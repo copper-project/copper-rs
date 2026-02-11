@@ -2,14 +2,15 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
+#[cfg(hardware)]
+use cu_linux_resources::LinuxI2c;
 use cu29::prelude::*;
 #[cfg(hardware)]
+use cu29::resource::Owned;
+use cu29::resource::{ResourceBindingMap, ResourceBindings, ResourceManager};
+#[cfg(hardware)]
 use embedded_hal::i2c::I2c;
-#[cfg(hardware)]
-use linux_embedded_hal::{I2CError, I2cdev};
 use std::fmt::Display;
-#[cfg(hardware)]
-use std::sync::Mutex;
 use uom::si::acceleration::{meter_per_second_squared, standard_gravity};
 use uom::si::angle::{degree, radian};
 use uom::si::angular_velocity::{degree_per_second, radian_per_second};
@@ -19,8 +20,6 @@ use uom::si::f32::AngularVelocity;
 use uom::si::f32::MagneticFluxDensity;
 use uom::si::magnetic_flux_density::{nanotesla, tesla};
 
-// FIXME: remove.
-const I2C_BUS: &str = "/dev/i2c-9";
 #[allow(unused)]
 const WT901_I2C_ADDRESS: u8 = 0x50;
 
@@ -67,7 +66,46 @@ use uom::fmt::DisplayStyle::Abbreviation;
 pub struct WT901 {
     #[cfg(hardware)]
     #[reflect(ignore)]
-    i2c: Mutex<Box<dyn I2c<Error = I2CError> + Send>>,
+    i2c: LinuxI2c,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Binding {
+    I2c,
+}
+
+pub struct Wt901Resources {
+    #[cfg(hardware)]
+    pub i2c: Owned<LinuxI2c>,
+}
+
+impl<'r> ResourceBindings<'r> for Wt901Resources {
+    type Binding = Binding;
+
+    fn from_bindings(
+        manager: &'r mut ResourceManager,
+        mapping: Option<&ResourceBindingMap<Self::Binding>>,
+    ) -> CuResult<Self> {
+        #[cfg(hardware)]
+        {
+            let mapping = mapping.ok_or_else(|| {
+                CuError::from("WT901 requires an `i2c` resource mapping in copperconfig")
+            })?;
+            let path = mapping.get(Binding::I2c).ok_or_else(|| {
+                CuError::from("WT901 resources must include `i2c: <bundle.resource>`")
+            })?;
+            let i2c = manager
+                .take::<LinuxI2c>(path.typed())
+                .map_err(|e| e.add_cause("Failed to fetch WT901 I2C resource"))?;
+            Ok(Self { i2c })
+        }
+        #[cfg(mock)]
+        {
+            let _ = manager;
+            let _ = mapping;
+            Ok(Self {})
+        }
+    }
 }
 
 #[derive(Default, Clone, Debug, Reflect)]
@@ -203,8 +241,8 @@ impl WT901 {
         #[cfg(hardware)]
         {
             let mut buf = [0u8; REGISTER_SPAN_SIZE];
-            let mut i2c = self.i2c.lock().expect("WT901 I2C mutex poisoned");
-            i2c.write_read(WT901_I2C_ADDRESS, &[Registers::AccX as u8], &mut buf)
+            self.i2c
+                .write_read(WT901_I2C_ADDRESS, &[Registers::AccX as u8], &mut buf)
                 .expect("Error reading WT901");
             pr.acc_x = convert_acc(get_vec_i16(&buf, Registers::AccX.offset()));
             pr.acc_y = convert_acc(get_vec_i16(&buf, Registers::AccY.offset()));
@@ -228,20 +266,19 @@ impl Freezable for WT901 {
 }
 
 impl CuSrcTask for WT901 {
-    type Resources<'r> = ();
+    type Resources<'r> = Wt901Resources;
     type Output<'m> = output_msg!(PositionalReadingsPayload);
 
     fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
-        debug!("Opening {}... ", I2C_BUS);
+        let _ = _config;
         #[cfg(hardware)]
-        let i2cdev = I2cdev::new(I2C_BUS).unwrap();
-        debug!("{} opened.", I2C_BUS);
+        let i2c = _resources.i2c.0;
         Ok(WT901 {
             #[cfg(hardware)]
-            i2c: Mutex::new(Box::new(i2cdev)),
+            i2c,
         })
     }
 

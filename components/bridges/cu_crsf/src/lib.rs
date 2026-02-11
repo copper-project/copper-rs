@@ -21,29 +21,14 @@ use embedded_io_07 as embedded_io;
 
 pub mod messages;
 
-pub use spin::Mutex;
-
-// std implementation
-#[cfg(feature = "std")]
-mod std_impl {
-    pub const SERIAL_PATH_KEY: &str = "serial_path";
-    pub const SERIAL_BAUD_KEY: &str = "baudrate";
-    pub const SERIAL_TIMEOUT_KEY: &str = "timeout_ms";
-}
-
-#[cfg(feature = "std")]
-use std_impl::*;
-
 use crate::messages::{LinkStatisticsPayload, RcChannelsPayload};
 use crsf::{LinkStatistics, Packet, PacketAddress, PacketParser, RcChannels};
 use cu29::cubridge::{
     BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
 };
 use cu29::prelude::*;
-#[cfg(feature = "std")]
-use cu29::resource::ResourceBundle;
 use cu29::resources;
-use embedded_io::{ErrorType, Read, Write};
+use embedded_io::{Read, Write};
 
 const READ_BUFFER_SIZE: usize = 1024;
 const PARSER_BUFFER_SIZE: usize = 1024;
@@ -263,91 +248,6 @@ where
     }
 }
 
-#[cfg(feature = "std")]
-pub mod std_serial {
-    use embedded_io_adapters_06::std::FromStd;
-    use std::boxed::Box;
-    use std::time::Duration;
-
-    pub type StdSerial = FromStd<Box<dyn serialport::SerialPort>>;
-
-    pub fn open(path: &str, baud: u32, timeout_ms: u64) -> std::io::Result<StdSerial> {
-        let port = serialport::new(path, baud)
-            .timeout(Duration::from_millis(timeout_ms))
-            .open()?;
-        Ok(FromStd::new(port))
-    }
-}
-
-#[cfg(feature = "std")]
-pub struct StdSerialBundle;
-
-#[cfg(feature = "std")]
-bundle_resources!(StdSerialBundle: Serial);
-
-#[cfg(feature = "std")]
-impl ResourceBundle for StdSerialBundle {
-    fn build(
-        bundle: cu29::resource::BundleContext<Self>,
-        config: Option<&ComponentConfig>,
-        manager: &mut ResourceManager,
-    ) -> CuResult<()> {
-        let cfg = config.ok_or_else(|| {
-            CuError::from(format!(
-                "CRSF serial bundle `{}` requires configuration",
-                bundle.bundle_id()
-            ))
-        })?;
-        let path = cfg.get::<String>(SERIAL_PATH_KEY)?.ok_or_else(|| {
-            CuError::from(format!(
-                "CRSF serial bundle `{}` missing `serial_path` entry",
-                bundle.bundle_id()
-            ))
-        })?;
-        let baud = cfg.get::<u32>(SERIAL_BAUD_KEY)?.unwrap_or(420_000);
-        let timeout_ms = cfg.get::<u32>(SERIAL_TIMEOUT_KEY)?.unwrap_or(100) as u64;
-
-        let serial = std_serial::open(&path, baud, timeout_ms).map_err(|err| {
-            CuError::from(format!(
-                "Failed to open serial `{path}` at {baud} baud: {err}"
-            ))
-        })?;
-        let key = bundle.key(StdSerialBundleId::Serial);
-        manager.add_owned(key, LockedSerial::new(serial))
-    }
-}
-
-pub struct LockedSerial<T>(pub Mutex<T>);
-
-impl<T> LockedSerial<T> {
-    pub fn new(inner: T) -> Self {
-        Self(Mutex::new(inner))
-    }
-}
-
-impl<T: ErrorType> ErrorType for LockedSerial<T> {
-    type Error = T::Error;
-}
-
-impl<T: Read> Read for LockedSerial<T> {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        let mut guard = self.0.lock();
-        guard.read(buf)
-    }
-}
-
-impl<T: Write> Write for LockedSerial<T> {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-        let mut guard = self.0.lock();
-        guard.write(buf)
-    }
-
-    fn flush(&mut self) -> Result<(), Self::Error> {
-        let mut guard = self.0.lock();
-        guard.flush()
-    }
-}
-
 /// Convenience alias for std targets.
 #[cfg(feature = "std")]
-pub type CrsfBridgeStd = CrsfBridge<LockedSerial<std_serial::StdSerial>, std::io::Error>;
+pub type CrsfBridgeStd = CrsfBridge<cu_linux_resources::LinuxSerialPort, std::io::Error>;

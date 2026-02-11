@@ -2,12 +2,11 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
+use cu_linux_resources::LinuxSerialPort;
 use cu29::prelude::*;
+use cu29::resource::{Owned, ResourceBindingMap, ResourceBindings, ResourceManager};
 use serde::{Deserialize, Serialize};
-use serialport::{DataBits, FlowControl, Parity, SerialPort, StopBits};
 use std::io::{self, Read, Write};
-use std::sync::Mutex;
-use std::time::Duration;
 use uom::si::angle::{degree, radian};
 use uom::si::f32::Angle;
 
@@ -44,9 +43,6 @@ mod servo {
     pub const SERVO_LED_ERROR_READ: u8 = 36; // 3 bytes
 }
 
-const SERIAL_SPEED: u32 = 115200; // only this speed is supported by the servos
-const TIMEOUT: Duration = Duration::from_secs(1); // TODO: add that as a parameter in the config
-
 const MAX_SERVOS: usize = 8; // in theory it could be higher. Revisit if needed.
 
 /// Compute the checksum for the given data.
@@ -76,9 +72,38 @@ fn angle_to_position(angle: Angle) -> i16 {
 #[reflect(from_reflect = false)]
 pub struct Lewansoul {
     #[reflect(ignore)]
-    port: Mutex<Box<dyn SerialPort>>,
+    port: LinuxSerialPort,
     #[allow(dead_code)]
     ids: [u8; 8], // TODO: WIP
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Binding {
+    Serial,
+}
+
+pub struct LewansoulResources {
+    pub serial: Owned<LinuxSerialPort>,
+}
+
+impl<'r> ResourceBindings<'r> for LewansoulResources {
+    type Binding = Binding;
+
+    fn from_bindings(
+        manager: &'r mut ResourceManager,
+        mapping: Option<&ResourceBindingMap<Self::Binding>>,
+    ) -> CuResult<Self> {
+        let mapping = mapping.ok_or_else(|| {
+            CuError::from("Lewansoul requires a `serial` resource mapping in copperconfig")
+        })?;
+        let path = mapping.get(Binding::Serial).ok_or_else(|| {
+            CuError::from("Lewansoul resources must include `serial: <bundle.resource>`")
+        })?;
+        let serial = manager
+            .take::<LinuxSerialPort>(path.typed())
+            .map_err(|e| e.add_cause("Failed to fetch Lewansoul serial resource"))?;
+        Ok(Self { serial })
+    }
 }
 
 impl Lewansoul {
@@ -89,11 +114,7 @@ impl Lewansoul {
         packet.push(checksum);
 
         // println!("Packet: {:02x?}", packet);
-        let mut port = self
-            .port
-            .lock()
-            .map_err(|_| io::Error::other("serial port lock poisoned"))?;
-        port.write_all(&packet)?;
+        self.port.write_all(&packet)?;
         Ok(())
     }
 
@@ -158,11 +179,7 @@ impl Lewansoul {
 
     fn read_response(&mut self) -> io::Result<(u8, u8, Vec<u8>)> {
         let mut header = [0; 5];
-        let mut port = self
-            .port
-            .lock()
-            .map_err(|_| io::Error::other("serial port lock poisoned"))?;
-        port.read_exact(&mut header)?;
+        self.port.read_exact(&mut header)?;
         if header[0] != 0x55 || header[1] != 0x55 {
             return Err(io::Error::other("Invalid header"));
         }
@@ -170,7 +187,7 @@ impl Lewansoul {
         let length = header[3];
         let command = header[4];
         let mut remaining = vec![0; length as usize - 2]; // -2 for length itself already read + command already read
-        port.read_exact(&mut remaining)?;
+        self.port.read_exact(&mut remaining)?;
         let checksum = compute_checksum(
             header[2..]
                 .iter()
@@ -210,23 +227,15 @@ impl Decode<()> for ServoPositionsPayload {
 }
 
 impl CuSinkTask for Lewansoul {
-    type Resources<'r> = ();
+    type Resources<'r> = LewansoulResources;
     type Input<'m> = input_msg!(ServoPositionsPayload);
 
-    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
         let ComponentConfig(kv) =
             config.ok_or("RPGpio needs a config, None was passed as ComponentConfig")?;
-
-        let serial_dev: String = kv
-            .get("serial_dev")
-            .expect(
-                "Lewansoul expects a serial_dev config entry pointing to the serial device to use.",
-            )
-            .clone()
-            .into();
 
         let mut ids = [0u8; 8];
         for (i, id) in ids.iter_mut().enumerate() {
@@ -242,19 +251,9 @@ impl CuSinkTask for Lewansoul {
             }
         }
 
-        let port = serialport::new(serial_dev.as_str(), SERIAL_SPEED)
-            .data_bits(DataBits::Eight)
-            .flow_control(FlowControl::None)
-            .parity(Parity::None)
-            .stop_bits(StopBits::One)
-            .timeout(TIMEOUT)
-            .open()
-            .map_err(|e| format!("Error opening serial port: {e:?}"))?;
+        let port = resources.serial.0;
 
-        Ok(Lewansoul {
-            port: Mutex::new(port),
-            ids,
-        })
+        Ok(Lewansoul { port, ids })
     }
 
     fn process(&mut self, _clock: &RobotClock, _input: &Self::Input<'_>) -> CuResult<()> {
@@ -270,14 +269,15 @@ mod tests {
     #[ignore]
     fn end2end_2_servos() {
         let mut config = ComponentConfig::default();
-        config
-            .0
-            .insert("serial_dev".to_string(), "/dev/ttyACM0".to_string().into());
-
         config.0.insert("servo0".to_string(), 1.into());
         config.0.insert("servo1".to_string(), 2.into());
 
-        let mut lewansoul = Lewansoul::new(Some(&config), ()).unwrap();
+        let serial = cu_linux_resources::LinuxSerialPort::open("/dev/ttyACM0", 115_200, 100)
+            .expect("open /dev/ttyACM0");
+        let resources = LewansoulResources {
+            serial: Owned(serial),
+        };
+        let mut lewansoul = Lewansoul::new(Some(&config), resources).unwrap();
         let _position = lewansoul.read_current_position(1).unwrap();
 
         let _angle_limits = lewansoul.read_angle_limits(1).unwrap();

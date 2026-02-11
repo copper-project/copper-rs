@@ -41,6 +41,7 @@ defmt = "1.0"
 defmt-rtt = "1.1"
 embedded-hal = "1.0"
 embedded-hal-bus = "0.3"
+embedded-io-07 = { package = "embedded-io", version = "0.7.1", default-features = false }
 embedded-sdmmc = { version = "0.9", features = [
   "defmt-log",
 ], default-features = false }

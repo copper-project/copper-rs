@@ -18,6 +18,7 @@ serde = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 rppal = { version = "0.22.1", default-features = false, features = ["hal"] }
+cu-linux-resources = { workspace = true }
 
 [build-dependencies]
 cfg_aliases = "0.2.1"

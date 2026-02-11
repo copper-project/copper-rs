@@ -15,11 +15,9 @@ cu29 = { path = "../../../core/cu29", version = "0.12.0", default-features = fal
 crsf = "2.0.1"
 embedded-io-06 = { package = "embedded-io", version = "0.6.1", default-features = false, optional = true }
 embedded-io-07 = { package = "embedded-io", version = "0.7.1", default-features = false, optional = true }
-embedded-io-adapters-06 = { package = "embedded-io-adapters", version = "0.6.2", optional = true }
-serialport = { version = "4.8.1", optional = true }
 serde = { workspace = true, features = ["derive"] }
 bincode = { workspace = true, features = ["alloc", "derive"] }
-spin = { workspace = true }
+cu-linux-resources = { workspace = true, optional = true }
 
 
 [features]
@@ -30,9 +28,7 @@ std = [
   "cu29/std",
   "embedded-io-06",
   "embedded-io-06/std",
-  "dep:embedded-io-adapters-06",
-  "dep:serialport",
-  "embedded-io-adapters-06/std",
+  "dep:cu-linux-resources",
 ]
 defmt = ["cu29/defmt"]
 alloc = []

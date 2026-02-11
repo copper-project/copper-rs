@@ -27,6 +27,7 @@ cu29-helpers = { workspace = true }
 [target.'cfg(target_os = "linux")'.dependencies]
 embedded-hal = "1"
 linux-embedded-hal = "0.4.0"
+cu-linux-resources = { workspace = true }
 
 [build-dependencies]
 cfg_aliases = "0.2.1"
