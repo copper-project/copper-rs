@@ -80,6 +80,13 @@ where
         }
     }
 
+    fn write_packet(&mut self, packet: Packet) -> CuResult<()> {
+        let raw_packet = packet.into_raw(PacketAddress::Transmitter);
+        self.serial_port
+            .write_all(raw_packet.data())
+            .map_err(|_| CuError::from("CRSF: Serial port write error"))
+    }
+
     // decode from the serial buffer and update to the last received values
     fn update(&mut self) -> CuResult<()> {
         let mut buf = [0; READ_BUFFER_SIZE];
@@ -193,11 +200,7 @@ where
                         "CRSF: Sent LinkStatistics: Downlink LQ:{}",
                         lq.0.downlink_link_quality
                     );
-                    let ls = Packet::LinkStatistics(lq.0.clone());
-                    let raw_packet = ls.into_raw(PacketAddress::Transmitter);
-                    self.serial_port
-                        .write_all(raw_packet.data())
-                        .map_err(|_| CuError::from("CRSF: Serial port write error"))?;
+                    self.write_packet(Packet::LinkStatistics(lq.0.clone()))?;
                 }
             }
             TxId::RcTx => {
@@ -206,11 +209,7 @@ where
                     for (i, value) in rc.0.iter().enumerate() {
                         debug!("Sending RC Channel {}: {}", i, value);
                     }
-                    let rc = Packet::RcChannels(rc.0.clone());
-                    let raw_packet = rc.into_raw(PacketAddress::Transmitter);
-                    self.serial_port
-                        .write_all(raw_packet.data())
-                        .map_err(|_| CuError::from("CRSF: Serial port write error"))?;
+                    self.write_packet(Packet::RcChannels(rc.0.clone()))?;
                 }
             }
         }
