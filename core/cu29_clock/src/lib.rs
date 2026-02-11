@@ -700,6 +700,11 @@ mod tests {
     use super::*;
     use approx::assert_relative_eq;
 
+    fn assert_time_range(range: CuTimeRange, start: u64, end: u64) {
+        assert_eq!(range.start, CuTime::from(start));
+        assert_eq!(range.end, CuTime::from(end));
+    }
+
     #[test]
     fn test_cuduration_comparison_operators() {
         let a = CuDuration(100);
@@ -782,8 +787,7 @@ mod tests {
     #[test]
     fn test_build_range_from_slice() {
         let range = CuTimeRange::from(&[20.into(), 10.into(), 30.into()][..]);
-        assert_eq!(range.start, 10.into());
-        assert_eq!(range.end, 30.into());
+        assert_time_range(range, 10, 30);
     }
 
     #[test]
@@ -802,11 +806,7 @@ mod tests {
             CuTime::from(120u64),
             CuTime::from(180u64),
         ];
-        let range_from_slice = CuTimeRange::from(&times[..]);
-
-        // Range should capture min and max values
-        assert_eq!(range_from_slice.start, CuTime::from(120u64));
-        assert_eq!(range_from_slice.end, CuTime::from(180u64));
+        assert_time_range(CuTimeRange::from(&times[..]), 120, 180);
     }
 
     #[test]
@@ -838,56 +838,31 @@ mod tests {
         // Test different Time of Validity (Tov) variants
         let time = CuTime::from(100u64);
 
-        // Test conversion from CuTime
-        let tov_time: Tov = time.into();
-        assert!(matches!(tov_time, Tov::Time(_)));
+        assert_eq!(Tov::from(time), Tov::Time(time));
+        assert_eq!(Tov::from(Some(time)), Tov::Time(time));
+        assert_eq!(Tov::from(None::<CuDuration>), Tov::None);
 
-        if let Tov::Time(t) = tov_time {
-            assert_eq!(t, time);
-        }
-
-        // Test conversion from Option<CuTime>
-        let some_time = Some(time);
-        let tov_some: Tov = some_time.into();
-        assert!(matches!(tov_some, Tov::Time(_)));
-
-        let none_time: Option<CuDuration> = None;
-        let tov_none: Tov = none_time.into();
-        assert!(matches!(tov_none, Tov::None));
-
-        // Test range
         let start = CuTime::from(100u64);
         let end = CuTime::from(200u64);
-        let range = CuTimeRange { start, end };
-        let tov_range = Tov::Range(range);
-
-        assert!(matches!(tov_range, Tov::Range(_)));
+        let tov_range = Tov::Range(CuTimeRange { start, end });
+        assert!(matches!(tov_range, Tov::Range(range) if range.start == start && range.end == end));
     }
 
     #[cfg(feature = "std")]
     #[test]
     fn test_cuduration_display() {
         // Test the display implementation for different magnitudes
-        let nano = CuDuration(42);
-        assert_eq!(nano.to_string(), "42 ns");
-
-        let micro = CuDuration(42_000);
-        assert_eq!(micro.to_string(), "42.000 µs");
-
-        let milli = CuDuration(42_000_000);
-        assert_eq!(milli.to_string(), "42.000 ms");
-
-        let sec = CuDuration(1_500_000_000);
-        assert_eq!(sec.to_string(), "1.500 s");
-
-        let min = CuDuration(90_000_000_000);
-        assert_eq!(min.to_string(), "1.500 m");
-
-        let hour = CuDuration(3_600_000_000_000);
-        assert_eq!(hour.to_string(), "1.000 h");
-
-        let day = CuDuration(86_400_000_000_000);
-        assert_eq!(day.to_string(), "1.000 d");
+        for (value, expected) in [
+            (CuDuration(42), "42 ns"),
+            (CuDuration(42_000), "42.000 µs"),
+            (CuDuration(42_000_000), "42.000 ms"),
+            (CuDuration(1_500_000_000), "1.500 s"),
+            (CuDuration(90_000_000_000), "1.500 m"),
+            (CuDuration(3_600_000_000_000), "1.000 h"),
+            (CuDuration(86_400_000_000_000), "1.000 d"),
+        ] {
+            assert_eq!(value.to_string(), expected);
+        }
     }
 
     #[test]
