@@ -145,10 +145,10 @@ impl FlightControllerEmulator {
         let bundle_cfg = config
             .resources
             .iter_mut()
-            .find(|b| b.id == "fc")
-            .ok_or_else(|| CuError::from("config missing `fc` resource bundle"))?;
+            .find(|b| b.id == "linux")
+            .ok_or_else(|| CuError::from("config missing `linux` resource bundle"))?;
         let component = bundle_cfg.config.get_or_insert_with(ComponentConfig::new);
-        component.set("device", device_path);
+        component.set("serial3_dev", device_path);
         Ok(())
     }
 }
@@ -264,7 +264,7 @@ mod tasks {
         }
     }
 
-    #[derive(Default)]
+    #[derive(Default, Reflect)]
     pub struct LoopbackSource {
         sent: bool,
     }
@@ -297,7 +297,7 @@ mod tasks {
         }
     }
 
-    #[derive(Default)]
+    #[derive(Default, Reflect)]
     pub struct LoopbackSink;
 
     impl Freezable for LoopbackSink {}

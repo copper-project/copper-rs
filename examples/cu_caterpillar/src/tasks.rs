@@ -5,7 +5,7 @@ use cu29::bincode::error::{DecodeError, EncodeError};
 use cu29::bincode::{Decode, Encode};
 use cu29::prelude::*;
 
-#[derive(Default)]
+#[derive(Default, Reflect)]
 pub struct CaterpillarSource {
     state: bool,
 }
@@ -42,6 +42,7 @@ impl CuSrcTask for CaterpillarSource {
     }
 }
 
+#[derive(Reflect)]
 pub struct CaterpillarTask;
 
 impl Freezable for CaterpillarTask {}

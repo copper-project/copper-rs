@@ -58,6 +58,10 @@ pub use cu29_runtime::input_msg;
 pub use cu29_runtime::monitoring;
 pub use cu29_runtime::output_msg;
 pub use cu29_runtime::payload;
+pub use cu29_runtime::reflect;
+pub use cu29_runtime::reflect as bevy_reflect;
+#[cfg(feature = "remote-debug")]
+pub use cu29_runtime::remote_debug;
 pub use cu29_runtime::resource;
 pub use cu29_runtime::rx_channels;
 #[cfg(feature = "std")]
@@ -102,7 +106,7 @@ pub use bincode;
 pub use cu29_clock as clock;
 #[cfg(feature = "defmt")]
 pub mod defmt {
-    pub use ::defmt::{debug, error, info, warn};
+    pub use defmt::{debug, error, info, warn};
 }
 #[cfg(feature = "std")]
 pub use cu29_runtime::config::read_configuration;
@@ -165,6 +169,7 @@ macro_rules! defmt_error {
 }
 
 pub mod prelude {
+    pub use crate::bevy_reflect;
     pub use crate::{defmt_debug, defmt_error, defmt_info, defmt_warn};
     #[cfg(feature = "std")]
     pub use ctrlc;
@@ -188,6 +193,18 @@ pub mod prelude {
     pub use cu29_runtime::monitoring::*;
     pub use cu29_runtime::output_msg;
     pub use cu29_runtime::payload::*;
+    #[cfg(feature = "reflect")]
+    pub use cu29_runtime::reflect::serde as reflect_serde;
+    #[cfg(feature = "reflect")]
+    pub use cu29_runtime::reflect::serde::{
+        ReflectSerializer, SerializationData, TypedReflectSerializer,
+    };
+    pub use cu29_runtime::reflect::{
+        GetTypeRegistration, Reflect, ReflectTaskIntrospection, ReflectTypePath, TypeInfo,
+        TypePath, TypeRegistry, dump_type_registry_schema,
+    };
+    #[cfg(feature = "remote-debug")]
+    pub use cu29_runtime::remote_debug::*;
     pub use cu29_runtime::resource::*;
     pub use cu29_runtime::rx_channels;
     #[cfg(feature = "std")]

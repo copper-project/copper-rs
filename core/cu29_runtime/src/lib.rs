@@ -23,6 +23,9 @@ pub mod monitoring;
 pub mod payload;
 #[cfg(feature = "std")]
 pub mod pool;
+pub mod reflect;
+#[cfg(feature = "remote-debug")]
+pub mod remote_debug;
 pub mod resource;
 #[cfg(feature = "std")]
 pub mod simulation;

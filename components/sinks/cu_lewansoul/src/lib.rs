@@ -2,11 +2,11 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
+use cu_linux_resources::LinuxSerialPort;
 use cu29::prelude::*;
+use cu29::resource::{Owned, ResourceBindingMap, ResourceBindings, ResourceManager};
 use serde::{Deserialize, Serialize};
-use serialport::{DataBits, FlowControl, Parity, SerialPort, StopBits};
 use std::io::{self, Read, Write};
-use std::time::Duration;
 use uom::si::angle::{degree, radian};
 use uom::si::f32::Angle;
 
@@ -43,9 +43,6 @@ mod servo {
     pub const SERVO_LED_ERROR_READ: u8 = 36; // 3 bytes
 }
 
-const SERIAL_SPEED: u32 = 115200; // only this speed is supported by the servos
-const TIMEOUT: Duration = Duration::from_secs(1); // TODO: add that as a parameter in the config
-
 const MAX_SERVOS: usize = 8; // in theory it could be higher. Revisit if needed.
 
 /// Compute the checksum for the given data.
@@ -71,10 +68,42 @@ fn angle_to_position(angle: Angle) -> i16 {
 }
 
 /// This is a driver for the LewanSoul LX-16A, LX-225 etc.  Serial Bus Servos.
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct Lewansoul {
-    port: Box<dyn SerialPort>,
+    #[reflect(ignore)]
+    port: LinuxSerialPort,
     #[allow(dead_code)]
     ids: [u8; 8], // TODO: WIP
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Binding {
+    Serial,
+}
+
+pub struct LewansoulResources {
+    pub serial: Owned<LinuxSerialPort>,
+}
+
+impl<'r> ResourceBindings<'r> for LewansoulResources {
+    type Binding = Binding;
+
+    fn from_bindings(
+        manager: &'r mut ResourceManager,
+        mapping: Option<&ResourceBindingMap<Self::Binding>>,
+    ) -> CuResult<Self> {
+        let mapping = mapping.ok_or_else(|| {
+            CuError::from("Lewansoul requires a `serial` resource mapping in copperconfig")
+        })?;
+        let path = mapping.get(Binding::Serial).ok_or_else(|| {
+            CuError::from("Lewansoul resources must include `serial: <bundle.resource>`")
+        })?;
+        let serial = manager
+            .take::<LinuxSerialPort>(path.typed())
+            .map_err(|e| e.add_cause("Failed to fetch Lewansoul serial resource"))?;
+        Ok(Self { serial })
+    }
 }
 
 impl Lewansoul {
@@ -176,7 +205,8 @@ impl Freezable for Lewansoul {
     // This driver is stateless as the IDs are recreate at new time, we keep the default implementation.
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct ServoPositionsPayload {
     pub positions: [Angle; MAX_SERVOS],
 }
@@ -197,23 +227,15 @@ impl Decode<()> for ServoPositionsPayload {
 }
 
 impl CuSinkTask for Lewansoul {
-    type Resources<'r> = ();
+    type Resources<'r> = LewansoulResources;
     type Input<'m> = input_msg!(ServoPositionsPayload);
 
-    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
         let ComponentConfig(kv) =
             config.ok_or("RPGpio needs a config, None was passed as ComponentConfig")?;
-
-        let serial_dev: String = kv
-            .get("serial_dev")
-            .expect(
-                "Lewansoul expects a serial_dev config entry pointing to the serial device to use.",
-            )
-            .clone()
-            .into();
 
         let mut ids = [0u8; 8];
         for (i, id) in ids.iter_mut().enumerate() {
@@ -229,14 +251,7 @@ impl CuSinkTask for Lewansoul {
             }
         }
 
-        let port = serialport::new(serial_dev.as_str(), SERIAL_SPEED)
-            .data_bits(DataBits::Eight)
-            .flow_control(FlowControl::None)
-            .parity(Parity::None)
-            .stop_bits(StopBits::One)
-            .timeout(TIMEOUT)
-            .open()
-            .map_err(|e| format!("Error opening serial port: {e:?}"))?;
+        let port = resources.serial.0;
 
         Ok(Lewansoul { port, ids })
     }
@@ -254,14 +269,15 @@ mod tests {
     #[ignore]
     fn end2end_2_servos() {
         let mut config = ComponentConfig::default();
-        config
-            .0
-            .insert("serial_dev".to_string(), "/dev/ttyACM0".to_string().into());
-
         config.0.insert("servo0".to_string(), 1.into());
         config.0.insert("servo1".to_string(), 2.into());
 
-        let mut lewansoul = Lewansoul::new(Some(&config), ()).unwrap();
+        let serial = cu_linux_resources::LinuxSerialPort::open("/dev/ttyACM0", 115_200, 100)
+            .expect("open /dev/ttyACM0");
+        let resources = LewansoulResources {
+            serial: Owned(serial),
+        };
+        let mut lewansoul = Lewansoul::new(Some(&config), resources).unwrap();
         let _position = lewansoul.read_current_position(1).unwrap();
 
         let _angle_limits = lewansoul.read_angle_limits(1).unwrap();

@@ -73,9 +73,41 @@ type Timer1 = Timer<CopyableTimer1>;
 type ElrsTx = Pin<Gpio2, FunctionUartAux, PullDown>;
 type ElrsRx = Pin<Gpio3, FunctionUartAux, PullUp>;
 type SerialPort = UartPeripheral<rp235x_hal::uart::Enabled, UART0, (ElrsTx, ElrsRx)>;
-type SerialPortError = rp235x_hal::uart::ReadErrorType;
+type SerialPortError = <SerialPort as embedded_io_07::ErrorType>::Error;
 type SerialResourceInner = SerialPort;
-type SerialResource = cu_crsf::LockedSerial<SerialResourceInner>;
+
+struct SerialResource(SerialResourceInner);
+
+impl SerialResource {
+    fn new(inner: SerialResourceInner) -> Self {
+        Self(inner)
+    }
+}
+
+// SAFETY: The firmware runtime is single-threaded for this UART resource.
+unsafe impl Send for SerialResource {}
+// SAFETY: The firmware runtime is single-threaded for this UART resource.
+unsafe impl Sync for SerialResource {}
+
+impl embedded_io_07::ErrorType for SerialResource {
+    type Error = <SerialResourceInner as embedded_io_07::ErrorType>::Error;
+}
+
+impl embedded_io_07::Read for SerialResource {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        embedded_io_07::Read::read(&mut self.0, buf)
+    }
+}
+
+impl embedded_io_07::Write for SerialResource {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+        embedded_io_07::Write::write(&mut self.0, buf)
+    }
+
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        embedded_io_07::Write::flush(&mut self.0)
+    }
+}
 
 #[entry]
 fn main() -> ! {

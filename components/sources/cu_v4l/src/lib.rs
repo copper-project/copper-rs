@@ -7,6 +7,7 @@ mod empty_impl {
     use cu_sensor_payloads::CuImage;
     use cu29::prelude::*;
 
+    #[derive(Reflect)]
     pub struct V4l {}
 
     impl Freezable for V4l {}
@@ -57,8 +58,12 @@ mod linux_impl {
     pub use v4l::{Format, FourCC, Timestamp};
 
     // A Copper source task that reads frames from a V4L device.
+    #[derive(Reflect)]
+    #[reflect(from_reflect = false)]
     pub struct V4l {
+        #[reflect(ignore)]
         stream: CuV4LStream,
+        #[reflect(ignore)]
         settled_format: CuImageBufferFormat,
         v4l_clock_time_offset_ns: i64,
     }

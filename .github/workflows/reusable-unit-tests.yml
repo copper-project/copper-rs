@@ -125,6 +125,15 @@ jobs:
       - name: Run Unit Tests on (${{ matrix.os }} | ${{ matrix.mode }})
         if: matrix.task == 'test'
         run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $EMBEDDED_EXCLUDES
+      - name: Run cu-caterpillar determinism test (determinism_ci)
+        if: matrix.task == 'test' && matrix.mode == 'debug' && env.WORKSPACE_SCOPE == 'workspace'
+        env:
+          RAYON_NUM_THREADS: "1"
+          COPPER_DETERMINISM_ITERS: "256"
+          COPPER_DETERMINISM_DT_TICKS: "1000"
+        run: >
+          cargo +${{ inputs.toolchain }} test -p cu-caterpillar --features determinism_ci
+          -- determinism_record_and_resim --test-threads=1
 
   tests-features:
     name: Unit Tests (all features)
@@ -216,7 +225,15 @@ jobs:
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
 
       - name: Run Unit Tests with all features on (${{ matrix.os }} | ${{ matrix.mode }})
-        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
+        run: |
+          if [[ '${{ matrix.mode }}' == 'cuda-debug' && '${{ runner.os }}' == 'Linux' ]]; then
+            if ! ldconfig -p 2>/dev/null | grep -q 'libcuda\.so\.1'; then
+              echo "libcuda.so.1 not found; compiling all-feature tests without executing them."
+              cargo +${{ inputs.toolchain }} test --no-run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
+              exit 0
+            fi
+          fi
+          cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
 
   templates:
     name: Templates (debug)

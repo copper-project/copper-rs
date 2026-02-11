@@ -1,10 +1,11 @@
-use cu29::resource::{ResourceBundle, ResourceManager};
-use cu29::{CuResult, bundle_resources};
+use cu29::prelude::*;
 use parking_lot::Mutex;
 use std::sync::Arc;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Reflect)]
+#[reflect(from_reflect = false)]
 pub struct SharedBus {
+    #[reflect(ignore)]
     inner: Arc<SharedBusInner>,
 }
 
@@ -54,8 +55,10 @@ impl OwnedCounter {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Reflect)]
+#[reflect(from_reflect = false)]
 pub struct GlobalLog {
+    #[reflect(ignore)]
     entries: Arc<Mutex<Vec<String>>>,
 }
 
@@ -71,8 +74,8 @@ bundle_resources!(BoardBundle: Bus, Counter, Tag);
 
 impl ResourceBundle for BoardBundle {
     fn build(
-        bundle: cu29::resource::BundleContext<Self>,
-        config: Option<&cu29::config::ComponentConfig>,
+        bundle: BundleContext<Self>,
+        config: Option<&ComponentConfig>,
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
         let label: String = match config {
@@ -105,8 +108,8 @@ bundle_resources!(ExtraBundle: Note);
 
 impl ResourceBundle for ExtraBundle {
     fn build(
-        bundle: cu29::resource::BundleContext<Self>,
-        config: Option<&cu29::config::ComponentConfig>,
+        bundle: BundleContext<Self>,
+        config: Option<&ComponentConfig>,
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
         let note: String = match config {
@@ -127,8 +130,8 @@ bundle_resources!(GlobalBundle: Log);
 
 impl ResourceBundle for GlobalBundle {
     fn build(
-        bundle: cu29::resource::BundleContext<Self>,
-        _config: Option<&cu29::config::ComponentConfig>,
+        bundle: BundleContext<Self>,
+        _config: Option<&ComponentConfig>,
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
         let log_key = bundle.key(GlobalBundleId::Log);

@@ -3,10 +3,12 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use crsf::{LinkStatistics, RcChannels};
+use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Copper-friendly wrapper for CRSF RC channel data.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct RcChannelsPayload(pub RcChannels);
 
 impl RcChannelsPayload {
@@ -50,7 +52,7 @@ impl Eq for RcChannelsPayload {}
 impl Encode for RcChannelsPayload {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         for value in self.0.0.iter() {
-            value.encode(encoder)?;
+            Encode::encode(value, encoder)?;
         }
         Ok(())
     }
@@ -60,7 +62,7 @@ impl Decode<()> for RcChannelsPayload {
     fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let mut channels = [0u16; 16];
         for slot in channels.iter_mut() {
-            *slot = u16::decode(decoder)?;
+            *slot = Decode::decode(decoder)?;
         }
         Ok(Self(RcChannels(channels)))
     }
@@ -86,7 +88,8 @@ impl<'de> Deserialize<'de> for RcChannelsPayload {
 }
 
 /// Copper-friendly wrapper for CRSF link statistics packets.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct LinkStatisticsPayload(pub LinkStatistics);
 
 impl LinkStatisticsPayload {
@@ -145,16 +148,16 @@ impl Default for LinkStatisticsPayload {
 impl Encode for LinkStatisticsPayload {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         let stats = &self.0;
-        stats.uplink_rssi_1.encode(encoder)?;
-        stats.uplink_rssi_2.encode(encoder)?;
-        stats.uplink_link_quality.encode(encoder)?;
-        stats.uplink_snr.encode(encoder)?;
-        stats.active_antenna.encode(encoder)?;
-        stats.rf_mode.encode(encoder)?;
-        stats.uplink_tx_power.encode(encoder)?;
-        stats.downlink_rssi.encode(encoder)?;
-        stats.downlink_link_quality.encode(encoder)?;
-        stats.downlink_snr.encode(encoder)?;
+        Encode::encode(&stats.uplink_rssi_1, encoder)?;
+        Encode::encode(&stats.uplink_rssi_2, encoder)?;
+        Encode::encode(&stats.uplink_link_quality, encoder)?;
+        Encode::encode(&stats.uplink_snr, encoder)?;
+        Encode::encode(&stats.active_antenna, encoder)?;
+        Encode::encode(&stats.rf_mode, encoder)?;
+        Encode::encode(&stats.uplink_tx_power, encoder)?;
+        Encode::encode(&stats.downlink_rssi, encoder)?;
+        Encode::encode(&stats.downlink_link_quality, encoder)?;
+        Encode::encode(&stats.downlink_snr, encoder)?;
         Ok(())
     }
 }
@@ -162,16 +165,16 @@ impl Encode for LinkStatisticsPayload {
 impl Decode<()> for LinkStatisticsPayload {
     fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
         Ok(Self(LinkStatistics {
-            uplink_rssi_1: u8::decode(decoder)?,
-            uplink_rssi_2: u8::decode(decoder)?,
-            uplink_link_quality: u8::decode(decoder)?,
-            uplink_snr: i8::decode(decoder)?,
-            active_antenna: u8::decode(decoder)?,
-            rf_mode: u8::decode(decoder)?,
-            uplink_tx_power: u8::decode(decoder)?,
-            downlink_rssi: u8::decode(decoder)?,
-            downlink_link_quality: u8::decode(decoder)?,
-            downlink_snr: i8::decode(decoder)?,
+            uplink_rssi_1: Decode::decode(decoder)?,
+            uplink_rssi_2: Decode::decode(decoder)?,
+            uplink_link_quality: Decode::decode(decoder)?,
+            uplink_snr: Decode::decode(decoder)?,
+            active_antenna: Decode::decode(decoder)?,
+            rf_mode: Decode::decode(decoder)?,
+            uplink_tx_power: Decode::decode(decoder)?,
+            downlink_rssi: Decode::decode(decoder)?,
+            downlink_link_quality: Decode::decode(decoder)?,
+            downlink_snr: Decode::decode(decoder)?,
         }))
     }
 }

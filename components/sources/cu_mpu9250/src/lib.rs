@@ -88,23 +88,56 @@ where
 }
 
 /// Copper source task for the MPU9250.
+#[derive(Reflect)]
+#[reflect(no_field_bounds, from_reflect = false, type_path = false)]
 pub struct Mpu9250Source<SPI, CS, D>
 where
-    SPI: eh1::spi::SpiBus<u8> + Send + 'static,
+    SPI: eh1::spi::SpiBus<u8> + Send + Sync + 'static,
     SPI::Error: Debug + Send + 'static,
-    CS: eh1::digital::OutputPin + Send + 'static,
+    CS: eh1::digital::OutputPin + Send + Sync + 'static,
     CS::Error: Debug + Send + 'static,
     D: eh1::delay::DelayNs + Send + 'static,
 {
+    #[reflect(ignore)]
     driver: embedded_hal::EmbeddedHalDriver<SPI, CS>,
-    _pd: PhantomData<D>,
+    #[reflect(ignore)]
+    _pd: PhantomData<fn() -> D>,
+}
+
+impl<SPI, CS, D> TypePath for Mpu9250Source<SPI, CS, D>
+where
+    SPI: eh1::spi::SpiBus<u8> + Send + Sync + 'static,
+    SPI::Error: Debug + Send + 'static,
+    CS: eh1::digital::OutputPin + Send + Sync + 'static,
+    CS::Error: Debug + Send + 'static,
+    D: eh1::delay::DelayNs + Send + 'static,
+{
+    fn type_path() -> &'static str {
+        "cu_mpu9250::Mpu9250Source"
+    }
+
+    fn short_type_path() -> &'static str {
+        "Mpu9250Source"
+    }
+
+    fn type_ident() -> Option<&'static str> {
+        Some("Mpu9250Source")
+    }
+
+    fn crate_name() -> Option<&'static str> {
+        Some("cu_mpu9250")
+    }
+
+    fn module_path() -> Option<&'static str> {
+        Some("")
+    }
 }
 
 impl<SPI, CS, D> Freezable for Mpu9250Source<SPI, CS, D>
 where
-    SPI: eh1::spi::SpiBus<u8> + Send + 'static,
+    SPI: eh1::spi::SpiBus<u8> + Send + Sync + 'static,
     SPI::Error: Debug + Send + 'static,
-    CS: eh1::digital::OutputPin + Send + 'static,
+    CS: eh1::digital::OutputPin + Send + Sync + 'static,
     CS::Error: Debug + Send + 'static,
     D: eh1::delay::DelayNs + Send + 'static,
 {
@@ -112,9 +145,9 @@ where
 
 impl<SPI, CS, D> CuSrcTask for Mpu9250Source<SPI, CS, D>
 where
-    SPI: eh1::spi::SpiBus<u8> + Send + 'static,
+    SPI: eh1::spi::SpiBus<u8> + Send + Sync + 'static,
     SPI::Error: Debug + Send + 'static,
-    CS: eh1::digital::OutputPin + Send + 'static,
+    CS: eh1::digital::OutputPin + Send + Sync + 'static,
     CS::Error: Debug + Send + 'static,
     D: eh1::delay::DelayNs + Send + 'static,
 {

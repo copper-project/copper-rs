@@ -111,6 +111,7 @@ use crate::config::ComponentConfig;
 use crate::cutask::CuMsgPack;
 
 use crate::cutask::{CuMsg, CuMsgPayload, CuSinkTask, CuSrcTask, Freezable};
+use crate::reflect::{Reflect, TypePath};
 use crate::{input_msg, output_msg};
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
@@ -173,9 +174,34 @@ pub enum CuBridgeLifecycleState {
 
 /// This is a placeholder task for a source task for the simulations.
 /// It basically does nothing in place of a real driver so it won't try to initialize any hardware.
+#[derive(Reflect)]
+#[reflect(no_field_bounds, from_reflect = false, type_path = false)]
 pub struct CuSimSrcTask<T> {
-    boo: PhantomData<T>,
+    #[reflect(ignore)]
+    boo: PhantomData<fn() -> T>,
     state: bool,
+}
+
+impl<T: 'static> TypePath for CuSimSrcTask<T> {
+    fn type_path() -> &'static str {
+        "cu29_runtime::simulation::CuSimSrcTask"
+    }
+
+    fn short_type_path() -> &'static str {
+        "CuSimSrcTask"
+    }
+
+    fn type_ident() -> Option<&'static str> {
+        Some("CuSimSrcTask")
+    }
+
+    fn crate_name() -> Option<&'static str> {
+        Some("cu29_runtime")
+    }
+
+    fn module_path() -> Option<&'static str> {
+        Some("simulation")
+    }
 }
 
 impl<T> Freezable for CuSimSrcTask<T> {
@@ -189,7 +215,7 @@ impl<T> Freezable for CuSimSrcTask<T> {
     }
 }
 
-impl<T: CuMsgPayload> CuSrcTask for CuSimSrcTask<T> {
+impl<T: CuMsgPayload + 'static> CuSrcTask for CuSimSrcTask<T> {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(T);
 
@@ -244,8 +270,33 @@ impl_sim_sink_input_tuple!(T1, T2, T3, T4, T5);
 
 /// This is a placeholder task for a sink task for the simulations.
 /// It basically does nothing in place of a real driver so it won't try to initialize any hardware.
+#[derive(Reflect)]
+#[reflect(no_field_bounds, from_reflect = false, type_path = false)]
 pub struct CuSimSinkTask<I> {
-    boo: PhantomData<I>,
+    #[reflect(ignore)]
+    boo: PhantomData<fn() -> I>,
+}
+
+impl<I: 'static> TypePath for CuSimSinkTask<I> {
+    fn type_path() -> &'static str {
+        "cu29_runtime::simulation::CuSimSinkTask"
+    }
+
+    fn short_type_path() -> &'static str {
+        "CuSimSinkTask"
+    }
+
+    fn type_ident() -> Option<&'static str> {
+        Some("CuSimSinkTask")
+    }
+
+    fn crate_name() -> Option<&'static str> {
+        Some("cu29_runtime")
+    }
+
+    fn module_path() -> Option<&'static str> {
+        Some("simulation")
+    }
 }
 
 impl<I> Freezable for CuSimSinkTask<I> {}

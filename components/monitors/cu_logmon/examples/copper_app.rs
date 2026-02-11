@@ -7,6 +7,7 @@ use std::time::Duration;
 pub mod tasks {
     use cu29::prelude::*;
 
+    #[derive(Reflect)]
     pub struct Src {
         counter: u32,
     }
@@ -31,6 +32,7 @@ pub mod tasks {
         }
     }
 
+    #[derive(Reflect)]
     pub struct Step;
 
     impl Freezable for Step {}
@@ -59,6 +61,7 @@ pub mod tasks {
         }
     }
 
+    #[derive(Reflect)]
     pub struct Sink;
 
     impl Freezable for Sink {}

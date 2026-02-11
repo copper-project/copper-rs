@@ -5,13 +5,41 @@ use bincode::{Decode, Encode};
 use cu29::prelude::*;
 use std::marker::PhantomData;
 
+#[derive(Reflect)]
+#[reflect(no_field_bounds, from_reflect = false, type_path = false)]
 pub struct CuRateLimit<T>
 where
     T: for<'a> CuMsgPayload + 'static,
 {
-    _marker: PhantomData<T>,
+    #[reflect(ignore)]
+    _marker: PhantomData<fn() -> T>,
     interval: CuDuration,
     last_tov: Option<CuTime>,
+}
+
+impl<T> TypePath for CuRateLimit<T>
+where
+    T: CuMsgPayload + 'static,
+{
+    fn type_path() -> &'static str {
+        "cu_ratelimit::CuRateLimit"
+    }
+
+    fn short_type_path() -> &'static str {
+        "CuRateLimit"
+    }
+
+    fn type_ident() -> Option<&'static str> {
+        Some("CuRateLimit")
+    }
+
+    fn crate_name() -> Option<&'static str> {
+        Some("cu_ratelimit")
+    }
+
+    fn module_path() -> Option<&'static str> {
+        Some("")
+    }
 }
 
 impl<T> Freezable for CuRateLimit<T>

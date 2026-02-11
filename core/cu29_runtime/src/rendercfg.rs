@@ -158,6 +158,23 @@ const RESOURCE_LEGEND_ITEMS: [(&str, &str); 3] = [
     ("Shared", RESOURCE_SHARED_BG),
     ("Unused", RESOURCE_UNUSED_BG),
 ];
+const LINUX_RESOURCE_SLOT_NAMES: [&str; 15] = [
+    "serial_acm0",
+    "serial_acm1",
+    "serial_acm2",
+    "serial_usb0",
+    "serial_usb1",
+    "serial_usb2",
+    "i2c0",
+    "i2c1",
+    "i2c2",
+    "gpio_out0",
+    "gpio_out1",
+    "gpio_out2",
+    "gpio_in0",
+    "gpio_in1",
+    "gpio_in2",
+];
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -579,6 +596,16 @@ fn collect_resource_catalog(
             for graph in graphs.values() {
                 collect_graph(graph)?;
             }
+        }
+    }
+
+    for bundle in &config.resources {
+        let Some(resource_names) = provider_resource_slots(bundle.provider.as_str()) else {
+            continue;
+        };
+        let bundle_resources = catalog.entry(bundle.id.clone()).or_default();
+        for resource_name in resource_names {
+            bundle_resources.insert((*resource_name).to_string());
         }
     }
 
@@ -3871,6 +3898,22 @@ fn strip_type_params(label: &str) -> String {
     out
 }
 
+fn provider_resource_slots(provider: &str) -> Option<&'static [&'static str]> {
+    let provider = strip_type_params(provider);
+    let compact: String = provider.chars().filter(|ch| !ch.is_whitespace()).collect();
+    let segments: Vec<&str> = compact
+        .split("::")
+        .filter(|segment| !segment.is_empty())
+        .collect();
+    let is_linux_bundle = segments.last().copied() == Some("LinuxResources")
+        && segments.contains(&"cu_linux_resources");
+    if is_linux_bundle {
+        Some(&LINUX_RESOURCE_SLOT_NAMES)
+    } else {
+        None
+    }
+}
+
 fn scale_layout_positions(graph: &mut VisualGraph) {
     for handle in graph.iter_nodes() {
         let center = graph.element(handle).position().center();
@@ -4185,5 +4228,44 @@ mod tests {
         assert!(tooltip.contains("Message size (avg): n/a"));
         assert!(tooltip.contains("Rate: n/a"));
         assert!(tooltip.contains("None: n/a"));
+    }
+
+    #[test]
+    fn provider_slot_matching_handles_type_params() {
+        assert_eq!(
+            provider_resource_slots("cu_linux_resources::LinuxResources"),
+            Some(&LINUX_RESOURCE_SLOT_NAMES[..])
+        );
+        assert_eq!(
+            provider_resource_slots(" crate::x::cu_linux_resources::LinuxResources < Foo<Bar> > "),
+            Some(&LINUX_RESOURCE_SLOT_NAMES[..])
+        );
+        assert!(provider_resource_slots("board::MicoAirH743").is_none());
+    }
+
+    #[test]
+    fn linux_bundle_catalog_includes_known_slots_without_bindings() {
+        let config = config::CuConfig {
+            monitor: None,
+            logging: None,
+            runtime: None,
+            resources: vec![config::ResourceBundleConfig {
+                id: "linux".to_string(),
+                provider: "cu_linux_resources::LinuxResources".to_string(),
+                config: None,
+                missions: None,
+            }],
+            bridges: Vec::new(),
+            graphs: ConfigGraphs::Simple(config::CuGraph::default()),
+        };
+
+        let catalog = collect_resource_catalog(&config).expect("catalog should build");
+        let linux_slots = catalog
+            .get("linux")
+            .expect("linux bundle should expose slot catalog");
+        assert_eq!(linux_slots.len(), LINUX_RESOURCE_SLOT_NAMES.len());
+        for slot in LINUX_RESOURCE_SLOT_NAMES {
+            assert!(linux_slots.contains(slot), "missing slot {slot}");
+        }
     }
 }

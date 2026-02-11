@@ -3,7 +3,7 @@ use cu29::prelude::*;
 use crate::messages::MyPayload;
 
 // Defines a source (ie. driver)
-#[derive(Default)]
+#[derive(Default, Reflect)]
 pub struct MySource {}
 
 // Needs to be fully implemented if you want to have a stateful task.

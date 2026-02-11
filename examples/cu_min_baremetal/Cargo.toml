@@ -38,6 +38,7 @@ cu29-helpers = { workspace = true, optional = true } # std only
 serde = { workspace = true }
 spin = { workspace = true }
 embedded-alloc = "0.7"
+critical-section = "1"
 
 # host only
 cu29-export = { workspace = true, features = [

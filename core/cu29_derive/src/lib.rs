@@ -494,7 +494,7 @@ fn gen_culist_support(
 
         // Note: PayloadSchemas is NOT implemented here.
         // Users who want MCAP export with schemas should implement it manually
-        // using cu29_export::serde_to_jsonschema::trace_type_to_jsonschema.
+        // using cu29_export::trace_type_to_jsonschema.
 
         // Adds the bincode support for the copper list tuple
         #msgs_types_tuple_encode
@@ -839,6 +839,68 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             build_bridge_resource_mappings(&resource_specs, &culist_bridge_specs);
 
         let ids = build_monitored_ids(&task_specs.ids, &mut culist_bridge_specs);
+
+        let task_reflect_read_arms: Vec<proc_macro2::TokenStream> = task_specs
+            .ids
+            .iter()
+            .enumerate()
+            .map(|(index, task_id)| {
+                let task_index = syn::Index::from(index);
+                let task_id_lit = LitStr::new(task_id, Span::call_site());
+                quote! {
+                    #task_id_lit => Some(&self.copper_runtime.tasks.#task_index as &dyn cu29::reflect::Reflect),
+                }
+            })
+            .collect();
+
+        let task_reflect_write_arms: Vec<proc_macro2::TokenStream> = task_specs
+            .ids
+            .iter()
+            .enumerate()
+            .map(|(index, task_id)| {
+                let task_index = syn::Index::from(index);
+                let task_id_lit = LitStr::new(task_id, Span::call_site());
+                quote! {
+                    #task_id_lit => Some(&mut self.copper_runtime.tasks.#task_index as &mut dyn cu29::reflect::Reflect),
+                }
+            })
+            .collect();
+
+        let mut reflect_registry_types: BTreeMap<String, Type> = BTreeMap::new();
+        let mut add_reflect_type = |ty: Type| {
+            let key = quote! { #ty }.to_string();
+            reflect_registry_types.entry(key).or_insert(ty);
+        };
+
+        for task_type in &task_specs.task_types {
+            add_reflect_type(task_type.clone());
+        }
+
+        for bridge_spec in &culist_bridge_specs {
+            add_reflect_type(bridge_spec.type_path.clone());
+            for channel in bridge_spec
+                .rx_channels
+                .iter()
+                .chain(bridge_spec.tx_channels.iter())
+            {
+                add_reflect_type(channel.msg_type.clone());
+            }
+        }
+
+        for output_pack in extract_output_packs(&culist_plan) {
+            for msg_type in output_pack.msg_types {
+                add_reflect_type(msg_type);
+            }
+        }
+
+        let reflect_type_registration_calls: Vec<proc_macro2::TokenStream> = reflect_registry_types
+            .values()
+            .map(|ty| {
+                quote! {
+                    registry.register::<#ty>();
+                }
+            })
+            .collect();
 
         let bridge_types: Vec<Type> = culist_bridge_specs
             .iter()
@@ -2231,6 +2293,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #copper_config_content.to_string()
                 }
 
+                pub fn register_reflect_types(registry: &mut cu29::reflect::TypeRegistry) {
+                    #(#reflect_type_registration_calls)*
+                }
+
                 #init_resources_fn
 
                 #new_with_resources_fn
@@ -2239,6 +2305,31 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #[inline]
                 pub fn copper_runtime_mut(&mut self) -> &mut CuRuntime<#mission_mod::#tasks_type, #mission_mod::CuBridges, #mission_mod::CuStampedDataSet, #monitor_type, #DEFAULT_CLNB> {
                     &mut self.copper_runtime
+                }
+            }
+        };
+
+        let app_reflect_impl = quote! {
+            impl cu29::reflect::ReflectTaskIntrospection for #application_name {
+                fn reflect_task(&self, task_id: &str) -> Option<&dyn cu29::reflect::Reflect> {
+                    match task_id {
+                        #(#task_reflect_read_arms)*
+                        _ => None,
+                    }
+                }
+
+                fn reflect_task_mut(
+                    &mut self,
+                    task_id: &str,
+                ) -> Option<&mut dyn cu29::reflect::Reflect> {
+                    match task_id {
+                        #(#task_reflect_write_arms)*
+                        _ => None,
+                    }
+                }
+
+                fn register_reflect_types(registry: &mut cu29::reflect::TypeRegistry) {
+                    #application_name::register_reflect_types(registry);
                 }
             }
         };
@@ -2625,6 +2716,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 pub #application_struct
 
                 #app_inherent_impl
+                #app_reflect_impl
                 #application_impl
 
                 #std_application_impl

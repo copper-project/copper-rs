@@ -14,6 +14,7 @@ repository.workspace = true
 default = ["std"]
 std = ["cu29/std", "bincode/std", "serde/std"]
 textlogs = ["cu29/textlogs"]
+reflect = ["cu29/reflect"]
 
 [dependencies]
 cu29 = { path = "../../../core/cu29", version = "0.12.0", default-features = false }

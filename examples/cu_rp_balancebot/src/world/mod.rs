@@ -110,6 +110,10 @@ fn assert_reflected_types(type_registry: Res<AppTypeRegistry>) {
 
 pub fn build_world(app: &mut App, headless: bool) -> &mut App {
     app.init_resource::<AppTypeRegistry>();
+    app.world_mut()
+        .resource_mut::<AppTypeRegistry>()
+        .write()
+        .register_derived_types();
     let app = app
         .add_plugins(PhysicsPlugins::default().with_length_unit(1000.0))
         // we want Bevy to measure these values for us:
@@ -161,11 +165,20 @@ pub fn build_world(app: &mut App, headless: bool) -> &mut App {
     app.register_type::<Name>();
     app.register_type::<Children>();
     app.register_type::<ChildOf>();
+    app.register_type::<Mesh3d>();
+    app.register_type::<MeshMaterial3d<StandardMaterial>>();
+    app.register_type::<bevy::camera::primitives::Aabb>();
     app.register_type::<Handle<Mesh>>();
     app.register_type::<Handle<StandardMaterial>>();
     app.register_type::<Handle<Image>>();
     app.register_type::<Handle<Gltf>>();
     app.register_type::<Handle<Scene>>();
+    app.register_type::<bevy::gltf::GltfExtras>();
+    app.register_type::<bevy::gltf::GltfSceneExtras>();
+    app.register_type::<bevy::gltf::GltfMeshExtras>();
+    app.register_type::<bevy::gltf::GltfMeshName>();
+    app.register_type::<bevy::gltf::GltfMaterialExtras>();
+    app.register_type::<bevy::gltf::GltfMaterialName>();
     app.add_systems(Startup, assert_reflected_types);
 
     app

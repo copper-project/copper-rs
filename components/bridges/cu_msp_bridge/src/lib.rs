@@ -10,14 +10,7 @@ extern crate alloc;
 // std implementation
 #[cfg(feature = "std")]
 mod std_impl {
-    pub use std::{format, mem, string::String, vec::Vec};
-
-    pub const DEVICE_KEY: &str = "device";
-    pub const BAUD_KEY: &str = "baudrate";
-    pub const TIMEOUT_KEY: &str = "timeout_ms";
-    pub const DEFAULT_DEVICE: &str = "/dev/ttyUSB0";
-    pub const DEFAULT_BAUDRATE: u32 = 115_200;
-    pub const DEFAULT_TIMEOUT_MS: u64 = 50;
+    pub use std::{mem, vec::Vec};
 }
 
 // no-std implementation
@@ -42,13 +35,10 @@ use cu29::cubridge::{
     BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
 };
 use cu29::prelude::*;
-#[cfg(feature = "std")]
-use cu29::resource::ResourceBundle;
 use cu29::resource::{Owned, ResourceBindings, ResourceManager};
-use embedded_io::{ErrorType, Read, Write};
+use embedded_io::{Read, Write};
 use heapless::Vec as HeaplessVec;
 use serde::{Deserialize, Serialize};
-use spin::Mutex;
 
 const READ_BUFFER_SIZE: usize = 512;
 const MAX_REQUESTS_PER_BATCH: usize = 8;
@@ -56,7 +46,8 @@ const MAX_RESPONSES_PER_BATCH: usize = 16;
 const TX_BUFFER_CAPACITY: usize = MSP_MAX_PAYLOAD_LEN + 12;
 
 /// Batch of MSP requests transported over the bridge.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct MspRequestBatch(pub HeaplessVec<MspRequest, MAX_REQUESTS_PER_BATCH>);
 
 impl MspRequestBatch {
@@ -106,7 +97,8 @@ impl Decode<()> for MspRequestBatch {
 }
 
 /// Batch of MSP responses collected by the bridge.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct MspResponseBatch(pub HeaplessVec<MspResponse, MAX_RESPONSES_PER_BATCH>);
 
 impl MspResponseBatch {
@@ -173,21 +165,31 @@ rx_channels! {
 }
 
 /// Bridge that multiplexes MSP traffic on a single serial link.
+#[derive(Reflect)]
+#[reflect(from_reflect = false, no_field_bounds, type_path = false)]
 pub struct CuMspBridge<S, E>
 where
-    S: Write<Error = E> + Read<Error = E>,
+    S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static,
+    E: 'static,
 {
+    #[reflect(ignore)]
     serial: S,
+    #[reflect(ignore)]
     parser: MspParser,
+    #[reflect(ignore)]
     read_buffer: [u8; READ_BUFFER_SIZE],
+    #[reflect(ignore)]
     pending_responses: MspResponseBatch,
+    #[reflect(ignore)]
     pending_requests: MspRequestBatch,
+    #[reflect(ignore)]
     tx_buffer: HeaplessVec<u8, TX_BUFFER_CAPACITY>,
 }
 
 impl<S, E> CuMspBridge<S, E>
 where
-    S: Write<Error = E> + Read<Error = E>,
+    S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static,
+    E: 'static,
 {
     fn from_serial(serial: S) -> Self {
         Self {
@@ -253,7 +255,38 @@ where
     }
 }
 
-impl<S, E> Freezable for CuMspBridge<S, E> where S: Write<Error = E> + Read<Error = E> {}
+impl<S, E> Freezable for CuMspBridge<S, E>
+where
+    S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static,
+    E: 'static,
+{
+}
+
+impl<S, E> cu29::reflect::TypePath for CuMspBridge<S, E>
+where
+    S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static,
+    E: 'static,
+{
+    fn type_path() -> &'static str {
+        "cu_msp_bridge::CuMspBridge"
+    }
+
+    fn short_type_path() -> &'static str {
+        "CuMspBridge"
+    }
+
+    fn type_ident() -> Option<&'static str> {
+        Some("CuMspBridge")
+    }
+
+    fn crate_name() -> Option<&'static str> {
+        Some("cu_msp_bridge")
+    }
+
+    fn module_path() -> Option<&'static str> {
+        Some("cu_msp_bridge")
+    }
+}
 
 pub struct MspResources<S> {
     pub serial: Owned<S>,
@@ -290,6 +323,7 @@ where
 impl<S, E> CuBridge for CuMspBridge<S, E>
 where
     S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static,
+    E: 'static,
 {
     type Resources<'r> = MspResources<S>;
     type Tx = TxChannels;
@@ -365,91 +399,6 @@ where
     }
 }
 
-#[cfg(feature = "std")]
-pub mod std_serial {
-    use embedded_io_adapters::std::FromStd;
-    #[cfg(feature = "std")]
-    use std::boxed::Box;
-    #[cfg(feature = "std")]
-    use std::time::Duration;
-
-    pub type StdSerial = FromStd<Box<dyn serialport::SerialPort>>;
-
-    pub fn open(path: &str, baud: u32, timeout_ms: u64) -> std::io::Result<StdSerial> {
-        let port = serialport::new(path, baud)
-            .timeout(Duration::from_millis(timeout_ms))
-            .open()?;
-        Ok(FromStd::new(port))
-    }
-}
-
-#[cfg(feature = "std")]
-pub struct StdSerialBundle;
-
-#[cfg(feature = "std")]
-bundle_resources!(StdSerialBundle: Serial);
-
-#[cfg(feature = "std")]
-impl ResourceBundle for StdSerialBundle {
-    fn build(
-        bundle: cu29::resource::BundleContext<Self>,
-        config: Option<&ComponentConfig>,
-        manager: &mut ResourceManager,
-    ) -> CuResult<()> {
-        let cfg = config.ok_or_else(|| {
-            CuError::from(format!(
-                "MSP serial bundle `{}` requires configuration",
-                bundle.bundle_id()
-            ))
-        })?;
-        let device = cfg
-            .get::<String>(DEVICE_KEY)?
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| DEFAULT_DEVICE.to_string());
-        let baudrate = cfg.get::<u32>(BAUD_KEY)?.unwrap_or(DEFAULT_BAUDRATE);
-        let timeout_ms = cfg.get::<u64>(TIMEOUT_KEY)?.unwrap_or(DEFAULT_TIMEOUT_MS);
-
-        let serial = std_serial::open(&device, baudrate, timeout_ms).map_err(|err| {
-            CuError::from(format!(
-                "MSP bridge failed to open serial `{device}` at {baudrate} baud: {err}"
-            ))
-        })?;
-        let key = bundle.key(StdSerialBundleId::Serial);
-        manager.add_owned(key, LockedSerial::new(serial))
-    }
-}
-
-pub struct LockedSerial<T>(pub Mutex<T>);
-
-impl<T> LockedSerial<T> {
-    pub fn new(inner: T) -> Self {
-        Self(Mutex::new(inner))
-    }
-}
-
-impl<T: ErrorType> ErrorType for LockedSerial<T> {
-    type Error = T::Error;
-}
-
-impl<T: Read> Read for LockedSerial<T> {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        let mut guard = self.0.lock();
-        guard.read(buf)
-    }
-}
-
-impl<T: Write> Write for LockedSerial<T> {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-        let mut guard = self.0.lock();
-        guard.write(buf)
-    }
-
-    fn flush(&mut self) -> Result<(), Self::Error> {
-        let mut guard = self.0.lock();
-        guard.flush()
-    }
-}
-
 /// Type alias for MSP bridge using standard I/O (for backward compatibility)
 #[cfg(feature = "std")]
-pub type CuMspBridgeStd = CuMspBridge<LockedSerial<std_serial::StdSerial>, std::io::Error>;
+pub type CuMspBridgeStd = CuMspBridge<cu_linux_resources::LinuxSerialPort, std::io::Error>;

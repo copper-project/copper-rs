@@ -13,6 +13,7 @@ use alloc::vec::Vec;
 #[cfg(not(feature = "std"))]
 use core::prelude::rust_2024::*;
 
+#[derive(Reflect)]
 pub struct DoraSource<const S: usize> {}
 
 impl<const S: usize> Freezable for DoraSource<S> {}
@@ -37,6 +38,7 @@ impl<const S: usize> CuSrcTask for DoraSource<S> {
     }
 }
 
+#[derive(Reflect)]
 pub struct DoraSink<const S: usize> {}
 
 impl<const S: usize> Freezable for DoraSink<S> {}
@@ -69,7 +71,7 @@ pub type FortyKSrc = DoraSource<FORTY_K>;
 #[allow(dead_code)]
 pub type FortyKSink = DoraSink<FORTY_K>;
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Reflect)]
 pub struct DoraPayload(Vec<u8>);
 
 impl Decode<()> for DoraPayload {

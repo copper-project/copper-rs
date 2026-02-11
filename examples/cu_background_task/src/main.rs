@@ -7,6 +7,7 @@ pub mod tasks {
     use cu29::prelude::*;
     use std::thread::sleep;
 
+    #[derive(Reflect)]
     pub struct ExampleSrc;
 
     impl Freezable for ExampleSrc {}
@@ -28,6 +29,7 @@ pub mod tasks {
         }
     }
 
+    #[derive(Reflect)]
     pub struct ExampleTask {
         sleep_duration: std::time::Duration,
     }
@@ -73,6 +75,7 @@ pub mod tasks {
         }
     }
 
+    #[derive(Reflect)]
     pub struct ExampleSink;
 
     impl Freezable for ExampleSink {}

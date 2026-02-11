@@ -1,3 +1,5 @@
+#![cfg(feature = "hardware")]
+
 use cu_hesai::LidarCuMsgPayload;
 use cu_hesai::parser::Packet;
 use cu_udp_inject::PcapStreamer;
@@ -7,6 +9,7 @@ use cu29_helpers::basic_copper_setup;
 use std::thread;
 use std::time::Duration;
 
+#[derive(Reflect)]
 struct HesaiTestSink {}
 
 impl Freezable for HesaiTestSink {}

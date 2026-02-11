@@ -1,5 +1,7 @@
 #![cfg(all(test, feature = "std"))]
 
+#[cfg(feature = "reflect")]
+use ::bevy_reflect;
 use bincode::{Decode, Encode};
 use cu29::cubridge::{BridgeChannel, CuBridge};
 use cu29::cutask::{CuMsg, CuMsgPayload, CuSinkTask, CuSrcTask, Freezable};
@@ -7,6 +9,7 @@ use cu29::prelude::copper_runtime;
 use cu29::prelude::error;
 use cu29::prelude::*;
 use cu29::prelude::{ComponentConfig, CuResult, RobotClock};
+use cu29::reflect::Reflect;
 use cu29::rx_channels;
 use cu29::simulation::{CuTaskCallbackState, SimOverride};
 use cu29::tx_channels;
@@ -23,12 +26,12 @@ use tempfile::TempDir;
 static BRIDGE_TX_CALLED: AtomicUsize = AtomicUsize::new(0);
 static BRIDGE_RX_CALLED: AtomicUsize = AtomicUsize::new(0);
 
-#[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
+#[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq, Reflect)]
 struct Ping {
     v: u8,
 }
 
-#[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
+#[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq, Reflect)]
 struct Pong {
     v: u8,
 }
@@ -41,7 +44,7 @@ rx_channels! {
     rx => Pong,
 }
 
-#[derive(Default)]
+#[derive(Default, Reflect)]
 struct DummyBridge {
     pub tx_called: usize,
     pub rx_called: usize,
@@ -107,7 +110,7 @@ impl CuBridge for DummyBridge {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Reflect)]
 struct MySrc;
 
 impl Freezable for MySrc {}
@@ -129,7 +132,7 @@ impl CuSrcTask for MySrc {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Reflect)]
 struct MySink;
 
 impl Freezable for MySink {}

@@ -3,7 +3,7 @@ use cu29::prelude::*;
 use crate::messages::MyPayload;
 
 // Defines a sink (ie. actualtion)
-#[derive(Default)]
+#[derive(Default, Reflect)]
 pub struct MySink {}
 
 // Needs to be fully implemented if you want to have a stateful task.

@@ -83,7 +83,7 @@ static LOG_RC: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::ne
 static LOG_RATE: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new());
 static LOG_MOTORS: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new());
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect)]
 enum StatusLabel {
     Disarmed,
     Angle,
@@ -114,6 +114,7 @@ fn estimate_cell_count(voltage_centi: u16) -> Option<u8> {
     Some(clamp_u8(cells.min(u32::from(u8::MAX)) as u16))
 }
 
+#[derive(Reflect)]
 pub struct ImuLogger {
     last_tov: Option<CuTime>,
 }
@@ -180,6 +181,7 @@ impl Freezable for BodyRateSetpoint {}
 impl Freezable for BodyCommand {}
 impl Freezable for BatteryVoltage {}
 
+#[derive(Reflect)]
 pub struct RcMapper {
     rc_min: u16,
     rc_mid: u16,
@@ -354,6 +356,7 @@ impl CuTask for RcMapper {
     }
 }
 
+#[derive(Reflect)]
 pub struct ImuCalibrator {
     bias: [f32; 3],
     sum: [f32; 3],
@@ -498,8 +501,12 @@ impl AxisPid {
     }
 }
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct AttitudeController {
+    #[reflect(ignore)]
     roll_pid: AxisPid,
+    #[reflect(ignore)]
     pitch_pid: AxisPid,
     angle_limit_rad: f32,
     rate_limit_rad: f32,
@@ -507,6 +514,7 @@ pub struct AttitudeController {
     acro_expo: f32,
     dt_fallback: CuDuration,
     last_time: Option<CuTime>,
+    #[reflect(ignore)]
     last_mode: FlightMode,
 }
 
@@ -646,9 +654,14 @@ impl CuTask for AttitudeController {
     }
 }
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct RateController {
+    #[reflect(ignore)]
     roll_pid: AxisPid,
+    #[reflect(ignore)]
     pitch_pid: AxisPid,
+    #[reflect(ignore)]
     yaw_pid: AxisPid,
     output_limit: f32,
     dt_fallback: CuDuration,
@@ -840,6 +853,7 @@ impl MotorLogState {
 
 static MOTOR_LOG: spin::Mutex<MotorLogState> = spin::Mutex::new(MotorLogState::new());
 
+#[derive(Reflect)]
 pub struct QuadXMixer {
     motor_index: usize,
     props_out: bool,

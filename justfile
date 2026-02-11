@@ -109,6 +109,10 @@ std-ci mode="debug": lint
 	cargo +stable nextest run $release_flag --all-targets --workspace $embedded_excludes
 	cargo +stable nextest run $release_flag --all-targets --workspace $features_flag $embedded_excludes
 
+	RAYON_NUM_THREADS=1 COPPER_DETERMINISM_ITERS=256 COPPER_DETERMINISM_DT_TICKS=1000 \
+		cargo +stable test $release_flag -p cu-caterpillar --features determinism_ci \
+		-- determinism_record_and_resim --test-threads=1
+
 	if [[ "$mode" == "debug" ]]; then
 		if ! cargo +stable generate --version >/dev/null 2>&1; then
 			cargo +stable install cargo-generate

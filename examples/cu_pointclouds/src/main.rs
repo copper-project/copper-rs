@@ -11,7 +11,10 @@ const SLAB_SIZE: Option<usize> = Some(100 * 1024 * 1024);
 #[copper_runtime(config = "ptclouds.ron")]
 struct PtCloudsApplication {}
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 struct RerunPlyViz {
+    #[reflect(ignore)]
     rec: rerun::RecordingStream,
 }
 

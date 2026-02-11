@@ -10,6 +10,7 @@ pub mod tasks {
     use cu29::prelude::*;
     use std::sync::atomic::Ordering;
 
+    #[derive(Reflect)]
     pub struct MultiOutSrc;
 
     impl Freezable for MultiOutSrc {}
@@ -33,6 +34,7 @@ pub mod tasks {
         }
     }
 
+    #[derive(Reflect)]
     pub struct IntSink;
 
     impl Freezable for IntSink {}
@@ -56,6 +58,7 @@ pub mod tasks {
         }
     }
 
+    #[derive(Reflect)]
     pub struct BoolSink;
 
     impl Freezable for BoolSink {}
@@ -79,6 +82,7 @@ pub mod tasks {
         }
     }
 
+    #[derive(Reflect)]
     pub struct BothSink;
 
     impl Freezable for BothSink {}
@@ -106,6 +110,7 @@ pub mod tasks {
         }
     }
 
+    #[derive(Reflect)]
     pub struct DropBoolSink;
 
     impl Freezable for DropBoolSink {}
@@ -127,6 +132,7 @@ pub mod tasks {
         }
     }
 
+    #[derive(Reflect)]
     pub struct LoopbackTask;
 
     impl Freezable for LoopbackTask {}
