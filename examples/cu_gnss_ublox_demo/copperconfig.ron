@@ -1,0 +1,40 @@
+(
+    resources: [
+        (
+            id: "linux",
+            provider: "cu_linux_resources::LinuxResources",
+            config: {
+                "serial0_dev": "/dev/ttyACM0",
+                "serial0_baudrate": 115200,
+                "serial0_timeout_ms": 20,
+            },
+        ),
+    ],
+    tasks: [
+        (
+            id: "ublox",
+            type: "cu_gnss_ublox::UbxSource",
+            resources: {
+                "serial": "linux.serial_acm0",
+            },
+            config: {
+                "poll_nav_pvt_ms": 200,
+                "poll_nav_sat_ms": 1000,
+                "poll_nav_sig_ms": 1000,
+                "poll_mon_rf_ms": 2000,
+                "emit_raw_unknown": true,
+            },
+        ),
+        (
+            id: "printer",
+            type: "tasks::EventPrinterSink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "ublox",
+            dst: "printer",
+            msg: "cu_gnss_payloads::GnssEvent",
+        ),
+    ],
+)

@@ -1,0 +1,22 @@
+[package]
+name = "cu-gnss-ublox"
+description = "Copper GNSS source for u-blox UBX receivers (protocol 34+)"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+cu29 = { workspace = true }
+cu-linux-resources = { workspace = true }
+cu-gnss-payloads = { workspace = true }
+uom = { workspace = true }
+
+[features]
+default = ["std"]
+std = ["cu29/std", "cu-gnss-payloads/std"]
+textlogs = ["cu29/textlogs", "cu-gnss-payloads/textlogs"]

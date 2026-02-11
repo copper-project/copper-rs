@@ -501,42 +501,56 @@ impl ResourceBundle for LinuxResources {
 
         #[cfg(target_os = "linux")]
         {
-            let gpio = rppal::gpio::Gpio::new().map_err(|err| {
-                CuError::new_with_cause("Failed to initialize GPIO subsystem", err)
-            })?;
+            let mut configured_gpio_out: std::vec::Vec<(LinuxResourcesId, u8)> =
+                std::vec::Vec::new();
+            let mut configured_gpio_in: std::vec::Vec<(LinuxResourcesId, u8)> =
+                std::vec::Vec::new();
 
             for slot in GPIO_OUT_SLOTS {
                 if let Some(pin) = get_u8(config, slot.key)? {
+                    configured_gpio_out.push((slot.id, pin));
+                }
+            }
+            for slot in GPIO_IN_SLOTS {
+                if let Some(pin) = get_u8(config, slot.key)? {
+                    configured_gpio_in.push((slot.id, pin));
+                }
+            }
+
+            if !configured_gpio_out.is_empty() || !configured_gpio_in.is_empty() {
+                let gpio = rppal::gpio::Gpio::new().map_err(|err| {
+                    CuError::new_with_cause("Failed to initialize GPIO subsystem", err)
+                })?;
+
+                for (slot_id, pin) in configured_gpio_out {
                     match gpio.get(pin) {
                         Ok(pin) => {
                             manager.add_owned(
-                                bundle.key(slot.id),
+                                bundle.key(slot_id),
                                 Exclusive::new(pin.into_output()),
                             )?;
                         }
                         Err(err) => {
                             eprintln!(
                                 "LinuxResources: skipping gpio output slot {} (pin {}): {}",
-                                slot_name(slot.id),
+                                slot_name(slot_id),
                                 pin,
                                 err
                             );
                         }
                     }
                 }
-            }
 
-            for slot in GPIO_IN_SLOTS {
-                if let Some(pin) = get_u8(config, slot.key)? {
+                for (slot_id, pin) in configured_gpio_in {
                     match gpio.get(pin) {
                         Ok(pin) => {
                             manager
-                                .add_owned(bundle.key(slot.id), Exclusive::new(pin.into_input()))?;
+                                .add_owned(bundle.key(slot_id), Exclusive::new(pin.into_input()))?;
                         }
                         Err(err) => {
                             eprintln!(
                                 "LinuxResources: skipping gpio input slot {} (pin {}): {}",
-                                slot_name(slot.id),
+                                slot_name(slot_id),
                                 pin,
                                 err
                             );

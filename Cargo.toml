@@ -25,6 +25,7 @@ members = [
   "components/monitors/cu_consolemon",
   "components/monitors/cu_logmon",
   "components/payloads/cu_ros_payloads",
+  "components/payloads/cu_gnss_payloads",
   "components/payloads/cu_sensor_payloads",
   "components/payloads/cu_spatial_payloads",
   "components/res/cu_micoairh743",
@@ -38,6 +39,7 @@ members = [
   "components/sinks/cu_zenoh_ros_sink",
   "components/sources/cu_ads7883",
   "components/sources/cu_bmi088",
+  "components/sources/cu_gnss_ublox",
   "components/sources/cu_gstreamer",
   "components/sources/cu_hesai",
   "components/sources/cu_livox",
@@ -84,6 +86,7 @@ members = [
   "examples/cu_zenoh_ros",
   "examples/cu_human_pose",
   "examples/cu_debug_session",
+  "examples/cu_gnss_ublox_demo",
   "examples/cu_remote_debug_session",
 ]
 
@@ -145,6 +148,7 @@ cu-linux-resources = { path = "components/res/cu_linux_resources", version = "0.
 
 # Payload definitions
 cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version = "0.12.0" }
+cu-gnss-payloads = { path = "components/payloads/cu_gnss_payloads", version = "0.12.0" }
 cu-ros-payloads = { path = "components/payloads/cu_ros_payloads", version = "0.12.0" }
 cu-pid = { path = "components/tasks/cu_pid", version = "0.12.0" }
 
