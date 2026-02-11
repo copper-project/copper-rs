@@ -18,7 +18,6 @@ path = "src/main.rs"
 [dependencies]
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
-cu-linux-resources = { workspace = true }
 cu-msp-bridge = { path = "../../components/bridges/cu_msp_bridge", version = "0.12.0" }
 cu-msp-lib = { path = "../../components/libs/cu_msp_lib", version = "0.12.0" }
 cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.12.0" }
