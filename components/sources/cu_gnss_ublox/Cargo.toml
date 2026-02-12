@@ -14,7 +14,7 @@ repository.workspace = true
 cu29 = { workspace = true }
 cu-linux-resources = { workspace = true }
 cu-gnss-payloads = { workspace = true }
-uom = { workspace = true }
+cu29-units = { workspace = true }
 
 [features]
 default = ["std"]

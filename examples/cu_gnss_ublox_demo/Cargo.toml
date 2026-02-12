@@ -11,8 +11,8 @@ cu29 = { workspace = true, features = ["log-level-debug"] }
 cu29-helpers = { workspace = true }
 cu-gnss-ublox = { path = "../../components/sources/cu_gnss_ublox", version = "0.12.0" }
 cu-gnss-payloads = { workspace = true }
+cu29-units = { workspace = true }
 cu-linux-resources = { workspace = true }
 tempfile = { workspace = true }
 serde = { workspace = true }
-uom = { workspace = true }
 ctrlc = "3"

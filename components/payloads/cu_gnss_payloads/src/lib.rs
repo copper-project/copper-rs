@@ -4,17 +4,14 @@ extern crate alloc;
 
 use alloc::string::String;
 use alloc::vec::Vec;
-use bincode::de::{BorrowDecode, BorrowDecoder, Decoder};
-use bincode::enc::Encoder;
-use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
+use cu29_units::si::angle::degree;
+use cu29_units::si::f32::{Angle, Length, Time, Velocity};
+use cu29_units::si::length::meter;
+use cu29_units::si::time::second;
+use cu29_units::si::velocity::meter_per_second;
 use serde::{Deserialize, Serialize};
-use uom::si::angle::{degree, radian};
-use uom::si::f32::{Angle, Length, Time, Velocity};
-use uom::si::length::meter;
-use uom::si::time::second;
-use uom::si::velocity::meter_per_second;
 
 #[derive(
     Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
@@ -82,7 +79,7 @@ pub struct GnssEpochTime {
     pub valid_magnetic_declination: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Reflect)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect)]
 pub struct GnssFixSolution {
     pub fix_type: GnssFixType,
     pub gnss_fix_ok: bool,
@@ -90,28 +87,16 @@ pub struct GnssFixSolution {
     pub carrier_solution: u8,
     pub invalid_llh: bool,
     pub num_satellites_used: u8,
-    // `uom::Quantity` does not implement Bevy/Copper reflection traits yet.
-    #[reflect(ignore)]
     pub longitude: Angle,
-    #[reflect(ignore)]
     pub latitude: Angle,
-    #[reflect(ignore)]
     pub height_ellipsoid: Length,
-    #[reflect(ignore)]
     pub height_msl: Length,
-    #[reflect(ignore)]
     pub velocity_north: Velocity,
-    #[reflect(ignore)]
     pub velocity_east: Velocity,
-    #[reflect(ignore)]
     pub velocity_down: Velocity,
-    #[reflect(ignore)]
     pub ground_speed: Velocity,
-    #[reflect(ignore)]
     pub heading_motion: Angle,
-    #[reflect(ignore)]
     pub heading_vehicle: Angle,
-    #[reflect(ignore)]
     pub magnetic_declination: Angle,
     pub psm_state: u8,
     pub correction_age_bucket: u8,
@@ -143,77 +128,12 @@ impl Default for GnssFixSolution {
     }
 }
 
-impl Encode for GnssFixSolution {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        Encode::encode(&self.fix_type, encoder)?;
-        Encode::encode(&self.gnss_fix_ok, encoder)?;
-        Encode::encode(&self.differential_solution, encoder)?;
-        Encode::encode(&self.carrier_solution, encoder)?;
-        Encode::encode(&self.invalid_llh, encoder)?;
-        Encode::encode(&self.num_satellites_used, encoder)?;
-        Encode::encode(&self.longitude.get::<radian>(), encoder)?;
-        Encode::encode(&self.latitude.get::<radian>(), encoder)?;
-        Encode::encode(&self.height_ellipsoid.get::<meter>(), encoder)?;
-        Encode::encode(&self.height_msl.get::<meter>(), encoder)?;
-        Encode::encode(&self.velocity_north.get::<meter_per_second>(), encoder)?;
-        Encode::encode(&self.velocity_east.get::<meter_per_second>(), encoder)?;
-        Encode::encode(&self.velocity_down.get::<meter_per_second>(), encoder)?;
-        Encode::encode(&self.ground_speed.get::<meter_per_second>(), encoder)?;
-        Encode::encode(&self.heading_motion.get::<radian>(), encoder)?;
-        Encode::encode(&self.heading_vehicle.get::<radian>(), encoder)?;
-        Encode::encode(&self.magnetic_declination.get::<radian>(), encoder)?;
-        Encode::encode(&self.psm_state, encoder)?;
-        Encode::encode(&self.correction_age_bucket, encoder)?;
-        Ok(())
-    }
-}
-
-impl<Context> Decode<Context> for GnssFixSolution {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        Ok(Self {
-            fix_type: Decode::decode(decoder)?,
-            gnss_fix_ok: Decode::decode(decoder)?,
-            differential_solution: Decode::decode(decoder)?,
-            carrier_solution: Decode::decode(decoder)?,
-            invalid_llh: Decode::decode(decoder)?,
-            num_satellites_used: Decode::decode(decoder)?,
-            longitude: Angle::new::<radian>(Decode::decode(decoder)?),
-            latitude: Angle::new::<radian>(Decode::decode(decoder)?),
-            height_ellipsoid: Length::new::<meter>(Decode::decode(decoder)?),
-            height_msl: Length::new::<meter>(Decode::decode(decoder)?),
-            velocity_north: Velocity::new::<meter_per_second>(Decode::decode(decoder)?),
-            velocity_east: Velocity::new::<meter_per_second>(Decode::decode(decoder)?),
-            velocity_down: Velocity::new::<meter_per_second>(Decode::decode(decoder)?),
-            ground_speed: Velocity::new::<meter_per_second>(Decode::decode(decoder)?),
-            heading_motion: Angle::new::<radian>(Decode::decode(decoder)?),
-            heading_vehicle: Angle::new::<radian>(Decode::decode(decoder)?),
-            magnetic_declination: Angle::new::<radian>(Decode::decode(decoder)?),
-            psm_state: Decode::decode(decoder)?,
-            correction_age_bucket: Decode::decode(decoder)?,
-        })
-    }
-}
-
-impl<'de, Context> BorrowDecode<'de, Context> for GnssFixSolution {
-    fn borrow_decode<D: BorrowDecoder<'de, Context = Context>>(
-        decoder: &mut D,
-    ) -> Result<Self, DecodeError> {
-        <Self as Decode<Context>>::decode(decoder)
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Reflect)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect)]
 pub struct GnssAccuracy {
-    // `uom::Quantity` does not implement Bevy/Copper reflection traits yet.
-    #[reflect(ignore)]
     pub horizontal: Length,
-    #[reflect(ignore)]
     pub vertical: Length,
-    #[reflect(ignore)]
     pub speed: Velocity,
-    #[reflect(ignore)]
     pub heading: Angle,
-    #[reflect(ignore)]
     pub time: Time,
     pub position_dop: f32,
 }
@@ -228,39 +148,6 @@ impl Default for GnssAccuracy {
             time: Time::new::<second>(0.0),
             position_dop: 0.0,
         }
-    }
-}
-
-impl Encode for GnssAccuracy {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        Encode::encode(&self.horizontal.get::<meter>(), encoder)?;
-        Encode::encode(&self.vertical.get::<meter>(), encoder)?;
-        Encode::encode(&self.speed.get::<meter_per_second>(), encoder)?;
-        Encode::encode(&self.heading.get::<radian>(), encoder)?;
-        Encode::encode(&self.time.get::<second>(), encoder)?;
-        Encode::encode(&self.position_dop, encoder)?;
-        Ok(())
-    }
-}
-
-impl<Context> Decode<Context> for GnssAccuracy {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        Ok(Self {
-            horizontal: Length::new::<meter>(Decode::decode(decoder)?),
-            vertical: Length::new::<meter>(Decode::decode(decoder)?),
-            speed: Velocity::new::<meter_per_second>(Decode::decode(decoder)?),
-            heading: Angle::new::<radian>(Decode::decode(decoder)?),
-            time: Time::new::<second>(Decode::decode(decoder)?),
-            position_dop: Decode::decode(decoder)?,
-        })
-    }
-}
-
-impl<'de, Context> BorrowDecode<'de, Context> for GnssAccuracy {
-    fn borrow_decode<D: BorrowDecoder<'de, Context = Context>>(
-        decoder: &mut D,
-    ) -> Result<Self, DecodeError> {
-        <Self as Decode<Context>>::decode(decoder)
     }
 }
 
