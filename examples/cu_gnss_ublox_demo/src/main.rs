@@ -40,7 +40,11 @@ fn run() -> CuResult<()> {
         "This demo logs message counters and GNSS values; `sats_in_view` is a per-epoch count that can move up/down as tracking changes."
     );
     let heartbeat_period_ns = CuDuration::from_secs(5).as_nanos();
-    let mut next_heartbeat_ns = ctx.clock.now().as_nanos().saturating_add(heartbeat_period_ns);
+    let mut next_heartbeat_ns = ctx
+        .clock
+        .now()
+        .as_nanos()
+        .saturating_add(heartbeat_period_ns);
 
     let mut run_error: Option<CuError> = None;
     while running.load(Ordering::Relaxed) {

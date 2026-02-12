@@ -97,18 +97,14 @@ impl CuSinkTask for TimeSink {
             state::mark_time();
             self.seen += 1;
 
-            if self.seen <= 3 || self.seen % 10 == 0 {
+            if self.seen <= 3 || self.seen.is_multiple_of(10) {
                 let utc = format!(
                     "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
                     time.year, time.month, time.day, time.hour, time.minute, time.second
                 );
                 debug!(
                     "[gnss/time] itow={} utc={} valid_date={} valid_time={} resolved={}",
-                    time.itow_ms,
-                    utc,
-                    time.valid_date,
-                    time.valid_time,
-                    time.fully_resolved
+                    time.itow_ms, utc, time.valid_date, time.valid_time, time.fully_resolved
                 );
             }
         }
@@ -139,11 +135,11 @@ impl CuSinkTask for FixSink {
             state::mark_fix(fix.num_satellites_used);
             self.seen += 1;
 
-            let fix_state_changed =
-                self.last_fix_type != Some(fix.fix_type) || self.last_fix_ok != Some(fix.gnss_fix_ok);
+            let fix_state_changed = self.last_fix_type != Some(fix.fix_type)
+                || self.last_fix_ok != Some(fix.gnss_fix_ok);
             let sats_used_changed = self.last_sats_used != Some(fix.num_satellites_used);
 
-            if fix_state_changed || self.seen <= 3 || self.seen % 20 == 0 {
+            if fix_state_changed || self.seen <= 3 || self.seen.is_multiple_of(20) {
                 let fix_type = format!("{:?}", fix.fix_type);
                 let lat = format!("{:.7}", fix.latitude.get::<degree>());
                 let lon = format!("{:.7}", fix.longitude.get::<degree>());
@@ -192,7 +188,7 @@ impl CuSinkTask for AccuracySink {
             state::mark_accuracy(accuracy.horizontal.get::<meter>());
             self.seen += 1;
 
-            if self.seen <= 3 || self.seen % 5 == 0 {
+            if self.seen <= 3 || self.seen.is_multiple_of(5) {
                 let h_acc = format!("{:.2}", accuracy.horizontal.get::<meter>());
                 let v_acc = format!("{:.2}", accuracy.vertical.get::<meter>());
                 let speed_acc = format!("{:.2}", accuracy.speed.get::<meter_per_second>());
@@ -200,11 +196,7 @@ impl CuSinkTask for AccuracySink {
                 let pdop = format!("{:.2}", accuracy.position_dop);
                 info!(
                     "[gnss/accuracy] h_acc={}m v_acc={}m speed_acc={}m/s heading_acc={}deg pdop={}",
-                    h_acc,
-                    v_acc,
-                    speed_acc,
-                    heading_acc,
-                    pdop
+                    h_acc, v_acc, speed_acc, heading_acc, pdop
                 );
             }
         }
@@ -245,7 +237,7 @@ impl CuSinkTask for SatsInViewSink {
                         sats.count, delta
                     );
                 }
-                Some(_) if self.seen % 10 == 0 => {
+                Some(_) if self.seen.is_multiple_of(10) => {
                     debug!("[gnss/sats] in_view={} (stable)", sats.count);
                 }
                 _ => {}
