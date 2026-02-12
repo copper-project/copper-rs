@@ -33,6 +33,8 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: taplo-cli, fmtron, typos
+      - name: Check README structure
+        run: python3 support/ci/readme_lint.py
       - name: Check Rust, TOML, RON formatting
         uses: j178/prek-action@v1
         with:
