@@ -285,12 +285,12 @@ pub struct LinuxResources;
 
 bundle_resources!(
     LinuxResources:
-        SerialAcm0,
-        SerialAcm1,
-        SerialAcm2,
-        SerialUsb0,
-        SerialUsb1,
-        SerialUsb2,
+        Serial0,
+        Serial1,
+        Serial2,
+        Serial3,
+        Serial4,
+        Serial5,
         I2c0,
         I2c1,
         I2c2,
@@ -302,27 +302,8 @@ bundle_resources!(
         GpioIn2
 );
 
-pub const LINUX_RESOURCE_SLOT_NAMES: &[&str] = &[
-    "serial_acm0",
-    "serial_acm1",
-    "serial_acm2",
-    "serial_usb0",
-    "serial_usb1",
-    "serial_usb2",
-    "i2c0",
-    "i2c1",
-    "i2c2",
-    "gpio_out0",
-    "gpio_out1",
-    "gpio_out2",
-    "gpio_in0",
-    "gpio_in1",
-    "gpio_in2",
-];
-
 struct SerialSlot {
     id: LinuxResourcesId,
-    default_dev: &'static str,
     dev_key: &'static str,
     baudrate_key: &'static str,
     parity_key: &'static str,
@@ -341,8 +322,7 @@ pub struct SerialSlotConfig {
 
 const SERIAL_SLOTS: &[SerialSlot] = &[
     SerialSlot {
-        id: LinuxResourcesId::SerialAcm0,
-        default_dev: "/dev/ttyACM0",
+        id: LinuxResourcesId::Serial0,
         dev_key: SERIAL0_DEV_KEY,
         baudrate_key: SERIAL0_BAUDRATE_KEY,
         parity_key: SERIAL0_PARITY_KEY,
@@ -350,8 +330,7 @@ const SERIAL_SLOTS: &[SerialSlot] = &[
         timeout_ms_key: SERIAL0_TIMEOUT_MS_KEY,
     },
     SerialSlot {
-        id: LinuxResourcesId::SerialAcm1,
-        default_dev: "/dev/ttyACM1",
+        id: LinuxResourcesId::Serial1,
         dev_key: SERIAL1_DEV_KEY,
         baudrate_key: SERIAL1_BAUDRATE_KEY,
         parity_key: SERIAL1_PARITY_KEY,
@@ -359,8 +338,7 @@ const SERIAL_SLOTS: &[SerialSlot] = &[
         timeout_ms_key: SERIAL1_TIMEOUT_MS_KEY,
     },
     SerialSlot {
-        id: LinuxResourcesId::SerialAcm2,
-        default_dev: "/dev/ttyACM2",
+        id: LinuxResourcesId::Serial2,
         dev_key: SERIAL2_DEV_KEY,
         baudrate_key: SERIAL2_BAUDRATE_KEY,
         parity_key: SERIAL2_PARITY_KEY,
@@ -368,8 +346,7 @@ const SERIAL_SLOTS: &[SerialSlot] = &[
         timeout_ms_key: SERIAL2_TIMEOUT_MS_KEY,
     },
     SerialSlot {
-        id: LinuxResourcesId::SerialUsb0,
-        default_dev: "/dev/ttyUSB0",
+        id: LinuxResourcesId::Serial3,
         dev_key: SERIAL3_DEV_KEY,
         baudrate_key: SERIAL3_BAUDRATE_KEY,
         parity_key: SERIAL3_PARITY_KEY,
@@ -377,8 +354,7 @@ const SERIAL_SLOTS: &[SerialSlot] = &[
         timeout_ms_key: SERIAL3_TIMEOUT_MS_KEY,
     },
     SerialSlot {
-        id: LinuxResourcesId::SerialUsb1,
-        default_dev: "/dev/ttyUSB1",
+        id: LinuxResourcesId::Serial4,
         dev_key: SERIAL4_DEV_KEY,
         baudrate_key: SERIAL4_BAUDRATE_KEY,
         parity_key: SERIAL4_PARITY_KEY,
@@ -386,8 +362,7 @@ const SERIAL_SLOTS: &[SerialSlot] = &[
         timeout_ms_key: SERIAL4_TIMEOUT_MS_KEY,
     },
     SerialSlot {
-        id: LinuxResourcesId::SerialUsb2,
-        default_dev: "/dev/ttyUSB2",
+        id: LinuxResourcesId::Serial5,
         dev_key: SERIAL5_DEV_KEY,
         baudrate_key: SERIAL5_BAUDRATE_KEY,
         parity_key: SERIAL5_PARITY_KEY,
@@ -400,7 +375,6 @@ const SERIAL_SLOTS: &[SerialSlot] = &[
 struct I2cSlot {
     id: LinuxResourcesId,
     dev_key: &'static str,
-    default_dev: &'static str,
 }
 
 #[cfg(target_os = "linux")]
@@ -408,17 +382,14 @@ const I2C_SLOTS: &[I2cSlot] = &[
     I2cSlot {
         id: LinuxResourcesId::I2c0,
         dev_key: I2C0_DEV_KEY,
-        default_dev: "/dev/i2c-0",
     },
     I2cSlot {
         id: LinuxResourcesId::I2c1,
         dev_key: I2C1_DEV_KEY,
-        default_dev: "/dev/i2c-1",
     },
     I2cSlot {
         id: LinuxResourcesId::I2c2,
         dev_key: I2C2_DEV_KEY,
-        default_dev: "/dev/i2c-2",
     },
 ];
 
@@ -464,13 +435,15 @@ impl ResourceBundle for LinuxResources {
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
         for slot in SERIAL_SLOTS {
-            let serial_config = read_serial_slot_config(config, slot)?;
+            let Some(serial_config) = read_serial_slot_config(config, slot)? else {
+                continue; // Skip slots without explicit config
+            };
             match LinuxSerialPort::open_with_config(&serial_config) {
                 Ok(serial) => {
                     manager.add_owned(bundle.key(slot.id), serial)?;
                 }
                 Err(err) => {
-                    eprintln!(
+                    warning!(
                         "LinuxResources: skipping serial slot {} (dev {}): {}",
                         slot_name(slot.id),
                         serial_config.dev,
@@ -482,14 +455,15 @@ impl ResourceBundle for LinuxResources {
 
         #[cfg(target_os = "linux")]
         for slot in I2C_SLOTS {
-            let dev =
-                get_string(config, slot.dev_key)?.unwrap_or_else(|| String::from(slot.default_dev));
+            let Some(dev) = get_string(config, slot.dev_key)? else {
+                continue; // Skip slots without explicit config
+            };
             match linux_embedded_hal::I2cdev::new(&dev) {
                 Ok(i2c) => {
                     manager.add_owned(bundle.key(slot.id), Exclusive::new(i2c))?;
                 }
                 Err(err) => {
-                    eprintln!(
+                    warning!(
                         "LinuxResources: skipping i2c slot {} (dev {}): {}",
                         slot_name(slot.id),
                         dev,
@@ -515,7 +489,7 @@ impl ResourceBundle for LinuxResources {
                             )?;
                         }
                         Err(err) => {
-                            eprintln!(
+                            warning!(
                                 "LinuxResources: skipping gpio output slot {} (pin {}): {}",
                                 slot_name(slot.id),
                                 pin,
@@ -534,7 +508,7 @@ impl ResourceBundle for LinuxResources {
                                 .add_owned(bundle.key(slot.id), Exclusive::new(pin.into_input()))?;
                         }
                         Err(err) => {
-                            eprintln!(
+                            warning!(
                                 "LinuxResources: skipping gpio input slot {} (pin {}): {}",
                                 slot_name(slot.id),
                                 pin,
@@ -550,7 +524,7 @@ impl ResourceBundle for LinuxResources {
         {
             for slot in GPIO_OUT_SLOTS {
                 if let Some(pin) = get_u8(config, slot.key)? {
-                    eprintln!(
+                    warning!(
                         "LinuxResources: requested gpio output slot {} on pin {} but GPIO is only supported on Linux",
                         slot_name(slot.id),
                         pin
@@ -559,7 +533,7 @@ impl ResourceBundle for LinuxResources {
             }
             for slot in GPIO_IN_SLOTS {
                 if let Some(pin) = get_u8(config, slot.key)? {
-                    eprintln!(
+                    warning!(
                         "LinuxResources: requested gpio input slot {} on pin {} but GPIO is only supported on Linux",
                         slot_name(slot.id),
                         pin
@@ -575,21 +549,23 @@ impl ResourceBundle for LinuxResources {
 fn read_serial_slot_config(
     config: Option<&ComponentConfig>,
     slot: &SerialSlot,
-) -> CuResult<SerialSlotConfig> {
-    let dev = get_string(config, slot.dev_key)?.unwrap_or_else(|| String::from(slot.default_dev));
+) -> CuResult<Option<SerialSlotConfig>> {
+    let Some(dev) = get_string(config, slot.dev_key)? else {
+        return Ok(None); // No device configured for this slot
+    };
     let baudrate = get_u32(config, slot.baudrate_key)?.unwrap_or(DEFAULT_SERIAL_BAUDRATE);
     let parity = get_serial_parity(config, slot.parity_key)?.unwrap_or(DEFAULT_SERIAL_PARITY);
     let stop_bits =
         get_serial_stop_bits(config, slot.stopbits_key)?.unwrap_or(DEFAULT_SERIAL_STOPBITS);
     let timeout_ms = get_u64(config, slot.timeout_ms_key)?.unwrap_or(DEFAULT_SERIAL_TIMEOUT_MS);
 
-    Ok(SerialSlotConfig {
+    Ok(Some(SerialSlotConfig {
         dev,
         baudrate,
         parity,
         stop_bits,
         timeout_ms,
-    })
+    }))
 }
 
 fn get_serial_parity(
@@ -635,7 +611,7 @@ fn parse_serial_stop_bits_value(raw: u8) -> CuResult<SerialStopBits> {
 }
 
 fn slot_name(id: LinuxResourcesId) -> &'static str {
-    LINUX_RESOURCE_SLOT_NAMES[id as usize]
+    LINUX_RESOURCES_ID_NAMES[id as usize]
 }
 
 fn get_string(config: Option<&ComponentConfig>, key: &str) -> CuResult<Option<String>> {

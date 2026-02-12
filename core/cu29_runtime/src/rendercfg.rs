@@ -159,12 +159,12 @@ const RESOURCE_LEGEND_ITEMS: [(&str, &str); 3] = [
     ("Unused", RESOURCE_UNUSED_BG),
 ];
 const LINUX_RESOURCE_SLOT_NAMES: [&str; 15] = [
-    "serial_acm0",
-    "serial_acm1",
-    "serial_acm2",
-    "serial_usb0",
-    "serial_usb1",
-    "serial_usb2",
+    "serial0",
+    "serial1",
+    "serial2",
+    "serial3",
+    "serial4",
+    "serial5",
     "i2c0",
     "i2c1",
     "i2c2",

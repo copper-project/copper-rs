@@ -13,13 +13,13 @@ The bridge expects a `serial` resource (anything implementing `embedded_io` `Rea
 **std builds**
 
 Use `cu_linux_resources::LinuxResources` as the serial provider; it stores owned
-resources in fixed slots like `<bundle>.serial_acm0` and `<bundle>.serial_usb0`.
+resources in fixed slots like `<bundle>.serial0` through `<bundle>.serial5`.
 
-For example, to back `serial_usb0`, configure serial slot `serial3_*`:
+For example, to use `serial3`, configure serial slot `serial3_*`:
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `serial3_dev` | string | `/dev/ttyUSB0` | Device node for the `serial_usb0` resource slot. |
+| `serial3_dev` | string | (required) | Device node for the `serial3` resource slot. |
 | `serial3_baudrate` | u32 | `115200` | UART baudrate for this slot. |
 | `serial3_parity` | string | `none` | Parity for this slot (`none`, `odd`, `even`). |
 | `serial3_stopbits` | u8 | `1` | Stop bits for this slot (`1` or `2`). |
@@ -37,7 +37,7 @@ bridges: [
   (
     id: "crsf",
     type: "cu_crsf::CrsfBridgeStd",
-    resources: { serial: "radio.serial_usb0" },
+    resources: { serial: "radio.serial3" },
     channels: [ Rx (id: "rc_rx"), Rx (id: "lq_rx") ],
   ),
 ],
