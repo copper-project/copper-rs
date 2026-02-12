@@ -7,6 +7,8 @@ mod image;
 mod imu;
 #[cfg(feature = "std")]
 mod pointcloud;
+#[cfg(feature = "rerun")]
+mod rerun_components;
 
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
