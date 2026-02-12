@@ -33,7 +33,7 @@ serde_json = "1.0"
 
 [dev-dependencies]
 tempfile = { workspace = true }
-jsonschema = "0.37"
+jsonschema = { version = "0.41", default-features = false }
 
 [features]
 default = []
