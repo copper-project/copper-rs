@@ -6,17 +6,9 @@ Bridge that combines the MSP source/sink tasks into one serial transport. It exp
 
 The bridge expects a `serial` resource. For std targets, use
 `cu_linux_resources::LinuxResources` as the provider. It opens serial devices
-and exposes fixed serial slots such as `<bundle>.serial_usb0`.
-
-For `serial_usb0`, configure serial slot `serial3_*` in the Linux bundle:
-
-| Key | Type | Default | Description |
-| --- | --- | --- | --- |
-| `serial3_dev` | string | `/dev/ttyUSB0` | Device node for the `serial_usb0` resource slot. |
-| `serial3_baudrate` | u32 | `115200` | UART baudrate for this slot. |
-| `serial3_parity` | string | `none` | Parity for this slot (`none`, `odd`, `even`). |
-| `serial3_stopbits` | u8 | `1` | Stop bits for this slot (`1` or `2`). |
-| `serial3_timeout_ms` | u64 | `50` | Read timeout for this slot in milliseconds. |
+and exposes fixed serial slots such as `<bundle>.serial0` through `<bundle>.serial5`.
+For serial config keys (`serialN_dev`, `serialN_baudrate`, parity/stopbits/timeout), see
+[`cu_linux_resources` README: Config Keys / Serial](../../res/cu_linux_resources/README.md#serial).
 
 ```ron
 resources: [
@@ -30,7 +22,7 @@ bridges: [
   (
     id: "msp_bridge",
     type: "cu_msp_bridge::CuMspBridgeStd",
-    resources: { serial: "linux.serial_usb0" },
+    resources: { serial: "linux.serial3" },
     channels: [ Tx (id: "requests"), Rx (id: "responses") ],
   ),
 ],

@@ -24,9 +24,7 @@
         (
             id: "msp_bridge",
             type: "cu_msp_bridge::CuMspBridgeStd",
-            resources: {
-                "serial": "linux.serial_usb0",
-            },
+            resources: {"serial": "linux.serial3"},
             channels: [
                 Tx(id: "requests"),
                 Rx(id: "responses"),

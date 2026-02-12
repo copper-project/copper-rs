@@ -13,22 +13,14 @@ The bridge expects a `serial` resource (anything implementing `embedded_io` `Rea
 **std builds**
 
 Use `cu_linux_resources::LinuxResources` as the serial provider; it stores owned
-resources in fixed slots like `<bundle>.serial_acm0` and `<bundle>.serial_usb0`.
-
-For example, to back `serial_usb0`, configure serial slot `serial3_*`:
-
-| Key | Type | Default | Description |
-| --- | --- | --- | --- |
-| `serial3_dev` | string | `/dev/ttyUSB0` | Device node for the `serial_usb0` resource slot. |
-| `serial3_baudrate` | u32 | `115200` | UART baudrate for this slot. |
-| `serial3_parity` | string | `none` | Parity for this slot (`none`, `odd`, `even`). |
-| `serial3_stopbits` | u8 | `1` | Stop bits for this slot (`1` or `2`). |
-| `serial3_timeout_ms` | u64 | `50` | Read timeout for this slot in milliseconds. |
+resources in fixed slots like `<bundle>.serial0` through `<bundle>.serial5`.
+For serial config keys (`serialN_dev`, `serialN_baudrate`, parity/stopbits/timeout), see
+[`cu_linux_resources` README: Config Keys / Serial](../../res/cu_linux_resources/README.md#serial).
 
 ```ron
 resources: [
   (
-    id: "radio",
+    id: "linux",
     provider: "cu_linux_resources::LinuxResources",
     config: { "serial3_dev": "/dev/ttyUSB0", "serial3_baudrate": 420000 },
   ),
@@ -37,7 +29,7 @@ bridges: [
   (
     id: "crsf",
     type: "cu_crsf::CrsfBridgeStd",
-    resources: { serial: "radio.serial_usb0" },
+    resources: { serial: "linux.serial3" },
     channels: [ Rx (id: "rc_rx"), Rx (id: "lq_rx") ],
   ),
 ],
