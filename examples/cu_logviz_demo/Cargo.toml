@@ -1,0 +1,50 @@
+[package]
+name = "cu-logviz-demo"
+description = "Example demonstrating Copper logviz with Rerun."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+publish = false
+
+[[bin]]
+name = "cu-logviz-demo"
+path = "src/main.rs"
+
+[[bin]]
+name = "cu-logviz-demo-logviz"
+path = "src/logviz.rs"
+required-features = ["logviz"]
+
+[[bin]]
+name = "cu-logviz-demo-logviz-custom"
+path = "src/logviz_custom.rs"
+required-features = ["logviz"]
+
+[features]
+default = []
+logviz = [
+  "dep:clap",
+  "dep:cu29-export",
+  "dep:cu29-logviz",
+  "dep:rerun",
+  "cu29/logviz",
+  "cu-sensor-payloads/rerun",
+  "cu-spatial-payloads/rerun",
+]
+
+[dependencies]
+clap = { workspace = true, optional = true }
+cu29 = { workspace = true }
+cu29-export = { workspace = true, optional = true }
+cu29-helpers = { workspace = true }
+cu29-logviz = { workspace = true, optional = true }
+cu-sensor-payloads = { workspace = true }
+cu-spatial-payloads = { workspace = true }
+rerun = { workspace = true, optional = true }
+serde = { workspace = true }

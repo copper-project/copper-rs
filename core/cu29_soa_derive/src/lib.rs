@@ -130,6 +130,25 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
 
     let input = parse_macro_input!(input as DeriveInput);
     let visibility = &input.vis;
+    let derive_reflect = input
+        .attrs
+        .iter()
+        .any(|attr| attr.path().is_ident("reflect"));
+    let reflect_import = if derive_reflect {
+        quote!(
+            use super::{bevy_reflect, Reflect};
+        )
+    } else {
+        quote!()
+    };
+    let soa_reflect_attrs = if derive_reflect {
+        quote! {
+            #[derive(Reflect)]
+            #[reflect(from_reflect = false)]
+        }
+    } else {
+        quote!()
+    };
 
     let name = &input.ident;
     let module_name = format_ident!("{}_soa", name.to_string().to_lowercase());
@@ -596,6 +615,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
             use serde::ser::SerializeStruct;
             use std::ops::{Index, IndexMut};
             #( use super::#unique_imports; )*
+            #reflect_import
             use core::array::from_fn;
 
             #[derive(Debug)]
@@ -715,6 +735,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
             }
 
             #[derive(Debug)]
+            #soa_reflect_attrs
             #visibility struct #soa_struct_name<const N: usize> {
                 pub len: usize,
                 #(#field_decls,)*
