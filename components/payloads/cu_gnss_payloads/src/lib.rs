@@ -19,7 +19,7 @@ use uom::si::velocity::meter_per_second;
 #[derive(
     Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
 )]
-#[reflect(opaque, from_reflect = false)]
+#[reflect(opaque)]
 pub enum GnssFixType {
     #[default]
     NoFix,
