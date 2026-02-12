@@ -6,7 +6,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 #[derive(Reflect)]
-struct WT910TestSink {}
+struct WT910TestSink;
 
 impl Freezable for WT910TestSink {}
 
@@ -18,7 +18,7 @@ impl CuSinkTask for WT910TestSink {
     where
         Self: Sized,
     {
-        Ok(Self {})
+        Ok(Self)
     }
 
     fn process(&mut self, _clock: &RobotClock, new_msg: &Self::Input<'_>) -> CuResult<()> {
