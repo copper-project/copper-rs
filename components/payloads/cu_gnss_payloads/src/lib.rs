@@ -16,7 +16,10 @@ use uom::si::length::meter;
 use uom::si::time::second;
 use uom::si::velocity::meter_per_second;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
+)]
+#[reflect(opaque, from_reflect = false)]
 pub enum GnssFixType {
     #[default]
     NoFix,
@@ -42,7 +45,10 @@ impl From<u8> for GnssFixType {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
+)]
+#[reflect(opaque, from_reflect = false)]
 pub enum GnssInfoSeverity {
     Debug,
     #[default]
@@ -52,14 +58,20 @@ pub enum GnssInfoSeverity {
     Test,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
+)]
+#[reflect(opaque, from_reflect = false)]
 pub enum GnssAckKind {
     #[default]
     Ack,
     Nak,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect,
+)]
+#[reflect(opaque, from_reflect = false)]
 pub struct GnssEpochTime {
     pub itow_ms: u32,
     pub year: u16,
@@ -240,14 +252,18 @@ impl<'de, Context> BorrowDecode<'de, Context> for GnssAccuracy {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct GnssNavEpoch {
     pub time: GnssEpochTime,
     pub fix: GnssFixSolution,
     pub accuracy: GnssAccuracy,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
+)]
+#[reflect(opaque, from_reflect = false)]
 pub struct GnssSatelliteInfo {
     pub gnss_id: u8,
     pub sv_id: u8,
@@ -267,13 +283,26 @@ pub struct GnssSatelliteInfo {
     pub spartn_corr_used: bool,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct GnssSatelliteState {
     pub itow_ms: u32,
     pub satellites: Vec<GnssSatelliteInfo>,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
+)]
+#[reflect(opaque, from_reflect = false)]
+pub struct GnssSatsInView {
+    pub itow_ms: u32,
+    pub count: u16,
+}
+
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
+)]
+#[reflect(opaque, from_reflect = false)]
 pub struct GnssSignalInfo {
     pub gnss_id: u8,
     pub sv_id: u8,
@@ -294,13 +323,17 @@ pub struct GnssSignalInfo {
     pub doppler_correction_used: bool,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct GnssSignalState {
     pub itow_ms: u32,
     pub signals: Vec<GnssSignalInfo>,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
+)]
+#[reflect(opaque, from_reflect = false)]
 pub struct GnssRfBlockStatus {
     pub block_id: u8,
     pub jamming_state: u8,
@@ -316,32 +349,39 @@ pub struct GnssRfBlockStatus {
     pub q_magnitude: u8,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct GnssRfStatus {
     pub blocks: Vec<GnssRfBlockStatus>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct GnssInfoText {
     pub severity: GnssInfoSeverity,
     pub text: String,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
+)]
+#[reflect(opaque, from_reflect = false)]
 pub struct GnssCommandAck {
     pub kind: GnssAckKind,
     pub class_id: u8,
     pub msg_id: u8,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct GnssRawUbxFrame {
     pub class_id: u8,
     pub msg_id: u8,
     pub payload: Vec<u8>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub enum GnssEvent {
     #[default]
     None,

@@ -5,7 +5,10 @@ mod protocol;
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::fmt;
-use cu_gnss_payloads::GnssEvent;
+use cu_gnss_payloads::{
+    GnssAccuracy, GnssCommandAck, GnssEpochTime, GnssEvent, GnssFixSolution, GnssInfoText,
+    GnssRawUbxFrame, GnssRfStatus, GnssSatelliteState, GnssSatsInView, GnssSignalState,
+};
 use cu_linux_resources::LinuxSerialPort;
 use cu29::prelude::*;
 use cu29::resource::{Owned, ResourceBindingMap, ResourceBindings, ResourceManager};
@@ -102,7 +105,18 @@ impl Freezable for UbxSource {}
 
 impl CuSrcTask for UbxSource {
     type Resources<'r> = UbloxResources;
-    type Output<'m> = output_msg!(GnssEvent);
+    type Output<'m> = output_msg!(
+        GnssEpochTime,
+        GnssFixSolution,
+        GnssAccuracy,
+        GnssSatsInView,
+        GnssSatelliteState,
+        GnssSignalState,
+        GnssRfStatus,
+        GnssInfoText,
+        GnssCommandAck,
+        GnssRawUbxFrame
+    );
 
     fn new(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
     where
@@ -152,6 +166,8 @@ impl CuSrcTask for UbxSource {
     }
 
     fn process(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+        clear_outputs(new_msg);
+
         let now_ns = clock.now().as_nanos();
 
         if Self::is_poll_due(
@@ -184,18 +200,14 @@ impl CuSrcTask for UbxSource {
         }
 
         if let Some(event) = self.pending_events.pop_front() {
-            new_msg.tov = Tov::Time(clock.now());
-            new_msg.set_payload(event);
+            self.emit_event(clock, new_msg, event);
             return Ok(());
         }
 
         self.read_and_decode()?;
 
         if let Some(event) = self.pending_events.pop_front() {
-            new_msg.tov = Tov::Time(clock.now());
-            new_msg.set_payload(event);
-        } else {
-            new_msg.clear_payload();
+            self.emit_event(clock, new_msg, event);
         }
 
         Ok(())
@@ -252,6 +264,68 @@ impl UbxSource {
             }
         }
     }
+
+    fn emit_event(
+        &self,
+        clock: &RobotClock,
+        out: &mut <Self as CuSrcTask>::Output<'_>,
+        event: GnssEvent,
+    ) {
+        let tov = Tov::Time(clock.now());
+        match event {
+            GnssEvent::None => {}
+            GnssEvent::NavEpoch(nav) => {
+                out.0.tov = tov;
+                out.0.set_payload(nav.time);
+                out.1.tov = tov;
+                out.1.set_payload(nav.fix);
+                out.2.tov = tov;
+                out.2.set_payload(nav.accuracy);
+            }
+            GnssEvent::SatelliteState(sat) => {
+                out.3.tov = tov;
+                out.3.set_payload(GnssSatsInView {
+                    itow_ms: sat.itow_ms,
+                    count: sat.satellites.len() as u16,
+                });
+                out.4.tov = tov;
+                out.4.set_payload(sat);
+            }
+            GnssEvent::SignalState(sig) => {
+                out.5.tov = tov;
+                out.5.set_payload(sig);
+            }
+            GnssEvent::RfStatus(rf) => {
+                out.6.tov = tov;
+                out.6.set_payload(rf);
+            }
+            GnssEvent::InfoText(info) => {
+                out.7.tov = tov;
+                out.7.set_payload(info);
+            }
+            GnssEvent::CommandAck(ack) => {
+                out.8.tov = tov;
+                out.8.set_payload(ack);
+            }
+            GnssEvent::RawUbx(raw) => {
+                out.9.tov = tov;
+                out.9.set_payload(raw);
+            }
+        }
+    }
+}
+
+fn clear_outputs(out: &mut <UbxSource as CuSrcTask>::Output<'_>) {
+    out.0.clear_payload();
+    out.1.clear_payload();
+    out.2.clear_payload();
+    out.3.clear_payload();
+    out.4.clear_payload();
+    out.5.clear_payload();
+    out.6.clear_payload();
+    out.7.clear_payload();
+    out.8.clear_payload();
+    out.9.clear_payload();
 }
 
 fn config_u32(config: Option<&ComponentConfig>, key: &str, default: u32) -> CuResult<u32> {

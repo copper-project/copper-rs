@@ -26,15 +26,76 @@
             },
         ),
         (
-            id: "printer",
-            type: "tasks::EventPrinterSink",
+            id: "time_sink",
+            type: "tasks::TimeSink",
+        ),
+        (
+            id: "fix_sink",
+            type: "tasks::FixSink",
+        ),
+        (
+            id: "sats_in_view_sink",
+            type: "tasks::SatsInViewSink",
+        ),
+        (
+            id: "drop_unused_a_sink",
+            type: "tasks::DropUnusedASink",
+        ),
+        (
+            id: "drop_unused_b_sink",
+            type: "tasks::DropUnusedBSink",
         ),
     ],
     cnx: [
         (
             src: "ublox",
-            dst: "printer",
-            msg: "cu_gnss_payloads::GnssEvent",
+            dst: "time_sink",
+            msg: "cu_gnss_payloads::GnssEpochTime",
+        ),
+        (
+            src: "ublox",
+            dst: "fix_sink",
+            msg: "cu_gnss_payloads::GnssFixSolution",
+        ),
+        (
+            src: "ublox",
+            dst: "drop_unused_a_sink",
+            msg: "cu_gnss_payloads::GnssAccuracy",
+        ),
+        (
+            src: "ublox",
+            dst: "sats_in_view_sink",
+            msg: "cu_gnss_payloads::GnssSatsInView",
+        ),
+        (
+            src: "ublox",
+            dst: "drop_unused_a_sink",
+            msg: "cu_gnss_payloads::GnssSatelliteState",
+        ),
+        (
+            src: "ublox",
+            dst: "drop_unused_a_sink",
+            msg: "cu_gnss_payloads::GnssSignalState",
+        ),
+        (
+            src: "ublox",
+            dst: "drop_unused_a_sink",
+            msg: "cu_gnss_payloads::GnssRfStatus",
+        ),
+        (
+            src: "ublox",
+            dst: "drop_unused_a_sink",
+            msg: "cu_gnss_payloads::GnssInfoText",
+        ),
+        (
+            src: "ublox",
+            dst: "drop_unused_b_sink",
+            msg: "cu_gnss_payloads::GnssCommandAck",
+        ),
+        (
+            src: "ublox",
+            dst: "drop_unused_b_sink",
+            msg: "cu_gnss_payloads::GnssRawUbxFrame",
         ),
     ],
 )
