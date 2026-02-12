@@ -447,7 +447,7 @@ impl ResourceBundle for LinuxResources {
                         "LinuxResources: skipping serial slot {} (dev {}): {}",
                         slot_name(slot.id),
                         serial_config.dev,
-                        err
+                        err.to_string()
                     );
                 }
             }
@@ -467,7 +467,7 @@ impl ResourceBundle for LinuxResources {
                         "LinuxResources: skipping i2c slot {} (dev {}): {}",
                         slot_name(slot.id),
                         dev,
-                        err
+                        err.to_string()
                     );
                 }
             }
@@ -493,7 +493,7 @@ impl ResourceBundle for LinuxResources {
                                 "LinuxResources: skipping gpio output slot {} (pin {}): {}",
                                 slot_name(slot.id),
                                 pin,
-                                err
+                                err.to_string()
                             );
                         }
                     }
@@ -512,7 +512,7 @@ impl ResourceBundle for LinuxResources {
                                 "LinuxResources: skipping gpio input slot {} (pin {}): {}",
                                 slot_name(slot.id),
                                 pin,
-                                err
+                                err.to_string()
                             );
                         }
                     }
