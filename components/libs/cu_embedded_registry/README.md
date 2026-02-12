@@ -1,12 +1,39 @@
 # Copper Embedded Registry
 
-A shared registry for Copper components to register and retrieve serial ports, SPI buses, chip-select pins, and delay providers in no-std environments.
-
 ## Overview
+
+A shared registry for Copper components to register and retrieve serial ports, SPI buses, chip-select pins, and delay providers in no-std environments.
 
 This library provides global slot-based registries for embedded devices so Copper applications can configure hardware in `main` and Copper components can pick them up later. It works in both std and no-std environments.
 
+## Interface
+
+Provides Rust APIs consumed by Copper components and applications.
+
+## Configuration
+
+Typically no direct runtime `copperconfig.ron` keys; configure through Rust API usage.
+
 ## Usage
+
+Bridges and sources can take SPI/CS/delay or serial instances from the registry instead of constructing them directly, letting the board-support crate decide the concrete HAL types.
+
+## Compatibility
+
+### Features
+
+- **no-std compatible**: Works in embedded environments
+- **Type-safe**: Uses Rust's type system to ensure correct device types
+- **Thread-safe**: Uses spin locks for concurrent access
+- **Bounded**: Supports up to 8 slots per device class
+- **Zero-cost when unused**: Minimal overhead
+
+## Links
+
+- Crate path: `components/libs/cu_embedded_registry`
+- docs.rs: <https://docs.rs/cu-embedded-registry>
+
+## Additional Notes
 
 ### Registering devices in your board-support crate
 
@@ -39,15 +66,3 @@ let delay: MyDelay = reg::take_delay(1).expect("Delay slot 1 not registered");
 ```
 
 Slots are consumed when taken; re-register if the handle needs to be shared again.
-
-## Features
-
-- **no-std compatible**: Works in embedded environments
-- **Type-safe**: Uses Rust's type system to ensure correct device types
-- **Thread-safe**: Uses spin locks for concurrent access
-- **Bounded**: Supports up to 8 slots per device class
-- **Zero-cost when unused**: Minimal overhead
-
-## Integration with Copper
-
-Bridges and sources can take SPI/CS/delay or serial instances from the registry instead of constructing them directly, letting the board-support crate decide the concrete HAL types.

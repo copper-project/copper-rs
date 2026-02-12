@@ -1,8 +1,16 @@
 # cu-msp-bridge
 
+## Overview
+
 Bridge that combines the MSP source/sink tasks into one serial transport. It exposes a single TX channel (`requests`) that accepts batches of [`cu_msp_lib::structs::MspRequest`] messages and a single RX channel (`responses`) that yields [`MspResponse`] batches decoded from the line.
 
-## Resources and configuration
+## Interface
+
+Defines typed `Tx`/`Rx` channels and maps them to external transport routes.
+
+## Configuration
+
+### Resources and configuration
 
 The bridge expects a `serial` resource. For std targets, use
 `cu_linux_resources::LinuxResources` as the provider. It opens serial devices
@@ -37,3 +45,16 @@ bridges: [
 ```
 
 For embedded targets, provide your own bundle that moves the UART into the `ResourceManager` as an owned resource. If your UART type is not `Sync`, wrap it once at bundle registration time with `cu_linux_resources::Exclusive<T>`. See `examples/cu_elrs_bdshot_demo` and `examples/cu_msp_bridge_loopback` for end-to-end wiring and config mutation.
+
+## Usage
+
+Declare bridge types in app code, then reference them under `bridges` in `copperconfig.ron`.
+
+## Compatibility
+
+Depends on enabled transport features and target platform support for the selected backend.
+
+## Links
+
+- Crate path: `components/bridges/cu_msp_bridge`
+- docs.rs: <https://docs.rs/cu-msp-bridge>

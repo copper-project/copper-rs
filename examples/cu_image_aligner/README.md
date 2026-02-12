@@ -1,13 +1,20 @@
 # cu-image-aligner
 
+## Overview
+
 This example demonstrates how to align two image streams using `cu-aligner` while keeping image data in pooled buffers (`CuHostMemoryPool<Vec<u8>>`). It generates synthetic grayscale images, stamps them with `tov`, aligns them in time, and prints a small summary from the aligned window.
 
-## What It Does
+### What It Does
 
 - Creates two source tasks that allocate image buffers from a host pool.
 - Fills each buffer with a deterministic pattern based on a per-source base value and sequence.
 - Uses `cu-aligner` to align the two `CuImage<Vec<u8>>` streams.
 - Emits a summary line showing aligned window sizes and a sample pixel.
+
+## Prerequisites
+
+- Rust stable toolchain
+- Any hardware or services referenced by this example
 
 ## Run
 
@@ -19,22 +26,9 @@ cargo run -p cu-image-aligner
 
 The run is bounded by `ITERATIONS` in `examples/cu_image_aligner/src/main.rs`.
 
-## Configuration
+## Expected Output
 
-All wiring lives in `examples/cu_image_aligner/copperconfig.ron`.
-
-Source config keys:
-- `width`, `height`: image dimensions
-- `base_value`: starting pixel value for the synthetic pattern
-- `pool_id`: name for the host memory pool
-- `pool_size`: number of pooled buffers (must be greater than `BUFFER_CAP` in `tasks.rs`)
-- `tov_offset_ms`: offset applied to `tov` in milliseconds
-
-Aligner config keys:
-- `target_alignment_window_ms`: size of the alignment window
-- `stale_data_horizon_ms`: how far back to retain data
-
-## Output
+### Output
 
 You should see output similar to:
 
@@ -50,13 +44,33 @@ Meaning of each field:
 
 `left_len` and `right_len` grow until they reach `OUTPUT_CAP`.
 
-## Tuning
+## Links
+
+- Example path: `examples/cu_image_aligner`
+- Build/deploy guide: <https://copper-project.github.io/copper-rs/Build-and-Deploy-a-Copper-Application>
+
+## Additional Notes
+
+All wiring lives in `examples/cu_image_aligner/copperconfig.ron`.
+
+Source config keys:
+- `width`, `height`: image dimensions
+- `base_value`: starting pixel value for the synthetic pattern
+- `pool_id`: name for the host memory pool
+- `pool_size`: number of pooled buffers (must be greater than `BUFFER_CAP` in `tasks.rs`)
+- `tov_offset_ms`: offset applied to `tov` in milliseconds
+
+Aligner config keys:
+- `target_alignment_window_ms`: size of the alignment window
+- `stale_data_horizon_ms`: how far back to retain data
+
+### Tuning
 
 - Adjust `BUFFER_CAP` and `OUTPUT_CAP` in `examples/cu_image_aligner/src/tasks.rs`.
 - Increase `pool_size` if you see buffer acquisition failures.
 - Increase `ITERATIONS` in `examples/cu_image_aligner/src/main.rs` for longer runs.
 
-## Troubleshooting
+### Troubleshooting
 
 - `pool_size must be greater than buffer capacity`: bump `pool_size` above `BUFFER_CAP`.
 - If you see logger shutdown warnings, they are emitted during log teardown and can be ignored for this example.

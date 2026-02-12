@@ -1,4 +1,32 @@
-## Cu-caterpillar: full example for Copper
+# cu-caterpillar
+
+## Overview
+
+`cu-caterpillar` is a runnable Copper example.
+
+## Prerequisites
+
+- Rust stable toolchain
+- Any hardware or services referenced by this example
+
+## Run
+
+```bash
+cargo run -p cu-caterpillar
+```
+
+## Expected Output
+
+Expect successful startup logs and normal task-loop execution without panics.
+
+## Links
+
+- Example path: `examples/cu_caterpillar`
+- Build/deploy guide: <https://copper-project.github.io/copper-rs/Build-and-Deploy-a-Copper-Application>
+
+## Additional Notes
+
+### Cu-caterpillar: full example for Copper
 
 This is an example for the Copper project running on a Raspberry Pi flipping in sequence 8 GPIO pins.
 It allows to gauge the latency and performance of the Copper runtime with minimal user code.

@@ -1,5 +1,7 @@
 # cu-resources-test
 
+## Overview
+
 Small, host-only Copper app that stress-tests resource bindings:
 
 - Multiple missions (`A` / `B`) with different bundles/config.
@@ -9,7 +11,34 @@ Small, host-only Copper app that stress-tests resource bindings:
 
 Logging is disabled in `copperconfig.ron` to keep the demo lightweight and avoid allocator/space limits while exercising resources. The runtime still allocates a unified log slab (default 10 MiB via `SLAB_SIZE: None` in `main.rs`).
 
-## Top-to-bottom resource flow
+## Prerequisites
+
+- Rust stable toolchain
+- Any hardware or services referenced by this example
+
+## Run
+
+### Running
+
+```bash
+cargo run -p cu-resources-test -- --mission A   # mission A graph
+cargo run -p cu-resources-test -- --mission B   # mission B graph
+```
+
+Logs end up in `logs/cu_resources_test.copper`; the global log is also appended in memory (see `GlobalLog`).
+
+## Expected Output
+
+Expect successful startup logs and normal task-loop execution without panics.
+
+## Links
+
+- Example path: `examples/cu_resources_test`
+- Build/deploy guide: <https://copper-project.github.io/copper-rs/Build-and-Deploy-a-Copper-Application>
+
+## Additional Notes
+
+### Top-to-bottom resource flow
 
 1) **Config declares bundles**
 `copperconfig.ron` lists four bundles:
@@ -42,12 +71,3 @@ Resource binding structs implement `ResourceBindings` manually:
 
 4) **Missions exercise variations**
 Mission A uses `board_a` (offset +10) and bridge `stats_a`. Mission B uses `board_b` (offset -3) plus an extra note from `extras_b` and bridge `stats_b`. The same code runs in both missions; the config drives which concrete resources are wired in.
-
-## Running
-
-```bash
-cargo run -p cu-resources-test -- --mission A   # mission A graph
-cargo run -p cu-resources-test -- --mission B   # mission B graph
-```
-
-Logs end up in `logs/cu_resources_test.copper`; the global log is also appended in memory (see `GlobalLog`).

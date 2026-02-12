@@ -1,6 +1,6 @@
-## Aligner to buffer and align data flow from different time horizons
+# cu-aligner
 
-The goal of this Copper component is to align data from different sources.
+## Overview
 
 ### Theory of operation:
 
@@ -35,7 +35,15 @@ The goal of this Copper component is to align data from different sources.
 
 The timings are taken from the CuMsg::tov field (time of validity).
 
-### Usage
+## Interface
+
+Consumes input payload(s) and emits transformed output payload(s) each process cycle.
+
+## Configuration
+
+Tune algorithm parameters via task `config` entries in `copperconfig.ron`.
+
+## Usage
 
 The task is generated entirely out of the `cu_aligner::define_task` macro:
 
@@ -66,6 +74,21 @@ The type of the input will be a tuple of CuMsg (which is what the aligner expect
 `(CuMsg<f32>, CuMsg<MyPayload>)`.
 The type of the output will be a CuMsg of a tuple of CuArrays holding the aligned messages for each stream. From the
 example: `CuMsg<(CuArray<f32, 7>, CuArray<MyPayload, 5>)>`.
+
+## Compatibility
+
+Supports `std`/`no_std` according to crate features and dependencies.
+
+## Links
+
+- Crate path: `components/tasks/cu_aligner`
+- docs.rs: <https://docs.rs/cu-aligner>
+
+## Additional Notes
+
+### Aligner to buffer and align data flow from different time horizons
+
+The goal of this Copper component is to align data from different sources.
 
 ### Performance consideration
 

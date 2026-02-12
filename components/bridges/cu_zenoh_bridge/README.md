@@ -1,8 +1,16 @@
 # cu-zenoh-bridge
 
+## Overview
+
 Bidirectional Copper bridge over Zenoh, with multiple typed channels per bridge.
 
-## Config
+## Interface
+
+Defines typed `Tx`/`Rx` channels and maps them to external transport routes.
+
+## Configuration
+
+### Config
 
 Bridge-level config:
 - `zenoh_config_file`: path to a Zenoh config file (optional). This should be a JSON5 file following
@@ -51,3 +59,16 @@ config: {
 ```
 
 The bridge uses a single Zenoh session and declares one publisher/subscriber per configured channel.
+
+## Usage
+
+Declare bridge types in app code, then reference them under `bridges` in `copperconfig.ron`.
+
+## Compatibility
+
+Depends on enabled transport features and target platform support for the selected backend.
+
+## Links
+
+- Crate path: `components/bridges/cu_zenoh_bridge`
+- docs.rs: <https://docs.rs/cu-zenoh-bridge>

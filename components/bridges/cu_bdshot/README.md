@@ -1,37 +1,27 @@
 # cu-bdshot
 
+## Overview
+
 Copper bridge for bidirectional DSHOT (BDShot) ESCs. It exposes up to four `EscCommand` transmit channels and matching `EscTelemetry` receive channels. The default `cu_bdshot::RpBdshotBridge` drives the RP2350 reference board PIO/DMA stack; custom boards can implement `BdshotBoard`/`BdshotBoardProvider`.
 
-## Channels
+## Interface
+
+### Channels
+
 - `esc{0-3}_tx` (`EscCommand`): throttle 0–2047, optional telemetry request bit.
 - `esc{0-3}_rx` (`EscTelemetry`): latest `DShotTelemetry` sample per ESC.
 
 Only the channels declared in the Copper config are driven; others stay idle.
 
-## Board setup
-- Select exactly one feature:
-  - `rp2350` (default): RP2350 PIO driver (`RpBdshotBridge`).
-  - `stm32h7`: STM32H7 bit-bang driver (`Stm32BdshotBridge`).
-- Build an `Rp2350Board` from your PIO0 state machines and pin map (defaults: GPIO6–GPIO9, 15.3 MHz PIO clock) and register it once before Copper boots:
-  ```rust
-  let board = Rp2350Board::new(resources, system_clock_hz, Rp2350BoardConfig::default())?;
-  cu_bdshot::register_rp2350_board(board)?;
-  ```
-- Build a `Stm32H7Board` from GPIOE pins (PE14/13/11/9) plus a running DWT cycle counter and register it once before Copper boots:
-  ```rust
-  let resources = Stm32H7BoardResources { m1, m2, m3, m4, dwt, sysclk_hz };
-  let board = Stm32H7Board::new(resources)?;
-  cu_bdshot::register_stm32h7_board(board)?;
-  ```
-- On startup the bridge sends repeated disarm frames and waits for telemetry; it errors out if ESCs never answer.
-
 ## Configuration
+
 Optional component-level config keys:
 - `rate_hz`: Maximum per-channel frame rate. If too early, the bridge skips sending on that cycle.
 
 Channel activation is driven solely by the Copper bridge channel list.
 
 ## Usage
+
 Declare the bridge and wire tasks to it:
 ```ron
 (
@@ -53,3 +43,32 @@ Declare the bridge and wire tasks to it:
 ```
 
 See `examples/cu_elrs_bdshot_demo` for a full mission wiring CRSF RC input into BDShot ESCs on the RP2350 reference board.
+
+## Compatibility
+
+Depends on enabled transport features and target platform support for the selected backend.
+
+## Links
+
+- Crate path: `components/bridges/cu_bdshot`
+- docs.rs: <https://docs.rs/cu-bdshot>
+
+## Additional Notes
+
+### Board setup
+
+- Select exactly one feature:
+  - `rp2350` (default): RP2350 PIO driver (`RpBdshotBridge`).
+  - `stm32h7`: STM32H7 bit-bang driver (`Stm32BdshotBridge`).
+- Build an `Rp2350Board` from your PIO0 state machines and pin map (defaults: GPIO6–GPIO9, 15.3 MHz PIO clock) and register it once before Copper boots:
+  ```rust
+  let board = Rp2350Board::new(resources, system_clock_hz, Rp2350BoardConfig::default())?;
+  cu_bdshot::register_rp2350_board(board)?;
+  ```
+- Build a `Stm32H7Board` from GPIOE pins (PE14/13/11/9) plus a running DWT cycle counter and register it once before Copper boots:
+  ```rust
+  let resources = Stm32H7BoardResources { m1, m2, m3, m4, dwt, sysclk_hz };
+  let board = Stm32H7Board::new(resources)?;
+  cu_bdshot::register_stm32h7_board(board)?;
+  ```
+- On startup the bridge sends repeated disarm frames and waits for telemetry; it errors out if ESCs never answer.

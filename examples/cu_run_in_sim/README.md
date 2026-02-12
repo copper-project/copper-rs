@@ -1,5 +1,7 @@
 # run_in_sim Demo
 
+## Overview
+
 This demo shows how to control task behavior in simulation using `run_in_sim` and a simulation callback.
 
 What the demo does:
@@ -14,7 +16,7 @@ In this implementation:
 - The Sink runs its real implementation in simulation (so its real `process` runs and prints).
 - The Regular task always runs its real code in simulation; `run_in_sim` is ignored for regular tasks.
 
-## Why this matters
+### Why this matters
 
 When running in simulation, sources and sinks can be either:
 
@@ -30,18 +32,14 @@ setup where:
 This lets you inject synthetic inputs at the beginning of the pipeline while keeping the real behavior at the output
 end.
 
-## How the simulation callback is used
+## Prerequisites
 
-The runtime generates a `SimStep` enum that indicates which task and lifecycle stage is happening. The demo’s callback
-does this:
+- Rust stable toolchain
+- Any hardware or services referenced by this example
 
-- For the Source `Process` step: it sets the output payload (e.g., a monotonically increasing counter) and returns
-  `ExecutedBySim`, meaning “the simulator handled it; skip the real implementation.”
-- For the Regular task `Process` step: it returns `ExecuteByRuntime` so the real code runs and doubles the value.
-- For the Sink `Process` step: it returns `ExecuteByRuntime` so the real sink runs and prints the result.
-- For all other lifecycle steps (New, Start, Preprocess, Postprocess, Stop): it returns `ExecuteByRuntime`.
+## Run
 
-## Running the demo
+### Running the demo
 
 From your workspace, run the example using your preferred method, for example:
 
@@ -62,3 +60,24 @@ Flushing the unified Logger ...
 Unified Logger flushed.
 ```
 
+## Expected Output
+
+Expect successful startup logs and normal task-loop execution without panics.
+
+## Links
+
+- Example path: `examples/cu_run_in_sim`
+- Build/deploy guide: <https://copper-project.github.io/copper-rs/Build-and-Deploy-a-Copper-Application>
+
+## Additional Notes
+
+### How the simulation callback is used
+
+The runtime generates a `SimStep` enum that indicates which task and lifecycle stage is happening. The demo’s callback
+does this:
+
+- For the Source `Process` step: it sets the output payload (e.g., a monotonically increasing counter) and returns
+  `ExecutedBySim`, meaning “the simulator handled it; skip the real implementation.”
+- For the Regular task `Process` step: it returns `ExecuteByRuntime` so the real code runs and doubles the value.
+- For the Sink `Process` step: it returns `ExecuteByRuntime` so the real sink runs and prints the result.
+- For all other lifecycle steps (New, Start, Preprocess, Postprocess, Stop): it returns `ExecuteByRuntime`.

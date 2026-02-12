@@ -1,8 +1,8 @@
 # Copper Driver for the ADS 7883 high speed SPI-based ADC
 
-See the crate [cu29](https://crates.io/crates/cu29) for more information about the Copper project.
-
 ## Overview
+
+See the crate [cu29](https://crates.io/crates/cu29) for more information about the Copper project.
 
 The ADS7883 is a high-speed, 12-bit, sampling analog-to-digital converter (ADC) that operates
 from a single power supply.
@@ -13,6 +13,62 @@ The ADC is not only performant but also fairly compact:
 
 <img src="doc/ads7883-scale.jpg" width="500px">
 
+## Interface
+
+Publishes source payloads into the Copper graph on each runtime tick.
+
+## Configuration
+
+Use `config` keys and `resources` bindings for hardware/driver handles.
+
+## Usage
+
+### Justfile command
+
+- `just deploy-cu-ads7883-tests` — cross-compile tests for `arm-unknown-linux-musleabihf` and scp the test binary plus config to `copper7:testads7883`.
+
+With no config will take the `/dev/spidev0.0` device and the default SPI speed of 48MHz (maxing it out at 3MSPS).
+
+If you need to override the device or clock speed, you can do so with the following config:
+
+```ron
+    tasks: [
+        (
+            id: "src",
+            type: "cu_ads7883::ADS7883",
+            config: {
+                spi_dev: "/dev/spidev0.1",
+                max_speed_hz: 1000000,  // 1MHz
+            },
+        ),
+    ]
+```
+
+When you connect this driver to the rest of the system you need to use the `cu_ads7883::ADSReadingMsg` message type.
+
+```ron
+    cnx: [
+        (src: "src",  dst: "dst",   msg: "cu_ads7883::ADSReadingMsg"),
+    ],
+
+```
+
+In this message you will get a 16bit value that represents the ADC reading and its time of validity.
+
+```rust
+#[derive(Debug, Clone, Copy, Default, Encode, Decode, PartialEq, Serialize, Deserialize)]
+pub struct ADCReadingMsg<T>
+where
+    T: Into<u128> + Copy, // Trick to say all unsigned integers.
+{
+    pub analog_value: T,
+    pub tov: CuTime,
+}
+
+/// This is the type of message that the ADS7883 driver will send.
+pub type ADSReadingMsg = ADCReadingMsg<u16>;
+```
+
 ## Compatibility
 
 OS: Linux
@@ -20,7 +76,12 @@ This driver works on any Linux kernel with the spidev driver enabled.
 
 hardware: [Texas Instrument ADS7883](https://www.ti.com/product/ADS7883)
 
-## Usage
+## Links
+
+- Crate path: `components/sources/cu_ads7883`
+- docs.rs: <https://docs.rs/cu-ads7883-new>
+
+## Additional Notes
 
 ### Preflight checks
 
@@ -78,55 +139,3 @@ In your Copper RON config file, add the following:
         ),
     ]
 ```
-
-## Justfile command
-
-- `just deploy-cu-ads7883-tests` — cross-compile tests for `arm-unknown-linux-musleabihf` and scp the test binary plus config to `copper7:testads7883`.
-
-With no config will take the `/dev/spidev0.0` device and the default SPI speed of 48MHz (maxing it out at 3MSPS).
-
-If you need to override the device or clock speed, you can do so with the following config:
-
-```ron
-    tasks: [
-        (
-            id: "src",
-            type: "cu_ads7883::ADS7883",
-            config: {
-                spi_dev: "/dev/spidev0.1",
-                max_speed_hz: 1000000,  // 1MHz
-            },
-        ),
-    ]
-```
-
-When you connect this driver to the rest of the system you need to use the `cu_ads7883::ADSReadingMsg` message type.
-
-```ron
-    cnx: [
-        (src: "src",  dst: "dst",   msg: "cu_ads7883::ADSReadingMsg"),
-    ],
-
-```
-
-In this message you will get a 16bit value that represents the ADC reading and its time of validity.
-
-```rust
-#[derive(Debug, Clone, Copy, Default, Encode, Decode, PartialEq, Serialize, Deserialize)]
-pub struct ADCReadingMsg<T>
-where
-    T: Into<u128> + Copy, // Trick to say all unsigned integers.
-{
-    pub analog_value: T,
-    pub tov: CuTime,
-}
-
-/// This is the type of message that the ADS7883 driver will send.
-pub type ADSReadingMsg = ADCReadingMsg<u16>;
-```
-
-
-
-
-
-

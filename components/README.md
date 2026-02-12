@@ -1,38 +1,34 @@
-You can find a collection of components for Copper in that subtree of the repo.
+# Components
 
-## bridges
+Copper components are reusable building blocks for application graphs.
 
-A combination of sinks and sources to interface with external systems.
+## Overview
 
-## libs
-Supporting libraries for Copper.
+The `components/` tree is organized by role. Most crates are plug-and-play from `copperconfig.ron` once imported in your app type registry.
 
-## monitors
+## Categories
 
-UI and interfacing with monitoring systems.
+| Directory | Purpose |
+|---|---|
+| `components/bridges` | Bidirectional adapters to external systems (transport/protocol bridges). |
+| `components/libs` | Shared support libraries used by runtime components. |
+| `components/monitors` | Runtime monitors and observability helpers. |
+| `components/payloads` | Common message payload definitions for task I/O. |
+| `components/res` | Platform resource bundles (HAL-like providers). |
+| `components/sinks` | Outgoing endpoints, usually actuation side. |
+| `components/sources` | Incoming endpoints, usually sensor side. |
+| `components/tasks` | In-graph computation tasks and algorithms. |
+| `components/testing` | Test support components and integration helpers. |
 
-## payloads
+## Interface Notes
 
-Common Message Payloads
-Those are for you to use in your tasks. They are used to pass data between tasks.
+- Sources produce messages into Copper.
+- Tasks transform messages inside Copper.
+- Sinks consume messages from Copper.
+- Bridges expose shared transports with typed Rx/Tx channels.
 
-## res
+## Links
 
-Platform-specific resource bundles.
-Those are the HAL for a lot of sources and bridges.
-
-## sinks
-
-Final destinations for Copper data, often on the actuation side of the robot.
-
-## sources
-
-Sources of Copper data, often on the sensor side of the robot.
-
-## tasks
-
-Internal tasks like computational processes & algorithms with an output out of an input.
-
-## testing
-
-Components and libraries that are common to those components for testing them (network injection, mocks etc...)
+- Style guide: [`doc/readme-style-guide.md`](../doc/readme-style-guide.md)
+- Component inventory (wiki): <https://copper-project.github.io/copper-rs/Available-Components>
+- Workspace root: [`README.md`](../README.md)

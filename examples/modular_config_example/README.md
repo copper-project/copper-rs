@@ -1,14 +1,45 @@
 # Modular Configuration Example
 
+## Overview
+
 This directory contains a simple example demonstrating how to use Copper's modular configuration feature. The example creates a basic robot configuration with a source task and two motor tasks, illustrating the use of includes and parameter substitution.
 
-## Configuration Files
+## Prerequisites
+
+- Rust stable toolchain
+- Any hardware or services referenced by this example
+
+## Run
+
+```bash
+cargo run -p <package-name>
+```
+
+## Expected Output
+
+### Resulting Configuration
+
+The final configuration will have:
+
+- One source task: `source`
+- Two motor tasks: `motor_left` and `motor_right`
+- Connections from the source to each motor
+- Console monitoring and logging configuration
+
+## Links
+
+- Example path: `examples/modular_config_example`
+- Build/deploy guide: <https://copper-project.github.io/copper-rs/Build-and-Deploy-a-Copper-Application>
+
+## Additional Notes
+
+### Configuration Files
 
 - **base.ron**: Contains the basic configuration with a source task
 - **motors.ron**: A template for motor tasks with parameters for ID, pin, and direction
 - **main_config.ron**: The main configuration that includes the other files with specific parameters
 
-## How It Works
+### How It Works
 
 1. **base.ron** defines a `FlippingSource` task that generates signals
 2. **motors.ron** is a template for motors with parameterized values:
@@ -20,17 +51,6 @@ This directory contains a simple example demonstrating how to use Copper's modul
    - `base.ron` with no parameters
    - `motors.ron` twice with different parameters for left and right motors
 
-## Resulting Configuration
-
-The final configuration will have:
-
-- One source task: `source`
-- Two motor tasks: `motor_left` and `motor_right`
-- Connections from the source to each motor
-- Console monitoring and logging configuration
-
-## Usage
-
 To use this configuration, reference the main configuration file in your Copper application:
 
 ```rust
@@ -38,7 +58,7 @@ To use this configuration, reference the main configuration file in your Copper 
 struct MyRobot {}
 ```
 
-## Benefits
+### Benefits
 
 This example demonstrates several benefits of modular configuration:
 

@@ -1,8 +1,16 @@
 # GStreamer Appsink Source for Copper
 
-## Compatibility
+## Overview
 
-It should be broad, any buffer you can send to a gstreamer Sink should be able to be handled on the Copper Side.
+`cu-gstreamer` is a Copper `sources` crate.
+
+## Interface
+
+Publishes source payloads into the Copper graph on each runtime tick.
+
+## Configuration
+
+Use `config` keys and `resources` bindings for hardware/driver handles.
 
 ## Usage
 
@@ -30,3 +38,12 @@ When you connect this driver to the rest of the system you need to use the `cu_g
 ```
 
 You can see a small test application in the `tests/` folder on github.
+
+## Compatibility
+
+It should be broad, any buffer you can send to a gstreamer Sink should be able to be handled on the Copper Side.
+
+## Links
+
+- Crate path: `components/sources/cu_gstreamer`
+- docs.rs: <https://docs.rs/cu-gstreamer>

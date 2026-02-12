@@ -1,12 +1,14 @@
 # cu-flight-controller
 
-A bare-metal quadcopter flight controller implemented end-to-end using Copper components.
-
 ## Overview
+
+A bare-metal quadcopter flight controller implemented end-to-end using Copper components.
 
 This example demonstrates a complete flight controller running on the MicoAir H743 board (STM32H743). It showcases Copper's ability to run deterministic, real-time control loops on embedded hardware with zero dynamic allocation during runtime.
 
-## Hardware
+## Prerequisites
+
+### Hardware
 
 - **MCU**: STM32H743VIT @ 400MHz
 - **IMU**: BMI088 (accelerometer + gyroscope)
@@ -18,7 +20,51 @@ This example demonstrates a complete flight controller running on the MicoAir H7
 
 See [doc/PINOUT.md](doc/PINOUT.md) for the complete pinout reference.
 
-## Architecture
+### Firmware (for flashing to hardware)
+
+```bash
+# Build and flash with text logging (debug)
+just fw
+
+# Build and flash release (optimized, no text logs)
+just fwr
+
+# Build and flash debug profile
+just fwd
+```
+
+### Dependencies
+
+Key Copper components used:
+- `cu29` - Core runtime
+- `cu-ahrs` - Attitude estimation
+- `cu-bdshot` - Bidirectional DShot ESC protocol
+- `cu-crsf` - CRSF RC protocol (ExpressLRS)
+- `cu-msp-bridge` - MSP protocol for VTX/OSD
+- `cu-pid` - PID controller
+- `cu-micoairh743` - MicoAir H743 HAL bundle
+- `cu-logmon` - Log monitoring
+
+## Run
+
+### Attaching to Running Target
+
+```bash
+just attach
+```
+
+## Expected Output
+
+Expect successful startup logs and normal task-loop execution without panics.
+
+## Links
+
+- Example path: `examples/cu_flight_controller`
+- Build/deploy guide: <https://copper-project.github.io/copper-rs/Build-and-Deploy-a-Copper-Application>
+
+## Additional Notes
+
+### Architecture
 
 The flight controller uses a cascaded control architecture:
 
@@ -57,21 +103,6 @@ RC Input (CRSF) -> RC Mapper -> Attitude Controller -> Rate Controller -> Mixer 
 - **Gyro calibration**: Automatic bias calibration on arm
 - **Zero-copy logging**: Binary logs to SD card via unified logger
 
-## Building
-
-### Firmware (for flashing to hardware)
-
-```bash
-# Build and flash with text logging (debug)
-just fw
-
-# Build and flash release (optimized, no text logs)
-just fwr
-
-# Build and flash debug profile
-just fwd
-```
-
 ### Log Reader (host tool)
 
 ```bash
@@ -92,11 +123,10 @@ just textlogs log=logs/embedded.copper
 just rc
 ```
 
-## Configuration
-
 The task graph is defined in `copperconfig.ron`. Key configurable parameters:
 
 ### Rate Controller
+
 ```ron
 config: {
     "kp": 0.04,
@@ -108,6 +138,7 @@ config: {
 ```
 
 ### Attitude Controller
+
 ```ron
 config: {
     "angle_limit_deg": 60.0,
@@ -118,6 +149,7 @@ config: {
 ```
 
 ### RC Mapper
+
 ```ron
 config: {
     "arm_channel": 4,
@@ -127,7 +159,7 @@ config: {
 }
 ```
 
-## Motor Layout
+### Motor Layout
 
 QuadX configuration (props out):
 
@@ -148,14 +180,6 @@ QuadX configuration (props out):
 | 2 | Rear Left | CW |
 | 3 | Front Left | CCW |
 
-## Development
-
-### Attaching to Running Target
-
-```bash
-just attach
-```
-
 ### Viewing Logs
 
 The firmware logs to the SD card in Copper's binary format. Use the log reader tools to extract and analyze:
@@ -167,15 +191,3 @@ just logreader
 # Extract text logs (when compiled with textlogs feature)
 just textlogs
 ```
-
-## Dependencies
-
-Key Copper components used:
-- `cu29` - Core runtime
-- `cu-ahrs` - Attitude estimation
-- `cu-bdshot` - Bidirectional DShot ESC protocol
-- `cu-crsf` - CRSF RC protocol (ExpressLRS)
-- `cu-msp-bridge` - MSP protocol for VTX/OSD
-- `cu-pid` - PID controller
-- `cu-micoairh743` - MicoAir H743 HAL bundle
-- `cu-logmon` - Log monitoring

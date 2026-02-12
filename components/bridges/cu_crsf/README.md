@@ -1,13 +1,21 @@
 # cu-crsf
 
+## Overview
+
 Serial bridge for TBS Crossfire / ExpressLRS receivers. It parses CRSF packets coming from a UART into Copper messages and can optionally forward RC or link statistics back out over the same link.
 
-## Channels
+## Interface
+
+### Channels
+
 - `rc_rx` (`RcChannelsPayload`): latest RC channel values from the receiver.
 - `lq_rx` (`LinkStatisticsPayload`): downlink link-quality metrics.
 - `rc_tx` / `lq_tx`: optional uplink of RC or link statistics toward the transmitter.
 
-## Resources and configuration
+## Configuration
+
+### Resources and configuration
+
 The bridge expects a `serial` resource (anything implementing `embedded_io` `Read`/`Write` + `Send + Sync`). Point the bridge's `resources` map at a bundle entry.
 
 **std builds**
@@ -64,3 +72,16 @@ bridges: [
 ```
 
 See `examples/cu_elrs_bdshot_demo` for a full wiring that feeds CRSF RC channels into a BDShot bridge on the RP2350 reference board.
+
+## Usage
+
+Declare bridge types in app code, then reference them under `bridges` in `copperconfig.ron`.
+
+## Compatibility
+
+Depends on enabled transport features and target platform support for the selected backend.
+
+## Links
+
+- Crate path: `components/bridges/cu_crsf`
+- docs.rs: <https://docs.rs/cu-crsf>

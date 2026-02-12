@@ -1,8 +1,25 @@
 # Copper Logging (cu29-log)
 
+## Overview
+
 The `cu29-log` crate provides a structured logging system for the Copper framework. It allows for efficient, compile-time optimized logging with different severity levels and structured log entry storage.
 
-## Log Levels
+## Usage
+
+Add this crate as a dependency in `Cargo.toml` and use its public APIs from your runtime or component code.
+
+## Compatibility
+
+Feature and platform support (`std`/`no_std`) is defined by this crate's `Cargo.toml` feature set.
+
+## Links
+
+- Crate path: `core/cu29_log`
+- docs.rs: <https://docs.rs/cu29-log>
+
+## Additional Notes
+
+### Log Levels
 
 Copper logging supports five levels of severity:
 
@@ -12,7 +29,7 @@ Copper logging supports five levels of severity:
 - **Error**: Issues that might disrupt normal operation but don't cause system failure
 - **Critical**: Critical errors requiring immediate attention, usually resulting in system failure
 
-## Compile-Time Log Level Selection
+### Compile-Time Log Level Selection
 
 A key feature of Copper's logging system is the ability to select the minimum log level at compile time. This means that log messages below the selected level are completely eliminated from the compiled code, resulting in zero runtime overhead for disabled log levels.
 
@@ -43,7 +60,7 @@ Available feature flags:
 
 By default, no feature flag is enabled. If two feature flags are enabled, the higher level feature flag will be used as the max log level. For example, if `log-level-info` and `log-level-error` are enabled, `info!`, `warning!`, `error!` and `critical!` will be logged.
 
-## Using the Logging Macros
+### Using the Logging Macros
 
 The following macros are available for logging at different levels through the `cu29_log_derive` crate:
 
@@ -69,12 +86,10 @@ All logging macros support both named and unnamed parameters:
 - Unnamed parameters: `debug!("Value: {}", value)`
 - Named parameters: `debug!("Value: {}", name = value)`
 
-## Behavior in Debug vs Release Mode
+### Behavior in Debug vs Release Mode
 
 - In **debug** mode, logs are both sent to the structured log sink and printed to the console for immediate visibility.
 - In **release** mode, logs are only sent to the structured log sink, optimizing for performance.
-
-## Advanced Usage
 
 ### CuLogLevel Enum
 

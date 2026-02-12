@@ -1,4 +1,6 @@
-## Compute a dynamic threshold for an image
+# cu-dynthreshold
+
+## Overview
 
 ### Theory of operation
 
@@ -9,7 +11,11 @@ block around it.
 
 The block radius is a parameter of the algorithm and is set in the configuration.
 
-### Configuration
+## Interface
+
+Consumes input payload(s) and emits transformed output payload(s) each process cycle.
+
+## Configuration
 
 In the ron config file:
 
@@ -33,3 +39,16 @@ For example the beginning of an NV12 buffer works directly (provided you give it
 config).
 
 As an output it will produce a CuImage with 0 or 255 values for each pixel.
+
+## Usage
+
+Add the task type to your app registry and connect it in the mission graph.
+
+## Compatibility
+
+Supports `std`/`no_std` according to crate features and dependencies.
+
+## Links
+
+- Crate path: `components/tasks/cu_dynthreshold`
+- docs.rs: <https://docs.rs/cu-dynthreshold>

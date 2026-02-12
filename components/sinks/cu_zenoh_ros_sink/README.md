@@ -1,7 +1,13 @@
 # cu-zenoh-ros-sink
 
+## Overview
+
 This is a Copper sink task that publishes messages to ROS 2 via Zenoh middleware.
 It allows seamless integration between Copper applications and ROS 2 nodes by using the [RMW zenoh implementation](https://github.com/ros2/rmw_zenoh).
+
+## Interface
+
+Consumes upstream payloads and performs external side effects (actuation, IO, or export).
 
 ## Configuration
 
@@ -32,7 +38,7 @@ Example configuration in a Copper application:
 )
 ```
 
-## Integration with ROS 2
+## Usage
 
 To receive messages in ROS 2:
 
@@ -50,16 +56,22 @@ export RMW_IMPLEMENTATION=rmw_zenoh
 
 3. Run your ROS 2 nodes as usual - they will automatically receive messages published by this sink.
 
-## Limitations
+## Compatibility
+
+### Limitations
 
 - Payload has to implement `RosMsgAdapter` trait (see `cu_ros_payloads`).
 - QoS is not implemented (default QoS).
 - Only works with Humble distribution (hash type not implemented).
 - No service implemented.
 
-## Caveats
+### Caveats
 
 - Add an extra serialization step to CDR format that could impact performance.
 
-
 See the crate [cu29](https://crates.io/crates/cu29) for more information about the Copper project.
+
+## Links
+
+- Crate path: `components/sinks/cu_zenoh_ros_sink`
+- docs.rs: <https://docs.rs/cu-zenoh-ros-sink>

@@ -1,14 +1,26 @@
 # cu-sdlogger
 
+## Overview
+
 Utilities for writing Copper unified logs to an SD/eMMC partition from embedded targets. It builds on `embedded_sdmmc::BlockDevice` and speaks the Cu29 on-disk format used by the runtime log reader.
 
-## What it provides
+### What it provides
+
 - `find_copper_partition`: scan the GPT and return the start/length of the Cu29 partition.
 - `EMMCLogger`: `UnifiedLogWrite<EMMCSectionStorage<_>>` implementation that lays out the main header and log sections on a block device.
 - `EMMCSectionStorage`: section writer that encodes entries with bincode.
 - `ForceSyncSend`: wrapper for sharing block devices with serialized access.
 
+## Interface
+
+Provides Rust APIs consumed by Copper components and applications.
+
+## Configuration
+
+Typically no direct runtime `copperconfig.ron` keys; configure through Rust API usage.
+
 ## Usage
+
 ```rust
 use cu_sdlogger::{find_copper_partition, EMMCLogger, EMMCSectionStorage, ForceSyncSend};
 use cu29::prelude::*;
@@ -37,3 +49,12 @@ Notes:
 - `ForceSyncSend` does not provide locking; use it only with single-threaded or
   externally synchronized access.
 - See `examples/cu_rp2350_skeleton` and `examples/cu_elrs_bdshot_demo` for full RP2350 setups that hand the logger to a `CuApplication`.
+
+## Compatibility
+
+Check crate features for `std`/`no_std` and optional dependency support.
+
+## Links
+
+- Crate path: `components/libs/cu_sdlogger`
+- docs.rs: <https://docs.rs/cu-sdlogger>

@@ -1,10 +1,12 @@
+# cu-pid
+
+## Overview
+
 ### This is a Generic PID Controller
 
 Check out cu_rp_balancebot for a full example of how to use it.
 
-### Compatibility
-
-This crate is compatible for std and no_std targets.
+## Interface
 
 ### Task and Input
 
@@ -45,15 +47,6 @@ Then you can use it in your copper RON config:
  [...]
 ```
 
-### Configuration
-
-- `kp`: Proportional gain
-- `ki`: Integral gain
-- `kd`: Derivative gain
-- `setpoint`: The target value
-- `cutoff`: The +/- deviation from the setpoint that is considered acceptable, otherwise the PID will return None (
-  safety mode)
-
 ### Output
 
 The PID controller will return a full state with the p, i and d contributions in PIDControlOutput struct:
@@ -67,3 +60,24 @@ pub struct PIDControlOutput {
 }
 ```
 
+## Configuration
+
+- `kp`: Proportional gain
+- `ki`: Integral gain
+- `kd`: Derivative gain
+- `setpoint`: The target value
+- `cutoff`: The +/- deviation from the setpoint that is considered acceptable, otherwise the PID will return None (
+  safety mode)
+
+## Usage
+
+Add the task type to your app registry and connect it in the mission graph.
+
+## Compatibility
+
+This crate is compatible for std and no_std targets.
+
+## Links
+
+- Crate path: `components/tasks/cu_pid`
+- docs.rs: <https://docs.rs/cu-pid>

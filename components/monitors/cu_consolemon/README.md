@@ -1,11 +1,21 @@
 # ConsoleMon
 
+## Overview
+
 <img src="doc/tasks.png" alt="Tasks"></img>
 
 Note: This is part of the Copper project. See the main project page for context.
 
 The ConsoleMon is a simple monitor that display the current state of the robot to the console in an TUI.
 It is useful for monitoring a robot quickly over ssh or in a terminal.
+
+## Interface
+
+Observes runtime state or payload flow for diagnostics and telemetry.
+
+## Configuration
+
+Monitor behavior is controlled by task `config` keys and feature flags.
 
 ## Usage
 
@@ -43,7 +53,14 @@ The monitor has 4 screens:
 - **Memory Pools**: A list of the memory pools with their real time usage and statistics (Pool ID, Used/Total, Buffer Size, Handles in Use, Handles/sec).
 - **Debug Output** [`debug_pane`](#debug_pane-feature): A pane that displays debug logs in real-time.
 
-## `debug_pane` feature
+## Compatibility
+
+### `debug_pane` feature
 
 Enabled by default. Disable with `default-features = false`. Displays real-time logs
 from [log](https://crates.io/crates/log), [cu29-log](https://crates.io/crates/cu29-log) and `stderr`.
+
+## Links
+
+- Crate path: `components/monitors/cu_consolemon`
+- docs.rs: <https://docs.rs/cu-consolemon>

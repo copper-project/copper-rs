@@ -33,7 +33,7 @@ The project includes a `justfile` that mirrors the CI workflow. This is the reco
 # Run the full CI-aligned check (lint + clippy + build + tests)
 just std-ci
 
-# Run only lint checks (formatting + typos)
+# Run only lint checks (formatting + typos + README structure)
 just lint
 
 # Run embedded/no_std CI checks
@@ -49,6 +49,7 @@ just std-ci cuda-release
 The `just std-ci` command runs the same checks as CI, including:
 - Format check (`cargo +stable fmt --all -- --check`)
 - Typos check (`typos -c .config/_typos.toml`)
+- README structure check (`python3 support/ci/readme_lint.py`)
 - Clippy with `--deny warnings`
 - Build with all features
 - Unit tests with cargo-nextest
@@ -144,11 +145,12 @@ cargo nextest run --workspace --all-targets --features mock,image,kornia,python,
 
 5. **Run Checks**: Before committing, ensure your code adheres to the project's standards. The easiest way is to run `just std-ci` which executes all CI checks. Alternatively, run individual checks:
     - **All checks (recommended)**: ```just std-ci```
-    - **Lint only**: ```just lint``` (formatting + typos)
+    - **Lint only**: ```just lint``` (formatting + typos + README structure)
     - **Formatting**: ```cargo +stable fmt --all -- --check```
     - **Clippy Lints**: ```cargo +stable clippy --workspace --all-targets -- --deny warnings```
     - **Tests**: ```cargo +stable nextest run --workspace --all-targets``` (run with relevant features if applicable)
     - **Typos**: ```typos -c .config/_typos.toml```
+    - **README structure**: ```python3 support/ci/readme_lint.py```
 6. **Commit and push Changes**: Commit your changes with clear and descriptive commit messages. (Consider using [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/))
     ```bash
     git add .

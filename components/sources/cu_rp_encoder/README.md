@@ -1,10 +1,16 @@
 # Raspberry Pi based encoder driver for Copper
 
+## Overview
+
 This driver is for the Raspberry Pi based encoder driver for Copper.
 
-## Compatibility
+## Interface
 
-Any encoder with a base clock + a direction trigger.
+Publishes source payloads into the Copper graph on each runtime tick.
+
+## Configuration
+
+Use `config` keys and `resources` bindings for hardware/driver handles.
 
 ## Usage
 
@@ -61,3 +67,12 @@ When you connect this driver to the rest of the system you need to use the `cu_r
 It has been tested with a Hall effect encoder like this one:
 
 <img alt="The encoder" src="doc/encoder.jpg">
+
+## Compatibility
+
+Any encoder with a base clock + a direction trigger.
+
+## Links
+
+- Crate path: `components/sources/cu_rp_encoder`
+- docs.rs: <https://docs.rs/cu-rp-encoder>

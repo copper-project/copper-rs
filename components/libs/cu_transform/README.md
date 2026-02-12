@@ -1,9 +1,25 @@
 # cu_transform
 
+## Overview
+
 This library provides spatial transformation functionality for the Copper framework, including both pose (position and
 orientation) transformations and velocity transformations.
 
-## Features
+## Interface
+
+Provides Rust APIs consumed by Copper components and applications.
+
+## Configuration
+
+Typically no direct runtime `copperconfig.ron` keys; configure through Rust API usage.
+
+## Usage
+
+Add this crate as a dependency and call its APIs from your component/application code.
+
+## Compatibility
+
+### Features
 
 - Efficient representation of 3D transformations using homogeneous matrices
 - Time-stamped transforms for tracking movements through time
@@ -13,7 +29,12 @@ orientation) transformations and velocity transformations.
 - Interpolation between transforms
 - allocation free for real time operations
 
-## Usage
+## Links
+
+- Crate path: `components/libs/cu_transform`
+- docs.rs: <https://docs.rs/cu-transform>
+
+## Additional Notes
 
 ### Transform Tree
 
@@ -49,7 +70,6 @@ The cu_transform library also supports calculating and transforming velocities:
 use cu_transform::{VelocityTransform, TransformTree};
 use cu29::clock::CuDuration;
 
-
 fn velocity_lookup() {
     // Create and set up a transform tree with moving frames
     // ...
@@ -66,8 +86,6 @@ fn velocity_lookup() {
     let linear_vel = velocity.linear_velocity(); // Returns velocities with proper units
 }
 ```
-
-## Velocity Transformation
 
 ### Computing Velocity
 
@@ -87,7 +105,6 @@ Velocities can be transformed between coordinate frames:
 ```rust
 use cu_transform::{transform_velocity, VelocityTransform, Transform3D};
 
-
 fn frame_transformation() {
     // Velocity in frame A
     let velocity_a = VelocityTransform {
@@ -105,8 +122,6 @@ fn frame_transformation() {
     let velocity_b = transform_velocity(&velocity_a, &transform_a_to_b, &position);
 }
 ```
-
-## Technical Details
 
 ### Velocity Transform Implementation
 

@@ -1,25 +1,10 @@
-## High Performance Monotonic Clock for robotics
+# cu29-clock
 
-This crate provides a monotonic clock and a mockable clock for testing and replay.
-It has a wide range of support for robots running on OSes and bare metal.
+## Overview
 
-It is no-std compatible with some limitations, see below.
+`cu29-clock` is a core Copper crate.
 
-Low level CPU counter implementations are provided for:
-
-- x86-64
-- arm64
-- armv7
-- risc-v
-
-We also provide a TOV (Time Of Validity) enum for tagging sensor data.
-
-It can fall back to the posix monotonic clock for other platforms (with std).
-
-It has been created originally for the Copper runtime but can be perfectly used independently.
-See the main crate cu29 for more information about the overall Copper project.
-
-## Examples
+## Usage
 
 ### Basic Clock Usage
 
@@ -44,6 +29,56 @@ assert_eq!(clock.now(), clock_clone.now()); // more or less :)
 let ref_time_ns = 1_000_000_000; // 1 second
 let clock_with_ref = RobotClock::from_ref_time(ref_time_ns);
 ```
+
+## Compatibility
+
+### Platform-Specific High-Performance Timing
+
+The clock automatically uses the best available timing mechanism for your platform:
+
+- **x86-64**: RDTSC instruction for sub-nanosecond precision
+- **ARM64**: ARM generic timer counters
+- **ARM32**: 64-bit ARM performance counters
+- **RISC-V**: Cycle counter
+- **Other platforms**: Falls back to system monotonic clock (std only)
+
+```rust
+use cu29_clock::{RobotClock, platform};
+
+// The clock automatically calibrates frequency at first use
+let clock = RobotClock::new();
+
+// For no-std environments, frequency calibration is simplified
+// but still provides high precision timing suitable for robotics
+```
+
+## Links
+
+- Crate path: `core/cu29_clock`
+- docs.rs: <https://docs.rs/cu29-clock>
+
+## Additional Notes
+
+### High Performance Monotonic Clock for robotics
+
+This crate provides a monotonic clock and a mockable clock for testing and replay.
+It has a wide range of support for robots running on OSes and bare metal.
+
+It is no-std compatible with some limitations, see below.
+
+Low level CPU counter implementations are provided for:
+
+- x86-64
+- arm64
+- armv7
+- risc-v
+
+We also provide a TOV (Time Of Validity) enum for tagging sensor data.
+
+It can fall back to the posix monotonic clock for other platforms (with std).
+
+It has been created originally for the Copper runtime but can be perfectly used independently.
+See the main crate cu29 for more information about the overall Copper project.
 
 ### Working with Time Durations
 
@@ -188,24 +223,4 @@ let back_to_option_time: OptionCuTime = std_option.into();
 // Display formatting
 println!("Some time: {}", some_time);  // "1.000 µs"
 println!("No time: {}", no_time);      // "None"
-```
-
-### Platform-Specific High-Performance Timing
-
-The clock automatically uses the best available timing mechanism for your platform:
-
-- **x86-64**: RDTSC instruction for sub-nanosecond precision
-- **ARM64**: ARM generic timer counters
-- **ARM32**: 64-bit ARM performance counters
-- **RISC-V**: Cycle counter
-- **Other platforms**: Falls back to system monotonic clock (std only)
-
-```rust
-use cu29_clock::{RobotClock, platform};
-
-// The clock automatically calibrates frequency at first use
-let clock = RobotClock::new();
-
-// For no-std environments, frequency calibration is simplified
-// but still provides high precision timing suitable for robotics
 ```

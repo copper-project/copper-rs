@@ -1,8 +1,10 @@
 # cu-ahrs
 
+## Overview
+
 `cu-ahrs` is a Copper task that runs the [`dcmimu`](https://crates.io/crates/dcmimu) filter on standardized IMU payloads to output roll, pitch, and yaw in radians.
 
-## Axis convention
+## Interface
 
 - Body frame matches the aerospace/NED convention: **+X forward**, **+Y right**, **+Z down**.
 - Positive rotations follow the right-hand rule about each axis:
@@ -13,7 +15,26 @@
 
 The task captures the first valid pose as a zero reference, so outputs are relative to the start orientation by default.
 
-## Bare-metal RP2350 demos
+## Configuration
+
+Tune algorithm parameters via task `config` entries in `copperconfig.ron`.
+
+## Usage
+
+Add the task type to your app registry and connect it in the mission graph.
+
+## Compatibility
+
+Supports `std`/`no_std` according to crate features and dependencies.
+
+## Links
+
+- Crate path: `components/tasks/cu_ahrs`
+- docs.rs: <https://docs.rs/cu-ahrs>
+
+## Additional Notes
+
+### Bare-metal RP2350 demos
 
 Two RP2350 no-std options mirroring `mpu9250-whoami`:
 - `examples/rp2350_ahrs.rs`: stand-alone loop (no Copper runtime) printing RPY.

@@ -13,6 +13,7 @@ default:
 lint:
 	just fmt-check
 	just typos
+	just readme-lint
 
 # Formatting check only
 fmt-check: check-format-tools
@@ -54,6 +55,10 @@ check-format-tools:
 # Typo check only
 typos:
 	typos -c .config/_typos.toml
+
+# README structure check for core/components/examples crates.
+readme-lint:
+	python3 support/ci/readme_lint.py
 
 # Run the Unit-Tests job locally via act (debug/ubuntu matrix).
 ci:

@@ -1,5 +1,7 @@
 # BalanceBot: this is a full Copper demo robot
 
+## Overview
+
 with:
 
 - a physical robot implementation
@@ -7,7 +9,14 @@ with:
 - a resimulation demoing the deterministic replay
 - a log export
 
-## To run the simulation
+## Prerequisites
+
+- Rust stable toolchain
+- Any hardware or services referenced by this example
+
+## Run
+
+### To run the simulation
 
 ```bash
 $ cd examples/cu_rp_balancebot
@@ -16,7 +25,7 @@ $ cargo run --release
 
 See the UI help for the navigation.
 
-## To run the resimulation
+### To run the resimulation
 
 (you need at least a log in `logs` for example from a simulation run).
 
@@ -27,7 +36,7 @@ $ cargo run --bin balancebot-resim --release
 
 It will recreate the logs from only the inputs of the previous run in `logs/balancebot_resim*.copper`.
 
-## To run on the real robot
+### To run on the real robot
 
 You will need to cross compile for Arm:
 
@@ -47,14 +56,25 @@ Deploy on the target:
 scp ../../target/armv7-unknown-linux-musleabihf/release/balancebot copperconfig.ron copper7:copper/  # change to match your target
 ```
 
-## To export logs
+## Expected Output
+
+Expect successful startup logs and normal task-loop execution without panics.
+
+## Links
+
+- Example path: `examples/cu_rp_balancebot`
+- Build/deploy guide: <https://copper-project.github.io/copper-rs/Build-and-Deploy-a-Copper-Application>
+
+## Additional Notes
+
+### To export logs
 
 ```bash
 $ cd examples/cu_rp_balancebot
 $ cargo run --bin balancebot-logreader --release
 ```
 
-## Justfile commands
+### Justfile commands
 
 - `just balancebot-dump-text-logs` — extract human-readable logs from `logs/balance.copper` into `../../target/debug/cu29_log_index/strings.bin`.
 - `just balancebot-fsck` — integrity check of `logs/balance.copper`.

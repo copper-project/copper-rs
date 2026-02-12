@@ -1,15 +1,20 @@
 # cu-mpu9250
 
+## Overview
+
 Copper source component for the MPU9250 IMU. This crate is `no_std` by default and ships an `embedded-hal`-compatible SPI driver so it can run on both baremetal and Linux.
 
-## Features
+## Interface
 
-- `embedded-hal`: Generic SPI+CS+delay backend over `embedded-hal` 1.0 traits.
-- `rp235x-hal`: SPI1 backend for RP235x (Pico 2 class) boards wired to GPIO10-13.
-- `linux-embedded-hal`: spidev + gpio-cdev backend for Linux boards.
-- `mock`: Reserved for mock backends.
+Publishes source payloads into the Copper graph on each runtime tick.
 
-## RP235x usage
+## Configuration
+
+Use `config` keys and `resources` bindings for hardware/driver handles.
+
+## Usage
+
+### RP235x usage
 
 ```bash
 # Build the source + AHRS stack for RP2350
@@ -24,7 +29,7 @@ The RP235x backend supports optional config fields:
 - `gyro_cal_ms` (u32): Gyro calibration dwell time in ms (default 0 = disabled).
 - `gyro_sample_delay_ms` (u32): Delay between calibration samples in ms (default 10).
 
-## Linux embedded-hal usage
+### Linux embedded-hal usage
 
 Enable the `linux-embedded-hal` feature to talk to MPU9250 via spidev and a gpio-cdev chip-select.
 
@@ -34,3 +39,17 @@ Config fields:
 - `gpio_chip` (string, default `/dev/gpiochip0`): GPIO chip for the CS line.
 - `cs_line` (u32, required): Line offset within the GPIO chip to drive CS.
 - `gyro_cal_ms` / `gyro_sample_delay_ms`: same calibration knobs as the RP backend.
+
+## Compatibility
+
+### Features
+
+- `embedded-hal`: Generic SPI+CS+delay backend over `embedded-hal` 1.0 traits.
+- `rp235x-hal`: SPI1 backend for RP235x (Pico 2 class) boards wired to GPIO10-13.
+- `linux-embedded-hal`: spidev + gpio-cdev backend for Linux boards.
+- `mock`: Reserved for mock backends.
+
+## Links
+
+- Crate path: `components/sources/cu_mpu9250`
+- docs.rs: <https://docs.rs/cu-mpu9250>

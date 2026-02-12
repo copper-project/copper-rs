@@ -1,6 +1,12 @@
 # cu-iceoryx2-bridge
 
+## Overview
+
 A Copper bridge that maps Copper channels to Iceoryx2 publish/subscribe services.
+
+## Interface
+
+Defines typed `Tx`/`Rx` channels and maps them to external transport routes.
 
 ## Configuration
 
@@ -27,3 +33,16 @@ Example:
   ],
 )
 ```
+
+## Usage
+
+Declare bridge types in app code, then reference them under `bridges` in `copperconfig.ron`.
+
+## Compatibility
+
+Depends on enabled transport features and target platform support for the selected backend.
+
+## Links
+
+- Crate path: `components/bridges/cu_iceoryx2_bridge`
+- docs.rs: <https://docs.rs/cu-iceoryx2-bridge>

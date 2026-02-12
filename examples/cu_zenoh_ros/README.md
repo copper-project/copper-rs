@@ -1,14 +1,17 @@
 # Copper ROS bridge using Zenoh
 
+## Overview
+
 ONLY SUPPORTS HUMBLE at the moment.
 
-## Install the zenoh daemon
+## Prerequisites
 
-```bash
-cargo install zenohd --all-features
-```
+- Rust stable toolchain
+- Any hardware or services referenced by this example
 
-## To run the bridge
+## Run
+
+### To run the bridge
 
 Launch a zenoh router.
 
@@ -25,21 +28,36 @@ $ cd cuexamples/cu_zenoh_ros
 $ cargo run --release
 ```
 
-## Run ROS from Docker (optional)
+### Run ROS from Docker (optional)
 
 If you don't have access to a perfect Ubuntu version to run ROS, you can do it from the Docker container given
 
 docker build -t ros-jazzy-zenoh .
 docker run --rm -it --net=host -v "$PWD":/ros2_ws -w /ros2_ws ros-jazzy-zenoh bash
 
-## Display the result.
+## Expected Output
+
+### Display the result.
 
 ```bash
 export RMW_IMPLEMENTATION=rmw_zenoh_cpp
 ros2 topic echo /output
 ```
 
-## Troubleshooting Zenoh
+## Links
+
+- Example path: `examples/cu_zenoh_ros`
+- Build/deploy guide: <https://copper-project.github.io/copper-rs/Build-and-Deploy-a-Copper-Application>
+
+## Additional Notes
+
+### Install the zenoh daemon
+
+```bash
+cargo install zenohd --all-features
+```
+
+### Troubleshooting Zenoh
 
 To inspect zenoh, this is suddedly some python stuff, so let's go and make a virtualenv.
 
@@ -58,4 +76,3 @@ zenoh subscribe -k '0/output/**'
 output is the name of the topic
 
 It is followed with some mangled things like the RIHS01 an and QOS.
-

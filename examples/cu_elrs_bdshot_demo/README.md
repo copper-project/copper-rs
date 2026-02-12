@@ -1,10 +1,14 @@
 # cu-bdshot-demo
 
+## Overview
+
 A Copper mission that drives four bidirectional DSHOT (BDShot) ESCs through
 `cu_bdshot::RpBdshotBridge` on the RP2350 reference board. The demo takes
 the throttle command from a remote and forwards it to the 4 ESCs.
 
-## Hardware wiring
+## Prerequisites
+
+### Hardware wiring
 
 Use the RP2350 reference board shipped with Copper and hook up ESCs like:
 
@@ -26,7 +30,9 @@ An ELRS module wired like:
 | GPIO12 (TX) | RX       |
 | GPIO13 (RX) | TX       |
 
-## Building & flashing
+## Run
+
+### Building & flashing
 
 `cargo run -p cu-elrs-bdshot-demo --release`
 The `.cargo/config.toml` in this example already targets `thumbv8m.main-none-eabihf`
@@ -38,7 +44,9 @@ board construction before launching Copper.
 After flashing, use `probe-rs defmt` (or your RTT client of choice) to see the
 throttle ramps and telemetry logs.
 
-## What it demonstrates
+## Expected Output
+
+### What it demonstrates
 
 - The ELRS remote operation bridge.
 - `cu_bdshot::RpBdshotBridge` encapsulates the RP2350 PIO program, DMA and timer
@@ -57,6 +65,13 @@ Replace the throttle tasks with your flight controller logic or scheduler and
 extend the sinks to react to the telemetry. The bridge itself lives in
 `components/bridges/cu_bdshot` and can be reused in other missions or boards.
 
-## Justfile command
+## Links
+
+- Example path: `examples/cu_elrs_bdshot_demo`
+- Build/deploy guide: <https://copper-project.github.io/copper-rs/Build-and-Deploy-a-Copper-Application>
+
+## Additional Notes
+
+### Justfile command
 
 - `just elrs-bdshot-attach` — attach `probe-rs` to the built demo at `../../target/thumbv8m.main-none-eabihf/debug/cu-elrs-bdshot-demo`.

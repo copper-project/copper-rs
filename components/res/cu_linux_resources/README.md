@@ -1,8 +1,12 @@
 # cu-linux-resources
 
+## Overview
+
 Linux/host resource bundle for serial, I2C, and GPIO peripherals.
 
-## Provider
+## Interface
+
+### Provider
 
 Use `cu_linux_resources::LinuxResources` in `copperconfig.ron`.
 
@@ -25,7 +29,7 @@ resources: [
 ],
 ```
 
-## Fixed Resource Slots
+## Configuration
 
 `LinuxResources` exposes embedded-style fixed slots:
 
@@ -36,7 +40,20 @@ resources: [
 
 Bind tasks/bridges to these slots via `<bundle>.<slot>` (for example `linux.serial_usb0`).
 
-## Config Keys
+## Usage
+
+Reference resource slot names from component `resources` mappings.
+
+## Compatibility
+
+Depends on target board/OS support and resource provider implementation.
+
+## Links
+
+- Crate path: `components/res/cu_linux_resources`
+- docs.rs: <https://docs.rs/cu-linux-resources>
+
+## Additional Notes
 
 ### Serial
 
@@ -70,7 +87,7 @@ Supported keys per serial slot `serialN`:
 
 GPIO slots are created only for configured pins.
 
-## Exclusive Wrapper
+### Exclusive Wrapper
 
 `cu_linux_resources::Exclusive<T>` is the bundle-layer wrapper for resources that are logically single-owner but must satisfy `Sync` for `ResourceManager::add_owned`.
 

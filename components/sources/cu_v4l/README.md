@@ -1,8 +1,16 @@
 # Video4Linux capture driver for Copper (V4L2)
 
-## Compatibility
+## Overview
 
-It should work with any v4l device (USB, MIPI etc.).
+`cu-v4l` is a Copper `sources` crate.
+
+## Interface
+
+Publishes source payloads into the Copper graph on each runtime tick.
+
+## Configuration
+
+Use `config` keys and `resources` bindings for hardware/driver handles.
 
 ## Usage
 
@@ -33,3 +41,12 @@ When you connect this driver to the rest of the system you need to use the `cu_s
         (src: "src",  dst: "dst",   msg: "cu_sensor_payloads::CuImage"),
     ],
 ```
+
+## Compatibility
+
+It should work with any v4l device (USB, MIPI etc.).
+
+## Links
+
+- Crate path: `components/sources/cu_v4l`
+- docs.rs: <https://docs.rs/cu-v4l>
