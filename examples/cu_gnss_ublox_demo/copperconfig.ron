@@ -15,7 +15,7 @@
             id: "ublox",
             type: "cu_gnss_ublox::UbxSource",
             resources: {
-                "serial": "linux.serial_acm0",
+                "serial": "linux.serial0",
             },
             config: {
                 "poll_nav_pvt_ms": 200,
@@ -34,8 +34,20 @@
             type: "tasks::FixSink",
         ),
         (
+            id: "accuracy_sink",
+            type: "tasks::AccuracySink",
+        ),
+        (
             id: "sats_in_view_sink",
             type: "tasks::SatsInViewSink",
+        ),
+        (
+            id: "satellite_state_sink",
+            type: "tasks::SatelliteStateSink",
+        ),
+        (
+            id: "info_text_sink",
+            type: "tasks::InfoTextSink",
         ),
         (
             id: "drop_unused_a_sink",
@@ -59,7 +71,7 @@
         ),
         (
             src: "ublox",
-            dst: "drop_unused_a_sink",
+            dst: "accuracy_sink",
             msg: "cu_gnss_payloads::GnssAccuracy",
         ),
         (
@@ -69,7 +81,7 @@
         ),
         (
             src: "ublox",
-            dst: "drop_unused_a_sink",
+            dst: "satellite_state_sink",
             msg: "cu_gnss_payloads::GnssSatelliteState",
         ),
         (
@@ -84,7 +96,7 @@
         ),
         (
             src: "ublox",
-            dst: "drop_unused_a_sink",
+            dst: "info_text_sink",
             msg: "cu_gnss_payloads::GnssInfoText",
         ),
         (
