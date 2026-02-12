@@ -45,12 +45,6 @@ const MAX_REQUESTS_PER_BATCH: usize = 8;
 const MAX_RESPONSES_PER_BATCH: usize = 16;
 const TX_BUFFER_CAPACITY: usize = MSP_MAX_PAYLOAD_LEN + 12;
 
-fn take_pending_batch<T: Default>(pending: &mut T) -> T {
-    let mut batch = T::default();
-    mem::swap(&mut batch, pending);
-    batch
-}
-
 fn decode_bounded_vec<T, const N: usize, D>(
     decoder: &mut D,
 ) -> Result<HeaplessVec<T, N>, DecodeError>
@@ -66,7 +60,6 @@ where
             found: count,
         });
     }
-
     let mut batch = HeaplessVec::new();
     for value in values {
         batch
@@ -382,11 +375,15 @@ where
         match channel.id() {
             RxId::Responses => {
                 let response_msg: &mut CuMsg<MspResponseBatch> = msg.downcast_mut()?;
-                response_msg.set_payload(take_pending_batch(&mut self.pending_responses));
+                let mut batch = MspResponseBatch::new();
+                mem::swap(&mut batch, &mut self.pending_responses);
+                response_msg.set_payload(batch);
             }
             RxId::Incoming => {
                 let request_msg: &mut CuMsg<MspRequestBatch> = msg.downcast_mut()?;
-                request_msg.set_payload(take_pending_batch(&mut self.pending_requests));
+                let mut batch = MspRequestBatch::new();
+                mem::swap(&mut batch, &mut self.pending_requests);
+                request_msg.set_payload(batch);
             }
         }
         Ok(())
