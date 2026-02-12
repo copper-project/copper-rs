@@ -29,25 +29,27 @@ resources: [
 
 `LinuxResources` exposes embedded-style fixed slots:
 
-- Serial: `serial_acm0`, `serial_acm1`, `serial_acm2`, `serial_usb0`, `serial_usb1`, `serial_usb2`
+- Serial: `serial0`, `serial1`, `serial2`, `serial3`, `serial4`, `serial5`
 - I2C: `i2c0`, `i2c1`, `i2c2`
 - GPIO output: `gpio_out0`, `gpio_out1`, `gpio_out2`
 - GPIO input: `gpio_in0`, `gpio_in1`, `gpio_in2`
 
-Bind tasks/bridges to these slots via `<bundle>.<slot>` (for example `linux.serial_usb0`).
+Bind tasks/bridges to these slots via `<bundle>.<slot>` (for example `linux.serial3`).
 
 ## Config Keys
 
 ### Serial
 
-Per-slot keys are anonymous (`serial0..serial5`). Each slot maps to a fixed resource id and default device:
+Per-slot keys are `serial0..serial5`. Each slot maps to a fixed resource id:
 
-- `serial0_*` -> `serial_acm0` (default dev `/dev/ttyACM0`)
-- `serial1_*` -> `serial_acm1` (default dev `/dev/ttyACM1`)
-- `serial2_*` -> `serial_acm2` (default dev `/dev/ttyACM2`)
-- `serial3_*` -> `serial_usb0` (default dev `/dev/ttyUSB0`)
-- `serial4_*` -> `serial_usb1` (default dev `/dev/ttyUSB1`)
-- `serial5_*` -> `serial_usb2` (default dev `/dev/ttyUSB2`)
+- `serial0_*` -> `serial0`
+- `serial1_*` -> `serial1`
+- `serial2_*` -> `serial2`
+- `serial3_*` -> `serial3`
+- `serial4_*` -> `serial4`
+- `serial5_*` -> `serial5`
+
+**Note:** Serial and I2C slots are only initialized when explicitly configured. Unconfigured slots are skipped.
 
 Supported keys per serial slot `serialN`:
 
@@ -59,9 +61,9 @@ Supported keys per serial slot `serialN`:
 
 ### I2C
 
-- `i2c0_dev` (default `/dev/i2c-0`)
-- `i2c1_dev` (default `/dev/i2c-1`)
-- `i2c2_dev` (default `/dev/i2c-2`)
+- `i2c0_dev` (no default - must be configured)
+- `i2c1_dev` (no default - must be configured)
+- `i2c2_dev` (no default - must be configured)
 
 ### GPIO
 
