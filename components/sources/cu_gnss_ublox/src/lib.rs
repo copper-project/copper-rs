@@ -73,6 +73,7 @@ pub struct UbxSource {
     frame_buffer: Vec<u8>,
     #[reflect(ignore)]
     pending_events: VecDeque<GnssEvent>,
+    max_pending_events: usize,
     emit_raw_unknown: bool,
     poll_nav_pvt_every_ms: u64,
     poll_nav_sat_every_ms: u64,
@@ -132,6 +133,7 @@ impl CuSrcTask for UbxSource {
             "max_pending_events",
             DEFAULT_MAX_PENDING_EVENTS as u32,
         )? as usize;
+        let max_pending_events = max_pending_events.max(1);
 
         let emit_raw_unknown = config_bool(config, "emit_raw_unknown", true)?;
 
@@ -144,7 +146,8 @@ impl CuSrcTask for UbxSource {
             serial: resources.serial.0,
             read_buffer: vec![0_u8; read_buffer_bytes.max(64)],
             frame_buffer: Vec::with_capacity(4096),
-            pending_events: VecDeque::with_capacity(max_pending_events.max(1)),
+            pending_events: VecDeque::with_capacity(max_pending_events),
+            max_pending_events,
             emit_raw_unknown,
             poll_nav_pvt_every_ms,
             poll_nav_sat_every_ms,
@@ -260,9 +263,16 @@ impl UbxSource {
     fn decode_from_buffer(&mut self) {
         while let Some(frame) = extract_next_ubx_frame(&mut self.frame_buffer) {
             if let Some(event) = decode_frame_to_event(&frame, self.emit_raw_unknown) {
-                self.pending_events.push_back(event);
+                self.push_pending_event(event);
             }
         }
+    }
+
+    fn push_pending_event(&mut self, event: GnssEvent) {
+        if self.pending_events.len() >= self.max_pending_events {
+            self.pending_events.pop_front();
+        }
+        self.pending_events.push_back(event);
     }
 
     fn emit_event(
