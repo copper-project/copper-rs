@@ -302,6 +302,24 @@ bundle_resources!(
         GpioIn2
 );
 
+const LINUX_RESOURCE_SLOT_NAMES: &[&str] = &[
+    "serial0",
+    "serial1",
+    "serial2",
+    "serial3",
+    "serial4",
+    "serial5",
+    "i2c0",
+    "i2c1",
+    "i2c2",
+    "gpio_out0",
+    "gpio_out1",
+    "gpio_out2",
+    "gpio_in0",
+    "gpio_in1",
+    "gpio_in2",
+];
+
 struct SerialSlot {
     id: LinuxResourcesId,
     dev_key: &'static str,
@@ -611,7 +629,7 @@ fn parse_serial_stop_bits_value(raw: u8) -> CuResult<SerialStopBits> {
 }
 
 fn slot_name(id: LinuxResourcesId) -> &'static str {
-    LINUX_RESOURCES_ID_NAMES[id as usize]
+    LINUX_RESOURCE_SLOT_NAMES[id as usize]
 }
 
 fn get_string(config: Option<&ComponentConfig>, key: &str) -> CuResult<Option<String>> {
