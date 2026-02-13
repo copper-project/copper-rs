@@ -1,0 +1,111 @@
+(
+    resources: [
+        (
+            id: "linux",
+            provider: "cu_linux_resources::LinuxResources",
+            config: {
+                "serial0_dev": "/dev/ttyACM0",
+                "serial0_baudrate": 115200,
+                "serial0_timeout_ms": 20,
+            },
+        ),
+    ],
+    tasks: [
+        (
+            id: "ublox",
+            type: "cu_gnss_ublox::UbxSource",
+            resources: {"serial": "linux.serial0"},
+            config: {
+                "poll_nav_pvt_ms": 200,
+                "poll_nav_sat_ms": 1000,
+                "poll_nav_sig_ms": 1000,
+                "poll_mon_rf_ms": 2000,
+                "emit_raw_unknown": true,
+            },
+        ),
+        (
+            id: "time_sink",
+            type: "tasks::TimeSink",
+        ),
+        (
+            id: "fix_sink",
+            type: "tasks::FixSink",
+        ),
+        (
+            id: "accuracy_sink",
+            type: "tasks::AccuracySink",
+        ),
+        (
+            id: "sats_in_view_sink",
+            type: "tasks::SatsInViewSink",
+        ),
+        (
+            id: "satellite_state_sink",
+            type: "tasks::SatelliteStateSink",
+        ),
+        (
+            id: "info_text_sink",
+            type: "tasks::InfoTextSink",
+        ),
+        (
+            id: "drop_unused_a_sink",
+            type: "tasks::DropUnusedASink",
+        ),
+        (
+            id: "drop_unused_b_sink",
+            type: "tasks::DropUnusedBSink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "ublox",
+            dst: "time_sink",
+            msg: "cu_gnss_payloads::GnssEpochTime",
+        ),
+        (
+            src: "ublox",
+            dst: "fix_sink",
+            msg: "cu_gnss_payloads::GnssFixSolution",
+        ),
+        (
+            src: "ublox",
+            dst: "accuracy_sink",
+            msg: "cu_gnss_payloads::GnssAccuracy",
+        ),
+        (
+            src: "ublox",
+            dst: "sats_in_view_sink",
+            msg: "cu_gnss_payloads::GnssSatsInView",
+        ),
+        (
+            src: "ublox",
+            dst: "satellite_state_sink",
+            msg: "cu_gnss_payloads::GnssSatelliteState",
+        ),
+        (
+            src: "ublox",
+            dst: "drop_unused_a_sink",
+            msg: "cu_gnss_payloads::GnssSignalState",
+        ),
+        (
+            src: "ublox",
+            dst: "drop_unused_a_sink",
+            msg: "cu_gnss_payloads::GnssRfStatus",
+        ),
+        (
+            src: "ublox",
+            dst: "info_text_sink",
+            msg: "cu_gnss_payloads::GnssInfoText",
+        ),
+        (
+            src: "ublox",
+            dst: "drop_unused_b_sink",
+            msg: "cu_gnss_payloads::GnssCommandAck",
+        ),
+        (
+            src: "ublox",
+            dst: "drop_unused_b_sink",
+            msg: "cu_gnss_payloads::GnssRawUbxFrame",
+        ),
+    ],
+)
