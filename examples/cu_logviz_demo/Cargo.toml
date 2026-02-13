@@ -48,3 +48,6 @@ cu-sensor-payloads = { workspace = true }
 cu-spatial-payloads = { workspace = true }
 rerun = { workspace = true, optional = true }
 serde = { workspace = true }
+
+[package.metadata.cargo-shear]
+ignored = ["serde"]
