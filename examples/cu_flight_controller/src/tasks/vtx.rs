@@ -22,6 +22,15 @@ use cu29::units::si::electric_potential::volt;
 
 const VTX_SYM_VOLT: char = '\x06';
 
+fn voltage_to_centivolts(voltage_v: f32) -> u16 {
+    let scaled = voltage_v * 100.0;
+    if !scaled.is_finite() || scaled <= 0.0 {
+        return 0;
+    }
+    let centivolts = (scaled + 0.5) as u32;
+    centivolts.min(u16::MAX as u32) as u16
+}
+
 #[derive(Reflect)]
 pub struct VtxOsd {
     row: u8,
@@ -93,7 +102,7 @@ impl CuTask for VtxOsd {
         let ctrl = ctrl_msg.payload();
 
         if let Some(voltage) = batt_msg.payload() {
-            self.last_voltage_centi = Some((voltage.voltage.get::<volt>() * 100.0).round() as u16);
+            self.last_voltage_centi = Some(voltage_to_centivolts(voltage.voltage.get::<volt>()));
         }
 
         // First, handle any incoming MSP requests (telemetry queries from VTX)
@@ -417,7 +426,7 @@ impl CuTask for VtxMspResponder {
         output.tov = req_msg.tov;
 
         if let Some(voltage) = voltage_msg.payload() {
-            self.last_voltage_centi = Some((voltage.voltage.get::<volt>() * 100.0).round() as u16);
+            self.last_voltage_centi = Some(voltage_to_centivolts(voltage.voltage.get::<volt>()));
         }
 
         let mut batch = MspRequestBatch::new();
