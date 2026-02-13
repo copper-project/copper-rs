@@ -14,8 +14,8 @@ description = "Those are standardized payloads for the Copper sensors. Feel free
 [dependencies]
 bincode = { workspace = true }
 cu29-soa-derive = { workspace = true }
-cu29-clock = { path = "../../../core/cu29_clock", version = "0.12.0", default-features = false }
-cu29 = { path = "../../../core/cu29", version = "0.12.0", default-features = false, features = [
+cu29-clock = { path = "../../../core/cu29_clock", version = "0.13.0", default-features = false }
+cu29 = { path = "../../../core/cu29", version = "0.13.0", default-features = false, features = [
   "units",
 ] }
 rerun = { workspace = true, optional = true }

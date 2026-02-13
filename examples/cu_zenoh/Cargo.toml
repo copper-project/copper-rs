@@ -14,7 +14,7 @@ publish = false
 [dependencies]
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
-cu-zenoh-sink = { path = "../../components/sinks/cu_zenoh_sink", version = "0.12.0" }
+cu-zenoh-sink = { path = "../../components/sinks/cu_zenoh_sink", version = "0.13.0" }
 tempfile = { workspace = true }
 serde = { workspace = true }
 

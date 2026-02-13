@@ -31,10 +31,10 @@ textlogs = [
 ]
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version = "0.12.0", default-features = false, features = [
+cu29 = { path = "../../../core/cu29", version = "0.13.0", default-features = false, features = [
   "units",
 ] }
-cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "0.12.0", default-features = false }
+cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "0.13.0", default-features = false }
 bincode = { workspace = true }
 serde = { workspace = true }
 dcmimu = "0.3.0"
@@ -51,8 +51,8 @@ rp235x-hal = { version = "0.4", features = [
   "critical-section-impl",
   "defmt",
 ], optional = true }
-cu-embedded-registry = { path = "../../libs/cu_embedded_registry", version = "0.12.0", default-features = false, optional = true }
-cu-mpu9250 = { path = "../../sources/cu_mpu9250", version = "0.12.0", default-features = false, optional = true }
+cu-embedded-registry = { path = "../../libs/cu_embedded_registry", version = "0.13.0", default-features = false, optional = true }
+cu-mpu9250 = { path = "../../sources/cu_mpu9250", version = "0.13.0", default-features = false, optional = true }
 
 [[example]]
 name = "rp2350_copper"
