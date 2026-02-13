@@ -182,6 +182,14 @@ fn segment_width(key: &str, label: &str) -> u16 {
     (6 + key.chars().count() + label.chars().count()) as u16
 }
 
+fn help_action(key: &str) -> Option<HelpAction> {
+    match key {
+        "r" => Some(HelpAction::ResetLatency),
+        "q" => Some(HelpAction::Quit),
+        _ => None,
+    }
+}
+
 fn mouse_inside(mouse: &event::MouseEvent, x: u16, y: u16, width: u16, height: u16) -> bool {
     mouse.column >= x && mouse.column < x + width && mouse.row >= y && mouse.row < y + height
 }
@@ -576,13 +584,13 @@ fn compute_end_to_end_latency(msgs: &[&CuMsgMetadata]) -> CuDuration {
     let start = msgs.first().map(|m| m.process_time.start);
     let end = msgs.last().map(|m| m.process_time.end);
 
-    match (start, end) {
-        (Some(s), Some(e)) => match (Option::<CuTime>::from(s), Option::<CuTime>::from(e)) {
-            (Some(s), Some(e)) if e >= s => e - s,
-            (Some(_), Some(_)) => CuDuration::MIN,
-            _ => CuDuration::MIN,
-        },
-        _ => CuDuration::MIN,
+    if let (Some(s), Some(e)) = (start, end)
+        && let (Some(s), Some(e)) = (Option::<CuTime>::from(s), Option::<CuTime>::from(e))
+        && e >= s
+    {
+        e - s
+    } else {
+        CuDuration::MIN
     }
 }
 
@@ -598,6 +606,22 @@ fn format_bytes(bytes: f64) -> String {
         format!("{:.0} {}", value, UNITS[unit_idx])
     } else {
         format!("{:.2} {}", value, UNITS[unit_idx])
+    }
+}
+
+fn format_bytes_or(bytes: u64, fallback: &str) -> String {
+    if bytes > 0 {
+        format_bytes(bytes as f64)
+    } else {
+        fallback.to_string()
+    }
+}
+
+fn format_rate_bytes_or_na(bytes: u64, rate_hz: f64) -> String {
+    if bytes > 0 {
+        format!("{}/s", format_bytes((bytes as f64) * rate_hz))
+    } else {
+        "n/a".to_string()
     }
 }
 
@@ -1385,30 +1409,14 @@ impl UI {
 
     fn draw_copperlist_stats(&self, f: &mut Frame, area: Rect) {
         let stats = self.copperlist_stats.lock().unwrap();
-        let size_display = if stats.size_bytes > 0 {
-            format_bytes(stats.size_bytes as f64)
-        } else {
-            "unknown".to_string()
-        };
+        let size_display = format_bytes_or(stats.size_bytes as u64, "unknown");
         let raw_total = stats.raw_culist_bytes.max(stats.size_bytes as u64);
-        let handles_display = if stats.handle_bytes > 0 {
-            format_bytes(stats.handle_bytes as f64)
-        } else {
-            "0 B".to_string()
-        };
+        let handles_display = format_bytes_or(stats.handle_bytes, "0 B");
         let mem_total = raw_total
             .saturating_add(stats.keyframe_bytes)
             .saturating_add(stats.structured_bytes_per_cl);
-        let mem_total_display = if mem_total > 0 {
-            format_bytes(mem_total as f64)
-        } else {
-            "unknown".to_string()
-        };
-        let encoded_display = if stats.encoded_bytes > 0 {
-            format_bytes(stats.encoded_bytes as f64)
-        } else {
-            "n/a".to_string()
-        };
+        let mem_total_display = format_bytes_or(mem_total, "unknown");
+        let encoded_display = format_bytes_or(stats.encoded_bytes, "n/a");
         let efficiency_display = if raw_total > 0 && stats.encoded_bytes > 0 {
             let ratio = (stats.encoded_bytes as f64) / (raw_total as f64);
             format!("{:.1}%", ratio * 100.0)
@@ -1416,49 +1424,15 @@ impl UI {
             "n/a".to_string()
         };
         let rate_display = format!("{:.2} Hz", stats.rate_hz);
-        let raw_bw = if mem_total > 0 {
-            format!("{}/s", format_bytes((mem_total as f64) * stats.rate_hz))
-        } else {
-            "n/a".to_string()
-        };
-        let _encoded_bw = if stats.encoded_bytes > 0 {
-            format!(
-                "{}/s",
-                format_bytes((stats.encoded_bytes as f64) * stats.rate_hz)
-            )
-        } else {
-            "n/a".to_string()
-        };
-        let keyframe_display = if stats.keyframe_bytes > 0 {
-            format_bytes(stats.keyframe_bytes as f64)
-        } else {
-            "0 B".to_string()
-        };
-        let structured_display = if stats.structured_bytes_per_cl > 0 {
-            format_bytes(stats.structured_bytes_per_cl as f64)
-        } else {
-            "0 B".to_string()
-        };
-        let structured_bw = if stats.structured_bytes_per_cl > 0 {
-            format!(
-                "{}/s",
-                format_bytes((stats.structured_bytes_per_cl as f64) * stats.rate_hz)
-            )
-        } else {
-            "n/a".to_string()
-        };
+        let raw_bw = format_rate_bytes_or_na(mem_total, stats.rate_hz);
+        let keyframe_display = format_bytes_or(stats.keyframe_bytes, "0 B");
+        let structured_display = format_bytes_or(stats.structured_bytes_per_cl, "0 B");
+        let structured_bw = format_rate_bytes_or_na(stats.structured_bytes_per_cl, stats.rate_hz);
         let disk_total_bytes = stats
             .encoded_bytes
             .saturating_add(stats.keyframe_bytes)
             .saturating_add(stats.structured_bytes_per_cl);
-        let disk_total_bw = if disk_total_bytes > 0 {
-            format!(
-                "{}/s",
-                format_bytes((disk_total_bytes as f64) * stats.rate_hz)
-            )
-        } else {
-            "n/a".to_string()
-        };
+        let disk_total_bw = format_rate_bytes_or_na(disk_total_bytes, stats.rate_hz);
 
         let header_cells = ["Metric", "Value"].iter().map(|h| {
             Cell::from(Line::from(*h)).style(
@@ -1470,64 +1444,33 @@ impl UI {
 
         let header = Row::new(header_cells).bottom_margin(1);
 
-        let spacer = Row::new(vec![
-            Cell::from(Line::from(" ")),
-            Cell::from(Line::from(" ")),
-        ]);
+        let row = |metric: &'static str, value: String| {
+            Row::new(vec![
+                Cell::from(Line::from(metric)),
+                Cell::from(Line::from(value).alignment(Alignment::Right)),
+            ])
+        };
+        let spacer = row(" ", " ".to_string());
 
         let rate_style = Style::default().fg(Color::Cyan);
         let mem_rows = vec![
-            Row::new(vec![
-                Cell::from(Line::from("Observed rate")),
-                Cell::from(Line::from(rate_display).alignment(Alignment::Right)),
-            ])
-            .style(rate_style),
+            row("Observed rate", rate_display).style(rate_style),
             spacer.clone(),
-            Row::new(vec![
-                Cell::from(Line::from("CopperList size")),
-                Cell::from(Line::from(size_display).alignment(Alignment::Right)),
-            ]),
-            Row::new(vec![
-                Cell::from(Line::from("Pool memory used")),
-                Cell::from(Line::from(handles_display).alignment(Alignment::Right)),
-            ]),
-            Row::new(vec![
-                Cell::from(Line::from("Keyframe size")),
-                Cell::from(Line::from(keyframe_display).alignment(Alignment::Right)),
-            ]),
-            Row::new(vec![
-                Cell::from(Line::from("Mem total (CL+KF+SL)")),
-                Cell::from(Line::from(mem_total_display).alignment(Alignment::Right)),
-            ]),
+            row("CopperList size", size_display),
+            row("Pool memory used", handles_display),
+            row("Keyframe size", keyframe_display),
+            row("Mem total (CL+KF+SL)", mem_total_display),
             spacer.clone(),
-            Row::new(vec![
-                Cell::from(Line::from("RAM BW (raw)")),
-                Cell::from(Line::from(raw_bw).alignment(Alignment::Right)),
-            ]),
+            row("RAM BW (raw)", raw_bw),
         ];
 
         let disk_rows = vec![
-            Row::new(vec![
-                Cell::from(Line::from("CL serialized size")),
-                Cell::from(Line::from(encoded_display).alignment(Alignment::Right)),
-            ]),
-            Row::new(vec![
-                Cell::from(Line::from("CL encoding efficiency")),
-                Cell::from(Line::from(efficiency_display).alignment(Alignment::Right)),
-            ]),
-            Row::new(vec![
-                Cell::from(Line::from("Structured log / CL")),
-                Cell::from(Line::from(structured_display).alignment(Alignment::Right)),
-            ]),
-            Row::new(vec![
-                Cell::from(Line::from("Structured BW")),
-                Cell::from(Line::from(structured_bw).alignment(Alignment::Right)),
-            ]),
+            row("CL serialized size", encoded_display),
+            row("CL encoding efficiency", efficiency_display),
+            row("Structured log / CL", structured_display),
+            row("Structured BW", structured_bw),
             spacer.clone(),
-            Row::new(vec![
-                Cell::from(Line::from("Total disk BW")),
-                Cell::from(Line::from(disk_total_bw).alignment(Alignment::Right)),
-            ]),
+            row("Total disk BW", disk_total_bw),
         ];
 
         let mem_table = Table::new(mem_rows, &[Constraint::Length(24), Constraint::Length(12)])
@@ -1653,11 +1596,7 @@ impl UI {
 
         for (key, label, bg) in segments {
             let segment_len = segment_width(key, label);
-            let action = match key {
-                "r" => Some(HelpAction::ResetLatency),
-                "q" => Some(HelpAction::Quit),
-                _ => None,
-            };
+            let action = help_action(key);
             if let Some(action) = action {
                 self.help_hitboxes.push(HelpHitbox {
                     action,
@@ -2190,13 +2129,7 @@ impl CuMonitor for CuConsoleMon {
                                 &named_params,
                             );
                             // Non-blocking: drop log if the bounded channel is full to avoid stalling the runtime.
-                            match tx.try_send(line) {
-                                Ok(_) => {}
-                                Err(std::sync::mpsc::TrySendError::Full(_)) => {}
-                                Err(std::sync::mpsc::TrySendError::Disconnected(_)) => {
-                                    // Receiver dropped; nothing else we can do.
-                                }
-                            }
+                            let _ = tx.try_send(line);
                         },
                     );
 
