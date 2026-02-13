@@ -12,40 +12,49 @@ pub const SERIAL0_BAUDRATE_KEY: &str = "serial0_baudrate";
 pub const SERIAL0_PARITY_KEY: &str = "serial0_parity";
 pub const SERIAL0_STOPBITS_KEY: &str = "serial0_stopbits";
 pub const SERIAL0_TIMEOUT_MS_KEY: &str = "serial0_timeout_ms";
+pub const SERIAL0_NAME: &str = "serial0";
 
 pub const SERIAL1_DEV_KEY: &str = "serial1_dev";
 pub const SERIAL1_BAUDRATE_KEY: &str = "serial1_baudrate";
 pub const SERIAL1_PARITY_KEY: &str = "serial1_parity";
 pub const SERIAL1_STOPBITS_KEY: &str = "serial1_stopbits";
 pub const SERIAL1_TIMEOUT_MS_KEY: &str = "serial1_timeout_ms";
+pub const SERIAL1_NAME: &str = "serial1";
 
 pub const SERIAL2_DEV_KEY: &str = "serial2_dev";
 pub const SERIAL2_BAUDRATE_KEY: &str = "serial2_baudrate";
 pub const SERIAL2_PARITY_KEY: &str = "serial2_parity";
 pub const SERIAL2_STOPBITS_KEY: &str = "serial2_stopbits";
 pub const SERIAL2_TIMEOUT_MS_KEY: &str = "serial2_timeout_ms";
+pub const SERIAL2_NAME: &str = "serial2";
 
 pub const SERIAL3_DEV_KEY: &str = "serial3_dev";
 pub const SERIAL3_BAUDRATE_KEY: &str = "serial3_baudrate";
 pub const SERIAL3_PARITY_KEY: &str = "serial3_parity";
 pub const SERIAL3_STOPBITS_KEY: &str = "serial3_stopbits";
 pub const SERIAL3_TIMEOUT_MS_KEY: &str = "serial3_timeout_ms";
+pub const SERIAL3_NAME: &str = "serial3";
 
 pub const SERIAL4_DEV_KEY: &str = "serial4_dev";
 pub const SERIAL4_BAUDRATE_KEY: &str = "serial4_baudrate";
 pub const SERIAL4_PARITY_KEY: &str = "serial4_parity";
 pub const SERIAL4_STOPBITS_KEY: &str = "serial4_stopbits";
 pub const SERIAL4_TIMEOUT_MS_KEY: &str = "serial4_timeout_ms";
+pub const SERIAL4_NAME: &str = "serial4";
 
 pub const SERIAL5_DEV_KEY: &str = "serial5_dev";
 pub const SERIAL5_BAUDRATE_KEY: &str = "serial5_baudrate";
 pub const SERIAL5_PARITY_KEY: &str = "serial5_parity";
 pub const SERIAL5_STOPBITS_KEY: &str = "serial5_stopbits";
 pub const SERIAL5_TIMEOUT_MS_KEY: &str = "serial5_timeout_ms";
+pub const SERIAL5_NAME: &str = "serial5";
 
 pub const I2C0_DEV_KEY: &str = "i2c0_dev";
 pub const I2C1_DEV_KEY: &str = "i2c1_dev";
 pub const I2C2_DEV_KEY: &str = "i2c2_dev";
+pub const I2C0_NAME: &str = "i2c0";
+pub const I2C1_NAME: &str = "i2c1";
+pub const I2C2_NAME: &str = "i2c2";
 
 pub const GPIO0_NAME: &str = "gpio0";
 pub const GPIO1_NAME: &str = "gpio1";
@@ -53,6 +62,30 @@ pub const GPIO2_NAME: &str = "gpio2";
 pub const GPIO3_NAME: &str = "gpio3";
 pub const GPIO4_NAME: &str = "gpio4";
 pub const GPIO5_NAME: &str = "gpio5";
+pub const GPIO0_PIN_KEY: &str = "gpio0_pin";
+pub const GPIO1_PIN_KEY: &str = "gpio1_pin";
+pub const GPIO2_PIN_KEY: &str = "gpio2_pin";
+pub const GPIO3_PIN_KEY: &str = "gpio3_pin";
+pub const GPIO4_PIN_KEY: &str = "gpio4_pin";
+pub const GPIO5_PIN_KEY: &str = "gpio5_pin";
+pub const GPIO0_DIRECTION_KEY: &str = "gpio0_direction";
+pub const GPIO1_DIRECTION_KEY: &str = "gpio1_direction";
+pub const GPIO2_DIRECTION_KEY: &str = "gpio2_direction";
+pub const GPIO3_DIRECTION_KEY: &str = "gpio3_direction";
+pub const GPIO4_DIRECTION_KEY: &str = "gpio4_direction";
+pub const GPIO5_DIRECTION_KEY: &str = "gpio5_direction";
+pub const GPIO0_BIAS_KEY: &str = "gpio0_bias";
+pub const GPIO1_BIAS_KEY: &str = "gpio1_bias";
+pub const GPIO2_BIAS_KEY: &str = "gpio2_bias";
+pub const GPIO3_BIAS_KEY: &str = "gpio3_bias";
+pub const GPIO4_BIAS_KEY: &str = "gpio4_bias";
+pub const GPIO5_BIAS_KEY: &str = "gpio5_bias";
+pub const GPIO0_INITIAL_LEVEL_KEY: &str = "gpio0_initial_level";
+pub const GPIO1_INITIAL_LEVEL_KEY: &str = "gpio1_initial_level";
+pub const GPIO2_INITIAL_LEVEL_KEY: &str = "gpio2_initial_level";
+pub const GPIO3_INITIAL_LEVEL_KEY: &str = "gpio3_initial_level";
+pub const GPIO4_INITIAL_LEVEL_KEY: &str = "gpio4_initial_level";
+pub const GPIO5_INITIAL_LEVEL_KEY: &str = "gpio5_initial_level";
 
 pub const DEFAULT_SERIAL_BAUDRATE: u32 = 115_200;
 pub const DEFAULT_SERIAL_TIMEOUT_MS: u64 = 50;
@@ -303,8 +336,21 @@ bundle_resources!(
 );
 
 const LINUX_RESOURCE_SLOT_NAMES: &[&str] = &[
-    "serial0", "serial1", "serial2", "serial3", "serial4", "serial5", "i2c0", "i2c1", "i2c2",
-    GPIO0_NAME, GPIO1_NAME, GPIO2_NAME, GPIO3_NAME, GPIO4_NAME, GPIO5_NAME,
+    SERIAL0_NAME,
+    SERIAL1_NAME,
+    SERIAL2_NAME,
+    SERIAL3_NAME,
+    SERIAL4_NAME,
+    SERIAL5_NAME,
+    I2C0_NAME,
+    I2C1_NAME,
+    I2C2_NAME,
+    GPIO0_NAME,
+    GPIO1_NAME,
+    GPIO2_NAME,
+    GPIO3_NAME,
+    GPIO4_NAME,
+    GPIO5_NAME,
 ];
 
 struct SerialSlot {
@@ -455,50 +501,50 @@ const GPIO_SLOTS: &[GpioSlot] = &[
     GpioSlot {
         id: LinuxResourcesId::Gpio0,
         name: GPIO0_NAME,
-        pin_key: "gpio0_pin",
-        direction_key: "gpio0_direction",
-        bias_key: "gpio0_bias",
-        initial_level_key: "gpio0_initial_level",
+        pin_key: GPIO0_PIN_KEY,
+        direction_key: GPIO0_DIRECTION_KEY,
+        bias_key: GPIO0_BIAS_KEY,
+        initial_level_key: GPIO0_INITIAL_LEVEL_KEY,
     },
     GpioSlot {
         id: LinuxResourcesId::Gpio1,
         name: GPIO1_NAME,
-        pin_key: "gpio1_pin",
-        direction_key: "gpio1_direction",
-        bias_key: "gpio1_bias",
-        initial_level_key: "gpio1_initial_level",
+        pin_key: GPIO1_PIN_KEY,
+        direction_key: GPIO1_DIRECTION_KEY,
+        bias_key: GPIO1_BIAS_KEY,
+        initial_level_key: GPIO1_INITIAL_LEVEL_KEY,
     },
     GpioSlot {
         id: LinuxResourcesId::Gpio2,
         name: GPIO2_NAME,
-        pin_key: "gpio2_pin",
-        direction_key: "gpio2_direction",
-        bias_key: "gpio2_bias",
-        initial_level_key: "gpio2_initial_level",
+        pin_key: GPIO2_PIN_KEY,
+        direction_key: GPIO2_DIRECTION_KEY,
+        bias_key: GPIO2_BIAS_KEY,
+        initial_level_key: GPIO2_INITIAL_LEVEL_KEY,
     },
     GpioSlot {
         id: LinuxResourcesId::Gpio3,
         name: GPIO3_NAME,
-        pin_key: "gpio3_pin",
-        direction_key: "gpio3_direction",
-        bias_key: "gpio3_bias",
-        initial_level_key: "gpio3_initial_level",
+        pin_key: GPIO3_PIN_KEY,
+        direction_key: GPIO3_DIRECTION_KEY,
+        bias_key: GPIO3_BIAS_KEY,
+        initial_level_key: GPIO3_INITIAL_LEVEL_KEY,
     },
     GpioSlot {
         id: LinuxResourcesId::Gpio4,
         name: GPIO4_NAME,
-        pin_key: "gpio4_pin",
-        direction_key: "gpio4_direction",
-        bias_key: "gpio4_bias",
-        initial_level_key: "gpio4_initial_level",
+        pin_key: GPIO4_PIN_KEY,
+        direction_key: GPIO4_DIRECTION_KEY,
+        bias_key: GPIO4_BIAS_KEY,
+        initial_level_key: GPIO4_INITIAL_LEVEL_KEY,
     },
     GpioSlot {
         id: LinuxResourcesId::Gpio5,
         name: GPIO5_NAME,
-        pin_key: "gpio5_pin",
-        direction_key: "gpio5_direction",
-        bias_key: "gpio5_bias",
-        initial_level_key: "gpio5_initial_level",
+        pin_key: GPIO5_PIN_KEY,
+        direction_key: GPIO5_DIRECTION_KEY,
+        bias_key: GPIO5_BIAS_KEY,
+        initial_level_key: GPIO5_INITIAL_LEVEL_KEY,
     },
 ];
 
@@ -906,22 +952,22 @@ mod tests {
     #[test]
     fn read_gpio_slot_config_requires_pin_when_aux_keys_are_present() {
         let mut cfg = ComponentConfig::new();
-        cfg.set("gpio0_direction", "input".to_string());
+        cfg.set(GPIO0_DIRECTION_KEY, "input".to_string());
         assert!(read_gpio_slot_config(Some(&cfg), &GPIO_SLOTS[0]).is_err());
     }
 
     #[test]
     fn read_gpio_slot_config_requires_direction_when_pin_is_set() {
         let mut cfg = ComponentConfig::new();
-        cfg.set("gpio0_pin", 23_u8);
+        cfg.set(GPIO0_PIN_KEY, 23_u8);
         assert!(read_gpio_slot_config(Some(&cfg), &GPIO_SLOTS[0]).is_err());
     }
 
     #[test]
     fn read_gpio_slot_config_defaults_bias_and_preserves_level_for_output() {
         let mut cfg = ComponentConfig::new();
-        cfg.set("gpio0_pin", 23_u8);
-        cfg.set("gpio0_direction", "output".to_string());
+        cfg.set(GPIO0_PIN_KEY, 23_u8);
+        cfg.set(GPIO0_DIRECTION_KEY, "output".to_string());
 
         let slot_config = read_gpio_slot_config(Some(&cfg), &GPIO_SLOTS[0])
             .unwrap()
@@ -940,9 +986,9 @@ mod tests {
     #[test]
     fn read_gpio_slot_config_parses_explicit_initial_level_for_output() {
         let mut cfg = ComponentConfig::new();
-        cfg.set("gpio0_pin", 23_u8);
-        cfg.set("gpio0_direction", "output".to_string());
-        cfg.set("gpio0_initial_level", "high".to_string());
+        cfg.set(GPIO0_PIN_KEY, 23_u8);
+        cfg.set(GPIO0_DIRECTION_KEY, "output".to_string());
+        cfg.set(GPIO0_INITIAL_LEVEL_KEY, "high".to_string());
 
         let slot_config = read_gpio_slot_config(Some(&cfg), &GPIO_SLOTS[0])
             .unwrap()
@@ -961,9 +1007,9 @@ mod tests {
     #[test]
     fn read_gpio_slot_config_rejects_initial_level_for_input() {
         let mut cfg = ComponentConfig::new();
-        cfg.set("gpio0_pin", 23_u8);
-        cfg.set("gpio0_direction", "input".to_string());
-        cfg.set("gpio0_initial_level", "high".to_string());
+        cfg.set(GPIO0_PIN_KEY, 23_u8);
+        cfg.set(GPIO0_DIRECTION_KEY, "input".to_string());
+        cfg.set(GPIO0_INITIAL_LEVEL_KEY, "high".to_string());
         assert!(read_gpio_slot_config(Some(&cfg), &GPIO_SLOTS[0]).is_err());
     }
 
