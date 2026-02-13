@@ -238,6 +238,17 @@ mod tests {
     use super::*;
     use bincode::{config, decode_from_slice, encode_to_vec};
 
+    fn assert_roundtrip<T>(payload: &T)
+    where
+        T: Encode + Decode<()> + PartialEq + core::fmt::Debug,
+    {
+        let cfg = config::standard();
+        let encoded = encode_to_vec(payload, cfg).expect("encode");
+        let (decoded, consumed): (T, usize) = decode_from_slice(&encoded, cfg).expect("decode");
+        assert_eq!(consumed, encoded.len());
+        assert_eq!(decoded, *payload);
+    }
+
     #[test]
     fn rc_channels_round_trip() {
         let mut channels = [0u16; 16];
@@ -245,15 +256,8 @@ mod tests {
             *value = (idx as u16) * 42;
         }
         let payload = RcChannelsPayload(RcChannels(channels));
-        let cfg = config::standard();
-
-        let encoded = encode_to_vec(&payload, cfg).expect("RC encode");
-        let (decoded, consumed): (RcChannelsPayload, usize) =
-            decode_from_slice(&encoded, cfg).expect("RC decode");
-
-        assert_eq!(consumed, encoded.len());
-        assert_eq!(payload, decoded);
-        assert_eq!(decoded.0.0, channels);
+        assert_roundtrip(&payload);
+        assert_eq!(payload.0.0, channels);
     }
 
     #[test]
@@ -270,14 +274,6 @@ mod tests {
             downlink_link_quality: 90,
             downlink_snr: -9,
         };
-        let payload = LinkStatisticsPayload(stats);
-        let cfg = config::standard();
-
-        let encoded = encode_to_vec(&payload, cfg).expect("Link encode");
-        let (decoded, consumed): (LinkStatisticsPayload, usize) =
-            decode_from_slice(&encoded, cfg).expect("Link decode");
-
-        assert_eq!(consumed, encoded.len());
-        assert_eq!(payload, decoded);
+        assert_roundtrip(&LinkStatisticsPayload(stats));
     }
 }
