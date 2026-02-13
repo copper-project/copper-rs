@@ -113,36 +113,6 @@ pub fn extract_next_ubx_frame(buffer: &mut Vec<u8>) -> Option<UbxFrame> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{UbxFrame, extract_next_ubx_frame};
-
-    #[test]
-    fn drops_full_noise_buffer_when_no_sync_is_present() {
-        let mut buffer = vec![0x00, 0x11, 0x22, 0x33, 0x44];
-        assert!(extract_next_ubx_frame(&mut buffer).is_none());
-        assert!(buffer.is_empty());
-    }
-
-    #[test]
-    fn keeps_trailing_sync_lead_byte_for_cross_read_reassembly() {
-        let frame = UbxFrame::from_message(0x01, 0x07, &[]);
-        let wire = frame.to_wire_bytes();
-
-        let mut buffer = vec![0xAA, 0xBB, 0xB5];
-        assert!(extract_next_ubx_frame(&mut buffer).is_none());
-        assert_eq!(buffer, vec![0xB5]);
-
-        buffer.extend_from_slice(&wire[1..]);
-
-        let parsed = extract_next_ubx_frame(&mut buffer).expect("expected reconstructed frame");
-        assert_eq!(parsed.class_id, 0x01);
-        assert_eq!(parsed.msg_id, 0x07);
-        assert!(parsed.payload.is_empty());
-        assert!(buffer.is_empty());
-    }
-}
-
 pub fn decode_frame_to_event(frame: &UbxFrame, emit_raw_unknown: bool) -> Option<GnssEvent> {
     let event = match (frame.class_id, frame.msg_id) {
         (CLASS_NAV, ID_NAV_PVT) => decode_nav_pvt(&frame.payload).map(GnssEvent::NavEpoch),
@@ -410,4 +380,34 @@ fn le_i32(bytes: &[u8], offset: usize) -> i32 {
         bytes[offset + 2],
         bytes[offset + 3],
     ])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{UbxFrame, extract_next_ubx_frame};
+
+    #[test]
+    fn drops_full_noise_buffer_when_no_sync_is_present() {
+        let mut buffer = vec![0x00, 0x11, 0x22, 0x33, 0x44];
+        assert!(extract_next_ubx_frame(&mut buffer).is_none());
+        assert!(buffer.is_empty());
+    }
+
+    #[test]
+    fn keeps_trailing_sync_lead_byte_for_cross_read_reassembly() {
+        let frame = UbxFrame::from_message(0x01, 0x07, &[]);
+        let wire = frame.to_wire_bytes();
+
+        let mut buffer = vec![0xAA, 0xBB, 0xB5];
+        assert!(extract_next_ubx_frame(&mut buffer).is_none());
+        assert_eq!(buffer, vec![0xB5]);
+
+        buffer.extend_from_slice(&wire[1..]);
+
+        let parsed = extract_next_ubx_frame(&mut buffer).expect("expected reconstructed frame");
+        assert_eq!(parsed.class_id, 0x01);
+        assert_eq!(parsed.msg_id, 0x07);
+        assert!(parsed.payload.is_empty());
+        assert!(buffer.is_empty());
+    }
 }
