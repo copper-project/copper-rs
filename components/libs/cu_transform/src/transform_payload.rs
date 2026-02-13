@@ -156,10 +156,9 @@ where
 
     /// Get the timestamp from the message
     pub fn timestamp(&self) -> Option<CuTime> {
-        if let Tov::Time(time) = self.transform.tov {
-            Some(time)
-        } else {
-            None
+        match self.transform.tov {
+            Tov::Time(time) => Some(time),
+            _ => None,
         }
     }
 
