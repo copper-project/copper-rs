@@ -23,7 +23,7 @@ members = [
   "components/libs/cu_msp_lib",
   "components/libs/cu_embedded_registry",
   "components/libs/cu_transform",
-  "components/libs/cu29_units",
+  "core/cu29_units",
   "components/monitors/cu_consolemon",
   "components/monitors/cu_logmon",
   "components/payloads/cu_ros_payloads",
@@ -107,6 +107,7 @@ default-members = [
   "core/cu29_runtime",
   "core/cu29_soa_derive",
   "core/cu29_traits",
+  "core/cu29_units",
   "core/cu29_unifiedlog",
 ]
 
@@ -148,7 +149,7 @@ cu29-traits = { path = "core/cu29_traits", default-features = false, version = "
 cu29-unifiedlog = { path = "core/cu29_unifiedlog", default-features = false, features = [
   "compact",
 ], version = "0.12.0" }
-cu29-units = { path = "components/libs/cu29_units", version = "0.12.0" }
+cu29-units = { path = "core/cu29_units", version = "0.12.0" }
 cu29-value = { path = "core/cu29_value", default-features = false, version = "0.12.0" }
 cu-linux-resources = { path = "components/res/cu_linux_resources", version = "0.12.0" }
 

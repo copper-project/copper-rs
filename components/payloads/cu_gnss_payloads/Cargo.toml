@@ -13,10 +13,11 @@ description = "Standardized GNSS payload definitions for Copper"
 [dependencies]
 bincode = { workspace = true }
 cu29 = { path = "../../../core/cu29", version = "0.12.0", default-features = false }
-cu29-units = { workspace = true }
+cu29-units = { path = "../../../core/cu29_units", version = "0.12.0", default-features = false }
 serde = { workspace = true }
 
 [features]
-default = ["std"]
-std = ["cu29/std"]
+default = ["std", "reflect"]
+std = ["cu29/std", "cu29-units/std"]
 textlogs = ["cu29/textlogs"]
+reflect = ["cu29/reflect", "cu29-units/reflect"]

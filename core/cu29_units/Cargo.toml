@@ -11,7 +11,7 @@ repository.workspace = true
 description = "Copper-native units with uom-shaped API and native bincode/reflect support"
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version = "0.12.0", default-features = false }
+cu29 = { path = "../cu29", version = "0.12.0", default-features = false }
 bincode = { workspace = true }
 serde = { workspace = true }
 uom = { workspace = true }
