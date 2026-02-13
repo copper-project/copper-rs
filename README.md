@@ -5,7 +5,7 @@
 ![](https://img.shields.io/badge/Rust-1.80+-orange.svg)
 [![dependency status](https://deps.rs/repo/github/copper-project/copper-rs/status.svg)](https://deps.rs/repo/github/copper-project/copper-rs)
 [![Discord](https://img.shields.io/discord/1305916875741597826?logo=discord)](https://discord.gg/VkCG7Sb9Kw)
-[![Book](https://img.shields.io)](https://copper-project.github.io/copper-rs-book/)
+[![Book](https://img.shields.io/badge/book-Docs-blue)](https://copper-project.github.io/copper-rs-book/)
 [![Documentation](https://img.shields.io/badge/docs-available-brightgreen)](https://copper-project.github.io/copper-rs)
 
 <blockquote>
