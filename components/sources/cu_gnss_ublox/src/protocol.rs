@@ -7,8 +7,9 @@ use cu_gnss_payloads::{
     GnssRfStatus, GnssSatelliteInfo, GnssSatelliteState, GnssSignalInfo, GnssSignalState,
 };
 use cu29::units::si::angle::degree;
-use cu29::units::si::f32::{Angle, Length, Time, Velocity};
-use cu29::units::si::length::meter;
+use cu29::units::si::f32::{Angle, Length, Ratio, Time, Velocity};
+use cu29::units::si::length::{decimeter, meter};
+use cu29::units::si::ratio::ratio;
 use cu29::units::si::time::second;
 use cu29::units::si::velocity::meter_per_second;
 
@@ -220,7 +221,7 @@ fn decode_nav_pvt(payload: &[u8]) -> Option<GnssNavEpoch> {
         speed: Velocity::new::<meter_per_second>(le_u32(payload, 68) as f32 / 1000.0),
         heading: Angle::new::<degree>(le_u32(payload, 72) as f32 * 1e-5),
         time: Time::new::<second>(le_u32(payload, 12) as f32 * 1e-9),
-        position_dop: le_u16(payload, 76) as f32 * 0.01,
+        position_dop: Ratio::new::<ratio>(le_u16(payload, 76) as f32 * 0.01),
     };
 
     Some(GnssNavEpoch {
@@ -249,9 +250,9 @@ fn decode_nav_sat(payload: &[u8]) -> Option<GnssSatelliteState> {
             gnss_id: payload[base],
             sv_id: payload[base + 1],
             cno_dbhz: payload[base + 2],
-            elevation_deg: payload[base + 3] as i8,
-            azimuth_deg: le_i16(payload, base + 4),
-            pseudorange_residual_dm: le_i16(payload, base + 6),
+            elevation: Angle::new::<degree>(payload[base + 3] as i8 as f32),
+            azimuth: Angle::new::<degree>(le_i16(payload, base + 4) as f32),
+            pseudorange_residual: Length::new::<decimeter>(le_i16(payload, base + 6) as f32),
             quality_ind: (flags & 0x07) as u8,
             used_for_navigation: (flags & (1 << 3)) != 0,
             health: ((flags >> 4) & 0x03) as u8,
@@ -291,7 +292,7 @@ fn decode_nav_sig(payload: &[u8]) -> Option<GnssSignalState> {
             sv_id: payload[base + 1],
             signal_id: payload[base + 2],
             frequency_id: payload[base + 3],
-            pseudorange_residual_dm: le_i16(payload, base + 4),
+            pseudorange_residual: Length::new::<decimeter>(le_i16(payload, base + 4) as f32),
             cno_dbhz: payload[base + 6],
             quality_ind: payload[base + 7],
             correction_source: payload[base + 8],

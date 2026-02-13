@@ -18,6 +18,7 @@ use cu_msp_lib::structs::{
     MspVoltageMeterConfig,
 };
 use cu29::prelude::*;
+use cu29::units::si::electric_potential::volt;
 
 const VTX_SYM_VOLT: char = '\x06';
 
@@ -92,7 +93,7 @@ impl CuTask for VtxOsd {
         let ctrl = ctrl_msg.payload();
 
         if let Some(voltage) = batt_msg.payload() {
-            self.last_voltage_centi = Some(voltage.centivolts);
+            self.last_voltage_centi = Some((voltage.voltage.get::<volt>() * 100.0).round() as u16);
         }
 
         // First, handle any incoming MSP requests (telemetry queries from VTX)
@@ -416,7 +417,7 @@ impl CuTask for VtxMspResponder {
         output.tov = req_msg.tov;
 
         if let Some(voltage) = voltage_msg.payload() {
-            self.last_voltage_centi = Some(voltage.centivolts);
+            self.last_voltage_centi = Some((voltage.voltage.get::<volt>() * 100.0).round() as u16);
         }
 
         let mut batch = MspRequestBatch::new();

@@ -8,6 +8,7 @@ use cu_gnss_payloads::{
 use cu29::prelude::*;
 use cu29::units::si::angle::degree;
 use cu29::units::si::length::meter;
+use cu29::units::si::ratio::ratio;
 use cu29::units::si::velocity::meter_per_second;
 
 pub mod state {
@@ -193,7 +194,7 @@ impl CuSinkTask for AccuracySink {
                 let v_acc = format!("{:.2}", accuracy.vertical.get::<meter>());
                 let speed_acc = format!("{:.2}", accuracy.speed.get::<meter_per_second>());
                 let heading_acc = format!("{:.2}", accuracy.heading.get::<degree>());
-                let pdop = format!("{:.2}", accuracy.position_dop);
+                let pdop = format!("{:.2}", accuracy.position_dop.get::<ratio>());
                 info!(
                     "[gnss/accuracy] h_acc={}m v_acc={}m speed_acc={}m/s heading_acc={}deg pdop={}",
                     h_acc, v_acc, speed_acc, heading_acc, pdop
