@@ -4,15 +4,22 @@ WINDOWS_BASE_FEATURES := "mock,image,kornia,python,gst,faer,nalgebra,glam,debug_
 export ROOT := `git rev-parse --show-toplevel`
 EMBEDDED_EXCLUDES := shell('python3 $1/support/ci/embedded_crates.py excludes', ROOT)
 
-# Default to the CI-aligned std workflow.
+# Default to the local PR-check workflow.
 default:
-	just std-ci
+	just pr-check
 
+# Local PR pipeline: format, lint, then tests.
+pr-check:
+	just fmt
+	just lint
+	just test
 
-# Formatting and typo checks mirroring the dedicated workflow job.
+# Formatting, typo, and clippy checks.
 lint:
 	just fmt-check
 	just typos
+	just clippy-std
+	just clippy-nostd
 
 # Formatting check only
 fmt-check: check-format-tools
@@ -55,6 +62,25 @@ check-format-tools:
 typos:
 	typos -c .config/_typos.toml
 
+# Std clippy checks aligned with reusable unit-test workflow defaults.
+clippy-std:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	os="$(uname -s || true)"
+	features="{{BASE_FEATURES}}"
+	case "$os" in
+		Linux*) features="{{BASE_FEATURES}},python" ;;
+		Darwin*) features="{{BASE_FEATURES}}" ;;
+		MINGW*|MSYS*|CYGWIN*|Windows_NT) features="{{WINDOWS_BASE_FEATURES}}" ;;
+		*) features="{{BASE_FEATURES}}" ;;
+	esac
+	features_flag="--features $features"
+	embedded_excludes="{{EMBEDDED_EXCLUDES}}"
+
+	cargo +stable clippy --workspace --all-targets $embedded_excludes -- --deny warnings
+	cargo +stable clippy --workspace --all-targets $features_flag $embedded_excludes -- --deny warnings
+
 # Run the Unit-Tests job locally via act (debug/ubuntu matrix).
 ci:
   act -W .github/workflows/general.yml -j Unit-Tests --matrix os:ubuntu-latest --matrix mode:debug -P ubuntu-latest=ghcr.io/catthehacker/ubuntu:act-latest
@@ -62,8 +88,22 @@ ci:
 # Host target detection for cross-platform logreader builds
 host_target := `rustc +stable -vV | sed -n 's/host: //p'`
 
+# no_std/embedded clippy checks mirroring the embedded workflow.
+clippy-nostd:
+	cargo +stable clippy --no-default-features
+	python3 support/ci/embedded_crates.py run --action clippy
+	cd examples/cu_rp2350_skeleton && cargo +stable clippy --target thumbv8m.main-none-eabihf --bin cu-blinky --features firmware
+	cd examples/cu_rp2350_skeleton && cargo +stable clippy --no-default-features --features host --bins --target={{host_target}}
+
+# Run std and no_std unit tests.
+test:
+	cargo +stable nextest run --all-targets --workspace {{EMBEDDED_EXCLUDES}}
+	cargo +stable nextest run --no-default-features
+
 # Run the no_std/embedded CI flow locally.
-nostd-ci: lint
+nostd-ci:
+	just fmt-check
+	just typos
 	cargo +stable build --no-default-features
 	cargo +stable nextest run --no-default-features
 	python3 support/ci/embedded_crates.py run --action clippy
@@ -74,9 +114,11 @@ nostd-ci: lint
 	cd examples/cu_rp2350_skeleton && cargo +stable build --target={{host_target}} --no-default-features --features host --bin blinky-logreader
 
 # Std-specific CI flow (local, CI-aligned). Use mode=release or mode=cuda-release as needed.
-std-ci mode="debug": lint
+std-ci mode="debug":
 	#!/usr/bin/env bash
 	set -euo pipefail
+	just fmt-check
+	just typos
 
 	mode="{{mode}}"
 	release_flag=""

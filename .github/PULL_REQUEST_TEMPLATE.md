@@ -6,9 +6,9 @@
 ## Changes
 
 ## Testing
-- [ ] `just std-ci`
-- [ ] `just lint`
-- [ ] `cargo +stable nextest run --workspace --all-targets`
+- [ ] `just pr-check`
+- [ ] optional full `just std-ci` (if std/runtime paths are impacted)
+- [ ] optional full `just nostd-ci` (if embedded/no_std paths are impacted)
 - [ ] Other (please specify):
 
 ## Checklist

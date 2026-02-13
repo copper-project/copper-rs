@@ -30,13 +30,22 @@ First off, thank you for considering contributing to Copper-rs! We welcome contr
 The project includes a `justfile` that mirrors the CI workflow. This is the recommended way to run checks locally before submitting a PR:
 
 ```bash
-# Run the full CI-aligned check (lint + clippy + build + tests)
-just std-ci
+# Run the default PR pipeline (format + lint + tests for std/no_std)
+just pr-check
 
-# Run only lint checks (formatting + typos)
+# Same as above (default target)
+just
+
+# Run lint checks (fmt-check + typos + clippy for std and no_std)
 just lint
 
-# Run embedded/no_std CI checks
+# Run unit tests (std + no_std)
+just test
+
+# Run CI-aligned std checks (build/tests/templates)
+just std-ci
+
+# Run CI-aligned embedded/no_std checks
 just nostd-ci
 
 # Run in release mode
@@ -46,8 +55,13 @@ just std-ci release
 just std-ci cuda-release
 ```
 
-The `just std-ci` command runs the same checks as CI, including:
-- Format check (`cargo +stable fmt --all -- --check`)
+The `just pr-check` command runs:
+- Formatting (`just fmt`)
+- Lint checks (`just lint`: format check + typos + std/no_std clippy)
+- Unit tests (`just test`: std + no_std)
+
+The `just std-ci` command remains CI-aligned for std paths, including:
+- Format check (`just fmt-check`)
 - Typos check (`typos -c .config/_typos.toml`)
 - Clippy with `--deny warnings`
 - Build with all features
@@ -142,12 +156,13 @@ cargo nextest run --workspace --all-targets --features mock,image,kornia,python,
 
 4. **Make Changes**: Implement your feature or fix the bug. Write clear and concise code.
 
-5. **Run Checks**: Before committing, ensure your code adheres to the project's standards. The easiest way is to run `just std-ci` which executes all CI checks. Alternatively, run individual checks:
-    - **All checks (recommended)**: ```just std-ci```
-    - **Lint only**: ```just lint``` (formatting + typos)
-    - **Formatting**: ```cargo +stable fmt --all -- --check```
-    - **Clippy Lints**: ```cargo +stable clippy --workspace --all-targets -- --deny warnings```
-    - **Tests**: ```cargo +stable nextest run --workspace --all-targets``` (run with relevant features if applicable)
+5. **Run Checks**: Before committing, ensure your code adheres to the project's standards. The default recommendation is `just pr-check` (or simply `just`). For CI-aligned paths, run `just std-ci` and/or `just nostd-ci` as applicable. You can also run individual checks:
+    - **All checks (recommended)**: ```just pr-check```
+    - **Std CI flow**: ```just std-ci```
+    - **Embedded/no_std CI flow**: ```just nostd-ci```
+    - **Lint only**: ```just lint``` (format check + typos + std/no_std clippy)
+    - **Tests only**: ```just test``` (std + no_std unit tests)
+    - **Formatting check**: ```just fmt-check```
     - **Typos**: ```typos -c .config/_typos.toml```
 6. **Commit and push Changes**: Commit your changes with clear and descriptive commit messages. (Consider using [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/))
     ```bash
