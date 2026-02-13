@@ -10,6 +10,17 @@ use std::sync::{Arc, RwLock};
 
 const DEFAULT_CACHE_SIZE: usize = 100;
 
+fn ordered_by_stamp<T: Copy + Debug + Default + 'static>(
+    first: StampedTransform<T>,
+    second: StampedTransform<T>,
+) -> (StampedTransform<T>, StampedTransform<T>) {
+    if first.stamp <= second.stamp {
+        (first, second)
+    } else {
+        (second, first)
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StampedTransform<T: Copy + Debug + Default + 'static> {
     pub transform: Transform3D<T>,
@@ -495,15 +506,8 @@ impl<T: Copy + Debug + Default + 'static> TransformBuffer<T> {
             + std::ops::Div<Output = T>
             + num_traits::NumCast,
     {
-        let transforms = self.get_transforms_around(time)?;
-
-        // Get the newer transform (which might not be in time order in case time is outside our buffer)
-        let (before, after) = if transforms.0.stamp < transforms.1.stamp {
-            (transforms.0, transforms.1)
-        } else {
-            (transforms.1, transforms.0)
-        };
-
+        let (first, second) = self.get_transforms_around(time)?;
+        let (before, after) = ordered_by_stamp(first, second);
         // Compute velocity using the transform difference
         after.compute_velocity(&before)
     }
@@ -611,13 +615,7 @@ impl<T: Copy + Debug + Default + 'static, const N: usize> ConstTransformBufferSy
         if let Some((i, j)) = best_pair {
             let t1 = buffer.transforms[i].as_ref()?.clone();
             let t2 = buffer.transforms[j].as_ref()?.clone();
-
-            // Return in time order
-            if t1.stamp <= t2.stamp {
-                Some((t1, t2))
-            } else {
-                Some((t2, t1))
-            }
+            Some(ordered_by_stamp(t1, t2))
         } else {
             None
         }
@@ -636,15 +634,8 @@ impl<T: Copy + Debug + Default + 'static, const N: usize> ConstTransformBufferSy
             + std::ops::Div<Output = T>
             + num_traits::NumCast,
     {
-        let transforms = self.get_transforms_around(time)?;
-
-        // Get the newer transform (which might not be in time order in case time is outside our buffer)
-        let (before, after) = if transforms.0.stamp < transforms.1.stamp {
-            (transforms.0, transforms.1)
-        } else {
-            (transforms.1, transforms.0)
-        };
-
+        let (first, second) = self.get_transforms_around(time)?;
+        let (before, after) = ordered_by_stamp(first, second);
         // Compute velocity using the transform difference
         after.compute_velocity(&before)
     }

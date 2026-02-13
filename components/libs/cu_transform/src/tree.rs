@@ -1,6 +1,6 @@
 use crate::FrameIdString;
 use crate::error::{TransformError, TransformResult};
-use crate::transform::{StampedTransform, TransformStore};
+use crate::transform::{StampedTransform, TransformBuffer, TransformStore};
 use crate::transform_payload::StampedFrameTransform;
 use crate::velocity::VelocityTransform;
 use crate::velocity_cache::VelocityTransformCache;
@@ -121,17 +121,11 @@ impl<T: Copy + Debug + 'static> TransformCache<T> {
 
         // If the cache is at capacity, remove the oldest entry
         if self.entries.len() >= self.max_size {
-            // Find the oldest entry (this requires iterating through entries)
-            let mut oldest_key = None;
-            let mut oldest_time = now;
-
-            for entry in self.entries.iter() {
-                if entry.last_access < oldest_time {
-                    oldest_time = entry.last_access;
-                    oldest_key = Some(*entry.key());
-                }
-            }
-
+            let oldest_key = self
+                .entries
+                .iter()
+                .min_by_key(|entry| entry.last_access)
+                .map(|entry| *entry.key());
             if let Some(key_to_remove) = oldest_key {
                 self.entries.remove(&key_to_remove);
             }
@@ -315,6 +309,19 @@ where
             .frame_indices
             .entry(frame_id_string)
             .or_insert_with(|| self.graph.add_node(frame_id_string))
+    }
+
+    fn get_segment_buffer(
+        &self,
+        parent: &FrameIdString,
+        child: &FrameIdString,
+    ) -> TransformResult<TransformBuffer<T>> {
+        self.transform_store
+            .get_buffer(parent, child)
+            .ok_or_else(|| TransformError::TransformNotFound {
+                from: parent.to_string(),
+                to: child.to_string(),
+            })
     }
 
     /// add a transform to the tree.
@@ -528,34 +535,19 @@ where
 
         // Iterate through each segment of the path
         for (parent, child, inverse) in &path {
-            // Get the transform buffer for this segment
-            let buffer = match self.transform_store.get_buffer(parent, child) {
-                Some(b) => b,
-                None => {
-                    // If we can't find the transform, it's an error
-                    return Err(TransformError::TransformNotFound {
-                        from: parent.to_string(),
-                        to: child.to_string(),
-                    });
-                }
-            };
+            let buffer = self.get_segment_buffer(parent, child)?;
 
             let transform = buffer
                 .get_closest_transform(time)
                 .ok_or(TransformError::TransformTimeNotAvailable(time))?;
 
-            // Apply the transform (with inverse if needed)
-            if *inverse {
-                // For inverse transforms, we multiply by the inverse
-                // Note: In transform composition, the right-most transform is applied first
-                let transform_to_apply = transform.transform.inverse();
-                result = transform_to_apply * result;
+            // Note: In transform composition, the right-most transform is applied first.
+            let transform_to_apply = if *inverse {
+                transform.transform.inverse()
             } else {
-                // For regular transforms, we multiply directly
-                // Note: In transform composition, the right-most transform is applied first
-                let transform_to_apply = transform.transform;
-                result = transform_to_apply * result;
-            }
+                transform.transform
+            };
+            result = transform_to_apply * result;
         }
 
         // Cache the computed result
@@ -635,16 +627,7 @@ where
 
         // Iterate through each segment of the path
         for (parent, child, inverse) in &path {
-            // Get the transform buffer for this segment
-            let buffer = match self.transform_store.get_buffer(parent, child) {
-                Some(b) => b,
-                None => {
-                    return Err(TransformError::TransformNotFound {
-                        from: parent.to_string(),
-                        to: child.to_string(),
-                    });
-                }
-            };
+            let buffer = self.get_segment_buffer(parent, child)?;
 
             // Compute velocity for this segment
             let segment_velocity = buffer
@@ -661,57 +644,28 @@ where
             let position = [T::default(); 3]; // Assume transformation at origin for simplicity
             // A more accurate implementation would track the position
 
-            // Apply velocity transformation
-            if *inverse {
-                // For inverse transforms, invert the transform first
+            let transformed_velocity = if *inverse {
                 let inverse_transform = transform.transform.inverse();
-
-                // Transform the velocity (note we need to negate segment_velocity for inverse transform)
-                let neg_velocity = VelocityTransform {
-                    linear: [
-                        -segment_velocity.linear[0],
-                        -segment_velocity.linear[1],
-                        -segment_velocity.linear[2],
-                    ],
-                    angular: [
-                        -segment_velocity.angular[0],
-                        -segment_velocity.angular[1],
-                        -segment_velocity.angular[2],
-                    ],
-                };
-
-                // Transform the negated velocity using the inverse transform
-                let transformed_velocity = crate::velocity::transform_velocity(
-                    &neg_velocity,
+                crate::velocity::transform_velocity(
+                    &segment_velocity.negate(),
                     &inverse_transform,
                     &position,
-                );
-
-                // Accumulate the transformed velocity
-                result.linear[0] += transformed_velocity.linear[0];
-                result.linear[1] += transformed_velocity.linear[1];
-                result.linear[2] += transformed_velocity.linear[2];
-
-                result.angular[0] += transformed_velocity.angular[0];
-                result.angular[1] += transformed_velocity.angular[1];
-                result.angular[2] += transformed_velocity.angular[2];
+                )
             } else {
-                // Use the transform to transform the velocity
-                let transformed_velocity = crate::velocity::transform_velocity(
+                crate::velocity::transform_velocity(
                     &segment_velocity,
                     &transform.transform,
                     &position,
-                );
+                )
+            };
 
-                // Accumulate the transformed velocity
-                result.linear[0] += transformed_velocity.linear[0];
-                result.linear[1] += transformed_velocity.linear[1];
-                result.linear[2] += transformed_velocity.linear[2];
+            result.linear[0] += transformed_velocity.linear[0];
+            result.linear[1] += transformed_velocity.linear[1];
+            result.linear[2] += transformed_velocity.linear[2];
 
-                result.angular[0] += transformed_velocity.angular[0];
-                result.angular[1] += transformed_velocity.angular[1];
-                result.angular[2] += transformed_velocity.angular[2];
-            }
+            result.angular[0] += transformed_velocity.angular[0];
+            result.angular[1] += transformed_velocity.angular[1];
+            result.angular[2] += transformed_velocity.angular[2];
         }
 
         // Cache the computed result
