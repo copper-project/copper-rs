@@ -6,9 +6,9 @@ use cu_gnss_payloads::{
     GnssSignalState,
 };
 use cu29::prelude::*;
-use cu29_units::si::angle::degree;
-use cu29_units::si::length::meter;
-use cu29_units::si::velocity::meter_per_second;
+use cu29::units::si::angle::degree;
+use cu29::units::si::length::meter;
+use cu29::units::si::velocity::meter_per_second;
 
 pub mod state {
     use super::*;

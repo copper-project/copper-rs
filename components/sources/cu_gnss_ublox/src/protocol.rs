@@ -6,11 +6,11 @@ use cu_gnss_payloads::{
     GnssFixType, GnssInfoSeverity, GnssInfoText, GnssNavEpoch, GnssRawUbxFrame, GnssRfBlockStatus,
     GnssRfStatus, GnssSatelliteInfo, GnssSatelliteState, GnssSignalInfo, GnssSignalState,
 };
-use cu29_units::si::angle::degree;
-use cu29_units::si::f32::{Angle, Length, Time, Velocity};
-use cu29_units::si::length::meter;
-use cu29_units::si::time::second;
-use cu29_units::si::velocity::meter_per_second;
+use cu29::units::si::angle::degree;
+use cu29::units::si::f32::{Angle, Length, Time, Velocity};
+use cu29::units::si::length::meter;
+use cu29::units::si::time::second;
+use cu29::units::si::velocity::meter_per_second;
 
 const UBX_SYNC_1: u8 = 0xB5;
 const UBX_SYNC_2: u8 = 0x62;

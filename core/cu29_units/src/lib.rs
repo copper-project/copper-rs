@@ -1,3 +1,11 @@
+//! Copper-native SI quantity wrappers.
+//!
+//! Feature flags:
+//! - `default` = `["std"]`
+//! - `std`: enables `uom/std`
+//! - `reflect`: enables `bevy_reflect` support on wrapper types
+//! - `textlogs`: compatibility no-op for downstream feature forwarding
+//!
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use uom;
@@ -9,7 +17,7 @@ macro_rules! define_storage_wrappers {
             use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
             #[cfg(feature = "reflect")]
-            use cu29::reflect::Reflect;
+            use bevy_reflect::Reflect;
 
             macro_rules! define_quantity {
                 ($unit_mod_name:ident, $quantity_name:ident) => {
@@ -204,9 +212,9 @@ macro_rules! define_storage_wrappers {
                     }
 
                     #[cfg(feature = "reflect")]
-                    impl cu29::reflect::FromReflect for $quantity_name {
+                    impl bevy_reflect::FromReflect for $quantity_name {
                         fn from_reflect(
-                            reflect: &dyn cu29::reflect::PartialReflect,
+                            reflect: &dyn bevy_reflect::PartialReflect,
                         ) -> Option<Self> {
                             if let Some(existing) = reflect.try_downcast_ref::<Self>() {
                                 return Some(*existing);
@@ -504,7 +512,7 @@ pub mod si {
 mod tests {
     use super::si::f32::Velocity;
     use super::si::velocity::{kilometer_per_hour, meter_per_second};
-    use cu29::reflect::{PartialReflect, Reflect, ReflectRef};
+    use bevy_reflect::{PartialReflect, Reflect, ReflectRef};
 
     #[derive(Reflect)]
     #[reflect(from_reflect = false)]

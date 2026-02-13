@@ -6,11 +6,11 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
-use cu29_units::si::angle::degree;
-use cu29_units::si::f32::{Angle, Length, Time, Velocity};
-use cu29_units::si::length::meter;
-use cu29_units::si::time::second;
-use cu29_units::si::velocity::meter_per_second;
+use cu29::units::si::angle::degree;
+use cu29::units::si::f32::{Angle, Length, Time, Velocity};
+use cu29::units::si::length::meter;
+use cu29::units::si::time::second;
+use cu29::units::si::velocity::meter_per_second;
 use serde::{Deserialize, Serialize};
 
 #[derive(

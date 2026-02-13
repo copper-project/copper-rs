@@ -9,9 +9,9 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 description = "Copper-native units with uom-shaped API and native bincode/reflect support"
+readme = "README.md"
 
 [dependencies]
-cu29 = { path = "../cu29", version = "0.12.0", default-features = false }
 bincode = { workspace = true }
 serde = { workspace = true }
 uom = { workspace = true }
@@ -19,6 +19,7 @@ bevy_reflect = { workspace = true, optional = true }
 
 [features]
 default = ["std"]
-std = ["cu29/std", "uom/std"]
-textlogs = ["cu29/textlogs"]
-reflect = ["cu29/reflect", "dep:bevy_reflect"]
+std = ["uom/std"]
+# Compatibility shim for crates that forward the Copper textlogs feature.
+textlogs = []
+reflect = ["dep:bevy_reflect"]

@@ -14,10 +14,9 @@ repository.workspace = true
 cu29 = { workspace = true }
 cu-linux-resources = { workspace = true }
 cu-gnss-payloads = { workspace = true }
-cu29-units = { workspace = true }
 
 [features]
 default = ["std"]
 std = ["cu29/std", "cu-gnss-payloads/std"]
 textlogs = ["cu29/textlogs", "cu-gnss-payloads/textlogs"]
-reflect = ["cu29/reflect", "cu-gnss-payloads/reflect", "cu29-units/reflect"]
+reflect = ["cu29/reflect", "cu-gnss-payloads/reflect"]
