@@ -16,13 +16,6 @@ use std::fmt::Debug;
 use std::ops::Neg;
 use std::time::Duration;
 
-fn frame_key(first: &str, second: &str) -> (FrameIdString, FrameIdString) {
-    (
-        FrameIdString::from(first).expect("Frame name too long"),
-        FrameIdString::from(second).expect("Frame name too long"),
-    )
-}
-
 /// Trait for types that can compute their inverse transformation
 pub trait HasInverse<T: Copy + Debug + 'static> {
     fn inverse(&self) -> Self;
@@ -87,7 +80,10 @@ impl<T: Copy + Debug + 'static> TransformCache<T> {
         path_hash: u64,
         robot_clock: &RobotClock,
     ) -> Option<Transform3D<T>> {
-        let key = frame_key(from, to);
+        let key = (
+            FrameIdString::from(from).expect("Frame name too long"),
+            FrameIdString::from(to).expect("Frame name too long"),
+        );
 
         if let Some(mut entry) = self.entries.get_mut(&key) {
             let now = robot_clock.now();
@@ -118,7 +114,10 @@ impl<T: Copy + Debug + 'static> TransformCache<T> {
         robot_clock: &RobotClock,
     ) {
         let now = robot_clock.now();
-        let key = frame_key(from, to);
+        let key = (
+            FrameIdString::from(from).expect("Frame name too long"),
+            FrameIdString::from(to).expect("Frame name too long"),
+        );
 
         // If the cache is at capacity, remove the oldest entry
         if self.entries.len() >= self.max_size {
@@ -323,19 +322,6 @@ where
                 from: parent.to_string(),
                 to: child.to_string(),
             })
-    }
-
-    fn accumulate_velocity(
-        result: &mut VelocityTransform<T>,
-        transformed_velocity: &VelocityTransform<T>,
-    ) {
-        result.linear[0] += transformed_velocity.linear[0];
-        result.linear[1] += transformed_velocity.linear[1];
-        result.linear[2] += transformed_velocity.linear[2];
-
-        result.angular[0] += transformed_velocity.angular[0];
-        result.angular[1] += transformed_velocity.angular[1];
-        result.angular[2] += transformed_velocity.angular[2];
     }
 
     /// add a transform to the tree.
@@ -673,7 +659,13 @@ where
                 )
             };
 
-            Self::accumulate_velocity(&mut result, &transformed_velocity);
+            result.linear[0] += transformed_velocity.linear[0];
+            result.linear[1] += transformed_velocity.linear[1];
+            result.linear[2] += transformed_velocity.linear[2];
+
+            result.angular[0] += transformed_velocity.angular[0];
+            result.angular[1] += transformed_velocity.angular[1];
+            result.angular[2] += transformed_velocity.angular[2];
         }
 
         // Cache the computed result

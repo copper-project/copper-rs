@@ -21,17 +21,6 @@ fn ordered_by_stamp<T: Copy + Debug + Default + 'static>(
     }
 }
 
-fn frame_pair(parent: &str, child: &str) -> Option<(FrameIdString, FrameIdString)> {
-    Some((
-        FrameIdString::from(parent).ok()?,
-        FrameIdString::from(child).ok()?,
-    ))
-}
-
-fn required_frame_pair(parent: &str, child: &str) -> (FrameIdString, FrameIdString) {
-    frame_pair(parent, child).expect("Parent or child frame name too long")
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StampedTransform<T: Copy + Debug + Default + 'static> {
     pub transform: Transform3D<T>,
@@ -674,7 +663,8 @@ impl<T: Copy + Debug + Default + 'static> TransformStore<T> {
 
     /// Get or create a transform buffer for a specific parent-child frame pair
     pub fn get_or_create_buffer(&self, parent: &str, child: &str) -> TransformBuffer<T> {
-        let (parent_frame, child_frame) = required_frame_pair(parent, child);
+        let parent_frame = FrameIdString::from(parent).expect("Parent frame name too long");
+        let child_frame = FrameIdString::from(child).expect("Child frame name too long");
         self.buffers
             .entry((parent_frame, child_frame))
             .or_insert_with(|| TransformBuffer::new())
@@ -689,7 +679,8 @@ impl<T: Copy + Debug + Default + 'static> TransformStore<T> {
 
     /// Get a transform buffer if it exists
     pub fn get_buffer(&self, parent: &str, child: &str) -> Option<TransformBuffer<T>> {
-        let (parent_frame, child_frame) = frame_pair(parent, child)?;
+        let parent_frame = FrameIdString::from(parent).ok()?;
+        let child_frame = FrameIdString::from(child).ok()?;
         self.buffers
             .get(&(parent_frame, child_frame))
             .map(|entry| entry.clone())
@@ -720,7 +711,8 @@ impl<T: Copy + Debug + Default + 'static, const N: usize> ConstTransformStore<T,
         parent: &str,
         child: &str,
     ) -> ConstTransformBufferSync<T, N> {
-        let (parent_frame, child_frame) = required_frame_pair(parent, child);
+        let parent_frame = FrameIdString::from(parent).expect("Parent frame name too long");
+        let child_frame = FrameIdString::from(child).expect("Child frame name too long");
         self.buffers
             .entry((parent_frame, child_frame))
             .or_insert_with(|| ConstTransformBufferSync::new())
@@ -735,7 +727,8 @@ impl<T: Copy + Debug + Default + 'static, const N: usize> ConstTransformStore<T,
 
     /// Get a transform buffer if it exists
     pub fn get_buffer(&self, parent: &str, child: &str) -> Option<ConstTransformBufferSync<T, N>> {
-        let (parent_frame, child_frame) = frame_pair(parent, child)?;
+        let parent_frame = FrameIdString::from(parent).ok()?;
+        let child_frame = FrameIdString::from(child).ok()?;
         self.buffers
             .get(&(parent_frame, child_frame))
             .map(|entry| entry.clone())
