@@ -16,6 +16,15 @@
 //! It will generate a minimal Copper robot project at `/path/to/my_robot`. `cargo build` should
 //! compile it out of the box.
 //!
+//! ## Feature flags
+//!
+//! - `default` = `["std", "textlogs", "units"]`
+//! - `units`: exposes `cu29::units` (re-export of `cu29-units`)
+//! - `std`: host/runtime support
+//! - `reflect`: reflection support for runtime and units types
+//! - `textlogs`: text logging derive support
+//! - `remote-debug`: remote debug transport support
+//!
 //! ## Concepts behind Copper
 //!
 //! Check out the [Copper Wiki](https://github.com/copper-project/copper-rs/wiki) to understand the
@@ -104,6 +113,8 @@ pub mod rtsan {
 
 pub use bincode;
 pub use cu29_clock as clock;
+#[cfg(feature = "units")]
+pub use cu29_units as units;
 #[cfg(feature = "defmt")]
 pub mod defmt {
     pub use defmt::{debug, error, info, warn};
@@ -170,6 +181,8 @@ macro_rules! defmt_error {
 
 pub mod prelude {
     pub use crate::bevy_reflect;
+    #[cfg(feature = "units")]
+    pub use crate::units;
     pub use crate::{defmt_debug, defmt_error, defmt_info, defmt_warn};
     #[cfg(feature = "std")]
     pub use ctrlc;
