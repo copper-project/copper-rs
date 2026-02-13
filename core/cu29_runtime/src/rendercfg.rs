@@ -159,21 +159,8 @@ const RESOURCE_LEGEND_ITEMS: [(&str, &str); 3] = [
     ("Unused", RESOURCE_UNUSED_BG),
 ];
 const LINUX_RESOURCE_SLOT_NAMES: [&str; 15] = [
-    "serial0",
-    "serial1",
-    "serial2",
-    "serial3",
-    "serial4",
-    "serial5",
-    "i2c0",
-    "i2c1",
-    "i2c2",
-    "gpio_out0",
-    "gpio_out1",
-    "gpio_out2",
-    "gpio_in0",
-    "gpio_in1",
-    "gpio_in2",
+    "serial0", "serial1", "serial2", "serial3", "serial4", "serial5", "i2c0", "i2c1", "i2c2",
+    "gpio0", "gpio1", "gpio2", "gpio3", "gpio4", "gpio5",
 ];
 
 #[derive(Parser)]
