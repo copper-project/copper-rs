@@ -1,6 +1,7 @@
 [package]
 name = "cu-hesai"
 description = "Copper driver for Hesai X32. Note: the actual parsing is usable outside of Copper if you need a Hesai X32 driver for another project."
+readme = "README.md"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

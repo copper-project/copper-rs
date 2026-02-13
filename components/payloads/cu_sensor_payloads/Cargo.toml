@@ -1,5 +1,6 @@
 [package]
 name = "cu-sensor-payloads"
+readme = "README.md"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
