@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["joule_per_square_meter_kelvin"],"trait":["Conversion","Unit"],"type":["ArealHeatCapacity","Dimension"]};

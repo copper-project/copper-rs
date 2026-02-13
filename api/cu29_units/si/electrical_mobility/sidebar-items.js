@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["square_centimeter_per_volt_second","square_meter_per_volt_second"],"trait":["Conversion","Unit"],"type":["Dimension","ElectricalMobility"]};

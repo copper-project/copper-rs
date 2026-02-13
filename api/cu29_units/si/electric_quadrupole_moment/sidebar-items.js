@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["atomic_unit_of_electric_quadrupole_moment","coulomb_square_meter","elementary_charge_barn"],"trait":["Conversion","Unit"],"type":["Dimension","ElectricQuadrupoleMoment"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["becquerel_per_kilogram","curie_per_kilogram","disintegrations_per_minute_per_kilogram"],"trait":["Conversion","Unit"],"type":["Dimension","SpecificRadioactivity"]};

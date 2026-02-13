@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["basis_point","part_per_billion","part_per_hundred","part_per_million","part_per_quadrillion","part_per_ten_thousand","part_per_thousand","part_per_trillion","per_mille","percent","ratio"],"trait":["Conversion","Unit"],"type":["Dimension","Ratio"]};

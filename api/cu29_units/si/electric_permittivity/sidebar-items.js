@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["farad_per_meter","vacuum_electric_permittivity"],"trait":["Conversion","Unit"],"type":["Dimension","ElectricPermittivity"]};

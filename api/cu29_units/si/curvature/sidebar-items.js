@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["degree_per_meter","degree_per_millimeter","radian_per_meter","radian_per_millimeter"],"trait":["Conversion","Unit"],"type":["Curvature","Dimension"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["watt_per_cubic_centimeter","watt_per_cubic_meter","watt_per_cubic_millimeter"],"trait":["Conversion","Unit"],"type":["Dimension","VolumetricPowerDensity"]};

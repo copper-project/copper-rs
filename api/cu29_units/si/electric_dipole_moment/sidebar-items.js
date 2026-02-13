@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["atomic_unit_of_charge_centimeter","atomic_unit_of_electric_dipole_moment","coulomb_meter","debye","elementary_charge_centimeter"],"trait":["Conversion","Unit"],"type":["Dimension","ElectricDipoleMoment"]};

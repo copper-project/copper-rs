@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["gram_per_centimeter","gram_per_kilometer","kilogram_per_meter","ounce_per_foot","ounce_per_inch","pound_per_foot","pound_per_inch","pound_per_yard"],"trait":["Conversion","Unit"],"type":["Dimension","LinearMassDensity"]};

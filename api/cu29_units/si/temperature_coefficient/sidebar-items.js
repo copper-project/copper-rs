@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["per_kelvin","ppm_per_degree_celsius","ppm_per_kelvin"],"trait":["Conversion","Unit"],"type":["Dimension","TemperatureCoefficient"]};

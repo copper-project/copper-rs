@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["atomic_unit_of_action","electronvolt_second","erg_second","joule_second","planck_constant","reduced_planck_constant"],"trait":["Conversion","Unit"],"type":["Action","Dimension"]};
