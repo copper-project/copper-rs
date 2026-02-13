@@ -17,7 +17,7 @@ cu29-units = { path = "../../../core/cu29_units", version = "0.12.0", default-fe
 serde = { workspace = true }
 
 [features]
-default = ["std", "reflect"]
+default = ["std"]
 std = ["cu29/std", "cu29-units/std"]
 textlogs = ["cu29/textlogs"]
 reflect = ["cu29/reflect", "cu29-units/reflect"]

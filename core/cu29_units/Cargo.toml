@@ -18,7 +18,7 @@ uom = { workspace = true }
 bevy_reflect = { workspace = true, optional = true }
 
 [features]
-default = ["std", "reflect"]
+default = ["std"]
 std = ["cu29/std", "uom/std"]
 textlogs = ["cu29/textlogs"]
 reflect = ["cu29/reflect", "dep:bevy_reflect"]

@@ -20,3 +20,4 @@ cu29-units = { workspace = true }
 default = ["std"]
 std = ["cu29/std", "cu-gnss-payloads/std"]
 textlogs = ["cu29/textlogs", "cu-gnss-payloads/textlogs"]
+reflect = ["cu29/reflect", "cu-gnss-payloads/reflect", "cu29-units/reflect"]
