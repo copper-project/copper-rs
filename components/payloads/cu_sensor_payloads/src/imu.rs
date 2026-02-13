@@ -1,18 +1,16 @@
-use bincode::de::Decoder;
-use bincode::enc::Encoder;
-use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
+use cu29::units::si::acceleration::meter_per_second_squared;
+use cu29::units::si::angular_velocity::radian_per_second;
+use cu29::units::si::f32::{
+    Acceleration, AngularVelocity, MagneticFluxDensity, ThermodynamicTemperature,
+};
+use cu29::units::si::magnetic_flux_density::microtesla;
+use cu29::units::si::thermodynamic_temperature::degree_celsius;
 use serde::{Deserialize, Serialize};
-use uom::si::acceleration::meter_per_second_squared;
-use uom::si::angular_velocity::radian_per_second;
-use uom::si::f32::{Acceleration, AngularVelocity, MagneticFluxDensity, ThermodynamicTemperature};
-use uom::si::magnetic_flux_density::microtesla;
-use uom::si::thermodynamic_temperature::degree_celsius;
 
 /// Standardized IMU payload carrying acceleration, angular velocity, and optional magnetometer data.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Reflect)]
-#[reflect(opaque, from_reflect = false)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect)]
 pub struct ImuPayload {
     pub accel_x: Acceleration,
     pub accel_y: Acceleration,
@@ -61,7 +59,7 @@ impl ImuPayload {
     }
 
     /// Build an IMU payload from unit-carrying types.
-    pub fn from_uom(
+    pub fn from_units(
         accel_x: Acceleration,
         accel_y: Acceleration,
         accel_z: Acceleration,
@@ -82,45 +80,8 @@ impl ImuPayload {
     }
 }
 
-impl Encode for ImuPayload {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        Encode::encode(&self.accel_x.value, encoder)?;
-        Encode::encode(&self.accel_y.value, encoder)?;
-        Encode::encode(&self.accel_z.value, encoder)?;
-        Encode::encode(&self.gyro_x.value, encoder)?;
-        Encode::encode(&self.gyro_y.value, encoder)?;
-        Encode::encode(&self.gyro_z.value, encoder)?;
-        Encode::encode(&self.temperature.get::<degree_celsius>(), encoder)?;
-        Ok(())
-    }
-}
-
-impl Decode<()> for ImuPayload {
-    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let accel_x = Acceleration::new::<meter_per_second_squared>(Decode::decode(decoder)?);
-        let accel_y = Acceleration::new::<meter_per_second_squared>(Decode::decode(decoder)?);
-        let accel_z = Acceleration::new::<meter_per_second_squared>(Decode::decode(decoder)?);
-
-        let gyro_x = AngularVelocity::new::<radian_per_second>(Decode::decode(decoder)?);
-        let gyro_y = AngularVelocity::new::<radian_per_second>(Decode::decode(decoder)?);
-        let gyro_z = AngularVelocity::new::<radian_per_second>(Decode::decode(decoder)?);
-
-        let temperature = ThermodynamicTemperature::new::<degree_celsius>(Decode::decode(decoder)?);
-
-        Ok(Self {
-            accel_x,
-            accel_y,
-            accel_z,
-            gyro_x,
-            gyro_y,
-            gyro_z,
-            temperature,
-        })
-    }
-}
-
 /// Magnetometer payload split from the main IMU data for composition.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Encode, Decode)]
 pub struct MagnetometerPayload {
     pub mag_x: MagneticFluxDensity,
     pub mag_y: MagneticFluxDensity,
@@ -149,7 +110,7 @@ impl MagnetometerPayload {
     }
 
     /// Build a magnetometer payload from unit-carrying types.
-    pub fn from_uom(
+    pub fn from_units(
         mag_x: MagneticFluxDensity,
         mag_y: MagneticFluxDensity,
         mag_z: MagneticFluxDensity,
@@ -162,31 +123,8 @@ impl MagnetometerPayload {
     }
 }
 
-impl Encode for MagnetometerPayload {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        Encode::encode(&self.mag_x.get::<microtesla>(), encoder)?;
-        Encode::encode(&self.mag_y.get::<microtesla>(), encoder)?;
-        Encode::encode(&self.mag_z.get::<microtesla>(), encoder)?;
-        Ok(())
-    }
-}
-
-impl Decode<()> for MagnetometerPayload {
-    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let mag_x = MagneticFluxDensity::new::<microtesla>(Decode::decode(decoder)?);
-        let mag_y = MagneticFluxDensity::new::<microtesla>(Decode::decode(decoder)?);
-        let mag_z = MagneticFluxDensity::new::<microtesla>(Decode::decode(decoder)?);
-
-        Ok(Self {
-            mag_x,
-            mag_y,
-            mag_z,
-        })
-    }
-}
-
 /// Combined payload allowing optional magnetometer data.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Encode, Decode)]
 pub struct ImuWithMagPayload {
     pub imu: ImuPayload,
     pub mag: Option<MagnetometerPayload>,
@@ -195,31 +133,6 @@ pub struct ImuWithMagPayload {
 impl ImuWithMagPayload {
     pub fn new(imu: ImuPayload, mag: Option<MagnetometerPayload>) -> Self {
         Self { imu, mag }
-    }
-}
-
-impl Encode for ImuWithMagPayload {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        Encode::encode(&self.imu, encoder)?;
-        Encode::encode(&self.mag.is_some(), encoder)?;
-        if let Some(mag) = self.mag {
-            Encode::encode(&mag, encoder)?;
-        }
-        Ok(())
-    }
-}
-
-impl Decode<()> for ImuWithMagPayload {
-    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let imu: ImuPayload = Decode::decode(decoder)?;
-        let has_mag: bool = Decode::decode(decoder)?;
-        let mag = if has_mag {
-            Some(Decode::decode(decoder)?)
-        } else {
-            None
-        };
-
-        Ok(Self { imu, mag })
     }
 }
 
@@ -253,7 +166,7 @@ mod tests {
         let gyro = AngularVelocity::new::<radian_per_second>(0.25);
         let temp = ThermodynamicTemperature::new::<degree_celsius>(20.0);
 
-        let payload = ImuPayload::from_uom(accel, accel, accel, gyro, gyro, gyro, temp);
+        let payload = ImuPayload::from_units(accel, accel, accel, gyro, gyro, gyro, temp);
 
         assert_eq!(payload.accel_x.value, accel.value);
         assert_eq!(payload.gyro_z.value, gyro.value);

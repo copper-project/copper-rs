@@ -12,7 +12,6 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-uom = { workspace = true }
 cu29 = { workspace = true }
 bincode = { workspace = true }
 serde = { workspace = true }

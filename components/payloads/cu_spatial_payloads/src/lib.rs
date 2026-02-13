@@ -2,13 +2,13 @@ use bincode::{Decode, Encode};
 use core::fmt::Debug;
 use core::ops::Mul;
 use cu29::prelude::*;
+use cu29::units::si::angle::radian;
+use cu29::units::si::f32::Angle as Angle32;
+use cu29::units::si::f32::Length as Length32;
+use cu29::units::si::f64::Angle as Angle64;
+use cu29::units::si::f64::Length as Length64;
+use cu29::units::si::length::meter;
 use serde::{Deserialize, Serialize};
-use uom::si::angle::radian;
-use uom::si::f32::Angle as Angle32;
-use uom::si::f32::Length as Length32;
-use uom::si::f64::Angle as Angle64;
-use uom::si::f64::Length as Length64;
-use uom::si::length::meter;
 
 #[cfg(feature = "glam")]
 use glam::{Affine3A, DAffine3, DMat4, Mat4};

@@ -1,6 +1,7 @@
 use cu_sensor_payloads::{CuImage, CuImageBufferFormat, Distance, PointCloud, PointCloudSoa};
 use cu_spatial_payloads::Transform3D;
 use cu29::prelude::CuResult;
+use cu29::units::si::length::meter;
 use rerun::RecordingStream;
 use serde::Serialize;
 
@@ -49,12 +50,12 @@ fn pointcloud_soa_serialization_shape_is_detectable() {
         len: 2,
         ..Default::default()
     };
-    pc.x[0] = Distance::from(1.0);
-    pc.y[0] = Distance::from(2.0);
-    pc.z[0] = Distance::from(3.0);
-    pc.x[1] = Distance::from(4.0);
-    pc.y[1] = Distance::from(5.0);
-    pc.z[1] = Distance::from(6.0);
+    pc.x[0] = Distance::new::<meter>(1.0);
+    pc.y[0] = Distance::new::<meter>(2.0);
+    pc.z[0] = Distance::new::<meter>(3.0);
+    pc.x[1] = Distance::new::<meter>(4.0);
+    pc.y[1] = Distance::new::<meter>(5.0);
+    pc.z[1] = Distance::new::<meter>(6.0);
 
     let value = serde_json::to_value(pc).expect("serialize PointCloudSoa");
     let text = value.to_string();

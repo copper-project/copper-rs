@@ -1,13 +1,13 @@
 use core::fmt::Debug;
 
 use cu29::prelude::*;
+use cu29::units::si::angular_velocity::radian_per_second;
+use cu29::units::si::f32::AngularVelocity as CuAngularVelocity;
 use embedded_hal::blocking::delay::DelayMs as Eh0DelayMs;
 use embedded_hal::blocking::spi::{Transfer as Eh0Transfer, Write as Eh0Write};
 use embedded_hal::digital::v2::OutputPin as Eh0OutputPin;
 use embedded_hal_1 as eh1;
 use mpu9250::{Marg, Mpu9250};
-use uom::si::angular_velocity::radian_per_second;
-use uom::si::f32::AngularVelocity as UomAngVel;
 
 use crate::{ImuPayload, Mpu9250Device, WhoAmI, map_debug_error};
 
@@ -106,9 +106,9 @@ pub struct EmbeddedHalDriver<SPI, CS> {
 
 impl<SPI, CS> EmbeddedHalDriver<SPI, CS> {
     fn apply_bias(payload: &mut ImuPayload, bias: [f32; 3]) {
-        let bx = UomAngVel::new::<radian_per_second>(bias[0]);
-        let by = UomAngVel::new::<radian_per_second>(bias[1]);
-        let bz = UomAngVel::new::<radian_per_second>(bias[2]);
+        let bx = CuAngularVelocity::new::<radian_per_second>(bias[0]);
+        let by = CuAngularVelocity::new::<radian_per_second>(bias[1]);
+        let bz = CuAngularVelocity::new::<radian_per_second>(bias[2]);
         payload.gyro_x -= bx;
         payload.gyro_y -= by;
         payload.gyro_z -= bz;

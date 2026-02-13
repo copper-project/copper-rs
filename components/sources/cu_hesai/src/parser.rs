@@ -1,20 +1,15 @@
 use bytemuck::{Pod, Zeroable};
 use chrono::{DateTime, MappedLocalTime, TimeZone, Utc};
 use cu29::prelude::{CuDuration, CuTime};
+use cu29::units::si::angle::degree;
+use cu29::units::si::angular_velocity::revolution_per_minute;
+use cu29::units::si::f32::{Angle, AngularVelocity, Length, Ratio};
+use cu29::units::si::length::millimeter;
+use cu29::units::si::ratio::{percent, ratio};
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::mem::size_of;
-use uom::ConversionFactor;
-use uom::fmt::DisplayStyle::Abbreviation;
-use uom::num_traits::ToPrimitive;
-use uom::si::Unit;
-use uom::si::angle::degree;
-use uom::si::angular_velocity::revolution_per_minute;
-use uom::si::f32::{Angle, Ratio};
-use uom::si::f32::{AngularVelocity, Length};
-use uom::si::length::millimeter;
-use uom::si::ratio::{percent, ratio};
 
 #[derive(Debug)]
 pub enum HesaiError {
@@ -134,9 +129,8 @@ impl Debug for Header {
         writeln!(f, "First Block return: {}", self.is_dual_return())?;
         writeln!(
             f,
-            "Distance unit: {}",
-            self.distance_unit()
-                .into_format_args(millimeter, Abbreviation)
+            "Distance unit: {} mm",
+            self.distance_unit().get::<millimeter>()
         )?;
         writeln!(f, "UDP Seq: {}", self.udp_seq)
     }
@@ -176,8 +170,8 @@ impl Block {
     pub fn check_invariants(self) -> Result<(), HesaiError> {
         if self.azimuth > 36000 {
             return Err(HesaiError::InvalidPacket(format!(
-                "Invalid azimuth: {}",
-                self.azimuth().into_format_args(degree, Abbreviation)
+                "Invalid azimuth: {} deg",
+                self.azimuth().get::<degree>()
             )));
         }
         for channel in self.channels.iter() {
@@ -189,12 +183,7 @@ impl Block {
 
 impl Debug for Block {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        writeln!(
-            f,
-            "Azimuth: {:>06.2}{}",
-            self.azimuth().get::<degree>().value().to_f64().unwrap(),
-            degree::abbreviation()
-        )?;
+        writeln!(f, "Azimuth: {:>06.2} deg", self.azimuth().get::<degree>(),)?;
         writeln!(f, "Channels:\n{:?}", self.channels)
     }
 }
@@ -234,15 +223,11 @@ impl Channel {
 
 impl Debug for Channel {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Distance: {} mm", self.distance().get::<millimeter>())?;
         writeln!(
             f,
-            "Distance: {}",
-            self.distance().into_format_args(millimeter, Abbreviation)
-        )?;
-        writeln!(
-            f,
-            "Reflectivity: {:>06.5}",
-            self.reflectivity().into_format_args(percent, Abbreviation)
+            "Reflectivity: {:>06.5} %",
+            self.reflectivity().get::<percent>()
         )
     }
 }
@@ -372,9 +357,8 @@ impl Debug for Tail {
         writeln!(f, "Return Mode: {:?}", self.return_mode())?;
         writeln!(
             f,
-            "Motor Speed: {}",
-            self.motor_speed()
-                .into_format_args(revolution_per_minute, Abbreviation)
+            "Motor Speed: {} rpm",
+            self.motor_speed().get::<revolution_per_minute>()
         )?;
         writeln!(f, "UTC Time: {:?}", self.utc_tov())?;
         writeln!(f, "Factory Info: {:x}", self.factory_info)

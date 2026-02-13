@@ -17,7 +17,6 @@ cu29-log-derive = { workspace = true }
 cu29-traits = { workspace = true }
 bincode = { workspace = true }
 serde = { workspace = true }
-uom = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

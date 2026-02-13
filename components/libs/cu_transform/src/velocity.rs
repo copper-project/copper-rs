@@ -1,12 +1,12 @@
 use bincode::{Decode, Encode};
 use core::fmt::Debug;
+use cu29::units::si::angular_velocity::radian_per_second;
+use cu29::units::si::f32::AngularVelocity as AngularVelocity32;
+use cu29::units::si::f32::Velocity as Velocity32;
+use cu29::units::si::f64::AngularVelocity as AngularVelocity64;
+use cu29::units::si::f64::Velocity as Velocity64;
+use cu29::units::si::velocity::meter_per_second;
 use serde::{Deserialize, Serialize};
-use uom::si::angular_velocity::radian_per_second;
-use uom::si::f32::AngularVelocity as AngularVelocity32;
-use uom::si::f32::Velocity as Velocity32;
-use uom::si::f64::AngularVelocity as AngularVelocity64;
-use uom::si::f64::Velocity as Velocity64;
-use uom::si::velocity::meter_per_second;
 
 /// A struct representing linear and angular velocity in 3D space
 ///

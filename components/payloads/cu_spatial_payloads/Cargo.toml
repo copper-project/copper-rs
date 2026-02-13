@@ -12,8 +12,9 @@ repository.workspace = true
 
 [dependencies]
 bincode = { workspace = true }
-cu29 = { path = "../../../core/cu29", version = "0.12.0", default-features = false }
-uom = { workspace = true }
+cu29 = { path = "../../../core/cu29", version = "0.12.0", default-features = false, features = [
+  "units",
+] }
 serde = { workspace = true }
 rerun = { workspace = true, optional = true }
 
