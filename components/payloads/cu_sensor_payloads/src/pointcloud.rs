@@ -1,118 +1,22 @@
-use bincode::de::{BorrowDecode, BorrowDecoder, Decode, Decoder};
-use bincode::enc::{Encode, Encoder};
-use bincode::error::{DecodeError, EncodeError};
+use bincode::{Decode, Encode};
 use cu29::prelude::*;
+use cu29::units::si::f32::{Length, Ratio};
+use cu29::units::si::length::meter;
+use cu29::units::si::ratio::percent;
 use cu29_clock::CuTime;
 use cu29_soa_derive::Soa;
-use derive_more::{Add, Deref, Div, From, Mul, Sub};
 use serde::{Deserialize, Serialize};
-use uom::si::f32::{Length, Ratio};
-use uom::si::length::meter;
-use uom::si::ratio::percent;
 
-#[derive(
-    Default,
-    PartialEq,
-    Debug,
-    Copy,
-    Clone,
-    Add,
-    Deref,
-    Sub,
-    From,
-    Mul,
-    Div,
-    Serialize,
-    Deserialize,
-    Reflect,
-)]
-#[reflect(opaque, from_reflect = false)]
-pub struct Reflectivity(Ratio);
-
-impl From<f32> for Reflectivity {
-    fn from(value: f32) -> Self {
-        Self(Ratio::new::<percent>(value))
-    }
-}
-
-/// Encode as f32
-impl Encode for Reflectivity {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let Reflectivity(ratio) = self;
-        Encode::encode(&ratio.value, encoder)
-    }
-}
-
-/// Decode as f32
-impl Decode<()> for Reflectivity {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let value: f32 = Decode::decode(decoder)?;
-        Ok(Reflectivity(Ratio::new::<percent>(value)))
-    }
-}
-
-/// Decode as f32
-impl<'de> BorrowDecode<'de, ()> for Reflectivity {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let value: f32 = Decode::decode(decoder)?;
-        Ok(Reflectivity(Ratio::new::<percent>(value)))
-    }
-}
-
-#[derive(
-    Default,
-    PartialEq,
-    Debug,
-    Copy,
-    Clone,
-    Add,
-    Deref,
-    Sub,
-    From,
-    Mul,
-    Div,
-    Serialize,
-    Deserialize,
-    Reflect,
-)]
-#[reflect(opaque, from_reflect = false)]
-pub struct Distance(pub Length);
-
-/// Encode it as a f32 in m
-impl Encode for Distance {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let Distance(length) = self;
-        Encode::encode(&length.value, encoder)
-    }
-}
-
-impl From<f32> for Distance {
-    fn from(value: f32) -> Self {
-        Self(Length::new::<meter>(value))
-    }
-}
-
-/// Decode it as a f32 in m
-impl Decode<()> for Distance {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let value: f32 = Decode::decode(decoder)?;
-        Ok(Distance(Length::new::<meter>(value)))
-    }
-}
-
-/// Decode it as a f32 in m
-impl<'de> BorrowDecode<'de, ()> for Distance {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let value: f32 = Decode::decode(decoder)?;
-        Ok(Distance(Length::new::<meter>(value)))
-    }
-}
+pub type Distance = Length;
+pub type Reflectivity = Ratio;
 
 /// Standardized PointCloud.
 /// note: the derive(Soa) will generate a PointCloudSoa struct that will store the data in a SoA format.
 /// The Soa format is appropriate for early pipeline operations like changing their frame of reference.
 /// important: The ToV of the points are not assumed to be sorted.
-#[derive(Default, Clone, PartialEq, Debug, Soa, Serialize, Deserialize, Reflect)]
+#[derive(
+    Default, Clone, PartialEq, Debug, Soa, Serialize, Deserialize, Encode, Decode, Reflect,
+)]
 #[reflect(from_reflect = false)]
 pub struct PointCloud {
     pub tov: CuTime, // Time of Validity, not sorted.
@@ -123,49 +27,19 @@ pub struct PointCloud {
     pub return_order: u8, // 0 for first return, 1 for second return, etc.
 }
 
-impl Encode for PointCloud {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        Encode::encode(&self.tov, encoder)?;
-        Encode::encode(&self.x, encoder)?;
-        Encode::encode(&self.y, encoder)?;
-        Encode::encode(&self.z, encoder)?;
-        Encode::encode(&self.i, encoder)?;
-        Encode::encode(&self.return_order, encoder)
-    }
-}
-
-impl Decode<()> for PointCloud {
-    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let tov: CuTime = Decode::decode(decoder)?;
-        let x: Distance = Decode::decode(decoder)?;
-        let y: Distance = Decode::decode(decoder)?;
-        let z: Distance = Decode::decode(decoder)?;
-        let i: Reflectivity = Decode::decode(decoder)?;
-        let return_order: u8 = Decode::decode(decoder)?;
-        Ok(PointCloud {
-            tov,
-            x,
-            y,
-            z,
-            i,
-            return_order,
-        })
-    }
-}
-
 impl PointCloud {
     pub fn new(tov: CuTime, x: f32, y: f32, z: f32, i: f32, return_order: Option<u8>) -> Self {
         Self {
             tov,
-            x: Distance(Length::new::<meter>(x)),
-            y: Distance(Length::new::<meter>(y)),
-            z: Distance(Length::new::<meter>(z)),
-            i: Reflectivity(Ratio::new::<percent>(i)),
+            x: Distance::new::<meter>(x),
+            y: Distance::new::<meter>(y),
+            z: Distance::new::<meter>(z),
+            i: Reflectivity::new::<percent>(i),
             return_order: return_order.unwrap_or(0),
         }
     }
 
-    pub fn new_uom(
+    pub fn new_units(
         tov: CuTime,
         x: Length,
         y: Length,
@@ -175,10 +49,10 @@ impl PointCloud {
     ) -> Self {
         Self {
             tov,
-            x: Distance(x),
-            y: Distance(y),
-            z: Distance(z),
-            i: Reflectivity(i),
+            x,
+            y,
+            z,
+            i,
             return_order: return_order.unwrap_or(0),
         }
     }
@@ -233,15 +107,15 @@ mod tests {
     #[test]
     fn test_point_payload() {
         let payload = PointCloud::new(CuDuration(1), 1.0, 2.0, 3.0, 0.0, None);
-        assert_eq!(payload.x.0.value, 1.0);
-        assert_eq!(payload.y.0.value, 2.0);
-        assert_eq!(payload.z.0.value, 3.0);
+        assert_eq!(payload.x.value, 1.0);
+        assert_eq!(payload.y.value, 2.0);
+        assert_eq!(payload.z.value, 3.0);
     }
 
     #[test]
     fn test_length_add_sub() {
-        let a = Distance(Length::new::<meter>(1.0));
-        let b = Distance(Length::new::<meter>(2.0));
+        let a = Distance::new::<meter>(1.0);
+        let b = Distance::new::<meter>(2.0);
         let c = a + b;
         assert_eq!(c.value, 3.0);
         let d = c - a;
@@ -250,7 +124,7 @@ mod tests {
 
     #[test]
     fn test_encoding_length() {
-        let a = Distance(Length::new::<meter>(1.0));
+        let a = Distance::new::<meter>(1.0);
         let mut encoded = vec![0u8; 1024]; // Reserve a buffer with sufficient capacity
 
         let length =

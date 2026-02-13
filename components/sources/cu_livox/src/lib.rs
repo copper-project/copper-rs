@@ -113,7 +113,7 @@ impl CuSrcTask for Tele15 {
 
         // let is_dual = lidar_packet.header.is_dual_return(); TODO: add dual return support
         for pt in lidar_packet.points.iter() {
-            payload.push(PointCloud::new_uom(
+            payload.push(PointCloud::new_units(
                 lidar_packet.header.timestamp(),
                 pt.x(),
                 pt.y(),

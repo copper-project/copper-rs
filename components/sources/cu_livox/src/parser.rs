@@ -1,12 +1,13 @@
 use bytemuck::{Pod, Zeroable};
 use chrono::{DateTime, Utc};
 use cu29::prelude::{CuDuration, CuTime};
+use cu29::units::si::f32::{Length, Ratio};
+use cu29::units::si::length::millimeter;
+use cu29::units::si::ratio::ratio;
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::mem::size_of;
-use uom::si::f32::{Length, Ratio};
-use uom::si::ratio::ratio;
 
 #[inline(always)]
 fn u16_endianness(val: u16) -> u16 {
@@ -184,13 +185,13 @@ pub struct PointType2 {
 
 impl PointType2 {
     pub fn x(&self) -> Length {
-        Length::new::<uom::si::length::millimeter>(i32_endianness(self.x) as f32)
+        Length::new::<millimeter>(i32_endianness(self.x) as f32)
     }
     pub fn y(&self) -> Length {
-        Length::new::<uom::si::length::millimeter>(i32_endianness(self.y) as f32)
+        Length::new::<millimeter>(i32_endianness(self.y) as f32)
     }
     pub fn z(&self) -> Length {
-        Length::new::<uom::si::length::millimeter>(i32_endianness(self.z) as f32)
+        Length::new::<millimeter>(i32_endianness(self.z) as f32)
     }
     pub fn reflectivity(&self) -> Ratio {
         Ratio::new::<ratio>(self.reflectivity as f32 / 255.0)

@@ -5,10 +5,10 @@ extern crate alloc;
 use bincode::{Decode, Encode};
 use cu_sensor_payloads::ImuPayload;
 use cu29::prelude::*;
+use cu29::units::si::acceleration::meter_per_second_squared;
+use cu29::units::si::angular_velocity::radian_per_second;
 use dcmimu::DCMIMU;
 use serde::{Deserialize, Serialize};
-use uom::si::acceleration::meter_per_second_squared;
-use uom::si::angular_velocity::radian_per_second;
 
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;

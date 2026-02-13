@@ -3,6 +3,7 @@ use cu_sensor_payloads::{
 };
 use cu_spatial_payloads::Transform3D;
 use cu29::prelude::*;
+use cu29::units::si::length::meter;
 use std::f32::consts::PI;
 
 const IMAGE_WIDTH: u32 = 64;
@@ -81,9 +82,9 @@ impl CuSrcTask for LogvizDemoSrc {
         let offset_y = phase.sin() * 0.5;
         for i in 0..POINTS {
             let angle = phase + i as f32 * step;
-            self.pointcloud.x[i] = Distance::from(angle.cos() + offset_x);
-            self.pointcloud.y[i] = Distance::from(angle.sin() + offset_y);
-            self.pointcloud.z[i] = Distance::from(i as f32 * 0.02);
+            self.pointcloud.x[i] = Distance::new::<meter>(angle.cos() + offset_x);
+            self.pointcloud.y[i] = Distance::new::<meter>(angle.sin() + offset_y);
+            self.pointcloud.z[i] = Distance::new::<meter>(i as f32 * 0.02);
         }
 
         let transform = Transform3D::from_matrix([
@@ -163,8 +164,7 @@ mod tests {
         }
         let mut sum = 0.0;
         for i in 0..len {
-            let Distance(x) = pc.x[i];
-            sum += x.value;
+            sum += pc.x[i].value;
         }
         sum / len as f32
     }
@@ -208,14 +208,14 @@ mod tests {
         src.process(&clock, &mut output)
             .expect("failed to run demo process");
         let p0 = output.2.payload().expect("missing point payload");
-        let Distance(x0) = p0.x;
+        let x0 = p0.x;
 
         mock.increment(CuDuration(1_000_000));
         let mut output2: <LogvizDemoSrc as CuSrcTask>::Output<'_> = Default::default();
         src.process(&clock, &mut output2)
             .expect("failed to run demo process");
         let p1 = output2.2.payload().expect("missing point payload");
-        let Distance(x1) = p1.x;
+        let x1 = p1.x;
 
         assert!(
             (x0.value - x1.value).abs() > 1.0e-3,

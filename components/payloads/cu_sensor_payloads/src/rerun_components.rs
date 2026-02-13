@@ -9,6 +9,7 @@ use rerun::{
 };
 
 use crate::{CuImage, CuImageBufferFormat, Distance, PointCloud, PointCloudSoa};
+use cu29::units::si::length::meter;
 
 fn image_format_from_cu(
     fmt: CuImageBufferFormat,
@@ -50,11 +51,7 @@ where
 
 impl AsComponents for PointCloud {
     fn as_serialized_batches(&self) -> Vec<SerializedComponentBatch> {
-        let Distance(x) = self.x;
-        let Distance(y) = self.y;
-        let Distance(z) = self.z;
-
-        Points3D::new([[x.value, y.value, z.value]]).as_serialized_batches()
+        Points3D::new([[self.x.value, self.y.value, self.z.value]]).as_serialized_batches()
     }
 }
 
@@ -69,10 +66,11 @@ fn pointcloud_positions<const N: usize>(pointcloud: &PointCloudSoa<N>) -> Vec<Po
     let mut points = Vec::with_capacity(len);
 
     for i in 0..len {
-        let Distance(x) = pointcloud.x[i];
-        let Distance(y) = pointcloud.y[i];
-        let Distance(z) = pointcloud.z[i];
-        points.push(Position3D::new(x.value, y.value, z.value));
+        points.push(Position3D::new(
+            pointcloud.x[i].value,
+            pointcloud.y[i].value,
+            pointcloud.z[i].value,
+        ));
     }
 
     points
@@ -103,12 +101,12 @@ mod tests {
             len: 1,
             ..Default::default()
         };
-        pointcloud.x[0] = Distance::from(1.0);
-        pointcloud.y[0] = Distance::from(2.0);
-        pointcloud.z[0] = Distance::from(3.0);
-        pointcloud.x[1] = Distance::from(9.0);
-        pointcloud.y[1] = Distance::from(9.0);
-        pointcloud.z[1] = Distance::from(9.0);
+        pointcloud.x[0] = Distance::new::<meter>(1.0);
+        pointcloud.y[0] = Distance::new::<meter>(2.0);
+        pointcloud.z[0] = Distance::new::<meter>(3.0);
+        pointcloud.x[1] = Distance::new::<meter>(9.0);
+        pointcloud.y[1] = Distance::new::<meter>(9.0);
+        pointcloud.z[1] = Distance::new::<meter>(9.0);
 
         let points = pointcloud_positions(&pointcloud);
         assert_eq!(points.len(), 1);

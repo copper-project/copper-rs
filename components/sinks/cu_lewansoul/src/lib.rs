@@ -1,14 +1,11 @@
-use bincode::de::Decoder;
-use bincode::enc::Encoder;
-use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu_linux_resources::LinuxSerialPort;
 use cu29::prelude::*;
 use cu29::resource::{Owned, ResourceBindingMap, ResourceBindings, ResourceManager};
+use cu29::units::si::angle::degree;
+use cu29::units::si::f32::Angle;
 use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Write};
-use uom::si::angle::{degree, radian};
-use uom::si::f32::Angle;
 
 #[allow(dead_code)]
 mod servo {
@@ -205,25 +202,9 @@ impl Freezable for Lewansoul {
     // This driver is stateless as the IDs are recreate at new time, we keep the default implementation.
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Reflect)]
-#[reflect(opaque, from_reflect = false)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, Reflect)]
 pub struct ServoPositionsPayload {
     pub positions: [Angle; MAX_SERVOS],
-}
-
-impl Encode for ServoPositionsPayload {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let angles: [f32; MAX_SERVOS] = self.positions.map(|a| a.value);
-        bincode::Encode::encode(&angles, encoder)
-    }
-}
-
-impl Decode<()> for ServoPositionsPayload {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let angles: [f32; 8] = Decode::decode(decoder)?;
-        let positions: [Angle; 8] = angles.map(Angle::new::<radian>);
-        Ok(ServoPositionsPayload { positions })
-    }
 }
 
 impl CuSinkTask for Lewansoul {

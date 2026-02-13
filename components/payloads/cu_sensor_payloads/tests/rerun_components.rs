@@ -3,6 +3,7 @@
 use cu_sensor_payloads::{CuImage, CuImageBufferFormat, Distance, PointCloud, PointCloudSoa};
 use cu29::clock::CuTime;
 use cu29::prelude::CuHandle;
+use cu29::units::si::length::meter;
 use rerun::AsComponents;
 
 #[test]
@@ -31,12 +32,12 @@ fn pointcloud_soa_emits_rerun_components() {
         len: 2,
         ..Default::default()
     };
-    pointcloud.x[0] = Distance::from(1.0);
-    pointcloud.y[0] = Distance::from(2.0);
-    pointcloud.z[0] = Distance::from(3.0);
-    pointcloud.x[1] = Distance::from(4.0);
-    pointcloud.y[1] = Distance::from(5.0);
-    pointcloud.z[1] = Distance::from(6.0);
+    pointcloud.x[0] = Distance::new::<meter>(1.0);
+    pointcloud.y[0] = Distance::new::<meter>(2.0);
+    pointcloud.z[0] = Distance::new::<meter>(3.0);
+    pointcloud.x[1] = Distance::new::<meter>(4.0);
+    pointcloud.y[1] = Distance::new::<meter>(5.0);
+    pointcloud.z[1] = Distance::new::<meter>(6.0);
 
     assert!(!pointcloud.as_serialized_batches().is_empty());
 }

@@ -63,12 +63,6 @@ cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", de
 bincode = { workspace = true }
 serde = { workspace = true }
 spin = { workspace = true }
-uom = { version = "0.37", default-features = false, features = [
-  "serde",
-  "f32",
-  "si",
-  "autoconvert",
-] }
 
 # --> host dependencies <--
 
@@ -111,6 +105,7 @@ evdev = { version = "0.13.2", optional = true }
 
 cu29 = { path = "../../core/cu29", default-features = false, features = [
   "log-level-debug",
+  "units",
 ], optional = true }
 cortex-m-rt = { version = "0.7", optional = true }
 defmt-rtt = { version = "1.1.0", optional = true }

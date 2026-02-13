@@ -8,8 +8,8 @@ use cu_micoairh743::GreenLed;
 use cu_pid::{PIDControlOutputPayload, PIDController};
 use cu_sensor_payloads::ImuPayload;
 use cu29::prelude::*;
-use uom::si::angular_velocity::degree_per_second;
-use uom::si::thermodynamic_temperature::degree_celsius;
+use cu29::units::si::angular_velocity::degree_per_second;
+use cu29::units::si::thermodynamic_temperature::degree_celsius;
 
 const LOG_PERIOD_MS: u64 = 500;
 const HEAP_LOG_PERIOD_MS: u64 = 500;

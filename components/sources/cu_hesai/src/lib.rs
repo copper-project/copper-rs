@@ -8,12 +8,14 @@ use bincode::{Decode, Encode};
 use chrono::Utc;
 use cu_sensor_payloads::{PointCloud, PointCloudSoa};
 use cu29::prelude::*;
+use cu29::units::si::angle::radian;
+use cu29::units::si::f32::{Angle, Length};
+use cu29::units::si::length::meter;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::io::ErrorKind;
 use std::io::Read;
 use std::net::SocketAddr;
 use std::ops::{Deref, DerefMut};
-use uom::si::f32::{Angle, Length};
 
 /// By default, Hesai broadcasts on this address.
 const DEFAULT_ADDR: &str = "0.0.0.0:2368";
@@ -25,9 +27,13 @@ fn spherical_to_cartesian(
     elevation: Angle,
     distance: Length,
 ) -> (Length, Length, Length) {
-    let x = distance * elevation.cos() * azimuth.cos();
-    let y = distance * elevation.cos() * azimuth.sin();
-    let z = distance * elevation.sin();
+    let distance_m = distance.get::<meter>();
+    let azimuth_rad = azimuth.get::<radian>();
+    let elevation_rad = elevation.get::<radian>();
+
+    let x = Length::new::<meter>(distance_m * elevation_rad.cos() * azimuth_rad.cos());
+    let y = Length::new::<meter>(distance_m * elevation_rad.cos() * azimuth_rad.sin());
+    let z = Length::new::<meter>(distance_m * elevation_rad.sin());
     (x, y, z)
 }
 
@@ -167,7 +173,7 @@ impl CuSrcTask for Xt32 {
                 } else if t > max_tov {
                     max_tov = t;
                 }
-                payload.push(PointCloud::new_uom(t, x, y, z, r, None));
+                payload.push(PointCloud::new_units(t, x, y, z, r, None));
             });
         }
 
