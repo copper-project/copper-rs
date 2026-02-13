@@ -549,8 +549,11 @@ impl ResourceBundle for LinuxResources {
 
         #[cfg(target_os = "linux")]
         {
-            let mut configured_gpio_slots: std::vec::Vec<(LinuxResourcesId, &'static str, GpioSlotConfig)> =
-                std::vec::Vec::new();
+            let mut configured_gpio_slots: std::vec::Vec<(
+                LinuxResourcesId,
+                &'static str,
+                GpioSlotConfig,
+            )> = std::vec::Vec::new();
 
             for slot in GPIO_SLOTS {
                 let Some(slot_config) = read_gpio_slot_config(config, slot)? else {
