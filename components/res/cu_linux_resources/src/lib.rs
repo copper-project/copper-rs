@@ -454,6 +454,19 @@ struct GpioSlot {
     initial_level_key: &'static str,
 }
 
+macro_rules! gpio_slot {
+    ($id:ident, $name:ident, $pin_key:ident, $direction_key:ident, $bias_key:ident, $initial_level_key:ident) => {
+        GpioSlot {
+            id: LinuxResourcesId::$id,
+            name: $name,
+            pin_key: $pin_key,
+            direction_key: $direction_key,
+            bias_key: $bias_key,
+            initial_level_key: $initial_level_key,
+        }
+    };
+}
+
 #[cfg(any(target_os = "linux", test))]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum GpioDirection {
@@ -498,54 +511,54 @@ struct GpioSlotConfig {
 }
 
 const GPIO_SLOTS: &[GpioSlot] = &[
-    GpioSlot {
-        id: LinuxResourcesId::Gpio0,
-        name: GPIO0_NAME,
-        pin_key: GPIO0_PIN_KEY,
-        direction_key: GPIO0_DIRECTION_KEY,
-        bias_key: GPIO0_BIAS_KEY,
-        initial_level_key: GPIO0_INITIAL_LEVEL_KEY,
-    },
-    GpioSlot {
-        id: LinuxResourcesId::Gpio1,
-        name: GPIO1_NAME,
-        pin_key: GPIO1_PIN_KEY,
-        direction_key: GPIO1_DIRECTION_KEY,
-        bias_key: GPIO1_BIAS_KEY,
-        initial_level_key: GPIO1_INITIAL_LEVEL_KEY,
-    },
-    GpioSlot {
-        id: LinuxResourcesId::Gpio2,
-        name: GPIO2_NAME,
-        pin_key: GPIO2_PIN_KEY,
-        direction_key: GPIO2_DIRECTION_KEY,
-        bias_key: GPIO2_BIAS_KEY,
-        initial_level_key: GPIO2_INITIAL_LEVEL_KEY,
-    },
-    GpioSlot {
-        id: LinuxResourcesId::Gpio3,
-        name: GPIO3_NAME,
-        pin_key: GPIO3_PIN_KEY,
-        direction_key: GPIO3_DIRECTION_KEY,
-        bias_key: GPIO3_BIAS_KEY,
-        initial_level_key: GPIO3_INITIAL_LEVEL_KEY,
-    },
-    GpioSlot {
-        id: LinuxResourcesId::Gpio4,
-        name: GPIO4_NAME,
-        pin_key: GPIO4_PIN_KEY,
-        direction_key: GPIO4_DIRECTION_KEY,
-        bias_key: GPIO4_BIAS_KEY,
-        initial_level_key: GPIO4_INITIAL_LEVEL_KEY,
-    },
-    GpioSlot {
-        id: LinuxResourcesId::Gpio5,
-        name: GPIO5_NAME,
-        pin_key: GPIO5_PIN_KEY,
-        direction_key: GPIO5_DIRECTION_KEY,
-        bias_key: GPIO5_BIAS_KEY,
-        initial_level_key: GPIO5_INITIAL_LEVEL_KEY,
-    },
+    gpio_slot!(
+        Gpio0,
+        GPIO0_NAME,
+        GPIO0_PIN_KEY,
+        GPIO0_DIRECTION_KEY,
+        GPIO0_BIAS_KEY,
+        GPIO0_INITIAL_LEVEL_KEY
+    ),
+    gpio_slot!(
+        Gpio1,
+        GPIO1_NAME,
+        GPIO1_PIN_KEY,
+        GPIO1_DIRECTION_KEY,
+        GPIO1_BIAS_KEY,
+        GPIO1_INITIAL_LEVEL_KEY
+    ),
+    gpio_slot!(
+        Gpio2,
+        GPIO2_NAME,
+        GPIO2_PIN_KEY,
+        GPIO2_DIRECTION_KEY,
+        GPIO2_BIAS_KEY,
+        GPIO2_INITIAL_LEVEL_KEY
+    ),
+    gpio_slot!(
+        Gpio3,
+        GPIO3_NAME,
+        GPIO3_PIN_KEY,
+        GPIO3_DIRECTION_KEY,
+        GPIO3_BIAS_KEY,
+        GPIO3_INITIAL_LEVEL_KEY
+    ),
+    gpio_slot!(
+        Gpio4,
+        GPIO4_NAME,
+        GPIO4_PIN_KEY,
+        GPIO4_DIRECTION_KEY,
+        GPIO4_BIAS_KEY,
+        GPIO4_INITIAL_LEVEL_KEY
+    ),
+    gpio_slot!(
+        Gpio5,
+        GPIO5_NAME,
+        GPIO5_PIN_KEY,
+        GPIO5_DIRECTION_KEY,
+        GPIO5_BIAS_KEY,
+        GPIO5_INITIAL_LEVEL_KEY
+    ),
 ];
 
 impl ResourceBundle for LinuxResources {
