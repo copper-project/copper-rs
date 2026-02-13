@@ -8,8 +8,7 @@ use rerun::{
     SerializedComponentBatch,
 };
 
-use crate::{CuImage, CuImageBufferFormat, Distance, PointCloud, PointCloudSoa};
-use cu29::units::si::length::meter;
+use crate::{CuImage, CuImageBufferFormat, PointCloud, PointCloudSoa};
 
 fn image_format_from_cu(
     fmt: CuImageBufferFormat,
@@ -79,6 +78,8 @@ fn pointcloud_positions<const N: usize>(pointcloud: &PointCloudSoa<N>) -> Vec<Po
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Distance;
+    use cu29::units::si::length::meter;
 
     #[test]
     fn image_format_rgb3_maps_to_color_model() {
