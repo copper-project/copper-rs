@@ -448,7 +448,7 @@ struct GpioSlotConfig {
     pin: u8,
     direction: GpioDirection,
     bias: GpioBias,
-    initial_level: GpioInitialLevel,
+    initial_level: Option<GpioInitialLevel>,
 }
 
 const GPIO_SLOTS: &[GpioSlot] = &[
@@ -589,9 +589,11 @@ impl ResourceBundle for LinuxResources {
                         GpioDirection::Output => {
                             let mut pin = pin.into_io(rppal::gpio::Mode::Output);
                             pin.set_bias(slot_config.bias.into_rppal());
-                            match slot_config.initial_level {
-                                GpioInitialLevel::Low => pin.set_low(),
-                                GpioInitialLevel::High => pin.set_high(),
+                            if let Some(initial_level) = slot_config.initial_level {
+                                match initial_level {
+                                    GpioInitialLevel::Low => pin.set_low(),
+                                    GpioInitialLevel::High => pin.set_high(),
+                                }
                             }
                             manager.add_owned(bundle.key(slot_id), Exclusive::new(pin))?;
                         }
@@ -672,13 +674,12 @@ fn read_gpio_slot_config(
         None => GpioBias::Off,
     };
 
-    let has_initial_level = initial_level.is_some();
     let initial_level = match initial_level {
-        Some(raw) => parse_gpio_initial_level_value(raw.as_str())?,
-        None => GpioInitialLevel::Low,
+        Some(raw) => Some(parse_gpio_initial_level_value(raw.as_str())?),
+        None => None,
     };
 
-    if matches!(direction, GpioDirection::Input) && has_initial_level {
+    if matches!(direction, GpioDirection::Input) && initial_level.is_some() {
         return Err(CuError::from(format!(
             "Config key '{}' is only valid when '{}' is 'output'",
             slot.initial_level_key, slot.direction_key
@@ -917,7 +918,7 @@ mod tests {
     }
 
     #[test]
-    fn read_gpio_slot_config_defaults_bias_and_initial_level_for_output() {
+    fn read_gpio_slot_config_defaults_bias_and_preserves_level_for_output() {
         let mut cfg = ComponentConfig::new();
         cfg.set("gpio0_pin", 23_u8);
         cfg.set("gpio0_direction", "output".to_string());
@@ -931,7 +932,28 @@ mod tests {
                 pin: 23,
                 direction: GpioDirection::Output,
                 bias: GpioBias::Off,
-                initial_level: GpioInitialLevel::Low,
+                initial_level: None,
+            }
+        );
+    }
+
+    #[test]
+    fn read_gpio_slot_config_parses_explicit_initial_level_for_output() {
+        let mut cfg = ComponentConfig::new();
+        cfg.set("gpio0_pin", 23_u8);
+        cfg.set("gpio0_direction", "output".to_string());
+        cfg.set("gpio0_initial_level", "high".to_string());
+
+        let slot_config = read_gpio_slot_config(Some(&cfg), &GPIO_SLOTS[0])
+            .unwrap()
+            .expect("slot should be configured");
+        assert_eq!(
+            slot_config,
+            GpioSlotConfig {
+                pin: 23,
+                direction: GpioDirection::Output,
+                bias: GpioBias::Off,
+                initial_level: Some(GpioInitialLevel::High),
             }
         );
     }

@@ -78,12 +78,15 @@ Per-slot keys:
 - `gpioN_pin` (`u8`, required when slot is configured)
 - `gpioN_direction` (`string`, required when slot is configured): `input` or `output`
 - `gpioN_bias` (`string`, optional, default `off`): `off`, `pull_up`, `pull_down`
-- `gpioN_initial_level` (`string`, optional, default `low`, output-only): `low`, `high`
+- `gpioN_initial_level` (`string`, optional, output-only): `low`, `high`
 
 Direction determines the concrete resource type:
 
 - `direction: "input"` registers `LinuxInputPin`
 - `direction: "output"` registers `LinuxOutputPin` (output mode with optional pull bias)
+
+If `gpioN_initial_level` is omitted for an output slot, initialization preserves the current
+GPIO output level.
 
 Validation is strict for GPIO config:
 
