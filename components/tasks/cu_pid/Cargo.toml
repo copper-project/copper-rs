@@ -17,6 +17,6 @@ textlogs = ["cu29/textlogs"]
 reflect = ["cu29/reflect"]
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version = "0.12.0", default-features = false }
+cu29 = { path = "../../../core/cu29", version = "0.13.0", default-features = false }
 bincode = { workspace = true }
 serde = { workspace = true }

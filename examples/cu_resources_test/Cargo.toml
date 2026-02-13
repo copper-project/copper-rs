@@ -22,7 +22,7 @@ clap = { workspace = true }
 cu29 = { workspace = true, features = ["log-level-debug"] }
 cu29-helpers = { workspace = true }
 cu29-unifiedlog = { workspace = true }
-cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.12.0" }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.13.0" }
 serde = { workspace = true }
 bincode = { workspace = true }
 parking_lot = "0.12"

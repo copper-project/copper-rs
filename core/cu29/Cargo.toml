@@ -20,7 +20,7 @@ cu29-log-derive = { workspace = true }
 cu29-log-runtime = { workspace = true }
 cu29-runtime = { workspace = true }
 cu29-traits = { workspace = true }
-cu29-units = { path = "../cu29_units", version = "0.12.0", default-features = false, optional = true }
+cu29-units = { path = "../cu29_units", version = "0.13.0", default-features = false, optional = true }
 cu29-unifiedlog = { workspace = true }
 cu29-value = { workspace = true }
 defmt = { version = "1.0", optional = true }

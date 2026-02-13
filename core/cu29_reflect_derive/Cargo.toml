@@ -1,6 +1,7 @@
 [package]
 name = "cu29-reflect-derive"
 description = "No-op fallback derive for Copper reflection when reflect is disabled"
+readme = "README.md"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
