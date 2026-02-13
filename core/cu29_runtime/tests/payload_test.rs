@@ -92,7 +92,8 @@ mod tests {
         let encoded = bincode::encode_to_vec(&large_vec, config).unwrap();
 
         // Try to decode into a smaller capacity vector - should fail
-        let result: Result<(CuArrayVec<u32, 5>, _), _> = bincode::decode_from_slice(&encoded, cfg);
+        let result: Result<(CuArrayVec<u32, 5>, _), _> =
+            bincode::decode_from_slice(&encoded, config);
         assert!(matches!(
             result,
             Err(bincode::error::DecodeError::ArrayLengthMismatch { .. })
