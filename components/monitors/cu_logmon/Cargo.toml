@@ -19,8 +19,8 @@ path = "src/lib.rs"
 
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version = "0.12.0", default-features = false }
-cu29-log-runtime = { path = "../../../core/cu29_log_runtime", version = "0.12.0", default-features = false }
+cu29 = { path = "../../../core/cu29", version = "0.13.0", default-features = false }
+cu29-log-runtime = { path = "../../../core/cu29_log_runtime", version = "0.13.0", default-features = false }
 spin = { workspace = true }
 
 [dev-dependencies]

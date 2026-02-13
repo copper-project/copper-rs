@@ -15,7 +15,7 @@ publish = false
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 cu-caterpillar = { path = "../cu_caterpillar", version = "0.12.0" }
-cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio", version = "0.12.0" }
+cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio", version = "0.13.0" }
 serde = { workspace = true }
 
 [package.metadata.cargo-shear]
