@@ -3,6 +3,8 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
+use cu29::units::si::f32::Ratio;
+use cu29::units::si::ratio::ratio;
 use serde::{Deserialize, Serialize};
 
 #[cfg(hardware)]
@@ -30,7 +32,7 @@ pub struct SN754410 {
     Debug, Clone, Copy, Default, Encode, Decode, PartialEq, Serialize, Deserialize, Reflect,
 )]
 pub struct MotorPayload {
-    pub power: f32, // -1.0 to 1.0
+    pub power: Ratio, // -1.0 to 1.0
 }
 
 #[cfg(hardware)]
@@ -183,22 +185,23 @@ impl CuSinkTask for SN754410 {
         if self.dryrun {
             debug!(
                 "In Dryrun mode ignore any command: power would have been {}.",
-                power.power
+                power.power.get::<ratio>()
             );
             self.stop()?;
             return Ok(());
         }
 
-        let deadzone_compensated = if power.power != 0.0f32 {
+        let power_ratio = power.power.get::<ratio>();
+        let deadzone_compensated = if power_ratio != 0.0f32 {
             // proportinally on the [deadzone, 1.0] range
             let deadzone = self.deadzone;
-            if power.power > 0.0 {
-                deadzone + (1.0 - deadzone) * power.power
+            if power_ratio > 0.0 {
+                deadzone + (1.0 - deadzone) * power_ratio
             } else {
-                -deadzone + (1.0 + deadzone) * power.power
+                -deadzone + (1.0 + deadzone) * power_ratio
             }
         } else {
-            power.power
+            power_ratio
         };
 
         if deadzone_compensated == self.current_power {

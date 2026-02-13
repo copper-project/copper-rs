@@ -3,6 +3,8 @@ use cu_pid::{GenericPIDTask, PIDControlOutputPayload};
 use cu_rp_encoder::EncoderPayload;
 use cu_rp_sn754410_new::MotorPayload;
 use cu29::prelude::*;
+use cu29::units::si::f32::Ratio;
+use cu29::units::si::ratio::ratio;
 
 pub type BalPID = GenericPIDTask<ADSReadingPayload>;
 pub type PosPID = GenericPIDTask<EncoderPayload>;
@@ -42,7 +44,7 @@ impl CuTask for PIDMerger {
         output.tov = merge_tov(bal_pid_msg.tov, pos_pid_msg.tov);
         let composite_output = (bal_pid.output - pos_pid.output).clamp(-1.0, 1.0);
         output.set_payload(MotorPayload {
-            power: composite_output,
+            power: Ratio::new::<ratio>(composite_output),
         });
         output
             .metadata

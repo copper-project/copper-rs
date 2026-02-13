@@ -1,4 +1,6 @@
 use super::*;
+use cu29::units::si::electric_potential::volt;
+use cu29::units::si::f32::ElectricPotential;
 
 resources!({
     battery_adc => Owned<cu_micoairh743::BatteryAdc>,
@@ -63,7 +65,9 @@ impl CuSrcTask for BatteryAdcSource {
         centivolts /= vbat_res_div_mult.max(1);
         let centivolts = centivolts.min(u64::from(u16::MAX)) as u16;
 
-        output.set_payload(BatteryVoltage { centivolts });
+        output.set_payload(BatteryVoltage {
+            voltage: ElectricPotential::new::<volt>(centivolts as f32 / 100.0),
+        });
         output.tov = Tov::Time(now);
         Ok(())
     }

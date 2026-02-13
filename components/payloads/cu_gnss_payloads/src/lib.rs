@@ -7,8 +7,9 @@ use alloc::vec::Vec;
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
 use cu29::units::si::angle::degree;
-use cu29::units::si::f32::{Angle, Length, Time, Velocity};
+use cu29::units::si::f32::{Angle, Length, Ratio, Time, Velocity};
 use cu29::units::si::length::meter;
+use cu29::units::si::ratio::ratio;
 use cu29::units::si::time::second;
 use cu29::units::si::velocity::meter_per_second;
 use serde::{Deserialize, Serialize};
@@ -135,7 +136,7 @@ pub struct GnssAccuracy {
     pub speed: Velocity,
     pub heading: Angle,
     pub time: Time,
-    pub position_dop: f32,
+    pub position_dop: Ratio,
 }
 
 impl Default for GnssAccuracy {
@@ -146,7 +147,7 @@ impl Default for GnssAccuracy {
             speed: Velocity::new::<meter_per_second>(0.0),
             heading: Angle::new::<degree>(0.0),
             time: Time::new::<second>(0.0),
-            position_dop: 0.0,
+            position_dop: Ratio::new::<ratio>(0.0),
         }
     }
 }
@@ -159,15 +160,15 @@ pub struct GnssNavEpoch {
 }
 
 #[derive(
-    Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
+    Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect,
 )]
 pub struct GnssSatelliteInfo {
     pub gnss_id: u8,
     pub sv_id: u8,
     pub cno_dbhz: u8,
-    pub elevation_deg: i8,
-    pub azimuth_deg: i16,
-    pub pseudorange_residual_dm: i16,
+    pub elevation: Angle,
+    pub azimuth: Angle,
+    pub pseudorange_residual: Length,
     pub quality_ind: u8,
     pub used_for_navigation: bool,
     pub health: u8,
@@ -195,14 +196,14 @@ pub struct GnssSatsInView {
 }
 
 #[derive(
-    Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
+    Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect,
 )]
 pub struct GnssSignalInfo {
     pub gnss_id: u8,
     pub sv_id: u8,
     pub signal_id: u8,
     pub frequency_id: u8,
-    pub pseudorange_residual_dm: i16,
+    pub pseudorange_residual: Length,
     pub cno_dbhz: u8,
     pub quality_ind: u8,
     pub correction_source: u8,

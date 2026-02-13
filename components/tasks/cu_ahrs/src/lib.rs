@@ -6,7 +6,9 @@ use bincode::{Decode, Encode};
 use cu_sensor_payloads::ImuPayload;
 use cu29::prelude::*;
 use cu29::units::si::acceleration::meter_per_second_squared;
+use cu29::units::si::angle::radian;
 use cu29::units::si::angular_velocity::radian_per_second;
+use cu29::units::si::f32::Angle;
 use dcmimu::DCMIMU;
 use serde::{Deserialize, Serialize};
 
@@ -21,9 +23,9 @@ use core::ptr;
     Debug, Clone, Copy, Default, Encode, Decode, Serialize, Deserialize, PartialEq, Reflect,
 )]
 pub struct AhrsPose {
-    pub roll: f32,
-    pub pitch: f32,
-    pub yaw: f32,
+    pub roll: Angle,
+    pub pitch: Angle,
+    pub yaw: Angle,
 }
 
 impl AhrsPose {
@@ -74,9 +76,9 @@ impl CuAhrs {
         );
 
         let pose = AhrsPose {
-            roll: angles.roll,
-            pitch: angles.pitch,
-            yaw: angles.yaw,
+            roll: Angle::new::<radian>(angles.roll),
+            pitch: Angle::new::<radian>(angles.pitch),
+            yaw: Angle::new::<radian>(angles.yaw),
         };
 
         let reference = self.reference.get_or_insert(pose);
@@ -128,7 +130,9 @@ pub mod sinks {
             if let Some(pose) = input.payload() {
                 info!(
                     "AHRS RPY [rad]: roll={} pitch={} yaw={}",
-                    pose.roll, pose.pitch, pose.yaw
+                    pose.roll.get::<radian>(),
+                    pose.pitch.get::<radian>(),
+                    pose.yaw.get::<radian>()
                 );
                 output.set_payload(*pose);
             } else {
@@ -260,9 +264,21 @@ mod tests {
     #[test]
     fn level_orientation_stays_zeroed() {
         let pose = settle_pose(0.0, 0.0, 5, 10_000_000);
-        assert!(pose.roll.abs() < 1e-3, "roll {}", pose.roll);
-        assert!(pose.pitch.abs() < 1e-3, "pitch {}", pose.pitch);
-        assert!(pose.yaw.abs() < 1e-3, "yaw {}", pose.yaw);
+        assert!(
+            pose.roll.get::<radian>().abs() < 1e-3,
+            "roll {}",
+            pose.roll.value
+        );
+        assert!(
+            pose.pitch.get::<radian>().abs() < 1e-3,
+            "pitch {}",
+            pose.pitch.value
+        );
+        assert!(
+            pose.yaw.get::<radian>().abs() < 1e-3,
+            "yaw {}",
+            pose.yaw.value
+        );
     }
 
     #[test]
@@ -270,12 +286,12 @@ mod tests {
         let target_pitch = FRAC_PI_3; // 60 deg nose up
         let pose = settle_pose(0.0, target_pitch, 80, 10_000_000);
         assert!(
-            (pose.pitch - target_pitch).abs() < 0.1,
+            (pose.pitch.get::<radian>() - target_pitch).abs() < 0.1,
             "pitch {} vs {}",
-            pose.pitch,
+            pose.pitch.value,
             target_pitch
         );
-        assert!(pose.roll.abs() < 0.05);
+        assert!(pose.roll.get::<radian>().abs() < 0.05);
     }
 
     #[test]
@@ -283,12 +299,12 @@ mod tests {
         let target_roll = -FRAC_PI_3; // left wing down
         let pose = settle_pose(target_roll, 0.0, 80, 10_000_000);
         assert!(
-            (pose.roll - target_roll).abs() < 0.1,
+            (pose.roll.get::<radian>() - target_roll).abs() < 0.1,
             "roll {} vs {}",
-            pose.roll,
+            pose.roll.value,
             target_roll
         );
-        assert!(pose.pitch.abs() < 0.05);
+        assert!(pose.pitch.get::<radian>().abs() < 0.05);
     }
 
     #[test]
@@ -306,9 +322,9 @@ mod tests {
 
         let pose = latest.expect("pose should be produced");
         assert!(
-            (pose.yaw - FRAC_PI_2).abs() < 0.2,
+            (pose.yaw.get::<radian>() - FRAC_PI_2).abs() < 0.2,
             "yaw {} vs {}",
-            pose.yaw,
+            pose.yaw.value,
             FRAC_PI_2
         );
     }

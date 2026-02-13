@@ -8,7 +8,10 @@ use cu_micoairh743::GreenLed;
 use cu_pid::{PIDControlOutputPayload, PIDController};
 use cu_sensor_payloads::ImuPayload;
 use cu29::prelude::*;
-use cu29::units::si::angular_velocity::degree_per_second;
+use cu29::units::si::angle::radian;
+use cu29::units::si::angular_velocity::{degree_per_second, radian_per_second};
+use cu29::units::si::f32::{AngularVelocity, Ratio};
+use cu29::units::si::ratio::ratio;
 use cu29::units::si::thermodynamic_temperature::degree_celsius;
 
 const LOG_PERIOD_MS: u64 = 500;
@@ -345,10 +348,10 @@ impl CuTask for RcMapper {
 
         output.tov = Tov::Time(tov_time);
         output.set_payload(ControlInputs {
-            roll,
-            pitch,
-            yaw,
-            throttle,
+            roll: Ratio::new::<ratio>(roll),
+            pitch: Ratio::new::<ratio>(pitch),
+            yaw: Ratio::new::<ratio>(yaw),
+            throttle: Ratio::new::<ratio>(throttle),
             armed,
             mode,
         });
@@ -615,12 +618,12 @@ impl CuTask for AttitudeController {
 
         let (roll_rate, pitch_rate) =
             if matches!(ctrl.mode, FlightMode::Angle | FlightMode::PositionHold) {
-                let target_roll = (ctrl.roll * self.angle_limit_rad)
+                let target_roll = (ctrl.roll.get::<ratio>() * self.angle_limit_rad)
                     .clamp(-self.angle_limit_rad, self.angle_limit_rad);
-                let target_pitch = (ctrl.pitch * self.angle_limit_rad)
+                let target_pitch = (ctrl.pitch.get::<ratio>() * self.angle_limit_rad)
                     .clamp(-self.angle_limit_rad, self.angle_limit_rad);
-                let roll_measure = pose.roll - target_roll;
-                let pitch_measure = pose.pitch - target_pitch;
+                let roll_measure = pose.roll.get::<radian>() - target_roll;
+                let pitch_measure = pose.pitch.get::<radian>() - target_pitch;
                 let roll_out = self.roll_pid.update(roll_measure, dt).unwrap_or_default();
                 let pitch_out = self.pitch_pid.update(pitch_measure, dt).unwrap_or_default();
                 let roll_rate = roll_out.output;
@@ -632,23 +635,23 @@ impl CuTask for AttitudeController {
             } else {
                 self.roll_pid.reset();
                 self.pitch_pid.reset();
-                let roll_cmd = apply_expo(ctrl.roll, self.acro_expo);
-                let pitch_cmd = apply_expo(ctrl.pitch, self.acro_expo);
+                let roll_cmd = apply_expo(ctrl.roll.get::<ratio>(), self.acro_expo);
+                let pitch_cmd = apply_expo(ctrl.pitch.get::<ratio>(), self.acro_expo);
                 (
                     (roll_cmd * self.acro_rate_rad).clamp(-self.acro_rate_rad, self.acro_rate_rad),
                     (pitch_cmd * self.acro_rate_rad).clamp(-self.acro_rate_rad, self.acro_rate_rad),
                 )
             };
 
-        let yaw_cmd = apply_expo(ctrl.yaw, self.acro_expo);
+        let yaw_cmd = apply_expo(ctrl.yaw.get::<ratio>(), self.acro_expo);
         let yaw_rate =
             (yaw_cmd * self.acro_rate_rad).clamp(-self.acro_rate_rad, self.acro_rate_rad);
 
         output.tov = output_tov;
         output.set_payload(BodyRateSetpoint {
-            roll: roll_rate,
-            pitch: pitch_rate,
-            yaw: yaw_rate,
+            roll: AngularVelocity::new::<radian_per_second>(roll_rate),
+            pitch: AngularVelocity::new::<radian_per_second>(pitch_rate),
+            yaw: AngularVelocity::new::<radian_per_second>(yaw_rate),
         });
         Ok(())
     }
@@ -747,7 +750,7 @@ impl CuTask for RateController {
         };
         let ctrl = ctrl_msg.payload();
         let armed = ctrl.map(|c| c.armed).unwrap_or(false);
-        let throttle = ctrl.map(|c| c.throttle).unwrap_or(0.0);
+        let throttle = ctrl.map(|c| c.throttle.get::<ratio>()).unwrap_or(0.0);
 
         if !armed {
             self.roll_pid.reset();
@@ -779,9 +782,9 @@ impl CuTask for RateController {
             return Ok(());
         }
 
-        let roll_measure = imu.gyro_x.value - setpoint.roll;
-        let pitch_measure = imu.gyro_y.value - setpoint.pitch;
-        let yaw_measure = imu.gyro_z.value - setpoint.yaw;
+        let roll_measure = imu.gyro_x.value - setpoint.roll.get::<radian_per_second>();
+        let pitch_measure = imu.gyro_y.value - setpoint.pitch.get::<radian_per_second>();
+        let yaw_measure = imu.gyro_z.value - setpoint.yaw.get::<radian_per_second>();
 
         let roll_out = self.roll_pid.update(roll_measure, dt).unwrap_or_default();
         let pitch_out = self.pitch_pid.update(pitch_measure, dt).unwrap_or_default();
@@ -791,9 +794,9 @@ impl CuTask for RateController {
         let yaw_cmd = yaw_out.output;
 
         debug_rl!(&LOG_RATE, ctrl_tov, {
-            let sp_roll = setpoint.roll.to_degrees();
-            let sp_pitch = setpoint.pitch.to_degrees();
-            let sp_yaw = setpoint.yaw.to_degrees();
+            let sp_roll = setpoint.roll.get::<radian_per_second>().to_degrees();
+            let sp_pitch = setpoint.pitch.get::<radian_per_second>().to_degrees();
+            let sp_yaw = setpoint.yaw.get::<radian_per_second>().to_degrees();
             let gyro_roll = imu.gyro_x.value.to_degrees();
             let gyro_pitch = imu.gyro_y.value.to_degrees();
             let gyro_yaw = imu.gyro_z.value.to_degrees();
@@ -825,9 +828,9 @@ impl CuTask for RateController {
 
         output.tov = output_tov;
         output.set_payload(BodyCommand {
-            roll: roll_cmd.clamp(-self.output_limit, self.output_limit),
-            pitch: pitch_cmd.clamp(-self.output_limit, self.output_limit),
-            yaw: yaw_cmd.clamp(-self.output_limit, self.output_limit),
+            roll: Ratio::new::<ratio>(roll_cmd.clamp(-self.output_limit, self.output_limit)),
+            pitch: Ratio::new::<ratio>(pitch_cmd.clamp(-self.output_limit, self.output_limit)),
+            yaw: Ratio::new::<ratio>(yaw_cmd.clamp(-self.output_limit, self.output_limit)),
         });
         Ok(())
     }
@@ -910,8 +913,10 @@ impl CuTask for QuadXMixer {
                 if self.props_out {
                     yaw_coeff = -yaw_coeff;
                 }
-                let mix = cmd.roll * roll_coeff + cmd.pitch * pitch_coeff + cmd.yaw * yaw_coeff;
-                let throttle = ctrl.throttle.clamp(0.0, 1.0);
+                let mix = cmd.roll.get::<ratio>() * roll_coeff
+                    + cmd.pitch.get::<ratio>() * pitch_coeff
+                    + cmd.yaw.get::<ratio>() * yaw_coeff;
+                let throttle = ctrl.throttle.get::<ratio>().clamp(0.0, 1.0);
 
                 // Apply airmode idle at low throttle (for control authority during power loops)
                 // When throttle < 50%, scale from idle to normal. Above 50%, normal mixing.

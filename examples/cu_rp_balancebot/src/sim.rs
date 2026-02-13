@@ -15,6 +15,7 @@ use cu29::prelude::debug;
 #[allow(unused_imports)]
 use cu29::prelude::error;
 use cu29::prelude::*;
+use cu29::units::si::ratio::ratio;
 use cu29_helpers::basic_copper_setup;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -171,11 +172,13 @@ fn run_copper_callback(
                 let now = clock.now();
                 if override_motor {
                     if let Some(motor_actuation) = maybe_motor_actuation
-                        && !motor_actuation.power.is_nan()
+                        && !motor_actuation.power.get::<ratio>().is_nan()
                     {
                         let total_mass = motor_model::total_mass_kg();
-                        let force_magnitude =
-                            motor_model::force_from_power(motor_actuation.power, total_mass);
+                        let force_magnitude = motor_model::force_from_power(
+                            motor_actuation.power.get::<ratio>(),
+                            total_mass,
+                        );
                         output
                             .metadata
                             .set_status(format!("Applied force: {force_magnitude}"));
@@ -185,15 +188,17 @@ fn run_copper_callback(
                     return SimOverride::ExecutedBySim;
                 }
                 if let Some(motor_actuation) = maybe_motor_actuation {
-                    if motor_actuation.power.is_nan() {
+                    if motor_actuation.power.get::<ratio>().is_nan() {
                         cart_force.0 = Vector::ZERO;
                         output.metadata.process_time.start = now.into();
                         output.metadata.process_time.end = now.into();
                         return SimOverride::ExecutedBySim;
                     }
                     let total_mass = motor_model::total_mass_kg();
-                    let force_magnitude =
-                        motor_model::force_from_power(motor_actuation.power, total_mass);
+                    let force_magnitude = motor_model::force_from_power(
+                        motor_actuation.power.get::<ratio>(),
+                        total_mass,
+                    );
                     let new_force = Vector::new(force_magnitude, 0.0, 0.0);
                     cart_force.0 = new_force;
                     applied_force.0 = new_force;

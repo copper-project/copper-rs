@@ -1,5 +1,6 @@
 use cu29::bincode::{Decode, Encode};
 use cu29::prelude::*;
+use cu29::units::si::f32::{AngularVelocity, ElectricPotential, Ratio};
 use serde::{Deserialize, Serialize};
 
 #[derive(
@@ -15,30 +16,29 @@ pub enum FlightMode {
 
 #[derive(Debug, Default, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
 pub struct ControlInputs {
-    pub roll: f32,
-    pub pitch: f32,
-    pub yaw: f32,
-    pub throttle: f32,
+    pub roll: Ratio,
+    pub pitch: Ratio,
+    pub yaw: Ratio,
+    pub throttle: Ratio,
     pub armed: bool,
     pub mode: FlightMode,
 }
 
 #[derive(Debug, Default, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
 pub struct BodyRateSetpoint {
-    pub roll: f32,
-    pub pitch: f32,
-    pub yaw: f32,
+    pub roll: AngularVelocity,
+    pub pitch: AngularVelocity,
+    pub yaw: AngularVelocity,
 }
 
 #[derive(Debug, Default, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
 pub struct BodyCommand {
-    pub roll: f32,
-    pub pitch: f32,
-    pub yaw: f32,
+    pub roll: Ratio,
+    pub pitch: Ratio,
+    pub yaw: Ratio,
 }
 
 #[derive(Debug, Default, Clone, Copy, Encode, Decode, Serialize, Deserialize, Reflect)]
 pub struct BatteryVoltage {
-    /// Battery voltage in 0.01V steps.
-    pub centivolts: u16,
+    pub voltage: ElectricPotential,
 }

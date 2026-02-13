@@ -7,6 +7,7 @@ mod firmware {
     use cu_embedded_registry as reg;
     use cu_mpu9250::Mpu9250Source;
     use cu29::prelude::*;
+    use cu29::units::si::angle::radian;
     use defmt::{Debug2Format, info, warn};
     use defmt_rtt as _;
     use hal::fugit::RateExtU32;
@@ -44,7 +45,9 @@ mod firmware {
                 if let Some(pose) = input.payload() {
                     info!(
                         "AHRS RPY [rad]: roll={:.3} pitch={:.3} yaw={:.3}",
-                        pose.roll, pose.pitch, pose.yaw
+                        pose.roll.get::<radian>(),
+                        pose.pitch.get::<radian>(),
+                        pose.yaw.get::<radian>()
                     );
                 }
                 Ok(())
