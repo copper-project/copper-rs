@@ -6,14 +6,17 @@ macro_rules! define_storage_wrappers {
     ($storage_mod:ident, $storage_ty:ty, [$(($unit_mod:ident, $quantity:ident),)+]) => {
         pub mod $storage_mod {
             use core::marker::PhantomData;
-            use cu29::reflect::Reflect;
             use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+            #[cfg(feature = "reflect")]
+            use cu29::reflect::Reflect;
 
             macro_rules! define_quantity {
                 ($unit_mod_name:ident, $quantity_name:ident) => {
                     #[repr(transparent)]
-                    #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Reflect)]
-                    #[reflect(opaque, from_reflect = false)]
+                    #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+                    #[cfg_attr(feature = "reflect", derive(Reflect))]
+                    #[cfg_attr(feature = "reflect", reflect(opaque, from_reflect = false))]
                     pub struct $quantity_name(pub(crate) uom::si::$storage_mod::$quantity_name);
 
                     impl $quantity_name {
