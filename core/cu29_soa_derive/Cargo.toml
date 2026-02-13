@@ -2,6 +2,7 @@
 name = "cu29-soa-derive"
 description = "This is fixed size implementation for SOAs (Struct of Arrays). It can be used independently from the Copper project."
 documentation = "https://docs.rs/cu29-soa-derive"
+readme = "README.md"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

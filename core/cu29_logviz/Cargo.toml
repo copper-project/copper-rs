@@ -1,6 +1,7 @@
 [package]
 name = "cu29-logviz"
 description = "Rerun-based log visualization for Copper logs"
+readme = "README.md"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

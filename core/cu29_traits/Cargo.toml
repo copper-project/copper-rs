@@ -2,6 +2,7 @@
 name = "cu29-traits"
 description = "Common systems and robotics traits designed to decouple the components of your robotic system. These can be used independently from the Copper project."
 documentation = "https://docs.rs/cu29-traits"
+readme = "README.md"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

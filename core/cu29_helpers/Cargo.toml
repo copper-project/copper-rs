@@ -32,7 +32,6 @@ default = ["std"]
 std = [
   "cu29-traits/std",
   "cu29-unifiedlog/std",
-  "cu29-log/std",
   "cu29-log-runtime/std",
   "cu29-runtime/std",
   "cu29-clock/std",

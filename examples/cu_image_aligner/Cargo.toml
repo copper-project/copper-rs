@@ -18,8 +18,8 @@ cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 cu29-clock = { workspace = true }
 tempfile = { workspace = true }
-cu-aligner = { path = "../../components/tasks/cu_aligner", version = "0.12.0" }
-cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", version = "0.12.0" }
+cu-aligner = { path = "../../components/tasks/cu_aligner", version = "0.13.0" }
+cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", version = "0.13.0" }
 paste = { workspace = true }
 serde = { workspace = true }
 
