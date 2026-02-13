@@ -14,7 +14,6 @@ use cu29_log_runtime::log;
 #[cfg(debug_assertions)]
 #[allow(unused_imports)]
 use cu29_log_runtime::log_debug_mode;
-
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 
@@ -34,13 +33,11 @@ fn log_derive_end2end() {
         b: i32,
     }
     let mytuple = (1, "toto", 3.34f64, true, 'a');
-    {
-        let _gigantic_vec = vec![0u8; 1_000_000];
-        debug!("Just a string {}", "zarma");
-        debug!("anonymous param constants {} {}", 42u16, 43u8);
-        debug!("named param constants {} {}", a = 3, b = 2);
-        debug!("mixed named param constants, {} {} {}", a = 3, 54, b = 2);
-        debug!("complex tuple", mytuple);
-        debug!("Struct", Test { a: 3, b: 4 });
-    }
+    let _gigantic_vec = vec![0u8; 1_000_000];
+    debug!("Just a string {}", "zarma");
+    debug!("anonymous param constants {} {}", 42u16, 43u8);
+    debug!("named param constants {} {}", a = 3, b = 2);
+    debug!("mixed named param constants, {} {} {}", a = 3, 54, b = 2);
+    debug!("complex tuple", mytuple);
+    debug!("Struct", Test { a: 3, b: 4 });
 }
