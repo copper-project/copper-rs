@@ -66,11 +66,8 @@ where
 {
     #[reflect(ignore)]
     session_config: Config,
-    #[reflect(ignore)]
     domain_id: u32,
-    #[reflect(ignore)]
     namespace: String,
-    #[reflect(ignore)]
     node: String,
     #[reflect(ignore)]
     tx_channels: Vec<Ros2ChannelConfig<Tx::Id>>,
@@ -124,45 +121,34 @@ where
     Tx::Id: Send + Sync + 'static,
     Rx::Id: Send + Sync + 'static,
 {
-    fn parse_session_config(config: Option<&ComponentConfig>) -> CuResult<Config> {
-        if let Some(config) = config {
-            if let Some(path) = config.get::<String>("zenoh_config_file")? {
-                return Config::from_file(&path).map_err(|e| {
-                    CuError::from(format!("Ros2Bridge: Failed to read config file: {e}"))
-                });
-            }
-            if let Some(json) = config.get::<String>("zenoh_config_json")? {
-                return Config::from_json5(&json).map_err(|e| {
-                    CuError::from(format!("Ros2Bridge: Failed to parse config json: {e}"))
-                });
-            }
+    fn parse_session_config(config: &ComponentConfig) -> CuResult<Config> {
+        if let Some(path) = config.get::<String>("zenoh_config_file")? {
+            return Config::from_file(&path).map_err(|e| {
+                CuError::from(format!("Ros2Bridge: Failed to read config file: {e}"))
+            });
+        }
+        if let Some(json) = config.get::<String>("zenoh_config_json")? {
+            return Config::from_json5(&json).map_err(|e| {
+                CuError::from(format!("Ros2Bridge: Failed to parse config json: {e}"))
+            });
         }
         Ok(Config::default())
     }
 
-    fn parse_domain_id(config: Option<&ComponentConfig>) -> CuResult<u32> {
-        if let Some(config) = config {
-            return Ok(config.get::<u32>("domain_id")?.unwrap_or(0));
-        }
-        Ok(0)
+    fn parse_domain_id(config: &ComponentConfig) -> CuResult<u32> {
+        Ok(config.get::<u32>("domain_id")?.unwrap_or(0))
     }
 
-    fn parse_namespace(config: Option<&ComponentConfig>) -> CuResult<String> {
-        if let Some(config) = config {
-            return Ok(config
-                .get::<String>("namespace")?
-                .unwrap_or_else(|| "copper".to_string()));
-        }
-        Ok("copper".to_string())
+    fn parse_namespace(config: &ComponentConfig) -> CuResult<String> {
+        Ok(config
+            .get::<String>("namespace")?
+            .unwrap_or_else(|| "copper".to_string()))
     }
 
-    fn parse_node_name(config: Option<&ComponentConfig>) -> CuResult<String> {
-        if let Some(config) = config {
-            return Ok(config
-                .get::<String>("node")?
-                .unwrap_or_else(|| "node".to_string()));
-        }
-        Ok("node".to_string())
+    fn parse_node_name(config: &ComponentConfig) -> CuResult<String> {
+        Ok(config
+            .get::<String>("node")?
+            .unwrap_or_else(|| "node".to_string()))
     }
 
     fn channel_route<Id: Copy + core::fmt::Debug>(
@@ -368,6 +354,9 @@ where
     where
         Self: Sized,
     {
+        let default_config = ComponentConfig::default();
+        let config = config.unwrap_or(&default_config);
+
         let session_config = Self::parse_session_config(config)?;
         let domain_id = Self::parse_domain_id(config)?;
         let namespace = Self::parse_namespace(config)?;
