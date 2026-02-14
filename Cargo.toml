@@ -190,7 +190,7 @@ quote = "1.0"                                  # proc macros
 syn = { version = "2.0", features = ["full"] } # proc macros
 
 # Unit of measure to be consistent across the project
-uom = { version = "0.37", default-features = false, features = [
+uom = { version = "0.38", default-features = false, features = [
   "autoconvert",
   "f32",
   "f64",
