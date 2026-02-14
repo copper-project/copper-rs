@@ -18,9 +18,8 @@ Types that are supported are:
 - `std_msgs/String` <-> `String`
 - `sensor_msgs/Image` <-> `CuImage<Vec<u8>>`
 - `sensor_msgs/PointCloud2` <-> `PointCloudSoa<N>`
-- `copper_msgs/ImuPayload` <-> `ImuPayload`
-- `copper_msgs/MagnetometerPayload` <-> `MagnetometerPayload`
-- `copper_msgs/ImuWithMagPayload` <-> `ImuWithMagPayload`
+- `sensor_msgs/Imu` <-> `ImuPayload` (accel/gyro mapped; temperature defaults to `0°C` when decoding from ROS)
+- `sensor_msgs/MagneticField` <-> `MagnetometerPayload`
 
 ## Adding new payloads (feel free to contribute!)
 

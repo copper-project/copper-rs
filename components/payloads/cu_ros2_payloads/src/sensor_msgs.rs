@@ -1,7 +1,12 @@
 use compact_str::CompactString;
-use cu_sensor_payloads::{CuImage, CuImageBufferFormat, PointCloud, PointCloudSoa};
+use cu_sensor_payloads::{
+    CuImage, CuImageBufferFormat, ImuPayload, MagnetometerPayload, PointCloud, PointCloudSoa,
+};
 use cu29::prelude::CuHandle;
+use cu29::units::si::acceleration::meter_per_second_squared;
+use cu29::units::si::angular_velocity::radian_per_second;
 use cu29::units::si::length::meter;
+use cu29::units::si::magnetic_flux_density::microtesla;
 use cu29::units::si::ratio::percent;
 use serde::{Deserialize, Serialize};
 
@@ -9,6 +14,9 @@ use crate::{RosMsgAdapter, builtin::Header};
 
 const DATATYPE_UINT32: u8 = 6;
 const DATATYPE_FLOAT32: u8 = 7;
+
+const UT_TO_TESLA: f64 = 1e-6;
+const TESLA_TO_UT: f64 = 1e6;
 
 // sensor_msgs/PointField
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -19,13 +27,13 @@ pub struct PointField {
     pub count: u32,
 }
 
-// sensor_msgs/PointCloud2 like struct
+// sensor_msgs/PointCloud2
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct PointCloud2 {
     pub header: Header,
     pub height: u32,
     pub width: u32,
-    pub pointfields: Vec<PointField>,
+    pub fields: Vec<PointField>,
     pub is_bigendian: bool,
     pub point_step: u32,
     pub row_step: u32,
@@ -33,7 +41,7 @@ pub struct PointCloud2 {
     pub is_dense: bool,
 }
 
-// sensor_msgs/Image like struct
+// sensor_msgs/Image
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Image {
     pub header: Header,
@@ -43,6 +51,49 @@ pub struct Image {
     pub is_bigendian: u8,
     pub step: u32,
     pub data: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Vector3 {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Quaternion {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub w: f64,
+}
+
+// sensor_msgs/Imu
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Imu {
+    pub header: Header,
+    pub orientation: Quaternion,
+    pub orientation_covariance: [f64; 9],
+    pub angular_velocity: Vector3,
+    pub angular_velocity_covariance: [f64; 9],
+    pub linear_acceleration: Vector3,
+    pub linear_acceleration_covariance: [f64; 9],
+}
+
+// sensor_msgs/MagneticField
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct MagneticField {
+    pub header: Header,
+    pub magnetic_field: Vector3,
+    pub magnetic_field_covariance: [f64; 9],
+}
+
+// sensor_msgs/Temperature
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Temperature {
+    pub header: Header,
+    pub temperature: f64,
+    pub variance: f64,
 }
 
 impl<const N: usize> RosMsgAdapter<'static> for PointCloudSoa<N> {
@@ -77,11 +128,43 @@ impl RosMsgAdapter<'static> for CuImage<Vec<u8>> {
     }
 }
 
+impl RosMsgAdapter<'static> for ImuPayload {
+    type Output = Imu;
+
+    fn namespace() -> &'static str {
+        "sensor_msgs"
+    }
+
+    fn type_name() -> &'static str {
+        "Imu"
+    }
+
+    fn type_hash() -> &'static str {
+        "RIHS01_7d9a00ff131080897a5ec7e26e315954b8eae3353c3f995c55faf71574000b5b"
+    }
+}
+
+impl RosMsgAdapter<'static> for MagnetometerPayload {
+    type Output = MagneticField;
+
+    fn namespace() -> &'static str {
+        "sensor_msgs"
+    }
+
+    fn type_name() -> &'static str {
+        "MagneticField"
+    }
+
+    fn type_hash() -> &'static str {
+        "RIHS01_e80f32f56a20486c9923008fc1a1db07bbb273cbbf6a5b3bfa00835ee00e4dff"
+    }
+}
+
 impl<const N: usize> From<&PointCloudSoa<N>> for PointCloud2 {
     fn from(pointcloud: &PointCloudSoa<N>) -> Self {
         let len = pointcloud.len;
 
-        let pointfields = vec![
+        let fields = vec![
             PointField {
                 name: "x".into(),
                 offset: 0,
@@ -143,13 +226,10 @@ impl<const N: usize> From<&PointCloudSoa<N>> for PointCloud2 {
         }
 
         PointCloud2 {
-            header: Header {
-                stamp: crate::builtin::Time { sec: 0, nanosec: 0 },
-                frame_id: "".into(),
-            },
+            header: default_header(),
             height: 1,
             width,
-            pointfields,
+            fields,
             is_bigendian: false,
             point_step,
             row_step,
@@ -163,16 +243,61 @@ impl From<&CuImage<Vec<u8>>> for Image {
     fn from(image: &CuImage<Vec<u8>>) -> Self {
         let data = image.buffer_handle.with_inner(|inner| inner.to_vec());
         Self {
-            header: Header {
-                stamp: crate::builtin::Time { sec: 0, nanosec: 0 },
-                frame_id: "".into(),
-            },
+            header: default_header(),
             height: image.format.height,
             width: image.format.width,
             encoding: pixel_format_to_encoding(image.format.pixel_format),
             is_bigendian: 0,
             step: image.format.stride,
             data,
+        }
+    }
+}
+
+impl From<&ImuPayload> for Imu {
+    fn from(value: &ImuPayload) -> Self {
+        let mut orientation_covariance = [0.0_f64; 9];
+        orientation_covariance[0] = -1.0;
+
+        Self {
+            header: default_header(),
+            orientation: Quaternion {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+            orientation_covariance,
+            angular_velocity: Vector3 {
+                x: value.gyro_x.get::<radian_per_second>() as f64,
+                y: value.gyro_y.get::<radian_per_second>() as f64,
+                z: value.gyro_z.get::<radian_per_second>() as f64,
+            },
+            angular_velocity_covariance: [0.0; 9],
+            linear_acceleration: Vector3 {
+                x: value.accel_x.get::<meter_per_second_squared>() as f64,
+                y: value.accel_y.get::<meter_per_second_squared>() as f64,
+                z: value.accel_z.get::<meter_per_second_squared>() as f64,
+            },
+            linear_acceleration_covariance: [0.0; 9],
+        }
+    }
+}
+
+impl From<&MagnetometerPayload> for MagneticField {
+    fn from(value: &MagnetometerPayload) -> Self {
+        let x_t = (value.mag_x.get::<microtesla>() as f64) * UT_TO_TESLA;
+        let y_t = (value.mag_y.get::<microtesla>() as f64) * UT_TO_TESLA;
+        let z_t = (value.mag_z.get::<microtesla>() as f64) * UT_TO_TESLA;
+
+        Self {
+            header: default_header(),
+            magnetic_field: Vector3 {
+                x: x_t,
+                y: y_t,
+                z: z_t,
+            },
+            magnetic_field_covariance: [0.0; 9],
         }
     }
 }
@@ -196,7 +321,7 @@ impl<const N: usize> TryFrom<PointCloud2> for PointCloudSoa<N> {
             return Err("PointCloud2: point_step too small for x/y/z/intensity/tov".to_string());
         }
 
-        let offsets = field_offsets(&value.pointfields)?;
+        let offsets = field_offsets(&value.fields)?;
 
         let required_bytes = count
             .checked_mul(point_step)
@@ -256,6 +381,39 @@ impl TryFrom<Image> for CuImage<Vec<u8>> {
     }
 }
 
+impl TryFrom<Imu> for ImuPayload {
+    type Error = String;
+
+    fn try_from(value: Imu) -> Result<Self, Self::Error> {
+        // sensor_msgs/Imu has no temperature field, default to 0°C on import.
+        Ok(ImuPayload::from_raw(
+            [
+                value.linear_acceleration.x as f32,
+                value.linear_acceleration.y as f32,
+                value.linear_acceleration.z as f32,
+            ],
+            [
+                value.angular_velocity.x as f32,
+                value.angular_velocity.y as f32,
+                value.angular_velocity.z as f32,
+            ],
+            0.0,
+        ))
+    }
+}
+
+impl TryFrom<MagneticField> for MagnetometerPayload {
+    type Error = String;
+
+    fn try_from(value: MagneticField) -> Result<Self, Self::Error> {
+        Ok(MagnetometerPayload::from_raw([
+            (value.magnetic_field.x * TESLA_TO_UT) as f32,
+            (value.magnetic_field.y * TESLA_TO_UT) as f32,
+            (value.magnetic_field.z * TESLA_TO_UT) as f32,
+        ]))
+    }
+}
+
 #[derive(Clone, Copy)]
 struct PointOffsets {
     x: usize,
@@ -264,6 +422,13 @@ struct PointOffsets {
     intensity: usize,
     tov_sec: usize,
     tov_nsec: usize,
+}
+
+fn default_header() -> Header {
+    Header {
+        stamp: crate::builtin::Time { sec: 0, nanosec: 0 },
+        frame_id: "".into(),
+    }
 }
 
 fn field_offsets(fields: &[PointField]) -> Result<PointOffsets, String> {
@@ -426,5 +591,48 @@ mod tests {
         assert_eq!(recovered.format.pixel_format, format.pixel_format);
         let recovered_bytes = recovered.buffer_handle.with_inner(|inner| inner.to_vec());
         assert_eq!(recovered_bytes, bytes);
+    }
+
+    #[test]
+    fn imu_roundtrip_accel_and_gyro() {
+        let imu = ImuPayload::from_raw([9.8, -0.2, 0.5], [0.1, -0.2, 1.5], 0.0);
+
+        let ros_value = imu.to_ros_message();
+        let encoded = cdr::serialize::<_, _, cdr::CdrBe>(&ros_value, cdr::Infinite)
+            .expect("cdr encode should succeed");
+        let decoded_ros: <ImuPayload as RosBridgeAdapter>::RosMessage =
+            cdr::deserialize(encoded.as_slice()).expect("cdr decode should succeed");
+        let recovered =
+            ImuPayload::from_ros_message(decoded_ros).expect("adapter decode should work");
+
+        assert!((imu.accel_x.value - recovered.accel_x.value).abs() < 1e-6);
+        assert!((imu.accel_y.value - recovered.accel_y.value).abs() < 1e-6);
+        assert!((imu.accel_z.value - recovered.accel_z.value).abs() < 1e-6);
+        assert!((imu.gyro_x.value - recovered.gyro_x.value).abs() < 1e-6);
+        assert!((imu.gyro_y.value - recovered.gyro_y.value).abs() < 1e-6);
+        assert!((imu.gyro_z.value - recovered.gyro_z.value).abs() < 1e-6);
+        assert_eq!(
+            recovered
+                .temperature
+                .get::<cu29::units::si::thermodynamic_temperature::degree_celsius>(),
+            0.0
+        );
+    }
+
+    #[test]
+    fn magnetic_field_roundtrip() {
+        let mag = MagnetometerPayload::from_raw([42.0, -13.0, 8.0]);
+
+        let ros_value = mag.to_ros_message();
+        let encoded = cdr::serialize::<_, _, cdr::CdrBe>(&ros_value, cdr::Infinite)
+            .expect("cdr encode should succeed");
+        let decoded_ros: <MagnetometerPayload as RosBridgeAdapter>::RosMessage =
+            cdr::deserialize(encoded.as_slice()).expect("cdr decode should succeed");
+        let recovered =
+            MagnetometerPayload::from_ros_message(decoded_ros).expect("adapter decode should work");
+
+        assert!((mag.mag_x.get::<microtesla>() - recovered.mag_x.get::<microtesla>()).abs() < 1e-3);
+        assert!((mag.mag_y.get::<microtesla>() - recovered.mag_y.get::<microtesla>()).abs() < 1e-3);
+        assert!((mag.mag_z.get::<microtesla>() - recovered.mag_z.get::<microtesla>()).abs() < 1e-3);
     }
 }

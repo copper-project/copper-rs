@@ -1,5 +1,4 @@
 pub mod builtin;
-pub mod copper_msgs;
 pub mod sensor_msgs;
 pub mod std_msgs;
 
