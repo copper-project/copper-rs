@@ -1111,11 +1111,7 @@ impl ConfigGraphs {
     #[allow(dead_code)]
     pub fn get_all_missions_graphs(&self) -> HashMap<String, CuGraph> {
         match self {
-            Simple(graph) => {
-                let mut map = HashMap::new();
-                map.insert("default".to_string(), graph.clone());
-                map
-            }
+            Simple(graph) => HashMap::from([("default".to_string(), graph.clone())]),
             Missions(graphs) => graphs.clone(),
         }
     }
@@ -1137,21 +1133,16 @@ impl ConfigGraphs {
     #[allow(dead_code)]
     pub fn get_graph(&self, mission_id: Option<&str>) -> CuResult<&CuGraph> {
         match self {
-            Simple(graph) => {
-                if mission_id.is_none() || mission_id.unwrap() == "default" {
-                    Ok(graph)
-                } else {
-                    Err("Cannot get mission graph from simple config".into())
-                }
-            }
+            Simple(graph) => match mission_id {
+                None | Some("default") => Ok(graph),
+                Some(_) => Err("Cannot get mission graph from simple config".into()),
+            },
             Missions(graphs) => {
-                if let Some(id) = mission_id {
-                    graphs
-                        .get(id)
-                        .ok_or_else(|| format!("Mission {id} not found").into())
-                } else {
-                    Err("Mission ID required for mission configs".into())
-                }
+                let id = mission_id
+                    .ok_or_else(|| "Mission ID required for mission configs".to_string())?;
+                graphs
+                    .get(id)
+                    .ok_or_else(|| format!("Mission {id} not found").into())
             }
         }
     }
@@ -1159,21 +1150,16 @@ impl ConfigGraphs {
     #[allow(dead_code)]
     pub fn get_graph_mut(&mut self, mission_id: Option<&str>) -> CuResult<&mut CuGraph> {
         match self {
-            Simple(graph) => {
-                if mission_id.is_none() {
-                    Ok(graph)
-                } else {
-                    Err("Cannot get mission graph from simple config".into())
-                }
-            }
+            Simple(graph) => match mission_id {
+                None => Ok(graph),
+                Some(_) => Err("Cannot get mission graph from simple config".into()),
+            },
             Missions(graphs) => {
-                if let Some(id) = mission_id {
-                    graphs
-                        .get_mut(id)
-                        .ok_or_else(|| format!("Mission {id} not found").into())
-                } else {
-                    Err("Mission ID required for mission configs".into())
-                }
+                let id = mission_id
+                    .ok_or_else(|| "Mission ID required for mission configs".to_string())?;
+                graphs
+                    .get_mut(id)
+                    .ok_or_else(|| format!("Mission {id} not found").into())
             }
         }
     }
@@ -1181,16 +1167,12 @@ impl ConfigGraphs {
     pub fn add_mission(&mut self, mission_id: &str) -> CuResult<&mut CuGraph> {
         match self {
             Simple(_) => Err("Cannot add mission to simple config".into()),
-            Missions(graphs) => {
-                if graphs.contains_key(mission_id) {
+            Missions(graphs) => match graphs.entry(mission_id.to_string()) {
+                hashbrown::hash_map::Entry::Occupied(_) => {
                     Err(format!("Mission {mission_id} already exists").into())
-                } else {
-                    let graph = CuGraph::default();
-                    graphs.insert(mission_id.to_string(), graph);
-                    // Get a mutable reference to the newly inserted graph
-                    Ok(graphs.get_mut(mission_id).unwrap())
                 }
-            }
+                hashbrown::hash_map::Entry::Vacant(entry) => Ok(entry.insert(CuGraph::default())),
+            },
         }
     }
 }

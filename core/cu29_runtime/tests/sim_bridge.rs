@@ -179,8 +179,7 @@ fn build_test_logger() -> CuResult<(TempDir, PathBuf, Arc<Mutex<MmapUnifiedLogge
     let temp_dir = tempfile::tempdir()
         .map_err(|e| cu29::CuError::new_with_cause("create temp log dir failed", e))?;
     let log_path = temp_dir.path().join("sim_bridge.log");
-    let logger = build_logger(&log_path)?;
-    Ok((temp_dir, log_path, logger))
+    Ok((temp_dir, log_path.clone(), build_logger(&log_path)?))
 }
 
 #[test]
@@ -198,11 +197,9 @@ fn bridge_sim_callbacks_fire_and_override() -> CuResult<()> {
     >>::Step<'_>|
      -> SimOverride {
         match step {
-            default::SimStep::BridgeBridge(cu29::simulation::CuBridgeLifecycleState::Start) => {
-                lifecycle_calls += 1;
-                SimOverride::ExecuteByRuntime
-            }
-            default::SimStep::BridgeBridge(cu29::simulation::CuBridgeLifecycleState::Stop) => {
+            default::SimStep::BridgeBridge(
+                CuBridgeLifecycleState::Start | CuBridgeLifecycleState::Stop,
+            ) => {
                 lifecycle_calls += 1;
                 SimOverride::ExecuteByRuntime
             }
@@ -217,10 +214,8 @@ fn bridge_sim_callbacks_fire_and_override() -> CuResult<()> {
                 msg.set_payload(Pong { v: 42 });
                 SimOverride::ExecutedBySim
             }
-            default::SimStep::Src(CuTaskCallbackState::Process(_, _)) => {
-                SimOverride::ExecuteByRuntime
-            }
-            default::SimStep::Sink(CuTaskCallbackState::Process(_, _)) => {
+            default::SimStep::Src(CuTaskCallbackState::Process(_, _))
+            | default::SimStep::Sink(CuTaskCallbackState::Process(_, _)) => {
                 SimOverride::ExecuteByRuntime
             }
             _ => SimOverride::ExecuteByRuntime,
