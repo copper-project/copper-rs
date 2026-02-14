@@ -37,9 +37,9 @@ bridges: [
 ## Payload codec registry
 
 The bridge uses a payload codec registry keyed by Copper payload type. It ships with:
-- `i8` <-> `std_msgs/Int8`
+- `bool`, `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `String`
 
-To add your own payloads, implement `cu_ros_payloads::RosBridgeAdapter` for the payload type and
+To add your own payloads, implement `cu_ros2_payloads::RosBridgeAdapter` for the payload type and
 register it once at startup:
 
 ```rust

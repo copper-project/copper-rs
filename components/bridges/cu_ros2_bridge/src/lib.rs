@@ -7,7 +7,7 @@ mod topic;
 
 use attachment::encode_attachment;
 use cdr::{CdrBe, Infinite};
-use cu_ros_payloads::RosBridgeAdapter;
+use cu_ros2_payloads::RosBridgeAdapter;
 use cu29::clock::RobotClock;
 use cu29::cubridge::{BridgeChannel, BridgeChannelConfig, BridgeChannelSet, CuBridge};
 use cu29::prelude::*;
@@ -108,7 +108,18 @@ fn payload_registry() -> &'static RosPayloadRegistry {
     static REGISTRY: OnceLock<RosPayloadRegistry> = OnceLock::new();
     REGISTRY.get_or_init(|| {
         let registry = RosPayloadRegistry::new();
+        registry.register::<bool>();
         registry.register::<i8>();
+        registry.register::<i16>();
+        registry.register::<i32>();
+        registry.register::<i64>();
+        registry.register::<u8>();
+        registry.register::<u16>();
+        registry.register::<u32>();
+        registry.register::<u64>();
+        registry.register::<f32>();
+        registry.register::<f64>();
+        registry.register::<String>();
         registry
     })
 }
@@ -116,7 +127,7 @@ fn payload_registry() -> &'static RosPayloadRegistry {
 /// Register a payload codec for ROS2 bridge transport.
 ///
 /// Call this once at application startup for custom payload types that implement
-/// [`cu_ros_payloads::RosBridgeAdapter`].
+/// [`cu_ros2_payloads::RosBridgeAdapter`].
 pub fn register_ros2_payload<Payload>()
 where
     Payload: CuMsgPayload + RosBridgeAdapter + 'static,
@@ -653,6 +664,34 @@ mod tests {
         .expect("decode should succeed");
 
         assert_eq!(dst.payload(), Some(&42));
+    }
+
+    #[test]
+    fn default_scalar_codecs_registered() {
+        Ros2Bridge::<crate::tests::DummyTx, crate::tests::DummyRx>::codec_for_payload::<bool>()
+            .expect("bool codec");
+        Ros2Bridge::<crate::tests::DummyTx, crate::tests::DummyRx>::codec_for_payload::<i8>()
+            .expect("i8 codec");
+        Ros2Bridge::<crate::tests::DummyTx, crate::tests::DummyRx>::codec_for_payload::<i16>()
+            .expect("i16 codec");
+        Ros2Bridge::<crate::tests::DummyTx, crate::tests::DummyRx>::codec_for_payload::<i32>()
+            .expect("i32 codec");
+        Ros2Bridge::<crate::tests::DummyTx, crate::tests::DummyRx>::codec_for_payload::<i64>()
+            .expect("i64 codec");
+        Ros2Bridge::<crate::tests::DummyTx, crate::tests::DummyRx>::codec_for_payload::<u8>()
+            .expect("u8 codec");
+        Ros2Bridge::<crate::tests::DummyTx, crate::tests::DummyRx>::codec_for_payload::<u16>()
+            .expect("u16 codec");
+        Ros2Bridge::<crate::tests::DummyTx, crate::tests::DummyRx>::codec_for_payload::<u32>()
+            .expect("u32 codec");
+        Ros2Bridge::<crate::tests::DummyTx, crate::tests::DummyRx>::codec_for_payload::<u64>()
+            .expect("u64 codec");
+        Ros2Bridge::<crate::tests::DummyTx, crate::tests::DummyRx>::codec_for_payload::<f32>()
+            .expect("f32 codec");
+        Ros2Bridge::<crate::tests::DummyTx, crate::tests::DummyRx>::codec_for_payload::<f64>()
+            .expect("f64 codec");
+        Ros2Bridge::<crate::tests::DummyTx, crate::tests::DummyRx>::codec_for_payload::<String>()
+            .expect("string codec");
     }
 
     tx_channels! {

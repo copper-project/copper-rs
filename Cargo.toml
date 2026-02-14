@@ -27,7 +27,7 @@ members = [
   "core/cu29_units",
   "components/monitors/cu_consolemon",
   "components/monitors/cu_logmon",
-  "components/payloads/cu_ros_payloads",
+  "components/payloads/cu_ros2_payloads",
   "components/payloads/cu_gnss_payloads",
   "components/payloads/cu_sensor_payloads",
   "components/payloads/cu_spatial_payloads",
@@ -157,7 +157,7 @@ cu-linux-resources = { path = "components/res/cu_linux_resources", version = "0.
 cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version = "0.13.0" }
 cu-gnss-payloads = { path = "components/payloads/cu_gnss_payloads", version = "0.13.0" }
 cu-spatial-payloads = { path = "components/payloads/cu_spatial_payloads", version = "0.13.0" }
-cu-ros-payloads = { path = "components/payloads/cu_ros_payloads", version = "0.13.0" }
+cu-ros2-payloads = { path = "components/payloads/cu_ros2_payloads", version = "0.13.0" }
 cu-pid = { path = "components/tasks/cu_pid", version = "0.13.0" }
 
 # External serialization
