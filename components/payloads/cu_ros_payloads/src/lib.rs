@@ -2,7 +2,9 @@ pub mod builtin;
 pub mod sensor_msgs;
 pub mod std_msgs;
 
+use core::fmt::Display;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::convert::From;
 
 // By default use Rust type as ROS type
@@ -46,5 +48,54 @@ pub trait RosMsgAdapter<'a>: Sized {
     #[cfg(feature = "humble")]
     fn convert(&self) -> (Self::Output, &str) {
         (self.into(), "TypeHashNotSupported")
+    }
+}
+
+/// Bidirectional ROS adaptation trait used by transport bridges.
+///
+/// Implement this for Copper payloads that can be encoded to and decoded from a ROS message
+/// representation.
+pub trait RosBridgeAdapter: Sized + 'static {
+    type RosMessage: Serialize + DeserializeOwned + 'static;
+
+    fn namespace() -> &'static str;
+
+    fn type_name() -> &'static str {
+        ros_type_name!(Self::RosMessage)
+    }
+
+    fn type_hash() -> &'static str;
+
+    fn to_ros_message(&self) -> Self::RosMessage;
+
+    fn from_ros_message(msg: Self::RosMessage) -> Result<Self, String>;
+}
+
+impl<T> RosBridgeAdapter for T
+where
+    T: RosMsgAdapter<'static> + TryFrom<<T as RosMsgAdapter<'static>>::Output> + 'static,
+    T::Output: Serialize + DeserializeOwned + 'static,
+    <T as TryFrom<<T as RosMsgAdapter<'static>>::Output>>::Error: Display,
+{
+    type RosMessage = <T as RosMsgAdapter<'static>>::Output;
+
+    fn namespace() -> &'static str {
+        <T as RosMsgAdapter<'static>>::namespace()
+    }
+
+    fn type_name() -> &'static str {
+        <T as RosMsgAdapter<'static>>::type_name()
+    }
+
+    fn type_hash() -> &'static str {
+        <T as RosMsgAdapter<'static>>::type_hash()
+    }
+
+    fn to_ros_message(&self) -> Self::RosMessage {
+        self.into()
+    }
+
+    fn from_ros_message(msg: Self::RosMessage) -> Result<Self, String> {
+        T::try_from(msg).map_err(|e| e.to_string())
     }
 }

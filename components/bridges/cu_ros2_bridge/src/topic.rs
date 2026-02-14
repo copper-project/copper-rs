@@ -1,4 +1,3 @@
-use cu_ros_payloads::RosMsgAdapter;
 use cu29::CuResult;
 use zenoh::key_expr::KeyExpr;
 
@@ -11,14 +10,11 @@ pub struct Topic<'a> {
 }
 
 impl<'a> Topic<'a> {
-    pub fn new<'b, T>(name: &'a str) -> Self
-    where
-        T: RosMsgAdapter<'b>,
-    {
+    pub fn from_ros_type(name: &'a str, namespace: &str, type_name: &str, type_hash: &str) -> Self {
         Self {
             name,
-            type_name: get_dds_type_name::<T>(),
-            type_hash: T::type_hash().into(),
+            type_name: dds_type_name(namespace, type_name),
+            type_hash: type_hash.into(),
         }
     }
 
@@ -44,10 +40,7 @@ impl<'a> Topic<'a> {
     }
 }
 
-fn get_dds_type_name<'a, T>() -> String
-where
-    T: RosMsgAdapter<'a>,
-{
+fn dds_type_name(namespace: &str, type_name: &str) -> String {
     // DDS name encoding relates to https://github.com/ros2/rmw_fastrtps/blob/469624e3d483290d6f88fe4b89ee5feaa7694e61/rmw_fastrtps_cpp/src/type_support_common.hpp
-    format!("{}::msg::dds_::{}_", T::namespace(), T::type_name())
+    format!("{namespace}::msg::dds_::{type_name}_")
 }

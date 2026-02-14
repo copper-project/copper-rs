@@ -26,6 +26,14 @@ impl From<&i8> for Int8 {
     }
 }
 
+impl TryFrom<Int8> for i8 {
+    type Error = &'static str;
+
+    fn try_from(value: Int8) -> Result<Self, Self::Error> {
+        Ok(value.data)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

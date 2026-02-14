@@ -7,8 +7,7 @@ mod topic;
 
 use attachment::encode_attachment;
 use cdr::{CdrBe, Infinite};
-use cu_ros_payloads::RosMsgAdapter;
-use cu_ros_payloads::std_msgs::Int8;
+use cu_ros_payloads::RosBridgeAdapter;
 use cu29::clock::RobotClock;
 use cu29::cubridge::{BridgeChannel, BridgeChannelConfig, BridgeChannelSet, CuBridge};
 use cu29::prelude::*;
@@ -18,10 +17,112 @@ use topic::Topic;
 use zenoh::bytes::Encoding;
 use zenoh::{Config, Error as ZenohError};
 
-use std::any::type_name;
+use std::any::{Any, TypeId, type_name};
+use std::collections::HashMap;
+use std::sync::{OnceLock, RwLock};
 
 // One node per bridge session.
 const NODE_ID: u32 = 0;
+
+#[derive(Clone, Copy)]
+struct RosPayloadCodec {
+    namespace: &'static str,
+    type_name: &'static str,
+    type_hash: &'static str,
+    encode_payload: fn(&dyn Any) -> CuResult<Vec<u8>>,
+    decode_payload: fn(&[u8]) -> CuResult<Box<dyn Any>>,
+}
+
+struct RosPayloadRegistry {
+    codecs: RwLock<HashMap<TypeId, RosPayloadCodec>>,
+}
+
+impl RosPayloadRegistry {
+    fn new() -> Self {
+        Self {
+            codecs: RwLock::new(HashMap::new()),
+        }
+    }
+
+    fn register<Payload>(&self)
+    where
+        Payload: CuMsgPayload + RosBridgeAdapter + 'static,
+    {
+        let codec = RosPayloadCodec {
+            namespace: <Payload as RosBridgeAdapter>::namespace(),
+            type_name: <Payload as RosBridgeAdapter>::type_name(),
+            type_hash: <Payload as RosBridgeAdapter>::type_hash(),
+            encode_payload: encode_payload_with::<Payload>,
+            decode_payload: decode_payload_with::<Payload>,
+        };
+        self.codecs
+            .write()
+            .expect("RosPayloadRegistry lock poisoned")
+            .insert(TypeId::of::<Payload>(), codec);
+    }
+
+    fn codec_for<Payload>(&self) -> CuResult<RosPayloadCodec>
+    where
+        Payload: CuMsgPayload + 'static,
+    {
+        self.codecs
+            .read()
+            .expect("RosPayloadRegistry lock poisoned")
+            .get(&TypeId::of::<Payload>())
+            .copied()
+            .ok_or_else(|| {
+                CuError::from(format!(
+                    "Ros2Bridge: No ROS codec registered for payload type {}",
+                    type_name::<Payload>()
+                ))
+            })
+    }
+}
+
+fn encode_payload_with<Payload>(payload_any: &dyn Any) -> CuResult<Vec<u8>>
+where
+    Payload: CuMsgPayload + RosBridgeAdapter + 'static,
+{
+    let payload = payload_any.downcast_ref::<Payload>().ok_or_else(|| {
+        CuError::from(format!(
+            "Ros2Bridge: Registry encode payload mismatch for {}",
+            type_name::<Payload>()
+        ))
+    })?;
+    let ros_payload = payload.to_ros_message();
+    cdr::serialize::<_, _, CdrBe>(&ros_payload, Infinite)
+        .map_err(|e| CuError::new_with_cause("Ros2Bridge: Failed to serialize payload", e))
+}
+
+fn decode_payload_with<Payload>(bytes: &[u8]) -> CuResult<Box<dyn Any>>
+where
+    Payload: CuMsgPayload + RosBridgeAdapter + 'static,
+{
+    let ros_payload: <Payload as RosBridgeAdapter>::RosMessage = cdr::deserialize(bytes)
+        .map_err(|e| CuError::new_with_cause("Ros2Bridge: Failed to deserialize payload", e))?;
+    let payload = Payload::from_ros_message(ros_payload).map_err(CuError::from)?;
+    Ok(Box::new(payload))
+}
+
+fn payload_registry() -> &'static RosPayloadRegistry {
+    static REGISTRY: OnceLock<RosPayloadRegistry> = OnceLock::new();
+    REGISTRY.get_or_init(|| {
+        let registry = RosPayloadRegistry::new();
+        registry.register::<i8>();
+        registry
+    })
+}
+
+/// Register a payload codec for ROS2 bridge transport.
+///
+/// Call this once at application startup for custom payload types that implement
+/// [`cu_ros_payloads::RosBridgeAdapter`].
+pub fn register_ros2_payload<Payload>()
+where
+    Payload: CuMsgPayload + RosBridgeAdapter + 'static,
+{
+    payload_registry().register::<Payload>();
+}
 
 #[derive(Debug, Clone)]
 struct Ros2ChannelConfig<Id: Copy> {
@@ -189,96 +290,61 @@ where
         channels.iter().position(|channel| channel.id == id)
     }
 
-    fn tx_topic_for_message<'a, Payload>(
-        msg: &CuMsg<Payload>,
-        route: &'a str,
-    ) -> CuResult<Topic<'a>>
+    fn codec_for_payload<Payload>() -> CuResult<RosPayloadCodec>
     where
-        Payload: CuMsgPayload + 'a + 'static,
+        Payload: CuMsgPayload + 'static,
     {
-        if msg.downcast_ref::<i8>().is_ok() {
-            return Ok(Topic::new::<i8>(route));
-        }
-
-        Err(CuError::from(format!(
-            "Ros2Bridge: Unsupported Tx payload type {}",
-            type_name::<Payload>()
-        )))
+        payload_registry().codec_for::<Payload>()
     }
 
-    fn rx_topic_for_message<'a, Payload>(
+    fn topic_for_codec<'a>(route: &'a str, codec: RosPayloadCodec) -> Topic<'a> {
+        Topic::from_ros_type(route, codec.namespace, codec.type_name, codec.type_hash)
+    }
+
+    fn encode_payload<Payload>(msg: &CuMsg<Payload>, codec: RosPayloadCodec) -> CuResult<Vec<u8>>
+    where
+        Payload: CuMsgPayload + 'static,
+    {
+        let payload = msg
+            .payload()
+            .ok_or_else(|| CuError::from("Ros2Bridge: Cannot send empty payload through bridge"))?;
+        (codec.encode_payload)(payload as &dyn Any)
+    }
+
+    fn decode_payload_into<Payload>(
+        bytes: &[u8],
         msg: &mut CuMsg<Payload>,
-        route: &'a str,
-    ) -> CuResult<Topic<'a>>
-    where
-        Payload: CuMsgPayload + 'a + 'static,
-    {
-        if msg.downcast_mut::<i8>().is_ok() {
-            return Ok(Topic::new::<i8>(route));
-        }
-
-        Err(CuError::from(format!(
-            "Ros2Bridge: Unsupported Rx payload type {}",
-            type_name::<Payload>()
-        )))
-    }
-
-    fn encode_payload<Payload>(msg: &CuMsg<Payload>) -> CuResult<Vec<u8>>
+        codec: RosPayloadCodec,
+    ) -> CuResult<()>
     where
         Payload: CuMsgPayload + 'static,
     {
-        if let Ok(cu_msg) = msg.downcast_ref::<i8>() {
-            let payload = cu_msg.payload().ok_or_else(|| {
-                CuError::from("Ros2Bridge: Cannot send empty payload through ROS2 bridge")
-            })?;
-            let ros_payload = payload.convert();
-            return cdr::serialize::<_, _, CdrBe>(&ros_payload, Infinite).map_err(|e| {
-                CuError::new_with_cause("Ros2Bridge: Failed to serialize payload", e)
-            });
-        }
-
-        Err(CuError::from(format!(
-            "Ros2Bridge: Unsupported Tx payload type {}",
-            type_name::<Payload>()
-        )))
+        let payload_any = (codec.decode_payload)(bytes)?;
+        let payload = payload_any.downcast::<Payload>().map_err(|_| {
+            CuError::from(format!(
+                "Ros2Bridge: Codec produced wrong payload type for {}",
+                type_name::<Payload>()
+            ))
+        })?;
+        msg.set_payload(*payload);
+        Ok(())
     }
 
-    fn decode_payload_into<Payload>(bytes: &[u8], msg: &mut CuMsg<Payload>) -> CuResult<()>
-    where
-        Payload: CuMsgPayload + 'static,
-    {
-        if let Ok(cu_msg) = msg.downcast_mut::<i8>() {
-            let (ros_msg, _hash): (Int8, String) = cdr::deserialize(bytes).map_err(|e| {
-                CuError::new_with_cause("Ros2Bridge: Failed to deserialize payload", e)
-            })?;
-            cu_msg.set_payload(ros_msg.data);
-            return Ok(());
-        }
-
-        Err(CuError::from(format!(
-            "Ros2Bridge: Unsupported Rx payload type {}",
-            type_name::<Payload>()
-        )))
-    }
-
-    fn init_tx_channel<Payload>(
+    fn init_tx_channel(
         domain_id: u32,
         namespace: &str,
         node_name: &str,
         ctx: &mut Ros2Context<Tx::Id, Rx::Id>,
         tx_idx: usize,
-        msg: &CuMsg<Payload>,
-    ) -> CuResult<()>
-    where
-        Payload: CuMsgPayload + 'static,
-    {
+        codec: RosPayloadCodec,
+    ) -> CuResult<()> {
         if ctx.tx_channels[tx_idx].publisher.is_some() {
             return Ok(());
         }
 
         let route = ctx.tx_channels[tx_idx].route.clone();
         let entity_id = ctx.tx_channels[tx_idx].entity_id;
-        let topic = Self::tx_topic_for_message(msg, route.as_str())?;
+        let topic = Self::topic_for_codec(route.as_str(), codec);
         let node = Self::make_node(domain_id, namespace, node_name, &ctx.session);
 
         let publisher_token = zenoh::Wait::wait(
@@ -300,23 +366,20 @@ where
         Ok(())
     }
 
-    fn init_rx_channel<Payload>(
+    fn init_rx_channel(
         domain_id: u32,
         namespace: &str,
         node_name: &str,
         ctx: &mut Ros2Context<Tx::Id, Rx::Id>,
         rx_idx: usize,
-        msg: &mut CuMsg<Payload>,
-    ) -> CuResult<()>
-    where
-        Payload: CuMsgPayload + 'static,
-    {
+        codec: RosPayloadCodec,
+    ) -> CuResult<()> {
         if ctx.rx_channels[rx_idx].subscriber.is_some() {
             return Ok(());
         }
 
         let route = ctx.rx_channels[rx_idx].route.clone();
-        let topic = Self::rx_topic_for_message(msg, route.as_str())?;
+        let topic = Self::topic_for_codec(route.as_str(), codec);
         let node = Self::make_node(domain_id, namespace, node_name, &ctx.session);
 
         let keyexpr = topic.pubsub_keyexpr(&node)?;
@@ -445,6 +508,7 @@ where
     where
         Payload: CuMsgPayload + 'a,
     {
+        let codec = Self::codec_for_payload::<Payload>()?;
         let domain_id = self.domain_id;
         let namespace = self.namespace.clone();
         let node_name = self.node.clone();
@@ -456,9 +520,9 @@ where
                 CuError::from(format!("Ros2Bridge: Unknown Tx channel {:?}", channel_id))
             })?;
 
-        Self::init_tx_channel(domain_id, &namespace, &node_name, ctx, tx_idx, msg)?;
+        Self::init_tx_channel(domain_id, &namespace, &node_name, ctx, tx_idx, codec)?;
 
-        let encoded = Self::encode_payload(msg)?;
+        let encoded = Self::encode_payload(msg, codec)?;
         let session_zid = ctx.session.zid();
 
         let tx_channel = &mut ctx.tx_channels[tx_idx];
@@ -490,6 +554,7 @@ where
     where
         Payload: CuMsgPayload + 'a,
     {
+        let codec = Self::codec_for_payload::<Payload>()?;
         let domain_id = self.domain_id;
         let namespace = self.namespace.clone();
         let node_name = self.node.clone();
@@ -501,7 +566,7 @@ where
                 CuError::from(format!("Ros2Bridge: Unknown Rx channel {:?}", channel_id))
             })?;
 
-        Self::init_rx_channel(domain_id, &namespace, &node_name, ctx, rx_idx, msg)?;
+        Self::init_rx_channel(domain_id, &namespace, &node_name, ctx, rx_idx, codec)?;
 
         msg.tov = Tov::Time(clock.now());
 
@@ -517,7 +582,7 @@ where
 
         if let Some(sample) = sample {
             let payload = sample.payload().to_bytes();
-            Self::decode_payload_into(payload.as_ref(), msg)?;
+            Self::decode_payload_into(payload.as_ref(), msg, codec)?;
         } else {
             msg.clear_payload();
         }
@@ -572,14 +637,18 @@ mod tests {
         let mut src = CuMsg::<i8>::default();
         src.set_payload(42);
 
+        let codec =
+            Ros2Bridge::<crate::tests::DummyTx, crate::tests::DummyRx>::codec_for_payload::<i8>()
+                .expect("codec should be registered");
         let bytes =
-            Ros2Bridge::<crate::tests::DummyTx, crate::tests::DummyRx>::encode_payload(&src)
+            Ros2Bridge::<crate::tests::DummyTx, crate::tests::DummyRx>::encode_payload(&src, codec)
                 .expect("encode should succeed");
 
         let mut dst = CuMsg::<i8>::default();
         Ros2Bridge::<crate::tests::DummyTx, crate::tests::DummyRx>::decode_payload_into(
             bytes.as_slice(),
             &mut dst,
+            codec,
         )
         .expect("decode should succeed");
 

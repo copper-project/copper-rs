@@ -34,9 +34,14 @@ bridges: [
 ],
 ```
 
-## Supported payload mappings
+## Payload codec registry
 
-Current built-in conversion mapping:
+The bridge uses a payload codec registry keyed by Copper payload type. It ships with:
 - `i8` <-> `std_msgs/Int8`
 
-Additional payload mappings can be added in the bridge implementation.
+To add your own payloads, implement `cu_ros_payloads::RosBridgeAdapter` for the payload type and
+register it once at startup:
+
+```rust
+cu_ros2_bridge::register_ros2_payload::<MyPayload>();
+```
