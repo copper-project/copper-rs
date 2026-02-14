@@ -12,7 +12,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-anyhow = "1.0"
+anyhow = { workspace = true }
 bincode = { workspace = true, default-features = false, features = ["std"] }
 fs2 = "0.4"
 

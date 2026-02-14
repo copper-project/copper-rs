@@ -17,7 +17,7 @@ cu29-unifiedlog = { workspace = true }
 cu29-log-runtime = { workspace = true }
 cu29-runtime = { workspace = true }
 cu29-clock = { workspace = true }
-simplelog = "0.12"
+simplelog = { workspace = true }
 
 # this is for the integration tests
 [dev-dependencies]

@@ -38,15 +38,15 @@ cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "0.
 bincode = { workspace = true }
 serde = { workspace = true }
 dcmimu = "0.3.0"
-defmt = { version = "1.0", optional = true }
-defmt-rtt = { version = "1.1", optional = true }
-panic-probe = { version = "1.0", features = [
+defmt = { workspace = true, optional = true }
+defmt-rtt = { workspace = true, optional = true }
+panic-probe = { workspace = true, features = [
   "defmt",
   "print-defmt",
 ], optional = true }
-cortex-m = { version = "0.7", optional = true }
-cortex-m-rt = { version = "0.7", optional = true }
-rp235x-hal = { version = "0.4", features = [
+cortex-m = { workspace = true, optional = true }
+cortex-m-rt = { workspace = true, optional = true }
+rp235x-hal = { workspace = true, features = [
   "rt",
   "critical-section-impl",
   "defmt",

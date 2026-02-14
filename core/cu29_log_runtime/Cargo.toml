@@ -18,8 +18,8 @@ cu29-clock = { workspace = true }
 bincode = { workspace = true }
 smallvec = { workspace = true }
 spin = { workspace = true }
-log = { version = "0.4", default-features = false }
-strfmt = { version = "0.2", optional = true }
+log = { workspace = true, default-features = false }
+strfmt = { workspace = true, optional = true }
 
 [dev-dependencies]
 cu29-value = { workspace = true }

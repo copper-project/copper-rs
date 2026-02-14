@@ -15,7 +15,7 @@ cu29-export = { workspace = true, optional = true }
 cu-linux-resources = { workspace = true }
 tempfile = { workspace = true }
 serde = { workspace = true }
-ctrlc = "3"
+ctrlc = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = ["serde", "cu-linux-resources"]

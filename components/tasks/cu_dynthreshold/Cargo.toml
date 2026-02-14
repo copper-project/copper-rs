@@ -12,7 +12,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-gstreamer = { version = "0.24", default-features = false, optional = true }
+gstreamer = { workspace = true, default-features = false, optional = true }
 cu29 = { workspace = true }
 cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "0.13.0" }
 cu-gstreamer = { path = "../../sources/cu_gstreamer", version = "0.13.0", optional = true }

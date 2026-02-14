@@ -11,7 +11,7 @@ repository.workspace = true
 description = "Copper sink task for Zenoh."
 
 [dependencies]
-zenoh = { version = "1.7.0", default-features = false, features = [
+zenoh = { workspace = true, default-features = false, features = [
   "transport_tcp",
 ] }
 cu29 = { workspace = true }

@@ -22,5 +22,5 @@ path = "src/standardlog_perf.rs"
 [dependencies]
 cu29 = { workspace = true }       # needed
 cu29-clock = { workspace = true }
-log = "0.4.27"
-simplelog = "0.12.2"
+log = { workspace = true }
+simplelog = { workspace = true }

@@ -19,7 +19,7 @@ serde = { workspace = true }
 cu-linux-resources = { workspace = true }
 
 [build-dependencies]
-cfg_aliases = "0.2.1"
+cfg_aliases = { workspace = true }
 
 [features]
 default = []

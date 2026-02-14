@@ -23,7 +23,7 @@ tempfile = { workspace = true }
 cu29-helpers = { workspace = true }
 
 [build-dependencies]
-cfg_aliases = "0.2.1"
+cfg_aliases = { workspace = true }
 
 [features]
 default = []

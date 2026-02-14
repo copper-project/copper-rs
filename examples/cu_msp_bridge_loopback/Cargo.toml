@@ -22,9 +22,9 @@ cu-linux-resources = { workspace = true }
 cu-msp-bridge = { path = "../../components/bridges/cu_msp_bridge", version = "0.13.0" }
 cu-msp-lib = { path = "../../components/libs/cu_msp_lib", version = "0.13.0" }
 cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.13.0" }
-nix = { version = "0.31", default-features = false, features = ["term", "fs"] }
+nix = { workspace = true, default-features = false, features = ["term", "fs"] }
 serde = { workspace = true }
-ctrlc = "3"
+ctrlc = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = ["serde", "cu-linux-resources"]

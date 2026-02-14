@@ -23,7 +23,7 @@ cu29-traits = { workspace = true }
 cu29-units = { path = "../cu29_units", version = "0.13.0", default-features = false, optional = true }
 cu29-unifiedlog = { workspace = true }
 cu29-value = { workspace = true }
-defmt = { version = "1.0", optional = true }
+defmt = { workspace = true, optional = true }
 rtsan-standalone = { workspace = true, optional = true }
 
 bincode = { workspace = true }
@@ -31,7 +31,7 @@ serde = { workspace = true }
 
 # only std
 rayon = { workspace = true, optional = true }
-ctrlc = { version = "3.5", optional = true }
+ctrlc = { workspace = true, optional = true }
 
 [features]
 default = ["std", "textlogs", "units"]

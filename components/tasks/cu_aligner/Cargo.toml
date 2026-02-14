@@ -13,5 +13,5 @@ repository.workspace = true
 [dependencies]
 cu29 = { workspace = true }
 cu29-clock = { workspace = true }
-circular-buffer = "1.1.0"
+circular-buffer = { workspace = true }
 paste = { workspace = true }
