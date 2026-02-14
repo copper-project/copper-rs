@@ -6,13 +6,13 @@ Bidirectional Copper bridge for ROS 2 messaging over Zenoh transport.
 
 Bridge-level config:
 - `domain_id`: ROS 2 domain id (default `0`).
-- `namespace`: ROS namespace (default `copper`).
-- `node`: ROS node name (default `node`).
+- `namespace`: ROS 2 namespace (default `copper`).
+- `node`: ROS 2 node name (default `node`).
 - `zenoh_config_file`: path to a Zenoh JSON5 config file (optional).
 - `zenoh_config_json`: inline Zenoh JSON5 config (optional).
 
 Per-channel config (`bridges[].channels`):
-- `route`: ROS topic path used by that channel.
+- `route`: ROS 2 topic path used by that channel.
 
 Example:
 

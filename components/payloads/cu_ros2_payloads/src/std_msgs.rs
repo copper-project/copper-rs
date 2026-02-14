@@ -2,6 +2,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::RosMsgAdapter;
 
+// ROS 2 transports (notably Iron+ metadata paths used by the bridge stack) carry a type hash
+// string alongside the message type. These RIHS01 hashes are the canonical ROS 2 interface hashes
+// generated from IDL definitions, so each adapter must expose the exact hash for wire compatibility.
 macro_rules! define_scalar_adapter {
     ($rust:ty, $msg:ident, $hash:literal) => {
         #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -16,6 +19,7 @@ macro_rules! define_scalar_adapter {
                 "std_msgs"
             }
 
+            // RIHS01 hash for this ROS 2 message type (std_msgs/*).
             fn type_hash() -> &'static str {
                 $hash
             }
