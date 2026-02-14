@@ -631,12 +631,8 @@ where
     }
 }
 
-fn cu_error(msg: &str, error: ZenohError) -> CuError {
-    CuError::from(format!("{msg}: {error}"))
-}
-
 fn cu_error_map(msg: &str) -> impl FnOnce(ZenohError) -> CuError + '_ {
-    move |e| cu_error(msg, e)
+    move |e| CuError::from(format!("{msg}: {e}"))
 }
 
 #[cfg(test)]
