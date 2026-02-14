@@ -12,47 +12,80 @@ pub const SERIAL0_BAUDRATE_KEY: &str = "serial0_baudrate";
 pub const SERIAL0_PARITY_KEY: &str = "serial0_parity";
 pub const SERIAL0_STOPBITS_KEY: &str = "serial0_stopbits";
 pub const SERIAL0_TIMEOUT_MS_KEY: &str = "serial0_timeout_ms";
+pub const SERIAL0_NAME: &str = "serial0";
 
 pub const SERIAL1_DEV_KEY: &str = "serial1_dev";
 pub const SERIAL1_BAUDRATE_KEY: &str = "serial1_baudrate";
 pub const SERIAL1_PARITY_KEY: &str = "serial1_parity";
 pub const SERIAL1_STOPBITS_KEY: &str = "serial1_stopbits";
 pub const SERIAL1_TIMEOUT_MS_KEY: &str = "serial1_timeout_ms";
+pub const SERIAL1_NAME: &str = "serial1";
 
 pub const SERIAL2_DEV_KEY: &str = "serial2_dev";
 pub const SERIAL2_BAUDRATE_KEY: &str = "serial2_baudrate";
 pub const SERIAL2_PARITY_KEY: &str = "serial2_parity";
 pub const SERIAL2_STOPBITS_KEY: &str = "serial2_stopbits";
 pub const SERIAL2_TIMEOUT_MS_KEY: &str = "serial2_timeout_ms";
+pub const SERIAL2_NAME: &str = "serial2";
 
 pub const SERIAL3_DEV_KEY: &str = "serial3_dev";
 pub const SERIAL3_BAUDRATE_KEY: &str = "serial3_baudrate";
 pub const SERIAL3_PARITY_KEY: &str = "serial3_parity";
 pub const SERIAL3_STOPBITS_KEY: &str = "serial3_stopbits";
 pub const SERIAL3_TIMEOUT_MS_KEY: &str = "serial3_timeout_ms";
+pub const SERIAL3_NAME: &str = "serial3";
 
 pub const SERIAL4_DEV_KEY: &str = "serial4_dev";
 pub const SERIAL4_BAUDRATE_KEY: &str = "serial4_baudrate";
 pub const SERIAL4_PARITY_KEY: &str = "serial4_parity";
 pub const SERIAL4_STOPBITS_KEY: &str = "serial4_stopbits";
 pub const SERIAL4_TIMEOUT_MS_KEY: &str = "serial4_timeout_ms";
+pub const SERIAL4_NAME: &str = "serial4";
 
 pub const SERIAL5_DEV_KEY: &str = "serial5_dev";
 pub const SERIAL5_BAUDRATE_KEY: &str = "serial5_baudrate";
 pub const SERIAL5_PARITY_KEY: &str = "serial5_parity";
 pub const SERIAL5_STOPBITS_KEY: &str = "serial5_stopbits";
 pub const SERIAL5_TIMEOUT_MS_KEY: &str = "serial5_timeout_ms";
+pub const SERIAL5_NAME: &str = "serial5";
 
 pub const I2C0_DEV_KEY: &str = "i2c0_dev";
 pub const I2C1_DEV_KEY: &str = "i2c1_dev";
 pub const I2C2_DEV_KEY: &str = "i2c2_dev";
+pub const I2C0_NAME: &str = "i2c0";
+pub const I2C1_NAME: &str = "i2c1";
+pub const I2C2_NAME: &str = "i2c2";
 
-pub const GPIO_OUT0_PIN_KEY: &str = "gpio_out0_pin";
-pub const GPIO_OUT1_PIN_KEY: &str = "gpio_out1_pin";
-pub const GPIO_OUT2_PIN_KEY: &str = "gpio_out2_pin";
-pub const GPIO_IN0_PIN_KEY: &str = "gpio_in0_pin";
-pub const GPIO_IN1_PIN_KEY: &str = "gpio_in1_pin";
-pub const GPIO_IN2_PIN_KEY: &str = "gpio_in2_pin";
+pub const GPIO0_NAME: &str = "gpio0";
+pub const GPIO1_NAME: &str = "gpio1";
+pub const GPIO2_NAME: &str = "gpio2";
+pub const GPIO3_NAME: &str = "gpio3";
+pub const GPIO4_NAME: &str = "gpio4";
+pub const GPIO5_NAME: &str = "gpio5";
+pub const GPIO0_PIN_KEY: &str = "gpio0_pin";
+pub const GPIO1_PIN_KEY: &str = "gpio1_pin";
+pub const GPIO2_PIN_KEY: &str = "gpio2_pin";
+pub const GPIO3_PIN_KEY: &str = "gpio3_pin";
+pub const GPIO4_PIN_KEY: &str = "gpio4_pin";
+pub const GPIO5_PIN_KEY: &str = "gpio5_pin";
+pub const GPIO0_DIRECTION_KEY: &str = "gpio0_direction";
+pub const GPIO1_DIRECTION_KEY: &str = "gpio1_direction";
+pub const GPIO2_DIRECTION_KEY: &str = "gpio2_direction";
+pub const GPIO3_DIRECTION_KEY: &str = "gpio3_direction";
+pub const GPIO4_DIRECTION_KEY: &str = "gpio4_direction";
+pub const GPIO5_DIRECTION_KEY: &str = "gpio5_direction";
+pub const GPIO0_BIAS_KEY: &str = "gpio0_bias";
+pub const GPIO1_BIAS_KEY: &str = "gpio1_bias";
+pub const GPIO2_BIAS_KEY: &str = "gpio2_bias";
+pub const GPIO3_BIAS_KEY: &str = "gpio3_bias";
+pub const GPIO4_BIAS_KEY: &str = "gpio4_bias";
+pub const GPIO5_BIAS_KEY: &str = "gpio5_bias";
+pub const GPIO0_INITIAL_LEVEL_KEY: &str = "gpio0_initial_level";
+pub const GPIO1_INITIAL_LEVEL_KEY: &str = "gpio1_initial_level";
+pub const GPIO2_INITIAL_LEVEL_KEY: &str = "gpio2_initial_level";
+pub const GPIO3_INITIAL_LEVEL_KEY: &str = "gpio3_initial_level";
+pub const GPIO4_INITIAL_LEVEL_KEY: &str = "gpio4_initial_level";
+pub const GPIO5_INITIAL_LEVEL_KEY: &str = "gpio5_initial_level";
 
 pub const DEFAULT_SERIAL_BAUDRATE: u32 = 115_200;
 pub const DEFAULT_SERIAL_TIMEOUT_MS: u64 = 50;
@@ -277,7 +310,7 @@ impl EmbeddedWrite for LinuxSerialPort {
 #[cfg(target_os = "linux")]
 pub type LinuxI2c = Exclusive<linux_embedded_hal::I2cdev>;
 #[cfg(target_os = "linux")]
-pub type LinuxOutputPin = Exclusive<rppal::gpio::OutputPin>;
+pub type LinuxOutputPin = Exclusive<rppal::gpio::IoPin>;
 #[cfg(target_os = "linux")]
 pub type LinuxInputPin = Exclusive<rppal::gpio::InputPin>;
 
@@ -294,30 +327,30 @@ bundle_resources!(
         I2c0,
         I2c1,
         I2c2,
-        GpioOut0,
-        GpioOut1,
-        GpioOut2,
-        GpioIn0,
-        GpioIn1,
-        GpioIn2
+        Gpio0,
+        Gpio1,
+        Gpio2,
+        Gpio3,
+        Gpio4,
+        Gpio5
 );
 
 const LINUX_RESOURCE_SLOT_NAMES: &[&str] = &[
-    "serial0",
-    "serial1",
-    "serial2",
-    "serial3",
-    "serial4",
-    "serial5",
-    "i2c0",
-    "i2c1",
-    "i2c2",
-    "gpio_out0",
-    "gpio_out1",
-    "gpio_out2",
-    "gpio_in0",
-    "gpio_in1",
-    "gpio_in2",
+    SERIAL0_NAME,
+    SERIAL1_NAME,
+    SERIAL2_NAME,
+    SERIAL3_NAME,
+    SERIAL4_NAME,
+    SERIAL5_NAME,
+    I2C0_NAME,
+    I2C1_NAME,
+    I2C2_NAME,
+    GPIO0_NAME,
+    GPIO1_NAME,
+    GPIO2_NAME,
+    GPIO3_NAME,
+    GPIO4_NAME,
+    GPIO5_NAME,
 ];
 
 struct SerialSlot {
@@ -411,39 +444,121 @@ const I2C_SLOTS: &[I2cSlot] = &[
     },
 ];
 
+#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
 struct GpioSlot {
     id: LinuxResourcesId,
-    key: &'static str,
+    name: &'static str,
+    pin_key: &'static str,
+    direction_key: &'static str,
+    bias_key: &'static str,
+    initial_level_key: &'static str,
 }
 
-const GPIO_OUT_SLOTS: &[GpioSlot] = &[
-    GpioSlot {
-        id: LinuxResourcesId::GpioOut0,
-        key: GPIO_OUT0_PIN_KEY,
-    },
-    GpioSlot {
-        id: LinuxResourcesId::GpioOut1,
-        key: GPIO_OUT1_PIN_KEY,
-    },
-    GpioSlot {
-        id: LinuxResourcesId::GpioOut2,
-        key: GPIO_OUT2_PIN_KEY,
-    },
-];
+macro_rules! gpio_slot {
+    ($id:ident, $name:ident, $pin_key:ident, $direction_key:ident, $bias_key:ident, $initial_level_key:ident) => {
+        GpioSlot {
+            id: LinuxResourcesId::$id,
+            name: $name,
+            pin_key: $pin_key,
+            direction_key: $direction_key,
+            bias_key: $bias_key,
+            initial_level_key: $initial_level_key,
+        }
+    };
+}
 
-const GPIO_IN_SLOTS: &[GpioSlot] = &[
-    GpioSlot {
-        id: LinuxResourcesId::GpioIn0,
-        key: GPIO_IN0_PIN_KEY,
-    },
-    GpioSlot {
-        id: LinuxResourcesId::GpioIn1,
-        key: GPIO_IN1_PIN_KEY,
-    },
-    GpioSlot {
-        id: LinuxResourcesId::GpioIn2,
-        key: GPIO_IN2_PIN_KEY,
-    },
+#[cfg(any(target_os = "linux", test))]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum GpioDirection {
+    Input,
+    Output,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum GpioBias {
+    Off,
+    PullDown,
+    PullUp,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl GpioBias {
+    #[cfg(target_os = "linux")]
+    const fn into_rppal(self) -> rppal::gpio::Bias {
+        match self {
+            GpioBias::Off => rppal::gpio::Bias::Off,
+            GpioBias::PullDown => rppal::gpio::Bias::PullDown,
+            GpioBias::PullUp => rppal::gpio::Bias::PullUp,
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum GpioInitialLevel {
+    Low,
+    High,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+struct GpioSlotConfig {
+    pin: u8,
+    direction: GpioDirection,
+    bias: GpioBias,
+    initial_level: Option<GpioInitialLevel>,
+}
+
+const GPIO_SLOTS: &[GpioSlot] = &[
+    gpio_slot!(
+        Gpio0,
+        GPIO0_NAME,
+        GPIO0_PIN_KEY,
+        GPIO0_DIRECTION_KEY,
+        GPIO0_BIAS_KEY,
+        GPIO0_INITIAL_LEVEL_KEY
+    ),
+    gpio_slot!(
+        Gpio1,
+        GPIO1_NAME,
+        GPIO1_PIN_KEY,
+        GPIO1_DIRECTION_KEY,
+        GPIO1_BIAS_KEY,
+        GPIO1_INITIAL_LEVEL_KEY
+    ),
+    gpio_slot!(
+        Gpio2,
+        GPIO2_NAME,
+        GPIO2_PIN_KEY,
+        GPIO2_DIRECTION_KEY,
+        GPIO2_BIAS_KEY,
+        GPIO2_INITIAL_LEVEL_KEY
+    ),
+    gpio_slot!(
+        Gpio3,
+        GPIO3_NAME,
+        GPIO3_PIN_KEY,
+        GPIO3_DIRECTION_KEY,
+        GPIO3_BIAS_KEY,
+        GPIO3_INITIAL_LEVEL_KEY
+    ),
+    gpio_slot!(
+        Gpio4,
+        GPIO4_NAME,
+        GPIO4_PIN_KEY,
+        GPIO4_DIRECTION_KEY,
+        GPIO4_BIAS_KEY,
+        GPIO4_INITIAL_LEVEL_KEY
+    ),
+    gpio_slot!(
+        Gpio5,
+        GPIO5_NAME,
+        GPIO5_PIN_KEY,
+        GPIO5_DIRECTION_KEY,
+        GPIO5_BIAS_KEY,
+        GPIO5_INITIAL_LEVEL_KEY
+    ),
 ];
 
 impl ResourceBundle for LinuxResources {
@@ -493,59 +608,53 @@ impl ResourceBundle for LinuxResources {
 
         #[cfg(target_os = "linux")]
         {
-            let mut configured_gpio_out: std::vec::Vec<(LinuxResourcesId, u8)> =
-                std::vec::Vec::new();
-            let mut configured_gpio_in: std::vec::Vec<(LinuxResourcesId, u8)> =
-                std::vec::Vec::new();
+            let mut configured_gpio_slots: std::vec::Vec<(
+                LinuxResourcesId,
+                &'static str,
+                GpioSlotConfig,
+            )> = std::vec::Vec::new();
 
-            for slot in GPIO_OUT_SLOTS {
-                if let Some(pin) = get_u8(config, slot.key)? {
-                    configured_gpio_out.push((slot.id, pin));
-                }
-            }
-            for slot in GPIO_IN_SLOTS {
-                if let Some(pin) = get_u8(config, slot.key)? {
-                    configured_gpio_in.push((slot.id, pin));
-                }
+            for slot in GPIO_SLOTS {
+                let Some(slot_config) = read_gpio_slot_config(config, slot)? else {
+                    continue;
+                };
+                configured_gpio_slots.push((slot.id, slot.name, slot_config));
             }
 
-            if !configured_gpio_out.is_empty() || !configured_gpio_in.is_empty() {
+            if !configured_gpio_slots.is_empty() {
                 let gpio = rppal::gpio::Gpio::new().map_err(|err| {
                     CuError::new_with_cause("Failed to initialize GPIO subsystem", err)
                 })?;
 
-                for (slot_id, pin) in configured_gpio_out {
-                    match gpio.get(pin) {
-                        Ok(pin) => {
-                            manager.add_owned(
-                                bundle.key(slot_id),
-                                Exclusive::new(pin.into_output()),
-                            )?;
-                        }
+                for (slot_id, slot_name, slot_config) in configured_gpio_slots {
+                    let pin = match gpio.get(slot_config.pin) {
+                        Ok(pin) => pin,
                         Err(err) => {
                             warning!(
-                                "LinuxResources: skipping gpio output slot {} (pin {}): {}",
-                                slot_name(slot_id),
-                                pin,
+                                "LinuxResources: skipping gpio slot {} (pin {}): {}",
+                                slot_name,
+                                slot_config.pin,
                                 err.to_string()
                             );
+                            continue;
                         }
-                    }
-                }
-
-                for (slot_id, pin) in configured_gpio_in {
-                    match gpio.get(pin) {
-                        Ok(pin) => {
-                            manager
-                                .add_owned(bundle.key(slot_id), Exclusive::new(pin.into_input()))?;
+                    };
+                    match slot_config.direction {
+                        GpioDirection::Input => {
+                            let mut pin = pin.into_input();
+                            pin.set_bias(slot_config.bias.into_rppal());
+                            manager.add_owned(bundle.key(slot_id), Exclusive::new(pin))?;
                         }
-                        Err(err) => {
-                            warning!(
-                                "LinuxResources: skipping gpio input slot {} (pin {}): {}",
-                                slot_name(slot_id),
-                                pin,
-                                err.to_string()
-                            );
+                        GpioDirection::Output => {
+                            let mut pin = pin.into_io(rppal::gpio::Mode::Output);
+                            pin.set_bias(slot_config.bias.into_rppal());
+                            if let Some(initial_level) = slot_config.initial_level {
+                                match initial_level {
+                                    GpioInitialLevel::Low => pin.set_low(),
+                                    GpioInitialLevel::High => pin.set_high(),
+                                }
+                            }
+                            manager.add_owned(bundle.key(slot_id), Exclusive::new(pin))?;
                         }
                     }
                 }
@@ -554,19 +663,10 @@ impl ResourceBundle for LinuxResources {
 
         #[cfg(not(target_os = "linux"))]
         {
-            for slot in GPIO_OUT_SLOTS {
-                if let Some(pin) = get_u8(config, slot.key)? {
+            for slot in GPIO_SLOTS {
+                if let Some(pin) = get_u8(config, slot.pin_key)? {
                     warning!(
-                        "LinuxResources: requested gpio output slot {} on pin {} but GPIO is only supported on Linux",
-                        slot_name(slot.id),
-                        pin
-                    );
-                }
-            }
-            for slot in GPIO_IN_SLOTS {
-                if let Some(pin) = get_u8(config, slot.key)? {
-                    warning!(
-                        "LinuxResources: requested gpio input slot {} on pin {} but GPIO is only supported on Linux",
+                        "LinuxResources: requested gpio slot {} on pin {} but GPIO is only supported on Linux",
                         slot_name(slot.id),
                         pin
                     );
@@ -597,6 +697,59 @@ fn read_serial_slot_config(
         parity,
         stop_bits,
         timeout_ms,
+    }))
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn read_gpio_slot_config(
+    config: Option<&ComponentConfig>,
+    slot: &GpioSlot,
+) -> CuResult<Option<GpioSlotConfig>> {
+    let pin = get_u8(config, slot.pin_key)?;
+    let direction = get_string(config, slot.direction_key)?;
+    let bias = get_string(config, slot.bias_key)?;
+    let initial_level = get_string(config, slot.initial_level_key)?;
+
+    let Some(pin) = pin else {
+        if direction.is_some() || bias.is_some() || initial_level.is_some() {
+            return Err(CuError::from(format!(
+                "Config key '{}' is required when configuring {}",
+                slot.pin_key, slot.name
+            )));
+        }
+        return Ok(None);
+    };
+
+    let direction_raw = direction.ok_or_else(|| {
+        CuError::from(format!(
+            "Config key '{}' is required when '{}' is set",
+            slot.direction_key, slot.pin_key
+        ))
+    })?;
+    let direction = parse_gpio_direction_value(direction_raw.as_str())?;
+
+    let bias = match bias {
+        Some(raw) => parse_gpio_bias_value(raw.as_str())?,
+        None => GpioBias::Off,
+    };
+
+    let initial_level = match initial_level {
+        Some(raw) => Some(parse_gpio_initial_level_value(raw.as_str())?),
+        None => None,
+    };
+
+    if matches!(direction, GpioDirection::Input) && initial_level.is_some() {
+        return Err(CuError::from(format!(
+            "Config key '{}' is only valid when '{}' is 'output'",
+            slot.initial_level_key, slot.direction_key
+        )));
+    }
+
+    Ok(Some(GpioSlotConfig {
+        pin,
+        direction,
+        bias,
+        initial_level,
     }))
 }
 
@@ -638,6 +791,43 @@ fn parse_serial_stop_bits_value(raw: u8) -> CuResult<SerialStopBits> {
         2 => Ok(SerialStopBits::Two),
         _ => Err(CuError::from(format!(
             "Invalid stopbits value '{raw}'. Expected 1 or 2"
+        ))),
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn parse_gpio_direction_value(raw: &str) -> CuResult<GpioDirection> {
+    let normalized = raw.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "input" => Ok(GpioDirection::Input),
+        "output" => Ok(GpioDirection::Output),
+        _ => Err(CuError::from(format!(
+            "Invalid GPIO direction '{raw}'. Expected one of: input, output"
+        ))),
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn parse_gpio_bias_value(raw: &str) -> CuResult<GpioBias> {
+    let normalized = raw.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "off" | "none" => Ok(GpioBias::Off),
+        "pull_down" | "pulldown" => Ok(GpioBias::PullDown),
+        "pull_up" | "pullup" => Ok(GpioBias::PullUp),
+        _ => Err(CuError::from(format!(
+            "Invalid GPIO bias '{raw}'. Expected one of: off, pull_up, pull_down"
+        ))),
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn parse_gpio_initial_level_value(raw: &str) -> CuResult<GpioInitialLevel> {
+    let normalized = raw.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "low" => Ok(GpioInitialLevel::Low),
+        "high" => Ok(GpioInitialLevel::High),
+        _ => Err(CuError::from(format!(
+            "Invalid GPIO initial level '{raw}'. Expected one of: low, high"
         ))),
     }
 }
@@ -715,6 +905,125 @@ mod tests {
     fn parse_serial_stop_bits_value_rejects_invalid_input() {
         assert!(parse_serial_stop_bits_value(0).is_err());
         assert!(parse_serial_stop_bits_value(3).is_err());
+    }
+
+    #[test]
+    fn parse_gpio_direction_value_accepts_expected_inputs() {
+        assert!(matches!(
+            parse_gpio_direction_value("input").unwrap(),
+            GpioDirection::Input
+        ));
+        assert!(matches!(
+            parse_gpio_direction_value("Output").unwrap(),
+            GpioDirection::Output
+        ));
+    }
+
+    #[test]
+    fn parse_gpio_direction_value_rejects_invalid_input() {
+        assert!(parse_gpio_direction_value("io").is_err());
+    }
+
+    #[test]
+    fn parse_gpio_bias_value_accepts_expected_inputs() {
+        assert!(matches!(
+            parse_gpio_bias_value("off").unwrap(),
+            GpioBias::Off
+        ));
+        assert!(matches!(
+            parse_gpio_bias_value("pull_down").unwrap(),
+            GpioBias::PullDown
+        ));
+        assert!(matches!(
+            parse_gpio_bias_value("PullUp").unwrap(),
+            GpioBias::PullUp
+        ));
+    }
+
+    #[test]
+    fn parse_gpio_bias_value_rejects_invalid_input() {
+        assert!(parse_gpio_bias_value("hold").is_err());
+    }
+
+    #[test]
+    fn parse_gpio_initial_level_value_accepts_expected_inputs() {
+        assert!(matches!(
+            parse_gpio_initial_level_value("low").unwrap(),
+            GpioInitialLevel::Low
+        ));
+        assert!(matches!(
+            parse_gpio_initial_level_value("HIGH").unwrap(),
+            GpioInitialLevel::High
+        ));
+    }
+
+    #[test]
+    fn parse_gpio_initial_level_value_rejects_invalid_input() {
+        assert!(parse_gpio_initial_level_value("toggle").is_err());
+    }
+
+    #[test]
+    fn read_gpio_slot_config_requires_pin_when_aux_keys_are_present() {
+        let mut cfg = ComponentConfig::new();
+        cfg.set(GPIO0_DIRECTION_KEY, "input".to_string());
+        assert!(read_gpio_slot_config(Some(&cfg), &GPIO_SLOTS[0]).is_err());
+    }
+
+    #[test]
+    fn read_gpio_slot_config_requires_direction_when_pin_is_set() {
+        let mut cfg = ComponentConfig::new();
+        cfg.set(GPIO0_PIN_KEY, 23_u8);
+        assert!(read_gpio_slot_config(Some(&cfg), &GPIO_SLOTS[0]).is_err());
+    }
+
+    #[test]
+    fn read_gpio_slot_config_defaults_bias_and_preserves_level_for_output() {
+        let mut cfg = ComponentConfig::new();
+        cfg.set(GPIO0_PIN_KEY, 23_u8);
+        cfg.set(GPIO0_DIRECTION_KEY, "output".to_string());
+
+        let slot_config = read_gpio_slot_config(Some(&cfg), &GPIO_SLOTS[0])
+            .unwrap()
+            .expect("slot should be configured");
+        assert_eq!(
+            slot_config,
+            GpioSlotConfig {
+                pin: 23,
+                direction: GpioDirection::Output,
+                bias: GpioBias::Off,
+                initial_level: None,
+            }
+        );
+    }
+
+    #[test]
+    fn read_gpio_slot_config_parses_explicit_initial_level_for_output() {
+        let mut cfg = ComponentConfig::new();
+        cfg.set(GPIO0_PIN_KEY, 23_u8);
+        cfg.set(GPIO0_DIRECTION_KEY, "output".to_string());
+        cfg.set(GPIO0_INITIAL_LEVEL_KEY, "high".to_string());
+
+        let slot_config = read_gpio_slot_config(Some(&cfg), &GPIO_SLOTS[0])
+            .unwrap()
+            .expect("slot should be configured");
+        assert_eq!(
+            slot_config,
+            GpioSlotConfig {
+                pin: 23,
+                direction: GpioDirection::Output,
+                bias: GpioBias::Off,
+                initial_level: Some(GpioInitialLevel::High),
+            }
+        );
+    }
+
+    #[test]
+    fn read_gpio_slot_config_rejects_initial_level_for_input() {
+        let mut cfg = ComponentConfig::new();
+        cfg.set(GPIO0_PIN_KEY, 23_u8);
+        cfg.set(GPIO0_DIRECTION_KEY, "input".to_string());
+        cfg.set(GPIO0_INITIAL_LEVEL_KEY, "high".to_string());
+        assert!(read_gpio_slot_config(Some(&cfg), &GPIO_SLOTS[0]).is_err());
     }
 
     #[cfg(feature = "embedded-io-07")]

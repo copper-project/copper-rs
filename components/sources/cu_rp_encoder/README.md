@@ -16,8 +16,10 @@ resources: [
         id: "enc",
         provider: "cu_linux_resources::LinuxResources",
         config: {
-            "gpio_in0_pin": 17,
-            "gpio_in1_pin": 18,
+            "gpio0_pin": 17,
+            "gpio0_direction": "input",
+            "gpio1_pin": 18,
+            "gpio1_direction": "input",
         },
     ),
 ],
@@ -26,8 +28,8 @@ tasks: [
         id: "src",
         type: "cu_rp_encoder::Encoder",
         resources: {
-            clk_pin: "enc.gpio_in0",
-            dat_pin: "enc.gpio_in1",
+            clk_pin: "enc.gpio0",
+            dat_pin: "enc.gpio1",
         },
     ),
 ]

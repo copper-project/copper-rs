@@ -48,7 +48,7 @@ impl<'r> ResourceBindings<'r> for GpioResources {
 }
 
 /// Example of a GPIO output driver for the Raspberry Pi
-/// On hardware, `pin` is provided by resource bindings (for example `<bundle>.gpio_out0`).
+/// On hardware, `pin` is provided by resource bindings (for example `<bundle>.gpio0`).
 /// In `mock` mode, the config still accepts `pin` to select the simulated output.
 #[derive(Reflect)]
 #[reflect(from_reflect = false)]
