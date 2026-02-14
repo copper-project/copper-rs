@@ -17,6 +17,9 @@ tempfile = { workspace = true }
 serde = { workspace = true }
 ctrlc = "3"
 
+[package.metadata.cargo-shear]
+ignored = ["serde", "cu-linux-resources"]
+
 [features]
 default = []
 logexport = ["dep:cu29-export", "cu-gnss-ublox/reflect"]
