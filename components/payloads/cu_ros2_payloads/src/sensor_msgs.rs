@@ -206,7 +206,7 @@ impl<const N: usize> From<&PointCloudSoa<N>> for PointCloud2 {
         let point_step = 24u32;
         let width = len as u32;
         let row_step = point_step * width;
-        let mut data = Vec::with_capacity((row_step * 1) as usize);
+        let mut data = Vec::with_capacity(row_step as usize);
 
         for idx in 0..len {
             let x = pointcloud.x[idx].get::<meter>();

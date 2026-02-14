@@ -11,4 +11,4 @@ mmaped = "mmaped"
 consts = "consts"
 
 [files]
-extend-exclude = ["patches/*", "components/payloads/cu_ros_payloads/**"]
+extend-exclude = ["patches/*", "components/payloads/cu_ros2_payloads/**"]
