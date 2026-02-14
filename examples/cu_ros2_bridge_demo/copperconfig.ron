@@ -19,8 +19,14 @@
                 "node": "bridge_tester",
             },
             channels: [
-                Tx(id: "outgoing", route: "/loopback"),
-                Rx(id: "incoming", route: "/loopback"),
+                Tx(
+                    id: "outgoing",
+                    route: "/loopback",
+                ),
+                Rx(
+                    id: "incoming",
+                    route: "/loopback",
+                ),
             ],
         ),
     ],
