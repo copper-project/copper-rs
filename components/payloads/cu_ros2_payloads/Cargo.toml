@@ -1,5 +1,5 @@
 [package]
-name = "cu-ros-payloads"
+name = "cu-ros2-payloads"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -14,6 +14,10 @@ description = "ROS2 Payloads that can be constructed from/to Copper Payloads for
 compact_str = { workspace = true }
 serde = { workspace = true }
 cu-sensor-payloads = { workspace = true }
+cu29 = { workspace = true }
 
 [features]
 humble = [] # Activate for ROS2 Humble, disable for later versions
+
+[dev-dependencies]
+cdr = { version = "0.2.4" }
