@@ -1,5 +1,5 @@
 [package]
-name = "cu-zenoh-ros-sink"
+name = "cu-ros2-bridge"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -8,7 +8,7 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
-description = "Copper sink task for ROS-compatible Zenoh messages."
+description = "Copper bridge for ROS 2 messaging over Zenoh transport."
 
 [package.metadata.cargo-shear]
 ignored = ["serde"]

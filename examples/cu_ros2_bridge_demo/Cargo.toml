@@ -1,5 +1,5 @@
 [package]
-name = "cu-zenoh-ros"
+name = "cu-ros2-bridge-demo"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -8,13 +8,14 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
-description = "Copper example to use zenoh as a ROS 2 bridge."
+description = "Copper example exercising the ROS2 bridge with Tx/Rx slots."
 
 publish = false
+
 [dependencies]
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
-cu-zenoh-ros-sink = { path = "../../components/sinks/cu_zenoh_ros_sink", version = "0.13.0" }
+cu-ros2-bridge = { path = "../../components/bridges/cu_ros2_bridge", version = "0.13.0" }
 tempfile = { workspace = true }
 serde = { workspace = true }
 
