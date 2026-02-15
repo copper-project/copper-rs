@@ -23,7 +23,7 @@ portable-atomic = { version = "1.11", default-features = false, features = [
 cortex-m = { workspace = true }
 
 [dev-dependencies]
-approx = "0.5"
+approx = { version = "0.5", default-features = false }
 
 [features]
 default = ["std"]

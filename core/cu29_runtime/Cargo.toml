@@ -66,8 +66,8 @@ tempfile = { workspace = true, optional = true }   # only used in CLI for svg ge
 object-pool = { version = "0.6", optional = true } # used for large object pooling, this will never happen in no-std
 
 # no std only dependencies
-spin = { workspace = true } # should be removed when std is on, but cargo is bad at negative features
-libm = { version = "0.2" }  # f64 math for 32 bit platforms
+spin = { workspace = true }                          # should be removed when std is on, but cargo is bad at negative features
+libm = { version = "0.2", default-features = false } # f64 math for 32 bit platforms
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 cudarc = { version = "0.19", optional = true, default-features = false, features = [

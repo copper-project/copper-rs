@@ -169,7 +169,7 @@ serde = { version = "1.0", default-features = false, features = [
   "derive",
   "alloc",
 ] }
-serde_json = "1.0"
+serde_json = { version = "1.0", default-features = false }
 erased-serde = { version = "0.4", default-features = false, features = [
   "alloc",
 ] }
@@ -185,9 +185,11 @@ clap = { version = "4.5", default-features = false, features = [
 ] }
 
 # External proc macros
-proc-macro2 = { version = "1.0" }
-quote = "1.0"                                  # proc macros
-syn = { version = "2.0", features = ["full"] } # proc macros
+proc-macro2 = { version = "1.0", default-features = false }
+quote = { version = "1.0", default-features = false } # proc macros
+syn = { version = "2.0", default-features = false, features = [
+  "full",
+] } # proc macros
 
 # Unit of measure to be consistent across the project
 uom = { version = "0.38", default-features = false, features = [
@@ -208,7 +210,7 @@ bevy_reflect = { version = "0.18.0", default-features = false, features = [
 ] }
 
 # used across testing
-tempfile = "3.23"
+tempfile = { version = "3.23", default-features = false }
 
 spin = { version = "0.10" } # should be removed when std is on, but cargo is bad at negative features
 
@@ -227,14 +229,14 @@ heapless = { version = "0.9", default-features = false, features = ["serde"] }
 rayon = "1.11"
 
 # Realtime sanitizer (standalone)
-rtsan-standalone = "0.3.0"
+rtsan-standalone = { version = "0.3.0", default-features = false }
 
 # HashMap that is fast and has no std dependency
 hashbrown = { version = "0.16", features = ["serde"] }
 
 # Shared external dependencies of workspace members.
 # Used by: cu-apriltag, cu29-intern-strs
-anyhow = "1.0"
+anyhow = { version = "1.0", default-features = false }
 # Used by: cu-transform, cu29-runtime
 arrayvec = { version = "0.7", default-features = false }
 # Used by: cu-flight-controller, cu-rp-balancebot
@@ -246,13 +248,13 @@ buddy_system_allocator = { version = "0.12", default-features = false }
 # Used by: cu-hesai, cu-livox
 bytemuck = "1.23.0"
 # Used by: cu-flight-controller, cu-rp-balancebot
-cached-path = "0.10.0"
+cached-path = { version = "0.10.0", default-features = false }
 # Used by: cu-ads7883-new, cu-gstreamer, cu-rp-encoder, cu-rp-gpio, cu-rp-sn754410-new, cu-wt901
 cfg_aliases = "0.2.1"
 # Used by: cu-consolemon, cu-hesai, cu-livox
 chrono = "0.4.41"
 # Used by: cu-aligner, cu-gstreamer
-circular-buffer = "1.1.0"
+circular-buffer = { version = "1.1.0", default-features = false }
 # Used by: cu-ahrs, cu-bdshot, cu-flight-controller, cu-micoairh743, cu29-clock
 cortex-m = "0.7"
 # Used by: cu-ahrs, cu-elrs-bdshot-demo, cu-flight-controller
@@ -264,13 +266,13 @@ defmt = { version = "1.0", default-features = false }
 # Used by: cu-ahrs, cu-elrs-bdshot-demo, cu-flight-controller
 defmt-rtt = "1.1"
 # Used by: cu-flight-controller, cu-min-baremetal
-embedded-alloc = "0.7"
+embedded-alloc = { version = "0.7", default-features = false }
 # Used by: cu-dynthreshold, cu-gstreamer
 gstreamer = { version = "0.24", default-features = false }
 # Used by: cu-apriltag, cu-sensor-payloads
 image = { version = "0.25.6", default-features = false }
 # Used by: cu-consolemon, cu-v4l
-libc = "0.2"
+libc = { version = "0.2", default-features = false }
 # Used by: cu-linux-resources, cu-mpu9250
 linux-embedded-hal = "0.4.0"
 # Used by: cu-consolemon, cu-logmon, cu-standalone-structlog, cu29-log-runtime
@@ -288,7 +290,7 @@ rp235x-hal = "0.4"
 # Used by: cu-linux-resources, cu-rp-encoder, cu-rp-sn754410-new
 rppal = { version = "0.22.1", default-features = false }
 # Used by: cu-linux-resources, cu-msp-lib
-serialport = "4.8.1"
+serialport = { version = "4.8.1", default-features = false }
 # Used by: cu-standalone-structlog, cu-v4l, cu29-helpers
 simplelog = "0.12"
 # Used by: cu-hesai, cu-livox
