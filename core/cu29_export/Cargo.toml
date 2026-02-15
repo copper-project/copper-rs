@@ -29,6 +29,7 @@ indicatif = { version = "0.18", optional = true, default-features = false }
 # PyO3 is not supported for macOS at the moment, don't allow people to opt-in since it won't work
 pyo3 = { version = "0.28", optional = true, default-features = false, features = [
   "extension-module",
+  "macros",
 ] }
 
 serde_json = { version = "1.0", default-features = false }
