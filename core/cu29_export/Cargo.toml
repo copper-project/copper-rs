@@ -24,12 +24,18 @@ clap = { workspace = true }
 bincode = { workspace = true }
 serde = { workspace = true }
 num-format = "0.4"
-indicatif = { version = "0.18", optional = true }
+indicatif = { version = "0.18", optional = true, default-features = false }
 
 # PyO3 is not supported for macOS at the moment, don't allow people to opt-in since it won't work
-pyo3 = { version = "0.28", optional = true, features = ["extension-module"] }
+pyo3 = { version = "0.28", optional = true, default-features = false, features = [
+  "extension-module",
+] }
 
-serde_json = "1.0"
+serde_json = { version = "1.0", default-features = false }
+
+mcap = { version = "0.24", optional = true, default-features = false }
+erased-serde = { version = "0.4", optional = true, default-features = false }
+
 
 [dev-dependencies]
 tempfile = { workspace = true }
@@ -39,11 +45,3 @@ jsonschema = { version = "0.41", default-features = false }
 default = []
 python = ["dep:pyo3"]
 mcap = ["dep:mcap", "dep:erased-serde", "dep:indicatif"]
-
-[dependencies.mcap]
-version = "0.24"
-optional = true
-
-[dependencies.erased-serde]
-version = "0.4"
-optional = true

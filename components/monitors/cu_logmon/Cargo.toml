@@ -24,7 +24,7 @@ cu29-log-runtime = { path = "../../../core/cu29_log_runtime", version = "0.13.0"
 spin = { workspace = true }
 
 [dev-dependencies]
-log = "0.4"
+log = { workspace = true }
 cu29 = { path = "../../../core/cu29", version = "0.13.0", default-features = false, features = [
   "log-level-info",
 ] }

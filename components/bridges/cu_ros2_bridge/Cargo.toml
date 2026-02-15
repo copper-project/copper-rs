@@ -17,7 +17,7 @@ ignored = ["serde"]
 cu29 = { workspace = true }
 cu-ros2-payloads = { workspace = true }
 serde = { workspace = true }
-zenoh = { version = "1.7.0", default-features = false, features = [
+zenoh = { workspace = true, default-features = false, features = [
   "transport_tcp",
 ] }
 zenoh-ext = { version = "1.7.0", default-features = false }

@@ -20,10 +20,10 @@ portable-atomic = { version = "1.11", default-features = false, features = [
 ] }
 
 [target.'cfg(all(target_arch = "arm", target_os = "none"))'.dependencies]
-cortex-m = { version = "0.7" }
+cortex-m = { workspace = true }
 
 [dev-dependencies]
-approx = "0.5"
+approx = { version = "0.5", default-features = false }
 
 [features]
 default = ["std"]

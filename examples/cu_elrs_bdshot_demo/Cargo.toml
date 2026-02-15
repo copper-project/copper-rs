@@ -17,7 +17,7 @@ embedded_config = "examples/cu_elrs_bdshot_demo/.cargo/config.toml"
 embedded_target = "thumbv8m.main-none-eabihf"
 
 [dependencies]
-buddy_system_allocator = { version = "0.12", default-features = false, features = [
+buddy_system_allocator = { workspace = true, default-features = false, features = [
   "use_spin",
 ] }
 cu29 = { path = "../../core/cu29", default-features = false, features = [
@@ -36,17 +36,17 @@ cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false,
 cu-sdlogger = { path = "../../components/libs/cu_sdlogger", default-features = false, features = [
   "eh1",
 ] }
-cortex-m-rt = "0.7"
-defmt = "1.0"
-defmt-rtt = "1.1"
+cortex-m-rt = { workspace = true }
+defmt = { workspace = true }
+defmt-rtt = { workspace = true }
 embedded-hal = "1.0"
 embedded-hal-bus = "0.3"
 embedded-io-07 = { package = "embedded-io", version = "0.7.1", default-features = false }
 embedded-sdmmc = { version = "0.9", features = [
   "defmt-log",
 ], default-features = false }
-panic-probe = { version = "1.0", features = ["defmt", "print-defmt"] }
-rp235x-hal = { version = "0.4", features = ["rt", "critical-section-impl"] }
+panic-probe = { workspace = true, features = ["defmt", "print-defmt"] }
+rp235x-hal = { workspace = true, features = ["rt", "critical-section-impl"] }
 spin = { workspace = true }
 bincode = { workspace = true, features = ["alloc", "derive"] }
 serde = { workspace = true }

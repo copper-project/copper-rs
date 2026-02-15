@@ -23,4 +23,4 @@ std = ["serde/std", "packed_struct/std"]
 bincode = ["dep:bincode"]
 
 [dev-dependencies]
-serialport = "4.3.0"
+serialport = { workspace = true }

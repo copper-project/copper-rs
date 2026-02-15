@@ -19,11 +19,11 @@ cu-spatial-payloads = { path = "../../payloads/cu_spatial_payloads", version = "
   "glam",
 ] }
 
-petgraph = "0.8.1" # For transform tree management
-thiserror = "2.0" # For error handling
+petgraph = { workspace = true, default-features = false } # For transform tree management
+thiserror = { version = "2.0", default-features = false } # For error handling
 dashmap = "6.1.0"
-num-traits = "0.2.18" # For numeric trait implementations
-arrayvec = { version = "0.7.6", features = [
+num-traits = { version = "0.2.18", default-features = false } # For numeric trait implementations
+arrayvec = { workspace = true, default-features = false, features = [
   "serde",
 ] } # For stack-allocated strings
 

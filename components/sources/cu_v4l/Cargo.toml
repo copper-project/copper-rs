@@ -13,12 +13,12 @@ repository.workspace = true
 [dependencies]
 cu29 = { workspace = true }
 cu-sensor-payloads = { workspace = true }
-libc = "0.2.172"
-nix = { version = "0.31", default-features = false, features = ["time"] }
+libc = { workspace = true }
+nix = { workspace = true, default-features = false, features = ["time"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 v4l = "0.14.0"
 
 [dev-dependencies]
 rerun = { workspace = true }
-simplelog = "0.12.2"
+simplelog = { workspace = true }

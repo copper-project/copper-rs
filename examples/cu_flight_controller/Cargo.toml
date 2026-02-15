@@ -70,7 +70,7 @@ spin = { workspace = true }
 cu29-export = { workspace = true, optional = true }
 
 ## Sim dependencies
-bevy = { version = "0.18.0", default-features = false, features = [
+bevy = { workspace = true, default-features = false, features = [
   "x11",
   "wayland",
   "default_font",
@@ -91,7 +91,7 @@ bevy = { version = "0.18.0", default-features = false, features = [
   "png",
   "zstd_rust",
 ], optional = true }
-avian3d = { version = "0.5.0", default-features = false, features = [
+avian3d = { workspace = true, default-features = false, features = [
   "bevy_scene",
   "collider-from-mesh",
   "debug-plugin",
@@ -100,21 +100,21 @@ avian3d = { version = "0.5.0", default-features = false, features = [
   "3d",
   "parry-f32",
 ], optional = true }
-cached-path = { version = "0.10.0", optional = true }
+cached-path = { workspace = true, optional = true }
 evdev = { version = "0.13.2", optional = true }
 
 cu29 = { path = "../../core/cu29", default-features = false, features = [
   "log-level-debug",
   "units",
 ], optional = true }
-cortex-m-rt = { version = "0.7", optional = true }
-defmt-rtt = { version = "1.1.0", optional = true }
-defmt = { version = "1.0", optional = true }
-panic-probe = { version = "1.0.0", optional = true, features = ["print-defmt"] }
-buddy_system_allocator = { version = "0.12", default-features = false, features = [
+cortex-m-rt = { workspace = true, optional = true }
+defmt-rtt = { workspace = true, optional = true }
+defmt = { workspace = true, optional = true }
+panic-probe = { workspace = true, optional = true, features = ["print-defmt"] }
+buddy_system_allocator = { workspace = true, default-features = false, features = [
   "use_spin",
 ], optional = true }
-stm32h7xx-hal = { version = "0.16.0", default-features = false, features = [
+stm32h7xx-hal = { workspace = true, default-features = false, features = [
   "stm32h743v",
   "rt",
   "defmt",
@@ -123,10 +123,10 @@ stm32h7xx-hal = { version = "0.16.0", default-features = false, features = [
 ], optional = true }
 embedded-io = { version = "0.6", optional = true }
 embedded-hal = { version = "0.2.7", optional = true }
-embedded-alloc = { version = "0.7", optional = true }
+embedded-alloc = { workspace = true, optional = true }
 # Keep aligned with stm32h7xx-hal SDMMC support (pulls embedded-sdmmc 0.5).
 embedded-sdmmc = { version = "0.5", default-features = false, optional = true }
-cortex-m = { version = "0.7", features = [
+cortex-m = { workspace = true, features = [
   "critical-section-single-core",
 ], optional = true }
 

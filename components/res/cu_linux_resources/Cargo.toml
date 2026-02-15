@@ -19,11 +19,11 @@ embedded-io = { version = "0.6.1", default-features = false, features = [
   "std",
 ] }
 embedded-io-07 = { package = "embedded-io", version = "0.7.1", default-features = false, optional = true }
-serialport = { version = "4.8.1" }
+serialport = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-linux-embedded-hal = "0.4.0"
-rppal = { version = "0.22.1", default-features = false, features = ["hal"] }
+linux-embedded-hal = { workspace = true }
+rppal = { workspace = true, default-features = false, features = ["hal"] }
 
 [features]
 default = []

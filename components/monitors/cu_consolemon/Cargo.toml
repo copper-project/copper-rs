@@ -25,13 +25,13 @@ pfetch-logo-parser = "0.1.1"
 pfetch = "2.11.1"
 dotenvy = "0.15.7"
 libmacchina = "8.1.0"
-ansi-to-tui = "8.0.0"
+ansi-to-tui = { version = "8.0.0", default-features = false }
 tui-widgets = "0.7.0"
-color-eyre = "0.6.4"
+color-eyre = { version = "0.6.4", default-features = false }
 gag = "1.0.0"
-arboard = { version = "3.6.1", optional = true }
-log = { version = "0.4.27", features = ["std"], optional = true }
-chrono = { version = "0.4.41", optional = true }
+arboard = { version = "3.6.1", optional = true, default-features = false }
+log = { workspace = true, features = ["std"], optional = true }
+chrono = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
-libc = "0.2"
+libc = { workspace = true }

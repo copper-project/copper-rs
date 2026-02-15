@@ -19,7 +19,7 @@ cu29 = { path = "../../../core/cu29", version = "0.13.0", default-features = fal
   "units",
 ] }
 rerun = { workspace = true, optional = true }
-image = { version = "0.25.6", default-features = false, optional = true }
+image = { workspace = true, default-features = false, optional = true }
 kornia-image = { version = "0.1.10", optional = true }
 serde = { workspace = true }
 

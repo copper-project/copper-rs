@@ -7,5 +7,5 @@ edition = "2021"
 resolver = "2"
 
 [dependencies]
-horus = { git = "https://github.com/softmata/horus", tag = "v0.1.6" }
-serde = { version = "1", features = ["derive"] }
+horus = { git = "https://github.com/softmata/horus", tag = "v0.1.6", default-features = false }
+serde = { version = "1", default-features = false, features = ["derive"] }

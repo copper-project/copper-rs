@@ -32,9 +32,9 @@ erased-serde = { workspace = true }
 serde_derive = { workspace = true }
 serde = { workspace = true }
 smallvec = { workspace = true }
-arrayvec = { version = "0.7", default-features = false, features = ["serde"] }
+arrayvec = { workspace = true, default-features = false, features = ["serde"] }
 html-escape = { version = "0.2", default-features = false }
-petgraph = { version = "0.8", default-features = false, features = [
+petgraph = { workspace = true, default-features = false, features = [
   "serde",
   "serde-1",
   "serde_derive",
@@ -50,12 +50,12 @@ svg = { version = "0.18", optional = true }
 serde_json = { version = "1.0", default-features = false, features = [
   "std",
 ], optional = true }
-zenoh = { version = "1.7.0", default-features = false, features = [
+zenoh = { workspace = true, default-features = false, features = [
   "shared-memory",
   "transport_tcp",
   "transport_unixsock-stream",
 ], optional = true }
-minicbor-serde = { version = "0.6.2", default-features = false, features = [
+minicbor-serde = { workspace = true, default-features = false, features = [
   "alloc",
 ], optional = true }
 
@@ -66,8 +66,8 @@ tempfile = { workspace = true, optional = true }   # only used in CLI for svg ge
 object-pool = { version = "0.6", optional = true } # used for large object pooling, this will never happen in no-std
 
 # no std only dependencies
-spin = { workspace = true } # should be removed when std is on, but cargo is bad at negative features
-libm = { version = "0.2" }  # f64 math for 32 bit platforms
+spin = { workspace = true }                          # should be removed when std is on, but cargo is bad at negative features
+libm = { version = "0.2", default-features = false } # f64 math for 32 bit platforms
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 cudarc = { version = "0.19", optional = true, default-features = false, features = [

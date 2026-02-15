@@ -11,13 +11,13 @@ repository.workspace = true
 description = "Copper bridge for bidirectional Zenoh messaging."
 
 [dependencies]
-zenoh = { version = "1.7.0", default-features = false, features = [
+zenoh = { workspace = true, default-features = false, features = [
   "transport_tcp",
 ] }
 cu29 = { workspace = true }
 serde = { workspace = true }
-serde_json = "1.0"
-minicbor-serde = { version = "0.6.2", default-features = false, features = [
+serde_json = { version = "1.0", default-features = false }
+minicbor-serde = { workspace = true, default-features = false, features = [
   "alloc",
 ] }
 bincode = { workspace = true }

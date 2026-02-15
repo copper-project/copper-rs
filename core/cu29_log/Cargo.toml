@@ -17,9 +17,9 @@ serde = { workspace = true }
 cu29-value = { workspace = true }
 cu29-traits = { workspace = true }
 cu29-clock = { workspace = true }
-strfmt = { version = "0.2", optional = true } # strfmt is std only
+strfmt = { workspace = true, optional = true } # strfmt is std only
 smallvec = { workspace = true }
-defmt = { version = "1.0", optional = true }
+defmt = { workspace = true, optional = true }
 
 [features]
 default = ["std"]
