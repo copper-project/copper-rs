@@ -20,13 +20,14 @@ members = [
   "components/bridges/cu_msp_bridge",
   "components/bridges/cu_iceoryx2_bridge",
   "components/bridges/cu_zenoh_bridge",
+  "components/bridges/cu_ros2_bridge",
   "components/libs/cu_msp_lib",
   "components/libs/cu_embedded_registry",
   "components/libs/cu_transform",
   "core/cu29_units",
   "components/monitors/cu_consolemon",
   "components/monitors/cu_logmon",
-  "components/payloads/cu_ros_payloads",
+  "components/payloads/cu_ros2_payloads",
   "components/payloads/cu_gnss_payloads",
   "components/payloads/cu_sensor_payloads",
   "components/payloads/cu_spatial_payloads",
@@ -38,7 +39,6 @@ members = [
   "components/sinks/cu_rp_sn754410",
   "components/sinks/cu_lewansoul",
   "components/sinks/cu_zenoh_sink",
-  "components/sinks/cu_zenoh_ros_sink",
   "components/sources/cu_ads7883",
   "components/sources/cu_bmi088",
   "components/sources/cu_gnss_ublox",
@@ -86,7 +86,7 @@ members = [
   "examples/cu_standalone_structlog",
   "examples/cu_zenoh",
   "examples/cu_zenoh_bridge_demo",
-  "examples/cu_zenoh_ros",
+  "examples/cu_ros2_bridge_demo",
   "examples/cu_human_pose",
   "examples/cu_debug_session",
   "examples/cu_gnss_ublox_demo",
@@ -157,7 +157,7 @@ cu-linux-resources = { path = "components/res/cu_linux_resources", version = "0.
 cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version = "0.13.0" }
 cu-gnss-payloads = { path = "components/payloads/cu_gnss_payloads", version = "0.13.0" }
 cu-spatial-payloads = { path = "components/payloads/cu_spatial_payloads", version = "0.13.0" }
-cu-ros-payloads = { path = "components/payloads/cu_ros_payloads", version = "0.13.0" }
+cu-ros2-payloads = { path = "components/payloads/cu_ros2_payloads", version = "0.13.0" }
 cu-pid = { path = "components/tasks/cu_pid", version = "0.13.0" }
 
 # External serialization

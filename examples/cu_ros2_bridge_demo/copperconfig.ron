@@ -1,0 +1,45 @@
+(
+    tasks: [
+        (
+            id: "source",
+            type: "tasks::ExampleSrc",
+        ),
+        (
+            id: "verifier",
+            type: "tasks::RxVerifier",
+        ),
+    ],
+    bridges: [
+        (
+            id: "ros2",
+            type: "bridges::ExampleRos2Bridge",
+            config: {
+                "domain_id": 0,
+                "namespace": "copper",
+                "node": "bridge_tester",
+            },
+            channels: [
+                Tx(
+                    id: "outgoing",
+                    route: "/loopback",
+                ),
+                Rx(
+                    id: "incoming",
+                    route: "/loopback",
+                ),
+            ],
+        ),
+    ],
+    cnx: [
+        (
+            src: "source",
+            dst: "ros2/outgoing",
+            msg: "i8",
+        ),
+        (
+            src: "ros2/incoming",
+            dst: "verifier",
+            msg: "i8",
+        ),
+    ],
+)
