@@ -19,5 +19,9 @@ cu-ros2-bridge = { path = "../../components/bridges/cu_ros2_bridge", version = "
 tempfile = { workspace = true }
 serde = { workspace = true }
 
+[features]
+humble = ["cu-ros2-bridge/humble"]
+
+
 [package.metadata.cargo-shear]
 ignored = ["serde"]

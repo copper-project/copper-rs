@@ -33,22 +33,6 @@ pub trait RosMsgAdapter<'a>: Sized {
     /// For example Int8 is "RIHS01_26525065a403d972cb672f0777e333f0c799ad444ae5fcd79e43d1e73bd0f440"
     /// This will only be used in ROS 2 Iron and later versions.
     fn type_hash() -> &'static str;
-
-    /// Converts the current Copper type into the corresponding ROS message type.
-    ///
-    /// # Returns
-    /// A tuple containing:
-    /// - The converted ROS message type (`Self::Output`).
-    /// - The type hash as a string, which is used to identify the message type in ROS.
-    #[cfg(not(feature = "humble"))]
-    fn convert(&self) -> (Self::Output, &'static str) {
-        (self.into(), Self::type_hash())
-    }
-
-    #[cfg(feature = "humble")]
-    fn convert(&self) -> (Self::Output, &str) {
-        (self.into(), "TypeHashNotSupported")
-    }
 }
 
 /// Bidirectional ROS adaptation trait used by transport bridges.
@@ -87,8 +71,14 @@ where
         <T as RosMsgAdapter<'static>>::type_name()
     }
 
+    #[cfg(not(feature = "humble"))]
     fn type_hash() -> &'static str {
         <T as RosMsgAdapter<'static>>::type_hash()
+    }
+
+    #[cfg(feature = "humble")]
+    fn type_hash() -> &'static str {
+        "TypeHashNotSupported"
     }
 
     fn to_ros_message(&self) -> Self::RosMessage {

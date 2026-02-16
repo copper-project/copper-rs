@@ -22,3 +22,6 @@ zenoh = { version = "1.7.0", default-features = false, features = [
 ] }
 zenoh-ext = { version = "1.7.0", default-features = false }
 cdr = { version = "0.2.4" }
+
+[features]
+humble = ["cu-ros2-payloads/humble"]
