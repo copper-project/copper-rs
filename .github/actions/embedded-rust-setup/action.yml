@@ -27,10 +27,13 @@ runs:
         echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
+    - name: Install latest nextest
+      uses: taiki-e/install-action@nextest
     - name: Setup rust-cache
       uses: Swatinem/rust-cache@v2
       with:
         prefix-key: embedded-${{ inputs.toolchain }}
         shared-key: rust-embedded-${{ inputs.toolchain }}
+        save-if: ${{ github.ref == 'refs/heads/master' }}
         cache-targets: "false"
         cache-bin: "true"

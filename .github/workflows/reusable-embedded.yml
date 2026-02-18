@@ -24,9 +24,6 @@ jobs:
         with:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
-
-      - name: Install latest nextest
-        uses: taiki-e/install-action@nextest
       - name: Check compilation of core with no-std
         run: cargo +${{ inputs.toolchain }} build --no-default-features
       - name: Unit tests of core with no-std
