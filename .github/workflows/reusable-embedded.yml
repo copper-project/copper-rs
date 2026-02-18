@@ -20,15 +20,23 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-      - uses: ./.github/actions/embedded-rust-setup
+      - id: embedded_setup
+        uses: ./.github/actions/embedded-rust-setup
         with:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           install_nextest: "true"
+          sccache_key_suffix: nostd
       - name: Check compilation of core with no-std
         run: cargo +${{ inputs.toolchain }} build --no-default-features
       - name: Unit tests of core with no-std
         run: cargo +${{ inputs.toolchain }} nextest run --no-default-features
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.embedded_setup.outputs.sccache_cache_primary_key != '' && steps.embedded_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.embedded_setup.outputs.sccache_cache_primary_key }}
 
   embedded-crates:
     name: Embedded crates
@@ -38,15 +46,23 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-      - uses: ./.github/actions/embedded-rust-setup
+      - id: embedded_setup
+        uses: ./.github/actions/embedded-rust-setup
         with:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          sccache_key_suffix: embedded-crates
 
       - name: Clippy embedded-only crates
         run: python3 support/ci/embedded_crates.py run --action clippy --toolchain ${{ inputs.toolchain }}
       - name: Build embedded-only crates
         run: python3 support/ci/embedded_crates.py run --action build --toolchain ${{ inputs.toolchain }}
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.embedded_setup.outputs.sccache_cache_primary_key != '' && steps.embedded_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.embedded_setup.outputs.sccache_cache_primary_key }}
 
   rp2350:
     name: RP2350 skeleton
@@ -56,10 +72,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-      - uses: ./.github/actions/embedded-rust-setup
+      - id: embedded_setup
+        uses: ./.github/actions/embedded-rust-setup
         with:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          sccache_key_suffix: rp2350
 
       - name: Detect host target
         run: |
@@ -77,3 +95,9 @@ jobs:
       - name: Build logreader (RP2350 host)
         working-directory: examples/cu_rp2350_skeleton
         run: cargo +${{ inputs.toolchain }} build --no-default-features --features host --bin blinky-logreader --target ${HOST_TARGET}
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.embedded_setup.outputs.sccache_cache_primary_key != '' && steps.embedded_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.embedded_setup.outputs.sccache_cache_primary_key }}
