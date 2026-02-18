@@ -8,6 +8,10 @@ inputs:
     description: Optional CARGO_TARGET_DIR override.
     required: false
     default: ""
+  install_nextest:
+    description: Whether to install nextest.
+    required: false
+    default: "false"
 runs:
   using: composite
   steps:
@@ -28,6 +32,7 @@ runs:
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: Install latest nextest
+      if: inputs.install_nextest == 'true'
       uses: taiki-e/install-action@nextest
     - name: Setup rust-cache
       uses: Swatinem/rust-cache@v2
