@@ -11,8 +11,6 @@ homepage.workspace = true
 repository.workspace = true
 default-run = "balancebot-sim"
 
-publish = false
-
 [package.metadata.cargo-shear]
 ignored = ["serde"]
 
