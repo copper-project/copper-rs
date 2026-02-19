@@ -37,6 +37,16 @@ pub struct JumpOutcome {
     pub replayed: usize,
 }
 
+/// Section-cache statistics for a debug session.
+#[derive(Debug, Clone, Copy)]
+pub struct SectionCacheStats {
+    pub cap: usize,
+    pub entries: usize,
+    pub hits: u64,
+    pub misses: u64,
+    pub evictions: u64,
+}
+
 /// Metadata for one copperlist section (no payload kept).
 #[derive(Debug, Clone)]
 pub(crate) struct SectionIndexEntry {
@@ -85,6 +95,9 @@ where
     cache: HashMap<usize, CachedSection<P>>,
     cache_order: VecDeque<usize>,
     cache_cap: usize,
+    cache_hits: u64,
+    cache_misses: u64,
+    cache_evictions: u64,
     phantom: PhantomData<(S, L)>,
 }
 
@@ -206,6 +219,9 @@ where
             cache: HashMap::new(),
             cache_order: VecDeque::new(),
             cache_cap: cache_cap.max(1),
+            cache_hits: 0,
+            cache_misses: 0,
+            cache_evictions: 0,
             phantom: PhantomData,
         }
     }
@@ -337,17 +353,21 @@ where
         self.cache_order.push_back(key);
         while self.cache_order.len() > self.cache_cap {
             if let Some(old) = self.cache_order.pop_front() {
-                self.cache.remove(&old);
+                if self.cache.remove(&old).is_some() {
+                    self.cache_evictions = self.cache_evictions.saturating_add(1);
+                }
             }
         }
     }
 
     fn load_section(&mut self, section_idx: usize) -> CuResult<&CachedSection<P>> {
         if self.cache.contains_key(&section_idx) {
+            self.cache_hits = self.cache_hits.saturating_add(1);
             self.touch_cache(section_idx);
             // SAFETY: key exists, unwrap ok.
             return Ok(self.cache.get(&section_idx).unwrap());
         }
+        self.cache_misses = self.cache_misses.saturating_add(1);
 
         let entry = &self.sections[section_idx];
         let (header, data) = read_section_at(&mut self.log_reader, entry.pos)?;
@@ -534,6 +554,22 @@ where
     /// Total number of copperlists indexed in this session.
     pub fn total_entries(&self) -> usize {
         self.total_entries
+    }
+
+    /// The nearest keyframe (<= target CL), if any.
+    pub fn nearest_keyframe_culistid(&self, target_culistid: u32) -> Option<u32> {
+        self.nearest_keyframe(target_culistid).map(|kf| kf.culistid)
+    }
+
+    /// Returns section-cache statistics for this session.
+    pub fn section_cache_stats(&self) -> SectionCacheStats {
+        SectionCacheStats {
+            cap: self.cache_cap,
+            entries: self.cache.len(),
+            hits: self.cache_hits,
+            misses: self.cache_misses,
+            evictions: self.cache_evictions,
+        }
     }
 
     /// Current absolute cursor index, if initialized.
