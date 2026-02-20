@@ -9,8 +9,10 @@
 extern crate alloc;
 
 use alloc::format;
+use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::fmt::Write as _;
 use cu29::prelude::*;
 #[cfg(all(feature = "std", debug_assertions))]
 use cu29_log_runtime::{
@@ -45,8 +47,7 @@ struct WindowState {
 }
 
 impl WindowState {
-    fn new(task_count: usize) -> Self {
-        let max_sample = CuDuration::from_secs(MAX_LATENCY_SECS);
+    fn new(task_count: usize, max_sample: CuDuration) -> Self {
         #[cfg(target_os = "none")]
         info!("WindowState::new: init end_to_end");
         let end_to_end = CuDurationStatistics::new(max_sample);
@@ -81,7 +82,32 @@ impl WindowState {
     }
 }
 
-struct Snapshot<'a> {
+fn monitor_max_sample(config: &CuConfig) -> CuResult<CuDuration> {
+    let monitor_cfg = config.get_monitor_config().and_then(|m| m.get_config());
+    if let Some(cfg) = monitor_cfg {
+        if let Some(us) = cfg.get::<u64>("max_latency_us")? {
+            if us == 0 {
+                return Err(CuError::from("cu_logmon max_latency_us must be > 0"));
+            }
+            return Ok(CuDuration::from_micros(us));
+        }
+        if let Some(ms) = cfg.get::<u64>("max_latency_ms")? {
+            if ms == 0 {
+                return Err(CuError::from("cu_logmon max_latency_ms must be > 0"));
+            }
+            return Ok(CuDuration::from_millis(ms));
+        }
+        if let Some(secs) = cfg.get::<u64>("max_latency_secs")? {
+            if secs == 0 {
+                return Err(CuError::from("cu_logmon max_latency_secs must be > 0"));
+            }
+            return Ok(CuDuration::from_secs(secs));
+        }
+    }
+    Ok(CuDuration::from_secs(MAX_LATENCY_SECS))
+}
+
+struct Snapshot {
     copperlist_index: u64,
     rate_whole: u64,
     rate_tenths: u64,
@@ -89,9 +115,8 @@ struct Snapshot<'a> {
     e2e_p90_us: u64,
     e2e_p99_us: u64,
     e2e_max_us: u64,
-    slowest_task: &'a str,
-    slowest_task_p99_us: u64,
-    log_overhead_us: u64,
+    top4: String,
+    overhead_us: u64,
 }
 
 pub struct CuLogMon {
@@ -101,7 +126,7 @@ pub struct CuLogMon {
 }
 
 impl CuLogMon {
-    fn compute_snapshot<'a>(&'a self, state: &WindowState, now: CuTime) -> Option<Snapshot<'a>> {
+    fn compute_snapshot(&self, state: &WindowState, now: CuTime) -> Option<Snapshot> {
         let last_report = state.last_report_at?;
 
         let elapsed = now - last_report;
@@ -117,13 +142,19 @@ impl CuLogMon {
             0
         };
 
-        let slowest = find_slowest_task(&state.per_task);
-        let (slowest_task, slowest_task_p99_us) = slowest
-            .map(|(idx, dur)| {
-                let name = self.taskids.get(idx).copied().unwrap_or("<?>");
-                (name, dur.as_micros())
-            })
-            .unwrap_or(("none", 0));
+        let top4_max_entries = find_top_tasks_by_max(&state.per_task, 4);
+        let mut top4 = String::new();
+        if top4_max_entries.is_empty() {
+            top4.push_str("none");
+        } else {
+            for (rank, (idx, dur)) in top4_max_entries.iter().enumerate() {
+                if rank > 0 {
+                    top4.push_str(", ");
+                }
+                let name = self.taskids.get(*idx).copied().unwrap_or("<?>");
+                let _ = write!(&mut top4, "{} {}us", name, dur.as_micros());
+            }
+        }
 
         let e2e_p50 = state.end_to_end.percentile(0.5).as_micros();
         let e2e_p90 = state.end_to_end.percentile(0.9).as_micros();
@@ -139,9 +170,8 @@ impl CuLogMon {
             e2e_p90_us: e2e_p90,
             e2e_p99_us: e2e_p99,
             e2e_max_us: e2e_max,
-            slowest_task,
-            slowest_task_p99_us,
-            log_overhead_us: state.last_log_duration.as_micros(),
+            top4,
+            overhead_us: state.last_log_duration.as_micros(),
         })
     }
 }
@@ -165,18 +195,19 @@ fn end_to_end_latency(msgs: &[&CuMsgMetadata]) -> Option<CuDuration> {
     }
 }
 
-fn find_slowest_task(per_task: &[CuDurationStatistics]) -> Option<(usize, CuDuration)> {
-    per_task
+fn find_top_tasks_by_max(per_task: &[CuDurationStatistics], limit: usize) -> Vec<(usize, CuDuration)> {
+    let mut ranked: Vec<(usize, CuDuration)> = per_task
         .iter()
         .enumerate()
-        .filter_map(|(idx, stats)| {
-            if stats.is_empty() {
-                None
-            } else {
-                Some((idx, stats.percentile(0.99)))
-            }
-        })
-        .max_by_key(|(_, dur)| dur.as_nanos())
+        .filter_map(|(idx, stats)| (!stats.is_empty()).then_some((idx, stats.max())))
+        .collect();
+    ranked.sort_unstable_by(|a, b| {
+        b.1.as_nanos()
+            .cmp(&a.1.as_nanos())
+            .then_with(|| a.0.cmp(&b.0))
+    });
+    ranked.truncate(limit);
+    ranked
 }
 
 fn task_state_label(state: &CuTaskState) -> &'static str {
@@ -190,10 +221,11 @@ fn task_state_label(state: &CuTaskState) -> &'static str {
 }
 
 impl CuMonitor for CuLogMon {
-    fn new(_config: &CuConfig, taskids: &'static [&'static str]) -> CuResult<Self> {
+    fn new(config: &CuConfig, taskids: &'static [&'static str]) -> CuResult<Self> {
         #[cfg(target_os = "none")]
         info!("CuLogMon::new: task_count={}", taskids.len());
-        let window = WindowState::new(taskids.len());
+        let max_sample = monitor_max_sample(config)?;
+        let window = WindowState::new(taskids.len(), max_sample);
         #[cfg(target_os = "none")]
         info!("CuLogMon::new: window ready");
         Ok(Self {
@@ -289,17 +321,16 @@ impl CuMonitor for CuLogMon {
             let log_start = clock.recent();
             let use_color = cfg!(feature = "color_log");
             let base = format!(
-                "[CL {}] rate {}.{} Hz | slowest {} {}us | e2e p50 {}us p90 {}us p99 {}us max {}us | log_overhead {}us",
+                "[CL {}] rate {}.{} Hz | top4 {} | e2e p50 {}us p90 {}us p99 {}us max {}us | overhead {}us",
                 snapshot.copperlist_index,
                 snapshot.rate_whole,
                 snapshot.rate_tenths,
-                snapshot.slowest_task,
-                snapshot.slowest_task_p99_us,
+                snapshot.top4,
                 snapshot.e2e_p50_us,
                 snapshot.e2e_p90_us,
                 snapshot.e2e_p99_us,
                 snapshot.e2e_max_us,
-                snapshot.log_overhead_us,
+                snapshot.overhead_us,
             );
             if use_color {
                 // Colored labels for readability (values stay uncolored).
@@ -309,7 +340,7 @@ impl CuMonitor for CuLogMon {
                 const TASK_NAME_COLOR: &str = "\x1b[38;5;208m"; // orange for task name
                 const RESET: &str = "\x1b[0m";
                 let colored = format!(
-                    "[{cl_color}CL {cl}{reset}] {label}rate{reset} {rate_whole}.{rate_tenths} Hz | {label}slowest{reset} {task_color}{slow_task}{reset} {slow_p99}us | {label}e2e{reset} {sublabel}p50{reset} {p50}us {sublabel}p90{reset} {p90}us {sublabel}p99{reset} {p99}us {sublabel}max{reset} {max}us | {label}log_overhead{reset} {log_overhead}us",
+                    "[{cl_color}CL {cl}{reset}] {label}rate{reset} {rate_whole}.{rate_tenths} Hz | {label}top4{reset} {task_color}{top4}{reset} | {label}e2e{reset} {sublabel}p50{reset} {p50}us {sublabel}p90{reset} {p90}us {sublabel}p99{reset} {p99}us {sublabel}max{reset} {max}us | {label}overhead{reset} {overhead}us",
                     cl_color = CL_COLOR,
                     label = LABEL_COLOR,
                     sublabel = SUBLABEL_COLOR,
@@ -318,13 +349,12 @@ impl CuMonitor for CuLogMon {
                     cl = snapshot.copperlist_index,
                     rate_whole = snapshot.rate_whole,
                     rate_tenths = snapshot.rate_tenths,
-                    slow_task = snapshot.slowest_task,
-                    slow_p99 = snapshot.slowest_task_p99_us,
                     p50 = snapshot.e2e_p50_us,
                     p90 = snapshot.e2e_p90_us,
                     p99 = snapshot.e2e_p99_us,
                     max = snapshot.e2e_max_us,
-                    log_overhead = snapshot.log_overhead_us,
+                    top4 = snapshot.top4,
+                    overhead = snapshot.overhead_us,
                 );
                 info!("{}", &colored);
             } else {
