@@ -1,0 +1,23 @@
+[package]
+name = "cu-feetech"
+description = "A copper-rs bridge for Feetech STS/SCS serial bus servos (e.g. STS3215 used in SO-100/SO-101 arms)."
+
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "feetech-calibrate"
+path = "src/bin/calibrate.rs"
+
+[dependencies]
+cu29 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+cu-linux-resources = { workspace = true }
+heapless = { workspace = true }

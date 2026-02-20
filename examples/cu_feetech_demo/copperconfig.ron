@@ -1,0 +1,96 @@
+(
+    missions: [
+        (id: "arm_publisher"),
+        (id: "leader_follower"),
+    ],
+    resources: [
+        (
+            id: "hw",
+            provider: "cu_linux_resources::LinuxResources",
+            config: {
+                "serial0_dev": "/dev/ttyACM0",
+                "serial0_baudrate": 1000000,
+                "serial0_timeout_ms": 10,
+                "serial1_dev": "/dev/ttyACM1",
+                "serial1_baudrate": 1000000,
+                "serial1_timeout_ms": 10,
+            },
+        ),
+    ],
+    tasks: [
+        (
+            id: "logger",
+            type: "tasks::PositionLogger",
+            missions: ["arm_publisher"],
+        ),
+    ],
+    bridges: [
+        (
+            id: "feetech",
+            type: "cu_feetech::FeetechBridge",
+            missions: ["arm_publisher"],
+            resources: {"serial": "hw.serial0"},
+            config: {
+                "servo0": 1,
+                "servo1": 2,
+                "servo2": 3,
+                "servo3": 4,
+                "servo4": 5,
+                "servo5": 6,
+            },
+            channels: [Rx(id: "positions")],
+        ),
+        (
+            id: "leader",
+            type: "cu_feetech::FeetechBridge",
+            missions: ["leader_follower"],
+            resources: {"serial": "hw.serial0"},
+            config: {
+                "servo0": 1,
+                "servo1": 2,
+                "servo2": 3,
+                "servo3": 4,
+                "servo4": 5,
+                "servo5": 6,
+                "units": "normalize",
+                "calibration_file": "calibration_leader.json",
+            },
+            channels: [Rx(id: "positions")],
+        ),
+        (
+            id: "follower",
+            type: "cu_feetech::FeetechBridge",
+            missions: ["leader_follower"],
+            resources: {"serial": "hw.serial1"},
+            config: {
+                "servo0": 1,
+                "servo1": 2,
+                "servo2": 3,
+                "servo3": 4,
+                "servo4": 5,
+                "servo5": 6,
+                "units": "normalize",
+                "calibration_file": "calibration_follower.json",
+            },
+            channels: [
+                Tx(id: "goal_positions"),
+                Rx(id: "positions"),
+            ],
+        ),
+    ],
+    cnx: [
+        (
+            src: "feetech/positions",
+            dst: "logger",
+            msg: "cu_feetech::messages::JointPositions",
+            missions: ["arm_publisher"],
+        ),
+        (
+            src: "leader/positions",
+            dst: "follower/goal_positions",
+            msg: "cu_feetech::messages::JointPositions",
+            missions: ["leader_follower"],
+        ),
+    ],
+    runtime: (rate_target_hz: 30),
+)
