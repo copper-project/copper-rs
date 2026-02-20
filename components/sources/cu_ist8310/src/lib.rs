@@ -35,10 +35,11 @@ const PDCNTL_PULSE_DURATION_NORMAL: u8 = 0xC0;
 const UT_PER_LSB: f32 = 0.3;
 
 const DETECT_RETRY_LIMIT: usize = 5_000;
-const MEASURE_READY_POLL_LIMIT: usize = 10_000;
 const I2C_TRANSFER_RETRY_LIMIT: usize = 8;
 const OUTPUT_RATE_HZ: u64 = 100;
 const OUTPUT_PERIOD_NS: u64 = 1_000_000_000 / OUTPUT_RATE_HZ;
+const MEASURE_MIN_DELAY_NS: u64 = 6_000_000;
+const MEASURE_TIMEOUT_NS: u64 = 20_000_000;
 const DRIVER_LOG_PERIOD_NS: u64 = 1_000_000_000;
 
 /// Address-scoped bus interface for IST8310 register I/O.
@@ -105,10 +106,16 @@ where
         Ok(())
     }
 
-    fn read_measure(&mut self) -> CuResult<MagnetometerPayload> {
+    fn trigger_measurement(&mut self) -> CuResult<()> {
         self.write_reg_value(REG_CNTRL1, CNTRL1_SINGLE_MEASURE)
-            .map_err(|err| map_debug_error("ist8310 trigger single measure", err))?;
-        self.wait_data_ready()?;
+            .map_err(|err| map_debug_error("ist8310 trigger single measure", err))
+    }
+
+    fn read_measure_if_ready(&mut self) -> CuResult<Option<MagnetometerPayload>> {
+        let stat1 = self.read_reg(REG_STAT1)?;
+        if (stat1 & STAT1_DRDY) == 0 {
+            return Ok(None);
+        }
 
         let mut buf = [0u8; 6];
         self.read_reg_buf(REG_DATA_X_L, &mut buf)?;
@@ -122,35 +129,7 @@ where
         let mag_y = -(y_raw as f32) * UT_PER_LSB;
         let mag_z = (z_raw as f32) * UT_PER_LSB;
 
-        Ok(MagnetometerPayload::from_raw([mag_x, mag_y, mag_z]))
-    }
-
-    fn wait_data_ready(&mut self) -> CuResult<()> {
-        let mut last_status: Option<u8> = None;
-        let mut read_errors = 0u32;
-        for _ in 0..MEASURE_READY_POLL_LIMIT {
-            let status = match self.read_reg(REG_STAT1) {
-                Ok(v) => v,
-                Err(_) => {
-                    read_errors = read_errors.saturating_add(1);
-                    backoff_spin();
-                    continue;
-                }
-            };
-            last_status = Some(status);
-            if (status & STAT1_DRDY) != 0 {
-                return Ok(());
-            }
-            backoff_spin();
-        }
-
-        let last_status_str = match last_status {
-            Some(status) => format!("0x{status:02X}"),
-            None => String::from("none"),
-        };
-        Err(CuError::from(format!(
-            "ist8310 data-ready timeout: last_stat1={last_status_str} read_errors={read_errors}"
-        )))
+        Ok(Some(MagnetometerPayload::from_raw([mag_x, mag_y, mag_z])))
     }
 
     fn read_reg(&mut self, reg: u8) -> CuResult<u8> {
@@ -215,8 +194,15 @@ where
 {
     #[reflect(ignore)]
     driver: Ist8310Driver<BUS>,
+    measure_state: MeasureState,
     last_output_ns: Option<u64>,
     last_log_ns: Option<u64>,
+}
+
+#[derive(Clone, Copy)]
+enum MeasureState {
+    Idle,
+    Measuring { started_ns: u64 },
 }
 
 impl<BUS> TypePath for Ist8310Source<BUS>
@@ -260,6 +246,7 @@ where
         let driver = Ist8310Driver::new(resources.i2c.0)?;
         Ok(Self {
             driver,
+            measure_state: MeasureState::Idle,
             last_output_ns: None,
             last_log_ns: None,
         })
@@ -274,15 +261,50 @@ where
         let tov = clock.now();
         let now_ns = tov.as_nanos();
 
-        if let Some(last_output_ns) = self.last_output_ns
-            && now_ns.saturating_sub(last_output_ns) < OUTPUT_PERIOD_NS
-        {
-            output.clear_payload();
-            output.tov = Tov::None;
-            return Ok(());
-        }
+        let payload = match self.measure_state {
+            MeasureState::Idle => {
+                if let Some(last_output_ns) = self.last_output_ns
+                    && now_ns.saturating_sub(last_output_ns) < OUTPUT_PERIOD_NS
+                {
+                    output.clear_payload();
+                    output.tov = Tov::None;
+                    return Ok(());
+                }
 
-        let payload = self.driver.read_measure()?;
+                self.driver.trigger_measurement()?;
+                self.measure_state = MeasureState::Measuring { started_ns: now_ns };
+                output.clear_payload();
+                output.tov = Tov::None;
+                return Ok(());
+            }
+            MeasureState::Measuring { started_ns } => {
+                let elapsed_ns = now_ns.saturating_sub(started_ns);
+                if elapsed_ns < MEASURE_MIN_DELAY_NS {
+                    output.clear_payload();
+                    output.tov = Tov::None;
+                    return Ok(());
+                }
+
+                if elapsed_ns > MEASURE_TIMEOUT_NS {
+                    self.measure_state = MeasureState::Idle;
+                    output.clear_payload();
+                    output.tov = Tov::None;
+                    return Ok(());
+                }
+
+                match self.driver.read_measure_if_ready()? {
+                    Some(payload) => {
+                        self.measure_state = MeasureState::Idle;
+                        payload
+                    }
+                    None => {
+                        output.clear_payload();
+                        output.tov = Tov::None;
+                        return Ok(());
+                    }
+                }
+            }
+        };
         self.last_output_ns = Some(now_ns);
 
         if self
