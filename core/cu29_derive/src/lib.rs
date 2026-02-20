@@ -4375,6 +4375,19 @@ fn generate_bridge_tx_execution_tokens(
     } else {
         quote! { &mut msgs.#input_index }
     };
+    let output_pack = step
+        .output_msg_pack
+        .as_ref()
+        .expect("Bridge Tx channel missing output pack");
+    if output_pack.msg_types.len() != 1 {
+        panic!(
+            "Bridge Tx channel '{}' expected a single output message slot, got {}",
+            channel.id,
+            output_pack.msg_types.len()
+        );
+    }
+    let output_index = int2sliceindex(output_pack.culist_index);
+    let output_ref = quote! { &mut msgs.#output_index };
     let bridge_tuple_index = int2sliceindex(bridge_spec.tuple_index as u32);
     let bridge_type = &bridge_spec.type_path;
     let const_ident = &channel.const_ident;
@@ -4425,12 +4438,10 @@ fn generate_bridge_tx_execution_tokens(
             {
                 let bridge = &mut __cu_bridges.#bridge_tuple_index;
                 let cumsg_input = #input_ref;
-                // Stamp timing so monitors see consistent ranges for bridge Tx as well.
+                let cumsg_output = #output_ref;
                 #call_sim_callback
                 if doit {
-                    if cumsg_input.metadata.process_time.start.is_none() {
-                        cumsg_input.metadata.process_time.start = clock.now().into();
-                    }
+                    cumsg_output.metadata.process_time.start = clock.now().into();
                     let maybe_error = {
                         #rt_guard
                         bridge.send(
@@ -4459,9 +4470,7 @@ fn generate_bridge_tx_execution_tokens(
                             }
                         }
                     }
-                    if cumsg_input.metadata.process_time.end.is_none() {
-                        cumsg_input.metadata.process_time.end = clock.now().into();
-                    }
+                    cumsg_output.metadata.process_time.end = clock.now().into();
                 }
             }
         },
