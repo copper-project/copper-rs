@@ -8,6 +8,28 @@ inputs:
     description: Optional CARGO_TARGET_DIR override.
     required: false
     default: ""
+  install_nextest:
+    description: Whether to install nextest.
+    required: false
+    default: "false"
+  sccache_restore:
+    description: Whether to restore sccache.
+    required: false
+    default: "true"
+  sccache_key_suffix:
+    description: Suffix used to separate sccache writers per job/task.
+    required: true
+  sccache_dir:
+    description: Optional SCCACHE_DIR override.
+    required: false
+    default: ""
+outputs:
+  sccache_cache_hit:
+    description: Whether sccache restore matched the primary key.
+    value: ${{ steps.restore_sccache.outputs.cache-hit }}
+  sccache_cache_primary_key:
+    description: Primary sccache key for this job.
+    value: ${{ steps.restore_sccache.outputs.cache-primary-key }}
 runs:
   using: composite
   steps:
@@ -20,17 +42,37 @@ runs:
         toolchain: ${{ inputs.toolchain }}
         targets: aarch64-unknown-none,thumbv7em-none-eabihf,thumbv8m.main-none-eabihf,riscv32imac-unknown-none-elf
         components: rustc,cargo,rust-std,rustfmt,clippy
-    - name: Enable sccache
-      shell: bash
-      run: |
-        echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
-        echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
+    - name: Configure sccache
+      shell: bash
+      run: |
+        SCCACHE_DIR="${{ inputs.sccache_dir }}"
+        if [[ -z "$SCCACHE_DIR" ]]; then
+          SCCACHE_DIR="$PWD/.sccache"
+        fi
+        mkdir -p "$SCCACHE_DIR"
+        echo "SCCACHE_DIR=$SCCACHE_DIR" >> "$GITHUB_ENV"
+        echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+    - name: Restore sccache
+      if: inputs.sccache_restore == 'true'
+      id: restore_sccache
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ env.SCCACHE_DIR }}
+        key: sccache-${{ runner.os }}-${{ inputs.toolchain }}-embedded-${{ inputs.sccache_key_suffix }}-${{ github.sha }}
+        restore-keys: |
+          sccache-${{ runner.os }}-${{ inputs.toolchain }}-embedded-${{ inputs.sccache_key_suffix }}-
+          sccache-${{ runner.os }}-${{ inputs.toolchain }}-embedded-
+          sccache-${{ runner.os }}-${{ inputs.toolchain }}-
+    - name: Install latest nextest
+      if: inputs.install_nextest == 'true'
+      uses: taiki-e/install-action@nextest
     - name: Setup rust-cache
       uses: Swatinem/rust-cache@v2
       with:
         prefix-key: embedded-${{ inputs.toolchain }}
         shared-key: rust-embedded-${{ inputs.toolchain }}
+        save-if: ${{ github.ref == 'refs/heads/master' }}
         cache-targets: "false"
         cache-bin: "true"
