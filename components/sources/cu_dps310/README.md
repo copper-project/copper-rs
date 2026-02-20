@@ -1,4 +1,4 @@
-# cu_dp310
+# cu_dps310
 
 Copper source driver for Infineon DPS310 barometer.
 

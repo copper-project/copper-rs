@@ -502,7 +502,7 @@ where
     BUS: Dps310Bus,
 {
     fn type_path() -> &'static str {
-        "cu_dp310::Dps310Source"
+        "cu_dps310::Dps310Source"
     }
 
     fn short_type_path() -> &'static str {
@@ -514,7 +514,7 @@ where
     }
 
     fn crate_name() -> Option<&'static str> {
-        Some("cu_dp310")
+        Some("cu_dps310")
     }
 
     fn module_path() -> Option<&'static str> {

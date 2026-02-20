@@ -56,7 +56,7 @@ cu-ahrs = { path = "../../components/tasks/cu_ahrs", default-features = false, f
 cu-bmi088 = { path = "../../components/sources/cu_bmi088", default-features = false, features = [
   "defmt",
 ], optional = true }
-cu-dp310 = { path = "../../components/sources/cu_dp310", default-features = false, features = [
+cu-dps310 = { path = "../../components/sources/cu_dps310", default-features = false, features = [
   "defmt",
 ], optional = true }
 
@@ -165,9 +165,9 @@ firmware = [
   "cu-micoairh743/defmt",
   "dep:cu-ahrs",
   "dep:cu-bmi088",
-  "dep:cu-dp310",
+  "dep:cu-dps310",
   "cu-bmi088/defmt",
-  "cu-dp310/defmt",
+  "cu-dps310/defmt",
   "dep:cu-crsf",
   "dep:cu-msp-bridge",
   "cu-crsf/defmt",

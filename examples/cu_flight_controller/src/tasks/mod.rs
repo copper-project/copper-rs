@@ -188,7 +188,7 @@ pub type Bmi088Source = cu_bmi088::Bmi088Source<
     cu_micoairh743::Bmi088GyrCs,
     cu_micoairh743::Bmi088Delay,
 >;
-pub type Dps310Source = cu_dp310::Dps310Source<cu_micoairh743::Dps310I2c>;
+pub type Dps310Source = cu_dps310::Dps310Source<cu_micoairh743::Dps310I2c>;
 
 #[derive(Reflect)]
 pub struct BarometerLogger {

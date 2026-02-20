@@ -7,7 +7,7 @@ use alloc::sync::Arc;
 use core::fmt::Debug;
 use cortex_m::peripheral::DWT;
 use cu_bdshot::{Stm32H7Board, Stm32H7BoardResources, register_stm32h7_board};
-use cu_dp310::Dps310Bus;
+use cu_dps310::Dps310Bus;
 use cu_sdlogger::{EMMCLogger, EMMCSectionStorage, ForceSyncSend, find_copper_partition};
 use cu29::resource::{ResourceBundle, ResourceManager};
 use cu29::{CuError, CuResult, bundle_resources};
