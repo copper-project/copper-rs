@@ -195,7 +195,10 @@ fn end_to_end_latency(msgs: &[&CuMsgMetadata]) -> Option<CuDuration> {
     }
 }
 
-fn find_top_tasks_by_max(per_task: &[CuDurationStatistics], limit: usize) -> Vec<(usize, CuDuration)> {
+fn find_top_tasks_by_max(
+    per_task: &[CuDurationStatistics],
+    limit: usize,
+) -> Vec<(usize, CuDuration)> {
     let mut ranked: Vec<(usize, CuDuration)> = per_task
         .iter()
         .enumerate()
