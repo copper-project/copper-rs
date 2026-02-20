@@ -42,6 +42,7 @@ members = [
   "components/sources/cu_ads7883",
   "components/sources/cu_bmi088",
   "components/sources/cu_dps310",
+  "components/sources/cu_ist8310",
   "components/sources/cu_gnss_ublox",
   "components/sources/cu_gstreamer",
   "components/sources/cu_hesai",
