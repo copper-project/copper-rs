@@ -26,6 +26,24 @@ inputs:
     description: Whether to set WORKSPACE_FLAG from WORKSPACE_SCOPE.
     required: false
     default: "true"
+  sccache_restore:
+    description: Whether to restore sccache.
+    required: false
+    default: "true"
+  sccache_key_suffix:
+    description: Suffix used to separate sccache writers per job/task.
+    required: true
+  sccache_dir:
+    description: Optional SCCACHE_DIR override.
+    required: false
+    default: ""
+outputs:
+  sccache_cache_hit:
+    description: Whether sccache restore matched the primary key.
+    value: ${{ steps.restore_sccache.outputs.cache-hit }}
+  sccache_cache_primary_key:
+    description: Primary sccache key for this job.
+    value: ${{ steps.restore_sccache.outputs.cache-primary-key }}
 runs:
   using: composite
   steps:
@@ -39,6 +57,27 @@ runs:
         components: rustc,cargo,rust-std,rustfmt,clippy
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
+    - name: Configure sccache
+      shell: bash
+      run: |
+        SCCACHE_DIR="${{ inputs.sccache_dir }}"
+        if [[ -z "$SCCACHE_DIR" ]]; then
+          SCCACHE_DIR="$PWD/.sccache"
+        fi
+        mkdir -p "$SCCACHE_DIR"
+        echo "SCCACHE_DIR=$SCCACHE_DIR" >> "$GITHUB_ENV"
+        echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+    - name: Restore sccache
+      if: inputs.sccache_restore == 'true'
+      id: restore_sccache
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ env.SCCACHE_DIR }}
+        key: sccache-${{ runner.os }}-${{ inputs.toolchain }}-${{ inputs.cache_prefix }}-${{ inputs.sccache_key_suffix }}-${{ github.sha }}
+        restore-keys: |
+          sccache-${{ runner.os }}-${{ inputs.toolchain }}-${{ inputs.cache_prefix }}-${{ inputs.sccache_key_suffix }}-
+          sccache-${{ runner.os }}-${{ inputs.toolchain }}-${{ inputs.cache_prefix }}-
+          sccache-${{ runner.os }}-${{ inputs.toolchain }}-
     - name: Install latest nextest
       if: inputs.install_nextest == 'true'
       uses: taiki-e/install-action@nextest

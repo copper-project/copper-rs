@@ -26,8 +26,6 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       BASE_FEATURES: mock,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: ${{ matrix.os == 'windows-latest' && 'core' || 'workspace' }}
 
@@ -49,7 +47,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-      - uses: ./.github/actions/rust-ci-setup
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
         with:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
@@ -57,6 +56,7 @@ jobs:
           cache_prefix: ${{ matrix.mode }}
           cache_shared_key: rust-${{ matrix.os }}
           install_nextest: ${{ matrix.task == 'test' }}
+          sccache_key_suffix: unit-${{ matrix.task }}
 
       - name: Install CUDA
         uses: Jimver/cuda-toolkit@v0.2.30
@@ -135,6 +135,13 @@ jobs:
           cargo +${{ inputs.toolchain }} test -p cu-caterpillar --features determinism_ci
           -- determinism_record_and_resim --test-threads=1
 
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
+
   tests-features:
     name: Unit Tests (all features)
     runs-on: ${{ matrix.os }}
@@ -145,8 +152,6 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       BASE_FEATURES: mock,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: ${{ matrix.os == 'windows-latest' && 'core' || 'workspace' }}
 
@@ -163,7 +168,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-      - uses: ./.github/actions/rust-ci-setup
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
         with:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
@@ -171,6 +177,7 @@ jobs:
           cache_prefix: ${{ matrix.mode }}
           cache_shared_key: rust-${{ matrix.os }}
           install_nextest: "true"
+          sccache_key_suffix: tests-features
 
       - name: Install CUDA
         uses: Jimver/cuda-toolkit@v0.2.30
@@ -235,6 +242,13 @@ jobs:
           fi
           cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
 
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
+
   templates:
     name: Templates (debug)
     runs-on: ${{ matrix.os }}
@@ -245,8 +259,6 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       BASE_FEATURES: mock,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
@@ -258,7 +270,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-      - uses: ./.github/actions/rust-ci-setup
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
         with:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
@@ -266,6 +279,7 @@ jobs:
           cache_prefix: ${{ matrix.mode }}
           cache_shared_key: rust-${{ matrix.os }}
           install_nextest: "false"
+          sccache_key_suffix: templates
 
       - name: Install cargo-generate on (${{ matrix.os }} | debug)
         uses: taiki-e/install-action@v2
@@ -284,3 +298,10 @@ jobs:
           cargo +${{ inputs.toolchain }} build
           cd ../test_workspace
           cargo +${{ inputs.toolchain }} build
+
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}

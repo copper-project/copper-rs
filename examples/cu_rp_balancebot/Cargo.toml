@@ -11,8 +11,6 @@ homepage.workspace = true
 repository.workspace = true
 default-run = "balancebot-sim"
 
-publish = false
-
 [package.metadata.cargo-shear]
 ignored = ["serde"]
 
@@ -68,7 +66,10 @@ avian3d = { workspace = true, default-features = false, features = [
   "parry-f32",
   "xpbd_joints",
 ], optional = true }
-cached-path = { workspace = true, features = ["progress-bar"], optional = true }
+cached-path = { workspace = true, features = [
+  "progress-bar",
+  "rustls-tls",
+], optional = true }
 bevy_anti_alias = { version = "0.18.0", optional = true }
 
 [features]

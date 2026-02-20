@@ -4,6 +4,7 @@
         (
             id: "fc",
             provider: "cu_micoairh743::MicoAirH743",
+            config: {"i2c2_hz": 400000},
         ),
     ],
     tasks: [
@@ -17,6 +18,17 @@
                 "gyr_cs": "fc.bmi088_gyr_cs",
                 "delay": "fc.bmi088_delay",
             },
+        ),
+        (
+            id: "dps310",
+            type: "tasks::Dps310Source",
+            logging: (enabled: true),
+            resources: {"i2c": "fc.i2c2_dps310"},
+        ),
+        (
+            id: "baro_logger",
+            type: "tasks::BarometerLogger",
+            logging: (enabled: false),
         ),
         (
             id: "battery_adc",
@@ -201,6 +213,11 @@
             src: "bmi088",
             dst: "imu_cal",
             msg: "cu_sensor_payloads::ImuPayload",
+        ),
+        (
+            src: "dps310",
+            dst: "baro_logger",
+            msg: "cu_sensor_payloads::BarometerPayload",
         ),
         (
             src: "mapper",

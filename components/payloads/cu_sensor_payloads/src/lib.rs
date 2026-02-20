@@ -2,6 +2,7 @@
 
 extern crate alloc;
 
+mod barometer;
 #[cfg(feature = "std")]
 mod image;
 mod imu;
@@ -10,6 +11,7 @@ mod pointcloud;
 #[cfg(feature = "rerun")]
 mod rerun_components;
 
+pub use barometer::*;
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use image::*;
