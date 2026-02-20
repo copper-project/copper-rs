@@ -85,11 +85,14 @@ fn main() -> ! {
     let clock = build_clock();
     let writer = Arc::new(Mutex::new(logger));
 
-    if let Ok(mut app) = FlightControllerApp::new_with_resources(clock, writer, resources) {
-        log_heap_stats("before-run");
-        let _ = <FlightControllerApp as CuApplication<LogStorage, Logger>>::run(&mut app);
-    } else {
-        error!("App init failed");
+    match FlightControllerApp::new_with_resources(clock, writer, resources) {
+        Ok(mut app) => {
+            log_heap_stats("before-run");
+            let _ = <FlightControllerApp as CuApplication<LogStorage, Logger>>::run(&mut app);
+        }
+        Err(err) => {
+            error!("App init failed: {}", &err);
+        }
     }
     loop {
         asm::wfi();

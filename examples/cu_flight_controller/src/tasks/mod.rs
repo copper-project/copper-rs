@@ -6,7 +6,7 @@ use cu_bdshot::EscCommand;
 use cu_crsf::messages::RcChannelsPayload;
 use cu_micoairh743::GreenLed;
 use cu_pid::{PIDControlOutputPayload, PIDController};
-use cu_sensor_payloads::ImuPayload;
+use cu_sensor_payloads::{BarometerPayload, ImuPayload};
 use cu29::prelude::*;
 use cu29::units::si::angle::radian;
 use cu29::units::si::angular_velocity::{degree_per_second, radian_per_second};
@@ -15,6 +15,7 @@ use cu29::units::si::ratio::ratio;
 use cu29::units::si::thermodynamic_temperature::degree_celsius;
 
 const LOG_PERIOD_MS: u64 = 500;
+const BARO_LOG_PERIOD_MS: u64 = 1000;
 const HEAP_LOG_PERIOD_MS: u64 = 500;
 const VTX_HEARTBEAT_PERIOD_MS: u64 = 1000;
 const VTX_DRAW_PERIOD_MS: u64 = 250;
@@ -48,12 +49,14 @@ pub mod vtx;
 
 struct LogRateLimiter {
     last: OptionCuTime,
+    period_ms: u64,
 }
 
 impl LogRateLimiter {
-    const fn new() -> Self {
+    const fn new(period_ms: u64) -> Self {
         Self {
             last: OptionCuTime::none(),
+            period_ms,
         }
     }
 
@@ -62,7 +65,11 @@ impl LogRateLimiter {
             self.last = now.into();
             return true;
         }
-        now - self.last.unwrap() > CuDuration::from_millis(LOG_PERIOD_MS)
+        if now - self.last.unwrap() >= CuDuration::from_millis(self.period_ms) {
+            self.last = now.into();
+            return true;
+        }
+        false
     }
 }
 
@@ -79,12 +86,16 @@ macro_rules! debug_rl {
     }};
 }
 
-static LOG_CTRL: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new());
-static LOG_TELEMETRY: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new());
-static LOG_IMU: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new());
-static LOG_RC: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new());
-static LOG_RATE: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new());
-static LOG_MOTORS: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new());
+static LOG_CTRL: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new(LOG_PERIOD_MS));
+static LOG_TELEMETRY: spin::Mutex<LogRateLimiter> =
+    spin::Mutex::new(LogRateLimiter::new(LOG_PERIOD_MS));
+static LOG_IMU: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new(LOG_PERIOD_MS));
+static LOG_BARO: spin::Mutex<LogRateLimiter> =
+    spin::Mutex::new(LogRateLimiter::new(BARO_LOG_PERIOD_MS));
+static LOG_RC: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new(LOG_PERIOD_MS));
+static LOG_RATE: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new(LOG_PERIOD_MS));
+static LOG_MOTORS: spin::Mutex<LogRateLimiter> =
+    spin::Mutex::new(LogRateLimiter::new(LOG_PERIOD_MS));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect)]
 enum StatusLabel {
@@ -177,6 +188,49 @@ pub type Bmi088Source = cu_bmi088::Bmi088Source<
     cu_micoairh743::Bmi088GyrCs,
     cu_micoairh743::Bmi088Delay,
 >;
+pub type Dps310Source = cu_dps310::Dps310Source<cu_micoairh743::Dps310I2c>;
+
+#[derive(Reflect)]
+pub struct BarometerLogger {
+    last_tov: Option<CuTime>,
+}
+
+impl Freezable for BarometerLogger {}
+
+impl CuSinkTask for BarometerLogger {
+    type Input<'m> = CuMsg<BarometerPayload>;
+    type Resources<'r> = ();
+
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        Ok(Self { last_tov: None })
+    }
+
+    fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
+        if let Some(payload) = input.payload() {
+            let tov_time = expect_tov_time(input.tov)?;
+            debug_rl!(&LOG_BARO, tov_time, {
+                let dt_us = match self.last_tov {
+                    Some(prev) => (tov_time - prev).as_micros(),
+                    None => 0,
+                };
+                self.last_tov = Some(tov_time);
+                let pressure_pa = payload.pressure.value;
+                let temp_c = payload.temperature.get::<degree_celsius>();
+                info!(
+                    "baro pressure_pa={} temp_c={} tov_ns={} tov_dt_us={}",
+                    pressure_pa,
+                    temp_c,
+                    tov_time.as_nanos(),
+                    dt_us
+                );
+            });
+        }
+        Ok(())
+    }
+}
 
 impl Freezable for FlightMode {}
 impl Freezable for ControlInputs {}

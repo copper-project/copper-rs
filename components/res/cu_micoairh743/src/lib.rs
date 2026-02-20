@@ -1,13 +1,19 @@
 #![no_std]
 #![doc = include_str!("../README.md")]
 
+extern crate alloc;
+
+use alloc::sync::Arc;
+use core::fmt::Debug;
 use cortex_m::peripheral::DWT;
 use cu_bdshot::{Stm32H7Board, Stm32H7BoardResources, register_stm32h7_board};
+use cu_dps310::Dps310Bus;
 use cu_sdlogger::{EMMCLogger, EMMCSectionStorage, ForceSyncSend, find_copper_partition};
 use cu29::resource::{ResourceBundle, ResourceManager};
 use cu29::{CuError, CuResult, bundle_resources};
 use embedded_hal::adc::OneShot;
 use embedded_hal::blocking::delay::DelayMs;
+use embedded_hal::blocking::i2c::{Read as I2cRead, Write as I2cWrite, WriteRead as I2cWriteRead};
 use embedded_hal::blocking::spi::Transfer;
 use embedded_hal::digital::v2::OutputPin;
 use spin::Mutex;
@@ -15,6 +21,7 @@ use stm32h7xx_hal::{
     adc,
     delay::Delay,
     gpio::{Analog, Output, PushPull, Speed},
+    i2c::I2cExt,
     nb, pac,
     prelude::*,
     rcc::{self, rec::AdcClkSel},
@@ -28,6 +35,9 @@ const UART_OVERRUN_LOG_PERIOD_SECS: u32 = 1;
 const UART6_BAUD: u32 = 420_000;
 const UART2_BAUD: u32 = 115_200;
 const UART4_BAUD: u32 = 115_200;
+const I2C2_DEFAULT_HZ: u32 = 800_000;
+const I2C_ADDR_DPS310: u8 = 0x76;
+const I2C_ADDR_IST8310: u8 = 0x0E;
 
 pub type SerialPortError = embedded_io::ErrorKind;
 
@@ -192,7 +202,64 @@ pub type Bmi088Spi =
 pub type Bmi088AccCs = SingleThreaded<stm32h7xx_hal::gpio::gpiod::PD4<Output<PushPull>>>;
 pub type Bmi088GyrCs = SingleThreaded<stm32h7xx_hal::gpio::gpiod::PD5<Output<PushPull>>>;
 pub type Bmi088Delay = SingleThreaded<Delay>;
+pub type I2c2Bus = stm32h7xx_hal::i2c::I2c<pac::I2C2>;
 pub type BatterySensePin = stm32h7xx_hal::gpio::gpioc::PC0<Analog>;
+
+/// Address-scoped, mutex-protected I2C device endpoint.
+///
+/// Multiple endpoints can share the same bus while the bundle enforces access
+/// serialization through the mutex.
+pub struct SharedI2cDevice<BUS> {
+    bus: Arc<Mutex<BUS>>,
+    address: u8,
+}
+
+impl<BUS> SharedI2cDevice<BUS> {
+    pub fn new(bus: Arc<Mutex<BUS>>, address: u8) -> Self {
+        Self { bus, address }
+    }
+
+    pub const fn address(&self) -> u8 {
+        self.address
+    }
+}
+
+impl<BUS> Dps310Bus for SharedI2cDevice<BUS>
+where
+    BUS: I2cWrite
+        + I2cRead<Error = <BUS as I2cWrite>::Error>
+        + I2cWriteRead<Error = <BUS as I2cWrite>::Error>
+        + Send
+        + 'static,
+    <BUS as I2cWrite>::Error: Debug + Send + 'static,
+{
+    type Error = <BUS as I2cWrite>::Error;
+
+    fn write(&mut self, write: &[u8]) -> Result<(), Self::Error> {
+        self.bus.lock().write(self.address, write)
+    }
+
+    fn write_read(&mut self, write: &[u8], read: &mut [u8]) -> Result<(), Self::Error> {
+        // Prefer atomic write_read, but fallback to write-then-read if the
+        // target/controller pair NACKs repeated-start transactions.
+        if self
+            .bus
+            .lock()
+            .write_read(self.address, write, read)
+            .is_ok()
+        {
+            return Ok(());
+        }
+
+        if !write.is_empty() {
+            self.bus.lock().write(self.address, write)?;
+        }
+        self.bus.lock().read(self.address, read)
+    }
+}
+
+pub type Dps310I2c = SharedI2cDevice<I2c2Bus>;
+pub type Ist8310I2c = SharedI2cDevice<I2c2Bus>;
 
 pub struct BatteryAdc {
     adc: adc::Adc<pac::ADC1, adc::Enabled>,
@@ -267,7 +334,19 @@ fn init_sd_logger(
 pub struct MicoAirH743;
 
 bundle_resources!(
-    MicoAirH743: Uart6, Uart2, Uart4, GreenLed, Logger, Bmi088Spi, Bmi088AccCs, Bmi088GyrCs, Bmi088Delay, BatteryAdc
+    MicoAirH743:
+        Uart6,
+        Uart2,
+        Uart4,
+        GreenLed,
+        Logger,
+        Bmi088Spi,
+        Bmi088AccCs,
+        Bmi088GyrCs,
+        Bmi088Delay,
+        I2C2Dps310,
+        I2C2Ist8310,
+        BatteryAdc
 );
 
 impl ResourceBundle for MicoAirH743 {
@@ -305,6 +384,7 @@ impl ResourceBundle for MicoAirH743 {
         let mut delay = Delay::new(syst, ccdr.clocks);
 
         let gpioa = dp.GPIOA.split(ccdr.peripheral.GPIOA);
+        let gpiob = dp.GPIOB.split(ccdr.peripheral.GPIOB);
         let gpioc = dp.GPIOC.split(ccdr.peripheral.GPIOC);
         let gpiod = dp.GPIOD.split(ccdr.peripheral.GPIOD);
         let gpioe = dp.GPIOE.split(ccdr.peripheral.GPIOE);
@@ -374,6 +454,28 @@ impl ResourceBundle for MicoAirH743 {
             overrun_period_cycles,
         );
 
+        let i2c2_hz = match _config {
+            Some(cfg) => cfg.get::<u32>("i2c2_hz")?.unwrap_or(I2C2_DEFAULT_HZ),
+            None => I2C2_DEFAULT_HZ,
+        };
+        let i2c2_scl = gpiob.pb10.into_alternate_open_drain();
+        let i2c2_sda = gpiob.pb11.into_alternate_open_drain();
+        let i2c2_bus = dp.I2C2.i2c(
+            (i2c2_scl, i2c2_sda),
+            i2c2_hz.Hz(),
+            ccdr.peripheral.I2C2,
+            &ccdr.clocks,
+        );
+        defmt::info!(
+            "I2C2 configured: {} Hz, DPS310=0x{:x}, IST8310=0x{:x}",
+            i2c2_hz,
+            I2C_ADDR_DPS310,
+            I2C_ADDR_IST8310
+        );
+        let i2c2_shared = Arc::new(Mutex::new(i2c2_bus));
+        let i2c2_dps310 = Dps310I2c::new(i2c2_shared.clone(), I2C_ADDR_DPS310);
+        let i2c2_ist8310 = Ist8310I2c::new(i2c2_shared, I2C_ADDR_IST8310);
+
         let logger = init_sd_logger(
             dp.SDMMC1,
             sdmmc1_rec,
@@ -434,6 +536,8 @@ impl ResourceBundle for MicoAirH743 {
         let bmi088_acc_cs_key = bundle.key(MicoAirH743Id::Bmi088AccCs);
         let bmi088_gyr_cs_key = bundle.key(MicoAirH743Id::Bmi088GyrCs);
         let bmi088_delay_key = bundle.key(MicoAirH743Id::Bmi088Delay);
+        let i2c2_dps310_key = bundle.key(MicoAirH743Id::I2C2Dps310);
+        let i2c2_ist8310_key = bundle.key(MicoAirH743Id::I2C2Ist8310);
         let battery_adc_key = bundle.key(MicoAirH743Id::BatteryAdc);
 
         manager.add_owned(uart6_key, uart6)?;
@@ -445,6 +549,8 @@ impl ResourceBundle for MicoAirH743 {
         manager.add_owned(bmi088_acc_cs_key, bmi088_acc_cs)?;
         manager.add_owned(bmi088_gyr_cs_key, bmi088_gyr_cs)?;
         manager.add_owned(bmi088_delay_key, bmi088_delay)?;
+        manager.add_owned(i2c2_dps310_key, i2c2_dps310)?;
+        manager.add_owned(i2c2_ist8310_key, i2c2_ist8310)?;
         manager.add_owned(battery_adc_key, battery_adc)?;
         Ok(())
     }
