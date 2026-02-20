@@ -352,10 +352,10 @@ where
         }
         self.cache_order.push_back(key);
         while self.cache_order.len() > self.cache_cap {
-            if let Some(old) = self.cache_order.pop_front() {
-                if self.cache.remove(&old).is_some() {
-                    self.cache_evictions = self.cache_evictions.saturating_add(1);
-                }
+            if let Some(old) = self.cache_order.pop_front()
+                && self.cache.remove(&old).is_some()
+            {
+                self.cache_evictions = self.cache_evictions.saturating_add(1);
             }
         }
     }
