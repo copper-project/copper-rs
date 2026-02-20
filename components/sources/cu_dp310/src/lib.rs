@@ -7,7 +7,7 @@
 
 extern crate alloc;
 
-use alloc::format;
+use alloc::{format, string::String};
 use core::fmt::Debug;
 
 pub use cu_sensor_payloads::BarometerPayload;
@@ -75,7 +75,7 @@ pub trait Dps310Bus: Send + Sync + 'static {
     fn write_read(&mut self, write: &[u8], read: &mut [u8]) -> Result<(), Self::Error>;
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 struct CalibrationCoefficients {
     c0: i16,
     c1: i16,
@@ -88,24 +88,6 @@ struct CalibrationCoefficients {
     c30: i16,
     c31: i16,
     c40: i16,
-}
-
-impl Default for CalibrationCoefficients {
-    fn default() -> Self {
-        Self {
-            c0: 0,
-            c1: 0,
-            c00: 0,
-            c10: 0,
-            c01: 0,
-            c11: 0,
-            c20: 0,
-            c21: 0,
-            c30: 0,
-            c31: 0,
-            c40: 0,
-        }
-    }
 }
 
 struct Dps310Driver<BUS>
@@ -159,7 +141,7 @@ where
         }
         let last_id_str = match last_id {
             Some(id) => format!("0x{:02X}", id),
-            None => format!("none"),
+            None => String::from("none"),
         };
         Err(CuError::from(format!(
             "dps310 detect failed: {} last_id={}",
@@ -199,7 +181,7 @@ where
         }
         let last_status_str = match last_status {
             Some(status) => format!("0x{:02X}", status),
-            None => format!("none"),
+            None => String::from("none"),
         };
         Err(CuError::from(format!(
             "dps310 init timeout: COEF_RDY/SENSOR_RDY not both set, last_meas_cfg={}, read_errors={}",
@@ -326,7 +308,7 @@ where
         }
         let last_status_str = match last_status {
             Some(status) => format!("0x{:02X}", status),
-            None => format!("none"),
+            None => String::from("none"),
         };
         Err(CuError::from(format!(
             "dps310 temp-ready timeout: last_meas_cfg={}, read_errors={}",
@@ -413,32 +395,39 @@ fn spin_wait(iterations: usize) {
 }
 
 fn parse_coefficients(raw: &[u8; 22], is_spl07: bool) -> CalibrationCoefficients {
-    let mut c = CalibrationCoefficients::default();
-    c.c0 = twos_complement(((raw[0] as u32) << 4) | (((raw[1] as u32) >> 4) & 0x0F), 12) as i16;
-    c.c1 = twos_complement((((raw[1] as u32) & 0x0F) << 8) | (raw[2] as u32), 12) as i16;
-    c.c00 = twos_complement(
-        ((raw[3] as u32) << 12) | ((raw[4] as u32) << 4) | (((raw[5] as u32) >> 4) & 0x0F),
-        20,
-    );
-    c.c10 = twos_complement(
-        (((raw[5] as u32) & 0x0F) << 16) | ((raw[6] as u32) << 8) | (raw[7] as u32),
-        20,
-    );
-    c.c01 = twos_complement(((raw[8] as u32) << 8) | (raw[9] as u32), 16) as i16;
-    c.c11 = twos_complement(((raw[10] as u32) << 8) | (raw[11] as u32), 16) as i16;
-    c.c20 = twos_complement(((raw[12] as u32) << 8) | (raw[13] as u32), 16) as i16;
-    c.c21 = twos_complement(((raw[14] as u32) << 8) | (raw[15] as u32), 16) as i16;
-    c.c30 = twos_complement(((raw[16] as u32) << 8) | (raw[17] as u32), 16) as i16;
-
-    if is_spl07 {
-        c.c31 = twos_complement(
+    let c31 = if is_spl07 {
+        twos_complement(
             ((raw[18] as u32) << 4) | (((raw[19] as u32) >> 4) & 0x0F),
             12,
-        ) as i16;
-        c.c40 = twos_complement((((raw[19] as u32) & 0x0F) << 8) | (raw[20] as u32), 12) as i16;
-    }
+        ) as i16
+    } else {
+        0
+    };
+    let c40 = if is_spl07 {
+        twos_complement((((raw[19] as u32) & 0x0F) << 8) | (raw[20] as u32), 12) as i16
+    } else {
+        0
+    };
 
-    c
+    CalibrationCoefficients {
+        c0: twos_complement(((raw[0] as u32) << 4) | (((raw[1] as u32) >> 4) & 0x0F), 12) as i16,
+        c1: twos_complement((((raw[1] as u32) & 0x0F) << 8) | (raw[2] as u32), 12) as i16,
+        c00: twos_complement(
+            ((raw[3] as u32) << 12) | ((raw[4] as u32) << 4) | (((raw[5] as u32) >> 4) & 0x0F),
+            20,
+        ),
+        c10: twos_complement(
+            (((raw[5] as u32) & 0x0F) << 16) | ((raw[6] as u32) << 8) | (raw[7] as u32),
+            20,
+        ),
+        c01: twos_complement(((raw[8] as u32) << 8) | (raw[9] as u32), 16) as i16,
+        c11: twos_complement(((raw[10] as u32) << 8) | (raw[11] as u32), 16) as i16,
+        c20: twos_complement(((raw[12] as u32) << 8) | (raw[13] as u32), 16) as i16,
+        c21: twos_complement(((raw[14] as u32) << 8) | (raw[15] as u32), 16) as i16,
+        c30: twos_complement(((raw[16] as u32) << 8) | (raw[17] as u32), 16) as i16,
+        c31,
+        c40,
+    }
 }
 
 fn compensate_temperature_c(calib: &CalibrationCoefficients, temperature_raw: i32) -> f32 {
@@ -563,12 +552,12 @@ where
         let tov = clock.now();
         let now_ns = tov.as_nanos();
 
-        if let Some(last_output_ns) = self.last_output_ns {
-            if now_ns.saturating_sub(last_output_ns) < OUTPUT_PERIOD_NS {
-                output.clear_payload();
-                output.tov = Tov::None;
-                return Ok(());
-            }
+        if let Some(last_output_ns) = self.last_output_ns
+            && now_ns.saturating_sub(last_output_ns) < OUTPUT_PERIOD_NS
+        {
+            output.clear_payload();
+            output.tov = Tov::None;
+            return Ok(());
         }
 
         let payload = self.driver.read_measure()?;
