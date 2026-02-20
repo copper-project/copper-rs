@@ -10,8 +10,8 @@ extern crate alloc;
 use alloc::format;
 use core::fmt::Debug;
 
-use cu29::prelude::*;
 pub use cu_sensor_payloads::BarometerPayload;
+use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
 
 // Registers
@@ -228,7 +228,10 @@ where
             while offset < coef_len {
                 let chunk = core::cmp::min(COEF_CHUNK_READ_LEN, coef_len - offset);
                 let mut buf = [0u8; COEF_CHUNK_READ_LEN];
-                if self.read_reg_buf(REG_COEF + offset as u8, &mut buf[..chunk]).is_err() {
+                if self
+                    .read_reg_buf(REG_COEF + offset as u8, &mut buf[..chunk])
+                    .is_err()
+                {
                     loaded = false;
                     break;
                 }
@@ -394,9 +397,7 @@ where
         }
         Err(CuError::from(format!(
             "dps310 i2c write failed: reg=0x{:02X} value=0x{:02X} retries={}",
-            reg,
-            value,
-            I2C_TRANSFER_RETRY_LIMIT
+            reg, value, I2C_TRANSFER_RETRY_LIMIT
         )))
     }
 }

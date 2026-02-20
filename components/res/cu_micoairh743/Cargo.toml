@@ -21,6 +21,7 @@ textlogs = ["cu29/textlogs", "cu-bdshot/textlogs", "cu-sdlogger/textlogs"]
 
 [dependencies]
 cu29 = { path = "../../../core/cu29", version = "0.13.0", default-features = false }
+cu-dp310 = { path = "../../sources/cu_dp310", version = "0.13.0", default-features = false }
 cu-bdshot = { path = "../../bridges/cu_bdshot", version = "0.13.0", default-features = false, features = [
   "stm32h7",
 ] }

@@ -21,6 +21,7 @@ path = "src/lib.rs"
 [dependencies]
 cu29 = { path = "../../../core/cu29", version = "0.13.0", default-features = false }
 cu29-log-runtime = { path = "../../../core/cu29_log_runtime", version = "0.13.0", default-features = false }
+defmt = { workspace = true, optional = true }
 spin = { workspace = true }
 
 [dev-dependencies]
@@ -35,7 +36,7 @@ serde = { workspace = true }
 [features]
 default = ["std", "color_log"]
 std = ["cu29/std", "cu29-log-runtime/std"]
-defmt = ["cu29/defmt"]
+defmt = ["dep:defmt", "cu29/defmt"]
 color_log = []
 textlogs = ["cu29/textlogs"]
 log-level-info = ["cu29/log-level-info"]
