@@ -1936,27 +1936,31 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         let config_load_stmt = if std {
             quote! {
-                let config = if let Some(overridden_config) = config_override {
-                    let serialized = overridden_config
-                        .serialize_ron()
-                        .unwrap_or_else(|err| format!("<failed to serialize config: {err}>"));
-                    debug!("CuConfig: Overridden programmatically: {}", serialized);
-                    overridden_config
+                let (config, config_source) = if let Some(overridden_config) = config_override {
+                    debug!("CuConfig: Overridden programmatically.");
+                    (overridden_config, RuntimeLifecycleConfigSource::ProgrammaticOverride)
                 } else if ::std::path::Path::new(config_filename).exists() {
                     debug!("CuConfig: Reading configuration from file: {}", config_filename);
-                    cu29::config::read_configuration(config_filename)?
+                    (
+                        cu29::config::read_configuration(config_filename)?,
+                        RuntimeLifecycleConfigSource::ExternalFile,
+                    )
                 } else {
                     let original_config = Self::original_config();
-                    debug!("CuConfig: Using the original configuration the project was compiled with: {}", &original_config);
-                    cu29::config::read_configuration_str(original_config, None)?
+                    debug!("CuConfig: Using the bundled configuration compiled into the binary.");
+                    (
+                        cu29::config::read_configuration_str(original_config, None)?,
+                        RuntimeLifecycleConfigSource::BundledDefault,
+                    )
                 };
             }
         } else {
             quote! {
                 // Only the original config is available in no-std
                 let original_config = Self::original_config();
-                debug!("CuConfig: Using the original configuration the project was compiled with: {}", &original_config);
+                debug!("CuConfig: Using the bundled configuration compiled into the binary.");
                 let config = cu29::config::read_configuration_str(original_config, None)?;
+                let config_source = RuntimeLifecycleConfigSource::BundledDefault;
             }
         };
 
@@ -2171,6 +2175,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let app_resources_struct = quote! {
             pub struct AppResources {
                 pub config: CuConfig,
+                pub config_source: RuntimeLifecycleConfigSource,
                 pub resources: ResourceManager,
             }
         };
@@ -2203,13 +2208,21 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp init: resources ready");
 
-                Ok(AppResources { config, resources })
+                Ok(AppResources {
+                    config,
+                    config_source,
+                    resources,
+                })
             }
         };
 
         let new_with_resources_fn = quote! {
             #new_with_resources_sig {
-                let AppResources { config, resources } = app_resources;
+                let AppResources {
+                    config,
+                    config_source,
+                    resources,
+                } = app_resources;
 
                 #[cfg(target_os = "none")]
                 {
@@ -2263,6 +2276,34 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 )?;
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: keyframes stream ready");
+
+                #[cfg(target_os = "none")]
+                ::cu29::prelude::info!("CuApp new: creating runtime lifecycle stream");
+                let mut runtime_lifecycle_stream = stream_write::<RuntimeLifecycleRecord, S>(
+                    unified_logger.clone(),
+                    UnifiedLogType::RuntimeLifecycle,
+                    1024 * 64, // 64 KiB
+                )?;
+                let effective_config_ron = config
+                    .serialize_ron()
+                    .unwrap_or_else(|_| "<failed to serialize config>".to_string());
+                let stack_info = RuntimeLifecycleStackInfo {
+                    app_name: env!("CARGO_PKG_NAME").to_string(),
+                    app_version: env!("CARGO_PKG_VERSION").to_string(),
+                    git_commit: option_env!("VERGEN_GIT_SHA").map(|value| value.to_string()),
+                    git_dirty: option_env!("VERGEN_GIT_DIRTY")
+                        .map(|value| matches!(value, "1" | "true" | "TRUE" | "True")),
+                };
+                runtime_lifecycle_stream.log(&RuntimeLifecycleRecord {
+                    timestamp: clock.now(),
+                    event: RuntimeLifecycleEvent::Instantiated {
+                        config_source,
+                        effective_config_ron,
+                        stack: stack_info,
+                    },
+                })?;
+                #[cfg(target_os = "none")]
+                ::cu29::prelude::info!("CuApp new: runtime lifecycle stream ready");
 
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: building runtime");
@@ -2655,6 +2696,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::config::ComponentConfig;
                 use cu29::curuntime::CuRuntime;
                 use cu29::curuntime::KeyFrame;
+                use cu29::curuntime::RuntimeLifecycleConfigSource;
+                use cu29::curuntime::RuntimeLifecycleEvent;
+                use cu29::curuntime::RuntimeLifecycleRecord;
+                use cu29::curuntime::RuntimeLifecycleStackInfo;
                 use cu29::CuResult;
                 use cu29::CuError;
                 use cu29::cutask::CuSrcTask;

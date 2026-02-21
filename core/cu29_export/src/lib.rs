@@ -74,6 +74,9 @@ pub enum Command {
     Fsck {
         #[arg(short, long, action = clap::ArgAction::Count)]
         verbose: u8,
+        /// Decode and print RuntimeLifecycle events.
+        #[arg(long)]
+        dump_runtime_lifecycle: bool,
     },
     /// Export log statistics to JSON for offline DAG rendering.
     LogStats {
@@ -217,8 +220,11 @@ where
                 }
             }
         }
-        Command::Fsck { verbose } => {
-            if let Some(value) = check::<P>(&mut dl, verbose) {
+        Command::Fsck {
+            verbose,
+            dump_runtime_lifecycle,
+        } => {
+            if let Some(value) = check::<P>(&mut dl, verbose, dump_runtime_lifecycle) {
                 return value;
             }
         }
@@ -330,8 +336,11 @@ where
                 }
             }
         }
-        Command::Fsck { verbose } => {
-            if let Some(value) = check::<P>(&mut dl, verbose) {
+        Command::Fsck {
+            verbose,
+            dump_runtime_lifecycle,
+        } => {
+            if let Some(value) = check::<P>(&mut dl, verbose, dump_runtime_lifecycle) {
                 return value;
             }
         }
