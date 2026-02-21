@@ -199,7 +199,7 @@ where
     last_log_ns: Option<u64>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Reflect)]
 enum MeasureState {
     Idle,
     Measuring { started_ns: u64 },
