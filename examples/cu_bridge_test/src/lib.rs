@@ -344,9 +344,14 @@ pub type BridgeFanoutBuilder = BridgeFanout::BridgeSchedulerAppBuilder;
 #[cfg(test)]
 mod tests {
     use super::events;
+    use super::messages;
     use cu29::prelude::*;
+    use cu29_export::copperlists_reader;
     use cu29_helpers::basic_copper_setup;
-    use cu29_unifiedlog::{UnifiedLoggerWrite, memmap::MmapSectionStorage};
+    use cu29_unifiedlog::{
+        UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader, UnifiedLoggerWrite,
+        memmap::MmapSectionStorage,
+    };
     use std::sync::{LazyLock, Mutex};
     use tempfile::TempDir;
 
@@ -375,6 +380,24 @@ mod tests {
         <App as CuApplication<MmapSectionStorage, UnifiedLoggerWrite>>::stop_all_tasks(&mut app)
             .expect("stop");
         events::take()
+    }
+
+    fn assert_process_time_populated(label: &str, msg: &CuMsg<messages::ChainPayload>) {
+        assert!(
+            !msg.metadata.process_time.start.is_none(),
+            "{label} missing process_time.start"
+        );
+        assert!(
+            !msg.metadata.process_time.end.is_none(),
+            "{label} missing process_time.end"
+        );
+
+        let start = msg.metadata.process_time.start.unwrap();
+        let end = msg.metadata.process_time.end.unwrap();
+        assert!(
+            start <= end,
+            "{label} has invalid process_time range: start={start}, end={end}"
+        );
     }
 
     static TEST_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
@@ -419,6 +442,58 @@ mod tests {
                 "alpha.tx.chain"
             ],
         );
+    }
+
+    #[test]
+    fn bridge_task_loopback_populates_process_time_both_directions() {
+        let _guard = TEST_MUTEX.lock().unwrap();
+        let temp_dir = TempDir::new().expect("temp dir");
+        let log_path = temp_dir.path().join("bridge_sched_process_time.copper");
+
+        {
+            let ctx =
+                basic_copper_setup(&log_path, Some(32 * 1024 * 1024), false, None).expect("ctx");
+            let mut app = BridgeTaskBuilder::new()
+                .with_context(&ctx)
+                .build()
+                .expect("build app");
+            app.start_all_tasks().expect("start");
+            app.run_one_iteration().expect("run");
+            app.stop_all_tasks().expect("stop");
+        }
+
+        let UnifiedLogger::Read(read_logger) = UnifiedLoggerBuilder::new()
+            .file_base_name(&log_path)
+            .build()
+            .expect("open log for read")
+        else {
+            panic!("expected read logger");
+        };
+
+        let mut reader = UnifiedLoggerIOReader::new(read_logger, UnifiedLogType::CopperList);
+        let mut copperlists =
+            copperlists_reader::<super::BridgeTaskSame::CuStampedDataSet>(&mut reader);
+
+        let loop_entry = copperlists.next().expect("expected one copperlist");
+        assert!(
+            copperlists.next().is_none(),
+            "expected exactly one copperlist for one loop"
+        );
+
+        // BridgeTaskSame graph is: alpha/chain_in -> passthrough -> alpha/chain_out.
+        let bridge_to_task = &loop_entry.msgs.0.0;
+        let task_to_bridge = &loop_entry.msgs.0.1;
+
+        assert!(
+            bridge_to_task.payload().is_some(),
+            "bridge->task payload missing"
+        );
+        assert!(
+            task_to_bridge.payload().is_some(),
+            "task->bridge payload missing"
+        );
+        assert_process_time_populated("bridge->task", bridge_to_task);
+        assert_process_time_populated("task->bridge", task_to_bridge);
     }
 
     #[test]
