@@ -2166,6 +2166,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     error!("A task errored out: {}", &result);
                 }
                 <Self as #app_trait<S, L>>::stop_all_tasks(self, #sim_callback_arg)?;
+                let shutdown_ts = self.copper_runtime.clock.now();
+                if let Some(stream) = &mut self.runtime_lifecycle_stream {
+                    let _ = stream.log(&RuntimeLifecycleRecord {
+                        timestamp: shutdown_ts,
+                        event: RuntimeLifecycleEvent::ShutdownCompleted,
+                    });
+                }
                 result
             }
         };
