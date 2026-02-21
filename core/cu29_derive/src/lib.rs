@@ -63,16 +63,17 @@ fn git_output_trimmed(repo_root: &Path, args: &[&str]) -> Option<String> {
         return None;
     }
     let stdout = String::from_utf8(output.stdout).ok()?;
-    let trimmed = stdout.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
+    Some(stdout.trim().to_string())
 }
 
 fn detect_git_info(repo_root: &Path) -> (Option<String>, Option<bool>) {
-    let commit = git_output_trimmed(repo_root, &["rev-parse", "HEAD"]);
+    let in_repo = git_output_trimmed(repo_root, &["rev-parse", "--is-inside-work-tree"])
+        .is_some_and(|value| value == "true");
+    if !in_repo {
+        return (None, None);
+    }
+
+    let commit = git_output_trimmed(repo_root, &["rev-parse", "HEAD"]).filter(|s| !s.is_empty());
     // Porcelain output is empty when tree is clean.
     let dirty = git_output_trimmed(repo_root, &["status", "--porcelain"]).map(|s| !s.is_empty());
     (commit, dirty)
