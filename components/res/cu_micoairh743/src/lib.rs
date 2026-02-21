@@ -8,6 +8,7 @@ use core::fmt::Debug;
 use cortex_m::peripheral::DWT;
 use cu_bdshot::{Stm32H7Board, Stm32H7BoardResources, register_stm32h7_board};
 use cu_dps310::Dps310Bus;
+use cu_ist8310::Ist8310Bus;
 use cu_sdlogger::{EMMCLogger, EMMCSectionStorage, ForceSyncSend, find_copper_partition};
 use cu29::resource::{ResourceBundle, ResourceManager};
 use cu29::{CuError, CuResult, bundle_resources};
@@ -225,6 +226,40 @@ impl<BUS> SharedI2cDevice<BUS> {
 }
 
 impl<BUS> Dps310Bus for SharedI2cDevice<BUS>
+where
+    BUS: I2cWrite
+        + I2cRead<Error = <BUS as I2cWrite>::Error>
+        + I2cWriteRead<Error = <BUS as I2cWrite>::Error>
+        + Send
+        + 'static,
+    <BUS as I2cWrite>::Error: Debug + Send + 'static,
+{
+    type Error = <BUS as I2cWrite>::Error;
+
+    fn write(&mut self, write: &[u8]) -> Result<(), Self::Error> {
+        self.bus.lock().write(self.address, write)
+    }
+
+    fn write_read(&mut self, write: &[u8], read: &mut [u8]) -> Result<(), Self::Error> {
+        // Prefer atomic write_read, but fallback to write-then-read if the
+        // target/controller pair NACKs repeated-start transactions.
+        if self
+            .bus
+            .lock()
+            .write_read(self.address, write, read)
+            .is_ok()
+        {
+            return Ok(());
+        }
+
+        if !write.is_empty() {
+            self.bus.lock().write(self.address, write)?;
+        }
+        self.bus.lock().read(self.address, read)
+    }
+}
+
+impl<BUS> Ist8310Bus for SharedI2cDevice<BUS>
 where
     BUS: I2cWrite
         + I2cRead<Error = <BUS as I2cWrite>::Error>

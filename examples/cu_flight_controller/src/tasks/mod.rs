@@ -6,16 +6,18 @@ use cu_bdshot::EscCommand;
 use cu_crsf::messages::RcChannelsPayload;
 use cu_micoairh743::GreenLed;
 use cu_pid::{PIDControlOutputPayload, PIDController};
-use cu_sensor_payloads::{BarometerPayload, ImuPayload};
+use cu_sensor_payloads::{BarometerPayload, ImuPayload, MagnetometerPayload};
 use cu29::prelude::*;
 use cu29::units::si::angle::radian;
 use cu29::units::si::angular_velocity::{degree_per_second, radian_per_second};
 use cu29::units::si::f32::{AngularVelocity, Ratio};
+use cu29::units::si::magnetic_flux_density::microtesla;
 use cu29::units::si::ratio::ratio;
 use cu29::units::si::thermodynamic_temperature::degree_celsius;
 
 const LOG_PERIOD_MS: u64 = 500;
 const BARO_LOG_PERIOD_MS: u64 = 1000;
+const MAG_LOG_PERIOD_MS: u64 = 500;
 const HEAP_LOG_PERIOD_MS: u64 = 500;
 const VTX_HEARTBEAT_PERIOD_MS: u64 = 1000;
 const VTX_DRAW_PERIOD_MS: u64 = 250;
@@ -92,6 +94,8 @@ static LOG_TELEMETRY: spin::Mutex<LogRateLimiter> =
 static LOG_IMU: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new(LOG_PERIOD_MS));
 static LOG_BARO: spin::Mutex<LogRateLimiter> =
     spin::Mutex::new(LogRateLimiter::new(BARO_LOG_PERIOD_MS));
+static LOG_MAG: spin::Mutex<LogRateLimiter> =
+    spin::Mutex::new(LogRateLimiter::new(MAG_LOG_PERIOD_MS));
 static LOG_RC: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new(LOG_PERIOD_MS));
 static LOG_RATE: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new(LOG_PERIOD_MS));
 static LOG_MOTORS: spin::Mutex<LogRateLimiter> =
@@ -189,6 +193,7 @@ pub type Bmi088Source = cu_bmi088::Bmi088Source<
     cu_micoairh743::Bmi088Delay,
 >;
 pub type Dps310Source = cu_dps310::Dps310Source<cu_micoairh743::Dps310I2c>;
+pub type Ist8310Source = cu_ist8310::Ist8310Source<cu_micoairh743::Ist8310I2c>;
 
 #[derive(Reflect)]
 pub struct BarometerLogger {
@@ -223,6 +228,53 @@ impl CuSinkTask for BarometerLogger {
                     "baro pressure_pa={} temp_c={} tov_ns={} tov_dt_us={}",
                     pressure_pa,
                     temp_c,
+                    tov_time.as_nanos(),
+                    dt_us
+                );
+            });
+        }
+        Ok(())
+    }
+}
+
+#[derive(Reflect)]
+pub struct MagnetometerLogger {
+    last_tov: Option<CuTime>,
+}
+
+impl Freezable for MagnetometerLogger {}
+
+impl CuSinkTask for MagnetometerLogger {
+    type Input<'m> = CuMsg<MagnetometerPayload>;
+    type Resources<'r> = ();
+
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        Ok(Self { last_tov: None })
+    }
+
+    fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
+        if let Some(payload) = input.payload() {
+            let tov_time = expect_tov_time(input.tov)?;
+            debug_rl!(&LOG_MAG, tov_time, {
+                let dt_us = match self.last_tov {
+                    Some(prev) => (tov_time - prev).as_micros(),
+                    None => 0,
+                };
+                self.last_tov = Some(tov_time);
+
+                let mag_x_ut = payload.mag_x.get::<microtesla>();
+                let mag_y_ut = payload.mag_y.get::<microtesla>();
+                let mag_z_ut = payload.mag_z.get::<microtesla>();
+                let abs_sum_ut = mag_x_ut.abs() + mag_y_ut.abs() + mag_z_ut.abs();
+                info!(
+                    "mag mag_x_ut={} mag_y_ut={} mag_z_ut={} abs_sum_ut={} tov_ns={} tov_dt_us={}",
+                    mag_x_ut,
+                    mag_y_ut,
+                    mag_z_ut,
+                    abs_sum_ut,
                     tov_time.as_nanos(),
                     dt_us
                 );

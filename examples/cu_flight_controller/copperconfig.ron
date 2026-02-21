@@ -26,8 +26,19 @@
             resources: {"i2c": "fc.i2c2_dps310"},
         ),
         (
+            id: "ist8310",
+            type: "tasks::Ist8310Source",
+            logging: (enabled: true),
+            resources: {"i2c": "fc.i2c2_ist8310"},
+        ),
+        (
             id: "baro_logger",
             type: "tasks::BarometerLogger",
+            logging: (enabled: false),
+        ),
+        (
+            id: "mag_logger",
+            type: "tasks::MagnetometerLogger",
             logging: (enabled: false),
         ),
         (
@@ -218,6 +229,11 @@
             src: "dps310",
             dst: "baro_logger",
             msg: "cu_sensor_payloads::BarometerPayload",
+        ),
+        (
+            src: "ist8310",
+            dst: "mag_logger",
+            msg: "cu_sensor_payloads::MagnetometerPayload",
         ),
         (
             src: "mapper",

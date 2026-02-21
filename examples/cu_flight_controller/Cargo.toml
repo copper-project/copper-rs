@@ -59,6 +59,9 @@ cu-bmi088 = { path = "../../components/sources/cu_bmi088", default-features = fa
 cu-dps310 = { path = "../../components/sources/cu_dps310", default-features = false, features = [
   "defmt",
 ], optional = true }
+cu-ist8310 = { path = "../../components/sources/cu_ist8310", default-features = false, features = [
+  "defmt",
+], optional = true }
 
 ### Algos
 cu-pid = { path = "../../components/tasks/cu_pid", default-features = false, version = "0.13.0" }
@@ -166,8 +169,10 @@ firmware = [
   "dep:cu-ahrs",
   "dep:cu-bmi088",
   "dep:cu-dps310",
+  "dep:cu-ist8310",
   "cu-bmi088/defmt",
   "cu-dps310/defmt",
+  "cu-ist8310/defmt",
   "dep:cu-crsf",
   "dep:cu-msp-bridge",
   "cu-crsf/defmt",
