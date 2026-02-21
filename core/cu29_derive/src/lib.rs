@@ -2,6 +2,8 @@ use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use std::collections::{BTreeMap, HashMap};
 use std::fs::read_to_string;
+use std::path::Path;
+use std::process::Command;
 use syn::Fields::{Named, Unnamed};
 use syn::meta::parser;
 use syn::{
@@ -48,6 +50,32 @@ fn rtsan_guard_tokens() -> proc_macro2::TokenStream {
     } else {
         quote! {}
     }
+}
+
+fn git_output_trimmed(repo_root: &Path, args: &[&str]) -> Option<String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(args)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8(output.stdout).ok()?;
+    let trimmed = stdout.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn detect_git_info(repo_root: &Path) -> (Option<String>, Option<bool>) {
+    let commit = git_output_trimmed(repo_root, &["rev-parse", "HEAD"]);
+    // Porcelain output is empty when tree is clean.
+    let dirty = git_output_trimmed(repo_root, &["status", "--porcelain"]).map(|s| !s.is_empty());
+    (commit, dirty)
 }
 
 #[proc_macro]
@@ -717,6 +745,18 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             ));
         }
     };
+    let caller_root = utils::caller_crate_root();
+    let (git_commit, git_dirty) = detect_git_info(&caller_root);
+    let git_commit_tokens = if let Some(commit) = git_commit {
+        quote! { Some(#commit.to_string()) }
+    } else {
+        quote! { None }
+    };
+    let git_dirty_tokens = if let Some(dirty) = git_dirty {
+        quote! { Some(#dirty) }
+    } else {
+        quote! { None }
+    };
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[build monitor type]");
@@ -766,6 +806,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let all_missions = copper_config.graphs.get_all_missions_graphs();
     let mut all_missions_tokens = Vec::<proc_macro2::TokenStream>::new();
     for (mission, graph) in &all_missions {
+        let git_commit_tokens = git_commit_tokens.clone();
+        let git_dirty_tokens = git_dirty_tokens.clone();
         let mission_mod = parse_str::<Ident>(mission.as_str())
             .expect("Could not make an identifier of the mission name");
 
@@ -2321,9 +2363,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let stack_info = RuntimeLifecycleStackInfo {
                     app_name: env!("CARGO_PKG_NAME").to_string(),
                     app_version: env!("CARGO_PKG_VERSION").to_string(),
-                    git_commit: option_env!("VERGEN_GIT_SHA").map(|value| value.to_string()),
-                    git_dirty: option_env!("VERGEN_GIT_DIRTY")
-                        .map(|value| matches!(value, "1" | "true" | "TRUE" | "True")),
+                    git_commit: #git_commit_tokens,
+                    git_dirty: #git_dirty_tokens,
                 };
                 runtime_lifecycle_stream.log(&RuntimeLifecycleRecord {
                     timestamp: clock.now(),
