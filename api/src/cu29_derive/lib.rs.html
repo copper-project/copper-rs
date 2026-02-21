@@ -4575,235 +4575,244 @@
 <a href=#4575 id=4575 data-nosnippet>4575</a>    } <span class="kw">else </span>{
 <a href=#4576 id=4576 data-nosnippet>4576</a>        <span class="macro">quote!</span> { <span class="kw-2">&amp;mut </span>msgs.#input_index }
 <a href=#4577 id=4577 data-nosnippet>4577</a>    };
-<a href=#4578 id=4578 data-nosnippet>4578</a>    <span class="kw">let </span>bridge_tuple_index = int2sliceindex(bridge_spec.tuple_index <span class="kw">as </span>u32);
-<a href=#4579 id=4579 data-nosnippet>4579</a>    <span class="kw">let </span>bridge_type = <span class="kw-2">&amp;</span>bridge_spec.type_path;
-<a href=#4580 id=4580 data-nosnippet>4580</a>    <span class="kw">let </span>const_ident = <span class="kw-2">&amp;</span>channel.const_ident;
-<a href=#4581 id=4581 data-nosnippet>4581</a>    <span class="kw">let </span>enum_ident = Ident::new(
-<a href=#4582 id=4582 data-nosnippet>4582</a>        <span class="kw-2">&amp;</span>config_id_to_enum(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}_tx_{}"</span>, bridge_spec.id, channel.id)),
-<a href=#4583 id=4583 data-nosnippet>4583</a>        Span::call_site(),
-<a href=#4584 id=4584 data-nosnippet>4584</a>    );
-<a href=#4585 id=4585 data-nosnippet>4585</a>
-<a href=#4586 id=4586 data-nosnippet>4586</a>    <span class="kw">let </span>call_sim_callback = <span class="kw">if </span>sim_mode {
-<a href=#4587 id=4587 data-nosnippet>4587</a>        <span class="macro">quote!</span> {
-<a href=#4588 id=4588 data-nosnippet>4588</a>            <span class="kw">let </span>doit = {
-<a href=#4589 id=4589 data-nosnippet>4589</a>                <span class="kw">let </span>state = SimStep::#enum_ident {
-<a href=#4590 id=4590 data-nosnippet>4590</a>                    channel: <span class="kw-2">&amp;</span>&lt;#bridge_type <span class="kw">as </span>cu29::cubridge::CuBridge&gt;::Tx::#const_ident,
-<a href=#4591 id=4591 data-nosnippet>4591</a>                    msg: <span class="kw-2">&amp;*</span>cumsg_input,
-<a href=#4592 id=4592 data-nosnippet>4592</a>                };
-<a href=#4593 id=4593 data-nosnippet>4593</a>                <span class="kw">let </span>ovr = sim_callback(state);
-<a href=#4594 id=4594 data-nosnippet>4594</a>                <span class="kw">if let </span>SimOverride::Errored(reason) = ovr  {
-<a href=#4595 id=4595 data-nosnippet>4595</a>                    <span class="kw">let </span>error: CuError = reason.into();
-<a href=#4596 id=4596 data-nosnippet>4596</a>                    <span class="kw">let </span>decision = monitor.process_error(#monitor_index, CuTaskState::Process, <span class="kw-2">&amp;</span>error);
-<a href=#4597 id=4597 data-nosnippet>4597</a>                    <span class="kw">match </span>decision {
-<a href=#4598 id=4598 data-nosnippet>4598</a>                        Decision::Abort =&gt; {
-<a href=#4599 id=4599 data-nosnippet>4599</a>                            <span class="macro">debug!</span>(<span class="string">"Process: ABORT decision from monitoring. Task '{}' errored out during process. Skipping the processing of CL {}."</span>, #mission_mod::TASKS_IDS[#monitor_index], clid);
-<a href=#4600 id=4600 data-nosnippet>4600</a>                            <span class="kw">let </span>monitor_result =
-<a href=#4601 id=4601 data-nosnippet>4601</a>                                monitor.process_copperlist(<span class="kw-2">&amp;</span>#mission_mod::collect_metadata(<span class="kw-2">&amp;</span>culist));
-<a href=#4602 id=4602 data-nosnippet>4602</a>                            cl_manager.end_of_processing(clid)<span class="question-mark">?</span>;
-<a href=#4603 id=4603 data-nosnippet>4603</a>                            monitor_result<span class="question-mark">?</span>;
-<a href=#4604 id=4604 data-nosnippet>4604</a>                            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#4605 id=4605 data-nosnippet>4605</a>                        }
-<a href=#4606 id=4606 data-nosnippet>4606</a>                        Decision::Ignore =&gt; {
-<a href=#4607 id=4607 data-nosnippet>4607</a>                            <span class="macro">debug!</span>(<span class="string">"Process: IGNORE decision from monitoring. Task '{}' errored out during process. The runtime will continue with a forced empty message."</span>, #mission_mod::TASKS_IDS[#monitor_index]);
-<a href=#4608 id=4608 data-nosnippet>4608</a>                            <span class="bool-val">false
-<a href=#4609 id=4609 data-nosnippet>4609</a>                        </span>}
-<a href=#4610 id=4610 data-nosnippet>4610</a>                        Decision::Shutdown =&gt; {
-<a href=#4611 id=4611 data-nosnippet>4611</a>                            <span class="macro">debug!</span>(<span class="string">"Process: SHUTDOWN decision from monitoring. Task '{}' errored out during process. The runtime cannot continue."</span>, #mission_mod::TASKS_IDS[#monitor_index]);
-<a href=#4612 id=4612 data-nosnippet>4612</a>                            <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::new_with_cause(<span class="string">"Task errored out during process."</span>, error));
-<a href=#4613 id=4613 data-nosnippet>4613</a>                        }
-<a href=#4614 id=4614 data-nosnippet>4614</a>                    }
-<a href=#4615 id=4615 data-nosnippet>4615</a>                } <span class="kw">else </span>{
-<a href=#4616 id=4616 data-nosnippet>4616</a>                    ovr == SimOverride::ExecuteByRuntime
-<a href=#4617 id=4617 data-nosnippet>4617</a>                }
-<a href=#4618 id=4618 data-nosnippet>4618</a>            };
-<a href=#4619 id=4619 data-nosnippet>4619</a>        }
-<a href=#4620 id=4620 data-nosnippet>4620</a>    } <span class="kw">else </span>{
-<a href=#4621 id=4621 data-nosnippet>4621</a>        <span class="macro">quote!</span> { <span class="kw">let </span>doit = <span class="bool-val">true</span>; }
-<a href=#4622 id=4622 data-nosnippet>4622</a>    };
-<a href=#4623 id=4623 data-nosnippet>4623</a>    (
-<a href=#4624 id=4624 data-nosnippet>4624</a>        <span class="macro">quote!</span> {
-<a href=#4625 id=4625 data-nosnippet>4625</a>            {
-<a href=#4626 id=4626 data-nosnippet>4626</a>                <span class="kw">let </span>bridge = <span class="kw-2">&amp;mut </span>__cu_bridges.#bridge_tuple_index;
-<a href=#4627 id=4627 data-nosnippet>4627</a>                <span class="kw">let </span>cumsg_input = #input_ref;
-<a href=#4628 id=4628 data-nosnippet>4628</a>                <span class="comment">// Stamp timing so monitors see consistent ranges for bridge Tx as well.
-<a href=#4629 id=4629 data-nosnippet>4629</a>                </span>#call_sim_callback
-<a href=#4630 id=4630 data-nosnippet>4630</a>                <span class="kw">if </span>doit {
-<a href=#4631 id=4631 data-nosnippet>4631</a>                    <span class="kw">if </span>cumsg_input.metadata.process_time.start.is_none() {
-<a href=#4632 id=4632 data-nosnippet>4632</a>                        cumsg_input.metadata.process_time.start = clock.now().into();
-<a href=#4633 id=4633 data-nosnippet>4633</a>                    }
-<a href=#4634 id=4634 data-nosnippet>4634</a>                    <span class="kw">let </span>maybe_error = {
-<a href=#4635 id=4635 data-nosnippet>4635</a>                        #rt_guard
-<a href=#4636 id=4636 data-nosnippet>4636</a>                        bridge.send(
-<a href=#4637 id=4637 data-nosnippet>4637</a>                            clock,
-<a href=#4638 id=4638 data-nosnippet>4638</a>                            <span class="kw-2">&amp;</span>&lt;#bridge_type <span class="kw">as </span>cu29::cubridge::CuBridge&gt;::Tx::#const_ident,
-<a href=#4639 id=4639 data-nosnippet>4639</a>                            <span class="kw-2">&amp;*</span>cumsg_input,
-<a href=#4640 id=4640 data-nosnippet>4640</a>                        )
-<a href=#4641 id=4641 data-nosnippet>4641</a>                    };
-<a href=#4642 id=4642 data-nosnippet>4642</a>                    <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = maybe_error {
-<a href=#4643 id=4643 data-nosnippet>4643</a>                        <span class="kw">let </span>decision = monitor.process_error(#monitor_index, CuTaskState::Process, <span class="kw-2">&amp;</span>error);
-<a href=#4644 id=4644 data-nosnippet>4644</a>                        <span class="kw">match </span>decision {
-<a href=#4645 id=4645 data-nosnippet>4645</a>                            Decision::Abort =&gt; {
-<a href=#4646 id=4646 data-nosnippet>4646</a>                                <span class="macro">debug!</span>(<span class="string">"Process: ABORT decision from monitoring. Task '{}' errored out during process. Skipping the processing of CL {}."</span>, #mission_mod::TASKS_IDS[#monitor_index], clid);
-<a href=#4647 id=4647 data-nosnippet>4647</a>                                <span class="kw">let </span>monitor_result = monitor
-<a href=#4648 id=4648 data-nosnippet>4648</a>                                    .process_copperlist(<span class="kw-2">&amp;</span>#mission_mod::collect_metadata(<span class="kw-2">&amp;</span>culist));
-<a href=#4649 id=4649 data-nosnippet>4649</a>                                cl_manager.end_of_processing(clid)<span class="question-mark">?</span>;
-<a href=#4650 id=4650 data-nosnippet>4650</a>                                monitor_result<span class="question-mark">?</span>;
-<a href=#4651 id=4651 data-nosnippet>4651</a>                                <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#4652 id=4652 data-nosnippet>4652</a>                            }
-<a href=#4653 id=4653 data-nosnippet>4653</a>                            Decision::Ignore =&gt; {
-<a href=#4654 id=4654 data-nosnippet>4654</a>                                <span class="macro">debug!</span>(<span class="string">"Process: IGNORE decision from monitoring. Task '{}' errored out during process. The runtime will continue with a forced empty message."</span>, #mission_mod::TASKS_IDS[#monitor_index]);
-<a href=#4655 id=4655 data-nosnippet>4655</a>                            }
-<a href=#4656 id=4656 data-nosnippet>4656</a>                            Decision::Shutdown =&gt; {
-<a href=#4657 id=4657 data-nosnippet>4657</a>                                <span class="macro">debug!</span>(<span class="string">"Process: SHUTDOWN decision from monitoring. Task '{}' errored out during process. The runtime cannot continue."</span>, #mission_mod::TASKS_IDS[#monitor_index]);
-<a href=#4658 id=4658 data-nosnippet>4658</a>                                <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::new_with_cause(<span class="string">"Task errored out during process."</span>, error));
-<a href=#4659 id=4659 data-nosnippet>4659</a>                            }
-<a href=#4660 id=4660 data-nosnippet>4660</a>                        }
-<a href=#4661 id=4661 data-nosnippet>4661</a>                    }
-<a href=#4662 id=4662 data-nosnippet>4662</a>                    <span class="kw">if </span>cumsg_input.metadata.process_time.end.is_none() {
-<a href=#4663 id=4663 data-nosnippet>4663</a>                        cumsg_input.metadata.process_time.end = clock.now().into();
-<a href=#4664 id=4664 data-nosnippet>4664</a>                    }
-<a href=#4665 id=4665 data-nosnippet>4665</a>                }
-<a href=#4666 id=4666 data-nosnippet>4666</a>            }
-<a href=#4667 id=4667 data-nosnippet>4667</a>        },
-<a href=#4668 id=4668 data-nosnippet>4668</a>        <span class="macro">quote!</span> {},
-<a href=#4669 id=4669 data-nosnippet>4669</a>    )
-<a href=#4670 id=4670 data-nosnippet>4670</a>}
-<a href=#4671 id=4671 data-nosnippet>4671</a>
-<a href=#4672 id=4672 data-nosnippet>4672</a><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-<a href=#4673 id=4673 data-nosnippet>4673</a></span><span class="kw">enum </span>BridgeChannelDirection {
-<a href=#4674 id=4674 data-nosnippet>4674</a>    Rx,
-<a href=#4675 id=4675 data-nosnippet>4675</a>    Tx,
-<a href=#4676 id=4676 data-nosnippet>4676</a>}
-<a href=#4677 id=4677 data-nosnippet>4677</a>
-<a href=#4678 id=4678 data-nosnippet>4678</a><span class="attr">#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-<a href=#4679 id=4679 data-nosnippet>4679</a></span><span class="kw">struct </span>BridgeChannelKey {
-<a href=#4680 id=4680 data-nosnippet>4680</a>    bridge_id: String,
-<a href=#4681 id=4681 data-nosnippet>4681</a>    channel_id: String,
-<a href=#4682 id=4682 data-nosnippet>4682</a>    direction: BridgeChannelDirection,
-<a href=#4683 id=4683 data-nosnippet>4683</a>}
-<a href=#4684 id=4684 data-nosnippet>4684</a>
-<a href=#4685 id=4685 data-nosnippet>4685</a><span class="attr">#[derive(Clone)]
-<a href=#4686 id=4686 data-nosnippet>4686</a></span><span class="kw">struct </span>BridgeChannelSpec {
-<a href=#4687 id=4687 data-nosnippet>4687</a>    id: String,
-<a href=#4688 id=4688 data-nosnippet>4688</a>    const_ident: Ident,
-<a href=#4689 id=4689 data-nosnippet>4689</a>    <span class="attr">#[allow(dead_code)]
-<a href=#4690 id=4690 data-nosnippet>4690</a>    </span>msg_type: Type,
-<a href=#4691 id=4691 data-nosnippet>4691</a>    msg_type_name: String,
-<a href=#4692 id=4692 data-nosnippet>4692</a>    config_index: usize,
-<a href=#4693 id=4693 data-nosnippet>4693</a>    plan_node_id: <span class="prelude-ty">Option</span>&lt;NodeId&gt;,
-<a href=#4694 id=4694 data-nosnippet>4694</a>    culist_index: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-<a href=#4695 id=4695 data-nosnippet>4695</a>    monitor_index: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-<a href=#4696 id=4696 data-nosnippet>4696</a>}
-<a href=#4697 id=4697 data-nosnippet>4697</a>
-<a href=#4698 id=4698 data-nosnippet>4698</a><span class="attr">#[derive(Clone)]
-<a href=#4699 id=4699 data-nosnippet>4699</a></span><span class="kw">struct </span>BridgeSpec {
-<a href=#4700 id=4700 data-nosnippet>4700</a>    id: String,
-<a href=#4701 id=4701 data-nosnippet>4701</a>    type_path: Type,
-<a href=#4702 id=4702 data-nosnippet>4702</a>    config_index: usize,
-<a href=#4703 id=4703 data-nosnippet>4703</a>    tuple_index: usize,
+<a href=#4578 id=4578 data-nosnippet>4578</a>    <span class="kw">let </span>output_pack = step
+<a href=#4579 id=4579 data-nosnippet>4579</a>        .output_msg_pack
+<a href=#4580 id=4580 data-nosnippet>4580</a>        .as_ref()
+<a href=#4581 id=4581 data-nosnippet>4581</a>        .expect(<span class="string">"Bridge Tx channel missing output pack"</span>);
+<a href=#4582 id=4582 data-nosnippet>4582</a>    <span class="kw">if </span>output_pack.msg_types.len() != <span class="number">1 </span>{
+<a href=#4583 id=4583 data-nosnippet>4583</a>        <span class="macro">panic!</span>(
+<a href=#4584 id=4584 data-nosnippet>4584</a>            <span class="string">"Bridge Tx channel '{}' expected a single output message slot, got {}"</span>,
+<a href=#4585 id=4585 data-nosnippet>4585</a>            channel.id,
+<a href=#4586 id=4586 data-nosnippet>4586</a>            output_pack.msg_types.len()
+<a href=#4587 id=4587 data-nosnippet>4587</a>        );
+<a href=#4588 id=4588 data-nosnippet>4588</a>    }
+<a href=#4589 id=4589 data-nosnippet>4589</a>    <span class="kw">let </span>output_index = int2sliceindex(output_pack.culist_index);
+<a href=#4590 id=4590 data-nosnippet>4590</a>    <span class="kw">let </span>output_ref = <span class="macro">quote!</span> { <span class="kw-2">&amp;mut </span>msgs.#output_index };
+<a href=#4591 id=4591 data-nosnippet>4591</a>    <span class="kw">let </span>bridge_tuple_index = int2sliceindex(bridge_spec.tuple_index <span class="kw">as </span>u32);
+<a href=#4592 id=4592 data-nosnippet>4592</a>    <span class="kw">let </span>bridge_type = <span class="kw-2">&amp;</span>bridge_spec.type_path;
+<a href=#4593 id=4593 data-nosnippet>4593</a>    <span class="kw">let </span>const_ident = <span class="kw-2">&amp;</span>channel.const_ident;
+<a href=#4594 id=4594 data-nosnippet>4594</a>    <span class="kw">let </span>enum_ident = Ident::new(
+<a href=#4595 id=4595 data-nosnippet>4595</a>        <span class="kw-2">&amp;</span>config_id_to_enum(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}_tx_{}"</span>, bridge_spec.id, channel.id)),
+<a href=#4596 id=4596 data-nosnippet>4596</a>        Span::call_site(),
+<a href=#4597 id=4597 data-nosnippet>4597</a>    );
+<a href=#4598 id=4598 data-nosnippet>4598</a>
+<a href=#4599 id=4599 data-nosnippet>4599</a>    <span class="kw">let </span>call_sim_callback = <span class="kw">if </span>sim_mode {
+<a href=#4600 id=4600 data-nosnippet>4600</a>        <span class="macro">quote!</span> {
+<a href=#4601 id=4601 data-nosnippet>4601</a>            <span class="kw">let </span>doit = {
+<a href=#4602 id=4602 data-nosnippet>4602</a>                <span class="kw">let </span>state = SimStep::#enum_ident {
+<a href=#4603 id=4603 data-nosnippet>4603</a>                    channel: <span class="kw-2">&amp;</span>&lt;#bridge_type <span class="kw">as </span>cu29::cubridge::CuBridge&gt;::Tx::#const_ident,
+<a href=#4604 id=4604 data-nosnippet>4604</a>                    msg: <span class="kw-2">&amp;*</span>cumsg_input,
+<a href=#4605 id=4605 data-nosnippet>4605</a>                };
+<a href=#4606 id=4606 data-nosnippet>4606</a>                <span class="kw">let </span>ovr = sim_callback(state);
+<a href=#4607 id=4607 data-nosnippet>4607</a>                <span class="kw">if let </span>SimOverride::Errored(reason) = ovr  {
+<a href=#4608 id=4608 data-nosnippet>4608</a>                    <span class="kw">let </span>error: CuError = reason.into();
+<a href=#4609 id=4609 data-nosnippet>4609</a>                    <span class="kw">let </span>decision = monitor.process_error(#monitor_index, CuTaskState::Process, <span class="kw-2">&amp;</span>error);
+<a href=#4610 id=4610 data-nosnippet>4610</a>                    <span class="kw">match </span>decision {
+<a href=#4611 id=4611 data-nosnippet>4611</a>                        Decision::Abort =&gt; {
+<a href=#4612 id=4612 data-nosnippet>4612</a>                            <span class="macro">debug!</span>(<span class="string">"Process: ABORT decision from monitoring. Task '{}' errored out during process. Skipping the processing of CL {}."</span>, #mission_mod::TASKS_IDS[#monitor_index], clid);
+<a href=#4613 id=4613 data-nosnippet>4613</a>                            <span class="kw">let </span>monitor_result =
+<a href=#4614 id=4614 data-nosnippet>4614</a>                                monitor.process_copperlist(<span class="kw-2">&amp;</span>#mission_mod::collect_metadata(<span class="kw-2">&amp;</span>culist));
+<a href=#4615 id=4615 data-nosnippet>4615</a>                            cl_manager.end_of_processing(clid)<span class="question-mark">?</span>;
+<a href=#4616 id=4616 data-nosnippet>4616</a>                            monitor_result<span class="question-mark">?</span>;
+<a href=#4617 id=4617 data-nosnippet>4617</a>                            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#4618 id=4618 data-nosnippet>4618</a>                        }
+<a href=#4619 id=4619 data-nosnippet>4619</a>                        Decision::Ignore =&gt; {
+<a href=#4620 id=4620 data-nosnippet>4620</a>                            <span class="macro">debug!</span>(<span class="string">"Process: IGNORE decision from monitoring. Task '{}' errored out during process. The runtime will continue with a forced empty message."</span>, #mission_mod::TASKS_IDS[#monitor_index]);
+<a href=#4621 id=4621 data-nosnippet>4621</a>                            <span class="bool-val">false
+<a href=#4622 id=4622 data-nosnippet>4622</a>                        </span>}
+<a href=#4623 id=4623 data-nosnippet>4623</a>                        Decision::Shutdown =&gt; {
+<a href=#4624 id=4624 data-nosnippet>4624</a>                            <span class="macro">debug!</span>(<span class="string">"Process: SHUTDOWN decision from monitoring. Task '{}' errored out during process. The runtime cannot continue."</span>, #mission_mod::TASKS_IDS[#monitor_index]);
+<a href=#4625 id=4625 data-nosnippet>4625</a>                            <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::new_with_cause(<span class="string">"Task errored out during process."</span>, error));
+<a href=#4626 id=4626 data-nosnippet>4626</a>                        }
+<a href=#4627 id=4627 data-nosnippet>4627</a>                    }
+<a href=#4628 id=4628 data-nosnippet>4628</a>                } <span class="kw">else </span>{
+<a href=#4629 id=4629 data-nosnippet>4629</a>                    ovr == SimOverride::ExecuteByRuntime
+<a href=#4630 id=4630 data-nosnippet>4630</a>                }
+<a href=#4631 id=4631 data-nosnippet>4631</a>            };
+<a href=#4632 id=4632 data-nosnippet>4632</a>        }
+<a href=#4633 id=4633 data-nosnippet>4633</a>    } <span class="kw">else </span>{
+<a href=#4634 id=4634 data-nosnippet>4634</a>        <span class="macro">quote!</span> { <span class="kw">let </span>doit = <span class="bool-val">true</span>; }
+<a href=#4635 id=4635 data-nosnippet>4635</a>    };
+<a href=#4636 id=4636 data-nosnippet>4636</a>    (
+<a href=#4637 id=4637 data-nosnippet>4637</a>        <span class="macro">quote!</span> {
+<a href=#4638 id=4638 data-nosnippet>4638</a>            {
+<a href=#4639 id=4639 data-nosnippet>4639</a>                <span class="kw">let </span>bridge = <span class="kw-2">&amp;mut </span>__cu_bridges.#bridge_tuple_index;
+<a href=#4640 id=4640 data-nosnippet>4640</a>                <span class="kw">let </span>cumsg_input = #input_ref;
+<a href=#4641 id=4641 data-nosnippet>4641</a>                <span class="kw">let </span>cumsg_output = #output_ref;
+<a href=#4642 id=4642 data-nosnippet>4642</a>                #call_sim_callback
+<a href=#4643 id=4643 data-nosnippet>4643</a>                <span class="kw">if </span>doit {
+<a href=#4644 id=4644 data-nosnippet>4644</a>                    cumsg_output.metadata.process_time.start = clock.now().into();
+<a href=#4645 id=4645 data-nosnippet>4645</a>                    <span class="kw">let </span>maybe_error = {
+<a href=#4646 id=4646 data-nosnippet>4646</a>                        #rt_guard
+<a href=#4647 id=4647 data-nosnippet>4647</a>                        bridge.send(
+<a href=#4648 id=4648 data-nosnippet>4648</a>                            clock,
+<a href=#4649 id=4649 data-nosnippet>4649</a>                            <span class="kw-2">&amp;</span>&lt;#bridge_type <span class="kw">as </span>cu29::cubridge::CuBridge&gt;::Tx::#const_ident,
+<a href=#4650 id=4650 data-nosnippet>4650</a>                            <span class="kw-2">&amp;*</span>cumsg_input,
+<a href=#4651 id=4651 data-nosnippet>4651</a>                        )
+<a href=#4652 id=4652 data-nosnippet>4652</a>                    };
+<a href=#4653 id=4653 data-nosnippet>4653</a>                    <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = maybe_error {
+<a href=#4654 id=4654 data-nosnippet>4654</a>                        <span class="kw">let </span>decision = monitor.process_error(#monitor_index, CuTaskState::Process, <span class="kw-2">&amp;</span>error);
+<a href=#4655 id=4655 data-nosnippet>4655</a>                        <span class="kw">match </span>decision {
+<a href=#4656 id=4656 data-nosnippet>4656</a>                            Decision::Abort =&gt; {
+<a href=#4657 id=4657 data-nosnippet>4657</a>                                <span class="macro">debug!</span>(<span class="string">"Process: ABORT decision from monitoring. Task '{}' errored out during process. Skipping the processing of CL {}."</span>, #mission_mod::TASKS_IDS[#monitor_index], clid);
+<a href=#4658 id=4658 data-nosnippet>4658</a>                                <span class="kw">let </span>monitor_result = monitor
+<a href=#4659 id=4659 data-nosnippet>4659</a>                                    .process_copperlist(<span class="kw-2">&amp;</span>#mission_mod::collect_metadata(<span class="kw-2">&amp;</span>culist));
+<a href=#4660 id=4660 data-nosnippet>4660</a>                                cl_manager.end_of_processing(clid)<span class="question-mark">?</span>;
+<a href=#4661 id=4661 data-nosnippet>4661</a>                                monitor_result<span class="question-mark">?</span>;
+<a href=#4662 id=4662 data-nosnippet>4662</a>                                <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#4663 id=4663 data-nosnippet>4663</a>                            }
+<a href=#4664 id=4664 data-nosnippet>4664</a>                            Decision::Ignore =&gt; {
+<a href=#4665 id=4665 data-nosnippet>4665</a>                                <span class="macro">debug!</span>(<span class="string">"Process: IGNORE decision from monitoring. Task '{}' errored out during process. The runtime will continue with a forced empty message."</span>, #mission_mod::TASKS_IDS[#monitor_index]);
+<a href=#4666 id=4666 data-nosnippet>4666</a>                            }
+<a href=#4667 id=4667 data-nosnippet>4667</a>                            Decision::Shutdown =&gt; {
+<a href=#4668 id=4668 data-nosnippet>4668</a>                                <span class="macro">debug!</span>(<span class="string">"Process: SHUTDOWN decision from monitoring. Task '{}' errored out during process. The runtime cannot continue."</span>, #mission_mod::TASKS_IDS[#monitor_index]);
+<a href=#4669 id=4669 data-nosnippet>4669</a>                                <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::new_with_cause(<span class="string">"Task errored out during process."</span>, error));
+<a href=#4670 id=4670 data-nosnippet>4670</a>                            }
+<a href=#4671 id=4671 data-nosnippet>4671</a>                        }
+<a href=#4672 id=4672 data-nosnippet>4672</a>                    }
+<a href=#4673 id=4673 data-nosnippet>4673</a>                    cumsg_output.metadata.process_time.end = clock.now().into();
+<a href=#4674 id=4674 data-nosnippet>4674</a>                }
+<a href=#4675 id=4675 data-nosnippet>4675</a>            }
+<a href=#4676 id=4676 data-nosnippet>4676</a>        },
+<a href=#4677 id=4677 data-nosnippet>4677</a>        <span class="macro">quote!</span> {},
+<a href=#4678 id=4678 data-nosnippet>4678</a>    )
+<a href=#4679 id=4679 data-nosnippet>4679</a>}
+<a href=#4680 id=4680 data-nosnippet>4680</a>
+<a href=#4681 id=4681 data-nosnippet>4681</a><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+<a href=#4682 id=4682 data-nosnippet>4682</a></span><span class="kw">enum </span>BridgeChannelDirection {
+<a href=#4683 id=4683 data-nosnippet>4683</a>    Rx,
+<a href=#4684 id=4684 data-nosnippet>4684</a>    Tx,
+<a href=#4685 id=4685 data-nosnippet>4685</a>}
+<a href=#4686 id=4686 data-nosnippet>4686</a>
+<a href=#4687 id=4687 data-nosnippet>4687</a><span class="attr">#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+<a href=#4688 id=4688 data-nosnippet>4688</a></span><span class="kw">struct </span>BridgeChannelKey {
+<a href=#4689 id=4689 data-nosnippet>4689</a>    bridge_id: String,
+<a href=#4690 id=4690 data-nosnippet>4690</a>    channel_id: String,
+<a href=#4691 id=4691 data-nosnippet>4691</a>    direction: BridgeChannelDirection,
+<a href=#4692 id=4692 data-nosnippet>4692</a>}
+<a href=#4693 id=4693 data-nosnippet>4693</a>
+<a href=#4694 id=4694 data-nosnippet>4694</a><span class="attr">#[derive(Clone)]
+<a href=#4695 id=4695 data-nosnippet>4695</a></span><span class="kw">struct </span>BridgeChannelSpec {
+<a href=#4696 id=4696 data-nosnippet>4696</a>    id: String,
+<a href=#4697 id=4697 data-nosnippet>4697</a>    const_ident: Ident,
+<a href=#4698 id=4698 data-nosnippet>4698</a>    <span class="attr">#[allow(dead_code)]
+<a href=#4699 id=4699 data-nosnippet>4699</a>    </span>msg_type: Type,
+<a href=#4700 id=4700 data-nosnippet>4700</a>    msg_type_name: String,
+<a href=#4701 id=4701 data-nosnippet>4701</a>    config_index: usize,
+<a href=#4702 id=4702 data-nosnippet>4702</a>    plan_node_id: <span class="prelude-ty">Option</span>&lt;NodeId&gt;,
+<a href=#4703 id=4703 data-nosnippet>4703</a>    culist_index: <span class="prelude-ty">Option</span>&lt;usize&gt;,
 <a href=#4704 id=4704 data-nosnippet>4704</a>    monitor_index: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-<a href=#4705 id=4705 data-nosnippet>4705</a>    rx_channels: Vec&lt;BridgeChannelSpec&gt;,
-<a href=#4706 id=4706 data-nosnippet>4706</a>    tx_channels: Vec&lt;BridgeChannelSpec&gt;,
-<a href=#4707 id=4707 data-nosnippet>4707</a>}
-<a href=#4708 id=4708 data-nosnippet>4708</a>
-<a href=#4709 id=4709 data-nosnippet>4709</a><span class="attr">#[derive(Clone)]
-<a href=#4710 id=4710 data-nosnippet>4710</a></span><span class="kw">struct </span>ExecutionEntity {
-<a href=#4711 id=4711 data-nosnippet>4711</a>    kind: ExecutionEntityKind,
-<a href=#4712 id=4712 data-nosnippet>4712</a>}
-<a href=#4713 id=4713 data-nosnippet>4713</a>
-<a href=#4714 id=4714 data-nosnippet>4714</a><span class="attr">#[derive(Clone)]
-<a href=#4715 id=4715 data-nosnippet>4715</a></span><span class="kw">enum </span>ExecutionEntityKind {
-<a href=#4716 id=4716 data-nosnippet>4716</a>    Task {
-<a href=#4717 id=4717 data-nosnippet>4717</a>        task_index: usize,
-<a href=#4718 id=4718 data-nosnippet>4718</a>    },
-<a href=#4719 id=4719 data-nosnippet>4719</a>    BridgeRx {
-<a href=#4720 id=4720 data-nosnippet>4720</a>        bridge_index: usize,
-<a href=#4721 id=4721 data-nosnippet>4721</a>        channel_index: usize,
-<a href=#4722 id=4722 data-nosnippet>4722</a>    },
-<a href=#4723 id=4723 data-nosnippet>4723</a>    BridgeTx {
-<a href=#4724 id=4724 data-nosnippet>4724</a>        bridge_index: usize,
-<a href=#4725 id=4725 data-nosnippet>4725</a>        channel_index: usize,
-<a href=#4726 id=4726 data-nosnippet>4726</a>    },
-<a href=#4727 id=4727 data-nosnippet>4727</a>}
-<a href=#4728 id=4728 data-nosnippet>4728</a>
-<a href=#4729 id=4729 data-nosnippet>4729</a><span class="attr">#[cfg(test)]
-<a href=#4730 id=4730 data-nosnippet>4730</a></span><span class="kw">mod </span>tests {
-<a href=#4731 id=4731 data-nosnippet>4731</a>    <span class="comment">// See tests/compile_file directory for more information
-<a href=#4732 id=4732 data-nosnippet>4732</a>    </span><span class="attr">#[test]
-<a href=#4733 id=4733 data-nosnippet>4733</a>    </span><span class="kw">fn </span>test_compile_fail() {
-<a href=#4734 id=4734 data-nosnippet>4734</a>        <span class="kw">use </span>rustc_version::{Channel, version_meta};
-<a href=#4735 id=4735 data-nosnippet>4735</a>        <span class="kw">use </span>std::{fs, path::Path};
-<a href=#4736 id=4736 data-nosnippet>4736</a>
-<a href=#4737 id=4737 data-nosnippet>4737</a>        <span class="kw">let </span>dir = Path::new(<span class="string">"tests/compile_fail"</span>);
-<a href=#4738 id=4738 data-nosnippet>4738</a>        <span class="kw">for </span>entry <span class="kw">in </span>fs::read_dir(dir).unwrap() {
-<a href=#4739 id=4739 data-nosnippet>4739</a>            <span class="kw">let </span>entry = entry.unwrap();
-<a href=#4740 id=4740 data-nosnippet>4740</a>            <span class="kw">if </span>!entry.file_type().unwrap().is_dir() {
-<a href=#4741 id=4741 data-nosnippet>4741</a>                <span class="kw">continue</span>;
-<a href=#4742 id=4742 data-nosnippet>4742</a>            }
-<a href=#4743 id=4743 data-nosnippet>4743</a>            <span class="kw">for </span>file <span class="kw">in </span>fs::read_dir(entry.path()).unwrap() {
-<a href=#4744 id=4744 data-nosnippet>4744</a>                <span class="kw">let </span>file = file.unwrap();
-<a href=#4745 id=4745 data-nosnippet>4745</a>                <span class="kw">let </span>p = file.path();
-<a href=#4746 id=4746 data-nosnippet>4746</a>                <span class="kw">if </span>p.extension().and_then(|x| x.to_str()) != <span class="prelude-val">Some</span>(<span class="string">"rs"</span>) {
-<a href=#4747 id=4747 data-nosnippet>4747</a>                    <span class="kw">continue</span>;
-<a href=#4748 id=4748 data-nosnippet>4748</a>                }
-<a href=#4749 id=4749 data-nosnippet>4749</a>
-<a href=#4750 id=4750 data-nosnippet>4750</a>                <span class="kw">let </span>base = p.with_extension(<span class="string">"stderr"</span>); <span class="comment">// the file trybuild reads
-<a href=#4751 id=4751 data-nosnippet>4751</a>                </span><span class="kw">let </span>src = <span class="kw">match </span>version_meta().unwrap().channel {
-<a href=#4752 id=4752 data-nosnippet>4752</a>                    Channel::Beta =&gt; Path::new(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}.beta"</span>, base.display())).to_path_buf(),
-<a href=#4753 id=4753 data-nosnippet>4753</a>                    <span class="kw">_ </span>=&gt; Path::new(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}.stable"</span>, base.display())).to_path_buf(),
-<a href=#4754 id=4754 data-nosnippet>4754</a>                };
-<a href=#4755 id=4755 data-nosnippet>4755</a>
-<a href=#4756 id=4756 data-nosnippet>4756</a>                <span class="kw">if </span>src.exists() {
-<a href=#4757 id=4757 data-nosnippet>4757</a>                    fs::copy(src, <span class="kw-2">&amp;</span>base).unwrap();
-<a href=#4758 id=4758 data-nosnippet>4758</a>                }
-<a href=#4759 id=4759 data-nosnippet>4759</a>            }
-<a href=#4760 id=4760 data-nosnippet>4760</a>        }
-<a href=#4761 id=4761 data-nosnippet>4761</a>
-<a href=#4762 id=4762 data-nosnippet>4762</a>        <span class="kw">let </span>t = trybuild::TestCases::new();
-<a href=#4763 id=4763 data-nosnippet>4763</a>        t.compile_fail(<span class="string">"tests/compile_fail/*/*.rs"</span>);
-<a href=#4764 id=4764 data-nosnippet>4764</a>        t.pass(<span class="string">"tests/compile_pass/*/*.rs"</span>);
-<a href=#4765 id=4765 data-nosnippet>4765</a>    }
-<a href=#4766 id=4766 data-nosnippet>4766</a>
-<a href=#4767 id=4767 data-nosnippet>4767</a>    <span class="attr">#[test]
-<a href=#4768 id=4768 data-nosnippet>4768</a>    </span><span class="kw">fn </span>bridge_resources_are_collected() {
-<a href=#4769 id=4769 data-nosnippet>4769</a>        <span class="kw">use </span>super::<span class="kw-2">*</span>;
-<a href=#4770 id=4770 data-nosnippet>4770</a>        <span class="kw">use </span>cu29::config::{CuGraph, Flavor, Node};
-<a href=#4771 id=4771 data-nosnippet>4771</a>        <span class="kw">use </span>std::collections::HashMap;
-<a href=#4772 id=4772 data-nosnippet>4772</a>        <span class="kw">use </span>syn::parse_str;
-<a href=#4773 id=4773 data-nosnippet>4773</a>
-<a href=#4774 id=4774 data-nosnippet>4774</a>        <span class="kw">let </span><span class="kw-2">mut </span>graph = CuGraph::default();
-<a href=#4775 id=4775 data-nosnippet>4775</a>        <span class="kw">let </span><span class="kw-2">mut </span>node = Node::new_with_flavor(<span class="string">"radio"</span>, <span class="string">"bridge::Dummy"</span>, Flavor::Bridge);
-<a href=#4776 id=4776 data-nosnippet>4776</a>        <span class="kw">let </span><span class="kw-2">mut </span>res = HashMap::new();
-<a href=#4777 id=4777 data-nosnippet>4777</a>        res.insert(<span class="string">"serial"</span>.to_string(), <span class="string">"fc.serial0"</span>.to_string());
-<a href=#4778 id=4778 data-nosnippet>4778</a>        node.set_resources(<span class="prelude-val">Some</span>(res));
-<a href=#4779 id=4779 data-nosnippet>4779</a>        graph.add_node(node).expect(<span class="string">"bridge node"</span>);
-<a href=#4780 id=4780 data-nosnippet>4780</a>
-<a href=#4781 id=4781 data-nosnippet>4781</a>        <span class="kw">let </span>task_specs = CuTaskSpecSet::from_graph(<span class="kw-2">&amp;</span>graph);
-<a href=#4782 id=4782 data-nosnippet>4782</a>        <span class="kw">let </span>bridge_spec = BridgeSpec {
-<a href=#4783 id=4783 data-nosnippet>4783</a>            id: <span class="string">"radio"</span>.to_string(),
-<a href=#4784 id=4784 data-nosnippet>4784</a>            type_path: parse_str(<span class="string">"bridge::Dummy"</span>).unwrap(),
-<a href=#4785 id=4785 data-nosnippet>4785</a>            config_index: <span class="number">0</span>,
-<a href=#4786 id=4786 data-nosnippet>4786</a>            tuple_index: <span class="number">0</span>,
-<a href=#4787 id=4787 data-nosnippet>4787</a>            monitor_index: <span class="prelude-val">None</span>,
-<a href=#4788 id=4788 data-nosnippet>4788</a>            rx_channels: Vec::new(),
-<a href=#4789 id=4789 data-nosnippet>4789</a>            tx_channels: Vec::new(),
-<a href=#4790 id=4790 data-nosnippet>4790</a>        };
-<a href=#4791 id=4791 data-nosnippet>4791</a>
-<a href=#4792 id=4792 data-nosnippet>4792</a>        <span class="kw">let </span><span class="kw-2">mut </span>config = cu29::config::CuConfig::default();
-<a href=#4793 id=4793 data-nosnippet>4793</a>        config.resources.push(ResourceBundleConfig {
-<a href=#4794 id=4794 data-nosnippet>4794</a>            id: <span class="string">"fc"</span>.to_string(),
-<a href=#4795 id=4795 data-nosnippet>4795</a>            provider: <span class="string">"board::Bundle"</span>.to_string(),
-<a href=#4796 id=4796 data-nosnippet>4796</a>            config: <span class="prelude-val">None</span>,
-<a href=#4797 id=4797 data-nosnippet>4797</a>            missions: <span class="prelude-val">None</span>,
-<a href=#4798 id=4798 data-nosnippet>4798</a>        });
-<a href=#4799 id=4799 data-nosnippet>4799</a>        <span class="kw">let </span>bundle_specs = build_bundle_specs(<span class="kw-2">&amp;</span>config, <span class="string">"default"</span>).expect(<span class="string">"bundle specs"</span>);
-<a href=#4800 id=4800 data-nosnippet>4800</a>        <span class="kw">let </span>specs = collect_resource_specs(<span class="kw-2">&amp;</span>graph, <span class="kw-2">&amp;</span>task_specs, <span class="kw-2">&amp;</span>[bridge_spec], <span class="kw-2">&amp;</span>bundle_specs)
-<a href=#4801 id=4801 data-nosnippet>4801</a>            .expect(<span class="string">"collect specs"</span>);
-<a href=#4802 id=4802 data-nosnippet>4802</a>        <span class="macro">assert_eq!</span>(specs.len(), <span class="number">1</span>);
-<a href=#4803 id=4803 data-nosnippet>4803</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(specs[<span class="number">0</span>].owner, ResourceOwner::Bridge(<span class="number">0</span>)));
-<a href=#4804 id=4804 data-nosnippet>4804</a>        <span class="macro">assert_eq!</span>(specs[<span class="number">0</span>].binding_name, <span class="string">"serial"</span>);
-<a href=#4805 id=4805 data-nosnippet>4805</a>        <span class="macro">assert_eq!</span>(specs[<span class="number">0</span>].bundle_index, <span class="number">0</span>);
-<a href=#4806 id=4806 data-nosnippet>4806</a>        <span class="macro">assert_eq!</span>(specs[<span class="number">0</span>].resource_name, <span class="string">"serial0"</span>);
-<a href=#4807 id=4807 data-nosnippet>4807</a>    }
-<a href=#4808 id=4808 data-nosnippet>4808</a>}
+<a href=#4705 id=4705 data-nosnippet>4705</a>}
+<a href=#4706 id=4706 data-nosnippet>4706</a>
+<a href=#4707 id=4707 data-nosnippet>4707</a><span class="attr">#[derive(Clone)]
+<a href=#4708 id=4708 data-nosnippet>4708</a></span><span class="kw">struct </span>BridgeSpec {
+<a href=#4709 id=4709 data-nosnippet>4709</a>    id: String,
+<a href=#4710 id=4710 data-nosnippet>4710</a>    type_path: Type,
+<a href=#4711 id=4711 data-nosnippet>4711</a>    config_index: usize,
+<a href=#4712 id=4712 data-nosnippet>4712</a>    tuple_index: usize,
+<a href=#4713 id=4713 data-nosnippet>4713</a>    monitor_index: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#4714 id=4714 data-nosnippet>4714</a>    rx_channels: Vec&lt;BridgeChannelSpec&gt;,
+<a href=#4715 id=4715 data-nosnippet>4715</a>    tx_channels: Vec&lt;BridgeChannelSpec&gt;,
+<a href=#4716 id=4716 data-nosnippet>4716</a>}
+<a href=#4717 id=4717 data-nosnippet>4717</a>
+<a href=#4718 id=4718 data-nosnippet>4718</a><span class="attr">#[derive(Clone)]
+<a href=#4719 id=4719 data-nosnippet>4719</a></span><span class="kw">struct </span>ExecutionEntity {
+<a href=#4720 id=4720 data-nosnippet>4720</a>    kind: ExecutionEntityKind,
+<a href=#4721 id=4721 data-nosnippet>4721</a>}
+<a href=#4722 id=4722 data-nosnippet>4722</a>
+<a href=#4723 id=4723 data-nosnippet>4723</a><span class="attr">#[derive(Clone)]
+<a href=#4724 id=4724 data-nosnippet>4724</a></span><span class="kw">enum </span>ExecutionEntityKind {
+<a href=#4725 id=4725 data-nosnippet>4725</a>    Task {
+<a href=#4726 id=4726 data-nosnippet>4726</a>        task_index: usize,
+<a href=#4727 id=4727 data-nosnippet>4727</a>    },
+<a href=#4728 id=4728 data-nosnippet>4728</a>    BridgeRx {
+<a href=#4729 id=4729 data-nosnippet>4729</a>        bridge_index: usize,
+<a href=#4730 id=4730 data-nosnippet>4730</a>        channel_index: usize,
+<a href=#4731 id=4731 data-nosnippet>4731</a>    },
+<a href=#4732 id=4732 data-nosnippet>4732</a>    BridgeTx {
+<a href=#4733 id=4733 data-nosnippet>4733</a>        bridge_index: usize,
+<a href=#4734 id=4734 data-nosnippet>4734</a>        channel_index: usize,
+<a href=#4735 id=4735 data-nosnippet>4735</a>    },
+<a href=#4736 id=4736 data-nosnippet>4736</a>}
+<a href=#4737 id=4737 data-nosnippet>4737</a>
+<a href=#4738 id=4738 data-nosnippet>4738</a><span class="attr">#[cfg(test)]
+<a href=#4739 id=4739 data-nosnippet>4739</a></span><span class="kw">mod </span>tests {
+<a href=#4740 id=4740 data-nosnippet>4740</a>    <span class="comment">// See tests/compile_file directory for more information
+<a href=#4741 id=4741 data-nosnippet>4741</a>    </span><span class="attr">#[test]
+<a href=#4742 id=4742 data-nosnippet>4742</a>    </span><span class="kw">fn </span>test_compile_fail() {
+<a href=#4743 id=4743 data-nosnippet>4743</a>        <span class="kw">use </span>rustc_version::{Channel, version_meta};
+<a href=#4744 id=4744 data-nosnippet>4744</a>        <span class="kw">use </span>std::{fs, path::Path};
+<a href=#4745 id=4745 data-nosnippet>4745</a>
+<a href=#4746 id=4746 data-nosnippet>4746</a>        <span class="kw">let </span>dir = Path::new(<span class="string">"tests/compile_fail"</span>);
+<a href=#4747 id=4747 data-nosnippet>4747</a>        <span class="kw">for </span>entry <span class="kw">in </span>fs::read_dir(dir).unwrap() {
+<a href=#4748 id=4748 data-nosnippet>4748</a>            <span class="kw">let </span>entry = entry.unwrap();
+<a href=#4749 id=4749 data-nosnippet>4749</a>            <span class="kw">if </span>!entry.file_type().unwrap().is_dir() {
+<a href=#4750 id=4750 data-nosnippet>4750</a>                <span class="kw">continue</span>;
+<a href=#4751 id=4751 data-nosnippet>4751</a>            }
+<a href=#4752 id=4752 data-nosnippet>4752</a>            <span class="kw">for </span>file <span class="kw">in </span>fs::read_dir(entry.path()).unwrap() {
+<a href=#4753 id=4753 data-nosnippet>4753</a>                <span class="kw">let </span>file = file.unwrap();
+<a href=#4754 id=4754 data-nosnippet>4754</a>                <span class="kw">let </span>p = file.path();
+<a href=#4755 id=4755 data-nosnippet>4755</a>                <span class="kw">if </span>p.extension().and_then(|x| x.to_str()) != <span class="prelude-val">Some</span>(<span class="string">"rs"</span>) {
+<a href=#4756 id=4756 data-nosnippet>4756</a>                    <span class="kw">continue</span>;
+<a href=#4757 id=4757 data-nosnippet>4757</a>                }
+<a href=#4758 id=4758 data-nosnippet>4758</a>
+<a href=#4759 id=4759 data-nosnippet>4759</a>                <span class="kw">let </span>base = p.with_extension(<span class="string">"stderr"</span>); <span class="comment">// the file trybuild reads
+<a href=#4760 id=4760 data-nosnippet>4760</a>                </span><span class="kw">let </span>src = <span class="kw">match </span>version_meta().unwrap().channel {
+<a href=#4761 id=4761 data-nosnippet>4761</a>                    Channel::Beta =&gt; Path::new(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}.beta"</span>, base.display())).to_path_buf(),
+<a href=#4762 id=4762 data-nosnippet>4762</a>                    <span class="kw">_ </span>=&gt; Path::new(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}.stable"</span>, base.display())).to_path_buf(),
+<a href=#4763 id=4763 data-nosnippet>4763</a>                };
+<a href=#4764 id=4764 data-nosnippet>4764</a>
+<a href=#4765 id=4765 data-nosnippet>4765</a>                <span class="kw">if </span>src.exists() {
+<a href=#4766 id=4766 data-nosnippet>4766</a>                    fs::copy(src, <span class="kw-2">&amp;</span>base).unwrap();
+<a href=#4767 id=4767 data-nosnippet>4767</a>                }
+<a href=#4768 id=4768 data-nosnippet>4768</a>            }
+<a href=#4769 id=4769 data-nosnippet>4769</a>        }
+<a href=#4770 id=4770 data-nosnippet>4770</a>
+<a href=#4771 id=4771 data-nosnippet>4771</a>        <span class="kw">let </span>t = trybuild::TestCases::new();
+<a href=#4772 id=4772 data-nosnippet>4772</a>        t.compile_fail(<span class="string">"tests/compile_fail/*/*.rs"</span>);
+<a href=#4773 id=4773 data-nosnippet>4773</a>        t.pass(<span class="string">"tests/compile_pass/*/*.rs"</span>);
+<a href=#4774 id=4774 data-nosnippet>4774</a>    }
+<a href=#4775 id=4775 data-nosnippet>4775</a>
+<a href=#4776 id=4776 data-nosnippet>4776</a>    <span class="attr">#[test]
+<a href=#4777 id=4777 data-nosnippet>4777</a>    </span><span class="kw">fn </span>bridge_resources_are_collected() {
+<a href=#4778 id=4778 data-nosnippet>4778</a>        <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#4779 id=4779 data-nosnippet>4779</a>        <span class="kw">use </span>cu29::config::{CuGraph, Flavor, Node};
+<a href=#4780 id=4780 data-nosnippet>4780</a>        <span class="kw">use </span>std::collections::HashMap;
+<a href=#4781 id=4781 data-nosnippet>4781</a>        <span class="kw">use </span>syn::parse_str;
+<a href=#4782 id=4782 data-nosnippet>4782</a>
+<a href=#4783 id=4783 data-nosnippet>4783</a>        <span class="kw">let </span><span class="kw-2">mut </span>graph = CuGraph::default();
+<a href=#4784 id=4784 data-nosnippet>4784</a>        <span class="kw">let </span><span class="kw-2">mut </span>node = Node::new_with_flavor(<span class="string">"radio"</span>, <span class="string">"bridge::Dummy"</span>, Flavor::Bridge);
+<a href=#4785 id=4785 data-nosnippet>4785</a>        <span class="kw">let </span><span class="kw-2">mut </span>res = HashMap::new();
+<a href=#4786 id=4786 data-nosnippet>4786</a>        res.insert(<span class="string">"serial"</span>.to_string(), <span class="string">"fc.serial0"</span>.to_string());
+<a href=#4787 id=4787 data-nosnippet>4787</a>        node.set_resources(<span class="prelude-val">Some</span>(res));
+<a href=#4788 id=4788 data-nosnippet>4788</a>        graph.add_node(node).expect(<span class="string">"bridge node"</span>);
+<a href=#4789 id=4789 data-nosnippet>4789</a>
+<a href=#4790 id=4790 data-nosnippet>4790</a>        <span class="kw">let </span>task_specs = CuTaskSpecSet::from_graph(<span class="kw-2">&amp;</span>graph);
+<a href=#4791 id=4791 data-nosnippet>4791</a>        <span class="kw">let </span>bridge_spec = BridgeSpec {
+<a href=#4792 id=4792 data-nosnippet>4792</a>            id: <span class="string">"radio"</span>.to_string(),
+<a href=#4793 id=4793 data-nosnippet>4793</a>            type_path: parse_str(<span class="string">"bridge::Dummy"</span>).unwrap(),
+<a href=#4794 id=4794 data-nosnippet>4794</a>            config_index: <span class="number">0</span>,
+<a href=#4795 id=4795 data-nosnippet>4795</a>            tuple_index: <span class="number">0</span>,
+<a href=#4796 id=4796 data-nosnippet>4796</a>            monitor_index: <span class="prelude-val">None</span>,
+<a href=#4797 id=4797 data-nosnippet>4797</a>            rx_channels: Vec::new(),
+<a href=#4798 id=4798 data-nosnippet>4798</a>            tx_channels: Vec::new(),
+<a href=#4799 id=4799 data-nosnippet>4799</a>        };
+<a href=#4800 id=4800 data-nosnippet>4800</a>
+<a href=#4801 id=4801 data-nosnippet>4801</a>        <span class="kw">let </span><span class="kw-2">mut </span>config = cu29::config::CuConfig::default();
+<a href=#4802 id=4802 data-nosnippet>4802</a>        config.resources.push(ResourceBundleConfig {
+<a href=#4803 id=4803 data-nosnippet>4803</a>            id: <span class="string">"fc"</span>.to_string(),
+<a href=#4804 id=4804 data-nosnippet>4804</a>            provider: <span class="string">"board::Bundle"</span>.to_string(),
+<a href=#4805 id=4805 data-nosnippet>4805</a>            config: <span class="prelude-val">None</span>,
+<a href=#4806 id=4806 data-nosnippet>4806</a>            missions: <span class="prelude-val">None</span>,
+<a href=#4807 id=4807 data-nosnippet>4807</a>        });
+<a href=#4808 id=4808 data-nosnippet>4808</a>        <span class="kw">let </span>bundle_specs = build_bundle_specs(<span class="kw-2">&amp;</span>config, <span class="string">"default"</span>).expect(<span class="string">"bundle specs"</span>);
+<a href=#4809 id=4809 data-nosnippet>4809</a>        <span class="kw">let </span>specs = collect_resource_specs(<span class="kw-2">&amp;</span>graph, <span class="kw-2">&amp;</span>task_specs, <span class="kw-2">&amp;</span>[bridge_spec], <span class="kw-2">&amp;</span>bundle_specs)
+<a href=#4810 id=4810 data-nosnippet>4810</a>            .expect(<span class="string">"collect specs"</span>);
+<a href=#4811 id=4811 data-nosnippet>4811</a>        <span class="macro">assert_eq!</span>(specs.len(), <span class="number">1</span>);
+<a href=#4812 id=4812 data-nosnippet>4812</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(specs[<span class="number">0</span>].owner, ResourceOwner::Bridge(<span class="number">0</span>)));
+<a href=#4813 id=4813 data-nosnippet>4813</a>        <span class="macro">assert_eq!</span>(specs[<span class="number">0</span>].binding_name, <span class="string">"serial"</span>);
+<a href=#4814 id=4814 data-nosnippet>4814</a>        <span class="macro">assert_eq!</span>(specs[<span class="number">0</span>].bundle_index, <span class="number">0</span>);
+<a href=#4815 id=4815 data-nosnippet>4815</a>        <span class="macro">assert_eq!</span>(specs[<span class="number">0</span>].resource_name, <span class="string">"serial0"</span>);
+<a href=#4816 id=4816 data-nosnippet>4816</a>    }
+<a href=#4817 id=4817 data-nosnippet>4817</a>}
 </code></pre></div></section></main></body></html>
