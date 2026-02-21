@@ -2,6 +2,8 @@ use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use std::collections::{BTreeMap, HashMap};
 use std::fs::read_to_string;
+use std::path::Path;
+use std::process::Command;
 use syn::Fields::{Named, Unnamed};
 use syn::meta::parser;
 use syn::{
@@ -48,6 +50,33 @@ fn rtsan_guard_tokens() -> proc_macro2::TokenStream {
     } else {
         quote! {}
     }
+}
+
+fn git_output_trimmed(repo_root: &Path, args: &[&str]) -> Option<String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(args)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8(output.stdout).ok()?;
+    Some(stdout.trim().to_string())
+}
+
+fn detect_git_info(repo_root: &Path) -> (Option<String>, Option<bool>) {
+    let in_repo = git_output_trimmed(repo_root, &["rev-parse", "--is-inside-work-tree"])
+        .is_some_and(|value| value == "true");
+    if !in_repo {
+        return (None, None);
+    }
+
+    let commit = git_output_trimmed(repo_root, &["rev-parse", "HEAD"]).filter(|s| !s.is_empty());
+    // Porcelain output is empty when tree is clean.
+    let dirty = git_output_trimmed(repo_root, &["status", "--porcelain"]).map(|s| !s.is_empty());
+    (commit, dirty)
 }
 
 #[proc_macro]
@@ -790,6 +819,18 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             ));
         }
     };
+    let caller_root = utils::caller_crate_root();
+    let (git_commit, git_dirty) = detect_git_info(&caller_root);
+    let git_commit_tokens = if let Some(commit) = git_commit {
+        quote! { Some(#commit.to_string()) }
+    } else {
+        quote! { None }
+    };
+    let git_dirty_tokens = if let Some(dirty) = git_dirty {
+        quote! { Some(#dirty) }
+    } else {
+        quote! { None }
+    };
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[build monitor type]");
@@ -814,15 +855,20 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             copper_runtime: cu29::curuntime::CuRuntime<CuTasks, CuBridges, CuStampedDataSet, #monitor_type, #DEFAULT_CLNB>
         }
     };
+    let lifecycle_stream_field: Field = parse_quote! {
+        runtime_lifecycle_stream: Option<Box<dyn WriteStream<RuntimeLifecycleRecord>>>
+    };
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[match struct anonymity]");
     match &mut application_struct.fields {
         Named(fields_named) => {
             fields_named.named.push(runtime_field);
+            fields_named.named.push(lifecycle_stream_field);
         }
         Unnamed(fields_unnamed) => {
             fields_unnamed.unnamed.push(runtime_field);
+            fields_unnamed.unnamed.push(lifecycle_stream_field);
         }
         Fields::Unit => {
             panic!(
@@ -834,6 +880,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let all_missions = copper_config.graphs.get_all_missions_graphs();
     let mut all_missions_tokens = Vec::<proc_macro2::TokenStream>::new();
     for (mission, graph) in &all_missions {
+        let git_commit_tokens = git_commit_tokens.clone();
+        let git_dirty_tokens = git_dirty_tokens.clone();
         let mission_mod = parse_str::<Ident>(mission.as_str())
             .expect("Could not make an identifier of the mission name");
 
@@ -2009,27 +2057,31 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         let config_load_stmt = if std {
             quote! {
-                let config = if let Some(overridden_config) = config_override {
-                    let serialized = overridden_config
-                        .serialize_ron()
-                        .unwrap_or_else(|err| format!("<failed to serialize config: {err}>"));
-                    debug!("CuConfig: Overridden programmatically: {}", serialized);
-                    overridden_config
+                let (config, config_source) = if let Some(overridden_config) = config_override {
+                    debug!("CuConfig: Overridden programmatically.");
+                    (overridden_config, RuntimeLifecycleConfigSource::ProgrammaticOverride)
                 } else if ::std::path::Path::new(config_filename).exists() {
                     debug!("CuConfig: Reading configuration from file: {}", config_filename);
-                    cu29::config::read_configuration(config_filename)?
+                    (
+                        cu29::config::read_configuration(config_filename)?,
+                        RuntimeLifecycleConfigSource::ExternalFile,
+                    )
                 } else {
                     let original_config = Self::original_config();
-                    debug!("CuConfig: Using the original configuration the project was compiled with: {}", &original_config);
-                    cu29::config::read_configuration_str(original_config, None)?
+                    debug!("CuConfig: Using the bundled configuration compiled into the binary.");
+                    (
+                        cu29::config::read_configuration_str(original_config, None)?,
+                        RuntimeLifecycleConfigSource::BundledDefault,
+                    )
                 };
             }
         } else {
             quote! {
                 // Only the original config is available in no-std
                 let original_config = Self::original_config();
-                debug!("CuConfig: Using the original configuration the project was compiled with: {}", &original_config);
+                debug!("CuConfig: Using the bundled configuration compiled into the binary.");
                 let config = cu29::config::read_configuration_str(original_config, None)?;
+                let config_source = RuntimeLifecycleConfigSource::BundledDefault;
             }
         };
 
@@ -2188,6 +2240,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             #start_all_tasks {
+                let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::MissionStarted {
+                    mission: #mission.to_string(),
+                });
                 #(#start_calls)*
                 self.copper_runtime.monitor.start(&self.copper_runtime.clock)?;
                 Ok(())
@@ -2196,6 +2251,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             #stop_all_tasks {
                 #(#stop_calls)*
                 self.copper_runtime.monitor.stop(&self.copper_runtime.clock)?;
+                // TODO(lifecycle): emit typed stop reasons (completed/error/panic/requested)
+                // once panic/reporting flow is finalized for std and no-std.
+                let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::MissionStopped {
+                    mission: #mission.to_string(),
+                    reason: "stop_all_tasks".to_string(),
+                });
                 Ok(())
             }
 
@@ -2211,6 +2272,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     error!("A task errored out: {}", &result);
                 }
                 <Self as #app_trait<S, L>>::stop_all_tasks(self, #sim_callback_arg)?;
+                let _ = self.log_shutdown_completed();
                 result
             }
         };
@@ -2244,6 +2306,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let app_resources_struct = quote! {
             pub struct AppResources {
                 pub config: CuConfig,
+                pub config_source: RuntimeLifecycleConfigSource,
                 pub resources: ResourceManager,
             }
         };
@@ -2276,13 +2339,21 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp init: resources ready");
 
-                Ok(AppResources { config, resources })
+                Ok(AppResources {
+                    config,
+                    config_source,
+                    resources,
+                })
             }
         };
 
         let new_with_resources_fn = quote! {
             #new_with_resources_sig {
-                let AppResources { config, resources } = app_resources;
+                let AppResources {
+                    config,
+                    config_source,
+                    resources,
+                } = app_resources;
 
                 #[cfg(target_os = "none")]
                 {
@@ -2338,6 +2409,33 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 ::cu29::prelude::info!("CuApp new: keyframes stream ready");
 
                 #[cfg(target_os = "none")]
+                ::cu29::prelude::info!("CuApp new: creating runtime lifecycle stream");
+                let mut runtime_lifecycle_stream = stream_write::<RuntimeLifecycleRecord, S>(
+                    unified_logger.clone(),
+                    UnifiedLogType::RuntimeLifecycle,
+                    1024 * 64, // 64 KiB
+                )?;
+                let effective_config_ron = config
+                    .serialize_ron()
+                    .unwrap_or_else(|_| "<failed to serialize config>".to_string());
+                let stack_info = RuntimeLifecycleStackInfo {
+                    app_name: env!("CARGO_PKG_NAME").to_string(),
+                    app_version: env!("CARGO_PKG_VERSION").to_string(),
+                    git_commit: #git_commit_tokens,
+                    git_dirty: #git_dirty_tokens,
+                };
+                runtime_lifecycle_stream.log(&RuntimeLifecycleRecord {
+                    timestamp: clock.now(),
+                    event: RuntimeLifecycleEvent::Instantiated {
+                        config_source,
+                        effective_config_ron,
+                        stack: stack_info,
+                    },
+                })?;
+                #[cfg(target_os = "none")]
+                ::cu29::prelude::info!("CuApp new: runtime lifecycle stream ready");
+
+                #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: building runtime");
                 let copper_runtime = CuRuntime::<#mission_mod::#tasks_type, #mission_mod::CuBridges, #mission_mod::CuStampedDataSet, #monitor_type, #DEFAULT_CLNB>::new_with_resources(
                     clock,
@@ -2352,7 +2450,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: runtime built");
 
-                let application = Ok(#application_name { copper_runtime });
+                let application = Ok(#application_name {
+                    copper_runtime,
+                    runtime_lifecycle_stream: Some(Box::new(runtime_lifecycle_stream)),
+                });
 
                 #sim_callback_on_new
 
@@ -2368,6 +2469,25 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 pub fn register_reflect_types(registry: &mut cu29::reflect::TypeRegistry) {
                     #(#reflect_type_registration_calls)*
+                }
+
+                /// Log one runtime lifecycle event with the current runtime timestamp.
+                pub fn log_runtime_lifecycle_event(
+                    &mut self,
+                    event: RuntimeLifecycleEvent,
+                ) -> CuResult<()> {
+                    let timestamp = self.copper_runtime.clock.now();
+                    let Some(stream) = self.runtime_lifecycle_stream.as_mut() else {
+                        return Err(CuError::from("Runtime lifecycle stream is not initialized"));
+                    };
+                    stream.log(&RuntimeLifecycleRecord { timestamp, event })
+                }
+
+                /// Convenience helper for manual execution loops to mark graceful shutdown.
+                // TODO(lifecycle): add helper(s) for panic/error stop reporting once we wire
+                // RuntimeLifecycleEvent::Panic across std/no-std execution models.
+                pub fn log_shutdown_completed(&mut self) -> CuResult<()> {
+                    self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::ShutdownCompleted)
                 }
 
                 #init_resources_fn
@@ -2689,12 +2809,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use std::fmt::{Debug, Formatter};
                 use std::fmt::Result as FmtResult;
                 use std::mem::size_of;
+                use std::boxed::Box;
                 use std::sync::Arc;
                 use std::sync::atomic::{AtomicBool, Ordering};
                 use std::sync::Mutex;
             }
         } else {
             quote! {
+                use alloc::boxed::Box;
                 use alloc::sync::Arc;
                 use alloc::string::String;
                 use alloc::string::ToString;
@@ -2728,6 +2850,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::config::ComponentConfig;
                 use cu29::curuntime::CuRuntime;
                 use cu29::curuntime::KeyFrame;
+                use cu29::curuntime::RuntimeLifecycleConfigSource;
+                use cu29::curuntime::RuntimeLifecycleEvent;
+                use cu29::curuntime::RuntimeLifecycleRecord;
+                use cu29::curuntime::RuntimeLifecycleStackInfo;
                 use cu29::CuResult;
                 use cu29::CuError;
                 use cu29::cutask::CuSrcTask;
@@ -2744,6 +2870,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::prelude::stream_write;
                 use cu29::prelude::UnifiedLogType;
                 use cu29::prelude::UnifiedLogWrite;
+                use cu29::prelude::WriteStream;
 
                 #imports
 

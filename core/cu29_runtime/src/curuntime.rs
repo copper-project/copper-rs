@@ -272,6 +272,57 @@ impl KeyFrame {
     }
 }
 
+/// Identifies where the effective runtime configuration came from.
+#[derive(Clone, Encode, Decode, Debug, PartialEq, Eq)]
+pub enum RuntimeLifecycleConfigSource {
+    ProgrammaticOverride,
+    ExternalFile,
+    BundledDefault,
+}
+
+/// Build-time stack identification metadata.
+#[derive(Clone, Encode, Decode, Debug, PartialEq, Eq)]
+pub struct RuntimeLifecycleStackInfo {
+    pub app_name: String,
+    pub app_version: String,
+    pub git_commit: Option<String>,
+    pub git_dirty: Option<bool>,
+}
+
+/// Runtime lifecycle events emitted in the dedicated lifecycle section.
+#[derive(Clone, Encode, Decode, Debug, PartialEq, Eq)]
+pub enum RuntimeLifecycleEvent {
+    Instantiated {
+        config_source: RuntimeLifecycleConfigSource,
+        effective_config_ron: String,
+        stack: RuntimeLifecycleStackInfo,
+    },
+    MissionStarted {
+        mission: String,
+    },
+    MissionStopped {
+        mission: String,
+        // TODO(lifecycle): replace free-form reason with a typed stop reason enum once
+        // std/no-std behavior and panic integration are split in a follow-up PR.
+        reason: String,
+    },
+    // TODO(lifecycle): wire panic hook / no_std equivalent to emit this event consistently.
+    Panic {
+        message: String,
+        file: Option<String>,
+        line: Option<u32>,
+        column: Option<u32>,
+    },
+    ShutdownCompleted,
+}
+
+/// One event record persisted in the `UnifiedLogType::RuntimeLifecycle` section.
+#[derive(Clone, Encode, Decode, Debug, PartialEq, Eq)]
+pub struct RuntimeLifecycleRecord {
+    pub timestamp: CuTime,
+    pub event: RuntimeLifecycleEvent,
+}
+
 impl<
     CT,
     CB,

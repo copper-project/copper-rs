@@ -12,6 +12,12 @@ fsck:
 	set -euo pipefail
 	cargo run --bin balancebot-logreader -r -- logs/balance.copper fsck
 
+# dump runtime Events
+fsck-runtime:
+        #!/usr/bin/env bash
+        set -euo pipefail
+        cargo run --bin balancebot-logreader -r -- logs/balance.copper fsck --dump-runtime-lifecycle
+
 fsck-resim:
 	#!/usr/bin/env bash
 	set -euo pipefail

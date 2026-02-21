@@ -233,6 +233,7 @@ fn stop_copper_on_exit(mut exit_events: MessageReader<AppExit>, mut copper_ctx: 
             .copper_app
             .stop_all_tasks(&mut default_callback) // let the tasks clean themselves up
             .expect("Failed to stop all tasks.");
+        let _ = copper_ctx.copper_app.log_shutdown_completed();
     }
 }
 
