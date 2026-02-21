@@ -12,8 +12,8 @@ use syn::{
 use crate::utils::{config_id_to_bridge_const, config_id_to_enum, config_id_to_struct_member};
 use cu29_runtime::config::CuConfig;
 use cu29_runtime::config::{
-    BridgeChannelConfigRepresentation, CuGraph, Flavor, Node, NodeId, ResourceBundleConfig,
-    read_configuration,
+    BridgeChannelConfigRepresentation, ConfigGraphs, CuGraph, Flavor, Node, NodeId,
+    ResourceBundleConfig, read_configuration,
 };
 use cu29_runtime::curuntime::{
     CuExecutionLoop, CuExecutionStep, CuExecutionUnit, CuTaskType, compute_runtime_plan,
@@ -83,38 +83,6 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
         Ok(cuconfig) => cuconfig,
         Err(e) => return return_error(e.to_string()),
     };
-    let graph = cuconfig
-        .get_graph(None) // FIXME(gbin): Multimission
-        .expect("Could not find the specified mission for gen_cumsgs");
-    let task_specs = CuTaskSpecSet::from_graph(graph);
-    let channel_usage = collect_bridge_channel_usage(graph);
-    let mut bridge_specs = build_bridge_specs(&cuconfig, graph, &channel_usage);
-    let (culist_plan, exec_entities, plan_to_original) =
-        match build_execution_plan(graph, &task_specs, &mut bridge_specs) {
-            Ok(plan) => plan,
-            Err(e) => return return_error(format!("Could not compute copperlist plan: {e}")),
-        };
-    let task_member_names = collect_task_member_names(graph);
-    let (culist_order, node_output_positions) = collect_culist_metadata(
-        &culist_plan,
-        &exec_entities,
-        &mut bridge_specs,
-        &plan_to_original,
-    );
-
-    #[cfg(feature = "macro_debug")]
-    eprintln!(
-        "[The CuStampedDataSet matching tasks ids are {:?}]",
-        culist_order
-    );
-
-    let support = gen_culist_support(
-        &culist_plan,
-        &culist_order,
-        &node_output_positions,
-        &task_member_names,
-        &bridge_specs,
-    );
 
     let extra_imports = if !std {
         quote! {
@@ -132,30 +100,135 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
         }
     };
 
-    let with_uses = quote! {
-        mod cumsgs {
-            use cu29::bincode::Encode;
-            use cu29::bincode::enc::Encoder;
-            use cu29::bincode::error::EncodeError;
-            use cu29::bincode::Decode;
-            use cu29::bincode::de::Decoder;
-            use cu29::bincode::error::DecodeError;
-            use cu29::copperlist::CopperList;
-            use cu29::prelude::ErasedCuStampedData;
-            use cu29::prelude::ErasedCuStampedDataSet;
-            use cu29::prelude::MatchingTasks;
-            use cu29::prelude::Serialize;
-            use cu29::prelude::CuMsg;
-            use cu29::prelude::CuMsgMetadata;
-            use cu29::prelude::CuListZeroedInit;
-            use cu29::prelude::CuCompactString;
-            #extra_imports
-            #support
+    let common_imports = quote! {
+        use cu29::bincode::Encode;
+        use cu29::bincode::enc::Encoder;
+        use cu29::bincode::error::EncodeError;
+        use cu29::bincode::Decode;
+        use cu29::bincode::de::Decoder;
+        use cu29::bincode::error::DecodeError;
+        use cu29::copperlist::CopperList;
+        use cu29::prelude::ErasedCuStampedData;
+        use cu29::prelude::ErasedCuStampedDataSet;
+        use cu29::prelude::MatchingTasks;
+        use cu29::prelude::Serialize;
+        use cu29::prelude::CuMsg;
+        use cu29::prelude::CuMsgMetadata;
+        use cu29::prelude::CuListZeroedInit;
+        use cu29::prelude::CuCompactString;
+        #extra_imports
+    };
+
+    let with_uses = match &cuconfig.graphs {
+        ConfigGraphs::Simple(graph) => {
+            let support = match build_gen_cumsgs_support(&cuconfig, graph, None) {
+                Ok(support) => support,
+                Err(e) => return return_error(e.to_string()),
+            };
+
+            quote! {
+                mod cumsgs {
+                    #common_imports
+                    #support
+                }
+                use cumsgs::CuStampedDataSet;
+                type CuMsgs=CuStampedDataSet;
+            }
         }
-        use cumsgs::CuStampedDataSet;
-        type CuMsgs=CuStampedDataSet;
+        ConfigGraphs::Missions(graphs) => {
+            let mut missions: Vec<_> = graphs.iter().collect();
+            missions.sort_by(|a, b| a.0.cmp(b.0));
+
+            let mut mission_modules = Vec::<proc_macro2::TokenStream>::new();
+            for (mission, graph) in missions {
+                let mission_mod = match parse_str::<Ident>(mission.as_str()) {
+                    Ok(id) => id,
+                    Err(_) => {
+                        return return_error(format!(
+                            "Mission '{mission}' is not a valid Rust identifier for gen_cumsgs output."
+                        ));
+                    }
+                };
+
+                let support = match build_gen_cumsgs_support(&cuconfig, graph, Some(mission)) {
+                    Ok(support) => support,
+                    Err(e) => return return_error(e.to_string()),
+                };
+
+                mission_modules.push(quote! {
+                    pub mod #mission_mod {
+                        #common_imports
+                        #support
+                    }
+                });
+            }
+
+            let default_exports = if graphs.contains_key("default") {
+                quote! {
+                    use cumsgs::default::CuStampedDataSet;
+                    type CuMsgs=CuStampedDataSet;
+                }
+            } else {
+                quote! {}
+            };
+
+            quote! {
+                mod cumsgs {
+                    #(#mission_modules)*
+                }
+                #default_exports
+            }
+        }
     };
     with_uses.into()
+}
+
+fn build_gen_cumsgs_support(
+    cuconfig: &CuConfig,
+    graph: &CuGraph,
+    mission_label: Option<&str>,
+) -> CuResult<proc_macro2::TokenStream> {
+    let task_specs = CuTaskSpecSet::from_graph(graph);
+    let channel_usage = collect_bridge_channel_usage(graph);
+    let mut bridge_specs = build_bridge_specs(cuconfig, graph, &channel_usage);
+    let (culist_plan, exec_entities, plan_to_original) =
+        build_execution_plan(graph, &task_specs, &mut bridge_specs).map_err(|e| {
+            if let Some(mission) = mission_label {
+                CuError::from(format!(
+                    "Could not compute copperlist plan for mission '{mission}': {e}"
+                ))
+            } else {
+                CuError::from(format!("Could not compute copperlist plan: {e}"))
+            }
+        })?;
+    let task_member_names = collect_task_member_names(graph);
+    let (culist_order, node_output_positions) = collect_culist_metadata(
+        &culist_plan,
+        &exec_entities,
+        &mut bridge_specs,
+        &plan_to_original,
+    );
+
+    #[cfg(feature = "macro_debug")]
+    if let Some(mission) = mission_label {
+        eprintln!(
+            "[The CuStampedDataSet matching tasks ids for mission '{mission}' are {:?}]",
+            culist_order
+        );
+    } else {
+        eprintln!(
+            "[The CuStampedDataSet matching tasks ids are {:?}]",
+            culist_order
+        );
+    }
+
+    Ok(gen_culist_support(
+        &culist_plan,
+        &culist_order,
+        &node_output_positions,
+        &task_member_names,
+        &bridge_specs,
+    ))
 }
 
 /// Build the inner support of the copper list.
@@ -4561,6 +4634,7 @@ mod tests {
 
         let t = trybuild::TestCases::new();
         t.compile_fail("tests/compile_fail/*/*.rs");
+        t.pass("tests/compile_pass/*/*.rs");
     }
 
     #[test]

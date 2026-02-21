@@ -1,0 +1,27 @@
+(
+    missions: [(id: "A"), (id: "B")],
+    tasks: [
+        (
+            id: "src",
+            type: "tasks::Source",
+        ),
+        (
+            id: "sink",
+            type: "tasks::Sink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "sink",
+            msg: "u32",
+            missions: ["A"],
+        ),
+        (
+            src: "src",
+            dst: "sink",
+            msg: "u64",
+            missions: ["B"],
+        ),
+    ],
+)
