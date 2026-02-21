@@ -741,15 +741,20 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             copper_runtime: cu29::curuntime::CuRuntime<CuTasks, CuBridges, CuStampedDataSet, #monitor_type, #DEFAULT_CLNB>
         }
     };
+    let lifecycle_stream_field: Field = parse_quote! {
+        runtime_lifecycle_stream: Option<Box<dyn WriteStream<RuntimeLifecycleRecord>>>
+    };
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[match struct anonymity]");
     match &mut application_struct.fields {
         Named(fields_named) => {
             fields_named.named.push(runtime_field);
+            fields_named.named.push(lifecycle_stream_field);
         }
         Unnamed(fields_unnamed) => {
             fields_unnamed.unnamed.push(runtime_field);
+            fields_unnamed.unnamed.push(lifecycle_stream_field);
         }
         Fields::Unit => {
             panic!(
@@ -2119,6 +2124,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             #start_all_tasks {
+                let mission_start_ts = self.copper_runtime.clock.now();
+                if let Some(stream) = &mut self.runtime_lifecycle_stream {
+                    let _ = stream.log(&RuntimeLifecycleRecord {
+                        timestamp: mission_start_ts,
+                        event: RuntimeLifecycleEvent::MissionStarted {
+                            mission: #mission.to_string(),
+                        },
+                    });
+                }
                 #(#start_calls)*
                 self.copper_runtime.monitor.start(&self.copper_runtime.clock)?;
                 Ok(())
@@ -2127,6 +2141,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             #stop_all_tasks {
                 #(#stop_calls)*
                 self.copper_runtime.monitor.stop(&self.copper_runtime.clock)?;
+                let mission_stop_ts = self.copper_runtime.clock.now();
+                if let Some(stream) = &mut self.runtime_lifecycle_stream {
+                    let _ = stream.log(&RuntimeLifecycleRecord {
+                        timestamp: mission_stop_ts,
+                        event: RuntimeLifecycleEvent::MissionStopped {
+                            mission: #mission.to_string(),
+                            reason: "stop_all_tasks".to_string(),
+                        },
+                    });
+                }
                 Ok(())
             }
 
@@ -2320,7 +2344,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: runtime built");
 
-                let application = Ok(#application_name { copper_runtime });
+                let application = Ok(#application_name {
+                    copper_runtime,
+                    runtime_lifecycle_stream: Some(Box::new(runtime_lifecycle_stream)),
+                });
 
                 #sim_callback_on_new
 
@@ -2657,12 +2684,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use std::fmt::{Debug, Formatter};
                 use std::fmt::Result as FmtResult;
                 use std::mem::size_of;
+                use std::boxed::Box;
                 use std::sync::Arc;
                 use std::sync::atomic::{AtomicBool, Ordering};
                 use std::sync::Mutex;
             }
         } else {
             quote! {
+                use alloc::boxed::Box;
                 use alloc::sync::Arc;
                 use alloc::string::String;
                 use alloc::string::ToString;
@@ -2716,6 +2745,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::prelude::stream_write;
                 use cu29::prelude::UnifiedLogType;
                 use cu29::prelude::UnifiedLogWrite;
+                use cu29::prelude::WriteStream;
 
                 #imports
 
