@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["CuDebugSession","JumpOutcome"]};
+window.SIDEBAR_ITEMS = {"struct":["CuDebugSession","JumpOutcome","SectionCacheStats"]};
