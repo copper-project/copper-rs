@@ -2177,6 +2177,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             #stop_all_tasks {
                 #(#stop_calls)*
                 self.copper_runtime.monitor.stop(&self.copper_runtime.clock)?;
+                // TODO(lifecycle): emit typed stop reasons (completed/error/panic/requested)
+                // once panic/reporting flow is finalized for std and no-std.
                 let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::MissionStopped {
                     mission: #mission.to_string(),
                     reason: "stop_all_tasks".to_string(),
@@ -2408,6 +2410,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
 
                 /// Convenience helper for manual execution loops to mark graceful shutdown.
+                // TODO(lifecycle): add helper(s) for panic/error stop reporting once we wire
+                // RuntimeLifecycleEvent::Panic across std/no-std execution models.
                 pub fn log_shutdown_completed(&mut self) -> CuResult<()> {
                     self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::ShutdownCompleted)
                 }

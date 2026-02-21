@@ -302,8 +302,11 @@ pub enum RuntimeLifecycleEvent {
     },
     MissionStopped {
         mission: String,
+        // TODO(lifecycle): replace free-form reason with a typed stop reason enum once
+        // std/no-std behavior and panic integration are split in a follow-up PR.
         reason: String,
     },
+    // TODO(lifecycle): wire panic hook / no_std equivalent to emit this event consistently.
     Panic {
         message: String,
         file: Option<String>,
