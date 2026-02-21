@@ -144,7 +144,7 @@
 //! | Method | Session required | Params | Result |
 //! | --- | --- | --- | --- |
 //! | `timeline.get_cursor` | yes | `{}` | current cursor snapshot |
-//! | `timeline.get_cl` | yes | `{ at?, include_payloads?, include_metadata?, include_raw? }` | `cl_snapshot` (+ optional resolution) |
+//! | `timeline.get_cl` | yes | `{ at?, include_payloads?, include_metadata?, include_raw? }` | `cl_snapshot`, `query_cursor` (+ optional resolution) |
 //! | `timeline.list` | yes | `{ from, to, page? }` | list of `{ idx, cl, ts_ns }` + `next_offset` |
 //!
 //! ### Schema
@@ -160,9 +160,9 @@
 //!
 //! | Method | Session required | Params | Result |
 //! | --- | --- | --- | --- |
-//! | `state.inspect` | yes | `{ path="/", at?, depth?, page? }` | node kind + children preview |
-//! | `state.read` | yes | `{ path="/", at?, depth?, page?, format="json" }` | JSON value slice |
-//! | `state.search` | yes | `{ query, at?, page? }` | path/kind/preview matches |
+//! | `state.inspect` | yes | `{ path="/", at?, depth?, page? }` | node kind + children preview + `query_cursor` |
+//! | `state.read` | yes | `{ path="/", at?, depth?, page?, format="json" }` | JSON value slice + `query_cursor` |
+//! | `state.search` | yes | `{ query, at?, page? }` | path/kind/preview matches + `query_cursor` |
 //! | `state.watch.open` | yes | `{ path, at?, mode? }` | `watch_id`, `event_topic` |
 //! | `state.watch.close` | yes | `{ watch_id }` | `closed: bool` |
 //!
@@ -527,6 +527,16 @@ struct CursorSnapshot {
     keyframe_cl: Option<u32>,
     replayed: usize,
     rev: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct QueryCursorSnapshot {
+    cl: u32,
+    idx: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ts_ns: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    keyframe_cl: Option<u32>,
 }
 
 struct SessionState<App, P, CB, TF, S, L>
@@ -1444,11 +1454,15 @@ where
                 rev: state.cursor_rev,
             },
         };
+        let query_cursor = resolved_at.as_ref().and_then(|resolved| {
+            query_cursor_snapshot_from_resolved(&mut state.session, resolved, &time_of).ok()
+        });
 
         ok_response(
             request_id,
             json!({
                 "cursor": cursor,
+                "query_cursor": query_cursor,
                 "cl_snapshot": snapshot,
             }),
             Some(state.cursor_rev),
@@ -1686,11 +1700,15 @@ where
         };
         let inspected = inspect_value(node, page);
         let cursor = cursor_snapshot(state, &time_of).ok();
+        let query_cursor = resolved_at.as_ref().and_then(|resolved| {
+            query_cursor_snapshot_from_resolved(&mut state.session, resolved, &time_of).ok()
+        });
 
         ok_response(
             request_id,
             json!({
                 "cursor": cursor,
+                "query_cursor": query_cursor,
                 "node_kind": inspected.kind,
                 "type_path": Value::Null,
                 "children": inspected.children,
@@ -1736,11 +1754,15 @@ where
         };
         let value = apply_page(node.clone(), page);
         let cursor = cursor_snapshot(state, &time_of).ok();
+        let query_cursor = resolved_at.as_ref().and_then(|resolved| {
+            query_cursor_snapshot_from_resolved(&mut state.session, resolved, &time_of).ok()
+        });
 
         ok_response(
             request_id,
             json!({
                 "cursor": cursor,
+                "query_cursor": query_cursor,
                 "value": value,
                 "format": parsed.format,
             }),
@@ -1785,11 +1807,15 @@ where
         collect_matches_paged(&root, "", &needle, start, end, &mut total, &mut matches);
 
         let cursor = cursor_snapshot(state, &time_of).ok();
+        let query_cursor = resolved_at.as_ref().and_then(|resolved| {
+            query_cursor_snapshot_from_resolved(&mut state.session, resolved, &time_of).ok()
+        });
 
         ok_response(
             request_id,
             json!({
                 "cursor": cursor,
+                "query_cursor": query_cursor,
                 "matches": matches,
                 "total": total,
             }),
@@ -1925,12 +1951,26 @@ where
             Ok(v) => v,
             Err(e) => return err_response(request_id, "SessionNotFound", &e.to_string()),
         };
+        let cache = state.session.section_cache_stats();
+        let cache_hit_rate = {
+            let total = cache.hits.saturating_add(cache.misses);
+            if total == 0 {
+                0.0
+            } else {
+                cache.hits as f64 / total as f64
+            }
+        };
 
         ok_response(
             request_id,
             json!({
                 "cache": {
-                    "note": "cache stats not yet exposed by CuDebugSession"
+                    "cap": cache.cap,
+                    "entries": cache.entries,
+                    "hits": cache.hits,
+                    "misses": cache.misses,
+                    "evictions": cache.evictions,
+                    "hit_rate": cache_hit_rate,
                 },
                 "replay_perf": {
                     "last_replayed": state.last_replayed,
@@ -2236,6 +2276,7 @@ fn capabilities_json(session_lifecycle: SessionLifecycleLimits) -> Value {
                 "cleanup_policy": "on_each_request_or_timeout_tick",
             },
         "supports_methods": [
+            "admin.stop",
             "session.open",
             "session.close",
             "session.capabilities",
@@ -2397,6 +2438,34 @@ where
         keyframe_cl: state.last_keyframe,
         replayed: state.last_replayed,
         rev: state.cursor_rev,
+    })
+}
+
+fn query_cursor_snapshot_from_resolved<App, P, CB, TF, S, L>(
+    session: &mut CuDebugSession<App, P, CB, TF, S, L>,
+    resolved: &ResolvedAt,
+    time_of: &TF,
+) -> CuResult<QueryCursorSnapshot>
+where
+    App: CuSimApplication<S, L>,
+    L: UnifiedLogWrite<S> + 'static,
+    S: SectionStorage,
+    P: CopperListTuple,
+    CB: for<'a> Fn(
+        &'a crate::copperlist::CopperList<P>,
+        RobotClock,
+    )
+        -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
+    TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
+{
+    let cl = session
+        .cl_at(resolved.idx)?
+        .ok_or_else(|| CuError::from("Resolved cursor points to missing copperlist"))?;
+    Ok(QueryCursorSnapshot {
+        cl: cl.id,
+        idx: resolved.idx,
+        ts_ns: time_of(cl.as_ref()).map(|t| t.as_nanos()),
+        keyframe_cl: session.nearest_keyframe_culistid(cl.id),
     })
 }
 
