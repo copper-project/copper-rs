@@ -2166,15 +2166,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             #start_all_tasks {
-                let mission_start_ts = self.copper_runtime.clock.now();
-                if let Some(stream) = &mut self.runtime_lifecycle_stream {
-                    let _ = stream.log(&RuntimeLifecycleRecord {
-                        timestamp: mission_start_ts,
-                        event: RuntimeLifecycleEvent::MissionStarted {
-                            mission: #mission.to_string(),
-                        },
-                    });
-                }
+                let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::MissionStarted {
+                    mission: #mission.to_string(),
+                });
                 #(#start_calls)*
                 self.copper_runtime.monitor.start(&self.copper_runtime.clock)?;
                 Ok(())
@@ -2183,16 +2177,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             #stop_all_tasks {
                 #(#stop_calls)*
                 self.copper_runtime.monitor.stop(&self.copper_runtime.clock)?;
-                let mission_stop_ts = self.copper_runtime.clock.now();
-                if let Some(stream) = &mut self.runtime_lifecycle_stream {
-                    let _ = stream.log(&RuntimeLifecycleRecord {
-                        timestamp: mission_stop_ts,
-                        event: RuntimeLifecycleEvent::MissionStopped {
-                            mission: #mission.to_string(),
-                            reason: "stop_all_tasks".to_string(),
-                        },
-                    });
-                }
+                let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::MissionStopped {
+                    mission: #mission.to_string(),
+                    reason: "stop_all_tasks".to_string(),
+                });
                 Ok(())
             }
 
@@ -2208,13 +2196,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     error!("A task errored out: {}", &result);
                 }
                 <Self as #app_trait<S, L>>::stop_all_tasks(self, #sim_callback_arg)?;
-                let shutdown_ts = self.copper_runtime.clock.now();
-                if let Some(stream) = &mut self.runtime_lifecycle_stream {
-                    let _ = stream.log(&RuntimeLifecycleRecord {
-                        timestamp: shutdown_ts,
-                        event: RuntimeLifecycleEvent::ShutdownCompleted,
-                    });
-                }
+                let _ = self.log_shutdown_completed();
                 result
             }
         };
@@ -2411,6 +2393,23 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 pub fn register_reflect_types(registry: &mut cu29::reflect::TypeRegistry) {
                     #(#reflect_type_registration_calls)*
+                }
+
+                /// Log one runtime lifecycle event with the current runtime timestamp.
+                pub fn log_runtime_lifecycle_event(
+                    &mut self,
+                    event: RuntimeLifecycleEvent,
+                ) -> CuResult<()> {
+                    let timestamp = self.copper_runtime.clock.now();
+                    let Some(stream) = self.runtime_lifecycle_stream.as_mut() else {
+                        return Err(CuError::from("Runtime lifecycle stream is not initialized"));
+                    };
+                    stream.log(&RuntimeLifecycleRecord { timestamp, event })
+                }
+
+                /// Convenience helper for manual execution loops to mark graceful shutdown.
+                pub fn log_shutdown_completed(&mut self) -> CuResult<()> {
+                    self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::ShutdownCompleted)
                 }
 
                 #init_resources_fn
