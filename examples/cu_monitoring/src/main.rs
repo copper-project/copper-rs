@@ -90,7 +90,7 @@ impl CuMonitor for ExampleMonitor {
         Ok(Self { tasks: taskids })
     }
 
-    fn start(&mut self, clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, clock: &CuContext) -> CuResult<()> {
         debug!("Monitoring: started: {}", clock.now());
         Ok(())
     }
@@ -111,7 +111,7 @@ impl CuMonitor for ExampleMonitor {
         Decision::Ignore
     }
 
-    fn stop(&mut self, clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, clock: &CuContext) -> CuResult<()> {
         debug!("Monitoring: stopped: {}", clock.now());
         Ok(())
     }

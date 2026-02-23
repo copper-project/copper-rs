@@ -543,7 +543,7 @@ where
         })
     }
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _clock: &CuContext) -> CuResult<()> {
         debug!("dps310: source started");
         Ok(())
     }

@@ -131,7 +131,7 @@ impl CuSrcTask for Xt32 {
             channel_elevations: generate_default_elevation_calibration(), // TODO: make the config able to override that
         })
     }
-    fn start(&mut self, robot_clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, robot_clock: &CuContext) -> CuResult<()> {
         self.sync(robot_clock);
         Ok(())
     }

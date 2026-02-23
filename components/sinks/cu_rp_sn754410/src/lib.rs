@@ -171,7 +171,7 @@ impl CuSinkTask for SN754410 {
             dryrun,
         })
     }
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _clock: &CuContext) -> CuResult<()> {
         debug!("Enabling SN754410.");
         self.enable_pwms()
     }
@@ -221,7 +221,7 @@ impl CuSinkTask for SN754410 {
         Ok(())
     }
 
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, _clock: &CuContext) -> CuResult<()> {
         debug!("Disabling SN754410.");
         self.disable_pwms()
     }

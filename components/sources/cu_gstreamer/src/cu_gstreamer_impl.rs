@@ -168,7 +168,7 @@ impl<const N: usize> CuSrcTask for CuGStreamer<N> {
         Ok(s)
     }
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _clock: &CuContext) -> CuResult<()> {
         debug!("Gstreamer: Starting pipeline.");
         self.circular_buffer.lock().unwrap().clear();
         self.pipeline
@@ -191,7 +191,7 @@ impl<const N: usize> CuSrcTask for CuGStreamer<N> {
         Ok(())
     }
 
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, _clock: &CuContext) -> CuResult<()> {
         self.pipeline
             .set_state(gstreamer::State::Null)
             .map_err(|e| CuError::new_with_cause("Failed to stop the gstreamer pipeline.", e))?;

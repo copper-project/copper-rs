@@ -9,7 +9,7 @@ use bincode::enc::{Encode, Encoder};
 use bincode::error::{DecodeError, EncodeError};
 use compact_str::{CompactString, ToCompactString};
 use core::any::{TypeId, type_name};
-use cu29_clock::{PartialCuTimeRange, RobotClock, Tov};
+use cu29_clock::{PartialCuTimeRange, Tov};
 use cu29_traits::{
     COMPACT_STRING_CAPACITY, CuCompactString, CuError, CuMsgMetadataTrait, CuResult,
     ErasedCuStampedData, Metadata,
@@ -306,14 +306,14 @@ pub trait CuSrcTask: Freezable + Reflect {
         Self: Sized;
 
     /// Start is called between the creation of the task and the first call to pre/process.
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _context: &CuContext) -> CuResult<()> {
         Ok(())
     }
 
     /// This is a method called by the runtime before "process". This is a kind of best effort,
     /// as soon as possible call to give a chance for the task to do some work before to prepare
     /// to make "process" as short as possible.
-    fn preprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn preprocess(&mut self, _context: &CuContext) -> CuResult<()> {
         Ok(())
     }
 
@@ -325,12 +325,12 @@ pub trait CuSrcTask: Freezable + Reflect {
     /// This is a method called by the runtime after "process". It is best effort a chance for
     /// the task to update some state after process is out of the way.
     /// It can be use for example to maintain statistics etc. that are not time-critical for the robot.
-    fn postprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn postprocess(&mut self, _context: &CuContext) -> CuResult<()> {
         Ok(())
     }
 
     /// Called to stop the task. It signals that the *process method won't be called until start is called again.
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, _context: &CuContext) -> CuResult<()> {
         Ok(())
     }
 }
@@ -349,14 +349,14 @@ pub trait CuTask: Freezable + Reflect {
         Self: Sized;
 
     /// Start is called between the creation of the task and the first call to pre/process.
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _context: &CuContext) -> CuResult<()> {
         Ok(())
     }
 
     /// This is a method called by the runtime before "process". This is a kind of best effort,
     /// as soon as possible call to give a chance for the task to do some work before to prepare
     /// to make "process" as short as possible.
-    fn preprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn preprocess(&mut self, _context: &CuContext) -> CuResult<()> {
         Ok(())
     }
 
@@ -373,12 +373,12 @@ pub trait CuTask: Freezable + Reflect {
     /// This is a method called by the runtime after "process". It is best effort a chance for
     /// the task to update some state after process is out of the way.
     /// It can be use for example to maintain statistics etc. that are not time-critical for the robot.
-    fn postprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn postprocess(&mut self, _context: &CuContext) -> CuResult<()> {
         Ok(())
     }
 
     /// Called to stop the task. It signals that the *process method won't be called until start is called again.
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, _context: &CuContext) -> CuResult<()> {
         Ok(())
     }
 }
@@ -396,14 +396,14 @@ pub trait CuSinkTask: Freezable + Reflect {
         Self: Sized;
 
     /// Start is called between the creation of the task and the first call to pre/process.
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _context: &CuContext) -> CuResult<()> {
         Ok(())
     }
 
     /// This is a method called by the runtime before "process". This is a kind of best effort,
     /// as soon as possible call to give a chance for the task to do some work before to prepare
     /// to make "process" as short as possible.
-    fn preprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn preprocess(&mut self, _context: &CuContext) -> CuResult<()> {
         Ok(())
     }
 
@@ -415,12 +415,12 @@ pub trait CuSinkTask: Freezable + Reflect {
     /// This is a method called by the runtime after "process". It is best effort a chance for
     /// the task to update some state after process is out of the way.
     /// It can be use for example to maintain statistics etc. that are not time-critical for the robot.
-    fn postprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn postprocess(&mut self, _context: &CuContext) -> CuResult<()> {
         Ok(())
     }
 
     /// Called to stop the task. It signals that the *process method won't be called until start is called again.
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, _context: &CuContext) -> CuResult<()> {
         Ok(())
     }
 }

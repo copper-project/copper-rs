@@ -178,7 +178,7 @@ where
         Ok(Self { driver })
     }
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _clock: &CuContext) -> CuResult<()> {
         Ok(())
     }
 

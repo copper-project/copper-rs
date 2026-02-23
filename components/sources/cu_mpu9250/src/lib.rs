@@ -197,7 +197,7 @@ where
         })
     }
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _clock: &CuContext) -> CuResult<()> {
         self.driver
             .who_am_i()
             .map_err(|err| map_debug_error("mpu9250 WHO_AM_I", err))?;

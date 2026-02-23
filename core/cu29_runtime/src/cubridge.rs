@@ -10,7 +10,6 @@ use alloc::borrow::Cow;
 use alloc::string::String;
 use core::fmt::{Debug, Formatter};
 use core::marker::PhantomData;
-use cu29_clock::RobotClock;
 use cu29_traits::CuResult;
 
 /// Compile-time description of a single bridge channel, including the message type carried on it.
@@ -177,12 +176,12 @@ pub trait CuBridge: Freezable + Reflect {
         Self: Sized;
 
     /// Called before the first send/receive cycle.
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _context: &CuContext) -> CuResult<()> {
         Ok(())
     }
 
     /// Gives the bridge a chance to prepare buffers before I/O.
-    fn preprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn preprocess(&mut self, _context: &CuContext) -> CuResult<()> {
         Ok(())
     }
 
@@ -209,12 +208,12 @@ pub trait CuBridge: Freezable + Reflect {
         Payload: CuMsgPayload + 'a;
 
     /// Called once the send/receive pair completed.
-    fn postprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn postprocess(&mut self, _context: &CuContext) -> CuResult<()> {
         Ok(())
     }
 
     /// Notifies the bridge that no more I/O will happen until a subsequent [`start`].
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, _context: &CuContext) -> CuResult<()> {
         Ok(())
     }
 }

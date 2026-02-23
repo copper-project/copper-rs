@@ -1450,7 +1450,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             #call_sim_callback
                             if doit {
                                 let task = &mut self.copper_runtime.tasks.#task_index;
-                                if let Err(error) = task.start(&self.copper_runtime.clock) {
+                                context.set_current_task(#index);
+                                if let Err(error) = task.start(&context) {
                                     #monitoring_action
                                 }
                             }
@@ -1500,7 +1501,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             #call_sim_callback
                             if doit {
                                 let task = &mut self.copper_runtime.tasks.#task_index;
-                                if let Err(error) = task.stop(&self.copper_runtime.clock) {
+                                context.set_current_task(#index);
+                                if let Err(error) = task.stop(&context) {
                                     #monitoring_action
                                 }
                             }
@@ -1548,9 +1550,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote! {
                             #call_sim_callback
                             if doit {
+                                context.set_current_task(#index);
                                 let maybe_error = {
                                     #rt_guard
-                                    tasks.#task_index.preprocess(clock)
+                                    tasks.#task_index.preprocess(&context)
                                 };
                                 if let Err(error) = maybe_error {
                                     #monitoring_action
@@ -1600,9 +1603,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote! {
                             #call_sim_callback
                             if doit {
+                                context.set_current_task(#index);
                                 let maybe_error = {
                                     #rt_guard
-                                    tasks.#task_index.postprocess(clock)
+                                    tasks.#task_index.postprocess(&context)
                                 };
                                 if let Err(error) = maybe_error {
                                     #monitoring_action
@@ -1651,8 +1655,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     {
                         #call_sim
                         if !doit { return Ok(()); }
+                        context.clear_current_task();
                         let bridge = &mut self.copper_runtime.bridges.#bridge_index;
-                        if let Err(error) = bridge.start(&self.copper_runtime.clock) {
+                        if let Err(error) = bridge.start(&context) {
                             let decision = self.copper_runtime.monitor.process_error(#monitor_index, CuTaskState::Start, &error);
                             match decision {
                                 Decision::Abort => {
@@ -1710,8 +1715,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     {
                         #call_sim
                         if !doit { return Ok(()); }
+                        context.clear_current_task();
                         let bridge = &mut self.copper_runtime.bridges.#bridge_index;
-                        if let Err(error) = bridge.stop(&self.copper_runtime.clock) {
+                        if let Err(error) = bridge.stop(&context) {
                             let decision = self.copper_runtime.monitor.process_error(#monitor_index, CuTaskState::Stop, &error);
                             match decision {
                                 Decision::Abort => {
@@ -1769,10 +1775,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     {
                         #call_sim
                         if doit {
+                            context.clear_current_task();
                             let bridge = &mut __cu_bridges.#bridge_index;
                             let maybe_error = {
                                 #rt_guard
-                                bridge.preprocess(clock)
+                                bridge.preprocess(&context)
                             };
                             if let Err(error) = maybe_error {
                                 let decision = monitor.process_error(#monitor_index, CuTaskState::Preprocess, &error);
@@ -1833,11 +1840,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     {
                         #call_sim
                         if doit {
+                            context.clear_current_task();
                             let bridge = &mut __cu_bridges.#bridge_index;
                             kf_manager.freeze_any(clid, bridge)?;
                             let maybe_error = {
                                 #rt_guard
-                                bridge.postprocess(clock)
+                                bridge.postprocess(&context)
                             };
                             if let Err(error) = maybe_error {
                                 let decision = monitor.process_error(#monitor_index, CuTaskState::Postprocess, &error);
@@ -2189,6 +2197,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let __cu_bridges = &mut runtime.bridges;
                 let cl_manager = &mut runtime.copperlists_manager;
                 let kf_manager = &mut runtime.keyframes_manager;
+                let mut context = cu29::context::CuContext::new(
+                    clock.clone(),
+                    0,
+                    #mission_mod::TASKS_IDS,
+                );
 
                 // Preprocess calls can happen at any time, just packed them up front.
                 #(#preprocess_calls)*
@@ -2248,12 +2261,22 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::MissionStarted {
                     mission: #mission.to_string(),
                 });
+                let mut context = cu29::context::CuContext::new(
+                    self.copper_runtime.clock.clone(),
+                    0,
+                    #mission_mod::TASKS_IDS,
+                );
                 #(#start_calls)*
                 self.copper_runtime.monitor.start(&self.copper_runtime.clock)?;
                 Ok(())
             }
 
             #stop_all_tasks {
+                let mut context = cu29::context::CuContext::new(
+                    self.copper_runtime.clock.clone(),
+                    0,
+                    #mission_mod::TASKS_IDS,
+                );
                 #(#stop_calls)*
                 self.copper_runtime.monitor.stop(&self.copper_runtime.clock)?;
                 // TODO(lifecycle): emit typed stop reasons (completed/error/panic/requested)

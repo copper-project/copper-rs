@@ -141,7 +141,7 @@ impl CuSrcTask for Encoder {
     }
 
     #[allow(unused_variables)]
-    fn start(&mut self, clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, clock: &CuContext) -> CuResult<()> {
         let clock = clock.clone();
         let idata = Arc::clone(&self.data_from_interrupts);
         #[cfg(hardware)]
@@ -167,7 +167,7 @@ impl CuSrcTask for Encoder {
         new_msg.set_payload(EncoderPayload { ticks: idata.ticks });
         Ok(())
     }
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, _clock: &CuContext) -> CuResult<()> {
         #[cfg(hardware)]
         self.clk_pin
             .get_mut()

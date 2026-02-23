@@ -274,7 +274,7 @@ where
         Ok(())
     }
 
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, _clock: &CuContext) -> CuResult<()> {
         self.pid.reset();
         self.first_run = true;
         Ok(())

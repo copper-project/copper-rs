@@ -120,7 +120,7 @@ where
         })
     }
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _clock: &CuContext) -> CuResult<()> {
         let idle_frame = encode_frame(EscCommand::disarm());
 
         let mut ready = true;

@@ -471,7 +471,7 @@ where
         })
     }
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _clock: &CuContext) -> CuResult<()> {
         let mut builder = NodeBuilder::new();
         if let Some(name) = &self.node_name {
             builder = builder.name(name);
@@ -559,7 +559,7 @@ where
         Ok(())
     }
 
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, _clock: &CuContext) -> CuResult<()> {
         self.ctx = None;
         Ok(())
     }

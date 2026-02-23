@@ -336,7 +336,7 @@ where
         Ok(bridge)
     }
 
-    fn preprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn preprocess(&mut self, _clock: &CuContext) -> CuResult<()> {
         self.poll_serial()
     }
 

@@ -121,7 +121,7 @@ impl CuSrcTask for ADS7883 {
             integrated_value: 0,
         })
     }
-    fn start(&mut self, clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, clock: &CuContext) -> CuResult<()> {
         debug!("ADS7883 started at {}", clock.now());
         // initialize the integrated value.
         self.integrated_value = read_adc_value(&mut self.spi)? as u64;

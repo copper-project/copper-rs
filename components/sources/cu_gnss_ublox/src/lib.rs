@@ -160,7 +160,7 @@ impl CuSrcTask for UbxSource {
         })
     }
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _clock: &CuContext) -> CuResult<()> {
         self.send_poll(CLASS_NAV, ID_NAV_PVT)?;
         self.send_poll(CLASS_NAV, ID_NAV_SAT)?;
         self.send_poll(CLASS_NAV, ID_NAV_SIG)?;

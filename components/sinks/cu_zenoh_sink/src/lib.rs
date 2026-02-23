@@ -103,7 +103,7 @@ where
         })
     }
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _clock: &CuContext) -> CuResult<()> {
         let session = zenoh::Wait::wait(zenoh::open(self.config.config.clone()))
             .map_err(cu_error_map("ZenohSink: Failed to open session"))?;
 
@@ -131,7 +131,7 @@ where
         Ok(())
     }
 
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, _clock: &CuContext) -> CuResult<()> {
         if let Some(ZenohContext { session, publisher }) = self.ctx.take() {
             zenoh::Wait::wait(publisher.undeclare())
                 .map_err(cu_error_map("ZenohSink: Failed to undeclare publisher"))?;
