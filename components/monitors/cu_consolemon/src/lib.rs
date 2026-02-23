@@ -7,9 +7,10 @@ use crate::tui_nodes::{Connection, NodeGraph, NodeLayout};
 use ansi_to_tui::IntoText;
 use color_eyre::config::HookBuilder;
 use compact_str::{CompactString, ToCompactString};
-use cu29::clock::{CuDuration, RobotClock};
+use cu29::clock::CuDuration;
 use cu29::config::CuConfig;
 use cu29::config::Flavor;
+use cu29::context::CuContext;
 use cu29::curuntime::{CuExecutionUnit, compute_runtime_plan};
 use cu29::cutask::CuMsgMetadata;
 use cu29::monitoring::{
@@ -2038,7 +2039,7 @@ impl CuMonitor for CuConsoleMon {
         cl_stats.update_io(stats);
     }
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         if !should_start_ui() {
             #[cfg(debug_assertions)]
             {
@@ -2178,7 +2179,7 @@ impl CuMonitor for CuConsoleMon {
         Ok(())
     }
 
-    fn process_copperlist(&self, msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+    fn process_copperlist(&self, _ctx: &CuContext, msgs: &[&CuMsgMetadata]) -> CuResult<()> {
         {
             let mut task_stats = self.task_stats.lock().unwrap();
             task_stats.update(msgs);
@@ -2237,7 +2238,7 @@ impl CuMonitor for CuConsoleMon {
         }
     }
 
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
         self.quitting.store(true, Ordering::SeqCst);
         let _ = restore_terminal();
 

@@ -90,12 +90,12 @@ impl CuMonitor for ExampleMonitor {
         Ok(Self { tasks: taskids })
     }
 
-    fn start(&mut self, ctx: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
         debug!("Monitoring: started: {}", ctx.now());
         Ok(())
     }
 
-    fn process_copperlist(&self, msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+    fn process_copperlist(&self, _ctx: &CuContext, msgs: &[&CuMsgMetadata]) -> CuResult<()> {
         debug!("Monitoring: Processing copperlist...");
         for (taskid, metadata) in msgs.iter().enumerate() {
             debug!("Task: {} -> {}", taskid, metadata);
@@ -111,7 +111,7 @@ impl CuMonitor for ExampleMonitor {
         Decision::Ignore
     }
 
-    fn stop(&mut self, ctx: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, ctx: &CuContext) -> CuResult<()> {
         debug!("Monitoring: stopped: {}", ctx.now());
         Ok(())
     }

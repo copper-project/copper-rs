@@ -2218,7 +2218,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #(#runtime_plan_code)*
                 } // drop(msgs);
                 let (raw_payload_bytes, handle_bytes) = #mission_mod::compute_payload_bytes(&culist);
-                let monitor_result = monitor.process_copperlist(&#mission_mod::collect_metadata(&culist));
+                ctx.clear_current_task();
+                        let monitor_result = monitor.process_copperlist(&ctx, &#mission_mod::collect_metadata(&culist));
 
                 // here drop the payloads if we don't want them to be logged.
                 #(#preprocess_logging_calls)*
@@ -2262,7 +2263,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     .task_ids(#mission_mod::TASKS_IDS)
                     .build();
                 #(#start_calls)*
-                self.copper_runtime.monitor.start(&self.copper_runtime.clock)?;
+                ctx.clear_current_task();
+                self.copper_runtime.monitor.start(&ctx)?;
                 Ok(())
             }
 
@@ -2271,7 +2273,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     .task_ids(#mission_mod::TASKS_IDS)
                     .build();
                 #(#stop_calls)*
-                self.copper_runtime.monitor.stop(&self.copper_runtime.clock)?;
+                ctx.clear_current_task();
+                self.copper_runtime.monitor.stop(&ctx)?;
                 // TODO(lifecycle): emit typed stop reasons (completed/error/panic/requested)
                 // once panic/reporting flow is finalized for std and no-std.
                 let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::MissionStopped {
@@ -4139,7 +4142,8 @@ fn generate_task_execution_tokens(
                     Decision::Abort => {
                         debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
                                 during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], clid);
-                        let monitor_result = monitor.process_copperlist(&#mission_mod::collect_metadata(&culist));
+                        ctx.clear_current_task();
+                        let monitor_result = monitor.process_copperlist(&ctx, &#mission_mod::collect_metadata(&culist));
                         cl_manager.end_of_processing(clid)?;
                         monitor_result?;
                         return Ok(());
@@ -4252,7 +4256,8 @@ fn generate_task_execution_tokens(
                     Decision::Abort => {
                         debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
                                 during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], clid);
-                        let monitor_result = monitor.process_copperlist(&#mission_mod::collect_metadata(&culist));
+                        ctx.clear_current_task();
+                        let monitor_result = monitor.process_copperlist(&ctx, &#mission_mod::collect_metadata(&culist));
                         cl_manager.end_of_processing(clid)?;
                         monitor_result?;
                         return Ok(());
@@ -4357,7 +4362,8 @@ fn generate_task_execution_tokens(
                     Decision::Abort => {
                         debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
                                 during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], clid);
-                        let monitor_result = monitor.process_copperlist(&#mission_mod::collect_metadata(&culist));
+                        ctx.clear_current_task();
+                        let monitor_result = monitor.process_copperlist(&ctx, &#mission_mod::collect_metadata(&culist));
                         cl_manager.end_of_processing(clid)?;
                         monitor_result?;
                         return Ok(());
@@ -4495,8 +4501,8 @@ fn generate_bridge_rx_execution_tokens(
                     match decision {
                         Decision::Abort => {
                             debug!("Process: ABORT decision from monitoring. Task '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#monitor_index], clid);
-                            let monitor_result =
-                                monitor.process_copperlist(&#mission_mod::collect_metadata(&culist));
+                            ctx.clear_current_task();
+                        let monitor_result = monitor.process_copperlist(&ctx, &#mission_mod::collect_metadata(&culist));
                             cl_manager.end_of_processing(clid)?;
                             monitor_result?;
                             return Ok(());
@@ -4542,8 +4548,8 @@ fn generate_bridge_rx_execution_tokens(
                         match decision {
                             Decision::Abort => {
                                 debug!("Process: ABORT decision from monitoring. Task '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#monitor_index], clid);
-                                let monitor_result = monitor
-                                    .process_copperlist(&#mission_mod::collect_metadata(&culist));
+                                ctx.clear_current_task();
+                        let monitor_result = monitor.process_copperlist(&ctx, &#mission_mod::collect_metadata(&culist));
                                 cl_manager.end_of_processing(clid)?;
                                 monitor_result?;
                                 return Ok(());
@@ -4635,8 +4641,8 @@ fn generate_bridge_tx_execution_tokens(
                     match decision {
                         Decision::Abort => {
                             debug!("Process: ABORT decision from monitoring. Task '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#monitor_index], clid);
-                            let monitor_result =
-                                monitor.process_copperlist(&#mission_mod::collect_metadata(&culist));
+                            ctx.clear_current_task();
+                        let monitor_result = monitor.process_copperlist(&ctx, &#mission_mod::collect_metadata(&culist));
                             cl_manager.end_of_processing(clid)?;
                             monitor_result?;
                             return Ok(());
@@ -4681,8 +4687,8 @@ fn generate_bridge_tx_execution_tokens(
                         match decision {
                             Decision::Abort => {
                                 debug!("Process: ABORT decision from monitoring. Task '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#monitor_index], clid);
-                                let monitor_result = monitor
-                                    .process_copperlist(&#mission_mod::collect_metadata(&culist));
+                                ctx.clear_current_task();
+                        let monitor_result = monitor.process_copperlist(&ctx, &#mission_mod::collect_metadata(&culist));
                                 cl_manager.end_of_processing(clid)?;
                                 monitor_result?;
                                 return Ok(());

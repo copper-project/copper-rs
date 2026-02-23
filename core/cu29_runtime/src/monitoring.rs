@@ -3,8 +3,9 @@
 
 use crate::config::CuConfig;
 use crate::config::{BridgeChannelConfigRepresentation, BridgeConfig, CuGraph, Flavor, NodeId};
+use crate::context::CuContext;
 use crate::cutask::CuMsgMetadata;
-use cu29_clock::{CuDuration, RobotClock};
+use cu29_clock::CuDuration;
 #[allow(unused_imports)]
 use cu29_log::CuLogLevel;
 #[cfg(all(feature = "std", debug_assertions))]
@@ -308,12 +309,12 @@ pub trait CuMonitor: Sized {
 
     fn set_copperlist_info(&mut self, _info: CopperListInfo) {}
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         Ok(())
     }
 
     /// Callback that will be trigger at the end of every copperlist (before, on or after the serialization).
-    fn process_copperlist(&self, msgs: &[&CuMsgMetadata]) -> CuResult<()>;
+    fn process_copperlist(&self, _ctx: &CuContext, msgs: &[&CuMsgMetadata]) -> CuResult<()>;
 
     /// Called when the runtime finishes serializing a CopperList, giving IO accounting data.
     fn observe_copperlist_io(&self, _stats: CopperListIoStats) {}
@@ -322,7 +323,7 @@ pub trait CuMonitor: Sized {
     fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision;
 
     /// Callbacked when copper is stopping.
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
         Ok(())
     }
 }
@@ -335,7 +336,7 @@ impl CuMonitor for NoMonitor {
         Ok(NoMonitor {})
     }
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         #[cfg(all(feature = "std", debug_assertions))]
         register_live_log_listener(|entry, format_str, param_names| {
             let params: Vec<String> = entry.params.iter().map(|v| v.to_string()).collect();
@@ -353,7 +354,7 @@ impl CuMonitor for NoMonitor {
         Ok(())
     }
 
-    fn process_copperlist(&self, _msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+    fn process_copperlist(&self, _ctx: &CuContext, _msgs: &[&CuMsgMetadata]) -> CuResult<()> {
         // By default, do nothing.
         Ok(())
     }
@@ -363,7 +364,7 @@ impl CuMonitor for NoMonitor {
         Decision::Ignore
     }
 
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
         #[cfg(all(feature = "std", debug_assertions))]
         unregister_live_log_listener();
         Ok(())
