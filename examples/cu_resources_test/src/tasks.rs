@@ -22,7 +22,7 @@ impl CuSrcTask for TriggerTask {
         Ok(Self)
     }
 
-    fn process<'o>(&mut self, _clock: &RobotClock, output: &mut Self::Output<'o>) -> CuResult<()> {
+    fn process<'o>(&mut self, _clock: &CuContext, output: &mut Self::Output<'o>) -> CuResult<()> {
         info!("[trigger] tick");
         output.set_payload(Tick);
         Ok(())
@@ -65,7 +65,7 @@ impl CuTask for SensorTask {
 
     fn process<'i, 'o>(
         &mut self,
-        _clock: &RobotClock,
+        _clock: &CuContext,
         _input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
@@ -108,7 +108,7 @@ impl CuSinkTask for InspectorTask {
         })
     }
 
-    fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
+    fn process<'i>(&mut self, _clock: &CuContext, input: &Self::Input<'i>) -> CuResult<()> {
         if let Some(reading) = input.payload() {
             record(
                 &self.global,

@@ -2,6 +2,7 @@
 //! or interact with to create a Copper task.
 
 use crate::config::ComponentConfig;
+use crate::context::CuContext;
 use crate::reflect::Reflect;
 use bincode::de::{Decode, Decoder};
 use bincode::enc::{Encode, Encoder};
@@ -319,7 +320,7 @@ pub trait CuSrcTask: Freezable + Reflect {
     /// Process is the most critical execution of the task.
     /// The goal will be to produce the output message as soon as possible.
     /// Use preprocess to prepare the task to make this method as short as possible.
-    fn process<'o>(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'o>) -> CuResult<()>;
+    fn process<'o>(&mut self, context: &CuContext, new_msg: &mut Self::Output<'o>) -> CuResult<()>;
 
     /// This is a method called by the runtime after "process". It is best effort a chance for
     /// the task to update some state after process is out of the way.
@@ -364,7 +365,7 @@ pub trait CuTask: Freezable + Reflect {
     /// Use preprocess to prepare the task to make this method as short as possible.
     fn process<'i, 'o>(
         &mut self,
-        _clock: &RobotClock,
+        _context: &CuContext,
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()>;
@@ -409,7 +410,7 @@ pub trait CuSinkTask: Freezable + Reflect {
     /// Process is the most critical execution of the task.
     /// The goal will be to produce the output message as soon as possible.
     /// Use preprocess to prepare the task to make this method as short as possible.
-    fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()>;
+    fn process<'i>(&mut self, _context: &CuContext, input: &Self::Input<'i>) -> CuResult<()>;
 
     /// This is a method called by the runtime after "process". It is best effort a chance for
     /// the task to update some state after process is out of the way.

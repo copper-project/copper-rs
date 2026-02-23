@@ -98,7 +98,7 @@ impl CuSinkTask for RPGpio {
         Ok(Self { pin })
     }
 
-    fn process(&mut self, _clock: &RobotClock, msg: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _clock: &CuContext, msg: &Self::Input<'_>) -> CuResult<()> {
         #[cfg(hardware)]
         {
             // Keep historical active-low behavior for compatibility.

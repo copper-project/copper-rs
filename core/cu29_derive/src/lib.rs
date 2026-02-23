@@ -2198,6 +2198,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 kf_manager.reset(clid, clock); // beginning of processing, we empty the serialized frozen states of the tasks.
                 culist.change_state(cu29::copperlist::CopperListState::Processing);
                 culist.msgs.init_zeroed();
+                let mut context = cu29::context::CuContext::new(
+                    clock.clone(),
+                    clid,
+                    #mission_mod::TASKS_IDS,
+                );
                 {
                     let msgs = &mut culist.msgs.0;
                     #(#runtime_plan_code)*
@@ -4178,7 +4183,8 @@ fn generate_task_execution_tokens(
                             #output_start_time
                             let result = {
                                 #rt_guard
-                                #task_instance.process(clock, cumsg_output)
+                                context.set_current_task(#tid);
+                                #task_instance.process(&context, cumsg_output)
                             };
                             #output_end_time
                             result
@@ -4282,7 +4288,8 @@ fn generate_task_execution_tokens(
                             #output_start_time
                             let result = {
                                 #rt_guard
-                                #task_instance.process(clock, cumsg_input)
+                                context.set_current_task(#tid);
+                                #task_instance.process(&context, cumsg_input)
                             };
                             #output_end_time
                             result
@@ -4396,7 +4403,8 @@ fn generate_task_execution_tokens(
                             #output_start_time
                             let result = {
                                 #rt_guard
-                                #task_instance.process(clock, cumsg_input, cumsg_output)
+                                context.set_current_task(#tid);
+                                #task_instance.process(&context, cumsg_input, cumsg_output)
                             };
                             #output_end_time
                             result
@@ -4505,8 +4513,9 @@ fn generate_bridge_rx_execution_tokens(
                     cumsg_output.metadata.process_time.start = clock.now().into();
                     let maybe_error = {
                         #rt_guard
+                        context.clear_current_task();
                         bridge.receive(
-                            clock,
+                            &context,
                             &<#bridge_type as cu29::cubridge::CuBridge>::Rx::#const_ident,
                             cumsg_output,
                         )
@@ -4644,8 +4653,9 @@ fn generate_bridge_tx_execution_tokens(
                     cumsg_output.metadata.process_time.start = clock.now().into();
                     let maybe_error = {
                         #rt_guard
+                        context.clear_current_task();
                         bridge.send(
-                            clock,
+                            &context,
                             &<#bridge_type as cu29::cubridge::CuBridge>::Tx::#const_ident,
                             &*cumsg_input,
                         )

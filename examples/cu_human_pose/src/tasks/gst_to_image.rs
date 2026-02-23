@@ -77,7 +77,7 @@ impl CuTask for GstToCuImage {
 
     fn process(
         &mut self,
-        clock: &RobotClock,
+        clock: &CuContext,
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {

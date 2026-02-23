@@ -72,7 +72,7 @@ impl CuBridge for DummyBridge {
 
     fn send<'a, Payload>(
         &mut self,
-        _clock: &RobotClock,
+        _context: &CuContext,
         _channel: &'static BridgeChannel<
             <Self::Tx as cu29::cubridge::BridgeChannelSet>::Id,
             Payload,
@@ -89,7 +89,7 @@ impl CuBridge for DummyBridge {
 
     fn receive<'a, Payload>(
         &mut self,
-        _clock: &RobotClock,
+        _context: &CuContext,
         _channel: &'static BridgeChannel<
             <Self::Rx as cu29::cubridge::BridgeChannelSet>::Id,
             Payload,
@@ -126,7 +126,7 @@ impl CuSrcTask for MySrc {
         Ok(Self)
     }
 
-    fn process<'o>(&mut self, _clock: &RobotClock, out: &mut Self::Output<'o>) -> CuResult<()> {
+    fn process<'o>(&mut self, _context: &CuContext, out: &mut Self::Output<'o>) -> CuResult<()> {
         out.set_payload(Ping { v: 7 });
         Ok(())
     }
@@ -148,7 +148,7 @@ impl CuSinkTask for MySink {
         Ok(Self)
     }
 
-    fn process<'i>(&mut self, _clock: &RobotClock, _input: &Self::Input<'i>) -> CuResult<()> {
+    fn process<'i>(&mut self, _context: &CuContext, _input: &Self::Input<'i>) -> CuResult<()> {
         Ok(())
     }
 }

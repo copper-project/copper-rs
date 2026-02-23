@@ -182,7 +182,7 @@ where
         Ok(())
     }
 
-    fn process<'o>(&mut self, clock: &RobotClock, output: &mut Self::Output<'o>) -> CuResult<()> {
+    fn process<'o>(&mut self, clock: &CuContext, output: &mut Self::Output<'o>) -> CuResult<()> {
         let tov = clock.now();
         let payload = self.driver.read_measure()?;
         output.tov = Tov::Time(tov);

@@ -398,7 +398,7 @@ where
         })
     }
 
-    fn receive(&mut self, clock: &RobotClock, msg: &mut CuMsg<Payload>) -> CuResult<()> {
+    fn receive(&mut self, clock: &CuContext, msg: &mut CuMsg<Payload>) -> CuResult<()> {
         msg.tov = Tov::Time(clock.now());
         let sample = self.subscriber.receive().map_err(|e| {
             CuError::new_with_cause(
@@ -491,7 +491,7 @@ where
 
     fn send<'a, Payload>(
         &mut self,
-        _clock: &RobotClock,
+        _clock: &CuContext,
         channel: &'static BridgeChannel<<Self::Tx as BridgeChannelSet>::Id, Payload>,
         msg: &CuMsg<Payload>,
     ) -> CuResult<()>
@@ -527,7 +527,7 @@ where
 
     fn receive<'a, Payload>(
         &mut self,
-        clock: &RobotClock,
+        clock: &CuContext,
         channel: &'static BridgeChannel<<Self::Rx as BridgeChannelSet>::Id, Payload>,
         msg: &mut CuMsg<Payload>,
     ) -> CuResult<()>

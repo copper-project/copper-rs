@@ -128,7 +128,7 @@ impl CuSrcTask for ADS7883 {
         self.integrated_value *= INTEGRATION_FACTOR;
         Ok(())
     }
-    fn process(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, clock: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         let bf = clock.now();
         let analog_value = read_adc_value(&mut self.spi)?;
         // hard to know exactly when the value was read.
@@ -170,7 +170,7 @@ pub mod test_support {
             Ok(Self {})
         }
 
-        fn process(&mut self, _clock: &RobotClock, new_msg: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, _clock: &CuContext, new_msg: &Self::Input<'_>) -> CuResult<()> {
             debug!("Received: {}", &new_msg.payload());
             Ok(())
         }

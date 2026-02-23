@@ -3,6 +3,7 @@
 //!
 
 use crate::config::ComponentConfig;
+use crate::context::CuContext;
 use crate::cutask::{CuMsg, CuMsgPayload, Freezable};
 use crate::reflect::Reflect;
 use alloc::borrow::Cow;
@@ -188,7 +189,7 @@ pub trait CuBridge: Freezable + Reflect {
     /// Sends a message on the selected outbound channel.
     fn send<'a, Payload>(
         &mut self,
-        clock: &RobotClock,
+        context: &CuContext,
         channel: &'static BridgeChannel<<Self::Tx as BridgeChannelSet>::Id, Payload>,
         msg: &CuMsg<Payload>,
     ) -> CuResult<()>
@@ -200,7 +201,7 @@ pub trait CuBridge: Freezable + Reflect {
     /// Implementations should write into `msg` when data is available.
     fn receive<'a, Payload>(
         &mut self,
-        clock: &RobotClock,
+        context: &CuContext,
         channel: &'static BridgeChannel<<Self::Rx as BridgeChannelSet>::Id, Payload>,
         msg: &mut CuMsg<Payload>,
     ) -> CuResult<()>
@@ -468,6 +469,7 @@ macro_rules! rx_channels {
 mod tests {
     use super::*;
     use crate::config::ComponentConfig;
+    use crate::context::CuContext;
     use crate::cutask::CuMsg;
     use alloc::vec::Vec;
     use cu29_clock::RobotClock;
@@ -589,7 +591,7 @@ mod tests {
 
         fn send<'a, Payload>(
             &mut self,
-            _clock: &RobotClock,
+            _context: &CuContext,
             channel: &'static BridgeChannel<TxId, Payload>,
             msg: &CuMsg<Payload>,
         ) -> CuResult<()>
@@ -618,7 +620,7 @@ mod tests {
 
         fn receive<'a, Payload>(
             &mut self,
-            _clock: &RobotClock,
+            _context: &CuContext,
             channel: &'static BridgeChannel<RxId, Payload>,
             msg: &mut CuMsg<Payload>,
         ) -> CuResult<()>
@@ -711,27 +713,28 @@ mod tests {
         assert_eq!(bridge.port, "ttyUSB0");
 
         let clock = RobotClock::default();
+        let context = CuContext::new(clock.clone(), 0, &[]);
         let imu_msg = CuMsg::new(Some(ImuMsg { accel: 7 }));
         bridge
-            .send(&clock, &TxChannels::IMU, &imu_msg)
+            .send(&context, &TxChannels::IMU, &imu_msg)
             .expect("send should succeed");
         let motor_msg = CuMsg::new(Some(MotorCmd { torque: -3 }));
         bridge
-            .send(&clock, &TxChannels::MOTOR, &motor_msg)
+            .send(&context, &TxChannels::MOTOR, &motor_msg)
             .expect("send should support multiple payload types");
         assert_eq!(bridge.imu_samples, vec![7]);
         assert_eq!(bridge.motor_torques, vec![-3]);
 
         let mut status_msg = CuMsg::new(None);
         bridge
-            .receive(&clock, &RxChannels::STATUS, &mut status_msg)
+            .receive(&context, &RxChannels::STATUS, &mut status_msg)
             .expect("receive should succeed");
         assert!(status_msg.payload().is_some());
         assert_eq!(bridge.status_temps, vec![21.5]);
 
         let mut alert_msg = CuMsg::new(None);
         bridge
-            .receive(&clock, &RxChannels::ALERT, &mut alert_msg)
+            .receive(&context, &RxChannels::ALERT, &mut alert_msg)
             .expect("receive should handle other payload types too");
         assert!(alert_msg.payload().is_some());
         assert_eq!(bridge.alert_codes, vec![0xDEAD_BEEF]);

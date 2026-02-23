@@ -168,7 +168,7 @@ impl CuSrcTask for UbxSource {
         Ok(())
     }
 
-    fn process(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, clock: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         clear_outputs(new_msg);
 
         let now_ns = clock.now().as_nanos();

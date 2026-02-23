@@ -22,7 +22,7 @@ pub mod tasks {
             Ok(Self)
         }
 
-        fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+        fn process(&mut self, _clock: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
             new_msg.set_payload(42);
             Ok(())
         }
@@ -47,10 +47,15 @@ pub mod tasks {
 
         fn process(
             &mut self,
-            _clock: &RobotClock,
+            context: &CuContext,
             input: &Self::Input<'_>,
             output: &mut Self::Output<'_>,
         ) -> CuResult<()> {
+            debug!(
+                "task={} cl={}",
+                context.task_id().unwrap_or("unknown"),
+                context.cl_id()
+            );
             let payload = input.payload().unwrap();
             output.set_payload(payload + 1);
             Ok(())
@@ -73,7 +78,7 @@ pub mod tasks {
             Ok(Self)
         }
 
-        fn process(&mut self, _clock: &RobotClock, _input: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, _clock: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
             Ok(())
         }
     }

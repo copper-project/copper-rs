@@ -108,6 +108,7 @@
 //!
 
 use crate::config::ComponentConfig;
+use crate::context::CuContext;
 use crate::cutask::CuMsgPack;
 
 use crate::cutask::{CuMsg, CuMsgPayload, CuSinkTask, CuSrcTask, Freezable};
@@ -118,7 +119,6 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use core::marker::PhantomData;
-use cu29_clock::RobotClock;
 use cu29_traits::CuResult;
 
 /// This is the state that will be passed to the simulation support to hook
@@ -230,7 +230,7 @@ impl<T: CuMsgPayload + 'static> CuSrcTask for CuSimSrcTask<T> {
         })
     }
 
-    fn process(&mut self, _clock: &RobotClock, _new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, _context: &CuContext, _new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         unimplemented!(
             "A placeholder for sim was called for a source, you need answer SimOverride to ExecutedBySim for the Process step."
         )
@@ -312,7 +312,7 @@ impl<I: CuSimSinkInput + 'static> CuSinkTask for CuSimSinkTask<I> {
         Ok(Self { boo: PhantomData })
     }
 
-    fn process(&mut self, _clock: &RobotClock, _input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _context: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
         unimplemented!(
             "A placeholder for sim was called for a sink, you need answer SimOverride to ExecutedBySim for the Process step."
         )

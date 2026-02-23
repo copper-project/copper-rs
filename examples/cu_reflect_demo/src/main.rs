@@ -46,7 +46,7 @@ pub mod tasks {
             })
         }
 
-        fn process(&mut self, clock: &RobotClock, output: &mut Self::Output<'_>) -> CuResult<()> {
+        fn process(&mut self, clock: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
             self.next_measurement += 0.05;
             output.tov = Some(clock.now()).into();
             output.set_payload(MeasurementPayload {
@@ -76,7 +76,7 @@ pub mod tasks {
             Ok(Self::default())
         }
 
-        fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, _clock: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
             self.last_output = input.payload().map(|payload| payload.output);
             Ok(())
         }

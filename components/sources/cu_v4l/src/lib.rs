@@ -23,11 +23,7 @@ mod empty_impl {
             Ok(Self {})
         }
 
-        fn process(
-            &mut self,
-            _clock: &RobotClock,
-            _new_msg: &mut Self::Output<'_>,
-        ) -> CuResult<()> {
+        fn process(&mut self, _clock: &CuContext, _new_msg: &mut Self::Output<'_>) -> CuResult<()> {
             Ok(())
         }
     }
@@ -242,7 +238,7 @@ mod linux_impl {
                 .map_err(|e| CuError::new_with_cause("could not start stream", e))
         }
 
-        fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+        fn process(&mut self, _clock: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
             let (handle, meta) = self
                 .stream
                 .next()

@@ -25,7 +25,7 @@ impl CuSinkTask for HesaiTestSink {
         Ok(Self {})
     }
 
-    fn process(&mut self, _clock: &RobotClock, new_msg: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _clock: &CuContext, new_msg: &Self::Input<'_>) -> CuResult<()> {
         match &new_msg.payload() {
             None => {
                 debug!("Received Nothing.");

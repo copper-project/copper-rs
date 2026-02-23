@@ -640,7 +640,7 @@ impl CuBridge for FeetechBridge {
     /// For `goal_positions`: sync-writes the raw positions to the servo bus.
     fn send<'a, Payload>(
         &mut self,
-        _clock: &RobotClock,
+        _clock: &CuContext,
         channel: &'static BridgeChannel<<Self::Tx as BridgeChannelSet>::Id, Payload>,
         msg: &CuMsg<Payload>,
     ) -> CuResult<()>
@@ -664,7 +664,7 @@ impl CuBridge for FeetechBridge {
     /// them as a [`JointPositions`].
     fn receive<'a, Payload>(
         &mut self,
-        clock: &RobotClock,
+        clock: &CuContext,
         channel: &'static BridgeChannel<<Self::Rx as BridgeChannelSet>::Id, Payload>,
         msg: &mut CuMsg<Payload>,
     ) -> CuResult<()>

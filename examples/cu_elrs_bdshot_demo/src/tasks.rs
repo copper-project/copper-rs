@@ -21,7 +21,7 @@ impl CuTask for ThrottleControl {
 
     fn process<'i, 'o>(
         &mut self,
-        _clock: &RobotClock,
+        _clock: &CuContext,
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
@@ -65,7 +65,7 @@ impl<const ESC: usize> CuSinkTask for TelemetrySink<ESC> {
         Ok(Self::default())
     }
 
-    fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
+    fn process<'i>(&mut self, _clock: &CuContext, input: &Self::Input<'i>) -> CuResult<()> {
         let Some(payload) = input.payload().and_then(|t| t.sample) else {
             info!("No Telemetry {}", ESC);
             return Ok(());

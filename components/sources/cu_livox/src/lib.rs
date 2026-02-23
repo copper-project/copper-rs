@@ -96,7 +96,7 @@ impl CuSrcTask for Tele15 {
         self.sync(robot_clock);
         Ok(())
     }
-    fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, _clock: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         let payload = new_msg.payload_mut().insert(LidarCuMsgPayload::default());
         let mut buf = [0u8; 1500];
         let size = match self.socket.read(&mut buf) {

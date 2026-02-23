@@ -118,7 +118,7 @@ where
         Ok(())
     }
 
-    fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _clock: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         let ctx = self
             .ctx
             .as_mut()

@@ -190,7 +190,7 @@ impl CuSrcTask for WT901 {
         })
     }
 
-    fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, _clock: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         let mut pos = PositionalReadingsPayload::default();
         self.bulk_position_read(&mut pos)?;
         new_msg.set_payload(pos);

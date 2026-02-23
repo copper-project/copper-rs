@@ -116,7 +116,7 @@ mod tasks {
             Ok(Self)
         }
 
-        fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, _clock: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
             if let Some(positions) = input.payload() {
                 debug!("Present positions: {}", positions);
             }

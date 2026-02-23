@@ -100,7 +100,7 @@ pub mod tasks {
 
         fn process<'o>(
             &mut self,
-            _clock: &RobotClock,
+            _clock: &CuContext,
             output: &mut Self::Output<'o>,
         ) -> CuResult<()> {
             events::record("source_to_bridge.process");
@@ -129,7 +129,7 @@ pub mod tasks {
 
         fn process<'i, 'o>(
             &mut self,
-            _clock: &RobotClock,
+            _clock: &CuContext,
             input: &Self::Input<'i>,
             output: &mut Self::Output<'o>,
         ) -> CuResult<()> {
@@ -159,7 +159,7 @@ pub mod tasks {
             Ok(Self)
         }
 
-        fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
+        fn process<'i>(&mut self, _clock: &CuContext, input: &Self::Input<'i>) -> CuResult<()> {
             events::record("sink_from_bridge.process");
             assert!(
                 input.payload().is_some(),
@@ -216,7 +216,7 @@ pub mod bridges {
 
         fn send<'a, Payload>(
             &mut self,
-            _clock: &RobotClock,
+            _clock: &CuContext,
             channel: &'static BridgeChannel<AlphaTxId, Payload>,
             msg: &CuMsg<Payload>,
         ) -> CuResult<()>
@@ -233,7 +233,7 @@ pub mod bridges {
 
         fn receive<'a, Payload>(
             &mut self,
-            _clock: &RobotClock,
+            _clock: &CuContext,
             channel: &'static BridgeChannel<AlphaRxId, Payload>,
             msg: &mut CuMsg<Payload>,
         ) -> CuResult<()>
@@ -297,7 +297,7 @@ pub mod bridges {
 
         fn send<'a, Payload>(
             &mut self,
-            _clock: &RobotClock,
+            _clock: &CuContext,
             channel: &'static BridgeChannel<BetaTxId, Payload>,
             msg: &CuMsg<Payload>,
         ) -> CuResult<()>
@@ -318,7 +318,7 @@ pub mod bridges {
 
         fn receive<'a, Payload>(
             &mut self,
-            _clock: &RobotClock,
+            _clock: &CuContext,
             _channel: &'static BridgeChannel<BetaRxId, Payload>,
             _msg: &mut CuMsg<Payload>,
         ) -> CuResult<()>

@@ -204,7 +204,7 @@ where
         Ok(())
     }
 
-    fn process<'o>(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'o>) -> CuResult<()> {
+    fn process<'o>(&mut self, clock: &CuContext, new_msg: &mut Self::Output<'o>) -> CuResult<()> {
         let tov = clock.now(); // best effort here
         let payload = self
             .driver

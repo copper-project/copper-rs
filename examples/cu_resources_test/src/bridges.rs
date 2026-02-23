@@ -64,7 +64,7 @@ impl CuBridge for StatsBridge {
 
     fn send<'a, Payload>(
         &mut self,
-        _clock: &RobotClock,
+        _clock: &CuContext,
         _channel: &'static BridgeChannel<<Self::Tx as BridgeChannelSet>::Id, Payload>,
         _msg: &CuMsg<Payload>,
     ) -> CuResult<()>
@@ -76,7 +76,7 @@ impl CuBridge for StatsBridge {
 
     fn receive<'a, Payload>(
         &mut self,
-        _clock: &RobotClock,
+        _clock: &CuContext,
         channel: &'static BridgeChannel<<Self::Rx as BridgeChannelSet>::Id, Payload>,
         msg: &mut CuMsg<Payload>,
     ) -> CuResult<()>

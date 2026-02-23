@@ -178,7 +178,7 @@ impl<const N: usize> CuSrcTask for CuGStreamer<N> {
         Ok(())
     }
 
-    fn process(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, clock: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         let mut circular_buffer = self.circular_buffer.lock().unwrap();
         if let Some(buffer) = circular_buffer.pop_front() {
             // TODO: do precise timing metadata from gstreamer

@@ -993,6 +993,7 @@ pub fn compute_runtime_plan(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
 mod tests {
     use super::*;
     use crate::config::Node;
+    use crate::context::CuContext;
     use crate::cutask::CuSinkTask;
     use crate::cutask::{CuSrcTask, Freezable};
     use crate::monitoring::NoMonitor;
@@ -1018,7 +1019,7 @@ mod tests {
 
         fn process(
             &mut self,
-            _clock: &RobotClock,
+            _context: &CuContext,
             _empty_msg: &mut Self::Output<'_>,
         ) -> CuResult<()> {
             Ok(())
@@ -1041,7 +1042,7 @@ mod tests {
             Ok(Self {})
         }
 
-        fn process(&mut self, _clock: &RobotClock, _input: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, _context: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
             Ok(())
         }
     }

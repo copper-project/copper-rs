@@ -548,7 +548,7 @@ where
         Ok(())
     }
 
-    fn process<'o>(&mut self, clock: &RobotClock, output: &mut Self::Output<'o>) -> CuResult<()> {
+    fn process<'o>(&mut self, clock: &CuContext, output: &mut Self::Output<'o>) -> CuResult<()> {
         let tov = clock.now();
         let now_ns = tov.as_nanos();
 

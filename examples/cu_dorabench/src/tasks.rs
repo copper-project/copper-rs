@@ -27,7 +27,7 @@ impl<const S: usize> CuSrcTask for DoraSource<S> {
         Ok(Self { pool })
     }
 
-    fn process(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, clock: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         new_msg.tov = Tov::Time(clock.now());
         let buffer = self.pool.acquire().unwrap();
         buffer.lock().unwrap()[42] = 42;
@@ -53,7 +53,7 @@ impl<const S: usize> CuSinkTask for DoraSink<S> {
         Ok(Self {})
     }
 
-    fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _clock: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         let incoming = input.payload().unwrap();
         assert_eq!(incoming.0.lock().unwrap()[42], 42);
         Ok(())

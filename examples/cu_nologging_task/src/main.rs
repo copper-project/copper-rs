@@ -22,7 +22,7 @@ pub mod tasks {
             Ok(Self)
         }
 
-        fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+        fn process(&mut self, _clock: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
             new_msg.set_payload(42);
             Ok(())
         }
@@ -47,7 +47,7 @@ pub mod tasks {
 
         fn process(
             &mut self,
-            _clock: &RobotClock,
+            _clock: &CuContext,
             input: &Self::Input<'_>,
             output: &mut Self::Output<'_>,
         ) -> CuResult<()> {
@@ -73,7 +73,7 @@ pub mod tasks {
             Ok(Self)
         }
 
-        fn process(&mut self, _clock: &RobotClock, _input: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, _clock: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
             Ok(())
         }
     }

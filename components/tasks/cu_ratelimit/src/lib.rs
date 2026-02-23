@@ -81,7 +81,7 @@ where
 
     fn process<'m>(
         &mut self,
-        _clock: &RobotClock,
+        _clock: &CuContext,
         input: &Self::Input<'m>,
         output: &mut Self::Output<'m>,
     ) -> CuResult<()> {

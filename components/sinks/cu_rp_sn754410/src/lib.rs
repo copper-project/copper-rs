@@ -175,7 +175,7 @@ impl CuSinkTask for SN754410 {
         debug!("Enabling SN754410.");
         self.enable_pwms()
     }
-    fn process(&mut self, clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, clock: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         let Some(power) = input.payload() else {
             debug!("No payload in the message, stopping for safety.");
             self.stop()?;
@@ -247,11 +247,7 @@ pub mod test_support {
             Ok(Self {})
         }
 
-        fn process(
-            &mut self,
-            _clock: &RobotClock,
-            _new_msg: &mut Self::Output<'_>,
-        ) -> CuResult<()> {
+        fn process(&mut self, _clock: &CuContext, _new_msg: &mut Self::Output<'_>) -> CuResult<()> {
             todo!()
         }
     }

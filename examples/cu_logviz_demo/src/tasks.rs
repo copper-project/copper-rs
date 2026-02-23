@@ -58,7 +58,7 @@ impl CuSrcTask for LogvizDemoSrc {
         })
     }
 
-    fn process(&mut self, clock: &RobotClock, output: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, clock: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
         self.tick = self.tick.wrapping_add(1);
         let phase = self.tick as f32 * 0.1;
         let now = Tov::Time(clock.now());
@@ -147,7 +147,7 @@ impl CuSinkTask for LogvizDemoSink {
         Ok(Self)
     }
 
-    fn process(&mut self, _clock: &RobotClock, _input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _clock: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
         Ok(())
     }
 }
