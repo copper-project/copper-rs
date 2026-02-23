@@ -60,8 +60,8 @@ macro_rules! define_task {
                 })
             }
 
-            fn preprocess(&mut self, clock: &cu29_clock::RobotClock) -> CuResult<()> {
-                self.aligner.purge(clock.now());
+            fn preprocess(&mut self, ctx: &CuContext) -> CuResult<()> {
+                self.aligner.purge(ctx.now());
                 Ok(())
             }
 
@@ -113,8 +113,8 @@ mod tests {
         let m3 = CuStampedData::<(CuArray<f32, 5>, CuArray<i32, 10>), CuMsgMetadata>::default();
         let mut output: <AlignerTask as CuTask>::Output<'_> = m3;
 
-        let clock = RobotClock::new();
-        let result = aligner.process(&clock, &input, &mut output);
+        let ctx = CuContext::new_with_clock();
+        let result = aligner.process(&ctx, &input, &mut output);
         assert!(result.is_ok());
     }
     mod string_payload {
@@ -139,8 +139,8 @@ mod tests {
             let mut output =
                 CuStampedData::<(CuArray<String, 4>, CuArray<String, 4>), CuMsgMetadata>::default();
 
-            let clock = RobotClock::new();
-            aligner.process(&clock, &input, &mut output).unwrap();
+            let ctx = CuContext::new_with_clock();
+            aligner.process(&ctx, &input, &mut output).unwrap();
 
             let payload = output.payload().unwrap();
             assert_eq!(payload.0.len(), 1);

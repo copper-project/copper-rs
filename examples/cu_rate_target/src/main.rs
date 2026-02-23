@@ -53,8 +53,8 @@ pub mod tasks {
         ) -> CuResult<()> {
             debug!(
                 "task={} cl={}",
-                context.task_id().unwrap_or("unknown"),
-                context.cl_id()
+                ctx.task_id().unwrap_or("unknown"),
+                ctx.cl_id()
             );
             let payload = input.payload().unwrap();
             output.set_payload(payload + 1);

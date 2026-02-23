@@ -48,7 +48,7 @@ pub mod tasks {
 
         fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
             self.next_measurement += 0.05;
-            output.tov = Some(clock.now()).into();
+            output.tov = Some(ctx.now()).into();
             output.set_payload(MeasurementPayload {
                 value: self.next_measurement,
             });

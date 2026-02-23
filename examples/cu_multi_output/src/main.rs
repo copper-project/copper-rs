@@ -27,7 +27,7 @@ pub mod tasks {
         }
 
         fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
-            output.0.tov = Tov::Time(clock.now());
+            output.0.tov = Tov::Time(ctx.now());
             output.0.set_payload(42);
             output.1.set_payload(true);
             Ok(())

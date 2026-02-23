@@ -122,30 +122,30 @@ mod tests {
 
     #[test]
     fn test_rate_limiting() {
-        let (clock, _) = RobotClock::mock();
+        let ctx = CuContext::new_with_clock();
         let mut limiter = create_test_ratelimiter(10.0); // 10 Hz = 100ms interval
         let mut input = CuMsg::<i32>::new(Some(42));
         let mut output = CuMsg::<i32>::new(None);
 
         // First message should pass
         input.tov = Tov::Time(CuTime::from(0));
-        limiter.process(&clock, &input, &mut output).unwrap();
+        limiter.process(&ctx, &input, &mut output).unwrap();
         assert_eq!(output.payload(), Some(&42));
 
         // Message within the interval should be blocked
         input.tov = Tov::Time(CuTime::from(50_000_000)); // 50ms
-        limiter.process(&clock, &input, &mut output).unwrap();
+        limiter.process(&ctx, &input, &mut output).unwrap();
         assert_eq!(output.payload(), None);
 
         // Message after the interval should pass
         input.tov = Tov::Time(CuTime::from(100_000_000)); // 100ms
-        limiter.process(&clock, &input, &mut output).unwrap();
+        limiter.process(&ctx, &input, &mut output).unwrap();
         assert_eq!(output.payload(), Some(&42));
     }
 
     #[test]
     fn test_payload_propagation() {
-        let (clock, _) = RobotClock::mock();
+        let ctx = CuContext::new_with_clock();
         let mut limiter = create_test_ratelimiter(10.0);
         let mut input = CuMsg::<i32>::new(None);
         let mut output = CuMsg::<i32>::new(None);
@@ -153,13 +153,13 @@ mod tests {
         // Test payload propagation
         input.set_payload(123);
         input.tov = Tov::Time(CuTime::from(0));
-        limiter.process(&clock, &input, &mut output).unwrap();
+        limiter.process(&ctx, &input, &mut output).unwrap();
         assert_eq!(output.payload(), Some(&123));
 
         // Test empty payload propagation
         input.clear_payload();
         input.tov = Tov::Time(CuTime::from(100_000_000));
-        limiter.process(&clock, &input, &mut output).unwrap();
+        limiter.process(&ctx, &input, &mut output).unwrap();
         assert_eq!(output.payload(), None);
     }
 }

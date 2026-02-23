@@ -471,7 +471,6 @@ mod tests {
     use crate::context::CuContext;
     use crate::cutask::CuMsg;
     use alloc::vec::Vec;
-    use cu29_clock::RobotClock;
     use cu29_traits::CuError;
     use serde::{Deserialize, Serialize};
 
@@ -711,8 +710,7 @@ mod tests {
 
         assert_eq!(bridge.port, "ttyUSB0");
 
-        let clock = RobotClock::default();
-        let context = CuContext::new(clock.clone(), 0, &[]);
+        let context = CuContext::new_with_clock();
         let imu_msg = CuMsg::new(Some(ImuMsg { accel: 7 }));
         bridge
             .send(&context, &TxChannels::IMU, &imu_msg)

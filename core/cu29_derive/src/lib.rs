@@ -2197,11 +2197,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let __cu_bridges = &mut runtime.bridges;
                 let cl_manager = &mut runtime.copperlists_manager;
                 let kf_manager = &mut runtime.keyframes_manager;
-                let mut ctx = cu29::context::CuContext::new(
-                    clock.clone(),
-                    0,
-                    #mission_mod::TASKS_IDS,
-                );
+                let mut ctx = cu29::context::CuContext::builder(clock.clone())
+                    .task_ids(#mission_mod::TASKS_IDS)
+                    .build();
 
                 // Preprocess calls can happen at any time, just packed them up front.
                 #(#preprocess_calls)*
@@ -2211,11 +2209,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 kf_manager.reset(clid, clock); // beginning of processing, we empty the serialized frozen states of the tasks.
                 culist.change_state(cu29::copperlist::CopperListState::Processing);
                 culist.msgs.init_zeroed();
-                let mut ctx = cu29::context::CuContext::new(
-                    clock.clone(),
-                    clid,
-                    #mission_mod::TASKS_IDS,
-                );
+                let mut ctx = cu29::context::CuContext::builder(clock.clone())
+                    .cl_id(clid)
+                    .task_ids(#mission_mod::TASKS_IDS)
+                    .build();
                 {
                     let msgs = &mut culist.msgs.0;
                     #(#runtime_plan_code)*
@@ -2261,22 +2258,18 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::MissionStarted {
                     mission: #mission.to_string(),
                 });
-                let mut ctx = cu29::context::CuContext::new(
-                    self.copper_runtime.clock.clone(),
-                    0,
-                    #mission_mod::TASKS_IDS,
-                );
+                let mut ctx = cu29::context::CuContext::builder(self.copper_runtime.clock.clone())
+                    .task_ids(#mission_mod::TASKS_IDS)
+                    .build();
                 #(#start_calls)*
                 self.copper_runtime.monitor.start(&self.copper_runtime.clock)?;
                 Ok(())
             }
 
             #stop_all_tasks {
-                let mut ctx = cu29::context::CuContext::new(
-                    self.copper_runtime.clock.clone(),
-                    0,
-                    #mission_mod::TASKS_IDS,
-                );
+                let mut ctx = cu29::context::CuContext::builder(self.copper_runtime.clock.clone())
+                    .task_ids(#mission_mod::TASKS_IDS)
+                    .build();
                 #(#stop_calls)*
                 self.copper_runtime.monitor.stop(&self.copper_runtime.clock)?;
                 // TODO(lifecycle): emit typed stop reasons (completed/error/panic/requested)

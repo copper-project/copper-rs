@@ -675,7 +675,7 @@ impl CuBridge for FeetechBridge {
         self.read_all_positions()?;
 
         // Stamp the message with the current robot time.
-        msg.tov = Tov::Time(clock.now());
+        msg.tov = Tov::Time(ctx.now());
 
         match channel.id() {
             RxId::Positions => {

@@ -64,10 +64,10 @@ impl CuSrcTask for BooleanSource {
     }
     fn process(&mut self, ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         self.state = !self.state;
-        new_msg.tov = Tov::Time(clock.now());
+        new_msg.tov = Tov::Time(ctx.now());
         *new_msg.payload_mut().as_mut().unwrap() = self.state;
-        let end = clock.now() + CuDuration::from_millis(1000);
-        while clock.now() < end {
+        let end = ctx.now() + CuDuration::from_millis(1000);
+        while ctx.now() < end {
             core::hint::spin_loop();
         }
         Ok(())

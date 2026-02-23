@@ -108,13 +108,13 @@ mod tests {
 
     #[test]
     fn vlp16_end_2_end_test() {
-        let clk = RobotClock::new();
+        let ctx = CuContext::new_with_clock();
         let cfg = ComponentConfig::new();
         let mut drv = Vlp16::new(Some(&cfg), ()).unwrap();
 
         let mut streamer = PcapStreamer::new("test/VLP_16_Single.pcap", "127.0.0.1:2368");
 
-        drv.start(&clk).unwrap();
+        drv.start(&ctx).unwrap();
 
         const PACKET_SIZE: usize = size_of::<DataPacket>();
 
@@ -124,9 +124,9 @@ mod tests {
             .expect("Failed to send packet")
         {
             let mut msg = CuMsg::new(Some(PointCloudSoa::<10000>::default()));
-            drv.process(&clk, &mut msg).unwrap();
+            drv.process(&ctx, &mut msg).unwrap();
             assert_eq!(-0.05115497, msg.payload().unwrap().x[0].value);
         }
-        drv.stop(&clk).unwrap();
+        drv.stop(&ctx).unwrap();
     }
 }

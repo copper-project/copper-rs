@@ -371,7 +371,7 @@ where
     where
         Payload: CuMsgPayload + 'a,
     {
-        msg.tov = Tov::Time(clock.now());
+        msg.tov = Tov::Time(ctx.now());
         match channel.id() {
             RxId::Responses => {
                 let response_msg: &mut CuMsg<MspResponseBatch> = msg.downcast_mut()?;

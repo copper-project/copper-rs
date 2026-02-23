@@ -36,7 +36,7 @@ impl CuSrcTask for CaterpillarSource {
         // forward the state to the next task
         self.state = !self.state;
         output.set_payload(RPGpioPayload { on: self.state });
-        output.tov = Tov::Time(clock.now());
+        output.tov = Tov::Time(ctx.now());
         output.metadata.set_status(self.state);
         Ok(())
     }

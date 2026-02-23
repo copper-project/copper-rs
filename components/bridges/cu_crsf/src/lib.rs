@@ -226,7 +226,7 @@ where
         Payload: CuMsgPayload + 'a,
     {
         self.update()?;
-        msg.tov = Tov::Time(clock.now());
+        msg.tov = Tov::Time(ctx.now());
         match channel.id() {
             RxId::LqRx => {
                 if let Some(lq) = self.last_lq.as_ref() {

@@ -182,7 +182,7 @@ impl<const N: usize> CuSrcTask for CuGStreamer<N> {
         let mut circular_buffer = self.circular_buffer.lock().unwrap();
         if let Some(buffer) = circular_buffer.pop_front() {
             // TODO: do precise timing metadata from gstreamer
-            new_msg.tov = clock.now().into();
+            new_msg.tov = ctx.now().into();
             new_msg.set_payload(buffer);
         } else {
             debug!("Gstreamer: Empty circular buffer, sending no payload.");

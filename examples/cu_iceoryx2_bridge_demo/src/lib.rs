@@ -74,7 +74,7 @@ pub mod tasks {
                 seq: self.seq,
                 note: format!("{}#{}", self.label, self.seq),
             });
-            output.tov = Tov::Time(clock.now());
+            output.tov = Tov::Time(ctx.now());
             self.seq += 1;
             Ok(())
         }
@@ -116,7 +116,7 @@ pub mod tasks {
                     seq: ping.seq,
                     reply: format!("{} -> {}", self.label, ping.note),
                 });
-                output.tov = Tov::Time(clock.now());
+                output.tov = Tov::Time(ctx.now());
             } else {
                 output.clear_payload();
             }

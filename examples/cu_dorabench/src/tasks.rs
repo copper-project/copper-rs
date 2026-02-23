@@ -28,7 +28,7 @@ impl<const S: usize> CuSrcTask for DoraSource<S> {
     }
 
     fn process(&mut self, ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
-        new_msg.tov = Tov::Time(clock.now());
+        new_msg.tov = Tov::Time(ctx.now());
         let buffer = self.pool.acquire().unwrap();
         buffer.lock().unwrap()[42] = 42;
         new_msg.set_payload(DoraPayload(buffer));

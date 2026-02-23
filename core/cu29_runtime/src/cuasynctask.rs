@@ -236,7 +236,6 @@ mod tests {
     use crate::cutask::Freezable;
     use crate::input_msg;
     use crate::output_msg;
-    use cu29_clock::RobotClock;
     use cu29_traits::CuResult;
     use rayon::ThreadPoolBuilder;
     use std::borrow::BorrowMut;
@@ -284,8 +283,7 @@ mod tests {
         );
 
         let config = ComponentConfig::default();
-        let clock = RobotClock::default();
-        let context = CuContext::new(clock.clone(), 0, &[]);
+        let context = CuContext::new_with_clock();
         let mut async_task: CuAsyncTask<TestTask, u32> =
             CuAsyncTask::new(Some(&config), (), tp).unwrap();
         let input = CuMsg::new(Some(42u32));
@@ -337,7 +335,7 @@ mod tests {
                 .expect("timed out waiting for ready signal");
 
             output.set_payload(ready_time.as_nanos() as u32);
-            output.metadata.process_time.start = context.now().into();
+            output.metadata.process_time.start = ctx.now().into();
             output.metadata.process_time.end = ready_time.into();
 
             if let Some(done_tx) = DONE_TX.get() {
@@ -350,8 +348,7 @@ mod tests {
     #[test]
     fn background_respects_recorded_ready_time() {
         let tp = Arc::new(ThreadPoolBuilder::new().num_threads(1).build().unwrap());
-        let (clock, clock_mock) = RobotClock::mock();
-        let context = CuContext::new(clock.clone(), 0, &[]);
+        let (context, clock_mock) = CuContext::new_mock_clock();
 
         // Install the control channels for the task.
         let (ready_tx, ready_rx) = mpsc::channel::<CuTime>();

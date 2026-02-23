@@ -191,7 +191,7 @@ where
             return Ok(());
         }
         if let Some(interval) = self.send_interval {
-            let now = clock.recent();
+            let now = ctx.recent();
             if let Some(last) = self.last_send[idx]
                 && now - last < interval
             {
@@ -223,7 +223,7 @@ where
     where
         Payload: CuMsgPayload + 'a,
     {
-        msg.tov = Tov::Time(clock.now());
+        msg.tov = Tov::Time(ctx.now());
         let idx = channel.id().as_index();
         if idx >= P::Board::CHANNEL_COUNT {
             msg.clear_payload();

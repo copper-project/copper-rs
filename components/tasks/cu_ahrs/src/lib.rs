@@ -237,26 +237,26 @@ mod tests {
 
     fn process_sample(
         task: &mut CuAhrs,
-        clock: &RobotClock,
+        ctx: &CuContext,
         payload: ImuPayload,
         tov_ns: u64,
     ) -> Option<AhrsPose> {
         let mut input = CuMsg::new(Some(payload));
         input.tov = Tov::Time(CuTime::from(tov_ns));
         let mut output = CuMsg::new(None);
-        task.process(clock, &input, &mut output).unwrap();
+        task.process(ctx, &input, &mut output).unwrap();
         output.payload().copied()
     }
 
     fn settle_pose(roll: f32, pitch: f32, iterations: usize, step_ns: u64) -> AhrsPose {
-        let (clock, _) = RobotClock::mock();
+        let ctx = CuContext::new_with_clock();
         let mut task = CuAhrs::new_filter();
         let accel = accel_from_orientation(roll, pitch);
         let payload = ImuPayload::from_raw(accel, [0.0; 3], 25.0);
 
         let mut latest = None;
         for i in 0..iterations {
-            latest = process_sample(&mut task, &clock, payload, step_ns * (i as u64 + 1));
+            latest = process_sample(&mut task, &ctx, payload, step_ns * (i as u64 + 1));
         }
         latest.expect("pose should be produced")
     }
@@ -309,7 +309,7 @@ mod tests {
 
     #[test]
     fn yaw_integrates_gyro() {
-        let (clock, _) = RobotClock::mock();
+        let ctx = CuContext::new_with_clock();
         let mut task = CuAhrs::new_filter();
         let accel = [0.0, 0.0, 9.81];
         let gyro = [0.0, 0.0, FRAC_PI_2]; // 90 deg/s about +Z
@@ -317,7 +317,7 @@ mod tests {
 
         let mut latest = None;
         for i in 0..10 {
-            latest = process_sample(&mut task, &clock, payload, 100_000_000 * (i as u64 + 1));
+            latest = process_sample(&mut task, &ctx, payload, 100_000_000 * (i as u64 + 1));
         }
 
         let pose = latest.expect("pose should be produced");

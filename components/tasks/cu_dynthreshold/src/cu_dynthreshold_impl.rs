@@ -246,8 +246,8 @@ mod tests {
         let input_msg = CuMsg::new(Some(cu_gst_buffer));
         let mut output: <DynThreshold as CuTask>::Output<'_> = CuMsg::<CuImage<Vec<u8>>>::default();
 
-        let clock = cu29::clock::RobotClock::new();
-        let result = dynthresh.process(&clock, &input_msg, &mut output);
+        let ctx = CuContext::new_with_clock();
+        let result = dynthresh.process(&ctx, &input_msg, &mut output);
         assert!(result.is_ok());
 
         let output_image = output.payload().unwrap();

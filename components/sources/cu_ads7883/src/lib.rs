@@ -122,18 +122,18 @@ impl CuSrcTask for ADS7883 {
         })
     }
     fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
-        debug!("ADS7883 started at {}", clock.now());
+        debug!("ADS7883 started at {}", ctx.now());
         // initialize the integrated value.
         self.integrated_value = read_adc_value(&mut self.spi)? as u64;
         self.integrated_value *= INTEGRATION_FACTOR;
         Ok(())
     }
     fn process(&mut self, ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
-        let bf = clock.now();
+        let bf = ctx.now();
         let analog_value = read_adc_value(&mut self.spi)?;
         // hard to know exactly when the value was read.
         // Should be within a couple of microseconds with the ioctl opverhead.
-        let af = clock.now();
+        let af = ctx.now();
         let tov = (af + bf) / 2u64;
 
         self.integrated_value = ((self.integrated_value + analog_value as u64)

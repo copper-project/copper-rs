@@ -1,18 +1,17 @@
 //! User-facing execution context passed to task and bridge process callbacks.
 
 use core::ops::Deref;
-use cu29_clock::RobotClock;
+use cu29_clock::{RobotClock, RobotClockMock};
 
-/// Context available inside each `process`/`send`/`receive` callback.
+/// Execution context passed to task and bridge callbacks.
 ///
-/// `CuContext` gives callback code access to runtime metadata for the current
-/// execution step without exposing the full copper list internals:
-/// - `clock` (or `context.now()` via `Deref`) for time access
-/// - `cl_id()` for the current copper list identifier
-/// - `task_id()` / `task_index()` for the currently running task (when applicable)
+/// `CuContext` provides callback code with:
+/// - time access through `clock` and `Deref<Target = RobotClock>`
+/// - current copper-list id via `cl_id()`
+/// - current task metadata via `task_id()` / `task_index()`
 ///
-/// A new context is created by the runtime for each copper-list iteration and
-/// reused across all callbacks executed during that iteration.
+/// The runtime creates one context per execution loop and updates transient
+/// fields such as the currently executing task before each callback.
 #[derive(Clone, Debug)]
 pub struct CuContext {
     /// Runtime clock. Kept as a field for direct access (`context.clock.now()`).
@@ -23,8 +22,44 @@ pub struct CuContext {
 }
 
 impl CuContext {
-    /// Creates a context for one copper-list execution iteration.
-    pub fn new(clock: RobotClock, clid: u32, task_ids: &'static [&'static str]) -> Self {
+    /// Starts a context builder from a clock.
+    pub fn builder(clock: RobotClock) -> CuContextBuilder {
+        CuContextBuilder {
+            clock,
+            cl_id: 0,
+            task_ids: &[],
+        }
+    }
+
+    /// Creates a context from an existing clock with default metadata.
+    ///
+    /// Defaults:
+    /// - `cl_id = 0`
+    /// - no task id table
+    pub fn from_clock(clock: RobotClock) -> Self {
+        Self::builder(clock).build()
+    }
+
+    /// Creates a context backed by a real robot clock.
+    ///
+    /// Defaults:
+    /// - `cl_id = 0`
+    /// - no task id table
+    #[cfg(feature = "std")]
+    pub fn new_with_clock() -> Self {
+        Self::from_clock(RobotClock::new())
+    }
+
+    /// Creates a context backed by a mock clock.
+    ///
+    /// Returns both the context and its [`RobotClockMock`] control handle.
+    pub fn new_mock_clock() -> (Self, RobotClockMock) {
+        let (clock, mock) = RobotClock::mock();
+        (Self::from_clock(clock), mock)
+    }
+
+    /// Internal constructor used by runtime internals and code generation.
+    pub(crate) fn new(clock: RobotClock, clid: u32, task_ids: &'static [&'static str]) -> Self {
         Self {
             clock,
             cl_id: clid,
@@ -57,6 +92,33 @@ impl CuContext {
     pub fn task_id(&self) -> Option<&'static str> {
         self.current_task_index
             .and_then(|idx| self.task_ids.get(idx).copied())
+    }
+}
+
+/// Builder for [`CuContext`].
+#[derive(Clone, Debug)]
+pub struct CuContextBuilder {
+    clock: RobotClock,
+    cl_id: u32,
+    task_ids: &'static [&'static str],
+}
+
+impl CuContextBuilder {
+    /// Sets the copper-list id for the context.
+    pub fn cl_id(mut self, cl_id: u32) -> Self {
+        self.cl_id = cl_id;
+        self
+    }
+
+    /// Sets the static task id table for task metadata access.
+    pub fn task_ids(mut self, task_ids: &'static [&'static str]) -> Self {
+        self.task_ids = task_ids;
+        self
+    }
+
+    /// Builds a context value.
+    pub fn build(self) -> CuContext {
+        CuContext::new(self.clock, self.cl_id, self.task_ids)
     }
 }
 

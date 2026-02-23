@@ -362,19 +362,19 @@ where
     where
         Payload: CuMsgPayload + 'a,
     {
-        let ctx = self
+        let runtime_ctx = self
             .ctx
             .as_mut()
             .ok_or_else(|| CuError::from("ZenohBridge: Context not initialized"))?;
-        let rx_channel =
-            Self::find_rx_channel_mut(&mut ctx.rx_channels, channel.id()).ok_or_else(|| {
+        let rx_channel = Self::find_rx_channel_mut(&mut runtime_ctx.rx_channels, channel.id())
+            .ok_or_else(|| {
                 CuError::from(format!(
                     "ZenohBridge: Unknown Rx channel {:?}",
                     channel.id()
                 ))
             })?;
 
-        msg.tov = Tov::Time(clock.now());
+        msg.tov = Tov::Time(ctx.now());
 
         let sample = rx_channel
             .subscriber

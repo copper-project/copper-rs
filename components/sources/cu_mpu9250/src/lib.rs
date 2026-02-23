@@ -205,7 +205,7 @@ where
     }
 
     fn process<'o>(&mut self, ctx: &CuContext, new_msg: &mut Self::Output<'o>) -> CuResult<()> {
-        let tov = clock.now(); // best effort here
+        let tov = ctx.now(); // best effort here
         let payload = self
             .driver
             .read_measure()

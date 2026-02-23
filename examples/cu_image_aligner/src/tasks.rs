@@ -87,7 +87,7 @@ impl CuSrcTask for ImageSrcTask {
 
         let mut image = CuImage::new(self.format, handle);
         image.seq = self.seq;
-        output.tov = Tov::Time(clock.now() + self.tov_offset);
+        output.tov = Tov::Time(ctx.now() + self.tov_offset);
         output.set_payload(image);
         self.seq = self.seq.wrapping_add(1);
         Ok(())

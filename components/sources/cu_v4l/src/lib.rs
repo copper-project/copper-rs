@@ -289,7 +289,7 @@ mod linux_impl {
         #[test]
         #[ignore]
         fn emulate_copper_backend() {
-            let clock = RobotClock::new();
+            let ctx = CuContext::new_with_clock();
 
             let term_logger = TermLogger::new(
                 LevelFilter::Debug,
@@ -297,7 +297,7 @@ mod linux_impl {
                 TerminalMode::Mixed,
                 ColorChoice::Auto,
             );
-            let _logger = LoggerRuntime::init(clock.clone(), NullLog {}, Some(*term_logger));
+            let _logger = LoggerRuntime::init(ctx.clock.clone(), NullLog {}, Some(*term_logger));
 
             let rec = RecordingStreamBuilder::new("Camera Viz")
                 .spawn()
@@ -314,7 +314,7 @@ mod linux_impl {
             config.set("timeout_ms", 500);
 
             let mut v4l = V4l::new(Some(&config), ()).unwrap();
-            v4l.start(&clock).unwrap();
+            v4l.start(&ctx).unwrap();
 
             let mut msg = CuMsg::new(None);
             // Define the image format
@@ -326,7 +326,7 @@ mod linux_impl {
                 channel_datatype: None, // Some(ChannelDatatype::U8),
             });
             for _ in 0..1000 {
-                let _output = v4l.process(&clock, &mut msg);
+                let _output = v4l.process(&ctx, &mut msg);
                 if let Some(frame) = msg.payload() {
                     let slice: &[u8] = &frame.buffer_handle.lock().unwrap();
                     let blob = Blob::from(slice);
@@ -340,7 +340,7 @@ mod linux_impl {
                 }
             }
 
-            v4l.stop(&clock).unwrap();
+            v4l.stop(&ctx).unwrap();
         }
     }
 }

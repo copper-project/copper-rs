@@ -217,7 +217,7 @@ impl CuSinkTask for SN754410 {
         } else {
             self.stop()?;
         }
-        self.last_update = clock.now();
+        self.last_update = ctx.now();
         Ok(())
     }
 

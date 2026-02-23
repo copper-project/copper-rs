@@ -719,7 +719,7 @@ impl CuTask for AttitudeController {
             self.last_mode = ctrl.mode;
         }
 
-        let now = clock.now();
+        let now = ctx.now();
         let dt = dt_or_fallback(&mut self.last_time, now, self.dt_fallback);
 
         let (roll_rate, pitch_rate) =
@@ -876,7 +876,7 @@ impl CuTask for RateController {
         }
         // Note: airmode_active stays true once activated until disarm
 
-        let now = clock.now();
+        let now = ctx.now();
         let dt = dt_or_fallback(&mut self.last_time, now, self.dt_fallback);
 
         if self.airmode_enabled && !self.airmode_active {

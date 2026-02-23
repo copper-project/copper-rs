@@ -196,7 +196,7 @@ mod tests {
 
     #[test]
     fn test_xt32() {
-        let clock = RobotClock::new();
+        let ctx = CuContext::new_with_clock();
         let mut streamer = PcapStreamer::new("tests/hesai-xt32-small.pcap", "127.0.0.1:2368");
         let config = ComponentConfig::new();
 
@@ -210,7 +210,7 @@ mod tests {
             .unwrap()
             .with_timezone(&Utc);
 
-        xt32.reftime = (datetime, clock.now());
+        xt32.reftime = (datetime, ctx.now());
 
         // 1076 is the expected payload size for Hesai XT32
         const PACKET_SIZE: usize = size_of::<Packet>();
@@ -218,7 +218,7 @@ mod tests {
             .send_next::<PACKET_SIZE>()
             .expect("Failed to send next packet")
         {
-            let err = xt32.process(&clock, &mut new_msg);
+            let err = xt32.process(&ctx, &mut new_msg);
             if let Err(e) = err {
                 println!("Error: {e:?}");
                 continue;
