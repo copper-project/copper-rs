@@ -44,7 +44,7 @@ impl CuSinkTask for RerunPoseViz {
         Ok(Self { rec })
     }
 
-    fn process(&mut self, _clock: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         // Input is a reference to a tuple of message references
         let (image_msg, poses_msg) = *input;
 

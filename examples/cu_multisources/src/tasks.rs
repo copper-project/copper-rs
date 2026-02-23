@@ -15,7 +15,7 @@ impl CuSrcTask for IntegerSrcTask {
         Ok(Self { value: 42 })
     }
 
-    fn process(&mut self, _clock: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
         self.value += 1;
         output.set_payload(self.value);
         Ok(())
@@ -37,7 +37,7 @@ impl CuSrcTask for FloatSrcTask {
         Ok(Self { value: 24.0 })
     }
 
-    fn process(&mut self, _clock: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
         self.value += 1.0;
         output.set_payload(self.value);
         Ok(())
@@ -58,7 +58,7 @@ impl CuSinkTask for MergingSinkTask {
         Ok(Self)
     }
 
-    fn process(&mut self, _clock: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         let (i, f) = input;
         println!(
             "SinkTask1 received: {}, {}",
@@ -89,7 +89,7 @@ impl CuTask for MergerTask {
 
     fn process(
         &mut self,
-        _clock: &CuContext,
+        _ctx: &CuContext,
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
@@ -115,7 +115,7 @@ impl CuSinkTask for MergedSinkTask {
         Ok(Self)
     }
 
-    fn process(&mut self, _clock: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         println!("SinkTask2 received: {:?}", input.payload().unwrap());
         Ok(())
     }

@@ -237,7 +237,7 @@ impl CuSinkTask for Lewansoul {
         Ok(Lewansoul { port, ids })
     }
 
-    fn process(&mut self, _clock: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
         todo!()
     }
 }

@@ -619,7 +619,7 @@ impl CuBridge for FeetechBridge {
     ///
     /// Enables torque only when writers are connected (commander mode).
     /// In follower mode torque stays off so the arm moves freely.
-    fn start(&mut self, _clock: &CuContext) -> CuResult<()> {
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         if self.has_writers {
             self.enable_all_torque()?;
             debug!(
@@ -640,7 +640,7 @@ impl CuBridge for FeetechBridge {
     /// For `goal_positions`: sync-writes the raw positions to the servo bus.
     fn send<'a, Payload>(
         &mut self,
-        _clock: &CuContext,
+        _ctx: &CuContext,
         channel: &'static BridgeChannel<<Self::Tx as BridgeChannelSet>::Id, Payload>,
         msg: &CuMsg<Payload>,
     ) -> CuResult<()>
@@ -664,7 +664,7 @@ impl CuBridge for FeetechBridge {
     /// them as a [`JointPositions`].
     fn receive<'a, Payload>(
         &mut self,
-        clock: &CuContext,
+        ctx: &CuContext,
         channel: &'static BridgeChannel<<Self::Rx as BridgeChannelSet>::Id, Payload>,
         msg: &mut CuMsg<Payload>,
     ) -> CuResult<()>
@@ -702,7 +702,7 @@ impl CuBridge for FeetechBridge {
     ///
     /// Disables torque on every servo for safety (prevents the arm from
     /// holding position with power applied after the application exits).
-    fn stop(&mut self, _clock: &CuContext) -> CuResult<()> {
+    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
         for i in 0..self.num_servos as usize {
             if let Err(e) = self.set_torque(self.ids[i], false) {
                 debug!(

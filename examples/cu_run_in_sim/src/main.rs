@@ -26,7 +26,7 @@ impl CuSrcTask for MySource {
     fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
         Ok(Self { next: 0 })
     }
-    fn process(&mut self, _clock: &CuContext, out: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, out: &mut Self::Output<'_>) -> CuResult<()> {
         // Real source just increments. In this demo, the sim will bypass this when run_in_sim = false.
         self.next += 1;
         out.set_payload(MyMsg { value: self.next });
@@ -51,7 +51,7 @@ impl CuTask for Doubler {
 
     fn process(
         &mut self,
-        _clock: &CuContext,
+        _ctx: &CuContext,
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
@@ -76,7 +76,7 @@ impl CuSinkTask for MySink {
         Ok(Self)
     }
 
-    fn process(&mut self, _clock: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         // THIS CODE WOULD NOT RUN IF run_in_sim = false in config
         if let Some(m) = input.payload() {
             println!("[MySink] got value = {}", m.value);

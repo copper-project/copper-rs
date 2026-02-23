@@ -69,7 +69,7 @@ pub mod tasks {
             Ok(Self { seq: 0, label })
         }
 
-        fn process(&mut self, clock: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
+        fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
             output.set_payload(Ping {
                 seq: self.seq,
                 note: format!("{}#{}", self.label, self.seq),
@@ -107,7 +107,7 @@ pub mod tasks {
 
         fn process(
             &mut self,
-            clock: &CuContext,
+            ctx: &CuContext,
             input: &Self::Input<'_>,
             output: &mut Self::Output<'_>,
         ) -> CuResult<()> {
@@ -148,7 +148,7 @@ pub mod tasks {
             Ok(Self { label })
         }
 
-        fn process(&mut self, _clock: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
             if let Some(pong) = input.payload() {
                 debug!(
                     "{}: got pong seq={} reply={}",

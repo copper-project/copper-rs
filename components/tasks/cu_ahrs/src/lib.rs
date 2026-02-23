@@ -123,7 +123,7 @@ pub mod sinks {
 
         fn process(
             &mut self,
-            _clock: &CuContext,
+            _ctx: &CuContext,
             input: &Self::Input<'_>,
             output: &mut Self::Output<'_>,
         ) -> CuResult<()> {
@@ -197,7 +197,7 @@ impl CuTask for CuAhrs {
 
     fn process(
         &mut self,
-        _clock: &CuContext,
+        _ctx: &CuContext,
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {

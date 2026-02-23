@@ -197,14 +197,14 @@ where
         })
     }
 
-    fn start(&mut self, _clock: &CuContext) -> CuResult<()> {
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         self.driver
             .who_am_i()
             .map_err(|err| map_debug_error("mpu9250 WHO_AM_I", err))?;
         Ok(())
     }
 
-    fn process<'o>(&mut self, clock: &CuContext, new_msg: &mut Self::Output<'o>) -> CuResult<()> {
+    fn process<'o>(&mut self, ctx: &CuContext, new_msg: &mut Self::Output<'o>) -> CuResult<()> {
         let tov = clock.now(); // best effort here
         let payload = self
             .driver

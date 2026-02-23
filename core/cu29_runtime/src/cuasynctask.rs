@@ -135,7 +135,7 @@ where
 
     fn process<'i, 'o>(
         &mut self,
-        context: &CuContext,
+        ctx: &CuContext,
         input: &Self::Input<'i>,
         real_output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
@@ -152,7 +152,7 @@ where
             }
 
             if let Some(ready_at) = state.ready_at
-                && context.now() < ready_at
+                && ctx.now() < ready_at
             {
                 // result not yet allowed to surface based on recorded completion time
                 return Ok(());
@@ -173,7 +173,7 @@ where
 
         // immediately requeue a task based on the new input
         self.tp.spawn_fifo({
-            let context = context.clone();
+            let ctx = ctx.clone();
             let input = (*input).clone();
             let output = self.output.clone();
             let task = self.task.clone();
@@ -194,10 +194,10 @@ where
 
                 // Track the actual processing interval so replay can honor it.
                 if output_ref.metadata.process_time.start.is_none() {
-                    output_ref.metadata.process_time.start = context.now().into();
+                    output_ref.metadata.process_time.start = ctx.now().into();
                 }
                 let task_result = match task.lock() {
-                    Ok(mut task_guard) => task_guard.process(&context, input_ref, output_ref),
+                    Ok(mut task_guard) => task_guard.process(&ctx, input_ref, output_ref),
                     Err(poison) => Err(CuError::from(format!(
                         "Async task mutex poisoned: {poison}"
                     ))),
@@ -211,7 +211,7 @@ where
                         let end_from_metadata: Option<CuTime> =
                             output_ref.metadata.process_time.end.into();
                         let end_time = end_from_metadata.unwrap_or_else(|| {
-                            let now = context.now();
+                            let now = ctx.now();
                             output_ref.metadata.process_time.end = now.into();
                             now
                         });
@@ -265,7 +265,7 @@ mod tests {
 
         fn process(
             &mut self,
-            _context: &CuContext,
+            _ctx: &CuContext,
             input: &Self::Input<'_>,
             output: &mut Self::Output<'_>,
         ) -> CuResult<()> {
@@ -323,7 +323,7 @@ mod tests {
 
         fn process(
             &mut self,
-            context: &CuContext,
+            ctx: &CuContext,
             _input: &Self::Input<'_>,
             output: &mut Self::Output<'_>,
         ) -> CuResult<()> {

@@ -336,13 +336,13 @@ where
         Ok(bridge)
     }
 
-    fn preprocess(&mut self, _clock: &CuContext) -> CuResult<()> {
+    fn preprocess(&mut self, _ctx: &CuContext) -> CuResult<()> {
         self.poll_serial()
     }
 
     fn send<'a, Payload>(
         &mut self,
-        _clock: &CuContext,
+        _ctx: &CuContext,
         channel: &'static BridgeChannel<<Self::Tx as BridgeChannelSet>::Id, Payload>,
         msg: &CuMsg<Payload>,
     ) -> CuResult<()>
@@ -364,7 +364,7 @@ where
 
     fn receive<'a, Payload>(
         &mut self,
-        clock: &CuContext,
+        ctx: &CuContext,
         channel: &'static BridgeChannel<<Self::Rx as BridgeChannelSet>::Id, Payload>,
         msg: &mut CuMsg<Payload>,
     ) -> CuResult<()>

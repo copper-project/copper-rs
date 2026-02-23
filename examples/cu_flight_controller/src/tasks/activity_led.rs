@@ -27,7 +27,7 @@ impl CuSinkTask for ActivityLed {
         })
     }
 
-    fn process<'i>(&mut self, _clock: &CuContext, _inputs: &Self::Input<'i>) -> CuResult<()> {
+    fn process<'i>(&mut self, _ctx: &CuContext, _inputs: &Self::Input<'i>) -> CuResult<()> {
         // Toggle the green LED so we can see if the Copper loop is alive.
         let mut led = self.led.lock();
         if self.on {

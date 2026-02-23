@@ -201,7 +201,7 @@ impl CuTask for AprilTags {
 
     fn process(
         &mut self,
-        _clock: &CuContext,
+        _ctx: &CuContext,
         _input: &Self::Input<'_>,
         _output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
@@ -264,7 +264,7 @@ impl CuTask for AprilTags {
 
     fn process(
         &mut self,
-        _clock: &CuContext,
+        _ctx: &CuContext,
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {

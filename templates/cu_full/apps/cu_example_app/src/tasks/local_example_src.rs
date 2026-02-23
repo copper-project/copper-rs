@@ -22,7 +22,7 @@ impl CuSrcTask for MySource {
 
     // don't forget the other lifecycle methods if you need them: start, stop, preprocess, postprocess
 
-    fn process(&mut self, _clock: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
         // Generated a 42 message.
         output.set_payload(MyPayload { value: 42 });
         Ok(())

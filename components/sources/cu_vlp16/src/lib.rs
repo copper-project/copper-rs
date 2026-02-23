@@ -57,7 +57,7 @@ impl CuSrcTask for Vlp16 {
         })
     }
 
-    fn start(&mut self, _clock: &CuContext) -> CuResult<()> {
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         let socket = UdpSocket::bind(&self.listen_addr).unwrap();
         socket
             .set_read_timeout(Some(Duration::from_millis(100)))
@@ -66,7 +66,7 @@ impl CuSrcTask for Vlp16 {
         Ok(())
     }
 
-    fn process(&mut self, _clock: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         let socket = self.socket.as_ref().unwrap();
         let mut packet = [0u8; size_of::<DataPacket>()];
         let (read_size, _peer_addr) = socket.recv_from(&mut packet).unwrap();
@@ -95,7 +95,7 @@ impl CuSrcTask for Vlp16 {
         new_msg.set_payload(output);
         Ok(())
     }
-    fn stop(&mut self, _clock: &CuContext) -> CuResult<()> {
+    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
         self.socket = None;
         Ok(())
     }

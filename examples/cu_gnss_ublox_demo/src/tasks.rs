@@ -93,7 +93,7 @@ impl CuSinkTask for TimeSink {
         Ok(Self::default())
     }
 
-    fn process(&mut self, _clock: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         if let Some(time) = input.payload() {
             state::mark_time();
             self.seen += 1;
@@ -131,7 +131,7 @@ impl CuSinkTask for FixSink {
         Ok(Self::default())
     }
 
-    fn process(&mut self, _clock: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         if let Some(fix) = input.payload() {
             state::mark_fix(fix.num_satellites_used);
             self.seen += 1;
@@ -184,7 +184,7 @@ impl CuSinkTask for AccuracySink {
         Ok(Self::default())
     }
 
-    fn process(&mut self, _clock: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         if let Some(accuracy) = input.payload() {
             state::mark_accuracy(accuracy.horizontal.get::<meter>());
             self.seen += 1;
@@ -221,7 +221,7 @@ impl CuSinkTask for SatsInViewSink {
         Ok(Self::default())
     }
 
-    fn process(&mut self, _clock: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         if let Some(sats) = input.payload() {
             state::mark_sats_in_view(sats.count);
             self.seen += 1;
@@ -263,7 +263,7 @@ impl CuSinkTask for SatelliteStateSink {
         Ok(Self)
     }
 
-    fn process(&mut self, _clock: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         if let Some(sat_state) = input.payload() {
             state::mark_sat_state();
 
@@ -318,7 +318,7 @@ impl CuSinkTask for InfoTextSink {
         Ok(Self)
     }
 
-    fn process(&mut self, _clock: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         if let Some(msg) = input.payload() {
             match msg.severity {
                 GnssInfoSeverity::Debug => debug!("[gnss/info] {}", msg.text.as_str()),
@@ -346,7 +346,7 @@ impl CuSinkTask for DropUnusedASink {
         Ok(Self)
     }
 
-    fn process(&mut self, _clock: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
         Ok(())
     }
 }
@@ -364,7 +364,7 @@ impl CuSinkTask for DropUnusedBSink {
         Ok(Self)
     }
 
-    fn process(&mut self, _clock: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
         Ok(())
     }
 }

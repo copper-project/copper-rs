@@ -1017,11 +1017,7 @@ mod tests {
             Ok(Self {})
         }
 
-        fn process(
-            &mut self,
-            _context: &CuContext,
-            _empty_msg: &mut Self::Output<'_>,
-        ) -> CuResult<()> {
+        fn process(&mut self, _ctx: &CuContext, _empty_msg: &mut Self::Output<'_>) -> CuResult<()> {
             Ok(())
         }
     }
@@ -1042,7 +1038,7 @@ mod tests {
             Ok(Self {})
         }
 
-        fn process(&mut self, _context: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, _ctx: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
             Ok(())
         }
     }

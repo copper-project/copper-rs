@@ -23,7 +23,7 @@ mod empty_impl {
             Ok(Self {})
         }
 
-        fn process(&mut self, _clock: &CuContext, _new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+        fn process(&mut self, _ctx: &CuContext, _new_msg: &mut Self::Output<'_>) -> CuResult<()> {
             Ok(())
         }
     }
@@ -224,8 +224,8 @@ mod linux_impl {
             })
         }
 
-        fn start(&mut self, robot_clock: &CuContext) -> CuResult<()> {
-            let rb_ns = robot_clock.now().as_nanos();
+        fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
+            let rb_ns = ctx.now().as_nanos();
             clock_gettime(ClockId::CLOCK_MONOTONIC)
                 .map(|ts| {
                     self.v4l_clock_time_offset_ns =
@@ -238,7 +238,7 @@ mod linux_impl {
                 .map_err(|e| CuError::new_with_cause("could not start stream", e))
         }
 
-        fn process(&mut self, _clock: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+        fn process(&mut self, _ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
             let (handle, meta) = self
                 .stream
                 .next()
@@ -254,7 +254,7 @@ mod linux_impl {
             Ok(())
         }
 
-        fn stop(&mut self, _clock: &CuContext) -> CuResult<()> {
+        fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
             self.stream
                 .stop()
                 .map_err(|e| CuError::new_with_cause("could not stop stream", e))

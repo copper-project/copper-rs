@@ -160,7 +160,7 @@ impl CuSrcTask for UbxSource {
         })
     }
 
-    fn start(&mut self, _clock: &CuContext) -> CuResult<()> {
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         self.send_poll(CLASS_NAV, ID_NAV_PVT)?;
         self.send_poll(CLASS_NAV, ID_NAV_SAT)?;
         self.send_poll(CLASS_NAV, ID_NAV_SIG)?;
@@ -168,7 +168,7 @@ impl CuSrcTask for UbxSource {
         Ok(())
     }
 
-    fn process(&mut self, clock: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         clear_outputs(new_msg);
 
         let now_ns = clock.now().as_nanos();

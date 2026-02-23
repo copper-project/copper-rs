@@ -75,7 +75,7 @@ impl CuSrcTask for ImageSrcTask {
         })
     }
 
-    fn process(&mut self, clock: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
         let handle = self
             .pool
             .acquire()
@@ -113,7 +113,7 @@ impl CuSinkTask for AlignedImageSink {
         Ok(Self)
     }
 
-    fn process(&mut self, _clock: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         let Some(payload) = input.payload() else {
             return Ok(());
         };

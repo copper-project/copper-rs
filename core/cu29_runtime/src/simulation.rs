@@ -230,7 +230,7 @@ impl<T: CuMsgPayload + 'static> CuSrcTask for CuSimSrcTask<T> {
         })
     }
 
-    fn process(&mut self, _context: &CuContext, _new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, _new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         unimplemented!(
             "A placeholder for sim was called for a source, you need answer SimOverride to ExecutedBySim for the Process step."
         )
@@ -312,7 +312,7 @@ impl<I: CuSimSinkInput + 'static> CuSinkTask for CuSimSinkTask<I> {
         Ok(Self { boo: PhantomData })
     }
 
-    fn process(&mut self, _context: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
         unimplemented!(
             "A placeholder for sim was called for a sink, you need answer SimOverride to ExecutedBySim for the Process step."
         )

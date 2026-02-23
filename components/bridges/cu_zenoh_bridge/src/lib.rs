@@ -283,7 +283,7 @@ where
         })
     }
 
-    fn start(&mut self, _clock: &CuContext) -> CuResult<()> {
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         let session = zenoh::Wait::wait(zenoh::open(self.session_config.clone()))
             .map_err(cu_error_map("ZenohBridge: Failed to open session"))?;
 
@@ -323,7 +323,7 @@ where
 
     fn send<'a, Payload>(
         &mut self,
-        _clock: &CuContext,
+        _ctx: &CuContext,
         channel: &'static BridgeChannel<<Self::Tx as BridgeChannelSet>::Id, Payload>,
         msg: &CuMsg<Payload>,
     ) -> CuResult<()>
@@ -355,7 +355,7 @@ where
 
     fn receive<'a, Payload>(
         &mut self,
-        clock: &CuContext,
+        ctx: &CuContext,
         channel: &'static BridgeChannel<<Self::Rx as BridgeChannelSet>::Id, Payload>,
         msg: &mut CuMsg<Payload>,
     ) -> CuResult<()>
@@ -390,7 +390,7 @@ where
         Ok(())
     }
 
-    fn stop(&mut self, _clock: &CuContext) -> CuResult<()> {
+    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
         if let Some(ZenohContext {
             session,
             tx_channels,

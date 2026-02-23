@@ -46,7 +46,7 @@ impl CuSrcTask for BatteryAdcSource {
         })
     }
 
-    fn process(&mut self, clock: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
         let now = clock.now();
         let raw = self.adc.read_raw_blocking();
         let slope = self.adc.slope().max(1);

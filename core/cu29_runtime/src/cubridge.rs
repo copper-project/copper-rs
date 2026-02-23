@@ -176,19 +176,19 @@ pub trait CuBridge: Freezable + Reflect {
         Self: Sized;
 
     /// Called before the first send/receive cycle.
-    fn start(&mut self, _context: &CuContext) -> CuResult<()> {
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         Ok(())
     }
 
     /// Gives the bridge a chance to prepare buffers before I/O.
-    fn preprocess(&mut self, _context: &CuContext) -> CuResult<()> {
+    fn preprocess(&mut self, _ctx: &CuContext) -> CuResult<()> {
         Ok(())
     }
 
     /// Sends a message on the selected outbound channel.
     fn send<'a, Payload>(
         &mut self,
-        context: &CuContext,
+        ctx: &CuContext,
         channel: &'static BridgeChannel<<Self::Tx as BridgeChannelSet>::Id, Payload>,
         msg: &CuMsg<Payload>,
     ) -> CuResult<()>
@@ -200,7 +200,7 @@ pub trait CuBridge: Freezable + Reflect {
     /// Implementations should write into `msg` when data is available.
     fn receive<'a, Payload>(
         &mut self,
-        context: &CuContext,
+        ctx: &CuContext,
         channel: &'static BridgeChannel<<Self::Rx as BridgeChannelSet>::Id, Payload>,
         msg: &mut CuMsg<Payload>,
     ) -> CuResult<()>
@@ -208,12 +208,12 @@ pub trait CuBridge: Freezable + Reflect {
         Payload: CuMsgPayload + 'a;
 
     /// Called once the send/receive pair completed.
-    fn postprocess(&mut self, _context: &CuContext) -> CuResult<()> {
+    fn postprocess(&mut self, _ctx: &CuContext) -> CuResult<()> {
         Ok(())
     }
 
     /// Notifies the bridge that no more I/O will happen until a subsequent [`start`].
-    fn stop(&mut self, _context: &CuContext) -> CuResult<()> {
+    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
         Ok(())
     }
 }
@@ -590,7 +590,7 @@ mod tests {
 
         fn send<'a, Payload>(
             &mut self,
-            _context: &CuContext,
+            _ctx: &CuContext,
             channel: &'static BridgeChannel<TxId, Payload>,
             msg: &CuMsg<Payload>,
         ) -> CuResult<()>
@@ -619,7 +619,7 @@ mod tests {
 
         fn receive<'a, Payload>(
             &mut self,
-            _context: &CuContext,
+            _ctx: &CuContext,
             channel: &'static BridgeChannel<RxId, Payload>,
             msg: &mut CuMsg<Payload>,
         ) -> CuResult<()>

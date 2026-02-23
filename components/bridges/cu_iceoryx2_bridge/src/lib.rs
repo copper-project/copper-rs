@@ -398,7 +398,7 @@ where
         })
     }
 
-    fn receive(&mut self, clock: &CuContext, msg: &mut CuMsg<Payload>) -> CuResult<()> {
+    fn receive(&mut self, ctx: &CuContext, msg: &mut CuMsg<Payload>) -> CuResult<()> {
         msg.tov = Tov::Time(clock.now());
         let sample = self.subscriber.receive().map_err(|e| {
             CuError::new_with_cause(
@@ -471,7 +471,7 @@ where
         })
     }
 
-    fn start(&mut self, _clock: &CuContext) -> CuResult<()> {
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         let mut builder = NodeBuilder::new();
         if let Some(name) = &self.node_name {
             builder = builder.name(name);
@@ -491,7 +491,7 @@ where
 
     fn send<'a, Payload>(
         &mut self,
-        _clock: &CuContext,
+        _ctx: &CuContext,
         channel: &'static BridgeChannel<<Self::Tx as BridgeChannelSet>::Id, Payload>,
         msg: &CuMsg<Payload>,
     ) -> CuResult<()>
@@ -527,7 +527,7 @@ where
 
     fn receive<'a, Payload>(
         &mut self,
-        clock: &CuContext,
+        ctx: &CuContext,
         channel: &'static BridgeChannel<<Self::Rx as BridgeChannelSet>::Id, Payload>,
         msg: &mut CuMsg<Payload>,
     ) -> CuResult<()>
@@ -559,7 +559,7 @@ where
         Ok(())
     }
 
-    fn stop(&mut self, _clock: &CuContext) -> CuResult<()> {
+    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
         self.ctx = None;
         Ok(())
     }

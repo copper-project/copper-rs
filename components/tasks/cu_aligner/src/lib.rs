@@ -67,7 +67,7 @@ macro_rules! define_task {
 
             fn process(
                 &mut self,
-                _clock: &CuContext,
+                _ctx: &CuContext,
                 input: &Self::Input<'_>,
                 output: &mut Self::Output<'_>,
             ) -> CuResult<()> {

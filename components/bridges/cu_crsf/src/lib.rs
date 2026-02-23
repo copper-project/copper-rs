@@ -185,7 +185,7 @@ where
 
     fn send<'a, Payload>(
         &mut self,
-        _clock: &CuContext,
+        _ctx: &CuContext,
         channel: &'static BridgeChannel<<Self::Tx as BridgeChannelSet>::Id, Payload>,
         msg: &CuMsg<Payload>,
     ) -> CuResult<()>
@@ -218,7 +218,7 @@ where
 
     fn receive<'a, Payload>(
         &mut self,
-        clock: &CuContext,
+        ctx: &CuContext,
         channel: &'static BridgeChannel<<Self::Rx as BridgeChannelSet>::Id, Payload>,
         msg: &mut CuMsg<Payload>,
     ) -> CuResult<()>

@@ -282,7 +282,7 @@ mod tasks {
             Ok(Self { sent: false })
         }
 
-        fn process(&mut self, _clock: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
+        fn process(&mut self, _ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
             if self.sent {
                 debug!("LoopbackSource: completed sending MSP request");
                 output.clear_payload();
@@ -313,7 +313,7 @@ mod tasks {
             Ok(Self)
         }
 
-        fn process(&mut self, _clock: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
             if let Some(batch) = input.payload() {
                 debug!(
                     "LoopbackSink: received MSP response batch with {} responses",

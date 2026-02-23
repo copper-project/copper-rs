@@ -150,7 +150,7 @@ impl CuSinkTask for ImuLogger {
         Ok(Self { last_tov: None })
     }
 
-    fn process<'i>(&mut self, _clock: &CuContext, input: &Self::Input<'i>) -> CuResult<()> {
+    fn process<'i>(&mut self, _ctx: &CuContext, input: &Self::Input<'i>) -> CuResult<()> {
         if let Some(payload) = input.payload() {
             let tov_time = expect_tov_time(input.tov)?;
             debug_rl!(&LOG_IMU, tov_time, {
@@ -213,7 +213,7 @@ impl CuSinkTask for BarometerLogger {
         Ok(Self { last_tov: None })
     }
 
-    fn process<'i>(&mut self, _clock: &CuContext, input: &Self::Input<'i>) -> CuResult<()> {
+    fn process<'i>(&mut self, _ctx: &CuContext, input: &Self::Input<'i>) -> CuResult<()> {
         if let Some(payload) = input.payload() {
             let tov_time = expect_tov_time(input.tov)?;
             debug_rl!(&LOG_BARO, tov_time, {
@@ -255,7 +255,7 @@ impl CuSinkTask for MagnetometerLogger {
         Ok(Self { last_tov: None })
     }
 
-    fn process<'i>(&mut self, _clock: &CuContext, input: &Self::Input<'i>) -> CuResult<()> {
+    fn process<'i>(&mut self, _ctx: &CuContext, input: &Self::Input<'i>) -> CuResult<()> {
         if let Some(payload) = input.payload() {
             let tov_time = expect_tov_time(input.tov)?;
             debug_rl!(&LOG_MAG, tov_time, {
@@ -372,7 +372,7 @@ impl CuTask for RcMapper {
 
     fn process<'i, 'o>(
         &mut self,
-        _clock: &CuContext,
+        _ctx: &CuContext,
         inputs: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
@@ -503,7 +503,7 @@ impl CuTask for ImuCalibrator {
 
     fn process<'i, 'o>(
         &mut self,
-        _clock: &CuContext,
+        _ctx: &CuContext,
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
@@ -685,7 +685,7 @@ impl CuTask for AttitudeController {
 
     fn process<'i, 'o>(
         &mut self,
-        clock: &CuContext,
+        ctx: &CuContext,
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
@@ -835,7 +835,7 @@ impl CuTask for RateController {
 
     fn process<'i, 'o>(
         &mut self,
-        clock: &CuContext,
+        ctx: &CuContext,
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
@@ -999,7 +999,7 @@ impl CuTask for QuadXMixer {
 
     fn process<'i, 'o>(
         &mut self,
-        _clock: &CuContext,
+        _ctx: &CuContext,
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
