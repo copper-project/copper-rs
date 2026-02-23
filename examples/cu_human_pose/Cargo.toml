@@ -37,7 +37,7 @@ bincode = { workspace = true }
 serde = { workspace = true }
 
 # Model download
-hf-hub = "0.4.3"
+hf-hub = "0.5.0"
 
 [package.metadata.cargo-shear]
 ignored = ["cu-logmon"]
