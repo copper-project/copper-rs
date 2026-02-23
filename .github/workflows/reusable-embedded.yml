@@ -33,7 +33,7 @@ jobs:
         run: cargo +${{ inputs.toolchain }} nextest run --no-default-features
       - name: Save sccache
         if: github.ref == 'refs/heads/master' && steps.embedded_setup.outputs.sccache_cache_primary_key != '' && steps.embedded_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
           key: ${{ steps.embedded_setup.outputs.sccache_cache_primary_key }}
@@ -59,7 +59,7 @@ jobs:
         run: python3 support/ci/embedded_crates.py run --action build --toolchain ${{ inputs.toolchain }}
       - name: Save sccache
         if: github.ref == 'refs/heads/master' && steps.embedded_setup.outputs.sccache_cache_primary_key != '' && steps.embedded_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
           key: ${{ steps.embedded_setup.outputs.sccache_cache_primary_key }}
@@ -97,7 +97,7 @@ jobs:
         run: cargo +${{ inputs.toolchain }} build --no-default-features --features host --bin blinky-logreader --target ${HOST_TARGET}
       - name: Save sccache
         if: github.ref == 'refs/heads/master' && steps.embedded_setup.outputs.sccache_cache_primary_key != '' && steps.embedded_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
           key: ${{ steps.embedded_setup.outputs.sccache_cache_primary_key }}
