@@ -255,7 +255,7 @@ ctrlc = "3.5"
 defmt = { version = "1.0", default-features = false }
 defmt-rtt = "1.1"
 embedded-alloc = { version = "0.7", default-features = false }
-gstreamer = { version = "0.24", default-features = false }
+gstreamer = { version = "0.25", default-features = false }
 image = { version = "0.25.6", default-features = false }
 libc = { version = "0.2", default-features = false }
 linux-embedded-hal = "0.4.0"
