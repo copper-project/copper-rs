@@ -142,7 +142,7 @@ impl CuSrcTask for Encoder {
 
     #[allow(unused_variables)]
     fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
-        let clock = ctx.clone();
+        let clock = ctx.clock.clone();
         let idata = Arc::clone(&self.data_from_interrupts);
         #[cfg(hardware)]
         self.clk_pin
