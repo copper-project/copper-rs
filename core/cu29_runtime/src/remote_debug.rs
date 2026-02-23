@@ -294,7 +294,7 @@ pub struct DebugRpcError {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResolvedAt {
-    pub cl: u32,
+    pub cl: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ts_ns: Option<u64>,
     pub idx: usize,
@@ -317,7 +317,7 @@ pub struct DebugRpcResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Target {
-    Cl { cl: u32 },
+    Cl { cl: u64 },
     Ts { ts_ns: u64 },
 }
 
@@ -519,24 +519,24 @@ struct StateWatch {
 
 #[derive(Debug, Clone, Serialize)]
 struct CursorSnapshot {
-    cl: u32,
+    cl: u64,
     idx: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     ts_ns: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    keyframe_cl: Option<u32>,
+    keyframe_cl: Option<u64>,
     replayed: usize,
     rev: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
 struct QueryCursorSnapshot {
-    cl: u32,
+    cl: u64,
     idx: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     ts_ns: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    keyframe_cl: Option<u32>,
+    keyframe_cl: Option<u64>,
 }
 
 struct SessionState<App, P, CB, TF, S, L>
@@ -549,7 +549,7 @@ where
     opened_at: Instant,
     last_touched_at: Instant,
     cursor_rev: u64,
-    last_keyframe: Option<u32>,
+    last_keyframe: Option<u64>,
     last_replayed: usize,
     watches: HashMap<u64, StateWatch>,
     #[allow(dead_code)]

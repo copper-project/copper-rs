@@ -527,7 +527,7 @@ struct CopperListStats {
     structured_bytes_per_cl: u64,
     total_copperlists: u64,
     window_copperlists: u64,
-    last_seen_clid: Option<u32>,
+    last_seen_clid: Option<u64>,
     last_rate_at: Instant,
     rate_hz: f64,
 }
@@ -564,10 +564,10 @@ impl CopperListStats {
         self.structured_total_bytes = total;
     }
 
-    fn update_rate(&mut self, clid: u32) {
+    fn update_rate(&mut self, clid: u64) {
         let newly_seen = self
             .last_seen_clid
-            .map_or(1, |prev| clid.wrapping_sub(prev) as u64);
+            .map_or(1, |prev| clid.wrapping_sub(prev));
         self.last_seen_clid = Some(clid);
         self.total_copperlists = self.total_copperlists.saturating_add(newly_seen);
         self.window_copperlists = self.window_copperlists.saturating_add(newly_seen);
@@ -1635,10 +1635,8 @@ impl UI {
         // Show current copper-list id on the right of the help line as a slanted amber cartouche.
         let clid_inner = {
             let stats = self.copperlist_stats.lock().unwrap();
-            let value = stats
-                .last_seen_clid
-                .map_or_else(|| "-".to_string(), |id| id.to_string());
-            format!(" CL {:>10} ", value)
+            let value = stats.last_seen_clid.unwrap_or(0);
+            format!(" CL {:020} ", value)
         };
         let clid_width = (clid_inner.chars().count() + 2) as u16;
         if area.width > clid_width + 2 && area.height >= 1 {

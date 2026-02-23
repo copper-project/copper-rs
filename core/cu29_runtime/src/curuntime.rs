@@ -66,7 +66,7 @@ pub struct CopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
 }
 
 impl<P: CopperListTuple + Default, const NBCL: usize> CopperListsManager<P, NBCL> {
-    pub fn end_of_processing(&mut self, culistid: u32) -> CuResult<()> {
+    pub fn end_of_processing(&mut self, culistid: u64) -> CuResult<()> {
         let mut is_top = true;
         let mut nb_done = 0;
         for cl in self.inner.iter_mut() {
@@ -118,11 +118,11 @@ pub struct KeyFramesManager {
 }
 
 impl KeyFramesManager {
-    fn is_keyframe(&self, culistid: u32) -> bool {
-        self.logger.is_some() && culistid.is_multiple_of(self.keyframe_interval)
+    fn is_keyframe(&self, culistid: u64) -> bool {
+        self.logger.is_some() && culistid.is_multiple_of(self.keyframe_interval as u64)
     }
 
-    pub fn reset(&mut self, culistid: u32, clock: &RobotClock) {
+    pub fn reset(&mut self, culistid: u64, clock: &RobotClock) {
         if self.is_keyframe(culistid) {
             // If a recorded keyframe was preloaded for this CL, keep it as-is.
             if self.locked && self.inner.culistid == culistid {
@@ -140,7 +140,7 @@ impl KeyFramesManager {
         self.forced_timestamp = Some(ts);
     }
 
-    pub fn freeze_task(&mut self, culistid: u32, task: &impl Freezable) -> CuResult<usize> {
+    pub fn freeze_task(&mut self, culistid: u64, task: &impl Freezable) -> CuResult<usize> {
         if self.is_keyframe(culistid) {
             if self.locked {
                 // We are replaying a recorded keyframe verbatim; don't mutate it.
@@ -161,11 +161,11 @@ impl KeyFramesManager {
     }
 
     /// Generic helper to freeze any `Freezable` state (task or bridge) into the current keyframe.
-    pub fn freeze_any(&mut self, culistid: u32, item: &impl Freezable) -> CuResult<usize> {
+    pub fn freeze_any(&mut self, culistid: u64, item: &impl Freezable) -> CuResult<usize> {
         self.freeze_task(culistid, item)
     }
 
-    pub fn end_of_processing(&mut self, culistid: u32) -> CuResult<()> {
+    pub fn end_of_processing(&mut self, culistid: u64) -> CuResult<()> {
         if self.is_keyframe(culistid) {
             let logger = self.logger.as_mut().unwrap();
             logger.log(&self.inner)?;
@@ -233,7 +233,7 @@ impl<CT, CB, P: CopperListTuple + CuListZeroedInit + Default, M: CuMonitor, cons
 #[derive(Clone, Encode, Decode)]
 pub struct KeyFrame {
     // This is the id of the copper list that this keyframe is associated with (recorded before the copperlist).
-    pub culistid: u32,
+    pub culistid: u64,
     // This is the timestamp when the keyframe was created, using the robot clock.
     pub timestamp: CuTime,
     // This is the bincode representation of the tuple of all the tasks.
@@ -250,7 +250,7 @@ impl KeyFrame {
     }
 
     /// This is to be able to avoid reallocations
-    fn reset(&mut self, culistid: u32, timestamp: CuTime) {
+    fn reset(&mut self, culistid: u64, timestamp: CuTime) {
         self.culistid = culistid;
         self.timestamp = timestamp;
         self.serialized_tasks.clear();

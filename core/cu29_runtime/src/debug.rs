@@ -30,9 +30,9 @@ use std::sync::Arc;
 #[derive(Debug, Clone)]
 pub struct JumpOutcome {
     /// Copperlist id we landed on
-    pub culistid: u32,
+    pub culistid: u64,
     /// Keyframe used to rewind (if any)
-    pub keyframe_culistid: Option<u32>,
+    pub keyframe_culistid: Option<u64>,
     /// Number of copperlists replayed after the keyframe
     pub replayed: usize,
 }
@@ -53,8 +53,8 @@ pub(crate) struct SectionIndexEntry {
     pos: LogPosition,
     start_idx: usize,
     len: usize,
-    first_id: u32,
-    last_id: u32,
+    first_id: u64,
+    last_id: u64,
     first_ts: Option<CuTime>,
     last_ts: Option<CuTime>,
 }
@@ -88,7 +88,7 @@ where
     keyframes: Vec<KeyFrame>,
     started: bool,
     current_idx: Option<usize>,
-    last_keyframe: Option<u32>,
+    last_keyframe: Option<u64>,
     build_callback: CB,
     time_of: TF,
     // Tiny LRU cache of decoded sections
@@ -236,7 +236,7 @@ where
         Ok(())
     }
 
-    fn nearest_keyframe(&self, target_culistid: u32) -> Option<KeyFrame> {
+    fn nearest_keyframe(&self, target_culistid: u64) -> Option<KeyFrame> {
         self.keyframes
             .iter()
             .filter(|kf| kf.culistid <= target_culistid)
@@ -265,7 +265,7 @@ where
             .ok()
     }
 
-    fn find_section_for_culistid(&self, culistid: u32) -> Option<usize> {
+    fn find_section_for_culistid(&self, culistid: u64) -> Option<usize> {
         self.sections
             .binary_search_by(|s| {
                 if culistid < s.first_id {
@@ -406,7 +406,7 @@ where
         Ok((cl, ts))
     }
 
-    fn index_for_culistid(&mut self, culistid: u32) -> CuResult<usize> {
+    fn index_for_culistid(&mut self, culistid: u64) -> CuResult<usize> {
         let section_idx = self
             .find_section_for_culistid(culistid)
             .ok_or_else(|| CuError::from("Requested culistid not present in log"))?;
@@ -461,7 +461,7 @@ where
         let (target_cl, _) = self.copperlist_at(target_idx)?;
         let target_culistid = target_cl.id;
 
-        let keyframe_used: Option<u32>;
+        let keyframe_used: Option<u64>;
         let replay_start: usize;
 
         // Fast path: forward stepping from current state.
@@ -512,7 +512,7 @@ where
     }
 
     /// Jump to a copperlist by id.
-    pub fn goto_cl(&mut self, culistid: u32) -> CuResult<JumpOutcome> {
+    pub fn goto_cl(&mut self, culistid: u64) -> CuResult<JumpOutcome> {
         let idx = self.index_for_culistid(culistid)?;
         self.goto_index(idx)
     }
@@ -557,7 +557,7 @@ where
     }
 
     /// The nearest keyframe (<= target CL), if any.
-    pub fn nearest_keyframe_culistid(&self, target_culistid: u32) -> Option<u32> {
+    pub fn nearest_keyframe_culistid(&self, target_culistid: u64) -> Option<u64> {
         self.nearest_keyframe(target_culistid).map(|kf| kf.culistid)
     }
 
@@ -686,7 +686,7 @@ fn scan_copperlist_section<
 >(
     section: &[u8],
     time_of: &TF,
-) -> CuResult<(usize, u32, u32, Option<CuTime>, Option<CuTime>)> {
+) -> CuResult<(usize, u64, u64, Option<CuTime>, Option<CuTime>)> {
     let mut cursor = std::io::Cursor::new(section);
     let mut count = 0usize;
     let mut first_id = None;

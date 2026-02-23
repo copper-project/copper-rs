@@ -16,7 +16,7 @@ use cu29_clock::{RobotClock, RobotClockMock};
 pub struct CuContext {
     /// Runtime clock. Kept as a field for direct access (`context.clock.now()`).
     pub clock: RobotClock,
-    cl_id: u32,
+    cl_id: u64,
     task_ids: &'static [&'static str],
     current_task_index: Option<usize>,
 }
@@ -59,7 +59,7 @@ impl CuContext {
     }
 
     /// Internal constructor used by runtime internals and code generation.
-    pub(crate) fn new(clock: RobotClock, clid: u32, task_ids: &'static [&'static str]) -> Self {
+    pub(crate) fn new(clock: RobotClock, clid: u64, task_ids: &'static [&'static str]) -> Self {
         Self {
             clock,
             cl_id: clid,
@@ -79,7 +79,7 @@ impl CuContext {
     }
 
     /// Returns the current copper list id.
-    pub fn cl_id(&self) -> u32 {
+    pub fn cl_id(&self) -> u64 {
         self.cl_id
     }
 
@@ -99,13 +99,13 @@ impl CuContext {
 #[derive(Clone, Debug)]
 pub struct CuContextBuilder {
     clock: RobotClock,
-    cl_id: u32,
+    cl_id: u64,
     task_ids: &'static [&'static str],
 }
 
 impl CuContextBuilder {
     /// Sets the copper-list id for the context.
-    pub fn cl_id(mut self, cl_id: u32) -> Self {
+    pub fn cl_id(mut self, cl_id: u64) -> Self {
         self.cl_id = cl_id;
         self
     }

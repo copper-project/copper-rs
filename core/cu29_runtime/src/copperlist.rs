@@ -51,7 +51,7 @@ impl Display for CopperListState {
 
 #[derive(Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct CopperList<P: CopperListTuple> {
-    pub id: u32,
+    pub id: u64,
     state: CopperListState,
     pub msgs: P, // This is generated from the runtime.
 }
@@ -68,7 +68,7 @@ impl<P: CopperListTuple> Default for CopperList<P> {
 
 impl<P: CopperListTuple> CopperList<P> {
     // This is not the usual way to create a CopperList, this is just for testing.
-    pub fn new(id: u32, msgs: P) -> Self {
+    pub fn new(id: u64, msgs: P) -> Self {
         CopperList {
             id,
             state: CopperListState::Initialized,
@@ -98,7 +98,7 @@ pub struct CuListsManager<P: CopperListTuple, const N: usize> {
     data: Box<[CopperList<P>; N]>,
     length: usize,
     insertion_index: usize,
-    current_cl_id: u32,
+    current_cl_id: u64,
 }
 
 impl<P: CopperListTuple + fmt::Debug, const N: usize> fmt::Debug for CuListsManager<P, N> {

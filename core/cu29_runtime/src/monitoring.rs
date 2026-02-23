@@ -134,7 +134,7 @@ pub struct CopperListIoStats {
     /// Cumulative bytes written to the structured log stream so far
     pub structured_log_bytes_total: u64,
     /// CopperList identifier for reference in monitors
-    pub culistid: u32,
+    pub culistid: u64,
 }
 
 /// Lightweight trait to estimate the amount of data a payload will contribute when serialized.
