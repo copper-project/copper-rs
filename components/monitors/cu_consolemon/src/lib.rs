@@ -527,6 +527,7 @@ struct CopperListStats {
     structured_bytes_per_cl: u64,
     total_copperlists: u64,
     window_copperlists: u64,
+    last_seen_clid: Option<u32>,
     last_rate_at: Instant,
     rate_hz: f64,
 }
@@ -543,6 +544,7 @@ impl CopperListStats {
             structured_bytes_per_cl: 0,
             total_copperlists: 0,
             window_copperlists: 0,
+            last_seen_clid: None,
             last_rate_at: Instant::now(),
             rate_hz: 0.0,
         }
@@ -562,9 +564,13 @@ impl CopperListStats {
         self.structured_total_bytes = total;
     }
 
-    fn update_rate(&mut self) {
-        self.total_copperlists = self.total_copperlists.saturating_add(1);
-        self.window_copperlists = self.window_copperlists.saturating_add(1);
+    fn update_rate(&mut self, clid: u32) {
+        let newly_seen = self
+            .last_seen_clid
+            .map_or(1, |prev| clid.wrapping_sub(prev) as u64);
+        self.last_seen_clid = Some(clid);
+        self.total_copperlists = self.total_copperlists.saturating_add(newly_seen);
+        self.window_copperlists = self.window_copperlists.saturating_add(newly_seen);
 
         let now = Instant::now();
         let elapsed = now.duration_since(self.last_rate_at);
@@ -1563,11 +1569,7 @@ impl UI {
 
         let tabs = Paragraph::new(Line::from(spans))
             .style(Style::default().bg(base_bg))
-            .block(
-                Block::default()
-                    .borders(Borders::BOTTOM)
-                    .style(Style::default().bg(base_bg)),
-            );
+            .block(Block::default().style(Style::default().bg(base_bg)));
         f.render_widget(tabs, area);
     }
 
@@ -1627,12 +1629,43 @@ impl UI {
 
         let help = Paragraph::new(Line::from(spans))
             .style(Style::default().bg(base_bg))
-            .block(
-                Block::default()
-                    .borders(Borders::TOP)
-                    .style(Style::default().bg(base_bg)),
-            );
+            .block(Block::default().style(Style::default().bg(base_bg)));
         f.render_widget(help, area);
+
+        // Show current copper-list id on the right of the help line as a slanted amber cartouche.
+        let clid_inner = {
+            let stats = self.copperlist_stats.lock().unwrap();
+            let value = stats
+                .last_seen_clid
+                .map_or_else(|| "-".to_string(), |id| id.to_string());
+            format!(" CL {:>10} ", value)
+        };
+        let clid_width = (clid_inner.chars().count() + 2) as u16;
+        if area.width > clid_width + 2 && area.height >= 1 {
+            let clid_area = Rect {
+                x: area
+                    .x
+                    .saturating_add(area.width.saturating_sub(clid_width + 1)),
+                y: area.y,
+                width: clid_width,
+                height: 1,
+            };
+            let badge_bg = Color::Rgb(216, 157, 63);
+            f.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled("", Style::default().fg(badge_bg).bg(base_bg)),
+                    Span::styled(
+                        clid_inner,
+                        Style::default()
+                            .fg(Color::Black)
+                            .bg(badge_bg)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled("", Style::default().fg(badge_bg).bg(base_bg)),
+                ])),
+                clid_area,
+            );
+        }
     }
 
     fn draw(&mut self, f: &mut Frame) {
@@ -1640,9 +1673,9 @@ impl UI {
             .direction(Direction::Vertical)
             .constraints(
                 [
-                    Constraint::Length(2), // Top tabs
+                    Constraint::Length(1), // Top tabs
                     Constraint::Min(0),    // Main content
-                    Constraint::Length(2), // Bottom help bar
+                    Constraint::Length(1), // Bottom help bar
                 ]
                 .as_ref(),
             )
@@ -2179,14 +2212,14 @@ impl CuMonitor for CuConsoleMon {
         Ok(())
     }
 
-    fn process_copperlist(&self, _ctx: &CuContext, msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+    fn process_copperlist(&self, ctx: &CuContext, msgs: &[&CuMsgMetadata]) -> CuResult<()> {
         {
             let mut task_stats = self.task_stats.lock().unwrap();
             task_stats.update(msgs);
         }
         {
             let mut copperlist_stats = self.copperlist_stats.lock().unwrap();
-            copperlist_stats.update_rate();
+            copperlist_stats.update_rate(ctx.cl_id());
         }
         {
             let mut task_statuses = self.task_statuses.lock().unwrap();
