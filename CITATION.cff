@@ -1,0 +1,9 @@
+@misc{copperrs2026,
+  author       = {Guillaume Binet and Copper Project contributors},
+  title        = {Copper-rs: A deterministic runtime and SDK for robotics},
+  year         = {2026},
+  howpublished = {GitHub repository},
+  url          = {https://github.com/copper-project/copper-rs},
+  note         = {Version v0.13 or latest}
+}
+
