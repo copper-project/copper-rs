@@ -16,7 +16,7 @@ cu29 = { workspace = true }
 bincode = { workspace = true }
 circular-buffer = { workspace = true }
 gstreamer = { workspace = true, default-features = false, optional = true }
-gstreamer-app = { version = "0.24", default-features = false, optional = true }
+gstreamer-app = { version = "0.25", default-features = false, optional = true }
 serde = { workspace = true }
 
 [dev-dependencies]
