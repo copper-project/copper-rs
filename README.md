@@ -84,6 +84,22 @@ cargo run --bin <app>-logviz --features logviz -- logs/my_log.copper --save out.
 - Release notes: [Copper Release Notes](https://copper-project.github.io/copper-rs/Copper-Release-Notes)
 - Roadmap: [Roadmap](https://copper-project.github.io/copper-rs/Roadmap)
 
+
+## Citation
+
+If you use Copper-rs in your research, please cite it as:
+
+```bibtex
+@misc{copperrs2026,
+  author       = {Guillaume Binet and Copper Project contributors},
+  title        = {Copper-rs: A deterministic runtime and SDK for robotics},
+  year         = {2026},
+  howpublished = {GitHub repository},
+  url          = {https://github.com/copper-project/copper-rs},
+  note         = {Version v0.13 or latest}
+}
+```
+
 ## Project
 
 > [!NOTE]
