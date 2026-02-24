@@ -25,7 +25,7 @@
             msg: "i32",
         ),
     ],
-    monitor: (type: "ExampleMonitor"),
+    monitors: [(type: "ExampleMonitor")],
     logging: (
         section_size_mib: 2,
         slab_size_mib: 1,

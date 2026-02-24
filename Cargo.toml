@@ -28,6 +28,7 @@ members = [
   "core/cu29_units",
   "components/monitors/cu_consolemon",
   "components/monitors/cu_logmon",
+  "components/monitors/cu_safetymon",
   "components/payloads/cu_ros2_payloads",
   "components/payloads/cu_gnss_payloads",
   "components/payloads/cu_sensor_payloads",

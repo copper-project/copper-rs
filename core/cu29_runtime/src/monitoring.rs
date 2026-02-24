@@ -18,6 +18,8 @@ use serde_derive::{Deserialize, Serialize};
 extern crate alloc;
 
 #[cfg(feature = "std")]
+use std::sync::Arc;
+#[cfg(feature = "std")]
 use std::{collections::HashMap as Map, string::String, string::ToString, vec::Vec};
 
 #[cfg(not(feature = "std"))]
@@ -58,7 +60,7 @@ fn format_timestamp(time: CuDuration) -> String {
 }
 
 /// The state of a task.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum CuTaskState {
     Start,
     Preprocess,
@@ -67,12 +69,125 @@ pub enum CuTaskState {
     Stop,
 }
 
+/// Execution progress marker emitted by the runtime before running a component step.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct ExecutionMarker {
+    /// Index into TASKS_IDS (tasks + bridge components/channels).
+    pub component_id: usize,
+    /// Lifecycle phase currently entered.
+    pub step: CuTaskState,
+    /// CopperList id when available (runtime loop), None during start/stop.
+    pub culistid: Option<u32>,
+}
+
+#[derive(Debug)]
+pub struct RuntimeExecutionProbe {
+    component_id: AtomicUsize,
+    step: AtomicUsize,
+    culistid_plus_one: AtomicUsize,
+    sequence: AtomicUsize,
+}
+
+impl Default for RuntimeExecutionProbe {
+    fn default() -> Self {
+        Self {
+            component_id: AtomicUsize::new(usize::MAX),
+            step: AtomicUsize::new(0),
+            culistid_plus_one: AtomicUsize::new(0),
+            sequence: AtomicUsize::new(0),
+        }
+    }
+}
+
+impl RuntimeExecutionProbe {
+    #[inline]
+    pub fn record(&self, marker: ExecutionMarker) {
+        self.component_id
+            .store(marker.component_id, Ordering::Relaxed);
+        self.step
+            .store(task_state_to_usize(marker.step), Ordering::Relaxed);
+        self.culistid_plus_one.store(
+            marker.culistid.map(|id| id as usize + 1).unwrap_or(0),
+            Ordering::Relaxed,
+        );
+        self.sequence.fetch_add(1, Ordering::Release);
+    }
+
+    #[inline]
+    pub fn sequence(&self) -> usize {
+        self.sequence.load(Ordering::Acquire)
+    }
+
+    #[inline]
+    pub fn marker(&self) -> Option<ExecutionMarker> {
+        // Read a coherent snapshot. A concurrent writer may change values between reads;
+        // in that case we retry to keep the marker and sequence aligned.
+        loop {
+            let seq_before = self.sequence.load(Ordering::Acquire);
+            let component_id = self.component_id.load(Ordering::Relaxed);
+            let step = self.step.load(Ordering::Relaxed);
+            let culistid_plus_one = self.culistid_plus_one.load(Ordering::Relaxed);
+            let seq_after = self.sequence.load(Ordering::Acquire);
+            if seq_before == seq_after {
+                if component_id == usize::MAX {
+                    return None;
+                }
+                let step = usize_to_task_state(step);
+                let culistid = if culistid_plus_one == 0 {
+                    None
+                } else {
+                    Some((culistid_plus_one - 1) as u32)
+                };
+                return Some(ExecutionMarker {
+                    component_id,
+                    step,
+                    culistid,
+                });
+            }
+        }
+    }
+}
+
+#[inline]
+const fn task_state_to_usize(step: CuTaskState) -> usize {
+    match step {
+        CuTaskState::Start => 0,
+        CuTaskState::Preprocess => 1,
+        CuTaskState::Process => 2,
+        CuTaskState::Postprocess => 3,
+        CuTaskState::Stop => 4,
+    }
+}
+
+#[inline]
+const fn usize_to_task_state(step: usize) -> CuTaskState {
+    match step {
+        0 => CuTaskState::Start,
+        1 => CuTaskState::Preprocess,
+        2 => CuTaskState::Process,
+        3 => CuTaskState::Postprocess,
+        _ => CuTaskState::Stop,
+    }
+}
+
+#[cfg(feature = "std")]
+pub type ExecutionProbeHandle = Arc<RuntimeExecutionProbe>;
+
 /// Monitor decision to be taken when a task errored out.
 #[derive(Debug)]
 pub enum Decision {
     Abort,    // for a step (stop, start) or a copperlist, just stop trying to process it.
     Ignore, // Ignore this error and try to continue, ie calling the other tasks steps, setting a None return value and continue a copperlist.
     Shutdown, // This is a fatal error, shutdown the copper as cleanly as possible.
+}
+
+fn merge_decision(lhs: Decision, rhs: Decision) -> Decision {
+    use Decision::{Abort, Ignore, Shutdown};
+    match (lhs, rhs) {
+        (Shutdown, _) | (_, Shutdown) => Shutdown,
+        (Abort, _) | (_, Abort) => Abort,
+        _ => Ignore,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -308,6 +423,9 @@ pub trait CuMonitor: Sized {
 
     fn set_copperlist_info(&mut self, _info: CopperListInfo) {}
 
+    #[cfg(feature = "std")]
+    fn set_execution_probe(&mut self, _probe: ExecutionProbeHandle) {}
+
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
         Ok(())
     }
@@ -318,8 +436,14 @@ pub trait CuMonitor: Sized {
     /// Called when the runtime finishes serializing a CopperList, giving IO accounting data.
     fn observe_copperlist_io(&self, _stats: CopperListIoStats) {}
 
+    /// Called before executing a component step. Useful for out-of-band watchdog diagnostics.
+    fn observe_execution_marker(&self, _marker: ExecutionMarker) {}
+
     /// Callbacked when a Task errored out. The runtime requires an immediate decision.
     fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision;
+
+    /// Callback fired when the runtime catches a panic in a std build.
+    fn process_panic(&self, _panic_message: &str) {}
 
     /// Callbacked when copper is stopping.
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
@@ -367,6 +491,82 @@ impl CuMonitor for NoMonitor {
         #[cfg(all(feature = "std", debug_assertions))]
         unregister_live_log_listener();
         Ok(())
+    }
+}
+
+macro_rules! impl_monitor_tuple {
+    ($($idx:tt => $name:ident),+) => {
+        impl<$($name: CuMonitor),+> CuMonitor for ($($name,)+) {
+            fn new(config: &CuConfig, taskids: &'static [&'static str]) -> CuResult<Self>
+            where
+                Self: Sized,
+            {
+                Ok(($($name::new(config, taskids)?,)+))
+            }
+
+            fn set_topology(&mut self, topology: MonitorTopology) {
+                $(self.$idx.set_topology(topology.clone());)+
+            }
+
+            fn set_copperlist_info(&mut self, info: CopperListInfo) {
+                $(self.$idx.set_copperlist_info(info);)+
+            }
+
+            #[cfg(feature = "std")]
+            fn set_execution_probe(&mut self, probe: ExecutionProbeHandle) {
+                $(self.$idx.set_execution_probe(probe.clone());)+
+            }
+
+            fn start(&mut self, clock: &RobotClock) -> CuResult<()> {
+                $(self.$idx.start(clock)?;)+
+                Ok(())
+            }
+
+            fn process_copperlist(&self, msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+                $(self.$idx.process_copperlist(msgs)?;)+
+                Ok(())
+            }
+
+            fn observe_copperlist_io(&self, stats: CopperListIoStats) {
+                $(self.$idx.observe_copperlist_io(stats);)+
+            }
+
+            fn observe_execution_marker(&self, marker: ExecutionMarker) {
+                $(self.$idx.observe_execution_marker(marker);)+
+            }
+
+            fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision {
+                let mut decision = Decision::Ignore;
+                $(decision = merge_decision(decision, self.$idx.process_error(taskid, step, error));)+
+                decision
+            }
+
+            fn process_panic(&self, panic_message: &str) {
+                $(self.$idx.process_panic(panic_message);)+
+            }
+
+            fn stop(&mut self, clock: &RobotClock) -> CuResult<()> {
+                $(self.$idx.stop(clock)?;)+
+                Ok(())
+            }
+        }
+    };
+}
+
+impl_monitor_tuple!(0 => M0, 1 => M1);
+impl_monitor_tuple!(0 => M0, 1 => M1, 2 => M2);
+impl_monitor_tuple!(0 => M0, 1 => M1, 2 => M2, 3 => M3);
+impl_monitor_tuple!(0 => M0, 1 => M1, 2 => M2, 3 => M3, 4 => M4);
+impl_monitor_tuple!(0 => M0, 1 => M1, 2 => M2, 3 => M3, 4 => M4, 5 => M5);
+
+#[cfg(feature = "std")]
+pub fn panic_payload_to_string(payload: &(dyn core::any::Any + Send)) -> String {
+    if let Some(msg) = payload.downcast_ref::<&str>() {
+        (*msg).to_string()
+    } else if let Some(msg) = payload.downcast_ref::<String>() {
+        msg.clone()
+    } else {
+        "panic with non-string payload".to_string()
     }
 }
 

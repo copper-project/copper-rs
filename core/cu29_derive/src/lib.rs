@@ -834,12 +834,90 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[build monitor type]");
-    let monitor_type = if let Some(monitor_config) = copper_config.get_monitor_config() {
-        let monitor_type = parse_str::<Type>(monitor_config.get_type())
+    let monitor_configs = copper_config.get_monitor_configs();
+    let (monitor_type, monitor_instanciator_body) = if monitor_configs.is_empty() {
+        (
+            quote! { NoMonitor },
+            quote! {
+                let mut monitor = NoMonitor::new(config, TASKS_IDS)
+                    .expect("Failed to create NoMonitor.");
+                let copperlist_info = ::cu29::monitoring::CopperListInfo::new(
+                    core::mem::size_of::<CuList>(),
+                    #DEFAULT_CLNB,
+                );
+                monitor.set_copperlist_info(copperlist_info);
+                monitor
+            },
+        )
+    } else if monitor_configs.len() == 1 {
+        let only_monitor_type = parse_str::<Type>(monitor_configs[0].get_type())
             .expect("Could not transform the monitor type name into a Rust type.");
-        quote! { #monitor_type }
+        (
+            quote! { #only_monitor_type },
+            quote! {
+                let mut monitor = #only_monitor_type::new(config, TASKS_IDS)
+                    .expect("Failed to create the given monitor.");
+                let copperlist_info = ::cu29::monitoring::CopperListInfo::new(
+                    core::mem::size_of::<CuList>(),
+                    #DEFAULT_CLNB,
+                );
+                monitor.set_copperlist_info(copperlist_info);
+                monitor
+            },
+        )
     } else {
-        quote! { NoMonitor }
+        let monitor_types: Vec<Type> = monitor_configs
+            .iter()
+            .map(|monitor_config| {
+                parse_str::<Type>(monitor_config.get_type())
+                    .expect("Could not transform the monitor type name into a Rust type.")
+            })
+            .collect();
+        let monitor_bindings: Vec<Ident> = (0..monitor_types.len())
+            .map(|idx| format_ident!("__cu_monitor_{idx}"))
+            .collect();
+        let monitor_config_bindings: Vec<Ident> = (0..monitor_types.len())
+            .map(|idx| format_ident!("__cu_monitor_cfg_{idx}"))
+            .collect();
+        let monitor_indices: Vec<syn::Index> =
+            (0..monitor_types.len()).map(syn::Index::from).collect();
+
+        let monitor_builders: Vec<proc_macro2::TokenStream> = monitor_types
+            .iter()
+            .zip(monitor_bindings.iter())
+            .zip(monitor_config_bindings.iter())
+            .zip(monitor_indices.iter())
+            .map(|(((monitor_ty, monitor_binding), config_binding), monitor_idx)| {
+                quote! {
+                    let mut #config_binding = config.clone();
+                    let __cu_monitor_cfg_entry = config
+                        .get_monitor_configs()
+                        .get(#monitor_idx)
+                        .cloned()
+                        .unwrap_or_else(|| panic!("Missing monitor config at index {}", #monitor_idx));
+                    #config_binding.monitors = vec![__cu_monitor_cfg_entry];
+                    let #monitor_binding = #monitor_ty::new(
+                        &#config_binding,
+                        TASKS_IDS,
+                    )
+                    .expect("Failed to create one of the configured monitors.");
+                }
+            })
+            .collect();
+        let tuple_type: TypeTuple = parse_quote! { (#(#monitor_types),*,) };
+        (
+            quote! { #tuple_type },
+            quote! {
+                #(#monitor_builders)*
+                let mut monitor: #tuple_type = (#(#monitor_bindings),*,);
+                let copperlist_info = ::cu29::monitoring::CopperListInfo::new(
+                    core::mem::size_of::<CuList>(),
+                    #DEFAULT_CLNB,
+                );
+                monitor.set_copperlist_info(copperlist_info);
+                monitor
+            },
+        )
     };
 
     // This is common for all the mission as it will be inserted in the respective modules with their local CuTasks, CuStampedDataSet etc...
@@ -1449,6 +1527,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote! {
                             #call_sim_callback
                             if doit {
+                                self.copper_runtime.observe_execution_marker(
+                                    cu29::monitoring::ExecutionMarker {
+                                        component_id: #index,
+                                        step: CuTaskState::Start,
+                                        culistid: None,
+                                    }
+                                );
                                 let task = &mut self.copper_runtime.tasks.#task_index;
                                 if let Err(error) = task.start(&self.copper_runtime.clock) {
                                     #monitoring_action
@@ -1499,6 +1584,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote! {
                             #call_sim_callback
                             if doit {
+                                self.copper_runtime.observe_execution_marker(
+                                    cu29::monitoring::ExecutionMarker {
+                                        component_id: #index,
+                                        step: CuTaskState::Stop,
+                                        culistid: None,
+                                    }
+                                );
                                 let task = &mut self.copper_runtime.tasks.#task_index;
                                 if let Err(error) = task.stop(&self.copper_runtime.clock) {
                                     #monitoring_action
@@ -1548,6 +1640,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote! {
                             #call_sim_callback
                             if doit {
+                                execution_probe.record(cu29::monitoring::ExecutionMarker {
+                                    component_id: #index,
+                                    step: CuTaskState::Preprocess,
+                                    culistid: None,
+                                });
                                 let maybe_error = {
                                     #rt_guard
                                     tasks.#task_index.preprocess(clock)
@@ -1600,6 +1697,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote! {
                             #call_sim_callback
                             if doit {
+                                execution_probe.record(cu29::monitoring::ExecutionMarker {
+                                    component_id: #index,
+                                    step: CuTaskState::Postprocess,
+                                    culistid: None,
+                                });
                                 let maybe_error = {
                                     #rt_guard
                                     tasks.#task_index.postprocess(clock)
@@ -1650,21 +1752,29 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 quote! {
                     {
                         #call_sim
-                        if !doit { return Ok(()); }
-                        let bridge = &mut self.copper_runtime.bridges.#bridge_index;
-                        if let Err(error) = bridge.start(&self.copper_runtime.clock) {
-                            let decision = self.copper_runtime.monitor.process_error(#monitor_index, CuTaskState::Start, &error);
-                            match decision {
-                                Decision::Abort => {
-                                    debug!("Start: ABORT decision from monitoring. Task '{}' errored out during start. Aborting all the other starts.", #mission_mod::TASKS_IDS[#monitor_index]);
-                                    return Ok(());
+                        if doit {
+                            self.copper_runtime.observe_execution_marker(
+                                cu29::monitoring::ExecutionMarker {
+                                    component_id: #monitor_index,
+                                    step: CuTaskState::Start,
+                                    culistid: None,
                                 }
-                                Decision::Ignore => {
-                                    debug!("Start: IGNORE decision from monitoring. Task '{}' errored out during start. The runtime will continue.", #mission_mod::TASKS_IDS[#monitor_index]);
-                                }
-                                Decision::Shutdown => {
-                                    debug!("Start: SHUTDOWN decision from monitoring. Task '{}' errored out during start. The runtime cannot continue.", #mission_mod::TASKS_IDS[#monitor_index]);
-                                    return Err(CuError::new_with_cause("Task errored out during start.", error));
+                            );
+                            let bridge = &mut self.copper_runtime.bridges.#bridge_index;
+                            if let Err(error) = bridge.start(&self.copper_runtime.clock) {
+                                let decision = self.copper_runtime.monitor.process_error(#monitor_index, CuTaskState::Start, &error);
+                                match decision {
+                                    Decision::Abort => {
+                                        debug!("Start: ABORT decision from monitoring. Task '{}' errored out during start. Aborting all the other starts.", #mission_mod::TASKS_IDS[#monitor_index]);
+                                        return Ok(());
+                                    }
+                                    Decision::Ignore => {
+                                        debug!("Start: IGNORE decision from monitoring. Task '{}' errored out during start. The runtime will continue.", #mission_mod::TASKS_IDS[#monitor_index]);
+                                    }
+                                    Decision::Shutdown => {
+                                        debug!("Start: SHUTDOWN decision from monitoring. Task '{}' errored out during start. The runtime cannot continue.", #mission_mod::TASKS_IDS[#monitor_index]);
+                                        return Err(CuError::new_with_cause("Task errored out during start.", error));
+                                    }
                                 }
                             }
                         }
@@ -1709,21 +1819,29 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 quote! {
                     {
                         #call_sim
-                        if !doit { return Ok(()); }
-                        let bridge = &mut self.copper_runtime.bridges.#bridge_index;
-                        if let Err(error) = bridge.stop(&self.copper_runtime.clock) {
-                            let decision = self.copper_runtime.monitor.process_error(#monitor_index, CuTaskState::Stop, &error);
-                            match decision {
-                                Decision::Abort => {
-                                    debug!("Stop: ABORT decision from monitoring. Task '{}' errored out during stop. Aborting all the other stops.", #mission_mod::TASKS_IDS[#monitor_index]);
-                                    return Ok(());
+                        if doit {
+                            self.copper_runtime.observe_execution_marker(
+                                cu29::monitoring::ExecutionMarker {
+                                    component_id: #monitor_index,
+                                    step: CuTaskState::Stop,
+                                    culistid: None,
                                 }
-                                Decision::Ignore => {
-                                    debug!("Stop: IGNORE decision from monitoring. Task '{}' errored out during stop. The runtime will continue.", #mission_mod::TASKS_IDS[#monitor_index]);
-                                }
-                                Decision::Shutdown => {
-                                    debug!("Stop: SHUTDOWN decision from monitoring. Task '{}' errored out during stop. The runtime cannot continue.", #mission_mod::TASKS_IDS[#monitor_index]);
-                                    return Err(CuError::new_with_cause("Task errored out during stop.", error));
+                            );
+                            let bridge = &mut self.copper_runtime.bridges.#bridge_index;
+                            if let Err(error) = bridge.stop(&self.copper_runtime.clock) {
+                                let decision = self.copper_runtime.monitor.process_error(#monitor_index, CuTaskState::Stop, &error);
+                                match decision {
+                                    Decision::Abort => {
+                                        debug!("Stop: ABORT decision from monitoring. Task '{}' errored out during stop. Aborting all the other stops.", #mission_mod::TASKS_IDS[#monitor_index]);
+                                        return Ok(());
+                                    }
+                                    Decision::Ignore => {
+                                        debug!("Stop: IGNORE decision from monitoring. Task '{}' errored out during stop. The runtime will continue.", #mission_mod::TASKS_IDS[#monitor_index]);
+                                    }
+                                    Decision::Shutdown => {
+                                        debug!("Stop: SHUTDOWN decision from monitoring. Task '{}' errored out during stop. The runtime cannot continue.", #mission_mod::TASKS_IDS[#monitor_index]);
+                                        return Err(CuError::new_with_cause("Task errored out during stop.", error));
+                                    }
                                 }
                             }
                         }
@@ -1770,6 +1888,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         #call_sim
                         if doit {
                             let bridge = &mut __cu_bridges.#bridge_index;
+                            execution_probe.record(cu29::monitoring::ExecutionMarker {
+                                component_id: #monitor_index,
+                                step: CuTaskState::Preprocess,
+                                culistid: None,
+                            });
                             let maybe_error = {
                                 #rt_guard
                                 bridge.preprocess(clock)
@@ -1835,6 +1958,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         if doit {
                             let bridge = &mut __cu_bridges.#bridge_index;
                             kf_manager.freeze_any(clid, bridge)?;
+                            execution_probe.record(cu29::monitoring::ExecutionMarker {
+                                component_id: #monitor_index,
+                                step: CuTaskState::Postprocess,
+                                culistid: Some(clid),
+                            });
                             let maybe_error = {
                                 #rt_guard
                                 bridge.postprocess(clock)
@@ -2140,7 +2268,25 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {
                 loop  {
                     let iter_start = self.copper_runtime.clock.now();
-                    let result = <Self as #app_trait<S, L>>::run_one_iteration(self, #sim_callback_arg);
+                    let result = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                        || <Self as #app_trait<S, L>>::run_one_iteration(self, #sim_callback_arg)
+                    )) {
+                        Ok(result) => result,
+                        Err(payload) => {
+                            let panic_message = cu29::monitoring::panic_payload_to_string(payload.as_ref());
+                            self.copper_runtime.monitor.process_panic(&panic_message);
+                            let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::Panic {
+                                message: panic_message.clone(),
+                                file: None,
+                                line: None,
+                                column: None,
+                            });
+                            Err(CuError::from(format!(
+                                "Panic while running one iteration: {}",
+                                panic_message
+                            )))
+                        }
+                    };
 
                     if let Some(rate) = self.copper_runtime.runtime_config.rate_target_hz {
                         let period: CuDuration = (1_000_000_000u64 / rate).into();
@@ -2184,6 +2330,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 // Pre-explode the runtime to avoid complexity with partial borrowing in the generated code.
                 let runtime = &mut self.copper_runtime;
                 let clock = &runtime.clock;
+                let execution_probe = &runtime.execution_probe;
                 let monitor = &mut runtime.monitor;
                 let tasks = &mut runtime.tasks;
                 let __cu_bridges = &mut runtime.bridges;
@@ -2901,14 +3048,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #bridges_instanciator
 
                 pub fn monitor_instanciator(config: &CuConfig) -> #monitor_type {
-                    let mut monitor = #monitor_type::new(config, #mission_mod::TASKS_IDS)
-                        .expect("Failed to create the given monitor.");
-                    let copperlist_info = ::cu29::monitoring::CopperListInfo::new(
-                        core::mem::size_of::<CuList>(),
-                        #DEFAULT_CLNB,
-                    );
-                    monitor.set_copperlist_info(copperlist_info);
-                    monitor
+                    #monitor_instanciator_body
                 }
 
                 // The application for this mission
@@ -4175,6 +4315,11 @@ fn generate_task_execution_tokens(
                         let cumsg_output = &mut msgs.#output_culist_index;
                         #maybe_sim_tick
                         let maybe_error = if doit {
+                            execution_probe.record(cu29::monitoring::ExecutionMarker {
+                                component_id: #tid,
+                                step: CuTaskState::Process,
+                                culistid: Some(clid),
+                            });
                             #output_start_time
                             let result = {
                                 #rt_guard
@@ -4279,6 +4424,11 @@ fn generate_task_execution_tokens(
                         let cumsg_input = &#inputs_type;
                         let cumsg_output = &mut msgs.#output_culist_index;
                         let maybe_error = if doit {
+                            execution_probe.record(cu29::monitoring::ExecutionMarker {
+                                component_id: #tid,
+                                step: CuTaskState::Process,
+                                culistid: Some(clid),
+                            });
                             #output_start_time
                             let result = {
                                 #rt_guard
@@ -4393,6 +4543,11 @@ fn generate_task_execution_tokens(
                         let cumsg_input = &#inputs_type;
                         let cumsg_output = &mut msgs.#output_culist_index;
                         let maybe_error = if doit {
+                            execution_probe.record(cu29::monitoring::ExecutionMarker {
+                                component_id: #tid,
+                                step: CuTaskState::Process,
+                                culistid: Some(clid),
+                            });
                             #output_start_time
                             let result = {
                                 #rt_guard
@@ -4502,6 +4657,11 @@ fn generate_bridge_rx_execution_tokens(
                 let cumsg_output = #output_ref;
                 #call_sim_callback
                 if doit {
+                    execution_probe.record(cu29::monitoring::ExecutionMarker {
+                        component_id: #monitor_index,
+                        step: CuTaskState::Process,
+                        culistid: Some(clid),
+                    });
                     cumsg_output.metadata.process_time.start = clock.now().into();
                     let maybe_error = {
                         #rt_guard
@@ -4641,6 +4801,11 @@ fn generate_bridge_tx_execution_tokens(
                 let cumsg_output = #output_ref;
                 #call_sim_callback
                 if doit {
+                    execution_probe.record(cu29::monitoring::ExecutionMarker {
+                        component_id: #monitor_index,
+                        step: CuTaskState::Process,
+                        culistid: Some(clid),
+                    });
                     cumsg_output.metadata.process_time.start = clock.now().into();
                     let maybe_error = {
                         #rt_guard

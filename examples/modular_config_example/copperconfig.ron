@@ -1,9 +1,9 @@
 (
     tasks: [],
     cnx: [],
-    monitor: (
+    monitors: [(
         type: "cu_consolemon::CuConsoleMon",
-    ),
+    )],
     logging: (
         file: "robot.copper",
         level: "debug",

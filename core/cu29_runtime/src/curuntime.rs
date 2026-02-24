@@ -6,7 +6,11 @@ use crate::config::{ComponentConfig, CuDirection, DEFAULT_KEYFRAME_INTERVAL, Nod
 use crate::config::{CuConfig, CuGraph, NodeId, RuntimeConfig};
 use crate::copperlist::{CopperList, CopperListState, CuListZeroedInit, CuListsManager};
 use crate::cutask::{BincodeAdapter, Freezable};
-use crate::monitoring::{CuMonitor, build_monitor_topology};
+#[cfg(feature = "std")]
+use crate::monitoring::ExecutionProbeHandle;
+use crate::monitoring::{
+    CuMonitor, ExecutionMarker, RuntimeExecutionProbe, build_monitor_topology,
+};
 use crate::resource::ResourceManager;
 use cu29_clock::{ClockProvider, CuTime, RobotClock};
 use cu29_traits::CuResult;
@@ -208,6 +212,12 @@ pub struct CuRuntime<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize
     /// The runtime monitoring.
     pub monitor: M,
 
+    /// Runtime-side execution progress probe for watchdog/diagnostic monitors.
+    #[cfg(feature = "std")]
+    pub execution_probe: ExecutionProbeHandle,
+    #[cfg(not(feature = "std"))]
+    pub execution_probe: RuntimeExecutionProbe,
+
     /// The logger for the copper lists (messages between tasks)
     pub copperlists_manager: CopperListsManager<P, NBCL>,
 
@@ -331,6 +341,11 @@ impl<
     const NBCL: usize,
 > CuRuntime<CT, CB, P, M, NBCL>
 {
+    #[inline]
+    pub fn observe_execution_marker(&self, marker: ExecutionMarker) {
+        self.execution_probe.record(marker);
+    }
+
     // FIXME(gbin): this became REALLY ugly with no-std
     #[allow(clippy::too_many_arguments)]
     #[cfg(feature = "std")]
@@ -387,6 +402,8 @@ impl<
 
         let tasks = tasks_instanciator(all_instances_configs, &mut resources)?;
         let mut monitor = monitor_instanciator(config);
+        let execution_probe = std::sync::Arc::new(RuntimeExecutionProbe::default());
+        monitor.set_execution_probe(execution_probe.clone());
         if let Ok(topology) = build_monitor_topology(config, mission) {
             monitor.set_topology(topology);
         }
@@ -438,6 +455,7 @@ impl<
             bridges,
             resources,
             monitor,
+            execution_probe,
             clock,
             copperlists_manager,
             keyframes_manager,
@@ -513,6 +531,7 @@ impl<
         #[cfg(target_os = "none")]
         info!("CuRuntime::new: monitor instanciator");
         let mut monitor = monitor_instanciator(config);
+        let execution_probe = RuntimeExecutionProbe::default();
         #[cfg(target_os = "none")]
         info!("CuRuntime::new: monitor instanciator ok");
         #[cfg(target_os = "none")]
@@ -574,6 +593,7 @@ impl<
             bridges,
             resources,
             monitor,
+            execution_probe,
             clock,
             copperlists_manager,
             keyframes_manager,

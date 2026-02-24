@@ -1,0 +1,21 @@
+[package]
+name = "cu-safetymon"
+description = "Safety monitor for Copper: watchdog, panic capture, fault latching with exit codes."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+cu29 = { path = "../../../core/cu29", version = "0.13.0", default-features = false }
+
+[features]
+default = ["std"]
+std = ["cu29/std"]
