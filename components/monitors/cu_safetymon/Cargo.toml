@@ -16,6 +16,9 @@ path = "src/lib.rs"
 [dependencies]
 cu29 = { path = "../../../core/cu29", version = "0.13.0", default-features = false }
 
+[dev-dependencies]
+cu-logmon = { path = "../cu_logmon", version = "0.13.0", default-features = false, features = ["std"] }
+
 [features]
 default = ["std"]
 std = ["cu29/std"]

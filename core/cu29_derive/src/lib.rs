@@ -1527,7 +1527,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote! {
                             #call_sim_callback
                             if doit {
-                                self.copper_runtime.observe_execution_marker(
+                                self.copper_runtime.record_execution_marker(
                                     cu29::monitoring::ExecutionMarker {
                                         component_id: #index,
                                         step: CuTaskState::Start,
@@ -1584,7 +1584,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote! {
                             #call_sim_callback
                             if doit {
-                                self.copper_runtime.observe_execution_marker(
+                                self.copper_runtime.record_execution_marker(
                                     cu29::monitoring::ExecutionMarker {
                                         component_id: #index,
                                         step: CuTaskState::Stop,
@@ -1753,7 +1753,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     {
                         #call_sim
                         if doit {
-                            self.copper_runtime.observe_execution_marker(
+                            self.copper_runtime.record_execution_marker(
                                 cu29::monitoring::ExecutionMarker {
                                     component_id: #monitor_index,
                                     step: CuTaskState::Start,
@@ -1820,7 +1820,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     {
                         #call_sim
                         if doit {
-                            self.copper_runtime.observe_execution_marker(
+                            self.copper_runtime.record_execution_marker(
                                 cu29::monitoring::ExecutionMarker {
                                     component_id: #monitor_index,
                                     step: CuTaskState::Stop,

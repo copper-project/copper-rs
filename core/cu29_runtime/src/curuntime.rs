@@ -213,6 +213,10 @@ pub struct CuRuntime<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize
     pub monitor: M,
 
     /// Runtime-side execution progress probe for watchdog/diagnostic monitors.
+    ///
+    /// This probe is written from the generated execution plan before each component
+    /// step. Monitors consume it asynchronously (typically from watchdog threads) to
+    /// report the last known component/step/culist when the runtime appears stalled.
     #[cfg(feature = "std")]
     pub execution_probe: ExecutionProbeHandle,
     #[cfg(not(feature = "std"))]
@@ -341,8 +345,11 @@ impl<
     const NBCL: usize,
 > CuRuntime<CT, CB, P, M, NBCL>
 {
+    /// Records runtime execution progress in the shared probe.
+    ///
+    /// This is intentionally lightweight and does not call monitor callbacks.
     #[inline]
-    pub fn observe_execution_marker(&self, marker: ExecutionMarker) {
+    pub fn record_execution_marker(&self, marker: ExecutionMarker) {
         self.execution_probe.record(marker);
     }
 

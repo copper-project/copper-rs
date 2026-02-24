@@ -80,6 +80,11 @@ pub struct ExecutionMarker {
     pub culistid: Option<u32>,
 }
 
+/// Lock-free runtime-side progress probe.
+///
+/// The runtime writes execution markers directly into this probe from the hot path
+/// (without calling monitor fan-out callbacks), and monitors can read a coherent
+/// snapshot from watchdog threads when diagnosing stalls.
 #[derive(Debug)]
 pub struct RuntimeExecutionProbe {
     component_id: AtomicUsize,
@@ -183,6 +188,8 @@ pub enum Decision {
 
 fn merge_decision(lhs: Decision, rhs: Decision) -> Decision {
     use Decision::{Abort, Ignore, Shutdown};
+    // Pick the strictest monitor decision when multiple monitors disagree.
+    // Shutdown dominates Abort, which dominates Ignore.
     match (lhs, rhs) {
         (Shutdown, _) | (_, Shutdown) => Shutdown,
         (Abort, _) | (_, Abort) => Abort,
@@ -436,9 +443,6 @@ pub trait CuMonitor: Sized {
     /// Called when the runtime finishes serializing a CopperList, giving IO accounting data.
     fn observe_copperlist_io(&self, _stats: CopperListIoStats) {}
 
-    /// Called before executing a component step. Useful for out-of-band watchdog diagnostics.
-    fn observe_execution_marker(&self, _marker: ExecutionMarker) {}
-
     /// Callbacked when a Task errored out. The runtime requires an immediate decision.
     fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision;
 
@@ -529,10 +533,6 @@ macro_rules! impl_monitor_tuple {
 
             fn observe_copperlist_io(&self, stats: CopperListIoStats) {
                 $(self.$idx.observe_copperlist_io(stats);)+
-            }
-
-            fn observe_execution_marker(&self, marker: ExecutionMarker) {
-                $(self.$idx.observe_execution_marker(marker);)+
             }
 
             fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision {
@@ -953,6 +953,64 @@ impl CuDurationStatistics {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::sync::atomic::{AtomicUsize, Ordering};
+    #[cfg(feature = "std")]
+    use std::sync::Arc;
+
+    #[derive(Clone, Copy)]
+    enum TestDecision {
+        Ignore,
+        Abort,
+        Shutdown,
+    }
+
+    struct TestMonitor {
+        decision: TestDecision,
+        copperlist_calls: AtomicUsize,
+        panic_calls: AtomicUsize,
+        #[cfg(feature = "std")]
+        probe_calls: AtomicUsize,
+    }
+
+    impl TestMonitor {
+        fn new_with(decision: TestDecision) -> Self {
+            Self {
+                decision,
+                copperlist_calls: AtomicUsize::new(0),
+                panic_calls: AtomicUsize::new(0),
+                #[cfg(feature = "std")]
+                probe_calls: AtomicUsize::new(0),
+            }
+        }
+    }
+
+    impl CuMonitor for TestMonitor {
+        fn new(_config: &CuConfig, _taskids: &'static [&'static str]) -> CuResult<Self> {
+            Ok(Self::new_with(TestDecision::Ignore))
+        }
+
+        #[cfg(feature = "std")]
+        fn set_execution_probe(&mut self, _probe: ExecutionProbeHandle) {
+            self.probe_calls.fetch_add(1, Ordering::SeqCst);
+        }
+
+        fn process_copperlist(&self, _msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+            self.copperlist_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+
+        fn process_error(&self, _taskid: usize, _step: CuTaskState, _error: &CuError) -> Decision {
+            match self.decision {
+                TestDecision::Ignore => Decision::Ignore,
+                TestDecision::Abort => Decision::Abort,
+                TestDecision::Shutdown => Decision::Shutdown,
+            }
+        }
+
+        fn process_panic(&self, _panic_message: &str) {
+            self.panic_calls.fetch_add(1, Ordering::SeqCst);
+        }
+    }
 
     #[test]
     fn test_live_statistics_percentiles() {
@@ -998,5 +1056,71 @@ mod tests {
         assert_eq!(stats.jitter_mean(), CuDuration((100 + 300 + 100) / 3));
         stats.reset();
         assert_eq!(stats.len(), 0);
+    }
+
+    #[test]
+    fn tuple_monitor_merges_contradictory_decisions_with_strictest_wins() {
+        let err = CuError::from("boom");
+
+        let two = (
+            TestMonitor::new_with(TestDecision::Ignore),
+            TestMonitor::new_with(TestDecision::Shutdown),
+        );
+        assert!(matches!(
+            two.process_error(0, CuTaskState::Process, &err),
+            Decision::Shutdown
+        ));
+
+        let two = (
+            TestMonitor::new_with(TestDecision::Ignore),
+            TestMonitor::new_with(TestDecision::Abort),
+        );
+        assert!(matches!(
+            two.process_error(0, CuTaskState::Process, &err),
+            Decision::Abort
+        ));
+    }
+
+    #[test]
+    fn tuple_monitor_fans_out_callbacks() {
+        let left = TestMonitor::new_with(TestDecision::Ignore);
+        let right = TestMonitor::new_with(TestDecision::Ignore);
+        let mut monitors = (left, right);
+
+        #[cfg(feature = "std")]
+        monitors.set_execution_probe(Arc::new(RuntimeExecutionProbe::default()));
+        monitors
+            .process_copperlist(&[])
+            .expect("process_copperlist should fan out");
+        monitors.process_panic("panic marker");
+
+        assert_eq!(monitors.0.copperlist_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(monitors.1.copperlist_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(monitors.0.panic_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(monitors.1.panic_calls.load(Ordering::SeqCst), 1);
+        #[cfg(feature = "std")]
+        {
+            assert_eq!(monitors.0.probe_calls.load(Ordering::SeqCst), 1);
+            assert_eq!(monitors.1.probe_calls.load(Ordering::SeqCst), 1);
+        }
+    }
+
+    #[test]
+    fn runtime_execution_probe_roundtrip_marker() {
+        let probe = RuntimeExecutionProbe::default();
+        assert!(probe.marker().is_none());
+        assert_eq!(probe.sequence(), 0);
+
+        probe.record(ExecutionMarker {
+            component_id: 7,
+            step: CuTaskState::Process,
+            culistid: Some(42),
+        });
+
+        let marker = probe.marker().expect("marker should be available");
+        assert_eq!(marker.component_id, 7);
+        assert!(matches!(marker.step, CuTaskState::Process));
+        assert_eq!(marker.culistid, Some(42));
+        assert_eq!(probe.sequence(), 1);
     }
 }

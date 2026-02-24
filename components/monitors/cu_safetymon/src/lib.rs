@@ -1,4 +1,25 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+//! Safety monitor for fault latching and fail-fast process termination.
+//!
+//! `CuSafetyMon` is designed for safety-critical deployments where "keep running"
+//! is less important than deterministic fault containment.
+//!
+//! Behavior:
+//! - Maintains a CopperList heartbeat (`process_copperlist`) and exits if no progress
+//!   is observed within `copperlist_deadline_ms`.
+//! - Consumes the runtime execution probe to report the last known
+//!   `(component_id/task, step, culistid)` when a lock is detected.
+//! - Installs a panic hook and turns panics into explicit process exit codes.
+//! - Latches runtime errors (`process_error`) as shutdown faults with their own exit code.
+//!
+//! Config (monitor `config` map keys):
+//! - `copperlist_deadline_ms` (u64, default: 1000)
+//! - `watchdog_period_ms` (u64, default: `max(deadline/4, 10)`)
+//! - `exit_code_shutdown` (i32, default: 70)
+//! - `exit_code_lock` (i32, default: 71)
+//! - `exit_code_panic` (i32, default: 72)
+//!
+//! Note: for now, this monitor is `std`-only by design.
 
 extern crate alloc;
 
@@ -127,6 +148,13 @@ pub struct CuSafetyMon {
 
 impl CuSafetyMon {
     #[cfg(feature = "std")]
+    fn emit_fault(prefix: &str, detail: &str) {
+        // Always emit to stderr so fault details are visible even without text log sinks.
+        eprintln!("{} {}", prefix, detail);
+        error!("{} {}", prefix, detail);
+    }
+
+    #[cfg(feature = "std")]
     fn spawn_watchdog(&mut self) {
         let shared = Arc::clone(&self.shared);
         let deadline = self.cfg.copperlist_deadline;
@@ -180,7 +208,7 @@ impl CuSafetyMon {
                     };
 
                     shared.request_exit(exit_code, detail.clone());
-                    error!("cu_safetymon lock fault: {}", detail);
+                    Self::emit_fault("cu_safetymon lock fault:", &detail);
                     std::process::exit(exit_code);
                 }
             }
@@ -221,7 +249,7 @@ impl CuSafetyMon {
             };
 
             shared.request_exit(panic_code, detail.clone());
-            error!("cu_safetymon panic fault: {}", detail);
+            Self::emit_fault("cu_safetymon panic fault:", &detail);
             std::process::exit(panic_code);
         }));
     }
@@ -237,10 +265,8 @@ impl CuSafetyMon {
                 .unwrap_or_else(|poison| poison.into_inner())
                 .clone()
                 .unwrap_or_else(|| "no reason captured".to_string());
-            error!(
-                "cu_safetymon exiting process with code {} ({})",
-                code, reason
-            );
+            let detail = format!("exiting process with code {} ({})", code, reason);
+            Self::emit_fault("cu_safetymon", &detail);
             std::process::exit(code);
         }
     }
@@ -306,7 +332,7 @@ impl CuMonitor for CuSafetyMon {
             );
             self.shared
                 .request_exit(self.cfg.exit_code_shutdown, detail.clone());
-            error!("cu_safetymon {}", detail);
+            Self::emit_fault("cu_safetymon", &detail);
         }
         Decision::Shutdown
     }
@@ -316,7 +342,7 @@ impl CuMonitor for CuSafetyMon {
         {
             self.shared
                 .request_exit(self.cfg.exit_code_panic, panic_message.to_string());
-            error!("cu_safetymon panic observed: {}", panic_message);
+            Self::emit_fault("cu_safetymon panic observed:", panic_message);
         }
     }
 
