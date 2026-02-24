@@ -164,7 +164,9 @@
         slab_size_mib: 1024,
         section_size_mib: 100,
     ),
-    monitors: [(
-        type: "cu_consolemon::CuConsoleMon",
-    )],
+    monitors: [
+        (
+            type: "cu_consolemon::CuConsoleMon",
+        ),
+    ],
 )
