@@ -252,13 +252,13 @@ where
         })
     }
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         debug!("ist8310: source started");
         Ok(())
     }
 
-    fn process<'o>(&mut self, clock: &RobotClock, output: &mut Self::Output<'o>) -> CuResult<()> {
-        let tov = clock.now();
+    fn process<'o>(&mut self, ctx: &CuContext, output: &mut Self::Output<'o>) -> CuResult<()> {
+        let tov = ctx.now();
         let now_ns = tov.as_nanos();
 
         let payload = match self.measure_state {

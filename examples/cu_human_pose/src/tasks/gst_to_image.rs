@@ -77,11 +77,11 @@ impl CuTask for GstToCuImage {
 
     fn process(
         &mut self,
-        clock: &RobotClock,
+        ctx: &CuContext,
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
-        let now_ns = clock.now().as_nanos();
+        let now_ns = ctx.now().as_nanos();
         let Some(buffer) = input.payload() else {
             const WARN_AFTER_NS: u64 = 2_000_000_000;
             const WARN_EVERY_NS: u64 = 2_000_000_000;

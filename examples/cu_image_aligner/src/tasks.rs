@@ -75,7 +75,7 @@ impl CuSrcTask for ImageSrcTask {
         })
     }
 
-    fn process(&mut self, clock: &RobotClock, output: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
         let handle = self
             .pool
             .acquire()
@@ -87,7 +87,7 @@ impl CuSrcTask for ImageSrcTask {
 
         let mut image = CuImage::new(self.format, handle);
         image.seq = self.seq;
-        output.tov = Tov::Time(clock.now() + self.tov_offset);
+        output.tov = Tov::Time(ctx.now() + self.tov_offset);
         output.set_payload(image);
         self.seq = self.seq.wrapping_add(1);
         Ok(())
@@ -113,7 +113,7 @@ impl CuSinkTask for AlignedImageSink {
         Ok(Self)
     }
 
-    fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         let Some(payload) = input.payload() else {
             return Ok(());
         };

@@ -87,7 +87,7 @@ impl CuTask for YoloPose {
 
     fn process(
         &mut self,
-        _clock: &RobotClock,
+        _ctx: &CuContext,
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {

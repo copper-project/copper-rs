@@ -121,7 +121,6 @@ struct Snapshot {
 
 pub struct CuLogMon {
     taskids: &'static [&'static str],
-    clock: Mutex<Option<RobotClock>>,
     window: Mutex<WindowState>,
 }
 
@@ -233,15 +232,13 @@ impl CuMonitor for CuLogMon {
         info!("CuLogMon::new: window ready");
         Ok(Self {
             taskids,
-            clock: Mutex::new(None),
             window: Mutex::new(window),
         })
     }
 
-    fn start(&mut self, clock: &RobotClock) -> CuResult<()> {
-        *self.clock.lock() = Some(clock.clone());
+    fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
         let mut window = self.window.lock();
-        window.last_report_at = Some(clock.recent());
+        window.last_report_at = Some(ctx.recent());
         info!("cu_logmon started ({} tasks)", self.taskids.len());
 
         // Also listen to structured logs and print them with color.
@@ -287,12 +284,8 @@ impl CuMonitor for CuLogMon {
         Ok(())
     }
 
-    fn process_copperlist(&self, msgs: &[&CuMsgMetadata]) -> CuResult<()> {
-        let Some(clock) = self.clock.lock().clone() else {
-            return Ok(());
-        };
-
-        let call_start = clock.recent();
+    fn process_copperlist(&self, ctx: &CuContext, msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+        let call_start = ctx.recent();
 
         let snapshot = {
             let mut window = self.window.lock();
@@ -321,7 +314,7 @@ impl CuMonitor for CuLogMon {
         };
 
         if let Some(snapshot) = snapshot {
-            let log_start = clock.recent();
+            let log_start = ctx.recent();
             let use_color = cfg!(feature = "color_log");
             let base = format!(
                 "[CL {}] rate {}.{} Hz | top4 {} | e2e p50 {}us p90 {}us p99 {}us max {}us | overhead {}us",
@@ -363,7 +356,7 @@ impl CuMonitor for CuLogMon {
             } else {
                 info!("{}", &base);
             }
-            let log_end = clock.recent();
+            let log_end = ctx.recent();
             self.window.lock().last_log_duration = log_end - log_start;
         }
 
@@ -381,7 +374,7 @@ impl CuMonitor for CuLogMon {
         Decision::Ignore
     }
 
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
         #[cfg(all(feature = "std", debug_assertions))]
         unregister_live_log_listener();
         Ok(())

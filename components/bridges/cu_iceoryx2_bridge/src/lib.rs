@@ -398,8 +398,8 @@ where
         })
     }
 
-    fn receive(&mut self, clock: &RobotClock, msg: &mut CuMsg<Payload>) -> CuResult<()> {
-        msg.tov = Tov::Time(clock.now());
+    fn receive(&mut self, ctx: &CuContext, msg: &mut CuMsg<Payload>) -> CuResult<()> {
+        msg.tov = Tov::Time(ctx.now());
         let sample = self.subscriber.receive().map_err(|e| {
             CuError::new_with_cause(
                 format!("Iceoryx2Bridge({}): Receive failed", self.service_name).as_str(),
@@ -471,7 +471,7 @@ where
         })
     }
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         let mut builder = NodeBuilder::new();
         if let Some(name) = &self.node_name {
             builder = builder.name(name);
@@ -491,7 +491,7 @@ where
 
     fn send<'a, Payload>(
         &mut self,
-        _clock: &RobotClock,
+        _ctx: &CuContext,
         channel: &'static BridgeChannel<<Self::Tx as BridgeChannelSet>::Id, Payload>,
         msg: &CuMsg<Payload>,
     ) -> CuResult<()>
@@ -527,7 +527,7 @@ where
 
     fn receive<'a, Payload>(
         &mut self,
-        clock: &RobotClock,
+        ctx: &CuContext,
         channel: &'static BridgeChannel<<Self::Rx as BridgeChannelSet>::Id, Payload>,
         msg: &mut CuMsg<Payload>,
     ) -> CuResult<()>
@@ -542,24 +542,24 @@ where
         })?;
         let service = cfg.service.clone();
 
-        let ctx = self.ctx_mut()?;
+        let runtime_ctx = self.ctx_mut()?;
 
         if let Some(rx_channel) =
-            Self::find_rx_channel_mut::<Payload>(&mut ctx.rx_channels, channel.id())?
+            Self::find_rx_channel_mut::<Payload>(&mut runtime_ctx.rx_channels, channel.id())?
         {
-            return rx_channel.receive(clock, msg);
+            return rx_channel.receive(ctx, msg);
         }
 
-        let mut new_channel = IceoryxRxChannel::<Payload>::new(&mut ctx.node, &service)?;
-        new_channel.receive(clock, msg)?;
-        ctx.rx_channels.push(IceoryxRxChannelEntry {
+        let mut new_channel = IceoryxRxChannel::<Payload>::new(&mut runtime_ctx.node, &service)?;
+        new_channel.receive(ctx, msg)?;
+        runtime_ctx.rx_channels.push(IceoryxRxChannelEntry {
             id: channel.id(),
             channel: Box::new(new_channel),
         });
         Ok(())
     }
 
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
         self.ctx = None;
         Ok(())
     }

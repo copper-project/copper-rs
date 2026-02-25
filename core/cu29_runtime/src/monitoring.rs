@@ -3,8 +3,9 @@
 
 use crate::config::CuConfig;
 use crate::config::{BridgeChannelConfigRepresentation, BridgeConfig, CuGraph, Flavor, NodeId};
+use crate::context::CuContext;
 use crate::cutask::CuMsgMetadata;
-use cu29_clock::{CuDuration, RobotClock};
+use cu29_clock::CuDuration;
 #[allow(unused_imports)]
 use cu29_log::CuLogLevel;
 #[cfg(all(feature = "std", debug_assertions))]
@@ -255,7 +256,7 @@ pub struct CopperListIoStats {
     /// Cumulative bytes written to the structured log stream so far
     pub structured_log_bytes_total: u64,
     /// CopperList identifier for reference in monitors
-    pub culistid: u32,
+    pub culistid: u64,
 }
 
 /// Lightweight trait to estimate the amount of data a payload will contribute when serialized.
@@ -433,12 +434,12 @@ pub trait CuMonitor: Sized {
     #[cfg(feature = "std")]
     fn set_execution_probe(&mut self, _probe: ExecutionProbeHandle) {}
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         Ok(())
     }
 
     /// Callback that will be trigger at the end of every copperlist (before, on or after the serialization).
-    fn process_copperlist(&self, msgs: &[&CuMsgMetadata]) -> CuResult<()>;
+    fn process_copperlist(&self, _ctx: &CuContext, msgs: &[&CuMsgMetadata]) -> CuResult<()>;
 
     /// Called when the runtime finishes serializing a CopperList, giving IO accounting data.
     fn observe_copperlist_io(&self, _stats: CopperListIoStats) {}
@@ -450,7 +451,7 @@ pub trait CuMonitor: Sized {
     fn process_panic(&self, _panic_message: &str) {}
 
     /// Callbacked when copper is stopping.
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
         Ok(())
     }
 }
@@ -463,7 +464,7 @@ impl CuMonitor for NoMonitor {
         Ok(NoMonitor {})
     }
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         #[cfg(all(feature = "std", debug_assertions))]
         register_live_log_listener(|entry, format_str, param_names| {
             let params: Vec<String> = entry.params.iter().map(|v| v.to_string()).collect();
@@ -481,7 +482,7 @@ impl CuMonitor for NoMonitor {
         Ok(())
     }
 
-    fn process_copperlist(&self, _msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+    fn process_copperlist(&self, _ctx: &CuContext, _msgs: &[&CuMsgMetadata]) -> CuResult<()> {
         // By default, do nothing.
         Ok(())
     }
@@ -491,7 +492,7 @@ impl CuMonitor for NoMonitor {
         Decision::Ignore
     }
 
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
         #[cfg(all(feature = "std", debug_assertions))]
         unregister_live_log_listener();
         Ok(())
@@ -521,13 +522,13 @@ macro_rules! impl_monitor_tuple {
                 $(self.$idx.set_execution_probe(probe.clone());)+
             }
 
-            fn start(&mut self, clock: &RobotClock) -> CuResult<()> {
-                $(self.$idx.start(clock)?;)+
+            fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
+                $(self.$idx.start(ctx)?;)+
                 Ok(())
             }
 
-            fn process_copperlist(&self, msgs: &[&CuMsgMetadata]) -> CuResult<()> {
-                $(self.$idx.process_copperlist(msgs)?;)+
+            fn process_copperlist(&self, ctx: &CuContext, msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+                $(self.$idx.process_copperlist(ctx, msgs)?;)+
                 Ok(())
             }
 
@@ -545,8 +546,8 @@ macro_rules! impl_monitor_tuple {
                 $(self.$idx.process_panic(panic_message);)+
             }
 
-            fn stop(&mut self, clock: &RobotClock) -> CuResult<()> {
-                $(self.$idx.stop(clock)?;)+
+            fn stop(&mut self, ctx: &CuContext) -> CuResult<()> {
+                $(self.$idx.stop(ctx)?;)+
                 Ok(())
             }
         }
@@ -994,7 +995,7 @@ mod tests {
             self.probe_calls.fetch_add(1, Ordering::SeqCst);
         }
 
-        fn process_copperlist(&self, _msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+        fn process_copperlist(&self, _ctx: &CuContext, _msgs: &[&CuMsgMetadata]) -> CuResult<()> {
             self.copperlist_calls.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
@@ -1086,11 +1087,12 @@ mod tests {
         let left = TestMonitor::new_with(TestDecision::Ignore);
         let right = TestMonitor::new_with(TestDecision::Ignore);
         let mut monitors = (left, right);
+        let (ctx, _clock_control) = CuContext::new_mock_clock();
 
         #[cfg(feature = "std")]
         monitors.set_execution_probe(Arc::new(RuntimeExecutionProbe::default()));
         monitors
-            .process_copperlist(&[])
+            .process_copperlist(&ctx, &[])
             .expect("process_copperlist should fan out");
         monitors.process_panic("panic marker");
 

@@ -41,7 +41,7 @@ mod firmware {
                 Ok(Self)
             }
 
-            fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
+            fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
                 if let Some(pose) = input.payload() {
                     info!(
                         "AHRS RPY [rad]: roll={:.3} pitch={:.3} yaw={:.3}",

@@ -26,8 +26,8 @@ pub mod tasks {
             Ok(Self)
         }
 
-        fn process(&mut self, clock: &RobotClock, output: &mut Self::Output<'_>) -> CuResult<()> {
-            output.0.tov = Tov::Time(clock.now());
+        fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
+            output.0.tov = Tov::Time(ctx.now());
             output.0.set_payload(42);
             output.1.set_payload(true);
             Ok(())
@@ -50,7 +50,7 @@ pub mod tasks {
             Ok(Self)
         }
 
-        fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
             if let Some(value) = input.payload() {
                 LAST_I32.store(*value, Ordering::SeqCst);
             }
@@ -74,7 +74,7 @@ pub mod tasks {
             Ok(Self)
         }
 
-        fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
             if let Some(value) = input.payload() {
                 LAST_BOOL.store(*value, Ordering::SeqCst);
             }
@@ -98,7 +98,7 @@ pub mod tasks {
             Ok(Self)
         }
 
-        fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
             let (int_msg, bool_msg): (&CuMsg<i32>, &CuMsg<bool>) = *input;
             if let Some(value) = int_msg.payload() {
                 LAST_I32.store(*value, Ordering::SeqCst);
@@ -126,7 +126,7 @@ pub mod tasks {
             Ok(Self)
         }
 
-        fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
             let _ = input.payload();
             Ok(())
         }
@@ -151,7 +151,7 @@ pub mod tasks {
 
         fn process(
             &mut self,
-            _clock: &RobotClock,
+            _ctx: &CuContext,
             input: &Self::Input<'_>,
             output: &mut Self::Output<'_>,
         ) -> CuResult<()> {

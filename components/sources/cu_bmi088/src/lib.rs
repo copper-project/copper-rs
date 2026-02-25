@@ -178,12 +178,12 @@ where
         Ok(Self { driver })
     }
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         Ok(())
     }
 
-    fn process<'o>(&mut self, clock: &RobotClock, output: &mut Self::Output<'o>) -> CuResult<()> {
-        let tov = clock.now();
+    fn process<'o>(&mut self, ctx: &CuContext, output: &mut Self::Output<'o>) -> CuResult<()> {
+        let tov = ctx.now();
         let payload = self.driver.read_measure()?;
         output.tov = Tov::Time(tov);
         output.set_payload(payload);

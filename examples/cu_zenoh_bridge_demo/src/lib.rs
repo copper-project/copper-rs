@@ -77,12 +77,12 @@ pub mod tasks {
             Ok(Self { seq: 0, label })
         }
 
-        fn process(&mut self, clock: &RobotClock, output: &mut Self::Output<'_>) -> CuResult<()> {
+        fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
             output.set_payload(Ping {
                 seq: self.seq,
                 note: format!("{}#{}", self.label, self.seq),
             });
-            output.tov = Tov::Time(clock.now());
+            output.tov = Tov::Time(ctx.now());
             self.seq += 1;
             Ok(())
         }
@@ -115,7 +115,7 @@ pub mod tasks {
 
         fn process(
             &mut self,
-            clock: &RobotClock,
+            ctx: &CuContext,
             input: &Self::Input<'_>,
             output: &mut Self::Output<'_>,
         ) -> CuResult<()> {
@@ -124,7 +124,7 @@ pub mod tasks {
                     seq: ping.seq,
                     reply: format!("{} -> {}", self.label, ping.note),
                 });
-                output.tov = Tov::Time(clock.now());
+                output.tov = Tov::Time(ctx.now());
             } else {
                 output.clear_payload();
             }
@@ -156,7 +156,7 @@ pub mod tasks {
             Ok(Self { label })
         }
 
-        fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
             if let Some(pong) = input.payload() {
                 debug!(
                     "{}: got pong seq={} reply={}",

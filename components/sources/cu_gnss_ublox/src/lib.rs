@@ -160,7 +160,7 @@ impl CuSrcTask for UbxSource {
         })
     }
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         self.send_poll(CLASS_NAV, ID_NAV_PVT)?;
         self.send_poll(CLASS_NAV, ID_NAV_SAT)?;
         self.send_poll(CLASS_NAV, ID_NAV_SIG)?;
@@ -168,10 +168,10 @@ impl CuSrcTask for UbxSource {
         Ok(())
     }
 
-    fn process(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         clear_outputs(new_msg);
 
-        let now_ns = clock.now().as_nanos();
+        let now_ns = ctx.now().as_nanos();
 
         if Self::is_poll_due(
             now_ns,
@@ -203,14 +203,14 @@ impl CuSrcTask for UbxSource {
         }
 
         if let Some(event) = self.pending_events.pop_front() {
-            self.emit_event(clock, new_msg, event);
+            self.emit_event(ctx, new_msg, event);
             return Ok(());
         }
 
         self.read_and_decode()?;
 
         if let Some(event) = self.pending_events.pop_front() {
-            self.emit_event(clock, new_msg, event);
+            self.emit_event(ctx, new_msg, event);
         }
 
         Ok(())
@@ -277,11 +277,11 @@ impl UbxSource {
 
     fn emit_event(
         &self,
-        clock: &RobotClock,
+        ctx: &CuContext,
         out: &mut <Self as CuSrcTask>::Output<'_>,
         event: GnssEvent,
     ) {
-        let tov = Tov::Time(clock.now());
+        let tov = Tov::Time(ctx.now());
         match event {
             GnssEvent::None => {}
             GnssEvent::NavEpoch(nav) => {

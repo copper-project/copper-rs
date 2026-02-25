@@ -776,7 +776,7 @@ mod tests {
             msgs.1.metadata.process_time.end =
                 OptionCuTime::from(CuTime::from((i as u64) * 1_000_000_000 + 600));
 
-            let cl = CopperList::new(i as u32, msgs);
+            let cl = CopperList::new(i as u64, msgs);
             offset += encode_into_slice(&cl, &mut buffer[offset..], standard()).unwrap();
         }
 
@@ -929,7 +929,7 @@ mod tests {
                 temperature: 20.0 + (i as f64),
                 active: i % 2 == 0,
             });
-            let cl = CopperList::new(i as u32, msgs);
+            let cl = CopperList::new(i as u64, msgs);
             offset += encode_into_slice(&cl, &mut buffer[offset..], standard()).unwrap();
         }
 

@@ -58,10 +58,10 @@ impl CuSrcTask for LogvizDemoSrc {
         })
     }
 
-    fn process(&mut self, clock: &RobotClock, output: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
         self.tick = self.tick.wrapping_add(1);
         let phase = self.tick as f32 * 0.1;
-        let now = Tov::Time(clock.now());
+        let now = Tov::Time(ctx.now());
 
         self.image.buffer_handle.with_inner_mut(|inner| {
             let data = &mut inner[..];
@@ -101,7 +101,7 @@ impl CuSrcTask for LogvizDemoSrc {
         );
 
         self.point = PointCloud::new(
-            clock.now(),
+            ctx.now(),
             phase.cos(),
             phase.sin(),
             0.1 + phase.sin() * 0.05,
@@ -147,7 +147,7 @@ impl CuSinkTask for LogvizDemoSink {
         Ok(Self)
     }
 
-    fn process(&mut self, _clock: &RobotClock, _input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
         Ok(())
     }
 }
@@ -155,7 +155,7 @@ impl CuSinkTask for LogvizDemoSink {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cu29::clock::{CuDuration, RobotClock};
+    use cu29::clock::CuDuration;
 
     fn centroid_x(pc: &PointCloudSoa<POINTS>) -> f32 {
         let len = pc.len.min(POINTS);
@@ -178,17 +178,17 @@ mod tests {
     #[test]
     fn demo_pointcloud_centroid_moves() {
         let mut src = LogvizDemoSrc::new(None, ()).expect("failed to build demo source");
-        let (clock, mock) = RobotClock::mock();
+        let (ctx, mock) = CuContext::new_mock_clock();
         let mut output: <LogvizDemoSrc as CuSrcTask>::Output<'_> = Default::default();
 
-        src.process(&clock, &mut output)
+        src.process(&ctx, &mut output)
             .expect("failed to run demo process");
         let pc0 = output.1.payload().expect("missing pointcloud payload");
         let c0 = centroid_x(pc0);
 
         mock.increment(CuDuration(1_000_000));
         let mut output2: <LogvizDemoSrc as CuSrcTask>::Output<'_> = Default::default();
-        src.process(&clock, &mut output2)
+        src.process(&ctx, &mut output2)
             .expect("failed to run demo process");
         let pc1 = output2.1.payload().expect("missing pointcloud payload");
         let c1 = centroid_x(pc1);
@@ -202,17 +202,17 @@ mod tests {
     #[test]
     fn demo_point_payload_moves() {
         let mut src = LogvizDemoSrc::new(None, ()).expect("failed to build demo source");
-        let (clock, mock) = RobotClock::mock();
+        let (ctx, mock) = CuContext::new_mock_clock();
         let mut output: <LogvizDemoSrc as CuSrcTask>::Output<'_> = Default::default();
 
-        src.process(&clock, &mut output)
+        src.process(&ctx, &mut output)
             .expect("failed to run demo process");
         let p0 = output.2.payload().expect("missing point payload");
         let x0 = p0.x;
 
         mock.increment(CuDuration(1_000_000));
         let mut output2: <LogvizDemoSrc as CuSrcTask>::Output<'_> = Default::default();
-        src.process(&clock, &mut output2)
+        src.process(&ctx, &mut output2)
             .expect("failed to run demo process");
         let p1 = output2.2.payload().expect("missing point payload");
         let x1 = p1.x;

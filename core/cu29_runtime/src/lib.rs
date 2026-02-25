@@ -10,6 +10,7 @@ pub mod app;
 #[cfg(feature = "std")]
 mod app_sim;
 pub mod config;
+pub mod context;
 pub mod copperlist;
 #[cfg(feature = "std")]
 pub mod cuasynctask; // no no-std version yet

@@ -543,13 +543,13 @@ where
         })
     }
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         debug!("dps310: source started");
         Ok(())
     }
 
-    fn process<'o>(&mut self, clock: &RobotClock, output: &mut Self::Output<'o>) -> CuResult<()> {
-        let tov = clock.now();
+    fn process<'o>(&mut self, ctx: &CuContext, output: &mut Self::Output<'o>) -> CuResult<()> {
+        let tov = ctx.now();
         let now_ns = tov.as_nanos();
 
         if let Some(last_output_ns) = self.last_output_ns

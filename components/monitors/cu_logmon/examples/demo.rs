@@ -32,9 +32,9 @@ impl log::Log for StdoutLogger {
     fn flush(&self) {}
 }
 
-fn build_metadata(clock: &RobotClock, work_micros: u64) -> CuMsgMetadata {
+fn build_metadata(ctx: &CuContext, work_micros: u64) -> CuMsgMetadata {
     let mut meta = CuMsgMetadata::default();
-    let start = clock.recent();
+    let start = ctx.recent();
     let end = start + CuDuration::from_micros(work_micros);
     meta.process_time.start = OptionCuTime::from(start);
     meta.process_time.end = OptionCuTime::from(end);
@@ -47,22 +47,22 @@ fn main() -> CuResult<()> {
     log::set_logger(&LOGGER)
         .map(|()| log::set_max_level(LevelFilter::Info))
         .ok();
-    let clock = RobotClock::new();
-    let _guard = LoggerRuntime::init(clock.clone(), NullStream, Some(StdoutLogger));
+    let ctx = CuContext::new_with_clock();
+    let _guard = LoggerRuntime::init(ctx.clock.clone(), NullStream, Some(StdoutLogger));
     info!("cu_logmon demo starting");
 
     let mut monitor = CuLogMon::new(&CuConfig::default(), TASKIDS)?;
-    monitor.start(&clock)?;
+    monitor.start(&ctx)?;
 
     let workloads: [u64; 3] = [500, 1500, 900]; // microseconds per task
 
     for _ in 0..30 {
         let metas: Vec<CuMsgMetadata> = workloads
             .iter()
-            .map(|&micros| build_metadata(&clock, micros))
+            .map(|&micros| build_metadata(&ctx, micros))
             .collect();
         let refs: Vec<&CuMsgMetadata> = metas.iter().collect();
-        monitor.process_copperlist(&refs)?;
+        monitor.process_copperlist(&ctx, &refs)?;
         thread::sleep(Duration::from_millis(100));
     }
 

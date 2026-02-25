@@ -8,7 +8,6 @@ mod topic;
 use attachment::encode_attachment;
 use cdr::{CdrBe, Infinite};
 use cu_ros2_payloads::RosBridgeAdapter;
-use cu29::clock::RobotClock;
 use cu29::cubridge::{BridgeChannel, BridgeChannelConfig, BridgeChannelSet, CuBridge};
 use cu29::prelude::*;
 use liveliness::{node_liveliness, publisher_liveliness};
@@ -465,7 +464,7 @@ where
         })
     }
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         let session = zenoh::Wait::wait(zenoh::open(self.session_config.clone()))
             .map_err(cu_error_map("Ros2Bridge: Failed to open session"))?;
 
@@ -512,7 +511,7 @@ where
 
     fn send<'a, Payload>(
         &mut self,
-        clock: &RobotClock,
+        ctx: &CuContext,
         channel: &'static BridgeChannel<<Self::Tx as BridgeChannelSet>::Id, Payload>,
         msg: &CuMsg<Payload>,
     ) -> CuResult<()>
@@ -524,25 +523,25 @@ where
         let namespace = self.namespace.clone();
         let node_name = self.node.clone();
         let channel_id = channel.id();
-        let ctx = self.ctx_mut()?;
+        let bridge_ctx = self.ctx_mut()?;
 
         let tx_idx =
-            Self::find_tx_channel_index(&ctx.tx_channels, channel_id).ok_or_else(|| {
+            Self::find_tx_channel_index(&bridge_ctx.tx_channels, channel_id).ok_or_else(|| {
                 CuError::from(format!("Ros2Bridge: Unknown Tx channel {:?}", channel_id))
             })?;
 
-        Self::init_tx_channel(domain_id, &namespace, &node_name, ctx, tx_idx, codec)?;
+        Self::init_tx_channel(domain_id, &namespace, &node_name, bridge_ctx, tx_idx, codec)?;
 
         let encoded = Self::encode_payload(msg, codec)?;
-        let session_zid = ctx.session.zid();
+        let session_zid = bridge_ctx.session.zid();
 
-        let tx_channel = &mut ctx.tx_channels[tx_idx];
+        let tx_channel = &mut bridge_ctx.tx_channels[tx_idx];
         let publisher = tx_channel
             .publisher
             .as_mut()
             .ok_or_else(|| CuError::from("Ros2Bridge: Tx publisher not initialized"))?;
 
-        let attachment = encode_attachment(tx_channel.sequence_number, clock, &session_zid);
+        let attachment = encode_attachment(tx_channel.sequence_number, ctx, &session_zid);
         tx_channel.sequence_number += 1;
 
         zenoh::Wait::wait(
@@ -558,7 +557,7 @@ where
 
     fn receive<'a, Payload>(
         &mut self,
-        clock: &RobotClock,
+        ctx: &CuContext,
         channel: &'static BridgeChannel<<Self::Rx as BridgeChannelSet>::Id, Payload>,
         msg: &mut CuMsg<Payload>,
     ) -> CuResult<()>
@@ -570,19 +569,19 @@ where
         let namespace = self.namespace.clone();
         let node_name = self.node.clone();
         let channel_id = channel.id();
-        let ctx = self.ctx_mut()?;
+        let bridge_ctx = self.ctx_mut()?;
 
         let rx_idx =
-            Self::find_rx_channel_index(&ctx.rx_channels, channel_id).ok_or_else(|| {
+            Self::find_rx_channel_index(&bridge_ctx.rx_channels, channel_id).ok_or_else(|| {
                 CuError::from(format!("Ros2Bridge: Unknown Rx channel {:?}", channel_id))
             })?;
 
-        Self::init_rx_channel(domain_id, &namespace, &node_name, ctx, rx_idx, codec)?;
+        Self::init_rx_channel(domain_id, &namespace, &node_name, bridge_ctx, rx_idx, codec)?;
 
-        msg.tov = Tov::Time(clock.now());
+        msg.tov = Tov::Time(ctx.now());
 
         let sample = {
-            let subscriber = ctx.rx_channels[rx_idx]
+            let subscriber = bridge_ctx.rx_channels[rx_idx]
                 .subscriber
                 .as_mut()
                 .ok_or_else(|| CuError::from("Ros2Bridge: Rx subscriber not initialized"))?;
@@ -601,7 +600,7 @@ where
         Ok(())
     }
 
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
         if let Some(Ros2Context {
             session,
             node_token: _,

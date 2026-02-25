@@ -1,4 +1,3 @@
-use cu29::clock::RobotClock;
 use cu29::{bincode, prelude::*};
 
 use zenoh::Config;
@@ -103,7 +102,7 @@ where
         })
     }
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         let session = zenoh::Wait::wait(zenoh::open(self.config.config.clone()))
             .map_err(cu_error_map("ZenohSink: Failed to open session"))?;
 
@@ -118,7 +117,7 @@ where
         Ok(())
     }
 
-    fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         let ctx = self
             .ctx
             .as_mut()
@@ -131,7 +130,7 @@ where
         Ok(())
     }
 
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
         if let Some(ZenohContext { session, publisher }) = self.ctx.take() {
             zenoh::Wait::wait(publisher.undeclare())
                 .map_err(cu_error_map("ZenohSink: Failed to undeclare publisher"))?;

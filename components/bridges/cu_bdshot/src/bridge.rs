@@ -120,7 +120,7 @@ where
         })
     }
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         let idle_frame = encode_frame(EscCommand::disarm());
 
         let mut ready = true;
@@ -176,7 +176,7 @@ where
 
     fn send<'a, Payload>(
         &mut self,
-        clock: &RobotClock,
+        ctx: &CuContext,
         channel: &'static BridgeChannel<<Self::Tx as BridgeChannelSet>::Id, Payload>,
         msg: &CuMsg<Payload>,
     ) -> CuResult<()>
@@ -191,7 +191,7 @@ where
             return Ok(());
         }
         if let Some(interval) = self.send_interval {
-            let now = clock.recent();
+            let now = ctx.recent();
             if let Some(last) = self.last_send[idx]
                 && now - last < interval
             {
@@ -216,14 +216,14 @@ where
 
     fn receive<'a, Payload>(
         &mut self,
-        clock: &RobotClock,
+        ctx: &CuContext,
         channel: &'static BridgeChannel<<Self::Rx as BridgeChannelSet>::Id, Payload>,
         msg: &mut CuMsg<Payload>,
     ) -> CuResult<()>
     where
         Payload: CuMsgPayload + 'a,
     {
-        msg.tov = Tov::Time(clock.now());
+        msg.tov = Tov::Time(ctx.now());
         let idx = channel.id().as_index();
         if idx >= P::Board::CHANNEL_COUNT {
             msg.clear_payload();
