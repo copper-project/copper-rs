@@ -7,8 +7,13 @@ use cu29_clock::{RobotClock, RobotClockMock};
 ///
 /// `CuContext` provides callback code with:
 /// - time access through `clock` and `Deref<Target = RobotClock>`
-/// - current copper-list id via `cl_id()`
+/// - current execution sequence id via `cl_id()`
 /// - current task metadata via `task_id()` / `task_index()`
+///
+/// The execution sequence id matches the copper-list id of the iteration being
+/// processed. It is also available in other lifecycle callbacks
+/// (`start`/`preprocess`/`postprocess`/`stop`) for continuity, but outside
+/// `process` callbacks it must not be treated as a live copper-list handle.
 ///
 /// The runtime creates one context per execution loop and updates transient
 /// fields such as the currently executing task before each callback.
@@ -78,7 +83,11 @@ impl CuContext {
         self.current_task_index = None;
     }
 
-    /// Returns the current copper list id.
+    /// Returns the current execution sequence id.
+    ///
+    /// In `process` callbacks, this value is the id of the copper-list being
+    /// processed. In other lifecycle callbacks, this value is still meaningful
+    /// for sequencing but does not imply that a copper-list instance is alive.
     pub fn cl_id(&self) -> u64 {
         self.cl_id
     }

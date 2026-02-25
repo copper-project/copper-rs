@@ -2197,7 +2197,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let __cu_bridges = &mut runtime.bridges;
                 let cl_manager = &mut runtime.copperlists_manager;
                 let kf_manager = &mut runtime.keyframes_manager;
+                let iteration_clid = cl_manager.inner.next_cl_id();
                 let mut ctx = cu29::context::CuContext::builder(clock.clone())
+                    .cl_id(iteration_clid)
                     .task_ids(#mission_mod::TASKS_IDS)
                     .build();
 
@@ -2206,11 +2208,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 let culist = cl_manager.inner.create().expect("Ran out of space for copper lists"); // FIXME: error handling
                 let clid = culist.id;
+                debug_assert_eq!(clid, iteration_clid);
                 kf_manager.reset(clid, clock); // beginning of processing, we empty the serialized frozen states of the tasks.
                 culist.change_state(cu29::copperlist::CopperListState::Processing);
                 culist.msgs.init_zeroed();
                 let mut ctx = cu29::context::CuContext::builder(clock.clone())
-                    .cl_id(clid)
+                    .cl_id(iteration_clid)
                     .task_ids(#mission_mod::TASKS_IDS)
                     .build();
                 {
@@ -2259,7 +2262,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::MissionStarted {
                     mission: #mission.to_string(),
                 });
+                let lifecycle_clid = self.copper_runtime.copperlists_manager.inner.last_cl_id();
                 let mut ctx = cu29::context::CuContext::builder(self.copper_runtime.clock.clone())
+                    .cl_id(lifecycle_clid)
                     .task_ids(#mission_mod::TASKS_IDS)
                     .build();
                 #(#start_calls)*
@@ -2269,7 +2274,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             #stop_all_tasks {
+                let lifecycle_clid = self.copper_runtime.copperlists_manager.inner.last_cl_id();
                 let mut ctx = cu29::context::CuContext::builder(self.copper_runtime.clock.clone())
+                    .cl_id(lifecycle_clid)
                     .task_ids(#mission_mod::TASKS_IDS)
                     .build();
                 #(#stop_calls)*

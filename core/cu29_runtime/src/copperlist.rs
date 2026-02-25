@@ -204,6 +204,20 @@ impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
         Some(result)
     }
 
+    /// Returns the next copper-list id that will be assigned by [`create`](Self::create).
+    #[inline]
+    pub fn next_cl_id(&self) -> u64 {
+        self.current_cl_id
+    }
+
+    /// Returns the most recently assigned copper-list id.
+    ///
+    /// Before the first call to [`create`](Self::create), this returns `0`.
+    #[inline]
+    pub fn last_cl_id(&self) -> u64 {
+        self.current_cl_id.saturating_sub(1)
+    }
+
     /// Peeks at the last element in the queue.
     #[inline]
     pub fn peek(&self) -> Option<&CopperList<P>> {
@@ -457,6 +471,25 @@ mod tests {
 
         let res: Vec<_> = q.iter().map(|x| x.msgs.0).collect();
         assert_eq!(res, [5, 4, 3, 2, 1]);
+    }
+
+    #[test]
+    fn next_and_last_cl_id_track_assigned_ids() {
+        let mut q = CuListsManager::<CuStampedDataSet, 5>::new();
+
+        // Before first allocation, next id is 0 and last id saturates to 0.
+        assert_eq!(q.next_cl_id(), 0);
+        assert_eq!(q.last_cl_id(), 0);
+
+        let cl0 = q.create().unwrap();
+        assert_eq!(cl0.id, 0);
+        assert_eq!(q.next_cl_id(), 1);
+        assert_eq!(q.last_cl_id(), 0);
+
+        let cl1 = q.create().unwrap();
+        assert_eq!(cl1.id, 1);
+        assert_eq!(q.next_cl_id(), 2);
+        assert_eq!(q.last_cl_id(), 1);
     }
 
     #[derive(Decode, Encode, Debug, PartialEq, Clone, Copy)]
