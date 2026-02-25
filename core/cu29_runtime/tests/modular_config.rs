@@ -53,9 +53,9 @@ mod tests {
         let main_config = r#"(
         tasks: [],
         cnx: [],
-        monitor: (
+        monitors: [(
             type: "tasks::ConsoleMon",
-        ),
+        )],
         logging: (
             file: "test.copper",
             level: "debug",
@@ -164,7 +164,7 @@ mod tests {
 
         // Verify monitor
         assert_eq!(
-            config.monitor.as_ref().unwrap().get_type(),
+            config.get_monitor_config().unwrap().get_type(),
             "tasks::ConsoleMon"
         );
     }
@@ -420,9 +420,9 @@ mod tests {
         cnx: [
             (src: "source", dst: "processor", msg: "tasks::DefaultData"),
         ],
-        monitor: (
+        monitors: [(
             type: "tasks::DefaultMonitor",
-        ),
+        )],
     )"#;
 
         let base_path = config_dir.join("base.ron");
@@ -447,12 +447,12 @@ mod tests {
         cnx: [
             (src: "processor", dst: "sink", msg: "tasks::ProcessedData"),
         ],
-        monitor: (
+        monitors: [(
             type: "tasks::CustomMonitor",
             config: {
                 "debug": true,
             },
-        ),
+        )],
         includes: [
             (
                 path: "base.ron",
@@ -533,12 +533,12 @@ mod tests {
 
         // Verify monitor has been overridden
         assert_eq!(
-            config.monitor.as_ref().unwrap().get_type(),
+            config.get_monitor_config().unwrap().get_type(),
             "tasks::CustomMonitor"
         );
 
         // Verify monitor is present
-        assert!(config.monitor.is_some());
+        assert!(config.get_monitor_config().is_some());
         // We can't access private fields, so we'll just verify the type is correct
         // The custom logic was removed to focus on what's essential for testing
     }

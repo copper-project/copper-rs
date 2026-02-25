@@ -216,9 +216,9 @@ mod tests {
             ),
         ],
         cnx: [],
-        monitor: (
+        monitors: [(
             type: "tasks::IncludedMonitor",
-        ),
+        )],
     )"#;
 
         let included_path = config_dir.join("included.ron");
@@ -239,9 +239,9 @@ mod tests {
                 ),
             ],
             cnx: [],
-            monitor: (
+            monitors: [(
                 type: "tasks::MainMonitor",
-            ),
+            )],
             includes: [
                 (
                     path: "included.ron",
@@ -283,7 +283,7 @@ mod tests {
         );
 
         assert_eq!(
-            config.monitor.as_ref().unwrap().get_type(),
+            config.get_monitor_config().unwrap().get_type(),
             "tasks::MainMonitor"
         );
     }
@@ -397,9 +397,9 @@ mod tests {
             (src: "detect1", dst: "octopus", msg: "cu_detect::DetectionPayload"),
             (src: "detect2", dst: "octopus", msg: "cu_detect::DetectionPayload"),
         ],
-        monitor: (
+        monitors: [(
             type: "cu_consolemon::CuConsoleMon",
-        )
+        )]
     )"#;
 
         let main_path = config_dir.join("main.ron");
@@ -520,9 +520,9 @@ mod tests {
         }
 
         // Verify monitor
-        assert!(config.monitor.is_some());
+        assert!(config.get_monitor_config().is_some());
         assert_eq!(
-            config.monitor.as_ref().unwrap().get_type(),
+            config.get_monitor_config().unwrap().get_type(),
             "cu_consolemon::CuConsoleMon"
         );
     }

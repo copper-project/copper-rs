@@ -28,6 +28,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use alloc::boxed::Box;
 #[cfg(not(feature = "std"))]
 use alloc::collections::BTreeMap;
+#[cfg(not(feature = "std"))]
+use alloc::vec;
 #[cfg(feature = "std")]
 use std::collections::BTreeMap;
 
@@ -1184,8 +1186,8 @@ impl ConfigGraphs {
 /// or a collection of mission-specific graphs. The graph structure is based on petgraph.
 #[derive(Debug, Clone)]
 pub struct CuConfig {
-    /// Optional monitoring configuration
-    pub monitor: Option<MonitorConfig>,
+    /// Monitoring configuration list.
+    pub monitors: Vec<MonitorConfig>,
     /// Optional logging configuration
     pub logging: Option<LoggingConfig>,
     /// Optional runtime configuration
@@ -1323,11 +1325,36 @@ struct CuConfigRepresentation {
     resources: Option<Vec<ResourceBundleConfig>>,
     bridges: Option<Vec<BridgeConfig>>,
     cnx: Option<Vec<SerializedCnx>>,
-    monitor: Option<MonitorConfig>,
+    #[serde(
+        default,
+        alias = "monitor",
+        deserialize_with = "deserialize_monitor_configs"
+    )]
+    monitors: Option<Vec<MonitorConfig>>,
     logging: Option<LoggingConfig>,
     runtime: Option<RuntimeConfig>,
     missions: Option<Vec<MissionsConfig>>,
     includes: Option<Vec<IncludesConfig>>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum OneOrManyMonitorConfig {
+    One(MonitorConfig),
+    Many(Vec<MonitorConfig>),
+}
+
+fn deserialize_monitor_configs<'de, D>(
+    deserializer: D,
+) -> Result<Option<Vec<MonitorConfig>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let parsed = Option::<OneOrManyMonitorConfig>::deserialize(deserializer)?;
+    Ok(parsed.map(|value| match value {
+        OneOrManyMonitorConfig::One(single) => vec![single],
+        OneOrManyMonitorConfig::Many(many) => many,
+    }))
 }
 
 /// Shared implementation for deserializing a CuConfigRepresentation into a CuConfig
@@ -1475,7 +1502,7 @@ where
         cuconfig.graphs = Simple(graph);
     }
 
-    cuconfig.monitor = representation.monitor.clone();
+    cuconfig.monitors = representation.monitors.clone().unwrap_or_default();
     cuconfig.logging = representation.logging.clone();
     cuconfig.runtime = representation.runtime.clone();
     cuconfig.resources = representation.resources.clone().unwrap_or_default();
@@ -1517,6 +1544,7 @@ impl Serialize for CuConfig {
         } else {
             Some(self.resources.clone())
         };
+        let monitors = (!self.monitors.is_empty()).then_some(self.monitors.clone());
         match &self.graphs {
             Simple(graph) => {
                 let tasks: Vec<Node> = graph
@@ -1536,7 +1564,7 @@ impl Serialize for CuConfig {
                     tasks: Some(tasks),
                     bridges: bridges.clone(),
                     cnx: Some(cnx),
-                    monitor: self.monitor.clone(),
+                    monitors: monitors.clone(),
                     logging: self.logging.clone(),
                     runtime: self.runtime.clone(),
                     resources: resources.clone(),
@@ -1585,7 +1613,7 @@ impl Serialize for CuConfig {
                     resources: resources.clone(),
                     bridges,
                     cnx: Some(cnx),
-                    monitor: self.monitor.clone(),
+                    monitors,
                     logging: self.logging.clone(),
                     runtime: self.runtime.clone(),
                     missions: Some(missions),
@@ -1601,7 +1629,7 @@ impl Default for CuConfig {
     fn default() -> Self {
         CuConfig {
             graphs: Simple(CuGraph(StableDiGraph::new())),
-            monitor: None,
+            monitors: Vec::new(),
             logging: None,
             runtime: None,
             resources: Vec::new(),
@@ -1622,7 +1650,7 @@ impl CuConfig {
     pub fn new_mission_type() -> Self {
         CuConfig {
             graphs: Missions(HashMap::new()),
-            monitor: None,
+            monitors: Vec::new(),
             logging: None,
             runtime: None,
             resources: Vec::new(),
@@ -1736,7 +1764,12 @@ impl CuConfig {
 
     #[allow(dead_code)]
     pub fn get_monitor_config(&self) -> Option<&MonitorConfig> {
-        self.monitor.as_ref()
+        self.monitors.first()
+    }
+
+    #[allow(dead_code)]
+    pub fn get_monitor_configs(&self) -> &[MonitorConfig] {
+        &self.monitors
     }
 
     #[allow(dead_code)]
@@ -2330,8 +2363,18 @@ fn process_includes(
                 }
             }
 
-            if result.monitor.is_none() {
-                result.monitor = included_representation.monitor;
+            if let Some(included_monitors) = included_representation.monitors {
+                if result.monitors.is_none() {
+                    result.monitors = Some(included_monitors);
+                } else {
+                    let mut monitors = result.monitors.take().unwrap();
+                    for included_monitor in included_monitors {
+                        if !monitors.iter().any(|m| m.type_ == included_monitor.type_) {
+                            monitors.push(included_monitor);
+                        }
+                    }
+                    result.monitors = Some(monitors);
+                }
             }
 
             if result.logging.is_none() {
@@ -2618,7 +2661,7 @@ mod tests {
     #[test]
     fn test_deserialization_error() {
         // Task needs to be an array, but provided tuple wrongfully
-        let txt = r#"( tasks: (), cnx: [], monitor: (type: "ExampleMonitor", ) ) "#;
+        let txt = r#"( tasks: (), cnx: [], monitors: [(type: "ExampleMonitor", )] ) "#;
         let err = CuConfig::deserialize_ron(txt).expect_err("expected deserialization error");
         assert!(
             err.to_string()
@@ -2636,16 +2679,41 @@ mod tests {
     }
 
     #[test]
-    fn test_monitor() {
-        let txt = r#"( tasks: [], cnx: [], monitor: (type: "ExampleMonitor", ) ) "#;
+    fn test_monitor_plural_syntax() {
+        let txt = r#"( tasks: [], cnx: [], monitors: [(type: "ExampleMonitor", )] ) "#;
         let config = CuConfig::deserialize_ron(txt).unwrap();
-        assert_eq!(config.monitor.as_ref().unwrap().type_, "ExampleMonitor");
+        assert_eq!(config.get_monitor_config().unwrap().type_, "ExampleMonitor");
 
-        let txt =
-            r#"( tasks: [], cnx: [], monitor: (type: "ExampleMonitor", config: { "toto": 4, } )) "#;
+        let txt = r#"( tasks: [], cnx: [], monitors: [(type: "ExampleMonitor", config: { "toto": 4, } )] ) "#;
         let config = CuConfig::deserialize_ron(txt).unwrap();
         assert_eq!(
-            config.monitor.as_ref().unwrap().config.as_ref().unwrap().0["toto"].0,
+            config
+                .get_monitor_config()
+                .unwrap()
+                .config
+                .as_ref()
+                .unwrap()
+                .0["toto"]
+                .0,
+            4u8.into()
+        );
+    }
+
+    #[test]
+    fn test_monitor_singular_syntax() {
+        let txt = r#"( tasks: [], cnx: [], monitor: (type: "ExampleMonitor", config: { "toto": 4, } ) ) "#;
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        assert_eq!(config.get_monitor_configs().len(), 1);
+        assert_eq!(config.get_monitor_config().unwrap().type_, "ExampleMonitor");
+        assert_eq!(
+            config
+                .get_monitor_config()
+                .unwrap()
+                .config
+                .as_ref()
+                .unwrap()
+                .0["toto"]
+                .0,
             4u8.into()
         );
     }

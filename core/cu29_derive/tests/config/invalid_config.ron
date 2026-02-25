@@ -25,5 +25,5 @@
             msg: "i32",
         ),
     ],
-    monitor: (type: "ExampleMonitor"),
+    monitors: [(type: "ExampleMonitor")],
 )
