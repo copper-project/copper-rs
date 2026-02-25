@@ -28,6 +28,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use alloc::boxed::Box;
 #[cfg(not(feature = "std"))]
 use alloc::collections::BTreeMap;
+#[cfg(not(feature = "std"))]
+use alloc::vec;
 #[cfg(feature = "std")]
 use std::collections::BTreeMap;
 
