@@ -12,11 +12,15 @@ type PanicHook = Box<dyn Fn(&PanicHookInfo<'_>) + Send + Sync + 'static>;
 #[derive(Clone, Debug)]
 struct LastProgress {
     at: Instant,
+    clid: u64,
 }
 
 impl LastProgress {
     fn new() -> Self {
-        Self { at: Instant::now() }
+        Self {
+            at: Instant::now(),
+            clid: 0,
+        }
     }
 }
 
@@ -78,12 +82,13 @@ impl SharedState {
         }
     }
 
-    fn touch(&self) {
+    fn touch(&self, clid: u64) {
         let mut guard = self
             .last_progress
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
         guard.at = Instant::now();
+        guard.clid = clid;
     }
 
     fn request_exit(&self, code: i32, reason: String) {
@@ -126,40 +131,33 @@ impl CuSafetyMon {
                 }
                 thread::sleep(period);
 
-                let elapsed = {
+                let (elapsed, last_culistid) = {
                     let guard = shared
                         .last_progress
                         .lock()
                         .unwrap_or_else(|poison| poison.into_inner());
-                    guard.at.elapsed()
+                    (guard.at.elapsed(), guard.clid)
                 };
 
                 if elapsed > deadline {
                     let marker = probe.as_ref().and_then(|p| p.marker());
+                    let culist_info = format!("last_culist={last_culistid}");
                     let detail = if let Some(marker) = marker {
                         let component = taskids.get(marker.component_id).map(|s| s.as_str());
-                        match (component, marker.culistid) {
-                            (Some(component), Some(clid)) => format!(
-                                "watchdog timeout after {:?}; last marker: component='{}' step={:?} culist={}",
-                                elapsed, component, marker.step, clid
+                        match component {
+                            Some(component) => format!(
+                                "watchdog timeout after {:?}; last marker: component='{}' step={:?}; {}",
+                                elapsed, component, marker.step, culist_info
                             ),
-                            (Some(component), None) => format!(
-                                "watchdog timeout after {:?}; last marker: component='{}' step={:?}",
-                                elapsed, component, marker.step
-                            ),
-                            (None, Some(clid)) => format!(
-                                "watchdog timeout after {:?}; last marker: component_id={} step={:?} culist={}",
-                                elapsed, marker.component_id, marker.step, clid
-                            ),
-                            (None, None) => format!(
-                                "watchdog timeout after {:?}; last marker: component_id={} step={:?}",
-                                elapsed, marker.component_id, marker.step
+                            None => format!(
+                                "watchdog timeout after {:?}; last marker: component_id={} step={:?}; {}",
+                                elapsed, marker.component_id, marker.step, culist_info
                             ),
                         }
                     } else {
                         format!(
-                            "watchdog timeout after {:?}; no execution marker seen",
-                            elapsed
+                            "watchdog timeout after {:?}; no execution marker seen; {}",
+                            elapsed, culist_info
                         )
                     };
 
@@ -193,14 +191,24 @@ impl CuSafetyMon {
                 .unwrap_or_else(|| "<unknown>".to_string());
 
             let marker = probe.as_ref().and_then(|p| p.marker());
+            let last_culistid = {
+                let guard = shared
+                    .last_progress
+                    .lock()
+                    .unwrap_or_else(|poison| poison.into_inner());
+                guard.clid
+            };
 
             let detail = if let Some(marker) = marker {
                 format!(
-                    "panic at {}: {}; last marker component={} step={:?} culist={:?}",
-                    location, panic_message, marker.component_id, marker.step, marker.culistid
+                    "panic at {}: {}; last marker component={} step={:?}; last_culist={}",
+                    location, panic_message, marker.component_id, marker.step, last_culistid
                 )
             } else {
-                format!("panic at {}: {}", location, panic_message)
+                format!(
+                    "panic at {}: {}; last_culist={}",
+                    location, panic_message, last_culistid
+                )
             };
 
             shared.request_exit(panic_code, detail.clone());
@@ -239,8 +247,8 @@ impl CuMonitor for CuSafetyMon {
         })
     }
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        self.shared.touch();
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
+        self.shared.touch(0);
         self.install_panic_hook();
         self.spawn_watchdog();
         info!(
@@ -254,8 +262,8 @@ impl CuMonitor for CuSafetyMon {
         Ok(())
     }
 
-    fn process_copperlist(&self, _msgs: &[&CuMsgMetadata]) -> CuResult<()> {
-        self.shared.touch();
+    fn process_copperlist(&self, ctx: &CuContext, _msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+        self.shared.touch(ctx.cl_id());
         Ok(())
     }
 
@@ -281,7 +289,7 @@ impl CuMonitor for CuSafetyMon {
         self.execution_probe = Some(probe);
     }
 
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
         self.shared.stopping.store(true, Ordering::SeqCst);
 
         if let Some(handle) = self.watchdog.take() {

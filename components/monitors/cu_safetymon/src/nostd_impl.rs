@@ -17,7 +17,7 @@ impl CuMonitor for CuSafetyMon {
         ))
     }
 
-    fn process_copperlist(&self, _msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+    fn process_copperlist(&self, _ctx: &CuContext, _msgs: &[&CuMsgMetadata]) -> CuResult<()> {
         Ok(())
     }
 
