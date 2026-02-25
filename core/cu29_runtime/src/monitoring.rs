@@ -25,10 +25,14 @@ use std::{collections::HashMap as Map, string::String, string::ToString, vec::Ve
 
 #[cfg(not(feature = "std"))]
 use alloc::{collections::BTreeMap as Map, string::String, string::ToString, vec::Vec};
+#[cfg(not(target_has_atomic = "64"))]
+use spin::Mutex;
 
 #[cfg(not(feature = "std"))]
 mod imp {
     pub use alloc::alloc::{GlobalAlloc, Layout};
+    #[cfg(target_has_atomic = "64")]
+    pub use core::sync::atomic::AtomicU64;
     pub use core::sync::atomic::{AtomicUsize, Ordering};
     pub use libm::sqrt;
 }
@@ -40,6 +44,8 @@ mod imp {
     #[cfg(feature = "memory_monitoring")]
     pub use std::alloc::System;
     pub use std::alloc::{GlobalAlloc, Layout};
+    #[cfg(target_has_atomic = "64")]
+    pub use std::sync::atomic::AtomicU64;
     pub use std::sync::atomic::{AtomicUsize, Ordering};
     #[cfg(feature = "memory_monitoring")]
     #[global_allocator]
@@ -78,7 +84,7 @@ pub struct ExecutionMarker {
     /// Lifecycle phase currently entered.
     pub step: CuTaskState,
     /// CopperList id when available (runtime loop), None during start/stop.
-    pub culistid: Option<u32>,
+    pub culistid: Option<u64>,
 }
 
 /// Lock-free runtime-side progress probe.
@@ -90,7 +96,12 @@ pub struct ExecutionMarker {
 pub struct RuntimeExecutionProbe {
     component_id: AtomicUsize,
     step: AtomicUsize,
-    culistid_plus_one: AtomicUsize,
+    #[cfg(target_has_atomic = "64")]
+    culistid: AtomicU64,
+    #[cfg(target_has_atomic = "64")]
+    culistid_present: AtomicUsize,
+    #[cfg(not(target_has_atomic = "64"))]
+    culistid: Mutex<Option<u64>>,
     sequence: AtomicUsize,
 }
 
@@ -99,7 +110,12 @@ impl Default for RuntimeExecutionProbe {
         Self {
             component_id: AtomicUsize::new(usize::MAX),
             step: AtomicUsize::new(0),
-            culistid_plus_one: AtomicUsize::new(0),
+            #[cfg(target_has_atomic = "64")]
+            culistid: AtomicU64::new(0),
+            #[cfg(target_has_atomic = "64")]
+            culistid_present: AtomicUsize::new(0),
+            #[cfg(not(target_has_atomic = "64"))]
+            culistid: Mutex::new(None),
             sequence: AtomicUsize::new(0),
         }
     }
@@ -112,10 +128,20 @@ impl RuntimeExecutionProbe {
             .store(marker.component_id, Ordering::Relaxed);
         self.step
             .store(task_state_to_usize(marker.step), Ordering::Relaxed);
-        self.culistid_plus_one.store(
-            marker.culistid.map(|id| id as usize + 1).unwrap_or(0),
-            Ordering::Relaxed,
-        );
+        #[cfg(target_has_atomic = "64")]
+        match marker.culistid {
+            Some(culistid) => {
+                self.culistid.store(culistid, Ordering::Relaxed);
+                self.culistid_present.store(1, Ordering::Relaxed);
+            }
+            None => {
+                self.culistid_present.store(0, Ordering::Relaxed);
+            }
+        }
+        #[cfg(not(target_has_atomic = "64"))]
+        {
+            *self.culistid.lock() = marker.culistid;
+        }
         self.sequence.fetch_add(1, Ordering::Release);
     }
 
@@ -132,17 +158,23 @@ impl RuntimeExecutionProbe {
             let seq_before = self.sequence.load(Ordering::Acquire);
             let component_id = self.component_id.load(Ordering::Relaxed);
             let step = self.step.load(Ordering::Relaxed);
-            let culistid_plus_one = self.culistid_plus_one.load(Ordering::Relaxed);
+            #[cfg(target_has_atomic = "64")]
+            let culistid_present = self.culistid_present.load(Ordering::Relaxed);
+            #[cfg(target_has_atomic = "64")]
+            let culistid_value = self.culistid.load(Ordering::Relaxed);
+            #[cfg(not(target_has_atomic = "64"))]
+            let culistid = *self.culistid.lock();
             let seq_after = self.sequence.load(Ordering::Acquire);
             if seq_before == seq_after {
                 if component_id == usize::MAX {
                     return None;
                 }
                 let step = usize_to_task_state(step);
-                let culistid = if culistid_plus_one == 0 {
+                #[cfg(target_has_atomic = "64")]
+                let culistid = if culistid_present == 0 {
                     None
                 } else {
-                    Some((culistid_plus_one - 1) as u32)
+                    Some(culistid_value)
                 };
                 return Some(ExecutionMarker {
                     component_id,
