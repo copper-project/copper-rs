@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_runtime/src/debug.rs`."><title>debug.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-b7b9f40b.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_runtime" data-themes="" data-resource-suffix="" data-rustdoc-version="1.95.0-nightly (c78a29473 2026-02-22)" data-channel="nightly" data-search-js="search-63369b7b.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5013f961.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">cu29_runtime/</div>debug.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! CuDebug: lightweight time-travel debugger helpers on top of Copper logs.
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_runtime/src/debug.rs`."><title>debug.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-b7b9f40b.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_runtime" data-themes="" data-resource-suffix="" data-rustdoc-version="1.95.0-nightly (859951e3c 2026-02-24)" data-channel="nightly" data-search-js="search-63369b7b.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5013f961.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">cu29_runtime/</div>debug.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! CuDebug: lightweight time-travel debugger helpers on top of Copper logs.
 <a href=#2 id=2 data-nosnippet>2</a>//!
 <a href=#3 id=3 data-nosnippet>3</a>//! Design goals:
 <a href=#4 id=4 data-nosnippet>4</a>//! - Do **not** load entire copperlists into memory (logs can be huge).
@@ -30,9 +30,9 @@
 <a href=#30 id=30 data-nosnippet>30</a></span><span class="attr">#[derive(Debug, Clone)]
 <a href=#31 id=31 data-nosnippet>31</a></span><span class="kw">pub struct </span>JumpOutcome {
 <a href=#32 id=32 data-nosnippet>32</a>    <span class="doccomment">/// Copperlist id we landed on
-<a href=#33 id=33 data-nosnippet>33</a>    </span><span class="kw">pub </span>culistid: u32,
+<a href=#33 id=33 data-nosnippet>33</a>    </span><span class="kw">pub </span>culistid: u64,
 <a href=#34 id=34 data-nosnippet>34</a>    <span class="doccomment">/// Keyframe used to rewind (if any)
-<a href=#35 id=35 data-nosnippet>35</a>    </span><span class="kw">pub </span>keyframe_culistid: <span class="prelude-ty">Option</span>&lt;u32&gt;,
+<a href=#35 id=35 data-nosnippet>35</a>    </span><span class="kw">pub </span>keyframe_culistid: <span class="prelude-ty">Option</span>&lt;u64&gt;,
 <a href=#36 id=36 data-nosnippet>36</a>    <span class="doccomment">/// Number of copperlists replayed after the keyframe
 <a href=#37 id=37 data-nosnippet>37</a>    </span><span class="kw">pub </span>replayed: usize,
 <a href=#38 id=38 data-nosnippet>38</a>}
@@ -53,8 +53,8 @@
 <a href=#53 id=53 data-nosnippet>53</a>    pos: LogPosition,
 <a href=#54 id=54 data-nosnippet>54</a>    start_idx: usize,
 <a href=#55 id=55 data-nosnippet>55</a>    len: usize,
-<a href=#56 id=56 data-nosnippet>56</a>    first_id: u32,
-<a href=#57 id=57 data-nosnippet>57</a>    last_id: u32,
+<a href=#56 id=56 data-nosnippet>56</a>    first_id: u64,
+<a href=#57 id=57 data-nosnippet>57</a>    last_id: u64,
 <a href=#58 id=58 data-nosnippet>58</a>    first_ts: <span class="prelude-ty">Option</span>&lt;CuTime&gt;,
 <a href=#59 id=59 data-nosnippet>59</a>    last_ts: <span class="prelude-ty">Option</span>&lt;CuTime&gt;,
 <a href=#60 id=60 data-nosnippet>60</a>}
@@ -88,7 +88,7 @@
 <a href=#88 id=88 data-nosnippet>88</a>    keyframes: Vec&lt;KeyFrame&gt;,
 <a href=#89 id=89 data-nosnippet>89</a>    started: bool,
 <a href=#90 id=90 data-nosnippet>90</a>    current_idx: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-<a href=#91 id=91 data-nosnippet>91</a>    last_keyframe: <span class="prelude-ty">Option</span>&lt;u32&gt;,
+<a href=#91 id=91 data-nosnippet>91</a>    last_keyframe: <span class="prelude-ty">Option</span>&lt;u64&gt;,
 <a href=#92 id=92 data-nosnippet>92</a>    build_callback: CB,
 <a href=#93 id=93 data-nosnippet>93</a>    time_of: TF,
 <a href=#94 id=94 data-nosnippet>94</a>    <span class="comment">// Tiny LRU cache of decoded sections
@@ -236,7 +236,7 @@
 <a href=#236 id=236 data-nosnippet>236</a>        <span class="prelude-val">Ok</span>(())
 <a href=#237 id=237 data-nosnippet>237</a>    }
 <a href=#238 id=238 data-nosnippet>238</a>
-<a href=#239 id=239 data-nosnippet>239</a>    <span class="kw">fn </span>nearest_keyframe(<span class="kw-2">&amp;</span><span class="self">self</span>, target_culistid: u32) -&gt; <span class="prelude-ty">Option</span>&lt;KeyFrame&gt; {
+<a href=#239 id=239 data-nosnippet>239</a>    <span class="kw">fn </span>nearest_keyframe(<span class="kw-2">&amp;</span><span class="self">self</span>, target_culistid: u64) -&gt; <span class="prelude-ty">Option</span>&lt;KeyFrame&gt; {
 <a href=#240 id=240 data-nosnippet>240</a>        <span class="self">self</span>.keyframes
 <a href=#241 id=241 data-nosnippet>241</a>            .iter()
 <a href=#242 id=242 data-nosnippet>242</a>            .filter(|kf| kf.culistid &lt;= target_culistid)
@@ -265,7 +265,7 @@
 <a href=#265 id=265 data-nosnippet>265</a>            .ok()
 <a href=#266 id=266 data-nosnippet>266</a>    }
 <a href=#267 id=267 data-nosnippet>267</a>
-<a href=#268 id=268 data-nosnippet>268</a>    <span class="kw">fn </span>find_section_for_culistid(<span class="kw-2">&amp;</span><span class="self">self</span>, culistid: u32) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
+<a href=#268 id=268 data-nosnippet>268</a>    <span class="kw">fn </span>find_section_for_culistid(<span class="kw-2">&amp;</span><span class="self">self</span>, culistid: u64) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
 <a href=#269 id=269 data-nosnippet>269</a>        <span class="self">self</span>.sections
 <a href=#270 id=270 data-nosnippet>270</a>            .binary_search_by(|s| {
 <a href=#271 id=271 data-nosnippet>271</a>                <span class="kw">if </span>culistid &lt; s.first_id {
@@ -406,7 +406,7 @@
 <a href=#406 id=406 data-nosnippet>406</a>        <span class="prelude-val">Ok</span>((cl, ts))
 <a href=#407 id=407 data-nosnippet>407</a>    }
 <a href=#408 id=408 data-nosnippet>408</a>
-<a href=#409 id=409 data-nosnippet>409</a>    <span class="kw">fn </span>index_for_culistid(<span class="kw-2">&amp;mut </span><span class="self">self</span>, culistid: u32) -&gt; CuResult&lt;usize&gt; {
+<a href=#409 id=409 data-nosnippet>409</a>    <span class="kw">fn </span>index_for_culistid(<span class="kw-2">&amp;mut </span><span class="self">self</span>, culistid: u64) -&gt; CuResult&lt;usize&gt; {
 <a href=#410 id=410 data-nosnippet>410</a>        <span class="kw">let </span>section_idx = <span class="self">self
 <a href=#411 id=411 data-nosnippet>411</a>            </span>.find_section_for_culistid(culistid)
 <a href=#412 id=412 data-nosnippet>412</a>            .ok_or_else(|| CuError::from(<span class="string">"Requested culistid not present in log"</span>))<span class="question-mark">?</span>;
@@ -461,7 +461,7 @@
 <a href=#461 id=461 data-nosnippet>461</a>        <span class="kw">let </span>(target_cl, <span class="kw">_</span>) = <span class="self">self</span>.copperlist_at(target_idx)<span class="question-mark">?</span>;
 <a href=#462 id=462 data-nosnippet>462</a>        <span class="kw">let </span>target_culistid = target_cl.id;
 <a href=#463 id=463 data-nosnippet>463</a>
-<a href=#464 id=464 data-nosnippet>464</a>        <span class="kw">let </span>keyframe_used: <span class="prelude-ty">Option</span>&lt;u32&gt;;
+<a href=#464 id=464 data-nosnippet>464</a>        <span class="kw">let </span>keyframe_used: <span class="prelude-ty">Option</span>&lt;u64&gt;;
 <a href=#465 id=465 data-nosnippet>465</a>        <span class="kw">let </span>replay_start: usize;
 <a href=#466 id=466 data-nosnippet>466</a>
 <a href=#467 id=467 data-nosnippet>467</a>        <span class="comment">// Fast path: forward stepping from current state.
@@ -512,7 +512,7 @@
 <a href=#512 id=512 data-nosnippet>512</a>    }
 <a href=#513 id=513 data-nosnippet>513</a>
 <a href=#514 id=514 data-nosnippet>514</a>    <span class="doccomment">/// Jump to a copperlist by id.
-<a href=#515 id=515 data-nosnippet>515</a>    </span><span class="kw">pub fn </span>goto_cl(<span class="kw-2">&amp;mut </span><span class="self">self</span>, culistid: u32) -&gt; CuResult&lt;JumpOutcome&gt; {
+<a href=#515 id=515 data-nosnippet>515</a>    </span><span class="kw">pub fn </span>goto_cl(<span class="kw-2">&amp;mut </span><span class="self">self</span>, culistid: u64) -&gt; CuResult&lt;JumpOutcome&gt; {
 <a href=#516 id=516 data-nosnippet>516</a>        <span class="kw">let </span>idx = <span class="self">self</span>.index_for_culistid(culistid)<span class="question-mark">?</span>;
 <a href=#517 id=517 data-nosnippet>517</a>        <span class="self">self</span>.goto_index(idx)
 <a href=#518 id=518 data-nosnippet>518</a>    }
@@ -557,7 +557,7 @@
 <a href=#557 id=557 data-nosnippet>557</a>    }
 <a href=#558 id=558 data-nosnippet>558</a>
 <a href=#559 id=559 data-nosnippet>559</a>    <span class="doccomment">/// The nearest keyframe (&lt;= target CL), if any.
-<a href=#560 id=560 data-nosnippet>560</a>    </span><span class="kw">pub fn </span>nearest_keyframe_culistid(<span class="kw-2">&amp;</span><span class="self">self</span>, target_culistid: u32) -&gt; <span class="prelude-ty">Option</span>&lt;u32&gt; {
+<a href=#560 id=560 data-nosnippet>560</a>    </span><span class="kw">pub fn </span>nearest_keyframe_culistid(<span class="kw-2">&amp;</span><span class="self">self</span>, target_culistid: u64) -&gt; <span class="prelude-ty">Option</span>&lt;u64&gt; {
 <a href=#561 id=561 data-nosnippet>561</a>        <span class="self">self</span>.nearest_keyframe(target_culistid).map(|kf| kf.culistid)
 <a href=#562 id=562 data-nosnippet>562</a>    }
 <a href=#563 id=563 data-nosnippet>563</a>
@@ -686,7 +686,7 @@
 <a href=#686 id=686 data-nosnippet>686</a>&gt;(
 <a href=#687 id=687 data-nosnippet>687</a>    section: <span class="kw-2">&amp;</span>[u8],
 <a href=#688 id=688 data-nosnippet>688</a>    time_of: <span class="kw-2">&amp;</span>TF,
-<a href=#689 id=689 data-nosnippet>689</a>) -&gt; CuResult&lt;(usize, u32, u32, <span class="prelude-ty">Option</span>&lt;CuTime&gt;, <span class="prelude-ty">Option</span>&lt;CuTime&gt;)&gt; {
+<a href=#689 id=689 data-nosnippet>689</a>) -&gt; CuResult&lt;(usize, u64, u64, <span class="prelude-ty">Option</span>&lt;CuTime&gt;, <span class="prelude-ty">Option</span>&lt;CuTime&gt;)&gt; {
 <a href=#690 id=690 data-nosnippet>690</a>    <span class="kw">let </span><span class="kw-2">mut </span>cursor = std::io::Cursor::new(section);
 <a href=#691 id=691 data-nosnippet>691</a>    <span class="kw">let </span><span class="kw-2">mut </span>count = <span class="number">0usize</span>;
 <a href=#692 id=692 data-nosnippet>692</a>    <span class="kw">let </span><span class="kw-2">mut </span>first_id = <span class="prelude-val">None</span>;
