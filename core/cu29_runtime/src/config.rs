@@ -1323,11 +1323,36 @@ struct CuConfigRepresentation {
     resources: Option<Vec<ResourceBundleConfig>>,
     bridges: Option<Vec<BridgeConfig>>,
     cnx: Option<Vec<SerializedCnx>>,
+    #[serde(
+        default,
+        alias = "monitor",
+        deserialize_with = "deserialize_monitor_configs"
+    )]
     monitors: Option<Vec<MonitorConfig>>,
     logging: Option<LoggingConfig>,
     runtime: Option<RuntimeConfig>,
     missions: Option<Vec<MissionsConfig>>,
     includes: Option<Vec<IncludesConfig>>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum OneOrManyMonitorConfig {
+    One(MonitorConfig),
+    Many(Vec<MonitorConfig>),
+}
+
+fn deserialize_monitor_configs<'de, D>(
+    deserializer: D,
+) -> Result<Option<Vec<MonitorConfig>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let parsed = Option::<OneOrManyMonitorConfig>::deserialize(deserializer)?;
+    Ok(parsed.map(|value| match value {
+        OneOrManyMonitorConfig::One(single) => vec![single],
+        OneOrManyMonitorConfig::Many(many) => many,
+    }))
 }
 
 /// Shared implementation for deserializing a CuConfigRepresentation into a CuConfig
@@ -2652,13 +2677,32 @@ mod tests {
     }
 
     #[test]
-    fn test_monitor() {
+    fn test_monitor_plural_syntax() {
         let txt = r#"( tasks: [], cnx: [], monitors: [(type: "ExampleMonitor", )] ) "#;
         let config = CuConfig::deserialize_ron(txt).unwrap();
         assert_eq!(config.get_monitor_config().unwrap().type_, "ExampleMonitor");
 
         let txt = r#"( tasks: [], cnx: [], monitors: [(type: "ExampleMonitor", config: { "toto": 4, } )] ) "#;
         let config = CuConfig::deserialize_ron(txt).unwrap();
+        assert_eq!(
+            config
+                .get_monitor_config()
+                .unwrap()
+                .config
+                .as_ref()
+                .unwrap()
+                .0["toto"]
+                .0,
+            4u8.into()
+        );
+    }
+
+    #[test]
+    fn test_monitor_singular_syntax() {
+        let txt = r#"( tasks: [], cnx: [], monitor: (type: "ExampleMonitor", config: { "toto": 4, } ) ) "#;
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        assert_eq!(config.get_monitor_configs().len(), 1);
+        assert_eq!(config.get_monitor_config().unwrap().type_, "ExampleMonitor");
         assert_eq!(
             config
                 .get_monitor_config()

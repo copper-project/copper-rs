@@ -367,7 +367,7 @@
             missions: ["flow"],
         ),
     ],
-    monitors: [(type: "cu_logmon::CuLogMon")],
+    monitor: (type: "cu_logmon::CuLogMon"),
     logging: (
         slab_size_mib: 16,
         section_size_mib: 4,

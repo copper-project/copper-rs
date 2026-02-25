@@ -75,9 +75,7 @@
             msg: "cu_rp_sn754410_new::MotorPayload",
         ),
     ],
-    monitors: [
-        (
-            type: "cu_consolemon::CuConsoleMon",
-        ),
-    ],
+    monitor: (
+        type: "cu_consolemon::CuConsoleMon",
+    ),
 )
