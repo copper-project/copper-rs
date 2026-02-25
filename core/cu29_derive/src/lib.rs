@@ -1967,7 +1967,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             execution_probe.record(cu29::monitoring::ExecutionMarker {
                                 component_id: #monitor_index,
                                 step: CuTaskState::Postprocess,
-                                culistid: Some(clid),
+                                culistid: u32::try_from(clid).ok(),
                             });
                             let maybe_error = {
                                 #rt_guard
@@ -4348,7 +4348,7 @@ fn generate_task_execution_tokens(
                             execution_probe.record(cu29::monitoring::ExecutionMarker {
                                 component_id: #tid,
                                 step: CuTaskState::Process,
-                                culistid: Some(clid),
+                                culistid: u32::try_from(clid).ok(),
                             });
                             #output_start_time
                             let result = {
@@ -4459,7 +4459,7 @@ fn generate_task_execution_tokens(
                             execution_probe.record(cu29::monitoring::ExecutionMarker {
                                 component_id: #tid,
                                 step: CuTaskState::Process,
-                                culistid: Some(clid),
+                                culistid: u32::try_from(clid).ok(),
                             });
                             #output_start_time
                             let result = {
@@ -4580,7 +4580,7 @@ fn generate_task_execution_tokens(
                             execution_probe.record(cu29::monitoring::ExecutionMarker {
                                 component_id: #tid,
                                 step: CuTaskState::Process,
-                                culistid: Some(clid),
+                                culistid: u32::try_from(clid).ok(),
                             });
                             #output_start_time
                             let result = {
@@ -4695,7 +4695,7 @@ fn generate_bridge_rx_execution_tokens(
                     execution_probe.record(cu29::monitoring::ExecutionMarker {
                         component_id: #monitor_index,
                         step: CuTaskState::Process,
-                        culistid: Some(clid),
+                        culistid: u32::try_from(clid).ok(),
                     });
                     cumsg_output.metadata.process_time.start = clock.now().into();
                     let maybe_error = {
@@ -4840,7 +4840,7 @@ fn generate_bridge_tx_execution_tokens(
                     execution_probe.record(cu29::monitoring::ExecutionMarker {
                         component_id: #monitor_index,
                         step: CuTaskState::Process,
-                        culistid: Some(clid),
+                        culistid: u32::try_from(clid).ok(),
                     });
                     cumsg_output.metadata.process_time.start = clock.now().into();
                     let maybe_error = {
