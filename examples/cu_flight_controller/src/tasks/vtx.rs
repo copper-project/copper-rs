@@ -90,7 +90,7 @@ impl CuTask for VtxOsd {
 
     fn process<'i, 'o>(
         &mut self,
-        _clock: &RobotClock,
+        _ctx: &CuContext,
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
@@ -418,7 +418,7 @@ impl CuTask for VtxMspResponder {
 
     fn process<'i, 'o>(
         &mut self,
-        _clock: &RobotClock,
+        _ctx: &CuContext,
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {

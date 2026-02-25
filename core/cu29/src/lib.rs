@@ -55,6 +55,7 @@ extern crate alloc;
 
 pub use cu29_derive::{bundle_resources, resources};
 pub use cu29_runtime::config;
+pub use cu29_runtime::context;
 pub use cu29_runtime::copperlist;
 #[cfg(feature = "std")]
 pub use cu29_runtime::cuasynctask;
@@ -196,6 +197,7 @@ pub mod prelude {
     pub use cu29_log_runtime::*;
     pub use cu29_runtime::app::*;
     pub use cu29_runtime::config::*;
+    pub use cu29_runtime::context::*;
     pub use cu29_runtime::copperlist::*;
     pub use cu29_runtime::cubridge::*;
     pub use cu29_runtime::curuntime::*;

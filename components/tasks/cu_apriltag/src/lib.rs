@@ -201,7 +201,7 @@ impl CuTask for AprilTags {
 
     fn process(
         &mut self,
-        _clock: &RobotClock,
+        _ctx: &CuContext,
         _input: &Self::Input<'_>,
         _output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
@@ -264,7 +264,7 @@ impl CuTask for AprilTags {
 
     fn process(
         &mut self,
-        _clock: &RobotClock,
+        _ctx: &CuContext,
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
@@ -359,8 +359,8 @@ mod tests {
         let input = CuMsg::<CuImage<Vec<u8>>>::new(Some(cuimage));
         let mut output = CuMsg::<AprilTagDetections>::default();
 
-        let clock = RobotClock::new();
-        let result = task.process(&clock, &input, &mut output);
+        let ctx = CuContext::new_with_clock();
+        let result = task.process(&ctx, &input, &mut output);
         assert!(result.is_ok());
 
         if let Some(detections) = output.payload() {

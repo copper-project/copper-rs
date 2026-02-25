@@ -18,7 +18,7 @@ impl CuSinkTask for FlowMspLogger {
         Ok(Self)
     }
 
-    fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
+    fn process<'i>(&mut self, _ctx: &CuContext, input: &Self::Input<'i>) -> CuResult<()> {
         let Some(batch) = input.payload() else {
             return Ok(());
         };

@@ -43,7 +43,7 @@ impl CuSrcTask for CounterSrc {
         Ok(Self { next: 0 })
     }
 
-    fn process(&mut self, _clock: &RobotClock, output: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
         self.next += 1;
         output.set_payload(CounterMsg { value: self.next });
         Ok(())
@@ -75,7 +75,7 @@ impl CuTask for Accumulator {
 
     fn process(
         &mut self,
-        _clock: &RobotClock,
+        _ctx: &CuContext,
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
@@ -111,7 +111,7 @@ impl CuSinkTask for SpySink {
         Ok(Self { last: None })
     }
 
-    fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         self.last = input.payload().map(|p| p.sum);
         Ok(())
     }

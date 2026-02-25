@@ -21,7 +21,7 @@ pub mod tasks {
             Ok(Self {})
         }
 
-        fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+        fn process(&mut self, _ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
             new_msg.set_payload(42);
             Ok(())
         }
@@ -46,7 +46,7 @@ pub mod tasks {
 
         fn process(
             &mut self,
-            _clock: &RobotClock,
+            _ctx: &CuContext,
             input: &Self::Input<'_>,
             output: &mut Self::Output<'_>,
         ) -> CuResult<()> {
@@ -71,7 +71,7 @@ pub mod tasks {
             Ok(Self {})
         }
 
-        fn process(&mut self, _clock: &RobotClock, _input: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, _ctx: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
             Ok(())
         }
     }
@@ -90,12 +90,12 @@ impl CuMonitor for ExampleMonitor {
         Ok(Self { tasks: taskids })
     }
 
-    fn start(&mut self, clock: &RobotClock) -> CuResult<()> {
-        debug!("Monitoring: started: {}", clock.now());
+    fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
+        debug!("Monitoring: started: {}", ctx.now());
         Ok(())
     }
 
-    fn process_copperlist(&self, msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+    fn process_copperlist(&self, _ctx: &CuContext, msgs: &[&CuMsgMetadata]) -> CuResult<()> {
         debug!("Monitoring: Processing copperlist...");
         for (taskid, metadata) in msgs.iter().enumerate() {
             debug!("Task: {} -> {}", taskid, metadata);
@@ -111,8 +111,8 @@ impl CuMonitor for ExampleMonitor {
         Decision::Ignore
     }
 
-    fn stop(&mut self, clock: &RobotClock) -> CuResult<()> {
-        debug!("Monitoring: stopped: {}", clock.now());
+    fn stop(&mut self, ctx: &CuContext) -> CuResult<()> {
+        debug!("Monitoring: stopped: {}", ctx.now());
         Ok(())
     }
 }

@@ -92,11 +92,11 @@ impl CuSrcTask for Tele15 {
             reftime: rt,
         })
     }
-    fn start(&mut self, robot_clock: &RobotClock) -> CuResult<()> {
-        self.sync(robot_clock);
+    fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
+        self.sync(ctx);
         Ok(())
     }
-    fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         let payload = new_msg.payload_mut().insert(LidarCuMsgPayload::default());
         let mut buf = [0u8; 1500];
         let size = match self.socket.read(&mut buf) {
@@ -136,7 +136,7 @@ mod tests {
 
     #[test]
     fn test_tele15() {
-        let clock = RobotClock::new();
+        let ctx = CuContext::new_with_clock();
         let mut streamer = PcapStreamer::new("tests/livox_tele15_small.pcap", "127.0.0.1:56001");
         let config = ComponentConfig::new();
 
@@ -150,13 +150,13 @@ mod tests {
             .unwrap()
             .with_timezone(&Utc);
 
-        tele15.reftime = (datetime, clock.now());
+        tele15.reftime = (datetime, ctx.now());
         const PACKET_SIZE: usize = size_of::<LidarFrame>();
         while streamer
             .send_next::<PACKET_SIZE>()
             .expect("Failed to send next packet")
         {
-            let err = tele15.process(&clock, &mut new_msg);
+            let err = tele15.process(&ctx, &mut new_msg);
             if let Err(e) = err {
                 println!("Error: {e:?}");
                 continue;

@@ -29,8 +29,8 @@ impl<const S: usize> CuSrcTask for DoraSource<S> {
         Ok(Self {})
     }
 
-    fn process(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
-        new_msg.tov = Tov::Time(clock.now());
+    fn process(&mut self, ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+        new_msg.tov = Tov::Time(ctx.now());
         let DoraPayload(v) = new_msg.payload_mut().as_mut().unwrap();
         v.resize(FORTY_K, 0);
         v[42] = 42;
@@ -54,7 +54,7 @@ impl<const S: usize> CuSinkTask for DoraSink<S> {
         Ok(Self {})
     }
 
-    fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         let incoming = input.payload().unwrap();
         if incoming.0[42] != 42 {
             return Err("Something is wrong: 42 expected".into());

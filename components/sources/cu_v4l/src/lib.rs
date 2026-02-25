@@ -23,11 +23,7 @@ mod empty_impl {
             Ok(Self {})
         }
 
-        fn process(
-            &mut self,
-            _clock: &RobotClock,
-            _new_msg: &mut Self::Output<'_>,
-        ) -> CuResult<()> {
+        fn process(&mut self, _ctx: &CuContext, _new_msg: &mut Self::Output<'_>) -> CuResult<()> {
             Ok(())
         }
     }
@@ -228,8 +224,8 @@ mod linux_impl {
             })
         }
 
-        fn start(&mut self, robot_clock: &RobotClock) -> CuResult<()> {
-            let rb_ns = robot_clock.now().as_nanos();
+        fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
+            let rb_ns = ctx.now().as_nanos();
             clock_gettime(ClockId::CLOCK_MONOTONIC)
                 .map(|ts| {
                     self.v4l_clock_time_offset_ns =
@@ -242,7 +238,7 @@ mod linux_impl {
                 .map_err(|e| CuError::new_with_cause("could not start stream", e))
         }
 
-        fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+        fn process(&mut self, _ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
             let (handle, meta) = self
                 .stream
                 .next()
@@ -258,7 +254,7 @@ mod linux_impl {
             Ok(())
         }
 
-        fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
             self.stream
                 .stop()
                 .map_err(|e| CuError::new_with_cause("could not stop stream", e))
@@ -293,7 +289,7 @@ mod linux_impl {
         #[test]
         #[ignore]
         fn emulate_copper_backend() {
-            let clock = RobotClock::new();
+            let ctx = CuContext::new_with_clock();
 
             let term_logger = TermLogger::new(
                 LevelFilter::Debug,
@@ -301,7 +297,7 @@ mod linux_impl {
                 TerminalMode::Mixed,
                 ColorChoice::Auto,
             );
-            let _logger = LoggerRuntime::init(clock.clone(), NullLog {}, Some(*term_logger));
+            let _logger = LoggerRuntime::init(ctx.clock.clone(), NullLog {}, Some(*term_logger));
 
             let rec = RecordingStreamBuilder::new("Camera Viz")
                 .spawn()
@@ -318,7 +314,7 @@ mod linux_impl {
             config.set("timeout_ms", 500);
 
             let mut v4l = V4l::new(Some(&config), ()).unwrap();
-            v4l.start(&clock).unwrap();
+            v4l.start(&ctx).unwrap();
 
             let mut msg = CuMsg::new(None);
             // Define the image format
@@ -330,7 +326,7 @@ mod linux_impl {
                 channel_datatype: None, // Some(ChannelDatatype::U8),
             });
             for _ in 0..1000 {
-                let _output = v4l.process(&clock, &mut msg);
+                let _output = v4l.process(&ctx, &mut msg);
                 if let Some(frame) = msg.payload() {
                     let slice: &[u8] = &frame.buffer_handle.lock().unwrap();
                     let blob = Blob::from(slice);
@@ -344,7 +340,7 @@ mod linux_impl {
                 }
             }
 
-            v4l.stop(&clock).unwrap();
+            v4l.stop(&ctx).unwrap();
         }
     }
 }

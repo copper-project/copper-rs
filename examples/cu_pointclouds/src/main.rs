@@ -37,7 +37,7 @@ impl CuSinkTask for RerunPlyViz {
         })
     }
 
-    fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         let Some(payload) = input.payload() else {
             // Depending on the race condition, we might get an empty payload.
             return Ok(());

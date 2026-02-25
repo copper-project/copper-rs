@@ -30,7 +30,7 @@ mod tests {
             Ok(Self { rec })
         }
 
-        fn process(&mut self, _clock: &RobotClock, msg: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, _ctx: &CuContext, msg: &Self::Input<'_>) -> CuResult<()> {
             if msg.payload().is_none() {
                 debug!("Skipped");
                 return Ok(());

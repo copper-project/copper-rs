@@ -168,7 +168,7 @@ impl<const N: usize> CuSrcTask for CuGStreamer<N> {
         Ok(s)
     }
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         debug!("Gstreamer: Starting pipeline.");
         self.circular_buffer.lock().unwrap().clear();
         self.pipeline
@@ -178,11 +178,11 @@ impl<const N: usize> CuSrcTask for CuGStreamer<N> {
         Ok(())
     }
 
-    fn process(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         let mut circular_buffer = self.circular_buffer.lock().unwrap();
         if let Some(buffer) = circular_buffer.pop_front() {
             // TODO: do precise timing metadata from gstreamer
-            new_msg.tov = clock.now().into();
+            new_msg.tov = ctx.now().into();
             new_msg.set_payload(buffer);
         } else {
             debug!("Gstreamer: Empty circular buffer, sending no payload.");
@@ -191,7 +191,7 @@ impl<const N: usize> CuSrcTask for CuGStreamer<N> {
         Ok(())
     }
 
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
         self.pipeline
             .set_state(gstreamer::State::Null)
             .map_err(|e| CuError::new_with_cause("Failed to stop the gstreamer pipeline.", e))?;

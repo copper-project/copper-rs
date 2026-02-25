@@ -150,7 +150,7 @@ impl CuSinkTask for ImuLogger {
         Ok(Self { last_tov: None })
     }
 
-    fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
+    fn process<'i>(&mut self, _ctx: &CuContext, input: &Self::Input<'i>) -> CuResult<()> {
         if let Some(payload) = input.payload() {
             let tov_time = expect_tov_time(input.tov)?;
             debug_rl!(&LOG_IMU, tov_time, {
@@ -213,7 +213,7 @@ impl CuSinkTask for BarometerLogger {
         Ok(Self { last_tov: None })
     }
 
-    fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
+    fn process<'i>(&mut self, _ctx: &CuContext, input: &Self::Input<'i>) -> CuResult<()> {
         if let Some(payload) = input.payload() {
             let tov_time = expect_tov_time(input.tov)?;
             debug_rl!(&LOG_BARO, tov_time, {
@@ -255,7 +255,7 @@ impl CuSinkTask for MagnetometerLogger {
         Ok(Self { last_tov: None })
     }
 
-    fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
+    fn process<'i>(&mut self, _ctx: &CuContext, input: &Self::Input<'i>) -> CuResult<()> {
         if let Some(payload) = input.payload() {
             let tov_time = expect_tov_time(input.tov)?;
             debug_rl!(&LOG_MAG, tov_time, {
@@ -372,7 +372,7 @@ impl CuTask for RcMapper {
 
     fn process<'i, 'o>(
         &mut self,
-        _clock: &RobotClock,
+        _ctx: &CuContext,
         inputs: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
@@ -503,7 +503,7 @@ impl CuTask for ImuCalibrator {
 
     fn process<'i, 'o>(
         &mut self,
-        _clock: &RobotClock,
+        _ctx: &CuContext,
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
@@ -685,7 +685,7 @@ impl CuTask for AttitudeController {
 
     fn process<'i, 'o>(
         &mut self,
-        clock: &RobotClock,
+        ctx: &CuContext,
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
@@ -719,7 +719,7 @@ impl CuTask for AttitudeController {
             self.last_mode = ctrl.mode;
         }
 
-        let now = clock.now();
+        let now = ctx.now();
         let dt = dt_or_fallback(&mut self.last_time, now, self.dt_fallback);
 
         let (roll_rate, pitch_rate) =
@@ -835,7 +835,7 @@ impl CuTask for RateController {
 
     fn process<'i, 'o>(
         &mut self,
-        clock: &RobotClock,
+        ctx: &CuContext,
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
@@ -876,7 +876,7 @@ impl CuTask for RateController {
         }
         // Note: airmode_active stays true once activated until disarm
 
-        let now = clock.now();
+        let now = ctx.now();
         let dt = dt_or_fallback(&mut self.last_time, now, self.dt_fallback);
 
         if self.airmode_enabled && !self.airmode_active {
@@ -999,7 +999,7 @@ impl CuTask for QuadXMixer {
 
     fn process<'i, 'o>(
         &mut self,
-        _clock: &RobotClock,
+        _ctx: &CuContext,
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {

@@ -1,7 +1,8 @@
 use crate::config::ComponentConfig;
+use crate::context::CuContext;
 use crate::cutask::{CuMsg, CuMsgPayload, CuTask, Freezable};
 use crate::reflect::{Reflect, TypePath};
-use cu29_clock::{CuTime, RobotClock};
+use cu29_clock::CuTime;
 use cu29_traits::{CuError, CuResult};
 use rayon::ThreadPool;
 use std::sync::{Arc, Mutex};
@@ -134,7 +135,7 @@ where
 
     fn process<'i, 'o>(
         &mut self,
-        clock: &RobotClock,
+        ctx: &CuContext,
         input: &Self::Input<'i>,
         real_output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
@@ -151,7 +152,7 @@ where
             }
 
             if let Some(ready_at) = state.ready_at
-                && clock.now() < ready_at
+                && ctx.now() < ready_at
             {
                 // result not yet allowed to surface based on recorded completion time
                 return Ok(());
@@ -172,7 +173,7 @@ where
 
         // immediately requeue a task based on the new input
         self.tp.spawn_fifo({
-            let clock = clock.clone();
+            let ctx = ctx.clone();
             let input = (*input).clone();
             let output = self.output.clone();
             let task = self.task.clone();
@@ -193,10 +194,10 @@ where
 
                 // Track the actual processing interval so replay can honor it.
                 if output_ref.metadata.process_time.start.is_none() {
-                    output_ref.metadata.process_time.start = clock.now().into();
+                    output_ref.metadata.process_time.start = ctx.now().into();
                 }
                 let task_result = match task.lock() {
-                    Ok(mut task_guard) => task_guard.process(&clock, input_ref, output_ref),
+                    Ok(mut task_guard) => task_guard.process(&ctx, input_ref, output_ref),
                     Err(poison) => Err(CuError::from(format!(
                         "Async task mutex poisoned: {poison}"
                     ))),
@@ -210,7 +211,7 @@ where
                         let end_from_metadata: Option<CuTime> =
                             output_ref.metadata.process_time.end.into();
                         let end_time = end_from_metadata.unwrap_or_else(|| {
-                            let now = clock.now();
+                            let now = ctx.now();
                             output_ref.metadata.process_time.end = now.into();
                             now
                         });
@@ -235,7 +236,6 @@ mod tests {
     use crate::cutask::Freezable;
     use crate::input_msg;
     use crate::output_msg;
-    use cu29_clock::RobotClock;
     use cu29_traits::CuResult;
     use rayon::ThreadPoolBuilder;
     use std::borrow::BorrowMut;
@@ -264,7 +264,7 @@ mod tests {
 
         fn process(
             &mut self,
-            _clock: &RobotClock,
+            _ctx: &CuContext,
             input: &Self::Input<'_>,
             output: &mut Self::Output<'_>,
         ) -> CuResult<()> {
@@ -283,7 +283,7 @@ mod tests {
         );
 
         let config = ComponentConfig::default();
-        let clock = RobotClock::default();
+        let context = CuContext::new_with_clock();
         let mut async_task: CuAsyncTask<TestTask, u32> =
             CuAsyncTask::new(Some(&config), (), tp).unwrap();
         let input = CuMsg::new(Some(42u32));
@@ -292,7 +292,7 @@ mod tests {
         loop {
             {
                 let output_ref: &mut CuMsg<u32> = &mut output;
-                async_task.process(&clock, &input, output_ref).unwrap();
+                async_task.process(&context, &input, output_ref).unwrap();
             }
 
             if let Some(val) = output.payload() {
@@ -321,7 +321,7 @@ mod tests {
 
         fn process(
             &mut self,
-            clock: &RobotClock,
+            ctx: &CuContext,
             _input: &Self::Input<'_>,
             output: &mut Self::Output<'_>,
         ) -> CuResult<()> {
@@ -335,7 +335,7 @@ mod tests {
                 .expect("timed out waiting for ready signal");
 
             output.set_payload(ready_time.as_nanos() as u32);
-            output.metadata.process_time.start = clock.now().into();
+            output.metadata.process_time.start = ctx.now().into();
             output.metadata.process_time.end = ready_time.into();
 
             if let Some(done_tx) = DONE_TX.get() {
@@ -348,7 +348,7 @@ mod tests {
     #[test]
     fn background_respects_recorded_ready_time() {
         let tp = Arc::new(ThreadPoolBuilder::new().num_threads(1).build().unwrap());
-        let (clock, clock_mock) = RobotClock::mock();
+        let (context, clock_mock) = CuContext::new_mock_clock();
 
         // Install the control channels for the task.
         let (ready_tx, ready_rx) = mpsc::channel::<CuTime>();
@@ -367,12 +367,12 @@ mod tests {
 
         // Copperlist 0: kick off processing, nothing ready yet.
         clock_mock.set_value(0);
-        async_task.process(&clock, &input, &mut output).unwrap();
+        async_task.process(&context, &input, &mut output).unwrap();
         assert!(output.payload().is_none());
 
         // Copperlist 1 at time 10: still running in the background.
         clock_mock.set_value(10);
-        async_task.process(&clock, &input, &mut output).unwrap();
+        async_task.process(&context, &input, &mut output).unwrap();
         assert!(output.payload().is_none());
 
         // The background thread finishes at time 30 (recorded in metadata).
@@ -401,7 +401,7 @@ mod tests {
 
         // Replay earlier than the recorded end time: the output should be held back.
         clock_mock.set_value(20);
-        async_task.process(&clock, &input, &mut output).unwrap();
+        async_task.process(&context, &input, &mut output).unwrap();
         assert!(
             output.payload().is_none(),
             "Output surfaced before recorded ready time"
@@ -409,7 +409,7 @@ mod tests {
 
         // Once the mock clock reaches the recorded end time, the result is released.
         clock_mock.set_value(30);
-        async_task.process(&clock, &input, &mut output).unwrap();
+        async_task.process(&context, &input, &mut output).unwrap();
         assert_eq!(output.payload(), Some(&30u32));
 
         // Allow the background worker spawned by the last poll to complete so the thread pool shuts down cleanly.

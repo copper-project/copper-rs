@@ -32,11 +32,11 @@ impl CuSrcTask for CaterpillarSource {
         Ok(Self { state: true })
     }
 
-    fn process(&mut self, clock: &RobotClock, output: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
         // forward the state to the next task
         self.state = !self.state;
         output.set_payload(RPGpioPayload { on: self.state });
-        output.tov = Tov::Time(clock.now());
+        output.tov = Tov::Time(ctx.now());
         output.metadata.set_status(self.state);
         Ok(())
     }
@@ -61,7 +61,7 @@ impl CuTask for CaterpillarTask {
 
     fn process(
         &mut self,
-        _clock: &RobotClock,
+        _ctx: &CuContext,
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {

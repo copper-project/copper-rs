@@ -25,7 +25,7 @@ pub mod tasks {
             Ok(Self { counter: 0 })
         }
 
-        fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+        fn process(&mut self, _ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
             self.counter = self.counter.wrapping_add(1);
             new_msg.set_payload(self.counter);
             Ok(())
@@ -51,7 +51,7 @@ pub mod tasks {
 
         fn process(
             &mut self,
-            _clock: &RobotClock,
+            _ctx: &CuContext,
             input: &Self::Input<'_>,
             output: &mut Self::Output<'_>,
         ) -> CuResult<()> {
@@ -77,7 +77,7 @@ pub mod tasks {
             Ok(Self)
         }
 
-        fn process(&mut self, _clock: &RobotClock, _input: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, _ctx: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
             // Do nothing, just exercise the pipeline
             Ok(())
         }
