@@ -66,20 +66,20 @@ fn cu_logmon_and_cu_safetymon_can_run_together() {
     let probe = Arc::new(RuntimeExecutionProbe::default());
     monitors.set_execution_probe(probe.clone());
 
-    let clock = RobotClock::new();
+    let (ctx, _clock_control) = CuContext::new_mock_clock();
     let meta = CuMsgMetadata::default();
     let msgs: [&CuMsgMetadata; 1] = [&meta];
 
-    monitors.start(&clock).expect("monitors start");
+    monitors.start(&ctx).expect("monitors start");
     probe.record(ExecutionMarker {
         component_id: 0,
         step: CuTaskState::Process,
         culistid: Some(1),
     });
     monitors
-        .process_copperlist(&msgs)
+        .process_copperlist(&ctx, &msgs)
         .expect("monitors process_copperlist");
-    monitors.stop(&clock).expect("monitors stop");
+    monitors.stop(&ctx).expect("monitors stop");
 }
 
 #[test]
@@ -111,7 +111,12 @@ fn panic_fault_exits_with_configured_code_and_marker_context() {
             step: CuTaskState::Process,
             culistid: Some(33),
         });
-        monitor.start(&RobotClock::new()).expect("safetymon start");
+        let (ctx, _clock_control) = CuContext::new_mock_clock();
+        monitor.start(&ctx).expect("safetymon start");
+        let cl_ctx = CuContext::builder(ctx.clock.clone()).cl_id(33).build();
+        monitor
+            .process_copperlist(&cl_ctx, &[])
+            .expect("safetymon process_copperlist");
         panic!("panic path test");
     }
 
@@ -128,7 +133,7 @@ fn panic_fault_exits_with_configured_code_and_marker_context() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("cu_safetymon panic fault:"));
     assert!(stderr.contains("component=1"));
-    assert!(stderr.contains("culist=Some(33)"));
+    assert!(stderr.contains("last_culist=33"));
 }
 
 #[test]
@@ -138,7 +143,12 @@ fn lock_fault_exits_with_configured_code_and_last_marker() {
         let mut monitor = CuSafetyMon::new(&cfg, TASK_IDS).expect("safetymon new");
         let probe = Arc::new(RuntimeExecutionProbe::default());
         monitor.set_execution_probe(probe.clone());
-        monitor.start(&RobotClock::new()).expect("safetymon start");
+        let (ctx, _clock_control) = CuContext::new_mock_clock();
+        monitor.start(&ctx).expect("safetymon start");
+        let cl_ctx = CuContext::builder(ctx.clock.clone()).cl_id(9).build();
+        monitor
+            .process_copperlist(&cl_ctx, &[])
+            .expect("safetymon process_copperlist");
         probe.record(ExecutionMarker {
             component_id: 1,
             step: CuTaskState::Process,
@@ -162,5 +172,5 @@ fn lock_fault_exits_with_configured_code_and_last_marker() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("cu_safetymon lock fault:"));
     assert!(stderr.contains("component='driver'"));
-    assert!(stderr.contains("culist=9"));
+    assert!(stderr.contains("last_culist=9"));
 }
