@@ -8,15 +8,18 @@ mod tasks;
 
 use avian3d::prelude::*;
 use bevy::app::AppExit;
+use bevy::asset::UnapprovedPathMode;
 use bevy::core_pipeline::Skybox;
 use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::prelude::{
-    App, AssetServer, ButtonInput, Camera, Camera3d, Color, Commands, Component, DefaultPlugins,
-    Dir3, DirectionalLight, FixedUpdate, GlobalAmbientLight, GlobalTransform, GltfAssetLabel,
-    KeyCode, MessageReader, MessageWriter, MinimalPlugins, Name, PerspectiveProjection,
-    PluginGroup, PostUpdate, Projection, Quat, Query, Res, ResMut, Resource, SceneRoot, Startup,
-    Time, Transform, Update, Vec3, Window, WindowPlugin, With, Without, default,
+    App, AssetPlugin, AssetServer, ButtonInput, Camera, Camera3d, Color, Commands, Component,
+    DefaultPlugins, Dir3, DirectionalLight, EnvironmentMapLight, FixedUpdate, GlobalAmbientLight,
+    GlobalTransform, GltfAssetLabel, KeyCode, MessageReader, MessageWriter, MinimalPlugins, Name,
+    PerspectiveProjection, PluginGroup, PostUpdate, Projection, Quat, Query, Res, ResMut, Resource,
+    SceneRoot, Startup, Time, Transform, Update, Vec3, Window, WindowPlugin, With, Without,
+    default,
 };
+use cached_path::{Cache, Error as CacheError, ProgressBar};
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
 
@@ -24,6 +27,7 @@ use cu_crsf::messages::RcChannelsPayload;
 use cu_sensor_payloads::{BarometerPayload, ImuPayload, MagnetometerPayload};
 
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 
 #[copper_runtime(config = "copperconfig.ron", sim_mode = true, ignore_resources = true)]
@@ -166,6 +170,67 @@ const THRUST_CONSTANT: f32 = 1.0e-6;
 const DRAG_CONSTANT: f32 = 1.0e-7;
 const MAX_OMEGA_RAD_S: f32 = 2200.0;
 const WORLD_MAG_FIELD_UT: [f32; 3] = [20.0, 0.0, -45.0];
+const BASE_ASSETS_URL: &str = "https://cdn.copper-robotics.com/";
+const SKYBOX: &str = "skybox.ktx2";
+const SPECULAR_MAP: &str = "specular_map.ktx2";
+const QUADCOPTER: &str = "quadcopter.glb";
+const LEVEL: &str = "level.glb";
+
+fn create_symlink(src: &str, dst: &str) -> io::Result<()> {
+    let dst_path = Path::new(dst);
+
+    if dst_path.exists() {
+        fs::remove_file(dst_path)?;
+    }
+
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(src, dst)
+    }
+
+    #[cfg(windows)]
+    {
+        std::os::windows::fs::symlink_file(src, dst)
+    }
+}
+
+fn get_asset_path(
+    online_cache: &Cache,
+    offline_cache: &Cache,
+    asset_url: &str,
+    asset_name: &str,
+) -> Result<PathBuf, CacheError> {
+    match online_cache.cached_path(asset_url) {
+        Ok(path) => Ok(path),
+        Err(err) => {
+            if matches!(
+                err,
+                CacheError::HttpError(_) | CacheError::IoError(_) | CacheError::ResourceNotFound(_)
+            ) {
+                eprintln!(
+                    "Failed to fetch latest '{}' from network ({}). Attempting to use cached version.",
+                    asset_name, err
+                );
+                offline_cache.cached_path(asset_url)
+            } else {
+                Err(err)
+            }
+        }
+    }
+}
+
+fn precached_asset_path(
+    online_cache: &Cache,
+    offline_cache: &Cache,
+    asset_name: &str,
+) -> Result<PathBuf, CacheError> {
+    let asset_url = format!("{BASE_ASSETS_URL}{asset_name}");
+    let hashed_path = get_asset_path(online_cache, offline_cache, &asset_url, asset_name)?;
+    let plain_path = hashed_path.parent().unwrap().join(asset_name);
+    create_symlink(hashed_path.to_str().unwrap(), plain_path.to_str().unwrap())
+        .expect("failed to create cached-asset symlink");
+    Ok(plain_path)
+}
 
 fn propeller_from_position(x: f32, y: f32, z: f32, direction: RotationDirection) -> PropellerInfo {
     PropellerInfo {
@@ -256,7 +321,28 @@ fn setup_copper(mut commands: Commands) {
 }
 
 fn setup_world(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let skybox_handle = asset_server.load("skybox.ktx2");
+    let online_cache = Cache::builder()
+        .progress_bar(Some(ProgressBar::Full))
+        .build()
+        .expect("failed to create online file cache");
+
+    let offline_cache = Cache::builder()
+        .progress_bar(Some(ProgressBar::Full))
+        .offline(true)
+        .build()
+        .expect("failed to create offline file cache");
+
+    let quadcopter_path = precached_asset_path(&online_cache, &offline_cache, QUADCOPTER)
+        .expect("failed to get quadcopter.glb (online or cached)");
+    let level_path = precached_asset_path(&online_cache, &offline_cache, LEVEL)
+        .expect("failed to get level.glb (online or cached)");
+    let skybox_path = precached_asset_path(&online_cache, &offline_cache, SKYBOX)
+        .expect("failed to get skybox.ktx2 (online or cached)");
+    let specular_map_path = precached_asset_path(&online_cache, &offline_cache, SPECULAR_MAP)
+        .expect("failed to get specular_map.ktx2 (online or cached)");
+
+    let skybox_handle = asset_server.load(skybox_path.clone());
+    let specular_map_handle = asset_server.load(specular_map_path);
 
     commands.insert_resource(GlobalAmbientLight {
         color: Color::WHITE,
@@ -272,8 +358,14 @@ fn setup_world(mut commands: Commands, asset_server: Res<AssetServer>) {
             ..default()
         }),
         Skybox {
-            image: skybox_handle,
+            image: skybox_handle.clone(),
             brightness: 1000.0,
+            ..default()
+        },
+        EnvironmentMapLight {
+            diffuse_map: skybox_handle.clone(),
+            specular_map: specular_map_handle,
+            intensity: 900.0,
             ..default()
         },
         Transform::from_xyz(-2.0, 1.6, -2.0).looking_at(Vec3::ZERO, Vec3::Y),
@@ -291,7 +383,9 @@ fn setup_world(mut commands: Commands, asset_server: Res<AssetServer>) {
 
     commands.spawn((
         Name::new("quadcopter"),
-        SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("quadcopter.glb"))),
+        SceneRoot(asset_server.load(
+            GltfAssetLabel::Scene(0).from_asset(format!("{}#scene0", quadcopter_path.display())),
+        )),
         RigidBody::Dynamic,
         Transform::from_xyz(0.0, 1.0, 0.0),
         Collider::cuboid(0.14, 0.05, 0.14),
@@ -305,7 +399,11 @@ fn setup_world(mut commands: Commands, asset_server: Res<AssetServer>) {
 
     commands.spawn((
         Name::new("level"),
-        SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("level.glb"))),
+        SceneRoot(
+            asset_server.load(
+                GltfAssetLabel::Scene(0).from_asset(format!("{}#scene0", level_path.display())),
+            ),
+        ),
         ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
         RigidBody::Static,
     ));
@@ -585,13 +683,20 @@ pub fn make_world(headless: bool) -> App {
         return app;
     }
 
-    app.add_plugins(DefaultPlugins.set(WindowPlugin {
-        primary_window: Some(Window {
-            title: "Copper Flight Controller Sim".into(),
-            ..default()
-        }),
-        ..default()
-    }))
+    app.add_plugins(
+        DefaultPlugins
+            .set(WindowPlugin {
+                primary_window: Some(Window {
+                    title: "Copper Flight Controller Sim".into(),
+                    ..default()
+                }),
+                ..default()
+            })
+            .set(AssetPlugin {
+                unapproved_path_mode: UnapprovedPathMode::Allow,
+                ..default()
+            }),
+    )
     .add_plugins(PhysicsPlugins::default())
     .insert_resource(Gravity(Vec3::new(0.0, -9.81, 0.0)))
     .insert_resource(Time::<Physics>::default())
