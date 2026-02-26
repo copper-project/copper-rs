@@ -184,6 +184,10 @@ fn build_test_logger() -> CuResult<(TempDir, PathBuf, Arc<Mutex<MmapUnifiedLogge
 
 #[test]
 fn bridge_sim_callbacks_fire_and_override() -> CuResult<()> {
+    // Keep an explicit construction so `dead_code` doesn't trigger in clippy:
+    // this bridge is otherwise resolved indirectly from config type names.
+    let _dummy_bridge_marker = DummyBridge::default();
+
     BRIDGE_NEW_CALLED.store(0, Ordering::Relaxed);
     BRIDGE_TX_CALLED.store(0, Ordering::Relaxed);
     BRIDGE_RX_CALLED.store(0, Ordering::Relaxed);
