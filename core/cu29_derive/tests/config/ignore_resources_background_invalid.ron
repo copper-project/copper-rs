@@ -1,0 +1,29 @@
+(
+    tasks: [
+        (
+            id: "src",
+            type: "Source",
+        ),
+        (
+            id: "worker",
+            type: "Worker",
+            background: true,
+        ),
+        (
+            id: "sink",
+            type: "Sink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "worker",
+            msg: "i32",
+        ),
+        (
+            src: "worker",
+            dst: "sink",
+            msg: "i32",
+        ),
+    ],
+)

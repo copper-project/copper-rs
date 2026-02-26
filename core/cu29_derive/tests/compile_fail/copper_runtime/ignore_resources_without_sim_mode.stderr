@@ -1,0 +1,10 @@
+error: `ignore_resources` is only supported when `sim_mode` is enabled
+ --> tests/compile_fail/copper_runtime/ignore_resources_without_sim_mode.rs:3:1
+  |
+3 | / #[copper_runtime(
+4 | |     config = "config/ignore_resources_sim_mode_valid.ron",
+5 | |     ignore_resources = true
+6 | | )]
+  | |__^
+  |
+  = note: this error originates in the attribute macro `copper_runtime` (in Nightly builds, run with -Z macro-backtrace for more info)

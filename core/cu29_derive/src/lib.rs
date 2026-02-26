@@ -5093,7 +5093,17 @@ mod tests {
     #[test]
     fn test_compile_fail() {
         use rustc_version::{Channel, version_meta};
-        use std::{fs, path::Path};
+        use std::{env, fs, path::Path};
+
+        let log_index_dir = env::temp_dir()
+            .join("cu29_derive_trybuild_log_index")
+            .join("a")
+            .join("b")
+            .join("c");
+        fs::create_dir_all(&log_index_dir).unwrap();
+        unsafe {
+            env::set_var("LOG_INDEX_DIR", &log_index_dir);
+        }
 
         let dir = Path::new("tests/compile_fail");
         for entry in fs::read_dir(dir).unwrap() {
