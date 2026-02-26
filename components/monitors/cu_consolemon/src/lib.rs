@@ -443,6 +443,7 @@ fn styled_line_from_structured(
 struct TaskStats {
     stats: Vec<CuDurationStatistics>,
     end2end: CuDurationStatistics,
+    missing_ts_samples: u64,
 }
 
 impl TaskStats {
@@ -451,16 +452,27 @@ impl TaskStats {
         TaskStats {
             stats,
             end2end: CuDurationStatistics::new(max_duration),
+            missing_ts_samples: 0,
         }
     }
 
     fn update(&mut self, msgs: &[&CuMsgMetadata]) {
         for (i, &msg) in msgs.iter().enumerate() {
-            let (before, after) = (
-                msg.process_time.start.unwrap(),
-                msg.process_time.end.unwrap(),
-            );
-            self.stats[i].record(after - before);
+            let before = Option::<CuTime>::from(msg.process_time.start);
+            let after = Option::<CuTime>::from(msg.process_time.end);
+            if let (Some(before), Some(after)) = (before, after)
+                && after >= before
+            {
+                self.stats[i].record(after - before);
+            } else {
+                self.missing_ts_samples = self.missing_ts_samples.saturating_add(1);
+                if self.missing_ts_samples <= 5 || self.missing_ts_samples % 100 == 0 {
+                    eprintln!(
+                        "CuConsoleMon warning: missing/invalid process_time for task index {} (count={})",
+                        i, self.missing_ts_samples
+                    );
+                }
+            }
         }
         self.end2end.record(compute_end_to_end_latency(msgs));
     }

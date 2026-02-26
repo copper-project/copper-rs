@@ -55,19 +55,54 @@ impl<'a> NodeGraph<'a> {
             assert!(main_chain.is_empty());
         }
 
+        // If the graph has disconnected components or cycles that are not reachable from
+        // the selected roots, place remaining nodes as separate trees to avoid panics.
+        if self.placements.len() < self.nodes.len() {
+            let mut orphan_y = self
+                .placements
+                .values()
+                .map(|r| r.bottom())
+                .max()
+                .unwrap_or(0);
+            let mut orphan_chain = Vec::new();
+            for idx in 0..self.nodes.len() {
+                if self.placements.contains_key(&idx) {
+                    continue;
+                }
+                self.place_node(idx, 0, orphan_y, &mut orphan_chain);
+                orphan_chain.clear();
+                orphan_y = self
+                    .placements
+                    .get(&idx)
+                    .map_or(orphan_y.saturating_add(1), |r| r.bottom());
+            }
+        }
+
         // calculate connections (eventually, this should be done during node
         // placement, but thats really complicated and i dont wanna deal with that
         // right now. essentially, adding non-trivial connections nudges nodes,
         // and nudging nodes nudges existing connections.)
         let mut conn_map = Map::<(usize, usize), usize>::new();
         let mut next_idx = 1;
+        let mut skipped_oob = 0usize;
+        let mut skipped_missing_placement = 0usize;
         for ea_conn in self.connections.iter() {
             if ea_conn.from_node == ea_conn.to_node {
                 self.loop_connections.push(*ea_conn);
                 continue;
             }
-            let a_pos = self.placements[&ea_conn.from_node];
-            let b_pos = self.placements[&ea_conn.to_node];
+            if ea_conn.from_node >= self.nodes.len() || ea_conn.to_node >= self.nodes.len() {
+                skipped_oob = skipped_oob.saturating_add(1);
+                continue;
+            }
+            let Some(a_pos) = self.placements.get(&ea_conn.from_node).copied() else {
+                skipped_missing_placement = skipped_missing_placement.saturating_add(1);
+                continue;
+            };
+            let Some(b_pos) = self.placements.get(&ea_conn.to_node).copied() else {
+                skipped_missing_placement = skipped_missing_placement.saturating_add(1);
+                continue;
+            };
             // NOTE: don't forget that left and right are swapped
             let a_point = (
                 self.width.saturating_sub(a_pos.left().into()),
@@ -89,6 +124,12 @@ impl<'a> NodeGraph<'a> {
             self.conn_layout.push_connection((*ea_conn, conn_map[&key]));
             self.conn_layout.block_port(a_point, false);
             self.conn_layout.block_port(b_point, true);
+        }
+        if skipped_oob > 0 || skipped_missing_placement > 0 {
+            eprintln!(
+                "CuConsoleMon warning: NodeGraph skipped {} out-of-bounds and {} unplaced connections",
+                skipped_oob, skipped_missing_placement
+            );
         }
         for mut ea_placement in self.placements.values().cloned() {
             ea_placement.x =
@@ -159,17 +200,73 @@ impl<'a> NodeGraph<'a> {
     }
 
     fn nudge(&mut self, idx_node: usize, x: u16) {
-        let rect_me = self.placements[&idx_node];
-        if rect_me.x < x {
-            self.placements.get_mut(&idx_node).unwrap().x = x;
-            for ea_child in get_upstream(&self.connections, idx_node) {
-                if ea_child.from_node == idx_node {
-                    continue;
-                }
-                assert!(self.placements.contains_key(&ea_child.from_node));
-                self.nudge(ea_child.from_node, x + rect_me.width + MARGIN);
-            }
+        let mut active_path = Set::new();
+        let mut skipped_cycles = 0usize;
+        let mut skipped_missing = 0usize;
+        self.nudge_impl(
+            idx_node,
+            x,
+            &mut active_path,
+            &mut skipped_cycles,
+            &mut skipped_missing,
+        );
+        if skipped_cycles > 0 || skipped_missing > 0 {
+            eprintln!(
+                "CuConsoleMon warning: NodeGraph nudge skipped {} cyclic and {} missing-node edges",
+                skipped_cycles, skipped_missing
+            );
         }
+    }
+
+    fn nudge_impl(
+        &mut self,
+        idx_node: usize,
+        x: u16,
+        active_path: &mut Set<usize>,
+        skipped_cycles: &mut usize,
+        skipped_missing: &mut usize,
+    ) {
+        let Some(rect_me) = self.placements.get(&idx_node).copied() else {
+            *skipped_missing = skipped_missing.saturating_add(1);
+            return;
+        };
+        if rect_me.x >= x {
+            return;
+        }
+        if !active_path.insert(idx_node) {
+            *skipped_cycles = skipped_cycles.saturating_add(1);
+            return;
+        }
+        if let Some(rect) = self.placements.get_mut(&idx_node) {
+            rect.x = x;
+        } else {
+            *skipped_missing = skipped_missing.saturating_add(1);
+            active_path.remove(&idx_node);
+            return;
+        }
+
+        let child_x = x.saturating_add(rect_me.width).saturating_add(MARGIN);
+        for ea_child in get_upstream(&self.connections, idx_node) {
+            if ea_child.from_node == idx_node {
+                continue;
+            }
+            if active_path.contains(&ea_child.from_node) {
+                *skipped_cycles = skipped_cycles.saturating_add(1);
+                continue;
+            }
+            if !self.placements.contains_key(&ea_child.from_node) {
+                *skipped_missing = skipped_missing.saturating_add(1);
+                continue;
+            }
+            self.nudge_impl(
+                ea_child.from_node,
+                child_x,
+                active_path,
+                skipped_cycles,
+                skipped_missing,
+            );
+        }
+        active_path.remove(&idx_node);
     }
 
     pub fn content_bounds(&self) -> Size {
