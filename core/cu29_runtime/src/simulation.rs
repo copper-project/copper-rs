@@ -405,9 +405,7 @@ impl<Tx: BridgeChannelSet + 'static, Rx: BridgeChannelSet + 'static> CuBridge
     where
         Payload: CuMsgPayload + 'a,
     {
-        unimplemented!(
-            "A placeholder for sim was called for a bridge send, you need answer SimOverride to ExecutedBySim for the Bridge Tx step."
-        )
+        Ok(())
     }
 
     fn receive<'a, Payload>(
@@ -419,8 +417,6 @@ impl<Tx: BridgeChannelSet + 'static, Rx: BridgeChannelSet + 'static> CuBridge
     where
         Payload: CuMsgPayload + 'a,
     {
-        unimplemented!(
-            "A placeholder for sim was called for a bridge receive, you need answer SimOverride to ExecutedBySim for the Bridge Rx step."
-        )
+        Ok(())
     }
 }
