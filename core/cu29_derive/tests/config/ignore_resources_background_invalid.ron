@@ -1,18 +1,12 @@
 (
     tasks: [
-        (
-            id: "src",
-            type: "Source",
-        ),
+        (id: "src", type: "Source"),
         (
             id: "worker",
             type: "Worker",
             background: true,
         ),
-        (
-            id: "sink",
-            type: "Sink",
-        ),
+        (id: "sink", type: "Sink"),
     ],
     cnx: [
         (
