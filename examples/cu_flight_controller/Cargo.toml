@@ -45,6 +45,7 @@ cu-embedded-registry = { path = "../../components/libs/cu_embedded_registry", de
 cu-logmon = { path = "../../components/monitors/cu_logmon", default-features = false, features = [
   "color_log",
 ], optional = true }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", optional = true }
 cu-ahrs = { path = "../../components/tasks/cu_ahrs", default-features = false, optional = true }
 cu-bmi088 = { path = "../../components/sources/cu_bmi088", default-features = false, optional = true }
 cu-dps310 = { path = "../../components/sources/cu_dps310", default-features = false, optional = true }
@@ -188,7 +189,7 @@ sim = [
   "dep:cu29",
   "cu29/std",
   "dep:cu29-helpers",
-  "dep:cu-logmon",
+  "dep:cu-consolemon",
   "dep:cu-ahrs",
   "dep:cu-crsf",
   "dep:cu-msp-bridge",
