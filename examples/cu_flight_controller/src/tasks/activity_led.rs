@@ -1,6 +1,37 @@
 use super::*;
+
+trait LedBackend {
+    fn set_on(&mut self, on: bool);
+}
+
+#[cfg(feature = "firmware")]
+type ActivityLedBackend = spin::Mutex<cu_micoairh743::GreenLed>;
+
+#[cfg(all(feature = "sim", not(feature = "firmware")))]
+type ActivityLedBackend = crate::sim_support::SimActivityLed;
+
+#[cfg(feature = "firmware")]
+impl LedBackend for ActivityLedBackend {
+    fn set_on(&mut self, on: bool) {
+        let mut led = self.lock();
+        if on {
+            let _ = led.set_high();
+        } else {
+            let _ = led.set_low();
+        }
+    }
+}
+
+#[cfg(all(feature = "sim", not(feature = "firmware")))]
+impl LedBackend for ActivityLedBackend {
+    fn set_on(&mut self, on: bool) {
+        self.set(on);
+    }
+}
+
+#[cfg(feature = "firmware")]
 resources!({
-    led => Owned<spin::Mutex<GreenLed>>,
+    led => Owned<ActivityLedBackend>,
 });
 
 #[derive(Reflect)]
@@ -8,34 +39,34 @@ resources!({
 pub struct ActivityLed {
     on: bool,
     #[reflect(ignore)]
-    led: spin::Mutex<GreenLed>,
+    led: ActivityLedBackend,
 }
 
 impl Freezable for ActivityLed {}
 
 impl CuSinkTask for ActivityLed {
     type Input<'m> = CuMsg<ControlInputs>;
+    #[cfg(feature = "firmware")]
     type Resources<'r> = Resources;
+    #[cfg(all(feature = "sim", not(feature = "firmware")))]
+    type Resources<'r> = ();
 
-    fn new(_config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
-        Ok(Self {
-            on: false,
-            led: resources.led.0,
-        })
+        #[cfg(feature = "firmware")]
+        let mut led = _resources.led.0;
+        #[cfg(all(feature = "sim", not(feature = "firmware")))]
+        let mut led = crate::sim_support::sim_activity_led();
+
+        led.set_on(false);
+        Ok(Self { on: false, led })
     }
 
     fn process<'i>(&mut self, _ctx: &CuContext, _inputs: &Self::Input<'i>) -> CuResult<()> {
-        // Toggle the green LED so we can see if the Copper loop is alive.
-        let mut led = self.led.lock();
-        if self.on {
-            led.set_low();
-        } else {
-            led.set_high();
-        }
         self.on = !self.on;
+        self.led.set_on(self.on);
         Ok(())
     }
 }

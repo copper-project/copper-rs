@@ -81,7 +81,7 @@ impl ImuPayload {
 }
 
 /// Magnetometer payload split from the main IMU data for composition.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Encode, Decode)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect)]
 pub struct MagnetometerPayload {
     pub mag_x: MagneticFluxDensity,
     pub mag_y: MagneticFluxDensity,
@@ -124,7 +124,7 @@ impl MagnetometerPayload {
 }
 
 /// Combined payload allowing optional magnetometer data.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Encode, Decode)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect)]
 pub struct ImuWithMagPayload {
     pub imu: ImuPayload,
     pub mag: Option<MagnetometerPayload>,
