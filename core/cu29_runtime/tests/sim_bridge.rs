@@ -1,7 +1,5 @@
 #![cfg(all(test, feature = "std"))]
 
-#[cfg(feature = "reflect")]
-use bevy_reflect;
 use bincode::{Decode, Encode};
 use cu29::cubridge::{BridgeChannel, CuBridge};
 use cu29::cutask::{CuMsg, CuMsgPayload, CuSinkTask, CuSrcTask, Freezable};
