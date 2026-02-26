@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["CuBridgeLifecycleState","CuTaskCallbackState","SimOverride"],"struct":["CuSimSinkTask","CuSimSrcTask"],"trait":["CuSimSinkInput"]};
+window.SIDEBAR_ITEMS = {"enum":["CuBridgeLifecycleState","CuNoBridgeChannelId","CuTaskCallbackState","SimOverride"],"struct":["CuNoBridgeChannels","CuSimBridge","CuSimSinkTask","CuSimSrcTask"],"trait":["CuSimSinkInput"]};
