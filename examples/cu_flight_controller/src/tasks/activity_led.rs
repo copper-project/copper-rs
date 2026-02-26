@@ -15,9 +15,9 @@ impl LedBackend for ActivityLedBackend {
     fn set_on(&mut self, on: bool) {
         let mut led = self.lock();
         if on {
-            let _ = led.set_high();
+            led.set_high();
         } else {
-            let _ = led.set_low();
+            led.set_low();
         }
     }
 }
