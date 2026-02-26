@@ -1,0 +1,11 @@
+error: `ignore_resources` cannot be used with background tasks because they require the threadpool resource bundle
+ --> tests/compile_fail/copper_runtime/ignore_resources_with_background_tasks.rs:3:1
+  |
+3 | / #[copper_runtime(
+4 | |     config = "config/ignore_resources_background_invalid.ron",
+5 | |     sim_mode = true,
+6 | |     ignore_resources = true
+7 | | )]
+  | |__^
+  |
+  = note: this error originates in the attribute macro `copper_runtime` (in Nightly builds, run with -Z macro-backtrace for more info)

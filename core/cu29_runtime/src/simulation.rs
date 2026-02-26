@@ -109,6 +109,9 @@
 
 use crate::config::ComponentConfig;
 use crate::context::CuContext;
+use crate::cubridge::{
+    BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
+};
 use crate::cutask::CuMsgPack;
 
 use crate::cutask::{CuMsg, CuMsgPayload, CuSinkTask, CuSrcTask, Freezable};
@@ -316,5 +319,104 @@ impl<I: CuSimSinkInput + 'static> CuSinkTask for CuSimSinkTask<I> {
         unimplemented!(
             "A placeholder for sim was called for a sink, you need answer SimOverride to ExecutedBySim for the Process step."
         )
+    }
+}
+
+/// Empty channel-id enum used when a simulated bridge has no channel on one side.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum CuNoBridgeChannelId {}
+
+/// Empty channel set used when a simulated bridge has no channel on one side.
+pub struct CuNoBridgeChannels;
+
+impl BridgeChannelSet for CuNoBridgeChannels {
+    type Id = CuNoBridgeChannelId;
+
+    const STATIC_CHANNELS: &'static [&'static dyn BridgeChannelInfo<Self::Id>] = &[];
+}
+
+/// Placeholder bridge used in simulation when a bridge is configured with
+/// `run_in_sim: false`.
+///
+/// This bridge is parameterized directly by the Tx/Rx channel sets generated
+/// from configuration, so the original bridge type does not need to compile in
+/// simulation mode.
+#[derive(Reflect)]
+#[reflect(no_field_bounds, from_reflect = false, type_path = false)]
+pub struct CuSimBridge<Tx: BridgeChannelSet + 'static, Rx: BridgeChannelSet + 'static> {
+    #[reflect(ignore)]
+    boo: PhantomData<fn() -> (Tx, Rx)>,
+}
+
+impl<Tx: BridgeChannelSet + 'static, Rx: BridgeChannelSet + 'static> TypePath
+    for CuSimBridge<Tx, Rx>
+{
+    fn type_path() -> &'static str {
+        "cu29_runtime::simulation::CuSimBridge"
+    }
+
+    fn short_type_path() -> &'static str {
+        "CuSimBridge"
+    }
+
+    fn type_ident() -> Option<&'static str> {
+        Some("CuSimBridge")
+    }
+
+    fn crate_name() -> Option<&'static str> {
+        Some("cu29_runtime")
+    }
+
+    fn module_path() -> Option<&'static str> {
+        Some("simulation")
+    }
+}
+
+impl<Tx: BridgeChannelSet + 'static, Rx: BridgeChannelSet + 'static> Freezable
+    for CuSimBridge<Tx, Rx>
+{
+}
+
+impl<Tx: BridgeChannelSet + 'static, Rx: BridgeChannelSet + 'static> CuBridge
+    for CuSimBridge<Tx, Rx>
+{
+    type Tx = Tx;
+    type Rx = Rx;
+    type Resources<'r> = ();
+
+    fn new(
+        _config: Option<&ComponentConfig>,
+        _tx_channels: &[BridgeChannelConfig<<Self::Tx as BridgeChannelSet>::Id>],
+        _rx_channels: &[BridgeChannelConfig<<Self::Rx as BridgeChannelSet>::Id>],
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        Ok(Self { boo: PhantomData })
+    }
+
+    fn send<'a, Payload>(
+        &mut self,
+        _ctx: &CuContext,
+        _channel: &'static BridgeChannel<<Self::Tx as BridgeChannelSet>::Id, Payload>,
+        _msg: &CuMsg<Payload>,
+    ) -> CuResult<()>
+    where
+        Payload: CuMsgPayload + 'a,
+    {
+        Ok(())
+    }
+
+    fn receive<'a, Payload>(
+        &mut self,
+        _ctx: &CuContext,
+        _channel: &'static BridgeChannel<<Self::Rx as BridgeChannelSet>::Id, Payload>,
+        _msg: &mut CuMsg<Payload>,
+    ) -> CuResult<()>
+    where
+        Payload: CuMsgPayload + 'a,
+    {
+        Ok(())
     }
 }
