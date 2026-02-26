@@ -109,6 +109,7 @@
 
 use crate::config::ComponentConfig;
 use crate::context::CuContext;
+use crate::cubridge::{BridgeChannel, BridgeChannelConfig, BridgeChannelSet, CuBridge};
 use crate::cutask::CuMsgPack;
 
 use crate::cutask::{CuMsg, CuMsgPayload, CuSinkTask, CuSrcTask, Freezable};
@@ -315,6 +316,88 @@ impl<I: CuSimSinkInput + 'static> CuSinkTask for CuSimSinkTask<I> {
     fn process(&mut self, _ctx: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
         unimplemented!(
             "A placeholder for sim was called for a sink, you need answer SimOverride to ExecutedBySim for the Process step."
+        )
+    }
+}
+
+/// Placeholder bridge used in simulation when a bridge is configured with
+/// `run_in_sim: false`.
+///
+/// This keeps the real bridge channel definitions while avoiding resource
+/// binding and bridge initialization.
+#[derive(Reflect)]
+#[reflect(no_field_bounds, from_reflect = false, type_path = false)]
+pub struct CuSimBridge<B: CuBridge + 'static> {
+    #[reflect(ignore)]
+    boo: PhantomData<fn() -> B>,
+}
+
+impl<B: CuBridge + 'static> TypePath for CuSimBridge<B> {
+    fn type_path() -> &'static str {
+        "cu29_runtime::simulation::CuSimBridge"
+    }
+
+    fn short_type_path() -> &'static str {
+        "CuSimBridge"
+    }
+
+    fn type_ident() -> Option<&'static str> {
+        Some("CuSimBridge")
+    }
+
+    fn crate_name() -> Option<&'static str> {
+        Some("cu29_runtime")
+    }
+
+    fn module_path() -> Option<&'static str> {
+        Some("simulation")
+    }
+}
+
+impl<B: CuBridge + 'static> Freezable for CuSimBridge<B> {}
+
+impl<B: CuBridge + 'static> CuBridge for CuSimBridge<B> {
+    type Tx = B::Tx;
+    type Rx = B::Rx;
+    type Resources<'r> = ();
+
+    fn new(
+        _config: Option<&ComponentConfig>,
+        _tx_channels: &[BridgeChannelConfig<<Self::Tx as BridgeChannelSet>::Id>],
+        _rx_channels: &[BridgeChannelConfig<<Self::Rx as BridgeChannelSet>::Id>],
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        Ok(Self { boo: PhantomData })
+    }
+
+    fn send<'a, Payload>(
+        &mut self,
+        _ctx: &CuContext,
+        _channel: &'static BridgeChannel<<Self::Tx as BridgeChannelSet>::Id, Payload>,
+        _msg: &CuMsg<Payload>,
+    ) -> CuResult<()>
+    where
+        Payload: CuMsgPayload + 'a,
+    {
+        unimplemented!(
+            "A placeholder for sim was called for a bridge send, you need answer SimOverride to ExecutedBySim for the Bridge Tx step."
+        )
+    }
+
+    fn receive<'a, Payload>(
+        &mut self,
+        _ctx: &CuContext,
+        _channel: &'static BridgeChannel<<Self::Rx as BridgeChannelSet>::Id, Payload>,
+        _msg: &mut CuMsg<Payload>,
+    ) -> CuResult<()>
+    where
+        Payload: CuMsgPayload + 'a,
+    {
+        unimplemented!(
+            "A placeholder for sim was called for a bridge receive, you need answer SimOverride to ExecutedBySim for the Bridge Rx step."
         )
     }
 }

@@ -707,11 +707,23 @@ pub struct BridgeConfig {
     pub resources: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub missions: Option<Vec<String>>,
+    /// Whether this bridge should run as the real implementation in simulation mode.
+    ///
+    /// Default is `true` to preserve historical behavior where bridges were always
+    /// instantiated in sim mode.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_in_sim: Option<bool>,
     /// List of logical endpoints exposed by this bridge.
     pub channels: Vec<BridgeChannelConfigRepresentation>,
 }
 
 impl BridgeConfig {
+    /// By default, bridges run as real implementations in sim mode for backward compatibility.
+    #[allow(dead_code)]
+    pub fn is_run_in_sim(&self) -> bool {
+        self.run_in_sim.unwrap_or(true)
+    }
+
     fn to_node(&self) -> Node {
         let mut node = Node::new_with_flavor(&self.id, &self.type_, Flavor::Bridge);
         node.config = self.config.clone();
@@ -2852,6 +2864,7 @@ mod tests {
             config: Some(bridge_config),
             resources: None,
             missions: None,
+            run_in_sim: None,
             channels: vec![
                 BridgeChannelConfigRepresentation::Rx {
                     id: "status".to_string(),
@@ -2874,6 +2887,7 @@ mod tests {
         let deserialized = CuConfig::deserialize_ron(&serialized).unwrap();
         assert_eq!(deserialized.bridges.len(), 1);
         let bridge = &deserialized.bridges[0];
+        assert!(bridge.is_run_in_sim());
         assert_eq!(bridge.channels.len(), 2);
         assert!(matches!(
             bridge.channels[0],
@@ -3055,6 +3069,7 @@ mod tests {
             config: None,
             resources: Some(bridge_resources),
             missions: None,
+            run_in_sim: None,
             channels: vec![BridgeChannelConfigRepresentation::Tx {
                 id: "uplink".to_string(),
                 route: None,

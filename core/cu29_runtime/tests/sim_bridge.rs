@@ -1,7 +1,7 @@
 #![cfg(all(test, feature = "std"))]
 
 #[cfg(feature = "reflect")]
-use ::bevy_reflect;
+use bevy_reflect;
 use bincode::{Decode, Encode};
 use cu29::cubridge::{BridgeChannel, CuBridge};
 use cu29::cutask::{CuMsg, CuMsgPayload, CuSinkTask, CuSrcTask, Freezable};
@@ -25,6 +25,7 @@ use tempfile::TempDir;
 
 static BRIDGE_TX_CALLED: AtomicUsize = AtomicUsize::new(0);
 static BRIDGE_RX_CALLED: AtomicUsize = AtomicUsize::new(0);
+static BRIDGE_NEW_CALLED: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq, Reflect)]
 struct Ping {
@@ -67,6 +68,7 @@ impl CuBridge for DummyBridge {
         >],
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self> {
+        BRIDGE_NEW_CALLED.fetch_add(1, Ordering::Relaxed);
         Ok(Self::default())
     }
 
@@ -184,6 +186,10 @@ fn build_test_logger() -> CuResult<(TempDir, PathBuf, Arc<Mutex<MmapUnifiedLogge
 
 #[test]
 fn bridge_sim_callbacks_fire_and_override() -> CuResult<()> {
+    BRIDGE_NEW_CALLED.store(0, Ordering::Relaxed);
+    BRIDGE_TX_CALLED.store(0, Ordering::Relaxed);
+    BRIDGE_RX_CALLED.store(0, Ordering::Relaxed);
+
     let (_temp_dir, _log_path, logger) = build_test_logger()?;
     let (robot_clock, _mock) = RobotClock::mock();
 
@@ -238,7 +244,8 @@ fn bridge_sim_callbacks_fire_and_override() -> CuResult<()> {
     assert_eq!(tx_calls, 1);
     assert_eq!(rx_calls, 1);
 
-    // Ensure real bridge was not used (counts remain zero)
+    // Ensure real bridge was not instantiated nor used (sim placeholder path).
+    assert_eq!(BRIDGE_NEW_CALLED.load(Ordering::Relaxed), 0);
     assert_eq!(BRIDGE_TX_CALLED.load(Ordering::Relaxed), 0);
     assert_eq!(BRIDGE_RX_CALLED.load(Ordering::Relaxed), 0);
     Ok(())

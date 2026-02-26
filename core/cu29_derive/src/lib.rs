@@ -1035,7 +1035,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 Err(e) => return return_error(e.to_string()),
             };
         let bridge_resource_mappings =
-            build_bridge_resource_mappings(&resource_specs, &culist_bridge_specs);
+            build_bridge_resource_mappings(&resource_specs, &culist_bridge_specs, sim_mode);
 
         let ids = build_monitored_ids(&task_specs.ids, &mut culist_bridge_specs);
 
@@ -1075,8 +1075,20 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             add_reflect_type(task_type.clone());
         }
 
-        for bridge_spec in &culist_bridge_specs {
-            add_reflect_type(bridge_spec.type_path.clone());
+        let bridge_runtime_types: Vec<Type> = culist_bridge_specs
+            .iter()
+            .map(|spec| {
+                if sim_mode && !spec.run_in_sim {
+                    let bridge_type = &spec.type_path;
+                    parse_quote!(cu29::simulation::CuSimBridge<#bridge_type>)
+                } else {
+                    spec.type_path.clone()
+                }
+            })
+            .collect();
+
+        for (bridge_index, bridge_spec) in culist_bridge_specs.iter().enumerate() {
+            add_reflect_type(bridge_runtime_types[bridge_index].clone());
             for channel in bridge_spec
                 .rx_channels
                 .iter()
@@ -1101,14 +1113,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             })
             .collect();
 
-        let bridge_types: Vec<Type> = culist_bridge_specs
-            .iter()
-            .map(|spec| spec.type_path.clone())
-            .collect();
-        let bridges_type_tokens: proc_macro2::TokenStream = if bridge_types.is_empty() {
+        let bridges_type_tokens: proc_macro2::TokenStream = if bridge_runtime_types.is_empty() {
             quote! { () }
         } else {
-            let tuple: TypeTuple = parse_quote! { (#(#bridge_types),*,) };
+            let bridge_types_for_tuple = bridge_runtime_types.clone();
+            let tuple: TypeTuple = parse_quote! { (#(#bridge_types_for_tuple),*,) };
             quote! { #tuple }
         };
 
@@ -1124,7 +1133,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             .map(|(idx, spec)| {
                 let binding_ident = &bridge_binding_idents[idx];
                 let bridge_mapping_ref = bridge_resource_mappings.refs[idx].clone();
-                let bridge_type = &spec.type_path;
+                let bridge_type = &bridge_runtime_types[idx];
                 let bridge_name = spec.id.clone();
                 let config_index = syn::Index::from(spec.config_index);
                 let binding_error = LitStr::new(
@@ -2896,6 +2905,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::simulation::CuTaskCallbackState;
                 use cu29::simulation::CuSimSrcTask;
                 use cu29::simulation::CuSimSinkTask;
+                use cu29::simulation::CuSimBridge;
                 use cu29::prelude::app::CuSimApplication;
                 use cu29::cubridge::BridgeChannelSet;
             })
@@ -3644,6 +3654,7 @@ fn build_bridge_specs(
         specs.push(BridgeSpec {
             id: bridge_cfg.id.clone(),
             type_path,
+            run_in_sim: bridge_cfg.is_run_in_sim(),
             config_index: bridge_index,
             tuple_index: 0,
             monitor_index: None,
@@ -3947,6 +3958,7 @@ fn build_task_resource_mappings(
 fn build_bridge_resource_mappings(
     resource_specs: &[ResourceKeySpec],
     bridge_specs: &[BridgeSpec],
+    sim_mode: bool,
 ) -> ResourceMappingTokens {
     let mut per_bridge: Vec<Vec<&ResourceKeySpec>> = vec![Vec::new(); bridge_specs.len()];
 
@@ -3954,6 +3966,9 @@ fn build_bridge_resource_mappings(
         let ResourceOwner::Bridge(bridge_index) = spec.owner else {
             continue;
         };
+        if sim_mode && !bridge_specs[bridge_index].run_in_sim {
+            continue;
+        }
         per_bridge[bridge_index].push(spec);
     }
 
@@ -4910,6 +4925,7 @@ struct BridgeChannelSpec {
 struct BridgeSpec {
     id: String,
     type_path: Type,
+    run_in_sim: bool,
     config_index: usize,
     tuple_index: usize,
     monitor_index: Option<usize>,
@@ -4993,6 +5009,7 @@ mod tests {
         let bridge_spec = BridgeSpec {
             id: "radio".to_string(),
             type_path: parse_str("bridge::Dummy").unwrap(),
+            run_in_sim: true,
             config_index: 0,
             tuple_index: 0,
             monitor_index: None,
