@@ -1,3 +1,5 @@
+extern crate cu29 as bevy;
+
 mod messages;
 
 use cu29::prelude::*;

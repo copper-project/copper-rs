@@ -9,7 +9,7 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
-# default-run = "quad-sim"
+default-run = "quad-sim"
 
 publish = false
 
@@ -30,12 +30,10 @@ ignored = ["bincode"]
 ### Hardware
 cu-bdshot = { path = "../../components/bridges/cu_bdshot", default-features = false, optional = true }
 cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false, features = [
-  "defmt",
   "alloc",
   "embedded-io-06",
 ], optional = true }
 cu-msp-bridge = { path = "../../components/bridges/cu_msp_bridge", default-features = false, features = [
-  "defmt",
   "alloc",
 ], optional = true }
 cu-msp-lib = { path = "../../components/libs/cu_msp_lib", default-features = false, features = [
@@ -43,25 +41,14 @@ cu-msp-lib = { path = "../../components/libs/cu_msp_lib", default-features = fal
 ] }
 cu-sdlogger = { path = "../../components/libs/cu_sdlogger", optional = true }
 cu-micoairh743 = { path = "../../components/res/cu_micoairh743", optional = true }
-cu-embedded-registry = { path = "../../components/libs/cu_embedded_registry", default-features = false, features = [
-  "defmt",
-], optional = true }
+cu-embedded-registry = { path = "../../components/libs/cu_embedded_registry", default-features = false, optional = true }
 cu-logmon = { path = "../../components/monitors/cu_logmon", default-features = false, features = [
-  "defmt",
   "color_log",
 ], optional = true }
-cu-ahrs = { path = "../../components/tasks/cu_ahrs", default-features = false, features = [
-  "defmt",
-], optional = true }
-cu-bmi088 = { path = "../../components/sources/cu_bmi088", default-features = false, features = [
-  "defmt",
-], optional = true }
-cu-dps310 = { path = "../../components/sources/cu_dps310", default-features = false, features = [
-  "defmt",
-], optional = true }
-cu-ist8310 = { path = "../../components/sources/cu_ist8310", default-features = false, features = [
-  "defmt",
-], optional = true }
+cu-ahrs = { path = "../../components/tasks/cu_ahrs", default-features = false, optional = true }
+cu-bmi088 = { path = "../../components/sources/cu_bmi088", default-features = false, optional = true }
+cu-dps310 = { path = "../../components/sources/cu_dps310", default-features = false, optional = true }
+cu-ist8310 = { path = "../../components/sources/cu_ist8310", default-features = false, optional = true }
 
 ### Algos
 cu-pid = { path = "../../components/tasks/cu_pid", default-features = false, version = "0.13.0" }
@@ -74,6 +61,7 @@ spin = { workspace = true }
 
 ## Log reader depencies
 cu29-export = { workspace = true, optional = true }
+cu29-helpers = { workspace = true, optional = true }
 
 ## Sim dependencies
 bevy = { workspace = true, default-features = false, features = [
@@ -176,9 +164,12 @@ firmware = [
   "dep:cu-crsf",
   "dep:cu-msp-bridge",
   "cu-crsf/defmt",
+  "cu-msp-bridge/defmt",
   "dep:cu-embedded-registry",
+  "cu-embedded-registry/defmt",
   "dep:cu-sdlogger",
   "dep:cu-logmon",
+  "cu-ahrs/defmt",
   "cu-logmon/defmt",
 ]
 logreader = [
@@ -188,6 +179,7 @@ logreader = [
   "serde/std",
   "dep:cu29-export",
   "dep:cu-crsf",
+  "dep:cu-msp-bridge",
   "dep:cu-bdshot",
   "dep:cu-ahrs",
   "cu-bdshot/messages-only",
@@ -195,10 +187,16 @@ logreader = [
 sim = [
   "dep:cu29",
   "cu29/std",
+  "dep:cu29-helpers",
+  "dep:cu-logmon",
+  "dep:cu-ahrs",
+  "dep:cu-crsf",
+  "dep:cu-msp-bridge",
+  "dep:cu-bdshot",
+  "cu-bdshot/messages-only",
   "dep:bevy",
   "dep:avian3d",
   "dep:cached-path",
-  "dep:cu29-export",
   "dep:evdev",
 ]
 
@@ -220,10 +218,10 @@ name = "quad-logreader"
 path = "src/logreader.rs"
 required-features = ["logreader"]
 
-# [[bin]]
-# name = "quad-sim"
-# path = "src/sim.rs"
-# required-features = ["sim"]
+[[bin]]
+name = "quad-sim"
+path = "src/sim.rs"
+required-features = ["sim"]
 #
 # [[bin]]
 # name = "quad-resim"

@@ -4,7 +4,6 @@ use crate::messages::{BatteryVoltage, BodyCommand, BodyRateSetpoint, ControlInpu
 use cu_ahrs::AhrsPose;
 use cu_bdshot::EscCommand;
 use cu_crsf::messages::RcChannelsPayload;
-use cu_micoairh743::GreenLed;
 use cu_pid::{PIDControlOutputPayload, PIDController};
 use cu_sensor_payloads::{BarometerPayload, ImuPayload, MagnetometerPayload};
 use cu29::prelude::*;
@@ -186,14 +185,24 @@ impl CuSinkTask for ImuLogger {
     }
 }
 
+#[cfg(feature = "firmware")]
 pub type Bmi088Source = cu_bmi088::Bmi088Source<
     cu_micoairh743::Bmi088Spi,
     cu_micoairh743::Bmi088AccCs,
     cu_micoairh743::Bmi088GyrCs,
     cu_micoairh743::Bmi088Delay,
 >;
+#[cfg(feature = "firmware")]
 pub type Dps310Source = cu_dps310::Dps310Source<cu_micoairh743::Dps310I2c>;
+#[cfg(feature = "firmware")]
 pub type Ist8310Source = cu_ist8310::Ist8310Source<cu_micoairh743::Ist8310I2c>;
+
+#[cfg(all(feature = "sim", not(feature = "firmware")))]
+pub type Bmi088Source = crate::sim_support::SimBmi088Source;
+#[cfg(all(feature = "sim", not(feature = "firmware")))]
+pub type Dps310Source = crate::sim_support::SimDps310Source;
+#[cfg(all(feature = "sim", not(feature = "firmware")))]
+pub type Ist8310Source = crate::sim_support::SimIst8310Source;
 
 #[derive(Reflect)]
 pub struct BarometerLogger {

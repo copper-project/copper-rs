@@ -5,6 +5,11 @@ rc:
   #!/usr/bin/env bash
   cargo run -p cu-flight-controller --no-default-features --features sim --bin rc-tester
 
+# Run the Bevy + Copper simulation loop.
+sim:
+  #!/usr/bin/env bash
+  cargo run -p cu-flight-controller --no-default-features --features sim --bin quad-sim
+
 # Extract CopperLists from a log file (JSON export).
 logreader log="logs/embedded.copper":
   #!/usr/bin/env bash
