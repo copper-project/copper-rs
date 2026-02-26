@@ -678,7 +678,7 @@ fn gen_sim_support(
                     let enum_entry_name = config_id_to_enum(&format!("{}_rx_{}", bridge_spec.id, channel.id));
                     let enum_ident = Ident::new(&enum_entry_name, Span::call_site());
                     let channel_type: Type = parse_str::<Type>(channel.msg_type_name.as_str()).unwrap();
-                    let bridge_type = &bridge_spec.type_path;
+                    let bridge_type = runtime_bridge_type_for_spec(bridge_spec, true);
                     let _const_ident = &channel.const_ident;
                     quote! {
                         #enum_ident {
@@ -693,7 +693,7 @@ fn gen_sim_support(
                     let enum_entry_name = config_id_to_enum(&format!("{}_tx_{}", bridge_spec.id, channel.id));
                     let enum_ident = Ident::new(&enum_entry_name, Span::call_site());
                     let channel_type: Type = parse_str::<Type>(channel.msg_type_name.as_str()).unwrap();
-                    let bridge_type = &bridge_spec.type_path;
+                    let bridge_type = runtime_bridge_type_for_spec(bridge_spec, true);
                     let _const_ident = &channel.const_ident;
                     quote! {
                         #enum_ident {
@@ -731,8 +731,10 @@ fn gen_sim_support(
     }
 }
 
-/// Adds #[copper_runtime(config = "path", sim_mode = false/true)] to your application struct to generate the runtime.
+/// Adds `#[copper_runtime(config = "path", sim_mode = false/true, ignore_resources = false/true)]`
+/// to your application struct to generate the runtime.
 /// if sim_mode is omitted, it is set to false.
+/// if ignore_resources is omitted, it is set to false.
 /// This will add a "runtime" field to your struct and implement the "new" and "run" methods.
 #[proc_macro_attribute]
 pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
@@ -745,6 +747,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let mut config_file: Option<LitStr> = None;
     let mut sim_mode = false;
+    let mut ignore_resources = false;
 
     #[cfg(feature = "std")]
     let std = true;
@@ -771,6 +774,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 sim_mode = true;
                 Ok(())
             }
+        } else if meta.path.is_ident("ignore_resources") {
+            if meta.input.peek(syn::Token![=]) {
+                meta.input.parse::<syn::Token![=]>()?;
+                let value: syn::LitBool = meta.input.parse()?;
+                ignore_resources = value.value();
+                Ok(())
+            } else {
+                ignore_resources = true;
+                Ok(())
+            }
         } else {
             Err(meta.error("unsupported property"))
         }
@@ -780,6 +793,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     eprintln!("[parse]");
     // Parse the provided args with the custom parser
     parse_macro_input!(args with attribute_config_parser);
+
+    if ignore_resources && !sim_mode {
+        return return_error(
+            "`ignore_resources` is only supported when `sim_mode` is enabled".to_string(),
+        );
+    }
 
     // Adds the generic parameter for the UnifiedLogger if this is a real application (not sim)
     // This allows to adapt either to the no-std (custom impl) and std (default file based one)
@@ -997,45 +1016,93 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             &culist_bridge_specs,
         );
 
-        let bundle_specs = match build_bundle_specs(&copper_config, mission.as_str()) {
-            Ok(specs) => specs,
-            Err(e) => return return_error(e.to_string()),
-        };
-        let threadpool_bundle_index = if task_specs.background_flags.iter().any(|&flag| flag) {
-            match bundle_specs
-                .iter()
-                .position(|bundle| bundle.id == "threadpool")
-            {
-                Some(index) => Some(index),
-                None => {
-                    return return_error(
-                        "Background tasks require the threadpool bundle to be configured"
-                            .to_string(),
-                    );
-                }
+        let (
+            threadpool_bundle_index,
+            resources_module,
+            resources_instanciator_fn,
+            task_resource_mappings,
+            bridge_resource_mappings,
+        ) = if ignore_resources {
+            if task_specs.background_flags.iter().any(|&flag| flag) {
+                return return_error(
+                    "`ignore_resources` cannot be used with background tasks because they require the threadpool resource bundle"
+                        .to_string(),
+                );
             }
-        } else {
-            None
-        };
 
-        let resource_specs =
-            match collect_resource_specs(graph, &task_specs, &culist_bridge_specs, &bundle_specs) {
+            let bundle_specs: Vec<BundleSpec> = Vec::new();
+            let resource_specs: Vec<ResourceKeySpec> = Vec::new();
+            let (resources_module, resources_instanciator_fn) =
+                match build_resources_module(&bundle_specs) {
+                    Ok(tokens) => tokens,
+                    Err(e) => return return_error(e.to_string()),
+                };
+            let task_resource_mappings =
+                match build_task_resource_mappings(&resource_specs, &task_specs) {
+                    Ok(tokens) => tokens,
+                    Err(e) => return return_error(e.to_string()),
+                };
+            let bridge_resource_mappings =
+                build_bridge_resource_mappings(&resource_specs, &culist_bridge_specs, sim_mode);
+            (
+                None,
+                resources_module,
+                resources_instanciator_fn,
+                task_resource_mappings,
+                bridge_resource_mappings,
+            )
+        } else {
+            let bundle_specs = match build_bundle_specs(&copper_config, mission.as_str()) {
+                Ok(specs) => specs,
+                Err(e) => return return_error(e.to_string()),
+            };
+            let threadpool_bundle_index = if task_specs.background_flags.iter().any(|&flag| flag) {
+                match bundle_specs
+                    .iter()
+                    .position(|bundle| bundle.id == "threadpool")
+                {
+                    Some(index) => Some(index),
+                    None => {
+                        return return_error(
+                            "Background tasks require the threadpool bundle to be configured"
+                                .to_string(),
+                        );
+                    }
+                }
+            } else {
+                None
+            };
+
+            let resource_specs = match collect_resource_specs(
+                graph,
+                &task_specs,
+                &culist_bridge_specs,
+                &bundle_specs,
+            ) {
                 Ok(specs) => specs,
                 Err(e) => return return_error(e.to_string()),
             };
 
-        let (resources_module, resources_instanciator_fn) =
-            match build_resources_module(&bundle_specs) {
-                Ok(tokens) => tokens,
-                Err(e) => return return_error(e.to_string()),
-            };
-        let task_resource_mappings =
-            match build_task_resource_mappings(&resource_specs, &task_specs) {
-                Ok(tokens) => tokens,
-                Err(e) => return return_error(e.to_string()),
-            };
-        let bridge_resource_mappings =
-            build_bridge_resource_mappings(&resource_specs, &culist_bridge_specs, sim_mode);
+            let (resources_module, resources_instanciator_fn) =
+                match build_resources_module(&bundle_specs) {
+                    Ok(tokens) => tokens,
+                    Err(e) => return return_error(e.to_string()),
+                };
+            let task_resource_mappings =
+                match build_task_resource_mappings(&resource_specs, &task_specs) {
+                    Ok(tokens) => tokens,
+                    Err(e) => return return_error(e.to_string()),
+                };
+            let bridge_resource_mappings =
+                build_bridge_resource_mappings(&resource_specs, &culist_bridge_specs, sim_mode);
+            (
+                threadpool_bundle_index,
+                resources_module,
+                resources_instanciator_fn,
+                task_resource_mappings,
+                bridge_resource_mappings,
+            )
+        };
 
         let ids = build_monitored_ids(&task_specs.ids, &mut culist_bridge_specs);
 
@@ -1075,17 +1142,54 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             add_reflect_type(task_type.clone());
         }
 
+        let mut sim_bridge_channel_decls = Vec::<proc_macro2::TokenStream>::new();
         let bridge_runtime_types: Vec<Type> = culist_bridge_specs
             .iter()
             .map(|spec| {
                 if sim_mode && !spec.run_in_sim {
-                    let bridge_type = &spec.type_path;
-                    parse_quote!(cu29::simulation::CuSimBridge<#bridge_type>)
-                } else {
-                    spec.type_path.clone()
+                    let (tx_set_ident, tx_id_ident, rx_set_ident, rx_id_ident) =
+                        sim_bridge_channel_set_idents(spec.tuple_index);
+
+                    if !spec.tx_channels.is_empty() {
+                        let tx_entries = spec.tx_channels.iter().map(|channel| {
+                            let entry_ident = Ident::new(
+                                &channel.const_ident.to_string().to_lowercase(),
+                                Span::call_site(),
+                            );
+                            let msg_type = &channel.msg_type;
+                            quote! { #entry_ident => #msg_type, }
+                        });
+                        sim_bridge_channel_decls.push(quote! {
+                            cu29::tx_channels! {
+                                pub struct #tx_set_ident : #tx_id_ident {
+                                    #(#tx_entries)*
+                                }
+                            }
+                        });
+                    }
+
+                    if !spec.rx_channels.is_empty() {
+                        let rx_entries = spec.rx_channels.iter().map(|channel| {
+                            let entry_ident = Ident::new(
+                                &channel.const_ident.to_string().to_lowercase(),
+                                Span::call_site(),
+                            );
+                            let msg_type = &channel.msg_type;
+                            quote! { #entry_ident => #msg_type, }
+                        });
+                        sim_bridge_channel_decls.push(quote! {
+                            cu29::rx_channels! {
+                                pub struct #rx_set_ident : #rx_id_ident {
+                                    #(#rx_entries)*
+                                }
+                            }
+                        });
+                    }
                 }
+                runtime_bridge_type_for_spec(spec, sim_mode)
             })
             .collect();
+        let sim_bridge_channel_defs = quote! { #(#sim_bridge_channel_decls)* };
 
         for (bridge_index, bridge_spec) in culist_bridge_specs.iter().enumerate() {
             add_reflect_type(bridge_runtime_types[bridge_index].clone());
@@ -3071,6 +3175,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 // CuList is a CopperList with the list of all the messages types as msgs.
                 pub type CuTasks = #task_types_tuple;
                 pub type CuBridges = #bridges_type_tokens;
+                #sim_bridge_channel_defs
                 #resources_module
                 #resources_instanciator_fn
                 #task_mapping_defs
@@ -4655,7 +4760,7 @@ fn generate_bridge_rx_execution_tokens(
             .monitor_index
             .expect("Bridge Rx channel missing monitor index"),
     );
-    let bridge_type = &bridge_spec.type_path;
+    let bridge_type = runtime_bridge_type_for_spec(bridge_spec, sim_mode);
     let const_ident = &channel.const_ident;
     let enum_ident = Ident::new(
         &config_id_to_enum(&format!("{}_rx_{}", bridge_spec.id, channel.id)),
@@ -4800,7 +4905,7 @@ fn generate_bridge_tx_execution_tokens(
     let output_index = int2sliceindex(output_pack.culist_index);
     let output_ref = quote! { &mut msgs.#output_index };
     let bridge_tuple_index = int2sliceindex(bridge_spec.tuple_index as u32);
-    let bridge_type = &bridge_spec.type_path;
+    let bridge_type = runtime_bridge_type_for_spec(bridge_spec, sim_mode);
     let const_ident = &channel.const_ident;
     let enum_ident = Ident::new(
         &config_id_to_enum(&format!("{}_tx_{}", bridge_spec.id, channel.id)),
@@ -4931,6 +5036,35 @@ struct BridgeSpec {
     monitor_index: Option<usize>,
     rx_channels: Vec<BridgeChannelSpec>,
     tx_channels: Vec<BridgeChannelSpec>,
+}
+
+fn sim_bridge_channel_set_idents(bridge_tuple_index: usize) -> (Ident, Ident, Ident, Ident) {
+    (
+        format_ident!("__CuSimBridge{}TxChannels", bridge_tuple_index),
+        format_ident!("__CuSimBridge{}TxId", bridge_tuple_index),
+        format_ident!("__CuSimBridge{}RxChannels", bridge_tuple_index),
+        format_ident!("__CuSimBridge{}RxId", bridge_tuple_index),
+    )
+}
+
+fn runtime_bridge_type_for_spec(bridge_spec: &BridgeSpec, sim_mode: bool) -> Type {
+    if sim_mode && !bridge_spec.run_in_sim {
+        let (tx_set_ident, _tx_id_ident, rx_set_ident, _rx_id_ident) =
+            sim_bridge_channel_set_idents(bridge_spec.tuple_index);
+        let tx_type: Type = if bridge_spec.tx_channels.is_empty() {
+            parse_quote!(cu29::simulation::CuNoBridgeChannels)
+        } else {
+            parse_quote!(#tx_set_ident)
+        };
+        let rx_type: Type = if bridge_spec.rx_channels.is_empty() {
+            parse_quote!(cu29::simulation::CuNoBridgeChannels)
+        } else {
+            parse_quote!(#rx_set_ident)
+        };
+        parse_quote!(cu29::simulation::CuSimBridge<#tx_type, #rx_type>)
+    } else {
+        bridge_spec.type_path.clone()
+    }
 }
 
 #[derive(Clone)]

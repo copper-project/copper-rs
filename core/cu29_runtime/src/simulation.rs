@@ -109,7 +109,9 @@
 
 use crate::config::ComponentConfig;
 use crate::context::CuContext;
-use crate::cubridge::{BridgeChannel, BridgeChannelConfig, BridgeChannelSet, CuBridge};
+use crate::cubridge::{
+    BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
+};
 use crate::cutask::CuMsgPack;
 
 use crate::cutask::{CuMsg, CuMsgPayload, CuSinkTask, CuSrcTask, Freezable};
@@ -320,19 +322,35 @@ impl<I: CuSimSinkInput + 'static> CuSinkTask for CuSimSinkTask<I> {
     }
 }
 
+/// Empty channel-id enum used when a simulated bridge has no channel on one side.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum CuNoBridgeChannelId {}
+
+/// Empty channel set used when a simulated bridge has no channel on one side.
+pub struct CuNoBridgeChannels;
+
+impl BridgeChannelSet for CuNoBridgeChannels {
+    type Id = CuNoBridgeChannelId;
+
+    const STATIC_CHANNELS: &'static [&'static dyn BridgeChannelInfo<Self::Id>] = &[];
+}
+
 /// Placeholder bridge used in simulation when a bridge is configured with
 /// `run_in_sim: false`.
 ///
-/// This keeps the real bridge channel definitions while avoiding resource
-/// binding and bridge initialization.
+/// This bridge is parameterized directly by the Tx/Rx channel sets generated
+/// from configuration, so the original bridge type does not need to compile in
+/// simulation mode.
 #[derive(Reflect)]
 #[reflect(no_field_bounds, from_reflect = false, type_path = false)]
-pub struct CuSimBridge<B: CuBridge + 'static> {
+pub struct CuSimBridge<Tx: BridgeChannelSet + 'static, Rx: BridgeChannelSet + 'static> {
     #[reflect(ignore)]
-    boo: PhantomData<fn() -> B>,
+    boo: PhantomData<fn() -> (Tx, Rx)>,
 }
 
-impl<B: CuBridge + 'static> TypePath for CuSimBridge<B> {
+impl<Tx: BridgeChannelSet + 'static, Rx: BridgeChannelSet + 'static> TypePath
+    for CuSimBridge<Tx, Rx>
+{
     fn type_path() -> &'static str {
         "cu29_runtime::simulation::CuSimBridge"
     }
@@ -354,11 +372,16 @@ impl<B: CuBridge + 'static> TypePath for CuSimBridge<B> {
     }
 }
 
-impl<B: CuBridge + 'static> Freezable for CuSimBridge<B> {}
+impl<Tx: BridgeChannelSet + 'static, Rx: BridgeChannelSet + 'static> Freezable
+    for CuSimBridge<Tx, Rx>
+{
+}
 
-impl<B: CuBridge + 'static> CuBridge for CuSimBridge<B> {
-    type Tx = B::Tx;
-    type Rx = B::Rx;
+impl<Tx: BridgeChannelSet + 'static, Rx: BridgeChannelSet + 'static> CuBridge
+    for CuSimBridge<Tx, Rx>
+{
+    type Tx = Tx;
+    type Rx = Rx;
     type Resources<'r> = ();
 
     fn new(
