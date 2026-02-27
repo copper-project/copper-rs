@@ -34,9 +34,7 @@ struct SafetyCfg {
 }
 
 impl SafetyCfg {
-    fn from_config(config: &CuConfig) -> CuResult<Self> {
-        let monitor_cfg = config.get_monitor_config().and_then(|m| m.get_config());
-
+    fn from_monitor_config(monitor_cfg: Option<&ComponentConfig>) -> CuResult<Self> {
         let deadline_ms = read_u64(monitor_cfg, "copperlist_deadline_ms")?.unwrap_or(1000);
         if deadline_ms == 0 {
             return Err(CuError::from(
@@ -235,15 +233,15 @@ impl CuSafetyMon {
 }
 
 impl CuMonitor for CuSafetyMon {
-    fn new(config: &CuConfig, taskids: &'static [&'static str]) -> CuResult<Self> {
-        let cfg = SafetyCfg::from_config(config)?;
+    fn new(metadata: RuntimeMonitoringMetadata) -> CuResult<Self> {
+        let cfg = SafetyCfg::from_monitor_config(metadata.monitor_config.as_ref())?;
         Ok(Self {
-            taskids,
+            taskids: metadata.task_ids,
             shared: Arc::new(SharedState::new()),
             cfg,
             watchdog: None,
             previous_panic_hook: None,
-            execution_probe: None,
+            execution_probe: Some(metadata.execution_probe),
         })
     }
 
@@ -283,10 +281,6 @@ impl CuMonitor for CuSafetyMon {
         self.shared
             .request_exit(self.cfg.exit_code_panic, panic_message.to_string());
         Self::emit_fault("cu_safetymon panic observed:", panic_message);
-    }
-
-    fn set_execution_probe(&mut self, probe: ExecutionProbeHandle) {
-        self.execution_probe = Some(probe);
     }
 
     fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {

@@ -85,7 +85,8 @@ struct ExampleMonitor {
 struct App {}
 
 impl CuMonitor for ExampleMonitor {
-    fn new(_config: &CuConfig, taskids: &'static [&str]) -> CuResult<Self> {
+    fn new(metadata: RuntimeMonitoringMetadata) -> CuResult<Self> {
+        let taskids = metadata.task_ids;
         debug!("Monitoring: created: {}", taskids);
         Ok(Self { tasks: taskids })
     }

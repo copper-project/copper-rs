@@ -10,8 +10,8 @@ pub struct CuSafetyMon {
 }
 
 impl CuMonitor for CuSafetyMon {
-    fn new(_config: &CuConfig, taskids: &'static [&'static str]) -> CuResult<Self> {
-        let _ = taskids;
+    fn new(metadata: RuntimeMonitoringMetadata) -> CuResult<Self> {
+        let _ = metadata;
         Err(CuError::from(
             "cu_safetymon currently requires std (no_std support intentionally deferred)",
         ))

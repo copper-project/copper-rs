@@ -8,12 +8,11 @@ use ansi_to_tui::IntoText;
 use color_eyre::config::HookBuilder;
 use compact_str::{CompactString, ToCompactString};
 use cu29::clock::CuDuration;
-use cu29::config::CuConfig;
 use cu29::context::CuContext;
 use cu29::cutask::CuMsgMetadata;
 use cu29::monitoring::{
     ComponentKind, CopperListInfo, CopperListIoStats, CuDurationStatistics, CuMonitor, CuTaskState,
-    Decision, MonitorTopology,
+    Decision, MonitorTopology, RuntimeMonitoringMetadata,
 };
 use cu29::prelude::{CuCompactString, CuTime, pool};
 use cu29::{CuError, CuResult};
@@ -755,15 +754,11 @@ struct NodesScrollableWidgetState {
 
 impl NodesScrollableWidgetState {
     fn new(
-        config: &CuConfig,
         errors: Arc<Mutex<Vec<TaskStatus>>>,
-        mission: Option<&str>,
         task_ids: &'static [&'static str],
         topology: Option<MonitorTopology>,
     ) -> Self {
-        let topology = topology
-            .or_else(|| cu29::monitoring::build_monitor_topology(config, mission).ok())
-            .unwrap_or_default();
+        let topology = topology.unwrap_or_default();
 
         let mut display_nodes: Vec<DisplayNode> = Vec::new();
         let mut status_index_map = Vec::new();
@@ -1090,7 +1085,6 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
 
 /// A TUI based realtime console for Copper.
 pub struct CuConsoleMon {
-    config: CuConfig,
     taskids: &'static [&'static str],
     task_stats: Arc<Mutex<TaskStats>>,
     task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
@@ -1143,8 +1137,6 @@ impl UI {
     #[cfg(feature = "debug_pane")]
     #[allow(clippy::too_many_arguments)]
     fn new(
-        config: CuConfig,
-        mission: Option<&str>,
         task_ids: &'static [&'static str],
         task_stats: Arc<Mutex<TaskStats>>,
         task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
@@ -1157,9 +1149,7 @@ impl UI {
     ) -> UI {
         init_error_hooks();
         let nodes_scrollable_widget_state = NodesScrollableWidgetState::new(
-            &config,
             task_statuses.clone(),
-            mission,
             task_ids,
             topology.clone(),
         );
@@ -1187,7 +1177,6 @@ impl UI {
 
     #[cfg(not(feature = "debug_pane"))]
     fn new(
-        config: CuConfig,
         task_ids: &'static [&'static str],
         task_stats: Arc<Mutex<TaskStats>>,
         task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
@@ -1198,9 +1187,7 @@ impl UI {
     ) -> UI {
         init_error_hooks();
         let nodes_scrollable_widget_state = NodesScrollableWidgetState::new(
-            &config,
             task_statuses.clone(),
-            None,
             task_ids,
             topology.clone(),
         );
@@ -2040,50 +2027,39 @@ impl UI {
 }
 
 impl CuMonitor for CuConsoleMon {
-    fn new(config: &CuConfig, taskids: &'static [&'static str]) -> CuResult<Self>
+    fn new(metadata: RuntimeMonitoringMetadata) -> CuResult<Self>
     where
         Self: Sized,
     {
+        let taskids = metadata.task_ids;
         let task_stats = Arc::new(Mutex::new(TaskStats::new(
             taskids.len(),
             CuDuration::from(Duration::from_secs(5)),
         )));
+        let mut culist_to_task = [usize::MAX; MAX_CULIST_MAP];
+        for (slot, component_idx) in metadata
+            .culist_component_mapping
+            .iter()
+            .copied()
+            .enumerate()
+            .take(MAX_CULIST_MAP)
+        {
+            culist_to_task[slot] = component_idx;
+        }
+        let mut copperlist_stats = CopperListStats::new();
+        copperlist_stats.set_info(metadata.copperlist_info);
 
         Ok(Self {
-            config: config.clone(),
             taskids,
             task_stats,
             task_statuses: Arc::new(Mutex::new(vec![TaskStatus::default(); taskids.len()])),
-            culist_to_task: [usize::MAX; MAX_CULIST_MAP],
+            culist_to_task,
             ui_handle: None,
             quitting: Arc::new(AtomicBool::new(false)),
             pool_stats: Arc::new(Mutex::new(Vec::new())),
-            copperlist_stats: Arc::new(Mutex::new(CopperListStats::new())),
-            topology: None,
+            copperlist_stats: Arc::new(Mutex::new(copperlist_stats)),
+            topology: metadata.topology,
         })
-    }
-
-    fn set_culist_task_mapping(&mut self, mapping: &'static [usize]) {
-        self.culist_to_task = [usize::MAX; MAX_CULIST_MAP];
-        for (slot, component_idx) in mapping.iter().copied().enumerate().take(MAX_CULIST_MAP) {
-            self.culist_to_task[slot] = component_idx;
-        }
-        #[cfg(feature = "debug_pane")]
-        log::info!(
-            "consolemon mapping installed: slots={} applied={} truncated={}",
-            mapping.len(),
-            mapping.len().min(MAX_CULIST_MAP),
-            mapping.len().saturating_sub(MAX_CULIST_MAP)
-        );
-    }
-
-    fn set_topology(&mut self, topology: MonitorTopology) {
-        self.topology = Some(topology);
-    }
-
-    fn set_copperlist_info(&mut self, info: CopperListInfo) {
-        let mut stats = self.copperlist_stats.lock().unwrap();
-        stats.set_info(info);
     }
 
     fn observe_copperlist_io(&self, stats: CopperListIoStats) {
@@ -2104,7 +2080,6 @@ impl CuMonitor for CuConsoleMon {
             return Ok(());
         }
 
-        let config_dup = self.config.clone();
         let taskids = self.taskids;
 
         let task_stats_ui = self.task_stats.clone();
@@ -2146,8 +2121,6 @@ impl CuMonitor for CuConsoleMon {
                 };
 
                 let mut ui = UI::new(
-                    config_dup,
-                    None, // FIXME(gbin): Allow somethere an API to get the current mission running
                     taskids,
                     task_stats_ui,
                     error_states,
@@ -2204,7 +2177,6 @@ impl CuMonitor for CuConsoleMon {
                 let stderr_gag = gag::Gag::stderr().unwrap();
 
                 let mut ui = UI::new(
-                    config_dup,
                     taskids,
                     task_stats_ui,
                     error_states,

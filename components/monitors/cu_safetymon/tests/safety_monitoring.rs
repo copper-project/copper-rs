@@ -9,6 +9,24 @@ use std::time::Duration;
 const TASK_IDS: &[&str] = &["planner", "driver"];
 const CHILD_MODE_ENV: &str = "CU_SAFETYMON_CHILD_MODE";
 
+fn monitor_metadata(
+    config: &CuConfig,
+    probe: Option<Arc<RuntimeExecutionProbe>>,
+) -> RuntimeMonitoringMetadata {
+    RuntimeMonitoringMetadata {
+        mission_id: DEFAULT_MISSION_ID.into(),
+        task_ids: TASK_IDS,
+        culist_component_mapping: &[],
+        copperlist_info: CopperListInfo::new(0, 0),
+        topology: None,
+        monitor_config: config
+            .get_monitor_configs()
+            .first()
+            .and_then(|entry| entry.get_config().cloned()),
+        execution_probe: probe.unwrap_or_else(|| Arc::new(RuntimeExecutionProbe::default())),
+    }
+}
+
 fn config_with_single_monitor(type_name: &str, extra_config: &str) -> CuConfig {
     let ron = format!(
         r#"
@@ -58,13 +76,13 @@ fn spawn_current_test(test_name: &str, mode: &str) -> Output {
 fn cu_logmon_and_cu_safetymon_can_run_together() {
     let log_cfg = config_with_single_monitor("cu_logmon::CuLogMon", "");
     let safe_cfg = safetymon_test_config(79, 80);
+    let probe = Arc::new(RuntimeExecutionProbe::default());
 
     let mut monitors = (
-        CuLogMon::new(&log_cfg, TASK_IDS).expect("logmon new"),
-        CuSafetyMon::new(&safe_cfg, TASK_IDS).expect("safetymon new"),
+        CuLogMon::new(monitor_metadata(&log_cfg, Some(probe.clone()))).expect("logmon new"),
+        CuSafetyMon::new(monitor_metadata(&safe_cfg, Some(probe.clone())))
+            .expect("safetymon new"),
     );
-    let probe = Arc::new(RuntimeExecutionProbe::default());
-    monitors.set_execution_probe(probe.clone());
 
     let (ctx, _clock_control) = CuContext::new_mock_clock();
     let meta = CuMsgMetadata::default();
@@ -88,8 +106,8 @@ fn contradictory_decisions_between_logmon_and_safetymon_shutdown() {
     let safe_cfg = safetymon_test_config(79, 80);
 
     let monitors = (
-        CuLogMon::new(&log_cfg, TASK_IDS).expect("logmon new"),
-        CuSafetyMon::new(&safe_cfg, TASK_IDS).expect("safetymon new"),
+        CuLogMon::new(monitor_metadata(&log_cfg, None)).expect("logmon new"),
+        CuSafetyMon::new(monitor_metadata(&safe_cfg, None)).expect("safetymon new"),
     );
 
     let decision = monitors.process_error(0, CuTaskState::Process, &CuError::from("fault"));
@@ -103,9 +121,9 @@ fn contradictory_decisions_between_logmon_and_safetymon_shutdown() {
 fn panic_fault_exits_with_configured_code_and_marker_context() {
     if std::env::var(CHILD_MODE_ENV).ok().as_deref() == Some("panic") {
         let cfg = safetymon_test_config(79, 80);
-        let mut monitor = CuSafetyMon::new(&cfg, TASK_IDS).expect("safetymon new");
         let probe = Arc::new(RuntimeExecutionProbe::default());
-        monitor.set_execution_probe(probe.clone());
+        let mut monitor =
+            CuSafetyMon::new(monitor_metadata(&cfg, Some(probe.clone()))).expect("safetymon new");
         probe.record(ExecutionMarker {
             component_id: 1,
             step: CuTaskState::Process,
@@ -140,9 +158,9 @@ fn panic_fault_exits_with_configured_code_and_marker_context() {
 fn lock_fault_exits_with_configured_code_and_last_marker() {
     if std::env::var(CHILD_MODE_ENV).ok().as_deref() == Some("lock") {
         let cfg = safetymon_test_config(79, 80);
-        let mut monitor = CuSafetyMon::new(&cfg, TASK_IDS).expect("safetymon new");
         let probe = Arc::new(RuntimeExecutionProbe::default());
-        monitor.set_execution_probe(probe.clone());
+        let mut monitor =
+            CuSafetyMon::new(monitor_metadata(&cfg, Some(probe.clone()))).expect("safetymon new");
         let (ctx, _clock_control) = CuContext::new_mock_clock();
         monitor.start(&ctx).expect("safetymon start");
         let cl_ctx = CuContext::builder(ctx.clock.clone()).cl_id(9).build();

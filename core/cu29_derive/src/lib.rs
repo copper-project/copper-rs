@@ -858,14 +858,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         (
             quote! { NoMonitor },
             quote! {
-                let mut monitor = NoMonitor::new(config, TASKS_IDS)
+                let monitor = NoMonitor::new(metadata)
                     .expect("Failed to create NoMonitor.");
-                let copperlist_info = ::cu29::monitoring::CopperListInfo::new(
-                    core::mem::size_of::<CuList>(),
-                    #DEFAULT_CLNB,
-                );
-                monitor.set_copperlist_info(copperlist_info);
-                monitor.set_culist_task_mapping(CULIST_COMPONENT_MAPPING);
                 monitor
             },
         )
@@ -875,14 +869,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         (
             quote! { #only_monitor_type },
             quote! {
-                let mut monitor = #only_monitor_type::new(config, TASKS_IDS)
+                let mut monitor_metadata = metadata;
+                monitor_metadata.monitor_config = config
+                    .get_monitor_configs()
+                    .first()
+                    .and_then(|entry| entry.get_config().cloned());
+                let monitor = #only_monitor_type::new(monitor_metadata)
                     .expect("Failed to create the given monitor.");
-                let copperlist_info = ::cu29::monitoring::CopperListInfo::new(
-                    core::mem::size_of::<CuList>(),
-                    #DEFAULT_CLNB,
-                );
-                monitor.set_copperlist_info(copperlist_info);
-                monitor.set_culist_task_mapping(CULIST_COMPONENT_MAPPING);
                 monitor
             },
         )
@@ -897,30 +890,22 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let monitor_bindings: Vec<Ident> = (0..monitor_types.len())
             .map(|idx| format_ident!("__cu_monitor_{idx}"))
             .collect();
-        let monitor_config_bindings: Vec<Ident> = (0..monitor_types.len())
-            .map(|idx| format_ident!("__cu_monitor_cfg_{idx}"))
-            .collect();
         let monitor_indices: Vec<syn::Index> =
             (0..monitor_types.len()).map(syn::Index::from).collect();
 
         let monitor_builders: Vec<proc_macro2::TokenStream> = monitor_types
             .iter()
             .zip(monitor_bindings.iter())
-            .zip(monitor_config_bindings.iter())
             .zip(monitor_indices.iter())
-            .map(|(((monitor_ty, monitor_binding), config_binding), monitor_idx)| {
+            .map(|((monitor_ty, monitor_binding), monitor_idx)| {
                 quote! {
-                    let mut #config_binding = config.clone();
                     let __cu_monitor_cfg_entry = config
                         .get_monitor_configs()
                         .get(#monitor_idx)
-                        .cloned()
-                        .unwrap_or_else(|| panic!("Missing monitor config at index {}", #monitor_idx));
-                    #config_binding.monitors = vec![__cu_monitor_cfg_entry];
-                    let #monitor_binding = #monitor_ty::new(
-                        &#config_binding,
-                        TASKS_IDS,
-                    )
+                        .and_then(|entry| entry.get_config().cloned());
+                    let mut __cu_monitor_metadata = metadata.clone();
+                    __cu_monitor_metadata.monitor_config = __cu_monitor_cfg_entry;
+                    let #monitor_binding = #monitor_ty::new(__cu_monitor_metadata)
                     .expect("Failed to create one of the configured monitors.");
                 }
             })
@@ -930,13 +915,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! { #tuple_type },
             quote! {
                 #(#monitor_builders)*
-                let mut monitor: #tuple_type = (#(#monitor_bindings),*,);
-                let copperlist_info = ::cu29::monitoring::CopperListInfo::new(
-                    core::mem::size_of::<CuList>(),
-                    #DEFAULT_CLNB,
-                );
-                monitor.set_copperlist_info(copperlist_info);
-                monitor.set_culist_task_mapping(CULIST_COMPONENT_MAPPING);
+                let monitor: #tuple_type = (#(#monitor_bindings),*,);
                 monitor
             },
         )
@@ -2740,9 +2719,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let copper_runtime = CuRuntime::<#mission_mod::#tasks_type, #mission_mod::CuBridges, #mission_mod::CuStampedDataSet, #monitor_type, #DEFAULT_CLNB>::new_with_resources(
                     clock,
                     &config,
-                    Some(#mission),
+                    #mission,
                     resources,
                     #mission_mod::#tasks_instanciator_fn,
+                    #mission_mod::TASKS_IDS,
+                    #mission_mod::CULIST_COMPONENT_MAPPING,
                     #mission_mod::monitor_instanciator,
                     #mission_mod::bridges_instanciator,
                     copperlist_stream,
@@ -3203,7 +3184,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #tasks_instanciator
                 #bridges_instanciator
 
-                pub fn monitor_instanciator(config: &CuConfig) -> #monitor_type {
+                pub fn monitor_instanciator(
+                    config: &CuConfig,
+                    metadata: ::cu29::monitoring::RuntimeMonitoringMetadata,
+                ) -> #monitor_type {
                     #monitor_instanciator_body
                 }
 

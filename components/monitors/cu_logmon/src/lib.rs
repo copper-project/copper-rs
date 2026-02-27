@@ -82,8 +82,7 @@ impl WindowState {
     }
 }
 
-fn monitor_max_sample(config: &CuConfig) -> CuResult<CuDuration> {
-    let monitor_cfg = config.get_monitor_config().and_then(|m| m.get_config());
+fn monitor_max_sample(monitor_cfg: Option<&ComponentConfig>) -> CuResult<CuDuration> {
     if let Some(cfg) = monitor_cfg {
         if let Some(us) = cfg.get::<u64>("max_latency_us")? {
             if us == 0 {
@@ -223,10 +222,11 @@ fn task_state_label(state: &CuTaskState) -> &'static str {
 }
 
 impl CuMonitor for CuLogMon {
-    fn new(config: &CuConfig, taskids: &'static [&'static str]) -> CuResult<Self> {
+    fn new(metadata: RuntimeMonitoringMetadata) -> CuResult<Self> {
+        let taskids = metadata.task_ids;
         #[cfg(target_os = "none")]
         info!("CuLogMon::new: task_count={}", taskids.len());
-        let max_sample = monitor_max_sample(config)?;
+        let max_sample = monitor_max_sample(metadata.monitor_config.as_ref())?;
         let window = WindowState::new(taskids.len(), max_sample);
         #[cfg(target_os = "none")]
         info!("CuLogMon::new: window ready");

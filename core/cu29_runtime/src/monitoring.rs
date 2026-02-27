@@ -2,9 +2,12 @@
 //!
 
 use crate::config::CuConfig;
-use crate::config::{BridgeChannelConfigRepresentation, BridgeConfig, CuGraph, Flavor, NodeId};
+use crate::config::{
+    BridgeChannelConfigRepresentation, BridgeConfig, ComponentConfig, CuGraph, Flavor, NodeId,
+};
 use crate::context::CuContext;
 use crate::cutask::CuMsgMetadata;
+use compact_str::CompactString;
 use cu29_clock::CuDuration;
 #[allow(unused_imports)]
 use cu29_log::CuLogLevel;
@@ -210,6 +213,18 @@ const fn usize_to_task_state(step: usize) -> CuTaskState {
 
 #[cfg(feature = "std")]
 pub type ExecutionProbeHandle = Arc<RuntimeExecutionProbe>;
+
+#[derive(Debug, Clone)]
+pub struct RuntimeMonitoringMetadata {
+    pub mission_id: CompactString,
+    pub task_ids: &'static [&'static str],
+    pub culist_component_mapping: &'static [usize],
+    pub copperlist_info: CopperListInfo,
+    pub topology: Option<MonitorTopology>,
+    pub monitor_config: Option<ComponentConfig>,
+    #[cfg(feature = "std")]
+    pub execution_probe: ExecutionProbeHandle,
+}
 
 /// Monitor decision to be taken when a task errored out.
 #[derive(Debug)]
@@ -455,20 +470,9 @@ pub fn build_monitor_topology(
 
 /// Trait to implement a monitoring task.
 pub trait CuMonitor: Sized {
-    fn new(config: &CuConfig, taskids: &'static [&'static str]) -> CuResult<Self>
+    fn new(metadata: RuntimeMonitoringMetadata) -> CuResult<Self>
     where
         Self: Sized;
-
-    fn set_topology(&mut self, _topology: MonitorTopology) {}
-
-    /// Runtime-authoritative mapping from `process_copperlist` slot index to
-    /// `TASKS_IDS` component index.
-    fn set_culist_task_mapping(&mut self, _mapping: &'static [usize]) {}
-
-    fn set_copperlist_info(&mut self, _info: CopperListInfo) {}
-
-    #[cfg(feature = "std")]
-    fn set_execution_probe(&mut self, _probe: ExecutionProbeHandle) {}
 
     fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         Ok(())
@@ -496,7 +500,7 @@ pub trait CuMonitor: Sized {
 /// This is basically defining the default behavior of Copper in case of error.
 pub struct NoMonitor {}
 impl CuMonitor for NoMonitor {
-    fn new(_config: &CuConfig, _taskids: &'static [&'static str]) -> CuResult<Self> {
+    fn new(_metadata: RuntimeMonitoringMetadata) -> CuResult<Self> {
         Ok(NoMonitor {})
     }
 
@@ -538,28 +542,11 @@ impl CuMonitor for NoMonitor {
 macro_rules! impl_monitor_tuple {
     ($($idx:tt => $name:ident),+) => {
         impl<$($name: CuMonitor),+> CuMonitor for ($($name,)+) {
-            fn new(config: &CuConfig, taskids: &'static [&'static str]) -> CuResult<Self>
+            fn new(metadata: RuntimeMonitoringMetadata) -> CuResult<Self>
             where
                 Self: Sized,
             {
-                Ok(($($name::new(config, taskids)?,)+))
-            }
-
-            fn set_topology(&mut self, topology: MonitorTopology) {
-                $(self.$idx.set_topology(topology.clone());)+
-            }
-
-            fn set_culist_task_mapping(&mut self, mapping: &'static [usize]) {
-                $(self.$idx.set_culist_task_mapping(mapping);)+
-            }
-
-            fn set_copperlist_info(&mut self, info: CopperListInfo) {
-                $(self.$idx.set_copperlist_info(info);)+
-            }
-
-            #[cfg(feature = "std")]
-            fn set_execution_probe(&mut self, probe: ExecutionProbeHandle) {
-                $(self.$idx.set_execution_probe(probe.clone());)+
+                Ok(($($name::new(metadata.clone())?,)+))
             }
 
             fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
@@ -1009,8 +996,6 @@ mod tests {
         decision: TestDecision,
         copperlist_calls: AtomicUsize,
         panic_calls: AtomicUsize,
-        #[cfg(feature = "std")]
-        probe_calls: AtomicUsize,
     }
 
     impl TestMonitor {
@@ -1019,20 +1004,29 @@ mod tests {
                 decision,
                 copperlist_calls: AtomicUsize::new(0),
                 panic_calls: AtomicUsize::new(0),
-                #[cfg(feature = "std")]
-                probe_calls: AtomicUsize::new(0),
             }
         }
     }
 
-    impl CuMonitor for TestMonitor {
-        fn new(_config: &CuConfig, _taskids: &'static [&'static str]) -> CuResult<Self> {
-            Ok(Self::new_with(TestDecision::Ignore))
+    fn test_metadata() -> RuntimeMonitoringMetadata {
+        RuntimeMonitoringMetadata {
+            mission_id: CompactString::from(crate::config::DEFAULT_MISSION_ID),
+            task_ids: &["a", "b"],
+            culist_component_mapping: &[],
+            copperlist_info: CopperListInfo::new(0, 0),
+            topology: None,
+            monitor_config: None,
+            #[cfg(feature = "std")]
+            execution_probe: Arc::new(RuntimeExecutionProbe::default()),
         }
+    }
 
-        #[cfg(feature = "std")]
-        fn set_execution_probe(&mut self, _probe: ExecutionProbeHandle) {
-            self.probe_calls.fetch_add(1, Ordering::SeqCst);
+    impl CuMonitor for TestMonitor {
+        fn new(metadata: RuntimeMonitoringMetadata) -> CuResult<Self> {
+            let monitor = Self::new_with(TestDecision::Ignore);
+            #[cfg(feature = "std")]
+            let _ = metadata.execution_probe;
+            Ok(monitor)
         }
 
         fn process_copperlist(&self, _ctx: &CuContext, _msgs: &[&CuMsgMetadata]) -> CuResult<()> {
@@ -1124,13 +1118,9 @@ mod tests {
 
     #[test]
     fn tuple_monitor_fans_out_callbacks() {
-        let left = TestMonitor::new_with(TestDecision::Ignore);
-        let right = TestMonitor::new_with(TestDecision::Ignore);
-        let mut monitors = (left, right);
+        let monitors =
+            <(TestMonitor, TestMonitor) as CuMonitor>::new(test_metadata()).expect("tuple new");
         let (ctx, _clock_control) = CuContext::new_mock_clock();
-
-        #[cfg(feature = "std")]
-        monitors.set_execution_probe(Arc::new(RuntimeExecutionProbe::default()));
         monitors
             .process_copperlist(&ctx, &[])
             .expect("process_copperlist should fan out");
@@ -1140,11 +1130,6 @@ mod tests {
         assert_eq!(monitors.1.copperlist_calls.load(Ordering::SeqCst), 1);
         assert_eq!(monitors.0.panic_calls.load(Ordering::SeqCst), 1);
         assert_eq!(monitors.1.panic_calls.load(Ordering::SeqCst), 1);
-        #[cfg(feature = "std")]
-        {
-            assert_eq!(monitors.0.probe_calls.load(Ordering::SeqCst), 1);
-            assert_eq!(monitors.1.probe_calls.load(Ordering::SeqCst), 1);
-        }
     }
 
     #[test]
