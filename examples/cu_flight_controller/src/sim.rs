@@ -17,9 +17,9 @@ use bevy::prelude::{
     App, AssetPlugin, AssetServer, ButtonInput, Camera, Camera3d, Color, Commands, Component,
     DefaultPlugins, Dir3, DirectionalLight, EnvironmentMapLight, FixedUpdate, GlobalAmbientLight,
     GlobalTransform, GltfAssetLabel, KeyCode, MessageReader, MessageWriter, MinimalPlugins, Name,
-    PerspectiveProjection, PluginGroup, PostUpdate, Projection, Quat, Query, Res, ResMut,
-    Resource, SceneRoot, Startup, Time, Transform, Update, Vec3, Window, WindowPlugin, With,
-    Without, default,
+    PerspectiveProjection, PluginGroup, PostUpdate, Projection, Quat, Query, Res, ResMut, Resource,
+    SceneRoot, Startup, Time, Transform, Update, Vec3, Window, WindowPlugin, With, Without,
+    default,
 };
 use cached_path::{Cache, Error as CacheError, ProgressBar};
 use cu29::prelude::*;
@@ -434,14 +434,15 @@ fn setup_joystick(
         Ok(joystick) => {
             apply_joystick_frame(&joystick.current_frame(), &mut rc_input);
             *rc_source = RcInputSource::Joystick;
-            info!(
-                "sim rc: joystick source active (set CU_SIM_JOYSTICK=<name> to target a device)"
-            );
+            info!("sim rc: joystick source active (set CU_SIM_JOYSTICK=<name> to target a device)");
             joystick_state.reader = Some(joystick);
         }
         Err(err) => {
             *rc_source = RcInputSource::Keyboard;
-            eprintln!("sim rc: joystick unavailable ({}), using keyboard controls", err);
+            eprintln!(
+                "sim rc: joystick unavailable ({}), using keyboard controls",
+                err
+            );
             joystick_state.reader = None;
         }
     }
@@ -492,7 +493,11 @@ fn arm_from_switches(frame: &RcFrame) -> Option<bool> {
     const ARM_SWITCH_NAMES: &[&str] = &["sf", "se", "arm", "btn1"];
 
     for name in ARM_SWITCH_NAMES {
-        if let Some(sw) = frame.switches.iter().find(|s| s.name.eq_ignore_ascii_case(name)) {
+        if let Some(sw) = frame
+            .switches
+            .iter()
+            .find(|s| s.name.eq_ignore_ascii_case(name))
+        {
             return Some(sw.on);
         }
     }
