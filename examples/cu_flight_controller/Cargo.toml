@@ -81,6 +81,7 @@ bevy = { workspace = true, default-features = false, features = [
   "mesh_picking",
   "tonemapping_luts",
   "bevy_ui",
+  "bevy_ui_render",
   "ktx2",
   "jpeg",
   "png",

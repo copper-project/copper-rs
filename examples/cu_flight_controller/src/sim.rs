@@ -16,16 +16,21 @@ use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::prelude::{
     App, AssetPlugin, AssetServer, ButtonInput, Camera, Camera3d, Color, Commands, Component,
     DefaultPlugins, Dir3, DirectionalLight, EnvironmentMapLight, FixedUpdate, GlobalAmbientLight,
-    GlobalTransform, GltfAssetLabel, KeyCode, MessageReader, MessageWriter, MinimalPlugins, Name,
-    PerspectiveProjection, PluginGroup, PostUpdate, Projection, Quat, Query, Res, ResMut, Resource,
-    SceneRoot, Startup, Time, Transform, Update, Vec3, Window, WindowPlugin, With, Without,
-    default,
+    GlobalTransform, GltfAssetLabel, IsDefaultUiCamera, KeyCode, MessageReader, MessageWriter,
+    MinimalPlugins, Name, Node, PerspectiveProjection, PluginGroup, PositionType, PostUpdate,
+    Projection, Quat, Query, Res, ResMut, Resource, SceneRoot, Startup, Text, TextColor, TextFont,
+    Time, Transform, Update, Val, Vec3, Visibility, Window, WindowPlugin, With, Without, default,
 };
+use bevy::window::PrimaryWindow;
 use cached_path::{Cache, Error as CacheError, ProgressBar};
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
 
 use cu_crsf::messages::RcChannelsPayload;
+use cu_msp_bridge::MspRequestBatch;
+use cu_msp_lib::structs::{
+    MSP_DP_CLEAR_SCREEN, MSP_DP_DRAW_SCREEN, MSP_DP_WRITE_STRING, MspDisplayPort, MspRequest,
+};
 use cu_sensor_payloads::{BarometerPayload, ImuPayload, MagnetometerPayload};
 use rc_joystick::{RcFrame, RcJoystick};
 
@@ -117,6 +122,126 @@ enum CameraView {
     FirstPerson,
     ThirdPerson,
 }
+
+const OSD_COLS: usize = 53;
+const OSD_ROWS: usize = 16;
+const OSD_VOLT_SYMBOL: u8 = 0x06;
+const OSD_CHAR_WIDTH_FACTOR: f32 = 0.62;
+const OSD_LINE_HEIGHT_FACTOR: f32 = 1.22;
+const OSD_HORIZONTAL_PADDING_COLS: f32 = 0.5;
+const OSD_VERTICAL_PADDING_ROWS: f32 = 0.5;
+
+#[derive(Resource, Clone)]
+struct SimOsdOverlay {
+    cols: usize,
+    rows: usize,
+    cells: Vec<char>,
+    text: String,
+}
+
+impl Default for SimOsdOverlay {
+    fn default() -> Self {
+        let mut overlay = Self {
+            cols: OSD_COLS,
+            rows: OSD_ROWS,
+            cells: vec![' '; OSD_COLS * OSD_ROWS],
+            text: String::new(),
+        };
+        overlay.rebuild_text();
+        overlay
+    }
+}
+
+impl SimOsdOverlay {
+    fn clear(&mut self) {
+        for c in &mut self.cells {
+            *c = ' ';
+        }
+    }
+
+    fn apply_batch(&mut self, batch: &MspRequestBatch) {
+        let mut touched = false;
+        for request in batch.iter() {
+            let MspRequest::MspDisplayPort(displayport) = request else {
+                continue;
+            };
+            if self.apply_displayport(displayport) {
+                touched = true;
+            }
+        }
+        if touched {
+            self.rebuild_text();
+        }
+    }
+
+    fn apply_displayport(&mut self, displayport: &MspDisplayPort) -> bool {
+        let payload = displayport.as_bytes();
+        let Some(cmd) = payload.first().copied() else {
+            return false;
+        };
+
+        match cmd {
+            MSP_DP_CLEAR_SCREEN => {
+                self.clear();
+                true
+            }
+            MSP_DP_WRITE_STRING => {
+                if payload.len() < 4 {
+                    return false;
+                }
+                let row = payload[1] as usize;
+                let col = payload[2] as usize;
+                self.write_bytes(row, col, &payload[4..])
+            }
+            MSP_DP_DRAW_SCREEN => true,
+            _ => false,
+        }
+    }
+
+    fn write_bytes(&mut self, row: usize, col: usize, bytes: &[u8]) -> bool {
+        if row >= self.rows || col >= self.cols || bytes.is_empty() {
+            return false;
+        }
+        let mut written = false;
+        for (i, byte) in bytes.iter().enumerate() {
+            let x = col + i;
+            if x >= self.cols {
+                break;
+            }
+            let idx = row * self.cols + x;
+            self.cells[idx] = sanitize_osd_char(*byte);
+            written = true;
+        }
+        written
+    }
+
+    fn rebuild_text(&mut self) {
+        self.text.clear();
+        self.text
+            .reserve(self.cols * self.rows + self.rows.saturating_sub(1));
+        for row in 0..self.rows {
+            let start = row * self.cols;
+            let end = start + self.cols;
+            for c in &self.cells[start..end] {
+                self.text.push(*c);
+            }
+            if row + 1 < self.rows {
+                self.text.push('\n');
+            }
+        }
+    }
+}
+
+fn sanitize_osd_char(byte: u8) -> char {
+    match byte {
+        b' '..=b'~' => byte as char,
+        OSD_VOLT_SYMBOL => 'V',
+        _ => ' ',
+    }
+}
+
+#[derive(Component)]
+struct OsdOverlayText;
 
 #[derive(Debug)]
 struct QuadcopterForceTorque {
@@ -383,6 +508,7 @@ fn setup_world(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         Name::new("camera"),
         Camera3d::default(),
+        IsDefaultUiCamera,
         Projection::Perspective(PerspectiveProjection {
             fov: 90.0_f32.to_radians(),
             ..default()
@@ -436,6 +562,26 @@ fn setup_world(mut commands: Commands, asset_server: Res<AssetServer>) {
         ),
         ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
         RigidBody::Static,
+    ));
+}
+
+fn setup_osd_overlay(mut commands: Commands) {
+    commands.spawn((
+        Name::new("fpv-osd"),
+        OsdOverlayText,
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(0.0),
+            left: Val::Px(0.0),
+            ..default()
+        },
+        Text::new(""),
+        TextFont {
+            font_size: 14.0,
+            ..default()
+        },
+        TextColor(Color::WHITE),
+        Visibility::Visible,
     ));
 }
 
@@ -660,6 +806,7 @@ fn run_copper(
     sim_state: Res<SimState>,
     rc_input: Res<SimRcInput>,
     mut motor_commands: ResMut<SimMotorCommands>,
+    mut osd_overlay: ResMut<SimOsdOverlay>,
     mut exit_writer: MessageWriter<AppExit>,
 ) {
     let vehicle = sim_state.vehicle.clone();
@@ -726,6 +873,12 @@ fn run_copper(
             }
             default::SimStep::BdshotTxEsc3Tx { msg, .. } => {
                 dshot[3] = msg.payload().map_or(0, |c| c.throttle);
+                SimOverride::ExecuteByRuntime
+            }
+            default::SimStep::VtxMspTxRequests { msg, .. } => {
+                if let Some(batch) = msg.payload() {
+                    osd_overlay.apply_batch(batch);
+                }
                 SimOverride::ExecuteByRuntime
             }
             _ => SimOverride::ExecuteByRuntime,
@@ -805,6 +958,36 @@ fn track_sim_led_state() {
     let _on = sim_support::sim_activity_led_is_on();
 }
 
+fn update_osd_overlay(
+    camera_view: Res<CameraView>,
+    osd_overlay: Res<SimOsdOverlay>,
+    window_query: Query<&Window, With<PrimaryWindow>>,
+    mut overlay_query: Query<(&mut Text, &mut TextFont, &mut Visibility), With<OsdOverlayText>>,
+) {
+    let Ok(window) = window_query.single() else {
+        return;
+    };
+    let Ok((mut text, mut text_font, mut visibility)) = overlay_query.single_mut() else {
+        return;
+    };
+
+    *visibility = if *camera_view == CameraView::FirstPerson {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
+
+    // Scale text so the 53x16 OSD grid spans the viewport with a small safety
+    // margin; this avoids clipping due to font line-height/advance rounding.
+    let font_by_height =
+        window.height() / ((OSD_ROWS as f32 + OSD_VERTICAL_PADDING_ROWS) * OSD_LINE_HEIGHT_FACTOR);
+    let font_by_width =
+        window.width() / ((OSD_COLS as f32 + OSD_HORIZONTAL_PADDING_COLS) * OSD_CHAR_WIDTH_FACTOR);
+    text_font.font_size = font_by_height.min(font_by_width).clamp(8.0, 96.0);
+
+    *text = Text::new(osd_overlay.text.clone());
+}
+
 fn stop_copper_on_exit(mut exit_events: MessageReader<AppExit>, mut copper: ResMut<CopperState>) {
     for _ in exit_events.read() {
         let _ = copper.app.stop_all_tasks(&mut default_callback);
@@ -846,7 +1029,8 @@ pub fn make_world(headless: bool) -> App {
         .insert_resource(SimKinematics::default())
         .insert_resource(RcInputSource::default())
         .insert_resource(SimJoystickState::default())
-        .insert_resource(CameraView::default());
+        .insert_resource(CameraView::default())
+        .insert_resource(SimOsdOverlay::default());
 
     if headless {
         app.add_plugins(MinimalPlugins);
@@ -873,7 +1057,10 @@ pub fn make_world(headless: bool) -> App {
     .add_plugins(PhysicsPlugins::default())
     .insert_resource(Gravity(Vec3::new(0.0, -9.81, 0.0)))
     .insert_resource(Time::<Physics>::default())
-    .add_systems(Startup, (setup_world, setup_copper, setup_joystick))
+    .add_systems(
+        Startup,
+        (setup_world, setup_osd_overlay, setup_copper, setup_joystick),
+    )
     .add_systems(
         Update,
         (
@@ -889,6 +1076,7 @@ pub fn make_world(headless: bool) -> App {
             toggle_camera_view,
             camera_follow_quadcopter,
             track_sim_led_state,
+            update_osd_overlay,
         )
             .chain(),
     )
