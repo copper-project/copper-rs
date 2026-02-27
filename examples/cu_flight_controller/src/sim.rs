@@ -17,9 +17,9 @@ use bevy::prelude::{
     App, AssetPlugin, AssetServer, ButtonInput, Camera, Camera3d, Color, Commands, Component,
     DefaultPlugins, Dir3, DirectionalLight, EnvironmentMapLight, FixedUpdate, GlobalAmbientLight,
     GlobalTransform, GltfAssetLabel, KeyCode, MessageReader, MessageWriter, MinimalPlugins, Name,
-    PerspectiveProjection, PluginGroup, PostUpdate, Projection, Quat, Query, Res, ResMut,
-    Resource, SceneRoot, Startup, Time, Transform, Update, Vec3, Window, WindowPlugin, With,
-    Without, default,
+    PerspectiveProjection, PluginGroup, PostUpdate, Projection, Quat, Query, Res, ResMut, Resource,
+    SceneRoot, Startup, Time, Transform, Update, Vec3, Window, WindowPlugin, With, Without,
+    default,
 };
 use cached_path::{Cache, Error as CacheError, ProgressBar};
 use cu29::prelude::*;
@@ -508,7 +508,11 @@ fn arm_from_switches(frame: &RcFrame) -> Option<bool> {
     const ARM_SWITCH_NAMES: &[&str] = &["sf", "se", "arm", "btn1"];
 
     for name in ARM_SWITCH_NAMES {
-        if let Some(sw) = frame.switches.iter().find(|s| s.name.eq_ignore_ascii_case(name)) {
+        if let Some(sw) = frame
+            .switches
+            .iter()
+            .find(|s| s.name.eq_ignore_ascii_case(name))
+        {
             return Some(sw.on);
         }
     }
@@ -789,7 +793,9 @@ fn camera_follow_quadcopter(
         CameraView::FirstPerson => {
             quad_tf.translation() + 0.10 * quad_tf.up() + 0.16 * quad_tf.forward()
         }
-        CameraView::ThirdPerson => quad_tf.translation() + -2.0 * quad_tf.forward() + 1.0 * quad_tf.up(),
+        CameraView::ThirdPerson => {
+            quad_tf.translation() + -2.0 * quad_tf.forward() + 1.0 * quad_tf.up()
+        }
     };
     camera_tf.translation = camera_position;
     *camera_tf = camera_tf.looking_to(quad_tf.forward(), quad_tf.up());
@@ -879,7 +885,12 @@ pub fn make_world(headless: bool) -> App {
     )
     .add_systems(
         Update,
-        (toggle_camera_view, camera_follow_quadcopter, track_sim_led_state).chain(),
+        (
+            toggle_camera_view,
+            camera_follow_quadcopter,
+            track_sim_led_state,
+        )
+            .chain(),
     )
     .add_systems(
         FixedUpdate,

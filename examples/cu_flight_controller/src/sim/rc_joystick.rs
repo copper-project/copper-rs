@@ -299,7 +299,6 @@ fn joystick_device_name(device: &Device) -> String {
     device.name().map(|n| n.to_lowercase()).unwrap_or_default()
 }
 
-
 fn is_radio_profile_name(name: &str) -> bool {
     is_elrs_profile_name(name) || is_opentx_profile_name(name)
 }
