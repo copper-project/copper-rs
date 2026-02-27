@@ -751,32 +751,57 @@ pub fn build_monitor_topology(config: &CuConfig, mission: &str) -> CuResult<Moni
     })
 }
 
-/// Trait to implement a monitoring task.
+/// Runtime monitoring contract implemented by monitor components.
+///
+/// Lifecycle:
+/// 1. [`CuMonitor::new`] is called once at runtime construction time.
+/// 2. [`CuMonitor::start`] is called once before the first runtime iteration.
+/// 3. For each iteration, [`CuMonitor::process_copperlist`] is called after task execution,
+///    then [`CuMonitor::observe_copperlist_io`] after serialization accounting.
+/// 4. [`CuMonitor::process_error`] is called synchronously when a task step fails.
+/// 5. [`CuMonitor::process_panic`] is called when the runtime catches a panic (`std` builds).
+/// 6. [`CuMonitor::stop`] is called once during runtime shutdown.
+///
+/// Indexing model:
+/// - `taskid` arguments in callbacks are task indices (not generic component indices).
+/// - Resolve names with [`CuMonitoringMetadata::task_id`] / `task_id_or_unknown`.
+/// - Use `metadata.components()` when you need full monitored component identity (tasks + bridge
+///   monitoring components).
+///
+/// Error policy:
+/// - [`Decision::Ignore`] continues execution.
+/// - [`Decision::Abort`] aborts the current operation (step/copperlist scope).
+/// - [`Decision::Shutdown`] triggers runtime shutdown.
 pub trait CuMonitor: Sized {
-    /// Construct the monitor once, before runtime task execution starts.
+    /// Construct the monitor once, before task execution starts.
     ///
+    /// `metadata` contains mission/config/topology/static mapping information.
+    /// `runtime` exposes dynamic runtime handles (for example execution probes).
     /// Use `metadata.monitor_config()` to decode monitor-specific parameters.
     fn new(metadata: CuMonitoringMetadata, runtime: CuMonitoringRuntime) -> CuResult<Self>
     where
         Self: Sized;
 
+    /// Called once before processing the first CopperList.
     fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         Ok(())
     }
 
-    /// Callback that will be trigger at the end of every copperlist (before, on or after the serialization).
+    /// Called once per processed CopperList after task execution.
+    ///
+    /// `msgs` is ordered by CopperList slot, not by task index.
     fn process_copperlist(&self, _ctx: &CuContext, msgs: &[&CuMsgMetadata]) -> CuResult<()>;
 
-    /// Called when the runtime finishes serializing a CopperList, giving IO accounting data.
+    /// Called when runtime finishes CopperList serialization/IO accounting.
     fn observe_copperlist_io(&self, _stats: CopperListIoStats) {}
 
-    /// Callbacked when a Task errored out. The runtime requires an immediate decision.
+    /// Called when a task step fails; must return an immediate runtime decision.
     fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision;
 
-    /// Callback fired when the runtime catches a panic in a std build.
+    /// Called when the runtime catches a panic (`std` builds).
     fn process_panic(&self, _panic_message: &str) {}
 
-    /// Callbacked when copper is stopping.
+    /// Called once during runtime shutdown.
     fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
         Ok(())
     }
