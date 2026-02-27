@@ -1293,8 +1293,6 @@ impl CuDurationStatistics {
 mod tests {
     use super::*;
     use core::sync::atomic::{AtomicUsize, Ordering};
-    #[cfg(feature = "std")]
-    use std::sync::Arc;
 
     #[derive(Clone, Copy)]
     enum TestDecision {
@@ -1432,8 +1430,11 @@ mod tests {
 
     #[test]
     fn tuple_monitor_fans_out_callbacks() {
-        let monitors =
-            <(TestMonitor, TestMonitor) as CuMonitor>::new(test_metadata()).expect("tuple new");
+        let monitors = <(TestMonitor, TestMonitor) as CuMonitor>::new(
+            test_metadata(),
+            CuMonitoringRuntime::unavailable(),
+        )
+        .expect("tuple new");
         let (ctx, _clock_control) = CuContext::new_mock_clock();
         monitors
             .process_copperlist(&ctx, &[])
