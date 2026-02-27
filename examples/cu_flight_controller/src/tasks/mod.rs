@@ -586,9 +586,12 @@ impl CuTask for ImuCalibrator {
 
             output.tov = Tov::Time(imu_tov);
             output.clear_payload();
-            let progress =
-                ((self.samples.saturating_mul(100)) / self.required_samples.max(1)).min(100);
-            status_if_not_firmware!(output.metadata, format!("cal {}%", progress));
+            #[cfg(not(feature = "firmware"))]
+            {
+                let progress =
+                    ((self.samples.saturating_mul(100)) / self.required_samples.max(1)).min(100);
+                status_if_not_firmware!(output.metadata, format!("cal {}%", progress));
+            }
             return Ok(());
         }
 
@@ -1191,6 +1194,7 @@ fn mode_label(mode: FlightMode) -> &'static str {
     }
 }
 
+#[cfg(not(feature = "firmware"))]
 fn mode_tag(mode: FlightMode) -> &'static str {
     match mode {
         FlightMode::Angle => "ANG",
@@ -1199,10 +1203,12 @@ fn mode_tag(mode: FlightMode) -> &'static str {
     }
 }
 
+#[cfg(not(feature = "firmware"))]
 fn throttle_percent(throttle: f32) -> u16 {
     (throttle.clamp(0.0, 1.0) * 100.0).round() as u16
 }
 
+#[cfg(not(feature = "firmware"))]
 fn dshot_percent(raw: u16) -> u16 {
     ((u32::from(raw) * 100 + 1023) / 2047) as u16
 }
