@@ -111,6 +111,13 @@ struct SimJoystickState {
     reader: Option<RcJoystick>,
 }
 
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum CameraView {
+    #[default]
+    FirstPerson,
+    ThirdPerson,
+}
+
 #[derive(Debug)]
 struct QuadcopterForceTorque {
     force: Vec3,
@@ -750,9 +757,26 @@ fn apply_multicopter_dynamics(
     forces.apply_angular_impulse(dt * force_torque.torque);
 }
 
+fn toggle_camera_view(keyboard: Res<ButtonInput<KeyCode>>, mut camera_view: ResMut<CameraView>) {
+    if !keyboard.just_pressed(KeyCode::KeyV) {
+        return;
+    }
+
+    *camera_view = match *camera_view {
+        CameraView::FirstPerson => CameraView::ThirdPerson,
+        CameraView::ThirdPerson => CameraView::FirstPerson,
+    };
+    let mode = match *camera_view {
+        CameraView::FirstPerson => "first_person",
+        CameraView::ThirdPerson => "third_person",
+    };
+    info!("sim camera: {}", mode);
+}
+
 fn camera_follow_quadcopter(
     quadcopter_query: Query<&GlobalTransform, With<Multicopter>>,
     mut camera_query: Query<&mut Transform, (With<Camera>, Without<Multicopter>)>,
+    camera_view: Res<CameraView>,
 ) {
     let Ok(quad_tf) = quadcopter_query.single() else {
         return;
@@ -761,7 +785,12 @@ fn camera_follow_quadcopter(
         return;
     };
 
-    let camera_position = quad_tf.translation() + -2.0 * quad_tf.forward() + 1.0 * quad_tf.up();
+    let camera_position = match *camera_view {
+        CameraView::FirstPerson => {
+            quad_tf.translation() + 0.10 * quad_tf.up() + 0.16 * quad_tf.forward()
+        }
+        CameraView::ThirdPerson => quad_tf.translation() + -2.0 * quad_tf.forward() + 1.0 * quad_tf.up(),
+    };
     camera_tf.translation = camera_position;
     *camera_tf = camera_tf.looking_to(quad_tf.forward(), quad_tf.up());
 }
@@ -810,7 +839,8 @@ pub fn make_world(headless: bool) -> App {
         .insert_resource(SimRcInput::default())
         .insert_resource(SimKinematics::default())
         .insert_resource(RcInputSource::default())
-        .insert_resource(SimJoystickState::default());
+        .insert_resource(SimJoystickState::default())
+        .insert_resource(CameraView::default());
 
     if headless {
         app.add_plugins(MinimalPlugins);
@@ -849,7 +879,7 @@ pub fn make_world(headless: bool) -> App {
     )
     .add_systems(
         Update,
-        (camera_follow_quadcopter, track_sim_led_state).chain(),
+        (toggle_camera_view, camera_follow_quadcopter, track_sim_led_state).chain(),
     )
     .add_systems(
         FixedUpdate,
