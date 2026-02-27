@@ -195,10 +195,7 @@ impl CuTask for VtxOsd {
         }
 
         if batch.0.is_empty() {
-            status_if_not_firmware!(
-                output.metadata,
-                format!("osd {}", label.as_str().trim())
-            );
+            status_if_not_firmware!(output.metadata, format!("osd {}", label.as_str().trim()));
             output.clear_payload();
         } else {
             status_if_not_firmware!(
