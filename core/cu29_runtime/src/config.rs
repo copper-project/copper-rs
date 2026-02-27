@@ -53,6 +53,7 @@ use imp::*;
 /// NodeId is the unique identifier of a node in the configuration graph for petgraph
 /// and the code generation.
 pub type NodeId = u32;
+pub const DEFAULT_MISSION_ID: &str = "default";
 
 /// This is the configuration of a component (like a task config or a monitoring config):w
 /// It is a map of key-value pairs.
@@ -1125,7 +1126,7 @@ impl ConfigGraphs {
     #[allow(dead_code)]
     pub fn get_all_missions_graphs(&self) -> HashMap<String, CuGraph> {
         match self {
-            Simple(graph) => HashMap::from([("default".to_string(), graph.clone())]),
+            Simple(graph) => HashMap::from([(DEFAULT_MISSION_ID.to_string(), graph.clone())]),
             Missions(graphs) => graphs.clone(),
         }
     }
@@ -1148,7 +1149,7 @@ impl ConfigGraphs {
     pub fn get_graph(&self, mission_id: Option<&str>) -> CuResult<&CuGraph> {
         match self {
             Simple(graph) => match mission_id {
-                None | Some("default") => Ok(graph),
+                None | Some(DEFAULT_MISSION_ID) => Ok(graph),
                 Some(_) => Err("Cannot get mission graph from simple config".into()),
             },
             Missions(graphs) => {

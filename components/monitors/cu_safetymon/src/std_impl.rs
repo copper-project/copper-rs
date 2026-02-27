@@ -34,9 +34,7 @@ struct SafetyCfg {
 }
 
 impl SafetyCfg {
-    fn from_config(config: &CuConfig) -> CuResult<Self> {
-        let monitor_cfg = config.get_monitor_config().and_then(|m| m.get_config());
-
+    fn from_monitor_config(monitor_cfg: Option<&ComponentConfig>) -> CuResult<Self> {
         let deadline_ms = read_u64(monitor_cfg, "copperlist_deadline_ms")?.unwrap_or(1000);
         if deadline_ms == 0 {
             return Err(CuError::from(
@@ -101,15 +99,24 @@ impl SharedState {
 }
 
 pub struct CuSafetyMon {
-    taskids: &'static [&'static str],
+    components: &'static [MonitorComponentMetadata],
+    task_count: usize,
     shared: Arc<SharedState>,
     cfg: SafetyCfg,
     watchdog: Option<JoinHandle<()>>,
     previous_panic_hook: Option<PanicHook>,
-    execution_probe: Option<ExecutionProbeHandle>,
+    execution_probe: MonitorExecutionProbe,
 }
 
 impl CuSafetyMon {
+    fn task_name(&self, task_idx: usize) -> &'static str {
+        if task_idx < self.task_count {
+            self.components[task_idx].id()
+        } else {
+            "<?>"
+        }
+    }
+
     fn emit_fault(prefix: &str, detail: &str) {
         // Always emit to stderr so fault details are visible even without text log sinks.
         eprintln!("{} {}", prefix, detail);
@@ -121,7 +128,7 @@ impl CuSafetyMon {
         let deadline = self.cfg.copperlist_deadline;
         let period = self.cfg.watchdog_period;
         let exit_code = self.cfg.exit_code_lock;
-        let taskids: Vec<String> = self.taskids.iter().map(|id| (*id).to_string()).collect();
+        let components = self.components;
         let probe = self.execution_probe.clone();
 
         self.watchdog = Some(thread::spawn(move || {
@@ -140,10 +147,10 @@ impl CuSafetyMon {
                 };
 
                 if elapsed > deadline {
-                    let marker = probe.as_ref().and_then(|p| p.marker());
+                    let marker = probe.marker();
                     let culist_info = format!("last_culist={last_culistid}");
                     let detail = if let Some(marker) = marker {
-                        let component = taskids.get(marker.component_id).map(|s| s.as_str());
+                        let component = components.get(marker.component_id).map(|c| c.id());
                         match component {
                             Some(component) => format!(
                                 "watchdog timeout after {:?}; last marker: component='{}' step={:?}; {}",
@@ -190,7 +197,7 @@ impl CuSafetyMon {
                 .map(|loc| format!("{}:{}:{}", loc.file(), loc.line(), loc.column()))
                 .unwrap_or_else(|| "<unknown>".to_string());
 
-            let marker = probe.as_ref().and_then(|p| p.marker());
+            let marker = probe.marker();
             let last_culistid = {
                 let guard = shared
                     .last_progress
@@ -235,15 +242,17 @@ impl CuSafetyMon {
 }
 
 impl CuMonitor for CuSafetyMon {
-    fn new(config: &CuConfig, taskids: &'static [&'static str]) -> CuResult<Self> {
-        let cfg = SafetyCfg::from_config(config)?;
+    fn new(metadata: CuMonitoringMetadata, runtime: CuMonitoringRuntime) -> CuResult<Self> {
+        let task_count = metadata.task_count();
+        let cfg = SafetyCfg::from_monitor_config(metadata.monitor_config())?;
         Ok(Self {
-            taskids,
+            components: metadata.components(),
+            task_count,
             shared: Arc::new(SharedState::new()),
             cfg,
             watchdog: None,
             previous_panic_hook: None,
-            execution_probe: None,
+            execution_probe: runtime.execution_probe().clone(),
         })
     }
 
@@ -268,7 +277,7 @@ impl CuMonitor for CuSafetyMon {
     }
 
     fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision {
-        let task_name = self.taskids.get(taskid).copied().unwrap_or("<?>");
+        let task_name = self.task_name(taskid);
         let detail = format!(
             "runtime fault: task='{}' step={:?} error={} ",
             task_name, step, error
@@ -283,10 +292,6 @@ impl CuMonitor for CuSafetyMon {
         self.shared
             .request_exit(self.cfg.exit_code_panic, panic_message.to_string());
         Self::emit_fault("cu_safetymon panic observed:", panic_message);
-    }
-
-    fn set_execution_probe(&mut self, probe: ExecutionProbeHandle) {
-        self.execution_probe = Some(probe);
     }
 
     fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
