@@ -46,6 +46,7 @@ const MSP_FC_VERSION_PATCH: u8 = 0;
 pub mod activity_led;
 pub mod battery;
 pub mod flow_msp;
+pub mod monitor;
 pub mod vtx;
 
 struct LogRateLimiter {

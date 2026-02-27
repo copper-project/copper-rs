@@ -379,7 +379,9 @@
             missions: ["flow"],
         ),
     ],
-    monitor: (type: "cu_logmon::CuLogMon"),
+    monitor: (
+        type: "tasks::monitor::FlightMonitor",
+    ),
     logging: (
         slab_size_mib: 16,
         section_size_mib: 4,
