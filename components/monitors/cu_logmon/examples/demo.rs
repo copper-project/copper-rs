@@ -4,7 +4,11 @@ use log::{Level, LevelFilter, Metadata, Record};
 use std::thread;
 use std::time::Duration;
 
-const TASKIDS: &[&str] = &["src", "task", "sink"];
+const MONITORED_COMPONENTS: &[MonitorComponentMetadata] = &[
+    MonitorComponentMetadata::new("src", ComponentKind::Task, None),
+    MonitorComponentMetadata::new("task", ComponentKind::Task, None),
+    MonitorComponentMetadata::new("sink", ComponentKind::Task, None),
+];
 
 #[derive(Debug)]
 struct NullStream;
@@ -51,7 +55,20 @@ fn main() -> CuResult<()> {
     let _guard = LoggerRuntime::init(ctx.clock.clone(), NullStream, Some(StdoutLogger));
     info!("cu_logmon demo starting");
 
-    let mut monitor = CuLogMon::new(&CuConfig::default(), TASKIDS)?;
+    let config = CuConfig::default();
+    let metadata = CuMonitoringMetadata::new(
+        DEFAULT_MISSION_ID.into(),
+        MONITORED_COMPONENTS,
+        &[],
+        CopperListInfo::new(0, 0),
+        MonitorTopology::default(),
+        config
+            .get_monitor_configs()
+            .first()
+            .and_then(|entry| entry.get_config().cloned()),
+    )?;
+    let runtime = CuMonitoringRuntime::unavailable();
+    let mut monitor = CuLogMon::new(metadata, runtime)?;
     monitor.start(&ctx)?;
 
     let workloads: [u64; 3] = [500, 1500, 900]; // microseconds per task
