@@ -3,6 +3,8 @@
 extern crate alloc;
 
 mod messages;
+#[path = "sim/rc_joystick.rs"]
+mod rc_joystick;
 mod sim_support;
 mod tasks;
 
@@ -15,9 +17,9 @@ use bevy::prelude::{
     App, AssetPlugin, AssetServer, ButtonInput, Camera, Camera3d, Color, Commands, Component,
     DefaultPlugins, Dir3, DirectionalLight, EnvironmentMapLight, FixedUpdate, GlobalAmbientLight,
     GlobalTransform, GltfAssetLabel, KeyCode, MessageReader, MessageWriter, MinimalPlugins, Name,
-    PerspectiveProjection, PluginGroup, PostUpdate, Projection, Quat, Query, Res, ResMut, Resource,
-    SceneRoot, Startup, Time, Transform, Update, Vec3, Window, WindowPlugin, With, Without,
-    default,
+    PerspectiveProjection, PluginGroup, PostUpdate, Projection, Quat, Query, Res, ResMut,
+    Resource, SceneRoot, Startup, Time, Transform, Update, Vec3, Window, WindowPlugin, With,
+    Without, default,
 };
 use cached_path::{Cache, Error as CacheError, ProgressBar};
 use cu29::prelude::*;
@@ -25,6 +27,7 @@ use cu29_helpers::basic_copper_setup;
 
 use cu_crsf::messages::RcChannelsPayload;
 use cu_sensor_payloads::{BarometerPayload, ImuPayload, MagnetometerPayload};
+use rc_joystick::{RcFrame, RcJoystick};
 
 use std::fs;
 use std::io;
@@ -94,6 +97,18 @@ impl Default for SimRcInput {
 #[derive(Resource, Default)]
 struct SimKinematics {
     prev_linear_velocity: Option<Vec3>,
+}
+
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum RcInputSource {
+    #[default]
+    Keyboard,
+    Joystick,
+}
+
+#[derive(Resource, Default)]
+struct SimJoystickState {
+    reader: Option<RcJoystick>,
 }
 
 #[derive(Debug)]
@@ -409,7 +424,109 @@ fn setup_world(mut commands: Commands, asset_server: Res<AssetServer>) {
     ));
 }
 
-fn update_rc_input(mut rc_input: ResMut<SimRcInput>, keyboard: Res<ButtonInput<KeyCode>>) {
+fn setup_joystick(
+    mut rc_input: ResMut<SimRcInput>,
+    mut rc_source: ResMut<RcInputSource>,
+    mut joystick_state: ResMut<SimJoystickState>,
+) {
+    let preferred = std::env::var("CU_SIM_JOYSTICK").ok();
+    match RcJoystick::open(preferred.as_deref()) {
+        Ok(joystick) => {
+            apply_joystick_frame(&joystick.current_frame(), &mut rc_input);
+            *rc_source = RcInputSource::Joystick;
+            info!(
+                "sim rc: joystick source active (set CU_SIM_JOYSTICK=<name> to target a device)"
+            );
+            joystick_state.reader = Some(joystick);
+        }
+        Err(err) => {
+            *rc_source = RcInputSource::Keyboard;
+            eprintln!("sim rc: joystick unavailable ({}), using keyboard controls", err);
+            joystick_state.reader = None;
+        }
+    }
+}
+
+fn poll_joystick(
+    mut joystick: ResMut<SimJoystickState>,
+    mut rc_input: ResMut<SimRcInput>,
+    mut rc_source: ResMut<RcInputSource>,
+) {
+    let Some(reader) = joystick.reader.as_mut() else {
+        return;
+    };
+
+    match reader.next_frame() {
+        Ok(Some(frame)) => {
+            let prev_armed = rc_input.armed;
+            let prev_mode = rc_input.mode;
+            apply_joystick_frame(&frame, &mut rc_input);
+            *rc_source = RcInputSource::Joystick;
+            if rc_input.armed != prev_armed || rc_input.mode != prev_mode {
+                info!("sim rc: armed={} mode={:?}", rc_input.armed, rc_input.mode);
+            }
+        }
+        Ok(None) => {}
+        Err(err) => {
+            eprintln!(
+                "sim rc: joystick read failed ({}), falling back to keyboard",
+                err
+            );
+            joystick.reader = None;
+            *rc_source = RcInputSource::Keyboard;
+        }
+    }
+}
+
+fn mode_from_three_pos(value: f32) -> messages::FlightMode {
+    if value < -0.33 {
+        messages::FlightMode::Acro
+    } else if value < 0.33 {
+        messages::FlightMode::Angle
+    } else {
+        messages::FlightMode::PositionHold
+    }
+}
+
+fn arm_from_switches(frame: &RcFrame) -> Option<bool> {
+    const ARM_SWITCH_NAMES: &[&str] = &["sf", "se", "arm", "btn1"];
+
+    for name in ARM_SWITCH_NAMES {
+        if let Some(sw) = frame.switches.iter().find(|s| s.name.eq_ignore_ascii_case(name)) {
+            return Some(sw.on);
+        }
+    }
+
+    frame.switches.first().map(|s| s.on)
+}
+
+fn apply_joystick_frame(frame: &RcFrame, rc_input: &mut SimRcInput) {
+    rc_input.roll = frame.roll.clamp(-1.0, 1.0);
+    rc_input.pitch = frame.pitch.clamp(-1.0, 1.0);
+    rc_input.yaw = frame.yaw.clamp(-1.0, 1.0);
+    rc_input.throttle = frame.throttle.clamp(0.0, 1.0);
+
+    let armed_from_switch = arm_from_switches(frame);
+    let arm_uses_sa_axis = armed_from_switch.is_none();
+    rc_input.armed = armed_from_switch.unwrap_or(frame.knob_sa > 0.5);
+
+    let mode_axis = if arm_uses_sa_axis {
+        frame.knob_sb
+    } else {
+        frame.knob_sa
+    };
+    rc_input.mode = mode_from_three_pos(mode_axis);
+}
+
+fn update_rc_input_keyboard(
+    mut rc_input: ResMut<SimRcInput>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    rc_source: Res<RcInputSource>,
+) {
+    if *rc_source == RcInputSource::Joystick {
+        return;
+    }
+
     let roll =
         (keyboard.pressed(KeyCode::KeyA) as i8 - keyboard.pressed(KeyCode::KeyD) as i8) as f32;
     let pitch =
@@ -437,11 +554,16 @@ fn update_rc_input(mut rc_input: ResMut<SimRcInput>, keyboard: Res<ButtonInput<K
     }
 }
 
-fn adjust_throttle(
+fn adjust_keyboard_throttle(
     mut rc_input: ResMut<SimRcInput>,
     keyboard: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
+    rc_source: Res<RcInputSource>,
 ) {
+    if *rc_source == RcInputSource::Joystick {
+        return;
+    }
+
     let dt = time.delta_secs();
     let mut throttle = rc_input.throttle;
 
@@ -673,7 +795,9 @@ pub fn make_world(headless: bool) -> App {
     app.insert_resource(SimState::default())
         .insert_resource(SimMotorCommands::default())
         .insert_resource(SimRcInput::default())
-        .insert_resource(SimKinematics::default());
+        .insert_resource(SimKinematics::default())
+        .insert_resource(RcInputSource::default())
+        .insert_resource(SimJoystickState::default());
 
     if headless {
         app.add_plugins(MinimalPlugins);
@@ -700,8 +824,16 @@ pub fn make_world(headless: bool) -> App {
     .add_plugins(PhysicsPlugins::default())
     .insert_resource(Gravity(Vec3::new(0.0, -9.81, 0.0)))
     .insert_resource(Time::<Physics>::default())
-    .add_systems(Startup, (setup_world, setup_copper))
-    .add_systems(Update, (update_rc_input, adjust_throttle, reset_vehicle))
+    .add_systems(Startup, (setup_world, setup_copper, setup_joystick))
+    .add_systems(
+        Update,
+        (
+            poll_joystick,
+            update_rc_input_keyboard,
+            adjust_keyboard_throttle,
+            reset_vehicle,
+        ),
+    )
     .add_systems(
         Update,
         (camera_follow_quadcopter, track_sim_led_state).chain(),

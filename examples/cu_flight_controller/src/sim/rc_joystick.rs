@@ -109,6 +109,7 @@ impl RcJoystick {
             state,
         };
 
+        joystick.device.set_nonblocking(true)?;
         prime_axes(&joystick.device, &joystick.axis_map, &mut joystick.state);
         prime_switches(&joystick.device, &joystick.switch_map, &mut joystick.state);
 
@@ -123,11 +124,11 @@ impl RcJoystick {
     /// Blocks until new events arrive and returns an updated frame when something changed.
     pub fn next_frame(&mut self) -> io::Result<Option<RcFrame>> {
         let mut updated = false;
-        let events = self
-            .device
-            .fetch_events()
-            .map_err(Error::other)?
-            .collect::<Vec<_>>();
+        let events = match self.device.fetch_events() {
+            Ok(events) => events.collect::<Vec<_>>(),
+            Err(err) if err.kind() == ErrorKind::WouldBlock => return Ok(None),
+            Err(err) => return Err(err),
+        };
 
         for ev in events {
             match ev.destructure() {
@@ -163,6 +164,11 @@ impl RcJoystick {
         } else {
             Ok(None)
         }
+    }
+
+    /// Returns the latest known joystick state snapshot.
+    pub fn current_frame(&self) -> RcFrame {
+        self.state.clone()
     }
 
     /// Convenience helper that logs changes to stdout.
@@ -298,6 +304,18 @@ fn joystick_device_name(device: &Device) -> String {
     device.name().map(|n| n.to_lowercase()).unwrap_or_default()
 }
 
+fn is_radio_profile_name(name: &str) -> bool {
+    is_elrs_profile_name(name) || is_opentx_profile_name(name)
+}
+
+fn is_elrs_profile_name(name: &str) -> bool {
+    name.contains("expresslrs") || name.contains("radiomaster")
+}
+
+fn is_opentx_profile_name(name: &str) -> bool {
+    name.contains("opentx") || name.contains("edgetx")
+}
+
 // ExpressLRS joystick switch codes mapped to radio labels directly.
 // Update these names if your Lua script exports different labels.
 const ELRS_SWITCH_CODES: &[(KeyCode, &str)] =
@@ -307,7 +325,7 @@ fn build_switches(device: &Device) -> Vec<SwitchState> {
     let name = joystick_device_name(device);
     let supported = device.supported_keys();
 
-    if name.contains("expresslrs") || name.contains("radiomaster") {
+    if is_radio_profile_name(&name) {
         return ELRS_SWITCH_CODES
             .iter()
             .filter(|(code, _)| supported.is_some_and(|s| s.contains(*code)))
@@ -334,7 +352,7 @@ fn build_switches(device: &Device) -> Vec<SwitchState> {
 fn build_switch_map(device: &Device, switches: &[SwitchState]) -> HashMap<u16, usize> {
     let mut map = HashMap::new();
     let device_name = joystick_device_name(device);
-    if device_name.contains("expresslrs") || device_name.contains("radiomaster") {
+    if is_radio_profile_name(&device_name) {
         for (code, name) in ELRS_SWITCH_CODES.iter() {
             if let Some(idx) = switches.iter().position(|s| s.name == *name) {
                 map.insert(code.0, idx);
@@ -391,6 +409,9 @@ fn score_device(device: &Device, preferred_name: Option<&str>) -> i32 {
         if lower.contains("radio") || lower.contains("rc") || lower.contains("tx") {
             score += 20;
         }
+        if lower.contains("opentx") || lower.contains("edgetx") {
+            score += 20;
+        }
         if lower.contains("joystick") {
             score += 5;
         }
@@ -411,7 +432,7 @@ fn build_axis_map(device: &Device) -> HashMap<u16, (RcAxis, AxisScale)> {
     };
 
     if let Some(name) = device.name().map(|n| n.to_lowercase())
-        && (name.contains("expresslrs") || name.contains("radiomaster"))
+        && is_elrs_profile_name(&name)
     {
         insert_if_present(
             axes,
@@ -464,6 +485,71 @@ fn build_axis_map(device: &Device) -> HashMap<u16, (RcAxis, AxisScale)> {
         );
 
         // Any remaining axes become aux channels.
+        let mut aux_index = 0u8;
+        for axis in axes.iter() {
+            let code = axis.0;
+            if let std::collections::hash_map::Entry::Vacant(entry) = map.entry(code) {
+                entry.insert((RcAxis::Aux(aux_index), AxisScale::NegOneToOne));
+                aux_index += 1;
+            }
+        }
+        return map;
+    }
+
+    if let Some(name) = device.name().map(|n| n.to_lowercase())
+        && is_opentx_profile_name(&name)
+    {
+        // OpenTX/EdgeTX USB joystick layout observed on TX15.
+        insert_if_present(
+            axes,
+            &mut map,
+            AbsoluteAxisCode::ABS_X,
+            RcAxis::Roll,
+            AxisScale::NegOneToOne,
+        );
+        insert_if_present(
+            axes,
+            &mut map,
+            AbsoluteAxisCode::ABS_Y,
+            RcAxis::Pitch,
+            AxisScale::NegOneToOne,
+        );
+        insert_if_present(
+            axes,
+            &mut map,
+            AbsoluteAxisCode::ABS_RX,
+            RcAxis::Yaw,
+            AxisScale::NegOneToOne,
+        );
+        insert_if_present(
+            axes,
+            &mut map,
+            AbsoluteAxisCode::ABS_Z,
+            RcAxis::Throttle,
+            AxisScale::ZeroToOne,
+        );
+        insert_if_present(
+            axes,
+            &mut map,
+            AbsoluteAxisCode::ABS_RY,
+            RcAxis::KnobSa,
+            AxisScale::NegOneToOne,
+        );
+        insert_if_present(
+            axes,
+            &mut map,
+            AbsoluteAxisCode::ABS_RZ,
+            RcAxis::KnobSb,
+            AxisScale::NegOneToOne,
+        );
+        insert_if_present(
+            axes,
+            &mut map,
+            AbsoluteAxisCode::ABS_THROTTLE,
+            RcAxis::KnobSc,
+            AxisScale::NegOneToOne,
+        );
+
         let mut aux_index = 0u8;
         for axis in axes.iter() {
             let code = axis.0;
