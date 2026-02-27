@@ -306,8 +306,16 @@ fn dshot_to_omega(dshot: u16) -> f32 {
     normalized * MAX_OMEGA_RAD_S
 }
 
-fn map_bevy_body_to_fc_axes(v: Vec3) -> [f32; 3] {
-    [v.x, v.z, v.y]
+/// Map Bevy body polar vectors (X right, Y up, Z forward) to FC AHRS body frame
+/// (X forward, Y right, Z down; aerospace/NED).
+fn map_bevy_body_to_fc_polar(v: Vec3) -> [f32; 3] {
+    [v.z, v.x, -v.y]
+}
+
+/// Map Bevy body axial vectors (angular velocity / magnetic field) into FC body frame.
+/// Because the frame transform changes handedness, axial vectors pick up an extra sign.
+fn map_bevy_body_to_fc_axial(v: Vec3) -> [f32; 3] {
+    [-v.z, -v.x, v.y]
 }
 
 fn setup_copper(mut commands: Commands) {
@@ -434,14 +442,15 @@ fn setup_joystick(
         Ok(joystick) => {
             apply_joystick_frame(&joystick.current_frame(), &mut rc_input);
             *rc_source = RcInputSource::Joystick;
-            info!(
-                "sim rc: joystick source active (set CU_SIM_JOYSTICK=<name> to target a device)"
-            );
+            info!("sim rc: joystick source active (set CU_SIM_JOYSTICK=<name> to target a device)");
             joystick_state.reader = Some(joystick);
         }
         Err(err) => {
             *rc_source = RcInputSource::Keyboard;
-            eprintln!("sim rc: joystick unavailable ({}), using keyboard controls", err);
+            info!(
+                "sim rc: joystick unavailable ({}), using keyboard controls",
+                err.to_string()
+            );
             joystick_state.reader = None;
         }
     }
@@ -468,9 +477,9 @@ fn poll_joystick(
         }
         Ok(None) => {}
         Err(err) => {
-            eprintln!(
+            info!(
                 "sim rc: joystick read failed ({}), falling back to keyboard",
-                err
+                err.to_string()
             );
             joystick.reader = None;
             *rc_source = RcInputSource::Keyboard;
@@ -502,8 +511,9 @@ fn arm_from_switches(frame: &RcFrame) -> Option<bool> {
 
 fn apply_joystick_frame(frame: &RcFrame, rc_input: &mut SimRcInput) {
     rc_input.roll = frame.roll.clamp(-1.0, 1.0);
-    rc_input.pitch = frame.pitch.clamp(-1.0, 1.0);
-    rc_input.yaw = frame.yaw.clamp(-1.0, 1.0);
+    // Match FC stick convention used by keyboard path and RcMapper.
+    rc_input.pitch = (-frame.pitch).clamp(-1.0, 1.0);
+    rc_input.yaw = (-frame.yaw).clamp(-1.0, 1.0);
     rc_input.throttle = frame.throttle.clamp(0.0, 1.0);
 
     let armed_from_switch = arm_from_switches(frame);
@@ -617,17 +627,20 @@ fn sync_vehicle_state(
     kin.prev_linear_velocity = Some(lv);
 
     let accel_world = (lv - prev) / dt;
-    let specific_force_world = accel_world - gravity.0;
+    // cu-ahrs expects accelerometer values in NED-style body axes where
+    // level flight is approximately [0, 0, +9.81]. In Bevy world (Y up),
+    // this corresponds to gravity minus linear acceleration.
+    let accel_measure_world = gravity.0 - accel_world;
 
     let rotation = transform.rotation();
-    let accel_body = rotation.inverse() * specific_force_world;
+    let accel_body = rotation.inverse() * accel_measure_world;
     let gyro_body = rotation.inverse() * angular_velocity.0;
 
     state.vehicle = SimVehicleState {
         position: transform.translation(),
         rotation,
-        body_accel_fc: map_bevy_body_to_fc_axes(accel_body),
-        body_gyro_fc: map_bevy_body_to_fc_axes(gyro_body),
+        body_accel_fc: map_bevy_body_to_fc_polar(accel_body),
+        body_gyro_fc: map_bevy_body_to_fc_axial(gyro_body),
     };
 }
 
@@ -665,7 +678,7 @@ fn run_copper(
                 let world_mag = Vec3::from_array(WORLD_MAG_FIELD_UT);
                 let body_mag = vehicle.rotation.inverse() * world_mag;
                 set_msg_timing(&clock, output);
-                output.set_payload(MagnetometerPayload::from_raw(map_bevy_body_to_fc_axes(
+                output.set_payload(MagnetometerPayload::from_raw(map_bevy_body_to_fc_axial(
                     body_mag,
                 )));
                 SimOverride::ExecutedBySim
