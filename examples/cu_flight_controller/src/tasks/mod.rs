@@ -88,6 +88,15 @@ macro_rules! debug_rl {
     }};
 }
 
+macro_rules! status_if_not_firmware {
+    ($metadata:expr, $status:expr) => {{
+        #[cfg(not(feature = "firmware"))]
+        {
+            $metadata.set_status($status);
+        }
+    }};
+}
+
 static LOG_CTRL: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new(LOG_PERIOD_MS));
 static LOG_TELEMETRY: spin::Mutex<LogRateLimiter> =
     spin::Mutex::new(LogRateLimiter::new(LOG_PERIOD_MS));
@@ -471,6 +480,15 @@ impl CuTask for RcMapper {
             armed,
             mode,
         });
+        status_if_not_firmware!(
+            output.metadata,
+            format!(
+                "{} {} T{}%",
+                if armed { "ARM" } else { "DIS" },
+                mode_tag(mode),
+                throttle_percent(throttle)
+            )
+        );
         Ok(())
     }
 }
@@ -533,6 +551,7 @@ impl CuTask for ImuCalibrator {
             self.samples = 0;
             self.last_armed = false;
             output.tov = Tov::Time(imu_tov);
+            status_if_not_firmware!(output.metadata, "disarm");
             output.set_payload(*imu);
             return Ok(());
         }
@@ -567,7 +586,9 @@ impl CuTask for ImuCalibrator {
 
             output.tov = Tov::Time(imu_tov);
             output.clear_payload();
-            output.metadata.set_status("cal");
+            let progress =
+                ((self.samples.saturating_mul(100)) / self.required_samples.max(1)).min(100);
+            status_if_not_firmware!(output.metadata, format!("cal {}%", progress));
             return Ok(());
         }
 
@@ -580,7 +601,7 @@ impl CuTask for ImuCalibrator {
         let temp_c = imu.temperature.get::<degree_celsius>();
 
         output.tov = Tov::Time(imu_tov);
-        output.metadata.set_status("ok");
+        status_if_not_firmware!(output.metadata, "ok");
         output.set_payload(ImuPayload::from_raw(accel_mps2, gyro_rad, temp_c));
         Ok(())
     }
@@ -719,6 +740,7 @@ impl CuTask for AttitudeController {
             self.pitch_pid.reset();
             self.last_mode = ctrl.mode;
             output.tov = output_tov;
+            status_if_not_firmware!(output.metadata, "disarm");
             output.set_payload(BodyRateSetpoint::default());
             return Ok(());
         }
@@ -764,6 +786,16 @@ impl CuTask for AttitudeController {
             (yaw_cmd * self.acro_rate_rad).clamp(-self.acro_rate_rad, self.acro_rate_rad);
 
         output.tov = output_tov;
+        status_if_not_firmware!(
+            output.metadata,
+            format!(
+                "{} r{} p{} y{}",
+                mode_tag(ctrl.mode),
+                roll_rate.to_degrees().round() as i16,
+                pitch_rate.to_degrees().round() as i16,
+                yaw_rate.to_degrees().round() as i16
+            )
+        );
         output.set_payload(BodyRateSetpoint {
             roll: AngularVelocity::new::<radian_per_second>(roll_rate),
             pitch: AngularVelocity::new::<radian_per_second>(pitch_rate),
@@ -874,6 +906,7 @@ impl CuTask for RateController {
             self.yaw_pid.reset();
             self.airmode_active = false;
             output.tov = output_tov;
+            status_if_not_firmware!(output.metadata, "disarm");
             output.set_payload(BodyCommand::default());
             return Ok(());
         }
@@ -894,6 +927,10 @@ impl CuTask for RateController {
             self.pitch_pid.reset();
             self.yaw_pid.reset();
             output.tov = output_tov;
+            status_if_not_firmware!(
+                output.metadata,
+                format!("air wait t{}%", throttle_percent(throttle))
+            );
             output.set_payload(BodyCommand::default());
             return Ok(());
         }
@@ -943,6 +980,16 @@ impl CuTask for RateController {
         }
 
         output.tov = output_tov;
+        status_if_not_firmware!(
+            output.metadata,
+            format!(
+                "t{} r{} p{} y{}",
+                throttle_percent(throttle),
+                (roll_cmd * 100.0).round() as i16,
+                (pitch_cmd * 100.0).round() as i16,
+                (yaw_cmd * 100.0).round() as i16
+            )
+        );
         output.set_payload(BodyCommand {
             roll: Ratio::new::<ratio>(roll_cmd.clamp(-self.output_limit, self.output_limit)),
             pitch: Ratio::new::<ratio>(pitch_cmd.clamp(-self.output_limit, self.output_limit)),
@@ -1019,6 +1066,7 @@ impl CuTask for QuadXMixer {
         let output_tov = Tov::Time(cmd_tov);
         let Some(ctrl) = ctrl_msg.payload() else {
             output.tov = output_tov;
+            status_if_not_firmware!(output.metadata, format!("m{} disarm", self.motor_index));
             output.set_payload(EscCommand::disarm());
             return Ok(());
         };
@@ -1073,6 +1121,15 @@ impl CuTask for QuadXMixer {
         }
 
         output.tov = output_tov;
+        status_if_not_firmware!(
+            output.metadata,
+            format!(
+                "m{} {}% {}",
+                self.motor_index,
+                dshot_percent(command.throttle),
+                command.throttle
+            )
+        );
         output.set_payload(command);
         Ok(())
     }
@@ -1132,6 +1189,22 @@ fn mode_label(mode: FlightMode) -> &'static str {
         FlightMode::Acro => "air",
         FlightMode::PositionHold => "position",
     }
+}
+
+fn mode_tag(mode: FlightMode) -> &'static str {
+    match mode {
+        FlightMode::Angle => "ANG",
+        FlightMode::Acro => "ACR",
+        FlightMode::PositionHold => "POS",
+    }
+}
+
+fn throttle_percent(throttle: f32) -> u16 {
+    (throttle.clamp(0.0, 1.0) * 100.0).round() as u16
+}
+
+fn dshot_percent(raw: u16) -> u16 {
+    ((u32::from(raw) * 100 + 1023) / 2047) as u16
 }
 
 fn dt_or_fallback(last_time: &mut Option<CuTime>, now: CuTime, fallback: CuDuration) -> CuDuration {
