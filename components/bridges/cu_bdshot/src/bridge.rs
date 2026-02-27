@@ -1,6 +1,8 @@
 use cu29::prelude::*;
 
 use crate::board::{BdshotBoard, encode_frame};
+#[cfg(feature = "messages-only")]
+use crate::messages::DShotTelemetry;
 use crate::messages::{EscCommand, EscTelemetry};
 
 pub trait BdshotBoardProvider {
@@ -25,6 +27,22 @@ rx_channels! {
 }
 
 const MAX_ESC_CHANNELS: usize = 4;
+
+#[cfg(feature = "messages-only")]
+fn telemetry_status(idx: usize, telemetry: Option<DShotTelemetry>) -> CuCompactString {
+    match telemetry {
+        Some(DShotTelemetry::Erpm(v)) => format!("esc{} {}rpm", idx, v).into(),
+        Some(DShotTelemetry::Temp(v)) => format!("esc{} t{}C", idx, v).into(),
+        Some(DShotTelemetry::Voltage(v)) => format!("esc{} {}V", idx, v).into(),
+        Some(DShotTelemetry::Amps(v)) => format!("esc{} {}A", idx, v).into(),
+        Some(DShotTelemetry::EncodingError) => format!("esc{} enc_err", idx).into(),
+        Some(DShotTelemetry::Debug1(v)) => format!("esc{} d1 {}", idx, v).into(),
+        Some(DShotTelemetry::Debug2(v)) => format!("esc{} d2 {}", idx, v).into(),
+        Some(DShotTelemetry::Debug3(v)) => format!("esc{} d3 {}", idx, v).into(),
+        Some(DShotTelemetry::Event(v)) => format!("esc{} ev {}", idx, v).into(),
+        None => format!("esc{} no_tlm", idx).into(),
+    }
+}
 
 #[derive(Reflect)]
 #[reflect(from_reflect = false, no_field_bounds, type_path = false)]
@@ -235,8 +253,16 @@ where
         }
         let telemetry_msg: &mut CuMsg<EscTelemetry> = msg.downcast_mut()?;
         if let Some(sample) = self.telemetry_cache[idx].take() {
+            #[cfg(feature = "messages-only")]
+            telemetry_msg
+                .metadata
+                .set_status(telemetry_status(idx, sample.sample));
             telemetry_msg.set_payload(sample);
         } else {
+            #[cfg(feature = "messages-only")]
+            telemetry_msg
+                .metadata
+                .set_status(telemetry_status(idx, None));
             telemetry_msg.clear_payload();
         }
         Ok(())

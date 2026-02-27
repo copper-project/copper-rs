@@ -454,20 +454,32 @@ impl TaskStats {
         }
     }
 
-    fn update(&mut self, msgs: &[&CuMsgMetadata]) {
-        for (i, &msg) in msgs.iter().enumerate() {
+    fn update(
+        &mut self,
+        msgs: &[&CuMsgMetadata],
+        culist_to_task: &[usize; MAX_CULIST_MAP],
+        task_count: usize,
+    ) {
+        for (culist_idx, &msg) in msgs.iter().enumerate() {
+            let task_idx = culist_to_task
+                .get(culist_idx)
+                .copied()
+                .unwrap_or(usize::MAX);
+            if task_idx == usize::MAX || task_idx >= task_count || task_idx >= self.stats.len() {
+                continue;
+            }
             let before = Option::<CuTime>::from(msg.process_time.start);
             let after = Option::<CuTime>::from(msg.process_time.end);
             if let (Some(before), Some(after)) = (before, after)
                 && after >= before
             {
-                self.stats[i].record(after - before);
+                self.stats[task_idx].record(after - before);
             } else {
                 self.missing_ts_samples = self.missing_ts_samples.saturating_add(1);
                 if self.missing_ts_samples <= 5 || self.missing_ts_samples.is_multiple_of(100) {
                     eprintln!(
-                        "CuConsoleMon warning: missing/invalid process_time for task index {} (count={})",
-                        i, self.missing_ts_samples
+                        "CuConsoleMon warning: missing/invalid process_time for task index {} (culist index {}, count={})",
+                        task_idx, culist_idx, self.missing_ts_samples
                     );
                 }
             }
@@ -2232,7 +2244,7 @@ impl CuMonitor for CuConsoleMon {
     fn process_copperlist(&self, ctx: &CuContext, msgs: &[&CuMsgMetadata]) -> CuResult<()> {
         {
             let mut task_stats = self.task_stats.lock().unwrap();
-            task_stats.update(msgs);
+            task_stats.update(msgs, &self.culist_to_task, self.task_count);
         }
         {
             let mut copperlist_stats = self.copperlist_stats.lock().unwrap();
@@ -2274,9 +2286,16 @@ impl CuMonitor for CuConsoleMon {
 
     fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision {
         {
-            let status = &mut self.task_statuses.lock().unwrap()[taskid];
-            status.is_error = true;
-            status.error = error.to_compact_string();
+            let mut statuses = self.task_statuses.lock().unwrap();
+            if let Some(status) = statuses.get_mut(taskid) {
+                status.is_error = true;
+                status.error = error.to_compact_string();
+            } else {
+                eprintln!(
+                    "CuConsoleMon warning: process_error received out-of-range task id {} (task_count={})",
+                    taskid, self.task_count
+                );
+            }
         }
         match step {
             CuTaskState::Start => Decision::Shutdown,

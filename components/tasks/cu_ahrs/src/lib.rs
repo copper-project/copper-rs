@@ -203,6 +203,8 @@ impl CuTask for CuAhrs {
     ) -> CuResult<()> {
         output.tov = input.tov;
         let Some(payload) = input.payload() else {
+            #[cfg(not(feature = "firmware"))]
+            output.metadata.set_status("imu none");
             output.clear_payload();
             return Ok(());
         };
@@ -212,6 +214,13 @@ impl CuTask for CuAhrs {
             _ => 1e-3,
         };
         let pose = self.update_pose(payload, dt_s);
+        #[cfg(not(feature = "firmware"))]
+        output.metadata.set_status(alloc::format!(
+            "r{} p{} y{}",
+            pose.roll.get::<radian>().to_degrees().round() as i16,
+            pose.pitch.get::<radian>().to_degrees().round() as i16,
+            pose.yaw.get::<radian>().to_degrees().round() as i16
+        ));
         output.set_payload(pose);
 
         Ok(())
