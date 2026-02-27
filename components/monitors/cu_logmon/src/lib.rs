@@ -119,11 +119,20 @@ struct Snapshot {
 }
 
 pub struct CuLogMon {
-    taskids: &'static [&'static str],
+    components: &'static [MonitorComponentMetadata],
+    task_count: usize,
     window: Mutex<WindowState>,
 }
 
 impl CuLogMon {
+    fn task_name(&self, task_idx: usize) -> &'static str {
+        if task_idx < self.task_count {
+            self.components[task_idx].id()
+        } else {
+            "<?>"
+        }
+    }
+
     fn compute_snapshot(&self, state: &WindowState, now: CuTime) -> Option<Snapshot> {
         let last_report = state.last_report_at?;
 
@@ -149,7 +158,7 @@ impl CuLogMon {
                 if rank > 0 {
                     top4.push_str(", ");
                 }
-                let name = self.taskids.get(*idx).copied().unwrap_or("<?>");
+                let name = self.task_name(*idx);
                 let _ = write!(&mut top4, "{} {}us", name, dur.as_micros());
             }
         }
@@ -222,16 +231,18 @@ fn task_state_label(state: &CuTaskState) -> &'static str {
 }
 
 impl CuMonitor for CuLogMon {
-    fn new(metadata: RuntimeMonitoringMetadata) -> CuResult<Self> {
-        let taskids = metadata.task_ids;
+    fn new(metadata: CuMonitoringMetadata, _runtime: CuMonitoringRuntime) -> CuResult<Self> {
+        let components = metadata.components();
+        let task_count = metadata.task_count();
         #[cfg(target_os = "none")]
-        info!("CuLogMon::new: task_count={}", taskids.len());
-        let max_sample = monitor_max_sample(metadata.monitor_config.as_ref())?;
-        let window = WindowState::new(taskids.len(), max_sample);
+        info!("CuLogMon::new: task_count={}", task_count);
+        let max_sample = monitor_max_sample(metadata.monitor_config())?;
+        let window = WindowState::new(task_count, max_sample);
         #[cfg(target_os = "none")]
         info!("CuLogMon::new: window ready");
         Ok(Self {
-            taskids,
+            components,
+            task_count,
             window: Mutex::new(window),
         })
     }
@@ -239,7 +250,7 @@ impl CuMonitor for CuLogMon {
     fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
         let mut window = self.window.lock();
         window.last_report_at = Some(ctx.recent());
-        info!("cu_logmon started ({} tasks)", self.taskids.len());
+        info!("cu_logmon started ({} tasks)", self.task_count);
 
         // Also listen to structured logs and print them with color.
         #[cfg(all(feature = "std", debug_assertions))]
@@ -364,7 +375,7 @@ impl CuMonitor for CuLogMon {
     }
 
     fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision {
-        let task_name = self.taskids.get(taskid).copied().unwrap_or("<??>");
+        let task_name = self.task_name(taskid);
         error!(
             "Task {} @ {}: Error: {}.",
             task_name,

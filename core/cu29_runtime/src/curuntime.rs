@@ -2,20 +2,20 @@
 //! It is exposed to the user via the `copper_runtime` macro injecting it as a field in their application struct.
 //!
 
-use crate::config::{
-    ComponentConfig, CuDirection, DEFAULT_KEYFRAME_INTERVAL, Node,
-};
+use crate::config::{ComponentConfig, CuDirection, DEFAULT_KEYFRAME_INTERVAL, Node};
 use crate::config::{CuConfig, CuGraph, NodeId, RuntimeConfig};
 use crate::copperlist::{CopperList, CopperListState, CuListZeroedInit, CuListsManager};
 use crate::cutask::{BincodeAdapter, Freezable};
 #[cfg(feature = "std")]
 use crate::monitoring::ExecutionProbeHandle;
+#[cfg(feature = "std")]
+use crate::monitoring::MonitorExecutionProbe;
 use crate::monitoring::{
-    CopperListInfo, CuMonitor, ExecutionMarker, RuntimeExecutionProbe, RuntimeMonitoringMetadata,
-    build_monitor_topology,
+    CopperListInfo, CuMonitor, CuMonitoringMetadata, CuMonitoringRuntime, ExecutionMarker,
+    MonitorComponentMetadata, RuntimeExecutionProbe, build_monitor_topology,
 };
-use compact_str::CompactString;
 use crate::resource::ResourceManager;
+use compact_str::CompactString;
 use cu29_clock::{ClockProvider, CuTime, RobotClock};
 use cu29_traits::CuResult;
 use cu29_traits::WriteStream;
@@ -369,9 +369,9 @@ impl<
             Vec<Option<&'c ComponentConfig>>,
             &mut ResourceManager,
         ) -> CuResult<CT>,
-        task_ids: &'static [&'static str],
+        monitored_components: &'static [MonitorComponentMetadata],
         culist_component_mapping: &'static [usize],
-        monitor_instanciator: impl Fn(&CuConfig, RuntimeMonitoringMetadata) -> M,
+        monitor_instanciator: impl Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
         bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
         keyframes_logger: impl WriteStream<KeyFrame> + 'static,
@@ -383,7 +383,7 @@ impl<
             mission,
             resources,
             tasks_instanciator,
-            task_ids,
+            monitored_components,
             culist_component_mapping,
             monitor_instanciator,
             bridges_instanciator,
@@ -403,9 +403,9 @@ impl<
             Vec<Option<&'c ComponentConfig>>,
             &mut ResourceManager,
         ) -> CuResult<CT>,
-        task_ids: &'static [&'static str],
+        monitored_components: &'static [MonitorComponentMetadata],
         culist_component_mapping: &'static [usize],
-        monitor_instanciator: impl Fn(&CuConfig, RuntimeMonitoringMetadata) -> M,
+        monitor_instanciator: impl Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
         bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
         keyframes_logger: impl WriteStream<KeyFrame> + 'static,
@@ -419,16 +419,17 @@ impl<
 
         let tasks = tasks_instanciator(all_instances_configs, &mut resources)?;
         let execution_probe = std::sync::Arc::new(RuntimeExecutionProbe::default());
-        let monitor_metadata = RuntimeMonitoringMetadata {
-            mission_id: CompactString::from(mission),
-            task_ids,
+        let monitor_metadata = CuMonitoringMetadata::new(
+            CompactString::from(mission),
+            monitored_components,
             culist_component_mapping,
-            copperlist_info: CopperListInfo::new(core::mem::size_of::<CopperList<P>>(), NBCL),
-            topology: build_monitor_topology(config, Some(mission)).ok(),
-            monitor_config: None,
-            execution_probe: execution_probe.clone(),
-        };
-        let monitor = monitor_instanciator(config, monitor_metadata);
+            CopperListInfo::new(core::mem::size_of::<CopperList<P>>(), NBCL),
+            build_monitor_topology(config, mission)?,
+            None,
+        )?;
+        let monitor_runtime =
+            CuMonitoringRuntime::new(MonitorExecutionProbe::from_shared(execution_probe.clone()));
+        let monitor = monitor_instanciator(config, monitor_metadata, monitor_runtime);
         let bridges = bridges_instanciator(config, &mut resources)?;
 
         let (copperlists_logger, keyframes_logger, keyframe_interval) = match &config.logging {
@@ -498,9 +499,9 @@ impl<
             Vec<Option<&'c ComponentConfig>>,
             &mut ResourceManager,
         ) -> CuResult<CT>,
-        task_ids: &'static [&'static str],
+        monitored_components: &'static [MonitorComponentMetadata],
         culist_component_mapping: &'static [usize],
-        monitor_instanciator: impl Fn(&CuConfig, RuntimeMonitoringMetadata) -> M,
+        monitor_instanciator: impl Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
         bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
         keyframes_logger: impl WriteStream<KeyFrame> + 'static,
@@ -514,7 +515,7 @@ impl<
             mission,
             resources,
             tasks_instanciator,
-            task_ids,
+            monitored_components,
             culist_component_mapping,
             monitor_instanciator,
             bridges_instanciator,
@@ -534,9 +535,9 @@ impl<
             Vec<Option<&'c ComponentConfig>>,
             &mut ResourceManager,
         ) -> CuResult<CT>,
-        task_ids: &'static [&'static str],
+        monitored_components: &'static [MonitorComponentMetadata],
         culist_component_mapping: &'static [usize],
-        monitor_instanciator: impl Fn(&CuConfig, RuntimeMonitoringMetadata) -> M,
+        monitor_instanciator: impl Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
         bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
         keyframes_logger: impl WriteStream<KeyFrame> + 'static,
@@ -558,15 +559,16 @@ impl<
 
         #[cfg(target_os = "none")]
         info!("CuRuntime::new: monitor instanciator");
-        let monitor_metadata = RuntimeMonitoringMetadata {
-            mission_id: CompactString::from(mission),
-            task_ids,
+        let monitor_metadata = CuMonitoringMetadata::new(
+            CompactString::from(mission),
+            monitored_components,
             culist_component_mapping,
-            copperlist_info: CopperListInfo::new(core::mem::size_of::<CopperList<P>>(), NBCL),
-            topology: build_monitor_topology(config, Some(mission)).ok(),
-            monitor_config: None,
-        };
-        let monitor = monitor_instanciator(config, monitor_metadata);
+            CopperListInfo::new(core::mem::size_of::<CopperList<P>>(), NBCL),
+            build_monitor_topology(config, mission)?,
+            None,
+        )?;
+        let monitor_runtime = CuMonitoringRuntime::unavailable();
+        let monitor = monitor_instanciator(config, monitor_metadata, monitor_runtime);
         let execution_probe = RuntimeExecutionProbe::default();
         #[cfg(target_os = "none")]
         info!("CuRuntime::new: monitor instanciator ok");
@@ -1136,9 +1138,10 @@ mod tests {
 
     fn monitor_instanciator(
         _config: &CuConfig,
-        metadata: RuntimeMonitoringMetadata,
+        metadata: CuMonitoringMetadata,
+        runtime: CuMonitoringRuntime,
     ) -> NoMonitor {
-        NoMonitor::new(metadata).expect("NoMonitor::new should never fail")
+        NoMonitor::new(metadata, runtime).expect("NoMonitor::new should never fail")
     }
 
     fn bridges_instanciator(_config: &CuConfig, _resources: &mut ResourceManager) -> CuResult<()> {

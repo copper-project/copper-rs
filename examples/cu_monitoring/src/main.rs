@@ -78,17 +78,20 @@ pub mod tasks {
 }
 
 struct ExampleMonitor {
-    tasks: &'static [&'static str],
+    components: &'static [MonitorComponentMetadata],
+    task_count: usize,
 }
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct App {}
 
 impl CuMonitor for ExampleMonitor {
-    fn new(metadata: RuntimeMonitoringMetadata) -> CuResult<Self> {
-        let taskids = metadata.task_ids;
-        debug!("Monitoring: created: {}", taskids);
-        Ok(Self { tasks: taskids })
+    fn new(metadata: CuMonitoringMetadata, _runtime: CuMonitoringRuntime) -> CuResult<Self> {
+        debug!("Monitoring: created: mission={}", metadata.mission_id());
+        Ok(Self {
+            components: metadata.components(),
+            task_count: metadata.task_count(),
+        })
     }
 
     fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
@@ -105,9 +108,14 @@ impl CuMonitor for ExampleMonitor {
     }
 
     fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision {
+        let task_name = if taskid < self.task_count {
+            self.components[taskid].id()
+        } else {
+            "<?>"
+        };
         debug!(
             "Monitoring: Processing error task: {} step: {} error: {}",
-            self.tasks[taskid], step, error
+            task_name, step, error
         );
         Decision::Ignore
     }

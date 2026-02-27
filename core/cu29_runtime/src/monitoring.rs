@@ -82,7 +82,7 @@ pub enum CuTaskState {
 /// Execution progress marker emitted by the runtime before running a component step.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct ExecutionMarker {
-    /// Index into TASKS_IDS (tasks + bridge components/channels).
+    /// Index into `CuMonitoringMetadata::components()`.
     pub component_id: usize,
     /// Lifecycle phase currently entered.
     pub step: CuTaskState,
@@ -214,16 +214,308 @@ const fn usize_to_task_state(step: usize) -> CuTaskState {
 #[cfg(feature = "std")]
 pub type ExecutionProbeHandle = Arc<RuntimeExecutionProbe>;
 
+/// Platform-neutral monitor view of runtime execution progress.
+///
+/// In `std` builds this can wrap a shared runtime probe. In `no_std` builds it is currently
+/// unavailable and helper methods return `None`/`false`.
 #[derive(Debug, Clone)]
-pub struct RuntimeMonitoringMetadata {
-    pub mission_id: CompactString,
-    pub task_ids: &'static [&'static str],
-    pub culist_component_mapping: &'static [usize],
-    pub copperlist_info: CopperListInfo,
-    pub topology: Option<MonitorTopology>,
-    pub monitor_config: Option<ComponentConfig>,
+pub struct MonitorExecutionProbe {
     #[cfg(feature = "std")]
-    pub execution_probe: ExecutionProbeHandle,
+    inner: Option<ExecutionProbeHandle>,
+}
+
+impl Default for MonitorExecutionProbe {
+    fn default() -> Self {
+        Self::unavailable()
+    }
+}
+
+impl MonitorExecutionProbe {
+    #[cfg(feature = "std")]
+    pub fn from_shared(handle: ExecutionProbeHandle) -> Self {
+        Self {
+            inner: Some(handle),
+        }
+    }
+
+    pub const fn unavailable() -> Self {
+        Self {
+            #[cfg(feature = "std")]
+            inner: None,
+        }
+    }
+
+    pub fn is_available(&self) -> bool {
+        #[cfg(feature = "std")]
+        {
+            self.inner.is_some()
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            false
+        }
+    }
+
+    pub fn marker(&self) -> Option<ExecutionMarker> {
+        #[cfg(feature = "std")]
+        {
+            self.inner.as_ref().and_then(|probe| probe.marker())
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            None
+        }
+    }
+
+    pub fn sequence(&self) -> Option<usize> {
+        #[cfg(feature = "std")]
+        {
+            self.inner.as_ref().map(|probe| probe.sequence())
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            None
+        }
+    }
+}
+
+/// Runtime component category used by monitoring metadata and topology.
+///
+/// A "task" is a regular Copper task (lifecycle callbacks + payload processing). A "bridge"
+/// is a monitored bridge-side execution component (bridge nodes and channel endpoints).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComponentKind {
+    Task,
+    Bridge,
+}
+
+/// Static identity entry for one monitored runtime component.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MonitorComponentMetadata {
+    id: &'static str,
+    kind: ComponentKind,
+    type_name: Option<&'static str>,
+}
+
+impl MonitorComponentMetadata {
+    pub const fn new(
+        id: &'static str,
+        kind: ComponentKind,
+        type_name: Option<&'static str>,
+    ) -> Self {
+        Self {
+            id,
+            kind,
+            type_name,
+        }
+    }
+
+    /// Stable monitor component id (for logs/debug and joins with runtime markers).
+    pub const fn id(&self) -> &'static str {
+        self.id
+    }
+
+    pub const fn kind(&self) -> ComponentKind {
+        self.kind
+    }
+
+    /// Rust type label when available (typically tasks); `None` for synthetic bridge entries.
+    pub const fn type_name(&self) -> Option<&'static str> {
+        self.type_name
+    }
+}
+
+/// Immutable runtime-provided metadata passed once to [`CuMonitor::new`].
+///
+/// Notions:
+/// - Task index: index used by runtime task callbacks (`process_error`, latency stats, etc.).
+/// - Component index: index into `components()`, used by execution markers and CopperList slot
+///   mappings. Tasks are always the prefix `[0..task_count())`.
+/// - Topology node id: config graph node identifier (tasks + bridge nodes). Topology describes
+///   graph connectivity, while `components()` includes additional synthetic bridge channel entries
+///   used by execution markers and CopperList slot mapping.
+///
+/// This bundles identifiers, deterministic runtime layout, and monitor-specific config so monitor
+/// construction is explicit and does not need ad-hoc late setters.
+#[derive(Debug, Clone)]
+pub struct CuMonitoringMetadata {
+    mission_id: CompactString,
+    components: &'static [MonitorComponentMetadata],
+    task_count: usize,
+    culist_component_mapping: &'static [usize],
+    copperlist_info: CopperListInfo,
+    topology: MonitorTopology,
+    monitor_config: Option<ComponentConfig>,
+}
+
+impl CuMonitoringMetadata {
+    pub fn new(
+        mission_id: CompactString,
+        components: &'static [MonitorComponentMetadata],
+        culist_component_mapping: &'static [usize],
+        copperlist_info: CopperListInfo,
+        topology: MonitorTopology,
+        monitor_config: Option<ComponentConfig>,
+    ) -> CuResult<Self> {
+        let task_count = Self::validate_components(components)?;
+        Self::validate_culist_mapping(components.len(), culist_component_mapping)?;
+        Ok(Self {
+            mission_id,
+            components,
+            task_count,
+            culist_component_mapping,
+            copperlist_info,
+            topology,
+            monitor_config,
+        })
+    }
+
+    fn validate_components(components: &'static [MonitorComponentMetadata]) -> CuResult<usize> {
+        let mut task_count = 0usize;
+        let mut seen_bridge = false;
+        for component in components {
+            match component.kind() {
+                ComponentKind::Task if seen_bridge => {
+                    return Err(CuError::from(
+                        "invalid monitor metadata: task components must appear before bridges",
+                    ));
+                }
+                ComponentKind::Task => task_count += 1,
+                ComponentKind::Bridge => seen_bridge = true,
+            }
+        }
+        Ok(task_count)
+    }
+
+    fn validate_culist_mapping(
+        components_len: usize,
+        culist_component_mapping: &'static [usize],
+    ) -> CuResult<()> {
+        for component_idx in culist_component_mapping {
+            if *component_idx >= components_len {
+                return Err(CuError::from(
+                    "invalid monitor metadata: culist mapping points past components table",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Active mission identifier for this runtime instance.
+    pub fn mission_id(&self) -> &str {
+        self.mission_id.as_str()
+    }
+
+    /// Canonical table of monitored runtime components.
+    ///
+    /// Ordering is deterministic and mission-scoped: tasks first, then bridge-side components.
+    pub fn components(&self) -> &'static [MonitorComponentMetadata] {
+        self.components
+    }
+
+    /// Number of task components (always prefix of `components()`).
+    pub const fn task_count(&self) -> usize {
+        self.task_count
+    }
+
+    /// Total number of monitored components.
+    pub const fn component_count(&self) -> usize {
+        self.components.len()
+    }
+
+    pub fn component(&self, component_idx: usize) -> Option<&MonitorComponentMetadata> {
+        self.components.get(component_idx)
+    }
+
+    pub fn component_id(&self, component_idx: usize) -> Option<&'static str> {
+        self.component(component_idx)
+            .map(MonitorComponentMetadata::id)
+    }
+
+    pub fn component_kind(&self, component_idx: usize) -> Option<ComponentKind> {
+        self.component(component_idx)
+            .map(MonitorComponentMetadata::kind)
+    }
+
+    /// Map runtime task index -> component index.
+    ///
+    /// Task indices are stable callback indices from runtime hooks.
+    pub fn component_index_for_task(&self, task_idx: usize) -> Option<usize> {
+        (task_idx < self.task_count).then_some(task_idx)
+    }
+
+    pub fn task_id(&self, task_idx: usize) -> Option<&'static str> {
+        self.component_index_for_task(task_idx)
+            .and_then(|component_idx| self.component_id(component_idx))
+    }
+
+    pub fn task_id_or_unknown(&self, task_idx: usize) -> &'static str {
+        self.task_id(task_idx).unwrap_or("<?>")
+    }
+
+    pub fn task_index_by_id(&self, task_id: &str) -> Option<usize> {
+        self.components[..self.task_count]
+            .iter()
+            .position(|component| component.id() == task_id)
+    }
+
+    pub fn component_index_by_id(&self, component_id: &str) -> Option<usize> {
+        self.components
+            .iter()
+            .position(|component| component.id() == component_id)
+    }
+
+    /// CopperList slot -> monitored component index mapping.
+    pub fn culist_component_mapping(&self) -> &'static [usize] {
+        self.culist_component_mapping
+    }
+
+    pub fn component_index_for_culist_slot(&self, slot: usize) -> Option<usize> {
+        self.culist_component_mapping.get(slot).copied()
+    }
+
+    pub const fn copperlist_info(&self) -> CopperListInfo {
+        self.copperlist_info
+    }
+
+    /// Resolved graph topology for the active mission.
+    ///
+    /// This is always available. Nodes represent config graph nodes, not every synthetic bridge
+    /// channel entry in `components()`.
+    pub fn topology(&self) -> &MonitorTopology {
+        &self.topology
+    }
+
+    pub fn monitor_config(&self) -> Option<&ComponentConfig> {
+        self.monitor_config.as_ref()
+    }
+
+    pub fn with_monitor_config(mut self, monitor_config: Option<ComponentConfig>) -> Self {
+        self.monitor_config = monitor_config;
+        self
+    }
+}
+
+/// Runtime-provided dynamic monitoring handles passed once to [`CuMonitor::new`].
+///
+/// This context may expose live runtime state (for example execution progress probes).
+#[derive(Debug, Clone, Default)]
+pub struct CuMonitoringRuntime {
+    execution_probe: MonitorExecutionProbe,
+}
+
+impl CuMonitoringRuntime {
+    pub const fn new(execution_probe: MonitorExecutionProbe) -> Self {
+        Self { execution_probe }
+    }
+
+    pub const fn unavailable() -> Self {
+        Self::new(MonitorExecutionProbe::unavailable())
+    }
+
+    pub fn execution_probe(&self) -> &MonitorExecutionProbe {
+        &self.execution_probe
+    }
 }
 
 /// Monitor decision to be taken when a task errored out.
@@ -243,12 +535,6 @@ fn merge_decision(lhs: Decision, rhs: Decision) -> Decision {
         (Abort, _) | (_, Abort) => Abort,
         _ => Ignore,
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ComponentKind {
-    Task,
-    Bridge,
 }
 
 #[derive(Debug, Clone)]
@@ -361,11 +647,8 @@ fn collect_output_ports(graph: &CuGraph, node_id: NodeId) -> Vec<(String, String
 }
 
 /// Derive a monitor-friendly topology from the runtime configuration.
-pub fn build_monitor_topology(
-    config: &CuConfig,
-    mission: Option<&str>,
-) -> CuResult<MonitorTopology> {
-    let graph = config.get_graph(mission)?;
+pub fn build_monitor_topology(config: &CuConfig, mission: &str) -> CuResult<MonitorTopology> {
+    let graph = config.get_graph(Some(mission))?;
     let mut nodes: Map<String, MonitorNode> = Map::new();
     let mut io_usage: Map<String, NodeIoUsage> = Map::new();
     let mut output_port_lookup: Map<String, Map<String, String>> = Map::new();
@@ -470,7 +753,10 @@ pub fn build_monitor_topology(
 
 /// Trait to implement a monitoring task.
 pub trait CuMonitor: Sized {
-    fn new(metadata: RuntimeMonitoringMetadata) -> CuResult<Self>
+    /// Construct the monitor once, before runtime task execution starts.
+    ///
+    /// Use `metadata.monitor_config()` to decode monitor-specific parameters.
+    fn new(metadata: CuMonitoringMetadata, runtime: CuMonitoringRuntime) -> CuResult<Self>
     where
         Self: Sized;
 
@@ -500,7 +786,7 @@ pub trait CuMonitor: Sized {
 /// This is basically defining the default behavior of Copper in case of error.
 pub struct NoMonitor {}
 impl CuMonitor for NoMonitor {
-    fn new(_metadata: RuntimeMonitoringMetadata) -> CuResult<Self> {
+    fn new(_metadata: CuMonitoringMetadata, _runtime: CuMonitoringRuntime) -> CuResult<Self> {
         Ok(NoMonitor {})
     }
 
@@ -542,11 +828,11 @@ impl CuMonitor for NoMonitor {
 macro_rules! impl_monitor_tuple {
     ($($idx:tt => $name:ident),+) => {
         impl<$($name: CuMonitor),+> CuMonitor for ($($name,)+) {
-            fn new(metadata: RuntimeMonitoringMetadata) -> CuResult<Self>
+            fn new(metadata: CuMonitoringMetadata, runtime: CuMonitoringRuntime) -> CuResult<Self>
             where
                 Self: Sized,
             {
-                Ok(($($name::new(metadata.clone())?,)+))
+                Ok(($($name::new(metadata.clone(), runtime.clone())?,)+))
             }
 
             fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
@@ -1008,24 +1294,27 @@ mod tests {
         }
     }
 
-    fn test_metadata() -> RuntimeMonitoringMetadata {
-        RuntimeMonitoringMetadata {
-            mission_id: CompactString::from(crate::config::DEFAULT_MISSION_ID),
-            task_ids: &["a", "b"],
-            culist_component_mapping: &[],
-            copperlist_info: CopperListInfo::new(0, 0),
-            topology: None,
-            monitor_config: None,
-            #[cfg(feature = "std")]
-            execution_probe: Arc::new(RuntimeExecutionProbe::default()),
-        }
+    fn test_metadata() -> CuMonitoringMetadata {
+        const COMPONENTS: &[MonitorComponentMetadata] = &[
+            MonitorComponentMetadata::new("a", ComponentKind::Task, None),
+            MonitorComponentMetadata::new("b", ComponentKind::Task, None),
+        ];
+        CuMonitoringMetadata::new(
+            CompactString::from(crate::config::DEFAULT_MISSION_ID),
+            COMPONENTS,
+            &[],
+            CopperListInfo::new(0, 0),
+            MonitorTopology::default(),
+            None,
+        )
+        .expect("test metadata should be valid")
     }
 
     impl CuMonitor for TestMonitor {
-        fn new(metadata: RuntimeMonitoringMetadata) -> CuResult<Self> {
+        fn new(_metadata: CuMonitoringMetadata, runtime: CuMonitoringRuntime) -> CuResult<Self> {
             let monitor = Self::new_with(TestDecision::Ignore);
             #[cfg(feature = "std")]
-            let _ = metadata.execution_probe;
+            let _ = runtime.execution_probe();
             Ok(monitor)
         }
 
