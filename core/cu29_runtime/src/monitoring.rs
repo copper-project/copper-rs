@@ -461,6 +461,10 @@ pub trait CuMonitor: Sized {
 
     fn set_topology(&mut self, _topology: MonitorTopology) {}
 
+    /// Runtime-authoritative mapping from `process_copperlist` slot index to
+    /// `TASKS_IDS` component index.
+    fn set_culist_task_mapping(&mut self, _mapping: &'static [usize]) {}
+
     fn set_copperlist_info(&mut self, _info: CopperListInfo) {}
 
     #[cfg(feature = "std")]
@@ -543,6 +547,10 @@ macro_rules! impl_monitor_tuple {
 
             fn set_topology(&mut self, topology: MonitorTopology) {
                 $(self.$idx.set_topology(topology.clone());)+
+            }
+
+            fn set_culist_task_mapping(&mut self, mapping: &'static [usize]) {
+                $(self.$idx.set_culist_task_mapping(mapping);)+
             }
 
             fn set_copperlist_info(&mut self, info: CopperListInfo) {

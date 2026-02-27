@@ -9,9 +9,7 @@ use color_eyre::config::HookBuilder;
 use compact_str::{CompactString, ToCompactString};
 use cu29::clock::CuDuration;
 use cu29::config::CuConfig;
-use cu29::config::Flavor;
 use cu29::context::CuContext;
-use cu29::curuntime::{CuExecutionUnit, compute_runtime_plan};
 use cu29::cutask::CuMsgMetadata;
 use cu29::monitoring::{
     ComponentKind, CopperListInfo, CopperListIoStats, CuDurationStatistics, CuMonitor, CuTaskState,
@@ -2046,10 +2044,6 @@ impl CuMonitor for CuConsoleMon {
     where
         Self: Sized,
     {
-        let mut culist_to_task = [usize::MAX; MAX_CULIST_MAP];
-        if let Ok(map) = build_culist_to_task_index(config, taskids) {
-            culist_to_task = map;
-        }
         let task_stats = Arc::new(Mutex::new(TaskStats::new(
             taskids.len(),
             CuDuration::from(Duration::from_secs(5)),
@@ -2060,7 +2054,7 @@ impl CuMonitor for CuConsoleMon {
             taskids,
             task_stats,
             task_statuses: Arc::new(Mutex::new(vec![TaskStatus::default(); taskids.len()])),
-            culist_to_task,
+            culist_to_task: [usize::MAX; MAX_CULIST_MAP],
             ui_handle: None,
             quitting: Arc::new(AtomicBool::new(false)),
             pool_stats: Arc::new(Mutex::new(Vec::new())),
@@ -2068,6 +2062,21 @@ impl CuMonitor for CuConsoleMon {
             topology: None,
         })
     }
+
+    fn set_culist_task_mapping(&mut self, mapping: &'static [usize]) {
+        self.culist_to_task = [usize::MAX; MAX_CULIST_MAP];
+        for (slot, component_idx) in mapping.iter().copied().enumerate().take(MAX_CULIST_MAP) {
+            self.culist_to_task[slot] = component_idx;
+        }
+        #[cfg(feature = "debug_pane")]
+        log::info!(
+            "consolemon mapping installed: slots={} applied={} truncated={}",
+            mapping.len(),
+            mapping.len().min(MAX_CULIST_MAP),
+            mapping.len().saturating_sub(MAX_CULIST_MAP)
+        );
+    }
+
     fn set_topology(&mut self, topology: MonitorTopology) {
         self.topology = Some(topology);
     }
@@ -2235,10 +2244,9 @@ impl CuMonitor for CuConsoleMon {
             let mut task_statuses = self.task_statuses.lock().unwrap();
             for (i, msg) in msgs.iter().enumerate() {
                 let CuCompactString(status_txt) = &msg.status_txt;
-                if let Some(&task_idx) = self.culist_to_task.get(i)
-                    && task_idx != usize::MAX
-                    && task_idx < task_statuses.len()
-                {
+                let task_idx = self.culist_to_task.get(i).copied().unwrap_or(usize::MAX);
+                let mapped = task_idx != usize::MAX && task_idx < self.taskids.len();
+                if mapped && task_idx < task_statuses.len() {
                     task_statuses[task_idx].status_txt = status_txt.clone();
                 }
             }
@@ -2310,36 +2318,6 @@ impl Drop for TerminalRestoreGuard {
     fn drop(&mut self) {
         let _ = restore_terminal();
     }
-}
-
-fn build_culist_to_task_index(
-    config: &CuConfig,
-    task_ids: &'static [&'static str],
-) -> CuResult<[usize; MAX_CULIST_MAP]> {
-    let graph = config.get_graph(None)?;
-    let plan = compute_runtime_plan(graph)?;
-
-    let mut mapping = [usize::MAX; MAX_CULIST_MAP];
-
-    for unit in &plan.steps {
-        if let CuExecutionUnit::Step(step) = unit
-            && let Some(output_pack) = &step.output_msg_pack
-        {
-            if step.node.get_flavor() != Flavor::Task {
-                continue;
-            }
-            let node_id = step.node.get_id();
-            let culist_idx = output_pack.culist_index as usize;
-            if culist_idx >= MAX_CULIST_MAP {
-                continue;
-            }
-            if let Some(task_idx) = task_ids.iter().position(|id| *id == node_id.as_str()) {
-                mapping[culist_idx] = task_idx;
-            }
-        }
-    }
-
-    Ok(mapping)
 }
 
 fn init_error_hooks() {

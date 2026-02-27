@@ -865,6 +865,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #DEFAULT_CLNB,
                 );
                 monitor.set_copperlist_info(copperlist_info);
+                monitor.set_culist_task_mapping(CULIST_COMPONENT_MAPPING);
                 monitor
             },
         )
@@ -881,6 +882,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #DEFAULT_CLNB,
                 );
                 monitor.set_copperlist_info(copperlist_info);
+                monitor.set_culist_task_mapping(CULIST_COMPONENT_MAPPING);
                 monitor
             },
         )
@@ -934,6 +936,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #DEFAULT_CLNB,
                 );
                 monitor.set_copperlist_info(copperlist_info);
+                monitor.set_culist_task_mapping(CULIST_COMPONENT_MAPPING);
                 monitor
             },
         )
@@ -1105,6 +1108,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         };
 
         let ids = build_monitored_ids(&task_specs.ids, &mut culist_bridge_specs);
+        let culist_component_mapping = match build_monitor_culist_component_mapping(
+            &culist_plan,
+            &culist_exec_entities,
+            &culist_bridge_specs,
+        ) {
+            Ok(mapping) => mapping,
+            Err(e) => return return_error(e),
+        };
 
         let task_reflect_read_arms: Vec<proc_macro2::TokenStream> = task_specs
             .ids
@@ -3186,6 +3197,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #sim_tasks_instanciator
 
                 pub const TASKS_IDS: &'static [&'static str] = &[#( #ids ),*];
+                pub const CULIST_COMPONENT_MAPPING: &'static [usize] = &[#( #culist_component_mapping ),*];
 
                 #culist_support
                 #tasks_instanciator
@@ -4300,6 +4312,57 @@ fn collect_culist_metadata(
     }
 
     (culist_order, node_output_positions)
+}
+
+fn build_monitor_culist_component_mapping(
+    runtime_plan: &CuExecutionLoop,
+    exec_entities: &[ExecutionEntity],
+    bridge_specs: &[BridgeSpec],
+) -> Result<Vec<usize>, String> {
+    let mut mapping = Vec::new();
+    for unit in &runtime_plan.steps {
+        if let CuExecutionUnit::Step(step) = unit
+            && step.output_msg_pack.is_some()
+        {
+            let Some(entity) = exec_entities.get(step.node_id as usize) else {
+                return Err(format!(
+                    "Missing execution entity for plan node {} while building monitor mapping",
+                    step.node_id
+                ));
+            };
+            let component_index = match &entity.kind {
+                ExecutionEntityKind::Task { task_index } => *task_index,
+                ExecutionEntityKind::BridgeRx {
+                    bridge_index,
+                    channel_index,
+                } => bridge_specs
+                    .get(*bridge_index)
+                    .and_then(|spec| spec.rx_channels.get(*channel_index))
+                    .and_then(|channel| channel.monitor_index)
+                    .ok_or_else(|| {
+                        format!(
+                            "Missing monitor index for bridge rx {}:{}",
+                            bridge_index, channel_index
+                        )
+                    })?,
+                ExecutionEntityKind::BridgeTx {
+                    bridge_index,
+                    channel_index,
+                } => bridge_specs
+                    .get(*bridge_index)
+                    .and_then(|spec| spec.tx_channels.get(*channel_index))
+                    .and_then(|channel| channel.monitor_index)
+                    .ok_or_else(|| {
+                        format!(
+                            "Missing monitor index for bridge tx {}:{}",
+                            bridge_index, channel_index
+                        )
+                    })?,
+            };
+            mapping.push(component_index);
+        }
+    }
+    Ok(mapping)
 }
 
 #[allow(dead_code)]
