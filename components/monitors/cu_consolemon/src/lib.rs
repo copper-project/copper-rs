@@ -466,7 +466,7 @@ impl TaskStats {
                 self.stats[i].record(after - before);
             } else {
                 self.missing_ts_samples = self.missing_ts_samples.saturating_add(1);
-                if self.missing_ts_samples <= 5 || self.missing_ts_samples % 100 == 0 {
+                if self.missing_ts_samples <= 5 || self.missing_ts_samples.is_multiple_of(100) {
                     eprintln!(
                         "CuConsoleMon warning: missing/invalid process_time for task index {} (count={})",
                         i, self.missing_ts_samples
