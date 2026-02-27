@@ -398,6 +398,7 @@ impl CuTask for RcMapper {
         let tov_time = expect_tov_time(inputs.tov)?;
         let Some(rc) = inputs.payload() else {
             output.tov = Tov::Time(tov_time);
+            status_if_not_firmware!(output.metadata, "rc none");
             output.clear_payload();
             return Ok(());
         };
@@ -540,6 +541,7 @@ impl CuTask for ImuCalibrator {
         let _ = expect_tov_time(ctrl_msg.tov)?;
         let Some(imu) = imu_msg.payload() else {
             output.tov = Tov::Time(imu_tov);
+            status_if_not_firmware!(output.metadata, "imu none");
             output.clear_payload();
             return Ok(());
         };
@@ -729,11 +731,13 @@ impl CuTask for AttitudeController {
         let output_tov = Tov::Time(pose_tov);
         let Some(pose) = pose_msg.payload() else {
             output.tov = output_tov;
+            status_if_not_firmware!(output.metadata, "att no-pose");
             output.clear_payload();
             return Ok(());
         };
         let Some(ctrl) = ctrl_msg.payload() else {
             output.tov = output_tov;
+            status_if_not_firmware!(output.metadata, "att no-ctrl");
             output.clear_payload();
             return Ok(());
         };
@@ -891,11 +895,13 @@ impl CuTask for RateController {
         let output_tov = Tov::Time(imu_tov);
         let Some(setpoint) = setpoint_msg.payload() else {
             output.tov = output_tov;
+            status_if_not_firmware!(output.metadata, "rate no-sp");
             output.clear_payload();
             return Ok(());
         };
         let Some(imu) = imu_msg.payload() else {
             output.tov = output_tov;
+            status_if_not_firmware!(output.metadata, "rate no-imu");
             output.clear_payload();
             return Ok(());
         };

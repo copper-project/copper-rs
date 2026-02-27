@@ -22,6 +22,15 @@ use cu29::units::si::electric_potential::volt;
 
 const VTX_SYM_VOLT: char = '\x06';
 
+macro_rules! status_if_not_firmware {
+    ($metadata:expr, $status:expr) => {{
+        #[cfg(not(feature = "firmware"))]
+        {
+            $metadata.set_status($status);
+        }
+    }};
+}
+
 fn voltage_to_centivolts(voltage_v: f32) -> u16 {
     let scaled = voltage_v * 100.0;
     if !scaled.is_finite() || scaled <= 0.0 {
@@ -126,8 +135,10 @@ impl CuTask for VtxOsd {
 
         let Some(ctrl) = ctrl else {
             if batch.0.is_empty() {
+                status_if_not_firmware!(output.metadata, "osd wait");
                 output.clear_payload();
             } else {
+                status_if_not_firmware!(output.metadata, format!("osd wait q{}", batch.0.len()));
                 output.set_payload(batch);
             }
             return Ok(());
@@ -184,8 +195,16 @@ impl CuTask for VtxOsd {
         }
 
         if batch.0.is_empty() {
+            status_if_not_firmware!(
+                output.metadata,
+                format!("osd {}", label.as_str().trim())
+            );
             output.clear_payload();
         } else {
+            status_if_not_firmware!(
+                output.metadata,
+                format!("osd {} q{}", label.as_str().trim(), batch.0.len())
+            );
             output.set_payload(batch);
         }
         Ok(())
@@ -431,6 +450,7 @@ impl CuTask for VtxMspResponder {
 
         let mut batch = MspRequestBatch::new();
         let Some(requests) = req_msg.payload() else {
+            status_if_not_firmware!(output.metadata, "msp wait");
             output.clear_payload();
             return Ok(());
         };
@@ -531,8 +551,13 @@ impl CuTask for VtxMspResponder {
         }
 
         if batch.0.is_empty() {
+            status_if_not_firmware!(output.metadata, format!("msp r{} q0", requests.0.len()));
             output.clear_payload();
         } else {
+            status_if_not_firmware!(
+                output.metadata,
+                format!("msp r{} q{}", requests.0.len(), batch.0.len())
+            );
             output.set_payload(batch);
         }
         Ok(())

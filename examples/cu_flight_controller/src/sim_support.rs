@@ -385,9 +385,6 @@ impl CuBridge for BdshotBridgeSim {
         let command = self.last_commands[motor_index];
         let erpm = ((u32::from(command.throttle) * 30).min(u32::from(u16::MAX))) as u16;
         telemetry_msg.tov = Tov::Time(ctx.now());
-        telemetry_msg
-            .metadata
-            .set_status(format!("esc{} {}rpm", motor_index, erpm));
         telemetry_msg.set_payload(EscTelemetry {
             sample: Some(DShotTelemetry::Erpm(erpm)),
         });

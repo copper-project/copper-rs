@@ -12,6 +12,7 @@ repository.workspace = true
 
 [features]
 default = ["std"]
+firmware = []
 rp2350-demo = [
   "defmt",
   "defmt-rtt",
