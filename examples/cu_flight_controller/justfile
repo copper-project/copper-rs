@@ -11,7 +11,7 @@ sim:
   cargo run -p cu-flight-controller --no-default-features --features sim --bin quad-sim
 
 # Extract CopperLists from a log file (JSON export).
-logreader log="logs/embedded.copper":
+logreader log="logs/flight_controller_sim.copper":
   #!/usr/bin/env bash
   set -euo pipefail
   invocation_dir="{{invocation_directory()}}"

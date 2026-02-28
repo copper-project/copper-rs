@@ -3,6 +3,8 @@
 extern crate alloc;
 
 mod messages;
+#[path = "sim/rc_joystick.rs"]
+mod rc_joystick;
 mod sim_support;
 mod tasks;
 
@@ -14,17 +16,23 @@ use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::prelude::{
     App, AssetPlugin, AssetServer, ButtonInput, Camera, Camera3d, Color, Commands, Component,
     DefaultPlugins, Dir3, DirectionalLight, EnvironmentMapLight, FixedUpdate, GlobalAmbientLight,
-    GlobalTransform, GltfAssetLabel, KeyCode, MessageReader, MessageWriter, MinimalPlugins, Name,
-    PerspectiveProjection, PluginGroup, PostUpdate, Projection, Quat, Query, Res, ResMut, Resource,
-    SceneRoot, Startup, Time, Transform, Update, Vec3, Window, WindowPlugin, With, Without,
-    default,
+    GlobalTransform, GltfAssetLabel, IsDefaultUiCamera, KeyCode, MessageReader, MessageWriter,
+    MinimalPlugins, Name, Node, PerspectiveProjection, PluginGroup, PositionType, PostUpdate,
+    Projection, Quat, Query, Res, ResMut, Resource, SceneRoot, Startup, Text, TextColor, TextFont,
+    Time, Transform, Update, Val, Vec3, Visibility, Window, WindowPlugin, With, Without, default,
 };
+use bevy::window::PrimaryWindow;
 use cached_path::{Cache, Error as CacheError, ProgressBar};
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
 
 use cu_crsf::messages::RcChannelsPayload;
+use cu_msp_bridge::MspRequestBatch;
+use cu_msp_lib::structs::{
+    MSP_DP_CLEAR_SCREEN, MSP_DP_DRAW_SCREEN, MSP_DP_WRITE_STRING, MspDisplayPort, MspRequest,
+};
 use cu_sensor_payloads::{BarometerPayload, ImuPayload, MagnetometerPayload};
+use rc_joystick::{RcFrame, RcJoystick};
 
 use std::fs;
 use std::io;
@@ -95,6 +103,145 @@ impl Default for SimRcInput {
 struct SimKinematics {
     prev_linear_velocity: Option<Vec3>,
 }
+
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum RcInputSource {
+    #[default]
+    Keyboard,
+    Joystick,
+}
+
+#[derive(Resource, Default)]
+struct SimJoystickState {
+    reader: Option<RcJoystick>,
+}
+
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum CameraView {
+    #[default]
+    FirstPerson,
+    ThirdPerson,
+}
+
+const OSD_COLS: usize = 53;
+const OSD_ROWS: usize = 16;
+const OSD_VOLT_SYMBOL: u8 = 0x06;
+const OSD_CHAR_WIDTH_FACTOR: f32 = 0.62;
+const OSD_LINE_HEIGHT_FACTOR: f32 = 1.22;
+const OSD_HORIZONTAL_PADDING_COLS: f32 = 0.5;
+const OSD_VERTICAL_PADDING_ROWS: f32 = 0.5;
+
+#[derive(Resource, Clone)]
+struct SimOsdOverlay {
+    cols: usize,
+    rows: usize,
+    cells: Vec<char>,
+    text: String,
+}
+
+impl Default for SimOsdOverlay {
+    fn default() -> Self {
+        let mut overlay = Self {
+            cols: OSD_COLS,
+            rows: OSD_ROWS,
+            cells: vec![' '; OSD_COLS * OSD_ROWS],
+            text: String::new(),
+        };
+        overlay.rebuild_text();
+        overlay
+    }
+}
+
+impl SimOsdOverlay {
+    fn clear(&mut self) {
+        for c in &mut self.cells {
+            *c = ' ';
+        }
+    }
+
+    fn apply_batch(&mut self, batch: &MspRequestBatch) {
+        let mut touched = false;
+        for request in batch.iter() {
+            let MspRequest::MspDisplayPort(displayport) = request else {
+                continue;
+            };
+            if self.apply_displayport(displayport) {
+                touched = true;
+            }
+        }
+        if touched {
+            self.rebuild_text();
+        }
+    }
+
+    fn apply_displayport(&mut self, displayport: &MspDisplayPort) -> bool {
+        let payload = displayport.as_bytes();
+        let Some(cmd) = payload.first().copied() else {
+            return false;
+        };
+
+        match cmd {
+            MSP_DP_CLEAR_SCREEN => {
+                self.clear();
+                true
+            }
+            MSP_DP_WRITE_STRING => {
+                if payload.len() < 4 {
+                    return false;
+                }
+                let row = payload[1] as usize;
+                let col = payload[2] as usize;
+                self.write_bytes(row, col, &payload[4..])
+            }
+            MSP_DP_DRAW_SCREEN => true,
+            _ => false,
+        }
+    }
+
+    fn write_bytes(&mut self, row: usize, col: usize, bytes: &[u8]) -> bool {
+        if row >= self.rows || col >= self.cols || bytes.is_empty() {
+            return false;
+        }
+        let mut written = false;
+        for (i, byte) in bytes.iter().enumerate() {
+            let x = col + i;
+            if x >= self.cols {
+                break;
+            }
+            let idx = row * self.cols + x;
+            self.cells[idx] = sanitize_osd_char(*byte);
+            written = true;
+        }
+        written
+    }
+
+    fn rebuild_text(&mut self) {
+        self.text.clear();
+        self.text
+            .reserve(self.cols * self.rows + self.rows.saturating_sub(1));
+        for row in 0..self.rows {
+            let start = row * self.cols;
+            let end = start + self.cols;
+            for c in &self.cells[start..end] {
+                self.text.push(*c);
+            }
+            if row + 1 < self.rows {
+                self.text.push('\n');
+            }
+        }
+    }
+}
+
+fn sanitize_osd_char(byte: u8) -> char {
+    match byte {
+        b' '..=b'~' => byte as char,
+        OSD_VOLT_SYMBOL => 'V',
+        _ => ' ',
+    }
+}
+
+#[derive(Component)]
+struct OsdOverlayText;
 
 #[derive(Debug)]
 struct QuadcopterForceTorque {
@@ -291,8 +438,16 @@ fn dshot_to_omega(dshot: u16) -> f32 {
     normalized * MAX_OMEGA_RAD_S
 }
 
-fn map_bevy_body_to_fc_axes(v: Vec3) -> [f32; 3] {
-    [v.x, v.z, v.y]
+/// Map Bevy body polar vectors (X right, Y up, Z forward) to FC AHRS body frame
+/// (X forward, Y right, Z down; aerospace/NED).
+fn map_bevy_body_to_fc_polar(v: Vec3) -> [f32; 3] {
+    [v.z, v.x, -v.y]
+}
+
+/// Map Bevy body axial vectors (angular velocity / magnetic field) into FC body frame.
+/// Because the frame transform changes handedness, axial vectors pick up an extra sign.
+fn map_bevy_body_to_fc_axial(v: Vec3) -> [f32; 3] {
+    [-v.z, -v.x, v.y]
 }
 
 fn setup_copper(mut commands: Commands) {
@@ -353,6 +508,7 @@ fn setup_world(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         Name::new("camera"),
         Camera3d::default(),
+        IsDefaultUiCamera,
         Projection::Perspective(PerspectiveProjection {
             fov: 90.0_f32.to_radians(),
             ..default()
@@ -409,7 +565,135 @@ fn setup_world(mut commands: Commands, asset_server: Res<AssetServer>) {
     ));
 }
 
-fn update_rc_input(mut rc_input: ResMut<SimRcInput>, keyboard: Res<ButtonInput<KeyCode>>) {
+fn setup_osd_overlay(mut commands: Commands) {
+    commands.spawn((
+        Name::new("fpv-osd"),
+        OsdOverlayText,
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(0.0),
+            left: Val::Px(0.0),
+            ..default()
+        },
+        Text::new(""),
+        TextFont {
+            font_size: 14.0,
+            ..default()
+        },
+        TextColor(Color::WHITE),
+        Visibility::Visible,
+    ));
+}
+
+fn setup_joystick(
+    mut rc_input: ResMut<SimRcInput>,
+    mut rc_source: ResMut<RcInputSource>,
+    mut joystick_state: ResMut<SimJoystickState>,
+) {
+    let preferred = std::env::var("CU_SIM_JOYSTICK").ok();
+    match RcJoystick::open(preferred.as_deref()) {
+        Ok(joystick) => {
+            apply_joystick_frame(&joystick.current_frame(), &mut rc_input);
+            *rc_source = RcInputSource::Joystick;
+            info!("sim rc: joystick source active (set CU_SIM_JOYSTICK=<name> to target a device)");
+            joystick_state.reader = Some(joystick);
+        }
+        Err(err) => {
+            *rc_source = RcInputSource::Keyboard;
+            info!(
+                "sim rc: joystick unavailable ({}), using keyboard controls",
+                err.to_string()
+            );
+            joystick_state.reader = None;
+        }
+    }
+}
+
+fn poll_joystick(
+    mut joystick: ResMut<SimJoystickState>,
+    mut rc_input: ResMut<SimRcInput>,
+    mut rc_source: ResMut<RcInputSource>,
+) {
+    let Some(reader) = joystick.reader.as_mut() else {
+        return;
+    };
+
+    match reader.next_frame() {
+        Ok(Some(frame)) => {
+            let prev_armed = rc_input.armed;
+            let prev_mode = rc_input.mode;
+            apply_joystick_frame(&frame, &mut rc_input);
+            *rc_source = RcInputSource::Joystick;
+            if rc_input.armed != prev_armed || rc_input.mode != prev_mode {
+                info!("sim rc: armed={} mode={:?}", rc_input.armed, rc_input.mode);
+            }
+        }
+        Ok(None) => {}
+        Err(err) => {
+            info!(
+                "sim rc: joystick read failed ({}), falling back to keyboard",
+                err.to_string()
+            );
+            joystick.reader = None;
+            *rc_source = RcInputSource::Keyboard;
+        }
+    }
+}
+
+fn mode_from_three_pos(value: f32) -> messages::FlightMode {
+    if value < -0.33 {
+        messages::FlightMode::Acro
+    } else if value < 0.33 {
+        messages::FlightMode::Angle
+    } else {
+        messages::FlightMode::PositionHold
+    }
+}
+
+fn arm_from_switches(frame: &RcFrame) -> Option<bool> {
+    const ARM_SWITCH_NAMES: &[&str] = &["sf", "se", "arm", "btn1"];
+
+    for name in ARM_SWITCH_NAMES {
+        if let Some(sw) = frame
+            .switches
+            .iter()
+            .find(|s| s.name.eq_ignore_ascii_case(name))
+        {
+            return Some(sw.on);
+        }
+    }
+
+    frame.switches.first().map(|s| s.on)
+}
+
+fn apply_joystick_frame(frame: &RcFrame, rc_input: &mut SimRcInput) {
+    rc_input.roll = frame.roll.clamp(-1.0, 1.0);
+    // Match FC stick convention used by keyboard path and RcMapper.
+    rc_input.pitch = (-frame.pitch).clamp(-1.0, 1.0);
+    rc_input.yaw = (-frame.yaw).clamp(-1.0, 1.0);
+    rc_input.throttle = frame.throttle.clamp(0.0, 1.0);
+
+    let armed_from_switch = arm_from_switches(frame);
+    let arm_uses_sa_axis = armed_from_switch.is_none();
+    rc_input.armed = armed_from_switch.unwrap_or(frame.knob_sa > 0.5);
+
+    let mode_axis = if arm_uses_sa_axis {
+        frame.knob_sb
+    } else {
+        frame.knob_sa
+    };
+    rc_input.mode = mode_from_three_pos(mode_axis);
+}
+
+fn update_rc_input_keyboard(
+    mut rc_input: ResMut<SimRcInput>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    rc_source: Res<RcInputSource>,
+) {
+    if *rc_source == RcInputSource::Joystick {
+        return;
+    }
+
     let roll =
         (keyboard.pressed(KeyCode::KeyA) as i8 - keyboard.pressed(KeyCode::KeyD) as i8) as f32;
     let pitch =
@@ -437,11 +721,16 @@ fn update_rc_input(mut rc_input: ResMut<SimRcInput>, keyboard: Res<ButtonInput<K
     }
 }
 
-fn adjust_throttle(
+fn adjust_keyboard_throttle(
     mut rc_input: ResMut<SimRcInput>,
     keyboard: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
+    rc_source: Res<RcInputSource>,
 ) {
+    if *rc_source == RcInputSource::Joystick {
+        return;
+    }
+
     let dt = time.delta_secs();
     let mut throttle = rc_input.throttle;
 
@@ -495,17 +784,20 @@ fn sync_vehicle_state(
     kin.prev_linear_velocity = Some(lv);
 
     let accel_world = (lv - prev) / dt;
-    let specific_force_world = accel_world - gravity.0;
+    // cu-ahrs expects accelerometer values in NED-style body axes where
+    // level flight is approximately [0, 0, +9.81]. In Bevy world (Y up),
+    // this corresponds to gravity minus linear acceleration.
+    let accel_measure_world = gravity.0 - accel_world;
 
     let rotation = transform.rotation();
-    let accel_body = rotation.inverse() * specific_force_world;
+    let accel_body = rotation.inverse() * accel_measure_world;
     let gyro_body = rotation.inverse() * angular_velocity.0;
 
     state.vehicle = SimVehicleState {
         position: transform.translation(),
         rotation,
-        body_accel_fc: map_bevy_body_to_fc_axes(accel_body),
-        body_gyro_fc: map_bevy_body_to_fc_axes(gyro_body),
+        body_accel_fc: map_bevy_body_to_fc_polar(accel_body),
+        body_gyro_fc: map_bevy_body_to_fc_axial(gyro_body),
     };
 }
 
@@ -514,6 +806,7 @@ fn run_copper(
     sim_state: Res<SimState>,
     rc_input: Res<SimRcInput>,
     mut motor_commands: ResMut<SimMotorCommands>,
+    mut osd_overlay: ResMut<SimOsdOverlay>,
     mut exit_writer: MessageWriter<AppExit>,
 ) {
     let vehicle = sim_state.vehicle.clone();
@@ -543,7 +836,7 @@ fn run_copper(
                 let world_mag = Vec3::from_array(WORLD_MAG_FIELD_UT);
                 let body_mag = vehicle.rotation.inverse() * world_mag;
                 set_msg_timing(&clock, output);
-                output.set_payload(MagnetometerPayload::from_raw(map_bevy_body_to_fc_axes(
+                output.set_payload(MagnetometerPayload::from_raw(map_bevy_body_to_fc_axial(
                     body_mag,
                 )));
                 SimOverride::ExecutedBySim
@@ -582,6 +875,12 @@ fn run_copper(
                 dshot[3] = msg.payload().map_or(0, |c| c.throttle);
                 SimOverride::ExecuteByRuntime
             }
+            default::SimStep::VtxMspTxRequests { msg, .. } => {
+                if let Some(batch) = msg.payload() {
+                    osd_overlay.apply_batch(batch);
+                }
+                SimOverride::ExecuteByRuntime
+            }
             _ => SimOverride::ExecuteByRuntime,
         }
     };
@@ -615,9 +914,26 @@ fn apply_multicopter_dynamics(
     forces.apply_angular_impulse(dt * force_torque.torque);
 }
 
+fn toggle_camera_view(keyboard: Res<ButtonInput<KeyCode>>, mut camera_view: ResMut<CameraView>) {
+    if !keyboard.just_pressed(KeyCode::KeyV) {
+        return;
+    }
+
+    *camera_view = match *camera_view {
+        CameraView::FirstPerson => CameraView::ThirdPerson,
+        CameraView::ThirdPerson => CameraView::FirstPerson,
+    };
+    let mode = match *camera_view {
+        CameraView::FirstPerson => "first_person",
+        CameraView::ThirdPerson => "third_person",
+    };
+    info!("sim camera: {}", mode);
+}
+
 fn camera_follow_quadcopter(
     quadcopter_query: Query<&GlobalTransform, With<Multicopter>>,
     mut camera_query: Query<&mut Transform, (With<Camera>, Without<Multicopter>)>,
+    camera_view: Res<CameraView>,
 ) {
     let Ok(quad_tf) = quadcopter_query.single() else {
         return;
@@ -626,13 +942,50 @@ fn camera_follow_quadcopter(
         return;
     };
 
-    let camera_position = quad_tf.translation() + -2.0 * quad_tf.forward() + 1.0 * quad_tf.up();
+    let camera_position = match *camera_view {
+        CameraView::FirstPerson => {
+            quad_tf.translation() + 0.10 * quad_tf.up() + 0.16 * quad_tf.forward()
+        }
+        CameraView::ThirdPerson => {
+            quad_tf.translation() + -2.0 * quad_tf.forward() + 1.0 * quad_tf.up()
+        }
+    };
     camera_tf.translation = camera_position;
     *camera_tf = camera_tf.looking_to(quad_tf.forward(), quad_tf.up());
 }
 
 fn track_sim_led_state() {
     let _on = sim_support::sim_activity_led_is_on();
+}
+
+fn update_osd_overlay(
+    camera_view: Res<CameraView>,
+    osd_overlay: Res<SimOsdOverlay>,
+    window_query: Query<&Window, With<PrimaryWindow>>,
+    mut overlay_query: Query<(&mut Text, &mut TextFont, &mut Visibility), With<OsdOverlayText>>,
+) {
+    let Ok(window) = window_query.single() else {
+        return;
+    };
+    let Ok((mut text, mut text_font, mut visibility)) = overlay_query.single_mut() else {
+        return;
+    };
+
+    *visibility = if *camera_view == CameraView::FirstPerson {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
+
+    // Scale text so the 53x16 OSD grid spans the viewport with a small safety
+    // margin; this avoids clipping due to font line-height/advance rounding.
+    let font_by_height =
+        window.height() / ((OSD_ROWS as f32 + OSD_VERTICAL_PADDING_ROWS) * OSD_LINE_HEIGHT_FACTOR);
+    let font_by_width =
+        window.width() / ((OSD_COLS as f32 + OSD_HORIZONTAL_PADDING_COLS) * OSD_CHAR_WIDTH_FACTOR);
+    text_font.font_size = font_by_height.min(font_by_width).clamp(8.0, 96.0);
+
+    *text = Text::new(osd_overlay.text.clone());
 }
 
 fn stop_copper_on_exit(mut exit_events: MessageReader<AppExit>, mut copper: ResMut<CopperState>) {
@@ -673,7 +1026,11 @@ pub fn make_world(headless: bool) -> App {
     app.insert_resource(SimState::default())
         .insert_resource(SimMotorCommands::default())
         .insert_resource(SimRcInput::default())
-        .insert_resource(SimKinematics::default());
+        .insert_resource(SimKinematics::default())
+        .insert_resource(RcInputSource::default())
+        .insert_resource(SimJoystickState::default())
+        .insert_resource(CameraView::default())
+        .insert_resource(SimOsdOverlay::default());
 
     if headless {
         app.add_plugins(MinimalPlugins);
@@ -700,11 +1057,28 @@ pub fn make_world(headless: bool) -> App {
     .add_plugins(PhysicsPlugins::default())
     .insert_resource(Gravity(Vec3::new(0.0, -9.81, 0.0)))
     .insert_resource(Time::<Physics>::default())
-    .add_systems(Startup, (setup_world, setup_copper))
-    .add_systems(Update, (update_rc_input, adjust_throttle, reset_vehicle))
+    .add_systems(
+        Startup,
+        (setup_world, setup_osd_overlay, setup_copper, setup_joystick),
+    )
     .add_systems(
         Update,
-        (camera_follow_quadcopter, track_sim_led_state).chain(),
+        (
+            poll_joystick,
+            update_rc_input_keyboard,
+            adjust_keyboard_throttle,
+            reset_vehicle,
+        ),
+    )
+    .add_systems(
+        Update,
+        (
+            toggle_camera_view,
+            camera_follow_quadcopter,
+            track_sim_led_state,
+            update_osd_overlay,
+        )
+            .chain(),
     )
     .add_systems(
         FixedUpdate,
