@@ -66,7 +66,7 @@ impl RcJoystick {
     /// Create a joystick reader. When `preferred_name` is provided it will match the
     /// device name (case insensitive). Otherwise the best joystick-like device is picked.
     pub fn open(preferred_name: Option<&str>) -> io::Result<Self> {
-        let (path, device) = discover_device(preferred_name)?;
+        let (_path, device) = discover_device(preferred_name)?;
 
         let axis_map = build_axis_map(&device);
         if axis_map.is_empty() {
@@ -113,11 +113,6 @@ impl RcJoystick {
         prime_axes(&joystick.device, &joystick.axis_map, &mut joystick.state);
         prime_switches(&joystick.device, &joystick.switch_map, &mut joystick.state);
 
-        println!(
-            "Opened RC joystick '{}' at {:?}",
-            joystick.device.name().unwrap_or("unknown device"),
-            path
-        );
         Ok(joystick)
     }
 
