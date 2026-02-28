@@ -600,9 +600,9 @@ fn setup_joystick(
         }
         Err(err) => {
             *rc_source = RcInputSource::Keyboard;
-            info!(
+            eprintln!(
                 "sim rc: joystick unavailable ({}), using keyboard controls",
-                err.to_string()
+                err
             );
             joystick_state.reader = None;
         }
@@ -630,9 +630,9 @@ fn poll_joystick(
         }
         Ok(None) => {}
         Err(err) => {
-            info!(
+            eprintln!(
                 "sim rc: joystick read failed ({}), falling back to keyboard",
-                err.to_string()
+                err
             );
             joystick.reader = None;
             *rc_source = RcInputSource::Keyboard;
@@ -668,9 +668,8 @@ fn arm_from_switches(frame: &RcFrame) -> Option<bool> {
 
 fn apply_joystick_frame(frame: &RcFrame, rc_input: &mut SimRcInput) {
     rc_input.roll = frame.roll.clamp(-1.0, 1.0);
-    // Match FC stick convention used by keyboard path and RcMapper.
-    rc_input.pitch = (-frame.pitch).clamp(-1.0, 1.0);
-    rc_input.yaw = (-frame.yaw).clamp(-1.0, 1.0);
+    rc_input.pitch = frame.pitch.clamp(-1.0, 1.0);
+    rc_input.yaw = frame.yaw.clamp(-1.0, 1.0);
     rc_input.throttle = frame.throttle.clamp(0.0, 1.0);
 
     let armed_from_switch = arm_from_switches(frame);
