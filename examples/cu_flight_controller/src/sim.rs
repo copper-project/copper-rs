@@ -16,11 +16,11 @@ use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::prelude::{
     App, AssetPlugin, AssetServer, ButtonInput, Camera, Camera3d, Color, Commands, Component,
     DefaultPlugins, Dir3, DirectionalLight, EnvironmentMapLight, FixedUpdate, GlobalAmbientLight,
-    GlobalTransform, GltfAssetLabel, IsDefaultUiCamera, KeyCode, MessageReader, MessageWriter,
-    MinimalPlugins, Name, Node, PerspectiveProjection, PluginGroup, PositionType, PostUpdate,
-    Projection, Quat, Query, Res, ResMut, Resource, SceneRoot, Startup, Text, TextColor, TextFont,
-    Time, Transform, UiRect, Update, Val, Vec3, Visibility, Window, WindowPlugin, With, Without,
-    default,
+    GlobalTransform, GltfAssetLabel, Handle, IsDefaultUiCamera, KeyCode, MessageReader,
+    MessageWriter, MinimalPlugins, Name, Node, PerspectiveProjection, PluginGroup, PositionType,
+    PostUpdate, Projection, Quat, Query, Res, ResMut, Resource, Scene, SceneRoot, Startup, Text,
+    TextColor, TextFont, Time, Transform, UiRect, Update, Val, Vec3, Visibility, Window,
+    WindowPlugin, With, Without, default,
 };
 use bevy::window::PrimaryWindow;
 use cached_path::{Cache, Error as CacheError, ProgressBar};
@@ -53,8 +53,8 @@ struct SimVehicleState {
 impl Default for SimVehicleState {
     fn default() -> Self {
         Self {
-            position: Vec3::new(0.0, 1.0, 0.0),
-            rotation: Quat::IDENTITY,
+            position: SIM_SPAWN_POSITION,
+            rotation: spawn_rotation(),
             body_accel_fc: [0.0, 0.0, 9.81],
             body_gyro_fc: [0.0; 3],
         }
@@ -103,6 +103,12 @@ impl Default for SimRcInput {
 #[derive(Resource, Default)]
 struct SimKinematics {
     prev_linear_velocity: Option<Vec3>,
+}
+
+#[derive(Resource)]
+struct PendingQuadcopterSpawn {
+    quadcopter_scene: Handle<Scene>,
+    city_scene: Handle<Scene>,
 }
 
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -325,10 +331,40 @@ const BASE_ASSETS_URL: &str = "https://cdn.copper-robotics.com/";
 const SKYBOX: &str = "skybox.ktx2";
 const SPECULAR_MAP: &str = "specular_map.ktx2";
 const QUADCOPTER: &str = "quadcopter.glb";
-const LEVEL: &str = "level.glb";
+const CITY: &str = "city.glb";
+// Measured from `gltf-transform inspect city.glb` in source model units.
+const LOCAL_CITY_BBOX_MIN_UNITS: Vec3 = Vec3::new(-30_614.165, -648.2196, -4_185.883);
+const LOCAL_CITY_BBOX_MAX_UNITS: Vec3 = Vec3::new(18_754.953, 11_102.407, 35_871.875);
+// Source appears to be authored in centimeters; convert units to meters.
+const LOCAL_CITY_SCALE: f32 = 0.01;
+const SIM_SPAWN_POSITION: Vec3 = Vec3::new(-10.0, 1.0, 20.0);
 const ARM_SWITCH_NAMES: &[&str] = &["sf", "se", "arm", "btn1"];
 const KEYBOARD_HOVER_THROTTLE_LOW: f32 = 0.56;
 const KEYBOARD_HOVER_THROTTLE_HIGH: f32 = 0.62;
+
+fn spawn_rotation() -> Quat {
+    Quat::from_rotation_y(core::f32::consts::PI)
+}
+
+fn spawn_pose_components() -> (
+    Transform,
+    Position,
+    Rotation,
+    LinearVelocity,
+    AngularVelocity,
+) {
+    (
+        Transform::from_translation(SIM_SPAWN_POSITION).with_rotation(spawn_rotation()),
+        Position::from_xyz(
+            SIM_SPAWN_POSITION.x,
+            SIM_SPAWN_POSITION.y,
+            SIM_SPAWN_POSITION.z,
+        ),
+        Rotation(spawn_rotation()),
+        LinearVelocity(Vec3::ZERO),
+        AngularVelocity(Vec3::ZERO),
+    )
+}
 
 fn create_symlink(src: &str, dst: &str) -> io::Result<()> {
     let dst_path = Path::new(dst);
@@ -496,12 +532,31 @@ fn setup_world(mut commands: Commands, asset_server: Res<AssetServer>) {
 
     let quadcopter_path = precached_asset_path(&online_cache, &offline_cache, QUADCOPTER)
         .expect("failed to get quadcopter.glb (online or cached)");
-    let level_path = precached_asset_path(&online_cache, &offline_cache, LEVEL)
-        .expect("failed to get level.glb (online or cached)");
     let skybox_path = precached_asset_path(&online_cache, &offline_cache, SKYBOX)
         .expect("failed to get skybox.ktx2 (online or cached)");
     let specular_map_path = precached_asset_path(&online_cache, &offline_cache, SPECULAR_MAP)
         .expect("failed to get specular_map.ktx2 (online or cached)");
+    let city_path = precached_asset_path(&online_cache, &offline_cache, CITY)
+        .expect("failed to get city.glb (online or cached)");
+
+    let city_size_units = LOCAL_CITY_BBOX_MAX_UNITS - LOCAL_CITY_BBOX_MIN_UNITS;
+    let city_size_m = city_size_units * LOCAL_CITY_SCALE;
+    let city_translation = Vec3::ZERO;
+    let city_scale = Vec3::splat(LOCAL_CITY_SCALE);
+    let city_path_str = city_path.to_string_lossy().into_owned();
+    info!(
+        "sim world: loading city {} (bbox {}x{}x{} units, scaled to {}x{}x{} m) with translation ({}, {}, {})",
+        city_path_str,
+        city_size_units.x,
+        city_size_units.y,
+        city_size_units.z,
+        city_size_m.x,
+        city_size_m.y,
+        city_size_m.z,
+        city_translation.x,
+        city_translation.y,
+        city_translation.z
+    );
 
     let skybox_handle = asset_server.load(skybox_path.clone());
     let specular_map_handle = asset_server.load(specular_map_path);
@@ -544,32 +599,66 @@ fn setup_world(mut commands: Commands, asset_server: Res<AssetServer>) {
         Transform::from_translation(Vec3::new(3.0, 10.0, 1.0)).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
-    commands.spawn((
-        Name::new("quadcopter"),
-        SceneRoot(asset_server.load(
-            GltfAssetLabel::Scene(0).from_asset(format!("{}#scene0", quadcopter_path.display())),
-        )),
-        RigidBody::Dynamic,
-        Transform::from_xyz(0.0, 1.0, 0.0),
-        Collider::cuboid(0.14, 0.05, 0.14),
-        Multicopter::new(quad_x_propellers()),
-        Mass(0.7),
-        AngularInertia::new(Vec3::new(0.012, 0.02, 0.012)),
-        AngularDamping(0.4),
-        LinearDamping(0.2),
-        SweptCcd::NON_LINEAR,
-    ));
+    let quadcopter_scene = asset_server
+        .load(GltfAssetLabel::Scene(0).from_asset(format!("{}#scene0", quadcopter_path.display())));
+    let city_scene = asset_server
+        .load(GltfAssetLabel::Scene(0).from_asset(format!("{}#scene0", city_path.display())));
+    commands.insert_resource(PendingQuadcopterSpawn {
+        quadcopter_scene: quadcopter_scene.clone(),
+        city_scene: city_scene.clone(),
+    });
 
     commands.spawn((
-        Name::new("level"),
-        SceneRoot(
-            asset_server.load(
-                GltfAssetLabel::Scene(0).from_asset(format!("{}#scene0", level_path.display())),
-            ),
-        ),
+        Name::new("city"),
+        SceneRoot(city_scene),
+        Transform {
+            translation: city_translation,
+            scale: city_scale,
+            ..default()
+        },
         ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
         RigidBody::Static,
     ));
+}
+
+fn spawn_quadcopter_when_world_ready(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    pending_spawn: Option<Res<PendingQuadcopterSpawn>>,
+    colliders: Query<(), (With<Collider>, Without<Multicopter>)>,
+) {
+    let Some(pending_spawn) = pending_spawn else {
+        return;
+    };
+
+    if !asset_server.is_loaded_with_dependencies(pending_spawn.city_scene.id())
+        || !asset_server.is_loaded_with_dependencies(pending_spawn.quadcopter_scene.id())
+        || colliders.is_empty()
+    {
+        return;
+    }
+
+    let (transform, position, rotation, lin_vel, ang_vel) = spawn_pose_components();
+    commands
+        .spawn((
+            Name::new("quadcopter"),
+            SceneRoot(pending_spawn.quadcopter_scene.clone()),
+            RigidBody::Dynamic,
+            transform,
+            position,
+            rotation,
+            lin_vel,
+            ang_vel,
+            Collider::cuboid(0.14, 0.05, 0.14),
+            Multicopter::new(quad_x_propellers()),
+            Mass(0.7),
+            AngularInertia::new(Vec3::new(0.012, 0.02, 0.012)),
+            AngularDamping(0.4),
+            LinearDamping(0.2),
+            SweptCcd::NON_LINEAR,
+        ))
+        .insert(Visibility::Visible);
+    commands.remove_resource::<PendingQuadcopterSpawn>();
 }
 
 fn setup_osd_overlay(mut commands: Commands) {
@@ -804,7 +893,13 @@ fn adjust_keyboard_throttle(
 fn reset_vehicle(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut query: Query<
-        (&mut Transform, &mut LinearVelocity, &mut AngularVelocity),
+        (
+            &mut Transform,
+            &mut Position,
+            &mut Rotation,
+            &mut LinearVelocity,
+            &mut AngularVelocity,
+        ),
         With<Multicopter>,
     >,
     mut motors: ResMut<SimMotorCommands>,
@@ -814,10 +909,16 @@ fn reset_vehicle(
         return;
     }
 
-    if let Ok((mut transform, mut lin_vel, mut ang_vel)) = query.single_mut() {
-        *transform = Transform::from_xyz(0.0, 1.0, 0.0);
-        *lin_vel = LinearVelocity(Vec3::ZERO);
-        *ang_vel = AngularVelocity(Vec3::ZERO);
+    if let Ok((mut transform, mut position, mut rotation, mut lin_vel, mut ang_vel)) =
+        query.single_mut()
+    {
+        let (spawn_tf, spawn_pos, spawn_rot, spawn_lin_vel, spawn_ang_vel) =
+            spawn_pose_components();
+        *transform = spawn_tf;
+        *position = spawn_pos;
+        *rotation = spawn_rot;
+        *lin_vel = spawn_lin_vel;
+        *ang_vel = spawn_ang_vel;
     }
 
     motors.dshot = [0; 4];
@@ -1013,6 +1114,20 @@ fn camera_follow_quadcopter(
     *camera_tf = camera_tf.looking_to(quad_tf.forward(), quad_tf.up());
 }
 
+fn update_quadcopter_visibility(
+    camera_view: Res<CameraView>,
+    mut quad_query: Query<&mut Visibility, With<Multicopter>>,
+) {
+    let Ok(mut visibility) = quad_query.single_mut() else {
+        return;
+    };
+    *visibility = if *camera_view == CameraView::FirstPerson {
+        Visibility::Hidden
+    } else {
+        Visibility::Visible
+    };
+}
+
 fn track_sim_led_state() {
     let _on = sim_support::sim_activity_led_is_on();
 }
@@ -1198,6 +1313,7 @@ pub fn make_world(headless: bool) -> App {
     .add_systems(
         Update,
         (
+            spawn_quadcopter_when_world_ready,
             poll_joystick,
             update_rc_input_keyboard,
             adjust_keyboard_throttle,
@@ -1208,6 +1324,7 @@ pub fn make_world(headless: bool) -> App {
         Update,
         (
             toggle_camera_view,
+            update_quadcopter_visibility,
             camera_follow_quadcopter,
             track_sim_led_state,
             update_help_overlay,

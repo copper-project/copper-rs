@@ -3,8 +3,6 @@
 use std::collections::HashMap;
 use std::io::{self, Error, ErrorKind};
 use std::path::PathBuf;
-use std::thread;
-use std::time::Duration;
 
 use evdev::{AbsoluteAxisCode, AttributeSetRef, Device, EventSummary, EventType, KeyCode};
 
@@ -22,10 +20,9 @@ pub struct RcFrame {
     pub switches: Vec<SwitchState>,
 }
 
-/// AUX channel with a stable name.
+/// AUX channel value.
 #[derive(Debug, Clone)]
 pub struct AuxChannel {
-    pub name: String,
     pub value: f32,
 }
 
@@ -93,11 +90,8 @@ impl RcJoystick {
             .filter(|a| matches!(a.0, RcAxis::Aux(_)))
             .count();
         let mut aux = Vec::with_capacity(aux_count);
-        for i in 0..aux_count {
-            aux.push(AuxChannel {
-                name: format!("aux{}", i + 1),
-                value: 0.0,
-            });
+        for _ in 0..aux_count {
+            aux.push(AuxChannel { value: 0.0 });
         }
 
         let switches = build_switches(&device);
@@ -200,42 +194,6 @@ impl RcJoystick {
     /// Returns the input device name used for RC mapping.
     pub fn device_name(&self) -> String {
         self.device.name().unwrap_or("unknown").to_string()
-    }
-
-    /// Convenience helper that logs changes to stdout.
-    pub fn print_loop(&mut self) -> io::Result<()> {
-        println!("Waiting for RC joystick events...");
-        loop {
-            match self.next_frame()? {
-                Some(frame) => {
-                    let aux_values = frame
-                        .aux
-                        .iter()
-                        .map(|a| format!("{}:{:+.2}", a.name, a.value))
-                        .collect::<Vec<_>>()
-                        .join(" ");
-                    let switch_values = frame
-                        .switches
-                        .iter()
-                        .map(|s| format!("{}:{}", s.name, if s.on { "on" } else { "off" }))
-                        .collect::<Vec<_>>()
-                        .join(" ");
-                    println!(
-                        "roll {:+.2} pitch {:+.2} yaw {:+.2} throttle {:+.2} sa {:+.2} sb {:+.2} sc {:+.2} | {} | {}",
-                        frame.roll,
-                        frame.pitch,
-                        frame.yaw,
-                        frame.throttle,
-                        frame.knob_sa,
-                        frame.knob_sb,
-                        frame.knob_sc,
-                        aux_values,
-                        switch_values
-                    );
-                }
-                None => thread::sleep(Duration::from_millis(10)),
-            }
-        }
     }
 
     fn update_axis(&mut self, role: RcAxis, value: f32) -> bool {
