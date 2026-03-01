@@ -14,13 +14,14 @@ use bevy::asset::UnapprovedPathMode;
 use bevy::core_pipeline::Skybox;
 use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::prelude::{
-    App, AssetPlugin, AssetServer, ButtonInput, Camera, Camera3d, Color, Commands, Component,
-    DefaultPlugins, Dir3, DirectionalLight, EnvironmentMapLight, FixedUpdate, GlobalAmbientLight,
-    GlobalTransform, GltfAssetLabel, Handle, IsDefaultUiCamera, KeyCode, MessageReader,
-    MessageWriter, MinimalPlugins, Name, Node, PerspectiveProjection, PluginGroup, PositionType,
-    PostUpdate, Projection, Quat, Query, Res, ResMut, Resource, Scene, SceneRoot, Startup, Text,
-    TextColor, TextFont, Time, Transform, UiRect, Update, Val, Vec3, Visibility, Window,
-    WindowPlugin, With, Without, default,
+    App, AssetPlugin, AssetServer, Assets, ButtonInput, Camera, Camera3d, Color, Commands,
+    Component, DefaultPlugins, Dir3, DirectionalLight, EnvironmentMapLight, FixedUpdate,
+    GlobalAmbientLight, GlobalTransform, GltfAssetLabel, Handle, ImageNode, IsDefaultUiCamera,
+    KeyCode, MessageReader, MessageWriter, MinimalPlugins, Name, Node, PerspectiveProjection,
+    PluginGroup, PositionType, PostUpdate, Projection, Quat, Query, Res, ResMut, Resource, Scene,
+    SceneRoot, Startup, Text, TextColor, TextFont, TextureAtlas, TextureAtlasLayout, Time,
+    Transform, UVec2, UiRect, Update, Val, Vec3, Visibility, Window, WindowPlugin, With, Without,
+    default,
 };
 use bevy::window::PrimaryWindow;
 use cached_path::{Cache, Error as CacheError, ProgressBar};
@@ -132,52 +133,47 @@ enum CameraView {
 
 const OSD_COLS: usize = 53;
 const OSD_ROWS: usize = 16;
-const OSD_VOLT_SYMBOL: u8 = 0x06;
-const OSD_CHAR_WIDTH_FACTOR: f32 = 0.62;
-const OSD_LINE_HEIGHT_FACTOR: f32 = 1.22;
+const OSD_BLANK_SYMBOL: u8 = 0x20;
 const OSD_HORIZONTAL_PADDING_COLS: f32 = 0.5;
 const OSD_VERTICAL_PADDING_ROWS: f32 = 0.5;
+const OSD_FONT_ATLAS_COLS: u32 = 16;
+const OSD_FONT_ATLAS_ROWS: u32 = 16;
+const OSD_FONT_ATLAS_GLYPHS: usize = (OSD_FONT_ATLAS_COLS * OSD_FONT_ATLAS_ROWS) as usize;
+const OSD_GLYPH_WIDTH_PX: u32 = 12;
+const OSD_GLYPH_HEIGHT_PX: u32 = 18;
+const OSD_GLYPH_PADDING_PX: u32 = 1;
+const OSD_FONT_ATLAS_PATH: &str = "osd/vtx_font.png";
 
 #[derive(Resource, Clone)]
 struct SimOsdOverlay {
     cols: usize,
     rows: usize,
-    cells: Vec<char>,
-    text: String,
+    cells: Vec<u8>,
 }
 
 impl Default for SimOsdOverlay {
     fn default() -> Self {
-        let mut overlay = Self {
+        Self {
             cols: OSD_COLS,
             rows: OSD_ROWS,
-            cells: vec![' '; OSD_COLS * OSD_ROWS],
-            text: String::new(),
-        };
-        overlay.rebuild_text();
-        overlay
+            cells: vec![OSD_BLANK_SYMBOL; OSD_COLS * OSD_ROWS],
+        }
     }
 }
 
 impl SimOsdOverlay {
     fn clear(&mut self) {
         for c in &mut self.cells {
-            *c = ' ';
+            *c = OSD_BLANK_SYMBOL;
         }
     }
 
     fn apply_batch(&mut self, batch: &MspRequestBatch) {
-        let mut touched = false;
         for request in batch.iter() {
             let MspRequest::MspDisplayPort(displayport) = request else {
                 continue;
             };
-            if self.apply_displayport(displayport) {
-                touched = true;
-            }
-        }
-        if touched {
-            self.rebuild_text();
+            let _ = self.apply_displayport(displayport);
         }
     }
 
@@ -216,39 +212,21 @@ impl SimOsdOverlay {
                 break;
             }
             let idx = row * self.cols + x;
-            self.cells[idx] = sanitize_osd_char(*byte);
+            self.cells[idx] = *byte;
             written = true;
         }
         written
     }
-
-    fn rebuild_text(&mut self) {
-        self.text.clear();
-        self.text
-            .reserve(self.cols * self.rows + self.rows.saturating_sub(1));
-        for row in 0..self.rows {
-            let start = row * self.cols;
-            let end = start + self.cols;
-            for c in &self.cells[start..end] {
-                self.text.push(*c);
-            }
-            if row + 1 < self.rows {
-                self.text.push('\n');
-            }
-        }
-    }
-}
-
-fn sanitize_osd_char(byte: u8) -> char {
-    match byte {
-        b' '..=b'~' => byte as char,
-        OSD_VOLT_SYMBOL => 'V',
-        _ => ' ',
-    }
 }
 
 #[derive(Component)]
-struct OsdOverlayText;
+struct OsdOverlayRoot;
+
+#[derive(Component, Clone, Copy)]
+struct OsdOverlayCell {
+    row: usize,
+    col: usize,
+}
 
 #[derive(Component)]
 struct SimHelpValuesText;
@@ -661,24 +639,58 @@ fn spawn_quadcopter_when_world_ready(
     commands.remove_resource::<PendingQuadcopterSpawn>();
 }
 
-fn setup_osd_overlay(mut commands: Commands) {
-    commands.spawn((
-        Name::new("fpv-osd"),
-        OsdOverlayText,
-        Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(0.0),
-            left: Val::Px(0.0),
-            ..default()
-        },
-        Text::new(""),
-        TextFont {
-            font_size: 14.0,
-            ..default()
-        },
-        TextColor(Color::WHITE),
-        Visibility::Visible,
+fn setup_osd_overlay(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut texture_atlases: ResMut<Assets<TextureAtlasLayout>>,
+) {
+    let atlas_handle = asset_server.load(OSD_FONT_ATLAS_PATH);
+    let atlas_layout = texture_atlases.add(TextureAtlasLayout::from_grid(
+        UVec2::new(OSD_GLYPH_WIDTH_PX, OSD_GLYPH_HEIGHT_PX),
+        OSD_FONT_ATLAS_COLS,
+        OSD_FONT_ATLAS_ROWS,
+        Some(UVec2::splat(OSD_GLYPH_PADDING_PX)),
+        None,
     ));
+
+    commands
+        .spawn((
+            Name::new("fpv-osd"),
+            OsdOverlayRoot,
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(0.0),
+                left: Val::Px(0.0),
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                ..default()
+            },
+            Visibility::Visible,
+        ))
+        .with_children(|parent| {
+            for row in 0..OSD_ROWS {
+                for col in 0..OSD_COLS {
+                    parent.spawn((
+                        OsdOverlayCell { row, col },
+                        Node {
+                            position_type: PositionType::Absolute,
+                            top: Val::Px(0.0),
+                            left: Val::Px(0.0),
+                            width: Val::Px(OSD_GLYPH_WIDTH_PX as f32),
+                            height: Val::Px(OSD_GLYPH_HEIGHT_PX as f32),
+                            ..default()
+                        },
+                        ImageNode::from_atlas_image(
+                            atlas_handle.clone(),
+                            TextureAtlas {
+                                layout: atlas_layout.clone(),
+                                index: OSD_BLANK_SYMBOL as usize,
+                            },
+                        ),
+                    ));
+                }
+            }
+        });
 }
 
 fn setup_help_overlay(mut commands: Commands) {
@@ -1205,12 +1217,13 @@ fn update_osd_overlay(
     camera_view: Res<CameraView>,
     osd_overlay: Res<SimOsdOverlay>,
     window_query: Query<&Window, With<PrimaryWindow>>,
-    mut overlay_query: Query<(&mut Text, &mut TextFont, &mut Visibility), With<OsdOverlayText>>,
+    mut root_query: Query<&mut Visibility, With<OsdOverlayRoot>>,
+    mut cell_query: Query<(&OsdOverlayCell, &mut Node, &mut ImageNode)>,
 ) {
     let Ok(window) = window_query.single() else {
         return;
     };
-    let Ok((mut text, mut text_font, mut visibility)) = overlay_query.single_mut() else {
+    let Ok(mut visibility) = root_query.single_mut() else {
         return;
     };
 
@@ -1220,15 +1233,31 @@ fn update_osd_overlay(
         Visibility::Hidden
     };
 
-    // Scale text so the 53x16 OSD grid spans the viewport with a small safety
-    // margin; this avoids clipping due to font line-height/advance rounding.
-    let font_by_height =
-        window.height() / ((OSD_ROWS as f32 + OSD_VERTICAL_PADDING_ROWS) * OSD_LINE_HEIGHT_FACTOR);
-    let font_by_width =
-        window.width() / ((OSD_COLS as f32 + OSD_HORIZONTAL_PADDING_COLS) * OSD_CHAR_WIDTH_FACTOR);
-    text_font.font_size = font_by_height.min(font_by_width).clamp(8.0, 96.0);
+    let max_cell_w = window.width() / (OSD_COLS as f32 + OSD_HORIZONTAL_PADDING_COLS);
+    let max_cell_h = window.height() / (OSD_ROWS as f32 + OSD_VERTICAL_PADDING_ROWS);
+    let scale_w = max_cell_w / OSD_GLYPH_WIDTH_PX as f32;
+    let scale_h = max_cell_h / OSD_GLYPH_HEIGHT_PX as f32;
+    let scale = scale_w.min(scale_h).max(0.1);
+    let cell_w = OSD_GLYPH_WIDTH_PX as f32 * scale;
+    let cell_h = OSD_GLYPH_HEIGHT_PX as f32 * scale;
+    let total_w = cell_w * OSD_COLS as f32;
+    let total_h = cell_h * OSD_ROWS as f32;
+    let origin_x = ((window.width() - total_w) * 0.5).max(0.0);
+    let origin_y = ((window.height() - total_h) * 0.5).max(0.0);
 
-    *text = Text::new(osd_overlay.text.clone());
+    for (cell, mut node, mut image_node) in &mut cell_query {
+        let idx = cell.row * osd_overlay.cols + cell.col;
+        let glyph = osd_overlay.cells.get(idx).copied().unwrap_or(OSD_BLANK_SYMBOL) as usize;
+
+        node.left = Val::Px(origin_x + cell.col as f32 * cell_w);
+        node.top = Val::Px(origin_y + cell.row as f32 * cell_h);
+        node.width = Val::Px(cell_w.ceil());
+        node.height = Val::Px(cell_h.ceil());
+
+        if let Some(atlas) = image_node.texture_atlas.as_mut() {
+            atlas.index = glyph.min(OSD_FONT_ATLAS_GLYPHS.saturating_sub(1));
+        }
+    }
 }
 
 fn stop_copper_on_exit(mut exit_events: MessageReader<AppExit>, mut copper: ResMut<CopperState>) {
