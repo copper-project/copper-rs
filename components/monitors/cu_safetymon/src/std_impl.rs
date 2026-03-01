@@ -100,7 +100,6 @@ impl SharedState {
 
 pub struct CuSafetyMon {
     components: &'static [MonitorComponentMetadata],
-    task_count: usize,
     shared: Arc<SharedState>,
     cfg: SafetyCfg,
     watchdog: Option<JoinHandle<()>>,
@@ -109,12 +108,8 @@ pub struct CuSafetyMon {
 }
 
 impl CuSafetyMon {
-    fn task_name(&self, task_idx: usize) -> &'static str {
-        if task_idx < self.task_count {
-            self.components[task_idx].id()
-        } else {
-            "<?>"
-        }
+    fn component_name(&self, component_id: ComponentId) -> &'static str {
+        self.components[component_id.index()].id()
     }
 
     fn emit_fault(prefix: &str, detail: &str) {
@@ -150,7 +145,7 @@ impl CuSafetyMon {
                     let marker = probe.marker();
                     let culist_info = format!("last_culist={last_culistid}");
                     let detail = if let Some(marker) = marker {
-                        let component = components.get(marker.component_id).map(|c| c.id());
+                        let component = components.get(marker.component_id.index()).map(|c| c.id());
                         match component {
                             Some(component) => format!(
                                 "watchdog timeout after {:?}; last marker: component='{}' step={:?}; {}",
@@ -158,7 +153,10 @@ impl CuSafetyMon {
                             ),
                             None => format!(
                                 "watchdog timeout after {:?}; last marker: component_id={} step={:?}; {}",
-                                elapsed, marker.component_id, marker.step, culist_info
+                                elapsed,
+                                marker.component_id.index(),
+                                marker.step,
+                                culist_info
                             ),
                         }
                     } else {
@@ -209,7 +207,11 @@ impl CuSafetyMon {
             let detail = if let Some(marker) = marker {
                 format!(
                     "panic at {}: {}; last marker component={} step={:?}; last_culist={}",
-                    location, panic_message, marker.component_id, marker.step, last_culistid
+                    location,
+                    panic_message,
+                    marker.component_id.index(),
+                    marker.step,
+                    last_culistid
                 )
             } else {
                 format!(
@@ -243,11 +245,9 @@ impl CuSafetyMon {
 
 impl CuMonitor for CuSafetyMon {
     fn new(metadata: CuMonitoringMetadata, runtime: CuMonitoringRuntime) -> CuResult<Self> {
-        let task_count = metadata.task_count();
         let cfg = SafetyCfg::from_monitor_config(metadata.monitor_config())?;
         Ok(Self {
             components: metadata.components(),
-            task_count,
             shared: Arc::new(SharedState::new()),
             cfg,
             watchdog: None,
@@ -271,16 +271,21 @@ impl CuMonitor for CuSafetyMon {
         Ok(())
     }
 
-    fn process_copperlist(&self, ctx: &CuContext, _msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+    fn process_copperlist(&self, ctx: &CuContext, _view: CopperListView<'_>) -> CuResult<()> {
         self.shared.touch(ctx.cl_id());
         Ok(())
     }
 
-    fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision {
-        let task_name = self.task_name(taskid);
+    fn process_error(
+        &self,
+        component_id: ComponentId,
+        step: CuComponentState,
+        error: &CuError,
+    ) -> Decision {
+        let component_name = self.component_name(component_id);
         let detail = format!(
-            "runtime fault: task='{}' step={:?} error={} ",
-            task_name, step, error
+            "runtime fault: component='{}' step={:?} error={} ",
+            component_name, step, error
         );
         self.shared
             .request_exit(self.cfg.exit_code_shutdown, detail.clone());

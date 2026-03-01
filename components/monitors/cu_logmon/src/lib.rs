@@ -43,23 +43,23 @@ struct WindowState {
     last_report_at: Option<CuTime>,
     last_log_duration: CuDuration,
     end_to_end: CuDurationStatistics,
-    per_task: Vec<CuDurationStatistics>,
+    per_component: Vec<CuDurationStatistics>,
 }
 
 impl WindowState {
-    fn new(task_count: usize, max_sample: CuDuration) -> Self {
+    fn new(component_count: usize, max_sample: CuDuration) -> Self {
         #[cfg(target_os = "none")]
         info!("WindowState::new: init end_to_end");
         let end_to_end = CuDurationStatistics::new(max_sample);
         #[cfg(target_os = "none")]
-        info!("WindowState::new: init per_task");
+        info!("WindowState::new: init per_component");
         #[cfg(target_os = "none")]
         info!(
-            "WindowState::new: stats_size={} per_task_bytes={}",
+            "WindowState::new: stats_size={} per_component_bytes={}",
             core::mem::size_of::<CuDurationStatistics>(),
-            core::mem::size_of::<CuDurationStatistics>() * task_count
+            core::mem::size_of::<CuDurationStatistics>() * component_count
         );
-        let per_task = vec![CuDurationStatistics::new(max_sample); task_count];
+        let per_component = vec![CuDurationStatistics::new(max_sample); component_count];
         #[cfg(target_os = "none")]
         info!("WindowState::new: init done");
         Self {
@@ -68,7 +68,7 @@ impl WindowState {
             last_report_at: None,
             last_log_duration: CuDuration::MIN,
             end_to_end,
-            per_task,
+            per_component,
         }
     }
 
@@ -76,7 +76,7 @@ impl WindowState {
         self.window_copperlists = 0;
         self.last_report_at = Some(now);
         self.end_to_end.reset();
-        for stat in &mut self.per_task {
+        for stat in &mut self.per_component {
             stat.reset();
         }
     }
@@ -120,17 +120,14 @@ struct Snapshot {
 
 pub struct CuLogMon {
     components: &'static [MonitorComponentMetadata],
-    task_count: usize,
+    component_count: usize,
     window: Mutex<WindowState>,
 }
 
 impl CuLogMon {
-    fn task_name(&self, task_idx: usize) -> &'static str {
-        if task_idx < self.task_count {
-            self.components[task_idx].id()
-        } else {
-            "<?>"
-        }
+    fn component_name(&self, component_id: ComponentId) -> &'static str {
+        debug_assert!(component_id.index() < self.component_count);
+        self.components[component_id.index()].id()
     }
 
     fn compute_snapshot(&self, state: &WindowState, now: CuTime) -> Option<Snapshot> {
@@ -149,16 +146,16 @@ impl CuLogMon {
             0
         };
 
-        let top4_max_entries = find_top_tasks_by_max(&state.per_task, 4);
+        let top4_max_entries = find_top_components_by_max(&state.per_component, 4);
         let mut top4 = String::new();
         if top4_max_entries.is_empty() {
             top4.push_str("none");
         } else {
-            for (rank, (idx, dur)) in top4_max_entries.iter().enumerate() {
+            for (rank, (component_id, dur)) in top4_max_entries.iter().enumerate() {
                 if rank > 0 {
                     top4.push_str(", ");
                 }
-                let name = self.task_name(*idx);
+                let name = self.component_name(*component_id);
                 let _ = write!(&mut top4, "{} {}us", name, dur.as_micros());
             }
         }
@@ -183,7 +180,7 @@ impl CuLogMon {
     }
 }
 
-fn task_duration(meta: &CuMsgMetadata) -> Option<CuDuration> {
+fn component_duration(meta: &CuMsgMetadata) -> Option<CuDuration> {
     let start = Option::<CuTime>::from(meta.process_time.start)?;
     let end = Option::<CuTime>::from(meta.process_time.end)?;
     (end >= start).then_some(end - start)
@@ -202,47 +199,49 @@ fn end_to_end_latency(msgs: &[&CuMsgMetadata]) -> Option<CuDuration> {
     }
 }
 
-fn find_top_tasks_by_max(
-    per_task: &[CuDurationStatistics],
+fn find_top_components_by_max(
+    per_component: &[CuDurationStatistics],
     limit: usize,
-) -> Vec<(usize, CuDuration)> {
-    let mut ranked: Vec<(usize, CuDuration)> = per_task
+) -> Vec<(ComponentId, CuDuration)> {
+    let mut ranked: Vec<(ComponentId, CuDuration)> = per_component
         .iter()
         .enumerate()
-        .filter_map(|(idx, stats)| (!stats.is_empty()).then_some((idx, stats.max())))
+        .filter_map(|(idx, stats)| {
+            (!stats.is_empty()).then_some((ComponentId::new(idx), stats.max()))
+        })
         .collect();
     ranked.sort_unstable_by(|a, b| {
         b.1.as_nanos()
             .cmp(&a.1.as_nanos())
-            .then_with(|| a.0.cmp(&b.0))
+            .then_with(|| a.0.index().cmp(&b.0.index()))
     });
     ranked.truncate(limit);
     ranked
 }
 
-fn task_state_label(state: &CuTaskState) -> &'static str {
+fn component_state_label(state: &CuComponentState) -> &'static str {
     match state {
-        CuTaskState::Start => "start",
-        CuTaskState::Preprocess => "pre",
-        CuTaskState::Process => "process",
-        CuTaskState::Postprocess => "post",
-        CuTaskState::Stop => "stop",
+        CuComponentState::Start => "start",
+        CuComponentState::Preprocess => "pre",
+        CuComponentState::Process => "process",
+        CuComponentState::Postprocess => "post",
+        CuComponentState::Stop => "stop",
     }
 }
 
 impl CuMonitor for CuLogMon {
     fn new(metadata: CuMonitoringMetadata, _runtime: CuMonitoringRuntime) -> CuResult<Self> {
         let components = metadata.components();
-        let task_count = metadata.task_count();
+        let component_count = components.len();
         #[cfg(target_os = "none")]
-        info!("CuLogMon::new: task_count={}", task_count);
+        info!("CuLogMon::new: component_count={}", component_count);
         let max_sample = monitor_max_sample(metadata.monitor_config())?;
-        let window = WindowState::new(task_count, max_sample);
+        let window = WindowState::new(component_count, max_sample);
         #[cfg(target_os = "none")]
         info!("CuLogMon::new: window ready");
         Ok(Self {
             components,
-            task_count,
+            component_count,
             window: Mutex::new(window),
         })
     }
@@ -250,7 +249,7 @@ impl CuMonitor for CuLogMon {
     fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
         let mut window = self.window.lock();
         window.last_report_at = Some(ctx.recent());
-        info!("cu_logmon started ({} tasks)", self.task_count);
+        info!("cu_logmon started ({} components)", self.component_count);
 
         // Also listen to structured logs and print them with color.
         #[cfg(all(feature = "std", debug_assertions))]
@@ -295,7 +294,7 @@ impl CuMonitor for CuLogMon {
         Ok(())
     }
 
-    fn process_copperlist(&self, ctx: &CuContext, msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+    fn process_copperlist(&self, ctx: &CuContext, view: CopperListView<'_>) -> CuResult<()> {
         let call_start = ctx.recent();
 
         let snapshot = {
@@ -305,15 +304,23 @@ impl CuMonitor for CuLogMon {
             window.total_copperlists = window.total_copperlists.saturating_add(1);
             window.window_copperlists = window.window_copperlists.saturating_add(1);
 
-            if let Some(latency) = end_to_end_latency(msgs) {
+            if let Some(latency) = end_to_end_latency(view.msgs()) {
                 window.end_to_end.record(latency);
             }
 
-            for (idx, meta) in msgs.iter().enumerate() {
-                if let Some(task_stat) = window.per_task.get_mut(idx)
-                    && let Some(duration) = task_duration(meta)
+            for entry in view.entries() {
+                let component_index = entry.component_id.index();
+                if let Some(component_stat) = window.per_component.get_mut(component_index)
+                    && let Some(duration) = component_duration(entry.msg)
                 {
-                    task_stat.record(duration);
+                    component_stat.record(duration);
+                } else {
+                    debug_assert!(
+                        component_index < window.per_component.len(),
+                        "cu_logmon: component index {} out of bounds {}",
+                        component_index,
+                        window.per_component.len()
+                    );
                 }
             }
 
@@ -344,14 +351,14 @@ impl CuMonitor for CuLogMon {
                 const CL_COLOR: &str = "\x1b[94m"; // blue
                 const LABEL_COLOR: &str = "\x1b[92m"; // green for main labels
                 const SUBLABEL_COLOR: &str = "\x1b[93m"; // yellow for sublabels
-                const TASK_NAME_COLOR: &str = "\x1b[38;5;208m"; // orange for task name
+                const COMPONENT_NAME_COLOR: &str = "\x1b[38;5;208m"; // orange for component name
                 const RESET: &str = "\x1b[0m";
                 let colored = format!(
-                    "[{cl_color}CL {cl}{reset}] {label}rate{reset} {rate_whole}.{rate_tenths} Hz | {label}top4{reset} {task_color}{top4}{reset} | {label}e2e{reset} {sublabel}p50{reset} {p50}us {sublabel}p90{reset} {p90}us {sublabel}p99{reset} {p99}us {sublabel}max{reset} {max}us | {label}overhead{reset} {overhead}us",
+                    "[{cl_color}CL {cl}{reset}] {label}rate{reset} {rate_whole}.{rate_tenths} Hz | {label}top4{reset} {component_color}{top4}{reset} | {label}e2e{reset} {sublabel}p50{reset} {p50}us {sublabel}p90{reset} {p90}us {sublabel}p99{reset} {p99}us {sublabel}max{reset} {max}us | {label}overhead{reset} {overhead}us",
                     cl_color = CL_COLOR,
                     label = LABEL_COLOR,
                     sublabel = SUBLABEL_COLOR,
-                    task_color = TASK_NAME_COLOR,
+                    component_color = COMPONENT_NAME_COLOR,
                     reset = RESET,
                     cl = snapshot.copperlist_index,
                     rate_whole = snapshot.rate_whole,
@@ -374,12 +381,17 @@ impl CuMonitor for CuLogMon {
         Ok(())
     }
 
-    fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision {
-        let task_name = self.task_name(taskid);
+    fn process_error(
+        &self,
+        component_id: ComponentId,
+        step: CuComponentState,
+        error: &CuError,
+    ) -> Decision {
+        let component_name = self.component_name(component_id);
         error!(
-            "Task {} @ {}: Error: {}.",
-            task_name,
-            task_state_label(&step),
+            "Component {} @ {}: Error: {}.",
+            component_name,
+            component_state_label(&step),
             error,
         );
         Decision::Ignore

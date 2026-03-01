@@ -6,7 +6,7 @@ use cu29::prelude::*;
 /// termination semantics and is intentionally deferred.
 pub struct CuSafetyMon {
     #[allow(dead_code)]
-    taskids: &'static [&'static str],
+    component_ids: &'static [&'static str],
 }
 
 impl CuMonitor for CuSafetyMon {
@@ -17,11 +17,16 @@ impl CuMonitor for CuSafetyMon {
         ))
     }
 
-    fn process_copperlist(&self, _ctx: &CuContext, _msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+    fn process_copperlist(&self, _ctx: &CuContext, _view: CopperListView<'_>) -> CuResult<()> {
         Ok(())
     }
 
-    fn process_error(&self, _taskid: usize, _step: CuTaskState, _error: &CuError) -> Decision {
+    fn process_error(
+        &self,
+        _component_id: ComponentId,
+        _step: CuComponentState,
+        _error: &CuError,
+    ) -> Decision {
         Decision::Shutdown
     }
 }

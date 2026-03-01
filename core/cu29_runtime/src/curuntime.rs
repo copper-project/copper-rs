@@ -11,8 +11,8 @@ use crate::monitoring::ExecutionProbeHandle;
 #[cfg(feature = "std")]
 use crate::monitoring::MonitorExecutionProbe;
 use crate::monitoring::{
-    CopperListInfo, CuMonitor, CuMonitoringMetadata, CuMonitoringRuntime, ExecutionMarker,
-    MonitorComponentMetadata, RuntimeExecutionProbe, build_monitor_topology,
+    ComponentId, CopperListInfo, CuMonitor, CuMonitoringMetadata, CuMonitoringRuntime,
+    ExecutionMarker, MonitorComponentMetadata, RuntimeExecutionProbe, build_monitor_topology,
 };
 use crate::resource::ResourceManager;
 use compact_str::CompactString;
@@ -370,7 +370,7 @@ impl<
             &mut ResourceManager,
         ) -> CuResult<CT>,
         monitored_components: &'static [MonitorComponentMetadata],
-        culist_component_mapping: &'static [usize],
+        culist_component_mapping: &'static [ComponentId],
         monitor_instanciator: impl Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
         bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
@@ -404,7 +404,7 @@ impl<
             &mut ResourceManager,
         ) -> CuResult<CT>,
         monitored_components: &'static [MonitorComponentMetadata],
-        culist_component_mapping: &'static [usize],
+        culist_component_mapping: &'static [ComponentId],
         monitor_instanciator: impl Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
         bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
@@ -500,7 +500,7 @@ impl<
             &mut ResourceManager,
         ) -> CuResult<CT>,
         monitored_components: &'static [MonitorComponentMetadata],
-        culist_component_mapping: &'static [usize],
+        culist_component_mapping: &'static [ComponentId],
         monitor_instanciator: impl Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
         bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
@@ -536,7 +536,7 @@ impl<
             &mut ResourceManager,
         ) -> CuResult<CT>,
         monitored_components: &'static [MonitorComponentMetadata],
-        culist_component_mapping: &'static [usize],
+        culist_component_mapping: &'static [ComponentId],
         monitor_instanciator: impl Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
         bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,

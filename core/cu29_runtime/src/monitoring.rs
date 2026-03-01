@@ -1,4 +1,4 @@
-//! Some basic internal monitoring tooling Copper uses to monitor itself and the tasks it is running.
+//! Some basic internal monitoring tooling Copper uses to monitor itself and the components it runs.
 //!
 
 use crate::config::CuConfig;
@@ -69,9 +69,9 @@ fn format_timestamp(time: CuDuration) -> String {
     format!("{hours:02}:{minutes:02}:{seconds:02}.{fractional_1e4:04}")
 }
 
-/// The state of a task.
+/// Lifecycle state of a monitored component.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub enum CuTaskState {
+pub enum CuComponentState {
     Start,
     Preprocess,
     Process,
@@ -79,13 +79,206 @@ pub enum CuTaskState {
     Stop,
 }
 
+/// Strongly-typed index into [`CuMonitoringMetadata::components`].
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ComponentId(usize);
+
+impl ComponentId {
+    pub const INVALID: Self = Self(usize::MAX);
+
+    #[inline]
+    pub const fn new(index: usize) -> Self {
+        Self(index)
+    }
+
+    #[inline]
+    pub const fn index(self) -> usize {
+        self.0
+    }
+}
+
+impl core::fmt::Display for ComponentId {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl From<ComponentId> for usize {
+    fn from(value: ComponentId) -> Self {
+        value.index()
+    }
+}
+
+/// Strongly-typed CopperList slot index.
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct CuListSlot(usize);
+
+impl CuListSlot {
+    #[inline]
+    pub const fn new(index: usize) -> Self {
+        Self(index)
+    }
+
+    #[inline]
+    pub const fn index(self) -> usize {
+        self.0
+    }
+}
+
+impl From<CuListSlot> for usize {
+    fn from(value: CuListSlot) -> Self {
+        value.index()
+    }
+}
+
+/// Static monitor-side CopperList indexing layout.
+///
+/// This layout is mission/runtime scoped and remains constant after monitor construction.
+#[derive(Debug, Clone, Copy)]
+pub struct CopperListLayout {
+    components: &'static [MonitorComponentMetadata],
+    slot_to_component: &'static [ComponentId],
+}
+
+impl CopperListLayout {
+    #[inline]
+    pub const fn new(
+        components: &'static [MonitorComponentMetadata],
+        slot_to_component: &'static [ComponentId],
+    ) -> Self {
+        Self {
+            components,
+            slot_to_component,
+        }
+    }
+
+    #[inline]
+    pub const fn components(self) -> &'static [MonitorComponentMetadata] {
+        self.components
+    }
+
+    #[inline]
+    pub const fn component_count(self) -> usize {
+        self.components.len()
+    }
+
+    #[inline]
+    pub const fn culist_slot_count(self) -> usize {
+        self.slot_to_component.len()
+    }
+
+    #[inline]
+    pub fn component(self, id: ComponentId) -> &'static MonitorComponentMetadata {
+        &self.components[id.index()]
+    }
+
+    #[inline]
+    pub fn component_for_slot(self, culist_slot: CuListSlot) -> ComponentId {
+        self.slot_to_component[culist_slot.index()]
+    }
+
+    #[inline]
+    pub const fn slot_to_component(self) -> &'static [ComponentId] {
+        self.slot_to_component
+    }
+
+    #[inline]
+    pub fn view<'a>(self, msgs: &'a [&'a CuMsgMetadata]) -> CopperListView<'a> {
+        CopperListView::new(self, msgs)
+    }
+}
+
+/// Per-loop monitor view over CopperList metadata paired with static component mapping.
+#[derive(Debug, Clone, Copy)]
+pub struct CopperListView<'a> {
+    layout: CopperListLayout,
+    msgs: &'a [&'a CuMsgMetadata],
+}
+
+impl<'a> CopperListView<'a> {
+    #[inline]
+    pub fn new(layout: CopperListLayout, msgs: &'a [&'a CuMsgMetadata]) -> Self {
+        assert_eq!(
+            msgs.len(),
+            layout.culist_slot_count(),
+            "invalid monitor CopperList view: msgs len {} != slot mapping len {}",
+            msgs.len(),
+            layout.culist_slot_count()
+        );
+        Self { layout, msgs }
+    }
+
+    #[inline]
+    pub const fn layout(self) -> CopperListLayout {
+        self.layout
+    }
+
+    #[inline]
+    pub const fn msgs(self) -> &'a [&'a CuMsgMetadata] {
+        self.msgs
+    }
+
+    #[inline]
+    pub const fn len(self) -> usize {
+        self.msgs.len()
+    }
+
+    #[inline]
+    pub const fn is_empty(self) -> bool {
+        self.msgs.is_empty()
+    }
+
+    #[inline]
+    pub fn entry(self, culist_slot: CuListSlot) -> CopperListEntry<'a> {
+        let index = culist_slot.index();
+        CopperListEntry {
+            culist_slot,
+            component_id: self.layout.component_for_slot(culist_slot),
+            msg: self.msgs[index],
+        }
+    }
+
+    pub fn entries(self) -> impl Iterator<Item = CopperListEntry<'a>> + 'a {
+        self.msgs.iter().enumerate().map(move |(idx, msg)| {
+            let culist_slot = CuListSlot::new(idx);
+            CopperListEntry {
+                culist_slot,
+                component_id: self.layout.component_for_slot(culist_slot),
+                msg,
+            }
+        })
+    }
+}
+
+/// One message entry in CopperList slot order with resolved component identity.
+#[derive(Debug, Clone, Copy)]
+pub struct CopperListEntry<'a> {
+    pub culist_slot: CuListSlot,
+    pub component_id: ComponentId,
+    pub msg: &'a CuMsgMetadata,
+}
+
+impl<'a> CopperListEntry<'a> {
+    #[inline]
+    pub fn component(self, layout: CopperListLayout) -> &'static MonitorComponentMetadata {
+        layout.component(self.component_id)
+    }
+
+    #[inline]
+    pub fn component_type(self, layout: CopperListLayout) -> ComponentType {
+        layout.component(self.component_id).kind()
+    }
+}
+
 /// Execution progress marker emitted by the runtime before running a component step.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct ExecutionMarker {
     /// Index into `CuMonitoringMetadata::components()`.
-    pub component_id: usize,
+    pub component_id: ComponentId,
     /// Lifecycle phase currently entered.
-    pub step: CuTaskState,
+    pub step: CuComponentState,
     /// CopperList id when available (runtime loop), None during start/stop.
     pub culistid: Option<u64>,
 }
@@ -111,7 +304,7 @@ pub struct RuntimeExecutionProbe {
 impl Default for RuntimeExecutionProbe {
     fn default() -> Self {
         Self {
-            component_id: AtomicUsize::new(usize::MAX),
+            component_id: AtomicUsize::new(ComponentId::INVALID.index()),
             step: AtomicUsize::new(0),
             #[cfg(target_has_atomic = "64")]
             culistid: AtomicU64::new(0),
@@ -128,9 +321,9 @@ impl RuntimeExecutionProbe {
     #[inline]
     pub fn record(&self, marker: ExecutionMarker) {
         self.component_id
-            .store(marker.component_id, Ordering::Relaxed);
+            .store(marker.component_id.index(), Ordering::Relaxed);
         self.step
-            .store(task_state_to_usize(marker.step), Ordering::Relaxed);
+            .store(component_state_to_usize(marker.step), Ordering::Relaxed);
         #[cfg(target_has_atomic = "64")]
         match marker.culistid {
             Some(culistid) => {
@@ -169,10 +362,10 @@ impl RuntimeExecutionProbe {
             let culistid = *self.culistid.lock();
             let seq_after = self.sequence.load(Ordering::Acquire);
             if seq_before == seq_after {
-                if component_id == usize::MAX {
+                if component_id == ComponentId::INVALID.index() {
                     return None;
                 }
-                let step = usize_to_task_state(step);
+                let step = usize_to_component_state(step);
                 #[cfg(target_has_atomic = "64")]
                 let culistid = if culistid_present == 0 {
                     None
@@ -180,7 +373,7 @@ impl RuntimeExecutionProbe {
                     Some(culistid_value)
                 };
                 return Some(ExecutionMarker {
-                    component_id,
+                    component_id: ComponentId::new(component_id),
                     step,
                     culistid,
                 });
@@ -190,24 +383,24 @@ impl RuntimeExecutionProbe {
 }
 
 #[inline]
-const fn task_state_to_usize(step: CuTaskState) -> usize {
+const fn component_state_to_usize(step: CuComponentState) -> usize {
     match step {
-        CuTaskState::Start => 0,
-        CuTaskState::Preprocess => 1,
-        CuTaskState::Process => 2,
-        CuTaskState::Postprocess => 3,
-        CuTaskState::Stop => 4,
+        CuComponentState::Start => 0,
+        CuComponentState::Preprocess => 1,
+        CuComponentState::Process => 2,
+        CuComponentState::Postprocess => 3,
+        CuComponentState::Stop => 4,
     }
 }
 
 #[inline]
-const fn usize_to_task_state(step: usize) -> CuTaskState {
+const fn usize_to_component_state(step: usize) -> CuComponentState {
     match step {
-        0 => CuTaskState::Start,
-        1 => CuTaskState::Preprocess,
-        2 => CuTaskState::Process,
-        3 => CuTaskState::Postprocess,
-        _ => CuTaskState::Stop,
+        0 => CuComponentState::Start,
+        1 => CuComponentState::Preprocess,
+        2 => CuComponentState::Process,
+        3 => CuComponentState::Postprocess,
+        _ => CuComponentState::Stop,
     }
 }
 
@@ -284,23 +477,32 @@ impl MonitorExecutionProbe {
 /// A "task" is a regular Copper task (lifecycle callbacks + payload processing). A "bridge"
 /// is a monitored bridge-side execution component (bridge nodes and channel endpoints).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ComponentKind {
+#[non_exhaustive]
+pub enum ComponentType {
+    Source,
     Task,
+    Sink,
     Bridge,
+}
+
+impl ComponentType {
+    pub const fn is_task(self) -> bool {
+        !matches!(self, Self::Bridge)
+    }
 }
 
 /// Static identity entry for one monitored runtime component.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MonitorComponentMetadata {
     id: &'static str,
-    kind: ComponentKind,
+    kind: ComponentType,
     type_name: Option<&'static str>,
 }
 
 impl MonitorComponentMetadata {
     pub const fn new(
         id: &'static str,
-        kind: ComponentKind,
+        kind: ComponentType,
         type_name: Option<&'static str>,
     ) -> Self {
         Self {
@@ -315,7 +517,7 @@ impl MonitorComponentMetadata {
         self.id
     }
 
-    pub const fn kind(&self) -> ComponentKind {
+    pub const fn kind(&self) -> ComponentType {
         self.kind
     }
 
@@ -327,22 +529,12 @@ impl MonitorComponentMetadata {
 
 /// Immutable runtime-provided metadata passed once to [`CuMonitor::new`].
 ///
-/// Notions:
-/// - Task index: index used by runtime task callbacks (`process_error`, latency stats, etc.).
-/// - Component index: index into `components()`, used by execution markers and CopperList slot
-///   mappings. Tasks are always the prefix `[0..task_count())`.
-/// - Topology node id: config graph node identifier (tasks + bridge nodes). Topology describes
-///   graph connectivity, while `components()` includes additional synthetic bridge channel entries
-///   used by execution markers and CopperList slot mapping.
-///
-/// This bundles identifiers, deterministic runtime layout, and monitor-specific config so monitor
+/// This bundles identifiers, deterministic component layout, and monitor-specific config so monitor
 /// construction is explicit and does not need ad-hoc late setters.
 #[derive(Debug, Clone)]
 pub struct CuMonitoringMetadata {
     mission_id: CompactString,
-    components: &'static [MonitorComponentMetadata],
-    task_count: usize,
-    culist_component_mapping: &'static [usize],
+    layout: CopperListLayout,
     copperlist_info: CopperListInfo,
     topology: MonitorTopology,
     monitor_config: Option<ComponentConfig>,
@@ -352,47 +544,44 @@ impl CuMonitoringMetadata {
     pub fn new(
         mission_id: CompactString,
         components: &'static [MonitorComponentMetadata],
-        culist_component_mapping: &'static [usize],
+        culist_component_mapping: &'static [ComponentId],
         copperlist_info: CopperListInfo,
         topology: MonitorTopology,
         monitor_config: Option<ComponentConfig>,
     ) -> CuResult<Self> {
-        let task_count = Self::validate_components(components)?;
+        Self::validate_components(components)?;
         Self::validate_culist_mapping(components.len(), culist_component_mapping)?;
         Ok(Self {
             mission_id,
-            components,
-            task_count,
-            culist_component_mapping,
+            layout: CopperListLayout::new(components, culist_component_mapping),
             copperlist_info,
             topology,
             monitor_config,
         })
     }
 
-    fn validate_components(components: &'static [MonitorComponentMetadata]) -> CuResult<usize> {
-        let mut task_count = 0usize;
+    fn validate_components(components: &'static [MonitorComponentMetadata]) -> CuResult<()> {
         let mut seen_bridge = false;
         for component in components {
             match component.kind() {
-                ComponentKind::Task if seen_bridge => {
+                component_type if component_type.is_task() && seen_bridge => {
                     return Err(CuError::from(
-                        "invalid monitor metadata: task components must appear before bridges",
+                        "invalid monitor metadata: task-family components must appear before bridges",
                     ));
                 }
-                ComponentKind::Task => task_count += 1,
-                ComponentKind::Bridge => seen_bridge = true,
+                ComponentType::Bridge => seen_bridge = true,
+                _ => {}
             }
         }
-        Ok(task_count)
+        Ok(())
     }
 
     fn validate_culist_mapping(
         components_len: usize,
-        culist_component_mapping: &'static [usize],
+        culist_component_mapping: &'static [ComponentId],
     ) -> CuResult<()> {
         for component_idx in culist_component_mapping {
-            if *component_idx >= components_len {
+            if component_idx.index() >= components_len {
                 return Err(CuError::from(
                     "invalid monitor metadata: culist mapping points past components table",
                 ));
@@ -410,68 +599,52 @@ impl CuMonitoringMetadata {
     ///
     /// Ordering is deterministic and mission-scoped: tasks first, then bridge-side components.
     pub fn components(&self) -> &'static [MonitorComponentMetadata] {
-        self.components
-    }
-
-    /// Number of task components (always prefix of `components()`).
-    pub const fn task_count(&self) -> usize {
-        self.task_count
+        self.layout.components()
     }
 
     /// Total number of monitored components.
     pub const fn component_count(&self) -> usize {
-        self.components.len()
+        self.layout.component_count()
     }
 
-    pub fn component(&self, component_idx: usize) -> Option<&MonitorComponentMetadata> {
-        self.components.get(component_idx)
+    /// Static runtime layout used to map CopperList slots to components.
+    pub const fn layout(&self) -> CopperListLayout {
+        self.layout
     }
 
-    pub fn component_id(&self, component_idx: usize) -> Option<&'static str> {
-        self.component(component_idx)
-            .map(MonitorComponentMetadata::id)
+    pub fn component(&self, component_id: ComponentId) -> &'static MonitorComponentMetadata {
+        self.layout.component(component_id)
     }
 
-    pub fn component_kind(&self, component_idx: usize) -> Option<ComponentKind> {
-        self.component(component_idx)
-            .map(MonitorComponentMetadata::kind)
+    pub fn component_id(&self, component_id: ComponentId) -> &'static str {
+        self.component(component_id).id()
     }
 
-    /// Map runtime task index -> component index.
-    ///
-    /// Task indices are stable callback indices from runtime hooks.
-    pub fn component_index_for_task(&self, task_idx: usize) -> Option<usize> {
-        (task_idx < self.task_count).then_some(task_idx)
+    pub fn component_kind(&self, component_id: ComponentId) -> ComponentType {
+        self.component(component_id).kind()
     }
 
-    pub fn task_id(&self, task_idx: usize) -> Option<&'static str> {
-        self.component_index_for_task(task_idx)
-            .and_then(|component_idx| self.component_id(component_idx))
-    }
-
-    pub fn task_id_or_unknown(&self, task_idx: usize) -> &'static str {
-        self.task_id(task_idx).unwrap_or("<?>")
-    }
-
-    pub fn task_index_by_id(&self, task_id: &str) -> Option<usize> {
-        self.components[..self.task_count]
-            .iter()
-            .position(|component| component.id() == task_id)
-    }
-
-    pub fn component_index_by_id(&self, component_id: &str) -> Option<usize> {
-        self.components
+    pub fn component_index_by_id(&self, component_id: &str) -> Option<ComponentId> {
+        self.layout
+            .components()
             .iter()
             .position(|component| component.id() == component_id)
+            .map(ComponentId::new)
     }
 
     /// CopperList slot -> monitored component index mapping.
-    pub fn culist_component_mapping(&self) -> &'static [usize] {
-        self.culist_component_mapping
+    ///
+    /// This table maps each CopperList slot index to the producing component index.
+    pub fn culist_component_mapping(&self) -> &'static [ComponentId] {
+        self.layout.slot_to_component()
     }
 
-    pub fn component_index_for_culist_slot(&self, slot: usize) -> Option<usize> {
-        self.culist_component_mapping.get(slot).copied()
+    pub fn component_for_culist_slot(&self, culist_slot: CuListSlot) -> ComponentId {
+        self.layout.component_for_slot(culist_slot)
+    }
+
+    pub fn copperlist_view<'a>(&self, msgs: &'a [&'a CuMsgMetadata]) -> CopperListView<'a> {
+        self.layout.view(msgs)
     }
 
     pub const fn copperlist_info(&self) -> CopperListInfo {
@@ -518,11 +691,11 @@ impl CuMonitoringRuntime {
     }
 }
 
-/// Monitor decision to be taken when a task errored out.
+/// Monitor decision to be taken when a component step errored out.
 #[derive(Debug)]
 pub enum Decision {
     Abort,    // for a step (stop, start) or a copperlist, just stop trying to process it.
-    Ignore, // Ignore this error and try to continue, ie calling the other tasks steps, setting a None return value and continue a copperlist.
+    Ignore, // Ignore this error and try to continue, ie calling the other component steps, setting a None return value and continue a copperlist.
     Shutdown, // This is a fatal error, shutdown the copper as cleanly as possible.
 }
 
@@ -541,7 +714,7 @@ fn merge_decision(lhs: Decision, rhs: Decision) -> Decision {
 pub struct MonitorNode {
     pub id: String,
     pub type_name: Option<String>,
-    pub kind: ComponentKind,
+    pub kind: ComponentType,
     /// Ordered list of input port identifiers.
     pub inputs: Vec<String>,
     /// Ordered list of output port identifiers.
@@ -664,15 +837,18 @@ pub fn build_monitor_topology(config: &CuConfig, mission: &str) -> CuResult<Moni
     }
 
     for (_, node) in graph.get_all_nodes() {
-        let kind = match node.get_flavor() {
-            Flavor::Bridge => ComponentKind::Bridge,
-            _ => ComponentKind::Task,
-        };
         let node_id = node.get_id();
+        let usage = io_usage.get(node_id.as_str()).cloned().unwrap_or_default();
+        let kind = match node.get_flavor() {
+            Flavor::Bridge => ComponentType::Bridge,
+            _ if !usage.has_incoming && usage.has_outgoing => ComponentType::Source,
+            _ if usage.has_incoming && !usage.has_outgoing => ComponentType::Sink,
+            _ => ComponentType::Task,
+        };
 
         let mut inputs = Vec::new();
         let mut outputs = Vec::new();
-        if kind == ComponentKind::Bridge {
+        if kind == ComponentType::Bridge {
             if let Some(bridge) = bridge_lookup.get(node_id.as_str()) {
                 for ch in &bridge.channels {
                     match ch {
@@ -684,7 +860,6 @@ pub fn build_monitor_topology(config: &CuConfig, mission: &str) -> CuResult<Moni
                 }
             }
         } else {
-            let usage = io_usage.get(node_id.as_str()).cloned().unwrap_or_default();
             if usage.has_incoming || !usage.has_outgoing {
                 inputs.push("in".to_string());
             }
@@ -756,24 +931,22 @@ pub fn build_monitor_topology(config: &CuConfig, mission: &str) -> CuResult<Moni
 /// Lifecycle:
 /// 1. [`CuMonitor::new`] is called once at runtime construction time.
 /// 2. [`CuMonitor::start`] is called once before the first runtime iteration.
-/// 3. For each iteration, [`CuMonitor::process_copperlist`] is called after task execution,
+/// 3. For each iteration, [`CuMonitor::process_copperlist`] is called after component execution,
 ///    then [`CuMonitor::observe_copperlist_io`] after serialization accounting.
-/// 4. [`CuMonitor::process_error`] is called synchronously when a task step fails.
+/// 4. [`CuMonitor::process_error`] is called synchronously when a monitored component step fails.
 /// 5. [`CuMonitor::process_panic`] is called when the runtime catches a panic (`std` builds).
 /// 6. [`CuMonitor::stop`] is called once during runtime shutdown.
 ///
 /// Indexing model:
-/// - `taskid` arguments in callbacks are task indices (not generic component indices).
-/// - Resolve names with [`CuMonitoringMetadata::task_id`] / `task_id_or_unknown`.
-/// - Use `metadata.components()` when you need full monitored component identity (tasks + bridge
-///   monitoring components).
+/// - `process_error(component_id, ..)` uses component indices into `metadata.components()`.
+/// - `process_copperlist(..., view)` iterates CopperList slots with resolved component identity.
 ///
 /// Error policy:
 /// - [`Decision::Ignore`] continues execution.
 /// - [`Decision::Abort`] aborts the current operation (step/copperlist scope).
 /// - [`Decision::Shutdown`] triggers runtime shutdown.
 pub trait CuMonitor: Sized {
-    /// Construct the monitor once, before task execution starts.
+    /// Construct the monitor once, before component execution starts.
     ///
     /// `metadata` contains mission/config/topology/static mapping information.
     /// `runtime` exposes dynamic runtime handles (for example execution probes).
@@ -787,16 +960,21 @@ pub trait CuMonitor: Sized {
         Ok(())
     }
 
-    /// Called once per processed CopperList after task execution.
-    ///
-    /// `msgs` is ordered by CopperList slot, not by task index.
-    fn process_copperlist(&self, _ctx: &CuContext, msgs: &[&CuMsgMetadata]) -> CuResult<()>;
+    /// Called once per processed CopperList after component execution.
+    fn process_copperlist(&self, _ctx: &CuContext, view: CopperListView<'_>) -> CuResult<()>;
 
     /// Called when runtime finishes CopperList serialization/IO accounting.
     fn observe_copperlist_io(&self, _stats: CopperListIoStats) {}
 
-    /// Called when a task step fails; must return an immediate runtime decision.
-    fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision;
+    /// Called when a monitored component step fails; must return an immediate runtime decision.
+    ///
+    /// `component_id` is an index into [`CuMonitoringMetadata::components`].
+    fn process_error(
+        &self,
+        component_id: ComponentId,
+        step: CuComponentState,
+        error: &CuError,
+    ) -> Decision;
 
     /// Called when the runtime catches a panic (`std` builds).
     fn process_panic(&self, _panic_message: &str) {}
@@ -833,12 +1011,17 @@ impl CuMonitor for NoMonitor {
         Ok(())
     }
 
-    fn process_copperlist(&self, _ctx: &CuContext, _msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+    fn process_copperlist(&self, _ctx: &CuContext, _view: CopperListView<'_>) -> CuResult<()> {
         // By default, do nothing.
         Ok(())
     }
 
-    fn process_error(&self, _taskid: usize, _step: CuTaskState, _error: &CuError) -> Decision {
+    fn process_error(
+        &self,
+        _component_id: ComponentId,
+        _step: CuComponentState,
+        _error: &CuError,
+    ) -> Decision {
         // By default, just try to continue.
         Decision::Ignore
     }
@@ -865,8 +1048,8 @@ macro_rules! impl_monitor_tuple {
                 Ok(())
             }
 
-            fn process_copperlist(&self, ctx: &CuContext, msgs: &[&CuMsgMetadata]) -> CuResult<()> {
-                $(self.$idx.process_copperlist(ctx, msgs)?;)+
+            fn process_copperlist(&self, ctx: &CuContext, view: CopperListView<'_>) -> CuResult<()> {
+                $(self.$idx.process_copperlist(ctx, view)?;)+
                 Ok(())
             }
 
@@ -874,9 +1057,14 @@ macro_rules! impl_monitor_tuple {
                 $(self.$idx.observe_copperlist_io(stats);)+
             }
 
-            fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision {
+            fn process_error(
+                &self,
+                component_id: ComponentId,
+                step: CuComponentState,
+                error: &CuError,
+            ) -> Decision {
                 let mut decision = Decision::Ignore;
-                $(decision = merge_decision(decision, self.$idx.process_error(taskid, step, error));)+
+                $(decision = merge_decision(decision, self.$idx.process_error(component_id, step, error));)+
                 decision
             }
 
@@ -1319,8 +1507,8 @@ mod tests {
 
     fn test_metadata() -> CuMonitoringMetadata {
         const COMPONENTS: &[MonitorComponentMetadata] = &[
-            MonitorComponentMetadata::new("a", ComponentKind::Task, None),
-            MonitorComponentMetadata::new("b", ComponentKind::Task, None),
+            MonitorComponentMetadata::new("a", ComponentType::Task, None),
+            MonitorComponentMetadata::new("b", ComponentType::Task, None),
         ];
         CuMonitoringMetadata::new(
             CompactString::from(crate::config::DEFAULT_MISSION_ID),
@@ -1341,12 +1529,17 @@ mod tests {
             Ok(monitor)
         }
 
-        fn process_copperlist(&self, _ctx: &CuContext, _msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+        fn process_copperlist(&self, _ctx: &CuContext, _view: CopperListView<'_>) -> CuResult<()> {
             self.copperlist_calls.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
 
-        fn process_error(&self, _taskid: usize, _step: CuTaskState, _error: &CuError) -> Decision {
+        fn process_error(
+            &self,
+            _component_id: ComponentId,
+            _step: CuComponentState,
+            _error: &CuError,
+        ) -> Decision {
             match self.decision {
                 TestDecision::Ignore => Decision::Ignore,
                 TestDecision::Abort => Decision::Abort,
@@ -1414,7 +1607,7 @@ mod tests {
             TestMonitor::new_with(TestDecision::Shutdown),
         );
         assert!(matches!(
-            two.process_error(0, CuTaskState::Process, &err),
+            two.process_error(ComponentId::new(0), CuComponentState::Process, &err),
             Decision::Shutdown
         ));
 
@@ -1423,7 +1616,7 @@ mod tests {
             TestMonitor::new_with(TestDecision::Abort),
         );
         assert!(matches!(
-            two.process_error(0, CuTaskState::Process, &err),
+            two.process_error(ComponentId::new(0), CuComponentState::Process, &err),
             Decision::Abort
         ));
     }
@@ -1436,8 +1629,9 @@ mod tests {
         )
         .expect("tuple new");
         let (ctx, _clock_control) = CuContext::new_mock_clock();
+        let empty_view = test_metadata().layout().view(&[]);
         monitors
-            .process_copperlist(&ctx, &[])
+            .process_copperlist(&ctx, empty_view)
             .expect("process_copperlist should fan out");
         monitors.process_panic("panic marker");
 
@@ -1454,14 +1648,14 @@ mod tests {
         assert_eq!(probe.sequence(), 0);
 
         probe.record(ExecutionMarker {
-            component_id: 7,
-            step: CuTaskState::Process,
+            component_id: ComponentId::new(7),
+            step: CuComponentState::Process,
             culistid: Some(42),
         });
 
         let marker = probe.marker().expect("marker should be available");
-        assert_eq!(marker.component_id, 7);
-        assert!(matches!(marker.step, CuTaskState::Process));
+        assert_eq!(marker.component_id, ComponentId::new(7));
+        assert!(matches!(marker.step, CuComponentState::Process));
         assert_eq!(marker.culistid, Some(42));
         assert_eq!(probe.sequence(), 1);
     }

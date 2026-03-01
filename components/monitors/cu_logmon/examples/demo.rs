@@ -5,9 +5,14 @@ use std::thread;
 use std::time::Duration;
 
 const MONITORED_COMPONENTS: &[MonitorComponentMetadata] = &[
-    MonitorComponentMetadata::new("src", ComponentKind::Task, None),
-    MonitorComponentMetadata::new("task", ComponentKind::Task, None),
-    MonitorComponentMetadata::new("sink", ComponentKind::Task, None),
+    MonitorComponentMetadata::new("src", ComponentType::Source, None),
+    MonitorComponentMetadata::new("task", ComponentType::Task, None),
+    MonitorComponentMetadata::new("sink", ComponentType::Sink, None),
+];
+const CULIST_COMPONENT_MAPPING: &[ComponentId] = &[
+    ComponentId::new(0),
+    ComponentId::new(1),
+    ComponentId::new(2),
 ];
 
 #[derive(Debug)]
@@ -59,7 +64,7 @@ fn main() -> CuResult<()> {
     let metadata = CuMonitoringMetadata::new(
         DEFAULT_MISSION_ID.into(),
         MONITORED_COMPONENTS,
-        &[],
+        CULIST_COMPONENT_MAPPING,
         CopperListInfo::new(0, 0),
         MonitorTopology::default(),
         config
@@ -67,6 +72,7 @@ fn main() -> CuResult<()> {
             .first()
             .and_then(|entry| entry.get_config().cloned()),
     )?;
+    let layout = metadata.layout();
     let runtime = CuMonitoringRuntime::unavailable();
     let mut monitor = CuLogMon::new(metadata, runtime)?;
     monitor.start(&ctx)?;
@@ -79,7 +85,7 @@ fn main() -> CuResult<()> {
             .map(|&micros| build_metadata(&ctx, micros))
             .collect();
         let refs: Vec<&CuMsgMetadata> = metas.iter().collect();
-        monitor.process_copperlist(&ctx, &refs)?;
+        monitor.process_copperlist(&ctx, layout.view(&refs))?;
         thread::sleep(Duration::from_millis(100));
     }
 
