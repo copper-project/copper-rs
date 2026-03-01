@@ -396,10 +396,10 @@ impl VtxOsd {
                     let altitude_m = altitude_m.clamp(-999.9, 9999.9);
                     alloc::format!("ALT {altitude_m:.1}m")
                 } else {
-                    alloc::format!("ALT --.-m")
+                    alloc::string::String::from("ALT --.-m")
                 }
             }
-            _ => alloc::format!("ALT --.-m"),
+            _ => alloc::string::String::from("ALT --.-m"),
         }
     }
 
