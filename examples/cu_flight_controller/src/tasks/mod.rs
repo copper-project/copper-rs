@@ -5,7 +5,7 @@ use cu_ahrs::AhrsPose;
 use cu_bdshot::EscCommand;
 use cu_crsf::messages::RcChannelsPayload;
 use cu_pid::{PIDControlOutputPayload, PIDController};
-use cu_sensor_payloads::{BarometerPayload, ImuPayload, MagnetometerPayload};
+use cu_sensor_payloads::{ImuPayload, MagnetometerPayload};
 use cu29::prelude::*;
 use cu29::units::si::angle::radian;
 use cu29::units::si::angular_velocity::{degree_per_second, radian_per_second};
@@ -15,7 +15,6 @@ use cu29::units::si::ratio::ratio;
 use cu29::units::si::thermodynamic_temperature::degree_celsius;
 
 const LOG_PERIOD_MS: u64 = 500;
-const BARO_LOG_PERIOD_MS: u64 = 1000;
 const MAG_LOG_PERIOD_MS: u64 = 500;
 const HEAP_LOG_PERIOD_MS: u64 = 500;
 const VTX_HEARTBEAT_PERIOD_MS: u64 = 1000;
@@ -101,8 +100,6 @@ static LOG_CTRL: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::
 static LOG_TELEMETRY: spin::Mutex<LogRateLimiter> =
     spin::Mutex::new(LogRateLimiter::new(LOG_PERIOD_MS));
 static LOG_IMU: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new(LOG_PERIOD_MS));
-static LOG_BARO: spin::Mutex<LogRateLimiter> =
-    spin::Mutex::new(LogRateLimiter::new(BARO_LOG_PERIOD_MS));
 static LOG_MAG: spin::Mutex<LogRateLimiter> =
     spin::Mutex::new(LogRateLimiter::new(MAG_LOG_PERIOD_MS));
 static LOG_RC: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new(LOG_PERIOD_MS));
@@ -215,48 +212,6 @@ pub type Bmi088Source = crate::sim_support::SimBmi088Source;
 pub type Dps310Source = crate::sim_support::SimDps310Source;
 #[cfg(all(feature = "sim", not(feature = "firmware")))]
 pub type Ist8310Source = crate::sim_support::SimIst8310Source;
-
-#[derive(Reflect)]
-pub struct BarometerLogger {
-    last_tov: Option<CuTime>,
-}
-
-impl Freezable for BarometerLogger {}
-
-impl CuSinkTask for BarometerLogger {
-    type Input<'m> = CuMsg<BarometerPayload>;
-    type Resources<'r> = ();
-
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
-    where
-        Self: Sized,
-    {
-        Ok(Self { last_tov: None })
-    }
-
-    fn process<'i>(&mut self, _ctx: &CuContext, input: &Self::Input<'i>) -> CuResult<()> {
-        if let Some(payload) = input.payload() {
-            let tov_time = expect_tov_time(input.tov)?;
-            debug_rl!(&LOG_BARO, tov_time, {
-                let dt_us = match self.last_tov {
-                    Some(prev) => (tov_time - prev).as_micros(),
-                    None => 0,
-                };
-                self.last_tov = Some(tov_time);
-                let pressure_pa = payload.pressure.value;
-                let temp_c = payload.temperature.get::<degree_celsius>();
-                info!(
-                    "baro pressure_pa={} temp_c={} tov_ns={} tov_dt_us={}",
-                    pressure_pa,
-                    temp_c,
-                    tov_time.as_nanos(),
-                    dt_us
-                );
-            });
-        }
-        Ok(())
-    }
-}
 
 #[derive(Reflect)]
 pub struct MagnetometerLogger {

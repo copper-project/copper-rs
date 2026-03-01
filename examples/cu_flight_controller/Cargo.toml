@@ -57,6 +57,7 @@ cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", de
 bincode = { workspace = true }
 serde = { workspace = true }
 spin = { workspace = true }
+libm = { version = "0.2", default-features = false }
 
 # --> host dependencies <--
 
