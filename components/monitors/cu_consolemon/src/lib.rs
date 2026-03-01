@@ -1098,6 +1098,7 @@ struct UI {
     debug_selection: DebugSelection,
     #[cfg(feature = "debug_pane")]
     clipboard: Option<Clipboard>,
+    latency_scroll_state: ScrollViewState,
     pool_stats: Arc<Mutex<Vec<PoolStats>>>,
     copperlist_stats: Arc<Mutex<CopperListStats>>,
 }
@@ -1157,6 +1158,7 @@ impl UI {
             debug_output_lines: Vec::new(),
             debug_selection: DebugSelection::default(),
             clipboard: None,
+            latency_scroll_state: ScrollViewState::default(),
             pool_stats,
             copperlist_stats,
         }
@@ -1187,12 +1189,13 @@ impl UI {
             tab_hitboxes: Vec::new(),
             help_hitboxes: Vec::new(),
             nodes_scrollable_widget_state,
+            latency_scroll_state: ScrollViewState::default(),
             pool_stats,
             copperlist_stats,
         }
     }
 
-    fn draw_latency_table(&self, f: &mut Frame, area: Rect) {
+    fn draw_latency_table(&mut self, f: &mut Frame, area: Rect) {
         let header_cells = [
             "🧩 Runtime Node",
             "Kind",
@@ -1307,6 +1310,8 @@ impl UI {
             .style(Style::default()),
         ];
         rows.push(Row::new(cells).top_margin(1));
+        let row_count = rows.len();
+        drop(component_stats);
 
         let table = Table::new(
             rows,
@@ -1329,7 +1334,37 @@ impl UI {
                 .title(" Latencies "),
         );
 
-        f.render_widget(table, area);
+        let content_width = self
+            .runtime_node_col_width
+            .saturating_add(10)
+            .saturating_add(10)
+            .saturating_add(12)
+            .saturating_add(12)
+            .saturating_add(10)
+            .saturating_add(12)
+            .saturating_add(13)
+            .saturating_add(24)
+            .max(area.width);
+        // Table vertical layout:
+        // top border + header(top margin + row + bottom margin) + rows + end2end top margin + bottom border
+        // = row_count + 6 lines total.
+        let content_height = (row_count as u16).saturating_add(6).max(area.height);
+        let content_size = Size::new(content_width, content_height);
+        self.clamp_latency_scroll_offset(area, content_size);
+        let mut scroll_view = ScrollView::new(content_size);
+        scroll_view.render_widget(
+            table,
+            Rect::new(0, 0, content_size.width, content_size.height),
+        );
+        scroll_view.render(area, f.buffer_mut(), &mut self.latency_scroll_state);
+    }
+
+    fn clamp_latency_scroll_offset(&mut self, area: Rect, content_size: Size) {
+        let max_x = content_size.width.saturating_sub(area.width);
+        let max_y = content_size.height.saturating_sub(area.height);
+        let offset = self.latency_scroll_state.offset();
+        let clamped = Position::new(offset.x.min(max_x), offset.y.min(max_y));
+        self.latency_scroll_state.set_offset(clamped);
     }
 
     fn draw_memory_pools(&self, f: &mut Frame, area: Rect) {
@@ -1747,36 +1782,74 @@ impl UI {
         false
     }
 
-    fn handle_scroll_mouse(&mut self, mouse: event::MouseEvent) {
-        if self.active_screen != Screen::Dag {
-            return;
+    fn scroll_active_screen_down(&mut self) {
+        match self.active_screen {
+            Screen::Dag => self
+                .nodes_scrollable_widget_state
+                .nodes_scrollable_state
+                .scroll_down(),
+            Screen::Latency => self.latency_scroll_state.scroll_down(),
+            _ => {}
         }
+    }
 
-        match mouse.kind {
-            MouseEventKind::ScrollDown => {
-                self.nodes_scrollable_widget_state
-                    .nodes_scrollable_state
-                    .scroll_down();
-            }
-            MouseEventKind::ScrollUp => {
-                self.nodes_scrollable_widget_state
-                    .nodes_scrollable_state
-                    .scroll_up();
-            }
-            MouseEventKind::ScrollRight => {
-                for _ in 0..5 {
+    fn scroll_active_screen_up(&mut self) {
+        match self.active_screen {
+            Screen::Dag => self
+                .nodes_scrollable_widget_state
+                .nodes_scrollable_state
+                .scroll_up(),
+            Screen::Latency => self.latency_scroll_state.scroll_up(),
+            _ => {}
+        }
+    }
+
+    fn scroll_active_screen_right(&mut self, steps: usize) {
+        match self.active_screen {
+            Screen::Dag => {
+                for _ in 0..steps {
                     self.nodes_scrollable_widget_state
                         .nodes_scrollable_state
                         .scroll_right();
                 }
             }
-            MouseEventKind::ScrollLeft => {
-                for _ in 0..5 {
+            Screen::Latency => {
+                for _ in 0..steps {
+                    self.latency_scroll_state.scroll_right();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn scroll_active_screen_left(&mut self, steps: usize) {
+        match self.active_screen {
+            Screen::Dag => {
+                for _ in 0..steps {
                     self.nodes_scrollable_widget_state
                         .nodes_scrollable_state
                         .scroll_left();
                 }
             }
+            Screen::Latency => {
+                for _ in 0..steps {
+                    self.latency_scroll_state.scroll_left();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_scroll_mouse(&mut self, mouse: event::MouseEvent) {
+        if !matches!(self.active_screen, Screen::Dag | Screen::Latency) {
+            return;
+        }
+
+        match mouse.kind {
+            MouseEventKind::ScrollDown => self.scroll_active_screen_down(),
+            MouseEventKind::ScrollUp => self.scroll_active_screen_up(),
+            MouseEventKind::ScrollRight => self.scroll_active_screen_right(5),
+            MouseEventKind::ScrollLeft => self.scroll_active_screen_left(5),
             _ => {}
         }
     }
@@ -1968,40 +2041,16 @@ impl UI {
                             }
                         }
                         KeyCode::Char('j') | KeyCode::Down => {
-                            if self.active_screen == Screen::Dag {
-                                for _ in 0..1 {
-                                    self.nodes_scrollable_widget_state
-                                        .nodes_scrollable_state
-                                        .scroll_down();
-                                }
-                            }
+                            self.scroll_active_screen_down();
                         }
                         KeyCode::Char('k') | KeyCode::Up => {
-                            if self.active_screen == Screen::Dag {
-                                for _ in 0..1 {
-                                    self.nodes_scrollable_widget_state
-                                        .nodes_scrollable_state
-                                        .scroll_up();
-                                }
-                            }
+                            self.scroll_active_screen_up();
                         }
                         KeyCode::Char('h') | KeyCode::Left => {
-                            if self.active_screen == Screen::Dag {
-                                for _ in 0..5 {
-                                    self.nodes_scrollable_widget_state
-                                        .nodes_scrollable_state
-                                        .scroll_left();
-                                }
-                            }
+                            self.scroll_active_screen_left(5);
                         }
                         KeyCode::Char('l') | KeyCode::Right => {
-                            if self.active_screen == Screen::Dag {
-                                for _ in 0..5 {
-                                    self.nodes_scrollable_widget_state
-                                        .nodes_scrollable_state
-                                        .scroll_right();
-                                }
-                            }
+                            self.scroll_active_screen_right(5);
                         }
                         KeyCode::Char('q') => {
                             self.quitting.store(true, Ordering::SeqCst);
