@@ -406,7 +406,6 @@ impl VtxOsd {
             _ => alloc::format!("{VTX_SYM_ALTITUDE}{VTX_ALT_UNKNOWN}{VTX_SYM_METER}"),
         }
     }
-
     fn push_watermark(&self, batch: &mut MspRequestBatch) -> CuResult<()> {
         if self.rows == 0 || self.cols == 0 {
             return Ok(());
@@ -474,7 +473,6 @@ fn format_altitude_field_no_spaces(altitude_m: f32) -> alloc::string::String {
         alloc::format!("{whole:04}.{frac}")
     }
 }
-
 fn build_msp_status(armed: bool) -> MspStatus {
     let mut flight_mode_flags = 0;
     if armed {
