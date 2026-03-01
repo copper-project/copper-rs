@@ -19,7 +19,8 @@ use bevy::prelude::{
     GlobalTransform, GltfAssetLabel, IsDefaultUiCamera, KeyCode, MessageReader, MessageWriter,
     MinimalPlugins, Name, Node, PerspectiveProjection, PluginGroup, PositionType, PostUpdate,
     Projection, Quat, Query, Res, ResMut, Resource, SceneRoot, Startup, Text, TextColor, TextFont,
-    Time, Transform, Update, Val, Vec3, Visibility, Window, WindowPlugin, With, Without, default,
+    Time, Transform, UiRect, Update, Val, Vec3, Visibility, Window, WindowPlugin, With, Without,
+    default,
 };
 use bevy::window::PrimaryWindow;
 use cached_path::{Cache, Error as CacheError, ProgressBar};
@@ -32,7 +33,7 @@ use cu_msp_lib::structs::{
     MSP_DP_CLEAR_SCREEN, MSP_DP_DRAW_SCREEN, MSP_DP_WRITE_STRING, MspDisplayPort, MspRequest,
 };
 use cu_sensor_payloads::{BarometerPayload, ImuPayload, MagnetometerPayload};
-use rc_joystick::{RcFrame, RcJoystick};
+use rc_joystick::{RcAxisBindings, RcFrame, RcJoystick};
 
 use std::fs;
 use std::io;
@@ -243,6 +244,9 @@ fn sanitize_osd_char(byte: u8) -> char {
 #[derive(Component)]
 struct OsdOverlayText;
 
+#[derive(Component)]
+struct SimHelpValuesText;
+
 #[derive(Debug)]
 struct QuadcopterForceTorque {
     force: Vec3,
@@ -322,6 +326,9 @@ const SKYBOX: &str = "skybox.ktx2";
 const SPECULAR_MAP: &str = "specular_map.ktx2";
 const QUADCOPTER: &str = "quadcopter.glb";
 const LEVEL: &str = "level.glb";
+const ARM_SWITCH_NAMES: &[&str] = &["sf", "se", "arm", "btn1"];
+const KEYBOARD_HOVER_THROTTLE_LOW: f32 = 0.56;
+const KEYBOARD_HOVER_THROTTLE_HIGH: f32 = 0.62;
 
 fn create_symlink(src: &str, dst: &str) -> io::Result<()> {
     let dst_path = Path::new(dst);
@@ -585,6 +592,47 @@ fn setup_osd_overlay(mut commands: Commands) {
     ));
 }
 
+fn setup_help_overlay(mut commands: Commands) {
+    commands
+        .spawn((
+            Name::new("sim-help"),
+            Node {
+                position_type: PositionType::Absolute,
+                bottom: Val::Px(5.0),
+                right: Val::Px(5.0),
+                padding: UiRect::new(Val::Px(15.0), Val::Px(15.0), Val::Px(10.0), Val::Px(10.0)),
+                column_gap: Val::Px(10.0),
+                flex_direction: bevy::ui::FlexDirection::Row,
+                justify_content: bevy::ui::JustifyContent::SpaceBetween,
+                border: UiRect::all(Val::Px(2.0)),
+                border_radius: bevy::ui::BorderRadius::all(Val::Px(10.0)),
+                ..default()
+            },
+            bevy::ui::BackgroundColor(Color::srgba(0.25, 0.41, 0.88, 0.7)),
+            bevy::ui::BorderColor::all(Color::srgba(0.8, 0.8, 0.8, 0.7)),
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Text::new("View\nRC Link\nArm\nMode\nThrottle\nRoll/Pitch\nYaw\nReset"),
+                TextFont {
+                    font_size: 12.0,
+                    ..default()
+                },
+                TextColor(Color::srgba(0.25, 0.25, 0.75, 1.0)),
+            ));
+
+            parent.spawn((
+                SimHelpValuesText,
+                Text::new("FPV (V)\nChecking RC link..."),
+                TextFont {
+                    font_size: 12.0,
+                    ..default()
+                },
+                TextColor(Color::WHITE),
+            ));
+        });
+}
+
 fn setup_joystick(
     mut rc_input: ResMut<SimRcInput>,
     mut rc_source: ResMut<RcInputSource>,
@@ -595,13 +643,19 @@ fn setup_joystick(
         Ok(joystick) => {
             apply_joystick_frame(&joystick.current_frame(), &mut rc_input);
             *rc_source = RcInputSource::Joystick;
-            info!("sim rc: joystick source active (set CU_SIM_JOYSTICK=<name> to target a device)");
+            info!(
+                "sim rc: joystick source active: {} (set CU_SIM_JOYSTICK=<name> to target a device)",
+                joystick.device_name()
+            );
             joystick_state.reader = Some(joystick);
         }
         Err(err) => {
             *rc_source = RcInputSource::Keyboard;
+            rc_input.mode = messages::FlightMode::Angle;
+            rc_input.armed = true;
+            rc_input.throttle = KEYBOARD_HOVER_THROTTLE_LOW;
             info!(
-                "sim rc: joystick unavailable ({}), using keyboard controls",
+                "sim rc: joystick unavailable ({}), using keyboard controls (auto-armed, hover throttle) (set CU_SIM_ALLOW_GENERIC_JOYSTICK=1 to allow non-radio joysticks)",
                 err.to_string()
             );
             joystick_state.reader = None;
@@ -636,6 +690,9 @@ fn poll_joystick(
             );
             joystick.reader = None;
             *rc_source = RcInputSource::Keyboard;
+            rc_input.mode = messages::FlightMode::Angle;
+            rc_input.armed = true;
+            rc_input.throttle = KEYBOARD_HOVER_THROTTLE_LOW;
         }
     }
 }
@@ -650,20 +707,22 @@ fn mode_from_three_pos(value: f32) -> messages::FlightMode {
     }
 }
 
-fn arm_from_switches(frame: &RcFrame) -> Option<bool> {
-    const ARM_SWITCH_NAMES: &[&str] = &["sf", "se", "arm", "btn1"];
-
+fn find_arm_switch(frame: &RcFrame) -> Option<&rc_joystick::SwitchState> {
     for name in ARM_SWITCH_NAMES {
         if let Some(sw) = frame
             .switches
             .iter()
             .find(|s| s.name.eq_ignore_ascii_case(name))
         {
-            return Some(sw.on);
+            return Some(sw);
         }
     }
 
-    frame.switches.first().map(|s| s.on)
+    frame.switches.first()
+}
+
+fn arm_from_switches(frame: &RcFrame) -> Option<bool> {
+    find_arm_switch(frame).map(|s| s.on)
 }
 
 fn apply_joystick_frame(frame: &RcFrame, rc_input: &mut SimRcInput) {
@@ -695,7 +754,7 @@ fn update_rc_input_keyboard(
     }
 
     let roll =
-        (keyboard.pressed(KeyCode::KeyA) as i8 - keyboard.pressed(KeyCode::KeyD) as i8) as f32;
+        (keyboard.pressed(KeyCode::KeyD) as i8 - keyboard.pressed(KeyCode::KeyA) as i8) as f32;
     let pitch =
         (keyboard.pressed(KeyCode::KeyS) as i8 - keyboard.pressed(KeyCode::KeyW) as i8) as f32;
     let yaw =
@@ -717,6 +776,10 @@ fn update_rc_input_keyboard(
 
     if keyboard.just_pressed(KeyCode::KeyT) {
         rc_input.armed = !rc_input.armed;
+        if rc_input.armed {
+            // Keyboard arming should start in a safe stabilized mode.
+            rc_input.mode = messages::FlightMode::Angle;
+        }
         info!("sim rc: armed={} mode={:?}", rc_input.armed, rc_input.mode);
     }
 }
@@ -724,24 +787,18 @@ fn update_rc_input_keyboard(
 fn adjust_keyboard_throttle(
     mut rc_input: ResMut<SimRcInput>,
     keyboard: Res<ButtonInput<KeyCode>>,
-    time: Res<Time>,
     rc_source: Res<RcInputSource>,
 ) {
     if *rc_source == RcInputSource::Joystick {
         return;
     }
 
-    let dt = time.delta_secs();
-    let mut throttle = rc_input.throttle;
-
-    if keyboard.pressed(KeyCode::Space) {
-        throttle += dt * 0.5;
-    }
-    if keyboard.pressed(KeyCode::ControlLeft) {
-        throttle -= dt * 0.5;
-    }
-
-    rc_input.throttle = throttle.clamp(0.0, 1.0);
+    // Keyboard mode is a simple "descend a bit / climb a bit" control around hover.
+    rc_input.throttle = if keyboard.pressed(KeyCode::Space) {
+        KEYBOARD_HOVER_THROTTLE_HIGH
+    } else {
+        KEYBOARD_HOVER_THROTTLE_LOW
+    };
 }
 
 fn reset_vehicle(
@@ -811,6 +868,8 @@ fn run_copper(
 ) {
     let vehicle = sim_state.vehicle.clone();
     let rc = rc_input.clone();
+    sim_support::sim_battery_set_armed(rc.armed);
+    sim_support::sim_battery_set_throttle(rc.throttle);
     let clock = copper._ctx.clock.clone();
     let dshot = &mut motor_commands.dshot;
 
@@ -958,6 +1017,75 @@ fn track_sim_led_state() {
     let _on = sim_support::sim_activity_led_is_on();
 }
 
+fn axis_or_unmapped(axis: Option<&String>) -> &str {
+    axis.map_or("unmapped", String::as_str)
+}
+
+fn connected_help_values(view_label: &str, joystick: &RcJoystick) -> String {
+    let axes: RcAxisBindings = joystick.axis_bindings();
+    let frame = joystick.current_frame();
+    let arm_switch = find_arm_switch(&frame);
+    let device_name = joystick.device_name();
+
+    let arm_line = if let Some(sw) = arm_switch {
+        format!("switch {}", sw.name)
+    } else {
+        format!("knob_sa {} > 0.5", axis_or_unmapped(axes.knob_sa.as_ref()))
+    };
+
+    let mode_line = if arm_switch.is_some() {
+        format!(
+            "knob_sa {} (3-pos)",
+            axis_or_unmapped(axes.knob_sa.as_ref())
+        )
+    } else {
+        format!(
+            "knob_sb {} (3-pos)",
+            axis_or_unmapped(axes.knob_sb.as_ref())
+        )
+    };
+
+    format!(
+        "{view_label}\nConnected ({device_name})\n{arm_line}\n{mode_line}\n{}\n{} / {}\n{}\nR",
+        axis_or_unmapped(axes.throttle.as_ref()),
+        axis_or_unmapped(axes.roll.as_ref()),
+        axis_or_unmapped(axes.pitch.as_ref()),
+        axis_or_unmapped(axes.yaw.as_ref()),
+    )
+}
+
+fn update_help_overlay(
+    camera_view: Res<CameraView>,
+    rc_source: Res<RcInputSource>,
+    joystick_state: Res<SimJoystickState>,
+    mut help_text_query: Query<&mut Text, With<SimHelpValuesText>>,
+) {
+    let Ok(mut text) = help_text_query.single_mut() else {
+        return;
+    };
+
+    let view_label = match *camera_view {
+        CameraView::FirstPerson => "FPV (V -> 3RD)",
+        CameraView::ThirdPerson => "3RD (V -> FPV)",
+    };
+
+    let values = match *rc_source {
+        RcInputSource::Keyboard => format!(
+            "{view_label}\nNot connected (plug RC via USB/BT)\nT\n1=Acro 2=Angle 3=PosHold\nSpace (boost)\nWASD\nQ / E\nR"
+        ),
+        RcInputSource::Joystick => joystick_state.reader.as_ref().map_or_else(
+            || {
+                format!(
+                    "{view_label}\nConnected (USB/BT)\nRC source initializing...\n-\n-\n-\n-\nR"
+                )
+            },
+            |joy| connected_help_values(view_label, joy),
+        ),
+    };
+
+    *text = Text::new(values);
+}
+
 fn update_osd_overlay(
     camera_view: Res<CameraView>,
     osd_overlay: Res<SimOsdOverlay>,
@@ -1059,7 +1187,13 @@ pub fn make_world(headless: bool) -> App {
     .insert_resource(Time::<Physics>::default())
     .add_systems(
         Startup,
-        (setup_world, setup_osd_overlay, setup_copper, setup_joystick),
+        (
+            setup_world,
+            setup_osd_overlay,
+            setup_help_overlay,
+            setup_copper,
+            setup_joystick,
+        ),
     )
     .add_systems(
         Update,
@@ -1076,6 +1210,7 @@ pub fn make_world(headless: bool) -> App {
             toggle_camera_view,
             camera_follow_quadcopter,
             track_sim_led_state,
+            update_help_overlay,
             update_osd_overlay,
         )
             .chain(),

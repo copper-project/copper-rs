@@ -36,6 +36,17 @@ pub struct SwitchState {
     pub on: bool,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct RcAxisBindings {
+    pub roll: Option<String>,
+    pub pitch: Option<String>,
+    pub yaw: Option<String>,
+    pub throttle: Option<String>,
+    pub knob_sa: Option<String>,
+    pub knob_sb: Option<String>,
+    pub knob_sc: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum RcAxis {
     Roll,
@@ -66,7 +77,8 @@ impl RcJoystick {
     /// Create a joystick reader. When `preferred_name` is provided it will match the
     /// device name (case insensitive). Otherwise the best joystick-like device is picked.
     pub fn open(preferred_name: Option<&str>) -> io::Result<Self> {
-        let (_path, device) = discover_device(preferred_name)?;
+        let allow_generic = env_flag_true("CU_SIM_ALLOW_GENERIC_JOYSTICK");
+        let (_path, device) = discover_device(preferred_name, allow_generic)?;
 
         let axis_map = build_axis_map(&device);
         if axis_map.is_empty() {
@@ -164,6 +176,30 @@ impl RcJoystick {
     /// Returns the latest known joystick state snapshot.
     pub fn current_frame(&self) -> RcFrame {
         self.state.clone()
+    }
+
+    /// Returns technical axis names currently bound to each RC role.
+    pub fn axis_bindings(&self) -> RcAxisBindings {
+        let mut bindings = RcAxisBindings::default();
+        for (code, (role, _scale)) in &self.axis_map {
+            let label = axis_code_label(*code);
+            match role {
+                RcAxis::Roll => bindings.roll = Some(label),
+                RcAxis::Pitch => bindings.pitch = Some(label),
+                RcAxis::Yaw => bindings.yaw = Some(label),
+                RcAxis::Throttle => bindings.throttle = Some(label),
+                RcAxis::KnobSa => bindings.knob_sa = Some(label),
+                RcAxis::KnobSb => bindings.knob_sb = Some(label),
+                RcAxis::KnobSc => bindings.knob_sc = Some(label),
+                RcAxis::Aux(_) => {}
+            }
+        }
+        bindings
+    }
+
+    /// Returns the input device name used for RC mapping.
+    pub fn device_name(&self) -> String {
+        self.device.name().unwrap_or("unknown").to_string()
     }
 
     /// Convenience helper that logs changes to stdout.
@@ -364,10 +400,13 @@ fn build_switch_map(device: &Device, switches: &[SwitchState]) -> HashMap<u16, u
     map
 }
 
-fn discover_device(preferred_name: Option<&str>) -> io::Result<(PathBuf, Device)> {
+fn discover_device(
+    preferred_name: Option<&str>,
+    allow_generic: bool,
+) -> io::Result<(PathBuf, Device)> {
     let mut best: Option<(i32, PathBuf, Device)> = None;
     for (path, device) in evdev::enumerate() {
-        let score = score_device(&device, preferred_name);
+        let score = score_device(&device, preferred_name, allow_generic);
         if score <= 0 {
             continue;
         }
@@ -381,7 +420,7 @@ fn discover_device(preferred_name: Option<&str>) -> io::Result<(PathBuf, Device)
         .ok_or_else(|| Error::new(ErrorKind::NotFound, "no RC joystick device found"))
 }
 
-fn score_device(device: &Device, preferred_name: Option<&str>) -> i32 {
+fn score_device(device: &Device, preferred_name: Option<&str>, allow_generic: bool) -> i32 {
     let mut score = 0;
     if device.supported_events().contains(EventType::ABSOLUTE) {
         score += 10;
@@ -399,22 +438,24 @@ fn score_device(device: &Device, preferred_name: Option<&str>) -> i32 {
         score += 5;
     }
 
-    if let Some(name) = device.name() {
-        let lower = name.to_lowercase();
-        if lower.contains("radio") || lower.contains("rc") || lower.contains("tx") {
-            score += 20;
-        }
-        if lower.contains("opentx") || lower.contains("edgetx") {
-            score += 20;
-        }
-        if lower.contains("joystick") {
-            score += 5;
-        }
-        if let Some(pref) = preferred_name
-            && lower.contains(&pref.to_lowercase())
-        {
-            score += 100;
-        }
+    let lower = joystick_device_name(device);
+    if let Some(pref) = preferred_name
+        && lower.contains(&pref.to_lowercase())
+    {
+        return score + 1000;
+    }
+
+    let is_radio = is_radio_profile_name(&lower);
+    if is_radio {
+        score += 40;
+    } else if !allow_generic {
+        return 0;
+    } else if lower.contains("joystick") {
+        score += 5;
+    }
+
+    if lower.contains("radio") || lower.contains("rc") || lower.contains("tx") {
+        score += 20;
     }
 
     score
@@ -643,4 +684,29 @@ fn normalize_axis(device: &Device, axis_code: u16, raw: i32) -> f32 {
 
     let raw = raw as f32;
     (raw / 32767.0).clamp(-1.0, 1.0)
+}
+
+fn axis_code_label(code: u16) -> String {
+    match code {
+        x if x == AbsoluteAxisCode::ABS_X.0 => "ABS_X".to_string(),
+        x if x == AbsoluteAxisCode::ABS_Y.0 => "ABS_Y".to_string(),
+        x if x == AbsoluteAxisCode::ABS_Z.0 => "ABS_Z".to_string(),
+        x if x == AbsoluteAxisCode::ABS_RX.0 => "ABS_RX".to_string(),
+        x if x == AbsoluteAxisCode::ABS_RY.0 => "ABS_RY".to_string(),
+        x if x == AbsoluteAxisCode::ABS_RZ.0 => "ABS_RZ".to_string(),
+        x if x == AbsoluteAxisCode::ABS_THROTTLE.0 => "ABS_THROTTLE".to_string(),
+        x if x == AbsoluteAxisCode::ABS_RUDDER.0 => "ABS_RUDDER".to_string(),
+        x if x == AbsoluteAxisCode::ABS_WHEEL.0 => "ABS_WHEEL".to_string(),
+        _ => format!("ABS_0x{code:02X}"),
+    }
+}
+
+fn env_flag_true(name: &str) -> bool {
+    std::env::var(name).is_ok_and(|v| {
+        let v = v.trim();
+        v == "1"
+            || v.eq_ignore_ascii_case("true")
+            || v.eq_ignore_ascii_case("yes")
+            || v.eq_ignore_ascii_case("on")
+    })
 }

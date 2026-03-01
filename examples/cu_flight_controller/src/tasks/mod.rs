@@ -113,6 +113,7 @@ static LOG_MOTORS: spin::Mutex<LogRateLimiter> =
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect)]
 enum StatusLabel {
     Disarmed,
+    Calibrating,
     Angle,
     Air,
     Position,
@@ -122,6 +123,7 @@ impl StatusLabel {
     const fn as_str(self) -> &'static str {
         match self {
             StatusLabel::Disarmed => " XXX ",
+            StatusLabel::Calibrating => " CAL ",
             StatusLabel::Angle => "ANGLE",
             StatusLabel::Air => " AIR ",
             StatusLabel::Position => " POS ",

@@ -92,6 +92,42 @@ just textlogs log=logs/embedded.copper
 just rc
 ```
 
+### Simulator (Bevy + Copper)
+
+```bash
+# Run the flight simulator
+just sim
+```
+
+### RC Input In Simulation
+
+The simulator reads RC input from a host joystick device (`evdev`). By default it only auto-connects to
+radio-style joystick profiles, to avoid false positives from keyboards/mice/gamepads that also expose joystick interfaces.
+
+Environment variables:
+
+```bash
+# Prefer a specific device name substring (case-insensitive)
+CU_SIM_JOYSTICK="radiomaster" just sim
+
+# Allow generic/non-radio joystick devices as RC input
+CU_SIM_ALLOW_GENERIC_JOYSTICK=1 just sim
+```
+
+Notes:
+- If no compatible RC joystick is found, the sim falls back to keyboard controls.
+- When connected, the bottom-right help panel shows the selected device name and technical axis bindings (`ABS_X`, `ABS_RY`, etc.).
+- USB and Bluetooth radios both work if they appear as a joystick device on the host.
+
+### Compatible TX/RX Notes
+
+- **Simulation path**: no receiver is used directly; input is read from the host joystick interface.
+- **Auto-detected TX joystick profiles**:
+  - ExpressLRS-style USB joystick names (`expresslrs`, `radiomaster`)
+  - OpenTX / EdgeTX USB joystick names (`opentx`, `edgetx`)
+- **Firmware path (real hardware)**: RC input is CRSF on UART, so use a CRSF-compatible RX link
+  (for example ExpressLRS/Crossfire-class receivers and compatible transmitters).
+
 ## Configuration
 
 The task graph is defined in `copperconfig.ron`. Key configurable parameters:
