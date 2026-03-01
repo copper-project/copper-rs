@@ -1247,7 +1247,11 @@ fn update_osd_overlay(
 
     for (cell, mut node, mut image_node) in &mut cell_query {
         let idx = cell.row * osd_overlay.cols + cell.col;
-        let glyph = osd_overlay.cells.get(idx).copied().unwrap_or(OSD_BLANK_SYMBOL) as usize;
+        let glyph = osd_overlay
+            .cells
+            .get(idx)
+            .copied()
+            .unwrap_or(OSD_BLANK_SYMBOL) as usize;
 
         node.left = Val::Px(origin_x + cell.col as f32 * cell_w);
         node.top = Val::Px(origin_y + cell.row as f32 * cell_h);
