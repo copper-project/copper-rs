@@ -21,11 +21,7 @@ const VTX_HEARTBEAT_PERIOD_MS: u64 = 1000;
 const VTX_DRAW_PERIOD_MS: u64 = 250;
 // Matches Betaflight ARMING_DISABLE_FLAGS_COUNT (log2(ARM_SWITCH) + 1).
 const MSP_ARMING_DISABLE_FLAGS_COUNT: u8 = 29;
-const VTX_WATERMARK_LINES: [&[u8]; 3] = [
-    b" /\\_/\\ ",
-    &[b'(', 0x8B, b' ', 0x75, b' ', 0x8B, b')'],
-    &[0x6C, b' ', b'>', b' ', 0x76, b' ', b'<', b' ', 0x64, b' ', b'[', b'C', b'U', b'2', b'9', b']'],
-];
+const VTX_WATERMARK_LINES: [&str; 3] = [" /\\_/\\ ", "( O O )", " > ^ <  [CU29]"];
 const VTX_CELL_DIVISOR: u16 = 4;
 const BATTERY_VREF_MV_DEFAULT: u32 = 3300;
 const BATTERY_VBAT_SCALE_DEFAULT: u32 = 210;
