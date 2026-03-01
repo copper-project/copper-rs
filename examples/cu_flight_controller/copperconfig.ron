@@ -77,7 +77,8 @@
             logging: (enabled: false),
             config: {
                 "angle_limit_deg": 60.0,
-                "acro_rate_dps": 200.0,
+                "rate_limit_dps": 210.0,
+                "acro_rate_dps": 500.0,
                 "acro_expo": 0.4,
                 "kp": 1.0,
                 "ki": 0.0,
