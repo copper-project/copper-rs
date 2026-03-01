@@ -22,6 +22,9 @@ use cu29::prelude::*;
 use cu29::units::si::electric_potential::volt;
 
 const VTX_SYM_VOLT: char = '\x06';
+const VTX_SYM_ALTITUDE: char = '\x7f';
+const VTX_SYM_METER: char = '\x0c';
+const VTX_ALT_UNKNOWN: &str = "---.-";
 
 macro_rules! status_if_not_firmware {
     ($metadata:expr, $status:expr) => {{
@@ -394,12 +397,13 @@ impl VtxOsd {
             (Some(reference_pa), Some(pressure_pa)) => {
                 if let Some(altitude_m) = relative_altitude_m(reference_pa, pressure_pa) {
                     let altitude_m = altitude_m.clamp(-999.9, 9999.9);
-                    alloc::format!("ALT {altitude_m:.1}m")
+                    let value = format_altitude_field_no_spaces(altitude_m);
+                    alloc::format!("{VTX_SYM_ALTITUDE}{value}{VTX_SYM_METER}")
                 } else {
-                    alloc::string::String::from("ALT --.-m")
+                    alloc::format!("{VTX_SYM_ALTITUDE}{VTX_ALT_UNKNOWN}{VTX_SYM_METER}")
                 }
             }
-            _ => alloc::string::String::from("ALT --.-m"),
+            _ => alloc::format!("{VTX_SYM_ALTITUDE}{VTX_ALT_UNKNOWN}{VTX_SYM_METER}"),
         }
     }
 
@@ -452,6 +456,22 @@ fn relative_altitude_m(reference_pa: f32, pressure_pa: f32) -> Option<f32> {
         Some(altitude_m)
     } else {
         None
+    }
+}
+
+fn format_altitude_field_no_spaces(altitude_m: f32) -> alloc::string::String {
+    // Render a fixed 6-character field with no spaces so symbol and value stay visually tight.
+    // Positive: 0000.0..9999.9, Negative: -000.0..-999.9
+    let tenths = libm::roundf(altitude_m * 10.0_f32) as i32;
+    if tenths < 0 {
+        let abs_tenths = tenths.saturating_abs();
+        let whole = (abs_tenths / 10).min(999);
+        let frac = abs_tenths % 10;
+        alloc::format!("-{whole:03}.{frac}")
+    } else {
+        let whole = (tenths / 10).min(9999);
+        let frac = tenths % 10;
+        alloc::format!("{whole:04}.{frac}")
     }
 }
 
