@@ -35,12 +35,6 @@
             resources: {"i2c": "fc.i2c2_ist8310"},
         ),
         (
-            id: "baro_logger",
-            type: "tasks::BarometerLogger",
-            run_in_sim: true,
-            logging: (enabled: false),
-        ),
-        (
             id: "mag_logger",
             type: "tasks::MagnetometerLogger",
             run_in_sim: true,
@@ -168,6 +162,8 @@
                 "cols": 53,
                 "row": 13,
                 "col_center": 26,
+                "alt_row": 7,
+                "alt_col": 36,
             },
         ),
         (
@@ -237,11 +233,6 @@
             src: "bmi088",
             dst: "imu_cal",
             msg: "cu_sensor_payloads::ImuPayload",
-        ),
-        (
-            src: "dps310",
-            dst: "baro_logger",
-            msg: "cu_sensor_payloads::BarometerPayload",
         ),
         (
             src: "ist8310",
@@ -322,6 +313,11 @@
             src: "imu_cal",
             dst: "vtx_osd",
             msg: "cu_sensor_payloads::ImuPayload",
+        ),
+        (
+            src: "dps310",
+            dst: "vtx_osd",
+            msg: "cu_sensor_payloads::BarometerPayload",
         ),
         (
             src: "rate",

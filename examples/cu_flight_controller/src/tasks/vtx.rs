@@ -17,7 +17,7 @@ use cu_msp_lib::structs::{
     MspFlightControllerVersion, MspRequest, MspStatus, MspStatusSensors, MspVoltageMeter,
     MspVoltageMeterConfig,
 };
-use cu_sensor_payloads::ImuPayload;
+use cu_sensor_payloads::{BarometerPayload, ImuPayload};
 use cu29::prelude::*;
 use cu29::units::si::electric_potential::volt;
 
@@ -47,6 +47,8 @@ pub struct VtxOsd {
     cols: u8,
     rows: u8,
     col_center: u8,
+    alt_row: u8,
+    alt_col: u8,
     watermark_row: u8,
     watermark_col: u8,
     last_label: Option<StatusLabel>,
@@ -55,12 +57,23 @@ pub struct VtxOsd {
     last_armed: bool,
     last_mode: FlightMode,
     last_voltage_centi: Option<u16>,
+    takeoff_pressure_pa: Option<f32>,
+    pressure_sum_pa: f32,
+    pressure_samples: u32,
+    last_pressure_pa: Option<f32>,
 }
 
 impl Freezable for VtxOsd {}
 
 impl CuTask for VtxOsd {
-    type Input<'m> = input_msg!('m, ControlInputs, ImuPayload, BatteryVoltage, MspRequestBatch);
+    type Input<'m> = input_msg!(
+        'm,
+        ControlInputs,
+        ImuPayload,
+        BarometerPayload,
+        BatteryVoltage,
+        MspRequestBatch
+    );
     type Output<'m> = CuMsg<MspRequestBatch>;
     type Resources<'r> = ();
 
@@ -78,6 +91,11 @@ impl CuTask for VtxOsd {
         let col_center = tasks::cfg_u16(config, "col_center", default_center)?
             .min(cols.saturating_sub(1) as u16) as u8;
         let row = tasks::cfg_u16(config, "row", 13)?.min(u8::MAX as u16) as u8;
+        let default_alt_col = cols.saturating_sub(19) as u16;
+        let alt_row =
+            tasks::cfg_u16(config, "alt_row", 7)?.min(rows.saturating_sub(1) as u16) as u8;
+        let alt_col = tasks::cfg_u16(config, "alt_col", default_alt_col)?
+            .min(cols.saturating_sub(1) as u16) as u8;
         let watermark_height = VTX_WATERMARK_LINES.len() as u8;
         let default_watermark_row = rows.saturating_sub(watermark_height);
         let watermark_row = tasks::cfg_u16(config, "watermark_row", default_watermark_row as u16)?
@@ -89,6 +107,8 @@ impl CuTask for VtxOsd {
             cols,
             rows,
             col_center,
+            alt_row,
+            alt_col,
             watermark_row,
             watermark_col,
             last_label: None,
@@ -97,6 +117,10 @@ impl CuTask for VtxOsd {
             last_armed: false,
             last_mode: FlightMode::Angle,
             last_voltage_centi: None,
+            takeoff_pressure_pa: None,
+            pressure_sum_pa: 0.0,
+            pressure_samples: 0,
+            last_pressure_pa: None,
         })
     }
 
@@ -106,7 +130,7 @@ impl CuTask for VtxOsd {
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
-        let (ctrl_msg, imu_msg, batt_msg, incoming_msg) = *input;
+        let (ctrl_msg, imu_msg, baro_msg, batt_msg, incoming_msg) = *input;
         let tov_time = tasks::expect_tov_time(ctrl_msg.tov)?;
         output.tov = Tov::Time(tov_time);
         let now = tov_time;
@@ -122,9 +146,45 @@ impl CuTask for VtxOsd {
             self.handle_incoming_requests(&mut batch, incoming_requests)?;
         }
 
+        let prev_armed = self.last_armed;
         if let Some(ctrl) = ctrl {
             self.last_armed = ctrl.armed;
             self.last_mode = ctrl.mode;
+        }
+        let armed = self.last_armed;
+        let calibrating = armed && imu_msg.payload().is_none();
+
+        if !armed {
+            self.takeoff_pressure_pa = None;
+            self.pressure_sum_pa = 0.0;
+            self.pressure_samples = 0;
+            self.last_pressure_pa = None;
+        } else {
+            if armed && !prev_armed {
+                self.takeoff_pressure_pa = None;
+                self.pressure_sum_pa = 0.0;
+                self.pressure_samples = 0;
+            }
+
+            let pressure_pa = baro_msg
+                .payload()
+                .and_then(|baro| sanitize_pressure_pa(baro.pressure.value));
+            if let Some(pressure_pa) = pressure_pa {
+                self.last_pressure_pa = Some(pressure_pa);
+                if self.takeoff_pressure_pa.is_none() && calibrating {
+                    self.pressure_sum_pa += pressure_pa;
+                    self.pressure_samples = self.pressure_samples.saturating_add(1);
+                }
+            }
+
+            if self.takeoff_pressure_pa.is_none() && !calibrating {
+                if self.pressure_samples > 0 {
+                    self.takeoff_pressure_pa =
+                        Some(self.pressure_sum_pa / (self.pressure_samples as f32));
+                } else if let Some(pressure_pa) = self.last_pressure_pa {
+                    self.takeoff_pressure_pa = Some(pressure_pa);
+                }
+            }
         }
 
         let heartbeat_due = self
@@ -133,14 +193,13 @@ impl CuTask for VtxOsd {
             .unwrap_or(true);
         if heartbeat_due {
             batch.push(MspRequest::MspDisplayPort(MspDisplayPort::heartbeat()))?;
-            batch.push(MspRequest::MspStatus(build_msp_status(self.last_armed)))?;
+            batch.push(MspRequest::MspStatus(build_msp_status(armed)))?;
             self.last_heartbeat = Some(now);
         }
 
-        let calibrating = self.last_armed && imu_msg.payload().is_none();
         let label = if calibrating {
             StatusLabel::Calibrating
-        } else if self.last_armed {
+        } else if armed {
             match self.last_mode {
                 FlightMode::Acro => StatusLabel::Air,
                 FlightMode::Angle => StatusLabel::Angle,
@@ -174,6 +233,7 @@ impl CuTask for VtxOsd {
                 self.row, col, 0, text,
             )))?;
             self.push_cell_voltage(&mut batch)?;
+            self.push_relative_altitude(&mut batch)?;
             self.push_watermark(&mut batch)?;
         }
 
@@ -184,6 +244,7 @@ impl CuTask for VtxOsd {
         if label_changed || draw_due {
             if !label_changed {
                 self.push_cell_voltage(&mut batch)?;
+                self.push_relative_altitude(&mut batch)?;
                 self.push_watermark(&mut batch)?;
             }
             batch.push(MspRequest::MspDisplayPort(MspDisplayPort::draw_screen()))?;
@@ -287,6 +348,35 @@ impl VtxOsd {
         Ok(())
     }
 
+    fn push_relative_altitude(&self, batch: &mut MspRequestBatch) -> CuResult<()> {
+        if self.rows == 0 || self.cols == 0 {
+            return Ok(());
+        }
+        let row = self.alt_row.min(self.rows.saturating_sub(1));
+        let col = self.alt_col.min(self.cols.saturating_sub(1));
+        let available = self.cols.saturating_sub(col) as usize;
+        if available == 0 {
+            return Ok(());
+        }
+
+        let text = self.format_relative_altitude();
+        let mut display_text = text.as_str();
+        if display_text.len() > available {
+            display_text = &display_text[..available];
+        }
+        if display_text.is_empty() {
+            return Ok(());
+        }
+
+        batch.push(MspRequest::MspDisplayPort(MspDisplayPort::write_string(
+            row,
+            col,
+            0,
+            display_text,
+        )))?;
+        Ok(())
+    }
+
     fn format_cell_voltage(&self) -> alloc::string::String {
         match self.last_voltage_centi {
             Some(total_centi) => {
@@ -296,6 +386,20 @@ impl VtxOsd {
                 alloc::format!("{whole}.{frac:02}{VTX_SYM_VOLT}")
             }
             None => alloc::format!("--.--{VTX_SYM_VOLT}"),
+        }
+    }
+
+    fn format_relative_altitude(&self) -> alloc::string::String {
+        match (self.takeoff_pressure_pa, self.last_pressure_pa) {
+            (Some(reference_pa), Some(pressure_pa)) => {
+                if let Some(altitude_m) = relative_altitude_m(reference_pa, pressure_pa) {
+                    let altitude_m = altitude_m.clamp(-999.9, 9999.9);
+                    alloc::format!("ALT {altitude_m:.1}m")
+                } else {
+                    alloc::string::String::from("ALT --.-m")
+                }
+            }
+            _ => alloc::string::String::from("ALT --.-m"),
         }
     }
 
@@ -325,6 +429,29 @@ impl VtxOsd {
             )))?;
         }
         Ok(())
+    }
+}
+
+fn sanitize_pressure_pa(pressure_pa: f32) -> Option<f32> {
+    if pressure_pa.is_finite() && pressure_pa > 0.0 {
+        Some(pressure_pa)
+    } else {
+        None
+    }
+}
+
+fn relative_altitude_m(reference_pa: f32, pressure_pa: f32) -> Option<f32> {
+    let reference_pa = sanitize_pressure_pa(reference_pa)?;
+    let pressure_pa = sanitize_pressure_pa(pressure_pa)?;
+    let ratio = pressure_pa / reference_pa;
+    if ratio <= 0.0 {
+        return None;
+    }
+    let altitude_m: f32 = 44_330.0_f32 * (1.0_f32 - libm::powf(ratio, 1.0_f32 / 5.255_f32));
+    if altitude_m.is_finite() {
+        Some(altitude_m)
+    } else {
+        None
     }
 }
 
