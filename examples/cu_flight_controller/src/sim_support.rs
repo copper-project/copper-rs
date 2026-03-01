@@ -2,13 +2,27 @@
 
 use cu_sensor_payloads::{BarometerPayload, ImuPayload, MagnetometerPayload};
 use cu29::prelude::*;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
 
 static SIM_ACTIVITY_LED_STATE: OnceLock<Arc<AtomicBool>> = OnceLock::new();
+static SIM_BATTERY_THROTTLE_BITS: OnceLock<Arc<AtomicU32>> = OnceLock::new();
+static SIM_BATTERY_ARMED_STATE: OnceLock<Arc<AtomicBool>> = OnceLock::new();
 
 fn sim_activity_led_state() -> Arc<AtomicBool> {
     SIM_ACTIVITY_LED_STATE
+        .get_or_init(|| Arc::new(AtomicBool::new(false)))
+        .clone()
+}
+
+fn sim_battery_throttle_state() -> Arc<AtomicU32> {
+    SIM_BATTERY_THROTTLE_BITS
+        .get_or_init(|| Arc::new(AtomicU32::new(0.0_f32.to_bits())))
+        .clone()
+}
+
+fn sim_battery_armed_state() -> Arc<AtomicBool> {
+    SIM_BATTERY_ARMED_STATE
         .get_or_init(|| Arc::new(AtomicBool::new(false)))
         .clone()
 }
@@ -34,10 +48,29 @@ pub fn sim_activity_led_is_on() -> bool {
     sim_activity_led_state().load(Ordering::Relaxed)
 }
 
+pub fn sim_battery_set_throttle(throttle: f32) {
+    let clamped = throttle.clamp(0.0, 1.0);
+    sim_battery_throttle_state().store(clamped.to_bits(), Ordering::Relaxed);
+}
+
+pub fn sim_battery_set_armed(armed: bool) {
+    sim_battery_armed_state().store(armed, Ordering::Relaxed);
+}
+
+fn sim_battery_throttle() -> f32 {
+    let bits = sim_battery_throttle_state().load(Ordering::Relaxed);
+    f32::from_bits(bits).clamp(0.0, 1.0)
+}
+
+fn sim_battery_is_armed() -> bool {
+    sim_battery_armed_state().load(Ordering::Relaxed)
+}
+
 #[derive(Clone, Reflect)]
 pub struct SimBatteryAdc {
     base_voltage: f32,
     phase: f32,
+    sag_max_ratio: f32,
 }
 
 impl Default for SimBatteryAdc {
@@ -45,23 +78,31 @@ impl Default for SimBatteryAdc {
         Self {
             base_voltage: 16.0,
             phase: 0.0,
+            sag_max_ratio: 0.08,
         }
     }
 }
 
 impl SimBatteryAdc {
     pub fn read_voltage_v(&mut self) -> f32 {
+        if !sim_battery_is_armed() {
+            self.phase = 0.0;
+            return self.base_voltage.max(0.0);
+        }
         // Keep a small deterministic ripple so downstream battery logic sees live updates.
         self.phase += 0.05;
         let ripple = self.phase.sin() * 0.2;
-        (self.base_voltage + ripple).max(0.0)
+        let sag_ratio = (self.sag_max_ratio * sim_battery_throttle()).clamp(0.0, 0.5);
+        let sagged = self.base_voltage * (1.0 - sag_ratio);
+        (sagged + ripple).max(0.0)
     }
 }
 
-pub fn sim_battery_adc(base_voltage: f32) -> SimBatteryAdc {
+pub fn sim_battery_adc(base_voltage: f32, sag_max_ratio: f32) -> SimBatteryAdc {
     SimBatteryAdc {
         base_voltage,
         phase: 0.0,
+        sag_max_ratio: sag_max_ratio.clamp(0.0, 0.5),
     }
 }
 

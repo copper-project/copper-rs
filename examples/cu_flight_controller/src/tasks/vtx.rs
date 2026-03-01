@@ -17,6 +17,7 @@ use cu_msp_lib::structs::{
     MspFlightControllerVersion, MspRequest, MspStatus, MspStatusSensors, MspVoltageMeter,
     MspVoltageMeterConfig,
 };
+use cu_sensor_payloads::ImuPayload;
 use cu29::prelude::*;
 use cu29::units::si::electric_potential::volt;
 
@@ -52,13 +53,14 @@ pub struct VtxOsd {
     last_heartbeat: Option<CuTime>,
     last_draw: Option<CuTime>,
     last_armed: bool,
+    last_mode: FlightMode,
     last_voltage_centi: Option<u16>,
 }
 
 impl Freezable for VtxOsd {}
 
 impl CuTask for VtxOsd {
-    type Input<'m> = input_msg!('m, ControlInputs, BatteryVoltage, MspRequestBatch);
+    type Input<'m> = input_msg!('m, ControlInputs, ImuPayload, BatteryVoltage, MspRequestBatch);
     type Output<'m> = CuMsg<MspRequestBatch>;
     type Resources<'r> = ();
 
@@ -93,6 +95,7 @@ impl CuTask for VtxOsd {
             last_heartbeat: None,
             last_draw: None,
             last_armed: false,
+            last_mode: FlightMode::Angle,
             last_voltage_centi: None,
         })
     }
@@ -103,7 +106,7 @@ impl CuTask for VtxOsd {
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
-        let (ctrl_msg, batt_msg, incoming_msg) = *input;
+        let (ctrl_msg, imu_msg, batt_msg, incoming_msg) = *input;
         let tov_time = tasks::expect_tov_time(ctrl_msg.tov)?;
         output.tov = Tov::Time(tov_time);
         let now = tov_time;
@@ -121,6 +124,7 @@ impl CuTask for VtxOsd {
 
         if let Some(ctrl) = ctrl {
             self.last_armed = ctrl.armed;
+            self.last_mode = ctrl.mode;
         }
 
         let heartbeat_due = self
@@ -133,19 +137,11 @@ impl CuTask for VtxOsd {
             self.last_heartbeat = Some(now);
         }
 
-        let Some(ctrl) = ctrl else {
-            if batch.0.is_empty() {
-                status_if_not_firmware!(output.metadata, "osd wait");
-                output.clear_payload();
-            } else {
-                status_if_not_firmware!(output.metadata, format!("osd wait q{}", batch.0.len()));
-                output.set_payload(batch);
-            }
-            return Ok(());
-        };
-
-        let label = if ctrl.armed {
-            match ctrl.mode {
+        let calibrating = self.last_armed && imu_msg.payload().is_none();
+        let label = if calibrating {
+            StatusLabel::Calibrating
+        } else if self.last_armed {
+            match self.last_mode {
                 FlightMode::Acro => StatusLabel::Air,
                 FlightMode::Angle => StatusLabel::Angle,
                 FlightMode::PositionHold => StatusLabel::Position,

@@ -65,7 +65,7 @@
             id: "imu_cal",
             type: "tasks::ImuCalibrator",
             logging: (enabled: false),
-            config: {"cal_ms": 3000},
+            config: {"cal_ms": 500},
         ),
         (
             id: "ahrs",
@@ -106,7 +106,7 @@
             config: {
                 "motor_index": 0,
                 "props_out": true,
-                "airmode_idle_percent": 20.0,
+                "airmode_idle_percent": 10.0,
             },
         ),
         (
@@ -116,7 +116,7 @@
             config: {
                 "motor_index": 1,
                 "props_out": true,
-                "airmode_idle_percent": 20.0,
+                "airmode_idle_percent": 10.0,
             },
         ),
         (
@@ -126,7 +126,7 @@
             config: {
                 "motor_index": 2,
                 "props_out": true,
-                "airmode_idle_percent": 20.0,
+                "airmode_idle_percent": 10.0,
             },
         ),
         (
@@ -136,7 +136,7 @@
             config: {
                 "motor_index": 3,
                 "props_out": true,
-                "airmode_idle_percent": 20.0,
+                "airmode_idle_percent": 10.0,
             },
         ),
         (
@@ -316,6 +316,11 @@
             src: "mapper",
             dst: "vtx_osd",
             msg: "crate::messages::ControlInputs",
+        ),
+        (
+            src: "imu_cal",
+            dst: "vtx_osd",
+            msg: "cu_sensor_payloads::ImuPayload",
         ),
         (
             src: "rate",

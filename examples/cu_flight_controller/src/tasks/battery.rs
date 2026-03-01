@@ -19,6 +19,11 @@ type BatteryAdcBackendImpl = cu_micoairh743::BatteryAdc;
 #[cfg(all(feature = "sim", not(feature = "firmware")))]
 type BatteryAdcBackendImpl = crate::sim_support::SimBatteryAdc;
 
+#[cfg(all(feature = "sim", not(feature = "firmware")))]
+const SIM_BATTERY_BASE_VOLTAGE_V: f32 = 16.0;
+#[cfg(all(feature = "sim", not(feature = "firmware")))]
+const SIM_BATTERY_SAG_MAX_RATIO: f32 = 0.08;
+
 #[cfg(feature = "firmware")]
 impl BatteryAdcBackend for BatteryAdcBackendImpl {
     fn read_centivolts(&mut self, calib: &BatteryAdcCalibration) -> u16 {
@@ -94,7 +99,10 @@ impl CuSrcTask for BatteryAdcSource {
         #[cfg(feature = "firmware")]
         let adc = _resources.battery_adc.0;
         #[cfg(all(feature = "sim", not(feature = "firmware")))]
-        let adc = crate::sim_support::sim_battery_adc(cfg_f32(config, "sim_voltage_v", 16.0)?);
+        let adc = crate::sim_support::sim_battery_adc(
+            SIM_BATTERY_BASE_VOLTAGE_V,
+            SIM_BATTERY_SAG_MAX_RATIO,
+        );
 
         Ok(Self { adc, calib })
     }
