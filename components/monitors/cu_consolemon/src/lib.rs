@@ -11,9 +11,9 @@ use cu29::clock::CuDuration;
 use cu29::context::CuContext;
 use cu29::cutask::CuMsgMetadata;
 use cu29::monitoring::{
-    ComponentKind, CopperListInfo, CopperListIoStats, CuDurationStatistics, CuMonitor,
-    CuMonitoringMetadata, CuMonitoringRuntime, CuTaskState, Decision, MonitorComponentMetadata,
-    MonitorTopology,
+    ComponentId, ComponentType, CopperListInfo, CopperListIoStats, CopperListView,
+    CuComponentState, CuDurationStatistics, CuMonitor, CuMonitoringMetadata, CuMonitoringRuntime,
+    Decision, MonitorComponentMetadata, MonitorTopology,
 };
 use cu29::prelude::{CuCompactString, CuTime, pool};
 use cu29::{CuError, CuResult};
@@ -438,53 +438,39 @@ fn styled_line_from_structured(
     }
 }
 
-struct TaskStats {
+struct ComponentStats {
     stats: Vec<CuDurationStatistics>,
     end2end: CuDurationStatistics,
-    missing_ts_samples: u64,
 }
 
-impl TaskStats {
-    fn new(num_tasks: usize, max_duration: CuDuration) -> Self {
-        let stats = vec![CuDurationStatistics::new(max_duration); num_tasks];
-        TaskStats {
+impl ComponentStats {
+    fn new(component_count: usize, max_duration: CuDuration) -> Self {
+        let stats = vec![CuDurationStatistics::new(max_duration); component_count];
+        ComponentStats {
             stats,
             end2end: CuDurationStatistics::new(max_duration),
-            missing_ts_samples: 0,
         }
     }
 
-    fn update(
-        &mut self,
-        msgs: &[&CuMsgMetadata],
-        culist_to_task: &[usize; MAX_CULIST_MAP],
-        task_count: usize,
-    ) {
-        for (culist_idx, &msg) in msgs.iter().enumerate() {
-            let task_idx = culist_to_task
-                .get(culist_idx)
-                .copied()
-                .unwrap_or(usize::MAX);
-            if task_idx == usize::MAX || task_idx >= task_count || task_idx >= self.stats.len() {
-                continue;
-            }
+    fn update(&mut self, view: CopperListView<'_>) {
+        for entry in view.entries() {
+            let component_index = entry.component_id.index();
+            assert!(
+                component_index < self.stats.len(),
+                "cu_consolemon: mapped component index {} out of stats bounds {}",
+                component_index,
+                self.stats.len()
+            );
+            let msg = entry.msg;
             let before = Option::<CuTime>::from(msg.process_time.start);
             let after = Option::<CuTime>::from(msg.process_time.end);
             if let (Some(before), Some(after)) = (before, after)
                 && after >= before
             {
-                self.stats[task_idx].record(after - before);
-            } else {
-                self.missing_ts_samples = self.missing_ts_samples.saturating_add(1);
-                if self.missing_ts_samples <= 5 || self.missing_ts_samples.is_multiple_of(100) {
-                    eprintln!(
-                        "CuConsoleMon warning: missing/invalid process_time for task index {} (culist index {}, count={})",
-                        task_idx, culist_idx, self.missing_ts_samples
-                    );
-                }
+                self.stats[component_index].record(after - before);
             }
         }
-        self.end2end.record(compute_end_to_end_latency(msgs));
+        self.end2end.record(compute_end_to_end_latency(view.msgs()));
     }
 
     fn reset(&mut self) {
@@ -677,26 +663,6 @@ impl Display for NodeType {
 }
 
 impl NodeType {
-    fn add_incoming(self) -> NodeType {
-        match self {
-            Self::Unknown => Self::Sink,
-            Self::Source => Self::Task,
-            Self::Sink => Self::Sink,
-            Self::Task => Self::Task,
-            Self::Bridge => Self::Bridge,
-        }
-    }
-
-    fn add_outgoing(self) -> NodeType {
-        match self {
-            Self::Unknown => Self::Source,
-            Self::Source => Self::Source,
-            Self::Sink => Self::Task,
-            Self::Task => Self::Task,
-            Self::Bridge => Self::Bridge,
-        }
-    }
-
     fn color(self) -> Color {
         match self {
             Self::Unknown => Color::Gray,
@@ -709,7 +675,7 @@ impl NodeType {
 }
 
 #[derive(Default, Clone)]
-struct TaskStatus {
+struct ComponentStatus {
     is_error: bool,
     status_txt: CompactString,
     error: CompactString,
@@ -758,42 +724,34 @@ impl GraphCache {
 struct NodesScrollableWidgetState {
     display_nodes: Vec<DisplayNode>,
     connections: Vec<Connection>,
-    statuses: Arc<Mutex<Vec<TaskStatus>>>,
-    status_index_map: Vec<Option<usize>>,
-    task_count: usize,
+    statuses: Arc<Mutex<Vec<ComponentStatus>>>,
+    status_index_map: Vec<Option<ComponentId>>,
     nodes_scrollable_state: ScrollViewState,
     graph_cache: GraphCache,
 }
 
 impl NodesScrollableWidgetState {
     fn new(
-        errors: Arc<Mutex<Vec<TaskStatus>>>,
+        statuses: Arc<Mutex<Vec<ComponentStatus>>>,
         components: &'static [MonitorComponentMetadata],
-        task_count: usize,
         topology: MonitorTopology,
     ) -> Self {
         let mut display_nodes: Vec<DisplayNode> = Vec::new();
         let mut status_index_map = Vec::new();
         let mut node_lookup = HashMap::new();
-        let task_idx_by_id: HashMap<&'static str, usize> = components[..task_count]
+        let component_id_by_name: HashMap<&'static str, ComponentId> = components
             .iter()
             .enumerate()
-            .map(|(idx, component)| (component.id(), idx))
+            .map(|(idx, component)| (component.id(), ComponentId::new(idx)))
             .collect();
 
         for node in topology.nodes.iter() {
             let node_type = match node.kind {
-                ComponentKind::Bridge => NodeType::Bridge,
-                ComponentKind::Task => {
-                    let mut role = NodeType::Unknown;
-                    if !node.inputs.is_empty() {
-                        role = role.add_incoming();
-                    }
-                    if !node.outputs.is_empty() {
-                        role = role.add_outgoing();
-                    }
-                    role
-                }
+                ComponentType::Source => NodeType::Source,
+                ComponentType::Task => NodeType::Task,
+                ComponentType::Sink => NodeType::Sink,
+                ComponentType::Bridge => NodeType::Bridge,
+                _ => NodeType::Unknown,
             };
 
             display_nodes.push(DisplayNode {
@@ -809,10 +767,7 @@ impl NodesScrollableWidgetState {
             let idx = display_nodes.len() - 1;
             node_lookup.insert(node.id.clone(), idx);
 
-            let status_idx = match node.kind {
-                ComponentKind::Task => task_idx_by_id.get(node.id.as_str()).copied(),
-                ComponentKind::Bridge => None,
-            };
+            let status_idx = component_id_by_name.get(node.id.as_str()).copied();
             status_index_map.push(status_idx);
         }
 
@@ -861,9 +816,8 @@ impl NodesScrollableWidgetState {
         NodesScrollableWidgetState {
             display_nodes,
             connections,
-            statuses: errors,
+            statuses,
             status_index_map,
-            task_count,
             nodes_scrollable_state: ScrollViewState::default(),
             graph_cache: GraphCache::new(),
         }
@@ -988,7 +942,6 @@ const NODE_WIDTH_CONTENT: u16 = NODE_WIDTH - 2;
 const NODE_HEIGHT: u16 = 5;
 const NODE_META_LINES: usize = 2;
 const NODE_PORT_ROW_OFFSET: usize = NODE_META_LINES;
-const MAX_CULIST_MAP: usize = 512;
 
 fn clip_tail(value: &str, max_chars: usize) -> String {
     if max_chars == 0 {
@@ -1024,18 +977,18 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
             let zones = graph.split(scroll_view.area());
 
             let mut statuses = state.statuses.lock().unwrap();
-            if statuses.len() <= state.task_count {
-                statuses.resize(state.task_count + 1, TaskStatus::default());
-            }
             for (idx, ea_zone) in zones.into_iter().enumerate() {
-                let fallback_idx = state.task_count;
-                let status_idx = state
+                let status = state
                     .status_index_map
                     .get(idx)
                     .and_then(|opt| *opt)
-                    .unwrap_or(fallback_idx);
-                let safe_index = status_idx.min(statuses.len().saturating_sub(1));
-                let status = &mut statuses[safe_index];
+                    .and_then(|component_id| statuses.get_mut(component_id.index()))
+                    .map(|status| {
+                        let snapshot = status.clone();
+                        status.is_error = false;
+                        snapshot
+                    })
+                    .unwrap_or_default();
                 let node = &state.display_nodes[idx];
                 let status_line = if status.is_error {
                     format!("❌ {}", status.error)
@@ -1088,7 +1041,6 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
                 }
 
                 let paragraph = Paragraph::new(Text::from(lines));
-                status.is_error = false; // reset if it was displayed
                 scroll_view.render_widget(paragraph, ea_zone);
             }
 
@@ -1103,10 +1055,8 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
 /// A TUI based realtime console for Copper.
 pub struct CuConsoleMon {
     components: &'static [MonitorComponentMetadata],
-    task_count: usize,
-    task_stats: Arc<Mutex<TaskStats>>,
-    task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
-    culist_to_task: [usize; MAX_CULIST_MAP],
+    component_stats: Arc<Mutex<ComponentStats>>,
+    component_statuses: Arc<Mutex<Vec<ComponentStatus>>>,
     ui_handle: Option<JoinHandle<()>>,
     pool_stats: Arc<Mutex<Vec<PoolStats>>>,
     copperlist_stats: Arc<Mutex<CopperListStats>>,
@@ -1126,10 +1076,10 @@ impl Drop for CuConsoleMon {
 
 struct UI {
     components: &'static [MonitorComponentMetadata],
-    task_count: usize,
+    runtime_node_col_width: u16,
     active_screen: Screen,
     sysinfo: String,
-    task_stats: Arc<Mutex<TaskStats>>,
+    component_stats: Arc<Mutex<ComponentStats>>,
     quitting: Arc<AtomicBool>,
     tab_hitboxes: Vec<TabHitbox>,
     help_hitboxes: Vec<HelpHitbox>,
@@ -1153,21 +1103,31 @@ struct UI {
 }
 
 impl UI {
-    fn task_label(&self, task_idx: usize) -> &'static str {
-        if task_idx < self.task_count {
-            self.components[task_idx].id()
-        } else {
-            "<?>"
-        }
+    fn compute_runtime_node_col_width(components: &'static [MonitorComponentMetadata]) -> u16 {
+        const MIN_WIDTH: usize = 24;
+        const MAX_WIDTH: usize = 56;
+
+        let header_width = "Runtime Node".chars().count();
+        let max_name_width = components
+            .iter()
+            .map(|component| component.id().chars().count())
+            .max()
+            .unwrap_or(0);
+        let width = header_width.max(max_name_width).saturating_add(2);
+        width.clamp(MIN_WIDTH, MAX_WIDTH) as u16
+    }
+
+    fn component_label(&self, component_id: ComponentId) -> &'static str {
+        debug_assert!(component_id.index() < self.components.len());
+        self.components[component_id.index()].id()
     }
 
     #[cfg(feature = "debug_pane")]
     #[allow(clippy::too_many_arguments)]
     fn new(
         components: &'static [MonitorComponentMetadata],
-        task_count: usize,
-        task_stats: Arc<Mutex<TaskStats>>,
-        task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
+        component_stats: Arc<Mutex<ComponentStats>>,
+        component_statuses: Arc<Mutex<Vec<ComponentStatus>>>,
         quitting: Arc<AtomicBool>,
         error_redirect: Option<gag::BufferRedirect>,
         debug_output: Option<debug_pane::DebugLog>,
@@ -1176,19 +1136,16 @@ impl UI {
         topology: MonitorTopology,
     ) -> UI {
         init_error_hooks();
-        let nodes_scrollable_widget_state = NodesScrollableWidgetState::new(
-            task_statuses.clone(),
-            components,
-            task_count,
-            topology,
-        );
+        let nodes_scrollable_widget_state =
+            NodesScrollableWidgetState::new(component_statuses.clone(), components, topology);
+        let runtime_node_col_width = Self::compute_runtime_node_col_width(components);
 
         Self {
             components,
-            task_count,
+            runtime_node_col_width,
             active_screen: Screen::Neofetch,
             sysinfo: sysinfo::pfetch_info(),
-            task_stats,
+            component_stats,
             quitting,
             tab_hitboxes: Vec::new(),
             help_hitboxes: Vec::new(),
@@ -1208,28 +1165,24 @@ impl UI {
     #[cfg(not(feature = "debug_pane"))]
     fn new(
         components: &'static [MonitorComponentMetadata],
-        task_count: usize,
-        task_stats: Arc<Mutex<TaskStats>>,
-        task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
+        component_stats: Arc<Mutex<ComponentStats>>,
+        component_statuses: Arc<Mutex<Vec<ComponentStatus>>>,
         quitting: Arc<AtomicBool>,
         pool_stats: Arc<Mutex<Vec<PoolStats>>>,
         copperlist_stats: Arc<Mutex<CopperListStats>>,
         topology: MonitorTopology,
     ) -> UI {
         init_error_hooks();
-        let nodes_scrollable_widget_state = NodesScrollableWidgetState::new(
-            task_statuses.clone(),
-            components,
-            task_count,
-            topology,
-        );
+        let nodes_scrollable_widget_state =
+            NodesScrollableWidgetState::new(component_statuses.clone(), components, topology);
+        let runtime_node_col_width = Self::compute_runtime_node_col_width(components);
 
         Self {
             components,
-            task_count,
+            runtime_node_col_width,
             active_screen: Screen::Neofetch,
             sysinfo: sysinfo::pfetch_info(),
-            task_stats,
+            component_stats,
             quitting,
             tab_hitboxes: Vec::new(),
             help_hitboxes: Vec::new(),
@@ -1241,7 +1194,8 @@ impl UI {
 
     fn draw_latency_table(&self, f: &mut Frame, area: Rect) {
         let header_cells = [
-            "🛠 Task",
+            "🧩 Runtime Node",
+            "Kind",
             "⬇ Min",
             "⬆ Max",
             "∅ Mean",
@@ -1250,8 +1204,14 @@ impl UI {
             "⧗⬆ Jitter",
         ]
         .iter()
-        .map(|h| {
-            Cell::from(Line::from(*h).alignment(Alignment::Right)).style(
+        .enumerate()
+        .map(|(idx, h)| {
+            let align = if idx <= 1 {
+                Alignment::Left
+            } else {
+                Alignment::Right
+            };
+            Cell::from(Line::from(*h).alignment(align)).style(
                 Style::default()
                     .fg(Color::Yellow)
                     .add_modifier(Modifier::BOLD),
@@ -1263,15 +1223,27 @@ impl UI {
             .bottom_margin(1)
             .top_margin(1);
 
-        let task_stats = self.task_stats.lock().unwrap(); // Acquire lock to read task_stats
-        let mut rows = task_stats
+        let component_stats = self.component_stats.lock().unwrap(); // Acquire lock to read component_stats
+        let mut rows = component_stats
             .stats
             .iter()
             .enumerate()
             .map(|(i, stat)| {
+                let component_id = ComponentId::new(i);
+                let kind_label = match self.components[component_id.index()].kind() {
+                    ComponentType::Source => "◈ Src",
+                    ComponentType::Task => "⚙ Task",
+                    ComponentType::Sink => "⭳ Sink",
+                    ComponentType::Bridge => "⇆ Brg",
+                    _ => "?",
+                };
                 let cells = vec![
-                    Cell::from(Line::from(self.task_label(i)).alignment(Alignment::Right))
-                        .light_blue(),
+                    Cell::from(
+                        Line::from(self.component_label(component_id)).alignment(Alignment::Left),
+                    )
+                    .light_blue(),
+                    Cell::from(Line::from(kind_label).alignment(Alignment::Left))
+                        .style(Style::default()),
                     Cell::from(Line::from(stat.min().to_string()).alignment(Alignment::Right))
                         .style(Style::default()),
                     Cell::from(Line::from(stat.max().to_string()).alignment(Alignment::Right))
@@ -1294,43 +1266,41 @@ impl UI {
             .collect::<Vec<Row>>();
 
         let cells = vec![
+            Cell::from(Line::from("End2End").light_red().alignment(Alignment::Left)),
+            Cell::from(Line::from("All").light_red().alignment(Alignment::Left))
+                .style(Style::default()),
             Cell::from(
-                Line::from("End2End")
-                    .light_red()
-                    .alignment(Alignment::Right),
-            ),
-            Cell::from(
-                Line::from(task_stats.end2end.min().to_string())
-                    .light_red()
-                    .alignment(Alignment::Right),
-            )
-            .style(Style::default()),
-            Cell::from(
-                Line::from(task_stats.end2end.max().to_string())
+                Line::from(component_stats.end2end.min().to_string())
                     .light_red()
                     .alignment(Alignment::Right),
             )
             .style(Style::default()),
             Cell::from(
-                Line::from(task_stats.end2end.mean().to_string())
+                Line::from(component_stats.end2end.max().to_string())
                     .light_red()
                     .alignment(Alignment::Right),
             )
             .style(Style::default()),
             Cell::from(
-                Line::from(task_stats.end2end.stddev().to_string())
+                Line::from(component_stats.end2end.mean().to_string())
                     .light_red()
                     .alignment(Alignment::Right),
             )
             .style(Style::default()),
             Cell::from(
-                Line::from(task_stats.end2end.jitter_mean().to_string())
+                Line::from(component_stats.end2end.stddev().to_string())
                     .light_red()
                     .alignment(Alignment::Right),
             )
             .style(Style::default()),
             Cell::from(
-                Line::from(task_stats.end2end.jitter_max().to_string())
+                Line::from(component_stats.end2end.jitter_mean().to_string())
+                    .light_red()
+                    .alignment(Alignment::Right),
+            )
+            .style(Style::default()),
+            Cell::from(
+                Line::from(component_stats.end2end.jitter_max().to_string())
                     .light_red()
                     .alignment(Alignment::Right),
             )
@@ -1341,6 +1311,7 @@ impl UI {
         let table = Table::new(
             rows,
             &[
+                Constraint::Length(self.runtime_node_col_width),
                 Constraint::Length(10),
                 Constraint::Length(10),
                 Constraint::Length(12),
@@ -1763,7 +1734,7 @@ impl UI {
             match hitbox.action {
                 HelpAction::ResetLatency => {
                     if self.active_screen == Screen::Latency {
-                        self.task_stats.lock().unwrap().reset();
+                        self.component_stats.lock().unwrap().reset();
                     }
                 }
                 HelpAction::Quit => {
@@ -1993,7 +1964,7 @@ impl UI {
                         KeyCode::Char('6') => self.active_screen = Screen::DebugOutput,
                         KeyCode::Char('r') => {
                             if self.active_screen == Screen::Latency {
-                                self.task_stats.lock().unwrap().reset()
+                                self.component_stats.lock().unwrap().reset()
                             }
                         }
                         KeyCode::Char('j') | KeyCode::Down => {
@@ -2065,30 +2036,21 @@ impl CuMonitor for CuConsoleMon {
         Self: Sized,
     {
         let components = metadata.components();
-        let task_count = metadata.task_count();
-        let task_stats = Arc::new(Mutex::new(TaskStats::new(
-            task_count,
+        let component_count = components.len();
+        let component_stats = Arc::new(Mutex::new(ComponentStats::new(
+            component_count,
             CuDuration::from(Duration::from_secs(5)),
         )));
-        let mut culist_to_task = [usize::MAX; MAX_CULIST_MAP];
-        for (slot, component_idx) in metadata
-            .culist_component_mapping()
-            .iter()
-            .copied()
-            .enumerate()
-            .take(MAX_CULIST_MAP)
-        {
-            culist_to_task[slot] = component_idx;
-        }
         let mut copperlist_stats = CopperListStats::new();
         copperlist_stats.set_info(metadata.copperlist_info());
 
         Ok(Self {
             components,
-            task_count,
-            task_stats,
-            task_statuses: Arc::new(Mutex::new(vec![TaskStatus::default(); task_count])),
-            culist_to_task,
+            component_stats,
+            component_statuses: Arc::new(Mutex::new(vec![
+                ComponentStatus::default();
+                component_count
+            ])),
             ui_handle: None,
             quitting: Arc::new(AtomicBool::new(false)),
             pool_stats: Arc::new(Mutex::new(Vec::new())),
@@ -2116,10 +2078,9 @@ impl CuMonitor for CuConsoleMon {
         }
 
         let components = self.components;
-        let task_count = self.task_count;
 
-        let task_stats_ui = self.task_stats.clone();
-        let error_states = self.task_statuses.clone();
+        let component_stats_ui = self.component_stats.clone();
+        let error_states = self.component_statuses.clone();
         let pool_stats_ui = self.pool_stats.clone();
         let copperlist_stats_ui = self.copperlist_stats.clone();
         let quitting = self.quitting.clone();
@@ -2158,8 +2119,7 @@ impl CuMonitor for CuConsoleMon {
 
                 let mut ui = UI::new(
                     components,
-                    task_count,
-                    task_stats_ui,
+                    component_stats_ui,
                     error_states,
                     quitting.clone(),
                     error_redirect,
@@ -2215,8 +2175,7 @@ impl CuMonitor for CuConsoleMon {
 
                 let mut ui = UI::new(
                     components,
-                    task_count,
-                    task_stats_ui,
+                    component_stats_ui,
                     error_states,
                     quitting.clone(),
                     pool_stats_ui,
@@ -2241,24 +2200,27 @@ impl CuMonitor for CuConsoleMon {
         Ok(())
     }
 
-    fn process_copperlist(&self, ctx: &CuContext, msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+    fn process_copperlist(&self, ctx: &CuContext, view: CopperListView<'_>) -> CuResult<()> {
         {
-            let mut task_stats = self.task_stats.lock().unwrap();
-            task_stats.update(msgs, &self.culist_to_task, self.task_count);
+            let mut component_stats = self.component_stats.lock().unwrap();
+            component_stats.update(view);
         }
         {
             let mut copperlist_stats = self.copperlist_stats.lock().unwrap();
             copperlist_stats.update_rate(ctx.cl_id());
         }
         {
-            let mut task_statuses = self.task_statuses.lock().unwrap();
-            for (i, msg) in msgs.iter().enumerate() {
-                let CuCompactString(status_txt) = &msg.status_txt;
-                let task_idx = self.culist_to_task.get(i).copied().unwrap_or(usize::MAX);
-                let mapped = task_idx != usize::MAX && task_idx < self.task_count;
-                if mapped && task_idx < task_statuses.len() {
-                    task_statuses[task_idx].status_txt = status_txt.clone();
-                }
+            let mut component_statuses = self.component_statuses.lock().unwrap();
+            for entry in view.entries() {
+                let component_index = entry.component_id.index();
+                assert!(
+                    component_index < component_statuses.len(),
+                    "cu_consolemon: mapped component index {} out of component_statuses bounds {}",
+                    component_index,
+                    component_statuses.len()
+                );
+                let CuCompactString(status_txt) = &entry.msg.status_txt;
+                component_statuses[component_index].status_txt = status_txt.clone();
             }
         }
 
@@ -2284,25 +2246,30 @@ impl CuMonitor for CuConsoleMon {
         Ok(())
     }
 
-    fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision {
-        {
-            let mut statuses = self.task_statuses.lock().unwrap();
-            if let Some(status) = statuses.get_mut(taskid) {
-                status.is_error = true;
-                status.error = error.to_compact_string();
-            } else {
-                eprintln!(
-                    "CuConsoleMon warning: process_error received out-of-range task id {} (task_count={})",
-                    taskid, self.task_count
-                );
-            }
+    fn process_error(
+        &self,
+        component_id: ComponentId,
+        step: CuComponentState,
+        error: &CuError,
+    ) -> Decision {
+        let component_index = component_id.index();
+        let mut statuses = self.component_statuses.lock().unwrap();
+        if component_index < statuses.len() {
+            statuses[component_index].is_error = true;
+            statuses[component_index].error = error.to_compact_string();
+        } else {
+            debug_assert!(
+                false,
+                "cu_consolemon: process_error component index {} out of bounds",
+                component_index
+            );
         }
         match step {
-            CuTaskState::Start => Decision::Shutdown,
-            CuTaskState::Preprocess => Decision::Abort,
-            CuTaskState::Process => Decision::Ignore,
-            CuTaskState::Postprocess => Decision::Ignore,
-            CuTaskState::Stop => Decision::Shutdown,
+            CuComponentState::Start => Decision::Shutdown,
+            CuComponentState::Preprocess => Decision::Abort,
+            CuComponentState::Process => Decision::Ignore,
+            CuComponentState::Postprocess => Decision::Ignore,
+            CuComponentState::Stop => Decision::Shutdown,
         }
     }
 
@@ -2319,7 +2286,7 @@ impl CuMonitor for CuConsoleMon {
             unregister_live_log_listener();
         }
 
-        self.task_stats
+        self.component_stats
             .lock()
             .unwrap()
             .stats

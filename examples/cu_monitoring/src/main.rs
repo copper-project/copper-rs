@@ -79,7 +79,6 @@ pub mod tasks {
 
 struct ExampleMonitor {
     components: &'static [MonitorComponentMetadata],
-    task_count: usize,
 }
 
 #[copper_runtime(config = "copperconfig.ron")]
@@ -90,7 +89,6 @@ impl CuMonitor for ExampleMonitor {
         debug!("Monitoring: created: mission={}", metadata.mission_id());
         Ok(Self {
             components: metadata.components(),
-            task_count: metadata.task_count(),
         })
     }
 
@@ -99,23 +97,30 @@ impl CuMonitor for ExampleMonitor {
         Ok(())
     }
 
-    fn process_copperlist(&self, _ctx: &CuContext, msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+    fn process_copperlist(&self, _ctx: &CuContext, view: CopperListView<'_>) -> CuResult<()> {
         debug!("Monitoring: Processing copperlist...");
-        for (taskid, metadata) in msgs.iter().enumerate() {
-            debug!("Task: {} -> {}", taskid, metadata);
+        for entry in view.entries() {
+            let component_name = self.components[entry.component_id.index()].id();
+            debug!(
+                "Component: {} (slot {}) -> {}",
+                component_name,
+                entry.culist_slot.index(),
+                entry.msg
+            );
         }
         Ok(())
     }
 
-    fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision {
-        let task_name = if taskid < self.task_count {
-            self.components[taskid].id()
-        } else {
-            "<?>"
-        };
+    fn process_error(
+        &self,
+        component_id: ComponentId,
+        step: CuComponentState,
+        error: &CuError,
+    ) -> Decision {
+        let component_name = self.components[component_id.index()].id();
         debug!(
-            "Monitoring: Processing error task: {} step: {} error: {}",
-            task_name, step, error
+            "Monitoring: Processing error component: {} step: {} error: {}",
+            component_name, step, error
         );
         Decision::Ignore
     }

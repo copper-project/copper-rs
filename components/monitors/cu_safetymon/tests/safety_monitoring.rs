@@ -7,9 +7,10 @@ use std::thread;
 use std::time::Duration;
 
 const MONITORED_COMPONENTS: &[MonitorComponentMetadata] = &[
-    MonitorComponentMetadata::new("planner", ComponentKind::Task, None),
-    MonitorComponentMetadata::new("driver", ComponentKind::Task, None),
+    MonitorComponentMetadata::new("planner", ComponentType::Task, None),
+    MonitorComponentMetadata::new("driver", ComponentType::Task, None),
 ];
+const CULIST_COMPONENT_MAPPING: &[ComponentId] = &[ComponentId::new(0)];
 const CHILD_MODE_ENV: &str = "CU_SAFETYMON_CHILD_MODE";
 
 fn monitor_metadata(
@@ -19,7 +20,7 @@ fn monitor_metadata(
     let metadata = CuMonitoringMetadata::new(
         DEFAULT_MISSION_ID.into(),
         MONITORED_COMPONENTS,
-        &[],
+        CULIST_COMPONENT_MAPPING,
         CopperListInfo::new(0, 0),
         MonitorTopology::default(),
         config
@@ -86,6 +87,7 @@ fn cu_logmon_and_cu_safetymon_can_run_together() {
     let probe = Arc::new(RuntimeExecutionProbe::default());
     let (log_meta, log_runtime) = monitor_metadata(&log_cfg, Some(probe.clone()));
     let (safe_meta, safe_runtime) = monitor_metadata(&safe_cfg, Some(probe.clone()));
+    let layout = log_meta.layout();
 
     let mut monitors = (
         CuLogMon::new(log_meta, log_runtime).expect("logmon new"),
@@ -98,12 +100,12 @@ fn cu_logmon_and_cu_safetymon_can_run_together() {
 
     monitors.start(&ctx).expect("monitors start");
     probe.record(ExecutionMarker {
-        component_id: 0,
-        step: CuTaskState::Process,
+        component_id: ComponentId::new(0),
+        step: CuComponentState::Process,
         culistid: Some(1),
     });
     monitors
-        .process_copperlist(&ctx, &msgs)
+        .process_copperlist(&ctx, layout.view(&msgs))
         .expect("monitors process_copperlist");
     monitors.stop(&ctx).expect("monitors stop");
 }
@@ -120,7 +122,11 @@ fn contradictory_decisions_between_logmon_and_safetymon_shutdown() {
         CuSafetyMon::new(safe_meta, safe_runtime).expect("safetymon new"),
     );
 
-    let decision = monitors.process_error(0, CuTaskState::Process, &CuError::from("fault"));
+    let decision = monitors.process_error(
+        ComponentId::new(0),
+        CuComponentState::Process,
+        &CuError::from("fault"),
+    );
     assert!(
         matches!(decision, Decision::Shutdown),
         "expected Shutdown when monitors disagree"
@@ -133,17 +139,20 @@ fn panic_fault_exits_with_configured_code_and_marker_context() {
         let cfg = safetymon_test_config(79, 80);
         let probe = Arc::new(RuntimeExecutionProbe::default());
         let (metadata, runtime) = monitor_metadata(&cfg, Some(probe.clone()));
+        let layout = metadata.layout();
         let mut monitor = CuSafetyMon::new(metadata, runtime).expect("safetymon new");
         probe.record(ExecutionMarker {
-            component_id: 1,
-            step: CuTaskState::Process,
+            component_id: ComponentId::new(1),
+            step: CuComponentState::Process,
             culistid: Some(33),
         });
         let (ctx, _clock_control) = CuContext::new_mock_clock();
         monitor.start(&ctx).expect("safetymon start");
         let cl_ctx = CuContext::builder(ctx.clock.clone()).cl_id(33).build();
+        let metadata = CuMsgMetadata::default();
+        let msgs: [&CuMsgMetadata; 1] = [&metadata];
         monitor
-            .process_copperlist(&cl_ctx, &[])
+            .process_copperlist(&cl_ctx, layout.view(&msgs))
             .expect("safetymon process_copperlist");
         panic!("panic path test");
     }
@@ -170,16 +179,19 @@ fn lock_fault_exits_with_configured_code_and_last_marker() {
         let cfg = safetymon_test_config(79, 80);
         let probe = Arc::new(RuntimeExecutionProbe::default());
         let (metadata, runtime) = monitor_metadata(&cfg, Some(probe.clone()));
+        let layout = metadata.layout();
         let mut monitor = CuSafetyMon::new(metadata, runtime).expect("safetymon new");
         let (ctx, _clock_control) = CuContext::new_mock_clock();
         monitor.start(&ctx).expect("safetymon start");
         let cl_ctx = CuContext::builder(ctx.clock.clone()).cl_id(9).build();
+        let metadata = CuMsgMetadata::default();
+        let msgs: [&CuMsgMetadata; 1] = [&metadata];
         monitor
-            .process_copperlist(&cl_ctx, &[])
+            .process_copperlist(&cl_ctx, layout.view(&msgs))
             .expect("safetymon process_copperlist");
         probe.record(ExecutionMarker {
-            component_id: 1,
-            step: CuTaskState::Process,
+            component_id: ComponentId::new(1),
+            step: CuComponentState::Process,
             culistid: Some(9),
         });
 
