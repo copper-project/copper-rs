@@ -121,7 +121,7 @@ impl CuSinkTask for GnssFixSink {
         if should_log {
             self.last_log = Some(now);
             info!(
-                "gnss lat={:.7} lon={:.7} sats={} fix_ok={}",
+                "gnss lat={} lon={} sats={} fix_ok={}",
                 fix.latitude.get::<degree>(),
                 fix.longitude.get::<degree>(),
                 fix.num_satellites_used,
