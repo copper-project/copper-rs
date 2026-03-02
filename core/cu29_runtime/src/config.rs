@@ -486,6 +486,9 @@ pub struct Node {
     /// Node role in the runtime graph (normal task or bridge endpoint).
     #[serde(skip, default)]
     flavor: Flavor,
+    /// Message types that are intentionally not connected (NC) in configuration.
+    #[serde(skip, default)]
+    nc_outputs: Vec<String>,
 }
 
 impl Node {
@@ -501,6 +504,7 @@ impl Node {
             run_in_sim: None,
             logging: None,
             flavor: Flavor::Task,
+            nc_outputs: Vec::new(),
         }
     }
 
@@ -601,6 +605,21 @@ impl Node {
     #[allow(dead_code)]
     pub fn set_flavor(&mut self, flavor: Flavor) {
         self.flavor = flavor;
+    }
+
+    /// Registers an intentionally unconnected output message type for this node.
+    #[allow(dead_code)]
+    pub fn add_nc_output(&mut self, msg_type: &str) {
+        if self.nc_outputs.iter().any(|existing| existing == msg_type) {
+            return;
+        }
+        self.nc_outputs.push(msg_type.to_string());
+    }
+
+    /// Returns message types intentionally marked as not connected.
+    #[allow(dead_code)]
+    pub fn nc_outputs(&self) -> &[String] {
+        &self.nc_outputs
     }
 }
 
@@ -756,6 +775,9 @@ struct SerializedCnx {
     missions: Option<Vec<String>>,
 }
 
+/// Special destination endpoint used to mark an output as intentionally not connected.
+pub const NC_ENDPOINT: &str = "__nc__";
+
 /// This represents a connection between 2 tasks (nodes) in the configuration graph.
 #[derive(Debug, Clone)]
 pub struct Cnx {
@@ -832,6 +854,40 @@ fn mission_applies(missions: &Option<Vec<String>>, mission_id: &str) -> bool {
         .as_ref()
         .map(|mission_list| mission_list.iter().any(|m| m == mission_id))
         .unwrap_or(true)
+}
+
+fn register_nc_output<E>(
+    graph: &mut CuGraph,
+    src_endpoint: &str,
+    msg_type: &str,
+    bridge_lookup: &HashMap<&str, &BridgeConfig>,
+) -> Result<(), E>
+where
+    E: From<String>,
+{
+    let (src_name, src_channel) =
+        parse_endpoint(src_endpoint, EndpointRole::Source, bridge_lookup).map_err(E::from)?;
+    if src_channel.is_some() {
+        return Err(E::from(format!(
+            "NC destination '{}' does not support bridge channels in source endpoint '{}'",
+            NC_ENDPOINT, src_endpoint
+        )));
+    }
+
+    let src = graph
+        .get_node_id_by_name(src_name.as_str())
+        .ok_or_else(|| E::from(format!("Source node not found: {src_endpoint}")))?;
+    let src_node = graph
+        .get_node_mut(src)
+        .ok_or_else(|| E::from(format!("Source node id {src} not found for NC output")))?;
+    if src_node.get_flavor() != Flavor::Task {
+        return Err(E::from(format!(
+            "NC destination '{}' is only supported for task outputs (source '{}')",
+            NC_ENDPOINT, src_endpoint
+        )));
+    }
+    src_node.add_nc_output(msg_type);
+    Ok(())
 }
 
 /// A simple wrapper enum for `petgraph::Direction`,
@@ -1421,6 +1477,10 @@ where
                     if let Some(cnx_missions) = &c.missions {
                         // if there is a filter by mission on the connection, only add the connection to the mission if it matches the filter.
                         if cnx_missions.contains(&mission_id.to_owned()) {
+                            if c.dst == NC_ENDPOINT {
+                                register_nc_output::<E>(graph, &c.src, &c.msg, &bridge_lookup)?;
+                                continue;
+                            }
                             let (src_name, src_channel) =
                                 parse_endpoint(&c.src, EndpointRole::Source, &bridge_lookup)
                                     .map_err(E::from)?;
@@ -1452,6 +1512,10 @@ where
                         }
                     } else {
                         // if there is no filter by mission on the connection, add the connection to the mission.
+                        if c.dst == NC_ENDPOINT {
+                            register_nc_output::<E>(graph, &c.src, &c.msg, &bridge_lookup)?;
+                            continue;
+                        }
                         let (src_name, src_channel) =
                             parse_endpoint(&c.src, EndpointRole::Source, &bridge_lookup)
                                 .map_err(E::from)?;
@@ -1495,6 +1559,10 @@ where
 
         if let Some(cnx) = &representation.cnx {
             for c in cnx {
+                if c.dst == NC_ENDPOINT {
+                    register_nc_output::<E>(&mut graph, &c.src, &c.msg, &bridge_lookup)?;
+                    continue;
+                }
                 let (src_name, src_channel) =
                     parse_endpoint(&c.src, EndpointRole::Source, &bridge_lookup)
                         .map_err(E::from)?;
@@ -1572,6 +1640,21 @@ impl Serialize for CuConfig {
                     .edge_indices()
                     .map(|edge| SerializedCnx::from(&graph.0[edge]))
                     .collect();
+                let mut cnx = cnx;
+                for node_idx in graph.0.node_indices() {
+                    let node = &graph.0[node_idx];
+                    if node.get_flavor() != Flavor::Task {
+                        continue;
+                    }
+                    for msg in node.nc_outputs() {
+                        cnx.push(SerializedCnx {
+                            src: node.get_id(),
+                            dst: NC_ENDPOINT.to_string(),
+                            msg: msg.clone(),
+                            missions: None,
+                        });
+                    }
+                }
 
                 CuConfigRepresentation {
                     tasks: Some(tasks),
@@ -1617,6 +1700,27 @@ impl Serialize for CuConfig {
                                 && c.msg == serialized.msg
                         }) {
                             cnx.push(serialized);
+                        }
+                    }
+                    for node_idx in graph.0.node_indices() {
+                        let node = &graph.0[node_idx];
+                        if node.get_flavor() != Flavor::Task {
+                            continue;
+                        }
+                        for msg in node.nc_outputs() {
+                            let serialized = SerializedCnx {
+                                src: node.get_id(),
+                                dst: NC_ENDPOINT.to_string(),
+                                msg: msg.clone(),
+                                missions: None,
+                            };
+                            if !cnx.iter().any(|c: &SerializedCnx| {
+                                c.src == serialized.src
+                                    && c.dst == serialized.dst
+                                    && c.msg == serialized.msg
+                            }) {
+                                cnx.push(serialized);
+                            }
                         }
                     }
                 }
@@ -3349,5 +3453,43 @@ mod tests {
         let config = CuConfig::deserialize_ron(txt).unwrap();
         let logging_config = config.logging.unwrap();
         assert_eq!(logging_config.keyframe_interval.unwrap(), 100);
+    }
+
+    #[test]
+    fn test_nc_connection_marks_source_output_without_creating_edge() {
+        let txt = r#"(
+            tasks: [(id: "src", type: "a"), (id: "sink", type: "b")],
+            cnx: [
+                (src: "src", dst: "sink", msg: "msg::A"),
+                (src: "src", dst: "__nc__", msg: "msg::B"),
+            ]
+        )"#;
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let graph = config.get_graph(None).unwrap();
+        let src_id = graph.get_node_id_by_name("src").unwrap();
+        let src_node = graph.get_node(src_id).unwrap();
+
+        assert_eq!(graph.edge_count(), 1);
+        assert_eq!(src_node.nc_outputs(), &["msg::B".to_string()]);
+    }
+
+    #[test]
+    fn test_nc_connection_survives_serialize_roundtrip() {
+        let txt = r#"(
+            tasks: [(id: "src", type: "a"), (id: "sink", type: "b")],
+            cnx: [
+                (src: "src", dst: "sink", msg: "msg::A"),
+                (src: "src", dst: "__nc__", msg: "msg::B"),
+            ]
+        )"#;
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let serialized = config.serialize_ron().unwrap();
+        let deserialized = CuConfig::deserialize_ron(&serialized).unwrap();
+        let graph = deserialized.get_graph(None).unwrap();
+        let src_id = graph.get_node_id_by_name("src").unwrap();
+        let src_node = graph.get_node(src_id).unwrap();
+
+        assert_eq!(graph.edge_count(), 1);
+        assert_eq!(src_node.nc_outputs(), &["msg::B".to_string()]);
     }
 }

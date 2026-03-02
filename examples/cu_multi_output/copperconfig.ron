@@ -30,11 +30,6 @@
             missions: ["both_inputs"],
         ),
         (
-            id: "drop_bool",
-            type: "tasks::DropBoolSink",
-            missions: ["open_output"],
-        ),
-        (
             id: "loopback",
             type: "tasks::LoopbackTask",
             missions: ["loopback"],
@@ -73,7 +68,9 @@
         ),
         (
             src: "src",
-            dst: "drop_bool",
+            // "__nc__" means this output is intentionally left unconnected in this mission.
+            // It keeps the source multi-output shape explicit without wiring a real sink.
+            dst: "__nc__",
             msg: "bool",
             missions: ["open_output"],
         ),

@@ -2,7 +2,12 @@
     tasks: [
         (
             id: "src",
-            type: "MultiSource",
+            type: "IntSource",
+            run_in_sim: true,
+        ),
+        (
+            id: "regular",
+            type: "MultiRegular",
             run_in_sim: true,
         ),
         (
@@ -14,11 +19,16 @@
     cnx: [
         (
             src: "src",
+            dst: "regular",
+            msg: "i32",
+        ),
+        (
+            src: "regular",
             dst: "sink",
             msg: "i32",
         ),
         (
-            src: "src",
+            src: "regular",
             dst: "__nc__",
             msg: "bool",
         ),

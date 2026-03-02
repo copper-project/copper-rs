@@ -17,10 +17,5 @@
             dst: "sink",
             msg: "i32",
         ),
-        (
-            src: "src",
-            dst: "__nc__",
-            msg: "bool",
-        ),
     ],
 )

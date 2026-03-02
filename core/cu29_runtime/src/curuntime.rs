@@ -778,6 +778,15 @@ fn collect_output_msg_types(graph: &CuGraph, node_id: NodeId) -> Vec<String> {
             msg_types.push(edge.msg.clone());
         }
     }
+    if let Some(node) = graph.get_node(node_id) {
+        for msg in node.nc_outputs() {
+            if seen.iter().any(|existing| existing == msg) {
+                continue;
+            }
+            seen.push(msg.clone());
+            msg_types.push(msg.clone());
+        }
+    }
     msg_types
 }
 /// Explores a subbranch and build the partial plan out of it.
@@ -1397,6 +1406,41 @@ mod tests {
 
         let output_pack = src_step.output_msg_pack.as_ref().unwrap();
         assert_eq!(output_pack.msg_types, vec!["i32"]);
+    }
+
+    #[test]
+    fn test_runtime_output_ports_include_nc_outputs() {
+        let mut config = CuConfig::default();
+        let graph = config.get_graph_mut(None).unwrap();
+        let src_id = graph.add_node(Node::new("src", "Source")).unwrap();
+        let dst_id = graph.add_node(Node::new("dst", "Sink")).unwrap();
+        graph.connect(src_id, dst_id, "msg::A").unwrap();
+        graph
+            .get_node_mut(src_id)
+            .expect("missing source node")
+            .add_nc_output("msg::B");
+
+        let runtime = compute_runtime_plan(graph).unwrap();
+        let src_step = runtime
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                CuExecutionUnit::Step(step) if step.node_id == src_id => Some(step),
+                _ => None,
+            })
+            .unwrap();
+        let dst_step = runtime
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                CuExecutionUnit::Step(step) if step.node_id == dst_id => Some(step),
+                _ => None,
+            })
+            .unwrap();
+
+        let output_pack = src_step.output_msg_pack.as_ref().unwrap();
+        assert_eq!(output_pack.msg_types, vec!["msg::A", "msg::B"]);
+        assert_eq!(dst_step.input_msg_indices_types[0].src_port, 0);
     }
 
     #[test]
