@@ -12,12 +12,13 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-cu29 = { workspace = true }
-cu-linux-resources = { workspace = true }
-cu-gnss-payloads = { workspace = true }
+cu29 = { path = "../../../core/cu29", version = "0.13.0", default-features = false }
+cu-linux-resources = { workspace = true, optional = true }
+cu-gnss-payloads = { path = "../../payloads/cu_gnss_payloads", version = "0.13.0", default-features = false }
+embedded-io = "0.6"
 
 [features]
 default = ["std"]
-std = ["cu29/std", "cu-gnss-payloads/std"]
+std = ["cu29/std", "cu-gnss-payloads/std", "dep:cu-linux-resources"]
 textlogs = ["cu29/textlogs", "cu-gnss-payloads/textlogs"]
 reflect = ["cu29/reflect", "cu-gnss-payloads/reflect"]

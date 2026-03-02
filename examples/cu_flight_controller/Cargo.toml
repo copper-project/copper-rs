@@ -50,6 +50,8 @@ cu-ahrs = { path = "../../components/tasks/cu_ahrs", default-features = false, o
 cu-bmi088 = { path = "../../components/sources/cu_bmi088", default-features = false, optional = true }
 cu-dps310 = { path = "../../components/sources/cu_dps310", default-features = false, optional = true }
 cu-ist8310 = { path = "../../components/sources/cu_ist8310", default-features = false, optional = true }
+cu-gnss-payloads = { path = "../../components/payloads/cu_gnss_payloads", default-features = false, version = "0.13.0", optional = true }
+cu-gnss-ublox = { path = "../../components/sources/cu_gnss_ublox", version = "0.13.0", default-features = false, optional = true }
 
 ### Algos
 cu-pid = { path = "../../components/tasks/cu_pid", default-features = false, version = "0.13.0" }
@@ -164,6 +166,8 @@ firmware = [
   "dep:cu-bmi088",
   "dep:cu-dps310",
   "dep:cu-ist8310",
+  "dep:cu-gnss-payloads",
+  "dep:cu-gnss-ublox",
   "cu-bmi088/defmt",
   "cu-dps310/defmt",
   "cu-ist8310/defmt",
@@ -205,6 +209,9 @@ sim = [
   "dep:avian3d",
   "dep:cached-path",
   "dep:evdev",
+  "dep:cu-gnss-payloads",
+  "dep:cu-gnss-ublox",
+  "cu-gnss-ublox/std",
 ]
 
 [[bin]]

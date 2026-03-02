@@ -26,9 +26,13 @@ use bevy::prelude::{
 use bevy::window::PrimaryWindow;
 use cached_path::{Cache, Error as CacheError, ProgressBar};
 use cu29::prelude::*;
+use cu29::units::si::angle::degree;
+use cu29::units::si::f32::{Angle, Length};
+use cu29::units::si::length::meter;
 use cu29_helpers::basic_copper_setup;
 
 use cu_crsf::messages::RcChannelsPayload;
+use cu_gnss_payloads::{GnssFixSolution, GnssFixType};
 use cu_msp_bridge::MspRequestBatch;
 use cu_msp_lib::structs::{
     MSP_DP_CLEAR_SCREEN, MSP_DP_DRAW_SCREEN, MSP_DP_WRITE_STRING, MspDisplayPort, MspRequest,
@@ -65,7 +69,7 @@ impl Default for SimVehicleState {
 #[derive(Resource)]
 struct CopperState {
     _ctx: CopperContext,
-    app: FlightControllerSim,
+    app: gnss::FlightControllerSim,
 }
 
 #[derive(Resource, Default, Clone)]
@@ -316,6 +320,8 @@ const LOCAL_CITY_BBOX_MAX_UNITS: Vec3 = Vec3::new(18_754.953, 11_102.407, 35_871
 // Source appears to be authored in centimeters; convert units to meters.
 const LOCAL_CITY_SCALE: f32 = 0.01;
 const SIM_SPAWN_POSITION: Vec3 = Vec3::new(-10.0, 1.0, 20.0);
+const GNSS_SIM_ORIGIN_LAT_DEG: f32 = 30.389861114639405_f64 as f32;
+const GNSS_SIM_ORIGIN_LON_DEG: f32 = -97.69316827380047_f64 as f32;
 const ARM_SWITCH_NAMES: &[&str] = &["sf", "se", "arm", "btn1"];
 const KEYBOARD_HOVER_THROTTLE_LOW: f32 = 0.56;
 const KEYBOARD_HOVER_THROTTLE_HIGH: f32 = 0.62;
@@ -421,7 +427,7 @@ fn quad_x_propellers() -> Vec<PropellerInfo> {
     ]
 }
 
-fn default_callback(_step: default::SimStep) -> SimOverride {
+fn default_callback(_step: gnss::SimStep) -> SimOverride {
     SimOverride::ExecuteByRuntime
 }
 
@@ -484,7 +490,7 @@ fn setup_copper(mut commands: Commands) {
     let ctx = basic_copper_setup(&PathBuf::from(logger_path), LOG_SLAB_SIZE, true, None)
         .expect("failed to setup logger");
 
-    let mut app = FlightControllerSimBuilder::new()
+    let mut app = gnss::FlightControllerSimBuilder::new()
         .with_context(&ctx)
         .with_sim_callback(&mut default_callback)
         .build()
@@ -986,9 +992,9 @@ fn run_copper(
     let clock = copper._ctx.clock.clone();
     let dshot = &mut motor_commands.dshot;
 
-    let mut sim_callback = move |step: default::SimStep| -> SimOverride {
+    let mut sim_callback = move |step: gnss::SimStep| -> SimOverride {
         match step {
-            default::SimStep::Bmi088(CuTaskCallbackState::Process(_, output)) => {
+            gnss::SimStep::Bmi088(CuTaskCallbackState::Process(_, output)) => {
                 set_msg_timing(&clock, output);
                 output.set_payload(ImuPayload::from_raw(
                     vehicle.body_accel_fc,
@@ -997,14 +1003,14 @@ fn run_copper(
                 ));
                 SimOverride::ExecutedBySim
             }
-            default::SimStep::Dps310(CuTaskCallbackState::Process(_, output)) => {
+            gnss::SimStep::Dps310(CuTaskCallbackState::Process(_, output)) => {
                 let altitude_m = vehicle.position.y.max(-100.0);
                 let pressure_pa = 101_325.0 * (1.0 - altitude_m / 44_330.0).powf(5.255);
                 set_msg_timing(&clock, output);
                 output.set_payload(BarometerPayload::from_raw(pressure_pa, 25.0));
                 SimOverride::ExecutedBySim
             }
-            default::SimStep::Ist8310(CuTaskCallbackState::Process(_, output)) => {
+            gnss::SimStep::Ist8310(CuTaskCallbackState::Process(_, output)) => {
                 let world_mag = Vec3::from_array(WORLD_MAG_FIELD_UT);
                 let body_mag = vehicle.rotation.inverse() * world_mag;
                 set_msg_timing(&clock, output);
@@ -1013,7 +1019,24 @@ fn run_copper(
                 )));
                 SimOverride::ExecutedBySim
             }
-            default::SimStep::RcRxRcRx { msg, .. } => {
+            gnss::SimStep::GnssUblox(CuTaskCallbackState::Process((), output)) => {
+                let mut fix = GnssFixSolution {
+                    fix_type: GnssFixType::Fix3D,
+                    gnss_fix_ok: true,
+                    invalid_llh: false,
+                    num_satellites_used: 14,
+                    ..GnssFixSolution::default()
+                };
+                fix.latitude = Angle::new::<degree>(GNSS_SIM_ORIGIN_LAT_DEG);
+                fix.longitude = Angle::new::<degree>(GNSS_SIM_ORIGIN_LON_DEG);
+                fix.height_ellipsoid = Length::new::<meter>(225.0);
+                fix.height_msl = Length::new::<meter>(212.0);
+
+                set_msg_timing(&clock, output);
+                output.set_payload(fix);
+                SimOverride::ExecutedBySim
+            }
+            gnss::SimStep::RcRxRcRx { msg, .. } => {
                 let mut payload = RcChannelsPayload::default();
                 let channels = &mut payload.inner_mut().0;
                 channels[0] = axis_to_rc(rc.roll);
@@ -1031,23 +1054,23 @@ fn run_copper(
                 msg.set_payload(payload);
                 SimOverride::ExecutedBySim
             }
-            default::SimStep::BdshotTxEsc0Tx { msg, .. } => {
+            gnss::SimStep::BdshotTxEsc0Tx { msg, .. } => {
                 dshot[0] = msg.payload().map_or(0, |c| c.throttle);
                 SimOverride::ExecuteByRuntime
             }
-            default::SimStep::BdshotTxEsc1Tx { msg, .. } => {
+            gnss::SimStep::BdshotTxEsc1Tx { msg, .. } => {
                 dshot[1] = msg.payload().map_or(0, |c| c.throttle);
                 SimOverride::ExecuteByRuntime
             }
-            default::SimStep::BdshotTxEsc2Tx { msg, .. } => {
+            gnss::SimStep::BdshotTxEsc2Tx { msg, .. } => {
                 dshot[2] = msg.payload().map_or(0, |c| c.throttle);
                 SimOverride::ExecuteByRuntime
             }
-            default::SimStep::BdshotTxEsc3Tx { msg, .. } => {
+            gnss::SimStep::BdshotTxEsc3Tx { msg, .. } => {
                 dshot[3] = msg.payload().map_or(0, |c| c.throttle);
                 SimOverride::ExecuteByRuntime
             }
-            default::SimStep::VtxMspTxRequests { msg, .. } => {
+            gnss::SimStep::VtxMspTxRequests { msg, .. } => {
                 if let Some(batch) = msg.payload() {
                     osd_overlay.apply_batch(batch);
                 }
