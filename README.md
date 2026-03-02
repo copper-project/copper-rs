@@ -26,7 +26,7 @@
 
 ### Showcasing copper-rs
 
-Flying - Driving - Swimming - Spacefaring - Humanoids
+✈️ Flying | 🚗 Driving | 🌊 Swimming | 🚀 Spacefaring | 🤖 Humanoids
 
 [![Copper in virtual action](https://github.com/user-attachments/assets/27ab8b08-ef17-4283-a1cf-8d4271595ef6)](https://youtu.be/weV_JYaUsmo)
 
