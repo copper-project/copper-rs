@@ -96,6 +96,120 @@ macro_rules! output_msg {
     };
 }
 
+/// Typed lookup on a source output pack (`CuMsg<T>` or tuple of `CuMsg<...>`).
+/// This enables routing a subset of a multi-output source without forcing wrappers.
+pub trait CuOutputGet<T: CuMsgPayload + 'static> {
+    fn output_msg(&self) -> &CuMsg<T>;
+}
+
+impl<T: CuMsgPayload + 'static> CuOutputGet<T> for CuMsg<T> {
+    #[inline]
+    fn output_msg(&self) -> &CuMsg<T> {
+        self
+    }
+}
+
+macro_rules! impl_cu_output_get_tuple {
+    ($($idx:tt => $name:ident),+) => {
+        impl<T, $($name),+> CuOutputGet<T> for ($(CuMsg<$name>,)+)
+        where
+            T: CuMsgPayload + 'static,
+            $($name: CuMsgPayload + 'static),+
+        {
+            fn output_msg(&self) -> &CuMsg<T> {
+                $(
+                    if TypeId::of::<T>() == TypeId::of::<$name>() {
+                        let msg = &self.$idx;
+                        // SAFETY: TypeId equality proves T == $name.
+                        return unsafe { &*(msg as *const CuMsg<$name> as *const CuMsg<T>) };
+                    }
+                )+
+                panic!(
+                    "Requested output message type '{}' is not present in source output tuple",
+                    type_name::<T>()
+                );
+            }
+        }
+    };
+}
+
+impl_cu_output_get_tuple!(0 => T1, 1 => T2);
+impl_cu_output_get_tuple!(0 => T1, 1 => T2, 2 => T3);
+impl_cu_output_get_tuple!(0 => T1, 1 => T2, 2 => T3, 3 => T4);
+impl_cu_output_get_tuple!(0 => T1, 1 => T2, 2 => T3, 3 => T4, 4 => T5);
+impl_cu_output_get_tuple!(0 => T1, 1 => T2, 2 => T3, 3 => T4, 4 => T5, 5 => T6);
+impl_cu_output_get_tuple!(0 => T1, 1 => T2, 2 => T3, 3 => T4, 4 => T5, 5 => T6, 6 => T7);
+impl_cu_output_get_tuple!(0 => T1, 1 => T2, 2 => T3, 3 => T4, 4 => T5, 5 => T6, 6 => T7, 7 => T8);
+impl_cu_output_get_tuple!(0 => T1, 1 => T2, 2 => T3, 3 => T4, 4 => T5, 5 => T6, 6 => T7, 7 => T8, 8 => T9);
+impl_cu_output_get_tuple!(0 => T1, 1 => T2, 2 => T3, 3 => T4, 4 => T5, 5 => T6, 6 => T7, 7 => T8, 8 => T9, 9 => T10);
+impl_cu_output_get_tuple!(0 => T1, 1 => T2, 2 => T3, 3 => T4, 4 => T5, 5 => T6, 6 => T7, 7 => T8, 8 => T9, 9 => T10, 10 => T11);
+impl_cu_output_get_tuple!(0 => T1, 1 => T2, 2 => T3, 3 => T4, 4 => T5, 5 => T6, 6 => T7, 7 => T8, 8 => T9, 9 => T10, 10 => T11, 11 => T12);
+
+/// Projection from a source output pack into the connected output slot type.
+pub trait CuOutputProject<Src> {
+    fn project_from(src: &Src, dst: &mut Self);
+}
+
+impl<Src, T> CuOutputProject<Src> for CuMsg<T>
+where
+    Src: CuOutputGet<T>,
+    T: CuMsgPayload + 'static,
+{
+    fn project_from(src: &Src, dst: &mut Self) {
+        let src_msg = src.output_msg();
+        let prev_process_time = dst.metadata.process_time;
+
+        dst.clear_payload();
+        dst.tov = src_msg.tov;
+        if let Some(payload) = src_msg.payload() {
+            dst.set_payload(payload.clone());
+        }
+
+        dst.metadata = src_msg.metadata.clone();
+        if dst.metadata.process_time.start.is_none() {
+            dst.metadata.process_time.start = prev_process_time.start;
+        }
+        if dst.metadata.process_time.end.is_none() {
+            dst.metadata.process_time.end = prev_process_time.end;
+        }
+    }
+}
+
+macro_rules! impl_cu_output_project_tuple {
+    ($($idx:tt => $name:ident),+) => {
+        impl<Src, $($name),+> CuOutputProject<Src> for ($(CuMsg<$name>,)+)
+        where
+            $(CuMsg<$name>: CuOutputProject<Src>, $name: CuMsgPayload + 'static),+
+        {
+            fn project_from(src: &Src, dst: &mut Self) {
+                $(
+                    <CuMsg<$name> as CuOutputProject<Src>>::project_from(src, &mut dst.$idx);
+                )+
+            }
+        }
+    };
+}
+
+impl_cu_output_project_tuple!(0 => T1, 1 => T2);
+impl_cu_output_project_tuple!(0 => T1, 1 => T2, 2 => T3);
+impl_cu_output_project_tuple!(0 => T1, 1 => T2, 2 => T3, 3 => T4);
+impl_cu_output_project_tuple!(0 => T1, 1 => T2, 2 => T3, 3 => T4, 4 => T5);
+impl_cu_output_project_tuple!(0 => T1, 1 => T2, 2 => T3, 3 => T4, 4 => T5, 5 => T6);
+impl_cu_output_project_tuple!(0 => T1, 1 => T2, 2 => T3, 3 => T4, 4 => T5, 5 => T6, 6 => T7);
+impl_cu_output_project_tuple!(0 => T1, 1 => T2, 2 => T3, 3 => T4, 4 => T5, 5 => T6, 6 => T7, 7 => T8);
+impl_cu_output_project_tuple!(0 => T1, 1 => T2, 2 => T3, 3 => T4, 4 => T5, 5 => T6, 6 => T7, 7 => T8, 8 => T9);
+impl_cu_output_project_tuple!(0 => T1, 1 => T2, 2 => T3, 3 => T4, 4 => T5, 5 => T6, 6 => T7, 7 => T8, 8 => T9, 9 => T10);
+impl_cu_output_project_tuple!(0 => T1, 1 => T2, 2 => T3, 3 => T4, 4 => T5, 5 => T6, 6 => T7, 7 => T8, 8 => T9, 9 => T10, 10 => T11);
+impl_cu_output_project_tuple!(0 => T1, 1 => T2, 2 => T3, 3 => T4, 4 => T5, 5 => T6, 6 => T7, 7 => T8, 8 => T9, 9 => T10, 10 => T11, 11 => T12);
+
+#[inline]
+pub fn project_output<Src, Dst>(src: &Src, dst: &mut Dst)
+where
+    Dst: CuOutputProject<Src>,
+{
+    Dst::project_from(src, dst);
+}
+
 /// CuMsgMetadata is a structure that contains metadata common to all CuStampedDataSet.
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, Serialize, Deserialize)]
 pub struct CuMsgMetadata {

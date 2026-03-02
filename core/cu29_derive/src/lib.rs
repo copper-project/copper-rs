@@ -4566,12 +4566,14 @@ fn generate_task_execution_tokens(
                                 step: CuComponentState::Process,
                                 culistid: Some(clid),
                             });
+                            let mut __cu_full_output = Default::default();
                             #output_start_time
                             let result = {
                                 #rt_guard
                                 ctx.set_current_task(#tid);
-                                #task_instance.process(&ctx, cumsg_output)
+                                #task_instance.process(&ctx, &mut __cu_full_output)
                             };
+                            cu29::cutask::project_output(&__cu_full_output, cumsg_output);
                             #output_end_time
                             result
                         } else {
