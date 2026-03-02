@@ -28,7 +28,7 @@
 
 Flying - Driving - Swimming - Spacefaring - Humanoids
 
-[![Copper in virtual action](https://github.com/user-attachments/assets/27ab8b08-ef17-4283-a1cf-8d4271595ef6)](https://youtu.be/weV_JYaUsmo))
+[![Copper in virtual action](https://github.com/user-attachments/assets/27ab8b08-ef17-4283-a1cf-8d4271595ef6)](https://youtu.be/weV_JYaUsmo)
 
 ### You don't have a real robot yet? Try it in our toy example right now in a sim environment!
 
