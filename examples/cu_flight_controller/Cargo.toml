@@ -210,8 +210,6 @@ sim = [
   "dep:cached-path",
   "dep:evdev",
   "dep:cu-gnss-payloads",
-  "dep:cu-gnss-ublox",
-  "cu-gnss-ublox/std",
 ]
 
 [[bin]]

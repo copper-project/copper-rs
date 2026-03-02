@@ -26,13 +26,9 @@ use bevy::prelude::{
 use bevy::window::PrimaryWindow;
 use cached_path::{Cache, Error as CacheError, ProgressBar};
 use cu29::prelude::*;
-use cu29::units::si::angle::degree;
-use cu29::units::si::f32::{Angle, Length};
-use cu29::units::si::length::meter;
 use cu29_helpers::basic_copper_setup;
 
 use cu_crsf::messages::RcChannelsPayload;
-use cu_gnss_payloads::{GnssFixSolution, GnssFixType};
 use cu_msp_bridge::MspRequestBatch;
 use cu_msp_lib::structs::{
     MSP_DP_CLEAR_SCREEN, MSP_DP_DRAW_SCREEN, MSP_DP_WRITE_STRING, MspDisplayPort, MspRequest,
@@ -320,8 +316,6 @@ const LOCAL_CITY_BBOX_MAX_UNITS: Vec3 = Vec3::new(18_754.953, 11_102.407, 35_871
 // Source appears to be authored in centimeters; convert units to meters.
 const LOCAL_CITY_SCALE: f32 = 0.01;
 const SIM_SPAWN_POSITION: Vec3 = Vec3::new(-10.0, 1.0, 20.0);
-const GNSS_SIM_ORIGIN_LAT_DEG: f32 = 30.389861114639405_f64 as f32;
-const GNSS_SIM_ORIGIN_LON_DEG: f32 = -97.69316827380047_f64 as f32;
 const ARM_SWITCH_NAMES: &[&str] = &["sf", "se", "arm", "btn1"];
 const KEYBOARD_HOVER_THROTTLE_LOW: f32 = 0.56;
 const KEYBOARD_HOVER_THROTTLE_HIGH: f32 = 0.62;
@@ -1017,23 +1011,6 @@ fn run_copper(
                 output.set_payload(MagnetometerPayload::from_raw(map_bevy_body_to_fc_axial(
                     body_mag,
                 )));
-                SimOverride::ExecutedBySim
-            }
-            gnss::SimStep::GnssUblox(CuTaskCallbackState::Process((), output)) => {
-                let mut fix = GnssFixSolution {
-                    fix_type: GnssFixType::Fix3D,
-                    gnss_fix_ok: true,
-                    invalid_llh: false,
-                    num_satellites_used: 14,
-                    ..GnssFixSolution::default()
-                };
-                fix.latitude = Angle::new::<degree>(GNSS_SIM_ORIGIN_LAT_DEG);
-                fix.longitude = Angle::new::<degree>(GNSS_SIM_ORIGIN_LON_DEG);
-                fix.height_ellipsoid = Length::new::<meter>(225.0);
-                fix.height_msl = Length::new::<meter>(212.0);
-
-                set_msg_timing(&clock, output);
-                output.set_payload(fix);
                 SimOverride::ExecutedBySim
             }
             gnss::SimStep::RcRxRcRx { msg, .. } => {

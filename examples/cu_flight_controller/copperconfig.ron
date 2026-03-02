@@ -184,7 +184,7 @@
             id: "gnss_ublox",
             type: "tasks::gnss::GnssSource",
             missions: ["gnss"],
-            run_in_sim: false,
+            run_in_sim: true,
             logging: (enabled: false),
             resources: {"serial": "fc.uart3"},
             config: {
