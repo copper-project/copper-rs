@@ -256,7 +256,7 @@ impl CuTask for MagneticTrueHeading {
         }
 
         let heading_deg = libm::atan2f(mag_y, mag_x).to_degrees() + self.declination_deg;
-        let heading_deg = heading_deg.rem_euclid(360.0);
+        let heading_deg = wrap_heading_deg(heading_deg);
         if !heading_deg.is_finite() {
             status_if_not_firmware!(output.metadata, "hdg bad");
             output.clear_payload();
@@ -1213,6 +1213,14 @@ fn apply_expo(value: f32, expo: f32) -> f32 {
     let abs = value.abs();
     let weight = expo * abs * abs * abs + (1.0 - expo);
     value * weight
+}
+
+fn wrap_heading_deg(value: f32) -> f32 {
+    let mut wrapped = libm::fmodf(value, 360.0);
+    if wrapped < 0.0 {
+        wrapped += 360.0;
+    }
+    wrapped
 }
 
 fn cfg_f32(config: Option<&ComponentConfig>, key: &str, default: f32) -> CuResult<f32> {

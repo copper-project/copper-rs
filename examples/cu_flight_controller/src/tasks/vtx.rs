@@ -454,7 +454,8 @@ impl VtxOsd {
     fn format_heading(&self) -> alloc::string::String {
         match self.last_heading_deg {
             Some(heading_deg) if heading_deg.is_finite() => {
-                let rounded = libm::roundf(heading_deg.rem_euclid(360.0)) as i32;
+                let normalized = wrap_heading_deg(heading_deg);
+                let rounded = libm::roundf(normalized) as i32;
                 let wrapped = if rounded >= 360 { 0 } else { rounded.max(0) };
                 alloc::format!("{wrapped:03}{VTX_SYM_DEGREE}")
             }
@@ -529,6 +530,15 @@ fn format_altitude_field_no_spaces(altitude_m: f32) -> alloc::string::String {
         alloc::format!("{whole:04}.{frac}")
     }
 }
+
+fn wrap_heading_deg(value: f32) -> f32 {
+    let mut wrapped = libm::fmodf(value, 360.0);
+    if wrapped < 0.0 {
+        wrapped += 360.0;
+    }
+    wrapped
+}
+
 fn build_msp_status(armed: bool) -> MspStatus {
     let mut flight_mode_flags = 0;
     if armed {
