@@ -1,4 +1,4 @@
-use crate::messages::{BatteryVoltage, ControlInputs, FlightMode};
+use crate::messages::{BatteryVoltage, ControlInputs, FlightMode, GeographicHeading};
 use crate::tasks;
 use crate::tasks::{
     BATTERY_CURRENT_METER_SOURCE_NONE, BATTERY_MAX_CELL_CENTIVOLTS_DEFAULT,
@@ -17,11 +17,13 @@ use cu_msp_lib::structs::{
     MspFlightControllerVersion, MspRequest, MspStatus, MspStatusSensors, MspVoltageMeter,
     MspVoltageMeterConfig,
 };
-use cu_sensor_payloads::{BarometerPayload, ImuPayload};
+use cu_sensor_payloads::BarometerPayload;
 use cu29::prelude::*;
+use cu29::units::si::angle::degree;
 use cu29::units::si::electric_potential::volt;
 
 const VTX_SYM_VOLT: char = '\x06';
+const VTX_SYM_DEGREE: char = '\x08';
 const VTX_SYM_ALTITUDE: char = '\x7f';
 const VTX_SYM_METER: char = '\x0c';
 const VTX_ALT_UNKNOWN: &str = "---.-";
@@ -50,6 +52,8 @@ pub struct VtxOsd {
     cols: u8,
     rows: u8,
     col_center: u8,
+    heading_row: u8,
+    heading_col_center: u8,
     alt_row: u8,
     alt_col: u8,
     watermark_row: u8,
@@ -64,6 +68,7 @@ pub struct VtxOsd {
     pressure_sum_pa: f32,
     pressure_samples: u32,
     last_pressure_pa: Option<f32>,
+    last_heading_deg: Option<f32>,
 }
 
 impl Freezable for VtxOsd {}
@@ -72,8 +77,8 @@ impl CuTask for VtxOsd {
     type Input<'m> = input_msg!(
         'm,
         ControlInputs,
-        ImuPayload,
         BarometerPayload,
+        GeographicHeading,
         BatteryVoltage,
         MspRequestBatch
     );
@@ -94,6 +99,10 @@ impl CuTask for VtxOsd {
         let col_center = tasks::cfg_u16(config, "col_center", default_center)?
             .min(cols.saturating_sub(1) as u16) as u8;
         let row = tasks::cfg_u16(config, "row", 13)?.min(u8::MAX as u16) as u8;
+        let heading_row =
+            tasks::cfg_u16(config, "heading_row", 0)?.min(rows.saturating_sub(1) as u16) as u8;
+        let heading_col_center = tasks::cfg_u16(config, "heading_col_center", default_center)?
+            .min(cols.saturating_sub(1) as u16) as u8;
         let default_alt_col = cols.saturating_sub(19) as u16;
         let alt_row =
             tasks::cfg_u16(config, "alt_row", 7)?.min(rows.saturating_sub(1) as u16) as u8;
@@ -110,6 +119,8 @@ impl CuTask for VtxOsd {
             cols,
             rows,
             col_center,
+            heading_row,
+            heading_col_center,
             alt_row,
             alt_col,
             watermark_row,
@@ -124,6 +135,7 @@ impl CuTask for VtxOsd {
             pressure_sum_pa: 0.0,
             pressure_samples: 0,
             last_pressure_pa: None,
+            last_heading_deg: None,
         })
     }
 
@@ -133,12 +145,16 @@ impl CuTask for VtxOsd {
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
-        let (ctrl_msg, imu_msg, baro_msg, batt_msg, incoming_msg) = *input;
+        let (ctrl_msg, baro_msg, heading_msg, batt_msg, incoming_msg) = *input;
         let tov_time = tasks::expect_tov_time(ctrl_msg.tov)?;
         output.tov = Tov::Time(tov_time);
         let now = tov_time;
         let mut batch = MspRequestBatch::new();
         let ctrl = ctrl_msg.payload();
+
+        if let Some(heading) = heading_msg.payload() {
+            self.last_heading_deg = Some(heading.heading.get::<degree>());
+        }
 
         if let Some(voltage) = batt_msg.payload() {
             self.last_voltage_centi = Some(voltage_to_centivolts(voltage.voltage.get::<volt>()));
@@ -155,7 +171,7 @@ impl CuTask for VtxOsd {
             self.last_mode = ctrl.mode;
         }
         let armed = self.last_armed;
-        let calibrating = armed && imu_msg.payload().is_none();
+        let calibrating = false;
 
         if !armed {
             self.takeoff_pressure_pa = None;
@@ -235,6 +251,7 @@ impl CuTask for VtxOsd {
             batch.push(MspRequest::MspDisplayPort(MspDisplayPort::write_string(
                 self.row, col, 0, text,
             )))?;
+            self.push_heading(&mut batch)?;
             self.push_cell_voltage(&mut batch)?;
             self.push_relative_altitude(&mut batch)?;
             self.push_watermark(&mut batch)?;
@@ -246,6 +263,7 @@ impl CuTask for VtxOsd {
             .unwrap_or(true);
         if label_changed || draw_due {
             if !label_changed {
+                self.push_heading(&mut batch)?;
                 self.push_cell_voltage(&mut batch)?;
                 self.push_relative_altitude(&mut batch)?;
                 self.push_watermark(&mut batch)?;
@@ -269,6 +287,32 @@ impl CuTask for VtxOsd {
 }
 
 impl VtxOsd {
+    fn push_heading(&self, batch: &mut MspRequestBatch) -> CuResult<()> {
+        if self.rows == 0 || self.cols == 0 {
+            return Ok(());
+        }
+        let row = self.heading_row.min(self.rows.saturating_sub(1));
+        let text = self.format_heading();
+        let width = text.len() as u8;
+        let col = if self.cols <= width {
+            0
+        } else {
+            let half = width / 2;
+            let mut col = self.heading_col_center.saturating_sub(half);
+            if col.saturating_add(width) > self.cols {
+                col = self.cols.saturating_sub(width);
+            }
+            col
+        };
+        batch.push(MspRequest::MspDisplayPort(MspDisplayPort::write_string(
+            row,
+            col,
+            0,
+            text.as_str(),
+        )))?;
+        Ok(())
+    }
+
     fn handle_incoming_requests(
         &self,
         batch: &mut MspRequestBatch,
@@ -406,6 +450,18 @@ impl VtxOsd {
             _ => alloc::format!("{VTX_SYM_ALTITUDE}{VTX_ALT_UNKNOWN}{VTX_SYM_METER}"),
         }
     }
+
+    fn format_heading(&self) -> alloc::string::String {
+        match self.last_heading_deg {
+            Some(heading_deg) if heading_deg.is_finite() => {
+                let rounded = libm::roundf(heading_deg.rem_euclid(360.0)) as i32;
+                let wrapped = if rounded >= 360 { 0 } else { rounded.max(0) };
+                alloc::format!("{wrapped:03}{VTX_SYM_DEGREE}")
+            }
+            _ => alloc::format!("---{VTX_SYM_DEGREE}"),
+        }
+    }
+
     fn push_watermark(&self, batch: &mut MspRequestBatch) -> CuResult<()> {
         if self.rows == 0 || self.cols == 0 {
             return Ok(());

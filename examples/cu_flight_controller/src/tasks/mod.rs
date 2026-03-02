@@ -1,21 +1,21 @@
 #![allow(dead_code)]
 
-use crate::messages::{BatteryVoltage, BodyCommand, BodyRateSetpoint, ControlInputs, FlightMode};
+use crate::messages::{
+    BatteryVoltage, BodyCommand, BodyRateSetpoint, ControlInputs, FlightMode, GeographicHeading,
+};
 use cu_ahrs::AhrsPose;
 use cu_bdshot::EscCommand;
 use cu_crsf::messages::RcChannelsPayload;
 use cu_pid::{PIDControlOutputPayload, PIDController};
 use cu_sensor_payloads::{ImuPayload, MagnetometerPayload};
 use cu29::prelude::*;
-use cu29::units::si::angle::radian;
+use cu29::units::si::angle::{degree, radian};
 use cu29::units::si::angular_velocity::{degree_per_second, radian_per_second};
-use cu29::units::si::f32::{AngularVelocity, Ratio};
-use cu29::units::si::magnetic_flux_density::microtesla;
+use cu29::units::si::f32::{Angle, AngularVelocity, Ratio};
 use cu29::units::si::ratio::ratio;
 use cu29::units::si::thermodynamic_temperature::degree_celsius;
 
 const LOG_PERIOD_MS: u64 = 500;
-const MAG_LOG_PERIOD_MS: u64 = 500;
 const HEAP_LOG_PERIOD_MS: u64 = 500;
 const VTX_HEARTBEAT_PERIOD_MS: u64 = 1000;
 const VTX_DRAW_PERIOD_MS: u64 = 250;
@@ -100,8 +100,6 @@ static LOG_CTRL: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::
 static LOG_TELEMETRY: spin::Mutex<LogRateLimiter> =
     spin::Mutex::new(LogRateLimiter::new(LOG_PERIOD_MS));
 static LOG_IMU: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new(LOG_PERIOD_MS));
-static LOG_MAG: spin::Mutex<LogRateLimiter> =
-    spin::Mutex::new(LogRateLimiter::new(MAG_LOG_PERIOD_MS));
 static LOG_RC: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new(LOG_PERIOD_MS));
 static LOG_RATE: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new(LOG_PERIOD_MS));
 static LOG_MOTORS: spin::Mutex<LogRateLimiter> =
@@ -214,48 +212,64 @@ pub type Dps310Source = crate::sim_support::SimDps310Source;
 pub type Ist8310Source = crate::sim_support::SimIst8310Source;
 
 #[derive(Reflect)]
-pub struct MagnetometerLogger {
-    last_tov: Option<CuTime>,
+pub struct MagneticTrueHeading {
+    declination_deg: f32,
 }
 
-impl Freezable for MagnetometerLogger {}
+impl Freezable for MagneticTrueHeading {}
 
-impl CuSinkTask for MagnetometerLogger {
+impl CuTask for MagneticTrueHeading {
     type Input<'m> = CuMsg<MagnetometerPayload>;
+    type Output<'m> = CuMsg<GeographicHeading>;
     type Resources<'r> = ();
 
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
-        Ok(Self { last_tov: None })
+        Ok(Self {
+            declination_deg: cfg_f32(config, "declination_deg", 0.0)?,
+        })
     }
 
-    fn process<'i>(&mut self, _ctx: &CuContext, input: &Self::Input<'i>) -> CuResult<()> {
-        if let Some(payload) = input.payload() {
-            let tov_time = expect_tov_time(input.tov)?;
-            debug_rl!(&LOG_MAG, tov_time, {
-                let dt_us = match self.last_tov {
-                    Some(prev) => (tov_time - prev).as_micros(),
-                    None => 0,
-                };
-                self.last_tov = Some(tov_time);
+    fn process<'i, 'o>(
+        &mut self,
+        _ctx: &CuContext,
+        input: &Self::Input<'i>,
+        output: &mut Self::Output<'o>,
+    ) -> CuResult<()> {
+        let tov_time = expect_tov_time(input.tov)?;
+        output.tov = Tov::Time(tov_time);
 
-                let mag_x_ut = payload.mag_x.get::<microtesla>();
-                let mag_y_ut = payload.mag_y.get::<microtesla>();
-                let mag_z_ut = payload.mag_z.get::<microtesla>();
-                let abs_sum_ut = mag_x_ut.abs() + mag_y_ut.abs() + mag_z_ut.abs();
-                info!(
-                    "mag mag_x_ut={} mag_y_ut={} mag_z_ut={} abs_sum_ut={} tov_ns={} tov_dt_us={}",
-                    mag_x_ut,
-                    mag_y_ut,
-                    mag_z_ut,
-                    abs_sum_ut,
-                    tov_time.as_nanos(),
-                    dt_us
-                );
-            });
+        let Some(payload) = input.payload() else {
+            status_if_not_firmware!(output.metadata, "hdg none");
+            output.clear_payload();
+            return Ok(());
+        };
+
+        let mag_x = payload.mag_x.value;
+        let mag_y = payload.mag_y.value;
+        if !mag_x.is_finite() || !mag_y.is_finite() {
+            status_if_not_firmware!(output.metadata, "hdg nan");
+            output.clear_payload();
+            return Ok(());
         }
+
+        let heading_deg = libm::atan2f(mag_y, mag_x).to_degrees() + self.declination_deg;
+        let heading_deg = heading_deg.rem_euclid(360.0);
+        if !heading_deg.is_finite() {
+            status_if_not_firmware!(output.metadata, "hdg bad");
+            output.clear_payload();
+            return Ok(());
+        }
+
+        output.set_payload(GeographicHeading {
+            heading: Angle::new::<degree>(heading_deg),
+        });
+        status_if_not_firmware!(
+            output.metadata,
+            format!("hdg {}", heading_deg.round() as i16)
+        );
         Ok(())
     }
 }
@@ -265,6 +279,7 @@ impl Freezable for ControlInputs {}
 impl Freezable for BodyRateSetpoint {}
 impl Freezable for BodyCommand {}
 impl Freezable for BatteryVoltage {}
+impl Freezable for GeographicHeading {}
 
 #[derive(Reflect)]
 pub struct RcMapper {
