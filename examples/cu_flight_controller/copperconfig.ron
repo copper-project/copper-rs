@@ -35,10 +35,11 @@
             resources: {"i2c": "fc.i2c2_ist8310"},
         ),
         (
-            id: "mag_logger",
-            type: "tasks::MagnetometerLogger",
+            id: "mag_heading",
+            type: "tasks::MagneticTrueHeading",
             run_in_sim: true,
             logging: (enabled: false),
+            config: {"declination_deg": 4.7},
         ),
         (
             id: "battery_adc",
@@ -162,6 +163,8 @@
                 "cols": 53,
                 "row": 13,
                 "col_center": 26,
+                "heading_row": 0,
+                "heading_col_center": 26,
                 "alt_row": 7,
                 "alt_col": 36,
             },
@@ -236,7 +239,7 @@
         ),
         (
             src: "ist8310",
-            dst: "mag_logger",
+            dst: "mag_heading",
             msg: "cu_sensor_payloads::MagnetometerPayload",
         ),
         (
@@ -310,14 +313,14 @@
             msg: "crate::messages::ControlInputs",
         ),
         (
-            src: "imu_cal",
-            dst: "vtx_osd",
-            msg: "cu_sensor_payloads::ImuPayload",
-        ),
-        (
             src: "dps310",
             dst: "vtx_osd",
             msg: "cu_sensor_payloads::BarometerPayload",
+        ),
+        (
+            src: "mag_heading",
+            dst: "vtx_osd",
+            msg: "crate::messages::GeographicHeading",
         ),
         (
             src: "rate",
