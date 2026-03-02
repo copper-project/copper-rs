@@ -1,6 +1,6 @@
 use cu29::bincode::{Decode, Encode};
 use cu29::prelude::*;
-use cu29::units::si::f32::{AngularVelocity, ElectricPotential, Ratio};
+use cu29::units::si::f32::{Angle, AngularVelocity, ElectricPotential, Ratio};
 use serde::{Deserialize, Serialize};
 
 #[derive(
@@ -41,4 +41,9 @@ pub struct BodyCommand {
 #[derive(Debug, Default, Clone, Copy, Encode, Decode, Serialize, Deserialize, Reflect)]
 pub struct BatteryVoltage {
     pub voltage: ElectricPotential,
+}
+
+#[derive(Debug, Default, Clone, Copy, Encode, Decode, Serialize, Deserialize, Reflect)]
+pub struct GeographicHeading {
+    pub heading: Angle,
 }
