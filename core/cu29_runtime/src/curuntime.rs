@@ -722,7 +722,7 @@ impl Debug for CuExecutionLoop {
 /// This structure represents a step in the execution plan.
 #[derive(Debug)]
 pub enum CuExecutionUnit {
-    Step(CuExecutionStep),
+    Step(Box<CuExecutionStep>),
     Loop(CuExecutionLoop),
 }
 
@@ -951,7 +951,7 @@ fn plan_tasks_tree_branch(
                 input_msg_indices_types,
                 output_msg_pack,
             };
-            plan.push(CuExecutionUnit::Step(step));
+            plan.push(CuExecutionUnit::Step(Box::new(step)));
         }
 
         handled = true;
