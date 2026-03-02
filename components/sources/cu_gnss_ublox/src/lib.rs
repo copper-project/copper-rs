@@ -184,17 +184,6 @@ where
     }
 
     fn process(&mut self, ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
-        new_msg.0.clear_payload();
-        new_msg.1.clear_payload();
-        new_msg.2.clear_payload();
-        new_msg.3.clear_payload();
-        new_msg.4.clear_payload();
-        new_msg.5.clear_payload();
-        new_msg.6.clear_payload();
-        new_msg.7.clear_payload();
-        new_msg.8.clear_payload();
-        new_msg.9.clear_payload();
-
         let now_ns = ctx.now().as_nanos();
 
         if Self::is_poll_due(
