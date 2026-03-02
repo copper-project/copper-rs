@@ -68,8 +68,6 @@
         ),
         (
             src: "src",
-            // "__nc__" means this output is intentionally left unconnected in this mission.
-            // It keeps the source multi-output shape explicit without wiring a real sink.
             dst: "__nc__",
             msg: "bool",
             missions: ["open_output"],
