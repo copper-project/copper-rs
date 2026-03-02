@@ -44,16 +44,25 @@ macro_rules! impl_cu_msg_pack {
     };
 }
 
+macro_rules! impl_cu_msg_pack_up_to {
+    ($first:ident, $second:ident $(, $rest:ident)* $(,)?) => {
+        impl_cu_msg_pack!($first, $second);
+        impl_cu_msg_pack_up_to!(@accumulate ($first, $second); $($rest),*);
+    };
+    (@accumulate ($($acc:ident),+);) => {};
+    (@accumulate ($($acc:ident),+); $next:ident $(, $rest:ident)*) => {
+        impl_cu_msg_pack!($($acc),+, $next);
+        impl_cu_msg_pack_up_to!(@accumulate ($($acc),+, $next); $($rest),*);
+    };
+}
+
 impl<T: CuMsgPayload> CuMsgPack for CuMsg<T> {}
 impl<T: CuMsgPayload> CuMsgPack for &CuMsg<T> {}
 impl<T: CuMsgPayload> CuMsgPack for (&CuMsg<T>,) {}
 impl CuMsgPack for () {}
 
-// Apply the macro to generate implementations for tuple sizes up to 5
-impl_cu_msg_pack!(T1, T2);
-impl_cu_msg_pack!(T1, T2, T3);
-impl_cu_msg_pack!(T1, T2, T3, T4);
-impl_cu_msg_pack!(T1, T2, T3, T4, T5);
+// Apply the macro to generate implementations for tuple sizes up to 12.
+impl_cu_msg_pack_up_to!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12);
 
 // A convenience macro to get from a payload or a list of payloads to a proper CuMsg or CuMsgPack
 // declaration for your tasks used for input messages.

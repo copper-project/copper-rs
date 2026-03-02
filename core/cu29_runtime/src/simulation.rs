@@ -265,11 +265,19 @@ macro_rules! impl_sim_sink_input_tuple {
     };
 }
 
-impl_sim_sink_input_tuple!(T1);
-impl_sim_sink_input_tuple!(T1, T2);
-impl_sim_sink_input_tuple!(T1, T2, T3);
-impl_sim_sink_input_tuple!(T1, T2, T3, T4);
-impl_sim_sink_input_tuple!(T1, T2, T3, T4, T5);
+macro_rules! impl_sim_sink_input_up_to {
+    ($first:ident $(, $rest:ident)* $(,)?) => {
+        impl_sim_sink_input_tuple!($first);
+        impl_sim_sink_input_up_to!(@accumulate ($first); $($rest),*);
+    };
+    (@accumulate ($($acc:ident),+);) => {};
+    (@accumulate ($($acc:ident),+); $next:ident $(, $rest:ident)*) => {
+        impl_sim_sink_input_tuple!($($acc),+, $next);
+        impl_sim_sink_input_up_to!(@accumulate ($($acc),+, $next); $($rest),*);
+    };
+}
+
+impl_sim_sink_input_up_to!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12);
 
 /// This is a placeholder task for a sink task for the simulations.
 /// It basically does nothing in place of a real driver so it won't try to initialize any hardware.
