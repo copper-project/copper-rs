@@ -1,5 +1,9 @@
 (
-    missions: [(id: "default"), (id: "flow"), (id: "gnss")],
+    missions: [
+        (id: "default"),
+        (id: "flow"),
+        (id: "gnss"),
+    ],
     resources: [
         (
             id: "fc",
