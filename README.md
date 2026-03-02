@@ -24,11 +24,11 @@
 <p><strong style="color: #b87333;">🪶 Runs anywhere</strong> – from Linux servers, workstations, SBC to bare-metal MPUs
 <p><strong style="color: #b87333;">📦 Built to ship</strong> – one stack from simulation to production
 
-### Example Applications
+### Showcasing copper-rs
 
-| Flying | Driving | Swimming | Spacefaring |
-|:--:|:--:|:--:|:--:|
-| <img width="200" alt="copper-drone" src="https://github.com/user-attachments/assets/31096307-fe1b-4315-b876-0f7237d69fa4" /> | <img width="200" alt="copper-driving" src="https://github.com/user-attachments/assets/1f051359-1ff4-45c6-838b-44442dc06ac4" /> | <img width="200" alt="copper-swimming" src="https://github.com/user-attachments/assets/5a0d0279-da98-4d4d-b5e1-e0cd8890a368" /> | <img width="200" alt="copper-space" src="https://github.com/user-attachments/assets/c535413e-014f-4846-ab06-a49e1151e42e" /> |
+Flying - Driving - Swimming - Spacefaring - Humanoids
+
+[![Copper in virtual action](https://github.com/user-attachments/assets/27ab8b08-ef17-4283-a1cf-8d4271595ef6)](https://youtu.be/weV_JYaUsmo))
 
 ### You don't have a real robot yet? Try it in our toy example right now in a sim environment!
 
