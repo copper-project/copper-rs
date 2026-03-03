@@ -71,7 +71,7 @@ impl<'r, S: 'static + Send + Sync> ResourceBindings<'r> for UbloxResourcesT<S> {
 }
 
 #[derive(Reflect)]
-#[reflect(from_reflect = false)]
+#[reflect(no_field_bounds, from_reflect = false, type_path = false)]
 pub struct UbxSourceTask<S> {
     #[reflect(ignore)]
     serial: S,
@@ -99,6 +99,28 @@ pub struct UbxSourceTask<S> {
 
 #[cfg(feature = "std")]
 pub type UbxSource = UbxSourceTask<LinuxSerialPort>;
+
+impl<S: 'static> TypePath for UbxSourceTask<S> {
+    fn type_path() -> &'static str {
+        "cu_gnss_ublox::UbxSourceTask"
+    }
+
+    fn short_type_path() -> &'static str {
+        "UbxSourceTask"
+    }
+
+    fn type_ident() -> Option<&'static str> {
+        Some("UbxSourceTask")
+    }
+
+    fn crate_name() -> Option<&'static str> {
+        Some("cu_gnss_ublox")
+    }
+
+    fn module_path() -> Option<&'static str> {
+        Some("cu_gnss_ublox")
+    }
+}
 
 impl<S> fmt::Debug for UbxSourceTask<S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
