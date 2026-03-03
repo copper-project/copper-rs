@@ -363,25 +363,29 @@ impl CuTask for VtxOsd {
         }
 
         if batch.0.is_empty() {
-            let status = if dropped_requests == 0 {
-                format!("osd {}", label.as_str().trim())
-            } else {
-                format!("osd {} d{}", label.as_str().trim(), dropped_requests)
-            };
-            status_if_not_firmware!(output.metadata, status);
+            status_if_not_firmware!(
+                output.metadata,
+                if dropped_requests == 0 {
+                    format!("osd {}", label.as_str().trim())
+                } else {
+                    format!("osd {} d{}", label.as_str().trim(), dropped_requests)
+                }
+            );
             output.clear_payload();
         } else {
-            let status = if dropped_requests == 0 {
-                format!("osd {} q{}", label.as_str().trim(), batch.0.len())
-            } else {
-                format!(
-                    "osd {} q{} d{}",
-                    label.as_str().trim(),
-                    batch.0.len(),
-                    dropped_requests
-                )
-            };
-            status_if_not_firmware!(output.metadata, status);
+            status_if_not_firmware!(
+                output.metadata,
+                if dropped_requests == 0 {
+                    format!("osd {} q{}", label.as_str().trim(), batch.0.len())
+                } else {
+                    format!(
+                        "osd {} q{} d{}",
+                        label.as_str().trim(),
+                        batch.0.len(),
+                        dropped_requests
+                    )
+                }
+            );
             output.set_payload(batch);
         }
         Ok(())
@@ -993,25 +997,29 @@ impl CuTask for VtxMspResponder {
         }
 
         if batch.0.is_empty() {
-            let status = if dropped_requests == 0 {
-                format!("msp r{} q0", requests.0.len())
-            } else {
-                format!("msp r{} q0 d{}", requests.0.len(), dropped_requests)
-            };
-            status_if_not_firmware!(output.metadata, status);
+            status_if_not_firmware!(
+                output.metadata,
+                if dropped_requests == 0 {
+                    format!("msp r{} q0", requests.0.len())
+                } else {
+                    format!("msp r{} q0 d{}", requests.0.len(), dropped_requests)
+                }
+            );
             output.clear_payload();
         } else {
-            let status = if dropped_requests == 0 {
-                format!("msp r{} q{}", requests.0.len(), batch.0.len())
-            } else {
-                format!(
-                    "msp r{} q{} d{}",
-                    requests.0.len(),
-                    batch.0.len(),
-                    dropped_requests
-                )
-            };
-            status_if_not_firmware!(output.metadata, status);
+            status_if_not_firmware!(
+                output.metadata,
+                if dropped_requests == 0 {
+                    format!("msp r{} q{}", requests.0.len(), batch.0.len())
+                } else {
+                    format!(
+                        "msp r{} q{} d{}",
+                        requests.0.len(),
+                        batch.0.len(),
+                        dropped_requests
+                    )
+                }
+            );
             output.set_payload(batch);
         }
         Ok(())
