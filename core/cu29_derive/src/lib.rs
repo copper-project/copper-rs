@@ -4296,13 +4296,14 @@ fn build_execution_plan(
         };
 
         plan_graph
-            .connect_ext(
+            .connect_ext_with_order(
                 src_plan,
                 dst_plan,
                 &cnx.msg,
                 cnx.missions.clone(),
                 None,
                 None,
+                cnx.order,
             )
             .map_err(|e| CuError::from(e.to_string()))?;
     }
@@ -5302,6 +5303,34 @@ mod tests {
         let t = trybuild::TestCases::new();
         t.compile_fail("tests/compile_fail/*/*.rs");
         t.pass("tests/compile_pass/*/*.rs");
+    }
+
+    #[test]
+    fn runtime_plan_keeps_nc_order_for_non_first_connected_output() {
+        use super::*;
+        use cu29::config::CuConfig;
+        use cu29::curuntime::{CuExecutionUnit, compute_runtime_plan};
+
+        let config: CuConfig =
+            read_config("tests/config/multi_output_source_non_first_connected_valid.ron")
+                .expect("failed to read test config");
+        let graph = config.get_graph(None).expect("missing graph");
+        let src_id = graph.get_node_id_by_name("src").expect("missing src node");
+
+        let runtime = compute_runtime_plan(graph).expect("runtime plan failed");
+        let src_step = runtime
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                CuExecutionUnit::Step(step) if step.node_id == src_id => Some(step),
+                _ => None,
+            })
+            .expect("missing source step");
+
+        assert_eq!(
+            src_step.output_msg_pack.as_ref().unwrap().msg_types,
+            vec!["i32", "bool"]
+        );
     }
 
     #[test]

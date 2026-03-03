@@ -767,27 +767,40 @@ fn collect_output_msg_types(graph: &CuGraph, node_id: NodeId) -> Vec<String> {
     let mut edge_ids = graph.get_src_edges(node_id).unwrap_or_default();
     edge_ids.sort();
 
-    let mut msg_types = Vec::new();
-    let mut seen = Vec::new();
+    let mut msg_order: Vec<(usize, String)> = Vec::new();
+    let mut record_msg = |msg: String, order: usize| {
+        if let Some((existing_order, _)) = msg_order
+            .iter_mut()
+            .find(|(_, existing_msg)| *existing_msg == msg)
+        {
+            if order < *existing_order {
+                *existing_order = order;
+            }
+            return;
+        }
+        msg_order.push((order, msg));
+    };
+
     for edge_id in edge_ids {
         if let Some(edge) = graph.edge(edge_id) {
-            if seen.iter().any(|msg| msg == &edge.msg) {
-                continue;
-            }
-            seen.push(edge.msg.clone());
-            msg_types.push(edge.msg.clone());
+            let order = if edge.order == usize::MAX {
+                edge_id
+            } else {
+                edge.order
+            };
+            record_msg(edge.msg.clone(), order);
         }
     }
     if let Some(node) = graph.get_node(node_id) {
-        for msg in node.nc_outputs() {
-            if seen.iter().any(|existing| existing == msg) {
-                continue;
-            }
-            seen.push(msg.clone());
-            msg_types.push(msg.clone());
+        for (msg, order) in node.nc_outputs_with_order() {
+            record_msg(msg.clone(), order);
         }
     }
-    msg_types
+
+    msg_order.sort_by(|(order_a, msg_a), (order_b, msg_b)| {
+        order_a.cmp(order_b).then_with(|| msg_a.cmp(msg_b))
+    });
+    msg_order.into_iter().map(|(_, msg)| msg).collect()
 }
 /// Explores a subbranch and build the partial plan out of it.
 fn plan_tasks_tree_branch(
@@ -1418,7 +1431,7 @@ mod tests {
         graph
             .get_node_mut(src_id)
             .expect("missing source node")
-            .add_nc_output("msg::B");
+            .add_nc_output("msg::B", usize::MAX);
 
         let runtime = compute_runtime_plan(graph).unwrap();
         let src_step = runtime
@@ -1441,6 +1454,120 @@ mod tests {
         let output_pack = src_step.output_msg_pack.as_ref().unwrap();
         assert_eq!(output_pack.msg_types, vec!["msg::A", "msg::B"]);
         assert_eq!(dst_step.input_msg_indices_types[0].src_port, 0);
+    }
+
+    #[test]
+    fn test_runtime_output_ports_respect_connection_order_with_nc() {
+        let txt = r#"(
+            tasks: [(id: "src", type: "a"), (id: "sink", type: "b")],
+            cnx: [
+                (src: "src", dst: "__nc__", msg: "msg::A"),
+                (src: "src", dst: "sink", msg: "msg::B"),
+            ]
+        )"#;
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let graph = config.get_graph(None).unwrap();
+        let src_id = graph.get_node_id_by_name("src").unwrap();
+        let dst_id = graph.get_node_id_by_name("sink").unwrap();
+
+        let runtime = compute_runtime_plan(graph).unwrap();
+        let src_step = runtime
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                CuExecutionUnit::Step(step) if step.node_id == src_id => Some(step),
+                _ => None,
+            })
+            .unwrap();
+        let dst_step = runtime
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                CuExecutionUnit::Step(step) if step.node_id == dst_id => Some(step),
+                _ => None,
+            })
+            .unwrap();
+
+        let output_pack = src_step.output_msg_pack.as_ref().unwrap();
+        assert_eq!(output_pack.msg_types, vec!["msg::A", "msg::B"]);
+        assert_eq!(dst_step.input_msg_indices_types[0].src_port, 1);
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_runtime_output_ports_respect_connection_order_with_nc_from_file() {
+        let txt = r#"(
+            tasks: [(id: "src", type: "a"), (id: "sink", type: "b")],
+            cnx: [
+                (src: "src", dst: "__nc__", msg: "msg::A"),
+                (src: "src", dst: "sink", msg: "msg::B"),
+            ]
+        )"#;
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), txt).unwrap();
+        let config = crate::config::read_configuration(tmp.path().to_str().unwrap()).unwrap();
+        let graph = config.get_graph(None).unwrap();
+        let src_id = graph.get_node_id_by_name("src").unwrap();
+        let dst_id = graph.get_node_id_by_name("sink").unwrap();
+
+        let runtime = compute_runtime_plan(graph).unwrap();
+        let src_step = runtime
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                CuExecutionUnit::Step(step) if step.node_id == src_id => Some(step),
+                _ => None,
+            })
+            .unwrap();
+        let dst_step = runtime
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                CuExecutionUnit::Step(step) if step.node_id == dst_id => Some(step),
+                _ => None,
+            })
+            .unwrap();
+
+        let output_pack = src_step.output_msg_pack.as_ref().unwrap();
+        assert_eq!(output_pack.msg_types, vec!["msg::A", "msg::B"]);
+        assert_eq!(dst_step.input_msg_indices_types[0].src_port, 1);
+    }
+
+    #[test]
+    fn test_runtime_output_ports_respect_connection_order_with_nc_primitives() {
+        let txt = r#"(
+            tasks: [(id: "src", type: "a"), (id: "sink", type: "b")],
+            cnx: [
+                (src: "src", dst: "__nc__", msg: "i32"),
+                (src: "src", dst: "sink", msg: "bool"),
+            ]
+        )"#;
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let graph = config.get_graph(None).unwrap();
+        let src_id = graph.get_node_id_by_name("src").unwrap();
+        let dst_id = graph.get_node_id_by_name("sink").unwrap();
+
+        let runtime = compute_runtime_plan(graph).unwrap();
+        let src_step = runtime
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                CuExecutionUnit::Step(step) if step.node_id == src_id => Some(step),
+                _ => None,
+            })
+            .unwrap();
+        let dst_step = runtime
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                CuExecutionUnit::Step(step) if step.node_id == dst_id => Some(step),
+                _ => None,
+            })
+            .unwrap();
+
+        let output_pack = src_step.output_msg_pack.as_ref().unwrap();
+        assert_eq!(output_pack.msg_types, vec!["i32", "bool"]);
+        assert_eq!(dst_step.input_msg_indices_types[0].src_port, 1);
     }
 
     #[test]
