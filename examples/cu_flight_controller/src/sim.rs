@@ -46,6 +46,7 @@ struct FlightControllerSim {}
 #[derive(Clone)]
 struct SimVehicleState {
     position: Vec3,
+    velocity_world: Vec3,
     rotation: Quat,
     body_accel_fc: [f32; 3],
     body_gyro_fc: [f32; 3],
@@ -55,6 +56,7 @@ impl Default for SimVehicleState {
     fn default() -> Self {
         Self {
             position: SIM_SPAWN_POSITION,
+            velocity_world: Vec3::ZERO,
             rotation: spawn_rotation(),
             body_accel_fc: [0.0, 0.0, 9.81],
             body_gyro_fc: [0.0; 3],
@@ -134,8 +136,8 @@ enum CameraView {
 const OSD_COLS: usize = 53;
 const OSD_ROWS: usize = 16;
 const OSD_BLANK_SYMBOL: u8 = 0x20;
-const OSD_HORIZONTAL_PADDING_COLS: f32 = 0.5;
-const OSD_VERTICAL_PADDING_ROWS: f32 = 0.5;
+const OSD_HORIZONTAL_PADDING_COLS: f32 = 0.0;
+const OSD_VERTICAL_PADDING_ROWS: f32 = 0.0;
 const OSD_FONT_ATLAS_COLS: u32 = 16;
 const OSD_FONT_ATLAS_ROWS: u32 = 16;
 const OSD_FONT_ATLAS_GLYPHS: usize = (OSD_FONT_ATLAS_COLS * OSD_FONT_ATLAS_ROWS) as usize;
@@ -965,6 +967,7 @@ fn sync_vehicle_state(
 
     state.vehicle = SimVehicleState {
         position: transform.translation(),
+        velocity_world: lv,
         rotation,
         body_accel_fc: map_bevy_body_to_fc_polar(accel_body),
         body_gyro_fc: map_bevy_body_to_fc_axial(gyro_body),
@@ -983,6 +986,14 @@ fn run_copper(
     let rc = rc_input.clone();
     sim_support::sim_battery_set_armed(rc.armed);
     sim_support::sim_battery_set_throttle(rc.throttle);
+    sim_support::sim_gnss_set_vehicle_state(
+        [vehicle.position.x, vehicle.position.y, vehicle.position.z],
+        [
+            vehicle.velocity_world.x,
+            vehicle.velocity_world.y,
+            vehicle.velocity_world.z,
+        ],
+    );
     let clock = copper._ctx.clock.clone();
     let dshot = &mut motor_commands.dshot;
 
@@ -1241,9 +1252,13 @@ fn update_osd_overlay(
     let cell_w = OSD_GLYPH_WIDTH_PX as f32 * scale;
     let cell_h = OSD_GLYPH_HEIGHT_PX as f32 * scale;
     let total_w = cell_w * OSD_COLS as f32;
-    let total_h = cell_h * OSD_ROWS as f32;
     let origin_x = ((window.width() - total_w) * 0.5).max(0.0);
-    let origin_y = ((window.height() - total_h) * 0.5).max(0.0);
+    let origin_y = 0.0;
+    let row_step = if OSD_ROWS > 1 {
+        ((window.height() - cell_h).max(0.0)) / ((OSD_ROWS - 1) as f32)
+    } else {
+        0.0
+    };
 
     for (cell, mut node, mut image_node) in &mut cell_query {
         let idx = cell.row * osd_overlay.cols + cell.col;
@@ -1254,7 +1269,7 @@ fn update_osd_overlay(
             .unwrap_or(OSD_BLANK_SYMBOL) as usize;
 
         node.left = Val::Px(origin_x + cell.col as f32 * cell_w);
-        node.top = Val::Px(origin_y + cell.row as f32 * cell_h);
+        node.top = Val::Px(origin_y + cell.row as f32 * row_step);
         node.width = Val::Px(cell_w.ceil());
         node.height = Val::Px(cell_h.ceil());
 
