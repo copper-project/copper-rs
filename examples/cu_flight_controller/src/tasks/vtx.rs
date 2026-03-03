@@ -644,19 +644,19 @@ impl VtxOsd {
     fn format_gps_position(&self) -> Vec<u8> {
         match (self.last_lat_deg, self.last_lon_deg) {
             (Some(lat), Some(lon)) if lat.is_finite() && lon.is_finite() => {
-                let mut bytes = Vec::with_capacity(20);
+                let mut bytes = Vec::with_capacity(24);
                 bytes.push(VTX_SYM_LATITUDE);
-                bytes.extend_from_slice(alloc::format!("{lat:+08.4}").as_bytes());
+                bytes.extend_from_slice(alloc::format!("{lat:+010.6}").as_bytes());
                 bytes.push(VTX_SYM_LONGITUDE);
-                bytes.extend_from_slice(alloc::format!("{lon:+09.4}").as_bytes());
+                bytes.extend_from_slice(alloc::format!("{lon:+011.6}").as_bytes());
                 bytes
             }
             _ => {
-                let mut bytes = Vec::with_capacity(20);
+                let mut bytes = Vec::with_capacity(24);
                 bytes.push(VTX_SYM_LATITUDE);
-                bytes.extend_from_slice(b"+--.----");
+                bytes.extend_from_slice(b"+--.------");
                 bytes.push(VTX_SYM_LONGITUDE);
-                bytes.extend_from_slice(b"+---.----");
+                bytes.extend_from_slice(b"+---.------");
                 bytes
             }
         }
