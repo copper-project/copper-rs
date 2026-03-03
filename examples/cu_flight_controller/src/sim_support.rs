@@ -1,6 +1,9 @@
 #![cfg(feature = "sim")]
 
-use cu_gnss_payloads::{GnssFixSolution, GnssFixType};
+use cu_gnss_payloads::{
+    GnssAccuracy, GnssCommandAck, GnssEpochTime, GnssFixSolution, GnssFixType, GnssInfoText,
+    GnssRawUbxFrame, GnssRfStatus, GnssSatelliteState, GnssSatsInView, GnssSignalState,
+};
 use cu_sensor_payloads::{BarometerPayload, ImuPayload, MagnetometerPayload};
 use cu29::prelude::*;
 use cu29::units::si::angle::degree;
@@ -205,7 +208,18 @@ impl Freezable for SimGnssSource {}
 
 impl CuSrcTask for SimGnssSource {
     type Resources<'r> = ();
-    type Output<'m> = output_msg!(GnssFixSolution);
+    type Output<'m> = output_msg!(
+        GnssEpochTime,
+        GnssFixSolution,
+        GnssAccuracy,
+        GnssSatsInView,
+        GnssSatelliteState,
+        GnssSignalState,
+        GnssRfStatus,
+        GnssInfoText,
+        GnssCommandAck,
+        GnssRawUbxFrame
+    );
 
     fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
         Ok(Self)
@@ -224,8 +238,8 @@ impl CuSrcTask for SimGnssSource {
         fix.height_ellipsoid = Length::new::<meter>(GNSS_FIXED_ELLIPSOID_ALT_M);
         fix.height_msl = Length::new::<meter>(GNSS_FIXED_MSL_ALT_M);
 
-        output.tov = Tov::Time(ctx.now());
-        output.set_payload(fix);
+        output.1.tov = Tov::Time(ctx.now());
+        output.1.set_payload(fix);
         Ok(())
     }
 }
