@@ -11,6 +11,7 @@ use crate::tasks::{
     VTX_CELL_DIVISOR, VTX_DRAW_PERIOD_MS, VTX_HEARTBEAT_PERIOD_MS, VTX_WATERMARK_LINES,
 };
 use alloc::vec::Vec;
+use cu_gnss_payloads::GnssFixSolution;
 use cu_msp_bridge::MspRequestBatch;
 use cu_msp_lib::structs::{
     MspAnalog, MspApiVersion, MspBatteryConfig, MspBatteryState, MspDisplayPort,
@@ -21,12 +22,19 @@ use cu_sensor_payloads::BarometerPayload;
 use cu29::prelude::*;
 use cu29::units::si::angle::degree;
 use cu29::units::si::electric_potential::volt;
+use cu29::units::si::velocity::meter_per_second;
 
 const VTX_SYM_VOLT: char = '\x06';
 const VTX_SYM_DEGREE: char = '\x08';
 const VTX_SYM_ALTITUDE: char = '\x7f';
 const VTX_SYM_METER: char = '\x0c';
+const VTX_SYM_SPEED: u8 = 0x70;
+const VTX_SYM_KPH: u8 = 0x9E;
+const VTX_SYM_LATITUDE: u8 = 0x89;
+const VTX_SYM_LONGITUDE: u8 = 0x98;
 const VTX_ALT_UNKNOWN: &str = "---.-";
+const VTX_SPEED_UNKNOWN: &str = "---.-";
+const VTX_ALT_FIELD_WIDTH: u8 = 8;
 
 macro_rules! status_if_not_firmware {
     ($metadata:expr, $status:expr) => {{
@@ -46,6 +54,12 @@ fn voltage_to_centivolts(voltage_v: f32) -> u16 {
     centivolts.min(u16::MAX as u32) as u16
 }
 
+fn push_request_or_drop(batch: &mut MspRequestBatch, request: MspRequest, dropped: &mut usize) {
+    if batch.push(request).is_err() {
+        *dropped = dropped.saturating_add(1);
+    }
+}
+
 #[derive(Reflect)]
 pub struct VtxOsd {
     row: u8,
@@ -54,8 +68,12 @@ pub struct VtxOsd {
     col_center: u8,
     heading_row: u8,
     heading_col_center: u8,
+    gps_row: u8,
+    gps_col_center: u8,
     alt_row: u8,
     alt_col: u8,
+    speed_row: u8,
+    speed_col: u8,
     watermark_row: u8,
     watermark_col: u8,
     last_label: Option<StatusLabel>,
@@ -69,6 +87,9 @@ pub struct VtxOsd {
     pressure_samples: u32,
     last_pressure_pa: Option<f32>,
     last_heading_deg: Option<f32>,
+    last_lat_deg: Option<f32>,
+    last_lon_deg: Option<f32>,
+    last_ground_speed_mps: Option<f32>,
 }
 
 impl Freezable for VtxOsd {}
@@ -80,7 +101,8 @@ impl CuTask for VtxOsd {
         BarometerPayload,
         GeographicHeading,
         BatteryVoltage,
-        MspRequestBatch
+        MspRequestBatch,
+        GnssFixSolution
     );
     type Output<'m> = CuMsg<MspRequestBatch>;
     type Resources<'r> = ();
@@ -100,13 +122,25 @@ impl CuTask for VtxOsd {
             .min(cols.saturating_sub(1) as u16) as u8;
         let row = tasks::cfg_u16(config, "row", 13)?.min(u8::MAX as u16) as u8;
         let heading_row =
-            tasks::cfg_u16(config, "heading_row", 0)?.min(rows.saturating_sub(1) as u16) as u8;
+            tasks::cfg_u16(config, "heading_row", 1)?.min(rows.saturating_sub(1) as u16) as u8;
         let heading_col_center = tasks::cfg_u16(config, "heading_col_center", default_center)?
             .min(cols.saturating_sub(1) as u16) as u8;
+        let default_gps_row: u8 = 0;
+        let gps_row = tasks::cfg_u16(config, "gps_row", u16::from(default_gps_row))?
+            .min(rows.saturating_sub(1) as u16) as u8;
+        let gps_col_center =
+            tasks::cfg_u16(config, "gps_col_center", u16::from(heading_col_center))?
+                .min(cols.saturating_sub(1) as u16) as u8;
         let default_alt_col = cols.saturating_sub(19) as u16;
         let alt_row =
             tasks::cfg_u16(config, "alt_row", 7)?.min(rows.saturating_sub(1) as u16) as u8;
         let alt_col = tasks::cfg_u16(config, "alt_col", default_alt_col)?
+            .min(cols.saturating_sub(1) as u16) as u8;
+        let default_speed_col =
+            cols.saturating_sub(alt_col.saturating_add(VTX_ALT_FIELD_WIDTH)) as u16;
+        let speed_row = tasks::cfg_u16(config, "speed_row", u16::from(alt_row))?
+            .min(rows.saturating_sub(1) as u16) as u8;
+        let speed_col = tasks::cfg_u16(config, "speed_col", default_speed_col)?
             .min(cols.saturating_sub(1) as u16) as u8;
         let watermark_height = VTX_WATERMARK_LINES.len() as u8;
         let default_watermark_row = rows.saturating_sub(watermark_height);
@@ -121,8 +155,12 @@ impl CuTask for VtxOsd {
             col_center,
             heading_row,
             heading_col_center,
+            gps_row,
+            gps_col_center,
             alt_row,
             alt_col,
+            speed_row,
+            speed_col,
             watermark_row,
             watermark_col,
             last_label: None,
@@ -136,6 +174,9 @@ impl CuTask for VtxOsd {
             pressure_samples: 0,
             last_pressure_pa: None,
             last_heading_deg: None,
+            last_lat_deg: None,
+            last_lon_deg: None,
+            last_ground_speed_mps: None,
         })
     }
 
@@ -145,11 +186,12 @@ impl CuTask for VtxOsd {
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
-        let (ctrl_msg, baro_msg, heading_msg, batt_msg, incoming_msg) = *input;
+        let (ctrl_msg, baro_msg, heading_msg, batt_msg, incoming_msg, gnss_msg) = *input;
         let tov_time = tasks::expect_tov_time(ctrl_msg.tov)?;
         output.tov = Tov::Time(tov_time);
         let now = tov_time;
         let mut batch = MspRequestBatch::new();
+        let mut dropped_requests = 0usize;
         let ctrl = ctrl_msg.payload();
 
         if let Some(heading) = heading_msg.payload() {
@@ -159,10 +201,36 @@ impl CuTask for VtxOsd {
         if let Some(voltage) = batt_msg.payload() {
             self.last_voltage_centi = Some(voltage_to_centivolts(voltage.voltage.get::<volt>()));
         }
+        if let Some(fix) = gnss_msg.payload() {
+            if fix.gnss_fix_ok && !fix.invalid_llh {
+                let lat_deg = fix.latitude.get::<degree>();
+                let lon_deg = fix.longitude.get::<degree>();
+                let speed_mps = fix.ground_speed.get::<meter_per_second>();
+                self.last_lat_deg = if lat_deg.is_finite() {
+                    Some(lat_deg.clamp(-90.0, 90.0))
+                } else {
+                    None
+                };
+                self.last_lon_deg = if lon_deg.is_finite() {
+                    Some(lon_deg.clamp(-180.0, 180.0))
+                } else {
+                    None
+                };
+                self.last_ground_speed_mps = if speed_mps.is_finite() && speed_mps >= 0.0 {
+                    Some(speed_mps)
+                } else {
+                    None
+                };
+            } else {
+                self.last_lat_deg = None;
+                self.last_lon_deg = None;
+                self.last_ground_speed_mps = None;
+            }
+        }
 
         // First, handle any incoming MSP requests (telemetry queries from VTX)
         if let Some(incoming_requests) = incoming_msg.payload() {
-            self.handle_incoming_requests(&mut batch, incoming_requests)?;
+            self.handle_incoming_requests(&mut batch, incoming_requests, &mut dropped_requests);
         }
 
         let prev_armed = self.last_armed;
@@ -211,8 +279,16 @@ impl CuTask for VtxOsd {
             .map(|prev| now - prev >= CuDuration::from_millis(VTX_HEARTBEAT_PERIOD_MS))
             .unwrap_or(true);
         if heartbeat_due {
-            batch.push(MspRequest::MspDisplayPort(MspDisplayPort::heartbeat()))?;
-            batch.push(MspRequest::MspStatus(build_msp_status(armed)))?;
+            push_request_or_drop(
+                &mut batch,
+                MspRequest::MspDisplayPort(MspDisplayPort::heartbeat()),
+                &mut dropped_requests,
+            );
+            push_request_or_drop(
+                &mut batch,
+                MspRequest::MspStatus(build_msp_status(armed)),
+                &mut dropped_requests,
+            );
             self.last_heartbeat = Some(now);
         }
 
@@ -247,14 +323,22 @@ impl CuTask for VtxOsd {
         };
 
         if label_changed {
-            batch.push(MspRequest::MspDisplayPort(MspDisplayPort::clear_screen()))?;
-            batch.push(MspRequest::MspDisplayPort(MspDisplayPort::write_string(
-                self.row, col, 0, text,
-            )))?;
-            self.push_heading(&mut batch)?;
-            self.push_cell_voltage(&mut batch)?;
-            self.push_relative_altitude(&mut batch)?;
-            self.push_watermark(&mut batch)?;
+            push_request_or_drop(
+                &mut batch,
+                MspRequest::MspDisplayPort(MspDisplayPort::clear_screen()),
+                &mut dropped_requests,
+            );
+            push_request_or_drop(
+                &mut batch,
+                MspRequest::MspDisplayPort(MspDisplayPort::write_string(self.row, col, 0, text)),
+                &mut dropped_requests,
+            );
+            self.push_heading(&mut batch, &mut dropped_requests);
+            self.push_gps_position(&mut batch, &mut dropped_requests);
+            self.push_cell_voltage(&mut batch, &mut dropped_requests);
+            self.push_ground_speed(&mut batch, &mut dropped_requests);
+            self.push_relative_altitude(&mut batch, &mut dropped_requests);
+            self.push_watermark(&mut batch, &mut dropped_requests);
         }
 
         let draw_due = self
@@ -263,22 +347,44 @@ impl CuTask for VtxOsd {
             .unwrap_or(true);
         if label_changed || draw_due {
             if !label_changed {
-                self.push_heading(&mut batch)?;
-                self.push_cell_voltage(&mut batch)?;
-                self.push_relative_altitude(&mut batch)?;
-                self.push_watermark(&mut batch)?;
+                self.push_heading(&mut batch, &mut dropped_requests);
+                self.push_gps_position(&mut batch, &mut dropped_requests);
+                self.push_cell_voltage(&mut batch, &mut dropped_requests);
+                self.push_ground_speed(&mut batch, &mut dropped_requests);
+                self.push_relative_altitude(&mut batch, &mut dropped_requests);
+                self.push_watermark(&mut batch, &mut dropped_requests);
             }
-            batch.push(MspRequest::MspDisplayPort(MspDisplayPort::draw_screen()))?;
+            push_request_or_drop(
+                &mut batch,
+                MspRequest::MspDisplayPort(MspDisplayPort::draw_screen()),
+                &mut dropped_requests,
+            );
             self.last_draw = Some(now);
         }
 
         if batch.0.is_empty() {
-            status_if_not_firmware!(output.metadata, format!("osd {}", label.as_str().trim()));
+            status_if_not_firmware!(
+                output.metadata,
+                if dropped_requests == 0 {
+                    format!("osd {}", label.as_str().trim())
+                } else {
+                    format!("osd {} d{}", label.as_str().trim(), dropped_requests)
+                }
+            );
             output.clear_payload();
         } else {
             status_if_not_firmware!(
                 output.metadata,
-                format!("osd {} q{}", label.as_str().trim(), batch.0.len())
+                if dropped_requests == 0 {
+                    format!("osd {} q{}", label.as_str().trim(), batch.0.len())
+                } else {
+                    format!(
+                        "osd {} q{} d{}",
+                        label.as_str().trim(),
+                        batch.0.len(),
+                        dropped_requests
+                    )
+                }
             );
             output.set_payload(batch);
         }
@@ -287,9 +393,9 @@ impl CuTask for VtxOsd {
 }
 
 impl VtxOsd {
-    fn push_heading(&self, batch: &mut MspRequestBatch) -> CuResult<()> {
+    fn push_heading(&self, batch: &mut MspRequestBatch, dropped: &mut usize) {
         if self.rows == 0 || self.cols == 0 {
-            return Ok(());
+            return;
         }
         let row = self.heading_row.min(self.rows.saturating_sub(1));
         let text = self.format_heading();
@@ -304,20 +410,54 @@ impl VtxOsd {
             }
             col
         };
-        batch.push(MspRequest::MspDisplayPort(MspDisplayPort::write_string(
-            row,
-            col,
-            0,
-            text.as_str(),
-        )))?;
-        Ok(())
+        push_request_or_drop(
+            batch,
+            MspRequest::MspDisplayPort(MspDisplayPort::write_string(row, col, 0, text.as_str())),
+            dropped,
+        );
+    }
+
+    fn push_gps_position(&self, batch: &mut MspRequestBatch, dropped: &mut usize) {
+        if self.rows == 0 || self.cols == 0 {
+            return;
+        }
+        let row = self.gps_row.min(self.rows.saturating_sub(1));
+        let text = self.format_gps_position();
+        let width = text.len() as u8;
+        let col = if self.cols <= width {
+            0
+        } else {
+            let half = width / 2;
+            let mut col = self.gps_col_center.saturating_sub(half);
+            if col.saturating_add(width) > self.cols {
+                col = self.cols.saturating_sub(width);
+            }
+            col
+        };
+        let available = self.cols.saturating_sub(col) as usize;
+        if available == 0 {
+            return;
+        }
+        let mut display_bytes = text.as_slice();
+        if display_bytes.len() > available {
+            display_bytes = &display_bytes[..available];
+        }
+        if display_bytes.is_empty() {
+            return;
+        }
+        push_request_or_drop(
+            batch,
+            MspRequest::MspDisplayPort(MspDisplayPort::write_bytes(row, col, 0, display_bytes)),
+            dropped,
+        );
     }
 
     fn handle_incoming_requests(
         &self,
         batch: &mut MspRequestBatch,
         requests: &MspRequestBatch,
-    ) -> CuResult<()> {
+        dropped: &mut usize,
+    ) {
         let voltage_centi = self.last_voltage_centi.unwrap_or(0);
         let voltage_decivolts = tasks::clamp_u8((voltage_centi + 5) / 10);
         let cell_count = tasks::estimate_cell_count(voltage_centi);
@@ -352,27 +492,34 @@ impl VtxOsd {
         for request in requests.iter() {
             match request {
                 MspRequest::MspApiVersionRequest => {
-                    batch.push(MspRequest::MspApiVersion(api_version))?;
+                    push_request_or_drop(batch, MspRequest::MspApiVersion(api_version), dropped);
                 }
                 MspRequest::MspFcVersionRequest => {
-                    batch.push(MspRequest::MspFlightControllerVersion(fc_version))?;
+                    push_request_or_drop(
+                        batch,
+                        MspRequest::MspFlightControllerVersion(fc_version),
+                        dropped,
+                    );
                 }
                 MspRequest::MspBatteryStateRequest => {
-                    batch.push(MspRequest::MspBatteryState(battery_state))?;
+                    push_request_or_drop(
+                        batch,
+                        MspRequest::MspBatteryState(battery_state),
+                        dropped,
+                    );
                 }
                 MspRequest::MspAnalogRequest => {
-                    batch.push(MspRequest::MspAnalog(analog))?;
+                    push_request_or_drop(batch, MspRequest::MspAnalog(analog), dropped);
                 }
                 _ => {}
             }
         }
-        Ok(())
     }
 
-    fn push_cell_voltage(&self, batch: &mut MspRequestBatch) -> CuResult<()> {
+    fn push_cell_voltage(&self, batch: &mut MspRequestBatch, dropped: &mut usize) {
         let row = self.row.saturating_add(1);
         if row >= self.rows {
-            return Ok(());
+            return;
         }
         let text = self.format_cell_voltage();
         let width = text.len() as u8;
@@ -386,24 +533,22 @@ impl VtxOsd {
             }
             col
         };
-        batch.push(MspRequest::MspDisplayPort(MspDisplayPort::write_string(
-            row,
-            col,
-            0,
-            text.as_str(),
-        )))?;
-        Ok(())
+        push_request_or_drop(
+            batch,
+            MspRequest::MspDisplayPort(MspDisplayPort::write_string(row, col, 0, text.as_str())),
+            dropped,
+        );
     }
 
-    fn push_relative_altitude(&self, batch: &mut MspRequestBatch) -> CuResult<()> {
+    fn push_relative_altitude(&self, batch: &mut MspRequestBatch, dropped: &mut usize) {
         if self.rows == 0 || self.cols == 0 {
-            return Ok(());
+            return;
         }
         let row = self.alt_row.min(self.rows.saturating_sub(1));
         let col = self.alt_col.min(self.cols.saturating_sub(1));
         let available = self.cols.saturating_sub(col) as usize;
         if available == 0 {
-            return Ok(());
+            return;
         }
 
         let text = self.format_relative_altitude();
@@ -412,16 +557,41 @@ impl VtxOsd {
             display_text = &display_text[..available];
         }
         if display_text.is_empty() {
-            return Ok(());
+            return;
         }
 
-        batch.push(MspRequest::MspDisplayPort(MspDisplayPort::write_string(
-            row,
-            col,
-            0,
-            display_text,
-        )))?;
-        Ok(())
+        push_request_or_drop(
+            batch,
+            MspRequest::MspDisplayPort(MspDisplayPort::write_string(row, col, 0, display_text)),
+            dropped,
+        );
+    }
+
+    fn push_ground_speed(&self, batch: &mut MspRequestBatch, dropped: &mut usize) {
+        if self.rows == 0 || self.cols == 0 {
+            return;
+        }
+        let row = self.speed_row.min(self.rows.saturating_sub(1));
+        let col = self.speed_col.min(self.cols.saturating_sub(1));
+        let available = self.cols.saturating_sub(col) as usize;
+        if available == 0 {
+            return;
+        }
+
+        let text = self.format_ground_speed();
+        let mut display_bytes = text.as_slice();
+        if display_bytes.len() > available {
+            display_bytes = &display_bytes[..available];
+        }
+        if display_bytes.is_empty() {
+            return;
+        }
+
+        push_request_or_drop(
+            batch,
+            MspRequest::MspDisplayPort(MspDisplayPort::write_bytes(row, col, 0, display_bytes)),
+            dropped,
+        );
     }
 
     fn format_cell_voltage(&self) -> alloc::string::String {
@@ -451,6 +621,47 @@ impl VtxOsd {
         }
     }
 
+    fn format_ground_speed(&self) -> Vec<u8> {
+        match self.last_ground_speed_mps {
+            Some(speed_mps) if speed_mps.is_finite() && speed_mps >= 0.0 => {
+                let speed_kmh = (speed_mps * 3.6).clamp(0.0, 999.9);
+                let mut bytes = Vec::with_capacity(7);
+                bytes.push(VTX_SYM_SPEED);
+                bytes.extend_from_slice(alloc::format!("{speed_kmh:05.1}").as_bytes());
+                bytes.push(VTX_SYM_KPH);
+                bytes
+            }
+            _ => {
+                let mut bytes = Vec::with_capacity(7);
+                bytes.push(VTX_SYM_SPEED);
+                bytes.extend_from_slice(VTX_SPEED_UNKNOWN.as_bytes());
+                bytes.push(VTX_SYM_KPH);
+                bytes
+            }
+        }
+    }
+
+    fn format_gps_position(&self) -> Vec<u8> {
+        match (self.last_lat_deg, self.last_lon_deg) {
+            (Some(lat), Some(lon)) if lat.is_finite() && lon.is_finite() => {
+                let mut bytes = Vec::with_capacity(24);
+                bytes.push(VTX_SYM_LATITUDE);
+                bytes.extend_from_slice(alloc::format!("{lat:+010.6}").as_bytes());
+                bytes.push(VTX_SYM_LONGITUDE);
+                bytes.extend_from_slice(alloc::format!("{lon:+011.6}").as_bytes());
+                bytes
+            }
+            _ => {
+                let mut bytes = Vec::with_capacity(24);
+                bytes.push(VTX_SYM_LATITUDE);
+                bytes.extend_from_slice(b"+--.------");
+                bytes.push(VTX_SYM_LONGITUDE);
+                bytes.extend_from_slice(b"+---.------");
+                bytes
+            }
+        }
+    }
+
     fn format_heading(&self) -> alloc::string::String {
         match self.last_heading_deg {
             Some(heading_deg) if heading_deg.is_finite() => {
@@ -463,14 +674,14 @@ impl VtxOsd {
         }
     }
 
-    fn push_watermark(&self, batch: &mut MspRequestBatch) -> CuResult<()> {
+    fn push_watermark(&self, batch: &mut MspRequestBatch, dropped: &mut usize) {
         if self.rows == 0 || self.cols == 0 {
-            return Ok(());
+            return;
         }
         let col = self.watermark_col.min(self.cols.saturating_sub(1));
         let available = self.cols.saturating_sub(col) as usize;
         if available == 0 {
-            return Ok(());
+            return;
         }
         for (idx, line) in VTX_WATERMARK_LINES.iter().enumerate() {
             let row = self.watermark_row.saturating_add(idx as u8);
@@ -484,11 +695,12 @@ impl VtxOsd {
             if text.is_empty() {
                 continue;
             }
-            batch.push(MspRequest::MspDisplayPort(MspDisplayPort::write_string(
-                row, col, 0, text,
-            )))?;
+            push_request_or_drop(
+                batch,
+                MspRequest::MspDisplayPort(MspDisplayPort::write_string(row, col, 0, text)),
+                dropped,
+            );
         }
-        Ok(())
     }
 }
 
@@ -653,6 +865,7 @@ impl CuTask for VtxMspResponder {
         }
 
         let mut batch = MspRequestBatch::new();
+        let mut dropped_requests = 0usize;
         let Some(requests) = req_msg.payload() else {
             status_if_not_firmware!(output.metadata, "msp wait");
             output.clear_payload();
@@ -722,25 +935,53 @@ impl CuTask for VtxMspResponder {
         for request in requests.iter() {
             match request {
                 MspRequest::MspApiVersionRequest => {
-                    batch.push(MspRequest::MspApiVersion(api_version))?;
+                    push_request_or_drop(
+                        &mut batch,
+                        MspRequest::MspApiVersion(api_version),
+                        &mut dropped_requests,
+                    );
                 }
                 MspRequest::MspFcVersionRequest => {
-                    batch.push(MspRequest::MspFlightControllerVersion(fc_version))?;
+                    push_request_or_drop(
+                        &mut batch,
+                        MspRequest::MspFlightControllerVersion(fc_version),
+                        &mut dropped_requests,
+                    );
                 }
                 MspRequest::MspBatteryConfigRequest => {
-                    batch.push(MspRequest::MspBatteryConfig(battery_config))?;
+                    push_request_or_drop(
+                        &mut batch,
+                        MspRequest::MspBatteryConfig(battery_config),
+                        &mut dropped_requests,
+                    );
                 }
                 MspRequest::MspBatteryStateRequest => {
-                    batch.push(MspRequest::MspBatteryState(battery_state))?;
+                    push_request_or_drop(
+                        &mut batch,
+                        MspRequest::MspBatteryState(battery_state),
+                        &mut dropped_requests,
+                    );
                 }
                 MspRequest::MspAnalogRequest => {
-                    batch.push(MspRequest::MspAnalog(analog))?;
+                    push_request_or_drop(
+                        &mut batch,
+                        MspRequest::MspAnalog(analog),
+                        &mut dropped_requests,
+                    );
                 }
                 MspRequest::MspVoltageMeterConfigRequest => {
-                    batch.push(MspRequest::MspVoltageMeterConfig(voltage_meter_config))?;
+                    push_request_or_drop(
+                        &mut batch,
+                        MspRequest::MspVoltageMeterConfig(voltage_meter_config),
+                        &mut dropped_requests,
+                    );
                 }
                 MspRequest::MspVoltageMetersRequest => {
-                    batch.push(MspRequest::MspVoltageMeter(voltage_meter))?;
+                    push_request_or_drop(
+                        &mut batch,
+                        MspRequest::MspVoltageMeter(voltage_meter),
+                        &mut dropped_requests,
+                    );
                 }
                 _ => {}
             }
@@ -748,19 +989,36 @@ impl CuTask for VtxMspResponder {
 
         if !batch.0.is_empty() {
             debug!(
-                "MSP responder: sending {} responses, vbat={} cv",
+                "MSP responder: sending {} responses, vbat={} cv, dropped={}",
                 batch.0.len(),
-                voltage_centi
+                voltage_centi,
+                dropped_requests
             );
         }
 
         if batch.0.is_empty() {
-            status_if_not_firmware!(output.metadata, format!("msp r{} q0", requests.0.len()));
+            status_if_not_firmware!(
+                output.metadata,
+                if dropped_requests == 0 {
+                    format!("msp r{} q0", requests.0.len())
+                } else {
+                    format!("msp r{} q0 d{}", requests.0.len(), dropped_requests)
+                }
+            );
             output.clear_payload();
         } else {
             status_if_not_firmware!(
                 output.metadata,
-                format!("msp r{} q{}", requests.0.len(), batch.0.len())
+                if dropped_requests == 0 {
+                    format!("msp r{} q{}", requests.0.len(), batch.0.len())
+                } else {
+                    format!(
+                        "msp r{} q{} d{}",
+                        requests.0.len(),
+                        batch.0.len(),
+                        dropped_requests
+                    )
+                }
             );
             output.set_payload(batch);
         }

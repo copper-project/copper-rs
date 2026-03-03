@@ -926,6 +926,16 @@ impl MspDisplayPort {
         Self { payload }
     }
 
+    pub fn write_bytes(row: u8, col: u8, attr: u8, bytes: &[u8]) -> Self {
+        let mut payload = Vec::with_capacity(4 + bytes.len());
+        payload.push(MSP_DP_WRITE_STRING);
+        payload.push(row);
+        payload.push(col);
+        payload.push(attr);
+        payload.extend_from_slice(bytes);
+        Self { payload }
+    }
+
     pub fn sys(row: u8, col: u8, element: u8) -> Self {
         Self {
             payload: Vec::from([MSP_DP_SYS, row, col, element]),

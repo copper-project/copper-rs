@@ -41,7 +41,7 @@ use heapless::Vec as HeaplessVec;
 use serde::{Deserialize, Serialize};
 
 const READ_BUFFER_SIZE: usize = 512;
-const MAX_REQUESTS_PER_BATCH: usize = 8;
+const MAX_REQUESTS_PER_BATCH: usize = 16;
 const MAX_RESPONSES_PER_BATCH: usize = 16;
 const TX_BUFFER_CAPACITY: usize = MSP_MAX_PAYLOAD_LEN + 12;
 
