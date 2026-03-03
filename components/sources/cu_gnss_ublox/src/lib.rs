@@ -1,18 +1,23 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
 extern crate alloc;
 
 mod protocol;
 
 use alloc::collections::VecDeque;
+use alloc::format;
+use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
 use cu_gnss_payloads::{
     GnssAccuracy, GnssCommandAck, GnssEpochTime, GnssEvent, GnssFixSolution, GnssInfoText,
     GnssRawUbxFrame, GnssRfStatus, GnssSatelliteState, GnssSatsInView, GnssSignalState,
 };
+#[cfg(feature = "std")]
 use cu_linux_resources::LinuxSerialPort;
 use cu29::prelude::*;
 use cu29::resource::{Owned, ResourceBindingMap, ResourceBindings, ResourceManager};
-use std::io::{ErrorKind, Read, Write};
+use embedded_io::{ErrorKind, ErrorType, Read, Write};
 
 use crate::protocol::{UbxFrame, decode_frame_to_event, extract_next_ubx_frame};
 
@@ -36,11 +41,14 @@ pub enum Binding {
     Serial,
 }
 
-pub struct UbloxResources {
-    pub serial: Owned<LinuxSerialPort>,
+pub struct UbloxResourcesT<S> {
+    pub serial: Owned<S>,
 }
 
-impl<'r> ResourceBindings<'r> for UbloxResources {
+#[cfg(feature = "std")]
+pub type UbloxResources = UbloxResourcesT<LinuxSerialPort>;
+
+impl<'r, S: 'static + Send + Sync> ResourceBindings<'r> for UbloxResourcesT<S> {
     type Binding = Binding;
 
     fn from_bindings(
@@ -55,7 +63,7 @@ impl<'r> ResourceBindings<'r> for UbloxResources {
         })?;
 
         let serial = manager
-            .take::<LinuxSerialPort>(path.typed())
+            .take::<S>(path.typed())
             .map_err(|e| e.add_cause("Failed to fetch UBX serial resource"))?;
 
         Ok(Self { serial })
@@ -63,10 +71,10 @@ impl<'r> ResourceBindings<'r> for UbloxResources {
 }
 
 #[derive(Reflect)]
-#[reflect(from_reflect = false)]
-pub struct UbxSource {
+#[reflect(no_field_bounds, from_reflect = false, type_path = false)]
+pub struct UbxSourceTask<S> {
     #[reflect(ignore)]
-    serial: LinuxSerialPort,
+    serial: S,
     #[reflect(ignore)]
     read_buffer: Vec<u8>,
     #[reflect(ignore)]
@@ -89,7 +97,32 @@ pub struct UbxSource {
     last_poll_mon_rf_ns: Option<u64>,
 }
 
-impl fmt::Debug for UbxSource {
+#[cfg(feature = "std")]
+pub type UbxSource = UbxSourceTask<LinuxSerialPort>;
+
+impl<S: 'static> TypePath for UbxSourceTask<S> {
+    fn type_path() -> &'static str {
+        "cu_gnss_ublox::UbxSourceTask"
+    }
+
+    fn short_type_path() -> &'static str {
+        "UbxSourceTask"
+    }
+
+    fn type_ident() -> Option<&'static str> {
+        Some("UbxSourceTask")
+    }
+
+    fn crate_name() -> Option<&'static str> {
+        Some("cu_gnss_ublox")
+    }
+
+    fn module_path() -> Option<&'static str> {
+        Some("cu_gnss_ublox")
+    }
+}
+
+impl<S> fmt::Debug for UbxSourceTask<S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("UbxSource")
             .field("emit_raw_unknown", &self.emit_raw_unknown)
@@ -102,10 +135,14 @@ impl fmt::Debug for UbxSource {
     }
 }
 
-impl Freezable for UbxSource {}
+impl<S> Freezable for UbxSourceTask<S> {}
 
-impl CuSrcTask for UbxSource {
-    type Resources<'r> = UbloxResources;
+impl<S> CuSrcTask for UbxSourceTask<S>
+where
+    S: Read + Write + ErrorType + Send + Sync + 'static,
+    <S as ErrorType>::Error: embedded_io::Error + fmt::Debug + 'static,
+{
+    type Resources<'r> = UbloxResourcesT<S>;
     type Output<'m> = output_msg!(
         GnssEpochTime,
         GnssFixSolution,
@@ -169,8 +206,6 @@ impl CuSrcTask for UbxSource {
     }
 
     fn process(&mut self, ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
-        clear_outputs(new_msg);
-
         let now_ns = ctx.now().as_nanos();
 
         if Self::is_poll_due(
@@ -217,13 +252,28 @@ impl CuSrcTask for UbxSource {
     }
 }
 
-impl UbxSource {
+impl<S> UbxSourceTask<S>
+where
+    S: Read + Write + ErrorType + Send + Sync + 'static,
+    <S as ErrorType>::Error: embedded_io::Error + fmt::Debug + 'static,
+{
     fn send_poll(&mut self, class_id: u8, msg_id: u8) -> CuResult<()> {
         let frame = UbxFrame::from_message(class_id, msg_id, &[]);
         let bytes = frame.to_wire_bytes();
+        let mut written = 0;
+        while written < bytes.len() {
+            let n = self
+                .serial
+                .write(&bytes[written..])
+                .map_err(|e| CuError::from(format!("UBX poll write failed: {e:?}")))?;
+            if n == 0 {
+                return Err(CuError::from("UBX poll write failed: zero-byte write"));
+            }
+            written += n;
+        }
         self.serial
-            .write_all(&bytes)
-            .map_err(|e| CuError::new_with_cause("UBX poll write failed", e))
+            .flush()
+            .map_err(|e| CuError::from(format!("UBX poll flush failed: {e:?}")))
     }
 
     fn is_poll_due(now_ns: u64, period_ms: u64, last_ns: Option<u64>) -> bool {
@@ -250,10 +300,13 @@ impl UbxSource {
                         break;
                     }
                 }
-                Err(e) if e.kind() == ErrorKind::TimedOut || e.kind() == ErrorKind::WouldBlock => {
+                Err(e)
+                    if embedded_io::Error::kind(&e) == ErrorKind::TimedOut
+                        || embedded_io::Error::kind(&e) == ErrorKind::Interrupted =>
+                {
                     break;
                 }
-                Err(e) => return Err(CuError::new_with_cause("UBX serial read failed", e)),
+                Err(e) => return Err(CuError::from(format!("UBX serial read failed: {e:?}"))),
             }
         }
 
@@ -278,7 +331,7 @@ impl UbxSource {
     fn emit_event(
         &self,
         ctx: &CuContext,
-        out: &mut <Self as CuSrcTask>::Output<'_>,
+        out: &mut <UbxSourceTask<S> as CuSrcTask>::Output<'_>,
         event: GnssEvent,
     ) {
         let tov = Tov::Time(ctx.now());
@@ -323,19 +376,6 @@ impl UbxSource {
             }
         }
     }
-}
-
-fn clear_outputs(out: &mut <UbxSource as CuSrcTask>::Output<'_>) {
-    out.0.clear_payload();
-    out.1.clear_payload();
-    out.2.clear_payload();
-    out.3.clear_payload();
-    out.4.clear_payload();
-    out.5.clear_payload();
-    out.6.clear_payload();
-    out.7.clear_payload();
-    out.8.clear_payload();
-    out.9.clear_payload();
 }
 
 fn config_u32(config: Option<&ComponentConfig>, key: &str, default: u32) -> CuResult<u32> {

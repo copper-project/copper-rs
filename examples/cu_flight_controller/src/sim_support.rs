@@ -1,13 +1,25 @@
 #![cfg(feature = "sim")]
 
+use cu_gnss_payloads::{
+    GnssAccuracy, GnssCommandAck, GnssEpochTime, GnssFixSolution, GnssFixType, GnssInfoText,
+    GnssRawUbxFrame, GnssRfStatus, GnssSatelliteState, GnssSatsInView, GnssSignalState,
+};
 use cu_sensor_payloads::{BarometerPayload, ImuPayload, MagnetometerPayload};
 use cu29::prelude::*;
+use cu29::units::si::angle::degree;
+use cu29::units::si::f32::{Angle, Length};
+use cu29::units::si::length::meter;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
 
 static SIM_ACTIVITY_LED_STATE: OnceLock<Arc<AtomicBool>> = OnceLock::new();
 static SIM_BATTERY_THROTTLE_BITS: OnceLock<Arc<AtomicU32>> = OnceLock::new();
 static SIM_BATTERY_ARMED_STATE: OnceLock<Arc<AtomicBool>> = OnceLock::new();
+const GNSS_FIXED_LAT_DEG: f32 = 30.389861114639405_f64 as f32;
+const GNSS_FIXED_LON_DEG: f32 = -97.69316827380047_f64 as f32;
+const GNSS_FIXED_ELLIPSOID_ALT_M: f32 = 225.0;
+const GNSS_FIXED_MSL_ALT_M: f32 = 212.0;
+const GNSS_FIXED_SAT_COUNT: u8 = 14;
 
 fn sim_activity_led_state() -> Arc<AtomicBool> {
     SIM_ACTIVITY_LED_STATE
@@ -185,6 +197,49 @@ impl CuSrcTask for SimIst8310Source {
             0.5 * t.sin(),
             -42.0,
         ]));
+        Ok(())
+    }
+}
+
+#[derive(Default, Reflect)]
+pub struct SimGnssSource;
+
+impl Freezable for SimGnssSource {}
+
+impl CuSrcTask for SimGnssSource {
+    type Resources<'r> = ();
+    type Output<'m> = output_msg!(
+        GnssEpochTime,
+        GnssFixSolution,
+        GnssAccuracy,
+        GnssSatsInView,
+        GnssSatelliteState,
+        GnssSignalState,
+        GnssRfStatus,
+        GnssInfoText,
+        GnssCommandAck,
+        GnssRawUbxFrame
+    );
+
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
+        Ok(Self)
+    }
+
+    fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
+        let mut fix = GnssFixSolution {
+            fix_type: GnssFixType::Fix3D,
+            gnss_fix_ok: true,
+            invalid_llh: false,
+            num_satellites_used: GNSS_FIXED_SAT_COUNT,
+            ..GnssFixSolution::default()
+        };
+        fix.latitude = Angle::new::<degree>(GNSS_FIXED_LAT_DEG);
+        fix.longitude = Angle::new::<degree>(GNSS_FIXED_LON_DEG);
+        fix.height_ellipsoid = Length::new::<meter>(GNSS_FIXED_ELLIPSOID_ALT_M);
+        fix.height_msl = Length::new::<meter>(GNSS_FIXED_MSL_ALT_M);
+
+        output.1.tov = Tov::Time(ctx.now());
+        output.1.set_payload(fix);
         Ok(())
     }
 }

@@ -1,5 +1,9 @@
 (
-    missions: [(id: "default"), (id: "flow")],
+    missions: [
+        (id: "default"),
+        (id: "flow"),
+        (id: "gnss"),
+    ],
     resources: [
         (
             id: "fc",
@@ -173,6 +177,28 @@
             id: "flow_logger",
             type: "tasks::flow_msp::FlowMspLogger",
             missions: ["flow"],
+            run_in_sim: true,
+            logging: (enabled: false),
+        ),
+        (
+            id: "gnss_ublox",
+            type: "tasks::gnss::GnssSource",
+            missions: ["gnss"],
+            run_in_sim: true,
+            logging: (enabled: false),
+            resources: {"serial": "fc.uart3"},
+            config: {
+                "poll_nav_pvt_ms": 200,
+                "poll_nav_sat_ms": 1000,
+                "poll_nav_sig_ms": 1000,
+                "poll_mon_rf_ms": 2000,
+                "emit_raw_unknown": true,
+            },
+        ),
+        (
+            id: "gnss_fix_sink",
+            type: "tasks::gnss::GnssFixSink",
+            missions: ["gnss"],
             run_in_sim: true,
             logging: (enabled: false),
         ),
@@ -382,6 +408,66 @@
             dst: "flow_logger",
             msg: "cu_msp_bridge::MspRequestBatch",
             missions: ["flow"],
+        ),
+        (
+            src: "gnss_ublox",
+            dst: "__nc__",
+            msg: "cu_gnss_payloads::GnssEpochTime",
+            missions: ["gnss"],
+        ),
+        (
+            src: "gnss_ublox",
+            dst: "gnss_fix_sink",
+            msg: "cu_gnss_payloads::GnssFixSolution",
+            missions: ["gnss"],
+        ),
+        (
+            src: "gnss_ublox",
+            dst: "__nc__",
+            msg: "cu_gnss_payloads::GnssAccuracy",
+            missions: ["gnss"],
+        ),
+        (
+            src: "gnss_ublox",
+            dst: "__nc__",
+            msg: "cu_gnss_payloads::GnssSatsInView",
+            missions: ["gnss"],
+        ),
+        (
+            src: "gnss_ublox",
+            dst: "__nc__",
+            msg: "cu_gnss_payloads::GnssSatelliteState",
+            missions: ["gnss"],
+        ),
+        (
+            src: "gnss_ublox",
+            dst: "__nc__",
+            msg: "cu_gnss_payloads::GnssSignalState",
+            missions: ["gnss"],
+        ),
+        (
+            src: "gnss_ublox",
+            dst: "__nc__",
+            msg: "cu_gnss_payloads::GnssRfStatus",
+            missions: ["gnss"],
+        ),
+        (
+            src: "gnss_ublox",
+            dst: "__nc__",
+            msg: "cu_gnss_payloads::GnssInfoText",
+            missions: ["gnss"],
+        ),
+        (
+            src: "gnss_ublox",
+            dst: "__nc__",
+            msg: "cu_gnss_payloads::GnssCommandAck",
+            missions: ["gnss"],
+        ),
+        (
+            src: "gnss_ublox",
+            dst: "__nc__",
+            msg: "cu_gnss_payloads::GnssRawUbxFrame",
+            missions: ["gnss"],
         ),
     ],
     monitor: (
