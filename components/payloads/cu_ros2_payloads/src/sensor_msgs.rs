@@ -1,6 +1,7 @@
 use compact_str::CompactString;
 use cu_sensor_payloads::{
-    CuImage, CuImageBufferFormat, ImuPayload, MagnetometerPayload, PointCloud, PointCloudSoa,
+    CuImage, CuImageBufferFormat, ImuPayload, JointState, MagnetometerPayload, PointCloud,
+    PointCloudSoa,
 };
 use cu29::prelude::CuHandle;
 use cu29::units::si::acceleration::meter_per_second_squared;
@@ -424,6 +425,82 @@ struct PointOffsets {
     tov_nsec: usize,
 }
 
+// sensor_msgs/JointState
+/// CDR-serialisable representation of `sensor_msgs/JointState`.
+///
+/// Field order and types must exactly match the ROS 2 IDL definition:
+/// ```text
+/// std_msgs/Header header
+/// string[]        name
+/// float64[]       position
+/// float64[]       velocity
+/// float64[]       effort
+/// ```
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct JointStateMsg {
+    pub header: Header,
+    pub name: Vec<String>,
+    pub position: Vec<f64>,
+    pub velocity: Vec<f64>,
+    pub effort: Vec<f64>,
+}
+
+impl<const N: usize> From<&JointState<N>> for JointStateMsg {
+    fn from(src: &JointState<N>) -> Self {
+        Self {
+            header: default_header(),
+            name: src.names.as_slice().to_vec(),
+            position: src.positions.as_slice().iter().map(|&v| v as f64).collect(),
+            velocity: src
+                .velocities
+                .as_slice()
+                .iter()
+                .map(|&v| v as f64)
+                .collect(),
+            effort: src.efforts.as_slice().iter().map(|&v| v as f64).collect(),
+        }
+    }
+}
+
+impl<const N: usize> TryFrom<JointStateMsg> for JointState<N> {
+    type Error = String;
+
+    fn try_from(msg: JointStateMsg) -> Result<Self, Self::Error> {
+        if msg.position.len() > N {
+            return Err(format!(
+                "JointState: {} joints exceed capacity {}",
+                msg.position.len(),
+                N
+            ));
+        }
+        let mut out = JointState::new();
+        out.names.fill_from_iter(msg.name);
+        out.positions
+            .fill_from_iter(msg.position.iter().map(|&v| v as f32));
+        out.velocities
+            .fill_from_iter(msg.velocity.iter().map(|&v| v as f32));
+        out.efforts
+            .fill_from_iter(msg.effort.iter().map(|&v| v as f32));
+        Ok(out)
+    }
+}
+
+impl<const N: usize> RosMsgAdapter<'static> for JointState<N> {
+    type Output = JointStateMsg;
+
+    fn namespace() -> &'static str {
+        "sensor_msgs"
+    }
+
+    fn type_name() -> &'static str {
+        "JointState"
+    }
+
+    fn type_hash() -> &'static str {
+        "RIHS01_a13ee3a330e346c9d87b5aa18d24e11690752bd33a0350f11c5882bc9179260e"
+    }
+}
+
 fn default_header() -> Header {
     Header {
         stamp: crate::builtin::Time { sec: 0, nanosec: 0 },
@@ -526,6 +603,46 @@ fn encoding_to_pixel_format(encoding: &str) -> [u8; 4] {
 mod tests {
     use super::*;
     use crate::RosBridgeAdapter;
+
+    #[test]
+    fn joint_state_overflow_is_rejected() {
+        let msg = JointStateMsg {
+            header: default_header(),
+            name: vec!["j0".into(), "j1".into(), "j2".into()],
+            position: vec![1.0, 2.0, 3.0],
+            velocity: vec![],
+            effort: vec![],
+        };
+        // 3 joints into capacity-2 must fail
+        assert!(JointState::<2>::try_from(msg).is_err());
+    }
+
+    #[test]
+    fn joint_state_roundtrip() {
+        let mut js = JointState::<6>::default();
+        js.names
+            .fill_from_iter(["j0", "j1", "j2"].map(String::from));
+        js.positions.fill_from_iter([0.1_f32, -0.2, 0.3]);
+        js.velocities.fill_from_iter([1.0_f32, 2.0, 3.0]);
+        js.efforts.fill_from_iter([10.0_f32, 20.0, 30.0]);
+
+        let ros_value = js.to_ros_message();
+        let bytes = cdr::serialize::<_, _, cdr::CdrBe>(&ros_value, cdr::Infinite)
+            .expect("cdr encode should succeed");
+        let decoded_ros: JointStateMsg =
+            cdr::deserialize(bytes.as_slice()).expect("cdr decode should succeed");
+        let recovered =
+            JointState::<6>::from_ros_message(decoded_ros).expect("adapter decode should work");
+
+        assert_eq!(recovered.names.as_slice(), js.names.as_slice());
+        for i in 0..3 {
+            assert!((recovered.positions.as_slice()[i] - js.positions.as_slice()[i]).abs() < 1e-6);
+            assert!(
+                (recovered.velocities.as_slice()[i] - js.velocities.as_slice()[i]).abs() < 1e-6
+            );
+            assert!((recovered.efforts.as_slice()[i] - js.efforts.as_slice()[i]).abs() < 1e-6);
+        }
+    }
 
     #[test]
     fn pointcloud_soa_roundtrip() {

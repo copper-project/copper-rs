@@ -431,7 +431,7 @@ impl FeetechBridge {
     /// [start_address] [bytes_per_servo] [ID_0] [lo_0] [hi_0] [ID_1] …
     /// ```
     fn sync_write_positions(&mut self, positions: &JointPositions) -> CuResult<()> {
-        let vals = positions.as_slice();
+        let vals = positions.positions.as_slice();
         // Write at most as many servos as we have configured, even if the
         // payload carries fewer (or more) entries.
         let n = (self.num_servos as usize).min(vals.len());
@@ -681,8 +681,8 @@ impl CuBridge for FeetechBridge {
             RxId::Positions => {
                 // Build the payload, converting each raw position to the
                 // configured output unit (raw / deg / rad).
-                let mut payload = JointPositions::new();
-                payload.fill_from_iter(
+                let mut payload = JointPositions::default();
+                payload.positions.fill_from_iter(
                     self.cached_positions[..self.num_servos as usize]
                         .iter()
                         .enumerate()
@@ -741,9 +741,9 @@ mod tests {
 
     #[test]
     fn joint_positions_from_slice() {
-        let mut p = JointPositions::new();
-        p.fill_from_iter([0.0f32, 32768.0, 65535.0]);
-        assert_eq!(p.as_slice(), &[0.0, 32768.0, 65535.0]);
+        let mut p = JointPositions::default();
+        p.positions.fill_from_iter([0.0f32, 32768.0, 65535.0]);
+        assert_eq!(p.positions.as_slice(), &[0.0, 32768.0, 65535.0]);
     }
 
     #[test]

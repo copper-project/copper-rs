@@ -17,6 +17,7 @@ path = "src/bin/calibrate.rs"
 
 [dependencies]
 cu29 = { workspace = true }
+cu-sensor-payloads = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 cu-linux-resources = { workspace = true }
