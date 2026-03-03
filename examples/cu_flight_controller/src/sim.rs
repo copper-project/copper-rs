@@ -629,7 +629,7 @@ fn spawn_quadcopter_when_world_ready(
             ang_vel,
             Collider::cuboid(0.14, 0.05, 0.14),
             Multicopter::new(quad_x_propellers()),
-            Mass(0.7),
+            Mass(0.44),
             AngularInertia::new(Vec3::new(0.012, 0.02, 0.012)),
             AngularDamping(0.4),
             LinearDamping(0.2),
