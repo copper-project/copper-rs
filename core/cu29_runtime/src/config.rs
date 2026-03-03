@@ -878,6 +878,31 @@ fn mission_applies(missions: &Option<Vec<String>>, mission_id: &str) -> bool {
         .unwrap_or(true)
 }
 
+fn merge_connection_missions(existing: &mut Option<Vec<String>>, incoming: &Option<Vec<String>>) {
+    if incoming.is_none() {
+        *existing = None;
+        return;
+    }
+    if existing.is_none() {
+        return;
+    }
+
+    if let (Some(existing_missions), Some(incoming_missions)) =
+        (existing.as_mut(), incoming.as_ref())
+    {
+        for mission in incoming_missions {
+            if !existing_missions
+                .iter()
+                .any(|existing_mission| existing_mission == mission)
+            {
+                existing_missions.push(mission.clone());
+            }
+        }
+        existing_missions.sort();
+        existing_missions.dedup();
+    }
+}
+
 fn register_nc_output<E>(
     graph: &mut CuGraph,
     src_endpoint: &str,
@@ -1781,7 +1806,7 @@ impl Serialize for CuConfig {
                 let mut tasks = Vec::new();
                 let mut ordered_cnx: Vec<(usize, SerializedCnx)> = Vec::new();
 
-                for graph in graphs.values() {
+                for (mission_id, graph) in graphs {
                     // Add all nodes from this mission
                     for node_idx in graph.node_indices() {
                         let node = &graph[node_idx];
@@ -1801,14 +1826,20 @@ impl Serialize for CuConfig {
                             edge.order
                         };
                         let serialized = SerializedCnx::from(edge);
-                        if let Some((existing_order, _)) = ordered_cnx.iter_mut().find(|(_, c)| {
-                            c.src == serialized.src
-                                && c.dst == serialized.dst
-                                && c.msg == serialized.msg
-                        }) {
+                        if let Some((existing_order, existing_serialized)) =
+                            ordered_cnx.iter_mut().find(|(_, c)| {
+                                c.src == serialized.src
+                                    && c.dst == serialized.dst
+                                    && c.msg == serialized.msg
+                            })
+                        {
                             if order < *existing_order {
                                 *existing_order = order;
                             }
+                            merge_connection_missions(
+                                &mut existing_serialized.missions,
+                                &serialized.missions,
+                            );
                         } else {
                             ordered_cnx.push((order, serialized));
                         }
@@ -1823,9 +1854,9 @@ impl Serialize for CuConfig {
                                 src: node.get_id(),
                                 dst: NC_ENDPOINT.to_string(),
                                 msg: msg.clone(),
-                                missions: None,
+                                missions: Some(vec![mission_id.clone()]),
                             };
-                            if let Some((existing_order, _)) =
+                            if let Some((existing_order, existing_serialized)) =
                                 ordered_cnx.iter_mut().find(|(_, c)| {
                                     c.src == serialized.src
                                         && c.dst == serialized.dst
@@ -1835,6 +1866,10 @@ impl Serialize for CuConfig {
                                 if order < *existing_order {
                                     *existing_order = order;
                                 }
+                                merge_connection_missions(
+                                    &mut existing_serialized.missions,
+                                    &serialized.missions,
+                                );
                             } else {
                                 ordered_cnx.push((order, serialized));
                             }
@@ -3553,6 +3588,35 @@ mod tests {
         assert_eq!(cnx.dst, "sink");
         assert_eq!(cnx.msg, "u32");
         assert_eq!(cnx.missions, Some(vec!["m1".to_string()]));
+    }
+
+    #[test]
+    fn test_mission_scoped_nc_connection_survives_serialize_roundtrip() {
+        let txt = r#"(
+            missions: [(id: "m1"), (id: "m2")],
+            tasks: [
+                (id: "src_m1", type: "a", missions: ["m1"]),
+                (id: "src_m2", type: "b", missions: ["m2"]),
+            ],
+            cnx: [
+                (src: "src_m1", dst: "__nc__", msg: "msg::A", missions: ["m1"]),
+                (src: "src_m2", dst: "__nc__", msg: "msg::B", missions: ["m2"]),
+            ]
+        )"#;
+
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let serialized = config.serialize_ron().unwrap();
+        let deserialized = CuConfig::deserialize_ron(&serialized).unwrap();
+
+        let m1_graph = deserialized.graphs.get_graph(Some("m1")).unwrap();
+        let src_m1_id = m1_graph.get_node_id_by_name("src_m1").unwrap();
+        let src_m1 = m1_graph.get_node(src_m1_id).unwrap();
+        assert_eq!(src_m1.nc_outputs(), &["msg::A".to_string()]);
+
+        let m2_graph = deserialized.graphs.get_graph(Some("m2")).unwrap();
+        let src_m2_id = m2_graph.get_node_id_by_name("src_m2").unwrap();
+        let src_m2 = m2_graph.get_node(src_m2_id).unwrap();
+        assert_eq!(src_m2.nc_outputs(), &["msg::B".to_string()]);
     }
 
     #[test]
