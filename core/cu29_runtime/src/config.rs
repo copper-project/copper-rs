@@ -486,6 +486,12 @@ pub struct Node {
     /// Node role in the runtime graph (normal task or bridge endpoint).
     #[serde(skip, default)]
     flavor: Flavor,
+    /// Message types that are intentionally not connected (NC) in configuration.
+    #[serde(skip, default)]
+    nc_outputs: Vec<String>,
+    /// Original config connection order for each NC output message type.
+    #[serde(skip, default)]
+    nc_output_orders: Vec<usize>,
 }
 
 impl Node {
@@ -501,6 +507,8 @@ impl Node {
             run_in_sim: None,
             logging: None,
             flavor: Flavor::Task,
+            nc_outputs: Vec::new(),
+            nc_output_orders: Vec::new(),
         }
     }
 
@@ -601,6 +609,37 @@ impl Node {
     #[allow(dead_code)]
     pub fn set_flavor(&mut self, flavor: Flavor) {
         self.flavor = flavor;
+    }
+
+    /// Registers an intentionally unconnected output message type for this node.
+    #[allow(dead_code)]
+    pub fn add_nc_output(&mut self, msg_type: &str, order: usize) {
+        if let Some(pos) = self
+            .nc_outputs
+            .iter()
+            .position(|existing| existing == msg_type)
+        {
+            if order < self.nc_output_orders[pos] {
+                self.nc_output_orders[pos] = order;
+            }
+            return;
+        }
+        self.nc_outputs.push(msg_type.to_string());
+        self.nc_output_orders.push(order);
+    }
+
+    /// Returns message types intentionally marked as not connected.
+    #[allow(dead_code)]
+    pub fn nc_outputs(&self) -> &[String] {
+        &self.nc_outputs
+    }
+
+    /// Returns NC outputs paired with original config order.
+    #[allow(dead_code)]
+    pub fn nc_outputs_with_order(&self) -> impl Iterator<Item = (&String, usize)> {
+        self.nc_outputs
+            .iter()
+            .zip(self.nc_output_orders.iter().copied())
     }
 }
 
@@ -756,6 +795,9 @@ struct SerializedCnx {
     missions: Option<Vec<String>>,
 }
 
+/// Special destination endpoint used to mark an output as intentionally not connected.
+pub const NC_ENDPOINT: &str = "__nc__";
+
 /// This represents a connection between 2 tasks (nodes) in the configuration graph.
 #[derive(Debug, Clone)]
 pub struct Cnx {
@@ -771,6 +813,8 @@ pub struct Cnx {
     pub src_channel: Option<String>,
     /// Optional channel id when the destination endpoint is a bridge.
     pub dst_channel: Option<String>,
+    /// Original serialized connection index used to preserve output ordering.
+    pub order: usize,
 }
 
 impl From<&Cnx> for SerializedCnx {
@@ -832,6 +876,66 @@ fn mission_applies(missions: &Option<Vec<String>>, mission_id: &str) -> bool {
         .as_ref()
         .map(|mission_list| mission_list.iter().any(|m| m == mission_id))
         .unwrap_or(true)
+}
+
+fn merge_connection_missions(existing: &mut Option<Vec<String>>, incoming: &Option<Vec<String>>) {
+    if incoming.is_none() {
+        *existing = None;
+        return;
+    }
+    if existing.is_none() {
+        return;
+    }
+
+    if let (Some(existing_missions), Some(incoming_missions)) =
+        (existing.as_mut(), incoming.as_ref())
+    {
+        for mission in incoming_missions {
+            if !existing_missions
+                .iter()
+                .any(|existing_mission| existing_mission == mission)
+            {
+                existing_missions.push(mission.clone());
+            }
+        }
+        existing_missions.sort();
+        existing_missions.dedup();
+    }
+}
+
+fn register_nc_output<E>(
+    graph: &mut CuGraph,
+    src_endpoint: &str,
+    msg_type: &str,
+    order: usize,
+    bridge_lookup: &HashMap<&str, &BridgeConfig>,
+) -> Result<(), E>
+where
+    E: From<String>,
+{
+    let (src_name, src_channel) =
+        parse_endpoint(src_endpoint, EndpointRole::Source, bridge_lookup).map_err(E::from)?;
+    if src_channel.is_some() {
+        return Err(E::from(format!(
+            "NC destination '{}' does not support bridge channels in source endpoint '{}'",
+            NC_ENDPOINT, src_endpoint
+        )));
+    }
+
+    let src = graph
+        .get_node_id_by_name(src_name.as_str())
+        .ok_or_else(|| E::from(format!("Source node not found: {src_endpoint}")))?;
+    let src_node = graph
+        .get_node_mut(src)
+        .ok_or_else(|| E::from(format!("Source node id {src} not found for NC output")))?;
+    if src_node.get_flavor() != Flavor::Task {
+        return Err(E::from(format!(
+            "NC destination '{}' is only supported for task outputs (source '{}')",
+            NC_ENDPOINT, src_endpoint
+        )));
+    }
+    src_node.add_nc_output(msg_type, order);
+    Ok(())
 }
 
 /// A simple wrapper enum for `petgraph::Direction`,
@@ -940,6 +1044,28 @@ impl CuGraph {
         src_channel: Option<String>,
         dst_channel: Option<String>,
     ) -> CuResult<()> {
+        self.connect_ext_with_order(
+            source,
+            target,
+            msg_type,
+            missions,
+            src_channel,
+            dst_channel,
+            usize::MAX,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn connect_ext_with_order(
+        &mut self,
+        source: NodeId,
+        target: NodeId,
+        msg_type: &str,
+        missions: Option<Vec<String>>,
+        src_channel: Option<String>,
+        dst_channel: Option<String>,
+        order: usize,
+    ) -> CuResult<()> {
         let (src_id, dst_id) = (
             self.0
                 .node_weight(source.into())
@@ -963,6 +1089,7 @@ impl CuGraph {
                 missions,
                 src_channel,
                 dst_channel,
+                order,
             },
         );
         Ok(())
@@ -1417,10 +1544,20 @@ where
             }
 
             if let Some(cnx) = &representation.cnx {
-                for c in cnx {
+                for (connection_order, c) in cnx.iter().enumerate() {
                     if let Some(cnx_missions) = &c.missions {
                         // if there is a filter by mission on the connection, only add the connection to the mission if it matches the filter.
                         if cnx_missions.contains(&mission_id.to_owned()) {
+                            if c.dst == NC_ENDPOINT {
+                                register_nc_output::<E>(
+                                    graph,
+                                    &c.src,
+                                    &c.msg,
+                                    connection_order,
+                                    &bridge_lookup,
+                                )?;
+                                continue;
+                            }
                             let (src_name, src_channel) =
                                 parse_endpoint(&c.src, EndpointRole::Source, &bridge_lookup)
                                     .map_err(E::from)?;
@@ -1440,18 +1577,29 @@ where
                                         E::from(format!("Destination node not found: {}", c.dst))
                                     })?;
                             graph
-                                .connect_ext(
+                                .connect_ext_with_order(
                                     src,
                                     dst,
                                     &c.msg,
                                     Some(cnx_missions.clone()),
                                     src_channel,
                                     dst_channel,
+                                    connection_order,
                                 )
                                 .map_err(|e| E::from(e.to_string()))?;
                         }
                     } else {
                         // if there is no filter by mission on the connection, add the connection to the mission.
+                        if c.dst == NC_ENDPOINT {
+                            register_nc_output::<E>(
+                                graph,
+                                &c.src,
+                                &c.msg,
+                                connection_order,
+                                &bridge_lookup,
+                            )?;
+                            continue;
+                        }
                         let (src_name, src_channel) =
                             parse_endpoint(&c.src, EndpointRole::Source, &bridge_lookup)
                                 .map_err(E::from)?;
@@ -1468,7 +1616,15 @@ where
                                     E::from(format!("Destination node not found: {}", c.dst))
                                 })?;
                         graph
-                            .connect_ext(src, dst, &c.msg, None, src_channel, dst_channel)
+                            .connect_ext_with_order(
+                                src,
+                                dst,
+                                &c.msg,
+                                None,
+                                src_channel,
+                                dst_channel,
+                                connection_order,
+                            )
                             .map_err(|e| E::from(e.to_string()))?;
                     }
                 }
@@ -1494,7 +1650,17 @@ where
         }
 
         if let Some(cnx) = &representation.cnx {
-            for c in cnx {
+            for (connection_order, c) in cnx.iter().enumerate() {
+                if c.dst == NC_ENDPOINT {
+                    register_nc_output::<E>(
+                        &mut graph,
+                        &c.src,
+                        &c.msg,
+                        connection_order,
+                        &bridge_lookup,
+                    )?;
+                    continue;
+                }
                 let (src_name, src_channel) =
                     parse_endpoint(&c.src, EndpointRole::Source, &bridge_lookup)
                         .map_err(E::from)?;
@@ -1508,7 +1674,15 @@ where
                     .get_node_id_by_name(dst_name.as_str())
                     .ok_or_else(|| E::from(format!("Destination node not found: {}", c.dst)))?;
                 graph
-                    .connect_ext(src, dst, &c.msg, None, src_channel, dst_channel)
+                    .connect_ext_with_order(
+                        src,
+                        dst,
+                        &c.msg,
+                        None,
+                        src_channel,
+                        dst_channel,
+                        connection_order,
+                    )
                     .map_err(|e| E::from(e.to_string()))?;
             }
         }
@@ -1567,10 +1741,46 @@ impl Serialize for CuConfig {
                     .filter(|node| node.get_flavor() == Flavor::Task)
                     .collect();
 
-                let cnx: Vec<SerializedCnx> = graph
+                let mut ordered_cnx: Vec<(usize, SerializedCnx)> = graph
                     .0
                     .edge_indices()
-                    .map(|edge| SerializedCnx::from(&graph.0[edge]))
+                    .map(|edge_idx| {
+                        let edge = &graph.0[edge_idx];
+                        let order = if edge.order == usize::MAX {
+                            edge_idx.index()
+                        } else {
+                            edge.order
+                        };
+                        (order, SerializedCnx::from(edge))
+                    })
+                    .collect();
+                for node_idx in graph.0.node_indices() {
+                    let node = &graph.0[node_idx];
+                    if node.get_flavor() != Flavor::Task {
+                        continue;
+                    }
+                    for (msg, order) in node.nc_outputs_with_order() {
+                        ordered_cnx.push((
+                            order,
+                            SerializedCnx {
+                                src: node.get_id(),
+                                dst: NC_ENDPOINT.to_string(),
+                                msg: msg.clone(),
+                                missions: None,
+                            },
+                        ));
+                    }
+                }
+                ordered_cnx.sort_by(|(order_a, cnx_a), (order_b, cnx_b)| {
+                    order_a
+                        .cmp(order_b)
+                        .then_with(|| cnx_a.src.cmp(&cnx_b.src))
+                        .then_with(|| cnx_a.dst.cmp(&cnx_b.dst))
+                        .then_with(|| cnx_a.msg.cmp(&cnx_b.msg))
+                });
+                let cnx: Vec<SerializedCnx> = ordered_cnx
+                    .into_iter()
+                    .map(|(_, serialized)| serialized)
                     .collect();
 
                 CuConfigRepresentation {
@@ -1594,9 +1804,9 @@ impl Serialize for CuConfig {
 
                 // Collect all unique tasks across missions
                 let mut tasks = Vec::new();
-                let mut cnx = Vec::new();
+                let mut ordered_cnx: Vec<(usize, SerializedCnx)> = Vec::new();
 
-                for graph in graphs.values() {
+                for (mission_id, graph) in graphs {
                     // Add all nodes from this mission
                     for node_idx in graph.node_indices() {
                         let node = &graph[node_idx];
@@ -1610,16 +1820,73 @@ impl Serialize for CuConfig {
                     // Add all edges from this mission
                     for edge_idx in graph.0.edge_indices() {
                         let edge = &graph.0[edge_idx];
+                        let order = if edge.order == usize::MAX {
+                            edge_idx.index()
+                        } else {
+                            edge.order
+                        };
                         let serialized = SerializedCnx::from(edge);
-                        if !cnx.iter().any(|c: &SerializedCnx| {
-                            c.src == serialized.src
-                                && c.dst == serialized.dst
-                                && c.msg == serialized.msg
-                        }) {
-                            cnx.push(serialized);
+                        if let Some((existing_order, existing_serialized)) =
+                            ordered_cnx.iter_mut().find(|(_, c)| {
+                                c.src == serialized.src
+                                    && c.dst == serialized.dst
+                                    && c.msg == serialized.msg
+                            })
+                        {
+                            if order < *existing_order {
+                                *existing_order = order;
+                            }
+                            merge_connection_missions(
+                                &mut existing_serialized.missions,
+                                &serialized.missions,
+                            );
+                        } else {
+                            ordered_cnx.push((order, serialized));
+                        }
+                    }
+                    for node_idx in graph.0.node_indices() {
+                        let node = &graph.0[node_idx];
+                        if node.get_flavor() != Flavor::Task {
+                            continue;
+                        }
+                        for (msg, order) in node.nc_outputs_with_order() {
+                            let serialized = SerializedCnx {
+                                src: node.get_id(),
+                                dst: NC_ENDPOINT.to_string(),
+                                msg: msg.clone(),
+                                missions: Some(vec![mission_id.clone()]),
+                            };
+                            if let Some((existing_order, existing_serialized)) =
+                                ordered_cnx.iter_mut().find(|(_, c)| {
+                                    c.src == serialized.src
+                                        && c.dst == serialized.dst
+                                        && c.msg == serialized.msg
+                                })
+                            {
+                                if order < *existing_order {
+                                    *existing_order = order;
+                                }
+                                merge_connection_missions(
+                                    &mut existing_serialized.missions,
+                                    &serialized.missions,
+                                );
+                            } else {
+                                ordered_cnx.push((order, serialized));
+                            }
                         }
                     }
                 }
+                ordered_cnx.sort_by(|(order_a, cnx_a), (order_b, cnx_b)| {
+                    order_a
+                        .cmp(order_b)
+                        .then_with(|| cnx_a.src.cmp(&cnx_b.src))
+                        .then_with(|| cnx_a.dst.cmp(&cnx_b.dst))
+                        .then_with(|| cnx_a.msg.cmp(&cnx_b.msg))
+                });
+                let cnx: Vec<SerializedCnx> = ordered_cnx
+                    .into_iter()
+                    .map(|(_, serialized)| serialized)
+                    .collect();
 
                 CuConfigRepresentation {
                     tasks: Some(tasks),
@@ -3324,6 +3591,35 @@ mod tests {
     }
 
     #[test]
+    fn test_mission_scoped_nc_connection_survives_serialize_roundtrip() {
+        let txt = r#"(
+            missions: [(id: "m1"), (id: "m2")],
+            tasks: [
+                (id: "src_m1", type: "a", missions: ["m1"]),
+                (id: "src_m2", type: "b", missions: ["m2"]),
+            ],
+            cnx: [
+                (src: "src_m1", dst: "__nc__", msg: "msg::A", missions: ["m1"]),
+                (src: "src_m2", dst: "__nc__", msg: "msg::B", missions: ["m2"]),
+            ]
+        )"#;
+
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let serialized = config.serialize_ron().unwrap();
+        let deserialized = CuConfig::deserialize_ron(&serialized).unwrap();
+
+        let m1_graph = deserialized.graphs.get_graph(Some("m1")).unwrap();
+        let src_m1_id = m1_graph.get_node_id_by_name("src_m1").unwrap();
+        let src_m1 = m1_graph.get_node(src_m1_id).unwrap();
+        assert_eq!(src_m1.nc_outputs(), &["msg::A".to_string()]);
+
+        let m2_graph = deserialized.graphs.get_graph(Some("m2")).unwrap();
+        let src_m2_id = m2_graph.get_node_id_by_name("src_m2").unwrap();
+        let src_m2 = m2_graph.get_node(src_m2_id).unwrap();
+        assert_eq!(src_m2.nc_outputs(), &["msg::B".to_string()]);
+    }
+
+    #[test]
     fn test_keyframe_interval() {
         // note here that the src1 task is added before src2 in the tasks array,
         // however, src1 connection is added AFTER src2 in the cnx array
@@ -3349,5 +3645,70 @@ mod tests {
         let config = CuConfig::deserialize_ron(txt).unwrap();
         let logging_config = config.logging.unwrap();
         assert_eq!(logging_config.keyframe_interval.unwrap(), 100);
+    }
+
+    #[test]
+    fn test_nc_connection_marks_source_output_without_creating_edge() {
+        let txt = r#"(
+            tasks: [(id: "src", type: "a"), (id: "sink", type: "b")],
+            cnx: [
+                (src: "src", dst: "sink", msg: "msg::A"),
+                (src: "src", dst: "__nc__", msg: "msg::B"),
+            ]
+        )"#;
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let graph = config.get_graph(None).unwrap();
+        let src_id = graph.get_node_id_by_name("src").unwrap();
+        let src_node = graph.get_node(src_id).unwrap();
+
+        assert_eq!(graph.edge_count(), 1);
+        assert_eq!(src_node.nc_outputs(), &["msg::B".to_string()]);
+    }
+
+    #[test]
+    fn test_nc_connection_survives_serialize_roundtrip() {
+        let txt = r#"(
+            tasks: [(id: "src", type: "a"), (id: "sink", type: "b")],
+            cnx: [
+                (src: "src", dst: "sink", msg: "msg::A"),
+                (src: "src", dst: "__nc__", msg: "msg::B"),
+            ]
+        )"#;
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let serialized = config.serialize_ron().unwrap();
+        let deserialized = CuConfig::deserialize_ron(&serialized).unwrap();
+        let graph = deserialized.get_graph(None).unwrap();
+        let src_id = graph.get_node_id_by_name("src").unwrap();
+        let src_node = graph.get_node(src_id).unwrap();
+
+        assert_eq!(graph.edge_count(), 1);
+        assert_eq!(src_node.nc_outputs(), &["msg::B".to_string()]);
+    }
+
+    #[test]
+    fn test_nc_connection_preserves_original_connection_order() {
+        let txt = r#"(
+            tasks: [(id: "src", type: "a"), (id: "sink", type: "b")],
+            cnx: [
+                (src: "src", dst: "__nc__", msg: "msg::A"),
+                (src: "src", dst: "sink", msg: "msg::B"),
+            ]
+        )"#;
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let graph = config.get_graph(None).unwrap();
+        let src_id = graph.get_node_id_by_name("src").unwrap();
+        let src_node = graph.get_node(src_id).unwrap();
+        let edge_id = graph.get_src_edges(src_id).unwrap()[0];
+        let edge = graph.edge(edge_id).unwrap();
+
+        assert_eq!(edge.msg, "msg::B");
+        assert_eq!(edge.order, 1);
+        assert_eq!(
+            src_node
+                .nc_outputs_with_order()
+                .map(|(msg, order)| (msg.as_str(), order))
+                .collect::<Vec<_>>(),
+            vec![("msg::A", 0)]
+        );
     }
 }

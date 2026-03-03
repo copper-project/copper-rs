@@ -1,0 +1,21 @@
+error[E0277]: the trait bound `CuStampedData<i32, CuMsgMetadata>: __CuOutputSlotMustMatchTaskOutput__Task_src__Add_dst___nc___connections_for_unused_outputs<(CuStampedData<i32, CuMsgMetadata>, CuStampedData<bool, CuMsgMetadata>)>` is not satisfied
+  --> tests/compile_fail/copper_runtime/multi_output_source_subset_without_nc.rs:42:1
+   |
+42 | / #[copper_runtime(
+43 | |     config = "config/multi_output_source_subset_without_nc.ron",
+44 | |     sim_mode = true,
+45 | |     ignore_resources = true
+46 | | )]
+   | |__^ unsatisfied trait bound
+   |
+   = help: the trait `__CuOutputSlotMustMatchTaskOutput__Task_src__Add_dst___nc___connections_for_unused_outputs<(CuStampedData<i32, CuMsgMetadata>, CuStampedData<bool, CuMsgMetadata>)>` is not implemented for `CuStampedData<i32, CuMsgMetadata>`
+note: required by a bound in `__cu_source_output_slot_or_add_dst___nc___for_unused_outputs__task_src`
+  --> tests/compile_fail/copper_runtime/multi_output_source_subset_without_nc.rs:42:1
+   |
+42 | / #[copper_runtime(
+43 | |     config = "config/multi_output_source_subset_without_nc.ron",
+44 | |     sim_mode = true,
+45 | |     ignore_resources = true
+46 | | )]
+   | |__^ required by this bound in `__cu_source_output_slot_or_add_dst___nc___for_unused_outputs__task_src`
+   = note: this error originates in the attribute macro `copper_runtime` (in Nightly builds, run with -Z macro-backtrace for more info)

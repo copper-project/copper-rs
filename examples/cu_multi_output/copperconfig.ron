@@ -30,11 +30,6 @@
             missions: ["both_inputs"],
         ),
         (
-            id: "drop_bool",
-            type: "tasks::DropBoolSink",
-            missions: ["open_output"],
-        ),
-        (
             id: "loopback",
             type: "tasks::LoopbackTask",
             missions: ["loopback"],
@@ -73,7 +68,7 @@
         ),
         (
             src: "src",
-            dst: "drop_bool",
+            dst: "__nc__",
             msg: "bool",
             missions: ["open_output"],
         ),

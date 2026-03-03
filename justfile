@@ -25,9 +25,8 @@ lint:
 fmt-check: check-format-tools
 	@cargo +stable fmt --all -- --check
 	@git ls-files -z '*.toml' | xargs -0 -r env RUST_LOG=warn taplo format --check
-	@git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' | xargs -0 -r -n 1 fmtron --input
+	@bash -lc 'set -euo pipefail; changed=(); while IFS= read -r -d "" f; do tmp=$(mktemp); cp "$f" "$tmp"; fmtron --input "$tmp" >/dev/null; if ! cmp -s "$f" "$tmp"; then changed+=("$f"); fi; rm -f "$tmp"; done < <(git ls-files -z "*.ron" ":!examples/modular_config_example/motors.ron"); if ((${#changed[@]})); then printf "RON formatting check failed:\n"; printf "%s\n" "${changed[@]}"; exit 1; fi'
 	@rg --files -g '*.ron.bak' | xargs rm -f
-	@git diff --exit-code -- '*.ron'
 
 # Apply formatting to Rust, TOML, and RON files
 fmt: check-format-tools

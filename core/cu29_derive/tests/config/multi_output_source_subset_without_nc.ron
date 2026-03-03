@@ -1,0 +1,21 @@
+(
+    tasks: [
+        (
+            id: "src",
+            type: "MultiSource",
+            run_in_sim: true,
+        ),
+        (
+            id: "sink",
+            type: "IntSink",
+            run_in_sim: true,
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "sink",
+            msg: "i32",
+        ),
+    ],
+)

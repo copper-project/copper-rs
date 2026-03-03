@@ -4296,13 +4296,14 @@ fn build_execution_plan(
         };
 
         plan_graph
-            .connect_ext(
+            .connect_ext_with_order(
                 src_plan,
                 dst_plan,
                 &cnx.msg,
                 cnx.missions.clone(),
                 None,
                 None,
+                cnx.order,
             )
             .map_err(|e| CuError::from(e.to_string()))?;
     }
@@ -4440,6 +4441,23 @@ fn generate_task_execution_tokens(
     let tid = task_index;
     let task_enum_name = config_id_to_enum(&task_specs.ids[tid]);
     let enum_name = Ident::new(&task_enum_name, Span::call_site());
+    let task_hint = config_id_to_struct_member(&task_specs.ids[tid]);
+    let source_slot_match_trait_ident = format_ident!(
+        "__CuOutputSlotMustMatchTaskOutput__Task_{}__Add_dst___nc___connections_for_unused_outputs",
+        task_hint
+    );
+    let source_slot_match_fn_ident = format_ident!(
+        "__cu_source_output_slot_or_add_dst___nc___for_unused_outputs__task_{}",
+        task_hint
+    );
+    let regular_slot_match_trait_ident = format_ident!(
+        "__CuOutputSlotMustMatchTaskOutput__Task_{}__Add_dst___nc___connections_for_unused_outputs",
+        task_hint
+    );
+    let regular_slot_match_fn_ident = format_ident!(
+        "__cu_task_output_slot_or_add_dst___nc___for_unused_outputs__task_{}",
+        task_hint
+    );
     let rt_guard = rtsan_guard_tokens();
     let run_in_sim_flag = task_specs.run_in_sim_flags[tid];
     let maybe_sim_tick = if sim_mode && !run_in_sim_flag {
@@ -4551,6 +4569,41 @@ fn generate_task_execution_tokens(
             } else {
                 quote!()
             };
+            let source_process_tokens = quote! {
+                #[allow(non_camel_case_types)]
+                trait #source_slot_match_trait_ident<Expected> {
+                    fn __cu_cast_output_slot(slot: &mut Self) -> &mut Expected;
+                }
+                impl<T> #source_slot_match_trait_ident<T> for T {
+                    fn __cu_cast_output_slot(slot: &mut Self) -> &mut T {
+                        slot
+                    }
+                }
+
+                fn #source_slot_match_fn_ident<'a, Task, Slot>(
+                    _task: &Task,
+                    slot: &'a mut Slot,
+                ) -> &'a mut Task::Output<'static>
+                where
+                    Task: cu29::cutask::CuSrcTask,
+                    Slot: #source_slot_match_trait_ident<Task::Output<'static>>,
+                {
+                    <Slot as #source_slot_match_trait_ident<Task::Output<'static>>>::__cu_cast_output_slot(slot)
+                }
+
+                #output_start_time
+                let result = {
+                    let cumsg_output = #source_slot_match_fn_ident::<
+                        _,
+                        _,
+                    >(&#task_instance, cumsg_output);
+                    #rt_guard
+                    ctx.set_current_task(#tid);
+                    #task_instance.process(&ctx, cumsg_output)
+                };
+                #output_end_time
+                result
+            };
 
             (
                 quote! {
@@ -4566,14 +4619,7 @@ fn generate_task_execution_tokens(
                                 step: CuComponentState::Process,
                                 culistid: Some(clid),
                             });
-                            #output_start_time
-                            let result = {
-                                #rt_guard
-                                ctx.set_current_task(#tid);
-                                #task_instance.process(&ctx, cumsg_output)
-                            };
-                            #output_end_time
-                            result
+                            #source_process_tokens
                         } else {
                             Ok(())
                         };
@@ -4783,6 +4829,41 @@ fn generate_task_execution_tokens(
             } else {
                 quote!()
             };
+            let regular_process_tokens = quote! {
+                #[allow(non_camel_case_types)]
+                trait #regular_slot_match_trait_ident<Expected> {
+                    fn __cu_cast_output_slot(slot: &mut Self) -> &mut Expected;
+                }
+                impl<T> #regular_slot_match_trait_ident<T> for T {
+                    fn __cu_cast_output_slot(slot: &mut Self) -> &mut T {
+                        slot
+                    }
+                }
+
+                fn #regular_slot_match_fn_ident<'a, Task, Slot>(
+                    _task: &Task,
+                    slot: &'a mut Slot,
+                ) -> &'a mut Task::Output<'static>
+                where
+                    Task: cu29::cutask::CuTask,
+                    Slot: #regular_slot_match_trait_ident<Task::Output<'static>>,
+                {
+                    <Slot as #regular_slot_match_trait_ident<Task::Output<'static>>>::__cu_cast_output_slot(slot)
+                }
+
+                #output_start_time
+                let result = {
+                    let cumsg_output = #regular_slot_match_fn_ident::<
+                        _,
+                        _,
+                    >(&#task_instance, cumsg_output);
+                    #rt_guard
+                    ctx.set_current_task(#tid);
+                    #task_instance.process(&ctx, cumsg_input, cumsg_output)
+                };
+                #output_end_time
+                result
+            };
 
             (
                 quote! {
@@ -4798,14 +4879,7 @@ fn generate_task_execution_tokens(
                                 step: CuComponentState::Process,
                                 culistid: Some(clid),
                             });
-                            #output_start_time
-                            let result = {
-                                #rt_guard
-                                ctx.set_current_task(#tid);
-                                #task_instance.process(&ctx, cumsg_input, cumsg_output)
-                            };
-                            #output_end_time
-                            result
+                            #regular_process_tokens
                         } else {
                             Ok(())
                         };
@@ -5229,6 +5303,34 @@ mod tests {
         let t = trybuild::TestCases::new();
         t.compile_fail("tests/compile_fail/*/*.rs");
         t.pass("tests/compile_pass/*/*.rs");
+    }
+
+    #[test]
+    fn runtime_plan_keeps_nc_order_for_non_first_connected_output() {
+        use super::*;
+        use cu29::config::CuConfig;
+        use cu29::curuntime::{CuExecutionUnit, compute_runtime_plan};
+
+        let config: CuConfig =
+            read_config("tests/config/multi_output_source_non_first_connected_valid.ron")
+                .expect("failed to read test config");
+        let graph = config.get_graph(None).expect("missing graph");
+        let src_id = graph.get_node_id_by_name("src").expect("missing src node");
+
+        let runtime = compute_runtime_plan(graph).expect("runtime plan failed");
+        let src_step = runtime
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                CuExecutionUnit::Step(step) if step.node_id == src_id => Some(step),
+                _ => None,
+            })
+            .expect("missing source step");
+
+        assert_eq!(
+            src_step.output_msg_pack.as_ref().unwrap().msg_types,
+            vec!["i32", "bool"]
+        );
     }
 
     #[test]

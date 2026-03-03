@@ -1,0 +1,36 @@
+(
+    tasks: [
+        (
+            id: "src",
+            type: "IntSource",
+            run_in_sim: true,
+        ),
+        (
+            id: "regular",
+            type: "MultiRegular",
+            run_in_sim: true,
+        ),
+        (
+            id: "sink",
+            type: "IntSink",
+            run_in_sim: true,
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "regular",
+            msg: "i32",
+        ),
+        (
+            src: "regular",
+            dst: "sink",
+            msg: "i32",
+        ),
+        (
+            src: "regular",
+            dst: "__nc__",
+            msg: "bool",
+        ),
+    ],
+)
