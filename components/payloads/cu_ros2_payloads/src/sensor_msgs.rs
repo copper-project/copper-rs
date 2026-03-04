@@ -449,7 +449,9 @@ impl<const N: usize> From<&JointState<N>> for JointStateMsg {
     fn from(src: &JointState<N>) -> Self {
         Self {
             header: default_header(),
-            name: src.names.as_slice().to_vec(),
+            name: (0..src.positions.len())
+                .map(|i| format!("joint{i}"))
+                .collect(),
             position: src.positions.as_slice().iter().map(|&v| v as f64).collect(),
             velocity: src
                 .velocities
@@ -474,7 +476,6 @@ impl<const N: usize> TryFrom<JointStateMsg> for JointState<N> {
             ));
         }
         let mut out = JointState::new();
-        out.names.fill_from_iter(msg.name);
         out.positions
             .fill_from_iter(msg.position.iter().map(|&v| v as f32));
         out.velocities
@@ -608,7 +609,7 @@ mod tests {
     fn joint_state_overflow_is_rejected() {
         let msg = JointStateMsg {
             header: default_header(),
-            name: vec!["j0".into(), "j1".into(), "j2".into()],
+            name: vec![],
             position: vec![1.0, 2.0, 3.0],
             velocity: vec![],
             effort: vec![],
@@ -620,13 +621,14 @@ mod tests {
     #[test]
     fn joint_state_roundtrip() {
         let mut js = JointState::<6>::default();
-        js.names
-            .fill_from_iter(["j0", "j1", "j2"].map(String::from));
         js.positions.fill_from_iter([0.1_f32, -0.2, 0.3]);
         js.velocities.fill_from_iter([1.0_f32, 2.0, 3.0]);
         js.efforts.fill_from_iter([10.0_f32, 20.0, 30.0]);
 
         let ros_value = js.to_ros_message();
+        // Default adapter generates joint0..jointN names.
+        assert_eq!(ros_value.name, vec!["joint0", "joint1", "joint2"]);
+
         let bytes = cdr::serialize::<_, _, cdr::CdrBe>(&ros_value, cdr::Infinite)
             .expect("cdr encode should succeed");
         let decoded_ros: JointStateMsg =
@@ -634,7 +636,6 @@ mod tests {
         let recovered =
             JointState::<6>::from_ros_message(decoded_ros).expect("adapter decode should work");
 
-        assert_eq!(recovered.names.as_slice(), js.names.as_slice());
         for i in 0..3 {
             assert!((recovered.positions.as_slice()[i] - js.positions.as_slice()[i]).abs() < 1e-6);
             assert!(
