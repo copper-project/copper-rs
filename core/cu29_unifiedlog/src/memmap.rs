@@ -456,7 +456,7 @@ fn create_base_alias_link(base_file_path: &Path) -> io::Result<()> {
                 "First slab file has no name component",
             )
         })?);
-        return symlink(relative_target, base_file_path).map_err(|e| {
+        symlink(relative_target, base_file_path).map_err(|e| {
             io::Error::new(
                 e.kind(),
                 format!(
@@ -465,7 +465,7 @@ fn create_base_alias_link(base_file_path: &Path) -> io::Result<()> {
                     first_slab_path.display()
                 ),
             )
-        });
+        })
     }
 
     #[cfg(windows)]
@@ -488,7 +488,7 @@ fn create_base_alias_link(base_file_path: &Path) -> io::Result<()> {
                 },
             ),
         }?;
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(not(any(unix, windows)))]
