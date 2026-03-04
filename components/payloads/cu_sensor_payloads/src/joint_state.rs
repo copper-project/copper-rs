@@ -31,6 +31,18 @@ impl<const N: usize> JointState<N> {
     }
 }
 
+impl<const N: usize> std::fmt::Display for JointState<N> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "pos:{:?} vel:{:?} eff:{:?}",
+            self.positions.as_slice(),
+            self.velocities.as_slice(),
+            self.efforts.as_slice()
+        )
+    }
+}
+
 // CuArray only implements Decode<()> (unit context), not the generic
 // Decode<__Context> that the derive macro would require.  Mirror the same
 // manual pattern used by CuArray itself.

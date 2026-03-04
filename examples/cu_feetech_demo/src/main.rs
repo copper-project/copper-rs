@@ -117,8 +117,8 @@ mod tasks {
         }
 
         fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
-            if let Some(js) = input.payload() {
-                debug!("Present positions: {:?}", js.positions.as_slice());
+            if let Some(positions) = input.payload() {
+                debug!("Present positions: {}", positions);
             }
             Ok(())
         }
