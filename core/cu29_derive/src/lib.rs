@@ -230,7 +230,7 @@ fn build_gen_cumsgs_support(
                 CuError::from(format!("Could not compute copperlist plan: {e}"))
             }
         })?;
-    let task_member_names = collect_task_member_names(graph);
+    let task_names = collect_task_names(graph);
     let (culist_order, node_output_positions) = collect_culist_metadata(
         &culist_plan,
         &exec_entities,
@@ -255,7 +255,7 @@ fn build_gen_cumsgs_support(
         &culist_plan,
         &culist_order,
         &node_output_positions,
-        &task_member_names,
+        &task_names,
         &bridge_specs,
     ))
 }
@@ -265,7 +265,7 @@ fn gen_culist_support(
     runtime_plan: &CuExecutionLoop,
     culist_indices_in_plan_order: &[usize],
     node_output_positions: &HashMap<NodeId, usize>,
-    task_member_names: &[(NodeId, String)],
+    task_names: &[(NodeId, String, String)],
     bridge_specs: &[BridgeSpec],
 ) -> proc_macro2::TokenStream {
     #[cfg(feature = "macro_debug")]
@@ -429,26 +429,23 @@ fn gen_culist_support(
         }
     };
 
-    let task_name_literals: Vec<String> = task_member_names
-        .iter()
-        .map(|(_, name)| name.clone())
-        .collect();
-
+    let mut slot_origin_ids: Vec<Option<String>> = vec![None; output_packs.len()];
     let mut slot_task_names: Vec<Option<String>> = vec![None; output_packs.len()];
 
     let mut methods = Vec::new();
-    for (node_id, name) in task_member_names {
-        let output_position = node_output_positions
-            .get(node_id)
-            .unwrap_or_else(|| panic!("Task {name} (id: {node_id}) not found in execution order"));
+    for (node_id, task_id, member_name) in task_names {
+        let output_position = node_output_positions.get(node_id).unwrap_or_else(|| {
+            panic!("Task {task_id} (node id: {node_id}) not found in execution order")
+        });
         let pack = output_packs
             .get(*output_position)
-            .unwrap_or_else(|| panic!("Missing output pack for task {name}"));
+            .unwrap_or_else(|| panic!("Missing output pack for task {task_id}"));
         let slot_index = syn::Index::from(*output_position);
-        slot_task_names[*output_position] = Some(name.clone());
+        slot_origin_ids[*output_position] = Some(task_id.clone());
+        slot_task_names[*output_position] = Some(member_name.clone());
 
         if pack.msg_types.len() == 1 {
-            let fn_name = format_ident!("get_{}_output", name);
+            let fn_name = format_ident!("get_{}_output", member_name);
             let payload_type = pack.msg_types.first().unwrap();
             methods.push(quote! {
                 #[allow(dead_code)]
@@ -457,10 +454,10 @@ fn gen_culist_support(
                 }
             });
         } else {
-            let outputs_fn = format_ident!("get_{}_outputs", name);
+            let outputs_fn = format_ident!("get_{}_outputs", member_name);
             let slot_type = pack.slot_type();
             for (port_idx, payload_type) in pack.msg_types.iter().enumerate() {
-                let fn_name = format_ident!("get_{}_output_{}", name, port_idx);
+                let fn_name = format_ident!("get_{}_output_{}", member_name, port_idx);
                 let port_index = syn::Index::from(port_idx);
                 methods.push(quote! {
                     #[allow(dead_code)]
@@ -477,6 +474,63 @@ fn gen_culist_support(
             });
         }
     }
+
+    for spec in bridge_specs {
+        for channel in &spec.rx_channels {
+            if let Some(culist_index) = channel.culist_index {
+                let origin_id = format!("bridge::{}::rx::{}", spec.id, channel.id);
+                let Some(existing_slot) = slot_origin_ids.get_mut(culist_index) else {
+                    panic!(
+                        "Bridge origin '{origin_id}' points to out-of-range copperlist slot {culist_index}"
+                    );
+                };
+                if let Some(existing) = existing_slot.as_ref() {
+                    panic!(
+                        "Duplicate slot origin assignment for slot {culist_index}: '{existing}' and '{origin_id}'"
+                    );
+                }
+                *existing_slot = Some(origin_id.clone());
+                let Some(slot_name) = slot_task_names.get_mut(culist_index) else {
+                    panic!(
+                        "Bridge origin '{origin_id}' points to out-of-range name slot {culist_index}"
+                    );
+                };
+                *slot_name = Some(origin_id);
+            }
+        }
+        for channel in &spec.tx_channels {
+            if let Some(culist_index) = channel.culist_index {
+                let origin_id = format!("bridge::{}::tx::{}", spec.id, channel.id);
+                let Some(existing_slot) = slot_origin_ids.get_mut(culist_index) else {
+                    panic!(
+                        "Bridge origin '{origin_id}' points to out-of-range copperlist slot {culist_index}"
+                    );
+                };
+                if let Some(existing) = existing_slot.as_ref() {
+                    panic!(
+                        "Duplicate slot origin assignment for slot {culist_index}: '{existing}' and '{origin_id}'"
+                    );
+                }
+                *existing_slot = Some(origin_id.clone());
+                let Some(slot_name) = slot_task_names.get_mut(culist_index) else {
+                    panic!(
+                        "Bridge origin '{origin_id}' points to out-of-range name slot {culist_index}"
+                    );
+                };
+                *slot_name = Some(origin_id);
+            }
+        }
+    }
+
+    let task_name_literals: Vec<String> = slot_origin_ids
+        .into_iter()
+        .enumerate()
+        .map(|(slot, origin)| {
+            origin.unwrap_or_else(|| {
+                panic!("Missing slot origin id for copperlist output slot {slot}")
+            })
+        })
+        .collect();
 
     let mut logviz_blocks = Vec::new();
     for (slot_idx, pack) in output_packs.iter().enumerate() {
@@ -978,7 +1032,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 Ok(plan) => plan,
                 Err(e) => return return_error(format!("Could not compute copperlist plan: {e}")),
             };
-        let task_member_names = collect_task_member_names(graph);
+        let task_names = collect_task_names(graph);
         let (culist_call_order, node_output_positions) = collect_culist_metadata(
             &culist_plan,
             &culist_exec_entities,
@@ -996,7 +1050,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             &culist_plan,
             &culist_call_order,
             &node_output_positions,
-            &task_member_names,
+            &task_names,
             &culist_bridge_specs,
         );
 
@@ -3820,12 +3874,18 @@ fn build_bridge_specs(
     specs
 }
 
-fn collect_task_member_names(graph: &CuGraph) -> Vec<(NodeId, String)> {
+fn collect_task_names(graph: &CuGraph) -> Vec<(NodeId, String, String)> {
     graph
         .get_all_nodes()
         .iter()
         .filter(|(_, node)| node.get_flavor() == Flavor::Task)
-        .map(|(node_id, node)| (*node_id, config_id_to_struct_member(node.get_id().as_str())))
+        .map(|(node_id, node)| {
+            (
+                *node_id,
+                node.get_id().to_string(),
+                config_id_to_struct_member(node.get_id().as_str()),
+            )
+        })
         .collect()
 }
 
@@ -4340,7 +4400,13 @@ fn collect_culist_metadata(
                     bridge_specs[*bridge_index].rx_channels[*channel_index].culist_index =
                         Some(output_idx as usize);
                 }
-                ExecutionEntityKind::BridgeTx { .. } => {}
+                ExecutionEntityKind::BridgeTx {
+                    bridge_index,
+                    channel_index,
+                } => {
+                    bridge_specs[*bridge_index].tx_channels[*channel_index].culist_index =
+                        Some(output_idx as usize);
+                }
             }
         }
     }
