@@ -292,6 +292,30 @@ impl CuSrcTask for SimGnssSource {
         let ellipsoid_alt_m = f32::from_bits(state.ellipsoid_alt_m_bits.load(Ordering::Relaxed));
         let msl_alt_m = f32::from_bits(state.msl_alt_m_bits.load(Ordering::Relaxed));
         let ground_speed_mps = f32::from_bits(state.ground_speed_mps_bits.load(Ordering::Relaxed));
+        let now = ctx.now();
+
+        // Runtime message buffers are reused; clear every optional GNSS output each tick
+        // to avoid stale payload bytes being reinterpreted by the logger/exporter.
+        output.0.tov = Tov::Time(now);
+        output.0.clear_payload();
+        output.1.tov = Tov::Time(now);
+        output.1.clear_payload();
+        output.2.tov = Tov::Time(now);
+        output.2.clear_payload();
+        output.3.tov = Tov::Time(now);
+        output.3.clear_payload();
+        output.4.tov = Tov::Time(now);
+        output.4.clear_payload();
+        output.5.tov = Tov::Time(now);
+        output.5.clear_payload();
+        output.6.tov = Tov::Time(now);
+        output.6.clear_payload();
+        output.7.tov = Tov::Time(now);
+        output.7.clear_payload();
+        output.8.tov = Tov::Time(now);
+        output.8.clear_payload();
+        output.9.tov = Tov::Time(now);
+        output.9.clear_payload();
 
         let mut fix = GnssFixSolution {
             fix_type: GnssFixType::Fix3D,
@@ -307,7 +331,6 @@ impl CuSrcTask for SimGnssSource {
         fix.ground_speed =
             cu29::units::si::f32::Velocity::new::<meter_per_second>(ground_speed_mps);
 
-        output.1.tov = Tov::Time(ctx.now());
         output.1.set_payload(fix);
         Ok(())
     }
