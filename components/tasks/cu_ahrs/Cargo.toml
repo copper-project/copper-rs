@@ -39,6 +39,7 @@ cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "0.
 bincode = { workspace = true }
 serde = { workspace = true }
 dcmimu = "0.3.0"
+libm = { version = "0.2", default-features = false }
 defmt = { workspace = true, optional = true }
 defmt-rtt = { workspace = true, optional = true }
 panic-probe = { workspace = true, features = [

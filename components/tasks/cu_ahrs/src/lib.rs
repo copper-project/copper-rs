@@ -3,7 +3,7 @@
 
 extern crate alloc;
 use bincode::{Decode, Encode};
-use cu_sensor_payloads::ImuPayload;
+use cu_sensor_payloads::{ImuPayload, MagnetometerPayload};
 use cu29::prelude::*;
 use cu29::units::si::acceleration::meter_per_second_squared;
 use cu29::units::si::angle::radian;
@@ -28,32 +28,26 @@ pub struct AhrsPose {
     pub yaw: Angle,
 }
 
-impl AhrsPose {
-    fn relative_to(self, reference: AhrsPose) -> Self {
-        Self {
-            roll: self.roll - reference.roll,
-            pitch: self.pitch - reference.pitch,
-            yaw: self.yaw - reference.yaw,
-        }
-    }
-}
-
 /// Copper AHRS task that fuses IMU payloads into roll/pitch/yaw.
 #[derive(Reflect)]
 #[reflect(from_reflect = false)]
 pub struct CuAhrs {
     #[reflect(ignore)]
     dcm: DCMIMU,
-    reference: Option<AhrsPose>,
     last_tov: Option<CuTime>,
+    yaw_offset_rad: f32,
+    mag_correction_gain: f32,
+    mag_tilt_limit_rad: f32,
 }
 
 impl CuAhrs {
     pub const fn new_filter() -> Self {
         Self {
             dcm: DCMIMU::new(),
-            reference: None,
             last_tov: None,
+            yaw_offset_rad: 0.0,
+            mag_correction_gain: 0.03,
+            mag_tilt_limit_rad: 50.0_f32.to_radians(),
         }
     }
 
@@ -80,9 +74,7 @@ impl CuAhrs {
             pitch: Angle::new::<radian>(angles.pitch),
             yaw: Angle::new::<radian>(angles.yaw),
         };
-
-        let reference = self.reference.get_or_insert(pose);
-        pose.relative_to(*reference)
+        pose
     }
 
     fn dt_seconds(&mut self, tov: &Tov) -> Option<f32> {
@@ -96,6 +88,56 @@ impl CuAhrs {
         self.last_tov = Some(current);
 
         dt.map(|duration| duration.as_nanos() as f32 * 1e-9)
+    }
+
+    fn wrap_angle_rad(value: f32) -> f32 {
+        let two_pi = 2.0 * core::f32::consts::PI;
+        let mut wrapped = libm::fmodf(value, two_pi);
+        if wrapped < 0.0 {
+            wrapped += two_pi;
+        }
+        wrapped
+    }
+
+    fn shortest_angle_rad(delta: f32) -> f32 {
+        let two_pi = 2.0 * core::f32::consts::PI;
+        let mut wrapped = libm::fmodf(delta, two_pi);
+        if wrapped <= -core::f32::consts::PI {
+            wrapped += two_pi;
+        } else if wrapped > core::f32::consts::PI {
+            wrapped -= two_pi;
+        }
+        wrapped
+    }
+
+    fn heading_from_mag_level_rad(
+        mag_x: f32,
+        mag_y: f32,
+        mag_z: f32,
+        roll_rad: f32,
+        pitch_rad: f32,
+    ) -> Option<f32> {
+        if !mag_x.is_finite()
+            || !mag_y.is_finite()
+            || !mag_z.is_finite()
+            || !roll_rad.is_finite()
+            || !pitch_rad.is_finite()
+        {
+            return None;
+        }
+
+        // Body axes are aerospace/NED: X forward, Y right, Z down.
+        let sin_r = libm::sinf(roll_rad);
+        let cos_r = libm::cosf(roll_rad);
+        let sin_p = libm::sinf(pitch_rad);
+        let cos_p = libm::cosf(pitch_rad);
+        let horizontal_x = mag_x * cos_p + mag_z * sin_p;
+        let horizontal_y = mag_x * sin_r * sin_p + mag_y * cos_r - mag_z * sin_r * cos_p;
+        let hnorm2 = horizontal_x * horizontal_x + horizontal_y * horizontal_y;
+        if !hnorm2.is_finite() || hnorm2 <= 1.0e-12 {
+            return None;
+        }
+        Some(Self::wrap_angle_rad(libm::atan2f(horizontal_y, horizontal_x)))
     }
 }
 
@@ -156,8 +198,8 @@ impl Freezable for CuAhrs {
             )
         };
         Encode::encode(&bytes, encoder)?;
-        Encode::encode(&self.reference, encoder)?;
         Encode::encode(&self.last_tov, encoder)?;
+        Encode::encode(&self.yaw_offset_rad, encoder)?;
         Ok(())
     }
 
@@ -177,22 +219,28 @@ impl Freezable for CuAhrs {
             // Mismatch: fall back to a fresh filter to avoid undefined state.
             self.dcm = DCMIMU::new();
         }
-        self.reference = Decode::decode(decoder)?;
         self.last_tov = Decode::decode(decoder)?;
+        self.yaw_offset_rad = Decode::decode(decoder)?;
         Ok(())
     }
 }
 
 impl CuTask for CuAhrs {
     type Resources<'r> = ();
-    type Input<'m> = input_msg!(ImuPayload);
+    type Input<'m> = input_msg!('m, ImuPayload, MagnetometerPayload);
     type Output<'m> = output_msg!(AhrsPose);
 
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
-        Ok(Self::new_filter())
+        let mut filter = Self::new_filter();
+        filter.mag_correction_gain = cfg_f32(config, "mag_correction_gain", 0.03)?.clamp(0.0, 1.0);
+        filter.mag_tilt_limit_rad = cfg_f32(config, "mag_tilt_limit_deg", 50.0)?
+            .abs()
+            .to_radians()
+            .clamp(1.0_f32.to_radians(), 89.0_f32.to_radians());
+        Ok(filter)
     }
 
     fn process(
@@ -201,19 +249,46 @@ impl CuTask for CuAhrs {
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
-        output.tov = input.tov;
-        let Some(payload) = input.payload() else {
+        let (imu_msg, mag_msg) = *input;
+        output.tov = imu_msg.tov;
+        let Some(payload) = imu_msg.payload() else {
             #[cfg(not(feature = "firmware"))]
             output.metadata.set_status("imu none");
             output.clear_payload();
             return Ok(());
         };
 
-        let dt_s = match self.dt_seconds(&input.tov) {
+        let dt_s = match self.dt_seconds(&imu_msg.tov) {
             Some(dt) if dt > 0.0 => dt,
             _ => 1e-3,
         };
-        let pose = self.update_pose(payload, dt_s);
+        let mut pose = self.update_pose(payload, dt_s);
+
+        let roll_rad = pose.roll.get::<radian>();
+        let pitch_rad = pose.pitch.get::<radian>();
+        let base_yaw_rad = Self::wrap_angle_rad(pose.yaw.get::<radian>());
+        let mut corrected_yaw_rad = Self::wrap_angle_rad(base_yaw_rad + self.yaw_offset_rad);
+        if let Some(mag) = mag_msg.payload() {
+            let tilt_ok =
+                roll_rad.abs() <= self.mag_tilt_limit_rad && pitch_rad.abs() <= self.mag_tilt_limit_rad;
+            if tilt_ok
+                && let Some(mag_heading_rad) = Self::heading_from_mag_level_rad(
+                    mag.mag_x.value,
+                    mag.mag_y.value,
+                    mag.mag_z.value,
+                    roll_rad,
+                    pitch_rad,
+                )
+            {
+                let err = Self::shortest_angle_rad(mag_heading_rad - corrected_yaw_rad);
+                self.yaw_offset_rad =
+                    Self::wrap_angle_rad(self.yaw_offset_rad + self.mag_correction_gain * err);
+                corrected_yaw_rad = Self::wrap_angle_rad(base_yaw_rad + self.yaw_offset_rad);
+            }
+        }
+
+        pose.yaw = Angle::new::<radian>(corrected_yaw_rad);
+
         #[cfg(not(feature = "firmware"))]
         output.metadata.set_status(alloc::format!(
             "r{} p{} y{}",
@@ -225,6 +300,14 @@ impl CuTask for CuAhrs {
 
         Ok(())
     }
+}
+
+fn cfg_f32(config: Option<&ComponentConfig>, key: &str, default: f32) -> CuResult<f32> {
+    let value = match config {
+        Some(cfg) => cfg.get::<f64>(key)?,
+        None => None,
+    };
+    Ok(value.map(|v| v as f32).unwrap_or(default))
 }
 
 #[cfg(test)]
@@ -248,11 +331,16 @@ mod tests {
         task: &mut CuAhrs,
         ctx: &CuContext,
         payload: ImuPayload,
+        mag: Option<MagnetometerPayload>,
         tov_ns: u64,
     ) -> Option<AhrsPose> {
-        let mut input = CuMsg::new(Some(payload));
-        input.tov = Tov::Time(CuTime::from(tov_ns));
+        let tov = Tov::Time(CuTime::from(tov_ns));
+        let mut imu_msg = CuMsg::new(Some(payload));
+        imu_msg.tov = tov;
+        let mut mag_msg = CuMsg::new(mag);
+        mag_msg.tov = tov;
         let mut output = CuMsg::new(None);
+        let input = (&imu_msg, &mag_msg);
         task.process(ctx, &input, &mut output).unwrap();
         output.payload().copied()
     }
@@ -265,7 +353,7 @@ mod tests {
 
         let mut latest = None;
         for i in 0..iterations {
-            latest = process_sample(&mut task, &ctx, payload, step_ns * (i as u64 + 1));
+            latest = process_sample(&mut task, &ctx, payload, None, step_ns * (i as u64 + 1));
         }
         latest.expect("pose should be produced")
     }
@@ -326,7 +414,7 @@ mod tests {
 
         let mut latest = None;
         for i in 0..10 {
-            latest = process_sample(&mut task, &ctx, payload, 100_000_000 * (i as u64 + 1));
+            latest = process_sample(&mut task, &ctx, payload, None, 100_000_000 * (i as u64 + 1));
         }
 
         let pose = latest.expect("pose should be produced");
@@ -335,6 +423,34 @@ mod tests {
             "yaw {} vs {}",
             pose.yaw.value,
             FRAC_PI_2
+        );
+    }
+
+    #[test]
+    fn magnetometer_correction_anchors_yaw() {
+        let ctx = CuContext::new_with_clock();
+        let mut task = CuAhrs::new_filter();
+        let imu = ImuPayload::from_raw([0.0, 0.0, 9.81], [0.0, 0.0, 0.0], 25.0);
+        // Level frame with magnetic east and positive down component.
+        let mag = MagnetometerPayload::from_raw([0.0, 20.0, 45.0]);
+
+        let mut latest = None;
+        for i in 0..200 {
+            latest = process_sample(
+                &mut task,
+                &ctx,
+                imu,
+                Some(mag),
+                10_000_000 * (i as u64 + 1),
+            );
+        }
+
+        let pose = latest.expect("pose should be produced");
+        let yaw_deg = pose.yaw.get::<radian>().to_degrees().rem_euclid(360.0);
+        assert!(
+            (yaw_deg - 90.0).abs() < 5.0,
+            "yaw_deg {} should converge near 90°",
+            yaw_deg
         );
     }
 }

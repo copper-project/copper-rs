@@ -189,7 +189,7 @@
             id: "gnss_ublox",
             type: "tasks::gnss::GnssSource",
             run_in_sim: true,
-            logging: (enabled: false),
+            logging: (enabled: true),
             resources: {"serial": "fc.uart3"},
             config: {
                 "poll_nav_pvt_ms": 200,
@@ -204,7 +204,7 @@
             type: "tasks::gnss::GnssFixSink",
             missions: ["gnss"],
             run_in_sim: true,
-            logging: (enabled: false),
+            logging: (enabled: true),
         ),
     ],
     bridges: [
@@ -268,11 +268,6 @@
             msg: "cu_sensor_payloads::ImuPayload",
         ),
         (
-            src: "ist8310",
-            dst: "mag_heading",
-            msg: "cu_sensor_payloads::MagnetometerPayload",
-        ),
-        (
             src: "mapper",
             dst: "imu_cal",
             msg: "crate::messages::ControlInputs",
@@ -281,6 +276,16 @@
             src: "imu_cal",
             dst: "ahrs",
             msg: "cu_sensor_payloads::ImuPayload",
+        ),
+        (
+            src: "ist8310",
+            dst: "ahrs",
+            msg: "cu_sensor_payloads::MagnetometerPayload",
+        ),
+        (
+            src: "ahrs",
+            dst: "mag_heading",
+            msg: "cu_ahrs::AhrsPose",
         ),
         (
             src: "ahrs",

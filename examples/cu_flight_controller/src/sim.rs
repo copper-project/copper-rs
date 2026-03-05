@@ -478,9 +478,9 @@ fn map_bevy_body_to_fc_axial(v: Vec3) -> [f32; 3] {
 }
 
 /// Map Bevy body magnetic vectors into FC body frame.
-/// Magnetometer is a polar vector (not axial), so it uses the polar mapping/signs.
+/// Magnetometer is a polar vector (not axial), so it uses the same mapping as accel.
 fn map_bevy_body_to_fc_magnetometer(v: Vec3) -> [f32; 3] {
-    [-v.z, v.x, -v.y]
+    map_bevy_body_to_fc_polar(v)
 }
 
 fn setup_copper(mut commands: Commands) {
@@ -1027,8 +1027,8 @@ fn run_copper(
             }
             gnss::SimStep::Ist8310(CuTaskCallbackState::Process(_, output)) => {
                 let world_mag = Vec3::from_array(WORLD_MAG_FIELD_UT);
-                // Keep heading increasing clockwise from north as Bevy yaw increases counter-clockwise.
-                let body_mag = vehicle.rotation * world_mag;
+                // Convert world vector into body frame using the same world->body convention as IMU.
+                let body_mag = vehicle.rotation.inverse() * world_mag;
                 set_msg_timing(&clock, output);
                 output.set_payload(MagnetometerPayload::from_raw(
                     map_bevy_body_to_fc_magnetometer(body_mag),
@@ -1444,13 +1444,19 @@ mod tests {
     fn sim_magnetometer_heading_tracks_bevy_yaw_convention() {
         let world_mag = Vec3::from_array(WORLD_MAG_FIELD_UT);
 
-        let north_body = Quat::IDENTITY * world_mag;
-        let north_fc = map_bevy_body_to_fc_magnetometer(north_body);
-        assert!(north_fc[2] > 0.0, "expected positive down component");
-        assert_heading_close(heading_from_mag_xy_deg(north_fc), 0.0);
+        // In Bevy body axes, identity faces world +Z (south), so heading is 180 deg.
+        let south_body = Quat::IDENTITY.inverse() * world_mag;
+        let south_fc = map_bevy_body_to_fc_magnetometer(south_body);
+        assert!(south_fc[2] > 0.0, "expected positive down component");
+        assert_heading_close(heading_from_mag_xy_deg(south_fc), 180.0);
 
-        let yaw_90_body = Quat::from_rotation_y(90.0_f32.to_radians()) * world_mag;
+        // Positive Bevy yaw rotates counter-clockwise; compass heading decreases clockwise.
+        let yaw_90_body = Quat::from_rotation_y(90.0_f32.to_radians()).inverse() * world_mag;
         let yaw_90_fc = map_bevy_body_to_fc_magnetometer(yaw_90_body);
-        assert_heading_close(heading_from_mag_xy_deg(yaw_90_fc), 270.0);
+        assert_heading_close(heading_from_mag_xy_deg(yaw_90_fc), 90.0);
+
+        let yaw_180_body = Quat::from_rotation_y(180.0_f32.to_radians()).inverse() * world_mag;
+        let yaw_180_fc = map_bevy_body_to_fc_magnetometer(yaw_180_body);
+        assert_heading_close(heading_from_mag_xy_deg(yaw_180_fc), 0.0);
     }
 }
