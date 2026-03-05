@@ -43,7 +43,7 @@ macro_rules! define_storage_wrappers {
                         where
                             U: uom::si::$unit_mod_name::Conversion<$storage_ty>,
                         {
-                            self.to_uom().get::<U>()
+                            (*self).to_uom().get::<U>()
                         }
 
                         #[inline]
@@ -58,7 +58,7 @@ macro_rules! define_storage_wrappers {
 
                         #[inline]
                         pub fn as_uom(&self) -> uom::si::$storage_mod::$quantity_name {
-                            self.to_uom()
+                            (*self).to_uom()
                         }
 
                         #[inline]
@@ -67,7 +67,7 @@ macro_rules! define_storage_wrappers {
                         }
 
                         #[inline]
-                        fn to_uom(&self) -> uom::si::$storage_mod::$quantity_name {
+                        fn to_uom(self) -> uom::si::$storage_mod::$quantity_name {
                             uom::si::$storage_mod::$quantity_name {
                                 dimension: PhantomData,
                                 units: PhantomData,
