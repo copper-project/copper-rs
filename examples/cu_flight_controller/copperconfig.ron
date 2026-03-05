@@ -474,8 +474,8 @@
         type: "tasks::monitor::FlightMonitor",
     ),
     logging: (
-        slab_size_mib: 16,
-        section_size_mib: 4,
+        slab_size_mib: 200,
+        section_size_mib: 20,
         enable_task_logging: true,
     ),
 )
