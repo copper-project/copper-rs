@@ -22,6 +22,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
+#[cfg(feature = "reflect")]
+pub use bevy_reflect::Reflect;
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
@@ -346,6 +348,8 @@ pub trait CuMsgMetadataTrait {
 /// A generic trait to expose the generated CuStampedDataSet from the task graph.
 pub trait ErasedCuStampedData {
     fn payload(&self) -> Option<&dyn erased_serde::Serialize>;
+    #[cfg(feature = "reflect")]
+    fn payload_reflect(&self) -> Option<&dyn Reflect>;
     fn tov(&self) -> Tov;
     fn metadata(&self) -> &dyn CuMsgMetadataTrait;
 }
