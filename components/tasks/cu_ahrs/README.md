@@ -1,6 +1,6 @@
 # cu-ahrs
 
-`cu-ahrs` is a Copper task that runs the [`dcmimu`](https://crates.io/crates/dcmimu) filter on standardized IMU payloads to output roll, pitch, and yaw in radians.
+`cu-ahrs` is a Copper task that runs the [`uf-ahrs`](https://crates.io/crates/uf-ahrs) Mahony filter on standardized IMU payloads (with optional magnetometer) to output roll, pitch, and yaw in radians.
 
 ## Axis convention
 
@@ -11,7 +11,7 @@
   - Yaw: clockwise when looking down along +Z (turning right) is positive.
 - Accelerometer readings are expected to include gravity (a level IMU yields roughly `[0, 0, +9.81]` m/s²).
 
-The task captures the first valid pose as a zero reference, so outputs are relative to the start orientation by default.
+The task outputs absolute filter orientation (no startup zero reference).
 
 ## Bare-metal RP2350 demos
 

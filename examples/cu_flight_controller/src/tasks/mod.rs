@@ -7,7 +7,7 @@ use cu_ahrs::AhrsPose;
 use cu_bdshot::EscCommand;
 use cu_crsf::messages::RcChannelsPayload;
 use cu_pid::{PIDControlOutputPayload, PIDController};
-use cu_sensor_payloads::{ImuPayload, MagnetometerPayload};
+use cu_sensor_payloads::ImuPayload;
 use cu29::prelude::*;
 use cu29::units::si::angle::{degree, radian};
 use cu29::units::si::angular_velocity::{degree_per_second, radian_per_second};
@@ -220,7 +220,7 @@ pub struct MagneticTrueHeading {
 impl Freezable for MagneticTrueHeading {}
 
 impl CuTask for MagneticTrueHeading {
-    type Input<'m> = CuMsg<MagnetometerPayload>;
+    type Input<'m> = CuMsg<AhrsPose>;
     type Output<'m> = CuMsg<GeographicHeading>;
     type Resources<'r> = ();
 
@@ -242,27 +242,25 @@ impl CuTask for MagneticTrueHeading {
         let tov_time = expect_tov_time(input.tov)?;
         output.tov = Tov::Time(tov_time);
 
-        let Some(payload) = input.payload() else {
+        let Some(pose) = input.payload() else {
             status_if_not_firmware!(output.metadata, "hdg none");
             output.clear_payload();
             return Ok(());
         };
 
-        let mag_x = payload.mag_x.value;
-        let mag_y = payload.mag_y.value;
-        if !mag_x.is_finite() || !mag_y.is_finite() {
+        let yaw_rad = pose.yaw.get::<radian>();
+        if !yaw_rad.is_finite() || !self.declination_deg.is_finite() {
             status_if_not_firmware!(output.metadata, "hdg nan");
             output.clear_payload();
             return Ok(());
         }
 
-        let heading_deg = libm::atan2f(mag_y, mag_x).to_degrees() + self.declination_deg;
-        let heading_deg = wrap_heading_deg(heading_deg);
-        if !heading_deg.is_finite() {
+        let Some(heading_deg) = heading_from_yaw_deg(yaw_rad.to_degrees(), self.declination_deg)
+        else {
             status_if_not_firmware!(output.metadata, "hdg bad");
             output.clear_payload();
             return Ok(());
-        }
+        };
 
         output.set_payload(GeographicHeading {
             heading: Angle::new::<degree>(heading_deg),
@@ -1224,6 +1222,59 @@ fn wrap_heading_deg(value: f32) -> f32 {
     wrapped
 }
 
+fn heading_from_yaw_deg(yaw_deg: f32, declination_deg: f32) -> Option<f32> {
+    if !yaw_deg.is_finite() || !declination_deg.is_finite() {
+        return None;
+    }
+    let heading_deg = wrap_heading_deg(-yaw_deg + declination_deg);
+    heading_deg.is_finite().then_some(heading_deg)
+}
+
+fn heading_from_mag_xy_deg(mag_x: f32, mag_y: f32, declination_deg: f32) -> Option<f32> {
+    if !mag_x.is_finite() || !mag_y.is_finite() || !declination_deg.is_finite() {
+        return None;
+    }
+    let heading_deg = wrap_heading_deg(libm::atan2f(mag_y, mag_x).to_degrees() + declination_deg);
+    heading_deg.is_finite().then_some(heading_deg)
+}
+
+fn heading_from_mag_level_deg(
+    mag_x: f32,
+    mag_y: f32,
+    mag_z: f32,
+    roll_rad: f32,
+    pitch_rad: f32,
+    declination_deg: f32,
+) -> Option<f32> {
+    if !mag_x.is_finite()
+        || !mag_y.is_finite()
+        || !mag_z.is_finite()
+        || !roll_rad.is_finite()
+        || !pitch_rad.is_finite()
+        || !declination_deg.is_finite()
+    {
+        return None;
+    }
+
+    // Project body-frame magnetic vector into a level frame using roll/pitch.
+    // Body axes are aerospace/NED: X forward, Y right, Z down.
+    let sin_r = libm::sinf(roll_rad);
+    let cos_r = libm::cosf(roll_rad);
+    let sin_p = libm::sinf(pitch_rad);
+    let cos_p = libm::cosf(pitch_rad);
+
+    let horizontal_x = mag_x * cos_p + mag_z * sin_p;
+    let horizontal_y = mag_x * sin_r * sin_p + mag_y * cos_r - mag_z * sin_r * cos_p;
+    let horizontal_norm2 = horizontal_x * horizontal_x + horizontal_y * horizontal_y;
+    if !horizontal_norm2.is_finite() || horizontal_norm2 <= 1.0e-12 {
+        return None;
+    }
+
+    let heading_deg =
+        wrap_heading_deg(libm::atan2f(horizontal_y, horizontal_x).to_degrees() + declination_deg);
+    heading_deg.is_finite().then_some(heading_deg)
+}
+
 fn cfg_f32(config: Option<&ComponentConfig>, key: &str, default: f32) -> CuResult<f32> {
     let value = match config {
         Some(cfg) => cfg.get::<f64>(key)?,
@@ -1264,4 +1315,91 @@ fn cfg_usize(config: Option<&ComponentConfig>, key: &str, default: usize) -> CuR
         None => None,
     };
     Ok(value.map(|v| v as usize).unwrap_or(default))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assert_heading_close(actual: f32, expected: f32) {
+        let err = (actual - expected + 540.0).rem_euclid(360.0) - 180.0;
+        assert!(
+            err.abs() < 1.0e-3,
+            "heading mismatch: actual={actual} expected={expected} err={err}"
+        );
+    }
+
+    #[test]
+    fn heading_from_mag_xy_applies_declination_and_wraps() {
+        assert_heading_close(
+            heading_from_mag_xy_deg(1.0, 0.0, 12.5).expect("finite heading"),
+            12.5,
+        );
+        assert_heading_close(
+            heading_from_mag_xy_deg(1.0, 0.0, -10.0).expect("finite heading"),
+            350.0,
+        );
+    }
+
+    #[test]
+    fn heading_from_mag_xy_uses_east_as_positive() {
+        assert_heading_close(
+            heading_from_mag_xy_deg(0.0, 1.0, 0.0).expect("finite heading"),
+            90.0,
+        );
+        assert_heading_close(
+            heading_from_mag_xy_deg(0.0, -1.0, 0.0).expect("finite heading"),
+            270.0,
+        );
+    }
+
+    #[test]
+    fn heading_from_mag_xy_rejects_non_finite_inputs() {
+        assert!(heading_from_mag_xy_deg(f32::NAN, 0.0, 0.0).is_none());
+        assert!(heading_from_mag_xy_deg(1.0, 0.0, f32::NAN).is_none());
+    }
+
+    #[test]
+    fn heading_from_yaw_converts_ahrs_sign_to_compass_convention() {
+        assert_heading_close(
+            heading_from_yaw_deg(90.0, 0.0).expect("finite heading"),
+            270.0,
+        );
+        assert_heading_close(
+            heading_from_yaw_deg(-90.0, 0.0).expect("finite heading"),
+            90.0,
+        );
+        assert_heading_close(
+            heading_from_yaw_deg(350.0, 20.0).expect("finite heading"),
+            30.0,
+        );
+    }
+
+    #[test]
+    fn heading_from_mag_level_removes_pitch_induced_flip() {
+        // World field in NED: north=20uT, east=0uT, down=45uT.
+        // At +30 deg pitch and no yaw, raw atan2(mag_y,mag_x) would flip to 180 deg.
+        let pitch = 30.0_f32.to_radians();
+        let mag_x = 20.0 * libm::cosf(pitch) - 45.0 * libm::sinf(pitch);
+        let mag_y = 0.0;
+        let mag_z = 20.0 * libm::sinf(pitch) + 45.0 * libm::cosf(pitch);
+
+        assert_heading_close(
+            heading_from_mag_xy_deg(mag_x, mag_y, 0.0).expect("raw heading"),
+            180.0,
+        );
+        assert_heading_close(
+            heading_from_mag_level_deg(mag_x, mag_y, mag_z, 0.0, pitch, 0.0)
+                .expect("level heading"),
+            0.0,
+        );
+    }
+
+    #[test]
+    fn heading_from_mag_level_rejects_degenerate_horizontal_projection() {
+        assert!(
+            heading_from_mag_level_deg(0.0, 0.0, 42.0, 0.0, 0.0, 0.0).is_none(),
+            "no horizontal magnetic component should not produce heading"
+        );
+    }
 }
