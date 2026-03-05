@@ -42,7 +42,7 @@
             id: "mag_heading",
             type: "tasks::MagneticTrueHeading",
             run_in_sim: true,
-            logging: (enabled: false),
+            logging: (enabled: true),
             config: {"declination_deg": 4.7},
         ),
         (
@@ -69,6 +69,7 @@
         (
             id: "ahrs",
             type: "cu_ahrs::CuAhrs",
+            logging: (enabled: true),
         ),
         (
             id: "attitude",
@@ -475,6 +476,6 @@
     logging: (
         slab_size_mib: 16,
         section_size_mib: 4,
-        enable_task_logging: false,
+        enable_task_logging: true,
     ),
 )

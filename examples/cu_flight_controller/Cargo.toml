@@ -193,6 +193,7 @@ logreader = [
   "dep:cu-msp-bridge",
   "dep:cu-bdshot",
   "dep:cu-ahrs",
+  "dep:cu-gnss-payloads",
   "cu-bdshot/messages-only",
 ]
 sim = [

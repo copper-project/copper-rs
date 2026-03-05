@@ -22,7 +22,7 @@ logreader log="logs/flight_controller_sim.copper":
   RUST_BACKTRACE=1 cargo run -p cu-flight-controller --no-default-features --features logreader --bin quad-logreader -- "$log" extract-copperlists --export-format json
 
 # Run log reader fsck against a log file.
-fsck log="logs/embedded.copper":
+fsck log="logs/flight_controller_sim.copper":
   #!/usr/bin/env bash
   set -euo pipefail
   invocation_dir="{{invocation_directory()}}"
