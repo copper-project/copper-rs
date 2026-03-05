@@ -6,6 +6,7 @@ use crate::velocity::VelocityTransform;
 use crate::velocity_cache::VelocityTransformCache;
 use cu_spatial_payloads::Transform3D;
 use cu29::clock::{CuTime, RobotClock, Tov};
+use cu29::prelude::CuMsgPayload;
 use dashmap::DashMap;
 use petgraph::algo::dijkstra;
 use petgraph::graph::{DiGraph, NodeIndex};
@@ -327,7 +328,7 @@ where
     /// add a transform to the tree.
     pub fn add_transform(&mut self, sft: &StampedFrameTransform<T>) -> TransformResult<()>
     where
-        T: bincode::Encode + bincode::Decode<()>,
+        T: CuMsgPayload,
     {
         let transform_msg = sft.payload().ok_or_else(|| {
             TransformError::Unknown("Failed to get transform payload".to_string())
