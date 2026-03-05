@@ -34,6 +34,27 @@ pub use mcap_export::{
 #[cfg(feature = "mcap")]
 pub use serde_to_jsonschema::trace_type_to_jsonschema;
 
+#[cfg(all(feature = "python", not(target_os = "macos")))]
+pub use python::register_copperlist_python_type;
+
+/// Creates a Python CopperList iterator for a specific CopperList tuple type.
+///
+/// This is intended for app-specific Python modules that know their generated
+/// CopperList type at compile time.
+#[cfg(all(feature = "python", not(target_os = "macos")))]
+pub fn copperlist_iterator_unified_typed_py<P>(
+    unified_src_path: &str,
+    py: pyo3::Python<'_>,
+) -> pyo3::PyResult<pyo3::Py<pyo3::PyAny>>
+where
+    P: CopperListTuple,
+{
+    register_copperlist_python_type::<P>()
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+    let iter = python::copperlist_iterator_unified(unified_src_path)?;
+    pyo3::Py::new(py, iter).map(|obj| obj.into())
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum ExportFormat {
     Json,
@@ -149,6 +170,9 @@ pub fn run_cli<P>() -> CuResult<()>
 where
     P: CopperListTuple + CuPayloadRawBytes + mcap_export::PayloadSchemas,
 {
+    #[cfg(all(feature = "python", not(target_os = "macos")))]
+    let _ = python::register_copperlist_python_type::<P>();
+
     run_cli_inner::<P>()
 }
 
@@ -159,6 +183,9 @@ pub fn run_cli<P>() -> CuResult<()>
 where
     P: CopperListTuple + CuPayloadRawBytes,
 {
+    #[cfg(all(feature = "python", not(target_os = "macos")))]
+    let _ = python::register_copperlist_python_type::<P>();
+
     run_cli_inner::<P>()
 }
 
@@ -252,8 +279,8 @@ where
 
             let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
 
-            // Export to MCAP with schemas
-            // Note: P must implement PayloadSchemas and provide schemas for each task output.
+            // Export to MCAP with schemas.
+            // Note: P must implement PayloadSchemas and provide schemas for each CopperList slot.
             let stats = if let Some(total_bytes) = total_bytes {
                 let progress_bar = make_progress_bar(total_bytes);
                 let reader = ProgressReader::new(reader, progress_bar.clone());
@@ -377,7 +404,7 @@ where
 
 /// Helper function for MCAP export.
 ///
-/// Uses the PayloadSchemas trait to get task payload schemas.
+/// Uses the PayloadSchemas trait to get per-slot payload schemas.
 #[cfg(feature = "mcap")]
 fn export_to_mcap_impl<P>(src: impl Read, output: &Path) -> CuResult<McapExportStats>
 where
@@ -530,17 +557,47 @@ mod python {
     use bincode::config::standard;
     use bincode::decode_from_std_read;
     use bincode::error::DecodeError;
+    use cu29::bevy_reflect::{PartialReflect, ReflectRef, VariantType};
     use cu29::prelude::*;
     use cu29_intern_strs::read_interned_strings;
-    use pyo3::exceptions::PyIOError;
+    use pyo3::exceptions::{PyIOError, PyRuntimeError};
     use pyo3::prelude::*;
     use pyo3::types::{PyDelta, PyDict, PyList};
     use std::io::Read;
     use std::path::Path;
+    use std::sync::OnceLock;
+
+    type CopperListDecodeFn =
+        for<'py> fn(&mut Box<dyn Read + Send + Sync>, Python<'py>) -> Option<PyResult<Py<PyAny>>>;
+    static COPPERLIST_DECODER: OnceLock<CopperListDecodeFn> = OnceLock::new();
 
     #[pyclass]
     pub struct PyLogIterator {
         reader: Box<dyn Read + Send + Sync>,
+    }
+
+    #[pyclass]
+    pub struct PyCopperListIterator {
+        reader: Box<dyn Read + Send + Sync>,
+        decode_next: CopperListDecodeFn,
+    }
+
+    #[pyclass(get_all)]
+    pub struct PyUnitValue {
+        pub value: f64,
+        pub unit: String,
+    }
+
+    pub fn register_copperlist_python_type<P>() -> CuResult<()>
+    where
+        P: CopperListTuple,
+    {
+        if COPPERLIST_DECODER.get().is_none() {
+            COPPERLIST_DECODER
+                .set(decode_next_copperlist::<P>)
+                .map_err(|_| CuError::from("Failed to register CopperList Python decoder"))?;
+        }
+        Ok(())
     }
 
     #[pymethods]
@@ -566,6 +623,17 @@ mod python {
                 }
                 Err(e) => Some(Err(PyIOError::new_err(e.to_string()))),
             }
+        }
+    }
+
+    #[pymethods]
+    impl PyCopperListIterator {
+        fn __iter__(slf: PyRefMut<Self>) -> PyRefMut<Self> {
+            slf
+        }
+
+        fn __next__(mut slf: PyRefMut<Self>, py: Python<'_>) -> Option<PyResult<Py<PyAny>>> {
+            (slf.decode_next)(&mut slf.reader, py)
         }
     }
 
@@ -621,6 +689,38 @@ mod python {
         ))
     }
 
+    /// Creates an iterator over CopperLists from a unified log file.
+    /// The concrete CopperList tuple type must be registered from Rust first with
+    /// `register_copperlist_python_type::<P>()`.
+    #[pyfunction]
+    pub fn copperlist_iterator_unified(unified_src_path: &str) -> PyResult<PyCopperListIterator> {
+        let decode_next = *COPPERLIST_DECODER.get().ok_or_else(|| {
+            PyRuntimeError::new_err(
+                "CopperList decoder is not registered. \
+Call register_copperlist_python_type::<P>() from Rust before using this function.",
+            )
+        })?;
+
+        let logger = UnifiedLoggerBuilder::new()
+            .file_base_name(Path::new(unified_src_path))
+            .build()
+            .map_err(|e| PyIOError::new_err(e.to_string()))?;
+        let dl = match logger {
+            UnifiedLogger::Read(dl) => dl,
+            UnifiedLogger::Write(_) => {
+                return Err(PyIOError::new_err(
+                    "Expected read-only unified logger for Python export",
+                ));
+            }
+        };
+
+        let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
+        Ok(PyCopperListIterator {
+            reader: Box::new(reader),
+            decode_next,
+        })
+    }
+
     /// This is a python wrapper for CuLogEntries.
     #[pyclass]
     pub struct PyCuLogEntry {
@@ -666,9 +766,321 @@ mod python {
     fn cu29_export(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add_class::<PyCuLogEntry>()?;
         m.add_class::<PyLogIterator>()?;
+        m.add_class::<PyCopperListIterator>()?;
+        m.add_class::<PyUnitValue>()?;
         m.add_function(wrap_pyfunction!(struct_log_iterator_bare, m)?)?;
         m.add_function(wrap_pyfunction!(struct_log_iterator_unified, m)?)?;
+        m.add_function(wrap_pyfunction!(copperlist_iterator_unified, m)?)?;
         Ok(())
+    }
+
+    fn decode_next_copperlist<P>(
+        reader: &mut Box<dyn Read + Send + Sync>,
+        py: Python<'_>,
+    ) -> Option<PyResult<Py<PyAny>>>
+    where
+        P: CopperListTuple,
+    {
+        let entry = super::read_next_entry::<CopperList<P>>(reader)?;
+        Some(copperlist_to_py::<P>(&entry, py))
+    }
+
+    fn copperlist_to_py<P>(entry: &CopperList<P>, py: Python<'_>) -> PyResult<Py<PyAny>>
+    where
+        P: CopperListTuple,
+    {
+        let task_ids = P::get_all_task_ids();
+        let root = PyDict::new(py);
+        root.set_item("id", entry.id)?;
+        root.set_item("state", entry.get_state().to_string())?;
+
+        let mut messages: Vec<Py<PyAny>> = Vec::new();
+        for (idx, msg) in entry.cumsgs().into_iter().enumerate() {
+            let message = PyDict::new(py);
+            message.set_item("task_id", task_ids.get(idx).copied().unwrap_or("unknown"))?;
+            message.set_item("tov", tov_to_py(msg.tov(), py)?)?;
+            message.set_item("metadata", metadata_to_py(msg.metadata(), py)?)?;
+            match msg.payload_reflect() {
+                Some(payload) => message.set_item(
+                    "payload",
+                    partial_reflect_to_py(payload.as_partial_reflect(), py)?,
+                )?,
+                None => message.set_item("payload", py.None())?,
+            }
+            messages.push(dict_to_namespace(message, py)?);
+        }
+
+        root.set_item("messages", PyList::new(py, messages)?)?;
+        dict_to_namespace(root, py)
+    }
+
+    fn metadata_to_py(metadata: &dyn CuMsgMetadataTrait, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let process = metadata.process_time();
+        let start: Option<CuTime> = process.start.into();
+        let end: Option<CuTime> = process.end.into();
+
+        let process_time = PyDict::new(py);
+        process_time.set_item("start_ns", start.map(|t| t.as_nanos()))?;
+        process_time.set_item("end_ns", end.map(|t| t.as_nanos()))?;
+
+        let metadata_py = PyDict::new(py);
+        metadata_py.set_item("process_time", dict_to_namespace(process_time, py)?)?;
+        metadata_py.set_item("status_txt", metadata.status_txt().0.to_string())?;
+        dict_to_namespace(metadata_py, py)
+    }
+
+    fn tov_to_py(tov: Tov, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let tov_py = PyDict::new(py);
+        match tov {
+            Tov::None => {
+                tov_py.set_item("kind", "none")?;
+            }
+            Tov::Time(t) => {
+                tov_py.set_item("kind", "time")?;
+                tov_py.set_item("time_ns", t.as_nanos())?;
+            }
+            Tov::Range(r) => {
+                tov_py.set_item("kind", "range")?;
+                tov_py.set_item("start_ns", r.start.as_nanos())?;
+                tov_py.set_item("end_ns", r.end.as_nanos())?;
+            }
+        }
+        dict_to_namespace(tov_py, py)
+    }
+
+    fn partial_reflect_to_py(value: &dyn PartialReflect, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        #[allow(unreachable_patterns)]
+        match value.reflect_ref() {
+            ReflectRef::Struct(s) => struct_to_py(s, py),
+            ReflectRef::TupleStruct(ts) => tuple_struct_to_py(ts, py),
+            ReflectRef::Tuple(t) => tuple_to_py(t, py),
+            ReflectRef::List(list) => list_to_py(list, py),
+            ReflectRef::Array(array) => array_to_py(array, py),
+            ReflectRef::Map(map) => map_to_py(map, py),
+            ReflectRef::Set(set) => set_to_py(set, py),
+            ReflectRef::Enum(e) => enum_to_py(e, py),
+            ReflectRef::Opaque(opaque) => opaque_to_py(opaque, py),
+            _ => Ok(py.None()),
+        }
+    }
+
+    fn struct_to_py(value: &dyn cu29::bevy_reflect::Struct, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let dict = PyDict::new(py);
+        for idx in 0..value.field_len() {
+            if let Some(field) = value.field_at(idx) {
+                let name = value
+                    .name_at(idx)
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| format!("field_{idx}"));
+                dict.set_item(name, partial_reflect_to_py(field, py)?)?;
+            }
+        }
+
+        if let Some(unit) = unit_abbrev_for_type_path(value.reflect_type_path()) {
+            if let Some(raw_value) = dict.get_item("value")? {
+                if let Ok(v) = raw_value.extract::<f64>() {
+                    let unit_value = PyUnitValue {
+                        value: v,
+                        unit: unit.to_string(),
+                    };
+                    return Ok(Py::new(py, unit_value)?.into());
+                }
+                if let Ok(v) = raw_value.extract::<f32>() {
+                    let unit_value = PyUnitValue {
+                        value: v as f64,
+                        unit: unit.to_string(),
+                    };
+                    return Ok(Py::new(py, unit_value)?.into());
+                }
+            }
+        }
+
+        dict_to_namespace(dict, py)
+    }
+
+    fn tuple_struct_to_py(
+        value: &dyn cu29::bevy_reflect::TupleStruct,
+        py: Python<'_>,
+    ) -> PyResult<Py<PyAny>> {
+        let mut fields = Vec::with_capacity(value.field_len());
+        for idx in 0..value.field_len() {
+            if let Some(field) = value.field(idx) {
+                fields.push(partial_reflect_to_py(field, py)?);
+            } else {
+                fields.push(py.None());
+            }
+        }
+        Ok(PyList::new(py, fields)?.into_pyobject(py)?.into())
+    }
+
+    fn tuple_to_py(value: &dyn cu29::bevy_reflect::Tuple, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let mut fields = Vec::with_capacity(value.field_len());
+        for idx in 0..value.field_len() {
+            if let Some(field) = value.field(idx) {
+                fields.push(partial_reflect_to_py(field, py)?);
+            } else {
+                fields.push(py.None());
+            }
+        }
+        Ok(PyList::new(py, fields)?.into_pyobject(py)?.into())
+    }
+
+    fn list_to_py(value: &dyn cu29::bevy_reflect::List, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let mut items = Vec::with_capacity(value.len());
+        for item in value.iter() {
+            items.push(partial_reflect_to_py(item, py)?);
+        }
+        Ok(PyList::new(py, items)?.into_pyobject(py)?.into())
+    }
+
+    fn array_to_py(value: &dyn cu29::bevy_reflect::Array, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let mut items = Vec::with_capacity(value.len());
+        for item in value.iter() {
+            items.push(partial_reflect_to_py(item, py)?);
+        }
+        Ok(PyList::new(py, items)?.into_pyobject(py)?.into())
+    }
+
+    fn map_to_py(value: &dyn cu29::bevy_reflect::Map, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let dict = PyDict::new(py);
+        for (key, val) in value.iter() {
+            let key_str = reflect_key_to_string(key);
+            dict.set_item(key_str, partial_reflect_to_py(val, py)?)?;
+        }
+        Ok(dict.into_pyobject(py)?.into())
+    }
+
+    fn set_to_py(value: &dyn cu29::bevy_reflect::Set, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let mut items = Vec::with_capacity(value.len());
+        for item in value.iter() {
+            items.push(partial_reflect_to_py(item, py)?);
+        }
+        Ok(PyList::new(py, items)?.into_pyobject(py)?.into())
+    }
+
+    fn enum_to_py(value: &dyn cu29::bevy_reflect::Enum, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let dict = PyDict::new(py);
+        dict.set_item("variant", value.variant_name())?;
+
+        match value.variant_type() {
+            VariantType::Unit => {}
+            VariantType::Tuple => {
+                let mut fields = Vec::with_capacity(value.field_len());
+                for idx in 0..value.field_len() {
+                    if let Some(field) = value.field_at(idx) {
+                        fields.push(partial_reflect_to_py(field, py)?);
+                    } else {
+                        fields.push(py.None());
+                    }
+                }
+                dict.set_item("fields", PyList::new(py, fields)?)?;
+            }
+            VariantType::Struct => {
+                let fields = PyDict::new(py);
+                for idx in 0..value.field_len() {
+                    if let Some(field) = value.field_at(idx) {
+                        let name = value
+                            .name_at(idx)
+                            .map(str::to_owned)
+                            .unwrap_or_else(|| format!("field_{idx}"));
+                        fields.set_item(name, partial_reflect_to_py(field, py)?)?;
+                    }
+                }
+                dict.set_item("fields", fields)?;
+            }
+        }
+
+        dict_to_namespace(dict, py)
+    }
+
+    fn dict_to_namespace(dict: Bound<'_, PyDict>, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let types = py.import("types")?;
+        let namespace_ctor = types.getattr("SimpleNamespace")?;
+        let namespace = namespace_ctor.call((), Some(&dict))?;
+        Ok(namespace.into())
+    }
+
+    fn reflect_key_to_string(value: &dyn PartialReflect) -> String {
+        if let Some(v) = value.try_downcast_ref::<String>() {
+            return v.clone();
+        }
+        if let Some(v) = value.try_downcast_ref::<&'static str>() {
+            return (*v).to_string();
+        }
+        if let Some(v) = value.try_downcast_ref::<char>() {
+            return v.to_string();
+        }
+        if let Some(v) = value.try_downcast_ref::<bool>() {
+            return v.to_string();
+        }
+        if let Some(v) = value.try_downcast_ref::<u64>() {
+            return v.to_string();
+        }
+        if let Some(v) = value.try_downcast_ref::<i64>() {
+            return v.to_string();
+        }
+        if let Some(v) = value.try_downcast_ref::<usize>() {
+            return v.to_string();
+        }
+        if let Some(v) = value.try_downcast_ref::<isize>() {
+            return v.to_string();
+        }
+        format!("{value:?}")
+    }
+
+    fn unit_abbrev_for_type_path(type_path: &str) -> Option<&'static str> {
+        match type_path.rsplit("::").next()? {
+            "Acceleration" => Some("m/s^2"),
+            "Angle" => Some("rad"),
+            "AngularVelocity" => Some("rad/s"),
+            "ElectricPotential" => Some("V"),
+            "Length" => Some("m"),
+            "MagneticFluxDensity" => Some("T"),
+            "Pressure" => Some("Pa"),
+            "Ratio" => Some("1"),
+            "ThermodynamicTemperature" => Some("K"),
+            "Time" => Some("s"),
+            "Velocity" => Some("m/s"),
+            _ => None,
+        }
+    }
+
+    fn opaque_to_py(value: &dyn PartialReflect, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        macro_rules! downcast_copy {
+            ($ty:ty) => {
+                if let Some(v) = value.try_downcast_ref::<$ty>() {
+                    return Ok(v.into_pyobject(py)?.to_owned().into());
+                }
+            };
+        }
+
+        downcast_copy!(bool);
+        downcast_copy!(u8);
+        downcast_copy!(u16);
+        downcast_copy!(u32);
+        downcast_copy!(u64);
+        downcast_copy!(usize);
+        downcast_copy!(i8);
+        downcast_copy!(i16);
+        downcast_copy!(i32);
+        downcast_copy!(i64);
+        downcast_copy!(isize);
+        downcast_copy!(f32);
+        downcast_copy!(f64);
+        downcast_copy!(char);
+
+        if let Some(v) = value.try_downcast_ref::<String>() {
+            return Ok(v.into_pyobject(py)?.into());
+        }
+        if let Some(v) = value.try_downcast_ref::<&'static str>() {
+            return Ok(v.into_pyobject(py)?.into());
+        }
+        if let Some(v) = value.try_downcast_ref::<Vec<u8>>() {
+            return Ok(v.into_pyobject(py)?.into());
+        }
+
+        let fallback = format!("{value:?}");
+        Ok(fallback.into_pyobject(py)?.into())
     }
 
     fn value_to_py(value: &cu29::prelude::Value, py: Python<'_>) -> PyResult<Py<PyAny>> {

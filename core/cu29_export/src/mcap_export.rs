@@ -286,7 +286,7 @@ fn wrap_payload_schema_for_mcap_message(schema_json: &str) -> String {
 
 /// Export CopperLists to MCAP format with payload schemas.
 ///
-/// This function uses `PayloadSchemas` for per-task payload schemas and wraps each
+/// This function uses `PayloadSchemas` for per-output payload schemas and wraps each
 /// payload schema into the full JSON envelope emitted in MCAP messages.
 ///
 /// # Arguments
@@ -300,7 +300,7 @@ where
     P: CopperListTuple + PayloadSchemas,
     R: Read,
 {
-    // Get payload schemas for all task outputs
+    // Get payload schemas for all CopperList outputs (slot order)
     let schemas = P::get_payload_schemas();
     let task_ids = P::get_all_task_ids();
 
@@ -315,7 +315,7 @@ where
 /// # Arguments
 /// * `src` - Reader for the CopperList log data
 /// * `output_path` - Path to write the MCAP file
-/// * `task_ids` - Slice of task IDs corresponding to the messages in CopperLists
+/// * `task_ids` - Slice of output IDs corresponding to CopperList message slots
 /// * `schemas` - Vector of (task_id, schema_json) pairs
 pub fn export_to_mcap_with_schemas<P, R>(
     mut src: R,
