@@ -127,9 +127,10 @@ pub fn sim_gnss_set_vehicle_state(position_xyz_m: [f32; 3], velocity_xyz_mps: [f
     let velocity_north_mps = velocity_xyz_mps[2];
     let velocity_east_mps = -velocity_xyz_mps[0];
     let velocity_down_mps = -velocity_xyz_mps[1];
-    let ground_speed_mps =
-        libm::sqrtf(velocity_north_mps * velocity_north_mps + velocity_east_mps * velocity_east_mps)
-            .max(0.0);
+    let ground_speed_mps = libm::sqrtf(
+        velocity_north_mps * velocity_north_mps + velocity_east_mps * velocity_east_mps,
+    )
+    .max(0.0);
     let heading_motion_deg = if ground_speed_mps > 1.0e-3 {
         wrap_heading_deg(libm::atan2f(velocity_east_mps, velocity_north_mps).to_degrees())
     } else {
@@ -324,11 +325,15 @@ impl CuSrcTask for SimGnssSource {
         let lon_deg = f32::from_bits(state.lon_deg_bits.load(Ordering::Relaxed));
         let ellipsoid_alt_m = f32::from_bits(state.ellipsoid_alt_m_bits.load(Ordering::Relaxed));
         let msl_alt_m = f32::from_bits(state.msl_alt_m_bits.load(Ordering::Relaxed));
-        let velocity_north_mps = f32::from_bits(state.velocity_north_mps_bits.load(Ordering::Relaxed));
-        let velocity_east_mps = f32::from_bits(state.velocity_east_mps_bits.load(Ordering::Relaxed));
-        let velocity_down_mps = f32::from_bits(state.velocity_down_mps_bits.load(Ordering::Relaxed));
+        let velocity_north_mps =
+            f32::from_bits(state.velocity_north_mps_bits.load(Ordering::Relaxed));
+        let velocity_east_mps =
+            f32::from_bits(state.velocity_east_mps_bits.load(Ordering::Relaxed));
+        let velocity_down_mps =
+            f32::from_bits(state.velocity_down_mps_bits.load(Ordering::Relaxed));
         let ground_speed_mps = f32::from_bits(state.ground_speed_mps_bits.load(Ordering::Relaxed));
-        let heading_motion_deg = f32::from_bits(state.heading_motion_deg_bits.load(Ordering::Relaxed));
+        let heading_motion_deg =
+            f32::from_bits(state.heading_motion_deg_bits.load(Ordering::Relaxed));
         let now = ctx.now();
 
         // Runtime message buffers are reused; clear every optional GNSS output each tick
@@ -412,8 +417,17 @@ mod tests {
 
         assert!(vn.abs() < 1.0e-6, "north velocity should be ~0");
         assert!((ve - 5.0).abs() < 1.0e-6, "east velocity should be +5 m/s");
-        assert!((vd + 2.0).abs() < 1.0e-6, "down velocity should be -2 m/s for upward motion");
-        assert!((gs - 5.0).abs() < 1.0e-6, "ground speed should track horizontal speed");
-        assert!((hm - 90.0).abs() < 1.0e-6, "eastward motion heading should be 90 deg");
+        assert!(
+            (vd + 2.0).abs() < 1.0e-6,
+            "down velocity should be -2 m/s for upward motion"
+        );
+        assert!(
+            (gs - 5.0).abs() < 1.0e-6,
+            "ground speed should track horizontal speed"
+        );
+        assert!(
+            (hm - 90.0).abs() < 1.0e-6,
+            "eastward motion heading should be 90 deg"
+        );
     }
 }

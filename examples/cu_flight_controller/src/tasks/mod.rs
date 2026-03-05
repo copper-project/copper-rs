@@ -255,7 +255,12 @@ impl CuTask for MagneticTrueHeading {
             return Ok(());
         }
 
-        let heading_deg = wrap_heading_deg(yaw_rad.to_degrees() + self.declination_deg);
+        let Some(heading_deg) = heading_from_yaw_deg(yaw_rad.to_degrees(), self.declination_deg)
+        else {
+            status_if_not_firmware!(output.metadata, "hdg bad");
+            output.clear_payload();
+            return Ok(());
+        };
 
         output.set_payload(GeographicHeading {
             heading: Angle::new::<degree>(heading_deg),
@@ -1217,6 +1222,14 @@ fn wrap_heading_deg(value: f32) -> f32 {
     wrapped
 }
 
+fn heading_from_yaw_deg(yaw_deg: f32, declination_deg: f32) -> Option<f32> {
+    if !yaw_deg.is_finite() || !declination_deg.is_finite() {
+        return None;
+    }
+    let heading_deg = wrap_heading_deg(-yaw_deg + declination_deg);
+    heading_deg.is_finite().then_some(heading_deg)
+}
+
 fn heading_from_mag_xy_deg(mag_x: f32, mag_y: f32, declination_deg: f32) -> Option<f32> {
     if !mag_x.is_finite() || !mag_y.is_finite() || !declination_deg.is_finite() {
         return None;
@@ -1344,6 +1357,22 @@ mod tests {
     fn heading_from_mag_xy_rejects_non_finite_inputs() {
         assert!(heading_from_mag_xy_deg(f32::NAN, 0.0, 0.0).is_none());
         assert!(heading_from_mag_xy_deg(1.0, 0.0, f32::NAN).is_none());
+    }
+
+    #[test]
+    fn heading_from_yaw_converts_ahrs_sign_to_compass_convention() {
+        assert_heading_close(
+            heading_from_yaw_deg(90.0, 0.0).expect("finite heading"),
+            270.0,
+        );
+        assert_heading_close(
+            heading_from_yaw_deg(-90.0, 0.0).expect("finite heading"),
+            90.0,
+        );
+        assert_heading_close(
+            heading_from_yaw_deg(350.0, 20.0).expect("finite heading"),
+            30.0,
+        );
     }
 
     #[test]

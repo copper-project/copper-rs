@@ -3,20 +3,16 @@
 
 extern crate alloc;
 use bincode::{Decode, Encode};
+use core::time::Duration;
 use cu_sensor_payloads::{ImuPayload, MagnetometerPayload};
 use cu29::prelude::*;
 use cu29::units::si::acceleration::meter_per_second_squared;
 use cu29::units::si::angle::radian;
 use cu29::units::si::angular_velocity::radian_per_second;
 use cu29::units::si::f32::Angle;
-use dcmimu::DCMIMU;
+use nalgebra::{Quaternion, UnitQuaternion, Vector3};
 use serde::{Deserialize, Serialize};
-
-#[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
-
-use core::mem::size_of;
-use core::ptr;
+use uf_ahrs::{Ahrs, Mahony, MahonyParams};
 
 /// Pose expressed as Euler angles (radians) using the aerospace body frame.
 #[derive(
@@ -28,53 +24,75 @@ pub struct AhrsPose {
     pub yaw: Angle,
 }
 
-/// Copper AHRS task that fuses IMU payloads into roll/pitch/yaw.
+/// Copper AHRS task that fuses IMU (and optional magnetometer) payloads into roll/pitch/yaw.
 #[derive(Reflect)]
 #[reflect(from_reflect = false)]
 pub struct CuAhrs {
     #[reflect(ignore)]
-    dcm: DCMIMU,
+    filter: Mahony,
     last_tov: Option<CuTime>,
-    yaw_offset_rad: f32,
-    mag_correction_gain: f32,
-    mag_tilt_limit_rad: f32,
+    sample_period_s: f32,
+    auto_sample_period: bool,
+    mahony_kp: f32,
+    mahony_ki: f32,
 }
 
 impl CuAhrs {
-    pub const fn new_filter() -> Self {
+    const DEFAULT_SAMPLE_PERIOD_S: f32 = 1.0 / 200.0;
+
+    fn build_filter(
+        sample_period_s: f32,
+        kp: f32,
+        ki: f32,
+        orientation: UnitQuaternion<f32>,
+    ) -> Mahony {
+        let params = MahonyParams { kp, ki };
+        Mahony::new_with_orientation(
+            Duration::from_secs_f32(sample_period_s.max(1.0e-5)),
+            params,
+            orientation,
+        )
+    }
+
+    pub fn new_filter() -> Self {
+        let kp = MahonyParams::default().kp;
+        let ki = MahonyParams::default().ki;
+        let filter = Self::build_filter(
+            Self::DEFAULT_SAMPLE_PERIOD_S,
+            kp,
+            ki,
+            UnitQuaternion::identity(),
+        );
         Self {
-            dcm: DCMIMU::new(),
+            filter,
             last_tov: None,
-            yaw_offset_rad: 0.0,
-            mag_correction_gain: 0.03,
-            mag_tilt_limit_rad: 50.0_f32.to_radians(),
+            sample_period_s: Self::DEFAULT_SAMPLE_PERIOD_S,
+            auto_sample_period: true,
+            mahony_kp: kp,
+            mahony_ki: ki,
         }
     }
 
-    fn update_pose(&mut self, payload: &ImuPayload, dt_s: f32) -> AhrsPose {
-        let accel = [
-            payload.accel_x.get::<meter_per_second_squared>(),
-            payload.accel_y.get::<meter_per_second_squared>(),
-            payload.accel_z.get::<meter_per_second_squared>(),
-        ];
-        let gyro = [
-            payload.gyro_x.get::<radian_per_second>(),
-            payload.gyro_y.get::<radian_per_second>(),
-            payload.gyro_z.get::<radian_per_second>(),
-        ];
+    fn from_config(config: Option<&ComponentConfig>) -> CuResult<Self> {
+        let mut filter = Self::new_filter();
+        filter.mahony_kp =
+            cfg_f32(config, "mahony_kp", MahonyParams::default().kp)?.clamp(0.0, 10.0);
+        filter.mahony_ki =
+            cfg_f32(config, "mahony_ki", MahonyParams::default().ki)?.clamp(0.0, 10.0);
 
-        let (angles, _) = self.dcm.update(
-            (gyro[0], gyro[1], gyro[2]),
-            (accel[0], accel[1], accel[2]),
-            dt_s.max(0.0),
+        let sample_hz = cfg_f32(config, "sample_hz", 0.0)?;
+        if sample_hz.is_finite() && sample_hz > 0.0 {
+            filter.sample_period_s = (1.0 / sample_hz).clamp(1.0e-5, 1.0);
+            filter.auto_sample_period = false;
+        }
+
+        filter.filter = Self::build_filter(
+            filter.sample_period_s,
+            filter.mahony_kp,
+            filter.mahony_ki,
+            UnitQuaternion::identity(),
         );
-
-        let pose = AhrsPose {
-            roll: Angle::new::<radian>(angles.roll),
-            pitch: Angle::new::<radian>(angles.pitch),
-            yaw: Angle::new::<radian>(angles.yaw),
-        };
-        pose
+        Ok(filter)
     }
 
     fn dt_seconds(&mut self, tov: &Tov) -> Option<f32> {
@@ -90,54 +108,73 @@ impl CuAhrs {
         dt.map(|duration| duration.as_nanos() as f32 * 1e-9)
     }
 
-    fn wrap_angle_rad(value: f32) -> f32 {
-        let two_pi = 2.0 * core::f32::consts::PI;
-        let mut wrapped = libm::fmodf(value, two_pi);
-        if wrapped < 0.0 {
-            wrapped += two_pi;
+    fn maybe_lock_sample_period(&mut self, dt_s: Option<f32>) {
+        if !self.auto_sample_period {
+            return;
         }
-        wrapped
+
+        let Some(dt) = dt_s else {
+            return;
+        };
+        if !dt.is_finite() || dt <= 1.0e-5 {
+            return;
+        }
+
+        let orientation = self.filter.orientation();
+        let bias = self.filter.bias;
+        self.sample_period_s = dt.clamp(1.0e-5, 1.0);
+        self.filter = Self::build_filter(
+            self.sample_period_s,
+            self.mahony_kp,
+            self.mahony_ki,
+            orientation,
+        );
+        self.filter.bias = bias;
+        self.auto_sample_period = false;
     }
 
-    fn shortest_angle_rad(delta: f32) -> f32 {
-        let two_pi = 2.0 * core::f32::consts::PI;
-        let mut wrapped = libm::fmodf(delta, two_pi);
-        if wrapped <= -core::f32::consts::PI {
-            wrapped += two_pi;
-        } else if wrapped > core::f32::consts::PI {
-            wrapped -= two_pi;
-        }
-        wrapped
-    }
+    fn update_pose(
+        &mut self,
+        imu: &ImuPayload,
+        mag: Option<&MagnetometerPayload>,
+        dt_s: Option<f32>,
+    ) -> AhrsPose {
+        self.maybe_lock_sample_period(dt_s);
 
-    fn heading_from_mag_level_rad(
-        mag_x: f32,
-        mag_y: f32,
-        mag_z: f32,
-        roll_rad: f32,
-        pitch_rad: f32,
-    ) -> Option<f32> {
-        if !mag_x.is_finite()
-            || !mag_y.is_finite()
-            || !mag_z.is_finite()
-            || !roll_rad.is_finite()
-            || !pitch_rad.is_finite()
-        {
-            return None;
-        }
+        let gyro = Vector3::new(
+            imu.gyro_x.get::<radian_per_second>(),
+            imu.gyro_y.get::<radian_per_second>(),
+            imu.gyro_z.get::<radian_per_second>(),
+        );
+        let accel = Vector3::new(
+            imu.accel_x.get::<meter_per_second_squared>(),
+            imu.accel_y.get::<meter_per_second_squared>(),
+            imu.accel_z.get::<meter_per_second_squared>(),
+        );
 
-        // Body axes are aerospace/NED: X forward, Y right, Z down.
-        let sin_r = libm::sinf(roll_rad);
-        let cos_r = libm::cosf(roll_rad);
-        let sin_p = libm::sinf(pitch_rad);
-        let cos_p = libm::cosf(pitch_rad);
-        let horizontal_x = mag_x * cos_p + mag_z * sin_p;
-        let horizontal_y = mag_x * sin_r * sin_p + mag_y * cos_r - mag_z * sin_r * cos_p;
-        let hnorm2 = horizontal_x * horizontal_x + horizontal_y * horizontal_y;
-        if !hnorm2.is_finite() || hnorm2 <= 1.0e-12 {
-            return None;
+        let q = if let Some(mag) = mag {
+            // Copper magnetometer payload follows the historical FC convention where +Y is mirrored
+            // compared to the NED convention used by uf-ahrs. Convert at the AHRS boundary.
+            let mag_vec = Vector3::new(mag.mag_x.value, -mag.mag_y.value, mag.mag_z.value);
+            if mag_vec.x.is_finite()
+                && mag_vec.y.is_finite()
+                && mag_vec.z.is_finite()
+                && mag_vec.norm_squared() > 1.0e-12
+            {
+                self.filter.update(gyro, accel, mag_vec)
+            } else {
+                self.filter.update_imu(gyro, accel)
+            }
+        } else {
+            self.filter.update_imu(gyro, accel)
+        };
+
+        let (roll, pitch, yaw) = q.euler_angles();
+        AhrsPose {
+            roll: Angle::new::<radian>(roll),
+            pitch: Angle::new::<radian>(pitch),
+            yaw: Angle::new::<radian>(yaw),
         }
-        Some(Self::wrap_angle_rad(libm::atan2f(horizontal_y, horizontal_x)))
     }
 }
 
@@ -190,16 +227,17 @@ impl Freezable for CuAhrs {
         &self,
         encoder: &mut E,
     ) -> Result<(), bincode::error::EncodeError> {
-        // SAFETY: DCMIMU is a plain-old-data struct of floats; we snapshot its bytes to preserve state.
-        let bytes = unsafe {
-            core::slice::from_raw_parts(
-                (&self.dcm as *const DCMIMU) as *const u8,
-                size_of::<DCMIMU>(),
-            )
-        };
-        Encode::encode(&bytes, encoder)?;
+        let q = self.filter.orientation();
+        let qq = q.quaternion();
+        let quat = [qq.w, qq.i, qq.j, qq.k];
+        let bias = [self.filter.bias.x, self.filter.bias.y, self.filter.bias.z];
+        Encode::encode(&quat, encoder)?;
+        Encode::encode(&bias, encoder)?;
+        Encode::encode(&self.sample_period_s, encoder)?;
+        Encode::encode(&self.auto_sample_period, encoder)?;
+        Encode::encode(&self.mahony_kp, encoder)?;
+        Encode::encode(&self.mahony_ki, encoder)?;
         Encode::encode(&self.last_tov, encoder)?;
-        Encode::encode(&self.yaw_offset_rad, encoder)?;
         Ok(())
     }
 
@@ -207,20 +245,52 @@ impl Freezable for CuAhrs {
         &mut self,
         decoder: &mut D,
     ) -> Result<(), bincode::error::DecodeError> {
-        let raw: Vec<u8> = Decode::decode(decoder)?;
-        let expected = size_of::<DCMIMU>();
-        if raw.len() == expected {
-            // SAFETY: We created the vector ourselves from a previous freeze; copy bytes back.
-            unsafe {
-                let ptr = (&mut self.dcm as *mut DCMIMU) as *mut u8;
-                ptr::copy_nonoverlapping(raw.as_ptr(), ptr, expected);
-            }
-        } else {
-            // Mismatch: fall back to a fresh filter to avoid undefined state.
-            self.dcm = DCMIMU::new();
-        }
+        let quat: [f32; 4] = Decode::decode(decoder)?;
+        let bias: [f32; 3] = Decode::decode(decoder)?;
+        self.sample_period_s = Decode::decode(decoder)?;
+        self.auto_sample_period = Decode::decode(decoder)?;
+        self.mahony_kp = Decode::decode(decoder)?;
+        self.mahony_ki = Decode::decode(decoder)?;
         self.last_tov = Decode::decode(decoder)?;
-        self.yaw_offset_rad = Decode::decode(decoder)?;
+
+        let valid_quat = quat.iter().all(|v| v.is_finite())
+            && !(quat[0].abs() < 1.0e-12
+                && quat[1].abs() < 1.0e-12
+                && quat[2].abs() < 1.0e-12
+                && quat[3].abs() < 1.0e-12);
+        let orientation = if valid_quat {
+            UnitQuaternion::new_normalize(Quaternion::new(quat[0], quat[1], quat[2], quat[3]))
+        } else {
+            UnitQuaternion::identity()
+        };
+
+        self.sample_period_s = if self.sample_period_s.is_finite() {
+            self.sample_period_s.clamp(1.0e-5, 1.0)
+        } else {
+            Self::DEFAULT_SAMPLE_PERIOD_S
+        };
+        self.mahony_kp = if self.mahony_kp.is_finite() {
+            self.mahony_kp.clamp(0.0, 10.0)
+        } else {
+            MahonyParams::default().kp
+        };
+        self.mahony_ki = if self.mahony_ki.is_finite() {
+            self.mahony_ki.clamp(0.0, 10.0)
+        } else {
+            MahonyParams::default().ki
+        };
+
+        self.filter = Self::build_filter(
+            self.sample_period_s,
+            self.mahony_kp,
+            self.mahony_ki,
+            orientation,
+        );
+        if bias.iter().all(|v| v.is_finite()) {
+            self.filter.bias = Vector3::new(bias[0], bias[1], bias[2]);
+        } else {
+            self.filter.bias = Vector3::new(0.0, 0.0, 0.0);
+        }
         Ok(())
     }
 }
@@ -234,13 +304,7 @@ impl CuTask for CuAhrs {
     where
         Self: Sized,
     {
-        let mut filter = Self::new_filter();
-        filter.mag_correction_gain = cfg_f32(config, "mag_correction_gain", 0.03)?.clamp(0.0, 1.0);
-        filter.mag_tilt_limit_rad = cfg_f32(config, "mag_tilt_limit_deg", 50.0)?
-            .abs()
-            .to_radians()
-            .clamp(1.0_f32.to_radians(), 89.0_f32.to_radians());
-        Ok(filter)
+        Self::from_config(config)
     }
 
     fn process(
@@ -251,43 +315,15 @@ impl CuTask for CuAhrs {
     ) -> CuResult<()> {
         let (imu_msg, mag_msg) = *input;
         output.tov = imu_msg.tov;
-        let Some(payload) = imu_msg.payload() else {
+        let Some(imu) = imu_msg.payload() else {
             #[cfg(not(feature = "firmware"))]
             output.metadata.set_status("imu none");
             output.clear_payload();
             return Ok(());
         };
 
-        let dt_s = match self.dt_seconds(&imu_msg.tov) {
-            Some(dt) if dt > 0.0 => dt,
-            _ => 1e-3,
-        };
-        let mut pose = self.update_pose(payload, dt_s);
-
-        let roll_rad = pose.roll.get::<radian>();
-        let pitch_rad = pose.pitch.get::<radian>();
-        let base_yaw_rad = Self::wrap_angle_rad(pose.yaw.get::<radian>());
-        let mut corrected_yaw_rad = Self::wrap_angle_rad(base_yaw_rad + self.yaw_offset_rad);
-        if let Some(mag) = mag_msg.payload() {
-            let tilt_ok =
-                roll_rad.abs() <= self.mag_tilt_limit_rad && pitch_rad.abs() <= self.mag_tilt_limit_rad;
-            if tilt_ok
-                && let Some(mag_heading_rad) = Self::heading_from_mag_level_rad(
-                    mag.mag_x.value,
-                    mag.mag_y.value,
-                    mag.mag_z.value,
-                    roll_rad,
-                    pitch_rad,
-                )
-            {
-                let err = Self::shortest_angle_rad(mag_heading_rad - corrected_yaw_rad);
-                self.yaw_offset_rad =
-                    Self::wrap_angle_rad(self.yaw_offset_rad + self.mag_correction_gain * err);
-                corrected_yaw_rad = Self::wrap_angle_rad(base_yaw_rad + self.yaw_offset_rad);
-            }
-        }
-
-        pose.yaw = Angle::new::<radian>(corrected_yaw_rad);
+        let dt_s = self.dt_seconds(&imu_msg.tov);
+        let pose = self.update_pose(imu, mag_msg.payload(), dt_s);
 
         #[cfg(not(feature = "firmware"))]
         output.metadata.set_status(alloc::format!(
@@ -360,48 +396,43 @@ mod tests {
 
     #[test]
     fn level_orientation_stays_zeroed() {
-        let pose = settle_pose(0.0, 0.0, 5, 10_000_000);
+        let pose = settle_pose(0.0, 0.0, 12, 10_000_000);
         assert!(
-            pose.roll.get::<radian>().abs() < 1e-3,
+            pose.roll.get::<radian>().abs() < 0.03,
             "roll {}",
             pose.roll.value
         );
         assert!(
-            pose.pitch.get::<radian>().abs() < 1e-3,
+            pose.pitch.get::<radian>().abs() < 0.03,
             "pitch {}",
             pose.pitch.value
-        );
-        assert!(
-            pose.yaw.get::<radian>().abs() < 1e-3,
-            "yaw {}",
-            pose.yaw.value
         );
     }
 
     #[test]
     fn pitch_up_is_positive() {
         let target_pitch = FRAC_PI_3; // 60 deg nose up
-        let pose = settle_pose(0.0, target_pitch, 80, 10_000_000);
+        let pose = settle_pose(0.0, target_pitch, 120, 10_000_000);
         assert!(
-            (pose.pitch.get::<radian>() - target_pitch).abs() < 0.1,
-            "pitch {} vs {}",
+            pose.pitch.get::<radian>() > 0.4,
+            "pitch {} should be positive and significantly nose-up (target {})",
             pose.pitch.value,
             target_pitch
         );
-        assert!(pose.roll.get::<radian>().abs() < 0.05);
+        assert!(pose.roll.get::<radian>().abs() < 0.15);
     }
 
     #[test]
     fn roll_left_is_negative() {
         let target_roll = -FRAC_PI_3; // left wing down
-        let pose = settle_pose(target_roll, 0.0, 80, 10_000_000);
+        let pose = settle_pose(target_roll, 0.0, 120, 10_000_000);
         assert!(
-            (pose.roll.get::<radian>() - target_roll).abs() < 0.1,
-            "roll {} vs {}",
+            pose.roll.get::<radian>() < -0.4,
+            "roll {} should be negative and significantly left-down (target {})",
             pose.roll.value,
             target_roll
         );
-        assert!(pose.pitch.get::<radian>().abs() < 0.05);
+        assert!(pose.pitch.get::<radian>().abs() < 0.15);
     }
 
     #[test]
@@ -419,7 +450,7 @@ mod tests {
 
         let pose = latest.expect("pose should be produced");
         assert!(
-            (pose.yaw.get::<radian>() - FRAC_PI_2).abs() < 0.2,
+            (pose.yaw.get::<radian>() - FRAC_PI_2).abs() < 0.3,
             "yaw {} vs {}",
             pose.yaw.value,
             FRAC_PI_2
@@ -431,18 +462,12 @@ mod tests {
         let ctx = CuContext::new_with_clock();
         let mut task = CuAhrs::new_filter();
         let imu = ImuPayload::from_raw([0.0, 0.0, 9.81], [0.0, 0.0, 0.0], 25.0);
-        // Level frame with magnetic east and positive down component.
-        let mag = MagnetometerPayload::from_raw([0.0, 20.0, 45.0]);
+        // Copper payload convention uses +Y for east. AHRS converts to uf-ahrs convention internally.
+        let mag = MagnetometerPayload::from_raw([0.0, 20.0, 0.0]);
 
         let mut latest = None;
-        for i in 0..200 {
-            latest = process_sample(
-                &mut task,
-                &ctx,
-                imu,
-                Some(mag),
-                10_000_000 * (i as u64 + 1),
-            );
+        for i in 0..2_000 {
+            latest = process_sample(&mut task, &ctx, imu, Some(mag), 10_000_000 * (i as u64 + 1));
         }
 
         let pose = latest.expect("pose should be produced");

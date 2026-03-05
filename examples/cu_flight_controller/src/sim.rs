@@ -1459,4 +1459,15 @@ mod tests {
         let yaw_180_fc = map_bevy_body_to_fc_magnetometer(yaw_180_body);
         assert_heading_close(heading_from_mag_xy_deg(yaw_180_fc), 0.0);
     }
+
+    #[test]
+    fn sim_gyro_z_maps_right_turn_to_negative_fc_yaw_rate() {
+        // The corresponding body yaw rate in Bevy for a right turn is negative Y.
+        let gyro_fc = map_bevy_body_to_fc_axial(Vec3::new(0.0, -1.0, 0.0));
+        assert!(
+            gyro_fc[2] < 0.0,
+            "right turn should map to negative FC gyro_z, got {}",
+            gyro_fc[2]
+        );
+    }
 }
