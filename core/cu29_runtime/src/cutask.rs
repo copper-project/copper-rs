@@ -4,6 +4,10 @@
 use crate::config::ComponentConfig;
 use crate::context::CuContext;
 use crate::reflect::Reflect;
+#[cfg(feature = "reflect")]
+use crate::reflect::TypePath;
+#[cfg(feature = "reflect")]
+use bevy_reflect;
 use bincode::de::{Decode, Decoder};
 use bincode::enc::{Encode, Encoder};
 use bincode::error::{DecodeError, EncodeError};
@@ -22,16 +26,56 @@ use core::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
 /// The state of a task.
 // Everything that is stateful in copper for zero copy constraints need to be restricted to this trait.
+#[cfg(feature = "reflect")]
 pub trait CuMsgPayload:
-    Default + Debug + Clone + Encode + Decode<()> + Serialize + DeserializeOwned + Sized
+    Default
+    + Debug
+    + Clone
+    + Encode
+    + Decode<()>
+    + Serialize
+    + DeserializeOwned
+    + Reflect
+    + TypePath
+    + Sized
+{
+}
+
+#[cfg(not(feature = "reflect"))]
+pub trait CuMsgPayload:
+    Default + Debug + Clone + Encode + Decode<()> + Serialize + DeserializeOwned + Reflect + Sized
 {
 }
 
 pub trait CuMsgPack {}
 
 // Also anything that follows this contract can be a payload (blanket implementation)
+#[cfg(feature = "reflect")]
 impl<T> CuMsgPayload for T where
-    T: Default + Debug + Clone + Encode + Decode<()> + Serialize + DeserializeOwned + Sized
+    T: Default
+        + Debug
+        + Clone
+        + Encode
+        + Decode<()>
+        + Serialize
+        + DeserializeOwned
+        + Reflect
+        + TypePath
+        + Sized
+{
+}
+
+#[cfg(not(feature = "reflect"))]
+impl<T> CuMsgPayload for T where
+    T: Default
+        + Debug
+        + Clone
+        + Encode
+        + Decode<()>
+        + Serialize
+        + DeserializeOwned
+        + Reflect
+        + Sized
 {
 }
 
@@ -97,7 +141,8 @@ macro_rules! output_msg {
 }
 
 /// CuMsgMetadata is a structure that contains metadata common to all CuStampedDataSet.
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, bincode::Encode, bincode::Decode, Serialize, Deserialize, Reflect)]
+#[reflect(opaque, from_reflect = false, no_field_bounds)]
 pub struct CuMsgMetadata {
     /// The time range used for the processing of this message
     pub process_time: PartialCuTimeRange,
@@ -135,7 +180,10 @@ impl Display for CuMsgMetadata {
 }
 
 /// CuMsg is the envelope holding the msg payload and the metadata between tasks.
-#[derive(Default, Debug, Clone, bincode::Encode, bincode::Decode, Serialize, Deserialize)]
+#[derive(
+    Default, Debug, Clone, bincode::Encode, bincode::Decode, Serialize, Deserialize, Reflect,
+)]
+#[reflect(opaque, from_reflect = false, no_field_bounds)]
 #[serde(bound(
     serialize = "T: Serialize, M: Serialize",
     deserialize = "T: DeserializeOwned, M: DeserializeOwned"
@@ -203,6 +251,13 @@ where
         self.payload
             .as_ref()
             .map(|p| p as &dyn erased_serde::Serialize)
+    }
+
+    #[cfg(feature = "reflect")]
+    fn payload_reflect(&self) -> Option<&dyn cu29_traits::Reflect> {
+        self.payload
+            .as_ref()
+            .map(|p| p as &dyn cu29_traits::Reflect)
     }
 
     fn tov(&self) -> Tov {
