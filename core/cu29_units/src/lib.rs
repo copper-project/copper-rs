@@ -523,7 +523,10 @@ mod tests {
             speed: Velocity::new::<kilometer_per_hour>(36.0),
         };
 
-        assert!(matches!(msg.speed.as_partial_reflect().reflect_ref(), ReflectRef::Struct(_)));
+        assert!(matches!(
+            msg.speed.as_partial_reflect().reflect_ref(),
+            ReflectRef::Struct(_)
+        ));
         assert_eq!(msg.speed.get::<meter_per_second>(), 10.0);
 
         let speed_reflected = match msg.as_partial_reflect().reflect_ref() {
