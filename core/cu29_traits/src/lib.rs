@@ -367,7 +367,10 @@ pub trait CuPayloadRawBytes {
     fn payload_raw_bytes(&self) -> Vec<Option<u64>>;
 }
 
-/// Trait to trace back from the CopperList the origin of the messages
+/// Trait to trace back from the CopperList the origin of each message slot.
+///
+/// The returned slice must be aligned with `ErasedCuStampedDataSet::cumsgs()`:
+/// index `i` maps to copperlist slot `i`.
 pub trait MatchingTasks {
     fn get_all_task_ids() -> &'static [&'static str];
 }
@@ -383,7 +386,7 @@ pub trait MatchingTasks {
 pub trait PayloadSchemas {
     /// Returns a vector of (task_id, schema_json) pairs.
     ///
-    /// Each entry corresponds to a task in the CopperList, in order.
+    /// Each entry corresponds to a CopperList output slot, in slot order.
     /// The schema is a JSON Schema string generated from the payload type.
     fn get_payload_schemas() -> Vec<(&'static str, String)> {
         Vec::new()
