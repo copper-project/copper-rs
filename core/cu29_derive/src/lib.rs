@@ -522,15 +522,7 @@ fn gen_culist_support(
         }
     }
 
-    let task_name_literals: Vec<String> = slot_origin_ids
-        .into_iter()
-        .enumerate()
-        .map(|(slot, origin)| {
-            origin.unwrap_or_else(|| {
-                panic!("Missing slot origin id for copperlist output slot {slot}")
-            })
-        })
-        .collect();
+    let task_name_literals = flatten_slot_origin_ids(&output_packs, slot_origin_ids);
 
     let mut logviz_blocks = Vec::new();
     for (slot_idx, pack) in output_packs.iter().enumerate() {
@@ -3527,6 +3519,26 @@ fn build_output_slot_type(msg_types: &[Type]) -> Type {
     }
 }
 
+fn flatten_slot_origin_ids(
+    output_packs: &[OutputPack],
+    slot_origin_ids: Vec<Option<String>>,
+) -> Vec<String> {
+    let mut ids = Vec::new();
+    for (slot, pack) in output_packs.iter().enumerate() {
+        if pack.msg_types.is_empty() {
+            continue;
+        }
+        let origin = slot_origin_ids
+            .get(slot)
+            .and_then(|origin| origin.as_ref())
+            .unwrap_or_else(|| panic!("Missing slot origin id for copperlist output slot {slot}"));
+        for _ in 0..pack.msg_types.len() {
+            ids.push(origin.clone());
+        }
+    }
+    ids
+}
+
 fn extract_output_packs(runtime_plan: &CuExecutionLoop) -> Vec<OutputPack> {
     let mut packs: Vec<(u32, OutputPack)> = runtime_plan
         .steps
@@ -5396,6 +5408,49 @@ mod tests {
         assert_eq!(
             src_step.output_msg_pack.as_ref().unwrap().msg_types,
             vec!["i32", "bool"]
+        );
+    }
+
+    #[test]
+    fn matching_task_ids_are_flattened_per_output_message() {
+        use super::*;
+        use cu29::config::CuConfig;
+
+        let config: CuConfig =
+            read_config("tests/config/multi_output_source_non_first_connected_valid.ron")
+                .expect("failed to read test config");
+        let graph = config.get_graph(None).expect("missing graph");
+        let task_specs = CuTaskSpecSet::from_graph(graph);
+        let channel_usage = collect_bridge_channel_usage(graph);
+        let mut bridge_specs = build_bridge_specs(&config, graph, &channel_usage);
+        let (runtime_plan, exec_entities, plan_to_original) =
+            build_execution_plan(graph, &task_specs, &mut bridge_specs)
+                .expect("runtime plan failed");
+        let output_packs = extract_output_packs(&runtime_plan);
+        let task_names = collect_task_names(graph);
+        let (_, node_output_positions) = collect_culist_metadata(
+            &runtime_plan,
+            &exec_entities,
+            &mut bridge_specs,
+            &plan_to_original,
+        );
+
+        // Rebuild per-slot origin ids like `gen_culist_support` does.
+        let mut slot_origin_ids: Vec<Option<String>> = vec![None; output_packs.len()];
+        for (node_id, task_id, _) in task_names {
+            let output_position = node_output_positions
+                .get(&node_id)
+                .unwrap_or_else(|| panic!("Task {task_id} (node id: {node_id}) not found"));
+            slot_origin_ids[*output_position] = Some(task_id);
+        }
+
+        let flattened_ids = flatten_slot_origin_ids(&output_packs, slot_origin_ids);
+
+        // src emits two messages (i32 + bool), both map to src.
+        // sink contributes its own output slot (CuMsg<()>), mapped to sink.
+        assert_eq!(
+            flattened_ids,
+            vec!["src".to_string(), "src".to_string(), "sink".to_string()]
         );
     }
 
