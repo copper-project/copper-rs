@@ -306,7 +306,10 @@ impl Multicopter {
 const THRUST_CONSTANT: f32 = 1.0e-6;
 const DRAG_CONSTANT: f32 = 1.0e-7;
 const MAX_OMEGA_RAD_S: f32 = 2200.0;
-const WORLD_MAG_FIELD_UT: [f32; 3] = [20.0, 0.0, -45.0];
+// Bevy world frame uses X east, Y up, Z south in this scene.
+// Keep declination at 0 in the simulated magnetic field itself so
+// `declination_deg` in `MagneticTrueHeading` can be tested independently.
+const WORLD_MAG_FIELD_UT: [f32; 3] = [0.0, -45.0, -20.0];
 const BASE_ASSETS_URL: &str = "https://cdn.copper-robotics.com/";
 const SKYBOX: &str = "skybox.ktx2";
 const SPECULAR_MAP: &str = "specular_map.ktx2";
@@ -318,12 +321,13 @@ const LOCAL_CITY_BBOX_MAX_UNITS: Vec3 = Vec3::new(18_754.953, 11_102.407, 35_871
 // Source appears to be authored in centimeters; convert units to meters.
 const LOCAL_CITY_SCALE: f32 = 0.01;
 const SIM_SPAWN_POSITION: Vec3 = Vec3::new(-10.0, 1.0, 20.0);
+const SIM_SPAWN_YAW_DEG: f32 = 180.0;
 const ARM_SWITCH_NAMES: &[&str] = &["sf", "se", "arm", "btn1"];
 const KEYBOARD_HOVER_THROTTLE_LOW: f32 = 0.56;
 const KEYBOARD_HOVER_THROTTLE_HIGH: f32 = 0.62;
 
 fn spawn_rotation() -> Quat {
-    Quat::from_rotation_y(core::f32::consts::PI)
+    Quat::from_rotation_y(SIM_SPAWN_YAW_DEG.to_radians())
 }
 
 fn spawn_pose_components() -> (
@@ -467,10 +471,16 @@ fn map_bevy_body_to_fc_polar(v: Vec3) -> [f32; 3] {
     [v.z, v.x, -v.y]
 }
 
-/// Map Bevy body axial vectors (angular velocity / magnetic field) into FC body frame.
+/// Map Bevy body axial vectors (angular velocity) into FC body frame.
 /// Because the frame transform changes handedness, axial vectors pick up an extra sign.
 fn map_bevy_body_to_fc_axial(v: Vec3) -> [f32; 3] {
     [-v.z, -v.x, v.y]
+}
+
+/// Map Bevy body magnetic vectors into FC body frame.
+/// Magnetometer is a polar vector (not axial), so it uses the polar mapping/signs.
+fn map_bevy_body_to_fc_magnetometer(v: Vec3) -> [f32; 3] {
+    [-v.z, v.x, -v.y]
 }
 
 fn setup_copper(mut commands: Commands) {
@@ -1017,11 +1027,12 @@ fn run_copper(
             }
             gnss::SimStep::Ist8310(CuTaskCallbackState::Process(_, output)) => {
                 let world_mag = Vec3::from_array(WORLD_MAG_FIELD_UT);
-                let body_mag = vehicle.rotation.inverse() * world_mag;
+                // Keep heading increasing clockwise from north as Bevy yaw increases counter-clockwise.
+                let body_mag = vehicle.rotation * world_mag;
                 set_msg_timing(&clock, output);
-                output.set_payload(MagnetometerPayload::from_raw(map_bevy_body_to_fc_axial(
-                    body_mag,
-                )));
+                output.set_payload(MagnetometerPayload::from_raw(
+                    map_bevy_body_to_fc_magnetometer(body_mag),
+                ));
                 SimOverride::ExecutedBySim
             }
             gnss::SimStep::RcRxRcRx { msg, .. } => {
@@ -1400,9 +1411,46 @@ fn main() {
 mod tests {
     use super::*;
 
+    fn heading_from_mag_xy_deg(mag: [f32; 3]) -> f32 {
+        let mut heading = libm::atan2f(mag[1], mag[0]).to_degrees();
+        if heading < 0.0 {
+            heading += 360.0;
+        }
+        heading
+    }
+
+    fn assert_heading_close(actual: f32, expected: f32) {
+        let err = (actual - expected + 540.0).rem_euclid(360.0) - 180.0;
+        assert!(
+            err.abs() < 1.0e-3,
+            "heading mismatch: actual={actual} expected={expected} err={err}"
+        );
+    }
+
     #[test]
     fn sim_world_starts() {
         let mut app = make_world(true);
         app.update();
+    }
+
+    #[test]
+    fn sim_world_magnetic_field_is_three_dimensional() {
+        let world_mag = Vec3::from_array(WORLD_MAG_FIELD_UT);
+        assert!(world_mag.x.abs() > 0.0 || world_mag.z.abs() > 0.0);
+        assert!(world_mag.y.abs() > 0.0);
+    }
+
+    #[test]
+    fn sim_magnetometer_heading_tracks_bevy_yaw_convention() {
+        let world_mag = Vec3::from_array(WORLD_MAG_FIELD_UT);
+
+        let north_body = Quat::IDENTITY * world_mag;
+        let north_fc = map_bevy_body_to_fc_magnetometer(north_body);
+        assert!(north_fc[2] > 0.0, "expected positive down component");
+        assert_heading_close(heading_from_mag_xy_deg(north_fc), 0.0);
+
+        let yaw_90_body = Quat::from_rotation_y(90.0_f32.to_radians()) * world_mag;
+        let yaw_90_fc = map_bevy_body_to_fc_magnetometer(yaw_90_body);
+        assert_heading_close(heading_from_mag_xy_deg(yaw_90_fc), 270.0);
     }
 }

@@ -256,13 +256,11 @@ impl CuTask for MagneticTrueHeading {
             return Ok(());
         }
 
-        let heading_deg = libm::atan2f(mag_y, mag_x).to_degrees() + self.declination_deg;
-        let heading_deg = wrap_heading_deg(heading_deg);
-        if !heading_deg.is_finite() {
+        let Some(heading_deg) = heading_from_mag_xy_deg(mag_x, mag_y, self.declination_deg) else {
             status_if_not_firmware!(output.metadata, "hdg bad");
             output.clear_payload();
             return Ok(());
-        }
+        };
 
         output.set_payload(GeographicHeading {
             heading: Angle::new::<degree>(heading_deg),
@@ -1224,6 +1222,14 @@ fn wrap_heading_deg(value: f32) -> f32 {
     wrapped
 }
 
+fn heading_from_mag_xy_deg(mag_x: f32, mag_y: f32, declination_deg: f32) -> Option<f32> {
+    if !mag_x.is_finite() || !mag_y.is_finite() || !declination_deg.is_finite() {
+        return None;
+    }
+    let heading_deg = wrap_heading_deg(libm::atan2f(mag_y, mag_x).to_degrees() + declination_deg);
+    heading_deg.is_finite().then_some(heading_deg)
+}
+
 fn cfg_f32(config: Option<&ComponentConfig>, key: &str, default: f32) -> CuResult<f32> {
     let value = match config {
         Some(cfg) => cfg.get::<f64>(key)?,
@@ -1264,4 +1270,47 @@ fn cfg_usize(config: Option<&ComponentConfig>, key: &str, default: usize) -> CuR
         None => None,
     };
     Ok(value.map(|v| v as usize).unwrap_or(default))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assert_heading_close(actual: f32, expected: f32) {
+        let err = (actual - expected + 540.0).rem_euclid(360.0) - 180.0;
+        assert!(
+            err.abs() < 1.0e-3,
+            "heading mismatch: actual={actual} expected={expected} err={err}"
+        );
+    }
+
+    #[test]
+    fn heading_from_mag_xy_applies_declination_and_wraps() {
+        assert_heading_close(
+            heading_from_mag_xy_deg(1.0, 0.0, 12.5).expect("finite heading"),
+            12.5,
+        );
+        assert_heading_close(
+            heading_from_mag_xy_deg(1.0, 0.0, -10.0).expect("finite heading"),
+            350.0,
+        );
+    }
+
+    #[test]
+    fn heading_from_mag_xy_uses_east_as_positive() {
+        assert_heading_close(
+            heading_from_mag_xy_deg(0.0, 1.0, 0.0).expect("finite heading"),
+            90.0,
+        );
+        assert_heading_close(
+            heading_from_mag_xy_deg(0.0, -1.0, 0.0).expect("finite heading"),
+            270.0,
+        );
+    }
+
+    #[test]
+    fn heading_from_mag_xy_rejects_non_finite_inputs() {
+        assert!(heading_from_mag_xy_deg(f32::NAN, 0.0, 0.0).is_none());
+        assert!(heading_from_mag_xy_deg(1.0, 0.0, f32::NAN).is_none());
+    }
 }
