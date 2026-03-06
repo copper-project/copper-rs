@@ -28,7 +28,6 @@ indicatif = { version = "0.18", optional = true, default-features = false }
 
 # PyO3 is not supported for macOS at the moment, don't allow people to opt-in since it won't work
 pyo3 = { version = "0.28", optional = true, default-features = false, features = [
-  "extension-module",
   "macros",
 ] }
 
@@ -45,4 +44,7 @@ jsonschema = { version = "0.44", default-features = false }
 [features]
 default = []
 python = ["dep:pyo3"]
+# Only enable this when building the Python extension itself; Rust binaries need
+# the plain `python` feature so they still link libpython correctly.
+python-extension-module = ["python", "pyo3/extension-module"]
 mcap = ["dep:mcap", "dep:erased-serde", "dep:indicatif"]
