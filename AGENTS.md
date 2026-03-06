@@ -196,6 +196,7 @@ Implications:
   - No hacks to hide a deeper design/runtime problem.
   - No shortcut that creates spaghetti code or weakens the architecture.
 - Prefer `just` targets over inventing ad hoc command sequences.
+- After each edit pass, run `just fmt` from the repo root before moving on.
 - Use `cargo expand` when proc-macro behavior is unclear.
 - Many examples/apps create logs under their own `logs/` directories.
 - `basic_copper_setup(...)` is the common logger/runtime bootstrap helper, but examples may customize around it.

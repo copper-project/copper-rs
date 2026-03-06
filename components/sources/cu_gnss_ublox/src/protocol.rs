@@ -7,7 +7,8 @@ use cu_gnss_payloads::{
     GnssRfStatus, GnssSatelliteInfo, GnssSatelliteState, GnssSignalInfo, GnssSignalState,
 };
 use cu29::units::si::angle::degree;
-use cu29::units::si::f32::{Angle, Length, Ratio, Time, Velocity};
+use cu29::units::si::f32::{Angle as Angle32, Length, Ratio, Time, Velocity};
+use cu29::units::si::f64::Angle as Angle64;
 use cu29::units::si::length::{decimeter, meter};
 use cu29::units::si::ratio::ratio;
 use cu29::units::si::time::second;
@@ -200,17 +201,17 @@ fn decode_nav_pvt(payload: &[u8]) -> Option<GnssNavEpoch> {
         carrier_solution: (flags >> 6) & 0x03,
         invalid_llh: (flags3 & 0x0001) != 0,
         num_satellites_used: payload[23],
-        longitude: Angle::new::<degree>(le_i32(payload, 24) as f32 * 1e-7),
-        latitude: Angle::new::<degree>(le_i32(payload, 28) as f32 * 1e-7),
+        longitude: Angle64::new::<degree>(le_i32(payload, 24) as f64 * 1e-7),
+        latitude: Angle64::new::<degree>(le_i32(payload, 28) as f64 * 1e-7),
         height_ellipsoid: Length::new::<meter>(le_i32(payload, 32) as f32 / 1000.0),
         height_msl: Length::new::<meter>(le_i32(payload, 36) as f32 / 1000.0),
         velocity_north: Velocity::new::<meter_per_second>(le_i32(payload, 48) as f32 / 1000.0),
         velocity_east: Velocity::new::<meter_per_second>(le_i32(payload, 52) as f32 / 1000.0),
         velocity_down: Velocity::new::<meter_per_second>(le_i32(payload, 56) as f32 / 1000.0),
         ground_speed: Velocity::new::<meter_per_second>(le_i32(payload, 60) as f32 / 1000.0),
-        heading_motion: Angle::new::<degree>(head_motion_deg),
-        heading_vehicle: Angle::new::<degree>(head_vehicle_deg),
-        magnetic_declination: Angle::new::<degree>(le_i16(payload, 88) as f32 * 1e-2),
+        heading_motion: Angle32::new::<degree>(head_motion_deg),
+        heading_vehicle: Angle32::new::<degree>(head_vehicle_deg),
+        magnetic_declination: Angle32::new::<degree>(le_i16(payload, 88) as f32 * 1e-2),
         psm_state: (flags >> 2) & 0x07,
         correction_age_bucket: ((flags3 >> 1) & 0x0F) as u8,
     };
@@ -219,7 +220,7 @@ fn decode_nav_pvt(payload: &[u8]) -> Option<GnssNavEpoch> {
         horizontal: Length::new::<meter>(le_u32(payload, 40) as f32 / 1000.0),
         vertical: Length::new::<meter>(le_u32(payload, 44) as f32 / 1000.0),
         speed: Velocity::new::<meter_per_second>(le_u32(payload, 68) as f32 / 1000.0),
-        heading: Angle::new::<degree>(le_u32(payload, 72) as f32 * 1e-5),
+        heading: Angle32::new::<degree>(le_u32(payload, 72) as f32 * 1e-5),
         time: Time::new::<second>(le_u32(payload, 12) as f32 * 1e-9),
         position_dop: Ratio::new::<ratio>(le_u16(payload, 76) as f32 * 0.01),
     };
@@ -250,8 +251,8 @@ fn decode_nav_sat(payload: &[u8]) -> Option<GnssSatelliteState> {
             gnss_id: payload[base],
             sv_id: payload[base + 1],
             cno_dbhz: payload[base + 2],
-            elevation: Angle::new::<degree>(payload[base + 3] as i8 as f32),
-            azimuth: Angle::new::<degree>(le_i16(payload, base + 4) as f32),
+            elevation: Angle32::new::<degree>(payload[base + 3] as i8 as f32),
+            azimuth: Angle32::new::<degree>(le_i16(payload, base + 4) as f32),
             pseudorange_residual: Length::new::<decimeter>(le_i16(payload, base + 6) as f32),
             quality_ind: (flags & 0x07) as u8,
             used_for_navigation: (flags & (1 << 3)) != 0,
