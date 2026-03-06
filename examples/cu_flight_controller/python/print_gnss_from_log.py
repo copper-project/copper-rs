@@ -11,6 +11,26 @@ def resolve_paths() -> tuple[Path, Path]:
     return crate_dir, target_dir
 
 
+def format_tov(msg) -> str:
+    kind = getattr(msg.tov, "kind", "none")
+    if kind == "time":
+        return f"{msg.tov.time_ns / 1_000_000_000.0:.9f}s"
+    if kind == "range":
+        return (
+            f"{msg.tov.start_ns / 1_000_000_000.0:.9f}s"
+            f"-{msg.tov.end_ns / 1_000_000_000.0:.9f}s"
+        )
+    return "none"
+
+
+def format_angle(quantity) -> tuple[float, str]:
+    value = quantity.value
+    unit = getattr(quantity, "unit", "")
+    if unit == "rad":
+        return math.degrees(value), "deg"
+    return value, unit
+
+
 def main() -> int:
     crate_dir, target_dir = resolve_paths()
     sys.path.insert(0, str(target_dir))
@@ -45,25 +65,24 @@ def main() -> int:
     count = 0
     for copperlist in libcu_flight_controller_export.copperlist_iterator_unified(str(log_path)):
         for msg in copperlist.messages:
-            if msg.task_id != "gnss_ublox":
+            if msg.task_id not in {"gnss_ublox", "gnss_fix_sink"}:
                 continue
             if msg.payload is None or not hasattr(msg.payload, "latitude"):
                 continue
-            if msg.tov.kind == "time":
-                tov = f"{msg.tov.time_ns / 1_000_000_000.0:.9f}s"
-            elif msg.tov.kind == "range":
-                tov = (
-                    f"{msg.tov.start_ns / 1_000_000_000.0:.9f}s"
-                    f"-{msg.tov.end_ns / 1_000_000_000.0:.9f}s"
-                )
-            else:
-                tov = "none"
+
+            lat, lat_unit = format_angle(msg.payload.latitude)
+            lon, lon_unit = format_angle(msg.payload.longitude)
+            extras = []
+            if hasattr(msg.payload, "num_satellites_used"):
+                extras.append(f"sats={msg.payload.num_satellites_used}")
+            if hasattr(msg.payload, "gnss_fix_ok"):
+                extras.append(f"fix_ok={msg.payload.gnss_fix_ok}")
+            extra_text = f" {' '.join(extras)}" if extras else ""
 
             print(
-                f"id={copperlist.id} tov={tov} task={msg.task_id} "
-                f"lat={math.degrees(msg.payload.latitude.value):.7f} deg "
-                f"lon={math.degrees(msg.payload.longitude.value):.7f} deg "
-                f"sats={msg.payload.num_satellites_used} fix_ok={msg.payload.gnss_fix_ok}"
+                f"id={copperlist.id} tov={format_tov(msg)} task={msg.task_id} "
+                f"lat={lat:.7f} {lat_unit} "
+                f"lon={lon:.7f} {lon_unit}{extra_text}"
             )
             count += 1
 

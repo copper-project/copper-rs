@@ -64,7 +64,6 @@ pub fn runtime_lifecycle_iterator_unified_py(
     let iter = python::runtime_lifecycle_iterator_unified(unified_src_path)?;
     pyo3::Py::new(py, iter).map(|obj| obj.into())
 }
-
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum ExportFormat {
     Json,
@@ -645,7 +644,6 @@ mod python {
         }
         Ok(())
     }
-
     #[pymethods]
     impl PyLogIterator {
         fn __iter__(slf: PyRefMut<Self>) -> PyRefMut<Self> {
@@ -694,7 +692,6 @@ mod python {
             Some(runtime_lifecycle_record_to_py(&entry, py))
         }
     }
-
     /// Creates an iterator of CuLogEntries from a bare binary structured log file (ie. not within a unified log).
     /// This is mainly used for using the structured logging out of the Copper framework.
     /// it returns a tuple with the iterator of log entries and the list of interned strings.
@@ -802,7 +799,6 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
             reader: Box::new(reader),
         })
     }
-
     /// This is a python wrapper for CuLogEntries.
     #[pyclass]
     pub struct PyCuLogEntry {
@@ -1235,7 +1231,6 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
         let fallback = format!("{value:?}");
         Ok(fallback.into_pyobject(py)?.into())
     }
-
     fn value_to_py(value: &cu29::prelude::Value, py: Python<'_>) -> PyResult<Py<PyAny>> {
         match value {
             Value::String(s) => Ok(s.into_pyobject(py)?.into()),

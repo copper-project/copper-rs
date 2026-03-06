@@ -27,7 +27,7 @@ py-build:
   set -euo pipefail
   cargo build -p cu-flight-controller --no-default-features --features python-bindings --lib
 
-# python example reading the log
+# Python example reading the log.
 py log="logs/flight_controller_sim.copper": py-build
   #!/usr/bin/env bash
   set -euo pipefail
@@ -39,6 +39,17 @@ py log="logs/flight_controller_sim.copper": py-build
   cargo build -p cu-flight-controller --no-default-features --features python-bindings --lib
   python3 python/print_gnss_from_log.py "$log"
 
+# Print GNSS coordinates from a Copper log via the Python extension.
+py-gnss log="logs/flight_controller_sim.copper":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  invocation_dir="{{invocation_directory()}}"
+  log="{{log}}"
+  if [[ "$log" != /* ]]; then
+    log="${invocation_dir}/${log}"
+  fi
+  cargo build -p cu-flight-controller --no-default-features --features python-bindings --lib
+  python3 python/print_gnss_from_log.py "$log"
 # Run log reader fsck against a log file.
 fsck log="logs/flight_controller_sim.copper":
   #!/usr/bin/env bash
