@@ -24,8 +24,10 @@ macro_rules! define_storage_wrappers {
                     #[repr(transparent)]
                     #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
                     #[cfg_attr(feature = "reflect", derive(Reflect))]
-                    #[cfg_attr(feature = "reflect", reflect(opaque, from_reflect = false))]
-                    pub struct $quantity_name(pub(crate) uom::si::$storage_mod::$quantity_name);
+                    #[cfg_attr(feature = "reflect", reflect(from_reflect = false))]
+                    pub struct $quantity_name {
+                        pub value: $storage_ty,
+                    }
 
                     impl $quantity_name {
                         #[inline]
@@ -33,7 +35,7 @@ macro_rules! define_storage_wrappers {
                         where
                             U: uom::si::$unit_mod_name::Conversion<$storage_ty>,
                         {
-                            Self(uom::si::$storage_mod::$quantity_name::new::<U>(value))
+                            Self::from_uom(uom::si::$storage_mod::$quantity_name::new::<U>(value))
                         }
 
                         #[inline]
@@ -41,64 +43,59 @@ macro_rules! define_storage_wrappers {
                         where
                             U: uom::si::$unit_mod_name::Conversion<$storage_ty>,
                         {
-                            self.0.get::<U>()
+                            (*self).to_uom().get::<U>()
                         }
 
                         #[inline]
                         pub fn raw(&self) -> $storage_ty {
-                            self.0.value
+                            self.value
                         }
 
                         #[inline]
                         pub fn into_uom(self) -> uom::si::$storage_mod::$quantity_name {
-                            self.0
+                            self.to_uom()
                         }
 
                         #[inline]
-                        pub fn as_uom(&self) -> &uom::si::$storage_mod::$quantity_name {
-                            &self.0
+                        pub fn as_uom(&self) -> uom::si::$storage_mod::$quantity_name {
+                            (*self).to_uom()
                         }
 
                         #[inline]
                         pub fn from_uom(inner: uom::si::$storage_mod::$quantity_name) -> Self {
-                            Self(inner)
+                            Self::from_base_value(inner.value)
                         }
 
                         #[inline]
-                        fn from_base_value(
-                            value: $storage_ty,
-                        ) -> uom::si::$storage_mod::$quantity_name {
+                        fn to_uom(self) -> uom::si::$storage_mod::$quantity_name {
                             uom::si::$storage_mod::$quantity_name {
                                 dimension: PhantomData,
                                 units: PhantomData,
-                                value,
+                                value: self.value,
                             }
+                        }
+
+                        #[inline]
+                        fn from_base_value(value: $storage_ty) -> Self {
+                            Self { value }
                         }
                     }
 
                     impl Default for $quantity_name {
                         fn default() -> Self {
-                            Self(Self::from_base_value(0.0 as $storage_ty))
+                            Self::from_base_value(0.0 as $storage_ty)
                         }
                     }
 
                     impl From<uom::si::$storage_mod::$quantity_name> for $quantity_name {
                         fn from(value: uom::si::$storage_mod::$quantity_name) -> Self {
-                            Self(value)
+                            Self::from_uom(value)
                         }
                     }
 
                     impl From<$quantity_name> for uom::si::$storage_mod::$quantity_name {
                         fn from(value: $quantity_name) -> Self {
-                            value.0
-                        }
-                    }
-
-                    impl core::ops::Deref for $quantity_name {
-                        type Target = uom::si::$storage_mod::$quantity_name;
-
-                        fn deref(&self) -> &Self::Target {
-                            &self.0
+                            value.into_uom()
                         }
                     }
 
@@ -106,7 +103,7 @@ macro_rules! define_storage_wrappers {
                         type Output = Self;
 
                         fn add(self, rhs: Self) -> Self::Output {
-                            Self(Self::from_base_value(self.raw() + rhs.raw()))
+                            Self::from_base_value(self.raw() + rhs.raw())
                         }
                     }
 
@@ -120,7 +117,7 @@ macro_rules! define_storage_wrappers {
                         type Output = Self;
 
                         fn sub(self, rhs: Self) -> Self::Output {
-                            Self(Self::from_base_value(self.raw() - rhs.raw()))
+                            Self::from_base_value(self.raw() - rhs.raw())
                         }
                     }
 
@@ -134,7 +131,7 @@ macro_rules! define_storage_wrappers {
                         type Output = Self;
 
                         fn mul(self, rhs: $storage_ty) -> Self::Output {
-                            Self(Self::from_base_value(self.raw() * rhs))
+                            Self::from_base_value(self.raw() * rhs)
                         }
                     }
 
@@ -148,7 +145,7 @@ macro_rules! define_storage_wrappers {
                         type Output = Self;
 
                         fn div(self, rhs: $storage_ty) -> Self::Output {
-                            Self(Self::from_base_value(self.raw() / rhs))
+                            Self::from_base_value(self.raw() / rhs)
                         }
                     }
 
@@ -162,7 +159,7 @@ macro_rules! define_storage_wrappers {
                         type Output = Self;
 
                         fn neg(self) -> Self::Output {
-                            Self(Self::from_base_value(-self.raw()))
+                            Self::from_base_value(-self.raw())
                         }
                     }
 
@@ -181,7 +178,7 @@ macro_rules! define_storage_wrappers {
                             D: Deserializer<'de>,
                         {
                             let value = <$storage_ty>::deserialize(deserializer)?;
-                            Ok(Self(Self::from_base_value(value)))
+                            Ok(Self::from_base_value(value))
                         }
                     }
 
@@ -199,7 +196,7 @@ macro_rules! define_storage_wrappers {
                             decoder: &mut D,
                         ) -> Result<Self, bincode::error::DecodeError> {
                             let value: $storage_ty = bincode::Decode::decode(decoder)?;
-                            Ok(Self(Self::from_base_value(value)))
+                            Ok(Self::from_base_value(value))
                         }
                     }
 
@@ -222,7 +219,7 @@ macro_rules! define_storage_wrappers {
 
                             reflect
                                 .try_downcast_ref::<$storage_ty>()
-                                .map(|value| Self(Self::from_base_value(*value)))
+                                .map(|value| Self::from_base_value(*value))
                         }
                     }
                 };
@@ -521,14 +518,14 @@ mod tests {
     }
 
     #[test]
-    fn reflect_velocity_as_opaque_base_value() {
+    fn reflect_velocity_exposes_value_field() {
         let msg = Msg {
             speed: Velocity::new::<kilometer_per_hour>(36.0),
         };
 
         assert!(matches!(
             msg.speed.as_partial_reflect().reflect_ref(),
-            ReflectRef::Opaque(_)
+            ReflectRef::Struct(_)
         ));
         assert_eq!(msg.speed.get::<meter_per_second>(), 10.0);
 
@@ -541,6 +538,7 @@ mod tests {
             .try_downcast_ref::<Velocity>()
             .expect("speed should downcast to cu29_units::si::f32::Velocity");
         assert_eq!(speed.raw(), 10.0);
+        assert_eq!(speed.value, 10.0);
         assert_eq!(speed.get::<meter_per_second>(), 10.0);
     }
 }
