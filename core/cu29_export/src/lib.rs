@@ -876,22 +876,22 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
             }
         }
 
-        if let Some(unit) = unit_abbrev_for_type_path(value.reflect_type_path()) {
-            if let Some(raw_value) = dict.get_item("value")? {
-                if let Ok(v) = raw_value.extract::<f64>() {
-                    let unit_value = PyUnitValue {
-                        value: v,
-                        unit: unit.to_string(),
-                    };
-                    return Ok(Py::new(py, unit_value)?.into());
-                }
-                if let Ok(v) = raw_value.extract::<f32>() {
-                    let unit_value = PyUnitValue {
-                        value: v as f64,
-                        unit: unit.to_string(),
-                    };
-                    return Ok(Py::new(py, unit_value)?.into());
-                }
+        if let Some(unit) = unit_abbrev_for_type_path(value.reflect_type_path())
+            && let Some(raw_value) = dict.get_item("value")?
+        {
+            if let Ok(v) = raw_value.extract::<f64>() {
+                let unit_value = PyUnitValue {
+                    value: v,
+                    unit: unit.to_string(),
+                };
+                return Ok(Py::new(py, unit_value)?.into());
+            }
+            if let Ok(v) = raw_value.extract::<f32>() {
+                let unit_value = PyUnitValue {
+                    value: v as f64,
+                    unit: unit.to_string(),
+                };
+                return Ok(Py::new(py, unit_value)?.into());
             }
         }
 
