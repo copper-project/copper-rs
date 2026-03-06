@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import math
 from pathlib import Path
 import sys
 
@@ -33,37 +34,36 @@ def main() -> int:
         log_path = Path.cwd() / log_path
 
     print(f"reading: {log_path}")
-    lifecycle_count = 0
-    mission = None
     for record in libcu_flight_controller_export.runtime_lifecycle_iterator_unified(str(log_path)):
-        lifecycle_count += 1
-        event = record.event
-        if event.kind == "mission_started":
-            mission = event.mission
-            print(f"runtime mission start: ts={record.timestamp_ns} mission={event.mission}")
-        elif event.kind == "mission_stopped":
+        if record.event.kind == "mission_started":
             print(
-                f"runtime mission stop: ts={record.timestamp_ns} mission={event.mission} "
-                f"reason={event.reason}"
+                f"runtime mission start: ts={record.timestamp_ns} "
+                f"mission={record.event.mission}"
             )
-        elif event.kind == "panic":
-            print(f"runtime panic: ts={record.timestamp_ns} message={event.message}")
-
-    if lifecycle_count == 0:
-        print("no runtime lifecycle events found")
-    elif mission is not None:
-        print(f"validated mission: {mission}")
+            break
 
     count = 0
     for copperlist in libcu_flight_controller_export.copperlist_iterator_unified(str(log_path)):
         for msg in copperlist.messages:
-            if msg.task_id != "gnss_fix_sink":
+            if msg.task_id != "gnss_ublox":
                 continue
+            if msg.payload is None or not hasattr(msg.payload, "latitude"):
+                continue
+            if msg.tov.kind == "time":
+                tov = f"{msg.tov.time_ns / 1_000_000_000.0:.9f}s"
+            elif msg.tov.kind == "range":
+                tov = (
+                    f"{msg.tov.start_ns / 1_000_000_000.0:.9f}s"
+                    f"-{msg.tov.end_ns / 1_000_000_000.0:.9f}s"
+                )
+            else:
+                tov = "none"
 
             print(
-                f"id={copperlist.id} task={msg.task_id} "
-                f"lat={msg.payload.latitude.value:.7f} {msg.payload.latitude.unit} "
-                f"lon={msg.payload.longitude.value:.7f} {msg.payload.longitude.unit}"
+                f"id={copperlist.id} tov={tov} task={msg.task_id} "
+                f"lat={math.degrees(msg.payload.latitude.value):.7f} deg "
+                f"lon={math.degrees(msg.payload.longitude.value):.7f} deg "
+                f"sats={msg.payload.num_satellites_used} fix_ok={msg.payload.gnss_fix_ok}"
             )
             count += 1
 
