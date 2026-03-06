@@ -12,13 +12,13 @@
         &amp;self,
         path: impl <a class="trait" href="../reflect/trait.ReflectPath.html" title="trait cu29::reflect::ReflectPath">ReflectPath</a>&lt;'p&gt;,
     ) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.reference.html">&amp;T</a>, <a class="enum" href="../reflect/enum.ReflectPathError.html" title="enum cu29::reflect::ReflectPathError">ReflectPathError</a>&lt;'p&gt;&gt;
-       <span class="where">where T: <a class="trait" href="../prelude/trait.Reflect.html" title="trait cu29::prelude::Reflect">Reflect</a></span> { ... }
+       <span class="where">where T: <a class="trait" href="../trait.Reflect.html" title="trait cu29::Reflect">Reflect</a></span> { ... }
 <span class="item-spacer"></span>    fn <a href="#method.path_mut" class="fn">path_mut</a>&lt;'p, T&gt;(
         &amp;mut self,
         path: impl <a class="trait" href="../reflect/trait.ReflectPath.html" title="trait cu29::reflect::ReflectPath">ReflectPath</a>&lt;'p&gt;,
     ) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.reference.html">&amp;mut T</a>, <a class="enum" href="../reflect/enum.ReflectPathError.html" title="enum cu29::reflect::ReflectPathError">ReflectPathError</a>&lt;'p&gt;&gt;
-       <span class="where">where T: <a class="trait" href="../prelude/trait.Reflect.html" title="trait cu29::prelude::Reflect">Reflect</a></span> { ... }
-}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>A trait which allows nested <a href="../prelude/trait.Reflect.html" title="trait cu29::prelude::Reflect"><code>Reflect</code></a> values to be retrieved with path strings.</p>
+       <span class="where">where T: <a class="trait" href="../trait.Reflect.html" title="trait cu29::Reflect">Reflect</a></span> { ... }
+}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>A trait which allows nested <a href="../trait.Reflect.html" title="trait cu29::Reflect"><code>Reflect</code></a> values to be retrieved with path strings.</p>
 <p>Using these functions repeatedly with the same string requires parsing the string every time.
 To avoid this cost, it’s recommended to construct a <a href="../reflect/struct.ParsedPath.html" title="struct cu29::reflect::ParsedPath"><code>ParsedPath</code></a> instead.</p>
 <h2 id="syntax"><a class="doc-anchor" href="#syntax">§</a>Syntax</h2><h3 id="structs"><a class="doc-anchor" href="#structs">§</a>Structs</h3>
@@ -127,7 +127,7 @@ to create a full path to a nested element.</p>
     &amp;self,
     path: impl <a class="trait" href="../reflect/trait.ReflectPath.html" title="trait cu29::reflect::ReflectPath">ReflectPath</a>&lt;'p&gt;,
 ) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.reference.html">&amp;T</a>, <a class="enum" href="../reflect/enum.ReflectPathError.html" title="enum cu29::reflect::ReflectPathError">ReflectPathError</a>&lt;'p&gt;&gt;<div class="where">where
-    T: <a class="trait" href="../prelude/trait.Reflect.html" title="trait cu29::prelude::Reflect">Reflect</a>,</div></h4></section></summary><div class="docblock"><p>Returns a statically typed reference to the value specified by <code>path</code>.</p>
+    T: <a class="trait" href="../trait.Reflect.html" title="trait cu29::Reflect">Reflect</a>,</div></h4></section></summary><div class="docblock"><p>Returns a statically typed reference to the value specified by <code>path</code>.</p>
 <p>This will automatically handle downcasting to type <code>T</code>.
 The downcast will fail if this value is not of type <code>T</code>
 (which may be the case when using dynamic types like <a href="../reflect/struct.DynamicStruct.html" title="struct cu29::reflect::DynamicStruct"><code>DynamicStruct</code></a>).</p>
@@ -135,9 +135,9 @@ The downcast will fail if this value is not of type <code>T</code>
     &amp;mut self,
     path: impl <a class="trait" href="../reflect/trait.ReflectPath.html" title="trait cu29::reflect::ReflectPath">ReflectPath</a>&lt;'p&gt;,
 ) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.reference.html">&amp;mut T</a>, <a class="enum" href="../reflect/enum.ReflectPathError.html" title="enum cu29::reflect::ReflectPathError">ReflectPathError</a>&lt;'p&gt;&gt;<div class="where">where
-    T: <a class="trait" href="../prelude/trait.Reflect.html" title="trait cu29::prelude::Reflect">Reflect</a>,</div></h4></section></summary><div class="docblock"><p>Returns a statically typed mutable reference to the value specified by <code>path</code>.</p>
+    T: <a class="trait" href="../trait.Reflect.html" title="trait cu29::Reflect">Reflect</a>,</div></h4></section></summary><div class="docblock"><p>Returns a statically typed mutable reference to the value specified by <code>path</code>.</p>
 <p>This will automatically handle downcasting to type <code>T</code>.
 The downcast will fail if this value is not of type <code>T</code>
 (which may be the case when using dynamic types like <a href="../reflect/struct.DynamicStruct.html" title="struct cu29::reflect::DynamicStruct"><code>DynamicStruct</code></a>).</p>
 </div></details></div><h2 id="dyn-compatibility" class="section-header">Dyn Compatibility<a href="#dyn-compatibility" class="anchor">§</a></h2><div class="dyn-compatibility-info"><p>This trait is <b>not</b> <a href="https://doc.rust-lang.org/nightly/reference/items/traits.html#dyn-compatibility">dyn compatible</a>.</p><p><i>In older versions of Rust, dyn compatibility was called "object safety", so this trait is not object safe.</i></p></div><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"><div class="negative-marker"></div><section id="impl-GetPath-for-T" class="impl"><a href="#impl-GetPath-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; <a class="trait" href="../reflect/trait.GetPath.html" title="trait cu29::reflect::GetPath">GetPath</a> for T<div class="where">where
-    T: <a class="trait" href="../prelude/trait.Reflect.html" title="trait cu29::prelude::Reflect">Reflect</a> + ?<a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a>,</div></h3></section></div><script src="../../trait.impl/bevy_reflect/path/trait.GetPath.js" async></script></section></div></main></body></html>
+    T: <a class="trait" href="../trait.Reflect.html" title="trait cu29::Reflect">Reflect</a> + ?<a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a>,</div></h3></section></div><script src="../../trait.impl/bevy_reflect/path/trait.GetPath.js" async></script></section></div></main></body></html>

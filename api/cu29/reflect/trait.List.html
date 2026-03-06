@@ -19,7 +19,7 @@
 <span class="item-spacer"></span>    fn <a href="#method.get_represented_list_info" class="fn">get_represented_list_info</a>(&amp;self) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;&amp;'static <a class="struct" href="struct.ListInfo.html" title="struct cu29::reflect::ListInfo">ListInfo</a>&gt; { ... }
 }</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>A trait used to power <a href="https://doc.rust-lang.org/book/ch08-01-vectors.html">list-like</a> operations via <a href="crate">reflection</a>.</p>
 <p>This corresponds to types, like <a href="https://doc.rust-lang.org/nightly/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec"><code>Vec</code></a>, which contain an ordered sequence
-of elements that implement <a href="../prelude/trait.Reflect.html" title="trait cu29::prelude::Reflect"><code>Reflect</code></a>.</p>
+of elements that implement <a href="../trait.Reflect.html" title="trait cu29::Reflect"><code>Reflect</code></a>.</p>
 <p>Unlike the <a href="trait.Array.html" title="trait cu29::reflect::Array"><code>Array</code></a> trait, implementors of this trait are not expected to
 maintain a constant length.
 Methods like <a href="trait.List.html#tymethod.insert" title="method cu29::reflect::List::insert">insertion</a> and <a href="trait.List.html#tymethod.remove" title="method cu29::reflect::List::remove">removal</a> explicitly allow for their

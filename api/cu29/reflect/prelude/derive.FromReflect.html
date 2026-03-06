@@ -5,7 +5,7 @@
 }
 </code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Derives the <code>FromReflect</code> trait.</p>
 <h2 id="field-attributes"><a class="doc-anchor" href="#field-attributes">§</a>Field Attributes</h2><h3 id="reflectignore"><a class="doc-anchor" href="#reflectignore">§</a><code>#[reflect(ignore)]</code></h3>
-<p>The <code>#[reflect(ignore)]</code> attribute is shared with the <a href="../../prelude/derive.Reflect.html" title="derive cu29::prelude::Reflect"><code>#[derive(Reflect)]</code></a> macro and has much of the same
+<p>The <code>#[reflect(ignore)]</code> attribute is shared with the <a href="../../derive.Reflect.html" title="derive cu29::Reflect"><code>#[derive(Reflect)]</code></a> macro and has much of the same
 functionality in that it denotes that a field will be ignored by the reflection API.</p>
 <p>The only major difference is that using it with this derive requires that the field implements [<code>Default</code>].
 Without this requirement, there would be no way for <code>FromReflect</code> to automatically construct missing fields

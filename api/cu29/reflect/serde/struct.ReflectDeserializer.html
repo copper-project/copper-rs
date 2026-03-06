@@ -7,7 +7,7 @@
 where the key is the <em>full</em> <a href="../../prelude/trait.TypePath.html#tymethod.type_path" title="associated function cu29::prelude::TypePath::type_path">type path</a> of the reflected type
 and the value is the serialized data.</p>
 <h2 id="output"><a class="doc-anchor" href="#output">§</a>Output</h2>
-<p>This deserializer will return a <a href="../../prelude/trait.Reflect.html" title="trait cu29::prelude::Reflect"><code>Box&lt;dyn Reflect&gt;</code></a> containing the deserialized data.</p>
+<p>This deserializer will return a <a href="../../trait.Reflect.html" title="trait cu29::Reflect"><code>Box&lt;dyn Reflect&gt;</code></a> containing the deserialized data.</p>
 <p>For opaque types (i.e. <a href="../enum.ReflectKind.html#variant.Opaque" title="variant cu29::reflect::ReflectKind::Opaque"><code>ReflectKind::Opaque</code></a>) or types that register <a href="../struct.ReflectDeserialize.html" title="struct cu29::reflect::ReflectDeserialize"><code>ReflectDeserialize</code></a> type data,
 this <code>Box</code> will contain the expected type.
 For example, deserializing an <code>i32</code> will return a <code>Box&lt;i32&gt;</code> (as a <code>Box&lt;dyn Reflect&gt;</code>).</p>

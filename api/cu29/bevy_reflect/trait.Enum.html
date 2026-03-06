@@ -54,7 +54,7 @@ Fields in struct variants (excluding tuple structs), on the other hand, are
 represented by a <em>name</em>.</p>
 <h2 id="implementation"><a class="doc-anchor" href="#implementation">§</a>Implementation</h2>
 <blockquote>
-<p>💡 This trait can be automatically implemented using <a href="../prelude/derive.Reflect.html" title="derive cu29::prelude::Reflect"><code>#[derive(Reflect)]</code></a>
+<p>💡 This trait can be automatically implemented using <a href="../derive.Reflect.html" title="derive cu29::Reflect"><code>#[derive(Reflect)]</code></a>
 on an enum definition.</p>
 </blockquote>
 <p>Despite the fact that enums can represent multiple states, traits only exist in one state
@@ -65,7 +65,7 @@ three variant types, but also define the <em>methods</em> for all three as well.
 representation of that variant using the <a href="../reflect/trait.Enum.html" title="trait cu29::reflect::Enum"><code>Enum</code></a> trait will still contain methods for
 accessing fields!
 Again, this is to account for <em>all three</em> variant types.</p>
-<p>We recommend using the built-in <a href="../prelude/derive.Reflect.html" title="derive cu29::prelude::Reflect"><code>#[derive(Reflect)]</code></a> macro to automatically handle all the
+<p>We recommend using the built-in <a href="../derive.Reflect.html" title="derive cu29::Reflect"><code>#[derive(Reflect)]</code></a> macro to automatically handle all the
 implementation details for you.
 However, if you <em>must</em> implement this trait manually, there are a few things to keep in mind…</p>
 <h3 id="field-order"><a class="doc-anchor" href="#field-order">§</a>Field Order</h3>

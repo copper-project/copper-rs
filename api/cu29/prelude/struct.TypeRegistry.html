@@ -2,13 +2,13 @@
 <p>This struct is used as the central store for type information.
 <a href="struct.TypeRegistry.html#method.register" title="method cu29::prelude::TypeRegistry::register">Registering</a> a type will generate a new <a href="../reflect/struct.TypeRegistration.html" title="struct cu29::reflect::TypeRegistration"><code>TypeRegistration</code></a> entry in this store
 using a type’s <a href="trait.GetTypeRegistration.html" title="trait cu29::prelude::GetTypeRegistration"><code>GetTypeRegistration</code></a> implementation
-(which is automatically implemented when using <a href="derive.Reflect.html" title="derive cu29::prelude::Reflect"><code>#[derive(Reflect)]</code></a>).</p>
+(which is automatically implemented when using <a href="../derive.Reflect.html" title="derive cu29::Reflect"><code>#[derive(Reflect)]</code></a>).</p>
 <p>See the <a href="crate">crate-level documentation</a> for more information.</p>
 </div></details><h2 id="implementations" class="section-header">Implementations<a href="#implementations" class="anchor">§</a></h2><div id="implementations-list"><details class="toggle implementors-toggle" open><summary><section id="impl-TypeRegistry" class="impl"><a href="#impl-TypeRegistry" class="anchor">§</a><h3 class="code-header">impl <a class="struct" href="struct.TypeRegistry.html" title="struct cu29::prelude::TypeRegistry">TypeRegistry</a></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.empty" class="method"><h4 class="code-header">pub fn <a href="#method.empty" class="fn">empty</a>() -&gt; <a class="struct" href="struct.TypeRegistry.html" title="struct cu29::prelude::TypeRegistry">TypeRegistry</a></h4></section></summary><div class="docblock"><p>Create a type registry with <em>no</em> registered types.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.new" class="method"><h4 class="code-header">pub fn <a href="#method.new" class="fn">new</a>() -&gt; <a class="struct" href="struct.TypeRegistry.html" title="struct cu29::prelude::TypeRegistry">TypeRegistry</a></h4></section></summary><div class="docblock"><p>Create a type registry with default registrations for primitive types.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.register_derived_types" class="method"><h4 class="code-header">pub fn <a href="#method.register_derived_types" class="fn">register_derived_types</a>(&amp;mut self)</h4></section></summary><div class="docblock"><p>Register all non-generic types annotated with <code>#[derive(Reflect)]</code>.</p>
 <p>Calling this method is equivalent to calling <a href="struct.TypeRegistry.html#method.register" title="method cu29::prelude::TypeRegistry::register"><code>register</code></a> on all types without generic parameters
-that derived <a href="trait.Reflect.html" title="trait cu29::prelude::Reflect"><code>Reflect</code></a> trait.</p>
+that derived <a href="../trait.Reflect.html" title="trait cu29::Reflect"><code>Reflect</code></a> trait.</p>
 <p>This method is supported on Linux, macOS, Windows, iOS, Android, and Web via the <code>inventory</code> crate.
 It does nothing on platforms not supported by either of those crates.</p>
 <h5 id="example"><a class="doc-anchor" href="#example">§</a>Example</h5>
@@ -37,7 +37,7 @@ When deriving <code>Reflect</code>, this will generally be all the fields of the
 As with any type registration, these type dependencies will not be registered more than once.</p>
 <p>If the registration for type <code>T</code> already exists, it will not be registered again and neither will its type dependencies.
 To register the type, overwriting any existing registration, use <a href="struct.TypeRegistry.html#method.overwrite_registration" title="method cu29::prelude::TypeRegistry::overwrite_registration">register</a> instead.</p>
-<p>Additionally, this will add any reflect <a href="../reflect/trait.TypeData.html" title="trait cu29::reflect::TypeData">type data</a> as specified in the <a href="trait.Reflect.html" title="trait cu29::prelude::Reflect"><code>Reflect</code></a> derive.</p>
+<p>Additionally, this will add any reflect <a href="../reflect/trait.TypeData.html" title="trait cu29::reflect::TypeData">type data</a> as specified in the <a href="../trait.Reflect.html" title="trait cu29::Reflect"><code>Reflect</code></a> derive.</p>
 <h5 id="example-1"><a class="doc-anchor" href="#example-1">§</a>Example</h5>
 <div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="attr">#[derive(Reflect, Default)]
 #[reflect(Default)]
@@ -90,9 +90,9 @@ Use <a href="struct.TypeRegistry.html#method.register" title="method cu29::prelu
 <p>This method will <em>not</em> register type dependencies.
 Use <a href="struct.TypeRegistry.html#method.register" title="method cu29::prelude::TypeRegistry::register"><code>register</code></a> to register a type with its dependencies.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.register_type_data" class="method"><h4 class="code-header">pub fn <a href="#method.register_type_data" class="fn">register_type_data</a>&lt;T, D&gt;(&amp;mut self)<div class="where">where
-    T: <a class="trait" href="trait.Reflect.html" title="trait cu29::prelude::Reflect">Reflect</a> + <a class="trait" href="trait.TypePath.html" title="trait cu29::prelude::TypePath">TypePath</a>,
+    T: <a class="trait" href="../trait.Reflect.html" title="trait cu29::Reflect">Reflect</a> + <a class="trait" href="trait.TypePath.html" title="trait cu29::prelude::TypePath">TypePath</a>,
     D: <a class="trait" href="../reflect/trait.TypeData.html" title="trait cu29::reflect::TypeData">TypeData</a> + <a class="trait" href="../reflect/trait.FromType.html" title="trait cu29::reflect::FromType">FromType</a>&lt;T&gt;,</div></h4></section></summary><div class="docblock"><p>Registers the type data <code>D</code> for type <code>T</code>.</p>
-<p>Most of the time <a href="struct.TypeRegistry.html#method.register" title="method cu29::prelude::TypeRegistry::register"><code>TypeRegistry::register</code></a> can be used instead to register a type you derived <a href="trait.Reflect.html" title="trait cu29::prelude::Reflect"><code>Reflect</code></a> for.
+<p>Most of the time <a href="struct.TypeRegistry.html#method.register" title="method cu29::prelude::TypeRegistry::register"><code>TypeRegistry::register</code></a> can be used instead to register a type you derived <a href="../trait.Reflect.html" title="trait cu29::Reflect"><code>Reflect</code></a> for.
 However, in cases where you want to add a piece of type data that was not included in the list of <code>#[reflect(...)]</code> type data in the derive,
 or where the type is generic and cannot register e.g. <a href="../reflect/struct.ReflectSerialize.html" title="struct cu29::reflect::ReflectSerialize"><code>ReflectSerialize</code></a> unconditionally without knowing the specific type parameters,
 this method can be used to insert additional type data.</p>
@@ -139,7 +139,7 @@ type_registry.register::&lt;foo::MyType&gt;();
 type_registry.register::&lt;bar::MyType&gt;();
 <span class="macro">assert_eq!</span>(type_registry.is_ambiguous(<span class="string">"MyType"</span>), <span class="bool-val">true</span>);</code></pre></div></div></details><details class="toggle method-toggle" open><summary><section id="method.get_type_data" class="method"><h4 class="code-header">pub fn <a href="#method.get_type_data" class="fn">get_type_data</a>&lt;T&gt;(&amp;self, type_id: <a class="struct" href="https://doc.rust-lang.org/nightly/core/any/struct.TypeId.html" title="struct core::any::TypeId">TypeId</a>) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.reference.html">&amp;T</a>&gt;<div class="where">where
     T: <a class="trait" href="../reflect/trait.TypeData.html" title="trait cu29::reflect::TypeData">TypeData</a>,</div></h4></section></summary><div class="docblock"><p>Returns a reference to the <a href="../reflect/trait.TypeData.html" title="trait cu29::reflect::TypeData"><code>TypeData</code></a> of type <code>T</code> associated with the given <a href="https://doc.rust-lang.org/nightly/core/any/struct.TypeId.html" title="struct core::any::TypeId"><code>TypeId</code></a>.</p>
-<p>The returned value may be used to downcast <a href="trait.Reflect.html" title="trait cu29::prelude::Reflect"><code>Reflect</code></a> trait objects to
+<p>The returned value may be used to downcast <a href="../trait.Reflect.html" title="trait cu29::Reflect"><code>Reflect</code></a> trait objects to
 trait objects of the trait used to generate <code>T</code>, provided that the
 underlying reflected type has the proper <code>#[reflect(DoThing)]</code>
 attribute.</p>

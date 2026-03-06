@@ -27,7 +27,7 @@ The order of these entries is not guaranteed by this trait.</p>
 <h2 id="hashing-and-equality"><a class="doc-anchor" href="#hashing-and-equality">§</a>Hashing and equality</h2>
 <p>All values are expected to return a valid hash value from <a href="trait.PartialReflect.html#method.reflect_hash" title="method cu29::reflect::PartialReflect::reflect_hash"><code>PartialReflect::reflect_hash</code></a> and be
 comparable using <a href="trait.PartialReflect.html#method.reflect_partial_eq" title="method cu29::reflect::PartialReflect::reflect_partial_eq"><code>PartialReflect::reflect_partial_eq</code></a>.
-If using the <a href="../prelude/derive.Reflect.html" title="derive cu29::prelude::Reflect"><code>#[derive(Reflect)]</code></a> macro, this can be done by adding
+If using the <a href="../derive.Reflect.html" title="derive cu29::Reflect"><code>#[derive(Reflect)]</code></a> macro, this can be done by adding
 <code>#[reflect(Hash, PartialEq)]</code> to the entire struct or enum.
 The ordering is expected to be total, that is as if the reflected type implements the <a href="https://doc.rust-lang.org/nightly/core/cmp/trait.Eq.html" title="trait core::cmp::Eq"><code>Eq</code></a> trait.
 This is true even for manual implementors who do not hash or compare values,

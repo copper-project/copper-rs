@@ -5,7 +5,7 @@
 <h2 id="input"><a class="doc-anchor" href="#input">§</a>Input</h2>
 <p>Since the type is already known, the input is just the serialized data.</p>
 <h2 id="output"><a class="doc-anchor" href="#output">§</a>Output</h2>
-<p>This deserializer will return a <a href="../../trait.Reflect.html" title="trait cu29::prelude::Reflect"><code>Box&lt;dyn Reflect&gt;</code></a> containing the deserialized data.</p>
+<p>This deserializer will return a <a href="../../../trait.Reflect.html" title="trait cu29::Reflect"><code>Box&lt;dyn Reflect&gt;</code></a> containing the deserialized data.</p>
 <p>For opaque types (i.e. <a href="../../../reflect/enum.ReflectKind.html#variant.Opaque" title="variant cu29::reflect::ReflectKind::Opaque"><code>ReflectKind::Opaque</code></a>) or types that register <a href="../../../reflect/struct.ReflectDeserialize.html" title="struct cu29::reflect::ReflectDeserialize"><code>ReflectDeserialize</code></a> type data,
 this <code>Box</code> will contain the expected type.
 For example, deserializing an <code>i32</code> will return a <code>Box&lt;i32&gt;</code> (as a <code>Box&lt;dyn Reflect&gt;</code>).</p>
