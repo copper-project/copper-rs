@@ -7,7 +7,8 @@ use alloc::vec::Vec;
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
 use cu29::units::si::angle::degree;
-use cu29::units::si::f32::{Angle, Length, Ratio, Time, Velocity};
+use cu29::units::si::f32::{Angle as Angle32, Length, Ratio, Time, Velocity};
+use cu29::units::si::f64::Angle as Angle64;
 use cu29::units::si::length::meter;
 use cu29::units::si::ratio::ratio;
 use cu29::units::si::time::second;
@@ -80,6 +81,21 @@ pub struct GnssEpochTime {
     pub valid_magnetic_declination: bool,
 }
 
+/// Precision notes for GNSS payloads.
+///
+/// | Field(s) | UBX/source resolution | `f32` precision at relevant scale | `f64` precision | Recommendation |
+/// | --- | --- | --- | --- | --- |
+/// | `latitude`, `longitude` | `1e-7 deg` | at `32 deg`: `3.81e-6 deg` (`0.42 m` lat, `0.36 m` lon); at `180 deg`: `1.53e-5 deg` (`1.70 m` lat) | `~1e-14 deg` | `f64` |
+/// | `height_*` | `1 mm` | at `1000 m`: `6.1e-5 m`; at `10000 m`: `9.8e-4 m` | `~1e-13..1e-12 m` | `f32` |
+/// | `velocity_*`, `ground_speed` | `1 mm/s` | at `100 m/s`: `7.6e-6 m/s`; at `1000 m/s`: `6.1e-5 m/s` | `~1e-14..1e-13 m/s` | `f32` |
+/// | `heading_*` | `1e-5 deg` | at `360 deg`: `3.05e-5 deg` | `~5.7e-14 deg` | `f32` |
+/// | `magnetic_declination` | `1e-2 deg` | at `20 deg`: `1.91e-6 deg` | `~3.6e-15 deg` | `f32` |
+/// | `accuracy.*` | `1 mm`, `1 mm/s`, `1e-5 deg`, `1 ns`, `0.01` | already below or close to source quantization | much smaller than source quantization | `f32` |
+/// | satellite/signal angles and residuals | `1 deg`, `0.1 m` | already below source quantization | much smaller than source quantization | `f32` |
+///
+/// The only fields that materially benefit from `f64` in practice are the
+/// absolute geodetic coordinates, because path planning and local projection
+/// often subtract nearby fixes and `f32` loses sub-meter detail there.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect)]
 pub struct GnssFixSolution {
     pub fix_type: GnssFixType,
@@ -88,17 +104,17 @@ pub struct GnssFixSolution {
     pub carrier_solution: u8,
     pub invalid_llh: bool,
     pub num_satellites_used: u8,
-    pub longitude: Angle,
-    pub latitude: Angle,
+    pub longitude: Angle64,
+    pub latitude: Angle64,
     pub height_ellipsoid: Length,
     pub height_msl: Length,
     pub velocity_north: Velocity,
     pub velocity_east: Velocity,
     pub velocity_down: Velocity,
     pub ground_speed: Velocity,
-    pub heading_motion: Angle,
-    pub heading_vehicle: Angle,
-    pub magnetic_declination: Angle,
+    pub heading_motion: Angle32,
+    pub heading_vehicle: Angle32,
+    pub magnetic_declination: Angle32,
     pub psm_state: u8,
     pub correction_age_bucket: u8,
 }
@@ -112,17 +128,17 @@ impl Default for GnssFixSolution {
             carrier_solution: 0,
             invalid_llh: true,
             num_satellites_used: 0,
-            longitude: Angle::new::<degree>(0.0),
-            latitude: Angle::new::<degree>(0.0),
+            longitude: Angle64::new::<degree>(0.0),
+            latitude: Angle64::new::<degree>(0.0),
             height_ellipsoid: Length::new::<meter>(0.0),
             height_msl: Length::new::<meter>(0.0),
             velocity_north: Velocity::new::<meter_per_second>(0.0),
             velocity_east: Velocity::new::<meter_per_second>(0.0),
             velocity_down: Velocity::new::<meter_per_second>(0.0),
             ground_speed: Velocity::new::<meter_per_second>(0.0),
-            heading_motion: Angle::new::<degree>(0.0),
-            heading_vehicle: Angle::new::<degree>(0.0),
-            magnetic_declination: Angle::new::<degree>(0.0),
+            heading_motion: Angle32::new::<degree>(0.0),
+            heading_vehicle: Angle32::new::<degree>(0.0),
+            magnetic_declination: Angle32::new::<degree>(0.0),
             psm_state: 0,
             correction_age_bucket: 0,
         }
@@ -134,7 +150,7 @@ pub struct GnssAccuracy {
     pub horizontal: Length,
     pub vertical: Length,
     pub speed: Velocity,
-    pub heading: Angle,
+    pub heading: Angle32,
     pub time: Time,
     pub position_dop: Ratio,
 }
@@ -145,7 +161,7 @@ impl Default for GnssAccuracy {
             horizontal: Length::new::<meter>(0.0),
             vertical: Length::new::<meter>(0.0),
             speed: Velocity::new::<meter_per_second>(0.0),
-            heading: Angle::new::<degree>(0.0),
+            heading: Angle32::new::<degree>(0.0),
             time: Time::new::<second>(0.0),
             position_dop: Ratio::new::<ratio>(0.0),
         }
@@ -166,8 +182,8 @@ pub struct GnssSatelliteInfo {
     pub gnss_id: u8,
     pub sv_id: u8,
     pub cno_dbhz: u8,
-    pub elevation: Angle,
-    pub azimuth: Angle,
+    pub elevation: Angle32,
+    pub azimuth: Angle32,
     pub pseudorange_residual: Length,
     pub quality_ind: u8,
     pub used_for_navigation: bool,

@@ -7,27 +7,28 @@ use cu_gnss_payloads::{
 use cu_sensor_payloads::{BarometerPayload, ImuPayload, MagnetometerPayload};
 use cu29::prelude::*;
 use cu29::units::si::angle::degree;
-use cu29::units::si::f32::{Angle, Length, Velocity};
+use cu29::units::si::f32::{Angle as Angle32, Length, Velocity};
+use cu29::units::si::f64::Angle as Angle64;
 use cu29::units::si::length::meter;
 use cu29::units::si::velocity::meter_per_second;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 
 static SIM_ACTIVITY_LED_STATE: OnceLock<Arc<AtomicBool>> = OnceLock::new();
 static SIM_BATTERY_THROTTLE_BITS: OnceLock<Arc<AtomicU32>> = OnceLock::new();
 static SIM_BATTERY_ARMED_STATE: OnceLock<Arc<AtomicBool>> = OnceLock::new();
 static SIM_GNSS_STATE: OnceLock<Arc<SimGnssState>> = OnceLock::new();
-const GNSS_FIXED_LAT_DEG: f32 = 30.389861114639405_f64 as f32;
-const GNSS_FIXED_LON_DEG: f32 = -97.69316827380047_f64 as f32;
+const GNSS_FIXED_LAT_DEG: f64 = 30.389861114639405;
+const GNSS_FIXED_LON_DEG: f64 = -97.69316827380047;
 const GNSS_FIXED_ELLIPSOID_ALT_M: f32 = 225.0;
 const GNSS_FIXED_MSL_ALT_M: f32 = 212.0;
 const GNSS_FIXED_SAT_COUNT: u8 = 14;
-const EARTH_METERS_PER_DEG_LAT: f32 = 111_320.0;
+const EARTH_METERS_PER_DEG_LAT: f64 = 111_320.0;
 
 #[derive(Default)]
 struct SimGnssState {
-    lat_deg_bits: AtomicU32,
-    lon_deg_bits: AtomicU32,
+    lat_deg_bits: AtomicU64,
+    lon_deg_bits: AtomicU64,
     ellipsoid_alt_m_bits: AtomicU32,
     msl_alt_m_bits: AtomicU32,
     velocity_north_mps_bits: AtomicU32,
@@ -41,8 +42,8 @@ fn sim_gnss_state() -> Arc<SimGnssState> {
     SIM_GNSS_STATE
         .get_or_init(|| {
             Arc::new(SimGnssState {
-                lat_deg_bits: AtomicU32::new(GNSS_FIXED_LAT_DEG.to_bits()),
-                lon_deg_bits: AtomicU32::new(GNSS_FIXED_LON_DEG.to_bits()),
+                lat_deg_bits: AtomicU64::new(GNSS_FIXED_LAT_DEG.to_bits()),
+                lon_deg_bits: AtomicU64::new(GNSS_FIXED_LON_DEG.to_bits()),
                 ellipsoid_alt_m_bits: AtomicU32::new(GNSS_FIXED_ELLIPSOID_ALT_M.to_bits()),
                 msl_alt_m_bits: AtomicU32::new(GNSS_FIXED_MSL_ALT_M.to_bits()),
                 velocity_north_mps_bits: AtomicU32::new(0.0_f32.to_bits()),
@@ -115,12 +116,12 @@ fn sim_battery_is_armed() -> bool {
 pub fn sim_gnss_set_vehicle_state(position_xyz_m: [f32; 3], velocity_xyz_mps: [f32; 3]) {
     // Scene/world alignment in this sim: +Z tracks geographic north and +X tracks geographic west.
     // GNSS expects NED signs, so east is the opposite of world +X.
-    let north_m = position_xyz_m[2];
-    let east_m = -position_xyz_m[0];
+    let north_m = position_xyz_m[2] as f64;
+    let east_m = -(position_xyz_m[0] as f64);
     let up_m = position_xyz_m[1];
 
     let meters_per_deg_lon =
-        (EARTH_METERS_PER_DEG_LAT * libm::cosf(GNSS_FIXED_LAT_DEG.to_radians()).abs()).max(1.0);
+        (EARTH_METERS_PER_DEG_LAT * GNSS_FIXED_LAT_DEG.to_radians().cos().abs()).max(1.0);
     let lat_deg = GNSS_FIXED_LAT_DEG + (north_m / EARTH_METERS_PER_DEG_LAT);
     let lon_deg = GNSS_FIXED_LON_DEG + (east_m / meters_per_deg_lon);
 
@@ -321,8 +322,8 @@ impl CuSrcTask for SimGnssSource {
 
     fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
         let state = sim_gnss_state();
-        let lat_deg = f32::from_bits(state.lat_deg_bits.load(Ordering::Relaxed));
-        let lon_deg = f32::from_bits(state.lon_deg_bits.load(Ordering::Relaxed));
+        let lat_deg = f64::from_bits(state.lat_deg_bits.load(Ordering::Relaxed));
+        let lon_deg = f64::from_bits(state.lon_deg_bits.load(Ordering::Relaxed));
         let ellipsoid_alt_m = f32::from_bits(state.ellipsoid_alt_m_bits.load(Ordering::Relaxed));
         let msl_alt_m = f32::from_bits(state.msl_alt_m_bits.load(Ordering::Relaxed));
         let velocity_north_mps =
@@ -366,15 +367,15 @@ impl CuSrcTask for SimGnssSource {
             num_satellites_used: GNSS_FIXED_SAT_COUNT,
             ..GnssFixSolution::default()
         };
-        fix.latitude = Angle::new::<degree>(lat_deg);
-        fix.longitude = Angle::new::<degree>(lon_deg);
+        fix.latitude = Angle64::new::<degree>(lat_deg);
+        fix.longitude = Angle64::new::<degree>(lon_deg);
         fix.height_ellipsoid = Length::new::<meter>(ellipsoid_alt_m);
         fix.height_msl = Length::new::<meter>(msl_alt_m);
         fix.velocity_north = Velocity::new::<meter_per_second>(velocity_north_mps);
         fix.velocity_east = Velocity::new::<meter_per_second>(velocity_east_mps);
         fix.velocity_down = Velocity::new::<meter_per_second>(velocity_down_mps);
         fix.ground_speed = Velocity::new::<meter_per_second>(ground_speed_mps);
-        fix.heading_motion = Angle::new::<degree>(heading_motion_deg);
+        fix.heading_motion = Angle32::new::<degree>(heading_motion_deg);
 
         output.1.set_payload(fix);
         Ok(())
@@ -390,15 +391,15 @@ mod tests {
         let state = sim_gnss_state();
 
         sim_gnss_set_vehicle_state([0.0, 0.0, 0.0], [0.0, 0.0, 0.0]);
-        let lon0 = f32::from_bits(state.lon_deg_bits.load(Ordering::Relaxed));
+        let lon0 = f64::from_bits(state.lon_deg_bits.load(Ordering::Relaxed));
 
         // In this scene, moving east is -X in world.
         sim_gnss_set_vehicle_state([-20.0, 0.0, 0.0], [0.0, 0.0, 0.0]);
-        let lon_east = f32::from_bits(state.lon_deg_bits.load(Ordering::Relaxed));
+        let lon_east = f64::from_bits(state.lon_deg_bits.load(Ordering::Relaxed));
         assert!(lon_east > lon0, "east movement should increase longitude");
 
         sim_gnss_set_vehicle_state([20.0, 0.0, 0.0], [0.0, 0.0, 0.0]);
-        let lon_west = f32::from_bits(state.lon_deg_bits.load(Ordering::Relaxed));
+        let lon_west = f64::from_bits(state.lon_deg_bits.load(Ordering::Relaxed));
         assert!(lon_west < lon0, "west movement should decrease longitude");
     }
 

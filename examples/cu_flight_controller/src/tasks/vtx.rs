@@ -87,8 +87,8 @@ pub struct VtxOsd {
     pressure_samples: u32,
     last_pressure_pa: Option<f32>,
     last_heading_deg: Option<f32>,
-    last_lat_deg: Option<f32>,
-    last_lon_deg: Option<f32>,
+    last_lat_deg: Option<f64>,
+    last_lon_deg: Option<f64>,
     last_ground_speed_mps: Option<f32>,
 }
 
