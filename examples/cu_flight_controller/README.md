@@ -85,6 +85,25 @@ just fsck log=logs/embedded.copper
 just textlogs log=logs/embedded.copper
 ```
 
+### Python GNSS Extraction
+
+You can use the PyO3 bindings to iterate CopperLists directly from Python and
+extract GNSS fields without going through JSON.
+
+```bash
+# Build the Python extension module
+just py-build
+
+# Print GNSS latitude/longitude from the flight-controller sim log
+just py-gnss log=logs/flight_controller_sim.copper
+```
+
+The script is at `python/print_gnss_from_log.py` and can also be run directly:
+
+```bash
+python3 python/print_gnss_from_log.py logs/flight_controller_sim.copper
+```
+
 ### RC Tester (simulation)
 
 ```bash

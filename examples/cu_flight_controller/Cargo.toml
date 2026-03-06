@@ -66,6 +66,10 @@ libm = { version = "0.2", default-features = false }
 ## Log reader depencies
 cu29-export = { workspace = true, optional = true }
 cu29-helpers = { workspace = true, optional = true }
+pyo3 = { version = "0.28", optional = true, default-features = false, features = [
+  "extension-module",
+  "macros",
+] }
 
 ## Sim dependencies
 bevy = { workspace = true, default-features = false, features = [
@@ -196,6 +200,21 @@ logreader = [
   "dep:cu-gnss-payloads",
   "cu-bdshot/messages-only",
 ]
+python-bindings = [
+  "dep:cu29",
+  "cu29/std",
+  "bincode/std",
+  "serde/std",
+  "dep:cu29-export",
+  "dep:cu-crsf",
+  "dep:cu-msp-bridge",
+  "dep:cu-bdshot",
+  "dep:cu-ahrs",
+  "dep:cu-gnss-payloads",
+  "cu-bdshot/messages-only",
+  "cu29-export/python",
+  "dep:pyo3",
+]
 sim = [
   "dep:cu29",
   "cu29/std",
@@ -212,6 +231,11 @@ sim = [
   "dep:evdev",
   "dep:cu-gnss-payloads",
 ]
+
+[lib]
+name = "cu_flight_controller_export"
+path = "src/python_module.rs"
+crate-type = ["cdylib"]
 
 [[bin]]
 name = "quad"
