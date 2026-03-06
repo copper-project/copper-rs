@@ -33,6 +33,27 @@ def main() -> int:
         log_path = Path.cwd() / log_path
 
     print(f"reading: {log_path}")
+    lifecycle_count = 0
+    mission = None
+    for record in libcu_flight_controller_export.runtime_lifecycle_iterator_unified(str(log_path)):
+        lifecycle_count += 1
+        event = record.event
+        if event.kind == "mission_started":
+            mission = event.mission
+            print(f"runtime mission start: ts={record.timestamp_ns} mission={event.mission}")
+        elif event.kind == "mission_stopped":
+            print(
+                f"runtime mission stop: ts={record.timestamp_ns} mission={event.mission} "
+                f"reason={event.reason}"
+            )
+        elif event.kind == "panic":
+            print(f"runtime panic: ts={record.timestamp_ns} message={event.message}")
+
+    if lifecycle_count == 0:
+        print("no runtime lifecycle events found")
+    elif mission is not None:
+        print(f"validated mission: {mission}")
+
     count = 0
     for copperlist in libcu_flight_controller_export.copperlist_iterator_unified(str(log_path)):
         for msg in copperlist.messages:

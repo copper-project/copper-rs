@@ -55,6 +55,16 @@ where
     pyo3::Py::new(py, iter).map(|obj| obj.into())
 }
 
+/// Creates a Python RuntimeLifecycle iterator from a unified log.
+#[cfg(all(feature = "python", not(target_os = "macos")))]
+pub fn runtime_lifecycle_iterator_unified_py(
+    unified_src_path: &str,
+    py: pyo3::Python<'_>,
+) -> pyo3::PyResult<pyo3::Py<pyo3::PyAny>> {
+    let iter = python::runtime_lifecycle_iterator_unified(unified_src_path)?;
+    pyo3::Py::new(py, iter).map(|obj| obj.into())
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum ExportFormat {
     Json,
@@ -498,6 +508,37 @@ pub fn keyframes_reader(mut src: impl Read) -> impl Iterator<Item = KeyFrame> {
     std::iter::from_fn(move || read_next_entry::<KeyFrame>(&mut src))
 }
 
+/// Extracts the runtime lifecycle records from the log.
+pub fn runtime_lifecycle_reader(mut src: impl Read) -> impl Iterator<Item = RuntimeLifecycleRecord> {
+    std::iter::from_fn(move || read_next_entry::<RuntimeLifecycleRecord>(&mut src))
+}
+
+/// Returns the first mission announced by the runtime lifecycle section, if any.
+pub fn unified_log_mission(unifiedlog_base: &Path) -> CuResult<Option<String>> {
+    let dl = build_read_logger(unifiedlog_base)?;
+    let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::RuntimeLifecycle);
+    Ok(runtime_lifecycle_reader(reader).find_map(|entry| match entry.event {
+        RuntimeLifecycleEvent::MissionStarted { mission } => Some(mission),
+        _ => None,
+    }))
+}
+
+/// Ensures the unified log was recorded for the expected mission.
+pub fn assert_unified_log_mission(
+    unifiedlog_base: &Path,
+    expected_mission: &str,
+) -> CuResult<()> {
+    match unified_log_mission(unifiedlog_base)? {
+        Some(actual_mission) if actual_mission == expected_mission => Ok(()),
+        Some(actual_mission) => Err(CuError::from(format!(
+            "Mission mismatch: expected '{expected_mission}', found '{actual_mission}'"
+        ))),
+        None => Err(CuError::from(format!(
+            "No MissionStarted runtime lifecycle event found while validating expected mission '{expected_mission}'"
+        ))),
+    }
+}
+
 pub fn structlog_reader(mut src: impl Read) -> impl Iterator<Item = CuResult<CuLogEntry>> {
     std::iter::from_fn(move || {
         let entry = decode_from_std_read::<CuLogEntry, _, _>(&mut src, standard());
@@ -582,6 +623,11 @@ mod python {
         decode_next: CopperListDecodeFn,
     }
 
+    #[pyclass]
+    pub struct PyRuntimeLifecycleIterator {
+        reader: Box<dyn Read + Send + Sync>,
+    }
+
     #[pyclass(get_all)]
     pub struct PyUnitValue {
         pub value: f64,
@@ -634,6 +680,18 @@ mod python {
 
         fn __next__(mut slf: PyRefMut<Self>, py: Python<'_>) -> Option<PyResult<Py<PyAny>>> {
             (slf.decode_next)(&mut slf.reader, py)
+        }
+    }
+
+    #[pymethods]
+    impl PyRuntimeLifecycleIterator {
+        fn __iter__(slf: PyRefMut<Self>) -> PyRefMut<Self> {
+            slf
+        }
+
+        fn __next__(mut slf: PyRefMut<Self>, py: Python<'_>) -> Option<PyResult<Py<PyAny>>> {
+            let entry = super::read_next_entry::<RuntimeLifecycleRecord>(&mut slf.reader)?;
+            Some(runtime_lifecycle_record_to_py(&entry, py))
         }
     }
 
@@ -721,6 +779,30 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
         })
     }
 
+    /// Creates an iterator over runtime lifecycle records from a unified log file.
+    #[pyfunction]
+    pub fn runtime_lifecycle_iterator_unified(
+        unified_src_path: &str,
+    ) -> PyResult<PyRuntimeLifecycleIterator> {
+        let logger = UnifiedLoggerBuilder::new()
+            .file_base_name(Path::new(unified_src_path))
+            .build()
+            .map_err(|e| PyIOError::new_err(e.to_string()))?;
+        let dl = match logger {
+            UnifiedLogger::Read(dl) => dl,
+            UnifiedLogger::Write(_) => {
+                return Err(PyIOError::new_err(
+                    "Expected read-only unified logger for Python export",
+                ));
+            }
+        };
+
+        let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::RuntimeLifecycle);
+        Ok(PyRuntimeLifecycleIterator {
+            reader: Box::new(reader),
+        })
+    }
+
     /// This is a python wrapper for CuLogEntries.
     #[pyclass]
     pub struct PyCuLogEntry {
@@ -767,10 +849,12 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
         m.add_class::<PyCuLogEntry>()?;
         m.add_class::<PyLogIterator>()?;
         m.add_class::<PyCopperListIterator>()?;
+        m.add_class::<PyRuntimeLifecycleIterator>()?;
         m.add_class::<PyUnitValue>()?;
         m.add_function(wrap_pyfunction!(struct_log_iterator_bare, m)?)?;
         m.add_function(wrap_pyfunction!(struct_log_iterator_unified, m)?)?;
         m.add_function(wrap_pyfunction!(copperlist_iterator_unified, m)?)?;
+        m.add_function(wrap_pyfunction!(runtime_lifecycle_iterator_unified, m)?)?;
         Ok(())
     }
 
@@ -812,6 +896,75 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
 
         root.set_item("messages", PyList::new(py, messages)?)?;
         dict_to_namespace(root, py)
+    }
+
+    fn runtime_lifecycle_record_to_py(
+        entry: &RuntimeLifecycleRecord,
+        py: Python<'_>,
+    ) -> PyResult<Py<PyAny>> {
+        let root = PyDict::new(py);
+        root.set_item("timestamp_ns", entry.timestamp.as_nanos())?;
+        root.set_item("event", runtime_lifecycle_event_to_py(&entry.event, py)?)?;
+        dict_to_namespace(root, py)
+    }
+
+    fn runtime_lifecycle_event_to_py(
+        event: &RuntimeLifecycleEvent,
+        py: Python<'_>,
+    ) -> PyResult<Py<PyAny>> {
+        let root = PyDict::new(py);
+        match event {
+            RuntimeLifecycleEvent::Instantiated {
+                config_source,
+                effective_config_ron,
+                stack,
+            } => {
+                root.set_item("kind", "instantiated")?;
+                root.set_item("config_source", runtime_config_source_to_py(config_source))?;
+                root.set_item("effective_config_ron", effective_config_ron)?;
+
+                let stack_py = PyDict::new(py);
+                stack_py.set_item("app_name", &stack.app_name)?;
+                stack_py.set_item("app_version", &stack.app_version)?;
+                stack_py.set_item("git_commit", &stack.git_commit)?;
+                stack_py.set_item("git_dirty", &stack.git_dirty)?;
+                root.set_item("stack", dict_to_namespace(stack_py, py)?)?;
+            }
+            RuntimeLifecycleEvent::MissionStarted { mission } => {
+                root.set_item("kind", "mission_started")?;
+                root.set_item("mission", mission)?;
+            }
+            RuntimeLifecycleEvent::MissionStopped { mission, reason } => {
+                root.set_item("kind", "mission_stopped")?;
+                root.set_item("mission", mission)?;
+                root.set_item("reason", reason)?;
+            }
+            RuntimeLifecycleEvent::Panic {
+                message,
+                file,
+                line,
+                column,
+            } => {
+                root.set_item("kind", "panic")?;
+                root.set_item("message", message)?;
+                root.set_item("file", file)?;
+                root.set_item("line", line)?;
+                root.set_item("column", column)?;
+            }
+            RuntimeLifecycleEvent::ShutdownCompleted => {
+                root.set_item("kind", "shutdown_completed")?;
+            }
+        }
+
+        dict_to_namespace(root, py)
+    }
+
+    fn runtime_config_source_to_py(source: &RuntimeLifecycleConfigSource) -> &'static str {
+        match source {
+            RuntimeLifecycleConfigSource::ProgrammaticOverride => "programmatic_override",
+            RuntimeLifecycleConfigSource::ExternalFile => "external_file",
+            RuntimeLifecycleConfigSource::BundledDefault => "bundled_default",
+        }
     }
 
     fn metadata_to_py(metadata: &dyn CuMsgMetadataTrait, py: Python<'_>) -> PyResult<Py<PyAny>> {
@@ -1261,5 +1414,41 @@ mod tests {
         assert_eq!(iter.next().unwrap().msgs, MyMsgs((2, 3, 4.0)));
         assert_eq!(iter.next().unwrap().msgs, MyMsgs((3, 4, 5.0)));
         assert_eq!(iter.next().unwrap().msgs, MyMsgs((4, 5, 6.0)));
+    }
+
+    #[test]
+    fn runtime_lifecycle_reader_extracts_started_mission() {
+        let records = vec![
+            RuntimeLifecycleRecord {
+                timestamp: CuTime::default(),
+                event: RuntimeLifecycleEvent::Instantiated {
+                    config_source: RuntimeLifecycleConfigSource::BundledDefault,
+                    effective_config_ron: "(missions: [])".to_string(),
+                    stack: RuntimeLifecycleStackInfo {
+                        app_name: "demo".to_string(),
+                        app_version: "0.1.0".to_string(),
+                        git_commit: None,
+                        git_dirty: None,
+                    },
+                },
+            },
+            RuntimeLifecycleRecord {
+                timestamp: CuTime::from_nanos(42),
+                event: RuntimeLifecycleEvent::MissionStarted {
+                    mission: "gnss".to_string(),
+                },
+            },
+        ];
+        let mut bytes = Vec::new();
+        for record in &records {
+            bytes.extend(bincode::encode_to_vec(record, standard()).unwrap());
+        }
+
+        let mission = runtime_lifecycle_reader(Cursor::new(bytes))
+            .find_map(|entry| match entry.event {
+                RuntimeLifecycleEvent::MissionStarted { mission } => Some(mission),
+                _ => None,
+            });
+        assert_eq!(mission.as_deref(), Some("gnss"));
     }
 }
