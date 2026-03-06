@@ -20,6 +20,7 @@ Types that are supported are:
 - `sensor_msgs/PointCloud2` <-> `PointCloudSoa<N>`
 - `sensor_msgs/Imu` <-> `ImuPayload` (accel/gyro mapped; temperature defaults to `0°C` when decoding from ROS)
 - `sensor_msgs/MagneticField` <-> `MagnetometerPayload`
+- `sensor_msgs/JointState` <-> `JointState<N>`
 
 ## Adding new payloads (feel free to contribute!)
 
