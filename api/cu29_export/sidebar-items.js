@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Command","ExportFormat"],"fn":["copperlists_reader","keyframes_reader","run_cli","structlog_reader","textlog_dump"],"mod":["logstats"],"struct":["LogReaderCli"]};
+window.SIDEBAR_ITEMS = {"enum":["Command","ExportFormat"],"fn":["assert_unified_log_mission","copperlists_reader","keyframes_reader","run_cli","runtime_lifecycle_reader","structlog_reader","textlog_dump","unified_log_mission"],"mod":["logstats"],"struct":["LogReaderCli"]};
