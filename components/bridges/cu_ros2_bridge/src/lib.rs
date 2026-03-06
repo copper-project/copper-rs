@@ -10,7 +10,7 @@ use cdr::{CdrBe, Infinite};
 use cu_ros2_payloads::RosBridgeAdapter;
 use cu29::cubridge::{BridgeChannel, BridgeChannelConfig, BridgeChannelSet, CuBridge};
 use cu29::prelude::*;
-use liveliness::{node_liveliness, publisher_liveliness};
+use liveliness::{node_liveliness, publisher_liveliness, subscriber_liveliness};
 use node::Node;
 use topic::Topic;
 use zenoh::bytes::Encoding;
@@ -155,7 +155,9 @@ struct Ros2TxChannel<Id: Copy> {
 struct Ros2RxChannel<Id: Copy> {
     id: Id,
     route: String,
+    entity_id: u32,
     subscriber: Option<Ros2Subscriber>,
+    subscriber_token: Option<zenoh::liveliness::LivelinessToken>,
 }
 
 struct Ros2Context<TxId: Copy, RxId: Copy> {
@@ -389,13 +391,24 @@ where
         }
 
         let route = ctx.rx_channels[rx_idx].route.clone();
+        let entity_id = ctx.rx_channels[rx_idx].entity_id;
         let topic = Self::topic_for_codec(route.as_str(), codec);
         let node = Self::make_node(domain_id, namespace, node_name, &ctx.session);
+
+        let subscriber_token = zenoh::Wait::wait(
+            ctx.session
+                .liveliness()
+                .declare_token(subscriber_liveliness(&node, &topic, entity_id)?),
+        )
+        .map_err(cu_error_map(
+            "Ros2Bridge: Failed to declare subscriber liveliness token",
+        ))?;
 
         let keyexpr = topic.pubsub_keyexpr(&node)?;
         let subscriber = zenoh::Wait::wait(ctx.session.declare_subscriber(keyexpr))
             .map_err(cu_error_map("Ros2Bridge: Failed to declare subscriber"))?;
 
+        ctx.rx_channels[rx_idx].subscriber_token = Some(subscriber_token);
         ctx.rx_channels[rx_idx].subscriber = Some(subscriber);
         Ok(())
     }
@@ -492,10 +505,13 @@ where
         let rx_channels = self
             .rx_channels
             .iter()
-            .map(|channel| Ros2RxChannel {
+            .enumerate()
+            .map(|(index, channel)| Ros2RxChannel {
                 id: channel.id,
                 route: channel.route.clone(),
+                entity_id: (index + 1) as u32,
                 subscriber: None,
+                subscriber_token: None,
             })
             .collect();
 
