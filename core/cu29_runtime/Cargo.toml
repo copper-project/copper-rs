@@ -89,7 +89,7 @@ default = ["std"]
 defmt = ["cu29-log/defmt", "cu29-log-derive/defmt", "cu29-traits/defmt"]
 cuda = ["dep:cudarc"]
 macro_debug = []
-reflect = ["dep:bevy_reflect"]
+reflect = ["dep:bevy_reflect", "cu29-traits/reflect"]
 remote-debug = [
   "std",
   "reflect",

@@ -475,22 +475,30 @@ mod tests {
     use serde::{Deserialize, Serialize};
 
     // ---- Generated channel payload stubs (Copper build output) ---------------
-    #[derive(Clone, Debug, Default, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+    #[derive(
+        Clone, Debug, Default, Serialize, Deserialize, bincode::Encode, bincode::Decode, Reflect,
+    )]
     struct ImuMsg {
         accel: i32,
     }
 
-    #[derive(Clone, Debug, Default, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+    #[derive(
+        Clone, Debug, Default, Serialize, Deserialize, bincode::Encode, bincode::Decode, Reflect,
+    )]
     struct MotorCmd {
         torque: i16,
     }
 
-    #[derive(Clone, Debug, Default, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+    #[derive(
+        Clone, Debug, Default, Serialize, Deserialize, bincode::Encode, bincode::Decode, Reflect,
+    )]
     struct StatusMsg {
         temperature: f32,
     }
 
-    #[derive(Clone, Debug, Default, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+    #[derive(
+        Clone, Debug, Default, Serialize, Deserialize, bincode::Encode, bincode::Decode, Reflect,
+    )]
     struct AlertMsg {
         code: u32,
     }
