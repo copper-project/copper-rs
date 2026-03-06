@@ -42,6 +42,14 @@ def _load_embedded_packages() -> List[Dict[str, Any]]:
                     copper_meta.get("embedded_no_default_features", False)
                 ),
                 "features": features,
+                "targets": [
+                    {
+                        "kind": target.get("kind", []),
+                        "name": target["name"],
+                        "required_features": target.get("required-features", []),
+                    }
+                    for target in pkg.get("targets", [])
+                ],
             }
         )
 
@@ -79,6 +87,16 @@ def _run_action(
             cmd.extend(["--target", pkg["target"]])
         if pkg["config"]:
             cmd.extend(["--config", pkg["config"]])
+        if action == "build":
+            enabled_features = set(pkg["features"])
+            eligible_bins = [
+                target["name"]
+                for target in pkg.get("targets", [])
+                if "bin" in target.get("kind", [])
+                and set(target.get("required_features", [])).issubset(enabled_features)
+            ]
+            for bin_name in eligible_bins:
+                cmd.extend(["--bin", bin_name])
         # Some embedded crates are expected to be linked with optimizations to fit
         # target memory; allow opting into release builds via package metadata.
         if action == "build" and pkg.get("build_release"):
