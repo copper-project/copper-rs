@@ -1,3 +1,5 @@
+#![cfg_attr(not(feature = "python-bindings"), no_std)]
+
 #[cfg(feature = "python-bindings")]
 extern crate cu29 as bevy;
 
