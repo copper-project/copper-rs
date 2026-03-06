@@ -508,7 +508,9 @@ pub fn keyframes_reader(mut src: impl Read) -> impl Iterator<Item = KeyFrame> {
 }
 
 /// Extracts the runtime lifecycle records from the log.
-pub fn runtime_lifecycle_reader(mut src: impl Read) -> impl Iterator<Item = RuntimeLifecycleRecord> {
+pub fn runtime_lifecycle_reader(
+    mut src: impl Read,
+) -> impl Iterator<Item = RuntimeLifecycleRecord> {
     std::iter::from_fn(move || read_next_entry::<RuntimeLifecycleRecord>(&mut src))
 }
 
@@ -516,17 +518,16 @@ pub fn runtime_lifecycle_reader(mut src: impl Read) -> impl Iterator<Item = Runt
 pub fn unified_log_mission(unifiedlog_base: &Path) -> CuResult<Option<String>> {
     let dl = build_read_logger(unifiedlog_base)?;
     let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::RuntimeLifecycle);
-    Ok(runtime_lifecycle_reader(reader).find_map(|entry| match entry.event {
-        RuntimeLifecycleEvent::MissionStarted { mission } => Some(mission),
-        _ => None,
-    }))
+    Ok(
+        runtime_lifecycle_reader(reader).find_map(|entry| match entry.event {
+            RuntimeLifecycleEvent::MissionStarted { mission } => Some(mission),
+            _ => None,
+        }),
+    )
 }
 
 /// Ensures the unified log was recorded for the expected mission.
-pub fn assert_unified_log_mission(
-    unifiedlog_base: &Path,
-    expected_mission: &str,
-) -> CuResult<()> {
+pub fn assert_unified_log_mission(unifiedlog_base: &Path, expected_mission: &str) -> CuResult<()> {
     match unified_log_mission(unifiedlog_base)? {
         Some(actual_mission) if actual_mission == expected_mission => Ok(()),
         Some(actual_mission) => Err(CuError::from(format!(
@@ -923,7 +924,7 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
                 stack_py.set_item("app_name", &stack.app_name)?;
                 stack_py.set_item("app_version", &stack.app_version)?;
                 stack_py.set_item("git_commit", &stack.git_commit)?;
-                stack_py.set_item("git_dirty", &stack.git_dirty)?;
+                stack_py.set_item("git_dirty", stack.git_dirty)?;
                 root.set_item("stack", dict_to_namespace(stack_py, py)?)?;
             }
             RuntimeLifecycleEvent::MissionStarted { mission } => {
@@ -1025,22 +1026,22 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
             }
         }
 
-        if let Some(unit) = unit_abbrev_for_type_path(value.reflect_type_path()) {
-            if let Some(raw_value) = dict.get_item("value")? {
-                if let Ok(v) = raw_value.extract::<f64>() {
-                    let unit_value = PyUnitValue {
-                        value: v,
-                        unit: unit.to_string(),
-                    };
-                    return Ok(Py::new(py, unit_value)?.into());
-                }
-                if let Ok(v) = raw_value.extract::<f32>() {
-                    let unit_value = PyUnitValue {
-                        value: v as f64,
-                        unit: unit.to_string(),
-                    };
-                    return Ok(Py::new(py, unit_value)?.into());
-                }
+        if let Some(unit) = unit_abbrev_for_type_path(value.reflect_type_path())
+            && let Some(raw_value) = dict.get_item("value")?
+        {
+            if let Ok(v) = raw_value.extract::<f64>() {
+                let unit_value = PyUnitValue {
+                    value: v,
+                    unit: unit.to_string(),
+                };
+                return Ok(Py::new(py, unit_value)?.into());
+            }
+            if let Ok(v) = raw_value.extract::<f32>() {
+                let unit_value = PyUnitValue {
+                    value: v as f64,
+                    unit: unit.to_string(),
+                };
+                return Ok(Py::new(py, unit_value)?.into());
             }
         }
 
@@ -1439,8 +1440,8 @@ mod tests {
             bytes.extend(bincode::encode_to_vec(record, standard()).unwrap());
         }
 
-        let mission = runtime_lifecycle_reader(Cursor::new(bytes))
-            .find_map(|entry| match entry.event {
+        let mission =
+            runtime_lifecycle_reader(Cursor::new(bytes)).find_map(|entry| match entry.event {
                 RuntimeLifecycleEvent::MissionStarted { mission } => Some(mission),
                 _ => None,
             });

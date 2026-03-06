@@ -6,6 +6,8 @@ use crate::frames::{FrameId, FramePair};
 use crate::velocity::VelocityTransform;
 use bincode::{Decode, Encode};
 use cu_spatial_payloads::Transform3D;
+#[allow(unused_imports)]
+use cu29::bevy_reflect;
 use cu29::clock::{CuTime, CuTimeRange, Tov};
 use cu29::cutask::CuStampedData;
 use cu29::prelude::{CuMsgPayload, Reflect};
