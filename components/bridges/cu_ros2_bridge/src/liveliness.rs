@@ -10,6 +10,7 @@ const ADMIN_SPACE: &str = "@ros2_lv";
 enum Entity {
     Node,
     Publisher,
+    Subscriber,
 }
 
 impl fmt::Display for Entity {
@@ -17,12 +18,25 @@ impl fmt::Display for Entity {
         match self {
             Entity::Node => write!(f, "NN"),
             Entity::Publisher => write!(f, "MP"),
+            Entity::Subscriber => write!(f, "MS"),
         }
     }
 }
 
 pub fn node_liveliness(node: &Node) -> CuResult<KeyExpr<'static>> {
     liveliness_base_keyexpr(node, Entity::Node, node.id)
+}
+
+pub fn subscriber_liveliness(
+    node: &Node,
+    topic: &Topic,
+    instance_id: u32,
+) -> CuResult<KeyExpr<'static>> {
+    let base_keyexpr = liveliness_base_keyexpr(node, Entity::Subscriber, instance_id)?;
+    let topic_keyexpr =
+        format_liveliness_keyexpr!(topic.name(), topic.type_name(), topic.hash(), topic.qos())?;
+
+    Ok(base_keyexpr / topic_keyexpr.as_ref())
 }
 
 pub fn publisher_liveliness(
