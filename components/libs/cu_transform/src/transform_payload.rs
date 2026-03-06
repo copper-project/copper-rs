@@ -39,6 +39,7 @@ pub type StampedFrameTransform<T> = CuStampedData<FrameTransform<T>, ()>;
 ///
 /// ```
 #[derive(Clone, Debug, Serialize, Deserialize, Default, Reflect)]
+#[reflect(opaque, from_reflect = false, no_field_bounds)]
 pub struct FrameTransform<T: Copy + Debug + Default + Serialize + 'static> {
     /// The actual transform
     pub transform: Transform3D<T>,
@@ -99,7 +100,7 @@ where
     fn decode<D: bincode::de::Decoder<Context = ()>>(
         decoder: &mut D,
     ) -> Result<Self, bincode::error::DecodeError> {
-        let transform = Transform3D::decode(decoder)?;
+        let transform = <Transform3D<T> as Decode<()>>::decode(decoder)?;
         let parent_frame_str = String::decode(decoder)?;
         let child_frame_str = String::decode(decoder)?;
         let parent_frame = FrameIdString::from(&parent_frame_str).map_err(|_| {
