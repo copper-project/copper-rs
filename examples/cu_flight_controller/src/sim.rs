@@ -314,7 +314,7 @@ const BASE_ASSETS_URL: &str = "https://cdn.copper-robotics.com/";
 const SKYBOX: &str = "skybox.ktx2";
 const SPECULAR_MAP: &str = "specular_map.ktx2";
 const QUADCOPTER: &str = "quadcopter.glb";
-const CITY: &str = "city.glb";
+const CITY: &str = "city-fixed.glb";
 // Measured from `gltf-transform inspect city.glb` in source model units.
 const LOCAL_CITY_BBOX_MIN_UNITS: Vec3 = Vec3::new(-30_614.165, -648.2196, -4_185.883);
 const LOCAL_CITY_BBOX_MAX_UNITS: Vec3 = Vec3::new(18_754.953, 11_102.407, 35_871.875);
