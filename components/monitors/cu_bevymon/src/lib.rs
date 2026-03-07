@@ -240,12 +240,11 @@ fn render_terminal_to_handle(
     let data_out = image.data.as_mut().expect("image data missing");
     let (pixels_in, _) = data_in.as_chunks::<3>();
     let (pixels_out, _) = data_out.as_chunks_mut::<4>();
-    for idx in 0..(width * height) as usize {
-        let px_out = &mut pixels_out[idx];
-        let px_in = pixels_in[idx];
+    for (px_in, px_out) in pixels_in.iter().zip(pixels_out.iter_mut()) {
         px_out[0] = px_in[0];
         px_out[1] = px_in[1];
         px_out[2] = px_in[2];
+        px_out[3] = 255;
     }
 }
 
