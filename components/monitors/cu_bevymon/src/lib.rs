@@ -345,6 +345,12 @@ fn resize_terminal_to_panel(
     let char_height = context.backend().char_height.max(1) as f32;
     let cols = (size.x / char_width).floor().max(1.0) as u16;
     let rows = (size.y / char_height).floor().max(1.0) as u16;
+
+    let current_area = context.backend().buffer().area;
+    if current_area.width == cols && current_area.height == rows {
+        return;
+    }
+
     context.backend_mut().resize(cols, rows);
 }
 
