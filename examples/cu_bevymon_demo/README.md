@@ -17,3 +17,18 @@ Controls:
 - when the monitor has focus: use the normal `cu_tuimon` clicks, tabs, scrolling, and keybindings
 
 The left panel is still a small fake Bevy scene, but the right panel is now backed by an actual Copper runtime with real tasks, real copperlists, and app-emitted `debug!` / `info!` / `warn!` / `error!` statements.
+
+Build targets:
+
+- Native desktop:
+  `cargo run -p cu-bevymon-demo`
+- Browser/wasm compile check:
+  `cargo check -p cu-bevymon-demo --target wasm32-unknown-unknown`
+- Browser demo with Trunk:
+  `cd examples/cu_bevymon_demo && trunk serve`
+
+Browser notes:
+
+- The wasm build uses a shared core `NoopLogger` instead of the file-backed unified logger.
+- Structured Copper log macros are still initialized so the monitor model can run without host logger setup.
+- The page shell lives in `examples/cu_bevymon_demo/index.html` and binds Bevy to `#bevy`.

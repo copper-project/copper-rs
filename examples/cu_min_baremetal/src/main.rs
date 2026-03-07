@@ -12,8 +12,6 @@ use cu29::prelude::*;
 mod imp {
     pub use alloc::sync::Arc;
     pub use alloc::vec;
-    pub use bincode::Encode;
-    pub use bincode::error::EncodeError;
     pub use core::ptr::addr_of_mut;
     pub use spin::Mutex;
 }
@@ -30,10 +28,6 @@ static ALLOC: Heap = Heap::empty();
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct MinimalNoStdApp {}
-
-// This needs to be implemented depending on the embedded platform (emmc, sdcard, etc ...)
-#[cfg(not(feature = "std"))]
-struct MyEmbeddedLogger {}
 
 #[cfg(not(feature = "std"))]
 use core::panic::PanicInfo;
@@ -62,66 +56,6 @@ unsafe impl critical_section::Impl for BaremetalCriticalSection {
 fn panic(_: &PanicInfo) -> ! {
     loop {
         core::hint::spin_loop()
-    }
-}
-
-#[cfg(not(feature = "std"))]
-struct MySectionStorage;
-
-#[cfg(not(feature = "std"))]
-impl SectionStorage for MySectionStorage {
-    // Just mock the behavior for now.
-    fn initialize<E: Encode>(&mut self, _header: &E) -> Result<usize, EncodeError> {
-        Ok(80)
-    }
-
-    fn post_update_header<E: Encode>(&mut self, _header: &E) -> Result<usize, EncodeError> {
-        Ok(80)
-    }
-
-    fn append<E: Encode>(&mut self, _entry: &E) -> Result<usize, EncodeError> {
-        Ok(300)
-    }
-
-    fn flush(&mut self) -> CuResult<usize> {
-        Ok(1000)
-    }
-}
-
-#[cfg(not(feature = "std"))]
-impl UnifiedLogWrite<MySectionStorage> for MyEmbeddedLogger {
-    fn add_section(
-        &mut self,
-        entry_type: UnifiedLogType,
-        _requested_section_size: usize,
-    ) -> CuResult<SectionHandle<MySectionStorage>> {
-        // Just mock the behavior for now.
-        let section_header = SectionHeader {
-            magic: SECTION_MAGIC,
-            block_size: 512,
-            entry_type,
-            offset_to_next_section: 10000,
-            used: 0,
-            is_open: true,
-        };
-
-        let mut storage: MySectionStorage = MySectionStorage {};
-        storage
-            .initialize(&section_header)
-            .map_err(|_| CuError::from("Error initializing storage"))?;
-        Ok(SectionHandle::create(section_header, storage).unwrap())
-    }
-
-    fn flush_section(&mut self, _section: &mut SectionHandle<MySectionStorage>) {
-        // no op for now
-    }
-
-    fn status(&self) -> UnifiedLogStatus {
-        // no op for now
-        UnifiedLogStatus {
-            total_used_space: 0,
-            total_allocated_space: 0,
-        }
     }
 }
 
@@ -158,9 +92,9 @@ pub extern "C" fn main() {
             }
         },
     );
-    let writer = Arc::new(Mutex::new(MyEmbeddedLogger {}));
+    let writer = Arc::new(Mutex::new(NoopLogger::new()));
     let mut app = MinimalNoStdApp::new(clock, writer).unwrap();
-    let _ = <MinimalNoStdApp as CuApplication<MySectionStorage, MyEmbeddedLogger>>::run(&mut app);
+    let _ = <MinimalNoStdApp as CuApplication<NoopSectionStorage, NoopLogger>>::run(&mut app);
 }
 
 #[cfg(feature = "std")]

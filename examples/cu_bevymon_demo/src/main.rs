@@ -9,9 +9,11 @@ use cu_bevymon::{
 };
 use cu29::prelude::*;
 use cu29::prelude::{debug, error, info};
-use cu29_helpers::basic_copper_setup;
+#[cfg(not(target_arch = "wasm32"))]
 use std::fs;
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 const SIM_PANEL_PERCENT: f32 = 62.0;
 const MONITOR_PANEL_PERCENT: f32 = 38.0;
@@ -20,10 +22,22 @@ const CUBE_MOVE_SPEED: f32 = 3.6;
 const CAMERA_ORBIT_SPEED: f32 = 1.7;
 const CAMERA_ZOOM_SPEED: f32 = 0.65;
 const COPPER_TICK_HZ: f32 = 10.0;
+#[cfg(not(target_arch = "wasm32"))]
 const LOG_SLAB_SIZE: Option<usize> = Some(64 * 1024 * 1024);
+const STRUCTURED_LOG_SECTION_SIZE: usize = 4096 * 10;
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct BevyMonDemoApp {}
+
+#[cfg(target_arch = "wasm32")]
+type DemoSectionStorage = NoopSectionStorage;
+#[cfg(target_arch = "wasm32")]
+type DemoUnifiedLogger = NoopLogger;
+
+#[cfg(not(target_arch = "wasm32"))]
+type DemoSectionStorage = memmap::MmapSectionStorage;
+#[cfg(not(target_arch = "wasm32"))]
+type DemoUnifiedLogger = UnifiedLoggerWrite;
 
 #[derive(Component)]
 struct SimCamera;
@@ -42,7 +56,7 @@ struct LayoutSpawned(bool);
 
 #[derive(Resource)]
 struct CopperDriver {
-    _copper_ctx: CopperContext,
+    _logger_runtime: LoggerRuntime,
     copper_app: BevyMonDemoApp,
     iteration_timer: Timer,
     started: bool,
@@ -71,11 +85,7 @@ fn main() {
 
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Copper BevyMon Demo".into(),
-                resolution: (1600, 900).into(),
-                ..default()
-            }),
+            primary_window: Some(primary_window()),
             ..default()
         }))
         .add_plugins(
@@ -110,28 +120,27 @@ fn main() {
 }
 
 fn build_copper_driver() -> CopperDriver {
-    let logger_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("logs/bevymon_demo.copper");
-    if let Some(parent) = logger_path.parent()
-        && !parent.exists()
-    {
-        fs::create_dir_all(parent).expect("Failed to create logs directory");
-    }
+    let clock = RobotClock::default();
+    let unified_logger = build_unified_logger().expect("Failed to create demo logger.");
+    let logger_runtime = init_logger_runtime(&clock, unified_logger.clone())
+        .expect("Failed to initialize Copper structured logging.");
 
-    let copper_ctx = basic_copper_setup(&logger_path, LOG_SLAB_SIZE, true, None)
-        .expect("Failed to setup logger.");
-    debug!(
-        "Logger created at {}.",
-        logger_path.to_string_lossy().into_owned()
-    );
+    #[cfg(target_arch = "wasm32")]
+    debug!("Using no-op unified logger for wasm BevyMon demo.");
+    #[cfg(not(target_arch = "wasm32"))]
+    debug!("Logger created for Copper BevyMon demo.");
+
     debug!("Creating Copper BevyMon demo application.");
 
-    let copper_app = BevyMonDemoAppBuilder::new()
-        .with_context(&copper_ctx)
-        .build()
-        .expect("Failed to create Copper runtime.");
+    let copper_app = <BevyMonDemoApp as CuApplication<DemoSectionStorage, DemoUnifiedLogger>>::new(
+        clock,
+        unified_logger,
+        None,
+    )
+    .expect("Failed to create Copper runtime.");
 
     CopperDriver {
-        _copper_ctx: copper_ctx,
+        _logger_runtime: logger_runtime,
         copper_app,
         iteration_timer: Timer::from_seconds(1.0 / COPPER_TICK_HZ, TimerMode::Repeating),
         started: false,
@@ -139,12 +148,82 @@ fn build_copper_driver() -> CopperDriver {
 }
 
 fn start_copper_runtime(mut copper: ResMut<CopperDriver>) {
-    copper
-        .copper_app
-        .start_all_tasks()
-        .expect("Failed to start Copper demo tasks.");
+    <BevyMonDemoApp as CuApplication<DemoSectionStorage, DemoUnifiedLogger>>::start_all_tasks(
+        &mut copper.copper_app,
+    )
+    .expect("Failed to start Copper demo tasks.");
     copper.started = true;
     info!("Copper BevyMon demo runtime started.");
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn primary_window() -> Window {
+    Window {
+        title: "Copper BevyMon Demo".into(),
+        resolution: (1600, 900).into(),
+        ..default()
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn primary_window() -> Window {
+    Window {
+        title: "Copper BevyMon Demo".into(),
+        resolution: (1600, 900).into(),
+        canvas: Some("#bevy".into()),
+        fit_canvas_to_parent: true,
+        ..default()
+    }
+}
+
+fn init_logger_runtime(
+    clock: &RobotClock,
+    unified_logger: Arc<Mutex<DemoUnifiedLogger>>,
+) -> CuResult<LoggerRuntime> {
+    let structured_stream = stream_write::<CuLogEntry, DemoSectionStorage>(
+        unified_logger,
+        UnifiedLogType::StructuredLogLine,
+        STRUCTURED_LOG_SECTION_SIZE,
+    )?;
+    Ok(LoggerRuntime::init(
+        clock.clone(),
+        structured_stream,
+        None::<NullLog>,
+    ))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn build_unified_logger() -> CuResult<Arc<Mutex<DemoUnifiedLogger>>> {
+    Ok(Arc::new(Mutex::new(NoopLogger::new())))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn build_unified_logger() -> CuResult<Arc<Mutex<DemoUnifiedLogger>>> {
+    let logger_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("logs/bevymon_demo.copper");
+    if let Some(parent) = logger_path.parent()
+        && !parent.exists()
+    {
+        fs::create_dir_all(parent).expect("Failed to create logs directory");
+    }
+
+    let logger = UnifiedLoggerBuilder::new()
+        .write(true)
+        .create(true)
+        .file_base_name(&logger_path)
+        .preallocated_size(LOG_SLAB_SIZE.unwrap_or(10 * 1024 * 1024))
+        .build()
+        .map_err(|err| {
+            CuError::new_with_cause("Failed to create unified logger for BevyMon demo", err)
+        })?;
+    let logger = match logger {
+        UnifiedLogger::Write(logger) => logger,
+        UnifiedLogger::Read(_) => {
+            return Err(CuError::from(
+                "UnifiedLoggerBuilder did not create a write-capable logger",
+            ));
+        }
+    };
+    Ok(Arc::new(Mutex::new(logger)))
 }
 
 fn setup_scene(
@@ -456,7 +535,11 @@ fn run_copper_iteration(
         return;
     }
 
-    if let Err(err) = copper.copper_app.run_one_iteration() {
+    if let Err(err) =
+        <BevyMonDemoApp as CuApplication<DemoSectionStorage, DemoUnifiedLogger>>::run_one_iteration(
+            &mut copper.copper_app,
+        )
+    {
         error!(
             "Copper demo stopped after runtime error: {}",
             err.to_string()
@@ -473,10 +556,10 @@ fn stop_copper_on_exit(mut exit_events: MessageReader<AppExit>, mut copper: ResM
         }
 
         info!("Stopping Copper BevyMon demo runtime.");
-        copper
-            .copper_app
-            .stop_all_tasks()
-            .expect("Failed to stop Copper demo tasks.");
+        <BevyMonDemoApp as CuApplication<DemoSectionStorage, DemoUnifiedLogger>>::stop_all_tasks(
+            &mut copper.copper_app,
+        )
+        .expect("Failed to stop Copper demo tasks.");
         let _ = copper.copper_app.log_shutdown_completed();
         copper.started = false;
     }

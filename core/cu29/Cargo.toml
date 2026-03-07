@@ -34,7 +34,7 @@ rayon = { workspace = true, optional = true }
 ctrlc = { workspace = true, optional = true }
 
 [features]
-default = ["std", "textlogs", "units"]
+default = ["std", "signal-handler", "textlogs", "units"]
 defmt = [
   "dep:defmt",
   "cu29-log/defmt",
@@ -46,6 +46,7 @@ textlogs = ["cu29-log-derive/textlogs"]
 units = ["dep:cu29-units"]
 macro_debug = ["cu29-derive/macro_debug", "cu29-log-derive/macro_debug"]
 logviz = ["cu29-derive/logviz"]
+signal-handler = ["dep:ctrlc", "cu29-derive/signal-handler"]
 log-level-debug = ["cu29-log-derive/log-level-debug"]
 log-level-info = ["cu29-log-derive/log-level-info"]
 log-level-warning = ["cu29-log-derive/log-level-warning"]
@@ -60,7 +61,6 @@ reflect = [
 remote-debug = ["cu29-runtime/remote-debug"]
 std = [
   "rayon",
-  "ctrlc",
   "cu29-clock/std",
   "cu29-derive/std",
   "cu29-log-derive/std",

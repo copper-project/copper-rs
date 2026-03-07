@@ -12,6 +12,15 @@ repository.workspace = true
 default-run = "cu-bevymon-demo"
 
 [dependencies]
+bevy_ecs = { version = "0.18.0", default-features = false }
+cu29 = { path = "../../core/cu29", version = "0.13.0", default-features = false, features = [
+  "std",
+  "textlogs",
+] }
+bincode = { workspace = true }
+serde = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 bevy = { workspace = true, default-features = false, features = [
   "x11",
   "wayland",
@@ -24,10 +33,18 @@ bevy = { workspace = true, default-features = false, features = [
   "bevy_ui_render",
 ] }
 cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "0.13.0" }
-cu29 = { workspace = true }
-cu29-helpers = { workspace = true }
-bincode = { workspace = true }
-serde = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+bevy = { workspace = true, default-features = false, features = [
+  "default_font",
+  "bevy_render",
+  "bevy_window",
+  "bevy_core_pipeline",
+  "bevy_pbr",
+  "bevy_ui",
+  "bevy_ui_render",
+] }
+cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "0.13.0", default-features = false }
 
 [[bin]]
 name = "cu-bevymon-demo"

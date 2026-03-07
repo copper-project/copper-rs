@@ -99,7 +99,6 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
 
     #[cfg(not(feature = "std"))]
     let std = false;
-
     let config = parse_macro_input!(config_path_lit as LitStr).value();
     if !std::path::Path::new(&config_full_path(&config)).exists() {
         return return_error(format!(
@@ -800,6 +799,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
     #[cfg(not(feature = "std"))]
     let std = false;
+    let signal_handler = cfg!(feature = "signal-handler");
 
     let rt_guard = rtsan_guard_tokens();
 
@@ -2442,7 +2442,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! { Self::new_with_resources(clock, unified_logger, app_resources) }
         };
 
-        let kill_handler = if std {
+        let kill_handler = if std && signal_handler {
             Some(quote! {
                 ctrlc::set_handler(move || {
                     STOP_FLAG.store(true, Ordering::SeqCst);

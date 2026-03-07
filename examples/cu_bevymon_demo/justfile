@@ -1,0 +1,19 @@
+import "../../justfile"
+
+# Run the native Bevy monitor demo.
+native:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cd "{{ROOT}}"
+	cargo run -p cu-bevymon-demo
+
+# Serve the wasm demo and open it in a browser.
+web:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	if ! command -v trunk >/dev/null 2>&1; then
+		echo "Missing trunk. Install with: cargo install --locked trunk" >&2
+		exit 1
+	fi
+	cd "{{invocation_directory()}}"
+	trunk serve --open

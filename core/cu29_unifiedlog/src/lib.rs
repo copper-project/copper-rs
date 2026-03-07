@@ -5,6 +5,7 @@ extern crate core;
 
 #[cfg(feature = "std")]
 pub mod memmap;
+pub mod noop;
 
 #[cfg(feature = "std")]
 mod compat {
@@ -19,6 +20,7 @@ mod compat {
 
 #[cfg(feature = "std")]
 pub use compat::*;
+pub use noop::{NoopLogger, NoopSectionStorage};
 
 use alloc::string::ToString;
 use alloc::sync::Arc;

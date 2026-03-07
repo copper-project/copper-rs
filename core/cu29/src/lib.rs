@@ -18,9 +18,10 @@
 //!
 //! ## Feature flags
 //!
-//! - `default` = `["std", "textlogs", "units"]`
+//! - `default` = `["std", "signal-handler", "textlogs", "units"]`
 //! - `units`: exposes `cu29::units` (re-export of `cu29-units`)
-//! - `std`: host/runtime support
+//! - `std`: host/runtime support that is also safe to compile for browser targets
+//! - `signal-handler`: desktop Ctrl-C integration for generated `run()` loops
 //! - `reflect`: reflection support for runtime and units types
 //! - `textlogs`: text logging derive support
 //! - `remote-debug`: remote debug transport support
@@ -185,7 +186,7 @@ pub mod prelude {
     #[cfg(feature = "units")]
     pub use crate::units;
     pub use crate::{defmt_debug, defmt_error, defmt_info, defmt_warn};
-    #[cfg(feature = "std")]
+    #[cfg(feature = "signal-handler")]
     pub use ctrlc;
     pub use cu29_clock::*;
     pub use cu29_derive::*; // includes resources! proc macro
