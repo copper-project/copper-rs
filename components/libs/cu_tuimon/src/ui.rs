@@ -888,14 +888,14 @@ fn tab_key_hint() -> String {
         let is_contiguous = numeric_keys
             .windows(2)
             .all(|window| window[1] == window[0].saturating_add(1));
-        if is_contiguous {
-            if let (Some(first), Some(last)) = (numeric_keys.first(), numeric_keys.last()) {
-                return if first == last {
-                    first.to_string()
-                } else {
-                    format!("{first}-{last}")
-                };
-            }
+        if is_contiguous
+            && let (Some(first), Some(last)) = (numeric_keys.first(), numeric_keys.last())
+        {
+            return if first == last {
+                first.to_string()
+            } else {
+                format!("{first}-{last}")
+            };
         }
     }
 

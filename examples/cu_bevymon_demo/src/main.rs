@@ -510,10 +510,10 @@ fn drive_demo_monitor(
     model
         .0
         .record_end_to_end_latency(CuDuration::from(Duration::from_micros(
-            90 + planner.as_micros() as u64
-                + controller.as_micros() as u64
-                + viz.as_micros() as u64
-                + actuator.as_micros() as u64,
+            90 + planner.as_micros()
+                + controller.as_micros()
+                + viz.as_micros()
+                + actuator.as_micros(),
         )));
 
     model
@@ -546,7 +546,11 @@ fn drive_demo_monitor(
         raw_culist_bytes: 1_536,
         handle_bytes: 256 + (t.sin().abs() * 96.0) as u64,
         encoded_culist_bytes: 744 + (t.cos().abs() * 128.0) as u64,
-        keyframe_bytes: if copperlist_id.0 % 90 == 0 { 384 } else { 0 },
+        keyframe_bytes: if copperlist_id.0.is_multiple_of(90) {
+            384
+        } else {
+            0
+        },
         structured_log_bytes_total: copperlist_id.0.saturating_mul(320),
         culistid: copperlist_id.0,
     });
