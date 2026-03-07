@@ -1,5 +1,3 @@
-pub mod sysinfo;
-
 #[cfg(feature = "debug_pane")]
 use arboard::Clipboard;
 use color_eyre::config::HookBuilder;
@@ -75,7 +73,6 @@ impl UI {
             monitor_ui: MonitorUi::new(
                 model,
                 MonitorUiOptions {
-                    system_info: sysinfo::pfetch_info(),
                     show_quit_hint: true,
                 },
             ),

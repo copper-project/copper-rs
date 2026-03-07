@@ -2,7 +2,9 @@ use crate::MonitorModel;
 #[cfg(feature = "log_pane")]
 use crate::logpane::StyledLine;
 use crate::model::ComponentStatus;
+use crate::system_info::{SystemInfo, default_system_info};
 use crate::tui_nodes::{Connection, NodeGraph, NodeLayout};
+#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
 use ansi_to_tui::IntoText;
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
@@ -78,7 +80,6 @@ pub enum MonitorUiEvent {
 
 #[derive(Clone, Debug, Default)]
 pub struct MonitorUiOptions {
-    pub system_info: String,
     pub show_quit_hint: bool,
 }
 
@@ -194,7 +195,7 @@ pub struct MonitorUi {
     model: MonitorModel,
     runtime_node_col_width: u16,
     active_screen: MonitorScreen,
-    system_info: String,
+    system_info: SystemInfo,
     show_quit_hint: bool,
     tab_hitboxes: Vec<TabHitbox>,
     help_hitboxes: Vec<HelpHitbox>,
@@ -218,7 +219,7 @@ impl MonitorUi {
             model,
             runtime_node_col_width,
             active_screen: MonitorScreen::System,
-            system_info: options.system_info,
+            system_info: default_system_info(),
             show_quit_hint: options.show_quit_hint,
             tab_hitboxes: Vec::new(),
             help_hitboxes: Vec::new(),
@@ -245,10 +246,6 @@ impl MonitorUi {
 
     pub fn set_active_screen(&mut self, screen: MonitorScreen) {
         self.active_screen = screen;
-    }
-
-    pub fn set_system_info(&mut self, system_info: impl Into<String>) {
-        self.system_info = system_info.into();
     }
 
     pub fn handle_event(&mut self, event: MonitorUiEvent) -> MonitorUiAction {
@@ -446,8 +443,25 @@ impl MonitorUi {
 
     fn draw_system_info(&self, f: &mut Frame, area: Rect) {
         const VERSION: &str = env!("CARGO_PKG_VERSION");
-        let raw = format!("\n   -> Copper v{}\n\n{}\n\n ", VERSION, self.system_info);
-        let text: Text = raw.into_text().unwrap_or_else(|_| Text::from(raw));
+        let mut lines = vec![
+            Line::raw(""),
+            Line::raw(format!("   -> Copper v{VERSION}")),
+            Line::raw(""),
+        ];
+        let mut body = match &self.system_info {
+            #[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
+            SystemInfo::Ansi(raw) => raw
+                .clone()
+                .into_text()
+                .map(|text| text.to_owned())
+                .unwrap_or_else(|_| Text::from(raw.clone())),
+            #[cfg(all(target_family = "wasm", target_os = "unknown"))]
+            SystemInfo::Rich(text) => text.clone(),
+        };
+        normalize_reset_colors(&mut body, Color::White, Color::Black);
+        lines.append(&mut body.lines);
+        lines.push(Line::raw(" "));
+        let text = Text::from(lines);
         let paragraph = Paragraph::new(text).block(
             Block::default()
                 .title(" System Info ")
@@ -1112,6 +1126,38 @@ impl MonitorUi {
                 clid_area,
             );
         }
+    }
+}
+
+fn normalize_reset_colors(text: &mut Text<'_>, fallback_fg: Color, fallback_bg: Color) {
+    for line in &mut text.lines {
+        for span in &mut line.spans {
+            if span.style.fg == Some(Color::Reset) {
+                span.style.fg = Some(fallback_fg);
+            }
+            if span.style.bg == Some(Color::Reset) {
+                span.style.bg = Some(fallback_bg);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_reset_colors_replaces_reset_fg_and_bg() {
+        let mut text = Text::from(Line::from(vec![Span::styled(
+            "pfetch",
+            Style::default().fg(Color::Reset).bg(Color::Reset),
+        )]));
+
+        normalize_reset_colors(&mut text, Color::White, Color::Black);
+
+        let span = &text.lines[0].spans[0];
+        assert_eq!(span.style.fg, Some(Color::White));
+        assert_eq!(span.style.bg, Some(Color::Black));
     }
 }
 
