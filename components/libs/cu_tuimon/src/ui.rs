@@ -38,6 +38,28 @@ pub enum MonitorUiAction {
     QuitRequested,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MonitorUiKey {
+    Char(char),
+    Left,
+    Right,
+    Up,
+    Down,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MonitorUiEvent {
+    Key(MonitorUiKey),
+    MouseDown {
+        col: u16,
+        row: u16,
+    },
+    Scroll {
+        direction: ScrollDirection,
+        steps: usize,
+    },
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct MonitorUiOptions {
     pub system_info: String,
@@ -148,27 +170,49 @@ impl MonitorUi {
         self.system_info = system_info.into();
     }
 
-    pub fn handle_char_key(&mut self, key: char) -> MonitorUiAction {
+    pub fn handle_event(&mut self, event: MonitorUiEvent) -> MonitorUiAction {
+        match event {
+            MonitorUiEvent::Key(key) => self.handle_key(key),
+            MonitorUiEvent::MouseDown { col, row } => self.click(col, row),
+            MonitorUiEvent::Scroll { direction, steps } => {
+                self.scroll(direction, steps);
+                MonitorUiAction::None
+            }
+        }
+    }
+
+    pub fn handle_key(&mut self, key: MonitorUiKey) -> MonitorUiAction {
         match key {
-            '1' => self.active_screen = MonitorScreen::System,
-            '2' => self.active_screen = MonitorScreen::Dag,
-            '3' => self.active_screen = MonitorScreen::Latency,
-            '4' => self.active_screen = MonitorScreen::CopperList,
-            '5' => self.active_screen = MonitorScreen::MemoryPools,
-            'r' => {
-                if self.active_screen == MonitorScreen::Latency {
-                    self.model.reset_latency();
+            MonitorUiKey::Char(key) => {
+                if let Some(screen) = screen_for_tab_key(key) {
+                    self.active_screen = screen;
+                } else {
+                    match key {
+                        'r' => {
+                            if self.active_screen == MonitorScreen::Latency {
+                                self.model.reset_latency();
+                            }
+                        }
+                        'j' => self.scroll(ScrollDirection::Down, 1),
+                        'k' => self.scroll(ScrollDirection::Up, 1),
+                        'h' => self.scroll(ScrollDirection::Left, 5),
+                        'l' => self.scroll(ScrollDirection::Right, 5),
+                        'q' if self.show_quit_hint => return MonitorUiAction::QuitRequested,
+                        _ => {}
+                    }
                 }
             }
-            'j' => self.scroll(ScrollDirection::Down, 1),
-            'k' => self.scroll(ScrollDirection::Up, 1),
-            'h' => self.scroll(ScrollDirection::Left, 5),
-            'l' => self.scroll(ScrollDirection::Right, 5),
-            'q' if self.show_quit_hint => return MonitorUiAction::QuitRequested,
-            _ => {}
+            MonitorUiKey::Left => self.scroll(ScrollDirection::Left, 5),
+            MonitorUiKey::Right => self.scroll(ScrollDirection::Right, 5),
+            MonitorUiKey::Up => self.scroll(ScrollDirection::Up, 1),
+            MonitorUiKey::Down => self.scroll(ScrollDirection::Down, 1),
         }
 
         MonitorUiAction::None
+    }
+
+    pub fn handle_char_key(&mut self, key: char) -> MonitorUiAction {
+        self.handle_key(MonitorUiKey::Char(key))
     }
 
     pub fn scroll(&mut self, direction: ScrollDirection, steps: usize) {
@@ -713,18 +757,23 @@ impl MonitorUi {
         cursor_x = cursor_x.saturating_add(1);
 
         let mut segments = vec![
-            ("1-5", "Tabs", Color::Rgb(86, 114, 98), None),
+            (tab_key_hint(), "Tabs", Color::Rgb(86, 114, 98), None),
             (
-                "r",
+                "r".to_string(),
                 "Reset latency",
                 Color::Rgb(136, 92, 78),
                 Some(HelpAction::ResetLatency),
             ),
-            ("hjkl/←↑→↓", "Scroll", Color::Rgb(92, 102, 150), None),
+            (
+                "hjkl/←↑→↓".to_string(),
+                "Scroll",
+                Color::Rgb(92, 102, 150),
+                None,
+            ),
         ];
         if self.show_quit_hint {
             segments.push((
-                "q",
+                "q".to_string(),
                 "Quit",
                 Color::Rgb(124, 118, 76),
                 Some(HelpAction::Quit),
@@ -732,7 +781,7 @@ impl MonitorUi {
         }
 
         for (key, label, bg, action) in segments {
-            let segment_len = segment_width(key, label);
+            let segment_len = segment_width(&key, label);
             if let Some(action) = action {
                 self.help_hitboxes.push(HelpHitbox {
                     action,
@@ -805,6 +854,42 @@ fn point_inside(px: u16, py: u16, x: u16, y: u16, width: u16, height: u16) -> bo
 
 fn segment_width(key: &str, label: &str) -> u16 {
     (6 + key.chars().count() + label.chars().count()) as u16
+}
+
+fn screen_for_tab_key(key: char) -> Option<MonitorScreen> {
+    TAB_DEFS
+        .iter()
+        .find(|tab| tab.key.len() == 1 && tab.key.starts_with(key))
+        .map(|tab| tab.screen)
+}
+
+fn tab_key_hint() -> String {
+    let keys = TAB_DEFS.iter().map(|tab| tab.key).collect::<Vec<_>>();
+    if keys.is_empty() {
+        return "tabs".to_string();
+    }
+
+    let numeric_keys = keys
+        .iter()
+        .map(|key| key.parse::<u8>())
+        .collect::<Result<Vec<_>, _>>();
+
+    if let Ok(numeric_keys) = numeric_keys {
+        let is_contiguous = numeric_keys
+            .windows(2)
+            .all(|window| window[1] == window[0].saturating_add(1));
+        if is_contiguous {
+            if let (Some(first), Some(last)) = (numeric_keys.first(), numeric_keys.last()) {
+                return if first == last {
+                    first.to_string()
+                } else {
+                    format!("{first}-{last}")
+                };
+            }
+        }
+    }
+
+    keys.join("/")
 }
 
 fn format_bytes(bytes: f64) -> String {

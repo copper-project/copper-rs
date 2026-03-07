@@ -2,7 +2,10 @@
 mod debug_pane;
 pub mod sysinfo;
 
-pub use cu_tuimon::{MonitorModel, MonitorScreen, MonitorUi, MonitorUiOptions, ScrollDirection};
+pub use cu_tuimon::{
+    MonitorModel, MonitorScreen, MonitorUi, MonitorUiEvent, MonitorUiKey, MonitorUiOptions,
+    ScrollDirection,
+};
 
 use color_eyre::config::HookBuilder;
 use cu29::clock::CuDuration;
@@ -472,7 +475,9 @@ impl UI {
                         self.active_screen,
                         ConsoleScreen::Base(MonitorScreen::Latency)
                     ) {
-                        self.monitor_ui.handle_char_key('r');
+                        let _ = self
+                            .monitor_ui
+                            .handle_event(MonitorUiEvent::Key(MonitorUiKey::Char('r')));
                     }
                 }
                 HelpAction::Quit => {
@@ -498,13 +503,19 @@ impl UI {
                     self.active_screen,
                     ConsoleScreen::Base(MonitorScreen::Latency)
                 ) {
-                    self.monitor_ui.handle_char_key('r');
+                    let _ = self
+                        .monitor_ui
+                        .handle_event(MonitorUiEvent::Key(MonitorUiKey::Char('r')));
                 }
             }
-            KeyCode::Char('j') | KeyCode::Down => self.scroll_active_screen_down(),
-            KeyCode::Char('k') | KeyCode::Up => self.scroll_active_screen_up(),
-            KeyCode::Char('h') | KeyCode::Left => self.scroll_active_screen_left(5),
-            KeyCode::Char('l') | KeyCode::Right => self.scroll_active_screen_right(5),
+            KeyCode::Char('j') => self.handle_monitor_key(MonitorUiKey::Char('j')),
+            KeyCode::Char('k') => self.handle_monitor_key(MonitorUiKey::Char('k')),
+            KeyCode::Char('h') => self.handle_monitor_key(MonitorUiKey::Char('h')),
+            KeyCode::Char('l') => self.handle_monitor_key(MonitorUiKey::Char('l')),
+            KeyCode::Down => self.handle_monitor_key(MonitorUiKey::Down),
+            KeyCode::Up => self.handle_monitor_key(MonitorUiKey::Up),
+            KeyCode::Left => self.handle_monitor_key(MonitorUiKey::Left),
+            KeyCode::Right => self.handle_monitor_key(MonitorUiKey::Right),
             KeyCode::Char('q') => {
                 self.quitting.store(true, Ordering::SeqCst);
                 return true;
@@ -514,27 +525,9 @@ impl UI {
         false
     }
 
-    fn scroll_active_screen_down(&mut self) {
+    fn handle_monitor_key(&mut self, key: MonitorUiKey) {
         if let ConsoleScreen::Base(_) = self.active_screen {
-            self.monitor_ui.scroll(ScrollDirection::Down, 1);
-        }
-    }
-
-    fn scroll_active_screen_up(&mut self) {
-        if let ConsoleScreen::Base(_) = self.active_screen {
-            self.monitor_ui.scroll(ScrollDirection::Up, 1);
-        }
-    }
-
-    fn scroll_active_screen_right(&mut self, steps: usize) {
-        if let ConsoleScreen::Base(_) = self.active_screen {
-            self.monitor_ui.scroll(ScrollDirection::Right, steps);
-        }
-    }
-
-    fn scroll_active_screen_left(&mut self, steps: usize) {
-        if let ConsoleScreen::Base(_) = self.active_screen {
-            self.monitor_ui.scroll(ScrollDirection::Left, steps);
+            let _ = self.monitor_ui.handle_event(MonitorUiEvent::Key(key));
         }
     }
 
@@ -546,10 +539,30 @@ impl UI {
             return;
         }
         match mouse.kind {
-            MouseEventKind::ScrollDown => self.scroll_active_screen_down(),
-            MouseEventKind::ScrollUp => self.scroll_active_screen_up(),
-            MouseEventKind::ScrollRight => self.scroll_active_screen_right(5),
-            MouseEventKind::ScrollLeft => self.scroll_active_screen_left(5),
+            MouseEventKind::ScrollDown => {
+                let _ = self.monitor_ui.handle_event(MonitorUiEvent::Scroll {
+                    direction: ScrollDirection::Down,
+                    steps: 1,
+                });
+            }
+            MouseEventKind::ScrollUp => {
+                let _ = self.monitor_ui.handle_event(MonitorUiEvent::Scroll {
+                    direction: ScrollDirection::Up,
+                    steps: 1,
+                });
+            }
+            MouseEventKind::ScrollRight => {
+                let _ = self.monitor_ui.handle_event(MonitorUiEvent::Scroll {
+                    direction: ScrollDirection::Right,
+                    steps: 5,
+                });
+            }
+            MouseEventKind::ScrollLeft => {
+                let _ = self.monitor_ui.handle_event(MonitorUiEvent::Scroll {
+                    direction: ScrollDirection::Left,
+                    steps: 5,
+                });
+            }
             _ => {}
         }
     }

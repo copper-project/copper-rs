@@ -1,9 +1,8 @@
-use bevy::camera::Viewport;
 use bevy::prelude::*;
-use bevy::window::PrimaryWindow;
 use cu_bevymon::{
-    CuBevyMonModel, CuBevyMonPanel, CuBevyMonPlugin, CuBevyMonTexture, MonitorModel,
-    MonitorUiOptions,
+    CuBevyMonFocus, CuBevyMonFocusBorder, CuBevyMonModel, CuBevyMonPanel, CuBevyMonPlugin,
+    CuBevyMonSurface, CuBevyMonSurfaceNode, CuBevyMonTexture, CuBevyMonViewportSurface,
+    MonitorModel, MonitorUiOptions,
 };
 use cu29::clock::CuDuration;
 use cu29::monitoring::{
@@ -12,7 +11,11 @@ use cu29::monitoring::{
 };
 use std::time::Duration;
 
-const MONITOR_PANEL_RATIO: f32 = 0.38;
+const SIM_PANEL_PERCENT: f32 = 62.0;
+const MONITOR_PANEL_PERCENT: f32 = 38.0;
+const CUBE_MOVE_SPEED: f32 = 3.6;
+const CAMERA_ORBIT_SPEED: f32 = 1.7;
+const CAMERA_ZOOM_SPEED: f32 = 0.65;
 
 const COMPONENTS: &[MonitorComponentMetadata] = &[
     MonitorComponentMetadata::new("clock", ComponentType::Source, Some("demo::ClockSource")),
@@ -32,11 +35,34 @@ struct SimCamera;
 #[derive(Component)]
 struct OrbitingCube;
 
+#[derive(Component)]
+struct AccentRing;
+
+#[derive(Component)]
+struct DemoHudText;
+
 #[derive(Resource, Default)]
 struct LayoutSpawned(bool);
 
 #[derive(Resource, Default)]
 struct DemoCopperListId(u64);
+
+#[derive(Resource)]
+struct DemoCameraRig {
+    yaw: f32,
+    pitch: f32,
+    distance: f32,
+}
+
+impl Default for DemoCameraRig {
+    fn default() -> Self {
+        Self {
+            yaw: 0.95,
+            pitch: -0.32,
+            distance: 8.6,
+        }
+    }
+}
 
 fn main() {
     let model = MonitorModel::from_parts(
@@ -55,23 +81,29 @@ fn main() {
             ..default()
         }))
         .add_plugins(
-            CuBevyMonPlugin::new(model).with_options(MonitorUiOptions {
-                system_info:
-                    "Windowed Ratatui backend via bevy_ratatui\nSplit-view Bevy monitor demo"
-                        .to_string(),
-                show_quit_hint: false,
-            }),
+            CuBevyMonPlugin::new(model)
+                .with_initial_focus(CuBevyMonSurface::Sim)
+                .with_options(MonitorUiOptions {
+                    system_info:
+                        "Windowed Ratatui backend via bevy_ratatui\nClick a panel to move focus"
+                            .to_string(),
+                    show_quit_hint: false,
+                }),
         )
         .insert_resource(ClearColor(Color::srgb(0.04, 0.05, 0.07)))
         .init_resource::<LayoutSpawned>()
         .init_resource::<DemoCopperListId>()
+        .init_resource::<DemoCameraRig>()
         .add_systems(Startup, setup_scene)
         .add_systems(
             Update,
             (
-                spawn_monitor_panel,
-                update_sim_viewport,
+                spawn_demo_layout,
+                drive_sim_controls,
+                handle_sim_zoom,
+                sync_demo_camera,
                 animate_scene,
+                update_demo_hud,
                 drive_demo_monitor,
             ),
         )
@@ -158,49 +190,59 @@ fn setup_scene(
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(5.0, 4.0, 8.0).looking_at(Vec3::ZERO, Vec3::Y),
+        CuBevyMonViewportSurface(CuBevyMonSurface::Sim),
         SimCamera,
     ));
     commands.spawn((Camera2d, IsDefaultUiCamera));
 
     commands.insert_resource(GlobalAmbientLight {
         color: Color::WHITE,
-        brightness: 350.0,
+        brightness: 320.0,
         affects_lightmapped_meshes: true,
     });
 
     commands.spawn((
         DirectionalLight {
-            illuminance: 15_000.0,
+            illuminance: 16_000.0,
             shadows_enabled: true,
             ..default()
         },
-        Transform::from_xyz(6.0, 10.0, 8.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(8.0, 10.0, 6.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(16.0, 16.0))),
+        Mesh3d(meshes.add(Plane3d::default().mesh().size(18.0, 18.0))),
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.10, 0.12, 0.16),
-            perceptual_roughness: 0.96,
+            base_color: Color::srgb(0.12, 0.13, 0.17),
+            perceptual_roughness: 0.95,
             ..default()
         })),
     ));
 
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(1.2, 1.2, 1.2))),
-        MeshMaterial3d(materials.add(Color::srgb(0.93, 0.46, 0.20))),
+        Mesh3d(meshes.add(Cuboid::new(1.25, 1.25, 1.25))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgb(0.93, 0.55, 0.27),
+            perceptual_roughness: 0.68,
+            ..default()
+        })),
         Transform::from_xyz(0.0, 1.0, 0.0),
         OrbitingCube,
     ));
 
     commands.spawn((
-        Mesh3d(meshes.add(Torus::new(1.8, 0.08))),
-        MeshMaterial3d(materials.add(Color::srgb(0.16, 0.55, 0.76))),
+        Mesh3d(meshes.add(Torus::new(1.9, 0.08))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgb(0.20, 0.66, 0.86),
+            emissive: LinearRgba::new(0.03, 0.08, 0.14, 0.0),
+            ..default()
+        })),
         Transform::from_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+        AccentRing,
     ));
 }
 
-fn spawn_monitor_panel(
+fn spawn_demo_layout(
     mut commands: Commands,
     texture: Option<Res<CuBevyMonTexture>>,
     mut spawned: ResMut<LayoutSpawned>,
@@ -217,7 +259,8 @@ fn spawn_monitor_panel(
             Node {
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
-                justify_content: JustifyContent::FlexEnd,
+                padding: UiRect::all(Val::Px(12.0)),
+                column_gap: Val::Px(12.0),
                 ..default()
             },
             BackgroundColor(Color::NONE),
@@ -226,14 +269,57 @@ fn spawn_monitor_panel(
             parent
                 .spawn((
                     Node {
-                        width: Val::Percent(MONITOR_PANEL_RATIO * 100.0),
+                        width: Val::Percent(SIM_PANEL_PERCENT),
                         height: Val::Percent(100.0),
-                        padding: UiRect::all(Val::Px(14.0)),
-                        border: UiRect::left(Val::Px(2.0)),
+                        position_type: PositionType::Relative,
+                        border: UiRect::all(Val::Px(1.0)),
                         ..default()
                     },
-                    BackgroundColor(Color::srgba(0.05, 0.06, 0.08, 0.97)),
+                    BackgroundColor(Color::NONE),
                     BorderColor::all(Color::srgb(0.24, 0.29, 0.35)),
+                    CuBevyMonSurfaceNode(CuBevyMonSurface::Sim),
+                    CuBevyMonFocusBorder::new(CuBevyMonSurface::Sim),
+                ))
+                .with_children(|panel| {
+                    panel
+                        .spawn((
+                            Node {
+                                position_type: PositionType::Absolute,
+                                left: Val::Px(18.0),
+                                top: Val::Px(18.0),
+                                padding: UiRect::axes(Val::Px(14.0), Val::Px(10.0)),
+                                max_width: Val::Px(330.0),
+                                border: UiRect::all(Val::Px(1.0)),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgba(0.05, 0.07, 0.10, 0.82)),
+                            BorderColor::all(Color::srgba(0.35, 0.42, 0.49, 0.92)),
+                        ))
+                        .with_children(|card| {
+                            card.spawn((
+                                DemoHudText,
+                                Text::new(""),
+                                TextFont {
+                                    font_size: 14.0,
+                                    ..default()
+                                },
+                                TextColor(Color::WHITE),
+                            ));
+                        });
+                });
+
+            parent
+                .spawn((
+                    Node {
+                        width: Val::Percent(MONITOR_PANEL_PERCENT),
+                        height: Val::Percent(100.0),
+                        border: UiRect::all(Val::Px(1.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(0.04, 0.05, 0.08, 0.98)),
+                    BorderColor::all(Color::srgb(0.24, 0.29, 0.35)),
+                    CuBevyMonSurfaceNode(CuBevyMonSurface::Monitor),
+                    CuBevyMonFocusBorder::new(CuBevyMonSurface::Monitor),
                 ))
                 .with_children(|panel| {
                     panel.spawn((
@@ -243,6 +329,7 @@ fn spawn_monitor_panel(
                             height: Val::Percent(100.0),
                             ..default()
                         },
+                        BackgroundColor(Color::BLACK),
                         CuBevyMonPanel,
                     ));
                 });
@@ -251,33 +338,131 @@ fn spawn_monitor_panel(
     spawned.0 = true;
 }
 
-fn update_sim_viewport(
-    window: Single<&Window, With<PrimaryWindow>>,
-    mut cameras: Query<&mut Camera, With<SimCamera>>,
+fn drive_sim_controls(
+    time: Res<Time>,
+    focus: Res<CuBevyMonFocus>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut rig: ResMut<DemoCameraRig>,
+    mut cubes: Query<&mut Transform, With<OrbitingCube>>,
 ) {
-    let viewport_width = ((1.0 - MONITOR_PANEL_RATIO) * window.physical_width() as f32)
-        .round()
-        .max(1.0) as u32;
-    let viewport_height = window.physical_height();
-    let viewport = Some(Viewport {
-        physical_position: UVec2::ZERO,
-        physical_size: UVec2::new(viewport_width, viewport_height),
-        ..default()
-    });
+    if focus.0 != CuBevyMonSurface::Sim {
+        return;
+    }
 
-    for mut camera in &mut cameras {
-        camera.viewport = viewport.clone();
+    let mut translation = Vec3::ZERO;
+    if keys.pressed(KeyCode::KeyW) {
+        translation.z -= 1.0;
+    }
+    if keys.pressed(KeyCode::KeyS) {
+        translation.z += 1.0;
+    }
+    if keys.pressed(KeyCode::KeyA) {
+        translation.x -= 1.0;
+    }
+    if keys.pressed(KeyCode::KeyD) {
+        translation.x += 1.0;
+    }
+    if keys.pressed(KeyCode::KeyQ) {
+        translation.y += 1.0;
+    }
+    if keys.pressed(KeyCode::KeyE) {
+        translation.y -= 1.0;
+    }
+
+    let delta = time.delta_secs();
+    for mut cube in &mut cubes {
+        if translation.length_squared() > 0.0 {
+            cube.translation += translation.normalize() * CUBE_MOVE_SPEED * delta;
+            cube.translation.x = cube.translation.x.clamp(-5.0, 5.0);
+            cube.translation.y = cube.translation.y.clamp(0.7, 3.0);
+            cube.translation.z = cube.translation.z.clamp(-5.0, 5.0);
+        }
+    }
+
+    if keys.pressed(KeyCode::ArrowLeft) || keys.pressed(KeyCode::KeyH) {
+        rig.yaw += CAMERA_ORBIT_SPEED * delta;
+    }
+    if keys.pressed(KeyCode::ArrowRight) {
+        rig.yaw -= CAMERA_ORBIT_SPEED * delta;
+    }
+    if keys.pressed(KeyCode::ArrowUp) {
+        rig.pitch = (rig.pitch + CAMERA_ORBIT_SPEED * 0.7 * delta).clamp(-1.1, 0.3);
+    }
+    if keys.pressed(KeyCode::ArrowDown) {
+        rig.pitch = (rig.pitch - CAMERA_ORBIT_SPEED * 0.7 * delta).clamp(-1.1, 0.3);
     }
 }
 
-fn animate_scene(time: Res<Time>, mut cubes: Query<&mut Transform, With<OrbitingCube>>) {
-    let t = time.elapsed_secs();
-    for mut transform in &mut cubes {
-        transform.translation.x = t.cos() * 2.2;
-        transform.translation.z = t.sin() * 1.4;
-        transform.translation.y = 1.0 + (t * 1.6).sin() * 0.25;
-        transform.rotate_y(time.delta_secs() * 1.7);
-        transform.rotate_x(time.delta_secs() * 0.9);
+fn handle_sim_zoom(
+    focus: Res<CuBevyMonFocus>,
+    mut wheel_events: MessageReader<bevy::input::mouse::MouseWheel>,
+    mut rig: ResMut<DemoCameraRig>,
+) {
+    if focus.0 != CuBevyMonSurface::Sim {
+        return;
+    }
+
+    for event in wheel_events.read() {
+        rig.distance = (rig.distance - event.y * CAMERA_ZOOM_SPEED).clamp(4.0, 16.0);
+    }
+}
+
+fn sync_demo_camera(
+    rig: Res<DemoCameraRig>,
+    cubes: Query<&Transform, With<OrbitingCube>>,
+    mut cameras: Query<&mut Transform, (With<SimCamera>, Without<OrbitingCube>)>,
+) {
+    let Some(target_transform) = cubes.iter().next() else {
+        return;
+    };
+    let target = target_transform.translation + Vec3::new(0.0, 0.45, 0.0);
+    let flat = rig.distance * rig.pitch.cos();
+    let offset = Vec3::new(
+        flat * rig.yaw.cos(),
+        rig.distance * rig.pitch.sin(),
+        flat * rig.yaw.sin(),
+    );
+
+    for mut camera in &mut cameras {
+        camera.translation = target + offset;
+        camera.look_at(target, Vec3::Y);
+    }
+}
+
+fn animate_scene(
+    time: Res<Time>,
+    mut cubes: Query<&mut Transform, With<OrbitingCube>>,
+    mut rings: Query<&mut Transform, (With<AccentRing>, Without<OrbitingCube>)>,
+) {
+    for mut cube in &mut cubes {
+        cube.rotate_y(time.delta_secs() * 1.5);
+        cube.rotate_x(time.delta_secs() * 0.55);
+    }
+
+    for mut ring in &mut rings {
+        ring.rotate_z(time.delta_secs() * 0.4);
+        ring.rotate_y(time.delta_secs() * 0.85);
+    }
+}
+
+fn update_demo_hud(focus: Res<CuBevyMonFocus>, mut texts: Query<&mut Text, With<DemoHudText>>) {
+    let (focus_label, footer) = match focus.0 {
+        CuBevyMonSurface::Sim => (
+            "SIM",
+            "WASD move cube, Q/E raise or lower it.\nArrow keys orbit camera, wheel zooms, and H also yaws left.\nClick the monitor to hand input to cu_tuimon and prove that H switches back to TUI scroll.",
+        ),
+        CuBevyMonSurface::Monitor => (
+            "MONITOR",
+            "The right panel owns keyboard and mouse now.\nUse the normal cu_tuimon clicks, tabs, scrolling, and keys.\nClick back into the sim to recover controls.",
+        ),
+    };
+
+    let text = format!(
+        "Focus: {focus_label}\n\nThis is the reusable side-by-side layout path.\nBoth panels stay visible; only input focus moves.\n\n{footer}"
+    );
+
+    for mut ui_text in &mut texts {
+        *ui_text = Text::new(text.clone());
     }
 }
 

@@ -1,8 +1,14 @@
+mod focus;
+mod viewport;
+
 use bevy::asset::RenderAssetUsages;
+use bevy::input::mouse::MouseWheel;
+use bevy::input::{ButtonState, keyboard::KeyboardInput};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+use bevy::window::PrimaryWindow;
 use bevy_ratatui::RatatuiContext;
-use cu_tuimon::MonitorUi;
+use cu_tuimon::{MonitorUi, MonitorUiAction, MonitorUiEvent, MonitorUiKey};
 use cu29::context::CuContext;
 use cu29::monitoring::{
     ComponentId, CopperListIoStats, CopperListView, CuComponentState, CuMonitor,
@@ -11,6 +17,8 @@ use cu29::monitoring::{
 use cu29::{CuError, CuResult};
 
 pub use cu_tuimon::{MonitorModel, MonitorScreen, MonitorUiOptions, ScrollDirection};
+pub use focus::{CuBevyMonFocus, CuBevyMonFocusBorder, CuBevyMonSurface, CuBevyMonSurfaceNode};
+pub use viewport::CuBevyMonViewportSurface;
 
 pub struct CuBevyMon {
     model: MonitorModel,
@@ -76,6 +84,7 @@ pub struct CuBevyMonPanel;
 pub struct CuBevyMonPlugin {
     model: MonitorModel,
     options: MonitorUiOptions,
+    initial_focus: CuBevyMonSurface,
 }
 
 impl CuBevyMonPlugin {
@@ -83,11 +92,17 @@ impl CuBevyMonPlugin {
         Self {
             model,
             options: MonitorUiOptions::default(),
+            initial_focus: CuBevyMonSurface::Monitor,
         }
     }
 
     pub fn with_options(mut self, options: MonitorUiOptions) -> Self {
         self.options = options;
+        self
+    }
+
+    pub fn with_initial_focus(mut self, initial_focus: CuBevyMonSurface) -> Self {
+        self.initial_focus = initial_focus;
         self
     }
 }
@@ -100,9 +115,27 @@ impl Plugin for CuBevyMonPlugin {
                 self.model.clone(),
                 self.options.clone(),
             )))
+            .insert_resource(CuBevyMonFocus(self.initial_focus))
             .add_systems(PostStartup, setup_terminal_texture)
-            .add_systems(Update, (draw_bevymon, render_terminal_to_handle))
-            .add_systems(PostUpdate, resize_terminal_to_panel);
+            .add_systems(
+                Update,
+                (
+                    focus::update_surface_focus_from_click,
+                    handle_monitor_pointer_input.after(focus::update_surface_focus_from_click),
+                    handle_monitor_scroll_input,
+                    handle_monitor_keyboard_input,
+                    focus::update_surface_focus_borders,
+                    draw_bevymon,
+                    render_terminal_to_handle,
+                ),
+            )
+            .add_systems(
+                PostUpdate,
+                (
+                    resize_terminal_to_panel,
+                    viewport::sync_camera_viewports_to_surfaces,
+                ),
+            );
     }
 }
 
@@ -167,7 +200,7 @@ fn render_terminal_to_handle(
     }
 
     let data_in = context.backend().get_pixmap_data();
-    let data_out = image.data.as_mut().expect("Image data missing");
+    let data_out = image.data.as_mut().expect("image data missing");
     let (pixels_in, _) = data_in.as_chunks::<3>();
     let (pixels_out, _) = data_out.as_chunks_mut::<4>();
     for idx in 0..(width * height) as usize {
@@ -176,6 +209,100 @@ fn render_terminal_to_handle(
         px_out[0] = px_in[0];
         px_out[1] = px_in[1];
         px_out[2] = px_in[2];
+    }
+}
+
+fn handle_monitor_pointer_input(
+    window: Single<&Window, With<PrimaryWindow>>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
+    context: Res<RatatuiContext>,
+    mut ui_state: ResMut<CuBevyMonUiState>,
+    panels: Query<(&ComputedNode, &bevy::ui::UiGlobalTransform), With<CuBevyMonPanel>>,
+) {
+    if !mouse_buttons.just_pressed(MouseButton::Left) {
+        return;
+    }
+
+    let Some((node, transform)) = panels.iter().next() else {
+        return;
+    };
+    let Some(local_point) = focus::local_cursor_position(&window, node, transform) else {
+        return;
+    };
+
+    let char_width = context.backend().char_width.max(1) as f32;
+    let char_height = context.backend().char_height.max(1) as f32;
+    let col = (local_point.x / char_width).floor().max(0.0) as u16;
+    let row = (local_point.y / char_height).floor().max(0.0) as u16;
+    let _ = ui_state
+        .0
+        .handle_event(MonitorUiEvent::MouseDown { col, row });
+}
+
+fn handle_monitor_scroll_input(
+    focus: Res<CuBevyMonFocus>,
+    mut wheel_events: MessageReader<MouseWheel>,
+    mut ui_state: ResMut<CuBevyMonUiState>,
+) {
+    if focus.0 != CuBevyMonSurface::Monitor {
+        return;
+    }
+
+    for event in wheel_events.read() {
+        if event.y > 0.0 {
+            let _ = ui_state.0.handle_event(MonitorUiEvent::Scroll {
+                direction: ScrollDirection::Up,
+                steps: 1,
+            });
+        } else if event.y < 0.0 {
+            let _ = ui_state.0.handle_event(MonitorUiEvent::Scroll {
+                direction: ScrollDirection::Down,
+                steps: 1,
+            });
+        }
+
+        if event.x > 0.0 {
+            let _ = ui_state.0.handle_event(MonitorUiEvent::Scroll {
+                direction: ScrollDirection::Right,
+                steps: 5,
+            });
+        } else if event.x < 0.0 {
+            let _ = ui_state.0.handle_event(MonitorUiEvent::Scroll {
+                direction: ScrollDirection::Left,
+                steps: 5,
+            });
+        }
+    }
+}
+
+fn handle_monitor_keyboard_input(
+    focus: Res<CuBevyMonFocus>,
+    mut keyboard_inputs: MessageReader<KeyboardInput>,
+    mut exit: MessageWriter<AppExit>,
+    mut ui_state: ResMut<CuBevyMonUiState>,
+) {
+    if focus.0 != CuBevyMonSurface::Monitor {
+        return;
+    }
+
+    for event in keyboard_inputs.read() {
+        if event.state != ButtonState::Pressed {
+            continue;
+        }
+
+        if let Some(key) = monitor_navigation_key(event.key_code) {
+            dispatch_monitor_event(&mut ui_state.0, &mut exit, MonitorUiEvent::Key(key));
+        }
+
+        if let Some(text) = &event.text {
+            for ch in text.chars().filter(|ch| !ch.is_control()) {
+                dispatch_monitor_event(
+                    &mut ui_state.0,
+                    &mut exit,
+                    MonitorUiEvent::Key(MonitorUiKey::Char(ch.to_ascii_lowercase())),
+                );
+            }
+        }
     }
 }
 
@@ -196,4 +323,24 @@ fn resize_terminal_to_panel(
     let cols = (size.x / char_width).floor().max(1.0) as u16;
     let rows = (size.y / char_height).floor().max(1.0) as u16;
     context.backend_mut().resize(cols, rows);
+}
+
+fn dispatch_monitor_event(
+    ui_state: &mut MonitorUi,
+    exit: &mut MessageWriter<AppExit>,
+    event: MonitorUiEvent,
+) {
+    if ui_state.handle_event(event) == MonitorUiAction::QuitRequested {
+        exit.write(AppExit::Success);
+    }
+}
+
+fn monitor_navigation_key(key_code: KeyCode) -> Option<MonitorUiKey> {
+    match key_code {
+        KeyCode::ArrowLeft => Some(MonitorUiKey::Left),
+        KeyCode::ArrowRight => Some(MonitorUiKey::Right),
+        KeyCode::ArrowUp => Some(MonitorUiKey::Up),
+        KeyCode::ArrowDown => Some(MonitorUiKey::Down),
+        _ => None,
+    }
 }
