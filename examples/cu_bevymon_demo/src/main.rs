@@ -13,6 +13,7 @@ use std::time::Duration;
 
 const SIM_PANEL_PERCENT: f32 = 62.0;
 const MONITOR_PANEL_PERCENT: f32 = 38.0;
+const MONITOR_PANEL_INSET_PX: f32 = 4.0;
 const CUBE_MOVE_SPEED: f32 = 3.6;
 const CAMERA_ORBIT_SPEED: f32 = 1.7;
 const CAMERA_ZOOM_SPEED: f32 = 0.65;
@@ -325,6 +326,7 @@ fn spawn_demo_layout(
                         width: Val::Percent(MONITOR_PANEL_PERCENT),
                         height: Val::Percent(100.0),
                         border: UiRect::all(Val::Px(1.0)),
+                        padding: UiRect::all(Val::Px(MONITOR_PANEL_INSET_PX)),
                         ..default()
                     },
                     BackgroundColor(Color::srgba(0.04, 0.05, 0.08, 0.98)),
