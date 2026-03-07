@@ -16,20 +16,20 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 rustc-hash = "2.1"
 ratatui-core = { version = "0.1.0", default-features = false }
-embedded-graphics = {version = "0.8.1",optional = true}
+embedded-graphics = { version = "0.8.1", optional = true }
 
-embedded-graphics-unicodefonts = {version = "0.2.0",optional = true}
+embedded-graphics-unicodefonts = { version = "0.2.0", optional = true }
 cosmic-text = { version = "0.14.2", optional = true }
-copper-bdf-parser = {  version = "0.1.1", optional = true }
+copper-bdf-parser = { version = "0.1.1", optional = true }
 embedded-ttf = { version = "0.2.2", optional = true }
 rusttype = { version = "0.9.3", optional = true }
 [features]
-default = ["unicodefonts",]
-unicodefonts = ["embedded-graphics","dep:embedded-graphics-unicodefonts"]
+default = ["unicodefonts"]
+unicodefonts = ["embedded-graphics", "dep:embedded-graphics-unicodefonts"]
 embedded-graphics = ["dep:embedded-graphics"]
 cosmic-text = ["dep:cosmic-text"]
 bdf-parser = ["dep:copper-bdf-parser"]
-embedded-ttf = ["dep:embedded-graphics","dep:embedded-ttf","dep:rusttype"]
+embedded-ttf = ["dep:embedded-graphics", "dep:embedded-ttf", "dep:rusttype"]
 
 #cosmic-text = ["dep:bdf-parser"]
 
