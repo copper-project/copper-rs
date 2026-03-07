@@ -2,10 +2,13 @@
 
 `cu_bevymon` is a Copper monitor frontend that renders the shared TUI monitor UI inside Bevy using `bevy_ratatui`.
 
+By default, the Bevy windowed monitor uses bundled JetBrains Mono Nerd Font Mono TTF files so the Bevy rendering is much closer to the console monitor than the stock `mono_8x13` backend.
+
 It provides:
 
 - `CuBevyMon`: a `CuMonitor` implementation backed by the shared monitor model
 - `CuBevyMonPlugin`: a Bevy plugin that draws the monitor into a Bevy texture
+- `CuBevyMonFontOptions`: font sizing for the bundled windowed TUI renderer
 - `CuBevyMonTexture` and `CuBevyMonPanel`: the Bevy-backed monitor render surface
 - `CuBevyMonSurfaceNode`, `CuBevyMonFocus`, and `CuBevyMonFocusBorder`: helpers for click-to-focus split layouts
 - `CuBevyMonViewportSurface`: a camera helper for syncing a 3D viewport to a Bevy UI panel
@@ -88,3 +91,11 @@ Input model:
 - logical panel focus is tracked by `CuBevyMonFocus`
 - `cu_bevymon` translates Bevy events into backend-neutral `cu_tuimon::MonitorUiEvent`
 - monitor bindings live in `cu_tuimon`, not in the Bevy adapter
+
+Font behavior:
+
+- the default bundled font set is JetBrains Mono Nerd Font Mono Light / SemiBold / LightItalic
+- use `CuBevyMonPlugin::with_font_size(...)` or `CuBevyMonPlugin::with_font_options(...)` to tune the Bevy-side font size
+- the bundled font bytes live under `assets/fonts/`
+- this improves glyph coverage for the powerline tabs, symbols, arrows, and box drawing used by `cu_tuimon`
+- OpenType feature selection like Kitty's `+zero` flag is not currently exposed through this backend

@@ -1,4 +1,5 @@
 mod focus;
+mod terminal;
 mod viewport;
 
 use bevy::asset::RenderAssetUsages;
@@ -7,7 +8,6 @@ use bevy::input::{ButtonState, keyboard::KeyboardInput};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::window::PrimaryWindow;
-use bevy_ratatui::RatatuiContext;
 use cu_tuimon::{MonitorUi, MonitorUiAction, MonitorUiEvent, MonitorUiKey};
 use cu29::context::CuContext;
 use cu29::monitoring::{
@@ -18,6 +18,8 @@ use cu29::{CuError, CuResult};
 
 pub use cu_tuimon::{MonitorModel, MonitorScreen, MonitorUiOptions, ScrollDirection};
 pub use focus::{CuBevyMonFocus, CuBevyMonFocusBorder, CuBevyMonSurface, CuBevyMonSurfaceNode};
+pub use terminal::CuBevyMonFontOptions;
+use terminal::CuBevyMonTerminal;
 pub use viewport::CuBevyMonViewportSurface;
 
 pub struct CuBevyMon {
@@ -84,6 +86,7 @@ pub struct CuBevyMonPanel;
 pub struct CuBevyMonPlugin {
     model: MonitorModel,
     options: MonitorUiOptions,
+    font_options: CuBevyMonFontOptions,
     initial_focus: CuBevyMonSurface,
 }
 
@@ -92,6 +95,7 @@ impl CuBevyMonPlugin {
         Self {
             model,
             options: MonitorUiOptions::default(),
+            font_options: CuBevyMonFontOptions::default(),
             initial_focus: CuBevyMonSurface::Monitor,
         }
     }
@@ -105,17 +109,28 @@ impl CuBevyMonPlugin {
         self.initial_focus = initial_focus;
         self
     }
+
+    pub fn with_font_options(mut self, font_options: CuBevyMonFontOptions) -> Self {
+        self.font_options = font_options;
+        self
+    }
+
+    pub fn with_font_size(mut self, size_px: u32) -> Self {
+        self.font_options = CuBevyMonFontOptions::new(size_px);
+        self
+    }
 }
 
 impl Plugin for CuBevyMonPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(bevy_ratatui::context::ContextPlugin)
-            .insert_resource(CuBevyMonModel(self.model.clone()))
+        app.insert_resource(CuBevyMonModel(self.model.clone()))
             .insert_resource(CuBevyMonUiState(MonitorUi::new(
                 self.model.clone(),
                 self.options.clone(),
             )))
+            .insert_resource(self.font_options.clone())
             .insert_resource(CuBevyMonFocus(self.initial_focus))
+            .add_systems(Startup, setup_terminal_context)
             .add_systems(PostStartup, setup_terminal_texture)
             .add_systems(
                 Update,
@@ -139,9 +154,17 @@ impl Plugin for CuBevyMonPlugin {
     }
 }
 
+fn setup_terminal_context(
+    mut commands: Commands,
+    font_options: Res<CuBevyMonFontOptions>,
+) -> Result {
+    commands.insert_resource(CuBevyMonTerminal::from_options(&font_options)?);
+    Ok(())
+}
+
 fn setup_terminal_texture(
     mut commands: Commands,
-    context: ResMut<RatatuiContext>,
+    context: ResMut<CuBevyMonTerminal>,
     mut images: ResMut<Assets<Image>>,
 ) -> Result {
     let width = context.backend().get_pixmap_width() as u32;
@@ -165,7 +188,7 @@ fn setup_terminal_texture(
 }
 
 fn draw_bevymon(
-    mut context: ResMut<RatatuiContext>,
+    mut context: ResMut<CuBevyMonTerminal>,
     mut ui_state: ResMut<CuBevyMonUiState>,
 ) -> Result {
     context.draw(|frame| {
@@ -175,7 +198,7 @@ fn draw_bevymon(
 }
 
 fn render_terminal_to_handle(
-    context: ResMut<RatatuiContext>,
+    context: ResMut<CuBevyMonTerminal>,
     texture: Option<Res<CuBevyMonTexture>>,
     mut images: ResMut<Assets<Image>>,
 ) {
@@ -215,7 +238,7 @@ fn render_terminal_to_handle(
 fn handle_monitor_pointer_input(
     window: Single<&Window, With<PrimaryWindow>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
-    context: Res<RatatuiContext>,
+    context: Res<CuBevyMonTerminal>,
     mut ui_state: ResMut<CuBevyMonUiState>,
     panels: Query<(&ComputedNode, &bevy::ui::UiGlobalTransform), With<CuBevyMonPanel>>,
 ) {
@@ -307,7 +330,7 @@ fn handle_monitor_keyboard_input(
 }
 
 fn resize_terminal_to_panel(
-    mut context: ResMut<RatatuiContext>,
+    mut context: ResMut<CuBevyMonTerminal>,
     panels: Query<&ComputedNode, With<CuBevyMonPanel>>,
 ) {
     let Some(panel) = panels.iter().next() else {
