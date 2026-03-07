@@ -1,6 +1,7 @@
 #[cfg(feature = "log_pane")]
 mod logpane;
 mod model;
+mod system_info;
 mod tui_nodes;
 mod ui;
 

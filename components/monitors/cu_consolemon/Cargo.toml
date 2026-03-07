@@ -20,10 +20,6 @@ cu29 = { workspace = true }
 cu-tuimon = { path = "../../libs/cu_tuimon", version = "0.13.0", default-features = false }
 compact_str = { workspace = true }
 ratatui = "0.30"
-pfetch-logo-parser = "0.1.1"
-pfetch = "2.11.1"
-dotenvy = "0.15.7"
-libmacchina = "8.1.0"
 ansi-to-tui = { version = "8.0.0", default-features = false }
 tui-widgets = "0.7.0"
 color-eyre = { version = "0.6.4", default-features = false }

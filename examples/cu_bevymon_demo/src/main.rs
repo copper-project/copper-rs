@@ -92,9 +92,6 @@ fn main() {
             CuBevyMonPlugin::new(monitor_model)
                 .with_initial_focus(CuBevyMonSurface::Sim)
                 .with_options(MonitorUiOptions {
-                    system_info:
-                        "Real Copper runtime via #[copper_runtime]\nClick a panel to move focus"
-                            .to_string(),
                     show_quit_hint: false,
                 }),
         )
