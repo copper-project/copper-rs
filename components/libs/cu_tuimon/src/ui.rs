@@ -1,4 +1,6 @@
 use crate::MonitorModel;
+#[cfg(feature = "log_pane")]
+use crate::logpane::StyledLine;
 use crate::model::ComponentStatus;
 use crate::tui_nodes::{Connection, NodeGraph, NodeLayout};
 use ansi_to_tui::IntoText;
@@ -22,6 +24,8 @@ pub enum MonitorScreen {
     Latency,
     CopperList,
     MemoryPools,
+    #[cfg(feature = "log_pane")]
+    Logs,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -32,10 +36,12 @@ pub enum ScrollDirection {
     Right,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MonitorUiAction {
     None,
     QuitRequested,
+    #[cfg(feature = "log_pane")]
+    CopyLogSelection(String),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -51,6 +57,16 @@ pub enum MonitorUiKey {
 pub enum MonitorUiEvent {
     Key(MonitorUiKey),
     MouseDown {
+        col: u16,
+        row: u16,
+    },
+    #[cfg(feature = "log_pane")]
+    MouseDrag {
+        col: u16,
+        row: u16,
+    },
+    #[cfg(feature = "log_pane")]
+    MouseUp {
         col: u16,
         row: u16,
     },
@@ -123,7 +139,56 @@ const TAB_DEFS: &[TabDef] = &[
         label: "MEM",
         key: "5",
     },
+    #[cfg(feature = "log_pane")]
+    TabDef {
+        screen: MonitorScreen::Logs,
+        label: "LOG",
+        key: "6",
+    },
 ];
+
+#[cfg(feature = "log_pane")]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct SelectionPoint {
+    row: usize,
+    col: usize,
+}
+
+#[cfg(feature = "log_pane")]
+#[derive(Clone, Copy, Debug, Default)]
+struct LogSelection {
+    anchor: Option<SelectionPoint>,
+    cursor: Option<SelectionPoint>,
+}
+
+#[cfg(feature = "log_pane")]
+impl LogSelection {
+    fn clear(&mut self) {
+        self.anchor = None;
+        self.cursor = None;
+    }
+
+    fn start(&mut self, point: SelectionPoint) {
+        self.anchor = Some(point);
+        self.cursor = Some(point);
+    }
+
+    fn update(&mut self, point: SelectionPoint) {
+        if self.anchor.is_some() {
+            self.cursor = Some(point);
+        }
+    }
+
+    fn range(&self) -> Option<(SelectionPoint, SelectionPoint)> {
+        let anchor = self.anchor?;
+        let cursor = self.cursor?;
+        if (anchor.row, anchor.col) <= (cursor.row, cursor.col) {
+            Some((anchor, cursor))
+        } else {
+            Some((cursor, anchor))
+        }
+    }
+}
 
 pub struct MonitorUi {
     model: MonitorModel,
@@ -135,6 +200,14 @@ pub struct MonitorUi {
     help_hitboxes: Vec<HelpHitbox>,
     nodes_scrollable_widget_state: NodesScrollableWidgetState,
     latency_scroll_state: ScrollViewState,
+    #[cfg(feature = "log_pane")]
+    log_area: Option<Rect>,
+    #[cfg(feature = "log_pane")]
+    log_lines: Vec<StyledLine>,
+    #[cfg(feature = "log_pane")]
+    log_selection: LogSelection,
+    #[cfg(feature = "log_pane")]
+    log_offset_from_bottom: usize,
 }
 
 impl MonitorUi {
@@ -151,6 +224,14 @@ impl MonitorUi {
             help_hitboxes: Vec::new(),
             nodes_scrollable_widget_state,
             latency_scroll_state: ScrollViewState::default(),
+            #[cfg(feature = "log_pane")]
+            log_area: None,
+            #[cfg(feature = "log_pane")]
+            log_lines: Vec::new(),
+            #[cfg(feature = "log_pane")]
+            log_selection: LogSelection::default(),
+            #[cfg(feature = "log_pane")]
+            log_offset_from_bottom: 0,
         }
     }
 
@@ -174,6 +255,10 @@ impl MonitorUi {
         match event {
             MonitorUiEvent::Key(key) => self.handle_key(key),
             MonitorUiEvent::MouseDown { col, row } => self.click(col, row),
+            #[cfg(feature = "log_pane")]
+            MonitorUiEvent::MouseDrag { col, row } => self.drag_log_selection(col, row),
+            #[cfg(feature = "log_pane")]
+            MonitorUiEvent::MouseUp { col, row } => self.finish_log_selection(col, row),
             MonitorUiEvent::Scroll { direction, steps } => {
                 self.scroll(direction, steps);
                 MonitorUiAction::None
@@ -257,6 +342,14 @@ impl MonitorUi {
                     self.latency_scroll_state.scroll_left();
                 }
             }
+            #[cfg(feature = "log_pane")]
+            (MonitorScreen::Logs, ScrollDirection::Up) => {
+                self.log_offset_from_bottom = self.log_offset_from_bottom.saturating_add(steps);
+            }
+            #[cfg(feature = "log_pane")]
+            (MonitorScreen::Logs, ScrollDirection::Down) => {
+                self.log_offset_from_bottom = self.log_offset_from_bottom.saturating_sub(steps);
+            }
             _ => {}
         }
     }
@@ -282,6 +375,11 @@ impl MonitorUi {
                 HelpAction::Quit => return MonitorUiAction::QuitRequested,
             }
             return MonitorUiAction::None;
+        }
+
+        #[cfg(feature = "log_pane")]
+        if self.active_screen == MonitorScreen::Logs {
+            return self.start_log_selection(x, y);
         }
 
         MonitorUiAction::None
@@ -322,6 +420,8 @@ impl MonitorUi {
             MonitorScreen::Latency => self.draw_latency_table(f, area),
             MonitorScreen::CopperList => self.draw_copperlist_stats(f, area),
             MonitorScreen::MemoryPools => self.draw_memory_pools(f, area),
+            #[cfg(feature = "log_pane")]
+            MonitorScreen::Logs => self.draw_logs(f, area),
         }
     }
 
@@ -700,6 +800,163 @@ impl MonitorUi {
         );
     }
 
+    #[cfg(feature = "log_pane")]
+    fn start_log_selection(&mut self, col: u16, row: u16) -> MonitorUiAction {
+        let Some(area) = self.log_area else {
+            self.log_selection.clear();
+            return MonitorUiAction::None;
+        };
+        if !point_inside(col, row, area.x, area.y, area.width, area.height) {
+            self.log_selection.clear();
+            return MonitorUiAction::None;
+        }
+
+        let Some(point) = self.log_selection_point(col, row) else {
+            return MonitorUiAction::None;
+        };
+        self.log_selection.start(point);
+        MonitorUiAction::None
+    }
+
+    #[cfg(feature = "log_pane")]
+    fn drag_log_selection(&mut self, col: u16, row: u16) -> MonitorUiAction {
+        let Some(point) = self.log_selection_point(col, row) else {
+            return MonitorUiAction::None;
+        };
+        self.log_selection.update(point);
+        MonitorUiAction::None
+    }
+
+    #[cfg(feature = "log_pane")]
+    fn finish_log_selection(&mut self, col: u16, row: u16) -> MonitorUiAction {
+        let Some(point) = self.log_selection_point(col, row) else {
+            self.log_selection.clear();
+            return MonitorUiAction::None;
+        };
+        self.log_selection.update(point);
+        self.selected_log_text()
+            .map(MonitorUiAction::CopyLogSelection)
+            .unwrap_or(MonitorUiAction::None)
+    }
+
+    #[cfg(feature = "log_pane")]
+    fn log_selection_point(&self, col: u16, row: u16) -> Option<SelectionPoint> {
+        let area = self.log_area?;
+        if !point_inside(col, row, area.x, area.y, area.width, area.height) {
+            return None;
+        }
+
+        let rel_row = (row - area.y) as usize;
+        let rel_col = (col - area.x) as usize;
+        let line_index = self.visible_log_offset(area).saturating_add(rel_row);
+        let line = self.log_lines.get(line_index)?;
+        Some(SelectionPoint {
+            row: line_index,
+            col: rel_col.min(line.text.chars().count()),
+        })
+    }
+
+    #[cfg(feature = "log_pane")]
+    fn visible_log_offset(&self, area: Rect) -> usize {
+        let visible_rows = area.height as usize;
+        let total_lines = self.log_lines.len();
+        let max_offset = total_lines.saturating_sub(visible_rows);
+        let offset_from_bottom = self.log_offset_from_bottom.min(max_offset);
+        total_lines.saturating_sub(visible_rows.saturating_add(offset_from_bottom))
+    }
+
+    #[cfg(feature = "log_pane")]
+    fn draw_logs(&mut self, f: &mut Frame, area: Rect) {
+        let block = Block::default()
+            .title(" Debug Output ")
+            .title_bottom(format!("{} log entries", self.model.log_line_count()))
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded);
+        let inner = block.inner(area);
+        self.log_area = Some(inner);
+        self.log_lines = self.model.log_lines();
+
+        let visible_offset = self.visible_log_offset(inner);
+        if let Some((start, end)) = self.log_selection.range()
+            && (start.row >= self.log_lines.len() || end.row >= self.log_lines.len())
+        {
+            self.log_selection.clear();
+        }
+
+        let paragraph = Paragraph::new(self.build_log_text(inner, visible_offset)).block(block);
+        f.render_widget(paragraph, area);
+    }
+
+    #[cfg(feature = "log_pane")]
+    fn build_log_text(&self, area: Rect, visible_offset: usize) -> Text<'static> {
+        let mut rendered_lines = Vec::new();
+        let selection = self
+            .log_selection
+            .range()
+            .filter(|(start, end)| start != end);
+        let selection_style = Style::default().bg(Color::Blue).fg(Color::Black);
+        let visible_lines = self
+            .log_lines
+            .iter()
+            .skip(visible_offset)
+            .take(area.height as usize);
+
+        for (idx, line) in visible_lines.enumerate() {
+            let line_index = visible_offset + idx;
+            let spans = if let Some((start, end)) = selection {
+                let line_len = line.text.chars().count();
+                if let Some((start_col, end_col)) =
+                    line_selection_bounds(line_index, line_len, start, end)
+                {
+                    let (before, selected, after) =
+                        slice_char_range(&line.text, start_col, end_col);
+                    let mut spans = Vec::new();
+                    if !before.is_empty() {
+                        spans.push(Span::raw(before.to_string()));
+                    }
+                    spans.push(Span::styled(selected.to_string(), selection_style));
+                    if !after.is_empty() {
+                        spans.push(Span::raw(after.to_string()));
+                    }
+                    spans
+                } else {
+                    spans_from_runs(line)
+                }
+            } else {
+                spans_from_runs(line)
+            };
+            rendered_lines.push(Line::from(spans));
+        }
+
+        Text::from(rendered_lines)
+    }
+
+    #[cfg(feature = "log_pane")]
+    fn selected_log_text(&self) -> Option<String> {
+        let (start, end) = self.log_selection.range()?;
+        if start == end || self.log_lines.is_empty() {
+            return None;
+        }
+        if start.row >= self.log_lines.len() || end.row >= self.log_lines.len() {
+            return None;
+        }
+
+        let mut selected = Vec::new();
+        for row in start.row..=end.row {
+            let line = &self.log_lines[row];
+            let line_len = line.text.chars().count();
+            let Some((start_col, end_col)) = line_selection_bounds(row, line_len, start, end)
+            else {
+                selected.push(String::new());
+                continue;
+            };
+            let (_, selection, _) = slice_char_range(&line.text, start_col, end_col);
+            selected.push(selection.to_string());
+        }
+
+        Some(selected.join("\n"))
+    }
+
     fn render_tabs(&mut self, f: &mut Frame, area: Rect) {
         let base_bg = Color::Rgb(16, 18, 20);
         let active_bg = Color::Rgb(56, 110, 120);
@@ -900,6 +1157,112 @@ fn tab_key_hint() -> String {
     }
 
     keys.join("/")
+}
+
+#[cfg(feature = "log_pane")]
+fn char_to_byte_index(text: &str, char_idx: usize) -> usize {
+    text.char_indices()
+        .nth(char_idx)
+        .map(|(idx, _)| idx)
+        .unwrap_or(text.len())
+}
+
+#[cfg(feature = "log_pane")]
+fn slice_char_range(text: &str, start: usize, end: usize) -> (&str, &str, &str) {
+    let start_idx = char_to_byte_index(text, start).min(text.len());
+    let end_idx = char_to_byte_index(text, end).min(text.len());
+    let (start_idx, end_idx) = if start_idx <= end_idx {
+        (start_idx, end_idx)
+    } else {
+        (end_idx, start_idx)
+    };
+
+    (
+        &text[..start_idx],
+        &text[start_idx..end_idx],
+        &text[end_idx..],
+    )
+}
+
+#[cfg(feature = "log_pane")]
+fn slice_chars_owned(text: &str, start: usize, end: usize) -> String {
+    let start_idx = char_to_byte_index(text, start).min(text.len());
+    let end_idx = char_to_byte_index(text, end).min(text.len());
+    text[start_idx..end_idx].to_string()
+}
+
+#[cfg(feature = "log_pane")]
+fn line_selection_bounds(
+    line_index: usize,
+    line_len: usize,
+    start: SelectionPoint,
+    end: SelectionPoint,
+) -> Option<(usize, usize)> {
+    if line_index < start.row || line_index > end.row {
+        return None;
+    }
+
+    let start_col = if line_index == start.row {
+        start.col
+    } else {
+        0
+    };
+    let mut end_col = if line_index == end.row {
+        end.col
+    } else {
+        line_len
+    };
+    if line_index == end.row {
+        end_col = end_col.saturating_add(1).min(line_len);
+    }
+
+    let start_col = start_col.min(line_len);
+    let end_col = end_col.min(line_len);
+    if start_col >= end_col {
+        return None;
+    }
+
+    Some((start_col, end_col))
+}
+
+#[cfg(feature = "log_pane")]
+fn spans_from_runs(line: &StyledLine) -> Vec<Span<'static>> {
+    if line.runs.is_empty() {
+        return vec![Span::raw(line.text.clone())];
+    }
+
+    let mut spans = Vec::new();
+    let mut cursor = 0usize;
+    let total_chars = line.text.chars().count();
+    let mut runs = line.runs.clone();
+    runs.sort_by_key(|run| run.start);
+
+    for run in runs {
+        let start = run.start.min(total_chars);
+        let end = run.end.min(total_chars);
+        if start > cursor {
+            let before = slice_chars_owned(&line.text, cursor, start);
+            if !before.is_empty() {
+                spans.push(Span::raw(before));
+            }
+        }
+        if end > start {
+            spans.push(Span::styled(
+                slice_chars_owned(&line.text, start, end),
+                run.style,
+            ));
+        }
+        cursor = cursor.max(end);
+    }
+
+    if cursor < total_chars {
+        let tail = slice_chars_owned(&line.text, cursor, total_chars);
+        if !tail.is_empty() {
+            spans.push(Span::raw(tail));
+        }
+    }
+
+    spans
 }
 
 fn format_bytes(bytes: f64) -> String {

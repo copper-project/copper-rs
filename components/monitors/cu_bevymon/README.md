@@ -16,6 +16,7 @@ It provides:
 Design intent:
 
 - reuse the same Ratatui rendering as `cu_consolemon`
+- reuse the same shared `LOG` pane, including Copper live logs and optional `stderr` capture
 - integrate into existing Bevy sims like `cu_rp_balancebot` and `cu_flight_controller`
 - keep the rendering/backend split clean enough for later browser / wasm work
 

@@ -1,0 +1,67 @@
+(
+    tasks: [
+        (
+            id: "clock",
+            type: "tasks::ClockSource",
+            config: {"phase_step": 0.17},
+        ),
+        (
+            id: "planner",
+            type: "tasks::PlannerTask",
+            config: {
+                "radius": 1.8,
+                "height_bias": 0.2,
+            },
+        ),
+        (
+            id: "controller",
+            type: "tasks::ControllerTask",
+            config: {
+                "torque_scale": 0.82,
+                "warn_torque": 0.9,
+                "hold_every": 48,
+            },
+        ),
+        (
+            id: "viz",
+            type: "tasks::VizSink",
+            config: {
+                "overlay_label": "monitor-overlay",
+            },
+        ),
+        (
+            id: "actuator",
+            type: "tasks::ActuatorSink",
+            config: {"hard_limit": 1.0},
+        ),
+    ],
+    cnx: [
+        (
+            src: "clock",
+            dst: "planner",
+            msg: "tasks::TickPayload",
+        ),
+        (
+            src: "planner",
+            dst: "controller",
+            msg: "tasks::TrajectoryPayload",
+        ),
+        (
+            src: "controller",
+            dst: "viz",
+            msg: "tasks::VizPayload",
+        ),
+        (
+            src: "controller",
+            dst: "actuator",
+            msg: "tasks::MotorCommandPayload",
+        ),
+    ],
+    logging: (
+        enable_task_logging: true,
+        slab_size_mib: 64,
+        section_size_mib: 8,
+        keyframe_interval: 90,
+    ),
+    monitor: (type: "cu_bevymon::CuBevyMon"),
+)

@@ -1,3 +1,5 @@
+#[cfg(feature = "log_pane")]
+use crate::logpane::StyledLine;
 use compact_str::{CompactString, ToCompactString};
 use cu29::clock::CuDuration;
 use cu29::cutask::CuMsgMetadata;
@@ -6,10 +8,14 @@ use cu29::monitoring::{
     CuMonitoringMetadata, MonitorComponentMetadata, MonitorTopology,
 };
 use cu29::prelude::{CuCompactString, CuTime, pool};
+#[cfg(feature = "log_pane")]
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 const COPPERLIST_RATE_WINDOW: Duration = Duration::from_secs(1);
+#[cfg(feature = "log_pane")]
+const DEFAULT_LOG_CAPACITY: usize = 1_024;
 
 #[derive(Clone)]
 pub struct MonitorModel {
@@ -23,6 +29,8 @@ pub(crate) struct MonitorModelInner {
     pub(crate) component_statuses: Mutex<Vec<ComponentStatus>>,
     pub(crate) pool_stats: Mutex<Vec<PoolStats>>,
     pub(crate) copperlist_stats: Mutex<CopperListStats>,
+    #[cfg(feature = "log_pane")]
+    pub(crate) log_lines: Mutex<VecDeque<StyledLine>>,
 }
 
 impl MonitorModel {
@@ -54,6 +62,8 @@ impl MonitorModel {
                 component_statuses: Mutex::new(vec![ComponentStatus::default(); component_count]),
                 pool_stats: Mutex::new(Vec::new()),
                 copperlist_stats: Mutex::new(copperlist_stats),
+                #[cfg(feature = "log_pane")]
+                log_lines: Mutex::new(VecDeque::with_capacity(DEFAULT_LOG_CAPACITY)),
             }),
         }
     }
@@ -174,6 +184,35 @@ impl MonitorModel {
         for (id, space_left, total_size, buffer_size) in pool_stats_data {
             self.upsert_pool_stat(id.to_string(), space_left, total_size, buffer_size);
         }
+    }
+
+    #[cfg(feature = "log_pane")]
+    pub fn push_log_line(&self, line: StyledLine) {
+        if line.text.is_empty() {
+            return;
+        }
+
+        let mut log_lines = self.inner.log_lines.lock().unwrap();
+        log_lines.push_back(line);
+        while log_lines.len() > DEFAULT_LOG_CAPACITY {
+            log_lines.pop_front();
+        }
+    }
+
+    #[cfg(feature = "log_pane")]
+    pub fn log_lines(&self) -> Vec<StyledLine> {
+        self.inner
+            .log_lines
+            .lock()
+            .unwrap()
+            .iter()
+            .cloned()
+            .collect()
+    }
+
+    #[cfg(feature = "log_pane")]
+    pub fn log_line_count(&self) -> usize {
+        self.inner.log_lines.lock().unwrap().len()
     }
 
     pub fn process_copperlist(&self, copperlist_id: u64, view: CopperListView<'_>) {

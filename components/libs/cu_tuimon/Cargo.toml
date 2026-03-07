@@ -10,9 +10,17 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[features]
+default = []
+log_pane = ["dep:cu29-log", "dep:cu29-log-runtime"]
+stderr_capture = ["log_pane", "dep:gag"]
+
 [dependencies]
 ansi-to-tui = { version = "8.0.0", default-features = false }
 compact_str = { workspace = true }
 cu29 = { workspace = true }
+cu29-log = { workspace = true, optional = true }
+cu29-log-runtime = { workspace = true, optional = true }
+gag = { version = "1.0.0", optional = true }
 ratatui = { version = "0.30", default-features = false }
 tui-widgets = "0.7.0"

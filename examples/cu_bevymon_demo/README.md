@@ -4,9 +4,10 @@
 
 - a simple Bevy 3D scene on the left
 - a `cu_bevymon` monitor panel on the right
-- a fake Copper DAG feeding live monitor data
+- a real Copper app generated from `copperconfig.ron`
 - click-to-focus input routing between the sim and the monitor
 - shared `cu_bevymon` helpers for panel focus borders and camera viewport sizing
+- structured Copper logs flowing into the shared `LOG` tab
 
 Controls:
 
@@ -15,4 +16,4 @@ Controls:
 - when the sim has focus: `WASD` moves the cube, `Q/E` move it vertically, arrow keys orbit the camera, `H` also yaws left, and the mouse wheel zooms
 - when the monitor has focus: use the normal `cu_tuimon` clicks, tabs, scrolling, and keybindings
 
-The example exists to validate the reusable side-by-side layout model before wiring `cu_bevymon` into the larger existing Bevy simulations.
+The left panel is still a small fake Bevy scene, but the right panel is now backed by an actual Copper runtime with real tasks, real copperlists, and app-emitted `debug!` / `info!` / `warn!` / `error!` statements.

@@ -14,7 +14,10 @@ repository.workspace = true
 bevy = { workspace = true }
 bevy_ratatui = { workspace = true, features = ["windowed"] }
 cu29 = { workspace = true }
-cu-tuimon = { path = "../../libs/cu_tuimon", version = "0.13.0" }
+cu-tuimon = { path = "../../libs/cu_tuimon", version = "0.13.0", features = [
+  "log_pane",
+  "stderr_capture",
+] }
 ratatui = "0.30.0"
 soft_ratatui = { version = "0.1.3", default-features = false, features = [
   "embedded-ttf",

@@ -1,15 +1,17 @@
+pub mod tasks;
+
+use bevy::app::AppExit;
 use bevy::prelude::*;
+use bevy::ui::Node as UiNode;
 use cu_bevymon::{
-    CuBevyMonFocus, CuBevyMonFocusBorder, CuBevyMonModel, CuBevyMonPanel, CuBevyMonPlugin,
-    CuBevyMonSurface, CuBevyMonSurfaceNode, CuBevyMonTexture, CuBevyMonViewportSurface,
-    MonitorModel, MonitorUiOptions,
+    CuBevyMonFocus, CuBevyMonFocusBorder, CuBevyMonPanel, CuBevyMonPlugin, CuBevyMonSurface,
+    CuBevyMonSurfaceNode, CuBevyMonTexture, CuBevyMonViewportSurface, MonitorUiOptions,
 };
-use cu29::clock::CuDuration;
-use cu29::monitoring::{
-    ComponentId, ComponentType, CopperListInfo, CopperListIoStats, MonitorComponentMetadata,
-    MonitorConnection, MonitorNode, MonitorTopology,
-};
-use std::time::Duration;
+use cu29::prelude::*;
+use cu29::prelude::{debug, error, info};
+use cu29_helpers::basic_copper_setup;
+use std::fs;
+use std::path::PathBuf;
 
 const SIM_PANEL_PERCENT: f32 = 62.0;
 const MONITOR_PANEL_PERCENT: f32 = 38.0;
@@ -17,18 +19,11 @@ const MONITOR_PANEL_INSET_PX: f32 = 4.0;
 const CUBE_MOVE_SPEED: f32 = 3.6;
 const CAMERA_ORBIT_SPEED: f32 = 1.7;
 const CAMERA_ZOOM_SPEED: f32 = 0.65;
+const COPPER_TICK_HZ: f32 = 10.0;
+const LOG_SLAB_SIZE: Option<usize> = Some(64 * 1024 * 1024);
 
-const COMPONENTS: &[MonitorComponentMetadata] = &[
-    MonitorComponentMetadata::new("clock", ComponentType::Source, Some("demo::ClockSource")),
-    MonitorComponentMetadata::new("planner", ComponentType::Task, Some("demo::PlannerTask")),
-    MonitorComponentMetadata::new(
-        "controller",
-        ComponentType::Task,
-        Some("demo::ControllerTask"),
-    ),
-    MonitorComponentMetadata::new("viz", ComponentType::Bridge, Some("demo::VizBridge")),
-    MonitorComponentMetadata::new("actuator", ComponentType::Sink, Some("demo::MotorSink")),
-];
+#[copper_runtime(config = "copperconfig.ron")]
+struct BevyMonDemoApp {}
 
 #[derive(Component)]
 struct SimCamera;
@@ -45,8 +40,13 @@ struct DemoHudText;
 #[derive(Resource, Default)]
 struct LayoutSpawned(bool);
 
-#[derive(Resource, Default)]
-struct DemoCopperListId(u64);
+#[derive(Resource)]
+struct CopperDriver {
+    _copper_ctx: CopperContext,
+    copper_app: BevyMonDemoApp,
+    iteration_timer: Timer,
+    started: bool,
+}
 
 #[derive(Resource)]
 struct DemoCameraRig {
@@ -66,11 +66,8 @@ impl Default for DemoCameraRig {
 }
 
 fn main() {
-    let model = MonitorModel::from_parts(
-        COMPONENTS,
-        CopperListInfo::new(1_536, COMPONENTS.len()),
-        demo_topology(),
-    );
+    let mut copper = build_copper_driver();
+    let monitor_model = copper.copper_app.copper_runtime_mut().monitor.model();
 
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -82,20 +79,20 @@ fn main() {
             ..default()
         }))
         .add_plugins(
-            CuBevyMonPlugin::new(model)
+            CuBevyMonPlugin::new(monitor_model)
                 .with_initial_focus(CuBevyMonSurface::Sim)
                 .with_options(MonitorUiOptions {
                     system_info:
-                        "Windowed Ratatui backend via bevy_ratatui\nClick a panel to move focus"
+                        "Real Copper runtime via #[copper_runtime]\nClick a panel to move focus"
                             .to_string(),
                     show_quit_hint: false,
                 }),
         )
         .insert_resource(ClearColor(Color::srgb(0.04, 0.05, 0.07)))
+        .insert_resource(copper)
         .init_resource::<LayoutSpawned>()
-        .init_resource::<DemoCopperListId>()
         .init_resource::<DemoCameraRig>()
-        .add_systems(Startup, setup_scene)
+        .add_systems(Startup, (setup_scene, start_copper_runtime))
         .add_systems(
             Update,
             (
@@ -105,82 +102,49 @@ fn main() {
                 sync_demo_camera,
                 animate_scene,
                 update_demo_hud,
-                drive_demo_monitor,
+                run_copper_iteration,
             ),
         )
+        .add_systems(PostUpdate, stop_copper_on_exit)
         .run();
 }
 
-fn demo_topology() -> MonitorTopology {
-    MonitorTopology {
-        nodes: vec![
-            MonitorNode {
-                id: "clock".into(),
-                type_name: Some("demo::ClockSource".into()),
-                kind: ComponentType::Source,
-                inputs: vec![],
-                outputs: vec!["tick".into()],
-            },
-            MonitorNode {
-                id: "planner".into(),
-                type_name: Some("demo::PlannerTask".into()),
-                kind: ComponentType::Task,
-                inputs: vec!["in".into()],
-                outputs: vec!["traj".into()],
-            },
-            MonitorNode {
-                id: "controller".into(),
-                type_name: Some("demo::ControllerTask".into()),
-                kind: ComponentType::Task,
-                inputs: vec!["in".into()],
-                outputs: vec!["cmd".into()],
-            },
-            MonitorNode {
-                id: "viz".into(),
-                type_name: Some("demo::VizBridge".into()),
-                kind: ComponentType::Bridge,
-                inputs: vec!["state".into()],
-                outputs: vec!["mesh".into()],
-            },
-            MonitorNode {
-                id: "actuator".into(),
-                type_name: Some("demo::MotorSink".into()),
-                kind: ComponentType::Sink,
-                inputs: vec!["in".into()],
-                outputs: vec![],
-            },
-        ],
-        connections: vec![
-            MonitorConnection {
-                src: "clock".into(),
-                src_port: Some("tick".into()),
-                dst: "planner".into(),
-                dst_port: Some("in".into()),
-                msg: "Tick".into(),
-            },
-            MonitorConnection {
-                src: "planner".into(),
-                src_port: Some("traj".into()),
-                dst: "controller".into(),
-                dst_port: Some("in".into()),
-                msg: "Trajectory".into(),
-            },
-            MonitorConnection {
-                src: "controller".into(),
-                src_port: Some("cmd".into()),
-                dst: "actuator".into(),
-                dst_port: Some("in".into()),
-                msg: "MotorCommand".into(),
-            },
-            MonitorConnection {
-                src: "controller".into(),
-                src_port: Some("cmd".into()),
-                dst: "viz".into(),
-                dst_port: Some("state".into()),
-                msg: "VizState".into(),
-            },
-        ],
+fn build_copper_driver() -> CopperDriver {
+    let logger_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("logs/bevymon_demo.copper");
+    if let Some(parent) = logger_path.parent()
+        && !parent.exists()
+    {
+        fs::create_dir_all(parent).expect("Failed to create logs directory");
     }
+
+    let copper_ctx = basic_copper_setup(&logger_path, LOG_SLAB_SIZE, true, None)
+        .expect("Failed to setup logger.");
+    debug!(
+        "Logger created at {}.",
+        logger_path.to_string_lossy().into_owned()
+    );
+    debug!("Creating Copper BevyMon demo application.");
+
+    let copper_app = BevyMonDemoAppBuilder::new()
+        .with_context(&copper_ctx)
+        .build()
+        .expect("Failed to create Copper runtime.");
+
+    CopperDriver {
+        _copper_ctx: copper_ctx,
+        copper_app,
+        iteration_timer: Timer::from_seconds(1.0 / COPPER_TICK_HZ, TimerMode::Repeating),
+        started: false,
+    }
+}
+
+fn start_copper_runtime(mut copper: ResMut<CopperDriver>) {
+    copper
+        .copper_app
+        .start_all_tasks()
+        .expect("Failed to start Copper demo tasks.");
+    copper.started = true;
+    info!("Copper BevyMon demo runtime started.");
 }
 
 fn setup_scene(
@@ -268,7 +232,7 @@ fn spawn_demo_layout(
 
     commands
         .spawn((
-            Node {
+            UiNode {
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
                 padding: UiRect::all(Val::Px(12.0)),
@@ -280,7 +244,7 @@ fn spawn_demo_layout(
         .with_children(|parent| {
             parent
                 .spawn((
-                    Node {
+                    UiNode {
                         width: Val::Percent(SIM_PANEL_PERCENT),
                         height: Val::Percent(100.0),
                         position_type: PositionType::Relative,
@@ -295,7 +259,7 @@ fn spawn_demo_layout(
                 .with_children(|panel| {
                     panel
                         .spawn((
-                            Node {
+                            UiNode {
                                 position_type: PositionType::Absolute,
                                 left: Val::Px(18.0),
                                 top: Val::Px(18.0),
@@ -322,7 +286,7 @@ fn spawn_demo_layout(
 
             parent
                 .spawn((
-                    Node {
+                    UiNode {
                         width: Val::Percent(MONITOR_PANEL_PERCENT),
                         height: Val::Percent(100.0),
                         border: UiRect::all(Val::Px(1.0)),
@@ -337,7 +301,7 @@ fn spawn_demo_layout(
                 .with_children(|panel| {
                     panel.spawn((
                         ImageNode::new(texture.0.clone()),
-                        Node {
+                        UiNode {
                             width: Val::Percent(100.0),
                             height: Val::Percent(100.0),
                             ..default()
@@ -462,16 +426,16 @@ fn update_demo_hud(focus: Res<CuBevyMonFocus>, mut texts: Query<&mut Text, With<
     let (focus_label, footer) = match focus.0 {
         CuBevyMonSurface::Sim => (
             "SIM",
-            "WASD move cube, Q/E raise or lower it.\nArrow keys orbit camera, wheel zooms, and H also yaws left.\nClick the monitor to hand input to cu_tuimon and prove that H switches back to TUI scroll.",
+            "WASD move cube, Q/E raise or lower it.\nArrow keys orbit camera, wheel zooms, and H also yaws left.\nClick the monitor to hand input to the real Copper runtime UI.",
         ),
         CuBevyMonSurface::Monitor => (
             "MONITOR",
-            "The right panel owns keyboard and mouse now.\nUse the normal cu_tuimon clicks, tabs, scrolling, and keys.\nClick back into the sim to recover controls.",
+            "The right panel owns keyboard and mouse now.\nUse the normal cu_tuimon clicks, tabs, scrolling, and keys.\nThe LOG tab is now fed by a generated Copper app, not a handwritten model.",
         ),
     };
 
     let text = format!(
-        "Focus: {focus_label}\n\nThis is the reusable side-by-side layout path.\nBoth panels stay visible; only input focus moves.\n\n{footer}"
+        "Focus: {focus_label}\n\nLeft: a small fake Bevy scene.\nRight: cu_bevymon driven by #[copper_runtime] and copperconfig.ron.\nThe Copper graph emits real statuses, copperlists, and structured logs.\n\n{footer}"
     );
 
     for mut ui_text in &mut texts {
@@ -479,94 +443,41 @@ fn update_demo_hud(focus: Res<CuBevyMonFocus>, mut texts: Query<&mut Text, With<
     }
 }
 
-fn drive_demo_monitor(
+fn run_copper_iteration(
     time: Res<Time>,
-    model: Res<CuBevyMonModel>,
-    mut copperlist_id: ResMut<DemoCopperListId>,
+    mut copper: ResMut<CopperDriver>,
+    mut exit_writer: MessageWriter<AppExit>,
 ) {
-    copperlist_id.0 = copperlist_id.0.wrapping_add(1);
-    let t = time.elapsed_secs();
-    let base_micros = |offset: f32, scale: f32| -> u64 {
-        (250.0 + ((t + offset).sin() * scale + scale) * 220.0).max(50.0) as u64
-    };
-
-    let planner = CuDuration::from(Duration::from_micros(base_micros(0.2, 1.8)));
-    let controller = CuDuration::from(Duration::from_micros(base_micros(1.1, 1.3)));
-    let viz = CuDuration::from(Duration::from_micros(base_micros(2.0, 0.8)));
-    let actuator = CuDuration::from(Duration::from_micros(base_micros(2.8, 0.6)));
-
-    model.0.record_component_latency(
-        ComponentId::new(0),
-        CuDuration::from(Duration::from_micros(90)),
-    );
-    model
-        .0
-        .record_component_latency(ComponentId::new(1), planner);
-    model
-        .0
-        .record_component_latency(ComponentId::new(2), controller);
-    model.0.record_component_latency(ComponentId::new(3), viz);
-    model
-        .0
-        .record_component_latency(ComponentId::new(4), actuator);
-    model
-        .0
-        .record_end_to_end_latency(CuDuration::from(Duration::from_micros(
-            90 + planner.as_micros()
-                + controller.as_micros()
-                + viz.as_micros()
-                + actuator.as_micros(),
-        )));
-
-    model
-        .0
-        .set_component_status(ComponentId::new(0), format!("tick {}", copperlist_id.0));
-    model.0.set_component_status(
-        ComponentId::new(1),
-        format!("target x={:+.2}", (t * 0.6).sin() * 1.8),
-    );
-    model.0.set_component_status(
-        ComponentId::new(2),
-        format!("cmd τ={:+.2}", (t * 1.1).cos() * 0.75),
-    );
-    model.0.set_component_status(
-        ComponentId::new(3),
-        format!("mesh phase {:.2}", t.rem_euclid(std::f32::consts::TAU)),
-    );
-    model
-        .0
-        .set_component_status(ComponentId::new(4), "armed".to_string());
-
-    if (t * 0.25).sin() > 0.96 {
-        model
-            .0
-            .set_component_error(ComponentId::new(2), "torque clamp".to_string());
+    if !copper.started {
+        return;
     }
 
-    model.0.update_copperlist_rate(copperlist_id.0);
-    model.0.observe_copperlist_io(CopperListIoStats {
-        raw_culist_bytes: 1_536,
-        handle_bytes: 256 + (t.sin().abs() * 96.0) as u64,
-        encoded_culist_bytes: 744 + (t.cos().abs() * 128.0) as u64,
-        keyframe_bytes: if copperlist_id.0.is_multiple_of(90) {
-            384
-        } else {
-            0
-        },
-        structured_log_bytes_total: copperlist_id.0.saturating_mul(320),
-        culistid: copperlist_id.0,
-    });
+    if !copper.iteration_timer.tick(time.delta()).just_finished() {
+        return;
+    }
 
-    model.0.upsert_pool_stat(
-        "telemetry",
-        88 - ((t.sin().abs() * 18.0) as usize),
-        128,
-        8 * 1024,
-    );
-    model.0.upsert_pool_stat(
-        "viz_cache",
-        18 - ((t.cos().abs() * 7.0) as usize),
-        32,
-        64 * 1024,
-    );
+    if let Err(err) = copper.copper_app.run_one_iteration() {
+        error!(
+            "Copper demo stopped after runtime error: {}",
+            err.to_string()
+        );
+        exit_writer.write(AppExit::Success);
+        copper.started = false;
+    }
+}
+
+fn stop_copper_on_exit(mut exit_events: MessageReader<AppExit>, mut copper: ResMut<CopperDriver>) {
+    if exit_events.read().next().is_some() {
+        if !copper.started {
+            return;
+        }
+
+        info!("Stopping Copper BevyMon demo runtime.");
+        copper
+            .copper_app
+            .stop_all_tasks()
+            .expect("Failed to stop Copper demo tasks.");
+        let _ = copper.copper_app.log_shutdown_completed();
+        copper.started = false;
+    }
 }

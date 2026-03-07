@@ -35,15 +35,16 @@ And in you copperconfig.ron:
 
 ```
 
-The monitor has 4 screens:
+The monitor has 5 core screens plus a shared log pane:
 
 - **SysInfo**: A quick system information screen (CPU, Memory, Distrib ...)
 - **DAG**: A Directed Acyclic Graph of the tasks with their real time error status and short string info.
 - **Latencies**: A list of the tasks with their real time latencies & assorted statistics (Jitter, Min, Max, Avg).
+- **Bandwidth**: CopperList serialization and IO statistics.
 - **Memory Pools**: A list of the memory pools with their real time usage and statistics (Pool ID, Used/Total, Buffer Size, Handles in Use, Handles/sec).
-- **Debug Output** [`debug_pane`](#debug_pane-feature): A pane that displays debug logs in real-time.
+- **Debug Output** [`debug_pane`](#debug_pane-feature): The shared `cu_tuimon` log pane showing Copper live logs and captured `stderr`.
 
 ## `debug_pane` feature
 
 Enabled by default. Disable with `default-features = false`. Displays real-time logs
-from [log](https://crates.io/crates/log), [cu29-log](https://crates.io/crates/cu29-log) and `stderr`.
+from Copper structured logging (`debug!`, `info!`, `warn!`, `error!`) and captured `stderr`.

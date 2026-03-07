@@ -8,7 +8,7 @@ use bevy::input::{ButtonState, keyboard::KeyboardInput};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::window::PrimaryWindow;
-use cu_tuimon::{MonitorUi, MonitorUiAction, MonitorUiEvent, MonitorUiKey};
+use cu_tuimon::{MonitorLogCapture, MonitorUi, MonitorUiAction, MonitorUiEvent, MonitorUiKey};
 use cu29::context::CuContext;
 use cu29::monitoring::{
     ComponentId, CopperListIoStats, CopperListView, CuComponentState, CuMonitor,
@@ -24,6 +24,7 @@ pub use viewport::CuBevyMonViewportSurface;
 
 pub struct CuBevyMon {
     model: MonitorModel,
+    log_capture: Option<std::sync::Mutex<MonitorLogCapture>>,
 }
 
 impl CuBevyMon {
@@ -36,10 +37,22 @@ impl CuMonitor for CuBevyMon {
     fn new(metadata: CuMonitoringMetadata, _runtime: CuMonitoringRuntime) -> CuResult<Self> {
         Ok(Self {
             model: MonitorModel::from_metadata(&metadata),
+            log_capture: None,
         })
     }
 
+    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
+        self.log_capture = Some(std::sync::Mutex::new(MonitorLogCapture::to_model(
+            self.model.clone(),
+        )));
+        Ok(())
+    }
+
     fn process_copperlist(&self, ctx: &CuContext, view: CopperListView<'_>) -> CuResult<()> {
+        if let Some(log_capture) = &self.log_capture {
+            let mut log_capture = log_capture.lock().unwrap_or_else(|err| err.into_inner());
+            log_capture.poll();
+        }
         self.model.process_copperlist(ctx.cl_id(), view);
         Ok(())
     }
@@ -66,6 +79,7 @@ impl CuMonitor for CuBevyMon {
     }
 
     fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
+        self.log_capture = None;
         self.model.reset_latency();
         Ok(())
     }
@@ -242,7 +256,9 @@ fn handle_monitor_pointer_input(
     mut ui_state: ResMut<CuBevyMonUiState>,
     panels: Query<(&ComputedNode, &bevy::ui::UiGlobalTransform), With<CuBevyMonPanel>>,
 ) {
-    if !mouse_buttons.just_pressed(MouseButton::Left) {
+    if !mouse_buttons.just_pressed(MouseButton::Left)
+        && !mouse_buttons.just_released(MouseButton::Left)
+    {
         return;
     }
 
@@ -257,9 +273,12 @@ fn handle_monitor_pointer_input(
     let char_height = context.backend().char_height.max(1) as f32;
     let col = (local_point.x / char_width).floor().max(0.0) as u16;
     let row = (local_point.y / char_height).floor().max(0.0) as u16;
-    let _ = ui_state
-        .0
-        .handle_event(MonitorUiEvent::MouseDown { col, row });
+    let event = if mouse_buttons.just_pressed(MouseButton::Left) {
+        MonitorUiEvent::MouseDown { col, row }
+    } else {
+        MonitorUiEvent::MouseUp { col, row }
+    };
+    let _ = ui_state.0.handle_event(event);
 }
 
 fn handle_monitor_scroll_input(
@@ -344,8 +363,12 @@ fn dispatch_monitor_event(
     exit: &mut MessageWriter<AppExit>,
     event: MonitorUiEvent,
 ) {
-    if ui_state.handle_event(event) == MonitorUiAction::QuitRequested {
-        exit.write(AppExit::Success);
+    match ui_state.handle_event(event) {
+        MonitorUiAction::QuitRequested => {
+            exit.write(AppExit::Success);
+        }
+        MonitorUiAction::None => {}
+        MonitorUiAction::CopyLogSelection(_) => {}
     }
 }
 
