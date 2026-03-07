@@ -124,6 +124,9 @@ resolver = "2"
 [profile.release]
 debug = 2
 
+[patch.crates-io]
+soft_ratatui = { path = "vendor/soft_ratatui" }
+
 [workspace.package]
 version = "0.13.1"
 authors = ["Guillaume Binet <gbin@gootz.net>"]
