@@ -37,6 +37,7 @@ enum CaptureTarget {
 }
 
 pub struct MonitorLogCapture {
+    #[cfg_attr(not(feature = "stderr_capture"), allow(dead_code))]
     target: CaptureTarget,
     #[cfg(debug_assertions)]
     registered_live_listener: bool,
@@ -54,7 +55,7 @@ impl MonitorLogCapture {
         Self::new(CaptureTarget::Stdout, false)
     }
 
-    fn new(target: CaptureTarget, capture_stderr: bool) -> Self {
+    fn new(target: CaptureTarget, _capture_stderr: bool) -> Self {
         #[cfg(debug_assertions)]
         register_live_log_listener({
             let target = target.clone();
@@ -68,7 +69,7 @@ impl MonitorLogCapture {
             #[cfg(debug_assertions)]
             registered_live_listener: true,
             #[cfg(feature = "stderr_capture")]
-            stderr_redirect: if capture_stderr {
+            stderr_redirect: if _capture_stderr {
                 BufferRedirect::stderr().ok()
             } else {
                 None
@@ -224,6 +225,7 @@ fn styled_line_from_structured(
     }
 }
 
+#[cfg_attr(not(feature = "stderr_capture"), allow(dead_code))]
 pub fn styled_line_from_stderr(text: &str) -> StyledLine {
     StyledLine {
         text: text.to_string(),

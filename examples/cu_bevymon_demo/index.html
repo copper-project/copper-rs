@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Copper BevyMon Demo</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        background:
+          radial-gradient(circle at top, #1a2633 0%, #090d12 52%, #05070a 100%);
+        font-family: "JetBrains Mono", "Fira Code", monospace;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+
+      body {
+        position: relative;
+      }
+
+      #bevy {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+        touch-action: none;
+      }
+
+      .chrome {
+        position: fixed;
+        top: 14px;
+        left: 14px;
+        z-index: 1;
+        padding: 10px 14px;
+        border: 1px solid rgba(135, 166, 194, 0.28);
+        background: rgba(6, 10, 14, 0.78);
+        color: #d7e2ec;
+        font-size: 12px;
+        line-height: 1.5;
+        letter-spacing: 0.02em;
+        backdrop-filter: blur(10px);
+      }
+
+      .chrome strong {
+        display: block;
+        margin-bottom: 4px;
+        color: #f4f7fa;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="chrome">
+      <strong>Copper BevyMon Demo</strong>
+      Left panel: Bevy sim. Right panel: live Copper monitor.
+    </div>
+    <canvas id="bevy"></canvas>
+  </body>
+</html>

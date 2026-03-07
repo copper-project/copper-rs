@@ -8,13 +8,18 @@ mod calibration;
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
 #[cfg_attr(all(target_os = "none", target_arch = "arm"), path = "cortexm.rs")]
 #[cfg_attr(target_arch = "riscv64", path = "riscv64.rs")]
+#[cfg_attr(
+    all(feature = "std", target_arch = "wasm32", target_os = "unknown"),
+    path = "wasm.rs"
+)]
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
 #[cfg_attr(
     not(any(
         target_arch = "x86_64",
         target_arch = "aarch64",
         all(target_os = "none", target_arch = "arm"),
-        target_arch = "riscv64"
+        target_arch = "riscv64",
+        all(feature = "std", target_arch = "wasm32", target_os = "unknown")
     )),
     path = "fallback.rs"
 )]
@@ -505,7 +510,10 @@ struct InternalClock {
 }
 
 // Implements the std version of the RTC clock
-#[cfg(feature = "std")]
+#[cfg(all(
+    feature = "std",
+    not(all(target_arch = "wasm32", target_os = "unknown"))
+))]
 #[inline(always)]
 fn read_rtc_ns() -> u64 {
     std::time::SystemTime::now()
@@ -514,10 +522,28 @@ fn read_rtc_ns() -> u64 {
         .as_nanos() as u64
 }
 
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", target_arch = "wasm32", target_os = "unknown"))]
+#[inline(always)]
+fn read_rtc_ns() -> u64 {
+    read_raw_counter()
+}
+
+#[cfg(all(
+    feature = "std",
+    not(all(target_arch = "wasm32", target_os = "unknown"))
+))]
 #[inline(always)]
 fn sleep_ns(ns: u64) {
     std::thread::sleep(std::time::Duration::from_nanos(ns));
+}
+
+#[cfg(all(feature = "std", target_arch = "wasm32", target_os = "unknown"))]
+#[inline(always)]
+fn sleep_ns(ns: u64) {
+    let start = read_raw_counter();
+    while read_raw_counter().saturating_sub(start) < ns {
+        core::hint::spin_loop();
+    }
 }
 
 impl InternalClock {

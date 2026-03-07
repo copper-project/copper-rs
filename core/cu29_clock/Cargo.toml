@@ -22,10 +22,13 @@ portable-atomic = { version = "1.11", default-features = false, features = [
 [target.'cfg(all(target_arch = "arm", target_os = "none"))'.dependencies]
 cortex-m = { workspace = true }
 
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+web-time = { version = "1.1.0", optional = true }
+
 [dev-dependencies]
 approx = { version = "0.5", default-features = false }
 
 [features]
 default = ["std"]
 reflect = ["dep:bevy_reflect"]
-std = ["portable-atomic/std", "portable-atomic/require-cas"]
+std = ["portable-atomic/std", "portable-atomic/require-cas", "dep:web-time"]
