@@ -310,6 +310,12 @@ impl MonitorUi {
     }
 
     pub fn draw_content(&mut self, f: &mut Frame, area: Rect) {
+        // Avoid backend-specific "reset" colors bleeding through the scrollable canvases.
+        f.render_widget(
+            Block::default().style(Style::default().bg(Color::Black)),
+            area,
+        );
+
         match self.active_screen {
             MonitorScreen::System => self.draw_system_info(f, area),
             MonitorScreen::Dag => self.draw_nodes(f, area),
@@ -491,6 +497,10 @@ impl MonitorUi {
         let content_size = Size::new(content_width, content_height);
         self.clamp_latency_scroll_offset(area, content_size);
         let mut scroll_view = ScrollView::new(content_size);
+        scroll_view.render_widget(
+            Block::default().style(Style::default().bg(Color::Black)),
+            Rect::new(0, 0, content_size.width, content_size.height),
+        );
         scroll_view.render_widget(
             table,
             Rect::new(0, 0, content_size.width, content_size.height),
@@ -1232,6 +1242,10 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let content_size = state.ensure_graph_cache(area);
         let mut scroll_view = ScrollView::new(content_size);
+        scroll_view.render_widget(
+            Block::default().style(Style::default().bg(Color::Black)),
+            Rect::new(0, 0, content_size.width, content_size.height),
+        );
 
         {
             let graph = state.graph();
