@@ -19,7 +19,7 @@ use cu29::{CuError, CuResult};
 pub use cu_tuimon::{MonitorModel, MonitorScreen, MonitorUiOptions, ScrollDirection};
 pub use focus::{CuBevyMonFocus, CuBevyMonFocusBorder, CuBevyMonSurface, CuBevyMonSurfaceNode};
 pub use terminal::CuBevyMonFontOptions;
-use terminal::CuBevyMonTerminal;
+use terminal::{CuBevyMonTerminal, sync_terminal_to_panel};
 pub use viewport::CuBevyMonViewportSurface;
 
 pub struct CuBevyMon {
@@ -336,22 +336,7 @@ fn resize_terminal_to_panel(
     let Some(panel) = panels.iter().next() else {
         return;
     };
-    let size = panel.size();
-    if size.x <= 1.0 || size.y <= 1.0 {
-        return;
-    }
-
-    let char_width = context.backend().char_width.max(1) as f32;
-    let char_height = context.backend().char_height.max(1) as f32;
-    let cols = (size.x / char_width).floor().max(1.0) as u16;
-    let rows = (size.y / char_height).floor().max(1.0) as u16;
-
-    let current_area = context.backend().buffer().area;
-    if current_area.width == cols && current_area.height == rows {
-        return;
-    }
-
-    context.backend_mut().resize(cols, rows);
+    sync_terminal_to_panel(&mut context, panel.size());
 }
 
 fn dispatch_monitor_event(
