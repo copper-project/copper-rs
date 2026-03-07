@@ -1,0 +1,17 @@
+[package]
+name = "cu-bevymon"
+description = "A Bevy-backed Ratatui monitor for Copper."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+bevy = { workspace = true }
+bevy_ratatui = { workspace = true, features = ["windowed"] }
+cu29 = { workspace = true }
+cu-tuimon = { path = "../../libs/cu_tuimon", version = "0.13.0" }
