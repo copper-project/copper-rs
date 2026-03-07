@@ -189,11 +189,22 @@ fn setup_scene(
 ) {
     commands.spawn((
         Camera3d::default(),
+        Camera {
+            order: 0,
+            ..default()
+        },
         Transform::from_xyz(5.0, 4.0, 8.0).looking_at(Vec3::ZERO, Vec3::Y),
         CuBevyMonViewportSurface(CuBevyMonSurface::Sim),
         SimCamera,
     ));
-    commands.spawn((Camera2d, IsDefaultUiCamera));
+    commands.spawn((
+        Camera2d,
+        Camera {
+            order: 1,
+            ..default()
+        },
+        IsDefaultUiCamera,
+    ));
 
     commands.insert_resource(GlobalAmbientLight {
         color: Color::WHITE,
