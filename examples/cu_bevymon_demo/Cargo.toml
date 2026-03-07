@@ -1,0 +1,34 @@
+[package]
+name = "cu-bevymon-demo"
+description = "Minimal side-by-side Bevy sim and Copper monitor demo."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+default-run = "cu-bevymon-demo"
+
+[dependencies]
+bevy = { workspace = true, default-features = false, features = [
+  "x11",
+  "wayland",
+  "default_font",
+  "bevy_render",
+  "bevy_window",
+  "bevy_core_pipeline",
+  "bevy_pbr",
+  "bevy_ui",
+  "bevy_ui_render",
+] }
+cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "0.13.0" }
+cu29 = { workspace = true }
+cu29-helpers = { workspace = true }
+bincode = { workspace = true }
+serde = { workspace = true }
+
+[[bin]]
+name = "cu-bevymon-demo"
+path = "src/main.rs"

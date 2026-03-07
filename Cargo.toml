@@ -26,7 +26,9 @@ members = [
   "components/libs/cu_embedded_registry",
   "components/libs/cu_transform",
   "core/cu29_units",
+  "components/libs/cu_tuimon",
   "components/monitors/cu_consolemon",
+  "components/monitors/cu_bevymon",
   "components/monitors/cu_logmon",
   "components/monitors/cu_safetymon",
   "components/payloads/cu_ros2_payloads",
@@ -66,6 +68,7 @@ members = [
   "examples/cu_background_task",
   "examples/cu_flight_controller",
   "examples/cu_bridge_test",
+  "examples/cu_bevymon_demo",
   "examples/cu_caterpillar",
   "examples/cu_config_gen",
   "examples/cu_config_variation",
@@ -244,6 +247,7 @@ anyhow = { version = "1.0", default-features = false }
 arrayvec = { version = "0.7", default-features = false }
 avian3d = { version = "0.5.0", default-features = false }
 bevy = { version = "0.18.0", default-features = false }
+bevy_ratatui = { version = "0.11.1", default-features = false }
 buddy_system_allocator = { version = "0.12", default-features = false }
 bytemuck = "1.23.0"
 cached-path = { version = "0.10.0", default-features = false }

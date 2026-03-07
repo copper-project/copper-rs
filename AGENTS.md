@@ -197,6 +197,9 @@ Implications:
   - No shortcut that creates spaghetti code or weakens the architecture.
 - Prefer `just` targets over inventing ad hoc command sequences.
 - After each edit pass, run `just fmt` from the repo root before moving on.
+- When touching Rust code, avoid clippy-denied cleanup mistakes that keep recurring here:
+  - do not keep redundant same-type casts such as `u64` to `u64`
+  - prefer `.is_multiple_of(...)` over `% ... == 0` when checking divisibility
 - Use `cargo expand` when proc-macro behavior is unclear.
 - Many examples/apps create logs under their own `logs/` directories.
 - `basic_copper_setup(...)` is the common logger/runtime bootstrap helper, but examples may customize around it.

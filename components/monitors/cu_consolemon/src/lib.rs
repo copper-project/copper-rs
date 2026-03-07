@@ -1,31 +1,21 @@
-#[cfg(feature = "debug_pane")]
-mod debug_pane;
 pub mod sysinfo;
-mod tui_nodes;
 
-use crate::tui_nodes::{Connection, NodeGraph, NodeLayout};
-use ansi_to_tui::IntoText;
-use color_eyre::config::HookBuilder;
-use compact_str::{CompactString, ToCompactString};
-use cu29::clock::CuDuration;
-use cu29::context::CuContext;
-use cu29::cutask::CuMsgMetadata;
-use cu29::monitoring::{
-    ComponentId, ComponentType, CopperListInfo, CopperListIoStats, CopperListView,
-    CuComponentState, CuDurationStatistics, CuMonitor, CuMonitoringMetadata, CuMonitoringRuntime,
-    Decision, MonitorComponentMetadata, MonitorTopology,
-};
-use cu29::prelude::{CuCompactString, CuTime, pool};
-use cu29::{CuError, CuResult};
-use cu29_log::CuLogLevel;
-#[cfg(debug_assertions)]
-use cu29_log_runtime::{
-    format_message_only, register_live_log_listener, unregister_live_log_listener,
-};
 #[cfg(feature = "debug_pane")]
-use debug_pane::{StyledLine, StyledRun, UIExt};
+use arboard::Clipboard;
+use color_eyre::config::HookBuilder;
+#[cfg(feature = "debug_pane")]
+use cu_tuimon::MonitorLogCapture;
+pub use cu_tuimon::{
+    MonitorModel, MonitorScreen, MonitorUi, MonitorUiAction, MonitorUiEvent, MonitorUiKey,
+    MonitorUiOptions, ScrollDirection,
+};
+use cu29::context::CuContext;
+use cu29::monitoring::{
+    ComponentId, CopperListIoStats, CopperListView, CuComponentState, CuMonitor,
+    CuMonitoringMetadata, CuMonitoringRuntime, Decision,
+};
+use cu29::{CuError, CuResult};
 use ratatui::backend::CrosstermBackend;
-use ratatui::buffer::Buffer;
 use ratatui::crossterm::event::{
     DisableMouseCapture, EnableMouseCapture, Event, KeyCode, MouseButton, MouseEventKind,
 };
@@ -34,1034 +24,31 @@ use ratatui::crossterm::terminal::{
 };
 use ratatui::crossterm::tty::IsTty;
 use ratatui::crossterm::{event, execute};
-use ratatui::layout::{Alignment, Constraint, Direction, Layout, Position, Size};
-use ratatui::prelude::Stylize;
-use ratatui::prelude::{Backend, Rect};
-use ratatui::style::{Color, Modifier, Style};
-use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, BorderType, Borders, Cell, Paragraph, Row, StatefulWidget, Table};
-use ratatui::{Frame, Terminal};
+use ratatui::{Terminal, TerminalOptions, Viewport};
 use std::backtrace::Backtrace;
-use std::fmt::{Display, Formatter};
 use std::io::{Write, stdin, stdout};
-use std::marker::PhantomData;
 use std::process;
+#[cfg(feature = "debug_pane")]
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, OnceLock};
 use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
-use std::{collections::HashMap, io, thread};
-use tui_widgets::scrollview::{ScrollView, ScrollViewState};
-
-#[cfg(feature = "debug_pane")]
-use arboard::Clipboard;
-
-#[derive(Clone, Copy)]
-struct TabDef {
-    screen: Screen,
-    label: &'static str,
-    key: &'static str,
-}
-
-#[derive(Clone, Copy)]
-struct TabHitbox {
-    screen: Screen,
-    x: u16,
-    y: u16,
-    width: u16,
-    height: u16,
-}
-
-#[derive(Clone, Copy)]
-enum HelpAction {
-    ResetLatency,
-    Quit,
-}
-
-#[derive(Clone, Copy)]
-struct HelpHitbox {
-    action: HelpAction,
-    x: u16,
-    y: u16,
-    width: u16,
-    height: u16,
-}
-
-const TAB_DEFS: &[TabDef] = &[
-    TabDef {
-        screen: Screen::Neofetch,
-        label: "SYS",
-        key: "1",
-    },
-    TabDef {
-        screen: Screen::Dag,
-        label: "DAG",
-        key: "2",
-    },
-    TabDef {
-        screen: Screen::Latency,
-        label: "LAT",
-        key: "3",
-    },
-    TabDef {
-        screen: Screen::CopperList,
-        label: "BW",
-        key: "4",
-    },
-    TabDef {
-        screen: Screen::MemoryPools,
-        label: "MEM",
-        key: "5",
-    },
-    #[cfg(feature = "debug_pane")]
-    TabDef {
-        screen: Screen::DebugOutput,
-        label: "LOG",
-        key: "6",
-    },
-];
-
-const COPPERLIST_RATE_WINDOW: Duration = Duration::from_secs(1);
-
-#[derive(Clone, Copy, PartialEq)]
-enum Screen {
-    Neofetch,
-    Dag,
-    Latency,
-    MemoryPools,
-    CopperList,
-    #[cfg(feature = "debug_pane")]
-    DebugOutput,
-}
-
-#[cfg(feature = "debug_pane")]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-struct SelectionPoint {
-    row: usize,
-    col: usize,
-}
-
-#[cfg(feature = "debug_pane")]
-#[derive(Clone, Copy, Debug, Default)]
-struct DebugSelection {
-    anchor: Option<SelectionPoint>,
-    cursor: Option<SelectionPoint>,
-}
-
-#[cfg(feature = "debug_pane")]
-impl DebugSelection {
-    fn clear(&mut self) {
-        self.anchor = None;
-        self.cursor = None;
-    }
-
-    fn start(&mut self, point: SelectionPoint) {
-        self.anchor = Some(point);
-        self.cursor = Some(point);
-    }
-
-    fn update(&mut self, point: SelectionPoint) {
-        if self.anchor.is_some() {
-            self.cursor = Some(point);
-        }
-    }
-
-    fn range(&self) -> Option<(SelectionPoint, SelectionPoint)> {
-        let anchor = self.anchor?;
-        let cursor = self.cursor?;
-        if (anchor.row, anchor.col) <= (cursor.row, cursor.col) {
-            Some((anchor, cursor))
-        } else {
-            Some((cursor, anchor))
-        }
-    }
-}
-
-fn segment_width(key: &str, label: &str) -> u16 {
-    (6 + key.chars().count() + label.chars().count()) as u16
-}
-
-fn help_action(key: &str) -> Option<HelpAction> {
-    match key {
-        "r" => Some(HelpAction::ResetLatency),
-        "q" => Some(HelpAction::Quit),
-        _ => None,
-    }
-}
-
-fn mouse_inside(mouse: &event::MouseEvent, x: u16, y: u16, width: u16, height: u16) -> bool {
-    mouse.column >= x && mouse.column < x + width && mouse.row >= y && mouse.row < y + height
-}
-
-#[cfg(feature = "debug_pane")]
-fn char_to_byte_index(text: &str, char_idx: usize) -> usize {
-    text.char_indices()
-        .nth(char_idx)
-        .map(|(idx, _)| idx)
-        .unwrap_or(text.len())
-}
-
-#[cfg(feature = "debug_pane")]
-fn slice_char_range(text: &str, start: usize, end: usize) -> (&str, &str, &str) {
-    let start_idx = char_to_byte_index(text, start);
-    let end_idx = char_to_byte_index(text, end);
-    let start_idx = start_idx.min(text.len());
-    let end_idx = end_idx.min(text.len());
-    let (start_idx, end_idx) = if start_idx <= end_idx {
-        (start_idx, end_idx)
-    } else {
-        (end_idx, start_idx)
-    };
-    (
-        &text[..start_idx],
-        &text[start_idx..end_idx],
-        &text[end_idx..],
-    )
-}
-
-#[cfg(feature = "debug_pane")]
-fn line_selection_bounds(
-    line_index: usize,
-    line_len: usize,
-    start: SelectionPoint,
-    end: SelectionPoint,
-) -> Option<(usize, usize)> {
-    if line_index < start.row || line_index > end.row {
-        return None;
-    }
-
-    let start_col = if line_index == start.row {
-        start.col
-    } else {
-        0
-    };
-    let mut end_col = if line_index == end.row {
-        end.col
-    } else {
-        line_len
-    };
-    if line_index == end.row {
-        end_col = end_col.saturating_add(1).min(line_len);
-    }
-    let start_col = start_col.min(line_len);
-    let end_col = end_col.min(line_len);
-    if start_col >= end_col {
-        return None;
-    }
-
-    Some((start_col, end_col))
-}
-
-#[cfg(feature = "debug_pane")]
-fn slice_chars_owned(text: &str, start: usize, end: usize) -> String {
-    let start_idx = char_to_byte_index(text, start);
-    let end_idx = char_to_byte_index(text, end);
-    text[start_idx.min(text.len())..end_idx.min(text.len())].to_string()
-}
-
-#[cfg(feature = "debug_pane")]
-fn spans_from_runs(line: &StyledLine) -> Vec<Span<'static>> {
-    if line.runs.is_empty() {
-        return vec![Span::raw(line.text.clone())];
-    }
-
-    let mut spans = Vec::new();
-    let mut cursor = 0usize;
-    let total_chars = line.text.chars().count();
-    let mut runs = line.runs.clone();
-    runs.sort_by_key(|r| r.start);
-
-    for run in runs {
-        let start = run.start.min(total_chars);
-        let end = run.end.min(total_chars);
-        if start > cursor {
-            let before = slice_chars_owned(&line.text, cursor, start);
-            if !before.is_empty() {
-                spans.push(Span::raw(before));
-            }
-        }
-        if end > start {
-            let segment = slice_chars_owned(&line.text, start, end);
-            spans.push(Span::styled(segment, run.style));
-        }
-        cursor = cursor.max(end);
-    }
-
-    if cursor < total_chars {
-        let tail = slice_chars_owned(&line.text, cursor, total_chars);
-        if !tail.is_empty() {
-            spans.push(Span::raw(tail));
-        }
-    }
-
-    spans
-}
-
-#[cfg(feature = "debug_pane")]
-fn color_for_level(level: CuLogLevel) -> Color {
-    match level {
-        CuLogLevel::Debug => Color::Green,
-        CuLogLevel::Info => Color::Gray,
-        CuLogLevel::Warning => Color::Yellow,
-        CuLogLevel::Error => Color::Red,
-        CuLogLevel::Critical => Color::Red,
-    }
-}
-
-#[cfg(feature = "debug_pane")]
-fn format_ts(time: CuTime) -> String {
-    let nanos = time.as_nanos();
-    let total_ms = nanos / 1_000_000;
-    let millis = total_ms % 1000;
-    let total_s = total_ms / 1000;
-    let secs = total_s % 60;
-    let mins = (total_s / 60) % 60;
-    let hours = (total_s / 3600) % 24;
-    format!("{hours:02}:{mins:02}:{secs:02}.{millis:03}")
-}
-
-#[cfg(feature = "debug_pane")]
-fn build_message_with_runs(
-    format_str: &str,
-    params: &[String],
-    named_params: &HashMap<String, String>,
-) -> (String, Vec<(usize, usize)>) {
-    let mut out = String::new();
-    let mut param_spans = Vec::new();
-    let mut anon_iter = params.iter();
-    let mut iter = format_str.char_indices().peekable();
-    while let Some((idx, ch)) = iter.next() {
-        if ch == '{' {
-            let start_idx = idx + ch.len_utf8();
-            if let Some(end) = format_str[start_idx..].find('}') {
-                let end_idx = start_idx + end;
-                let placeholder = &format_str[start_idx..end_idx];
-                let replacement_opt = if placeholder.is_empty() {
-                    anon_iter.next()
-                } else {
-                    named_params.get(placeholder)
-                };
-                if let Some(repl) = replacement_opt {
-                    let span_start = out.chars().count();
-                    out.push_str(repl);
-                    let span_end = out.chars().count();
-                    param_spans.push((span_start, span_end));
-                    let skip_to = end_idx + '}'.len_utf8();
-                    while let Some((next_idx, _)) = iter.peek().copied() {
-                        if next_idx < skip_to {
-                            iter.next();
-                        } else {
-                            break;
-                        }
-                    }
-                    continue;
-                }
-            }
-        }
-        out.push(ch);
-    }
-    (out, param_spans)
-}
-
-#[cfg(feature = "debug_pane")]
-fn styled_line_from_structured(
-    time: CuTime,
-    level: CuLogLevel,
-    format_str: &str,
-    params: &[String],
-    named_params: &HashMap<String, String>,
-) -> StyledLine {
-    let ts = format_ts(time);
-    let level_txt = format!("[{:?}]", level);
-
-    let (msg_text, param_spans) = build_message_with_runs(format_str, params, named_params);
-    let mut msg_runs = Vec::new();
-    let mut cursor = 0usize;
-    let param_spans_sorted = {
-        let mut v = param_spans;
-        v.sort_by_key(|p| p.0);
-        v
-    };
-    for (start, end) in param_spans_sorted {
-        if start > cursor {
-            msg_runs.push(StyledRun {
-                start: cursor,
-                end: start,
-                style: Style::default().fg(Color::Gray),
-            });
-        }
-        msg_runs.push(StyledRun {
-            start,
-            end,
-            style: Style::default().fg(Color::Magenta),
-        });
-        cursor = end;
-    }
-    if cursor < msg_text.chars().count() {
-        msg_runs.push(StyledRun {
-            start: cursor,
-            end: msg_text.chars().count(),
-            style: Style::default().fg(Color::Gray),
-        });
-    }
-
-    let prefix = format!("{ts} {level_txt} ");
-    let prefix_len = prefix.chars().count();
-    let line_text = format!("{prefix}{msg_text}");
-
-    let mut runs = Vec::new();
-    let ts_len = ts.chars().count();
-    let level_start = ts_len + 1;
-    let level_end = level_start + level_txt.chars().count();
-
-    runs.push(StyledRun {
-        start: 0,
-        end: ts_len,
-        style: Style::default().fg(Color::Blue),
-    });
-    runs.push(StyledRun {
-        start: level_start,
-        end: level_end,
-        style: Style::default().fg(color_for_level(level)).bold(),
-    });
-    for run in msg_runs {
-        runs.push(StyledRun {
-            start: prefix_len + run.start,
-            end: prefix_len + run.end,
-            style: run.style,
-        });
-    }
-
-    StyledLine {
-        text: line_text,
-        runs,
-    }
-}
-
-struct ComponentStats {
-    stats: Vec<CuDurationStatistics>,
-    end2end: CuDurationStatistics,
-}
-
-impl ComponentStats {
-    fn new(component_count: usize, max_duration: CuDuration) -> Self {
-        let stats = vec![CuDurationStatistics::new(max_duration); component_count];
-        ComponentStats {
-            stats,
-            end2end: CuDurationStatistics::new(max_duration),
-        }
-    }
-
-    fn update(&mut self, view: CopperListView<'_>) {
-        for entry in view.entries() {
-            let component_index = entry.component_id.index();
-            assert!(
-                component_index < self.stats.len(),
-                "cu_consolemon: mapped component index {} out of stats bounds {}",
-                component_index,
-                self.stats.len()
-            );
-            let msg = entry.msg;
-            let before = Option::<CuTime>::from(msg.process_time.start);
-            let after = Option::<CuTime>::from(msg.process_time.end);
-            if let (Some(before), Some(after)) = (before, after)
-                && after >= before
-            {
-                self.stats[component_index].record(after - before);
-            }
-        }
-        self.end2end.record(compute_end_to_end_latency(view.msgs()));
-    }
-
-    fn reset(&mut self) {
-        for s in &mut self.stats {
-            s.reset();
-        }
-        self.end2end.reset();
-    }
-}
-struct PoolStats {
-    id: CompactString,
-    space_left: usize,
-    total_size: usize,
-    buffer_size: usize,
-    handles_in_use: usize,
-    handles_per_second: usize,
-    last_update: Instant,
-}
-
-impl PoolStats {
-    fn new(
-        id: impl ToCompactString,
-        space_left: usize,
-        total_size: usize,
-        buffer_size: usize,
-    ) -> Self {
-        Self {
-            id: id.to_compact_string(),
-            space_left,
-            total_size,
-            buffer_size,
-            handles_in_use: total_size - space_left,
-            handles_per_second: 0,
-            last_update: Instant::now(),
-        }
-    }
-
-    fn update(&mut self, space_left: usize, total_size: usize) {
-        let now = Instant::now();
-        let handles_in_use = total_size - space_left;
-        let elapsed = now.duration_since(self.last_update).as_secs_f32();
-
-        if elapsed >= 1.0 {
-            self.handles_per_second =
-                ((handles_in_use.abs_diff(self.handles_in_use)) as f32 / elapsed) as usize;
-            self.last_update = now;
-        }
-
-        self.handles_in_use = handles_in_use;
-        self.space_left = space_left;
-        self.total_size = total_size;
-    }
-}
-
-struct CopperListStats {
-    size_bytes: usize,
-    raw_culist_bytes: u64,
-    handle_bytes: u64,
-    encoded_bytes: u64,
-    keyframe_bytes: u64,
-    structured_total_bytes: u64,
-    structured_bytes_per_cl: u64,
-    total_copperlists: u64,
-    window_copperlists: u64,
-    last_seen_clid: Option<u64>,
-    last_rate_at: Instant,
-    rate_hz: f64,
-}
-
-impl CopperListStats {
-    fn new() -> Self {
-        Self {
-            size_bytes: 0,
-            raw_culist_bytes: 0,
-            handle_bytes: 0,
-            encoded_bytes: 0,
-            keyframe_bytes: 0,
-            structured_total_bytes: 0,
-            structured_bytes_per_cl: 0,
-            total_copperlists: 0,
-            window_copperlists: 0,
-            last_seen_clid: None,
-            last_rate_at: Instant::now(),
-            rate_hz: 0.0,
-        }
-    }
-
-    fn set_info(&mut self, info: CopperListInfo) {
-        self.size_bytes = info.size_bytes;
-    }
-
-    fn update_io(&mut self, stats: cu29::monitoring::CopperListIoStats) {
-        self.raw_culist_bytes = stats.raw_culist_bytes;
-        self.handle_bytes = stats.handle_bytes;
-        self.encoded_bytes = stats.encoded_culist_bytes;
-        self.keyframe_bytes = stats.keyframe_bytes;
-        let total = stats.structured_log_bytes_total;
-        self.structured_bytes_per_cl = total.saturating_sub(self.structured_total_bytes);
-        self.structured_total_bytes = total;
-    }
-
-    fn update_rate(&mut self, clid: u64) {
-        let newly_seen = self
-            .last_seen_clid
-            .map_or(1, |prev| clid.wrapping_sub(prev));
-        self.last_seen_clid = Some(clid);
-        self.total_copperlists = self.total_copperlists.saturating_add(newly_seen);
-        self.window_copperlists = self.window_copperlists.saturating_add(newly_seen);
-
-        let now = Instant::now();
-        let elapsed = now.duration_since(self.last_rate_at);
-        if elapsed >= COPPERLIST_RATE_WINDOW {
-            let elapsed_secs = elapsed.as_secs_f64();
-            self.rate_hz = if elapsed_secs > 0.0 {
-                self.window_copperlists as f64 / elapsed_secs
-            } else {
-                0.0
-            };
-            self.window_copperlists = 0;
-            self.last_rate_at = now;
-        }
-    }
-}
-
-fn compute_end_to_end_latency(msgs: &[&CuMsgMetadata]) -> CuDuration {
-    let start = msgs.first().map(|m| m.process_time.start);
-    let end = msgs.last().map(|m| m.process_time.end);
-
-    if let (Some(s), Some(e)) = (start, end)
-        && let (Some(s), Some(e)) = (Option::<CuTime>::from(s), Option::<CuTime>::from(e))
-        && e >= s
-    {
-        e - s
-    } else {
-        CuDuration::MIN
-    }
-}
-
-fn format_bytes(bytes: f64) -> String {
-    const UNITS: [&str; 4] = ["B", "KiB", "MiB", "GiB"];
-    let mut value = bytes;
-    let mut unit_idx = 0;
-    while value >= 1024.0 && unit_idx < UNITS.len() - 1 {
-        value /= 1024.0;
-        unit_idx += 1;
-    }
-    if unit_idx == 0 {
-        format!("{:.0} {}", value, UNITS[unit_idx])
-    } else {
-        format!("{:.2} {}", value, UNITS[unit_idx])
-    }
-}
-
-fn format_bytes_or(bytes: u64, fallback: &str) -> String {
-    if bytes > 0 {
-        format_bytes(bytes as f64)
-    } else {
-        fallback.to_string()
-    }
-}
-
-fn format_rate_bytes_or_na(bytes: u64, rate_hz: f64) -> String {
-    if bytes > 0 {
-        format!("{}/s", format_bytes((bytes as f64) * rate_hz))
-    } else {
-        "n/a".to_string()
-    }
-}
-
-// This is kind of terrible.
-#[derive(Copy, Clone)]
-enum NodeType {
-    Unknown,
-    Source,
-    Sink,
-    Task,
-    Bridge,
-}
-
-impl Display for NodeType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Unknown => write!(f, "?"),
-            Self::Source => write!(f, "◈"),
-            Self::Task => write!(f, "⚙"),
-            Self::Sink => write!(f, "⭳"),
-            Self::Bridge => write!(f, "⇆"),
-        }
-    }
-}
-
-impl NodeType {
-    fn color(self) -> Color {
-        match self {
-            Self::Unknown => Color::Gray,
-            Self::Source => Color::Rgb(255, 191, 0),
-            Self::Sink => Color::Rgb(255, 102, 204),
-            Self::Task => Color::White,
-            Self::Bridge => Color::Rgb(204, 153, 255),
-        }
-    }
-}
-
-#[derive(Default, Clone)]
-struct ComponentStatus {
-    is_error: bool,
-    status_txt: CompactString,
-    error: CompactString,
-}
-
-#[derive(Clone)]
-struct DisplayNode {
-    id: String,
-    type_label: String,
-    node_type: NodeType,
-    inputs: Vec<String>,
-    outputs: Vec<String>,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-struct GraphCacheKey {
-    area: Size,
-    node_count: usize,
-    connection_count: usize,
-}
-
-struct GraphCache {
-    graph: Option<NodeGraph<'static>>,
-    content_size: Size,
-    key: Option<GraphCacheKey>,
-    dirty: bool,
-}
-
-impl GraphCache {
-    fn new() -> Self {
-        Self {
-            graph: None,
-            content_size: Size::ZERO,
-            key: None,
-            dirty: true,
-        }
-    }
-}
-
-impl GraphCache {
-    fn needs_rebuild(&self, key: GraphCacheKey) -> bool {
-        self.dirty || self.graph.is_none() || self.key != Some(key)
-    }
-}
-
-struct NodesScrollableWidgetState {
-    display_nodes: Vec<DisplayNode>,
-    connections: Vec<Connection>,
-    statuses: Arc<Mutex<Vec<ComponentStatus>>>,
-    status_index_map: Vec<Option<ComponentId>>,
-    nodes_scrollable_state: ScrollViewState,
-    graph_cache: GraphCache,
-}
-
-impl NodesScrollableWidgetState {
-    fn new(
-        statuses: Arc<Mutex<Vec<ComponentStatus>>>,
-        components: &'static [MonitorComponentMetadata],
-        topology: MonitorTopology,
-    ) -> Self {
-        let mut display_nodes: Vec<DisplayNode> = Vec::new();
-        let mut status_index_map = Vec::new();
-        let mut node_lookup = HashMap::new();
-        let component_id_by_name: HashMap<&'static str, ComponentId> = components
-            .iter()
-            .enumerate()
-            .map(|(idx, component)| (component.id(), ComponentId::new(idx)))
-            .collect();
-
-        for node in topology.nodes.iter() {
-            let node_type = match node.kind {
-                ComponentType::Source => NodeType::Source,
-                ComponentType::Task => NodeType::Task,
-                ComponentType::Sink => NodeType::Sink,
-                ComponentType::Bridge => NodeType::Bridge,
-                _ => NodeType::Unknown,
-            };
-
-            display_nodes.push(DisplayNode {
-                id: node.id.clone(),
-                type_label: node
-                    .type_name
-                    .clone()
-                    .unwrap_or_else(|| "unknown".to_string()),
-                node_type,
-                inputs: node.inputs.clone(),
-                outputs: node.outputs.clone(),
-            });
-            let idx = display_nodes.len() - 1;
-            node_lookup.insert(node.id.clone(), idx);
-
-            let status_idx = component_id_by_name.get(node.id.as_str()).copied();
-            status_index_map.push(status_idx);
-        }
-
-        let mut connections: Vec<Connection> = Vec::with_capacity(topology.connections.len());
-        for cnx in topology.connections.iter() {
-            let Some(&src_idx) = node_lookup.get(&cnx.src) else {
-                continue;
-            };
-            let Some(&dst_idx) = node_lookup.get(&cnx.dst) else {
-                continue;
-            };
-            let src_node = &display_nodes[src_idx];
-            let dst_node = &display_nodes[dst_idx];
-            let src_port = cnx
-                .src_port
-                .as_ref()
-                .and_then(|p| src_node.outputs.iter().position(|name| name == p))
-                .unwrap_or(0);
-            let dst_port = cnx
-                .dst_port
-                .as_ref()
-                .and_then(|p| dst_node.inputs.iter().position(|name| name == p))
-                .unwrap_or(0);
-
-            connections.push(Connection::new(
-                src_idx,
-                src_port + NODE_PORT_ROW_OFFSET,
-                dst_idx,
-                dst_port + NODE_PORT_ROW_OFFSET,
-            ));
-        }
-
-        // tui-nodes drops all nodes when every node has an outgoing edge (no roots).
-        // If that happens, drop the outgoing edges for the first node so at least one root exists.
-        if !display_nodes.is_empty() {
-            let mut from_set = std::collections::HashSet::new();
-            for conn in &connections {
-                from_set.insert(conn.from_node);
-            }
-            if from_set.len() == display_nodes.len() {
-                let root_idx = 0;
-                connections.retain(|c| c.from_node != root_idx);
-            }
-        }
-
-        NodesScrollableWidgetState {
-            display_nodes,
-            connections,
-            statuses,
-            status_index_map,
-            nodes_scrollable_state: ScrollViewState::default(),
-            graph_cache: GraphCache::new(),
-        }
-    }
-
-    fn mark_graph_dirty(&mut self) {
-        self.graph_cache.dirty = true;
-    }
-
-    fn ensure_graph_cache(&mut self, area: Rect) -> Size {
-        let key = self.graph_cache_key(area);
-        if self.graph_cache.needs_rebuild(key) {
-            self.rebuild_graph_cache(area, key);
-        }
-        self.graph_cache.content_size
-    }
-
-    fn graph(&self) -> &NodeGraph<'static> {
-        self.graph_cache
-            .graph
-            .as_ref()
-            .expect("graph cache must be initialized before render")
-    }
-
-    fn graph_cache_key(&self, area: Rect) -> GraphCacheKey {
-        GraphCacheKey {
-            area: area.into(),
-            node_count: self.display_nodes.len(),
-            connection_count: self.connections.len(),
-        }
-    }
-
-    fn build_graph(&self, content_size: Size) -> NodeGraph<'static> {
-        let mut graph = NodeGraph::new(
-            self.build_node_layouts(),
-            self.connections.clone(),
-            content_size.width as usize,
-            content_size.height as usize,
-        );
-        graph.calculate();
-        graph
-    }
-
-    fn rebuild_graph_cache(&mut self, area: Rect, key: GraphCacheKey) {
-        let content_size = if self.display_nodes.is_empty() {
-            Size::new(area.width.max(NODE_WIDTH), area.height.max(NODE_HEIGHT))
-        } else {
-            let node_count = self.display_nodes.len();
-            let content_width = (node_count as u16)
-                .saturating_mul(NODE_WIDTH + 20)
-                .max(NODE_WIDTH);
-            let max_ports = self
-                .display_nodes
-                .iter()
-                .map(|node| node.inputs.len().max(node.outputs.len()))
-                .max()
-                .unwrap_or_default();
-            let content_height =
-                (((max_ports + NODE_PORT_ROW_OFFSET) as u16) * 12).max(NODE_HEIGHT * 6);
-
-            let initial_size = Size::new(content_width, content_height);
-            let graph = self.build_graph(initial_size);
-            let bounds = graph.content_bounds();
-            let desired_width = bounds
-                .width
-                .saturating_add(GRAPH_WIDTH_PADDING)
-                .max(NODE_WIDTH);
-            let desired_height = bounds
-                .height
-                .saturating_add(GRAPH_HEIGHT_PADDING)
-                .max(NODE_HEIGHT);
-            Size::new(desired_width, desired_height)
-        };
-
-        self.graph_cache.graph = Some(self.build_graph(content_size));
-        self.graph_cache.content_size = content_size;
-        self.graph_cache.key = Some(key);
-        self.graph_cache.dirty = false;
-
-        self.clamp_scroll_offset(area, content_size);
-    }
-
-    fn build_node_layouts(&self) -> Vec<NodeLayout<'static>> {
-        self.display_nodes
-            .iter()
-            .map(|node| {
-                let ports = node.inputs.len().max(node.outputs.len());
-                let content_rows = ports + NODE_PORT_ROW_OFFSET;
-                let height = (content_rows as u16).saturating_add(2).max(NODE_HEIGHT);
-                let title_line = Line::from(vec![
-                    Span::styled(
-                        format!(" {}", node.node_type),
-                        Style::default().fg(node.node_type.color()),
-                    ),
-                    Span::styled(format!(" {} ", node.id), Style::default().fg(Color::White)),
-                ]);
-                NodeLayout::new((NODE_WIDTH, height)).with_title_line(title_line)
-            })
-            .collect()
-    }
-
-    fn clamp_scroll_offset(&mut self, area: Rect, content_size: Size) {
-        let max_x = content_size
-            .width
-            .saturating_sub(area.width.saturating_sub(1));
-        let max_y = content_size
-            .height
-            .saturating_sub(area.height.saturating_sub(1));
-        let offset = self.nodes_scrollable_state.offset();
-        let clamped = Position::new(offset.x.min(max_x), offset.y.min(max_y));
-        self.nodes_scrollable_state.set_offset(clamped);
-    }
-}
-
-struct NodesScrollableWidget<'a> {
-    _marker: PhantomData<&'a ()>,
-}
-
-const NODE_WIDTH: u16 = 29;
-const NODE_WIDTH_CONTENT: u16 = NODE_WIDTH - 2;
-
-const NODE_HEIGHT: u16 = 5;
-const NODE_META_LINES: usize = 2;
-const NODE_PORT_ROW_OFFSET: usize = NODE_META_LINES;
-
-fn clip_tail(value: &str, max_chars: usize) -> String {
-    if max_chars == 0 {
-        return String::new();
-    }
-    let char_count = value.chars().count();
-    if char_count <= max_chars {
-        return value.to_string();
-    }
-    let skip = char_count.saturating_sub(max_chars);
-    let start = value
-        .char_indices()
-        .nth(skip)
-        .map(|(idx, _)| idx)
-        .unwrap_or(value.len());
-    value[start..].to_string()
-}
-
-#[allow(dead_code)]
-const NODE_HEIGHT_CONTENT: u16 = NODE_HEIGHT - 2;
-const GRAPH_WIDTH_PADDING: u16 = NODE_WIDTH * 2;
-const GRAPH_HEIGHT_PADDING: u16 = NODE_HEIGHT * 4;
-
-impl StatefulWidget for NodesScrollableWidget<'_> {
-    type State = NodesScrollableWidgetState;
-
-    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let content_size = state.ensure_graph_cache(area);
-        let mut scroll_view = ScrollView::new(content_size);
-
-        {
-            let graph = state.graph();
-            let zones = graph.split(scroll_view.area());
-
-            let mut statuses = state.statuses.lock().unwrap();
-            for (idx, ea_zone) in zones.into_iter().enumerate() {
-                let status = state
-                    .status_index_map
-                    .get(idx)
-                    .and_then(|opt| *opt)
-                    .and_then(|component_id| statuses.get_mut(component_id.index()))
-                    .map(|status| {
-                        let snapshot = status.clone();
-                        status.is_error = false;
-                        snapshot
-                    })
-                    .unwrap_or_default();
-                let node = &state.display_nodes[idx];
-                let status_line = if status.is_error {
-                    format!("❌ {}", status.error)
-                } else {
-                    format!("✓ {}", status.status_txt)
-                };
-
-                let label_width = (NODE_WIDTH_CONTENT as usize).saturating_sub(2);
-                let type_label = clip_tail(&node.type_label, label_width);
-                let status_text = clip_tail(&status_line, label_width);
-                let base_style = if status.is_error {
-                    Style::default().fg(Color::Red)
-                } else {
-                    Style::default().fg(Color::Green)
-                };
-                let mut lines: Vec<Line> = Vec::new();
-                lines.push(Line::styled(format!(" {}", type_label), base_style));
-                lines.push(Line::styled(format!(" {}", status_text), base_style));
-
-                let max_ports = node.inputs.len().max(node.outputs.len());
-                if max_ports > 0 {
-                    let left_width = (NODE_WIDTH_CONTENT as usize - 2) / 2;
-                    let right_width = NODE_WIDTH_CONTENT as usize - 2 - left_width;
-                    let input_style = Style::default().fg(Color::Yellow);
-                    let output_style = Style::default().fg(Color::Cyan);
-                    let dotted_style = Style::default().fg(Color::DarkGray);
-                    for port_idx in 0..max_ports {
-                        let input = node
-                            .inputs
-                            .get(port_idx)
-                            .map(|label| clip_tail(label, left_width))
-                            .unwrap_or_default();
-                        let output = node
-                            .outputs
-                            .get(port_idx)
-                            .map(|label| clip_tail(label, right_width))
-                            .unwrap_or_default();
-                        let mut port_line = Line::default();
-                        port_line.spans.push(Span::styled(
-                            format!(" {:<left_width$}", input, left_width = left_width),
-                            input_style,
-                        ));
-                        port_line.spans.push(Span::styled("┆", dotted_style));
-                        port_line.spans.push(Span::styled(
-                            format!("{:>right_width$}", output, right_width = right_width),
-                            output_style,
-                        ));
-                        lines.push(port_line);
-                    }
-                }
-
-                let paragraph = Paragraph::new(Text::from(lines));
-                scroll_view.render_widget(paragraph, ea_zone);
-            }
-
-            let content_area = Rect::new(0, 0, content_size.width, content_size.height);
-            scroll_view.render_widget(graph, content_area);
-        }
-
-        scroll_view.render(area, buf, &mut state.nodes_scrollable_state);
-    }
-}
+use std::time::Duration;
+use std::{io, thread};
 
 /// A TUI based realtime console for Copper.
 pub struct CuConsoleMon {
-    components: &'static [MonitorComponentMetadata],
-    component_stats: Arc<Mutex<ComponentStats>>,
-    component_statuses: Arc<Mutex<Vec<ComponentStatus>>>,
+    model: MonitorModel,
     ui_handle: Option<JoinHandle<()>>,
-    pool_stats: Arc<Mutex<Vec<PoolStats>>>,
-    copperlist_stats: Arc<Mutex<CopperListStats>>,
     quitting: Arc<AtomicBool>,
-    topology: MonitorTopology,
+    #[cfg(feature = "debug_pane")]
+    log_capture: Option<Mutex<MonitorLogCapture>>,
+}
+
+impl CuConsoleMon {
+    pub fn model(&self) -> MonitorModel {
+        self.model.clone()
+    }
 }
 
 impl Drop for CuConsoleMon {
@@ -1075,878 +62,123 @@ impl Drop for CuConsoleMon {
 }
 
 struct UI {
-    components: &'static [MonitorComponentMetadata],
-    runtime_node_col_width: u16,
-    active_screen: Screen,
-    sysinfo: String,
-    component_stats: Arc<Mutex<ComponentStats>>,
+    monitor_ui: MonitorUi,
     quitting: Arc<AtomicBool>,
-    tab_hitboxes: Vec<TabHitbox>,
-    help_hitboxes: Vec<HelpHitbox>,
-    nodes_scrollable_widget_state: NodesScrollableWidgetState,
-    #[cfg(feature = "debug_pane")]
-    error_redirect: Option<gag::BufferRedirect>,
-    #[cfg(feature = "debug_pane")]
-    debug_output: Option<debug_pane::DebugLog>,
-    #[cfg(feature = "debug_pane")]
-    debug_output_area: Option<Rect>,
-    #[cfg(feature = "debug_pane")]
-    debug_output_visible_offset: usize,
-    #[cfg(feature = "debug_pane")]
-    debug_output_lines: Vec<debug_pane::StyledLine>,
-    #[cfg(feature = "debug_pane")]
-    debug_selection: DebugSelection,
     #[cfg(feature = "debug_pane")]
     clipboard: Option<Clipboard>,
-    latency_scroll_state: ScrollViewState,
-    pool_stats: Arc<Mutex<Vec<PoolStats>>>,
-    copperlist_stats: Arc<Mutex<CopperListStats>>,
 }
 
 impl UI {
-    fn compute_runtime_node_col_width(components: &'static [MonitorComponentMetadata]) -> u16 {
-        const MIN_WIDTH: usize = 24;
-        const MAX_WIDTH: usize = 56;
-
-        let header_width = "Runtime Node".chars().count();
-        let max_name_width = components
-            .iter()
-            .map(|component| component.id().chars().count())
-            .max()
-            .unwrap_or(0);
-        let width = header_width.max(max_name_width).saturating_add(2);
-        width.clamp(MIN_WIDTH, MAX_WIDTH) as u16
-    }
-
-    fn component_label(&self, component_id: ComponentId) -> &'static str {
-        debug_assert!(component_id.index() < self.components.len());
-        self.components[component_id.index()].id()
-    }
-
-    #[cfg(feature = "debug_pane")]
-    #[allow(clippy::too_many_arguments)]
-    fn new(
-        components: &'static [MonitorComponentMetadata],
-        component_stats: Arc<Mutex<ComponentStats>>,
-        component_statuses: Arc<Mutex<Vec<ComponentStatus>>>,
-        quitting: Arc<AtomicBool>,
-        error_redirect: Option<gag::BufferRedirect>,
-        debug_output: Option<debug_pane::DebugLog>,
-        pool_stats: Arc<Mutex<Vec<PoolStats>>>,
-        copperlist_stats: Arc<Mutex<CopperListStats>>,
-        topology: MonitorTopology,
-    ) -> UI {
+    fn new(model: MonitorModel, quitting: Arc<AtomicBool>) -> Self {
         init_error_hooks();
-        let nodes_scrollable_widget_state =
-            NodesScrollableWidgetState::new(component_statuses.clone(), components, topology);
-        let runtime_node_col_width = Self::compute_runtime_node_col_width(components);
-
         Self {
-            components,
-            runtime_node_col_width,
-            active_screen: Screen::Neofetch,
-            sysinfo: sysinfo::pfetch_info(),
-            component_stats,
+            monitor_ui: MonitorUi::new(
+                model,
+                MonitorUiOptions {
+                    system_info: sysinfo::pfetch_info(),
+                    show_quit_hint: true,
+                },
+            ),
             quitting,
-            tab_hitboxes: Vec::new(),
-            help_hitboxes: Vec::new(),
-            nodes_scrollable_widget_state,
-            error_redirect,
-            debug_output,
-            debug_output_area: None,
-            debug_output_visible_offset: 0,
-            debug_output_lines: Vec::new(),
-            debug_selection: DebugSelection::default(),
-            clipboard: None,
-            latency_scroll_state: ScrollViewState::default(),
-            pool_stats,
-            copperlist_stats,
-        }
-    }
-
-    #[cfg(not(feature = "debug_pane"))]
-    fn new(
-        components: &'static [MonitorComponentMetadata],
-        component_stats: Arc<Mutex<ComponentStats>>,
-        component_statuses: Arc<Mutex<Vec<ComponentStatus>>>,
-        quitting: Arc<AtomicBool>,
-        pool_stats: Arc<Mutex<Vec<PoolStats>>>,
-        copperlist_stats: Arc<Mutex<CopperListStats>>,
-        topology: MonitorTopology,
-    ) -> UI {
-        init_error_hooks();
-        let nodes_scrollable_widget_state =
-            NodesScrollableWidgetState::new(component_statuses.clone(), components, topology);
-        let runtime_node_col_width = Self::compute_runtime_node_col_width(components);
-
-        Self {
-            components,
-            runtime_node_col_width,
-            active_screen: Screen::Neofetch,
-            sysinfo: sysinfo::pfetch_info(),
-            component_stats,
-            quitting,
-            tab_hitboxes: Vec::new(),
-            help_hitboxes: Vec::new(),
-            nodes_scrollable_widget_state,
-            latency_scroll_state: ScrollViewState::default(),
-            pool_stats,
-            copperlist_stats,
-        }
-    }
-
-    fn draw_latency_table(&mut self, f: &mut Frame, area: Rect) {
-        let header_cells = [
-            "🧩 Runtime Node",
-            "Kind",
-            "⬇ Min",
-            "⬆ Max",
-            "∅ Mean",
-            "σ Stddev",
-            "⧖∅ Jitter",
-            "⧗⬆ Jitter",
-        ]
-        .iter()
-        .enumerate()
-        .map(|(idx, h)| {
-            let align = if idx <= 1 {
-                Alignment::Left
-            } else {
-                Alignment::Right
-            };
-            Cell::from(Line::from(*h).alignment(align)).style(
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )
-        });
-
-        let header = Row::new(header_cells)
-            .style(Style::default().fg(Color::Yellow))
-            .bottom_margin(1)
-            .top_margin(1);
-
-        let component_stats = self.component_stats.lock().unwrap(); // Acquire lock to read component_stats
-        let mut rows = component_stats
-            .stats
-            .iter()
-            .enumerate()
-            .map(|(i, stat)| {
-                let component_id = ComponentId::new(i);
-                let kind_label = match self.components[component_id.index()].kind() {
-                    ComponentType::Source => "◈ Src",
-                    ComponentType::Task => "⚙ Task",
-                    ComponentType::Sink => "⭳ Sink",
-                    ComponentType::Bridge => "⇆ Brg",
-                    _ => "?",
-                };
-                let cells = vec![
-                    Cell::from(
-                        Line::from(self.component_label(component_id)).alignment(Alignment::Left),
-                    )
-                    .light_blue(),
-                    Cell::from(Line::from(kind_label).alignment(Alignment::Left))
-                        .style(Style::default()),
-                    Cell::from(Line::from(stat.min().to_string()).alignment(Alignment::Right))
-                        .style(Style::default()),
-                    Cell::from(Line::from(stat.max().to_string()).alignment(Alignment::Right))
-                        .style(Style::default()),
-                    Cell::from(Line::from(stat.mean().to_string()).alignment(Alignment::Right))
-                        .style(Style::default()),
-                    Cell::from(Line::from(stat.stddev().to_string()).alignment(Alignment::Right))
-                        .style(Style::default()),
-                    Cell::from(
-                        Line::from(stat.jitter_mean().to_string()).alignment(Alignment::Right),
-                    )
-                    .style(Style::default()),
-                    Cell::from(
-                        Line::from(stat.jitter_max().to_string()).alignment(Alignment::Right),
-                    )
-                    .style(Style::default()),
-                ];
-                Row::new(cells)
-            })
-            .collect::<Vec<Row>>();
-
-        let cells = vec![
-            Cell::from(Line::from("End2End").light_red().alignment(Alignment::Left)),
-            Cell::from(Line::from("All").light_red().alignment(Alignment::Left))
-                .style(Style::default()),
-            Cell::from(
-                Line::from(component_stats.end2end.min().to_string())
-                    .light_red()
-                    .alignment(Alignment::Right),
-            )
-            .style(Style::default()),
-            Cell::from(
-                Line::from(component_stats.end2end.max().to_string())
-                    .light_red()
-                    .alignment(Alignment::Right),
-            )
-            .style(Style::default()),
-            Cell::from(
-                Line::from(component_stats.end2end.mean().to_string())
-                    .light_red()
-                    .alignment(Alignment::Right),
-            )
-            .style(Style::default()),
-            Cell::from(
-                Line::from(component_stats.end2end.stddev().to_string())
-                    .light_red()
-                    .alignment(Alignment::Right),
-            )
-            .style(Style::default()),
-            Cell::from(
-                Line::from(component_stats.end2end.jitter_mean().to_string())
-                    .light_red()
-                    .alignment(Alignment::Right),
-            )
-            .style(Style::default()),
-            Cell::from(
-                Line::from(component_stats.end2end.jitter_max().to_string())
-                    .light_red()
-                    .alignment(Alignment::Right),
-            )
-            .style(Style::default()),
-        ];
-        rows.push(Row::new(cells).top_margin(1));
-        let row_count = rows.len();
-        drop(component_stats);
-
-        let table = Table::new(
-            rows,
-            &[
-                Constraint::Length(self.runtime_node_col_width),
-                Constraint::Length(10),
-                Constraint::Length(10),
-                Constraint::Length(12),
-                Constraint::Length(12),
-                Constraint::Length(10),
-                Constraint::Length(12),
-                Constraint::Length(13),
-            ],
-        )
-        .header(header)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .title(" Latencies "),
-        );
-
-        let content_width = self
-            .runtime_node_col_width
-            .saturating_add(10)
-            .saturating_add(10)
-            .saturating_add(12)
-            .saturating_add(12)
-            .saturating_add(10)
-            .saturating_add(12)
-            .saturating_add(13)
-            .saturating_add(24)
-            .max(area.width);
-        // Table vertical layout:
-        // top border + header(top margin + row + bottom margin) + rows + end2end top margin + bottom border
-        // = row_count + 6 lines total.
-        let content_height = (row_count as u16).saturating_add(6).max(area.height);
-        let content_size = Size::new(content_width, content_height);
-        self.clamp_latency_scroll_offset(area, content_size);
-        let mut scroll_view = ScrollView::new(content_size);
-        scroll_view.render_widget(
-            table,
-            Rect::new(0, 0, content_size.width, content_size.height),
-        );
-        scroll_view.render(area, f.buffer_mut(), &mut self.latency_scroll_state);
-    }
-
-    fn clamp_latency_scroll_offset(&mut self, area: Rect, content_size: Size) {
-        let max_x = content_size.width.saturating_sub(area.width);
-        let max_y = content_size.height.saturating_sub(area.height);
-        let offset = self.latency_scroll_state.offset();
-        let clamped = Position::new(offset.x.min(max_x), offset.y.min(max_y));
-        self.latency_scroll_state.set_offset(clamped);
-    }
-
-    fn draw_memory_pools(&self, f: &mut Frame, area: Rect) {
-        let header_cells = [
-            "Pool ID",
-            "Used/Total",
-            "Buffer Size",
-            "Handles in Use",
-            "Handles/sec",
-        ]
-        .iter()
-        .map(|h| {
-            Cell::from(Line::from(*h).alignment(Alignment::Right)).style(
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )
-        });
-
-        let header = Row::new(header_cells)
-            .style(Style::default().fg(Color::Yellow))
-            .bottom_margin(1);
-
-        let pool_stats = self.pool_stats.lock().unwrap();
-        let rows = pool_stats
-            .iter()
-            .map(|stat| {
-                let used = stat.total_size - stat.space_left;
-                let percent = if stat.total_size > 0 {
-                    100.0 * used as f64 / stat.total_size as f64
-                } else {
-                    0.0
-                };
-                let buffer_size = stat.buffer_size;
-                let mb_unit = 1024.0 * 1024.0;
-
-                let cells = vec![
-                    Cell::from(Line::from(stat.id.to_string()).alignment(Alignment::Right))
-                        .light_blue(),
-                    Cell::from(
-                        Line::from(format!(
-                            "{:.2} MB / {:.2} MB ({:.1}%)",
-                            used as f64 * buffer_size as f64 / mb_unit,
-                            stat.total_size as f64 * buffer_size as f64 / mb_unit,
-                            percent
-                        ))
-                        .alignment(Alignment::Right),
-                    ),
-                    Cell::from(
-                        Line::from(format!("{} KB", stat.buffer_size / 1024))
-                            .alignment(Alignment::Right),
-                    ),
-                    Cell::from(
-                        Line::from(format!("{}", stat.handles_in_use)).alignment(Alignment::Right),
-                    ),
-                    Cell::from(
-                        Line::from(format!("{}/s", stat.handles_per_second))
-                            .alignment(Alignment::Right),
-                    ),
-                ];
-                Row::new(cells)
-            })
-            .collect::<Vec<Row>>();
-
-        let table = Table::new(
-            rows,
-            &[
-                Constraint::Percentage(30),
-                Constraint::Percentage(20),
-                Constraint::Percentage(15),
-                Constraint::Percentage(15),
-                Constraint::Percentage(20),
-            ],
-        )
-        .header(header)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .title(" Memory Pools "),
-        );
-
-        f.render_widget(table, area);
-    }
-
-    fn draw_copperlist_stats(&self, f: &mut Frame, area: Rect) {
-        let stats = self.copperlist_stats.lock().unwrap();
-        let size_display = format_bytes_or(stats.size_bytes as u64, "unknown");
-        let raw_total = stats.raw_culist_bytes.max(stats.size_bytes as u64);
-        let handles_display = format_bytes_or(stats.handle_bytes, "0 B");
-        let mem_total = raw_total
-            .saturating_add(stats.keyframe_bytes)
-            .saturating_add(stats.structured_bytes_per_cl);
-        let mem_total_display = format_bytes_or(mem_total, "unknown");
-        let encoded_display = format_bytes_or(stats.encoded_bytes, "n/a");
-        let efficiency_display = if raw_total > 0 && stats.encoded_bytes > 0 {
-            let ratio = (stats.encoded_bytes as f64) / (raw_total as f64);
-            format!("{:.1}%", ratio * 100.0)
-        } else {
-            "n/a".to_string()
-        };
-        let rate_display = format!("{:.2} Hz", stats.rate_hz);
-        let raw_bw = format_rate_bytes_or_na(mem_total, stats.rate_hz);
-        let keyframe_display = format_bytes_or(stats.keyframe_bytes, "0 B");
-        let structured_display = format_bytes_or(stats.structured_bytes_per_cl, "0 B");
-        let structured_bw = format_rate_bytes_or_na(stats.structured_bytes_per_cl, stats.rate_hz);
-        let disk_total_bytes = stats
-            .encoded_bytes
-            .saturating_add(stats.keyframe_bytes)
-            .saturating_add(stats.structured_bytes_per_cl);
-        let disk_total_bw = format_rate_bytes_or_na(disk_total_bytes, stats.rate_hz);
-
-        let header_cells = ["Metric", "Value"].iter().map(|h| {
-            Cell::from(Line::from(*h)).style(
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )
-        });
-
-        let header = Row::new(header_cells).bottom_margin(1);
-
-        let row = |metric: &'static str, value: String| {
-            Row::new(vec![
-                Cell::from(Line::from(metric)),
-                Cell::from(Line::from(value).alignment(Alignment::Right)),
-            ])
-        };
-        let spacer = row(" ", " ".to_string());
-
-        let rate_style = Style::default().fg(Color::Cyan);
-        let mem_rows = vec![
-            row("Observed rate", rate_display).style(rate_style),
-            spacer.clone(),
-            row("CopperList size", size_display),
-            row("Pool memory used", handles_display),
-            row("Keyframe size", keyframe_display),
-            row("Mem total (CL+KF+SL)", mem_total_display),
-            spacer.clone(),
-            row("RAM BW (raw)", raw_bw),
-        ];
-
-        let disk_rows = vec![
-            row("CL serialized size", encoded_display),
-            row("CL encoding efficiency", efficiency_display),
-            row("Structured log / CL", structured_display),
-            row("Structured BW", structured_bw),
-            spacer.clone(),
-            row("Total disk BW", disk_total_bw),
-        ];
-
-        let mem_table = Table::new(mem_rows, &[Constraint::Length(24), Constraint::Length(12)])
-            .header(header.clone())
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded)
-                    .title(" Memory BW "),
-            );
-
-        let disk_table = Table::new(disk_rows, &[Constraint::Length(24), Constraint::Length(12)])
-            .header(header)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded)
-                    .title(" Disk / Encoding "),
-            );
-
-        let layout = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Length(42), Constraint::Length(42)].as_ref())
-            .split(area);
-
-        f.render_widget(mem_table, layout[0]);
-        f.render_widget(disk_table, layout[1]);
-    }
-
-    fn draw_nodes(&mut self, f: &mut Frame, space: Rect) {
-        NodesScrollableWidget {
-            _marker: Default::default(),
-        }
-        .render(
-            space,
-            f.buffer_mut(),
-            &mut self.nodes_scrollable_widget_state,
-        )
-    }
-
-    fn render_tabs(&mut self, f: &mut Frame, area: Rect) {
-        let base_bg = Color::Rgb(16, 18, 20);
-        let active_bg = Color::Rgb(56, 110, 120);
-        let inactive_bg = Color::Rgb(40, 44, 52);
-        let active_fg = Color::Rgb(245, 246, 247);
-        let inactive_fg = Color::Rgb(198, 200, 204);
-        let key_fg = Color::Rgb(255, 208, 128);
-
-        let mut spans = Vec::new();
-        self.tab_hitboxes.clear();
-        let mut cursor_x = area.x;
-        spans.push(Span::styled(" ", Style::default().bg(base_bg)));
-        cursor_x = cursor_x.saturating_add(1);
-
-        for tab in TAB_DEFS {
-            let is_active = self.active_screen == tab.screen;
-            let bg = if is_active { active_bg } else { inactive_bg };
-            let fg = if is_active { active_fg } else { inactive_fg };
-            let label_style = if is_active {
-                Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(fg).bg(bg)
-            };
-            let tab_width = segment_width(tab.key, tab.label);
-            self.tab_hitboxes.push(TabHitbox {
-                screen: tab.screen,
-                x: cursor_x,
-                y: area.y,
-                width: tab_width,
-                height: area.height,
-            });
-            cursor_x = cursor_x.saturating_add(tab_width);
-
-            spans.push(Span::styled("", Style::default().fg(bg).bg(base_bg)));
-            spans.push(Span::styled(" ", Style::default().bg(bg)));
-            spans.push(Span::styled(
-                tab.key,
-                Style::default()
-                    .fg(key_fg)
-                    .bg(bg)
-                    .add_modifier(Modifier::BOLD),
-            ));
-            spans.push(Span::styled(" ", Style::default().bg(bg)));
-            spans.push(Span::styled(tab.label, label_style));
-            spans.push(Span::styled(" ", Style::default().bg(bg)));
-            spans.push(Span::styled("", Style::default().fg(bg).bg(base_bg)));
-            spans.push(Span::styled(" ", Style::default().bg(base_bg)));
-        }
-
-        let tabs = Paragraph::new(Line::from(spans))
-            .style(Style::default().bg(base_bg))
-            .block(Block::default().style(Style::default().bg(base_bg)));
-        f.render_widget(tabs, area);
-    }
-
-    fn render_help(&mut self, f: &mut Frame, area: Rect) {
-        let base_bg = Color::Rgb(18, 16, 22);
-        let key_fg = Color::Rgb(248, 231, 176);
-        let text_fg = Color::Rgb(236, 236, 236);
-
-        let mut spans = Vec::new();
-        self.help_hitboxes.clear();
-        let mut cursor_x = area.x;
-        spans.push(Span::styled(" ", Style::default().bg(base_bg)));
-        cursor_x = cursor_x.saturating_add(1);
-
-        let tab_hint = if cfg!(feature = "debug_pane") {
-            "1-6"
-        } else {
-            "1-5"
-        };
-
-        let segments = [
-            (tab_hint, "Tabs", Color::Rgb(86, 114, 98)),
-            ("r", "Reset latency", Color::Rgb(136, 92, 78)),
-            ("hjkl/←↑→↓", "Scroll", Color::Rgb(92, 102, 150)),
-            ("q", "Quit", Color::Rgb(124, 118, 76)),
-        ];
-
-        for (key, label, bg) in segments {
-            let segment_len = segment_width(key, label);
-            let action = help_action(key);
-            if let Some(action) = action {
-                self.help_hitboxes.push(HelpHitbox {
-                    action,
-                    x: cursor_x,
-                    y: area.y,
-                    width: segment_len,
-                    height: area.height,
-                });
-            }
-            cursor_x = cursor_x.saturating_add(segment_len);
-
-            spans.push(Span::styled("", Style::default().fg(bg).bg(base_bg)));
-            spans.push(Span::styled(" ", Style::default().bg(bg)));
-            spans.push(Span::styled(
-                key,
-                Style::default()
-                    .fg(key_fg)
-                    .bg(bg)
-                    .add_modifier(Modifier::BOLD),
-            ));
-            spans.push(Span::styled(" ", Style::default().bg(bg)));
-            spans.push(Span::styled(label, Style::default().fg(text_fg).bg(bg)));
-            spans.push(Span::styled(" ", Style::default().bg(bg)));
-            spans.push(Span::styled("", Style::default().fg(bg).bg(base_bg)));
-            spans.push(Span::styled(" ", Style::default().bg(base_bg)));
-        }
-
-        let help = Paragraph::new(Line::from(spans))
-            .style(Style::default().bg(base_bg))
-            .block(Block::default().style(Style::default().bg(base_bg)));
-        f.render_widget(help, area);
-
-        // Show current copper-list id on the right of the help line as a slanted amber cartouche.
-        let clid_inner = {
-            let stats = self.copperlist_stats.lock().unwrap();
-            let value = stats.last_seen_clid.unwrap_or(0);
-            format!(" CL {:020} ", value)
-        };
-        let clid_width = (clid_inner.chars().count() + 2) as u16;
-        if area.width > clid_width + 2 && area.height >= 1 {
-            let clid_area = Rect {
-                x: area
-                    .x
-                    .saturating_add(area.width.saturating_sub(clid_width + 1)),
-                y: area.y,
-                width: clid_width,
-                height: 1,
-            };
-            let badge_bg = Color::Rgb(216, 157, 63);
-            f.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("", Style::default().fg(badge_bg).bg(base_bg)),
-                    Span::styled(
-                        clid_inner,
-                        Style::default()
-                            .fg(Color::Black)
-                            .bg(badge_bg)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled("", Style::default().fg(badge_bg).bg(base_bg)),
-                ])),
-                clid_area,
-            );
-        }
-    }
-
-    fn draw(&mut self, f: &mut Frame) {
-        let layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints(
-                [
-                    Constraint::Length(1), // Top tabs
-                    Constraint::Min(0),    // Main content
-                    Constraint::Length(1), // Bottom help bar
-                ]
-                .as_ref(),
-            )
-            .split(f.area());
-
-        self.render_tabs(f, layout[0]);
-        self.render_help(f, layout[2]);
-
-        match self.active_screen {
-            Screen::Neofetch => {
-                const VERSION: &str = env!("CARGO_PKG_VERSION");
-                let text: Text = format!("\n   -> Copper v{}\n\n{}\n\n ", VERSION, self.sysinfo)
-                    .into_text()
-                    .unwrap();
-                let p = Paragraph::new::<Text>(text).block(
-                    Block::default()
-                        .title(" System Info ")
-                        .borders(Borders::ALL)
-                        .border_type(BorderType::Rounded),
-                );
-                f.render_widget(p, layout[1]);
-            }
-            Screen::Dag => {
-                self.draw_nodes(f, layout[1]);
-            }
-            Screen::Latency => self.draw_latency_table(f, layout[1]),
-            Screen::MemoryPools => self.draw_memory_pools(f, layout[1]),
-            Screen::CopperList => self.draw_copperlist_stats(f, layout[1]),
             #[cfg(feature = "debug_pane")]
-            Screen::DebugOutput => self.draw_debug_output(f, layout[1]),
+            clipboard: None,
+        }
+    }
+
+    fn draw(&mut self, frame: &mut ratatui::Frame) {
+        self.monitor_ui.draw(frame);
+    }
+
+    fn handle_action(&mut self, action: MonitorUiAction) -> bool {
+        match action {
+            MonitorUiAction::None => false,
+            MonitorUiAction::QuitRequested => {
+                self.quitting.store(true, Ordering::SeqCst);
+                true
+            }
+            #[cfg(feature = "debug_pane")]
+            MonitorUiAction::CopyLogSelection(text) => {
+                self.copy_text(text);
+                false
+            }
+        }
+    }
+
+    fn handle_key(&mut self, key: KeyCode) -> bool {
+        let action = match key {
+            KeyCode::Char(ch) => {
+                self.monitor_ui
+                    .handle_event(MonitorUiEvent::Key(MonitorUiKey::Char(
+                        ch.to_ascii_lowercase(),
+                    )))
+            }
+            KeyCode::Left => self
+                .monitor_ui
+                .handle_event(MonitorUiEvent::Key(MonitorUiKey::Left)),
+            KeyCode::Right => self
+                .monitor_ui
+                .handle_event(MonitorUiEvent::Key(MonitorUiKey::Right)),
+            KeyCode::Up => self
+                .monitor_ui
+                .handle_event(MonitorUiEvent::Key(MonitorUiKey::Up)),
+            KeyCode::Down => self
+                .monitor_ui
+                .handle_event(MonitorUiEvent::Key(MonitorUiKey::Down)),
+            _ => MonitorUiAction::None,
         };
+
+        self.handle_action(action)
     }
 
-    fn handle_tab_click(&mut self, mouse: event::MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
-
-        for hitbox in &self.tab_hitboxes {
-            if mouse_inside(&mouse, hitbox.x, hitbox.y, hitbox.width, hitbox.height) {
-                self.active_screen = hitbox.screen;
-                break;
-            }
-        }
-    }
-
-    fn handle_help_click(&mut self, mouse: event::MouseEvent) -> bool {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return false;
-        }
-
-        for hitbox in &self.help_hitboxes {
-            if !mouse_inside(&mouse, hitbox.x, hitbox.y, hitbox.width, hitbox.height) {
-                continue;
-            }
-
-            match hitbox.action {
-                HelpAction::ResetLatency => {
-                    if self.active_screen == Screen::Latency {
-                        self.component_stats.lock().unwrap().reset();
-                    }
-                }
-                HelpAction::Quit => {
-                    self.quitting.store(true, Ordering::SeqCst);
-                }
-            }
-            return true;
-        }
-
-        false
-    }
-
-    fn scroll_active_screen_down(&mut self) {
-        match self.active_screen {
-            Screen::Dag => self
-                .nodes_scrollable_widget_state
-                .nodes_scrollable_state
-                .scroll_down(),
-            Screen::Latency => self.latency_scroll_state.scroll_down(),
-            _ => {}
-        }
-    }
-
-    fn scroll_active_screen_up(&mut self) {
-        match self.active_screen {
-            Screen::Dag => self
-                .nodes_scrollable_widget_state
-                .nodes_scrollable_state
-                .scroll_up(),
-            Screen::Latency => self.latency_scroll_state.scroll_up(),
-            _ => {}
-        }
-    }
-
-    fn scroll_active_screen_right(&mut self, steps: usize) {
-        match self.active_screen {
-            Screen::Dag => {
-                for _ in 0..steps {
-                    self.nodes_scrollable_widget_state
-                        .nodes_scrollable_state
-                        .scroll_right();
-                }
-            }
-            Screen::Latency => {
-                for _ in 0..steps {
-                    self.latency_scroll_state.scroll_right();
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn scroll_active_screen_left(&mut self, steps: usize) {
-        match self.active_screen {
-            Screen::Dag => {
-                for _ in 0..steps {
-                    self.nodes_scrollable_widget_state
-                        .nodes_scrollable_state
-                        .scroll_left();
-                }
-            }
-            Screen::Latency => {
-                for _ in 0..steps {
-                    self.latency_scroll_state.scroll_left();
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn handle_scroll_mouse(&mut self, mouse: event::MouseEvent) {
-        if !matches!(self.active_screen, Screen::Dag | Screen::Latency) {
-            return;
-        }
-
-        match mouse.kind {
-            MouseEventKind::ScrollDown => self.scroll_active_screen_down(),
-            MouseEventKind::ScrollUp => self.scroll_active_screen_up(),
-            MouseEventKind::ScrollRight => self.scroll_active_screen_right(5),
-            MouseEventKind::ScrollLeft => self.scroll_active_screen_left(5),
-            _ => {}
-        }
-    }
-
-    #[cfg(feature = "debug_pane")]
     fn handle_mouse_event(&mut self, mouse: event::MouseEvent) {
-        self.handle_tab_click(mouse);
-        if self.handle_help_click(mouse) {
-            return;
-        }
-        self.handle_scroll_mouse(mouse);
-
-        if self.active_screen != Screen::DebugOutput {
-            return;
-        }
-
-        let Some(area) = self.debug_output_area else {
-            return;
-        };
-
-        if !mouse_inside(&mouse, area.x, area.y, area.width, area.height) {
-            if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-                self.debug_selection.clear();
-            }
-            return;
-        }
-
-        let rel_row = (mouse.row - area.y) as usize;
-        let rel_col = (mouse.column - area.x) as usize;
-        let line_index = self.debug_output_visible_offset.saturating_add(rel_row);
-        let Some(line) = self.debug_output_lines.get(line_index) else {
-            return;
-        };
-        let line_len = line.text.chars().count();
-        let point = SelectionPoint {
-            row: line_index,
-            col: rel_col.min(line_len),
-        };
-
-        match mouse.kind {
+        let action = match mouse.kind {
             MouseEventKind::Down(MouseButton::Left) => {
-                self.debug_selection.start(point);
+                self.monitor_ui.handle_event(MonitorUiEvent::MouseDown {
+                    col: mouse.column,
+                    row: mouse.row,
+                })
             }
+            #[cfg(feature = "debug_pane")]
             MouseEventKind::Drag(MouseButton::Left) => {
-                self.debug_selection.update(point);
+                self.monitor_ui.handle_event(MonitorUiEvent::MouseDrag {
+                    col: mouse.column,
+                    row: mouse.row,
+                })
             }
+            #[cfg(feature = "debug_pane")]
             MouseEventKind::Up(MouseButton::Left) => {
-                self.debug_selection.update(point);
-                if let Some(text) = self.selected_debug_text() {
-                    self.copy_debug_text(text);
-                }
+                self.monitor_ui.handle_event(MonitorUiEvent::MouseUp {
+                    col: mouse.column,
+                    row: mouse.row,
+                })
             }
-            _ => {}
-        }
-    }
+            MouseEventKind::ScrollDown => self.monitor_ui.handle_event(MonitorUiEvent::Scroll {
+                direction: ScrollDirection::Down,
+                steps: 1,
+            }),
+            MouseEventKind::ScrollUp => self.monitor_ui.handle_event(MonitorUiEvent::Scroll {
+                direction: ScrollDirection::Up,
+                steps: 1,
+            }),
+            MouseEventKind::ScrollLeft => self.monitor_ui.handle_event(MonitorUiEvent::Scroll {
+                direction: ScrollDirection::Left,
+                steps: 5,
+            }),
+            MouseEventKind::ScrollRight => self.monitor_ui.handle_event(MonitorUiEvent::Scroll {
+                direction: ScrollDirection::Right,
+                steps: 5,
+            }),
+            _ => MonitorUiAction::None,
+        };
 
-    #[cfg(not(feature = "debug_pane"))]
-    fn handle_mouse_event(&mut self, mouse: event::MouseEvent) {
-        self.handle_tab_click(mouse);
-        let _ = self.handle_help_click(mouse);
-        self.handle_scroll_mouse(mouse);
-    }
-
-    #[cfg(feature = "debug_pane")]
-    fn selected_debug_text(&self) -> Option<String> {
-        let (start, end) = self.debug_selection.range()?;
-        if start == end {
-            return None;
-        }
-        if self.debug_output_lines.is_empty() {
-            return None;
-        }
-        if start.row >= self.debug_output_lines.len() || end.row >= self.debug_output_lines.len() {
-            return None;
-        }
-
-        let mut selected = Vec::new();
-        for row in start.row..=end.row {
-            let line = &self.debug_output_lines[row];
-            let line_len = line.text.chars().count();
-            let Some((start_col, end_col)) = line_selection_bounds(row, line_len, start, end)
-            else {
-                selected.push(String::new());
-                continue;
-            };
-            let (_, selected_part, _) = slice_char_range(&line.text, start_col, end_col);
-            selected.push(selected_part.to_string());
-        }
-        Some(selected.join("\n"))
+        let _ = self.handle_action(action);
     }
 
     #[cfg(feature = "debug_pane")]
-    fn copy_debug_text(&mut self, text: String) {
+    fn copy_text(&mut self, text: String) {
         if text.is_empty() {
             return;
         }
-
         if self.clipboard.is_none() {
             match Clipboard::new() {
                 Ok(clipboard) => self.clipboard = Some(clipboard),
@@ -1956,7 +188,6 @@ impl UI {
                 }
             }
         }
-
         if let Some(clipboard) = self.clipboard.as_mut()
             && let Err(err) = clipboard.set_text(text)
         {
@@ -1964,51 +195,7 @@ impl UI {
         }
     }
 
-    #[cfg(feature = "debug_pane")]
-    fn build_debug_output_text(&self, area: Rect) -> Text<'_> {
-        let mut rendered_lines = Vec::new();
-        let selection = self
-            .debug_selection
-            .range()
-            .filter(|(start, end)| start != end);
-        let selection_style = Style::default().bg(Color::Blue).fg(Color::Black);
-        let visible = self
-            .debug_output_lines
-            .iter()
-            .skip(self.debug_output_visible_offset)
-            .take(area.height as usize);
-
-        for (idx, line) in visible.enumerate() {
-            let line_index = self.debug_output_visible_offset + idx;
-            let spans = if let Some((start, end)) = selection {
-                let line_len = line.text.chars().count();
-                if let Some((start_col, end_col)) =
-                    line_selection_bounds(line_index, line_len, start, end)
-                {
-                    let (before, selected, after) =
-                        slice_char_range(&line.text, start_col, end_col);
-                    let mut spans = Vec::new();
-                    if !before.is_empty() {
-                        spans.push(Span::raw(before.to_string()));
-                    }
-                    spans.push(Span::styled(selected.to_string(), selection_style));
-                    if !after.is_empty() {
-                        spans.push(Span::raw(after.to_string()));
-                    }
-                    spans
-                } else {
-                    spans_from_runs(line)
-                }
-            } else {
-                spans_from_runs(line)
-            };
-            rendered_lines.push(Line::from(spans));
-        }
-
-        Text::from(rendered_lines)
-    }
-
-    fn run_app<B: Backend<Error = io::Error>>(
+    fn run_app<B: ratatui::prelude::Backend<Error = io::Error>>(
         &mut self,
         terminal: &mut Terminal<B>,
     ) -> io::Result<()> {
@@ -2016,61 +203,20 @@ impl UI {
             if self.quitting.load(Ordering::SeqCst) {
                 break;
             }
-            #[cfg(feature = "debug_pane")]
-            self.update_debug_output();
 
-            terminal.draw(|f| {
-                self.draw(f);
+            terminal.draw(|frame| {
+                self.draw(frame);
             })?;
 
             if event::poll(Duration::from_millis(50))? {
-                let event = event::read()?;
-
-                match event {
-                    Event::Key(key) => match key.code {
-                        KeyCode::Char('1') => self.active_screen = Screen::Neofetch,
-                        KeyCode::Char('2') => self.active_screen = Screen::Dag,
-                        KeyCode::Char('3') => self.active_screen = Screen::Latency,
-                        KeyCode::Char('4') => self.active_screen = Screen::CopperList,
-                        KeyCode::Char('5') => self.active_screen = Screen::MemoryPools,
-                        #[cfg(feature = "debug_pane")]
-                        KeyCode::Char('6') => self.active_screen = Screen::DebugOutput,
-                        KeyCode::Char('r') => {
-                            if self.active_screen == Screen::Latency {
-                                self.component_stats.lock().unwrap().reset()
-                            }
-                        }
-                        KeyCode::Char('j') | KeyCode::Down => {
-                            self.scroll_active_screen_down();
-                        }
-                        KeyCode::Char('k') | KeyCode::Up => {
-                            self.scroll_active_screen_up();
-                        }
-                        KeyCode::Char('h') | KeyCode::Left => {
-                            self.scroll_active_screen_left(5);
-                        }
-                        KeyCode::Char('l') | KeyCode::Right => {
-                            self.scroll_active_screen_right(5);
-                        }
-                        KeyCode::Char('q') => {
-                            self.quitting.store(true, Ordering::SeqCst);
+                match event::read()? {
+                    Event::Key(key) => {
+                        if self.handle_key(key.code) {
                             break;
                         }
-                        _ => {}
-                    },
-
-                    Event::Mouse(mouse) => {
-                        self.handle_mouse_event(mouse);
                     }
-                    Event::Resize(_columns, rows) => {
-                        self.nodes_scrollable_widget_state.mark_graph_dirty();
-                        #[cfg(not(feature = "debug_pane"))]
-                        let _ = rows;
-                        #[cfg(feature = "debug_pane")]
-                        if let Some(debug_output) = self.debug_output.as_mut() {
-                            debug_output.max_rows.store(rows, Ordering::SeqCst)
-                        }
-                    }
+                    Event::Mouse(mouse) => self.handle_mouse_event(mouse),
+                    Event::Resize(_, _) => self.monitor_ui.mark_graph_dirty(),
                     _ => {}
                 }
             }
@@ -2080,62 +226,36 @@ impl UI {
 }
 
 impl CuMonitor for CuConsoleMon {
-    fn new(metadata: CuMonitoringMetadata, _runtime: CuMonitoringRuntime) -> CuResult<Self>
-    where
-        Self: Sized,
-    {
-        let components = metadata.components();
-        let component_count = components.len();
-        let component_stats = Arc::new(Mutex::new(ComponentStats::new(
-            component_count,
-            CuDuration::from(Duration::from_secs(5)),
-        )));
-        let mut copperlist_stats = CopperListStats::new();
-        copperlist_stats.set_info(metadata.copperlist_info());
-
+    fn new(metadata: CuMonitoringMetadata, _runtime: CuMonitoringRuntime) -> CuResult<Self> {
         Ok(Self {
-            components,
-            component_stats,
-            component_statuses: Arc::new(Mutex::new(vec![
-                ComponentStatus::default();
-                component_count
-            ])),
+            model: MonitorModel::from_metadata(&metadata),
             ui_handle: None,
             quitting: Arc::new(AtomicBool::new(false)),
-            pool_stats: Arc::new(Mutex::new(Vec::new())),
-            copperlist_stats: Arc::new(Mutex::new(copperlist_stats)),
-            topology: metadata.topology().clone(),
+            #[cfg(feature = "debug_pane")]
+            log_capture: None,
         })
     }
 
     fn observe_copperlist_io(&self, stats: CopperListIoStats) {
-        let mut cl_stats = self.copperlist_stats.lock().unwrap();
-        cl_stats.update_io(stats);
+        self.model.observe_copperlist_io(stats);
     }
 
     fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
+        #[cfg(feature = "debug_pane")]
+        {
+            self.log_capture = Some(Mutex::new(if should_start_ui() {
+                MonitorLogCapture::to_model(self.model.clone())
+            } else {
+                MonitorLogCapture::to_stdout()
+            }));
+        }
+
         if !should_start_ui() {
-            #[cfg(debug_assertions)]
-            {
-                register_live_log_listener(|entry, format_str, param_names| {
-                    if let Some(line) = format_headless_log_line(entry, format_str, param_names) {
-                        println!("{line}");
-                    }
-                });
-            }
             return Ok(());
         }
 
-        let components = self.components;
-
-        let component_stats_ui = self.component_stats.clone();
-        let error_states = self.component_statuses.clone();
-        let pool_stats_ui = self.pool_stats.clone();
-        let copperlist_stats_ui = self.copperlist_stats.clone();
+        let model = self.model.clone();
         let quitting = self.quitting.clone();
-        let topology = self.topology.clone();
-
-        // Start the main UI loop
         let handle = thread::spawn(move || {
             let backend = CrosstermBackend::new(stdout());
             let _terminal_guard = TerminalRestoreGuard;
@@ -2145,7 +265,12 @@ impl CuMonitor for CuConsoleMon {
                 return;
             }
 
-            let mut terminal = match Terminal::new(backend) {
+            let mut terminal = match Terminal::with_options(
+                backend,
+                TerminalOptions {
+                    viewport: Viewport::Fullscreen,
+                },
+            ) {
                 Ok(terminal) => terminal,
                 Err(err) => {
                     eprintln!("Failed to initialize terminal backend: {err}");
@@ -2153,95 +278,14 @@ impl CuMonitor for CuConsoleMon {
                 }
             };
 
-            #[cfg(feature = "debug_pane")]
-            {
-                // redirect stderr, so it doesn't pop in the terminal
-                let error_redirect = match gag::BufferRedirect::stderr() {
-                    Ok(redirect) => Some(redirect),
-                    Err(err) => {
-                        eprintln!(
-                            "Failed to redirect stderr for debug pane; continuing without redirect: {err}"
-                        );
-                        None
-                    }
-                };
-
-                let mut ui = UI::new(
-                    components,
-                    component_stats_ui,
-                    error_states,
-                    quitting.clone(),
-                    error_redirect,
-                    None,
-                    pool_stats_ui,
-                    copperlist_stats_ui,
-                    topology.clone(),
-                );
-
-                #[cfg(debug_assertions)]
-                {
-                    let max_lines = terminal.size().unwrap().height - 5;
-                    let (mut debug_log, tx) = debug_pane::DebugLog::new(max_lines);
-
-                    cu29_log_runtime::register_live_log_listener(
-                        move |entry, format_str, param_names| {
-                            // Rebuild line from structured data, then push to bounded channel.
-                            let params: Vec<String> =
-                                entry.params.iter().map(|v| v.to_string()).collect();
-                            let named_params: HashMap<String, String> = param_names
-                                .iter()
-                                .zip(params.iter())
-                                .map(|(name, value)| (name.to_string(), value.clone()))
-                                .collect();
-                            let line = styled_line_from_structured(
-                                entry.time,
-                                entry.level,
-                                format_str,
-                                params.as_slice(),
-                                &named_params,
-                            );
-                            // Non-blocking: drop log if the bounded channel is full to avoid stalling the runtime.
-                            let _ = tx.try_send(line);
-                        },
-                    );
-
-                    // Drain any pending from the channel into the UI buffer once to size it.
-                    debug_log.update_logs();
-                    ui.debug_output = Some(debug_log);
-                }
-                if let Err(err) = ui.run_app(&mut terminal) {
-                    let _ = restore_terminal();
-                    eprintln!("CuConsoleMon UI exited with error: {err}");
-                    cu29_log_runtime::unregister_live_log_listener();
-                    return;
-                }
-                cu29_log_runtime::unregister_live_log_listener();
-            }
-
-            #[cfg(not(feature = "debug_pane"))]
-            {
-                let stderr_gag = gag::Gag::stderr().unwrap();
-
-                let mut ui = UI::new(
-                    components,
-                    component_stats_ui,
-                    error_states,
-                    quitting.clone(),
-                    pool_stats_ui,
-                    copperlist_stats_ui,
-                    topology,
-                );
-                if let Err(err) = ui.run_app(&mut terminal) {
-                    let _ = restore_terminal();
-                    eprintln!("CuConsoleMon UI exited with error: {err}");
-                    return;
-                }
-
-                drop(stderr_gag);
+            let mut ui = UI::new(model, quitting.clone());
+            if let Err(err) = ui.run_app(&mut terminal) {
+                let _ = restore_terminal();
+                eprintln!("CuConsoleMon UI exited with error: {err}");
+                return;
             }
 
             quitting.store(true, Ordering::SeqCst);
-            // restoring the terminal
             let _ = restore_terminal();
         });
 
@@ -2250,45 +294,13 @@ impl CuMonitor for CuConsoleMon {
     }
 
     fn process_copperlist(&self, ctx: &CuContext, view: CopperListView<'_>) -> CuResult<()> {
-        {
-            let mut component_stats = self.component_stats.lock().unwrap();
-            component_stats.update(view);
-        }
-        {
-            let mut copperlist_stats = self.copperlist_stats.lock().unwrap();
-            copperlist_stats.update_rate(ctx.cl_id());
-        }
-        {
-            let mut component_statuses = self.component_statuses.lock().unwrap();
-            for entry in view.entries() {
-                let component_index = entry.component_id.index();
-                assert!(
-                    component_index < component_statuses.len(),
-                    "cu_consolemon: mapped component index {} out of component_statuses bounds {}",
-                    component_index,
-                    component_statuses.len()
-                );
-                let CuCompactString(status_txt) = &entry.msg.status_txt;
-                component_statuses[component_index].status_txt = status_txt.clone();
-            }
+        #[cfg(feature = "debug_pane")]
+        if let Some(log_capture) = &self.log_capture {
+            let mut log_capture = log_capture.lock().unwrap_or_else(|err| err.into_inner());
+            log_capture.poll();
         }
 
-        // Update pool statistics
-        {
-            let pool_stats_data = pool::pools_statistics();
-            let mut pool_stats = self.pool_stats.lock().unwrap();
-
-            // Update existing pools or add new ones
-            for (id, space_left, total_size, buffer_size) in pool_stats_data {
-                let id_str = id.to_string();
-                if let Some(existing) = pool_stats.iter_mut().find(|p| p.id == id_str) {
-                    existing.update(space_left, total_size);
-                } else {
-                    pool_stats.push(PoolStats::new(id_str, space_left, total_size, buffer_size));
-                }
-            }
-        }
-
+        self.model.process_copperlist(ctx.cl_id(), view);
         if self.quitting.load(Ordering::SeqCst) {
             return Err("Exiting...".into());
         }
@@ -2301,18 +313,8 @@ impl CuMonitor for CuConsoleMon {
         step: CuComponentState,
         error: &CuError,
     ) -> Decision {
-        let component_index = component_id.index();
-        let mut statuses = self.component_statuses.lock().unwrap();
-        if component_index < statuses.len() {
-            statuses[component_index].is_error = true;
-            statuses[component_index].error = error.to_compact_string();
-        } else {
-            debug_assert!(
-                false,
-                "cu_consolemon: process_error component index {} out of bounds",
-                component_index
-            );
-        }
+        self.model
+            .set_component_error(component_id, error.to_string());
         match step {
             CuComponentState::Start => Decision::Shutdown,
             CuComponentState::Preprocess => Decision::Abort,
@@ -2330,17 +332,12 @@ impl CuMonitor for CuConsoleMon {
             let _ = handle.join();
         }
 
-        #[cfg(debug_assertions)]
-        if !should_start_ui() {
-            unregister_live_log_listener();
+        #[cfg(feature = "debug_pane")]
+        {
+            self.log_capture = None;
         }
 
-        self.component_stats
-            .lock()
-            .unwrap()
-            .stats
-            .iter_mut()
-            .for_each(|s| s.reset());
+        self.model.reset_latency();
         Ok(())
     }
 }
@@ -2361,19 +358,18 @@ fn init_error_hooks() {
 
     let (_panic_hook, error) = HookBuilder::default().into_hooks();
     let error = error.into_eyre_hook();
-    color_eyre::eyre::set_hook(Box::new(move |e| {
+    color_eyre::eyre::set_hook(Box::new(move |err| {
         let _ = restore_terminal();
-        error(e)
+        error(err)
     }))
     .unwrap();
+
     std::panic::set_hook(Box::new(move |info| {
         let _ = restore_terminal();
-        let bt = Backtrace::force_capture();
-        // stderr may be gagged; print to stdout so the panic is visible.
+        let backtrace = Backtrace::force_capture();
         println!("CuConsoleMon panic: {info}");
-        println!("Backtrace:\n{bt}");
+        println!("Backtrace:\n{backtrace}");
         let _ = stdout().flush();
-        // Exit immediately so the process doesn't hang after the TUI restores.
         process::exit(1);
     }));
 
@@ -2382,7 +378,6 @@ fn init_error_hooks() {
 
 fn setup_terminal() -> io::Result<()> {
     enable_raw_mode()?;
-    // Enable mouse capture for in-app log selection.
     execute!(stdout(), EnterAlternateScreen, EnableMouseCapture)?;
     Ok(())
 }
@@ -2390,39 +385,6 @@ fn setup_terminal() -> io::Result<()> {
 fn restore_terminal() -> io::Result<()> {
     execute!(stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
     disable_raw_mode()
-}
-
-#[cfg(debug_assertions)]
-fn format_timestamp(time: CuDuration) -> String {
-    // Render CuTime/CuDuration as HH:mm:ss.xxxx (4 fractional digits of a second).
-    let nanos = time.as_nanos();
-    let total_seconds = nanos / 1_000_000_000;
-    let hours = total_seconds / 3600;
-    let minutes = (total_seconds / 60) % 60;
-    let seconds = total_seconds % 60;
-    let fractional_1e4 = (nanos % 1_000_000_000) / 100_000;
-    format!("{hours:02}:{minutes:02}:{seconds:02}.{fractional_1e4:04}")
-}
-
-#[cfg(debug_assertions)]
-fn format_headless_log_line(
-    entry: &cu29_log::CuLogEntry,
-    format_str: &str,
-    param_names: &[&str],
-) -> Option<String> {
-    let params: Vec<String> = entry.params.iter().map(|v| v.to_string()).collect();
-    let named: HashMap<String, String> = param_names
-        .iter()
-        .zip(params.iter())
-        .map(|(k, v)| (k.to_string(), v.clone()))
-        .collect();
-
-    format_message_only(format_str, params.as_slice(), &named)
-        .ok()
-        .map(|msg| {
-            let ts = format_timestamp(entry.time);
-            format!("{} [{:?}] {}", ts, entry.level, msg)
-        })
 }
 
 fn should_start_ui() -> bool {
@@ -2433,13 +395,13 @@ fn should_start_ui() -> bool {
     #[cfg(unix)]
     {
         use std::os::unix::io::AsRawFd;
+
         let stdin_fd = stdin().as_raw_fd();
-        // SAFETY: tcgetpgrp only reads process group state for a valid fd.
         let fg_pgrp = unsafe { libc::tcgetpgrp(stdin_fd) };
         if fg_pgrp == -1 {
             return false;
         }
-        // SAFETY: getpgrp has no safety requirements beyond being called in a process.
+
         let pgrp = unsafe { libc::getpgrp() };
         if fg_pgrp != pgrp {
             return false;

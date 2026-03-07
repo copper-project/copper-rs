@@ -13,12 +13,11 @@ repository.workspace = true
 [features]
 default = ["debug_pane"]
 # Enables 'Debug Output' Pane
-debug_pane = ["dep:log", "dep:chrono", "dep:arboard"]
+debug_pane = ["cu-tuimon/log_pane", "cu-tuimon/stderr_capture", "dep:arboard"]
 
 [dependencies]
 cu29 = { workspace = true }
-cu29-log-runtime = { workspace = true }
-cu29-log = { workspace = true }
+cu-tuimon = { path = "../../libs/cu_tuimon", version = "0.13.0", default-features = false }
 compact_str = { workspace = true }
 ratatui = "0.30"
 pfetch-logo-parser = "0.1.1"
@@ -30,8 +29,6 @@ tui-widgets = "0.7.0"
 color-eyre = { version = "0.6.4", default-features = false }
 gag = "1.0.0"
 arboard = { version = "3.6.1", optional = true, default-features = false }
-log = { workspace = true, features = ["std"], optional = true }
-chrono = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
