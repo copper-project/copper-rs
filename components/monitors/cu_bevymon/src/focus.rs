@@ -3,8 +3,8 @@ use bevy::prelude::*;
 use bevy::ui::UiGlobalTransform;
 use bevy::window::PrimaryWindow;
 
-const DEFAULT_FOCUSED_BORDER: Color = Color::srgb(0.94, 0.76, 0.26);
-const DEFAULT_UNFOCUSED_BORDER: Color = Color::srgb(0.93, 0.94, 0.96);
+const DEFAULT_FOCUSED_BORDER: Color = Color::srgb(0.38, 0.40, 0.43);
+const DEFAULT_UNFOCUSED_BORDER: Color = Color::BLACK;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum CuBevyMonSurface {
