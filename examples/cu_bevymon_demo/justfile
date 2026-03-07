@@ -1,7 +1,7 @@
-ROOT := `git rev-parse --show-toplevel`
+import "../../justfile"
 
 # Run the native Bevy monitor demo.
-default:
+native:
 	#!/usr/bin/env bash
 	set -euo pipefail
 	cd "{{ROOT}}"
@@ -15,5 +15,5 @@ web:
 		echo "Missing trunk. Install with: cargo install --locked trunk" >&2
 		exit 1
 	fi
-	cd "{{ROOT}}/examples/cu_bevymon_demo"
+	cd "{{invocation_directory()}}"
 	trunk serve --open
