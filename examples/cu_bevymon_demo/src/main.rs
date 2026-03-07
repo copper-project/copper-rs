@@ -379,8 +379,7 @@ fn spawn_demo_layout(
                 ))
                 .with_children(|panel| {
                     panel.spawn((
-                        ImageNode::new(texture.0.clone())
-                            .with_mode(bevy::ui::prelude::NodeImageMode::Stretch),
+                        ImageNode::new(texture.0.clone()),
                         UiNode {
                             width: Val::Percent(100.0),
                             height: Val::Percent(100.0),

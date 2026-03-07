@@ -240,12 +240,11 @@ fn render_terminal_to_handle(
     let data_out = image.data.as_mut().expect("image data missing");
     let (pixels_in, _) = data_in.as_chunks::<3>();
     let (pixels_out, _) = data_out.as_chunks_mut::<4>();
-    for idx in 0..(width * height) as usize {
-        let px_out = &mut pixels_out[idx];
-        let px_in = pixels_in[idx];
+    for (px_in, px_out) in pixels_in.iter().zip(pixels_out.iter_mut()) {
         px_out[0] = px_in[0];
         px_out[1] = px_in[1];
         px_out[2] = px_in[2];
+        px_out[3] = 255;
     }
 }
 
@@ -269,17 +268,10 @@ fn handle_monitor_pointer_input(
         return;
     };
 
-    let area = context.backend().buffer().area;
-    let cols = area.width.max(1);
-    let rows = area.height.max(1);
-    let cell_width = (node.size().x / cols as f32).max(1.0);
-    let cell_height = (node.size().y / rows as f32).max(1.0);
-    let col = (local_point.x / cell_width)
-        .floor()
-        .clamp(0.0, (cols - 1) as f32) as u16;
-    let row = (local_point.y / cell_height)
-        .floor()
-        .clamp(0.0, (rows - 1) as f32) as u16;
+    let char_width = context.backend().char_width.max(1) as f32;
+    let char_height = context.backend().char_height.max(1) as f32;
+    let col = (local_point.x / char_width).floor().max(0.0) as u16;
+    let row = (local_point.y / char_height).floor().max(0.0) as u16;
     let event = if mouse_buttons.just_pressed(MouseButton::Left) {
         MonitorUiEvent::MouseDown { col, row }
     } else {
@@ -357,15 +349,12 @@ fn handle_monitor_keyboard_input(
 
 fn resize_terminal_to_panel(
     mut context: ResMut<CuBevyMonTerminal>,
-    surfaces: Query<(&ComputedNode, &CuBevyMonSurfaceNode)>,
+    panels: Query<&ComputedNode, With<CuBevyMonPanel>>,
 ) {
-    let Some((panel, _)) = surfaces
-        .iter()
-        .find(|(_, surface)| surface.0 == CuBevyMonSurface::Monitor)
-    else {
+    let Some(panel) = panels.iter().next() else {
         return;
     };
-    sync_terminal_to_panel(&mut context, panel.content_size());
+    sync_terminal_to_panel(&mut context, panel.size());
 }
 
 fn dispatch_monitor_event(

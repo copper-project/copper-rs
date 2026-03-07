@@ -11,6 +11,9 @@ use cu29::prelude::{CuCompactString, CuTime, pool};
 #[cfg(feature = "log_pane")]
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+use std::time::{Duration, Instant};
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use web_time::{Duration, Instant};
 
 const COPPERLIST_RATE_WINDOW: Duration = Duration::from_secs(1);
