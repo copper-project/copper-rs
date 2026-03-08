@@ -473,7 +473,7 @@ impl MonitorUi {
 
     fn draw_latency_table(&mut self, f: &mut Frame, area: Rect) {
         let header_cells = [
-            "🧩 Runtime Node",
+            "⌘ Runtime Node",
             "Kind",
             "⬇ Min",
             "⬆ Max",
