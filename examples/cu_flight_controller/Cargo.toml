@@ -25,6 +25,7 @@ embedded_build_release = true
 ignored = ["bincode"]
 
 [dependencies]
+bevy_ecs = { version = "0.18.0", default-features = false }
 ## Flight controller components
 
 ### Hardware
@@ -45,7 +46,6 @@ cu-embedded-registry = { path = "../../components/libs/cu_embedded_registry", de
 cu-logmon = { path = "../../components/monitors/cu_logmon", default-features = false, features = [
   "color_log",
 ], optional = true }
-cu-consolemon = { path = "../../components/monitors/cu_consolemon", optional = true }
 cu-ahrs = { path = "../../components/tasks/cu_ahrs", default-features = false, optional = true }
 cu-bmi088 = { path = "../../components/sources/cu_bmi088", default-features = false, optional = true }
 cu-dps310 = { path = "../../components/sources/cu_dps310", default-features = false, optional = true }
@@ -65,35 +65,12 @@ libm = { version = "0.2", default-features = false }
 
 ## Log reader depencies
 cu29-export = { workspace = true, optional = true }
-cu29-helpers = { workspace = true, optional = true }
 pyo3 = { version = "0.28", optional = true, default-features = false, features = [
   "extension-module",
   "macros",
 ] }
 
 ## Sim dependencies
-bevy = { workspace = true, default-features = false, features = [
-  "x11",
-  "wayland",
-  "default_font",
-  "bevy_render",
-  "bevy_window",
-  "bevy_core_pipeline",
-  "bevy_pbr",
-  "bevy_scene",
-  "bevy_sprite",
-  "bevy_gltf",
-  "gltf_animation",
-  "bevy_picking",
-  "mesh_picking",
-  "tonemapping_luts",
-  "bevy_ui",
-  "bevy_ui_render",
-  "ktx2",
-  "jpeg",
-  "png",
-  "zstd_rust",
-], optional = true }
 avian3d = { workspace = true, default-features = false, features = [
   "bevy_scene",
   "collider-from-mesh",
@@ -103,11 +80,6 @@ avian3d = { workspace = true, default-features = false, features = [
   "3d",
   "parry-f32",
 ], optional = true }
-cached-path = { workspace = true, features = [
-  "progress-bar",
-  "rustls-tls",
-], optional = true }
-evdev = { version = "0.13.2", optional = true }
 
 cu29 = { path = "../../core/cu29", default-features = false, features = [
   "log-level-debug",
@@ -136,8 +108,76 @@ cortex-m = { workspace = true, features = [
   "critical-section-single-core",
 ], optional = true }
 
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", optional = true }
+cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "0.13.0", optional = true }
+cu29-helpers = { workspace = true, optional = true }
+bevy = { workspace = true, default-features = false, features = [
+  "x11",
+  "wayland",
+  "default_font",
+  "bevy_render",
+  "bevy_window",
+  "bevy_core_pipeline",
+  "bevy_pbr",
+  "bevy_scene",
+  "bevy_sprite",
+  "bevy_gltf",
+  "gltf_animation",
+  "bevy_picking",
+  "mesh_picking",
+  "tonemapping_luts",
+  "bevy_ui",
+  "bevy_ui_render",
+  "ktx2",
+  "jpeg",
+  "png",
+  "zstd_rust",
+], optional = true }
+cached-path = { workspace = true, features = [
+  "progress-bar",
+  "rustls-tls",
+], optional = true }
+evdev = { version = "0.13.2", optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "0.13.0", default-features = false, optional = true }
+bevy = { workspace = true, default-features = false, features = [
+  "default_font",
+  "bevy_render",
+  "bevy_window",
+  "bevy_core_pipeline",
+  "bevy_pbr",
+  "bevy_scene",
+  "bevy_sprite",
+  "bevy_gltf",
+  "gltf_animation",
+  "bevy_picking",
+  "mesh_picking",
+  "tonemapping_luts",
+  "bevy_ui",
+  "bevy_ui_render",
+  "ktx2",
+  "jpeg",
+  "png",
+  "zstd_rust",
+  "reflect_auto_register",
+], optional = true }
+
 [features]
 default = ["sim"]
+sim_core = [
+  "dep:cu29",
+  "cu29/std",
+  "dep:cu-ahrs",
+  "dep:cu-crsf",
+  "dep:cu-msp-bridge",
+  "dep:cu-bdshot",
+  "cu-bdshot/messages-only",
+  "dep:bevy",
+  "dep:avian3d",
+  "dep:cu-gnss-payloads",
+]
 textlogs = [
   "cu29/textlogs",
   "cu-msp-bridge/textlogs",
@@ -216,21 +256,13 @@ python-bindings = [
   "dep:pyo3",
 ]
 sim = [
-  "dep:cu29",
-  "cu29/std",
+  "sim_core",
   "dep:cu29-helpers",
   "dep:cu-consolemon",
-  "dep:cu-ahrs",
-  "dep:cu-crsf",
-  "dep:cu-msp-bridge",
-  "dep:cu-bdshot",
-  "cu-bdshot/messages-only",
-  "dep:bevy",
-  "dep:avian3d",
   "dep:cached-path",
   "dep:evdev",
-  "dep:cu-gnss-payloads",
 ]
+bevymon = ["sim_core", "dep:cu-bevymon", "dep:cached-path", "dep:evdev"]
 
 [lib]
 name = "cu_flight_controller_export"
@@ -259,6 +291,11 @@ required-features = ["logreader"]
 name = "quad-sim"
 path = "src/sim.rs"
 required-features = ["sim"]
+
+[[bin]]
+name = "quad-bevymon"
+path = "src/bevymon.rs"
+required-features = ["bevymon"]
 #
 # [[bin]]
 # name = "quad-resim"

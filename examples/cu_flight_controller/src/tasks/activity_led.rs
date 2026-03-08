@@ -7,7 +7,7 @@ trait LedBackend {
 #[cfg(feature = "firmware")]
 type ActivityLedBackend = spin::Mutex<cu_micoairh743::GreenLed>;
 
-#[cfg(all(feature = "sim", not(feature = "firmware")))]
+#[cfg(all(any(feature = "sim", feature = "bevymon"), not(feature = "firmware")))]
 type ActivityLedBackend = crate::sim_support::SimActivityLed;
 
 #[cfg(feature = "firmware")]
@@ -22,7 +22,7 @@ impl LedBackend for ActivityLedBackend {
     }
 }
 
-#[cfg(all(feature = "sim", not(feature = "firmware")))]
+#[cfg(all(any(feature = "sim", feature = "bevymon"), not(feature = "firmware")))]
 impl LedBackend for ActivityLedBackend {
     fn set_on(&mut self, on: bool) {
         self.set(on);
@@ -48,7 +48,7 @@ impl CuSinkTask for ActivityLed {
     type Input<'m> = CuMsg<ControlInputs>;
     #[cfg(feature = "firmware")]
     type Resources<'r> = Resources;
-    #[cfg(all(feature = "sim", not(feature = "firmware")))]
+    #[cfg(all(any(feature = "sim", feature = "bevymon"), not(feature = "firmware")))]
     type Resources<'r> = ();
 
     fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
@@ -57,7 +57,7 @@ impl CuSinkTask for ActivityLed {
     {
         #[cfg(feature = "firmware")]
         let mut led = _resources.led.0;
-        #[cfg(all(feature = "sim", not(feature = "firmware")))]
+        #[cfg(all(any(feature = "sim", feature = "bevymon"), not(feature = "firmware")))]
         let mut led = crate::sim_support::sim_activity_led();
 
         led.set_on(false);

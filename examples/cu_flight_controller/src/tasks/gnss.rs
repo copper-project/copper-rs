@@ -5,7 +5,7 @@ use cu29::units::si::angle::degree;
 #[cfg(feature = "firmware")]
 pub type GnssSource = cu_gnss_ublox::UbxSourceTask<cu_micoairh743::Uart3Port>;
 
-#[cfg(all(feature = "sim", not(feature = "firmware")))]
+#[cfg(all(any(feature = "sim", feature = "bevymon"), not(feature = "firmware")))]
 pub type GnssSource = crate::sim_support::SimGnssSource;
 
 #[derive(Reflect, Default)]

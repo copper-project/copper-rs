@@ -1,11 +1,15 @@
 pub mod tasks;
 
 use bevy::app::AppExit;
+use bevy::asset::RenderAssetUsages;
+use bevy::camera::ClearColorConfig;
+use bevy::camera::RenderTarget;
 use bevy::prelude::*;
+use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
 use bevy::ui::Node as UiNode;
 use cu_bevymon::{
-    CuBevyMonFocus, CuBevyMonFocusBorder, CuBevyMonPanel, CuBevyMonPlugin, CuBevyMonSurface,
-    CuBevyMonSurfaceNode, CuBevyMonTexture, CuBevyMonViewportSurface, MonitorUiOptions,
+    CuBevyMonFocus, CuBevyMonPlugin, CuBevyMonSplitLayoutConfig, CuBevyMonSplitStyle,
+    CuBevyMonSurface, CuBevyMonTexture, MonitorUiOptions, spawn_split_layout,
 };
 use cu29::prelude::*;
 use cu29::prelude::{debug, error, info};
@@ -43,6 +47,9 @@ type DemoUnifiedLogger = UnifiedLoggerWrite;
 struct SimCamera;
 
 #[derive(Component)]
+struct SplitSceneCamera;
+
+#[derive(Component)]
 struct OrbitingCube;
 
 #[derive(Component)]
@@ -53,6 +60,9 @@ struct DemoHudText;
 
 #[derive(Resource, Default)]
 struct LayoutSpawned(bool);
+
+#[derive(Resource)]
+struct SplitUiCamera(Entity);
 
 #[derive(Resource)]
 struct CopperDriver {
@@ -100,7 +110,10 @@ fn main() {
         .insert_resource(copper)
         .init_resource::<LayoutSpawned>()
         .init_resource::<DemoCameraRig>()
-        .add_systems(Startup, (setup_scene, start_copper_runtime))
+        .add_systems(
+            Startup,
+            (setup_scene, setup_ui_camera, start_copper_runtime),
+        )
         .add_systems(
             Update,
             (
@@ -226,26 +239,30 @@ fn build_unified_logger() -> CuResult<Arc<Mutex<DemoUnifiedLogger>>> {
 
 fn setup_scene(
     mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    let mut image = Image::new_uninit(
+        default(),
+        TextureDimension::D2,
+        TextureFormat::Bgra8UnormSrgb,
+        RenderAssetUsages::all(),
+    );
+    image.texture_descriptor.usage =
+        TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::RENDER_ATTACHMENT;
+    let split_target = images.add(image);
+
     commands.spawn((
         Camera3d::default(),
         Camera {
             order: 0,
             ..default()
         },
+        RenderTarget::Image(split_target.into()),
         Transform::from_xyz(5.0, 4.0, 8.0).looking_at(Vec3::ZERO, Vec3::Y),
-        CuBevyMonViewportSurface(CuBevyMonSurface::Sim),
         SimCamera,
-    ));
-    commands.spawn((
-        Camera2d,
-        Camera {
-            order: 1,
-            ..default()
-        },
-        IsDefaultUiCamera,
+        SplitSceneCamera,
     ));
 
     commands.insert_resource(GlobalAmbientLight {
@@ -295,9 +312,25 @@ fn setup_scene(
     ));
 }
 
+fn setup_ui_camera(mut commands: Commands) {
+    let camera = commands
+        .spawn((
+            Camera2d,
+            Camera {
+                order: 1,
+                clear_color: ClearColorConfig::None,
+                ..default()
+            },
+        ))
+        .id();
+    commands.insert_resource(SplitUiCamera(camera));
+}
+
 fn spawn_demo_layout(
     mut commands: Commands,
     texture: Option<Res<CuBevyMonTexture>>,
+    ui_camera: Option<Res<SplitUiCamera>>,
+    scene_cameras: Query<Entity, With<SplitSceneCamera>>,
     mut spawned: ResMut<LayoutSpawned>,
 ) {
     if spawned.0 {
@@ -306,88 +339,54 @@ fn spawn_demo_layout(
     let Some(texture) = texture else {
         return;
     };
+    let Some(ui_camera) = ui_camera else {
+        return;
+    };
+    let Ok(scene_camera) = scene_cameras.single() else {
+        return;
+    };
 
-    commands
-        .spawn((
-            UiNode {
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                padding: UiRect::all(Val::Px(12.0)),
-                column_gap: Val::Px(12.0),
+    let layout = spawn_split_layout(
+        &mut commands,
+        texture.0.clone(),
+        CuBevyMonSplitLayoutConfig::new(scene_camera)
+            .with_ui_camera(ui_camera.0)
+            .with_style(CuBevyMonSplitStyle {
+                sim_panel_percent: SIM_PANEL_PERCENT,
+                monitor_panel_percent: MONITOR_PANEL_PERCENT,
+                monitor_panel_inset_px: MONITOR_PANEL_INSET_PX,
+                unfocused_border_color: Color::srgb(0.24, 0.29, 0.35),
                 ..default()
-            },
-            BackgroundColor(Color::NONE),
-        ))
-        .with_children(|parent| {
-            parent
-                .spawn((
-                    UiNode {
-                        width: Val::Percent(SIM_PANEL_PERCENT),
-                        height: Val::Percent(100.0),
-                        position_type: PositionType::Relative,
-                        border: UiRect::all(Val::Px(1.0)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::NONE),
-                    BorderColor::all(Color::srgb(0.24, 0.29, 0.35)),
-                    CuBevyMonSurfaceNode(CuBevyMonSurface::Sim),
-                    CuBevyMonFocusBorder::new(CuBevyMonSurface::Sim),
-                ))
-                .with_children(|panel| {
-                    panel
-                        .spawn((
-                            UiNode {
-                                position_type: PositionType::Absolute,
-                                left: Val::Px(18.0),
-                                top: Val::Px(18.0),
-                                padding: UiRect::axes(Val::Px(14.0), Val::Px(10.0)),
-                                max_width: Val::Px(330.0),
-                                border: UiRect::all(Val::Px(1.0)),
-                                ..default()
-                            },
-                            BackgroundColor(Color::srgba(0.05, 0.07, 0.10, 0.82)),
-                            BorderColor::all(Color::srgba(0.35, 0.42, 0.49, 0.92)),
-                        ))
-                        .with_children(|card| {
-                            card.spawn((
-                                DemoHudText,
-                                Text::new(""),
-                                TextFont {
-                                    font_size: 14.0,
-                                    ..default()
-                                },
-                                TextColor(Color::WHITE),
-                            ));
-                        });
-                });
+            }),
+    );
 
-            parent
-                .spawn((
-                    UiNode {
-                        width: Val::Percent(MONITOR_PANEL_PERCENT),
-                        height: Val::Percent(100.0),
-                        border: UiRect::all(Val::Px(1.0)),
-                        padding: UiRect::all(Val::Px(MONITOR_PANEL_INSET_PX)),
+    commands.entity(layout.sim_panel).with_children(|panel| {
+        panel
+            .spawn((
+                UiNode {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(18.0),
+                    top: Val::Px(18.0),
+                    padding: UiRect::axes(Val::Px(14.0), Val::Px(10.0)),
+                    max_width: Val::Px(330.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.05, 0.07, 0.10, 0.82)),
+                BorderColor::all(Color::srgba(0.35, 0.42, 0.49, 0.92)),
+            ))
+            .with_children(|card| {
+                card.spawn((
+                    DemoHudText,
+                    Text::new(""),
+                    TextFont {
+                        font_size: 14.0,
                         ..default()
                     },
-                    BackgroundColor(Color::srgba(0.04, 0.05, 0.08, 0.98)),
-                    BorderColor::all(Color::srgb(0.24, 0.29, 0.35)),
-                    CuBevyMonSurfaceNode(CuBevyMonSurface::Monitor),
-                    CuBevyMonFocusBorder::new(CuBevyMonSurface::Monitor),
-                ))
-                .with_children(|panel| {
-                    panel.spawn((
-                        ImageNode::new(texture.0.clone()),
-                        UiNode {
-                            width: Val::Percent(100.0),
-                            height: Val::Percent(100.0),
-                            ..default()
-                        },
-                        BackgroundColor(Color::BLACK),
-                        CuBevyMonPanel,
-                    ));
-                });
-        });
+                    TextColor(Color::WHITE),
+                ));
+            });
+    });
 
     spawned.0 = true;
 }

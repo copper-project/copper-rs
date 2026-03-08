@@ -51,6 +51,7 @@ pub fn dim_rgb(color: [u8; 3]) -> [u8; 3] {
 /// * `bg` - [R, G, B, A] background color
 ///
 /// Returns: blended color as [u8; 4]
+#[cfg(feature = "cosmic-text")]
 pub fn blend_rgba(fg: [u8; 4], bg: [u8; 4]) -> [u8; 3] {
     let fg_a = fg[3] as f32 / 255.0;
     let bg_a = bg[3] as f32 / 255.0;

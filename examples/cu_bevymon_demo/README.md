@@ -6,7 +6,7 @@
 - a `cu_bevymon` monitor panel on the right
 - a real Copper app generated from `copperconfig.ron`
 - click-to-focus input routing between the sim and the monitor
-- shared `cu_bevymon` helpers for panel focus borders and camera viewport sizing
+- the shared `cu_bevymon::spawn_split_layout(...)` split shell used by the other examples too
 - structured Copper logs flowing into the shared `LOG` tab
 
 Controls:
@@ -21,11 +21,13 @@ The left panel is still a small fake Bevy scene, but the right panel is now back
 Build targets:
 
 - Native desktop:
-  `cargo run -p cu-bevymon-demo`
+  `just`
+  or
+  `just bevy`
 - Browser/wasm compile check:
   `cargo check -p cu-bevymon-demo --target wasm32-unknown-unknown`
 - Browser demo with Trunk:
-  `cd examples/cu_bevymon_demo && trunk serve`
+  `just web`
 
 Browser notes:
 
