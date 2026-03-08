@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#v0130-2026-02-13" class="md-skip">
+        <a href="#v0140-tbd" class="md-skip">
           Skip to content
         </a>
       
@@ -1030,54 +1030,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#breaking-api-changes" class="md-nav__link">
+  <a href="#configapi-updates" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Breaking API Changes
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#new-features" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        New Features
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#enhancements" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Enhancements
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#bug-fixes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Bug Fixes
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dependency-updates" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Dependency Updates
+        Config/API Updates
       
     </span>
   </a>
@@ -1304,54 +1260,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#breaking-api-changes" class="md-nav__link">
+  <a href="#configapi-updates" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Breaking API Changes
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#new-features" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        New Features
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#enhancements" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Enhancements
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#bug-fixes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Bug Fixes
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dependency-updates" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Dependency Updates
+        Config/API Updates
       
     </span>
   </a>
@@ -1378,8 +1290,27 @@
   
 
 
-<h1 id="v0130-2026-02-13">v0.13.0 - 2026-02-13<a class="headerlink" href="#v0130-2026-02-13" title="Permanent link">&para;</a></h1>
+<h1 id="v0140-tbd">v0.14.0 - TBD<a class="headerlink" href="#v0140-tbd" title="Permanent link">&para;</a></h1>
 <h2 id="high-level">High Level<a class="headerlink" href="#high-level" title="Permanent link">&para;</a></h2>
+<p>This release expands runtime monitoring with a dedicated safety monitor path and multi-monitor composition, while keeping one-monitor configuration straightforward.</p>
+<h2 id="configapi-updates">Config/API Updates<a class="headerlink" href="#configapi-updates" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Single-monitor configs use <code>monitor</code> as the standard form</strong><br />
+  For one monitor, prefer:
+  <code>ron
+  monitor: (type: "your_monitor::Type")</code></li>
+<li><strong>Multiple monitors use <code>monitors</code></strong><br />
+  For monitor fan-out, use:
+  <code>ron
+  monitors: [
+      (type: "monitor_a::Type"),
+      (type: "monitor_b::Type"),
+  ]</code></li>
+<li><strong>Backward-compatible parsing for both forms</strong><br />
+  Config deserialization accepts both <code>monitor</code> and <code>monitors</code>, so existing configurations continue to load.</li>
+</ul>
+<h1 id="v0130-2026-02-13">v0.13.0 - 2026-02-13<a class="headerlink" href="#v0130-2026-02-13" title="Permanent link">&para;</a></h1>
+<h2 id="high-level_1">High Level<a class="headerlink" href="#high-level_1" title="Permanent link">&para;</a></h2>
 <p>This release focuses on developer experience and runtime observability: Reflection/Schema support, remote and time-travel debugging APIs, richer MCAP exports, and a new Rerun-based visualization path. On the runtime side, Linux/std resource wiring is now centralized, the units stack is standardized through <code>cu29-units</code>, and simulation/determinism tooling has been strengthened.</p>
 <h2 id="breaking-api-changes">Breaking API Changes<a class="headerlink" href="#breaking-api-changes" title="Permanent link">&para;</a></h2>
 <ul>
@@ -1436,7 +1367,7 @@
 </ul>
 <!-- v0.13.0 PR links -->
 <h1 id="v0120-2026-01-15">v0.12.0 - 2026-01-15<a class="headerlink" href="#v0120-2026-01-15" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_1">High Level<a class="headerlink" href="#high-level_1" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_2">High Level<a class="headerlink" href="#high-level_2" title="Permanent link">&para;</a></h2>
 <p>Resources are now first-class in Copper: you can describe hardware endpoints and shared system services in config, then bind them to tasks/bridges without rewriting code. Multi-output tasks land, mission/DAG rendering is clearer, and the flight controller stack is now a solid base for autonomous flying machines on off-the-shelf hardware.</p>
 <h2 id="breaking-api-changes_1">Breaking API Changes<a class="headerlink" href="#breaking-api-changes_1" title="Permanent link">&para;</a></h2>
 <ul>
@@ -1570,7 +1501,7 @@
 <!-- v0.12.0 PR links -->
 <hr />
 <h1 id="v0110-2025-11-26">v0.11.0 - 2025-11-26<a class="headerlink" href="#v0110-2025-11-26" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_2">High Level<a class="headerlink" href="#high-level_2" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_3">High Level<a class="headerlink" href="#high-level_3" title="Permanent link">&para;</a></h2>
 <p>In this release we are introducing a new type of tasks: Bridges to help users implement multi-channel transports (serial, CAN, ELRS radios, ESC buses…). Technically they are like a set of our existing sources and sinks bundled into one logical component, it makes it easier to manage state from external systems and Copper.</p>
 <p>This release also delivers the minimum viable set of crates to build a Copper-native flight controller! </p>
 <p>MSP messaging, PID control, ELRS/CRSF radio links, and bidirectional DSHOT ESCs all run in <code>no_std</code>. </p>
@@ -1642,7 +1573,7 @@
 <!-- v0.11.0 PR/issue links -->
 <hr />
 <h1 id="v0100-2025-10-19">v0.10.0 - 2025-10-19<a class="headerlink" href="#v0100-2025-10-19" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_3">High Level<a class="headerlink" href="#high-level_3" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_4">High Level<a class="headerlink" href="#high-level_4" title="Permanent link">&para;</a></h2>
 <p>Major milestone: <strong>baremetal</strong> support lands across the stack, SD/eMMC logging backends, CMSIS-DAP probe workflow. RP2350 is the reference platform; examples and scripts are included.</p>
 <h2 id="new-features_3">New Features<a class="headerlink" href="#new-features_3" title="Permanent link">&para;</a></h2>
 <ul>
@@ -1683,7 +1614,7 @@
 <!-- v0.10.0 PR/issue links -->
 <hr />
 <h1 id="v091-2025-09-12">v0.9.1 - 2025-09-12<a class="headerlink" href="#v091-2025-09-12" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_4">High Level<a class="headerlink" href="#high-level_4" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_5">High Level<a class="headerlink" href="#high-level_5" title="Permanent link">&para;</a></h2>
 <p>Point release improving simulation control, fixing task indexing bugs, and refreshing several dependencies for long-term maintenance.</p>
 <h2 id="new-features_4">New Features<a class="headerlink" href="#new-features_4" title="Permanent link">&para;</a></h2>
 <ul>
@@ -1722,7 +1653,7 @@
 <!-- v0.9.1 PR/issue links -->
 <hr />
 <h1 id="v090-2025-07-31">v0.9.0 - 2025-07-31<a class="headerlink" href="#v090-2025-07-31" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_5">High Level<a class="headerlink" href="#high-level_5" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_6">High Level<a class="headerlink" href="#high-level_6" title="Permanent link">&para;</a></h2>
 <p>This release is primarily driven by user requests. It introduces a full transform library (à la tf2 for ROS), new keyframes in the logs, background tasks, a log checker, and a set of runtime and logging tuning parameters to better adapt to constrained environments.</p>
 <h2 id="api-change">API Change<a class="headerlink" href="#api-change" title="Permanent link">&para;</a></h2>
 <p>The task API now uses finer-grained lifetimes for input and output types. This provides greater flexibility when testing tasks and was necessary to support the implementation of background tasks:</p>
@@ -1918,7 +1849,7 @@ type MyTemporalData = CuStampData&lt;f64, ()&gt;;
 <!-- v0.9.0 PR/issue links -->
 <hr />
 <h1 id="v080-2025-05-26">v0.8.0 - 2025-05-26<a class="headerlink" href="#v080-2025-05-26" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_6">High level<a class="headerlink" href="#high-level_6" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_7">High level<a class="headerlink" href="#high-level_7" title="Permanent link">&para;</a></h2>
 <p>This release has been focused on Zenoh and ROS2 interoperability, modular configuration for larger robots with a new support for the notion of "mission" (aka mode like autonomy mode, datacollect mode etc..)</p>
 <h2 id="new-features_6">New Features<a class="headerlink" href="#new-features_6" title="Permanent link">&para;</a></h2>
 <ul>
@@ -1989,7 +1920,7 @@ cu29 = { version = &quot;0.7.0&quot;, features = [&quot;log-level-debug&quot;] }
 <!-- v0.8.0 PR/issue links -->
 <hr />
 <h1 id="v070-2025-03-14">v0.7.0 - 2025-03-14<a class="headerlink" href="#v070-2025-03-14" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_7">High level<a class="headerlink" href="#high-level_7" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_8">High level<a class="headerlink" href="#high-level_8" title="Permanent link">&para;</a></h2>
 <p>This release added a set of feature useful to develop autonomy algorithms on Drone (MSP).
 We also have a solid set of quality of life improvements derived from real usage.</p>
 <h2 id="notable-regression">Notable regression<a class="headerlink" href="#notable-regression" title="Permanent link">&para;</a></h2>
