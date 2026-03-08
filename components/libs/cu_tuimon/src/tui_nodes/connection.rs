@@ -412,18 +412,6 @@ impl ConnectionsLayout {
             }
         };
         let is_conn = |edge: Edge| matches!(edge, Edge::Connection(_));
-        let pick_style = |edges: &[Edge]| {
-            edges
-                .iter()
-                .find_map(|edge| {
-                    if let Edge::Connection(idx) = *edge {
-                        Some(self.line_styles[&idx])
-                    } else {
-                        None
-                    }
-                })
-                .unwrap_or_default()
-        };
         for y in 0..self.height {
             for x in 0..self.width {
                 let pos = (x, y);
@@ -432,51 +420,56 @@ impl ConnectionsLayout {
                 let east = self.edge_field[(pos, Direction::East).into()];
                 let west = self.edge_field[(pos, Direction::West).into()];
                 #[rustfmt::skip]
-				let (symbol, line_style) = match (north, south, east, west) {
+				let (symbol, style_edge) = match (north, south, east, west) {
 					(B | E, B | E, B | E, B | E) => continue,
 					(n, s, e, w) if n == B || s == B || e == B || w == B => {
 						if n == B && s == B && e != E || w != E && e == w {
-							(bor(e).horizontal, get_line_style(e))
+							(bor(e).horizontal, e)
 						} else if e == B && w == B && n != E && s != E && n == s {
-							(bor(n).vertical, get_line_style(n))
+							(bor(n).vertical, n)
+						} else if let Some((symbol, style_edge)) =
+							resolve_mixed_symbol(n, s, e, w, &bor)
+						{
+							(symbol, style_edge)
 						} else {
-							("*", Style::default())
+							("*", E)
 						}
 					}
-					(n, E, E, E) => (bor(n).vertical, get_line_style(n)),
-					(E, s, E, E) => (bor(s).vertical, get_line_style(s)),
-					(E, E, e, E) => (bor(e).horizontal, get_line_style(e)),
-					(E, E, E, w) => (bor(w).horizontal, get_line_style(w)),
+					(n, E, E, E) => (bor(n).vertical, n),
+					(E, s, E, E) => (bor(s).vertical, s),
+					(E, E, e, E) => (bor(e).horizontal, e),
+					(E, E, E, w) => (bor(w).horizontal, w),
 
-					(n, s, E, w) if n == s && n == w => (bor(n).vertical_left, get_line_style(n)),
-					(n, E, e, w) if n == e && n == w => (bor(n).horizontal_up, get_line_style(n)),
-					(n, s, e, E) if n == s && n == e => (bor(n).vertical_right, get_line_style(n)),
-					(E, s, e, w) if s == e && s == w => (bor(s).horizontal_down, get_line_style(s)),
-					(E, s, E, w) if s == w => (bor(s).top_right, get_line_style(s)),
-					(n, E, E, w) if n == w => (bor(n).bottom_right, get_line_style(n)),
-					(n, E, e, E) if n == e => (bor(n).bottom_left, get_line_style(n)),
-					(E, s, e, E) if s == e => (bor(s).top_left, get_line_style(s)),
+					(n, s, E, w) if n == s && n == w => (bor(n).vertical_left, n),
+					(n, E, e, w) if n == e && n == w => (bor(n).horizontal_up, n),
+					(n, s, e, E) if n == s && n == e => (bor(n).vertical_right, n),
+					(E, s, e, w) if s == e && s == w => (bor(s).horizontal_down, s),
+					(E, s, E, w) if s == w => (bor(s).top_right, s),
+					(n, E, E, w) if n == w => (bor(n).bottom_right, n),
+					(n, E, e, E) if n == e => (bor(n).bottom_left, n),
+					(E, s, e, E) if s == e => (bor(s).top_left, s),
 
-					(n, s, E, E) if n == s => (bor(n).vertical, get_line_style(n)),
-					(E, E, e, w) if e == w => (bor(e).horizontal, get_line_style(e)),
+					(n, s, E, E) if n == s => (bor(n).vertical, n),
+					(E, E, e, w) if e == w => (bor(e).horizontal, e),
 
-					(n, s, e, w) if n == s && n == e && n == w => (bor(n).cross, get_line_style(n)),
+					(n, s, e, w) if n == s && n == e && n == w => (bor(n).cross, n),
 					// intersections should just be verticals
-					(n, s, e, w) if n == s && e == w && n != E && e != E => (bor(n).vertical, get_line_style(n)),
+					(n, s, e, w) if n == s && e == w && n != E && e != E => (bor(n).vertical, n),
 					(n, s, e, w) if is_conn(n) && is_conn(s) && is_conn(e) && !is_conn(w) => {
-						(bor(n).vertical_right, pick_style(&[n, s, e]))
+						(bor(n).vertical_right, pick_symbol_edge(&[n, s, e]))
 					}
 					(n, s, e, w) if is_conn(n) && is_conn(s) && !is_conn(e) && is_conn(w) => {
-						(bor(n).vertical_left, pick_style(&[n, s, w]))
+						(bor(n).vertical_left, pick_symbol_edge(&[n, s, w]))
 					}
 					(n, s, e, w) if is_conn(n) && !is_conn(s) && is_conn(e) && is_conn(w) => {
-						(bor(e).horizontal_up, pick_style(&[n, e, w]))
+						(bor(e).horizontal_up, pick_symbol_edge(&[n, e, w]))
 					}
 					(n, s, e, w) if !is_conn(n) && is_conn(s) && is_conn(e) && is_conn(w) => {
-						(bor(e).horizontal_down, pick_style(&[s, e, w]))
+						(bor(e).horizontal_down, pick_symbol_edge(&[s, e, w]))
 					}
-					(_, _, _, _) => ("?", Style::default()),
+					(n, s, e, w) => resolve_mixed_symbol(n, s, e, w, &bor).unwrap_or(("?", E)),
 				};
+                let line_style = get_line_style(style_edge);
 
                 buf.cell_mut(Position::new(x as u16 + area.left(), y as u16 + area.top()))
                     .unwrap()
@@ -564,6 +557,137 @@ impl ConnectionsLayout {
         } else {
             isize::MAX
         }
+    }
+}
+
+fn pick_symbol_edge(edges: &[Edge]) -> Edge {
+    edges
+        .iter()
+        .copied()
+        .find(|edge| matches!(edge, Edge::Connection(_)))
+        .or_else(|| edges.iter().copied().find(|edge| *edge == Edge::Blocked))
+        .unwrap_or(Edge::Empty)
+}
+
+fn resolve_mixed_symbol(
+    north: Edge,
+    south: Edge,
+    east: Edge,
+    west: Edge,
+    bor: &impl Fn(Edge) -> line::Set<'static>,
+) -> Option<(&'static str, Edge)> {
+    let present = (north != E, south != E, east != E, west != E);
+    let vertical_edge = pick_symbol_edge(&[north, south]);
+    let horizontal_edge = pick_symbol_edge(&[east, west]);
+    let all_edge = pick_symbol_edge(&[north, south, east, west]);
+
+    Some(match present {
+        (false, false, false, false) => return None,
+        (true, false, false, false) | (false, true, false, false) | (true, true, false, false) => {
+            (bor(vertical_edge).vertical, vertical_edge)
+        }
+        (false, false, true, false) | (false, false, false, true) | (false, false, true, true) => {
+            (bor(horizontal_edge).horizontal, horizontal_edge)
+        }
+        (false, true, false, true) => {
+            let edge = pick_symbol_edge(&[south, west]);
+            (bor(edge).top_right, edge)
+        }
+        (true, false, false, true) => {
+            let edge = pick_symbol_edge(&[north, west]);
+            (bor(edge).bottom_right, edge)
+        }
+        (true, false, true, false) => {
+            let edge = pick_symbol_edge(&[north, east]);
+            (bor(edge).bottom_left, edge)
+        }
+        (false, true, true, false) => {
+            let edge = pick_symbol_edge(&[south, east]);
+            (bor(edge).top_left, edge)
+        }
+        (true, true, false, true) => {
+            let edge = pick_symbol_edge(&[north, south, west]);
+            (bor(edge).vertical_left, edge)
+        }
+        (true, false, true, true) => {
+            let edge = pick_symbol_edge(&[north, east, west]);
+            (bor(edge).horizontal_up, edge)
+        }
+        (true, true, true, false) => {
+            let edge = pick_symbol_edge(&[north, south, east]);
+            (bor(edge).vertical_right, edge)
+        }
+        (false, true, true, true) => {
+            let edge = pick_symbol_edge(&[south, east, west]);
+            (bor(edge).horizontal_down, edge)
+        }
+        (true, true, true, true) if north == south && north == east && north == west => {
+            (bor(north).cross, north)
+        }
+        (true, true, true, true) if north == south => (bor(vertical_edge).vertical, vertical_edge),
+        (true, true, true, true) if east == west => {
+            (bor(horizontal_edge).horizontal, horizontal_edge)
+        }
+        (true, true, true, true) => {
+            let edge = pick_symbol_edge(&[vertical_edge, all_edge]);
+            (bor(edge).vertical, edge)
+        }
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn symbol_for(north: Edge, south: Edge, east: Edge, west: Edge) -> &'static str {
+        resolve_mixed_symbol(north, south, east, west, &|edge| {
+            if edge == Edge::Blocked {
+                line::THICK
+            } else {
+                line::NORMAL
+            }
+        })
+        .map(|(symbol, _)| symbol)
+        .unwrap()
+    }
+
+    #[test]
+    fn mixed_four_way_prefers_coherent_vertical_run() {
+        assert_eq!(
+            symbol_for(
+                Edge::Connection(1),
+                Edge::Connection(1),
+                Edge::Connection(2),
+                Edge::Connection(3),
+            ),
+            line::NORMAL.vertical
+        );
+    }
+
+    #[test]
+    fn mixed_four_way_prefers_coherent_horizontal_run() {
+        assert_eq!(
+            symbol_for(
+                Edge::Connection(1),
+                Edge::Connection(2),
+                Edge::Connection(3),
+                Edge::Connection(3),
+            ),
+            line::NORMAL.horizontal
+        );
+    }
+
+    #[test]
+    fn fully_mixed_four_way_still_renders_a_line() {
+        assert_eq!(
+            symbol_for(
+                Edge::Connection(1),
+                Edge::Connection(2),
+                Edge::Connection(3),
+                Edge::Connection(4),
+            ),
+            line::NORMAL.vertical
+        );
     }
 }
 
