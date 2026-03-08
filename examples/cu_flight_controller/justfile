@@ -24,27 +24,27 @@ bevy:
   cd "{{ROOT}}"
   cargo run -p cu-flight-controller --no-default-features --features bevymon --bin quad-bevymon
 
-# Download the scene assets needed by the wasm BevyMon app.
-prepare-web-assets:
+# Download the local scene assets needed by the browser BevyMon app.
+prepare-assets:
   #!/usr/bin/env bash
   set -euo pipefail
   cd "{{invocation_directory()}}"
   mkdir -p assets
-  if [[ ! -f "assets/quadcopter.web.glb" ]]; then
+  if [[ ! -f "assets/quadcopter.glb" ]]; then
     echo "Downloading quadcopter.glb..."
-    curl --fail --location --silent --show-error --output "assets/quadcopter.web.glb" "https://cdn.copper-robotics.com/quadcopter.glb"
+    curl --fail --location --silent --show-error --output "assets/quadcopter.glb" "https://cdn.copper-robotics.com/quadcopter.glb"
   fi
-  if [[ ! -f "assets/city-fixed.web.glb" ]]; then
+  if [[ ! -f "assets/city-fixed.glb" ]]; then
     echo "Downloading city-fixed.glb..."
-    curl --fail --location --silent --show-error --output "assets/city-fixed.web.glb" "https://cdn.copper-robotics.com/city-fixed.glb"
+    curl --fail --location --silent --show-error --output "assets/city-fixed.glb" "https://cdn.copper-robotics.com/city-fixed.glb"
   fi
-  if [[ ! -f "assets/skybox.web.ktx2" ]]; then
+  if [[ ! -f "assets/skybox.ktx2" ]]; then
     echo "Downloading skybox.ktx2..."
-    curl --fail --location --silent --show-error --output "assets/skybox.web.ktx2" "https://cdn.copper-robotics.com/skybox.ktx2"
+    curl --fail --location --silent --show-error --output "assets/skybox.ktx2" "https://cdn.copper-robotics.com/skybox.ktx2"
   fi
-  if [[ ! -f "assets/specular_map.web.ktx2" ]]; then
+  if [[ ! -f "assets/specular_map.ktx2" ]]; then
     echo "Downloading specular_map.ktx2..."
-    curl --fail --location --silent --show-error --output "assets/specular_map.web.ktx2" "https://cdn.copper-robotics.com/specular_map.ktx2"
+    curl --fail --location --silent --show-error --output "assets/specular_map.ktx2" "https://cdn.copper-robotics.com/specular_map.ktx2"
   fi
 
 # Serve the BevyMon flight controller sim in the browser.
@@ -56,7 +56,7 @@ web:
     exit 1
   fi
   cd "{{invocation_directory()}}"
-  just prepare-web-assets
+  just prepare-assets
   trunk serve --open
 
 # Extract CopperLists from a log file (JSON export).

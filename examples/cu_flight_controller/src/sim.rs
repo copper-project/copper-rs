@@ -391,22 +391,10 @@ const MAX_OMEGA_RAD_S: f32 = 2200.0;
 const WORLD_MAG_FIELD_UT: [f32; 3] = [0.0, -45.0, -20.0];
 #[cfg(not(target_arch = "wasm32"))]
 const BASE_ASSETS_URL: &str = "https://cdn.copper-robotics.com/";
-#[cfg(not(target_arch = "wasm32"))]
 const SKYBOX: &str = "skybox.ktx2";
-#[cfg(not(target_arch = "wasm32"))]
 const SPECULAR_MAP: &str = "specular_map.ktx2";
-#[cfg(not(target_arch = "wasm32"))]
 const QUADCOPTER: &str = "quadcopter.glb";
-#[cfg(not(target_arch = "wasm32"))]
 const CITY: &str = "city-fixed.glb";
-#[cfg(target_arch = "wasm32")]
-const WEB_SKYBOX: &str = "skybox.web.ktx2";
-#[cfg(target_arch = "wasm32")]
-const WEB_SPECULAR_MAP: &str = "specular_map.web.ktx2";
-#[cfg(target_arch = "wasm32")]
-const WEB_QUADCOPTER: &str = "quadcopter.web.glb";
-#[cfg(target_arch = "wasm32")]
-const WEB_CITY: &str = "city-fixed.web.glb";
 // Measured from `gltf-transform inspect city.glb` in source model units.
 const LOCAL_CITY_BBOX_MIN_UNITS: Vec3 = Vec3::new(-30_614.165, -648.2196, -4_185.883);
 const LOCAL_CITY_BBOX_MAX_UNITS: Vec3 = Vec3::new(18_754.953, 11_102.407, 35_871.875);
@@ -748,13 +736,13 @@ fn setup_world(
     let city_path = precached_asset_path(&online_cache, &offline_cache, CITY)
         .expect("failed to get city.glb (online or cached)");
     #[cfg(target_arch = "wasm32")]
-    let quadcopter_path = WEB_QUADCOPTER;
+    let quadcopter_path = QUADCOPTER;
     #[cfg(target_arch = "wasm32")]
-    let skybox_path = WEB_SKYBOX;
+    let skybox_path = SKYBOX;
     #[cfg(target_arch = "wasm32")]
-    let specular_map_path = WEB_SPECULAR_MAP;
+    let specular_map_path = SPECULAR_MAP;
     #[cfg(target_arch = "wasm32")]
-    let city_path = WEB_CITY;
+    let city_path = CITY;
 
     let city_size_units = LOCAL_CITY_BBOX_MAX_UNITS - LOCAL_CITY_BBOX_MIN_UNITS;
     let city_size_m = city_size_units * LOCAL_CITY_SCALE;
