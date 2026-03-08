@@ -2,20 +2,21 @@ use crate::motor_model;
 use avian3d::math::Vector;
 use avian3d::physics_transform::{PreSolveDeltaPosition, PreSolveDeltaRotation};
 use avian3d::prelude::*;
+use bevy::asset::RenderAssetUsages;
+use bevy::camera::RenderTarget;
 use bevy::color::palettes::css::RED;
-#[cfg(not(target_arch = "wasm32"))]
 use bevy::core_pipeline::Skybox;
 use bevy::input::{
     keyboard::KeyCode,
-    mouse::{MouseButton, MouseMotion, MouseWheel},
+    mouse::{MouseButton, MouseMotion, MouseScrollUnit, MouseWheel},
 };
 #[cfg(not(target_arch = "wasm32"))]
 use bevy::pbr::DefaultOpaqueRendererMethod;
 #[cfg(not(target_arch = "wasm32"))]
 use bevy::pbr::ScreenSpaceReflections;
 use bevy::prelude::*;
+use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
 use bevy::ui::IsDefaultUiCamera;
-#[cfg(not(target_arch = "wasm32"))]
 use bevy_anti_alias::fxaa::Fxaa;
 #[cfg(not(target_arch = "wasm32"))]
 use cached_path::{Cache, Error as CacheError, ProgressBar};
@@ -26,11 +27,18 @@ use std::path::{Path, PathBuf};
 #[cfg(not(target_arch = "wasm32"))]
 use std::{fs, io};
 
+#[cfg(not(target_arch = "wasm32"))]
 pub const BALANCEBOT: &str = "balancebot.glb";
+#[cfg(not(target_arch = "wasm32"))]
 pub const SKYBOX: &str = "skybox.ktx2";
+#[cfg(not(target_arch = "wasm32"))]
 pub const DIFFUSE_MAP: &str = "diffuse_map.ktx2";
 #[cfg(target_arch = "wasm32")]
-const WEB_ASSET_DIR: &str = "assets";
+const WEB_BALANCEBOT: &str = "balancebot.web.glb";
+#[cfg(target_arch = "wasm32")]
+const WEB_SKYBOX: &str = "skybox.web.ktx2";
+#[cfg(target_arch = "wasm32")]
+const WEB_DIFFUSE_MAP: &str = "diffuse_map.web.ktx2";
 
 const TABLE_HEIGHT: f32 = 0.724;
 const RAIL_WIDTH: f32 = 0.55; // 55cm
@@ -83,6 +91,9 @@ pub struct Cart;
 
 #[derive(Component)]
 pub struct Rod;
+
+#[derive(Component)]
+pub struct SplitSceneCamera;
 
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct AppliedForce(pub Vector);
@@ -210,7 +221,6 @@ pub fn build_world(app: &mut App, headless: bool, split_monitor: bool) -> &mut A
     app.register_type::<bevy::gltf::GltfMaterialExtras>();
     app.register_type::<bevy::gltf::GltfMaterialName>();
     app.add_systems(Startup, assert_reflected_types);
-
     app
 }
 
@@ -306,6 +316,7 @@ pub const BASE_ASSETS_URL: &str = "https://cdn.copper-robotics.com/";
 fn setup_scene(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
+    mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     layout: Res<WorldLayout>,
@@ -377,11 +388,11 @@ fn setup_scene(
     .expect("Failed to create symlink to diffuse_map.ktx2.");
 
     #[cfg(target_arch = "wasm32")]
-    let balance_bot_path = format!("{WEB_ASSET_DIR}/{BALANCEBOT}");
+    let balance_bot_path = WEB_BALANCEBOT;
     #[cfg(target_arch = "wasm32")]
-    let skybox_path = format!("{WEB_ASSET_DIR}/{SKYBOX}");
+    let skybox_path = WEB_SKYBOX;
     #[cfg(target_arch = "wasm32")]
-    let diffuse_map_path = format!("{WEB_ASSET_DIR}/{DIFFUSE_MAP}");
+    let diffuse_map_path = WEB_DIFFUSE_MAP;
 
     let scene_handle = asset_server.load(GltfAssetLabel::Scene(0).from_asset(balance_bot_path));
     let skybox_handle = asset_server.load(skybox_path);
@@ -396,6 +407,21 @@ fn setup_scene(
 
     commands.spawn((SceneRoot(scene_handle),));
 
+    let split_target = if layout.split_monitor {
+        let mut image = Image::new_uninit(
+            default(),
+            TextureDimension::D2,
+            TextureFormat::Bgra8UnormSrgb,
+            RenderAssetUsages::all(),
+        );
+        image.texture_descriptor.usage = TextureUsages::TEXTURE_BINDING
+            | TextureUsages::COPY_DST
+            | TextureUsages::RENDER_ATTACHMENT;
+        Some(images.add(image))
+    } else {
+        None
+    };
+
     let mut camera = commands.spawn((
         Camera3d::default(),
         Msaa::Off,
@@ -408,10 +434,19 @@ fn setup_scene(
         Transform::from_xyz(-1.0, 0.1, 1.5).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
-    let _ = layout;
-    camera.insert(IsDefaultUiCamera);
+    if layout.split_monitor {
+        camera.insert((
+            Camera {
+                order: 0,
+                ..default()
+            },
+            RenderTarget::Image(split_target.expect("split viewport target missing").into()),
+            SplitSceneCamera,
+        ));
+    } else {
+        camera.insert(IsDefaultUiCamera);
+    }
 
-    #[cfg(not(target_arch = "wasm32"))]
     camera.insert(Skybox {
         image: skybox_handle,
         brightness: 1000.0,
@@ -426,7 +461,6 @@ fn setup_scene(
         bisection_steps: 8,
         use_secant: true,
     });
-    #[cfg(not(target_arch = "wasm32"))]
     camera.insert(Fxaa::default());
 
     commands.insert_resource(SetupCompleted(false));
@@ -963,7 +997,12 @@ fn camera_control_system(
     // Zoom with scroll
     for ev in scroll_evr.read() {
         let forward = camera_transform.forward(); // Store forward vector in a variable
-        let zoom_amount = ev.y * camera_control.zoom_sensitivity * time.delta_secs();
+        let scroll_lines = match ev.unit {
+            MouseScrollUnit::Line => ev.y,
+            MouseScrollUnit::Pixel => ev.y / 16.0,
+        }
+        .clamp(-5.0, 5.0);
+        let zoom_amount = scroll_lines * camera_control.zoom_sensitivity * time.delta_secs();
         camera_transform.translation += forward * zoom_amount;
     }
 
