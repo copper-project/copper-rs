@@ -1,3 +1,4 @@
+use crate::palette;
 use ratatui::layout::{Position, Size};
 
 use super::*;
@@ -370,7 +371,9 @@ impl<'a> NodeGraph<'a> {
                                 .unwrap()
                                 .set_symbol(alias_char)
                                 .set_style(
-                                    Style::default().add_modifier(Modifier::BOLD).bg(Color::Red),
+                                    Style::default()
+                                        .add_modifier(Modifier::BOLD)
+                                        .bg(palette::RED),
                                 );
                         }
                     }
@@ -400,7 +403,11 @@ impl<'a> NodeGraph<'a> {
                         ))
                         .unwrap()
                         .set_symbol(alias_char)
-                        .set_style(Style::default().add_modifier(Modifier::BOLD).bg(Color::Red));
+                        .set_style(
+                            Style::default()
+                                .add_modifier(Modifier::BOLD)
+                                .bg(palette::RED),
+                        );
                     }
 
                     // draw port

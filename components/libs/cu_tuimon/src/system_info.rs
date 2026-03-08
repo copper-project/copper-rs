@@ -227,6 +227,7 @@ mod native {
 
 #[cfg(all(target_family = "wasm", target_os = "unknown"))]
 mod browser {
+    use crate::palette;
     use crate::system_info::SystemInfo;
     use js_sys::{Array, Intl, Reflect};
     use ratatui::{
@@ -654,7 +655,7 @@ mod browser {
     }
 
     fn colored_logo_line(color: Color, text: &'static str) -> Line<'static> {
-        let style = Style::default().fg(color);
+        let style = Style::default().fg(palette::explicit_fg(color));
         let mut spans = Vec::new();
         let mut buf = String::new();
         let mut buf_is_space: Option<bool> = None;
@@ -699,12 +700,12 @@ mod browser {
 
     fn label_style() -> Style {
         Style::default()
-            .fg(Color::Blue)
+            .fg(palette::BLUE)
             .add_modifier(Modifier::BOLD)
     }
 
     fn value_style() -> Style {
-        Style::default().fg(Color::White)
+        Style::default().fg(palette::WHITE)
     }
 }
 

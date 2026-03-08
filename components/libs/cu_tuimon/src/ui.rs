@@ -2,6 +2,7 @@ use crate::MonitorModel;
 #[cfg(feature = "log_pane")]
 use crate::logpane::StyledLine;
 use crate::model::ComponentStatus;
+use crate::palette;
 use crate::system_info::{SystemInfo, default_system_info};
 use crate::tui_nodes::{Connection, NodeGraph, NodeLayout};
 #[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
@@ -407,7 +408,7 @@ impl MonitorUi {
     pub fn draw_content(&mut self, f: &mut Frame, area: Rect) {
         // Avoid backend-specific "reset" colors bleeding through the scrollable canvases.
         f.render_widget(
-            Block::default().style(Style::default().bg(Color::Black)),
+            Block::default().style(Style::default().bg(palette::BACKGROUND)),
             area,
         );
 
@@ -458,7 +459,7 @@ impl MonitorUi {
             #[cfg(all(target_family = "wasm", target_os = "unknown"))]
             SystemInfo::Rich(text) => text.clone(),
         };
-        normalize_reset_colors(&mut body, Color::White, Color::Black);
+        palette::normalize_text_colors(&mut body, palette::FOREGROUND, palette::BACKGROUND);
         lines.append(&mut body.lines);
         lines.push(Line::raw(" "));
         let text = Text::from(lines);
@@ -492,13 +493,13 @@ impl MonitorUi {
             };
             Cell::from(Line::from(*header).alignment(align)).style(
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(palette::YELLOW)
                     .add_modifier(Modifier::BOLD),
             )
         });
 
         let header = Row::new(header_cells)
-            .style(Style::default().fg(Color::Yellow))
+            .style(Style::default().fg(palette::YELLOW))
             .bottom_margin(1)
             .top_margin(1);
 
@@ -612,7 +613,7 @@ impl MonitorUi {
         self.clamp_latency_scroll_offset(area, content_size);
         let mut scroll_view = ScrollView::new(content_size);
         scroll_view.render_widget(
-            Block::default().style(Style::default().bg(Color::Black)),
+            Block::default().style(Style::default().bg(palette::BACKGROUND)),
             Rect::new(0, 0, content_size.width, content_size.height),
         );
         scroll_view.render_widget(
@@ -642,13 +643,13 @@ impl MonitorUi {
         .map(|header| {
             Cell::from(Line::from(*header).alignment(Alignment::Right)).style(
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(palette::YELLOW)
                     .add_modifier(Modifier::BOLD),
             )
         });
 
         let header = Row::new(header_cells)
-            .style(Style::default().fg(Color::Yellow))
+            .style(Style::default().fg(palette::YELLOW))
             .bottom_margin(1);
 
         let pool_stats = self.model.inner.pool_stats.lock().unwrap();
@@ -741,7 +742,7 @@ impl MonitorUi {
         let header_cells = ["Metric", "Value"].iter().map(|header| {
             Cell::from(Line::from(*header)).style(
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(palette::YELLOW)
                     .add_modifier(Modifier::BOLD),
             )
         });
@@ -755,7 +756,7 @@ impl MonitorUi {
         };
         let spacer = row(" ", " ".to_string());
 
-        let rate_style = Style::default().fg(Color::Cyan);
+        let rate_style = Style::default().fg(palette::CYAN);
         let mem_rows = vec![
             row("Observed rate", rate_display).style(rate_style),
             spacer.clone(),
@@ -908,7 +909,7 @@ impl MonitorUi {
             .log_selection
             .range()
             .filter(|(start, end)| start != end);
-        let selection_style = Style::default().bg(Color::Blue).fg(Color::Black);
+        let selection_style = Style::default().bg(palette::BLUE).fg(palette::BACKGROUND);
         let visible_lines = self
             .log_lines
             .iter()
@@ -1117,7 +1118,7 @@ impl MonitorUi {
                     Span::styled(
                         clid_inner,
                         Style::default()
-                            .fg(Color::Black)
+                            .fg(palette::BACKGROUND)
                             .bg(badge_bg)
                             .add_modifier(Modifier::BOLD),
                     ),
@@ -1129,35 +1130,22 @@ impl MonitorUi {
     }
 }
 
-fn normalize_reset_colors(text: &mut Text<'_>, fallback_fg: Color, fallback_bg: Color) {
-    for line in &mut text.lines {
-        for span in &mut line.spans {
-            if span.style.fg == Some(Color::Reset) {
-                span.style.fg = Some(fallback_fg);
-            }
-            if span.style.bg == Some(Color::Reset) {
-                span.style.bg = Some(fallback_bg);
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn normalize_reset_colors_replaces_reset_fg_and_bg() {
+    fn normalize_text_colors_replaces_reset_fg_and_bg() {
         let mut text = Text::from(Line::from(vec![Span::styled(
             "pfetch",
             Style::default().fg(Color::Reset).bg(Color::Reset),
         )]));
 
-        normalize_reset_colors(&mut text, Color::White, Color::Black);
+        palette::normalize_text_colors(&mut text, palette::FOREGROUND, palette::BACKGROUND);
 
         let span = &text.lines[0].spans[0];
-        assert_eq!(span.style.fg, Some(Color::White));
-        assert_eq!(span.style.bg, Some(Color::Black));
+        assert_eq!(span.style.fg, Some(palette::FOREGROUND));
+        assert_eq!(span.style.bg, Some(palette::BACKGROUND));
     }
 }
 
@@ -1366,10 +1354,10 @@ impl std::fmt::Display for NodeType {
 impl NodeType {
     fn color(self) -> Color {
         match self {
-            Self::Unknown => Color::Gray,
+            Self::Unknown => palette::GRAY,
             Self::Source => Color::Rgb(255, 191, 0),
             Self::Sink => Color::Rgb(255, 102, 204),
-            Self::Task => Color::White,
+            Self::Task => palette::WHITE,
             Self::Bridge => Color::Rgb(204, 153, 255),
         }
     }
@@ -1596,7 +1584,10 @@ impl NodesScrollableWidgetState {
                         format!(" {}", node.node_type),
                         Style::default().fg(node.node_type.color()),
                     ),
-                    Span::styled(format!(" {} ", node.id), Style::default().fg(Color::White)),
+                    Span::styled(
+                        format!(" {} ", node.id),
+                        Style::default().fg(palette::WHITE),
+                    ),
                 ]);
                 NodeLayout::new((NODE_WIDTH, height)).with_title_line(title_line)
             })
@@ -1652,7 +1643,7 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
         let content_size = state.ensure_graph_cache(area);
         let mut scroll_view = ScrollView::new(content_size);
         scroll_view.render_widget(
-            Block::default().style(Style::default().bg(Color::Black)),
+            Block::default().style(Style::default().bg(palette::BACKGROUND)),
             Rect::new(0, 0, content_size.width, content_size.height),
         );
 
@@ -1684,9 +1675,9 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
                 let type_label = clip_tail(&node.type_label, label_width);
                 let status_text = clip_tail(&status_line, label_width);
                 let base_style = if status.is_error {
-                    Style::default().fg(Color::Red)
+                    Style::default().fg(palette::RED)
                 } else {
-                    Style::default().fg(Color::Green)
+                    Style::default().fg(palette::GREEN)
                 };
                 let mut lines = vec![
                     Line::styled(format!(" {}", type_label), base_style),
@@ -1697,9 +1688,9 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
                 if max_ports > 0 {
                     let left_width = (NODE_WIDTH_CONTENT as usize - 2) / 2;
                     let right_width = NODE_WIDTH_CONTENT as usize - 2 - left_width;
-                    let input_style = Style::default().fg(Color::Yellow);
-                    let output_style = Style::default().fg(Color::Cyan);
-                    let dotted_style = Style::default().fg(Color::DarkGray);
+                    let input_style = Style::default().fg(palette::YELLOW);
+                    let output_style = Style::default().fg(palette::CYAN);
+                    let dotted_style = Style::default().fg(palette::DARK_GRAY);
                     for port_idx in 0..max_ports {
                         let input = node
                             .inputs
