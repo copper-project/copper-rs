@@ -25,14 +25,14 @@ use bevy::ecs::change_detection::DetectChanges;
 use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::image::TextureFormatPixelInfo;
 use bevy::prelude::{
-    App, AssetPlugin, AssetServer, Assets, BackgroundColor, BorderColor, ButtonInput, Camera,
-    Camera3d, Color, Commands, Component, ComputedNode, DefaultPlugins, Dir3, DirectionalLight,
-    Entity, EnvironmentMapLight, FixedUpdate, GlobalAmbientLight, GlobalTransform, GltfAssetLabel,
-    Handle, Image, ImageNode, IsDefaultUiCamera, KeyCode, MessageReader, MessageWriter,
-    MinimalPlugins, Name, Node, PerspectiveProjection, Pickable, PluginGroup, PositionType,
-    PostUpdate, Projection, Quat, Query, Res, ResMut, Resource, Scene, SceneRoot, Startup, Text,
-    TextColor, TextFont, TextureAtlasLayout, Time, Transform, UVec2, UiRect, Update, Val, Vec2,
-    Vec3, Visibility, Window, WindowPlugin, With, Without, default,
+    App, AssetPlugin, AssetServer, Assets, ButtonInput, Camera, Camera3d, Color, Commands,
+    Component, ComputedNode, DefaultPlugins, Dir3, DirectionalLight, Entity, EnvironmentMapLight,
+    FixedUpdate, GlobalAmbientLight, GlobalTransform, GltfAssetLabel, Handle, Image, ImageNode,
+    IsDefaultUiCamera, KeyCode, MessageReader, MessageWriter, MinimalPlugins, Name, Node,
+    PerspectiveProjection, Pickable, PluginGroup, PositionType, PostUpdate, Projection, Quat,
+    Query, Res, ResMut, Resource, Scene, SceneRoot, Startup, Text, TextColor, TextFont,
+    TextureAtlasLayout, Time, Transform, UVec2, UiRect, Update, Val, Vec2, Vec3, Visibility,
+    Window, WindowPlugin, With, Without, default,
 };
 use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
 #[cfg(not(target_arch = "wasm32"))]
@@ -199,8 +199,6 @@ struct SceneLoadingOverlay;
 const OSD_COLS: usize = 53;
 const OSD_ROWS: usize = 16;
 const OSD_BLANK_SYMBOL: u8 = 0x20;
-const OSD_HORIZONTAL_PADDING_COLS: f32 = 0.0;
-const OSD_VERTICAL_PADDING_ROWS: f32 = 0.0;
 const OSD_FONT_ATLAS_COLS: u32 = 16;
 const OSD_FONT_ATLAS_ROWS: u32 = 16;
 const OSD_FONT_ATLAS_GLYPHS: usize = (OSD_FONT_ATLAS_COLS * OSD_FONT_ATLAS_ROWS) as usize;
@@ -210,7 +208,6 @@ const OSD_GLYPH_PADDING_PX: u32 = 1;
 const OSD_FONT_ATLAS_PATH: &str = "osd/vtx_font.png";
 const OSD_CANVAS_WIDTH_PX: u32 = OSD_COLS as u32 * OSD_GLYPH_WIDTH_PX;
 const OSD_CANVAS_HEIGHT_PX: u32 = OSD_ROWS as u32 * OSD_GLYPH_HEIGHT_PX;
-const DEBUG_SPLIT_RED_TARGET: bool = true;
 
 #[derive(Resource, Clone)]
 struct SimOsdOverlay {
@@ -295,9 +292,6 @@ struct OsdCanvasFrame;
 
 #[derive(Component)]
 struct OsdCanvasNode;
-
-#[derive(Component)]
-struct SceneViewportDebugFrame;
 
 #[derive(Resource)]
 struct OsdCanvasAssets {
@@ -988,24 +982,6 @@ fn spawn_osd_overlay(
     });
 
     commands.entity(hud_root.0).with_children(|parent| {
-        parent.spawn((
-            Name::new("scene-viewport-debug"),
-            SceneViewportDebugFrame,
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(0.0),
-                left: Val::Px(0.0),
-                width: Val::Px(0.0),
-                height: Val::Px(0.0),
-                border: UiRect::all(Val::Px(2.0)),
-                ..default()
-            },
-            Pickable::IGNORE,
-            Visibility::Hidden,
-            BorderColor::all(Color::srgba(0.0, 0.45, 1.0, 0.95)),
-            BackgroundColor(Color::NONE),
-        ));
-
         parent
             .spawn((
                 Name::new("fpv-osd"),
@@ -1031,12 +1007,9 @@ fn spawn_osd_overlay(
                             left: Val::Px(0.0),
                             width: Val::Px(OSD_CANVAS_WIDTH_PX as f32),
                             height: Val::Px(OSD_CANVAS_HEIGHT_PX as f32),
-                            border: UiRect::all(Val::Px(2.0)),
                             ..default()
                         },
                         Pickable::IGNORE,
-                        BorderColor::all(Color::srgba(1.0, 0.0, 0.0, 0.95)),
-                        BackgroundColor(Color::NONE),
                     ))
                     .with_children(|frame| {
                         frame.spawn((
@@ -1772,25 +1745,6 @@ fn rasterize_osd_canvas(
             }
         }
     }
-
-    if raster_source.bytes_per_pixel >= 4 {
-        let border = [0u8, 255u8, 0u8, 255u8];
-        let canvas_height = canvas_image.texture_descriptor.size.height as usize;
-
-        for x in 0..canvas_width {
-            let top = x * raster_source.bytes_per_pixel;
-            let bottom = ((canvas_height - 1) * canvas_width + x) * raster_source.bytes_per_pixel;
-            canvas_data[top..top + 4].copy_from_slice(&border);
-            canvas_data[bottom..bottom + 4].copy_from_slice(&border);
-        }
-
-        for y in 0..canvas_height {
-            let left = (y * canvas_width) * raster_source.bytes_per_pixel;
-            let right = (y * canvas_width + (canvas_width - 1)) * raster_source.bytes_per_pixel;
-            canvas_data[left..left + 4].copy_from_slice(&border);
-            canvas_data[right..right + 4].copy_from_slice(&border);
-        }
-    }
 }
 
 fn prepare_osd_raster_source(
@@ -1844,8 +1798,7 @@ fn logical_node_size(node: &ComputedNode) -> Vec2 {
 }
 
 fn update_osd_overlay(
-    camera_view: Res<CameraView>,
-    osd_overlay: Res<SimOsdOverlay>,
+    (camera_view, osd_overlay): (Res<CameraView>, Res<SimOsdOverlay>),
     osd_canvas_assets: Option<Res<OsdCanvasAssets>>,
     raster_source: Res<OsdRasterSource>,
     mut images: ResMut<Assets<Image>>,
@@ -1917,67 +1870,6 @@ fn update_osd_overlay(
     };
 
     rasterize_osd_canvas(&osd_overlay, &raster_source, canvas_image);
-}
-
-fn update_scene_viewport_debug_frame(
-    scene_camera: Query<(&Camera, &RenderTarget), With<SimSceneCamera>>,
-    osd_root: Query<&ComputedNode, With<OsdOverlayRoot>>,
-    mut debug_frame: Query<(&mut Node, &mut Visibility), With<SceneViewportDebugFrame>>,
-) {
-    let Ok((camera, render_target)) = scene_camera.single() else {
-        return;
-    };
-    let Ok((mut frame_node, mut frame_visibility)) = debug_frame.single_mut() else {
-        return;
-    };
-    let root_size = osd_root.single().ok().map(logical_node_size);
-    let Some(rect) = display_viewport_rect(camera, render_target, root_size) else {
-        *frame_visibility = Visibility::Hidden;
-        return;
-    };
-
-    frame_node.left = Val::Px(rect.min.x);
-    frame_node.top = Val::Px(rect.min.y);
-    frame_node.width = Val::Px(rect.width());
-    frame_node.height = Val::Px(rect.height());
-    *frame_visibility = Visibility::Visible;
-}
-
-fn debug_fill_split_render_target(
-    mut scene_camera: Query<(&mut Camera, &RenderTarget), With<SplitSceneCamera>>,
-    mut images: ResMut<Assets<Image>>,
-) {
-    if !DEBUG_SPLIT_RED_TARGET {
-        return;
-    }
-
-    let Ok((mut camera, render_target)) = scene_camera.single_mut() else {
-        return;
-    };
-    let Some(handle) = render_target.as_image() else {
-        return;
-    };
-    let Some(image) = images.get_mut(handle) else {
-        return;
-    };
-
-    let width = image.texture_descriptor.size.width as usize;
-    let height = image.texture_descriptor.size.height as usize;
-    if width == 0 || height == 0 {
-        return;
-    }
-
-    camera.is_active = false;
-
-    let pixel = [0u8, 0u8, 255u8, 255u8];
-    let len = width * height * pixel.len();
-    let data = image.data.get_or_insert_with(|| vec![0; len]);
-    if data.len() != len {
-        data.resize(len, 0);
-    }
-    for chunk in data.chunks_exact_mut(pixel.len()) {
-        chunk.copy_from_slice(&pixel);
-    }
 }
 
 fn stop_copper_on_exit<T: Send + Sync + 'static>(
@@ -2206,8 +2098,6 @@ pub fn build_world(headless: bool, split_monitor: bool) -> App {
             update_help_overlay,
             prepare_osd_raster_source,
             update_osd_overlay,
-            update_scene_viewport_debug_frame,
-            debug_fill_split_render_target,
         )
             .chain(),
     )
