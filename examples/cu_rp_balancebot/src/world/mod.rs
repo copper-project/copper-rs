@@ -27,18 +27,9 @@ use std::path::{Path, PathBuf};
 #[cfg(not(target_arch = "wasm32"))]
 use std::{fs, io};
 
-#[cfg(not(target_arch = "wasm32"))]
 pub const BALANCEBOT: &str = "balancebot.glb";
-#[cfg(not(target_arch = "wasm32"))]
 pub const SKYBOX: &str = "skybox.ktx2";
-#[cfg(not(target_arch = "wasm32"))]
 pub const DIFFUSE_MAP: &str = "diffuse_map.ktx2";
-#[cfg(target_arch = "wasm32")]
-const WEB_BALANCEBOT: &str = "balancebot.web.glb";
-#[cfg(target_arch = "wasm32")]
-const WEB_SKYBOX: &str = "skybox.web.ktx2";
-#[cfg(target_arch = "wasm32")]
-const WEB_DIFFUSE_MAP: &str = "diffuse_map.web.ktx2";
 
 const TABLE_HEIGHT: f32 = 0.724;
 const RAIL_WIDTH: f32 = 0.55; // 55cm
@@ -398,11 +389,11 @@ fn setup_scene(
     .expect("Failed to create symlink to diffuse_map.ktx2.");
 
     #[cfg(target_arch = "wasm32")]
-    let balance_bot_path = WEB_BALANCEBOT;
+    let balance_bot_path = BALANCEBOT;
     #[cfg(target_arch = "wasm32")]
-    let skybox_path = WEB_SKYBOX;
+    let skybox_path = SKYBOX;
     #[cfg(target_arch = "wasm32")]
-    let diffuse_map_path = WEB_DIFFUSE_MAP;
+    let diffuse_map_path = DIFFUSE_MAP;
 
     let scene_handle = asset_server.load(GltfAssetLabel::Scene(0).from_asset(balance_bot_path));
     let skybox_handle = asset_server.load(skybox_path);

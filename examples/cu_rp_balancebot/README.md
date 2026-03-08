@@ -33,6 +33,7 @@ $ just web
 ```
 
 This serves the Bevy sim and the live Copper monitor through Trunk. The first run downloads the scene assets into `assets/` so the browser can load them from the same origin.
+The browser path now uses the same asset filenames as the native sim: `balancebot.glb`, `skybox.ktx2`, and `diffuse_map.ktx2`.
 
 ## To run the resimulation
 
