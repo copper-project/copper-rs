@@ -1,4 +1,4 @@
-#![cfg(feature = "sim")]
+#![cfg(any(feature = "sim", feature = "bevymon"))]
 
 use cu_gnss_payloads::{
     GnssAccuracy, GnssCommandAck, GnssEpochTime, GnssFixSolution, GnssFixType, GnssInfoText,

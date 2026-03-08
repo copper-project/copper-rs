@@ -1,44 +1,66 @@
-#![cfg(feature = "sim")]
-
+#[cfg(feature = "sim")]
 extern crate alloc;
 
+#[cfg(feature = "sim")]
 mod messages;
+#[cfg(feature = "sim")]
 #[path = "sim/rc_joystick.rs"]
 mod rc_joystick;
+#[cfg(feature = "sim")]
 mod sim_support;
+#[cfg(feature = "sim")]
 mod tasks;
 
 use avian3d::prelude::*;
 use bevy::app::AppExit;
+#[cfg(all(feature = "bevymon", target_arch = "wasm32"))]
+use bevy::asset::AssetMetaCheck;
+use bevy::asset::RenderAssetUsages;
 use bevy::asset::UnapprovedPathMode;
+#[cfg(feature = "bevymon")]
+use bevy::camera::ClearColorConfig;
+use bevy::camera::RenderTarget;
 use bevy::core_pipeline::Skybox;
 use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::prelude::{
     App, AssetPlugin, AssetServer, Assets, ButtonInput, Camera, Camera3d, Color, Commands,
-    Component, DefaultPlugins, Dir3, DirectionalLight, EnvironmentMapLight, FixedUpdate,
-    GlobalAmbientLight, GlobalTransform, GltfAssetLabel, Handle, ImageNode, IsDefaultUiCamera,
-    KeyCode, MessageReader, MessageWriter, MinimalPlugins, Name, Node, PerspectiveProjection,
-    PluginGroup, PositionType, PostUpdate, Projection, Quat, Query, Res, ResMut, Resource, Scene,
-    SceneRoot, Startup, Text, TextColor, TextFont, TextureAtlas, TextureAtlasLayout, Time,
-    Transform, UVec2, UiRect, Update, Val, Vec3, Visibility, Window, WindowPlugin, With, Without,
-    default,
+    Component, ComputedNode, DefaultPlugins, Dir3, DirectionalLight, Entity, EnvironmentMapLight,
+    FixedUpdate, GlobalAmbientLight, GlobalTransform, GltfAssetLabel, Handle, Image, ImageNode,
+    IsDefaultUiCamera, KeyCode, MessageReader, MessageWriter, MinimalPlugins, Name, Node,
+    PerspectiveProjection, Pickable, PluginGroup, PositionType, PostUpdate, Projection, Quat,
+    Query, Res, ResMut, Resource, Scene, SceneRoot, Startup, Text, TextColor, TextFont,
+    TextureAtlas, TextureAtlasLayout, Time, Transform, UVec2, UiRect, Update, Val, Vec3,
+    Visibility, Window, WindowPlugin, With, Without, default,
 };
-use bevy::window::PrimaryWindow;
+use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
+#[cfg(not(target_arch = "wasm32"))]
 use cached_path::{Cache, Error as CacheError, ProgressBar};
+#[cfg(feature = "bevymon")]
+use cu_bevymon::{
+    CuBevyMonFocus, CuBevyMonPlugin, CuBevyMonSplitLayoutConfig, CuBevyMonSplitStyle,
+    CuBevyMonSurface, CuBevyMonTexture, MonitorModel, MonitorUiOptions, spawn_split_layout,
+};
 use cu29::prelude::*;
+#[cfg(all(not(target_arch = "wasm32"), feature = "sim"))]
 use cu29_helpers::basic_copper_setup;
 
+#[cfg(not(target_arch = "wasm32"))]
+use crate::rc_joystick::{RcAxisBindings, RcFrame, RcJoystick};
 use cu_crsf::messages::RcChannelsPayload;
 use cu_msp_bridge::MspRequestBatch;
 use cu_msp_lib::structs::{
     MSP_DP_CLEAR_SCREEN, MSP_DP_DRAW_SCREEN, MSP_DP_WRITE_STRING, MspDisplayPort, MspRequest,
 };
 use cu_sensor_payloads::{BarometerPayload, ImuPayload, MagnetometerPayload};
-use rc_joystick::{RcAxisBindings, RcFrame, RcJoystick};
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::fs;
+#[cfg(not(target_arch = "wasm32"))]
 use std::io;
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::{Path, PathBuf};
+#[cfg(feature = "bevymon")]
+use std::sync::{Arc, Mutex};
 
 #[copper_runtime(config = "copperconfig.ron", sim_mode = true, ignore_resources = true)]
 struct FlightControllerSim {}
@@ -65,8 +87,9 @@ impl Default for SimVehicleState {
 }
 
 #[derive(Resource)]
-struct CopperState {
-    _ctx: CopperContext,
+struct CopperState<T: Send + Sync + 'static> {
+    _runtime_state: T,
+    clock: RobotClock,
     app: gnss::FlightControllerSim,
 }
 
@@ -123,8 +146,37 @@ enum RcInputSource {
 
 #[derive(Resource, Default)]
 struct SimJoystickState {
+    #[cfg(not(target_arch = "wasm32"))]
     reader: Option<RcJoystick>,
 }
+
+#[derive(Resource, Clone, Copy)]
+struct WorldLayout {
+    split_monitor: bool,
+}
+
+#[derive(Resource, Default)]
+struct SceneLoadState {
+    ready: bool,
+}
+
+#[derive(Resource)]
+struct SimHudRoot(Entity);
+
+#[derive(Resource, Default)]
+struct SimHudSpawnState {
+    loading: bool,
+    help: bool,
+    osd: bool,
+}
+
+#[cfg(feature = "bevymon")]
+#[derive(Resource, Default)]
+struct LayoutSpawned(bool);
+
+#[cfg(feature = "bevymon")]
+#[derive(Resource)]
+struct SplitUiCamera(Entity);
 
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum CameraView {
@@ -132,6 +184,15 @@ enum CameraView {
     FirstPerson,
     ThirdPerson,
 }
+
+#[derive(Component)]
+struct SimSceneCamera;
+
+#[derive(Component)]
+struct SplitSceneCamera;
+
+#[derive(Component)]
+struct SceneLoadingOverlay;
 
 const OSD_COLS: usize = 53;
 const OSD_ROWS: usize = 16;
@@ -310,11 +371,24 @@ const MAX_OMEGA_RAD_S: f32 = 2200.0;
 // Keep declination at 0 in the simulated magnetic field itself so
 // `declination_deg` in `MagneticTrueHeading` can be tested independently.
 const WORLD_MAG_FIELD_UT: [f32; 3] = [0.0, -45.0, -20.0];
+#[cfg(not(target_arch = "wasm32"))]
 const BASE_ASSETS_URL: &str = "https://cdn.copper-robotics.com/";
+#[cfg(not(target_arch = "wasm32"))]
 const SKYBOX: &str = "skybox.ktx2";
+#[cfg(not(target_arch = "wasm32"))]
 const SPECULAR_MAP: &str = "specular_map.ktx2";
+#[cfg(not(target_arch = "wasm32"))]
 const QUADCOPTER: &str = "quadcopter.glb";
+#[cfg(not(target_arch = "wasm32"))]
 const CITY: &str = "city-fixed.glb";
+#[cfg(target_arch = "wasm32")]
+const WEB_SKYBOX: &str = "skybox.web.ktx2";
+#[cfg(target_arch = "wasm32")]
+const WEB_SPECULAR_MAP: &str = "specular_map.web.ktx2";
+#[cfg(target_arch = "wasm32")]
+const WEB_QUADCOPTER: &str = "quadcopter.web.glb";
+#[cfg(target_arch = "wasm32")]
+const WEB_CITY: &str = "city-fixed.web.glb";
 // Measured from `gltf-transform inspect city.glb` in source model units.
 const LOCAL_CITY_BBOX_MIN_UNITS: Vec3 = Vec3::new(-30_614.165, -648.2196, -4_185.883);
 const LOCAL_CITY_BBOX_MAX_UNITS: Vec3 = Vec3::new(18_754.953, 11_102.407, 35_871.875);
@@ -322,6 +396,7 @@ const LOCAL_CITY_BBOX_MAX_UNITS: Vec3 = Vec3::new(18_754.953, 11_102.407, 35_871
 const LOCAL_CITY_SCALE: f32 = 0.01;
 const SIM_SPAWN_POSITION: Vec3 = Vec3::new(-10.0, 1.0, 20.0);
 const SIM_SPAWN_YAW_DEG: f32 = 180.0;
+#[cfg(not(target_arch = "wasm32"))]
 const ARM_SWITCH_NAMES: &[&str] = &["sf", "se", "arm", "btn1"];
 const KEYBOARD_HOVER_THROTTLE_LOW: f32 = 0.56;
 const KEYBOARD_HOVER_THROTTLE_HIGH: f32 = 0.62;
@@ -350,6 +425,7 @@ fn spawn_pose_components() -> (
     )
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn create_symlink(src: &str, dst: &str) -> io::Result<()> {
     let dst_path = Path::new(dst);
 
@@ -368,6 +444,7 @@ fn create_symlink(src: &str, dst: &str) -> io::Result<()> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn get_asset_path(
     online_cache: &Cache,
     offline_cache: &Cache,
@@ -393,6 +470,7 @@ fn get_asset_path(
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn precached_asset_path(
     online_cache: &Cache,
     offline_cache: &Cache,
@@ -483,6 +561,21 @@ fn map_bevy_body_to_fc_magnetometer(v: Vec3) -> [f32; 3] {
     map_bevy_body_to_fc_polar(v)
 }
 
+#[cfg(feature = "bevymon")]
+#[cfg(target_arch = "wasm32")]
+type BevyMonSectionStorage = NoopSectionStorage;
+#[cfg(feature = "bevymon")]
+#[cfg(target_arch = "wasm32")]
+type BevyMonUnifiedLogger = NoopLogger;
+
+#[cfg(feature = "bevymon")]
+#[cfg(not(target_arch = "wasm32"))]
+type BevyMonSectionStorage = memmap::MmapSectionStorage;
+#[cfg(feature = "bevymon")]
+#[cfg(not(target_arch = "wasm32"))]
+type BevyMonUnifiedLogger = UnifiedLoggerWrite;
+
+#[cfg(all(not(target_arch = "wasm32"), feature = "sim"))]
 fn setup_copper(mut commands: Commands) {
     #[allow(clippy::identity_op)]
     const LOG_SLAB_SIZE: Option<usize> = Some(128 * 1024 * 1024);
@@ -495,6 +588,7 @@ fn setup_copper(mut commands: Commands) {
 
     let ctx = basic_copper_setup(&PathBuf::from(logger_path), LOG_SLAB_SIZE, true, None)
         .expect("failed to setup logger");
+    let clock = ctx.clock.clone();
 
     let mut app = gnss::FlightControllerSimBuilder::new()
         .with_context(&ctx)
@@ -505,35 +599,151 @@ fn setup_copper(mut commands: Commands) {
     app.start_all_tasks(&mut default_callback)
         .expect("failed to start tasks");
 
-    commands.insert_resource(CopperState { _ctx: ctx, app });
+    commands.insert_resource(CopperState {
+        _runtime_state: ctx,
+        clock,
+        app,
+    });
 }
 
-fn setup_world(mut commands: Commands, asset_server: Res<AssetServer>) {
+#[cfg(feature = "bevymon")]
+fn build_bevymon_copper() -> (MonitorModel, CopperState<LoggerRuntime>) {
+    #[allow(clippy::identity_op)]
+    const LOG_SLAB_SIZE: Option<usize> = Some(128 * 1024 * 1024);
+    const STRUCTURED_LOG_SECTION_SIZE: usize = 4096 * 10;
+
+    let clock = RobotClock::default();
+    let unified_logger = build_unified_logger(LOG_SLAB_SIZE).expect("failed to create logger");
+    let logger_runtime =
+        init_logger_runtime(&clock, unified_logger.clone(), STRUCTURED_LOG_SECTION_SIZE)
+            .expect("failed to initialize structured logger");
+
+    let mut sim_callback = default_callback;
+    let mut app = <gnss::FlightControllerSim as CuSimApplication<
+        BevyMonSectionStorage,
+        BevyMonUnifiedLogger,
+    >>::new(clock.clone(), unified_logger, None, &mut sim_callback)
+    .expect("failed to create runtime");
+
+    app.start_all_tasks(&mut sim_callback)
+        .expect("failed to start tasks");
+
+    let monitor_model = app.copper_runtime_mut().monitor.model();
+    (
+        monitor_model,
+        CopperState {
+            _runtime_state: logger_runtime,
+            clock,
+            app,
+        },
+    )
+}
+
+#[cfg(feature = "bevymon")]
+fn init_logger_runtime(
+    clock: &RobotClock,
+    unified_logger: Arc<Mutex<BevyMonUnifiedLogger>>,
+    structured_log_section_size: usize,
+) -> CuResult<LoggerRuntime> {
+    let structured_stream = stream_write::<CuLogEntry, BevyMonSectionStorage>(
+        unified_logger,
+        UnifiedLogType::StructuredLogLine,
+        structured_log_section_size,
+    )?;
+    Ok(LoggerRuntime::init(
+        clock.clone(),
+        structured_stream,
+        None::<NullLog>,
+    ))
+}
+
+#[cfg(feature = "bevymon")]
+#[cfg(target_arch = "wasm32")]
+fn build_unified_logger(
+    _log_slab_size: Option<usize>,
+) -> CuResult<Arc<Mutex<BevyMonUnifiedLogger>>> {
+    Ok(Arc::new(Mutex::new(NoopLogger::new())))
+}
+
+#[cfg(feature = "bevymon")]
+#[cfg(not(target_arch = "wasm32"))]
+fn build_unified_logger(
+    log_slab_size: Option<usize>,
+) -> CuResult<Arc<Mutex<BevyMonUnifiedLogger>>> {
+    let logger_path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("logs/flight_controller_sim.copper");
+    if let Some(parent) = logger_path.parent()
+        && !parent.exists()
+    {
+        fs::create_dir_all(parent).expect("failed to create logs directory");
+    }
+
+    let logger = UnifiedLoggerBuilder::new()
+        .write(true)
+        .create(true)
+        .file_base_name(&logger_path)
+        .preallocated_size(log_slab_size.unwrap_or(10 * 1024 * 1024))
+        .build()
+        .map_err(|err| CuError::new_with_cause("failed to create flight controller logger", err))?;
+    let logger = match logger {
+        UnifiedLogger::Write(logger) => logger,
+        UnifiedLogger::Read(_) => {
+            return Err(CuError::from(
+                "UnifiedLoggerBuilder did not create a write-capable logger",
+            ));
+        }
+    };
+    Ok(Arc::new(Mutex::new(logger)))
+}
+
+fn setup_world(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut images: ResMut<Assets<Image>>,
+    layout: Res<WorldLayout>,
+) {
+    #[cfg(not(target_arch = "wasm32"))]
     let online_cache = Cache::builder()
         .progress_bar(Some(ProgressBar::Full))
         .build()
         .expect("failed to create online file cache");
 
+    #[cfg(not(target_arch = "wasm32"))]
     let offline_cache = Cache::builder()
         .progress_bar(Some(ProgressBar::Full))
         .offline(true)
         .build()
         .expect("failed to create offline file cache");
 
+    #[cfg(not(target_arch = "wasm32"))]
     let quadcopter_path = precached_asset_path(&online_cache, &offline_cache, QUADCOPTER)
         .expect("failed to get quadcopter.glb (online or cached)");
+    #[cfg(not(target_arch = "wasm32"))]
     let skybox_path = precached_asset_path(&online_cache, &offline_cache, SKYBOX)
         .expect("failed to get skybox.ktx2 (online or cached)");
+    #[cfg(not(target_arch = "wasm32"))]
     let specular_map_path = precached_asset_path(&online_cache, &offline_cache, SPECULAR_MAP)
         .expect("failed to get specular_map.ktx2 (online or cached)");
+    #[cfg(not(target_arch = "wasm32"))]
     let city_path = precached_asset_path(&online_cache, &offline_cache, CITY)
         .expect("failed to get city.glb (online or cached)");
+    #[cfg(target_arch = "wasm32")]
+    let quadcopter_path = WEB_QUADCOPTER;
+    #[cfg(target_arch = "wasm32")]
+    let skybox_path = WEB_SKYBOX;
+    #[cfg(target_arch = "wasm32")]
+    let specular_map_path = WEB_SPECULAR_MAP;
+    #[cfg(target_arch = "wasm32")]
+    let city_path = WEB_CITY;
 
     let city_size_units = LOCAL_CITY_BBOX_MAX_UNITS - LOCAL_CITY_BBOX_MIN_UNITS;
     let city_size_m = city_size_units * LOCAL_CITY_SCALE;
     let city_translation = Vec3::ZERO;
     let city_scale = Vec3::splat(LOCAL_CITY_SCALE);
+    #[cfg(not(target_arch = "wasm32"))]
     let city_path_str = city_path.to_string_lossy().into_owned();
+    #[cfg(target_arch = "wasm32")]
+    let city_path_str = city_path.to_string();
     info!(
         "sim world: loading city {} (bbox {}x{}x{} units, scaled to {}x{}x{} m) with translation ({}, {}, {})",
         city_path_str,
@@ -548,7 +758,7 @@ fn setup_world(mut commands: Commands, asset_server: Res<AssetServer>) {
         city_translation.z
     );
 
-    let skybox_handle = asset_server.load(skybox_path.clone());
+    let skybox_handle = asset_server.load(skybox_path);
     let specular_map_handle = asset_server.load(specular_map_path);
 
     commands.insert_resource(GlobalAmbientLight {
@@ -557,10 +767,24 @@ fn setup_world(mut commands: Commands, asset_server: Res<AssetServer>) {
         affects_lightmapped_meshes: true,
     });
 
-    commands.spawn((
+    let split_target = if layout.split_monitor {
+        let mut image = Image::new_uninit(
+            default(),
+            TextureDimension::D2,
+            TextureFormat::Bgra8UnormSrgb,
+            RenderAssetUsages::all(),
+        );
+        image.texture_descriptor.usage = TextureUsages::TEXTURE_BINDING
+            | TextureUsages::COPY_DST
+            | TextureUsages::RENDER_ATTACHMENT;
+        Some(images.add(image))
+    } else {
+        None
+    };
+
+    let mut camera = commands.spawn((
         Name::new("camera"),
         Camera3d::default(),
-        IsDefaultUiCamera,
         Projection::Perspective(PerspectiveProjection {
             fov: 90.0_f32.to_radians(),
             ..default()
@@ -577,7 +801,20 @@ fn setup_world(mut commands: Commands, asset_server: Res<AssetServer>) {
             ..default()
         },
         Transform::from_xyz(-2.0, 1.6, -2.0).looking_at(Vec3::ZERO, Vec3::Y),
+        SimSceneCamera,
     ));
+    if layout.split_monitor {
+        camera.insert((
+            Camera {
+                order: 0,
+                ..default()
+            },
+            RenderTarget::Image(split_target.expect("split viewport target missing").into()),
+            SplitSceneCamera,
+        ));
+    } else {
+        camera.insert(IsDefaultUiCamera);
+    }
 
     commands.spawn((
         Name::new("sun"),
@@ -589,10 +826,18 @@ fn setup_world(mut commands: Commands, asset_server: Res<AssetServer>) {
         Transform::from_translation(Vec3::new(3.0, 10.0, 1.0)).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
-    let quadcopter_scene = asset_server
-        .load(GltfAssetLabel::Scene(0).from_asset(format!("{}#scene0", quadcopter_path.display())));
-    let city_scene = asset_server
-        .load(GltfAssetLabel::Scene(0).from_asset(format!("{}#scene0", city_path.display())));
+    #[cfg(not(target_arch = "wasm32"))]
+    let quadcopter_scene_path = format!("{}#scene0", quadcopter_path.display());
+    #[cfg(target_arch = "wasm32")]
+    let quadcopter_scene_path = format!("{quadcopter_path}#scene0");
+    #[cfg(not(target_arch = "wasm32"))]
+    let city_scene_path = format!("{}#scene0", city_path.display());
+    #[cfg(target_arch = "wasm32")]
+    let city_scene_path = format!("{city_path}#scene0");
+
+    let quadcopter_scene =
+        asset_server.load(GltfAssetLabel::Scene(0).from_asset(quadcopter_scene_path));
+    let city_scene = asset_server.load(GltfAssetLabel::Scene(0).from_asset(city_scene_path));
     commands.insert_resource(PendingQuadcopterSpawn {
         quadcopter_scene: quadcopter_scene.clone(),
         city_scene: city_scene.clone(),
@@ -616,6 +861,7 @@ fn spawn_quadcopter_when_world_ready(
     asset_server: Res<AssetServer>,
     pending_spawn: Option<Res<PendingQuadcopterSpawn>>,
     colliders: Query<(), (With<Collider>, Without<Multicopter>)>,
+    mut load_state: ResMut<SceneLoadState>,
 ) {
     let Some(pending_spawn) = pending_spawn else {
         return;
@@ -649,13 +895,45 @@ fn spawn_quadcopter_when_world_ready(
         ))
         .insert(Visibility::Visible);
     commands.remove_resource::<PendingQuadcopterSpawn>();
+    load_state.ready = true;
 }
 
-fn setup_osd_overlay(
+fn setup_full_window_hud_root(mut commands: Commands, layout: Res<WorldLayout>) {
+    if layout.split_monitor {
+        return;
+    }
+
+    let root = commands
+        .spawn((
+            Name::new("sim-ui-root"),
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(0.0),
+                left: Val::Px(0.0),
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                ..default()
+            },
+            Pickable::IGNORE,
+        ))
+        .id();
+    commands.insert_resource(SimHudRoot(root));
+}
+
+fn spawn_osd_overlay(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlasLayout>>,
+    hud_root: Option<Res<SimHudRoot>>,
+    mut spawned: ResMut<SimHudSpawnState>,
 ) {
+    if spawned.osd {
+        return;
+    }
+    let Some(hud_root) = hud_root else {
+        return;
+    };
+
     let atlas_handle = asset_server.load(OSD_FONT_ATLAS_PATH);
     let atlas_layout = texture_atlases.add(TextureAtlasLayout::from_grid(
         UVec2::new(OSD_GLYPH_WIDTH_PX, OSD_GLYPH_HEIGHT_PX),
@@ -665,87 +943,175 @@ fn setup_osd_overlay(
         None,
     ));
 
-    commands
-        .spawn((
-            Name::new("fpv-osd"),
-            OsdOverlayRoot,
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(0.0),
-                left: Val::Px(0.0),
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                ..default()
-            },
-            Visibility::Visible,
-        ))
-        .with_children(|parent| {
-            for row in 0..OSD_ROWS {
-                for col in 0..OSD_COLS {
-                    parent.spawn((
-                        OsdOverlayCell { row, col },
+    commands.entity(hud_root.0).with_children(|parent| {
+        parent
+            .spawn((
+                Name::new("fpv-osd"),
+                OsdOverlayRoot,
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: Val::Px(0.0),
+                    left: Val::Px(0.0),
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    ..default()
+                },
+                Pickable::IGNORE,
+                Visibility::Visible,
+            ))
+            .with_children(|cells| {
+                for row in 0..OSD_ROWS {
+                    for col in 0..OSD_COLS {
+                        cells.spawn((
+                            OsdOverlayCell { row, col },
+                            Node {
+                                position_type: PositionType::Absolute,
+                                top: Val::Px(0.0),
+                                left: Val::Px(0.0),
+                                width: Val::Px(OSD_GLYPH_WIDTH_PX as f32),
+                                height: Val::Px(OSD_GLYPH_HEIGHT_PX as f32),
+                                ..default()
+                            },
+                            Pickable::IGNORE,
+                            ImageNode::from_atlas_image(
+                                atlas_handle.clone(),
+                                TextureAtlas {
+                                    layout: atlas_layout.clone(),
+                                    index: OSD_BLANK_SYMBOL as usize,
+                                },
+                            ),
+                        ));
+                    }
+                }
+            });
+    });
+    spawned.osd = true;
+}
+
+fn spawn_loading_overlay(
+    mut commands: Commands,
+    hud_root: Option<Res<SimHudRoot>>,
+    mut spawned: ResMut<SimHudSpawnState>,
+) {
+    if spawned.loading {
+        return;
+    }
+    let Some(hud_root) = hud_root else {
+        return;
+    };
+
+    commands.entity(hud_root.0).with_children(|parent| {
+        parent
+            .spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: Val::Px(18.0),
+                    left: Val::Px(0.0),
+                    right: Val::Px(0.0),
+                    justify_content: bevy::ui::JustifyContent::Center,
+                    ..default()
+                },
+                Pickable::IGNORE,
+            ))
+            .with_children(|loading| {
+                loading
+                    .spawn((
                         Node {
-                            position_type: PositionType::Absolute,
-                            top: Val::Px(0.0),
-                            left: Val::Px(0.0),
-                            width: Val::Px(OSD_GLYPH_WIDTH_PX as f32),
-                            height: Val::Px(OSD_GLYPH_HEIGHT_PX as f32),
+                            padding: UiRect::new(
+                                Val::Px(18.0),
+                                Val::Px(18.0),
+                                Val::Px(10.0),
+                                Val::Px(10.0),
+                            ),
+                            border: UiRect::all(Val::Px(2.0)),
+                            border_radius: bevy::ui::BorderRadius::all(Val::Px(12.0)),
                             ..default()
                         },
-                        ImageNode::from_atlas_image(
-                            atlas_handle.clone(),
-                            TextureAtlas {
-                                layout: atlas_layout.clone(),
-                                index: OSD_BLANK_SYMBOL as usize,
+                        Pickable::IGNORE,
+                        SceneLoadingOverlay,
+                        bevy::ui::BackgroundColor(Color::srgba(0.03, 0.05, 0.09, 0.92)),
+                        bevy::ui::BorderColor::all(Color::srgba(0.58, 0.74, 0.96, 0.95)),
+                    ))
+                    .with_children(|cartouche| {
+                        cartouche.spawn((
+                            Pickable::IGNORE,
+                            Text::new("Assets loading..."),
+                            TextFont {
+                                font_size: 18.0,
+                                ..default()
                             },
-                        ),
-                    ));
-                }
-            }
-        });
+                            TextColor(Color::srgb(0.93, 0.96, 1.0)),
+                        ));
+                    });
+            });
+    });
+    spawned.loading = true;
 }
 
-fn setup_help_overlay(mut commands: Commands) {
-    commands
-        .spawn((
-            Name::new("sim-help"),
-            Node {
-                position_type: PositionType::Absolute,
-                bottom: Val::Px(5.0),
-                right: Val::Px(5.0),
-                padding: UiRect::new(Val::Px(15.0), Val::Px(15.0), Val::Px(10.0), Val::Px(10.0)),
-                column_gap: Val::Px(10.0),
-                flex_direction: bevy::ui::FlexDirection::Row,
-                justify_content: bevy::ui::JustifyContent::SpaceBetween,
-                border: UiRect::all(Val::Px(2.0)),
-                border_radius: bevy::ui::BorderRadius::all(Val::Px(10.0)),
-                ..default()
-            },
-            bevy::ui::BackgroundColor(Color::srgba(0.25, 0.41, 0.88, 0.7)),
-            bevy::ui::BorderColor::all(Color::srgba(0.8, 0.8, 0.8, 0.7)),
-        ))
-        .with_children(|parent| {
-            parent.spawn((
-                Text::new("View\nRC Link\nArm\nMode\nThrottle\nRoll/Pitch\nYaw\nReset"),
-                TextFont {
-                    font_size: 12.0,
-                    ..default()
-                },
-                TextColor(Color::srgba(0.25, 0.25, 0.75, 1.0)),
-            ));
+fn spawn_help_overlay(
+    mut commands: Commands,
+    hud_root: Option<Res<SimHudRoot>>,
+    mut spawned: ResMut<SimHudSpawnState>,
+) {
+    if spawned.help {
+        return;
+    }
+    let Some(hud_root) = hud_root else {
+        return;
+    };
 
-            parent.spawn((
-                SimHelpValuesText,
-                Text::new("FPV (V)\nChecking RC link..."),
-                TextFont {
-                    font_size: 12.0,
+    commands.entity(hud_root.0).with_children(|parent| {
+        parent
+            .spawn((
+                Name::new("sim-help"),
+                Node {
+                    position_type: PositionType::Absolute,
+                    bottom: Val::Px(5.0),
+                    right: Val::Px(5.0),
+                    padding: UiRect::new(
+                        Val::Px(15.0),
+                        Val::Px(15.0),
+                        Val::Px(10.0),
+                        Val::Px(10.0),
+                    ),
+                    column_gap: Val::Px(10.0),
+                    flex_direction: bevy::ui::FlexDirection::Row,
+                    justify_content: bevy::ui::JustifyContent::SpaceBetween,
+                    border: UiRect::all(Val::Px(2.0)),
+                    border_radius: bevy::ui::BorderRadius::all(Val::Px(10.0)),
                     ..default()
                 },
-                TextColor(Color::WHITE),
-            ));
-        });
+                Pickable::IGNORE,
+                bevy::ui::BackgroundColor(Color::srgba(0.25, 0.41, 0.88, 0.7)),
+                bevy::ui::BorderColor::all(Color::srgba(0.8, 0.8, 0.8, 0.7)),
+            ))
+            .with_children(|help| {
+                help.spawn((
+                    Pickable::IGNORE,
+                    Text::new("View\nRC Link\nArm\nMode\nThrottle\nRoll/Pitch\nYaw\nReset"),
+                    TextFont {
+                        font_size: 12.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgba(0.25, 0.25, 0.75, 1.0)),
+                ));
+
+                help.spawn((
+                    Pickable::IGNORE,
+                    SimHelpValuesText,
+                    Text::new("FPV (V)\nChecking RC link..."),
+                    TextFont {
+                        font_size: 12.0,
+                        ..default()
+                    },
+                    TextColor(Color::WHITE),
+                ));
+            });
+    });
+    spawned.help = true;
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn setup_joystick(
     mut rc_input: ResMut<SimRcInput>,
     mut rc_source: ResMut<RcInputSource>,
@@ -776,6 +1142,16 @@ fn setup_joystick(
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+fn setup_joystick(mut rc_input: ResMut<SimRcInput>, mut rc_source: ResMut<RcInputSource>) {
+    *rc_source = RcInputSource::Keyboard;
+    rc_input.mode = messages::FlightMode::Angle;
+    rc_input.armed = true;
+    rc_input.throttle = KEYBOARD_HOVER_THROTTLE_LOW;
+    info!("sim rc: web build using keyboard controls");
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn poll_joystick(
     mut joystick: ResMut<SimJoystickState>,
     mut rc_input: ResMut<SimRcInput>,
@@ -810,6 +1186,10 @@ fn poll_joystick(
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+fn poll_joystick() {}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn mode_from_three_pos(value: f32) -> messages::FlightMode {
     if value < -0.33 {
         messages::FlightMode::Acro
@@ -820,6 +1200,7 @@ fn mode_from_three_pos(value: f32) -> messages::FlightMode {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn find_arm_switch(frame: &RcFrame) -> Option<&rc_joystick::SwitchState> {
     for name in ARM_SWITCH_NAMES {
         if let Some(sw) = frame
@@ -834,10 +1215,12 @@ fn find_arm_switch(frame: &RcFrame) -> Option<&rc_joystick::SwitchState> {
     frame.switches.first()
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn arm_from_switches(frame: &RcFrame) -> Option<bool> {
     find_arm_switch(frame).map(|s| s.on)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn apply_joystick_frame(frame: &RcFrame, rc_input: &mut SimRcInput) {
     rc_input.roll = frame.roll.clamp(-1.0, 1.0);
     // Match FC stick convention used by keyboard path and RcMapper.
@@ -861,7 +1244,14 @@ fn update_rc_input_keyboard(
     mut rc_input: ResMut<SimRcInput>,
     keyboard: Res<ButtonInput<KeyCode>>,
     rc_source: Res<RcInputSource>,
+    _layout: Res<WorldLayout>,
+    #[cfg(feature = "bevymon")] focus: Option<Res<CuBevyMonFocus>>,
 ) {
+    #[cfg(feature = "bevymon")]
+    if _layout.split_monitor && !focus.is_some_and(|focus| focus.0 == CuBevyMonSurface::Sim) {
+        return;
+    }
+
     if *rc_source == RcInputSource::Joystick {
         return;
     }
@@ -901,7 +1291,14 @@ fn adjust_keyboard_throttle(
     mut rc_input: ResMut<SimRcInput>,
     keyboard: Res<ButtonInput<KeyCode>>,
     rc_source: Res<RcInputSource>,
+    _layout: Res<WorldLayout>,
+    #[cfg(feature = "bevymon")] focus: Option<Res<CuBevyMonFocus>>,
 ) {
+    #[cfg(feature = "bevymon")]
+    if _layout.split_monitor && !focus.is_some_and(|focus| focus.0 == CuBevyMonSurface::Sim) {
+        return;
+    }
+
     if *rc_source == RcInputSource::Joystick {
         return;
     }
@@ -928,7 +1325,14 @@ fn reset_vehicle(
     >,
     mut motors: ResMut<SimMotorCommands>,
     mut kin: ResMut<SimKinematics>,
+    _layout: Res<WorldLayout>,
+    #[cfg(feature = "bevymon")] focus: Option<Res<CuBevyMonFocus>>,
 ) {
+    #[cfg(feature = "bevymon")]
+    if _layout.split_monitor && !focus.is_some_and(|focus| focus.0 == CuBevyMonSurface::Sim) {
+        return;
+    }
+
     if !keyboard.just_pressed(KeyCode::KeyR) {
         return;
     }
@@ -984,8 +1388,8 @@ fn sync_vehicle_state(
     };
 }
 
-fn run_copper(
-    mut copper: ResMut<CopperState>,
+fn run_copper<T: Send + Sync + 'static>(
+    mut copper: ResMut<CopperState<T>>,
     sim_state: Res<SimState>,
     rc_input: Res<SimRcInput>,
     mut motor_commands: ResMut<SimMotorCommands>,
@@ -1004,7 +1408,7 @@ fn run_copper(
             vehicle.velocity_world.z,
         ],
     );
-    let clock = copper._ctx.clock.clone();
+    let clock = copper.clock.clone();
     let dshot = &mut motor_commands.dshot;
 
     let mut sim_callback = move |step: gnss::SimStep| -> SimOverride {
@@ -1108,7 +1512,17 @@ fn apply_multicopter_dynamics(
     forces.apply_angular_impulse(dt * force_torque.torque);
 }
 
-fn toggle_camera_view(keyboard: Res<ButtonInput<KeyCode>>, mut camera_view: ResMut<CameraView>) {
+fn toggle_camera_view(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut camera_view: ResMut<CameraView>,
+    _layout: Res<WorldLayout>,
+    #[cfg(feature = "bevymon")] focus: Option<Res<CuBevyMonFocus>>,
+) {
+    #[cfg(feature = "bevymon")]
+    if _layout.split_monitor && !focus.is_some_and(|focus| focus.0 == CuBevyMonSurface::Sim) {
+        return;
+    }
+
     if !keyboard.just_pressed(KeyCode::KeyV) {
         return;
     }
@@ -1126,7 +1540,7 @@ fn toggle_camera_view(keyboard: Res<ButtonInput<KeyCode>>, mut camera_view: ResM
 
 fn camera_follow_quadcopter(
     quadcopter_query: Query<&GlobalTransform, With<Multicopter>>,
-    mut camera_query: Query<&mut Transform, (With<Camera>, Without<Multicopter>)>,
+    mut camera_query: Query<&mut Transform, (With<SimSceneCamera>, Without<Multicopter>)>,
     camera_view: Res<CameraView>,
 ) {
     let Ok(quad_tf) = quadcopter_query.single() else {
@@ -1166,10 +1580,12 @@ fn track_sim_led_state() {
     let _on = sim_support::sim_activity_led_is_on();
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn axis_or_unmapped(axis: Option<&String>) -> &str {
     axis.map_or("unmapped", String::as_str)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn connected_help_values(view_label: &str, joystick: &RcJoystick) -> String {
     let axes: RcAxisBindings = joystick.axis_bindings();
     let frame = joystick.current_frame();
@@ -1206,7 +1622,7 @@ fn connected_help_values(view_label: &str, joystick: &RcJoystick) -> String {
 fn update_help_overlay(
     camera_view: Res<CameraView>,
     rc_source: Res<RcInputSource>,
-    joystick_state: Res<SimJoystickState>,
+    _joystick_state: Res<SimJoystickState>,
     mut help_text_query: Query<&mut Text, With<SimHelpValuesText>>,
 ) {
     let Ok(mut text) = help_text_query.single_mut() else {
@@ -1222,14 +1638,25 @@ fn update_help_overlay(
         RcInputSource::Keyboard => format!(
             "{view_label}\nNot connected (plug RC via USB/BT)\nT\n1=Acro 2=Angle 3=PosHold\nSpace (boost)\nWASD\nQ / E\nR"
         ),
-        RcInputSource::Joystick => joystick_state.reader.as_ref().map_or_else(
-            || {
-                format!(
-                    "{view_label}\nConnected (USB/BT)\nRC source initializing...\n-\n-\n-\n-\nR"
+        RcInputSource::Joystick => {
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                _joystick_state.reader.as_ref().map_or_else(
+                    || {
+                        format!(
+                            "{view_label}\nConnected (USB/BT)\nRC source initializing...\n-\n-\n-\n-\nR"
+                        )
+                    },
+                    |joy| connected_help_values(view_label, joy),
                 )
-            },
-            |joy| connected_help_values(view_label, joy),
-        ),
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                format!(
+                    "{view_label}\nWeb build keyboard mode\nT\n1=Acro 2=Angle 3=PosHold\nSpace (boost)\nWASD\nQ / E\nR"
+                )
+            }
+        }
     };
 
     *text = Text::new(values);
@@ -1238,14 +1665,10 @@ fn update_help_overlay(
 fn update_osd_overlay(
     camera_view: Res<CameraView>,
     osd_overlay: Res<SimOsdOverlay>,
-    window_query: Query<&Window, With<PrimaryWindow>>,
-    mut root_query: Query<&mut Visibility, With<OsdOverlayRoot>>,
+    mut root_query: Query<(&ComputedNode, &mut Visibility), With<OsdOverlayRoot>>,
     mut cell_query: Query<(&OsdOverlayCell, &mut Node, &mut ImageNode)>,
 ) {
-    let Ok(window) = window_query.single() else {
-        return;
-    };
-    let Ok(mut visibility) = root_query.single_mut() else {
+    let Ok((root_node, mut visibility)) = root_query.single_mut() else {
         return;
     };
 
@@ -1255,18 +1678,19 @@ fn update_osd_overlay(
         Visibility::Hidden
     };
 
-    let max_cell_w = window.width() / (OSD_COLS as f32 + OSD_HORIZONTAL_PADDING_COLS);
-    let max_cell_h = window.height() / (OSD_ROWS as f32 + OSD_VERTICAL_PADDING_ROWS);
+    let viewport_size = root_node.size();
+    let max_cell_w = viewport_size.x / (OSD_COLS as f32 + OSD_HORIZONTAL_PADDING_COLS);
+    let max_cell_h = viewport_size.y / (OSD_ROWS as f32 + OSD_VERTICAL_PADDING_ROWS);
     let scale_w = max_cell_w / OSD_GLYPH_WIDTH_PX as f32;
     let scale_h = max_cell_h / OSD_GLYPH_HEIGHT_PX as f32;
     let scale = scale_w.min(scale_h).max(0.1);
     let cell_w = OSD_GLYPH_WIDTH_PX as f32 * scale;
     let cell_h = OSD_GLYPH_HEIGHT_PX as f32 * scale;
     let total_w = cell_w * OSD_COLS as f32;
-    let origin_x = ((window.width() - total_w) * 0.5).max(0.0);
+    let origin_x = ((viewport_size.x - total_w) * 0.5).max(0.0);
     let origin_y = 0.0;
     let row_step = if OSD_ROWS > 1 {
-        ((window.height() - cell_h).max(0.0)) / ((OSD_ROWS - 1) as f32)
+        ((viewport_size.y - cell_h).max(0.0)) / ((OSD_ROWS - 1) as f32)
     } else {
         0.0
     };
@@ -1290,7 +1714,10 @@ fn update_osd_overlay(
     }
 }
 
-fn stop_copper_on_exit(mut exit_events: MessageReader<AppExit>, mut copper: ResMut<CopperState>) {
+fn stop_copper_on_exit<T: Send + Sync + 'static>(
+    mut exit_events: MessageReader<AppExit>,
+    mut copper: ResMut<CopperState<T>>,
+) {
     for _ in exit_events.read() {
         let _ = copper.app.stop_all_tasks(&mut default_callback);
         let _ = copper.app.log_shutdown_completed();
@@ -1323,7 +1750,133 @@ fn register_scene_reflect_types(app: &mut App) {
     app.register_type::<bevy::gltf::GltfMaterialName>();
 }
 
-pub fn make_world(headless: bool) -> App {
+fn asset_plugin() -> AssetPlugin {
+    #[cfg(all(feature = "bevymon", target_arch = "wasm32"))]
+    {
+        AssetPlugin {
+            meta_check: AssetMetaCheck::Never,
+            unapproved_path_mode: UnapprovedPathMode::Allow,
+            ..default()
+        }
+    }
+    #[cfg(not(all(feature = "bevymon", target_arch = "wasm32")))]
+    {
+        AssetPlugin {
+            unapproved_path_mode: UnapprovedPathMode::Allow,
+            ..default()
+        }
+    }
+}
+
+fn primary_window(split_monitor: bool) -> Window {
+    let title = if split_monitor {
+        "Copper Flight Controller BevyMon"
+    } else {
+        "Copper Flight Controller Sim"
+    };
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        return Window {
+            title: title.into(),
+            resolution: (1680, 960).into(),
+            canvas: Some("#bevy".into()),
+            fit_canvas_to_parent: true,
+            ..default()
+        };
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        Window {
+            title: title.into(),
+            resolution: (1680, 960).into(),
+            ..default()
+        }
+    }
+}
+
+#[cfg(feature = "bevymon")]
+fn setup_split_ui_camera(mut commands: Commands) {
+    let camera = commands
+        .spawn((
+            bevy::prelude::Camera2d,
+            Camera {
+                order: 1,
+                clear_color: ClearColorConfig::None,
+                ..default()
+            },
+        ))
+        .id();
+    commands.insert_resource(SplitUiCamera(camera));
+}
+
+#[cfg(feature = "bevymon")]
+fn spawn_bevymon_layout(
+    mut commands: Commands,
+    texture: Option<Res<CuBevyMonTexture>>,
+    ui_camera: Option<Res<SplitUiCamera>>,
+    scene_cameras: Query<Entity, With<SplitSceneCamera>>,
+    mut spawned: ResMut<LayoutSpawned>,
+) {
+    if spawned.0 {
+        return;
+    }
+    let Some(texture) = texture else {
+        return;
+    };
+    let Some(ui_camera) = ui_camera else {
+        return;
+    };
+    let Ok(scene_camera) = scene_cameras.single() else {
+        return;
+    };
+
+    let layout = spawn_split_layout(
+        &mut commands,
+        texture.0.clone(),
+        CuBevyMonSplitLayoutConfig::new(scene_camera)
+            .with_ui_camera(ui_camera.0)
+            .with_style(CuBevyMonSplitStyle {
+                sim_panel_percent: 67.0,
+                monitor_panel_percent: 33.0,
+                monitor_panel_inset_px: 4.0,
+                ..default()
+            }),
+    );
+
+    let hud_root = commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(0.0),
+                left: Val::Px(0.0),
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                ..default()
+            },
+            Pickable::IGNORE,
+        ))
+        .id();
+    commands.entity(layout.sim_panel).add_child(hud_root);
+    commands.insert_resource(SimHudRoot(hud_root));
+    spawned.0 = true;
+}
+
+fn sync_loading_overlay(
+    load_state: Res<SceneLoadState>,
+    mut overlays: Query<&mut Visibility, With<SceneLoadingOverlay>>,
+) {
+    if !load_state.ready {
+        return;
+    }
+
+    for mut visibility in &mut overlays {
+        *visibility = Visibility::Hidden;
+    }
+}
+
+pub fn build_world(headless: bool, split_monitor: bool) -> App {
     let mut app = App::new();
     app.insert_resource(SimState::default())
         .insert_resource(SimMotorCommands::default())
@@ -1332,41 +1885,38 @@ pub fn make_world(headless: bool) -> App {
         .insert_resource(RcInputSource::default())
         .insert_resource(SimJoystickState::default())
         .insert_resource(CameraView::default())
-        .insert_resource(SimOsdOverlay::default());
+        .insert_resource(SimOsdOverlay::default())
+        .insert_resource(WorldLayout { split_monitor })
+        .init_resource::<SceneLoadState>()
+        .init_resource::<SimHudSpawnState>();
 
     if headless {
         app.add_plugins(MinimalPlugins);
-        app.add_systems(Startup, setup_copper);
-        app.add_systems(Update, run_copper);
-        app.add_systems(PostUpdate, stop_copper_on_exit);
         return app;
     }
 
     app.add_plugins(
         DefaultPlugins
             .set(WindowPlugin {
-                primary_window: Some(Window {
-                    title: "Copper Flight Controller Sim".into(),
-                    ..default()
-                }),
+                primary_window: Some(primary_window(split_monitor)),
                 ..default()
             })
-            .set(AssetPlugin {
-                unapproved_path_mode: UnapprovedPathMode::Allow,
-                ..default()
-            }),
+            .set(asset_plugin()),
     )
     .add_plugins(PhysicsPlugins::default())
     .insert_resource(Gravity(Vec3::new(0.0, -9.81, 0.0)))
     .insert_resource(Time::<Physics>::default())
     .add_systems(
         Startup,
+        (setup_world, setup_full_window_hud_root, setup_joystick),
+    )
+    .add_systems(
+        Update,
         (
-            setup_world,
-            setup_osd_overlay,
-            setup_help_overlay,
-            setup_copper,
-            setup_joystick,
+            spawn_loading_overlay,
+            spawn_help_overlay,
+            spawn_osd_overlay,
+            sync_loading_overlay,
         ),
     )
     .add_systems(
@@ -1391,20 +1941,59 @@ pub fn make_world(headless: bool) -> App {
         )
             .chain(),
     )
-    .add_systems(
-        FixedUpdate,
-        (sync_vehicle_state, run_copper, apply_multicopter_dynamics).chain(),
-    )
-    .add_systems(PostUpdate, stop_copper_on_exit);
+    .add_systems(FixedUpdate, sync_vehicle_state);
 
     register_scene_reflect_types(&mut app);
 
     app
 }
 
-fn main() {
-    let mut app = make_world(false);
+#[cfg(feature = "sim")]
+pub fn run_sim() {
+    let mut app = build_world(false, false);
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        app.add_systems(Startup, setup_copper);
+        app.add_systems(
+            FixedUpdate,
+            (run_copper::<CopperContext>, apply_multicopter_dynamics)
+                .chain()
+                .after(sync_vehicle_state),
+        );
+        app.add_systems(PostUpdate, stop_copper_on_exit::<CopperContext>);
+    }
     app.run();
+}
+
+#[cfg(feature = "bevymon")]
+pub fn run_bevymon() {
+    let (monitor_model, copper) = build_bevymon_copper();
+
+    let mut app = build_world(false, true);
+    app.insert_resource(copper)
+        .init_resource::<LayoutSpawned>()
+        .add_plugins(
+            CuBevyMonPlugin::new(monitor_model)
+                .with_initial_focus(CuBevyMonSurface::Sim)
+                .with_options(MonitorUiOptions {
+                    show_quit_hint: false,
+                }),
+        )
+        .add_systems(Startup, setup_split_ui_camera)
+        .add_systems(Update, spawn_bevymon_layout)
+        .add_systems(
+            FixedUpdate,
+            (run_copper::<LoggerRuntime>, apply_multicopter_dynamics)
+                .chain()
+                .after(sync_vehicle_state),
+        )
+        .add_systems(PostUpdate, stop_copper_on_exit::<LoggerRuntime>);
+    app.run();
+}
+
+#[cfg(feature = "sim")]
+fn main() {
+    run_sim();
 }
 
 #[cfg(test)]
@@ -1429,7 +2018,7 @@ mod tests {
 
     #[test]
     fn sim_world_starts() {
-        let mut app = make_world(true);
+        let mut app = build_world(true, false);
         app.update();
     }
 

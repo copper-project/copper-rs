@@ -1,4 +1,14 @@
-import "../../justfile"
+ROOT := `git rev-parse --show-toplevel`
+
+# Run the native balancebot sim with the console monitor.
+default: sim
+
+# Run the native balancebot sim with the console monitor.
+sim:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cd "{{ROOT}}"
+	cargo run -p cu-rp-balancebot --bin balancebot-sim
 
 # Run the balancebot sim with the monitor embedded in Bevy.
 bevy:
@@ -52,9 +62,9 @@ fsck:
 
 # dump runtime Events
 fsck-runtime:
-        #!/usr/bin/env bash
-        set -euo pipefail
-        cargo run --bin balancebot-logreader -r -- logs/balance.copper fsck --dump-runtime-lifecycle
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cargo run --bin balancebot-logreader -r -- logs/balance.copper fsck --dump-runtime-lifecycle
 
 fsck-resim:
 	#!/usr/bin/env bash
@@ -62,8 +72,8 @@ fsck-resim:
 	RUST_BACKTRACE=1 cargo run -r --bin balancebot-logreader  logs/balanceresim.copper fsck
 
 cmp:
-  #!/usr/bin/env bash
-  cmp logs/balance_0.copper logs/balanceresim_0.copper
+	#!/usr/bin/env bash
+	cmp logs/balance_0.copper logs/balanceresim_0.copper
 
 # Render a DAG with log-derived statistics. Requires explicit bin=<logreader>.
 dag-stats bin="balancebot-logreader" log="logs/balance.copper" mission="" out="target/cu29_logstats.json":
@@ -165,6 +175,6 @@ mcap:
 	cargo run --bin balancebot-logreader --profile screaming -- "${copper_base}" mcap-info "${mcap_file}"
 
 resim:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  cargo run --bin balancebot-resim -r
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cargo run --bin balancebot-resim -r

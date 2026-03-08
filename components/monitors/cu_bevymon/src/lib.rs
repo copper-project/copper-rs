@@ -1,4 +1,5 @@
 mod focus;
+mod split;
 mod terminal;
 mod viewport;
 
@@ -18,6 +19,10 @@ use cu29::{CuError, CuResult};
 
 pub use cu_tuimon::{MonitorModel, MonitorScreen, MonitorUiOptions, ScrollDirection};
 pub use focus::{CuBevyMonFocus, CuBevyMonFocusBorder, CuBevyMonSurface, CuBevyMonSurfaceNode};
+pub use split::{
+    CuBevyMonSplitLayoutConfig, CuBevyMonSplitLayoutEntities, CuBevyMonSplitMonitorPanel,
+    CuBevyMonSplitRoot, CuBevyMonSplitSimPanel, CuBevyMonSplitStyle, spawn_split_layout,
+};
 pub use terminal::CuBevyMonFontOptions;
 use terminal::{CuBevyMonTerminal, sync_terminal_to_panel};
 pub use viewport::CuBevyMonViewportSurface;

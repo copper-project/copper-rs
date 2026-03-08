@@ -1,4 +1,4 @@
-#![cfg(feature = "sim")]
+#![cfg(any(feature = "sim", feature = "bevymon"))]
 
 use std::collections::HashMap;
 use std::io::{self, Error, ErrorKind};

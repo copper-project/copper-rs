@@ -16,12 +16,12 @@ trait BatteryAdcBackend {
 #[cfg(feature = "firmware")]
 type BatteryAdcBackendImpl = cu_micoairh743::BatteryAdc;
 
-#[cfg(all(feature = "sim", not(feature = "firmware")))]
+#[cfg(all(any(feature = "sim", feature = "bevymon"), not(feature = "firmware")))]
 type BatteryAdcBackendImpl = crate::sim_support::SimBatteryAdc;
 
-#[cfg(all(feature = "sim", not(feature = "firmware")))]
+#[cfg(all(any(feature = "sim", feature = "bevymon"), not(feature = "firmware")))]
 const SIM_BATTERY_BASE_VOLTAGE_V: f32 = 16.0;
-#[cfg(all(feature = "sim", not(feature = "firmware")))]
+#[cfg(all(any(feature = "sim", feature = "bevymon"), not(feature = "firmware")))]
 const SIM_BATTERY_SAG_MAX_RATIO: f32 = 0.08;
 
 #[cfg(feature = "firmware")]
@@ -44,7 +44,7 @@ impl BatteryAdcBackend for BatteryAdcBackendImpl {
     }
 }
 
-#[cfg(all(feature = "sim", not(feature = "firmware")))]
+#[cfg(all(any(feature = "sim", feature = "bevymon"), not(feature = "firmware")))]
 impl BatteryAdcBackend for BatteryAdcBackendImpl {
     fn read_centivolts(&mut self, _calib: &BatteryAdcCalibration) -> u16 {
         let voltage_v = self.read_voltage_v();
@@ -72,7 +72,7 @@ impl CuSrcTask for BatteryAdcSource {
     type Output<'m> = output_msg!(BatteryVoltage);
     #[cfg(feature = "firmware")]
     type Resources<'r> = Resources;
-    #[cfg(all(feature = "sim", not(feature = "firmware")))]
+    #[cfg(all(any(feature = "sim", feature = "bevymon"), not(feature = "firmware")))]
     type Resources<'r> = ();
 
     fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
@@ -98,7 +98,7 @@ impl CuSrcTask for BatteryAdcSource {
 
         #[cfg(feature = "firmware")]
         let adc = _resources.battery_adc.0;
-        #[cfg(all(feature = "sim", not(feature = "firmware")))]
+        #[cfg(all(any(feature = "sim", feature = "bevymon"), not(feature = "firmware")))]
         let adc = crate::sim_support::sim_battery_adc(
             SIM_BATTERY_BASE_VOLTAGE_V,
             SIM_BATTERY_SAG_MAX_RATIO,

@@ -11,6 +11,7 @@ It provides:
 - `CuBevyMonFontOptions`: font sizing for the bundled windowed TUI renderer
 - `CuBevyMonTexture` and `CuBevyMonPanel`: the Bevy-backed monitor render surface
 - `CuBevyMonSurfaceNode`, `CuBevyMonFocus`, and `CuBevyMonFocusBorder`: helpers for click-to-focus split layouts
+- `spawn_split_layout(...)`: the shared left/right split shell used by the current examples
 - `CuBevyMonViewportSurface`: a camera helper for syncing a 3D viewport to a Bevy UI panel
 
 Design intent:
@@ -50,41 +51,44 @@ pub type AppMonitor = cu_logmon::CuLogMon;
 
 That keeps RON stable while the build target decides whether the app gets a Bevy panel, a terminal TUI, or a lighter real-target monitor.
 
-Side-by-side Bevy pattern:
+Standard split-view pattern:
 
-1. Add `CuBevyMonPlugin::new(model)` to the Bevy app.
-2. Mark the outer monitor wrapper with `CuBevyMonSurfaceNode(CuBevyMonSurface::Monitor)` and `CuBevyMonFocusBorder::new(...)`.
-3. Put `CuBevyMonPanel` on the inner node that actually displays the monitor texture.
-4. Mark the sim panel with `CuBevyMonSurfaceNode(CuBevyMonSurface::Sim)` and `CuBevyMonFocusBorder::new(...)`.
-5. Mark the 3D camera with `CuBevyMonViewportSurface(CuBevyMonSurface::Sim)`.
-6. Gate sim-control systems on `Res<CuBevyMonFocus>` while `cu_bevymon` routes monitor events to `cu_tuimon`.
+1. Keep your sim scene camera app-owned.
+2. Recommended: render that camera to an offscreen `RenderTarget::Image`.
+3. Add `CuBevyMonPlugin::new(model)` to the Bevy app.
+4. Create a dedicated `Camera2d` for the split-shell UI.
+5. Call `spawn_split_layout(...)` with the scene camera entity and the monitor texture handle.
+6. Add app-specific overlays like loading cards, help panels, or OSD widgets as children of the returned `sim_panel`.
+7. Gate sim-control systems on `Res<CuBevyMonFocus>` while `cu_bevymon` routes monitor events to `cu_tuimon`.
 
-Minimal layout sketch:
+Shared shell sketch:
 
 ```rust
-commands.spawn((
-    Node { ..default() },
-    CuBevyMonSurfaceNode(CuBevyMonSurface::Sim),
-    CuBevyMonFocusBorder::new(CuBevyMonSurface::Sim),
-));
+let layout = spawn_split_layout(
+    &mut commands,
+    monitor_texture.0.clone(),
+    CuBevyMonSplitLayoutConfig::new(scene_camera).with_ui_camera(ui_camera),
+);
 
-commands.spawn((
-    Node { ..default() },
-    CuBevyMonSurfaceNode(CuBevyMonSurface::Monitor),
-    CuBevyMonFocusBorder::new(CuBevyMonSurface::Monitor),
-)).with_children(|parent| {
-    parent.spawn((
-        ImageNode::new(texture.0.clone()),
-        Node { ..default() },
-        CuBevyMonPanel,
+commands.entity(layout.sim_panel).with_children(|panel| {
+    panel.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            bottom: Val::Px(5.0),
+            right: Val::Px(5.0),
+            ..default()
+        },
+        Pickable::IGNORE,
     ));
 });
-
-commands.spawn((
-    Camera3d::default(),
-    CuBevyMonViewportSurface(CuBevyMonSurface::Sim),
-));
 ```
+
+The `cu_bevymon_demo`, `cu_rp_balancebot`, and `cu_flight_controller` examples all use that shared split shell now. The main app-specific choice is how the left-side scene camera is produced.
+
+Render strategy guidance:
+
+- Use the offscreen `RenderTarget::Image` + `ViewportNode` path when the sim already has its own UI overlays, picking, or camera behavior. This is the standardized path in the current examples.
+- `CuBevyMonViewportSurface` still exists for simpler panel-clipped window cameras, but it is now the lower-level escape hatch, not the primary documented pattern.
 
 Input model:
 
