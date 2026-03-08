@@ -6,6 +6,7 @@ use bevy::asset::RenderAssetUsages;
 use bevy::camera::RenderTarget;
 use bevy::color::palettes::css::RED;
 use bevy::core_pipeline::Skybox;
+use bevy::ecs::system::SystemParam;
 use bevy::input::{
     keyboard::KeyCode,
     mouse::{MouseButton, MouseMotion, MouseScrollUnit, MouseWheel},
@@ -100,6 +101,35 @@ pub struct AppliedForce(pub Vector);
 #[derive(Resource, Clone, Copy)]
 struct WorldLayout {
     split_monitor: bool,
+}
+
+#[derive(SystemParam)]
+struct SimInput<'w> {
+    layout: Res<'w, WorldLayout>,
+    #[cfg(feature = "bevymon")]
+    focus: Option<Res<'w, CuBevyMonFocus>>,
+}
+
+impl SimInput<'_> {
+    fn enabled(&self) -> bool {
+        #[cfg(feature = "bevymon")]
+        {
+            sim_input_enabled(&self.layout, self.focus.as_deref())
+        }
+        #[cfg(not(feature = "bevymon"))]
+        {
+            sim_input_enabled(&self.layout)
+        }
+    }
+}
+
+#[derive(SystemParam)]
+struct CameraControlInput<'w, 's> {
+    keys: Res<'w, ButtonInput<KeyCode>>,
+    scroll_evr: MessageReader<'w, 's, MouseWheel>,
+    mouse_motion: MessageReader<'w, 's, MouseMotion>,
+    time: Res<'w, Time<Real>>,
+    mouse_button_input: Res<'w, ButtonInput<MouseButton>>,
 }
 
 #[cfg(feature = "bevymon")]
@@ -863,15 +893,9 @@ fn external_force_display(
     mut gizmos: Gizmos,
     keys: Res<ButtonInput<KeyCode>>,
     mut should_display: Local<bool>,
-    layout: Res<WorldLayout>,
-    #[cfg(feature = "bevymon")] focus: Option<Res<CuBevyMonFocus>>,
+    sim_input: SimInput,
 ) {
-    #[cfg(feature = "bevymon")]
-    if !sim_input_enabled(&layout, focus.as_deref()) {
-        return;
-    }
-    #[cfg(not(feature = "bevymon"))]
-    if !sim_input_enabled(&layout) {
+    if !sim_input.enabled() {
         return;
     }
 
@@ -916,15 +940,9 @@ fn reset_sim(
         )>,
         Query<Forces>,
     )>,
-    layout: Res<WorldLayout>,
-    #[cfg(feature = "bevymon")] focus: Option<Res<CuBevyMonFocus>>,
+    sim_input: SimInput,
 ) {
-    #[cfg(feature = "bevymon")]
-    if !sim_input_enabled(&layout, focus.as_deref()) {
-        return;
-    }
-    #[cfg(not(feature = "bevymon"))]
-    if !sim_input_enabled(&layout) {
+    if !sim_input.enabled() {
         return;
     }
 
@@ -1029,22 +1047,11 @@ fn reset_sim(
 /// Winged some type of orbital camera to explore around the robot.
 fn camera_control_system(
     camera_control: Res<CameraControl>,
-    keys: Res<ButtonInput<KeyCode>>,
-    mut scroll_evr: MessageReader<MouseWheel>,
-    mut mouse_motion: MessageReader<MouseMotion>,
+    mut input: CameraControlInput,
     mut query: Query<&mut Transform, With<Camera3d>>,
-    // use real time to scale camera movement in case physics time is paused
-    time: Res<Time<Real>>,
-    mouse_button_input: Res<ButtonInput<MouseButton>>,
-    layout: Res<WorldLayout>,
-    #[cfg(feature = "bevymon")] focus: Option<Res<CuBevyMonFocus>>,
+    sim_input: SimInput,
 ) {
-    #[cfg(feature = "bevymon")]
-    if !sim_input_enabled(&layout, focus.as_deref()) {
-        return;
-    }
-    #[cfg(not(feature = "bevymon"))]
-    if !sim_input_enabled(&layout) {
+    if !sim_input.enabled() {
         return;
     }
 
@@ -1056,20 +1063,20 @@ fn camera_control_system(
     let radius = direction.length(); // Distance from the focal point
 
     // Zoom with scroll
-    for ev in scroll_evr.read() {
+    for ev in input.scroll_evr.read() {
         let forward = camera_transform.forward(); // Store forward vector in a variable
         let scroll_lines = match ev.unit {
             MouseScrollUnit::Line => ev.y,
             MouseScrollUnit::Pixel => ev.y / 16.0,
         }
         .clamp(-5.0, 5.0);
-        let zoom_amount = scroll_lines * camera_control.zoom_sensitivity * time.delta_secs();
+        let zoom_amount = scroll_lines * camera_control.zoom_sensitivity * input.time.delta_secs();
         camera_transform.translation += forward * zoom_amount;
     }
 
     // Rotate camera around the focal point with right mouse button + drag
-    if mouse_button_input.pressed(MouseButton::Middle) {
-        for ev in mouse_motion.read() {
+    if input.mouse_button_input.pressed(MouseButton::Middle) {
+        for ev in input.mouse_motion.read() {
             let yaw = Quat::from_rotation_y(-ev.delta.x * camera_control.rotate_sensitivity);
             let pitch = Quat::from_rotation_x(-ev.delta.y * camera_control.rotate_sensitivity);
 
@@ -1089,8 +1096,8 @@ fn camera_control_system(
     #[cfg(not(target_os = "macos"))]
     let mouse_button = MouseButton::Middle;
 
-    if mouse_button_input.pressed(mouse_button) {
-        for ev in mouse_motion.read() {
+    if input.mouse_button_input.pressed(mouse_button) {
+        for ev in input.mouse_motion.read() {
             let right = camera_transform.right();
             let up = camera_transform.up();
             camera_transform.translation += right * -ev.delta.x * camera_control.move_sensitivity;
@@ -1098,25 +1105,25 @@ fn camera_control_system(
         }
     }
 
-    let forward = if keys.pressed(KeyCode::KeyW) {
+    let forward = if input.keys.pressed(KeyCode::KeyW) {
         camera_transform.forward() * camera_control.move_sensitivity
-    } else if keys.pressed(KeyCode::KeyS) {
+    } else if input.keys.pressed(KeyCode::KeyS) {
         camera_transform.back() * camera_control.move_sensitivity
     } else {
         Vec3::ZERO
     };
 
-    let strafe = if keys.pressed(KeyCode::KeyA) {
+    let strafe = if input.keys.pressed(KeyCode::KeyA) {
         camera_transform.left() * camera_control.move_sensitivity
-    } else if keys.pressed(KeyCode::KeyD) {
+    } else if input.keys.pressed(KeyCode::KeyD) {
         camera_transform.right() * camera_control.move_sensitivity
     } else {
         Vec3::ZERO
     };
 
-    let vertical = if keys.pressed(KeyCode::KeyQ) {
+    let vertical = if input.keys.pressed(KeyCode::KeyQ) {
         Vec3::Y * camera_control.move_sensitivity
-    } else if keys.pressed(KeyCode::KeyE) {
+    } else if input.keys.pressed(KeyCode::KeyE) {
         Vec3::NEG_Y * camera_control.move_sensitivity
     } else {
         Vec3::ZERO
@@ -1132,15 +1139,9 @@ fn camera_control_system(
 fn toggle_simulation_state(
     mut state: ResMut<SimulationState>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    layout: Res<WorldLayout>,
-    #[cfg(feature = "bevymon")] focus: Option<Res<CuBevyMonFocus>>,
+    sim_input: SimInput,
 ) {
-    #[cfg(feature = "bevymon")]
-    if !sim_input_enabled(&layout, focus.as_deref()) {
-        return;
-    }
-    #[cfg(not(feature = "bevymon"))]
-    if !sim_input_enabled(&layout) {
+    if !sim_input.enabled() {
         return;
     }
 
