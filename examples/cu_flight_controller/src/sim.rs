@@ -31,8 +31,8 @@ use bevy::prelude::{
     Handle, Image, ImageNode, IsDefaultUiCamera, KeyCode, MessageReader, MessageWriter,
     MinimalPlugins, Name, Node, PerspectiveProjection, Pickable, PluginGroup, PositionType,
     PostUpdate, Projection, Quat, Query, Res, ResMut, Resource, Scene, SceneRoot, Startup, Text,
-    TextColor, TextFont, TextureAtlasLayout, Time, Transform, UVec2, UiRect, Update, Val, Vec3,
-    Visibility, Window, WindowPlugin, With, Without, default,
+    TextColor, TextFont, TextureAtlasLayout, Time, Transform, UVec2, UiRect, Update, Val, Vec2,
+    Vec3, Visibility, Window, WindowPlugin, With, Without, default,
 };
 use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
 #[cfg(not(target_arch = "wasm32"))]
@@ -210,6 +210,7 @@ const OSD_GLYPH_PADDING_PX: u32 = 1;
 const OSD_FONT_ATLAS_PATH: &str = "osd/vtx_font.png";
 const OSD_CANVAS_WIDTH_PX: u32 = OSD_COLS as u32 * OSD_GLYPH_WIDTH_PX;
 const OSD_CANVAS_HEIGHT_PX: u32 = OSD_ROWS as u32 * OSD_GLYPH_HEIGHT_PX;
+const DEBUG_SPLIT_RED_TARGET: bool = true;
 
 #[derive(Resource, Clone)]
 struct SimOsdOverlay {
@@ -1824,23 +1825,43 @@ fn prepare_osd_raster_source(
     raster_source.ready = true;
 }
 
+fn display_viewport_rect(
+    camera: &Camera,
+    render_target: &RenderTarget,
+    root_size: Option<Vec2>,
+) -> Option<bevy::math::Rect> {
+    match render_target {
+        RenderTarget::Image(_) => root_size.map(|size| bevy::math::Rect {
+            min: Vec2::ZERO,
+            max: size,
+        }),
+        _ => camera.logical_viewport_rect(),
+    }
+}
+
+fn logical_node_size(node: &ComputedNode) -> Vec2 {
+    node.size() * node.inverse_scale_factor()
+}
+
 fn update_osd_overlay(
     camera_view: Res<CameraView>,
     osd_overlay: Res<SimOsdOverlay>,
     osd_canvas_assets: Option<Res<OsdCanvasAssets>>,
     raster_source: Res<OsdRasterSource>,
     mut images: ResMut<Assets<Image>>,
-    scene_camera: Query<&Camera, With<SimSceneCamera>>,
-    mut root_query: Query<&mut Visibility, With<OsdOverlayRoot>>,
+    scene_camera: Query<(&Camera, &RenderTarget), With<SimSceneCamera>>,
+    mut root_query: Query<(&ComputedNode, &mut Visibility), With<OsdOverlayRoot>>,
     mut canvas_query: Query<&mut Node, With<OsdCanvasFrame>>,
 ) {
-    let Ok(camera) = scene_camera.single() else {
+    let Ok((camera, render_target)) = scene_camera.single() else {
         return;
     };
-    let Some(viewport_rect) = camera.logical_viewport_rect() else {
+    let Ok((root_node, mut visibility)) = root_query.single_mut() else {
         return;
     };
-    let Ok(mut visibility) = root_query.single_mut() else {
+    let Some(viewport_rect) =
+        display_viewport_rect(camera, render_target, Some(logical_node_size(root_node)))
+    else {
         return;
     };
     let Ok(mut canvas_node) = canvas_query.single_mut() else {
@@ -1899,16 +1920,18 @@ fn update_osd_overlay(
 }
 
 fn update_scene_viewport_debug_frame(
-    scene_camera: Query<&Camera, With<SimSceneCamera>>,
+    scene_camera: Query<(&Camera, &RenderTarget), With<SimSceneCamera>>,
+    osd_root: Query<&ComputedNode, With<OsdOverlayRoot>>,
     mut debug_frame: Query<(&mut Node, &mut Visibility), With<SceneViewportDebugFrame>>,
 ) {
-    let Ok(camera) = scene_camera.single() else {
+    let Ok((camera, render_target)) = scene_camera.single() else {
         return;
     };
     let Ok((mut frame_node, mut frame_visibility)) = debug_frame.single_mut() else {
         return;
     };
-    let Some(rect) = camera.logical_viewport_rect() else {
+    let root_size = osd_root.single().ok().map(logical_node_size);
+    let Some(rect) = display_viewport_rect(camera, render_target, root_size) else {
         *frame_visibility = Visibility::Hidden;
         return;
     };
@@ -1918,6 +1941,43 @@ fn update_scene_viewport_debug_frame(
     frame_node.width = Val::Px(rect.width());
     frame_node.height = Val::Px(rect.height());
     *frame_visibility = Visibility::Visible;
+}
+
+fn debug_fill_split_render_target(
+    mut scene_camera: Query<(&mut Camera, &RenderTarget), With<SplitSceneCamera>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    if !DEBUG_SPLIT_RED_TARGET {
+        return;
+    }
+
+    let Ok((mut camera, render_target)) = scene_camera.single_mut() else {
+        return;
+    };
+    let Some(handle) = render_target.as_image() else {
+        return;
+    };
+    let Some(image) = images.get_mut(handle) else {
+        return;
+    };
+
+    let width = image.texture_descriptor.size.width as usize;
+    let height = image.texture_descriptor.size.height as usize;
+    if width == 0 || height == 0 {
+        return;
+    }
+
+    camera.is_active = false;
+
+    let pixel = [0u8, 0u8, 255u8, 255u8];
+    let len = width * height * pixel.len();
+    let data = image.data.get_or_insert_with(|| vec![0; len]);
+    if data.len() != len {
+        data.resize(len, 0);
+    }
+    for chunk in data.chunks_exact_mut(pixel.len()) {
+        chunk.copy_from_slice(&pixel);
+    }
 }
 
 fn stop_copper_on_exit<T: Send + Sync + 'static>(
@@ -2147,6 +2207,7 @@ pub fn build_world(headless: bool, split_monitor: bool) -> App {
             prepare_osd_raster_source,
             update_osd_overlay,
             update_scene_viewport_debug_frame,
+            debug_fill_split_render_target,
         )
             .chain(),
     )
