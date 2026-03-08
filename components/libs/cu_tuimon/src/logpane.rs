@@ -1,10 +1,12 @@
 use crate::MonitorModel;
 use crate::palette;
-use ratatui::style::{Color, Style};
+#[cfg(debug_assertions)]
+use ratatui::style::Color;
+use ratatui::style::Style;
 
 #[cfg(debug_assertions)]
 use cu29::clock::CuTime;
-#[cfg(feature = "log_pane")]
+#[cfg(debug_assertions)]
 use cu29_log::{CuLogEntry, CuLogLevel};
 #[cfg(debug_assertions)]
 use cu29_log_runtime::format_message_only;
@@ -31,6 +33,10 @@ pub struct StyledLine {
     pub runs: Vec<StyledRun>,
 }
 
+#[cfg_attr(
+    not(any(debug_assertions, feature = "stderr_capture")),
+    allow(dead_code)
+)]
 #[derive(Clone)]
 enum CaptureTarget {
     Model(MonitorModel),
