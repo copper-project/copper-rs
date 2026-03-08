@@ -8,7 +8,7 @@ use soft_ratatui::{EmbeddedTTF, SoftBackend};
 
 const DEFAULT_TERMINAL_COLS: u16 = 100;
 const DEFAULT_TERMINAL_ROWS: u16 = 50;
-const DEFAULT_FONT_SIZE_PX: u32 = 16;
+const DEFAULT_FONT_SIZE_PX: u32 = 24;
 
 const FONT_REGULAR: &[u8] = include_bytes!("../assets/fonts/CopperMono-Light.ttf");
 const FONT_BOLD: &[u8] = include_bytes!("../assets/fonts/CopperMono-SemiBold.ttf");

@@ -100,7 +100,7 @@ Input model:
 Font behavior:
 
 - the default bundled font set is JetBrains Mono Nerd Font Mono Light / SemiBold / LightItalic
-- the default bundled font size is 16 px
+- the default bundled font size is 24 px
 - panel resize changes how many rows and columns fit; it does not change the glyph size
 - use `CuBevyMonPlugin::with_font_size(...)` or `CuBevyMonPlugin::with_font_options(...)` to tune the Bevy-side font size
 - use `CuBevyMonPlugin::with_font_options(...)` for full control
