@@ -3,23 +3,34 @@ use avian3d::math::Vector;
 use avian3d::physics_transform::{PreSolveDeltaPosition, PreSolveDeltaRotation};
 use avian3d::prelude::*;
 use bevy::color::palettes::css::RED;
+#[cfg(not(target_arch = "wasm32"))]
 use bevy::core_pipeline::Skybox;
 use bevy::input::{
     keyboard::KeyCode,
     mouse::{MouseButton, MouseMotion, MouseWheel},
 };
-use bevy::pbr::{DefaultOpaqueRendererMethod, ScreenSpaceReflections};
+#[cfg(not(target_arch = "wasm32"))]
+use bevy::pbr::DefaultOpaqueRendererMethod;
+#[cfg(not(target_arch = "wasm32"))]
+use bevy::pbr::ScreenSpaceReflections;
 use bevy::prelude::*;
 use bevy::ui::IsDefaultUiCamera;
+#[cfg(not(target_arch = "wasm32"))]
 use bevy_anti_alias::fxaa::Fxaa;
+#[cfg(not(target_arch = "wasm32"))]
 use cached_path::{Cache, Error as CacheError, ProgressBar};
-use std::path::{Path, PathBuf}; // Import PathBuf
-
+#[cfg(feature = "bevymon")]
+use cu_bevymon::{CuBevyMonFocus, CuBevyMonSurface};
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::{Path, PathBuf};
+#[cfg(not(target_arch = "wasm32"))]
 use std::{fs, io};
 
 pub const BALANCEBOT: &str = "balancebot.glb";
 pub const SKYBOX: &str = "skybox.ktx2";
 pub const DIFFUSE_MAP: &str = "diffuse_map.ktx2";
+#[cfg(target_arch = "wasm32")]
+const WEB_ASSET_DIR: &str = "assets";
 
 const TABLE_HEIGHT: f32 = 0.724;
 const RAIL_WIDTH: f32 = 0.55; // 55cm
@@ -76,6 +87,22 @@ pub struct Rod;
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct AppliedForce(pub Vector);
 
+#[derive(Resource, Clone, Copy)]
+struct WorldLayout {
+    split_monitor: bool,
+}
+
+#[cfg(feature = "bevymon")]
+fn sim_input_enabled(layout: &WorldLayout, focus: Option<&CuBevyMonFocus>) -> bool {
+    !layout.split_monitor || focus.is_some_and(|focus| focus.0 == CuBevyMonSurface::Sim)
+}
+
+#[cfg(not(feature = "bevymon"))]
+fn sim_input_enabled(layout: &WorldLayout) -> bool {
+    let _ = layout;
+    true
+}
+
 fn assert_reflected_types(type_registry: Res<AppTypeRegistry>) {
     let registry = type_registry.read();
     assert!(
@@ -108,7 +135,7 @@ fn assert_reflected_types(type_registry: Res<AppTypeRegistry>) {
     );
 }
 
-pub fn build_world(app: &mut App, headless: bool) -> &mut App {
+pub fn build_world(app: &mut App, headless: bool, split_monitor: bool) -> &mut App {
     app.init_resource::<AppTypeRegistry>();
     app.world_mut()
         .resource_mut::<AppTypeRegistry>()
@@ -119,7 +146,7 @@ pub fn build_world(app: &mut App, headless: bool) -> &mut App {
         // we want Bevy to measure these values for us:
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
         .add_plugins(bevy::diagnostic::EntityCountDiagnosticsPlugin::default())
-        .insert_resource(DefaultOpaqueRendererMethod::deferred())
+        .insert_resource(WorldLayout { split_monitor })
         .insert_resource(SimulationState::Running)
         .insert_resource(CameraControl {
             rotate_sensitivity: 0.05,
@@ -141,6 +168,9 @@ pub fn build_world(app: &mut App, headless: bool) -> &mut App {
             FixedPostUpdate,
             lock_cart_rotation.in_set(PhysicsSystems::Last),
         );
+
+    #[cfg(not(target_arch = "wasm32"))]
+    let app = app.insert_resource(DefaultOpaqueRendererMethod::deferred());
 
     // these will make a headless app crash, so only add them if we aren't headless
     if !headless {
@@ -220,6 +250,7 @@ fn ground_setup(
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn create_symlink(src: &str, dst: &str) -> io::Result<()> {
     let dst_path = Path::new(dst);
 
@@ -240,6 +271,7 @@ fn create_symlink(src: &str, dst: &str) -> io::Result<()> {
 
 /// Tries to get the asset path using the online cache first.
 /// If that fails due to a network error, falls back to the offline cache.
+#[cfg(not(target_arch = "wasm32"))]
 fn get_asset_path(
     online_cache: &Cache,
     offline_cache: &Cache,
@@ -267,6 +299,8 @@ fn get_asset_path(
         }
     }
 }
+
+#[cfg(not(target_arch = "wasm32"))]
 pub const BASE_ASSETS_URL: &str = "https://cdn.copper-robotics.com/";
 
 fn setup_scene(
@@ -274,107 +308,136 @@ fn setup_scene(
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    layout: Res<WorldLayout>,
 ) {
-    // Precache where the user executes the binary
-
+    #[cfg(not(target_arch = "wasm32"))]
     let online_cache = Cache::builder()
         .progress_bar(Some(ProgressBar::Full))
         .build()
         .expect("Failed to create the online file cache.");
 
+    #[cfg(not(target_arch = "wasm32"))]
     let offline_cache = Cache::builder()
         .progress_bar(Some(ProgressBar::Full))
-        .offline(true) // Force offline mode
+        .offline(true)
         .build()
         .expect("Failed to create the offline file cache.");
+
+    #[cfg(not(target_arch = "wasm32"))]
     let balance_bot_url = format!("{BASE_ASSETS_URL}{BALANCEBOT}");
+
+    #[cfg(not(target_arch = "wasm32"))]
     let balance_bot_hashed =
         get_asset_path(&online_cache, &offline_cache, &balance_bot_url, BALANCEBOT)
             .expect("Failed to get balancebot.glb (online or cached).");
+
+    #[cfg(not(target_arch = "wasm32"))]
     let balance_bot_path = balance_bot_hashed.parent().unwrap().join(BALANCEBOT);
 
+    #[cfg(not(target_arch = "wasm32"))]
     create_symlink(
         balance_bot_hashed.to_str().unwrap(),
         balance_bot_path.to_str().unwrap(),
     )
     .expect("Failed to create symlink to balancebot.glb.");
 
+    #[cfg(not(target_arch = "wasm32"))]
     let skybox_url = format!("{BASE_ASSETS_URL}{SKYBOX}");
+
+    #[cfg(not(target_arch = "wasm32"))]
     let skybox_path_hashed = get_asset_path(&online_cache, &offline_cache, &skybox_url, SKYBOX)
         .expect("Failed to get skybox.ktx2 (online or cached).");
 
+    #[cfg(not(target_arch = "wasm32"))]
     let skybox_path = skybox_path_hashed.parent().unwrap().join(SKYBOX);
+
+    #[cfg(not(target_arch = "wasm32"))]
     create_symlink(
         skybox_path_hashed.to_str().unwrap(),
         skybox_path.to_str().unwrap(),
     )
     .expect("Failed to create symlink to skybox.ktx2.");
 
+    #[cfg(not(target_arch = "wasm32"))]
     let diffuse_map_url = format!("{BASE_ASSETS_URL}{DIFFUSE_MAP}");
+
+    #[cfg(not(target_arch = "wasm32"))]
     let diffuse_map_path_hashed =
         get_asset_path(&online_cache, &offline_cache, &diffuse_map_url, DIFFUSE_MAP)
             .expect("Failed to get diffuse_map.ktx2 (online or cached).");
+
+    #[cfg(not(target_arch = "wasm32"))]
     let diffuse_map_path = diffuse_map_path_hashed.parent().unwrap().join(DIFFUSE_MAP);
+
+    #[cfg(not(target_arch = "wasm32"))]
     create_symlink(
         diffuse_map_path_hashed.to_str().unwrap(),
         diffuse_map_path.to_str().unwrap(),
     )
     .expect("Failed to create symlink to diffuse_map.ktx2.");
 
-    // Load the resources
-    let scene_handle = asset_server.load(
-        GltfAssetLabel::Scene(0).from_asset(format!("{}#scene0", balance_bot_path.display())),
-    );
+    #[cfg(target_arch = "wasm32")]
+    let balance_bot_path = format!("{WEB_ASSET_DIR}/{BALANCEBOT}");
+    #[cfg(target_arch = "wasm32")]
+    let skybox_path = format!("{WEB_ASSET_DIR}/{SKYBOX}");
+    #[cfg(target_arch = "wasm32")]
+    let diffuse_map_path = format!("{WEB_ASSET_DIR}/{DIFFUSE_MAP}");
+
+    let scene_handle = asset_server.load(GltfAssetLabel::Scene(0).from_asset(balance_bot_path));
     let skybox_handle = asset_server.load(skybox_path);
     let diffuse_map_handle = asset_server.load(diffuse_map_path);
-    let specular_map_handle = skybox_handle.clone(); // some quirk
+    let specular_map_handle = skybox_handle.clone();
 
-    // Fiat Lux
     commands.insert_resource(GlobalAmbientLight {
         color: Color::srgb_u8(210, 220, 240),
         brightness: 1.0,
         affects_lightmapped_meshes: true,
     });
 
-    // load the scene
     commands.spawn((SceneRoot(scene_handle),));
 
-    // Spawn the camera
-    commands.spawn((
+    let mut camera = commands.spawn((
         Camera3d::default(),
-        IsDefaultUiCamera,
         Msaa::Off,
-        Skybox {
-            image: skybox_handle,
-            brightness: 1000.0,
-            ..default()
-        },
         EnvironmentMapLight {
             diffuse_map: diffuse_map_handle,
             specular_map: specular_map_handle,
             intensity: 900.0,
             ..default()
         },
-        ScreenSpaceReflections {
-            perceptual_roughness_threshold: 0.85, // Customize as needed
-            thickness: 0.01,
-            linear_steps: 128,
-            linear_march_exponent: 2.0,
-            bisection_steps: 8,
-            use_secant: true,
-        },
-        Fxaa::default(),
         Transform::from_xyz(-1.0, 0.1, 1.5).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
-    // add the delayed setup flag
-    commands.insert_resource(SetupCompleted(false));
+    let _ = layout;
+    camera.insert(IsDefaultUiCamera);
 
-    // add a ground
+    #[cfg(not(target_arch = "wasm32"))]
+    camera.insert(Skybox {
+        image: skybox_handle,
+        brightness: 1000.0,
+        ..default()
+    });
+    #[cfg(not(target_arch = "wasm32"))]
+    camera.insert(ScreenSpaceReflections {
+        perceptual_roughness_threshold: 0.85,
+        thickness: 0.01,
+        linear_steps: 128,
+        linear_march_exponent: 2.0,
+        bisection_steps: 8,
+        use_secant: true,
+    });
+    #[cfg(not(target_arch = "wasm32"))]
+    camera.insert(Fxaa::default());
+
+    commands.insert_resource(SetupCompleted(false));
     ground_setup(&mut commands, &mut meshes, &mut materials);
 }
 
-fn setup_ui(mut commands: Commands) {
+fn setup_ui(mut commands: Commands, layout: Res<WorldLayout>) {
+    if layout.split_monitor {
+        return;
+    }
+
     #[cfg(target_os = "macos")]
     let instructions = "WASD / QE\nControl-Click + Drag\nClick + Drag\nScrolling\nSpace\nR\nF";
     #[cfg(not(target_os = "macos"))]
@@ -621,7 +684,7 @@ fn on_drag_start(
 
 fn on_drag(
     drag: On<Pointer<Drag>>,
-    camera_query: Option<Single<&Transform, With<Camera>>>,
+    camera_query: Option<Single<&Transform, With<Camera3d>>>,
     parents: Query<(&ChildOf, Option<&RigidBody>)>,
     cart: Query<(), With<Cart>>,
     mut applied_forces: Query<&mut AppliedForce>,
@@ -698,14 +761,25 @@ fn apply_drag_force(drag_state: Res<DragState>, mut forces: Query<Forces>) {
     }
 }
 
-pub fn external_force_display(
+fn external_force_display(
     external_force: Query<(Entity, &Position, &AppliedForce)>,
     cart: Query<(), With<Cart>>,
     rod: Query<(), With<Rod>>,
     mut gizmos: Gizmos,
     keys: Res<ButtonInput<KeyCode>>,
     mut should_display: Local<bool>,
+    layout: Res<WorldLayout>,
+    #[cfg(feature = "bevymon")] focus: Option<Res<CuBevyMonFocus>>,
 ) {
+    #[cfg(feature = "bevymon")]
+    if !sim_input_enabled(&layout, focus.as_deref()) {
+        return;
+    }
+    #[cfg(not(feature = "bevymon"))]
+    if !sim_input_enabled(&layout) {
+        return;
+    }
+
     if keys.just_pressed(KeyCode::KeyF) {
         *should_display = !*should_display;
     }
@@ -747,7 +821,18 @@ fn reset_sim(
         )>,
         Query<Forces>,
     )>,
+    layout: Res<WorldLayout>,
+    #[cfg(feature = "bevymon")] focus: Option<Res<CuBevyMonFocus>>,
 ) {
+    #[cfg(feature = "bevymon")]
+    if !sim_input_enabled(&layout, focus.as_deref()) {
+        return;
+    }
+    #[cfg(not(feature = "bevymon"))]
+    if !sim_input_enabled(&layout) {
+        return;
+    }
+
     if keys.just_pressed(KeyCode::KeyR) {
         drag_state.override_motor = false;
         let mut entities_with_forces = Vec::new();
@@ -852,11 +937,22 @@ fn camera_control_system(
     keys: Res<ButtonInput<KeyCode>>,
     mut scroll_evr: MessageReader<MouseWheel>,
     mut mouse_motion: MessageReader<MouseMotion>,
-    mut query: Query<&mut Transform, With<Camera>>,
+    mut query: Query<&mut Transform, With<Camera3d>>,
     // use real time to scale camera movement in case physics time is paused
     time: Res<Time<Real>>,
     mouse_button_input: Res<ButtonInput<MouseButton>>,
+    layout: Res<WorldLayout>,
+    #[cfg(feature = "bevymon")] focus: Option<Res<CuBevyMonFocus>>,
 ) {
+    #[cfg(feature = "bevymon")]
+    if !sim_input_enabled(&layout, focus.as_deref()) {
+        return;
+    }
+    #[cfg(not(feature = "bevymon"))]
+    if !sim_input_enabled(&layout) {
+        return;
+    }
+
     let mut camera_transform = query.single_mut().expect("Failed to get camera transform");
     let focal_point = Vec3::ZERO; // Define the point to orbit around (usually the center of the scene)
 
@@ -936,7 +1032,18 @@ fn camera_control_system(
 fn toggle_simulation_state(
     mut state: ResMut<SimulationState>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
+    layout: Res<WorldLayout>,
+    #[cfg(feature = "bevymon")] focus: Option<Res<CuBevyMonFocus>>,
 ) {
+    #[cfg(feature = "bevymon")]
+    if !sim_input_enabled(&layout, focus.as_deref()) {
+        return;
+    }
+    #[cfg(not(feature = "bevymon"))]
+    if !sim_input_enabled(&layout) {
+        return;
+    }
+
     if keyboard_input.just_pressed(KeyCode::Space) {
         if *state == SimulationState::Running {
             *state = SimulationState::Paused;

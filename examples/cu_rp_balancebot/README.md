@@ -11,10 +11,28 @@ with:
 
 ```bash
 $ cd examples/cu_rp_balancebot
-$ cargo run --release
+$ cargo run
 ```
 
 See the UI help for the navigation.
+
+## To run the simulation with the monitor embedded in Bevy
+
+```bash
+$ cd examples/cu_rp_balancebot
+$ just bevy
+```
+
+This keeps the Bevy sim on the left and the live Copper monitor on the right.
+
+## To run the simulation in the browser
+
+```bash
+$ cd examples/cu_rp_balancebot
+$ just web
+```
+
+This serves the Bevy sim and the live Copper monitor through Trunk. The first run downloads the scene assets into `assets/` so the browser can load them from the same origin.
 
 ## To run the resimulation
 
@@ -56,6 +74,8 @@ $ cargo run --bin balancebot-logreader --release
 
 ## Justfile commands
 
+- `just bevy` — run the split-view Bevy sim with `cu_bevymon`.
+- `just web` — serve the split-view wasm demo with Trunk.
 - `just balancebot-dump-text-logs` — extract human-readable logs from `logs/balance.copper` into `../../target/debug/cu29_log_index/strings.bin`.
 - `just balancebot-fsck` — integrity check of `logs/balance.copper`.
 - `just balancebot-set-pwm-permissions` — fix PWM sysfs permissions on the target (requires appropriate privileges).

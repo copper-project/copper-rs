@@ -1,5 +1,37 @@
 import "../../justfile"
 
+# Run the balancebot sim with the monitor embedded in Bevy.
+bevy:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cd "{{ROOT}}"
+	cargo run -p cu-rp-balancebot --no-default-features --features bevymon --bin balancebot-bevymon
+
+# Download the scene assets needed by the wasm BevyMon app.
+prepare-web-assets:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cd "{{invocation_directory()}}"
+	mkdir -p assets
+	for asset in balancebot.glb skybox.ktx2 diffuse_map.ktx2; do
+		if [[ ! -f "assets/${asset}" ]]; then
+			echo "Downloading ${asset}..."
+			curl --fail --location --silent --show-error --output "assets/${asset}" "https://cdn.copper-robotics.com/${asset}"
+		fi
+	done
+
+# Serve the balancebot BevyMon sim in the browser.
+web:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	if ! command -v trunk >/dev/null 2>&1; then
+		echo "Missing trunk. Install with: cargo install --locked trunk" >&2
+		exit 1
+	fi
+	cd "{{invocation_directory()}}"
+	just prepare-web-assets
+	trunk serve --open
+
 # Extract a text log using the balancebot logreader.
 text-logs:
 	#!/usr/bin/env bash
@@ -130,4 +162,3 @@ resim:
   #!/usr/bin/env bash
   set -euo pipefail
   cargo run --bin balancebot-resim -r
-

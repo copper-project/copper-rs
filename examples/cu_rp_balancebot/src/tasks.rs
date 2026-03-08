@@ -9,6 +9,14 @@ use cu29::units::si::ratio::ratio;
 pub type BalPID = GenericPIDTask<ADSReadingPayload>;
 pub type PosPID = GenericPIDTask<EncoderPayload>;
 
+pub mod monitor {
+    #[cfg(feature = "bevymon")]
+    pub type AppMonitor = cu_bevymon::CuBevyMon;
+
+    #[cfg(not(feature = "bevymon"))]
+    pub type AppMonitor = cu_consolemon::CuConsoleMon;
+}
+
 #[derive(Reflect)]
 pub struct PIDMerger {}
 
