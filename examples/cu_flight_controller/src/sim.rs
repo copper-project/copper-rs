@@ -323,8 +323,10 @@ const LOCAL_CITY_SCALE: f32 = 0.01;
 const SIM_SPAWN_POSITION: Vec3 = Vec3::new(-10.0, 1.0, 20.0);
 const SIM_SPAWN_YAW_DEG: f32 = 180.0;
 const ARM_SWITCH_NAMES: &[&str] = &["sf", "se", "arm", "btn1"];
-const KEYBOARD_HOVER_THROTTLE_LOW: f32 = 0.56;
-const KEYBOARD_HOVER_THROTTLE_HIGH: f32 = 0.62;
+// With the corrected 0.44 kg sim mass and 10% airmode idle, hover is about 0.48.
+// Keep keyboard idle slightly below hover so release-to-descend works again.
+const KEYBOARD_HOVER_THROTTLE_LOW: f32 = 0.47;
+const KEYBOARD_HOVER_THROTTLE_HIGH: f32 = 0.50;
 
 fn spawn_rotation() -> Quat {
     Quat::from_rotation_y(SIM_SPAWN_YAW_DEG.to_radians())
