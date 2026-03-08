@@ -91,6 +91,7 @@ fn main() {
         .add_plugins(
             CuBevyMonPlugin::new(monitor_model)
                 .with_initial_focus(CuBevyMonSurface::Sim)
+                .with_font_size(24)
                 .with_options(MonitorUiOptions {
                     show_quit_hint: false,
                 }),
