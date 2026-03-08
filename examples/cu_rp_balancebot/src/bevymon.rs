@@ -12,15 +12,15 @@ use bevy::asset::UnapprovedPathMode;
 use bevy::camera::ClearColorConfig;
 use bevy::prelude::{
     App, AssetPlugin, BackgroundColor, BorderColor, Camera, Camera2d, ClearColor, Color, Commands,
-    Component, DefaultPlugins, Entity, FixedUpdate, ImageNode, Pickable, PluginGroup, PostUpdate,
-    Query, Res, ResMut, Resource, Startup, Text, TextColor, TextFont, Update, Val, Visibility,
-    Window, WindowPlugin, With, default,
+    Component, DefaultPlugins, Entity, FixedUpdate, Pickable, PluginGroup, PostUpdate, Query, Res,
+    ResMut, Resource, Startup, Text, TextColor, TextFont, Update, Val, Visibility, Window,
+    WindowPlugin, With, default,
 };
 use bevy::render::RenderPlugin;
-use bevy::ui::{Node as UiNode, PositionType, UiRect, UiTargetCamera, widget::ViewportNode};
+use bevy::ui::{Node as UiNode, PositionType, UiRect};
 use cu_bevymon::{
-    CuBevyMonFocusBorder, CuBevyMonPanel, CuBevyMonPlugin, CuBevyMonSurface, CuBevyMonSurfaceNode,
-    CuBevyMonTexture, MonitorUiOptions,
+    CuBevyMonPlugin, CuBevyMonSplitLayoutConfig, CuBevyMonSplitStyle, CuBevyMonSurface,
+    CuBevyMonTexture, MonitorUiOptions, spawn_split_layout,
 };
 use cu29::prelude::*;
 
@@ -173,155 +173,109 @@ fn spawn_balancebot_layout(
     #[cfg(not(target_os = "macos"))]
     let instructions = "WASD / QE\nMiddle-Click + Drag\nClick + Drag\nScroll Wheel\nSpace\nR\nF";
 
-    commands
-        .spawn((
-            UiNode {
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                padding: UiRect::all(Val::Px(12.0)),
-                column_gap: Val::Px(12.0),
+    let layout = spawn_split_layout(
+        &mut commands,
+        texture.0.clone(),
+        CuBevyMonSplitLayoutConfig::new(scene_camera)
+            .with_ui_camera(ui_camera.0)
+            .with_style(CuBevyMonSplitStyle {
+                sim_panel_percent: SIM_PANEL_PERCENT,
+                monitor_panel_percent: MONITOR_PANEL_PERCENT,
+                monitor_panel_inset_px: MONITOR_PANEL_INSET_PX,
                 ..default()
-            },
-            UiTargetCamera(ui_camera.0),
-            BackgroundColor(Color::NONE),
-        ))
-        .with_children(|parent| {
-            parent.spawn((
+            }),
+    );
+
+    commands.entity(layout.sim_panel).with_children(|panel| {
+        panel
+            .spawn((
                 UiNode {
-                    width: Val::Percent(SIM_PANEL_PERCENT),
-                    height: Val::Percent(100.0),
-                    position_type: PositionType::Relative,
-                    border: UiRect::all(Val::Px(1.0)),
+                    position_type: PositionType::Absolute,
+                    top: Val::Px(18.0),
+                    left: Val::Px(0.0),
+                    right: Val::Px(0.0),
+                    justify_content: bevy::ui::JustifyContent::Center,
                     ..default()
                 },
-                ViewportNode::new(scene_camera),
+                Pickable::IGNORE,
                 BackgroundColor(Color::NONE),
-                BorderColor::all(Color::srgb(0.23, 0.28, 0.33)),
-                CuBevyMonSurfaceNode(CuBevyMonSurface::Sim),
-                CuBevyMonFocusBorder::new(CuBevyMonSurface::Sim),
             ))
-            .with_children(|panel| {
-                panel
+            .with_children(|loading| {
+                loading
                     .spawn((
                         UiNode {
-                            position_type: PositionType::Absolute,
-                            top: Val::Px(18.0),
-                            left: Val::Px(0.0),
-                            right: Val::Px(0.0),
-                            justify_content: bevy::ui::JustifyContent::Center,
-                            ..default()
-                        },
-                        Pickable::IGNORE,
-                        BackgroundColor(Color::NONE),
-                    ))
-                    .with_children(|loading| {
-                        loading
-                            .spawn((
-                                UiNode {
-                                    padding: UiRect::new(
-                                        Val::Px(18.0),
-                                        Val::Px(18.0),
-                                        Val::Px(10.0),
-                                        Val::Px(10.0),
-                                    ),
-                                    border: UiRect::all(Val::Px(2.0)),
-                                    border_radius: bevy::ui::BorderRadius::all(Val::Px(12.0)),
-                                    ..default()
-                                },
-                                Pickable::IGNORE,
-                                SplitLoadingOverlay,
-                                BackgroundColor(Color::srgba(0.03, 0.05, 0.09, 0.92)),
-                                BorderColor::all(Color::srgba(0.58, 0.74, 0.96, 0.95)),
-                            ))
-                            .with_children(|cartouche| {
-                                cartouche.spawn((
-                                    Pickable::IGNORE,
-                                    Text::new("Assets loading..."),
-                                    TextFont {
-                                        font_size: 18.0,
-                                        ..default()
-                                    },
-                                    TextColor(Color::srgb(0.93, 0.96, 1.0)),
-                                ));
-                            });
-                    });
-
-                panel
-                    .spawn((
-                        UiNode {
-                            position_type: PositionType::Absolute,
-                            bottom: Val::Px(5.0),
-                            right: Val::Px(5.0),
                             padding: UiRect::new(
-                                Val::Px(15.0),
-                                Val::Px(15.0),
+                                Val::Px(18.0),
+                                Val::Px(18.0),
                                 Val::Px(10.0),
                                 Val::Px(10.0),
                             ),
-                            column_gap: Val::Px(10.0),
-                            flex_direction: bevy::ui::FlexDirection::Row,
-                            justify_content: bevy::ui::JustifyContent::SpaceBetween,
                             border: UiRect::all(Val::Px(2.0)),
-                            border_radius: bevy::ui::BorderRadius::all(Val::Px(10.0)),
+                            border_radius: bevy::ui::BorderRadius::all(Val::Px(12.0)),
                             ..default()
                         },
                         Pickable::IGNORE,
-                        BackgroundColor(Color::srgba(0.25, 0.41, 0.88, 0.7)),
-                        BorderColor::all(Color::srgba(0.8, 0.8, 0.8, 0.7)),
+                        SplitLoadingOverlay,
+                        BackgroundColor(Color::srgba(0.03, 0.05, 0.09, 0.92)),
+                        BorderColor::all(Color::srgba(0.58, 0.74, 0.96, 0.95)),
                     ))
-                    .with_children(|help| {
-                        help.spawn((
+                    .with_children(|cartouche| {
+                        cartouche.spawn((
                             Pickable::IGNORE,
-                            Text::new(
-                                "Move\nNavigation\nInteract\nZoom\nPause/Resume\nReset\nShow Forces",
-                            ),
+                            Text::new("Assets loading..."),
                             TextFont {
-                                font_size: 12.0,
+                                font_size: 18.0,
                                 ..default()
                             },
-                            TextColor(Color::srgba(0.25, 0.25, 0.75, 1.0)),
-                        ));
-                        help.spawn((
-                            Pickable::IGNORE,
-                            Text::new(instructions),
-                            TextFont {
-                                font_size: 12.0,
-                                ..default()
-                            },
-                            TextColor(Color::WHITE),
+                            TextColor(Color::srgb(0.93, 0.96, 1.0)),
                         ));
                     });
             });
 
-            parent
-                .spawn((
-                    UiNode {
-                        width: Val::Percent(MONITOR_PANEL_PERCENT),
-                        height: Val::Percent(100.0),
-                        border: UiRect::all(Val::Px(1.0)),
-                        padding: UiRect::all(Val::Px(MONITOR_PANEL_INSET_PX)),
+        panel
+            .spawn((
+                UiNode {
+                    position_type: PositionType::Absolute,
+                    bottom: Val::Px(5.0),
+                    right: Val::Px(5.0),
+                    padding: UiRect::new(
+                        Val::Px(15.0),
+                        Val::Px(15.0),
+                        Val::Px(10.0),
+                        Val::Px(10.0),
+                    ),
+                    column_gap: Val::Px(10.0),
+                    flex_direction: bevy::ui::FlexDirection::Row,
+                    justify_content: bevy::ui::JustifyContent::SpaceBetween,
+                    border: UiRect::all(Val::Px(2.0)),
+                    border_radius: bevy::ui::BorderRadius::all(Val::Px(10.0)),
+                    ..default()
+                },
+                Pickable::IGNORE,
+                BackgroundColor(Color::srgba(0.25, 0.41, 0.88, 0.7)),
+                BorderColor::all(Color::srgba(0.8, 0.8, 0.8, 0.7)),
+            ))
+            .with_children(|help| {
+                help.spawn((
+                    Pickable::IGNORE,
+                    Text::new("Move\nNavigation\nInteract\nZoom\nPause/Resume\nReset\nShow Forces"),
+                    TextFont {
+                        font_size: 12.0,
                         ..default()
                     },
+                    TextColor(Color::srgba(0.25, 0.25, 0.75, 1.0)),
+                ));
+                help.spawn((
                     Pickable::IGNORE,
-                    BackgroundColor(Color::srgba(0.04, 0.05, 0.08, 0.98)),
-                    BorderColor::all(Color::srgb(0.23, 0.28, 0.33)),
-                    CuBevyMonSurfaceNode(CuBevyMonSurface::Monitor),
-                    CuBevyMonFocusBorder::new(CuBevyMonSurface::Monitor),
-                ))
-                .with_children(|panel| {
-                    panel.spawn((
-                        ImageNode::new(texture.0.clone()),
-                        UiNode {
-                            width: Val::Percent(100.0),
-                            height: Val::Percent(100.0),
-                            ..default()
-                        },
-                        Pickable::IGNORE,
-                        BackgroundColor(Color::BLACK),
-                        CuBevyMonPanel,
-                    ));
-                });
-        });
+                    Text::new(instructions),
+                    TextFont {
+                        font_size: 12.0,
+                        ..default()
+                    },
+                    TextColor(Color::WHITE),
+                ));
+            });
+    });
 
     spawned.0 = true;
 }

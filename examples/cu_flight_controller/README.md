@@ -114,9 +114,19 @@ just rc
 ### Simulator (Bevy + Copper)
 
 ```bash
-# Run the flight simulator
-just sim
+# Run the normal full-window simulator
+just
+
+# Run the split BevyMon simulator
+just bevy
+
+# Run the split BevyMon simulator in the browser
+just web
 ```
+
+The split BevyMon path reuses the same `cu_bevymon::spawn_split_layout(...)` shell as
+`cu_rp_balancebot` and `cu_bevymon_demo`, but the left panel still runs the real flight-controller
+sim world, OSD, and help overlays.
 
 ### RC Input In Simulation
 

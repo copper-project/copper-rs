@@ -1,11 +1,17 @@
-import "../../justfile"
+ROOT := `git rev-parse --show-toplevel`
 
-# Run the native Bevy monitor demo.
-native:
+# Run the BevyMon demo.
+default: bevy
+
+# Run the Bevy monitor demo.
+bevy:
 	#!/usr/bin/env bash
 	set -euo pipefail
 	cd "{{ROOT}}"
 	cargo run -p cu-bevymon-demo
+
+# Backwards-compatible alias for the native demo.
+native: bevy
 
 # Serve the wasm demo and open it in a browser.
 web:

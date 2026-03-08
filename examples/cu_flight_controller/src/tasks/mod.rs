@@ -205,11 +205,11 @@ pub type Dps310Source = cu_dps310::Dps310Source<cu_micoairh743::Dps310I2c>;
 #[cfg(feature = "firmware")]
 pub type Ist8310Source = cu_ist8310::Ist8310Source<cu_micoairh743::Ist8310I2c>;
 
-#[cfg(all(feature = "sim", not(feature = "firmware")))]
+#[cfg(all(any(feature = "sim", feature = "bevymon"), not(feature = "firmware")))]
 pub type Bmi088Source = crate::sim_support::SimBmi088Source;
-#[cfg(all(feature = "sim", not(feature = "firmware")))]
+#[cfg(all(any(feature = "sim", feature = "bevymon"), not(feature = "firmware")))]
 pub type Dps310Source = crate::sim_support::SimDps310Source;
-#[cfg(all(feature = "sim", not(feature = "firmware")))]
+#[cfg(all(any(feature = "sim", feature = "bevymon"), not(feature = "firmware")))]
 pub type Ist8310Source = crate::sim_support::SimIst8310Source;
 
 #[derive(Reflect)]
