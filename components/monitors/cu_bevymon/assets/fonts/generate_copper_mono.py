@@ -6,9 +6,25 @@ import psMat
 
 
 ROOT = pathlib.Path(__file__).resolve().parent
-SYSTEM_FONTS = pathlib.Path("/usr/share/fonts/TTF")
+SYSTEM_FONTS = pathlib.Path("/usr/share/fonts")
 IOSEVKA_FIXED_INDEX = 2
-PATCH_CODEPOINTS = (0x2699, 0x2B73, 0x21C6)
+PATCH_CODEPOINTS = (
+    0x2699,
+    0x274C,
+    0x29D6,
+    0x29D7,
+    0x2B06,
+    0x2B07,
+    0x2B73,
+    0x21C6,
+)
+
+
+def resolve_font_path(font_name: str) -> pathlib.Path:
+    for path in SYSTEM_FONTS.rglob(font_name):
+        if path.is_file():
+            return path
+    raise FileNotFoundError(f"unable to find system font {font_name!r} under {SYSTEM_FONTS}")
 
 
 def open_font(path: pathlib.Path, index: int | None = None):
@@ -25,8 +41,8 @@ def patch_font(
     family_name: str,
     full_name: str,
 ):
-    base_path = SYSTEM_FONTS / base_font_name
-    source_path = SYSTEM_FONTS / source_font_name
+    base_path = resolve_font_path(base_font_name)
+    source_path = resolve_font_path(source_font_name)
     output_path = ROOT / output_font_name
 
     base = open_font(base_path)
