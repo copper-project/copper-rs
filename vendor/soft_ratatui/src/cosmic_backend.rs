@@ -26,12 +26,12 @@ pub struct CosmicText {
     swash_cache: SwashCache,
 }
 
-fn add_strikeout(text: &String) -> String {
+fn add_strikeout(text: &str) -> String {
     let strike = '\u{0336}';
     text.chars().flat_map(|c| [c, strike]).collect()
 }
 
-fn add_underline(text: &String) -> String {
+fn add_underline(text: &str) -> String {
     let strike = '\u{0332}';
     text.chars().flat_map(|c| [c, strike]).collect()
 }
@@ -88,13 +88,13 @@ impl RasterBackend for CosmicText {
         if rat_cell.modifier.contains(Modifier::SLOW_BLINK) {
             always_redraw_list.insert((xik, yik));
             if blinking_slow {
-                fg_color = bg_color.clone();
+                fg_color = bg_color;
             }
         }
         if rat_cell.modifier.contains(Modifier::RAPID_BLINK) {
             always_redraw_list.insert((xik, yik));
             if blinking_fast {
-                fg_color = bg_color.clone();
+                fg_color = bg_color;
             }
         }
 
@@ -225,7 +225,6 @@ impl SoftBackend<CosmicText> {
     /// static FONT_DATA: &[u8] = include_bytes!("../../assets/iosevka.ttf");
     /// let backend = SoftBackend::<CosmicText>::new_with_font(20, 20, 16, FONT_DATA);
     /// ```
-
     pub fn new(width: u16, height: u16, font_size: i32, font_data: &[u8]) -> Self {
         let mut swash_cache = SwashCache::new();
 

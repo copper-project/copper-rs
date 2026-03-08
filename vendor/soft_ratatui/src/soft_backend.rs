@@ -26,6 +26,7 @@ pub struct SoftBackend<R: RasterBackend> {
 }
 /// Trait for raster backends (TTF, embedded-graphics, etc.)
 pub trait RasterBackend {
+    #[allow(clippy::too_many_arguments)]
     fn draw_cell(
         &mut self,
         x: u16,
@@ -188,10 +189,7 @@ impl<R: RasterBackend> SoftBackend<R> {
     /// Resizes the `SoftBackend` to the specified width and height.
     pub fn resize(&mut self, width: u16, height: u16) {
         self.buffer.resize(Rect::new(0, 0, width, height));
-        let rgb_pixmap = RgbPixmap::new(
-            self.char_width as usize * width as usize,
-            self.char_height as usize * height as usize,
-        );
+        let rgb_pixmap = RgbPixmap::new(self.char_width * width as usize, self.char_height * height as usize);
         self.rgb_pixmap = rgb_pixmap;
         self.redraw();
     }

@@ -27,7 +27,7 @@ pub fn rat_to_rgb(rat_col: &RatColor, is_a_fg: bool) -> [u8; 3] {
         RatColor::LightCyan => [224, 255, 255],
         RatColor::White => [255, 255, 255],
         RatColor::Indexed(i) => {
-            let i = *i as u8;
+            let i = *i;
             [i.wrapping_mul(i), i.wrapping_add(i), i]
         }
         RatColor::Rgb(r, g, b) => [*r, *g, *b],
@@ -68,41 +68,4 @@ pub fn blend_rgba(fg: [u8; 4], bg: [u8; 4]) -> [u8; 3] {
             blend_channel(fg[2], bg[2]),
         ]
     }
-}
-
-pub fn blend_ignore_bg_alpha(fg: [u8; 4], bg: [u8; 3]) -> [u8; 3] {
-    let alpha = fg[3] as f32 / 255.0;
-    let inv_alpha = 1.0 - alpha;
-
-    [
-        (fg[0] as f32 * alpha + bg[0] as f32 * inv_alpha).round() as u8,
-        (fg[1] as f32 * alpha + bg[1] as f32 * inv_alpha).round() as u8,
-        (fg[2] as f32 * alpha + bg[2] as f32 * inv_alpha).round() as u8,
-    ]
-}
-pub fn blend_gamma_corrected(fg: [u8; 4], bg: [u8; 4]) -> [u8; 3] {
-    let fg_a = fg[3] as f32 / 255.0;
-    let bg_a = bg[3] as f32 / 255.0;
-    let out_a = fg_a + bg_a * (1.0 - fg_a);
-
-    if out_a == 0.0 {
-        return [0, 0, 0];
-    }
-
-    // Convert to linear space (approx gamma 2.2)
-    let to_linear = |c: u8| (c as f32 / 255.0).powf(2.2);
-    let from_linear = |c: f32| (c.powf(1.0 / 2.2).clamp(0.0, 1.0) * 255.0).round() as u8;
-
-    let blend_channel = |f: u8, b: u8| {
-        let f_lin = to_linear(f);
-        let b_lin = to_linear(b);
-        let result_lin = (f_lin * fg_a + b_lin * bg_a * (1.0 - fg_a)) / out_a;
-        from_linear(result_lin)
-    };
-
-    [
-        blend_channel(fg[0], bg[0]),
-        blend_channel(fg[1], bg[1]),
-        blend_channel(fg[2], bg[2]),
-    ]
 }

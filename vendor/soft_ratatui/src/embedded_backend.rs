@@ -129,7 +129,6 @@ impl SoftBackend<EmbeddedGraphics> {
     ///
     ///  let backend = SoftBackend::<EmbeddedGraphics>::new(100,50,font_regular,Some(font_bold),Some(font_italic));
     /// ```
-
     pub fn new(
         width: u16,
         height: u16,
@@ -146,7 +145,7 @@ impl SoftBackend<EmbeddedGraphics> {
             cursor: false,
             cursor_pos: (0, 0),
             raster_backend: EmbeddedGraphics {
-                font_regular: font_regular,
+                font_regular,
                 font_bold,
                 font_italic,
             },

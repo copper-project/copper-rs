@@ -89,7 +89,7 @@ impl RgbPixmap {
         self.height
     }
 
-    /// Retuns the raw rgb data of the pixmap as a flat array
+    /// Returns the raw rgb data of the pixmap as a flat array
     pub fn data(&self) -> &[u8] {
         &self.data
     }

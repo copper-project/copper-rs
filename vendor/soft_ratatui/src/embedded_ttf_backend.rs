@@ -148,7 +148,6 @@ impl SoftBackend<EmbeddedTTF> {
     /// let font_regular = Font::try_from_bytes(include_bytes!("../assets/iosevka.ttf")).unwrap();
     /// let backend = SoftBackend::<EmbeddedTTF>::new(80, 60, 16, font_regular, None, None);
     /// ```
-
     pub fn new(
         width: u16,
         height: u16,

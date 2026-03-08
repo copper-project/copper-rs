@@ -190,14 +190,8 @@ impl SoftBackend<Bdf> {
 
         let rgb_pixmap = RgbPixmap::new(char_width * width as usize, char_height * height as usize);
 
-        let bdf_font_italic = match font_italic {
-            Some(x) => Some(Font::parse(x).expect("INVALID ITALIC FONT")),
-            _ => None,
-        };
-        let bdf_font_bold = match font_bold {
-            Some(x) => Some(Font::parse(x).expect("INVALID BOLD FONT")),
-            _ => None,
-        };
+        let bdf_font_italic = font_italic.map(|x| Font::parse(x).expect("INVALID ITALIC FONT"));
+        let bdf_font_bold = font_bold.map(|x| Font::parse(x).expect("INVALID BOLD FONT"));
 
         let mut return_struct = Self {
             buffer: Buffer::empty(Rect::new(0, 0, width, height)),
