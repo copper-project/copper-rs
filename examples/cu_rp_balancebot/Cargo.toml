@@ -15,14 +15,11 @@ default-run = "balancebot-sim"
 ignored = ["serde"]
 
 [dependencies]
-# Core dependencies
-cu29 = { workspace = true }
-cu29-helpers = { workspace = true }
 serde = { workspace = true }
+bevy_ecs = { version = "0.18.0", default-features = false }
 cu-ads7883-new = { path = "../../components/sources/cu_ads7883", version = "0.13.0" }
 cu-rp-sn754410-new = { path = "../../components/sinks/cu_rp_sn754410", version = "0.13.0" }
 cu-rp-encoder = { path = "../../components/sources/cu_rp_encoder", version = "0.13.0" }
-cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.13.0" }    # needed
 cu-pid = { path = "../../components/tasks/cu_pid", version = "0.13.0" }
 
 # Log reader depencies
@@ -31,7 +28,22 @@ cu29-export = { workspace = true, optional = true, features = [
   "mcap",
 ] }
 
-# Sim dependencies
+avian3d = { workspace = true, default-features = false, features = [
+  "bevy_scene",
+  "collider-from-mesh",
+  "debug-plugin",
+  "parallel",
+  "f32",
+  "3d",
+  "parry-f32",
+  "xpbd_joints",
+], optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+cu29 = { workspace = true }
+cu29-helpers = { workspace = true }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.13.0" }
+cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "0.13.0", optional = true }
 bevy = { workspace = true, default-features = false, features = [
   "x11",
   "wayland",
@@ -56,21 +68,41 @@ bevy = { workspace = true, default-features = false, features = [
   "trace",
   "reflect_auto_register",
 ], optional = true }
-avian3d = { workspace = true, default-features = false, features = [
-  "bevy_scene",
-  "collider-from-mesh",
-  "debug-plugin",
-  "parallel",
-  "f32",
-  "3d",
-  "parry-f32",
-  "xpbd_joints",
-], optional = true }
 cached-path = { workspace = true, features = [
   "progress-bar",
   "rustls-tls",
 ], optional = true }
 bevy_anti_alias = { version = "0.18.0", optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+cu29 = { path = "../../core/cu29", version = "0.13.0", default-features = false, features = [
+  "std",
+  "textlogs",
+  "units",
+] }
+cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "0.13.0", default-features = false, optional = true }
+bevy_anti_alias = { version = "0.18.0", optional = true }
+bevy = { workspace = true, default-features = false, features = [
+  "default_font",
+  "bevy_render",
+  "bevy_window",
+  "bevy_core_pipeline",
+  "bevy_pbr",
+  "bevy_scene",
+  "bevy_sprite",
+  "bevy_gltf",
+  "gltf_animation",
+  "bevy_picking",
+  "mesh_picking",
+  "tonemapping_luts",
+  "bevy_ui",
+  "bevy_ui_render",
+  "ktx2",
+  "jpeg",
+  "png",
+  "zstd_rust",
+  "reflect_auto_register",
+], optional = true }
 
 [features]
 default = ["logreader", "sim"]
@@ -82,8 +114,8 @@ sim = [
   "dep:bevy_anti_alias",
   "dep:avian3d",
   "dep:cached-path",
-  "dep:cu29-export",
-] # required for exporting simulation data
+] # dependencies to run the Bevy-based balancebot sim
+bevymon = ["sim", "dep:cu-bevymon"]
 
 [[bin]]
 name = "balancebot"
@@ -95,6 +127,11 @@ path = "src/logreader.rs"
 required-features = ["logreader"]
 
 [[bin]]
+name = "balancebot-bevymon"
+path = "src/bevymon.rs"
+required-features = ["bevymon"]
+
+[[bin]]
 name = "balancebot-sim"
 path = "src/sim.rs"
 required-features = ["sim"]
@@ -102,4 +139,4 @@ required-features = ["sim"]
 [[bin]]
 name = "balancebot-resim"
 path = "src/resim.rs"
-required-features = ["sim"]
+required-features = ["sim", "logreader"]

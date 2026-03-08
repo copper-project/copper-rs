@@ -2,19 +2,30 @@ use crate::motor_model;
 use avian3d::math::Vector;
 use avian3d::physics_transform::{PreSolveDeltaPosition, PreSolveDeltaRotation};
 use avian3d::prelude::*;
+use bevy::asset::RenderAssetUsages;
+use bevy::camera::RenderTarget;
 use bevy::color::palettes::css::RED;
 use bevy::core_pipeline::Skybox;
+use bevy::ecs::system::SystemParam;
 use bevy::input::{
     keyboard::KeyCode,
-    mouse::{MouseButton, MouseMotion, MouseWheel},
+    mouse::{MouseButton, MouseMotion, MouseScrollUnit, MouseWheel},
 };
-use bevy::pbr::{DefaultOpaqueRendererMethod, ScreenSpaceReflections};
+#[cfg(not(target_arch = "wasm32"))]
+use bevy::pbr::DefaultOpaqueRendererMethod;
+#[cfg(not(target_arch = "wasm32"))]
+use bevy::pbr::ScreenSpaceReflections;
 use bevy::prelude::*;
+use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
 use bevy::ui::IsDefaultUiCamera;
 use bevy_anti_alias::fxaa::Fxaa;
+#[cfg(not(target_arch = "wasm32"))]
 use cached_path::{Cache, Error as CacheError, ProgressBar};
-use std::path::{Path, PathBuf}; // Import PathBuf
-
+#[cfg(feature = "bevymon")]
+use cu_bevymon::{CuBevyMonFocus, CuBevyMonSurface};
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::{Path, PathBuf};
+#[cfg(not(target_arch = "wasm32"))]
 use std::{fs, io};
 
 pub const BALANCEBOT: &str = "balancebot.glb";
@@ -67,14 +78,70 @@ pub struct DragState {
     pub active_drag: Option<(Entity, Vector)>,
 }
 
+#[derive(Resource, Default)]
+pub struct SceneLoadState {
+    pub ready: bool,
+}
+
 #[derive(Component)]
 pub struct Cart;
 
 #[derive(Component)]
 pub struct Rod;
 
+#[derive(Component)]
+pub struct SplitSceneCamera;
+
+#[derive(Component)]
+struct SceneLoadingOverlay;
+
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct AppliedForce(pub Vector);
+
+#[derive(Resource, Clone, Copy)]
+struct WorldLayout {
+    split_monitor: bool,
+}
+
+#[derive(SystemParam)]
+struct SimInput<'w> {
+    layout: Res<'w, WorldLayout>,
+    #[cfg(feature = "bevymon")]
+    focus: Option<Res<'w, CuBevyMonFocus>>,
+}
+
+impl SimInput<'_> {
+    fn enabled(&self) -> bool {
+        #[cfg(feature = "bevymon")]
+        {
+            sim_input_enabled(&self.layout, self.focus.as_deref())
+        }
+        #[cfg(not(feature = "bevymon"))]
+        {
+            sim_input_enabled(&self.layout)
+        }
+    }
+}
+
+#[derive(SystemParam)]
+struct CameraControlInput<'w, 's> {
+    keys: Res<'w, ButtonInput<KeyCode>>,
+    scroll_evr: MessageReader<'w, 's, MouseWheel>,
+    mouse_motion: MessageReader<'w, 's, MouseMotion>,
+    time: Res<'w, Time<Real>>,
+    mouse_button_input: Res<'w, ButtonInput<MouseButton>>,
+}
+
+#[cfg(feature = "bevymon")]
+fn sim_input_enabled(layout: &WorldLayout, focus: Option<&CuBevyMonFocus>) -> bool {
+    !layout.split_monitor || focus.is_some_and(|focus| focus.0 == CuBevyMonSurface::Sim)
+}
+
+#[cfg(not(feature = "bevymon"))]
+fn sim_input_enabled(layout: &WorldLayout) -> bool {
+    let _ = layout;
+    true
+}
 
 fn assert_reflected_types(type_registry: Res<AppTypeRegistry>) {
     let registry = type_registry.read();
@@ -108,7 +175,7 @@ fn assert_reflected_types(type_registry: Res<AppTypeRegistry>) {
     );
 }
 
-pub fn build_world(app: &mut App, headless: bool) -> &mut App {
+pub fn build_world(app: &mut App, headless: bool, split_monitor: bool) -> &mut App {
     app.init_resource::<AppTypeRegistry>();
     app.world_mut()
         .resource_mut::<AppTypeRegistry>()
@@ -119,7 +186,7 @@ pub fn build_world(app: &mut App, headless: bool) -> &mut App {
         // we want Bevy to measure these values for us:
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
         .add_plugins(bevy::diagnostic::EntityCountDiagnosticsPlugin::default())
-        .insert_resource(DefaultOpaqueRendererMethod::deferred())
+        .insert_resource(WorldLayout { split_monitor })
         .insert_resource(SimulationState::Running)
         .insert_resource(CameraControl {
             rotate_sensitivity: 0.05,
@@ -131,16 +198,21 @@ pub fn build_world(app: &mut App, headless: bool) -> &mut App {
             max_force: 10.,
         })
         .insert_resource(DragState::default())
+        .init_resource::<SceneLoadState>()
         .insert_resource(Gravity::default())
         .insert_resource(Time::<Physics>::default())
         .add_systems(Startup, setup_scene)
         .add_systems(Startup, setup_ui)
         .add_systems(Update, setup_entities) // Wait for the cart entity to be loaded
+        .add_systems(Update, sync_loading_overlay)
         .add_systems(Update, update_physics)
         .add_systems(
             FixedPostUpdate,
             lock_cart_rotation.in_set(PhysicsSystems::Last),
         );
+
+    #[cfg(not(target_arch = "wasm32"))]
+    let app = app.insert_resource(DefaultOpaqueRendererMethod::deferred());
 
     // these will make a headless app crash, so only add them if we aren't headless
     if !headless {
@@ -180,7 +252,6 @@ pub fn build_world(app: &mut App, headless: bool) -> &mut App {
     app.register_type::<bevy::gltf::GltfMaterialExtras>();
     app.register_type::<bevy::gltf::GltfMaterialName>();
     app.add_systems(Startup, assert_reflected_types);
-
     app
 }
 
@@ -220,6 +291,7 @@ fn ground_setup(
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn create_symlink(src: &str, dst: &str) -> io::Result<()> {
     let dst_path = Path::new(dst);
 
@@ -240,6 +312,7 @@ fn create_symlink(src: &str, dst: &str) -> io::Result<()> {
 
 /// Tries to get the asset path using the online cache first.
 /// If that fails due to a network error, falls back to the offline cache.
+#[cfg(not(target_arch = "wasm32"))]
 fn get_asset_path(
     online_cache: &Cache,
     offline_cache: &Cache,
@@ -267,118 +340,218 @@ fn get_asset_path(
         }
     }
 }
+
+#[cfg(not(target_arch = "wasm32"))]
 pub const BASE_ASSETS_URL: &str = "https://cdn.copper-robotics.com/";
 
 fn setup_scene(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
+    mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    layout: Res<WorldLayout>,
 ) {
-    // Precache where the user executes the binary
-
+    #[cfg(not(target_arch = "wasm32"))]
     let online_cache = Cache::builder()
         .progress_bar(Some(ProgressBar::Full))
         .build()
         .expect("Failed to create the online file cache.");
 
+    #[cfg(not(target_arch = "wasm32"))]
     let offline_cache = Cache::builder()
         .progress_bar(Some(ProgressBar::Full))
-        .offline(true) // Force offline mode
+        .offline(true)
         .build()
         .expect("Failed to create the offline file cache.");
+
+    #[cfg(not(target_arch = "wasm32"))]
     let balance_bot_url = format!("{BASE_ASSETS_URL}{BALANCEBOT}");
+
+    #[cfg(not(target_arch = "wasm32"))]
     let balance_bot_hashed =
         get_asset_path(&online_cache, &offline_cache, &balance_bot_url, BALANCEBOT)
             .expect("Failed to get balancebot.glb (online or cached).");
+
+    #[cfg(not(target_arch = "wasm32"))]
     let balance_bot_path = balance_bot_hashed.parent().unwrap().join(BALANCEBOT);
 
+    #[cfg(not(target_arch = "wasm32"))]
     create_symlink(
         balance_bot_hashed.to_str().unwrap(),
         balance_bot_path.to_str().unwrap(),
     )
     .expect("Failed to create symlink to balancebot.glb.");
 
+    #[cfg(not(target_arch = "wasm32"))]
     let skybox_url = format!("{BASE_ASSETS_URL}{SKYBOX}");
+
+    #[cfg(not(target_arch = "wasm32"))]
     let skybox_path_hashed = get_asset_path(&online_cache, &offline_cache, &skybox_url, SKYBOX)
         .expect("Failed to get skybox.ktx2 (online or cached).");
 
+    #[cfg(not(target_arch = "wasm32"))]
     let skybox_path = skybox_path_hashed.parent().unwrap().join(SKYBOX);
+
+    #[cfg(not(target_arch = "wasm32"))]
     create_symlink(
         skybox_path_hashed.to_str().unwrap(),
         skybox_path.to_str().unwrap(),
     )
     .expect("Failed to create symlink to skybox.ktx2.");
 
+    #[cfg(not(target_arch = "wasm32"))]
     let diffuse_map_url = format!("{BASE_ASSETS_URL}{DIFFUSE_MAP}");
+
+    #[cfg(not(target_arch = "wasm32"))]
     let diffuse_map_path_hashed =
         get_asset_path(&online_cache, &offline_cache, &diffuse_map_url, DIFFUSE_MAP)
             .expect("Failed to get diffuse_map.ktx2 (online or cached).");
+
+    #[cfg(not(target_arch = "wasm32"))]
     let diffuse_map_path = diffuse_map_path_hashed.parent().unwrap().join(DIFFUSE_MAP);
+
+    #[cfg(not(target_arch = "wasm32"))]
     create_symlink(
         diffuse_map_path_hashed.to_str().unwrap(),
         diffuse_map_path.to_str().unwrap(),
     )
     .expect("Failed to create symlink to diffuse_map.ktx2.");
 
-    // Load the resources
-    let scene_handle = asset_server.load(
-        GltfAssetLabel::Scene(0).from_asset(format!("{}#scene0", balance_bot_path.display())),
-    );
+    #[cfg(target_arch = "wasm32")]
+    let balance_bot_path = BALANCEBOT;
+    #[cfg(target_arch = "wasm32")]
+    let skybox_path = SKYBOX;
+    #[cfg(target_arch = "wasm32")]
+    let diffuse_map_path = DIFFUSE_MAP;
+
+    let scene_handle = asset_server.load(GltfAssetLabel::Scene(0).from_asset(balance_bot_path));
     let skybox_handle = asset_server.load(skybox_path);
     let diffuse_map_handle = asset_server.load(diffuse_map_path);
-    let specular_map_handle = skybox_handle.clone(); // some quirk
+    let specular_map_handle = skybox_handle.clone();
 
-    // Fiat Lux
     commands.insert_resource(GlobalAmbientLight {
         color: Color::srgb_u8(210, 220, 240),
         brightness: 1.0,
         affects_lightmapped_meshes: true,
     });
 
-    // load the scene
     commands.spawn((SceneRoot(scene_handle),));
 
-    // Spawn the camera
-    commands.spawn((
+    let split_target = if layout.split_monitor {
+        let mut image = Image::new_uninit(
+            default(),
+            TextureDimension::D2,
+            TextureFormat::Bgra8UnormSrgb,
+            RenderAssetUsages::all(),
+        );
+        image.texture_descriptor.usage = TextureUsages::TEXTURE_BINDING
+            | TextureUsages::COPY_DST
+            | TextureUsages::RENDER_ATTACHMENT;
+        Some(images.add(image))
+    } else {
+        None
+    };
+
+    let mut camera = commands.spawn((
         Camera3d::default(),
-        IsDefaultUiCamera,
         Msaa::Off,
-        Skybox {
-            image: skybox_handle,
-            brightness: 1000.0,
-            ..default()
-        },
         EnvironmentMapLight {
             diffuse_map: diffuse_map_handle,
             specular_map: specular_map_handle,
             intensity: 900.0,
             ..default()
         },
-        ScreenSpaceReflections {
-            perceptual_roughness_threshold: 0.85, // Customize as needed
-            thickness: 0.01,
-            linear_steps: 128,
-            linear_march_exponent: 2.0,
-            bisection_steps: 8,
-            use_secant: true,
-        },
-        Fxaa::default(),
         Transform::from_xyz(-1.0, 0.1, 1.5).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
-    // add the delayed setup flag
-    commands.insert_resource(SetupCompleted(false));
+    if layout.split_monitor {
+        camera.insert((
+            Camera {
+                order: 0,
+                ..default()
+            },
+            RenderTarget::Image(split_target.expect("split viewport target missing").into()),
+            SplitSceneCamera,
+        ));
+    } else {
+        camera.insert(IsDefaultUiCamera);
+    }
 
-    // add a ground
+    camera.insert(Skybox {
+        image: skybox_handle,
+        brightness: 1000.0,
+        ..default()
+    });
+    #[cfg(not(target_arch = "wasm32"))]
+    camera.insert(ScreenSpaceReflections {
+        perceptual_roughness_threshold: 0.85,
+        thickness: 0.01,
+        linear_steps: 128,
+        linear_march_exponent: 2.0,
+        bisection_steps: 8,
+        use_secant: true,
+    });
+    camera.insert(Fxaa::default());
+
+    commands.insert_resource(SetupCompleted(false));
     ground_setup(&mut commands, &mut meshes, &mut materials);
 }
 
-fn setup_ui(mut commands: Commands) {
+fn setup_ui(mut commands: Commands, layout: Res<WorldLayout>) {
+    if layout.split_monitor {
+        return;
+    }
+
     #[cfg(target_os = "macos")]
     let instructions = "WASD / QE\nControl-Click + Drag\nClick + Drag\nScrolling\nSpace\nR\nF";
     #[cfg(not(target_os = "macos"))]
     let instructions = "WASD / QE\nMiddle-Click + Drag\nClick + Drag\nScroll Wheel\nSpace\nR\nF";
+
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(18.0),
+                left: Val::Px(0.0),
+                right: Val::Px(0.0),
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            Pickable::IGNORE,
+            BackgroundColor(Color::NONE),
+        ))
+        .with_children(|parent| {
+            parent
+                .spawn((
+                    Node {
+                        padding: UiRect::new(
+                            Val::Px(18.0),
+                            Val::Px(18.0),
+                            Val::Px(10.0),
+                            Val::Px(10.0),
+                        ),
+                        border: UiRect::all(Val::Px(2.0)),
+                        border_radius: BorderRadius::all(Val::Px(12.0)),
+                        ..default()
+                    },
+                    Pickable::IGNORE,
+                    SceneLoadingOverlay,
+                    BackgroundColor(Color::srgba(0.03, 0.05, 0.09, 0.92)),
+                    BorderColor::all(Color::srgba(0.58, 0.74, 0.96, 0.95)),
+                ))
+                .with_children(|cartouche| {
+                    cartouche.spawn((
+                        Pickable::IGNORE,
+                        Text::new("Assets loading..."),
+                        TextFont {
+                            font_size: 18.0,
+                            ..default()
+                        },
+                        TextColor(Color::srgb(0.93, 0.96, 1.0)),
+                    ));
+                });
+        });
 
     commands
         .spawn((
@@ -421,6 +594,19 @@ fn setup_ui(mut commands: Commands) {
         });
 }
 
+fn sync_loading_overlay(
+    load_state: Res<SceneLoadState>,
+    mut overlays: Query<&mut Visibility, With<SceneLoadingOverlay>>,
+) {
+    if !load_state.ready {
+        return;
+    }
+
+    for mut visibility in &mut overlays {
+        *visibility = Visibility::Hidden;
+    }
+}
+
 // This needs to match an object / parent object name in the GLTF file (in blender this is the object name).
 const CART_GLTF_ASSET_NAME: &str = "Cart";
 
@@ -456,6 +642,7 @@ fn setup_entities(
     mut materials: ResMut<Assets<StandardMaterial>>,
     query: Query<(Entity, &Name, &Transform), Without<Cart>>,
     mut setup_completed: ResMut<SetupCompleted>,
+    mut load_state: ResMut<SceneLoadState>,
 ) {
     let SetupCompleted(completed) = *setup_completed;
     if completed {
@@ -578,6 +765,7 @@ fn setup_entities(
     ));
 
     setup_completed.0 = true; // Mark as completed
+    load_state.ready = true;
 }
 
 fn get_rigid_body_entity(
@@ -621,7 +809,7 @@ fn on_drag_start(
 
 fn on_drag(
     drag: On<Pointer<Drag>>,
-    camera_query: Option<Single<&Transform, With<Camera>>>,
+    camera_query: Option<Single<&Transform, With<Camera3d>>>,
     parents: Query<(&ChildOf, Option<&RigidBody>)>,
     cart: Query<(), With<Cart>>,
     mut applied_forces: Query<&mut AppliedForce>,
@@ -698,14 +886,19 @@ fn apply_drag_force(drag_state: Res<DragState>, mut forces: Query<Forces>) {
     }
 }
 
-pub fn external_force_display(
+fn external_force_display(
     external_force: Query<(Entity, &Position, &AppliedForce)>,
     cart: Query<(), With<Cart>>,
     rod: Query<(), With<Rod>>,
     mut gizmos: Gizmos,
     keys: Res<ButtonInput<KeyCode>>,
     mut should_display: Local<bool>,
+    sim_input: SimInput,
 ) {
+    if !sim_input.enabled() {
+        return;
+    }
+
     if keys.just_pressed(KeyCode::KeyF) {
         *should_display = !*should_display;
     }
@@ -747,7 +940,12 @@ fn reset_sim(
         )>,
         Query<Forces>,
     )>,
+    sim_input: SimInput,
 ) {
+    if !sim_input.enabled() {
+        return;
+    }
+
     if keys.just_pressed(KeyCode::KeyR) {
         drag_state.override_motor = false;
         let mut entities_with_forces = Vec::new();
@@ -849,14 +1047,14 @@ fn reset_sim(
 /// Winged some type of orbital camera to explore around the robot.
 fn camera_control_system(
     camera_control: Res<CameraControl>,
-    keys: Res<ButtonInput<KeyCode>>,
-    mut scroll_evr: MessageReader<MouseWheel>,
-    mut mouse_motion: MessageReader<MouseMotion>,
-    mut query: Query<&mut Transform, With<Camera>>,
-    // use real time to scale camera movement in case physics time is paused
-    time: Res<Time<Real>>,
-    mouse_button_input: Res<ButtonInput<MouseButton>>,
+    mut input: CameraControlInput,
+    mut query: Query<&mut Transform, With<Camera3d>>,
+    sim_input: SimInput,
 ) {
+    if !sim_input.enabled() {
+        return;
+    }
+
     let mut camera_transform = query.single_mut().expect("Failed to get camera transform");
     let focal_point = Vec3::ZERO; // Define the point to orbit around (usually the center of the scene)
 
@@ -865,15 +1063,20 @@ fn camera_control_system(
     let radius = direction.length(); // Distance from the focal point
 
     // Zoom with scroll
-    for ev in scroll_evr.read() {
+    for ev in input.scroll_evr.read() {
         let forward = camera_transform.forward(); // Store forward vector in a variable
-        let zoom_amount = ev.y * camera_control.zoom_sensitivity * time.delta_secs();
+        let scroll_lines = match ev.unit {
+            MouseScrollUnit::Line => ev.y,
+            MouseScrollUnit::Pixel => ev.y / 16.0,
+        }
+        .clamp(-5.0, 5.0);
+        let zoom_amount = scroll_lines * camera_control.zoom_sensitivity * input.time.delta_secs();
         camera_transform.translation += forward * zoom_amount;
     }
 
     // Rotate camera around the focal point with right mouse button + drag
-    if mouse_button_input.pressed(MouseButton::Middle) {
-        for ev in mouse_motion.read() {
+    if input.mouse_button_input.pressed(MouseButton::Middle) {
+        for ev in input.mouse_motion.read() {
             let yaw = Quat::from_rotation_y(-ev.delta.x * camera_control.rotate_sensitivity);
             let pitch = Quat::from_rotation_x(-ev.delta.y * camera_control.rotate_sensitivity);
 
@@ -893,8 +1096,8 @@ fn camera_control_system(
     #[cfg(not(target_os = "macos"))]
     let mouse_button = MouseButton::Middle;
 
-    if mouse_button_input.pressed(mouse_button) {
-        for ev in mouse_motion.read() {
+    if input.mouse_button_input.pressed(mouse_button) {
+        for ev in input.mouse_motion.read() {
             let right = camera_transform.right();
             let up = camera_transform.up();
             camera_transform.translation += right * -ev.delta.x * camera_control.move_sensitivity;
@@ -902,25 +1105,25 @@ fn camera_control_system(
         }
     }
 
-    let forward = if keys.pressed(KeyCode::KeyW) {
+    let forward = if input.keys.pressed(KeyCode::KeyW) {
         camera_transform.forward() * camera_control.move_sensitivity
-    } else if keys.pressed(KeyCode::KeyS) {
+    } else if input.keys.pressed(KeyCode::KeyS) {
         camera_transform.back() * camera_control.move_sensitivity
     } else {
         Vec3::ZERO
     };
 
-    let strafe = if keys.pressed(KeyCode::KeyA) {
+    let strafe = if input.keys.pressed(KeyCode::KeyA) {
         camera_transform.left() * camera_control.move_sensitivity
-    } else if keys.pressed(KeyCode::KeyD) {
+    } else if input.keys.pressed(KeyCode::KeyD) {
         camera_transform.right() * camera_control.move_sensitivity
     } else {
         Vec3::ZERO
     };
 
-    let vertical = if keys.pressed(KeyCode::KeyQ) {
+    let vertical = if input.keys.pressed(KeyCode::KeyQ) {
         Vec3::Y * camera_control.move_sensitivity
-    } else if keys.pressed(KeyCode::KeyE) {
+    } else if input.keys.pressed(KeyCode::KeyE) {
         Vec3::NEG_Y * camera_control.move_sensitivity
     } else {
         Vec3::ZERO
@@ -936,7 +1139,12 @@ fn camera_control_system(
 fn toggle_simulation_state(
     mut state: ResMut<SimulationState>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
+    sim_input: SimInput,
 ) {
+    if !sim_input.enabled() {
+        return;
+    }
+
     if keyboard_input.just_pressed(KeyCode::Space) {
         if *state == SimulationState::Running {
             *state = SimulationState::Paused;
