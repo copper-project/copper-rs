@@ -10,10 +10,9 @@ const DEFAULT_TERMINAL_COLS: u16 = 100;
 const DEFAULT_TERMINAL_ROWS: u16 = 50;
 const DEFAULT_FONT_SIZE_PX: u32 = 16;
 
-const FONT_REGULAR: &[u8] = include_bytes!("../assets/fonts/JetBrainsMonoNerdFontMono-Light.ttf");
-const FONT_BOLD: &[u8] = include_bytes!("../assets/fonts/JetBrainsMonoNerdFontMono-SemiBold.ttf");
-const FONT_ITALIC: &[u8] =
-    include_bytes!("../assets/fonts/JetBrainsMonoNerdFontMono-LightItalic.ttf");
+const FONT_REGULAR: &[u8] = include_bytes!("../assets/fonts/CopperMono-Light.ttf");
+const FONT_BOLD: &[u8] = include_bytes!("../assets/fonts/CopperMono-SemiBold.ttf");
+const FONT_ITALIC: &[u8] = include_bytes!("../assets/fonts/CopperMono-LightItalic.ttf");
 
 #[derive(Resource, Clone, Debug)]
 pub struct CuBevyMonFontOptions {
@@ -46,15 +45,9 @@ impl CuBevyMonTerminal {
             DEFAULT_TERMINAL_COLS,
             DEFAULT_TERMINAL_ROWS,
             font_size,
-            load_font(FONT_REGULAR, "JetBrainsMonoNerdFontMono-Light.ttf")?,
-            Some(load_font(
-                FONT_BOLD,
-                "JetBrainsMonoNerdFontMono-SemiBold.ttf",
-            )?),
-            Some(load_font(
-                FONT_ITALIC,
-                "JetBrainsMonoNerdFontMono-LightItalic.ttf",
-            )?),
+            load_font(FONT_REGULAR, "CopperMono-Light.ttf")?,
+            Some(load_font(FONT_BOLD, "CopperMono-SemiBold.ttf")?),
+            Some(load_font(FONT_ITALIC, "CopperMono-LightItalic.ttf")?),
         );
         Ok(Self(Terminal::new(backend)?))
     }
