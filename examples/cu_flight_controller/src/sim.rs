@@ -21,15 +21,17 @@ use bevy::asset::UnapprovedPathMode;
 use bevy::camera::ClearColorConfig;
 use bevy::camera::RenderTarget;
 use bevy::core_pipeline::Skybox;
+use bevy::ecs::change_detection::DetectChanges;
 use bevy::ecs::schedule::IntoScheduleConfigs;
+use bevy::image::TextureFormatPixelInfo;
 use bevy::prelude::{
-    App, AssetPlugin, AssetServer, Assets, ButtonInput, Camera, Camera3d, Color, Commands,
-    Component, ComputedNode, DefaultPlugins, Dir3, DirectionalLight, Entity, EnvironmentMapLight,
-    FixedUpdate, GlobalAmbientLight, GlobalTransform, GltfAssetLabel, Handle, Image, ImageNode,
-    IsDefaultUiCamera, KeyCode, MessageReader, MessageWriter, MinimalPlugins, Name, Node,
-    PerspectiveProjection, Pickable, PluginGroup, PositionType, PostUpdate, Projection, Quat,
-    Query, Res, ResMut, Resource, Scene, SceneRoot, Startup, Text, TextColor, TextFont,
-    TextureAtlas, TextureAtlasLayout, Time, Transform, UVec2, UiRect, Update, Val, Vec3,
+    App, AssetPlugin, AssetServer, Assets, BackgroundColor, BorderColor, ButtonInput, Camera,
+    Camera3d, Color, Commands, Component, ComputedNode, DefaultPlugins, Dir3, DirectionalLight,
+    Entity, EnvironmentMapLight, FixedUpdate, GlobalAmbientLight, GlobalTransform, GltfAssetLabel,
+    Handle, Image, ImageNode, IsDefaultUiCamera, KeyCode, MessageReader, MessageWriter,
+    MinimalPlugins, Name, Node, PerspectiveProjection, Pickable, PluginGroup, PositionType,
+    PostUpdate, Projection, Quat, Query, Res, ResMut, Resource, Scene, SceneRoot, Startup, Text,
+    TextColor, TextFont, TextureAtlasLayout, Time, Transform, UVec2, UiRect, Update, Val, Vec3,
     Visibility, Window, WindowPlugin, With, Without, default,
 };
 use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
@@ -206,6 +208,8 @@ const OSD_GLYPH_WIDTH_PX: u32 = 12;
 const OSD_GLYPH_HEIGHT_PX: u32 = 18;
 const OSD_GLYPH_PADDING_PX: u32 = 1;
 const OSD_FONT_ATLAS_PATH: &str = "osd/vtx_font.png";
+const OSD_CANVAS_WIDTH_PX: u32 = OSD_COLS as u32 * OSD_GLYPH_WIDTH_PX;
+const OSD_CANVAS_HEIGHT_PX: u32 = OSD_ROWS as u32 * OSD_GLYPH_HEIGHT_PX;
 
 #[derive(Resource, Clone)]
 struct SimOsdOverlay {
@@ -285,10 +289,29 @@ impl SimOsdOverlay {
 #[derive(Component)]
 struct OsdOverlayRoot;
 
-#[derive(Component, Clone, Copy)]
-struct OsdOverlayCell {
-    row: usize,
-    col: usize,
+#[derive(Component)]
+struct OsdCanvasFrame;
+
+#[derive(Component)]
+struct OsdCanvasNode;
+
+#[derive(Component)]
+struct SceneViewportDebugFrame;
+
+#[derive(Resource)]
+struct OsdCanvasAssets {
+    canvas: Handle<Image>,
+    atlas: Handle<Image>,
+    atlas_layout: Handle<TextureAtlasLayout>,
+}
+
+#[derive(Resource, Default)]
+struct OsdRasterSource {
+    atlas_width: usize,
+    bytes_per_pixel: usize,
+    rects: Vec<bevy::math::URect>,
+    pixels: Vec<u8>,
+    ready: bool,
 }
 
 #[derive(Component)]
@@ -924,6 +947,7 @@ fn spawn_osd_overlay(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlasLayout>>,
+    mut images: ResMut<Assets<Image>>,
     hud_root: Option<Res<SimHudRoot>>,
     mut spawned: ResMut<SimHudSpawnState>,
 ) {
@@ -942,8 +966,45 @@ fn spawn_osd_overlay(
         Some(UVec2::splat(OSD_GLYPH_PADDING_PX)),
         None,
     ));
+    let mut canvas_image = Image::new_fill(
+        bevy::render::render_resource::Extent3d {
+            width: OSD_CANVAS_WIDTH_PX,
+            height: OSD_CANVAS_HEIGHT_PX,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        &[0, 0, 0, 0],
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::default(),
+    );
+    canvas_image.sampler = bevy::image::ImageSampler::nearest();
+    let canvas_handle = images.add(canvas_image);
+
+    commands.insert_resource(OsdCanvasAssets {
+        canvas: canvas_handle.clone(),
+        atlas: atlas_handle.clone(),
+        atlas_layout: atlas_layout.clone(),
+    });
 
     commands.entity(hud_root.0).with_children(|parent| {
+        parent.spawn((
+            Name::new("scene-viewport-debug"),
+            SceneViewportDebugFrame,
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(0.0),
+                left: Val::Px(0.0),
+                width: Val::Px(0.0),
+                height: Val::Px(0.0),
+                border: UiRect::all(Val::Px(2.0)),
+                ..default()
+            },
+            Pickable::IGNORE,
+            Visibility::Hidden,
+            BorderColor::all(Color::srgba(0.0, 0.45, 1.0, 0.95)),
+            BackgroundColor(Color::NONE),
+        ));
+
         parent
             .spawn((
                 Name::new("fpv-osd"),
@@ -959,30 +1020,35 @@ fn spawn_osd_overlay(
                 Pickable::IGNORE,
                 Visibility::Visible,
             ))
-            .with_children(|cells| {
-                for row in 0..OSD_ROWS {
-                    for col in 0..OSD_COLS {
-                        cells.spawn((
-                            OsdOverlayCell { row, col },
+            .with_children(|canvas| {
+                canvas
+                    .spawn((
+                        OsdCanvasFrame,
+                        Node {
+                            position_type: PositionType::Absolute,
+                            top: Val::Px(0.0),
+                            left: Val::Px(0.0),
+                            width: Val::Px(OSD_CANVAS_WIDTH_PX as f32),
+                            height: Val::Px(OSD_CANVAS_HEIGHT_PX as f32),
+                            border: UiRect::all(Val::Px(2.0)),
+                            ..default()
+                        },
+                        Pickable::IGNORE,
+                        BorderColor::all(Color::srgba(1.0, 0.0, 0.0, 0.95)),
+                        BackgroundColor(Color::NONE),
+                    ))
+                    .with_children(|frame| {
+                        frame.spawn((
+                            OsdCanvasNode,
                             Node {
-                                position_type: PositionType::Absolute,
-                                top: Val::Px(0.0),
-                                left: Val::Px(0.0),
-                                width: Val::Px(OSD_GLYPH_WIDTH_PX as f32),
-                                height: Val::Px(OSD_GLYPH_HEIGHT_PX as f32),
+                                width: Val::Percent(100.0),
+                                height: Val::Percent(100.0),
                                 ..default()
                             },
                             Pickable::IGNORE,
-                            ImageNode::from_atlas_image(
-                                atlas_handle.clone(),
-                                TextureAtlas {
-                                    layout: atlas_layout.clone(),
-                                    index: OSD_BLANK_SYMBOL as usize,
-                                },
-                            ),
+                            ImageNode::new(canvas_handle.clone()),
                         ));
-                    }
-                }
+                    });
             });
     });
     spawned.osd = true;
@@ -1662,13 +1728,122 @@ fn update_help_overlay(
     *text = Text::new(values);
 }
 
+fn rasterize_osd_canvas(
+    osd_overlay: &SimOsdOverlay,
+    raster_source: &OsdRasterSource,
+    canvas_image: &mut Image,
+) {
+    if !raster_source.ready {
+        return;
+    }
+    let Some(canvas_data) = canvas_image.data.as_mut() else {
+        return;
+    };
+
+    let canvas_width = canvas_image.texture_descriptor.size.width as usize;
+    let glyph_w = OSD_GLYPH_WIDTH_PX as usize;
+    let glyph_h = OSD_GLYPH_HEIGHT_PX as usize;
+
+    canvas_data.fill(0);
+
+    for row in 0..OSD_ROWS {
+        for col in 0..OSD_COLS {
+            let idx = row * osd_overlay.cols + col;
+            let glyph = osd_overlay
+                .cells
+                .get(idx)
+                .copied()
+                .unwrap_or(OSD_BLANK_SYMBOL) as usize;
+            let rect = &raster_source.rects[glyph.min(OSD_FONT_ATLAS_GLYPHS.saturating_sub(1))];
+            let src_x = rect.min.x as usize;
+            let src_y = rect.min.y as usize;
+            let dst_x = col * glyph_w;
+            let dst_y = row * glyph_h;
+
+            for y in 0..glyph_h {
+                let src_offset = ((src_y + y) * raster_source.atlas_width + src_x)
+                    * raster_source.bytes_per_pixel;
+                let dst_offset =
+                    ((dst_y + y) * canvas_width + dst_x) * raster_source.bytes_per_pixel;
+                let line_len = glyph_w * raster_source.bytes_per_pixel;
+                canvas_data[dst_offset..dst_offset + line_len]
+                    .copy_from_slice(&raster_source.pixels[src_offset..src_offset + line_len]);
+            }
+        }
+    }
+
+    if raster_source.bytes_per_pixel >= 4 {
+        let border = [0u8, 255u8, 0u8, 255u8];
+        let canvas_height = canvas_image.texture_descriptor.size.height as usize;
+
+        for x in 0..canvas_width {
+            let top = x * raster_source.bytes_per_pixel;
+            let bottom = ((canvas_height - 1) * canvas_width + x) * raster_source.bytes_per_pixel;
+            canvas_data[top..top + 4].copy_from_slice(&border);
+            canvas_data[bottom..bottom + 4].copy_from_slice(&border);
+        }
+
+        for y in 0..canvas_height {
+            let left = (y * canvas_width) * raster_source.bytes_per_pixel;
+            let right = (y * canvas_width + (canvas_width - 1)) * raster_source.bytes_per_pixel;
+            canvas_data[left..left + 4].copy_from_slice(&border);
+            canvas_data[right..right + 4].copy_from_slice(&border);
+        }
+    }
+}
+
+fn prepare_osd_raster_source(
+    osd_canvas_assets: Option<Res<OsdCanvasAssets>>,
+    atlas_images: Res<Assets<Image>>,
+    atlas_layouts: Res<Assets<TextureAtlasLayout>>,
+    mut raster_source: ResMut<OsdRasterSource>,
+) {
+    if raster_source.ready {
+        return;
+    }
+    let Some(osd_canvas_assets) = osd_canvas_assets else {
+        return;
+    };
+    let Some(atlas_image) = atlas_images.get(&osd_canvas_assets.atlas) else {
+        return;
+    };
+    let Some(atlas_layout) = atlas_layouts.get(&osd_canvas_assets.atlas_layout) else {
+        return;
+    };
+    let Some(atlas_pixels) = atlas_image.data.as_ref() else {
+        return;
+    };
+    let Ok(bytes_per_pixel) = atlas_image.texture_descriptor.format.pixel_size() else {
+        return;
+    };
+
+    raster_source.atlas_width = atlas_image.texture_descriptor.size.width as usize;
+    raster_source.bytes_per_pixel = bytes_per_pixel;
+    raster_source.rects = atlas_layout.textures.clone();
+    raster_source.pixels = atlas_pixels.clone();
+    raster_source.ready = true;
+}
+
 fn update_osd_overlay(
     camera_view: Res<CameraView>,
     osd_overlay: Res<SimOsdOverlay>,
-    mut root_query: Query<(&ComputedNode, &mut Visibility), With<OsdOverlayRoot>>,
-    mut cell_query: Query<(&OsdOverlayCell, &mut Node, &mut ImageNode)>,
+    osd_canvas_assets: Option<Res<OsdCanvasAssets>>,
+    raster_source: Res<OsdRasterSource>,
+    mut images: ResMut<Assets<Image>>,
+    scene_camera: Query<&Camera, With<SimSceneCamera>>,
+    mut root_query: Query<&mut Visibility, With<OsdOverlayRoot>>,
+    mut canvas_query: Query<&mut Node, With<OsdCanvasFrame>>,
 ) {
-    let Ok((root_node, mut visibility)) = root_query.single_mut() else {
+    let Ok(camera) = scene_camera.single() else {
+        return;
+    };
+    let Some(viewport_rect) = camera.logical_viewport_rect() else {
+        return;
+    };
+    let Ok(mut visibility) = root_query.single_mut() else {
+        return;
+    };
+    let Ok(mut canvas_node) = canvas_query.single_mut() else {
         return;
     };
 
@@ -1678,40 +1853,71 @@ fn update_osd_overlay(
         Visibility::Hidden
     };
 
-    let viewport_size = root_node.size();
-    let max_cell_w = viewport_size.x / (OSD_COLS as f32 + OSD_HORIZONTAL_PADDING_COLS);
-    let max_cell_h = viewport_size.y / (OSD_ROWS as f32 + OSD_VERTICAL_PADDING_ROWS);
-    let scale_w = max_cell_w / OSD_GLYPH_WIDTH_PX as f32;
-    let scale_h = max_cell_h / OSD_GLYPH_HEIGHT_PX as f32;
-    let scale = scale_w.min(scale_h).max(0.1);
-    let cell_w = OSD_GLYPH_WIDTH_PX as f32 * scale;
-    let cell_h = OSD_GLYPH_HEIGHT_PX as f32 * scale;
-    let total_w = cell_w * OSD_COLS as f32;
-    let origin_x = ((viewport_size.x - total_w) * 0.5).max(0.0);
-    let origin_y = 0.0;
-    let row_step = if OSD_ROWS > 1 {
-        ((viewport_size.y - cell_h).max(0.0)) / ((OSD_ROWS - 1) as f32)
-    } else {
-        0.0
+    let viewport_width = viewport_rect.width();
+    let viewport_height = viewport_rect.height();
+    let osd_width = OSD_CANVAS_WIDTH_PX as f32;
+    let osd_height = OSD_CANVAS_HEIGHT_PX as f32;
+    let width_fit_scale = viewport_width / osd_width;
+    let width_fit_height = osd_height * width_fit_scale;
+
+    let (target_width, target_height, target_left, target_top) =
+        if width_fit_height <= viewport_height {
+            (
+                viewport_width,
+                width_fit_height,
+                viewport_rect.min.x,
+                viewport_rect.min.y + ((viewport_height - width_fit_height) * 0.5),
+            )
+        } else {
+            let height_fit_scale = viewport_height / osd_height;
+            let height_fit_width = osd_width * height_fit_scale;
+            (
+                height_fit_width,
+                viewport_height,
+                viewport_rect.min.x + ((viewport_width - height_fit_width) * 0.5),
+                viewport_rect.min.y,
+            )
+        };
+
+    canvas_node.left = Val::Px(target_left.max(viewport_rect.min.x));
+    canvas_node.top = Val::Px(target_top.max(viewport_rect.min.y));
+    canvas_node.width = Val::Px(target_width.min(viewport_width).ceil());
+    canvas_node.height = Val::Px(target_height.min(viewport_height).ceil());
+
+    if !osd_overlay.is_changed() {
+        return;
+    }
+
+    let Some(osd_canvas_assets) = osd_canvas_assets else {
+        return;
+    };
+    let Some(canvas_image) = images.get_mut(&osd_canvas_assets.canvas) else {
+        return;
     };
 
-    for (cell, mut node, mut image_node) in &mut cell_query {
-        let idx = cell.row * osd_overlay.cols + cell.col;
-        let glyph = osd_overlay
-            .cells
-            .get(idx)
-            .copied()
-            .unwrap_or(OSD_BLANK_SYMBOL) as usize;
+    rasterize_osd_canvas(&osd_overlay, &raster_source, canvas_image);
+}
 
-        node.left = Val::Px(origin_x + cell.col as f32 * cell_w);
-        node.top = Val::Px(origin_y + cell.row as f32 * row_step);
-        node.width = Val::Px(cell_w.ceil());
-        node.height = Val::Px(cell_h.ceil());
+fn update_scene_viewport_debug_frame(
+    scene_camera: Query<&Camera, With<SimSceneCamera>>,
+    mut debug_frame: Query<(&mut Node, &mut Visibility), With<SceneViewportDebugFrame>>,
+) {
+    let Ok(camera) = scene_camera.single() else {
+        return;
+    };
+    let Ok((mut frame_node, mut frame_visibility)) = debug_frame.single_mut() else {
+        return;
+    };
+    let Some(rect) = camera.logical_viewport_rect() else {
+        *frame_visibility = Visibility::Hidden;
+        return;
+    };
 
-        if let Some(atlas) = image_node.texture_atlas.as_mut() {
-            atlas.index = glyph.min(OSD_FONT_ATLAS_GLYPHS.saturating_sub(1));
-        }
-    }
+    frame_node.left = Val::Px(rect.min.x);
+    frame_node.top = Val::Px(rect.min.y);
+    frame_node.width = Val::Px(rect.width());
+    frame_node.height = Val::Px(rect.height());
+    *frame_visibility = Visibility::Visible;
 }
 
 fn stop_copper_on_exit<T: Send + Sync + 'static>(
@@ -1886,6 +2092,7 @@ pub fn build_world(headless: bool, split_monitor: bool) -> App {
         .insert_resource(SimJoystickState::default())
         .insert_resource(CameraView::default())
         .insert_resource(SimOsdOverlay::default())
+        .init_resource::<OsdRasterSource>()
         .insert_resource(WorldLayout { split_monitor })
         .init_resource::<SceneLoadState>()
         .init_resource::<SimHudSpawnState>();
@@ -1937,7 +2144,9 @@ pub fn build_world(headless: bool, split_monitor: bool) -> App {
             camera_follow_quadcopter,
             track_sim_led_state,
             update_help_overlay,
+            prepare_osd_raster_source,
             update_osd_overlay,
+            update_scene_viewport_debug_frame,
         )
             .chain(),
     )
