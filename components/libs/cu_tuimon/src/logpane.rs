@@ -1,4 +1,5 @@
 use crate::MonitorModel;
+use crate::palette;
 use ratatui::style::{Color, Style};
 
 #[cfg(debug_assertions)]
@@ -177,13 +178,13 @@ fn styled_line_from_structured(
             message_runs.push(StyledRun {
                 start: cursor,
                 end: start,
-                style: Style::default().fg(Color::Gray),
+                style: Style::default().fg(palette::GRAY),
             });
         }
         message_runs.push(StyledRun {
             start,
             end,
-            style: Style::default().fg(Color::Magenta),
+            style: Style::default().fg(palette::MAGENTA),
         });
         cursor = end;
     }
@@ -192,7 +193,7 @@ fn styled_line_from_structured(
         message_runs.push(StyledRun {
             start: cursor,
             end: message_text.chars().count(),
-            style: Style::default().fg(Color::Gray),
+            style: Style::default().fg(palette::GRAY),
         });
     }
 
@@ -202,7 +203,7 @@ fn styled_line_from_structured(
         StyledRun {
             start: 0,
             end: timestamp.chars().count(),
-            style: Style::default().fg(Color::Blue),
+            style: Style::default().fg(palette::BLUE),
         },
         StyledRun {
             start: timestamp.chars().count() + 1,
@@ -232,7 +233,7 @@ pub fn styled_line_from_stderr(text: &str) -> StyledLine {
         runs: vec![StyledRun {
             start: 0,
             end: text.chars().count(),
-            style: Style::default().fg(Color::Red),
+            style: Style::default().fg(palette::RED),
         }],
     }
 }
@@ -240,10 +241,10 @@ pub fn styled_line_from_stderr(text: &str) -> StyledLine {
 #[cfg(debug_assertions)]
 fn color_for_level(level: CuLogLevel) -> Color {
     match level {
-        CuLogLevel::Debug => Color::Green,
-        CuLogLevel::Info => Color::Gray,
-        CuLogLevel::Warning => Color::Yellow,
-        CuLogLevel::Error | CuLogLevel::Critical => Color::Red,
+        CuLogLevel::Debug => palette::GREEN,
+        CuLogLevel::Info => palette::GRAY,
+        CuLogLevel::Warning => palette::YELLOW,
+        CuLogLevel::Error | CuLogLevel::Critical => palette::RED,
     }
 }
 
