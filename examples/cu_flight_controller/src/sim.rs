@@ -123,7 +123,7 @@ impl Default for SimRcInput {
             yaw: 0.0,
             throttle: 0.0,
             armed: false,
-            mode: messages::FlightMode::Angle,
+            mode: messages::FlightMode::Acro,
         }
     }
 }
@@ -411,6 +411,12 @@ const KEYBOARD_HOVER_THROTTLE_HIGH: f32 = 0.50;
 
 fn spawn_rotation() -> Quat {
     Quat::from_rotation_y(SIM_SPAWN_YAW_DEG.to_radians())
+}
+
+fn init_keyboard_rc(rc_input: &mut SimRcInput) {
+    rc_input.mode = messages::FlightMode::Acro;
+    rc_input.armed = false;
+    rc_input.throttle = 0.0;
 }
 
 fn spawn_pose_components() -> (
@@ -1160,11 +1166,9 @@ fn setup_joystick(
         }
         Err(err) => {
             *rc_source = RcInputSource::Keyboard;
-            rc_input.mode = messages::FlightMode::Angle;
-            rc_input.armed = true;
-            rc_input.throttle = KEYBOARD_HOVER_THROTTLE_LOW;
+            init_keyboard_rc(&mut rc_input);
             info!(
-                "sim rc: joystick unavailable ({}), using keyboard controls (auto-armed, hover throttle) (set CU_SIM_ALLOW_GENERIC_JOYSTICK=1 to allow non-radio joysticks)",
+                "sim rc: joystick unavailable ({}), using keyboard controls (disarmed start, Space arms Angle mode) (set CU_SIM_ALLOW_GENERIC_JOYSTICK=1 to allow non-radio joysticks)",
                 err.to_string()
             );
             joystick_state.reader = None;
@@ -1175,10 +1179,8 @@ fn setup_joystick(
 #[cfg(target_arch = "wasm32")]
 fn setup_joystick(mut rc_input: ResMut<SimRcInput>, mut rc_source: ResMut<RcInputSource>) {
     *rc_source = RcInputSource::Keyboard;
-    rc_input.mode = messages::FlightMode::Angle;
-    rc_input.armed = true;
-    rc_input.throttle = KEYBOARD_HOVER_THROTTLE_LOW;
-    info!("sim rc: web build using keyboard controls");
+    init_keyboard_rc(&mut rc_input);
+    info!("sim rc: web build using keyboard controls (disarmed start, Space arms Angle mode)");
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1209,9 +1211,7 @@ fn poll_joystick(
             );
             joystick.reader = None;
             *rc_source = RcInputSource::Keyboard;
-            rc_input.mode = messages::FlightMode::Angle;
-            rc_input.armed = true;
-            rc_input.throttle = KEYBOARD_HOVER_THROTTLE_LOW;
+            init_keyboard_rc(&mut rc_input);
         }
     }
 }
@@ -1306,13 +1306,14 @@ fn update_rc_input_keyboard(
     if keyboard.just_pressed(KeyCode::Digit3) {
         rc_input.mode = messages::FlightMode::PositionHold;
     }
+    if keyboard.just_pressed(KeyCode::Space) && !rc_input.armed {
+        rc_input.armed = true;
+        rc_input.mode = messages::FlightMode::Angle;
+        info!("sim rc: keyboard armed in Angle mode");
+    }
 
     if keyboard.just_pressed(KeyCode::KeyT) {
         rc_input.armed = !rc_input.armed;
-        if rc_input.armed {
-            // Keyboard arming should start in a safe stabilized mode.
-            rc_input.mode = messages::FlightMode::Angle;
-        }
         info!("sim rc: armed={} mode={:?}", rc_input.armed, rc_input.mode);
     }
 }
@@ -1333,12 +1334,18 @@ fn adjust_keyboard_throttle(
         return;
     }
 
+    if !rc_input.armed {
+        rc_input.throttle = 0.0;
+        return;
+    }
+
     // Keyboard mode is a simple "descend a bit / climb a bit" control around hover.
-    rc_input.throttle = if keyboard.pressed(KeyCode::Space) {
-        KEYBOARD_HOVER_THROTTLE_HIGH
-    } else {
-        KEYBOARD_HOVER_THROTTLE_LOW
-    };
+    rc_input.throttle =
+        if keyboard.pressed(KeyCode::Space) && !keyboard.just_pressed(KeyCode::Space) {
+            KEYBOARD_HOVER_THROTTLE_HIGH
+        } else {
+            KEYBOARD_HOVER_THROTTLE_LOW
+        };
 }
 
 fn reset_vehicle(
@@ -1355,6 +1362,8 @@ fn reset_vehicle(
     >,
     mut motors: ResMut<SimMotorCommands>,
     mut kin: ResMut<SimKinematics>,
+    rc_source: Res<RcInputSource>,
+    mut rc_input: ResMut<SimRcInput>,
     _layout: Res<WorldLayout>,
     #[cfg(feature = "bevymon")] focus: Option<Res<CuBevyMonFocus>>,
 ) {
@@ -1381,6 +1390,11 @@ fn reset_vehicle(
 
     motors.dshot = [0; 4];
     kin.prev_linear_velocity = None;
+
+    if *rc_source == RcInputSource::Keyboard {
+        init_keyboard_rc(&mut rc_input);
+        info!("sim rc: reset to disarmed keyboard start");
+    }
 }
 
 fn sync_vehicle_state(
@@ -1666,7 +1680,7 @@ fn update_help_overlay(
 
     let values = match *rc_source {
         RcInputSource::Keyboard => format!(
-            "{view_label}\nNot connected (plug RC via USB/BT)\nT\n1=Acro 2=Angle 3=PosHold\nSpace (boost)\nWASD\nQ / E\nR"
+            "{view_label}\nNot connected (plug RC via USB/BT)\nT\n1=Acro 2=Angle 3=PosHold\nSpace (arm Angle / climb)\nWASD\nQ / E\nR"
         ),
         RcInputSource::Joystick => {
             #[cfg(not(target_arch = "wasm32"))]
@@ -1683,7 +1697,7 @@ fn update_help_overlay(
             #[cfg(target_arch = "wasm32")]
             {
                 format!(
-                    "{view_label}\nWeb build keyboard mode\nT\n1=Acro 2=Angle 3=PosHold\nSpace (boost)\nWASD\nQ / E\nR"
+                    "{view_label}\nWeb build keyboard mode\nT\n1=Acro 2=Angle 3=PosHold\nSpace (arm Angle / climb)\nWASD\nQ / E\nR"
                 )
             }
         }
