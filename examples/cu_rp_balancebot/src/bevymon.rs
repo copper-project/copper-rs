@@ -12,9 +12,9 @@ use bevy::asset::UnapprovedPathMode;
 use bevy::camera::ClearColorConfig;
 use bevy::prelude::{
     App, AssetPlugin, BackgroundColor, BorderColor, Camera, Camera2d, ClearColor, Color, Commands,
-    DefaultPlugins, Entity, FixedUpdate, ImageNode, Pickable, PluginGroup, PostUpdate, Query, Res,
-    ResMut, Resource, Startup, Text, TextColor, TextFont, Update, Val, Window, WindowPlugin, With,
-    default,
+    Component, DefaultPlugins, Entity, FixedUpdate, ImageNode, Pickable, PluginGroup, PostUpdate,
+    Query, Res, ResMut, Resource, Startup, Text, TextColor, TextFont, Update, Val, Visibility,
+    Window, WindowPlugin, With, default,
 };
 use bevy::render::RenderPlugin;
 use bevy::ui::{Node as UiNode, PositionType, UiRect, UiTargetCamera, widget::ViewportNode};
@@ -33,6 +33,9 @@ struct LayoutSpawned(bool);
 
 #[derive(Resource)]
 struct SplitUiCamera(Entity);
+
+#[derive(Component)]
+struct SplitLoadingOverlay;
 
 fn main() {
     let (monitor_model, copper) = sim_driver::build_bevymon_copper();
@@ -59,7 +62,8 @@ fn main() {
     .insert_resource(sim_driver::LastCopperTick::default())
     .init_resource::<LayoutSpawned>()
     .add_systems(Startup, setup_ui_camera)
-    .add_systems(Update, spawn_balancebot_layout);
+    .add_systems(Update, spawn_balancebot_layout)
+    .add_systems(Update, sync_split_loading_overlay);
 
     world::build_world(&mut app, false, true);
     app.add_systems(
@@ -201,6 +205,51 @@ fn spawn_balancebot_layout(
                     .spawn((
                         UiNode {
                             position_type: PositionType::Absolute,
+                            top: Val::Px(18.0),
+                            left: Val::Px(0.0),
+                            right: Val::Px(0.0),
+                            justify_content: bevy::ui::JustifyContent::Center,
+                            ..default()
+                        },
+                        Pickable::IGNORE,
+                        BackgroundColor(Color::NONE),
+                    ))
+                    .with_children(|loading| {
+                        loading
+                            .spawn((
+                                UiNode {
+                                    padding: UiRect::new(
+                                        Val::Px(18.0),
+                                        Val::Px(18.0),
+                                        Val::Px(10.0),
+                                        Val::Px(10.0),
+                                    ),
+                                    border: UiRect::all(Val::Px(2.0)),
+                                    border_radius: bevy::ui::BorderRadius::all(Val::Px(12.0)),
+                                    ..default()
+                                },
+                                Pickable::IGNORE,
+                                SplitLoadingOverlay,
+                                BackgroundColor(Color::srgba(0.03, 0.05, 0.09, 0.92)),
+                                BorderColor::all(Color::srgba(0.58, 0.74, 0.96, 0.95)),
+                            ))
+                            .with_children(|cartouche| {
+                                cartouche.spawn((
+                                    Pickable::IGNORE,
+                                    Text::new("Assets loading..."),
+                                    TextFont {
+                                        font_size: 18.0,
+                                        ..default()
+                                    },
+                                    TextColor(Color::srgb(0.93, 0.96, 1.0)),
+                                ));
+                            });
+                    });
+
+                panel
+                    .spawn((
+                        UiNode {
+                            position_type: PositionType::Absolute,
                             bottom: Val::Px(5.0),
                             right: Val::Px(5.0),
                             padding: UiRect::new(
@@ -275,4 +324,17 @@ fn spawn_balancebot_layout(
         });
 
     spawned.0 = true;
+}
+
+fn sync_split_loading_overlay(
+    load_state: Res<world::SceneLoadState>,
+    mut overlays: Query<&mut Visibility, With<SplitLoadingOverlay>>,
+) {
+    if !load_state.ready {
+        return;
+    }
+
+    for mut visibility in &mut overlays {
+        *visibility = Visibility::Hidden;
+    }
 }

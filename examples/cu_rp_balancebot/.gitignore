@@ -1,0 +1,8 @@
+dist/
+assets/balancebot.glb
+assets/balancebot.web.glb
+assets/skybox.ktx2
+assets/skybox.web.ktx2
+assets/diffuse_map.ktx2
+assets/diffuse_map.web.ktx2
+!assets/.gitkeep

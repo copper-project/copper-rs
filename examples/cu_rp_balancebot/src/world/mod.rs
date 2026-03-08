@@ -86,6 +86,11 @@ pub struct DragState {
     pub active_drag: Option<(Entity, Vector)>,
 }
 
+#[derive(Resource, Default)]
+pub struct SceneLoadState {
+    pub ready: bool,
+}
+
 #[derive(Component)]
 pub struct Cart;
 
@@ -94,6 +99,9 @@ pub struct Rod;
 
 #[derive(Component)]
 pub struct SplitSceneCamera;
+
+#[derive(Component)]
+struct SceneLoadingOverlay;
 
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct AppliedForce(pub Vector);
@@ -169,11 +177,13 @@ pub fn build_world(app: &mut App, headless: bool, split_monitor: bool) -> &mut A
             max_force: 10.,
         })
         .insert_resource(DragState::default())
+        .init_resource::<SceneLoadState>()
         .insert_resource(Gravity::default())
         .insert_resource(Time::<Physics>::default())
         .add_systems(Startup, setup_scene)
         .add_systems(Startup, setup_ui)
         .add_systems(Update, setup_entities) // Wait for the cart entity to be loaded
+        .add_systems(Update, sync_loading_overlay)
         .add_systems(Update, update_physics)
         .add_systems(
             FixedPostUpdate,
@@ -481,6 +491,51 @@ fn setup_ui(mut commands: Commands, layout: Res<WorldLayout>) {
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
+                top: Val::Px(18.0),
+                left: Val::Px(0.0),
+                right: Val::Px(0.0),
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            Pickable::IGNORE,
+            BackgroundColor(Color::NONE),
+        ))
+        .with_children(|parent| {
+            parent
+                .spawn((
+                    Node {
+                        padding: UiRect::new(
+                            Val::Px(18.0),
+                            Val::Px(18.0),
+                            Val::Px(10.0),
+                            Val::Px(10.0),
+                        ),
+                        border: UiRect::all(Val::Px(2.0)),
+                        border_radius: BorderRadius::all(Val::Px(12.0)),
+                        ..default()
+                    },
+                    Pickable::IGNORE,
+                    SceneLoadingOverlay,
+                    BackgroundColor(Color::srgba(0.03, 0.05, 0.09, 0.92)),
+                    BorderColor::all(Color::srgba(0.58, 0.74, 0.96, 0.95)),
+                ))
+                .with_children(|cartouche| {
+                    cartouche.spawn((
+                        Pickable::IGNORE,
+                        Text::new("Assets loading..."),
+                        TextFont {
+                            font_size: 18.0,
+                            ..default()
+                        },
+                        TextColor(Color::srgb(0.93, 0.96, 1.0)),
+                    ));
+                });
+        });
+
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
                 bottom: Val::Px(5.0),
                 right: Val::Px(5.0),
                 padding: UiRect::new(Val::Px(15.0), Val::Px(15.0), Val::Px(10.0), Val::Px(10.0)),
@@ -518,6 +573,19 @@ fn setup_ui(mut commands: Commands, layout: Res<WorldLayout>) {
         });
 }
 
+fn sync_loading_overlay(
+    load_state: Res<SceneLoadState>,
+    mut overlays: Query<&mut Visibility, With<SceneLoadingOverlay>>,
+) {
+    if !load_state.ready {
+        return;
+    }
+
+    for mut visibility in &mut overlays {
+        *visibility = Visibility::Hidden;
+    }
+}
+
 // This needs to match an object / parent object name in the GLTF file (in blender this is the object name).
 const CART_GLTF_ASSET_NAME: &str = "Cart";
 
@@ -553,6 +621,7 @@ fn setup_entities(
     mut materials: ResMut<Assets<StandardMaterial>>,
     query: Query<(Entity, &Name, &Transform), Without<Cart>>,
     mut setup_completed: ResMut<SetupCompleted>,
+    mut load_state: ResMut<SceneLoadState>,
 ) {
     let SetupCompleted(completed) = *setup_completed;
     if completed {
@@ -675,6 +744,7 @@ fn setup_entities(
     ));
 
     setup_completed.0 = true; // Mark as completed
+    load_state.ready = true;
 }
 
 fn get_rigid_body_entity(
