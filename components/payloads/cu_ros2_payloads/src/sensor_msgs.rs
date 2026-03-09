@@ -37,6 +37,7 @@ pub struct PointCloud2 {
     pub is_bigendian: bool,
     pub point_step: u32,
     pub row_step: u32,
+    #[serde(with = "serde_bytes")]
     pub data: Vec<u8>,
     pub is_dense: bool,
 }
@@ -50,6 +51,7 @@ pub struct Image {
     pub encoding: String,
     pub is_bigendian: u8,
     pub step: u32,
+    #[serde(with = "serde_bytes")]
     pub data: Vec<u8>,
 }
 

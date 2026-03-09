@@ -134,14 +134,49 @@ where
     payload_registry().register::<Payload>();
 }
 
+/// Per-channel Rx queue strategy, configured via `queue_mode` in the channel config.
+/// - `"fifo"` (default): ordered delivery, one sample per cycle.
+/// - `"ring"`: creates a buffer and drops the oldest sample when full; set `ring_size` (default 1) for buffer depth.
 #[derive(Debug, Clone)]
-struct Ros2ChannelConfig<Id: Copy> {
+enum RxQueueConfig {
+    Fifo,
+    Ring { size: usize },
+}
+
+impl RxQueueConfig {
+    fn from_config(config: Option<&ComponentConfig>) -> CuResult<Self> {
+        let Some(cfg) = config else {
+            return Ok(Self::Fifo);
+        };
+        match cfg.get::<String>("queue_mode")?.as_deref() {
+            Some("ring") => Ok(Self::Ring {
+                size: cfg.get::<u32>("ring_size")?.unwrap_or(1) as usize,
+            }),
+            Some("fifo") | None => Ok(Self::Fifo),
+            Some(other) => Err(CuError::from(format!(
+                "Ros2Bridge: unknown queue_mode '{other}'"
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Ros2TxChannelConfig<Id: Copy> {
     id: Id,
     route: String,
 }
 
-type Ros2Subscriber =
-    zenoh::pubsub::Subscriber<zenoh::handlers::FifoChannelHandler<zenoh::sample::Sample>>;
+#[derive(Debug, Clone)]
+struct Ros2RxChannelConfig<Id: Copy> {
+    id: Id,
+    route: String,
+    queue: RxQueueConfig,
+}
+
+enum Ros2Subscriber {
+    Fifo(zenoh::pubsub::Subscriber<zenoh::handlers::FifoChannelHandler<zenoh::sample::Sample>>),
+    Ring(zenoh::pubsub::Subscriber<zenoh::handlers::RingChannelHandler<zenoh::sample::Sample>>),
+}
 
 struct Ros2TxChannel<Id: Copy> {
     id: Id,
@@ -156,6 +191,7 @@ struct Ros2RxChannel<Id: Copy> {
     id: Id,
     route: String,
     entity_id: u32,
+    queue: RxQueueConfig,
     subscriber: Option<Ros2Subscriber>,
     subscriber_token: Option<zenoh::liveliness::LivelinessToken>,
 }
@@ -183,9 +219,9 @@ where
     namespace: String,
     node: String,
     #[reflect(ignore)]
-    tx_channels: Vec<Ros2ChannelConfig<Tx::Id>>,
+    tx_channels: Vec<Ros2TxChannelConfig<Tx::Id>>,
     #[reflect(ignore)]
-    rx_channels: Vec<Ros2ChannelConfig<Rx::Id>>,
+    rx_channels: Vec<Ros2RxChannelConfig<Rx::Id>>,
     #[reflect(ignore)]
     ctx: Option<Ros2Context<Tx::Id, Rx::Id>>,
 }
@@ -405,8 +441,20 @@ where
         ))?;
 
         let keyexpr = topic.pubsub_keyexpr(&node)?;
-        let subscriber = zenoh::Wait::wait(ctx.session.declare_subscriber(keyexpr))
-            .map_err(cu_error_map("Ros2Bridge: Failed to declare subscriber"))?;
+        let subscriber = match ctx.rx_channels[rx_idx].queue {
+            RxQueueConfig::Fifo => Ros2Subscriber::Fifo(
+                zenoh::Wait::wait(ctx.session.declare_subscriber(keyexpr))
+                    .map_err(cu_error_map("Ros2Bridge: Failed to declare subscriber"))?,
+            ),
+            RxQueueConfig::Ring { size } => Ros2Subscriber::Ring(
+                zenoh::Wait::wait(
+                    ctx.session
+                        .declare_subscriber(keyexpr)
+                        .with(zenoh::handlers::RingChannel::new(size)),
+                )
+                .map_err(cu_error_map("Ros2Bridge: Failed to declare subscriber"))?,
+            ),
+        };
 
         ctx.rx_channels[rx_idx].subscriber_token = Some(subscriber_token);
         ctx.rx_channels[rx_idx].subscriber = Some(subscriber);
@@ -451,7 +499,7 @@ where
         let mut tx_cfgs = Vec::with_capacity(tx_channels.len());
         for channel in tx_channels {
             let route = Self::channel_route(channel)?;
-            tx_cfgs.push(Ros2ChannelConfig {
+            tx_cfgs.push(Ros2TxChannelConfig {
                 id: channel.channel.id,
                 route,
             });
@@ -460,9 +508,11 @@ where
         let mut rx_cfgs = Vec::with_capacity(rx_channels.len());
         for channel in rx_channels {
             let route = Self::channel_route(channel)?;
-            rx_cfgs.push(Ros2ChannelConfig {
+            let queue = RxQueueConfig::from_config(channel.config.as_ref())?;
+            rx_cfgs.push(Ros2RxChannelConfig {
                 id: channel.channel.id,
                 route,
+                queue,
             });
         }
 
@@ -510,6 +560,7 @@ where
                 id: channel.id,
                 route: channel.route.clone(),
                 entity_id: (index + 1) as u32,
+                queue: channel.queue.clone(),
                 subscriber: None,
                 subscriber_token: None,
             })
@@ -596,15 +647,15 @@ where
 
         msg.tov = Tov::Time(ctx.now());
 
-        let sample = {
-            let subscriber = bridge_ctx.rx_channels[rx_idx]
-                .subscriber
-                .as_mut()
-                .ok_or_else(|| CuError::from("Ros2Bridge: Rx subscriber not initialized"))?;
-            subscriber
-                .try_recv()
-                .map_err(|e| CuError::from(format!("Ros2Bridge: receive failed: {e}")))?
-        };
+        let subscriber = bridge_ctx.rx_channels[rx_idx]
+            .subscriber
+            .as_mut()
+            .ok_or_else(|| CuError::from("Ros2Bridge: Rx subscriber not initialized"))?;
+        let sample = match subscriber {
+            Ros2Subscriber::Fifo(s) => s.try_recv(),
+            Ros2Subscriber::Ring(s) => s.try_recv(),
+        }
+        .map_err(|e| CuError::from(format!("Ros2Bridge: receive failed: {e}")))?;
 
         if let Some(sample) = sample {
             let payload = sample.payload().to_bytes();
@@ -633,8 +684,12 @@ where
 
             for channel in rx_channels {
                 if let Some(subscriber) = channel.subscriber {
-                    zenoh::Wait::wait(subscriber.undeclare())
-                        .map_err(cu_error_map("Ros2Bridge: Failed to undeclare subscriber"))?;
+                    match subscriber {
+                        Ros2Subscriber::Fifo(s) => zenoh::Wait::wait(s.undeclare())
+                            .map_err(cu_error_map("Ros2Bridge: Failed to undeclare subscriber"))?,
+                        Ros2Subscriber::Ring(s) => zenoh::Wait::wait(s.undeclare())
+                            .map_err(cu_error_map("Ros2Bridge: Failed to undeclare subscriber"))?,
+                    }
                 }
             }
 

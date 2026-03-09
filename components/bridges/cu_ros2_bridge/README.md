@@ -14,6 +14,10 @@ Bridge-level config:
 Per-channel config (`bridges[].channels`):
 - `route`: ROS 2 topic path used by that channel.
 
+Rx-only options:
+- `queue_mode`: `"fifo"` (default) First In First Out mode. Delivers samples in order, one per cycle. `"ring"` creates a buffer and drops oldest sample when full.
+- `ring_size`: depth of the ring buffer when `queue_mode` is `"ring"` (default `1`).
+
 Example:
 
 ```ron
@@ -28,7 +32,10 @@ bridges: [
     },
     channels: [
       Tx(id: "outgoing", route: "/output"),
+      // fifo: ordered delivery, one sample per cycle (default)
       Rx(id: "incoming", route: "/input"),
+      // ring: always receive the freshest sample
+      Rx(id: "sensor",   route: "/sensor", config: {"queue_mode": "ring"}),
     ],
   ),
 ],
