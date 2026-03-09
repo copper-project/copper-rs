@@ -38,7 +38,7 @@ cu29 = { path = "../../../core/cu29", version = "0.13.0", default-features = fal
 cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "0.13.0", default-features = false }
 bincode = { workspace = true }
 serde = { workspace = true }
-uf-ahrs = { version = "0.1.1", default-features = false }
+uf-ahrs = { version = "0.2.0", default-features = false }
 nalgebra = { version = "0.34.1", default-features = false, features = ["libm"] }
 defmt = { workspace = true, optional = true }
 defmt-rtt = { workspace = true, optional = true }
