@@ -1253,7 +1253,7 @@
 <a href=#1253 id=1253 data-nosnippet>1253</a>    <span class="kw">if </span>inputs.len() &lt;= <span class="number">1 </span>{
 <a href=#1254 id=1254 data-nosnippet>1254</a>        <span class="kw">return</span>;
 <a href=#1255 id=1255 data-nosnippet>1255</a>    }
-<a href=#1256 id=1256 data-nosnippet>1256</a>    inputs.sort_by(|a, b| a.<span class="number">0</span>.cmp(<span class="kw-2">&amp;</span>b.<span class="number">0</span>));
+<a href=#1256 id=1256 data-nosnippet>1256</a>    inputs.sort_by_key(|a| a.<span class="number">0</span>);
 <a href=#1257 id=1257 data-nosnippet>1257</a>    <span class="kw">let </span><span class="kw-2">mut </span>new_rows = Vec::with_capacity(input_rows.len());
 <a href=#1258 id=1258 data-nosnippet>1258</a>    new_rows.push(header);
 <a href=#1259 id=1259 data-nosnippet>1259</a>    <span class="kw">for </span>(<span class="kw">_</span>, row) <span class="kw">in </span>inputs {
@@ -4138,7 +4138,7 @@
 <a href=#4138 id=4138 data-nosnippet>4138</a>    parts.push(<span class="macro">format!</span>(<span class="string">"mission={}"</span>, mission.unwrap_or(<span class="string">"default"</span>)));
 <a href=#4139 id=4139 data-nosnippet>4139</a>
 <a href=#4140 id=4140 data-nosnippet>4140</a>    <span class="kw">let </span><span class="kw-2">mut </span>nodes: Vec&lt;<span class="kw">_</span>&gt; = graph.get_all_nodes();
-<a href=#4141 id=4141 data-nosnippet>4141</a>    nodes.sort_by(|a, b| a.<span class="number">1</span>.get_id().cmp(<span class="kw-2">&amp;</span>b.<span class="number">1</span>.get_id()));
+<a href=#4141 id=4141 data-nosnippet>4141</a>    nodes.sort_by_key(|a| a.<span class="number">1</span>.get_id());
 <a href=#4142 id=4142 data-nosnippet>4142</a>    <span class="kw">for </span>(<span class="kw">_</span>, node) <span class="kw">in </span>nodes {
 <a href=#4143 id=4143 data-nosnippet>4143</a>        parts.push(<span class="macro">format!</span>(
 <a href=#4144 id=4144 data-nosnippet>4144</a>            <span class="string">"node|{}|{}|{}"</span>,

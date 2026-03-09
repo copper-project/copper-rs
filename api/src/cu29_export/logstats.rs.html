@@ -404,7 +404,7 @@
 <a href=#404 id=404 data-nosnippet>404</a>    parts.push(<span class="macro">format!</span>(<span class="string">"mission={}"</span>, mission.unwrap_or(<span class="string">"default"</span>)));
 <a href=#405 id=405 data-nosnippet>405</a>
 <a href=#406 id=406 data-nosnippet>406</a>    <span class="kw">let </span><span class="kw-2">mut </span>nodes: Vec&lt;<span class="kw">_</span>&gt; = graph.get_all_nodes();
-<a href=#407 id=407 data-nosnippet>407</a>    nodes.sort_by(|a, b| a.<span class="number">1</span>.get_id().cmp(<span class="kw-2">&amp;</span>b.<span class="number">1</span>.get_id()));
+<a href=#407 id=407 data-nosnippet>407</a>    nodes.sort_by_key(|a| a.<span class="number">1</span>.get_id());
 <a href=#408 id=408 data-nosnippet>408</a>    <span class="kw">for </span>(<span class="kw">_</span>, node) <span class="kw">in </span>nodes {
 <a href=#409 id=409 data-nosnippet>409</a>        parts.push(<span class="macro">format!</span>(
 <a href=#410 id=410 data-nosnippet>410</a>            <span class="string">"node|{}|{}|{}"</span>,
