@@ -131,7 +131,11 @@ impl CuSafetyMon {
                 if shared.stopping.load(Ordering::SeqCst) {
                     break;
                 }
-                thread::sleep(period);
+                thread::park_timeout(period);
+
+                if shared.stopping.load(Ordering::SeqCst) {
+                    break;
+                }
 
                 let (elapsed, last_culistid) = {
                     let guard = shared
@@ -303,6 +307,7 @@ impl CuMonitor for CuSafetyMon {
         self.shared.stopping.store(true, Ordering::SeqCst);
 
         if let Some(handle) = self.watchdog.take() {
+            handle.thread().unpark();
             let _ = handle.join();
         }
 
