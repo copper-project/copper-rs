@@ -1,0 +1,34 @@
+// UDS Example: UdsTestSource → UdsServer → UdsResponseSink
+// Demonstrates a UDS diagnostic server receiving requests and generating responses.
+(
+    tasks: [
+        (
+            id: "uds_src",
+            type: "tasks::UdsTestSource",
+        ),
+        (
+            id: "uds_server",
+            type: "cu_uds::UdsServer",
+            config: {
+                "source_addr": 0x7E8,
+                "target_addr": 0x7E0,
+            },
+        ),
+        (
+            id: "uds_sink",
+            type: "tasks::UdsResponseSink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "uds_src",
+            dst: "uds_server",
+            msg: "cu_automotive_payloads::isotp::IsotpPdu",
+        ),
+        (
+            src: "uds_server",
+            dst: "uds_sink",
+            msg: "cu_automotive_payloads::isotp::IsotpPdu",
+        ),
+    ],
+)

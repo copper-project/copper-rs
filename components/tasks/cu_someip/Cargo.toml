@@ -1,0 +1,26 @@
+[package]
+name = "cu-someip"
+description = "AUTOSAR SOME/IP source, sink, and service discovery tasks for the Copper project."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+cu29 = { path = "../../../core/cu29", version = "0.13.0", default-features = false }
+cu-automotive-payloads = { path = "../../payloads/cu_automotive_payloads", version = "0.13.0", default-features = false }
+bincode = { workspace = true }
+serde = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+
+[features]
+default = ["std"]
+std = ["cu29/std", "cu-automotive-payloads/std"]
+textlogs = ["cu29/textlogs"]
+mock = []

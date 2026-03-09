@@ -1,0 +1,27 @@
+[package]
+name = "cu-can-example"
+description = "CAN bus example using Copper automotive stack — mock source → filter → sink pipeline."
+publish = false
+
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "cu-can-example"
+path = "src/main.rs"
+
+[dependencies]
+cu29 = { workspace = true }
+cu29-helpers = { workspace = true }
+cu-automotive-payloads = { path = "../../components/payloads/cu_automotive_payloads", version = "0.13.0" }
+cu-can = { path = "../../components/tasks/cu_can", version = "0.13.0", features = ["mock"] }
+serde = { workspace = true }
+
+[package.metadata.cargo-shear]
+ignored = ["serde", "cu-can", "cu-automotive-payloads"]

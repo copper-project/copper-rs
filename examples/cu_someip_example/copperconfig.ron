@@ -1,0 +1,38 @@
+// SOME/IP Example: SomeIpSource → SomeIpRouter → SomeIpSink
+// Demonstrates SOME/IP message routing with mock UDP transport.
+(
+    tasks: [
+        (
+            id: "someip_src",
+            type: "cu_someip::SomeIpSource",
+            config: {
+                "bind_addr": "0.0.0.0",
+                "port": 30490,
+            },
+        ),
+        (
+            id: "someip_router",
+            type: "cu_someip::SomeIpRouter",
+        ),
+        (
+            id: "someip_sink",
+            type: "cu_someip::SomeIpSink",
+            config: {
+                "dest_addr": "127.0.0.1",
+                "dest_port": 30491,
+            },
+        ),
+    ],
+    cnx: [
+        (
+            src: "someip_src",
+            dst: "someip_router",
+            msg: "cu_automotive_payloads::someip::SomeIpMessage",
+        ),
+        (
+            src: "someip_router",
+            dst: "someip_sink",
+            msg: "cu_automotive_payloads::someip::SomeIpMessage",
+        ),
+    ],
+)

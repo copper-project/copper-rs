@@ -1,0 +1,29 @@
+[package]
+name = "cu-uds-example"
+description = "UDS diagnostic example using Copper automotive stack — mock CAN → ISO-TP → UDS server pipeline."
+publish = false
+
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "cu-uds-example"
+path = "src/main.rs"
+
+[dependencies]
+cu29 = { workspace = true }
+cu29-helpers = { workspace = true }
+cu-automotive-payloads = { path = "../../components/payloads/cu_automotive_payloads", version = "0.13.0" }
+cu-can = { path = "../../components/tasks/cu_can", version = "0.13.0", features = ["mock"] }
+cu-isotp = { path = "../../components/tasks/cu_isotp", version = "0.13.0" }
+cu-uds = { path = "../../components/tasks/cu_uds", version = "0.13.0" }
+serde = { workspace = true }
+
+[package.metadata.cargo-shear]
+ignored = ["serde", "cu-can", "cu-isotp", "cu-uds", "cu-automotive-payloads"]

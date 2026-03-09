@@ -99,6 +99,14 @@ members = [
   "examples/cu_debug_session",
   "examples/cu_gnss_ublox_demo",
   "examples/cu_remote_debug_session",
+  "components/payloads/cu_automotive_payloads",
+  "components/tasks/cu_can",
+  "components/tasks/cu_isotp",
+  "components/tasks/cu_uds",
+  "components/tasks/cu_someip",
+  "examples/cu_can_example",
+  "examples/cu_uds_example",
+  "examples/cu_someip_example",
 ]
 
 # put only the core crates here that are not platform specific
@@ -169,6 +177,11 @@ cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version 
 cu-gnss-payloads = { path = "components/payloads/cu_gnss_payloads", version = "0.13.0" }
 cu-spatial-payloads = { path = "components/payloads/cu_spatial_payloads", version = "0.13.0" }
 cu-ros2-payloads = { path = "components/payloads/cu_ros2_payloads", version = "0.13.0" }
+cu-automotive-payloads = { path = "components/payloads/cu_automotive_payloads", version = "0.13.0" }
+cu-can = { path = "components/tasks/cu_can", version = "0.13.0" }
+cu-isotp = { path = "components/tasks/cu_isotp", version = "0.13.0" }
+cu-uds = { path = "components/tasks/cu_uds", version = "0.13.0" }
+cu-someip = { path = "components/tasks/cu_someip", version = "0.13.0" }
 cu-pid = { path = "components/tasks/cu_pid", version = "0.13.0" }
 
 # External serialization

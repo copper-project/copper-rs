@@ -1,0 +1,42 @@
+// CAN Example: CanSource → CanFilter → CanSink
+// Demonstrates a basic CAN bus pipeline with mock SocketCAN.
+// CanSource produces synthetic frames, CanFilter passes only selected IDs,
+// and CanSink consumes and logs the filtered frames.
+(
+    tasks: [
+        (
+            id: "can_src",
+            type: "cu_can::CanSource",
+            config: {
+                "interface": "vcan0",
+            },
+        ),
+        (
+            id: "can_filter",
+            type: "cu_can::CanFilter",
+            config: {
+                "accept_id": 0x100,
+                "accept_mask": 0x7FF,
+            },
+        ),
+        (
+            id: "can_sink",
+            type: "cu_can::CanSink",
+            config: {
+                "interface": "vcan0",
+            },
+        ),
+    ],
+    cnx: [
+        (
+            src: "can_src",
+            dst: "can_filter",
+            msg: "cu_automotive_payloads::can::CanFrame",
+        ),
+        (
+            src: "can_filter",
+            dst: "can_sink",
+            msg: "cu_automotive_payloads::can::CanFrame",
+        ),
+    ],
+)
