@@ -13,6 +13,7 @@ description = "ROS2 Payloads that can be constructed from/to Copper Payloads for
 [dependencies]
 compact_str = { workspace = true }
 serde = { workspace = true }
+serde_bytes = { workspace = true }
 cu-sensor-payloads = { workspace = true }
 cu29 = { workspace = true }
 
