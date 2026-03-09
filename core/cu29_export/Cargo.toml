@@ -39,7 +39,7 @@ erased-serde = { version = "0.4", optional = true, default-features = false }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-jsonschema = { version = "0.44", default-features = false }
+jsonschema = { version = "0.45", default-features = false }
 
 [features]
 default = []
