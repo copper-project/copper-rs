@@ -107,6 +107,7 @@ members = [
   "examples/cu_can_example",
   "examples/cu_uds_example",
   "examples/cu_someip_example",
+  "examples/cu_vehicle_sim",
 ]
 
 # put only the core crates here that are not platform specific

@@ -1,0 +1,29 @@
+[package]
+name = "cu-vehicle-sim"
+description = "Toyota TSS2 ADAS vehicle CAN network simulation using Copper automotive stack and DBC signal definitions."
+publish = false
+
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "cu-vehicle-sim"
+path = "src/main.rs"
+
+[dependencies]
+cu29 = { workspace = true }
+cu29-helpers = { workspace = true }
+cu-automotive-payloads = { path = "../../components/payloads/cu_automotive_payloads", version = "0.13.0" }
+serde = { workspace = true }
+
+[dev-dependencies]
+cu-automotive-payloads = { path = "../../components/payloads/cu_automotive_payloads", version = "0.13.0" }
+
+[package.metadata.cargo-shear]
+ignored = ["serde", "cu-automotive-payloads"]

@@ -1,0 +1,34 @@
+// Toyota TSS2 ADAS Vehicle CAN Network Simulation
+//
+// Task graph: ToyotaRadarEcu (source) → CanBusSpy (sink)
+//
+// The radar ECU produces all 34 messages from the DBC file in round-robin order.
+// The bus spy decodes each frame back to physical signal values and validates
+// checksums and counter continuity.
+(
+    tasks: [
+        (
+            id: "radar_ecu",
+            type: "ecu_radar::ToyotaRadarEcu",
+            config: {
+                "active_tracks": 6,
+                "base_speed_kph": 100.0,
+            },
+        ),
+        (
+            id: "bus_spy",
+            type: "bus_spy::CanBusSpy",
+            config: {
+                "verbose": true,
+                "summary_interval": 340,
+            },
+        ),
+    ],
+    cnx: [
+        (
+            src: "radar_ecu",
+            dst: "bus_spy",
+            msg: "cu_automotive_payloads::can::CanFrame",
+        ),
+    ],
+)
