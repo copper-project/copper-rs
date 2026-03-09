@@ -1179,6 +1179,32 @@ mod tests {
         assert!(offset.x > 0);
     }
 
+    #[test]
+    fn resizing_wide_dag_reuses_cached_graph_layout_and_clamps_scroll() {
+        let mut state = NodesScrollableWidgetState::new(wide_test_monitor_model());
+        let initial_area = Rect::new(0, 0, 80, 20);
+        let resized_area = Rect::new(0, 0, 120, 24);
+
+        let initial_content_size = state.ensure_graph_cache(initial_area);
+        let initial_key = state.graph_cache.key;
+
+        state
+            .nodes_scrollable_state
+            .set_offset(Position::new(u16::MAX, u16::MAX));
+        let resized_content_size = state.ensure_graph_cache(resized_area);
+        let offset = state.nodes_scrollable_state.offset();
+        let max_x = resized_content_size
+            .width
+            .saturating_sub(resized_area.width.saturating_sub(1));
+        let max_y = resized_content_size
+            .height
+            .saturating_sub(resized_area.height.saturating_sub(1));
+
+        assert_eq!(resized_content_size, initial_content_size);
+        assert_eq!(state.graph_cache.key, initial_key);
+        assert_eq!(offset, Position::new(max_x, max_y));
+    }
+
     fn test_monitor_model() -> MonitorModel {
         static COMPONENTS: [MonitorComponentMetadata; 3] = [
             MonitorComponentMetadata::new("sensor", ComponentType::Source, Some("Sensor")),
@@ -1497,9 +1523,9 @@ struct DisplayNode {
     outputs: Vec<String>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct GraphCacheKey {
-    area: Size,
+    area: Option<Size>,
     node_count: usize,
     connection_count: usize,
 }
@@ -1534,6 +1560,7 @@ struct NodesScrollableWidgetState {
     nodes_scrollable_state: ScrollViewState,
     graph_cache: GraphCache,
     initial_viewport_pending: bool,
+    last_viewport_area: Option<Size>,
 }
 
 impl NodesScrollableWidgetState {
@@ -1619,6 +1646,7 @@ impl NodesScrollableWidgetState {
             nodes_scrollable_state: ScrollViewState::default(),
             graph_cache: GraphCache::new(),
             initial_viewport_pending: true,
+            last_viewport_area: None,
         }
     }
 
@@ -1627,10 +1655,14 @@ impl NodesScrollableWidgetState {
     }
 
     fn ensure_graph_cache(&mut self, area: Rect) -> Size {
+        let viewport_area: Size = area.into();
         let key = self.graph_cache_key(area);
         if self.graph_cache.needs_rebuild(key) {
             self.rebuild_graph_cache(area, key);
+        } else if self.last_viewport_area != Some(viewport_area) {
+            self.clamp_scroll_offset(area, self.graph_cache.content_size);
         }
+        self.last_viewport_area = Some(viewport_area);
         self.graph_cache.content_size
     }
 
@@ -1643,7 +1675,7 @@ impl NodesScrollableWidgetState {
 
     fn graph_cache_key(&self, area: Rect) -> GraphCacheKey {
         GraphCacheKey {
-            area: area.into(),
+            area: self.display_nodes.is_empty().then_some(area.into()),
             node_count: self.display_nodes.len(),
             connection_count: self.connections.len(),
         }
@@ -1697,6 +1729,7 @@ impl NodesScrollableWidgetState {
         self.graph_cache.content_size = content_size;
         self.graph_cache.key = Some(key);
         self.graph_cache.dirty = false;
+        self.last_viewport_area = Some(area.into());
 
         if self.initial_viewport_pending {
             self.nodes_scrollable_state

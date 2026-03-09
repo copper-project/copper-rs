@@ -100,6 +100,7 @@ pub fn spawn_split_layout(
         UiNode {
             width: Val::Percent(100.0),
             height: Val::Percent(100.0),
+            flex_direction: FlexDirection::Row,
             padding: UiRect::all(Val::Px(style.outer_padding_px)),
             column_gap: Val::Px(style.panel_gap_px),
             ..default()
@@ -120,8 +121,10 @@ pub fn spawn_split_layout(
                 parent
                     .spawn((
                         UiNode {
-                            width: Val::Percent(style.sim_panel_percent),
                             height: Val::Percent(100.0),
+                            min_width: Val::Px(0.0),
+                            flex_basis: Val::Px(0.0),
+                            flex_grow: style.sim_panel_percent,
                             position_type: PositionType::Relative,
                             border: UiRect::all(Val::Px(style.unfocused_border_width_px)),
                             ..default()
@@ -140,8 +143,10 @@ pub fn spawn_split_layout(
                 parent
                     .spawn((
                         UiNode {
-                            width: Val::Percent(style.monitor_panel_percent),
                             height: Val::Percent(100.0),
+                            min_width: Val::Px(0.0),
+                            flex_basis: Val::Px(0.0),
+                            flex_grow: style.monitor_panel_percent,
                             border: UiRect::all(Val::Px(style.unfocused_border_width_px)),
                             padding: UiRect::all(Val::Px(style.monitor_panel_inset_px)),
                             ..default()
