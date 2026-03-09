@@ -219,7 +219,7 @@ impl MonitorUi {
         Self {
             model,
             runtime_node_col_width,
-            active_screen: MonitorScreen::System,
+            active_screen: MonitorScreen::Dag,
             system_info: default_system_info(),
             show_quit_hint: options.show_quit_hint,
             tab_hitboxes: Vec::new(),
@@ -1133,6 +1133,10 @@ impl MonitorUi {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cu29::monitoring::{
+        ComponentType, CopperListInfo, MonitorComponentMetadata, MonitorConnection, MonitorNode,
+        MonitorTopology,
+    };
 
     #[test]
     fn normalize_text_colors_replaces_reset_fg_and_bg() {
@@ -1146,6 +1150,129 @@ mod tests {
         let span = &text.lines[0].spans[0];
         assert_eq!(span.style.fg, Some(palette::FOREGROUND));
         assert_eq!(span.style.bg, Some(palette::BACKGROUND));
+    }
+
+    #[test]
+    fn monitor_ui_starts_on_dag_tab() {
+        let ui = MonitorUi::new(test_monitor_model(), MonitorUiOptions::default());
+
+        assert_eq!(ui.active_screen(), MonitorScreen::Dag);
+    }
+
+    #[test]
+    fn initial_graph_scroll_offset_targets_center_right() {
+        let area = Rect::new(0, 0, 80, 20);
+        let content_size = Size::new(240, 90);
+        let graph_bounds = Size::new(200, 70);
+
+        let offset = initial_graph_scroll_offset(area, content_size, graph_bounds);
+
+        assert_eq!(offset, Position::new(85, 25));
+    }
+
+    #[test]
+    fn first_graph_build_seeds_a_non_zero_horizontal_offset_for_wide_dags() {
+        let mut state = NodesScrollableWidgetState::new(wide_test_monitor_model());
+
+        let content_size = state.ensure_graph_cache(Rect::new(0, 0, 80, 20));
+        let offset = state.nodes_scrollable_state.offset();
+
+        assert!(content_size.width > 80);
+        assert!(offset.x > 0);
+    }
+
+    fn test_monitor_model() -> MonitorModel {
+        static COMPONENTS: [MonitorComponentMetadata; 3] = [
+            MonitorComponentMetadata::new("sensor", ComponentType::Source, Some("Sensor")),
+            MonitorComponentMetadata::new("controller", ComponentType::Task, Some("Controller")),
+            MonitorComponentMetadata::new("actuator", ComponentType::Sink, Some("Actuator")),
+        ];
+
+        let topology = MonitorTopology {
+            nodes: vec![
+                MonitorNode {
+                    id: "sensor".to_string(),
+                    type_name: Some("Sensor".to_string()),
+                    kind: ComponentType::Source,
+                    inputs: Vec::new(),
+                    outputs: vec!["imu".to_string()],
+                },
+                MonitorNode {
+                    id: "controller".to_string(),
+                    type_name: Some("Controller".to_string()),
+                    kind: ComponentType::Task,
+                    inputs: vec!["imu".to_string()],
+                    outputs: vec!["cmd".to_string()],
+                },
+                MonitorNode {
+                    id: "actuator".to_string(),
+                    type_name: Some("Actuator".to_string()),
+                    kind: ComponentType::Sink,
+                    inputs: vec!["cmd".to_string()],
+                    outputs: Vec::new(),
+                },
+            ],
+            connections: Vec::new(),
+        };
+
+        MonitorModel::from_parts(&COMPONENTS, CopperListInfo::new(0, 0), topology)
+    }
+
+    fn wide_test_monitor_model() -> MonitorModel {
+        static COMPONENTS: [MonitorComponentMetadata; 6] = [
+            MonitorComponentMetadata::new("source", ComponentType::Source, Some("Source")),
+            MonitorComponentMetadata::new("estimator", ComponentType::Task, Some("Estimator")),
+            MonitorComponentMetadata::new("planner", ComponentType::Task, Some("Planner")),
+            MonitorComponentMetadata::new("controller", ComponentType::Task, Some("Controller")),
+            MonitorComponentMetadata::new("mixer", ComponentType::Task, Some("Mixer")),
+            MonitorComponentMetadata::new("actuator", ComponentType::Sink, Some("Actuator")),
+        ];
+
+        let ids = [
+            "source",
+            "estimator",
+            "planner",
+            "controller",
+            "mixer",
+            "actuator",
+        ];
+        let nodes = ids
+            .iter()
+            .map(|id| MonitorNode {
+                id: (*id).to_string(),
+                type_name: Some(id.to_string()),
+                kind: if *id == "source" {
+                    ComponentType::Source
+                } else if *id == "actuator" {
+                    ComponentType::Sink
+                } else {
+                    ComponentType::Task
+                },
+                inputs: if *id == "source" {
+                    Vec::new()
+                } else {
+                    vec!["in".to_string()]
+                },
+                outputs: if *id == "actuator" {
+                    Vec::new()
+                } else {
+                    vec!["out".to_string()]
+                },
+            })
+            .collect();
+        let connections = ids
+            .windows(2)
+            .map(|pair| MonitorConnection {
+                src: pair[0].to_string(),
+                src_port: Some("out".to_string()),
+                dst: pair[1].to_string(),
+                dst_port: Some("in".to_string()),
+                msg: "msg".to_string(),
+            })
+            .collect();
+        let topology = MonitorTopology { nodes, connections };
+
+        MonitorModel::from_parts(&COMPONENTS, CopperListInfo::new(0, 0), topology)
     }
 }
 
@@ -1408,6 +1535,7 @@ struct NodesScrollableWidgetState {
     status_index_map: Vec<Option<ComponentId>>,
     nodes_scrollable_state: ScrollViewState,
     graph_cache: GraphCache,
+    initial_viewport_pending: bool,
 }
 
 impl NodesScrollableWidgetState {
@@ -1492,6 +1620,7 @@ impl NodesScrollableWidgetState {
             status_index_map,
             nodes_scrollable_state: ScrollViewState::default(),
             graph_cache: GraphCache::new(),
+            initial_viewport_pending: true,
         }
     }
 
@@ -1564,12 +1693,24 @@ impl NodesScrollableWidgetState {
             Size::new(desired_width, desired_height)
         };
 
-        self.graph_cache.graph = Some(self.build_graph(content_size));
+        let graph = self.build_graph(content_size);
+        let graph_bounds = graph.content_bounds();
+        self.graph_cache.graph = Some(graph);
         self.graph_cache.content_size = content_size;
         self.graph_cache.key = Some(key);
         self.graph_cache.dirty = false;
 
-        self.clamp_scroll_offset(area, content_size);
+        if self.initial_viewport_pending {
+            self.nodes_scrollable_state
+                .set_offset(initial_graph_scroll_offset(
+                    area,
+                    content_size,
+                    graph_bounds,
+                ));
+            self.initial_viewport_pending = false;
+        } else {
+            self.clamp_scroll_offset(area, content_size);
+        }
     }
 
     fn build_node_layouts(&self) -> Vec<NodeLayout<'static>> {
@@ -1618,6 +1759,8 @@ const NODE_META_LINES: usize = 2;
 const NODE_PORT_ROW_OFFSET: usize = NODE_META_LINES;
 const GRAPH_WIDTH_PADDING: u16 = NODE_WIDTH * 2;
 const GRAPH_HEIGHT_PADDING: u16 = NODE_HEIGHT * 4;
+const INITIAL_GRAPH_FOCUS_X_NUMERATOR: u32 = 5;
+const INITIAL_GRAPH_FOCUS_X_DENOMINATOR: u32 = 8;
 
 fn clip_tail(value: &str, max_chars: usize) -> String {
     if max_chars == 0 {
@@ -1634,6 +1777,23 @@ fn clip_tail(value: &str, max_chars: usize) -> String {
         .map(|(idx, _)| idx)
         .unwrap_or(value.len());
     value[start..].to_string()
+}
+
+fn initial_graph_scroll_offset(area: Rect, content_size: Size, graph_bounds: Size) -> Position {
+    let max_x = content_size
+        .width
+        .saturating_sub(area.width.saturating_sub(1));
+    let max_y = content_size
+        .height
+        .saturating_sub(area.height.saturating_sub(1));
+    let focus_x = (((graph_bounds.width as u32) * INITIAL_GRAPH_FOCUS_X_NUMERATOR)
+        / INITIAL_GRAPH_FOCUS_X_DENOMINATOR) as u16;
+    let focus_y = graph_bounds.height / 2;
+
+    Position::new(
+        focus_x.saturating_sub(area.width / 2).min(max_x),
+        focus_y.saturating_sub(area.height / 2).min(max_y),
+    )
 }
 
 impl StatefulWidget for NodesScrollableWidget<'_> {
