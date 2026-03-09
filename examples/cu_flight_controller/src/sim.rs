@@ -407,7 +407,7 @@ const ARM_SWITCH_NAMES: &[&str] = &["sf", "se", "arm", "btn1"];
 // With the corrected 0.44 kg sim mass and 10% airmode idle, hover is about 0.48.
 // Keep keyboard idle slightly below hover so release-to-descend works again.
 const KEYBOARD_HOVER_THROTTLE_LOW: f32 = 0.47;
-const KEYBOARD_HOVER_THROTTLE_HIGH: f32 = 0.50;
+const KEYBOARD_HOVER_THROTTLE_HIGH: f32 = 0.52;
 
 fn spawn_rotation() -> Quat {
     Quat::from_rotation_y(SIM_SPAWN_YAW_DEG.to_radians())
@@ -1118,8 +1118,8 @@ fn spawn_help_overlay(
                     ..default()
                 },
                 Pickable::IGNORE,
-                bevy::ui::BackgroundColor(Color::srgba(0.25, 0.41, 0.88, 0.7)),
-                bevy::ui::BorderColor::all(Color::srgba(0.8, 0.8, 0.8, 0.7)),
+                bevy::ui::BackgroundColor(Color::srgba(0.03, 0.05, 0.09, 0.94)),
+                bevy::ui::BorderColor::all(Color::srgba(0.58, 0.74, 0.96, 0.95)),
             ))
             .with_children(|help| {
                 help.spawn((
@@ -1129,7 +1129,7 @@ fn spawn_help_overlay(
                         font_size: 12.0,
                         ..default()
                     },
-                    TextColor(Color::srgba(0.25, 0.25, 0.75, 1.0)),
+                    TextColor(Color::srgb(0.78, 0.86, 0.96)),
                 ));
 
                 help.spawn((
