@@ -4,7 +4,7 @@ use cu29::prelude::*;
 use std::process::{Command, Output};
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const MONITORED_COMPONENTS: &[MonitorComponentMetadata] = &[
     MonitorComponentMetadata::new("planner", ComponentType::Task, None),
@@ -12,6 +12,9 @@ const MONITORED_COMPONENTS: &[MonitorComponentMetadata] = &[
 ];
 const CULIST_COMPONENT_MAPPING: &[ComponentId] = &[ComponentId::new(0)];
 const CHILD_MODE_ENV: &str = "CU_SAFETYMON_CHILD_MODE";
+const STOP_RACE_WATCHDOG_PERIOD_MS: u64 = 1_000;
+const STOP_RACE_SLEEP_MS: u64 = 5;
+const STOP_RACE_MAX_CHILD_RUNTIME_MS: u64 = 900;
 
 fn monitor_metadata(
     config: &CuConfig,
@@ -228,27 +231,37 @@ fn lock_fault_exits_with_configured_code_and_last_marker() {
 fn stop_does_not_trigger_lock_fault_after_shutdown_requested() {
     if std::env::var(CHILD_MODE_ENV).ok().as_deref() == Some("stop-race") {
         for _ in 0..10 {
-            let cfg = safetymon_test_config_with_timing(10, 100, 79, 80);
+            // Keep a wide watchdog period so this only fails if `stop()` does not
+            // promptly wake the watchdog, not because CI delayed the main thread.
+            let cfg = safetymon_test_config_with_timing(10, STOP_RACE_WATCHDOG_PERIOD_MS, 79, 80);
             let probe = Arc::new(RuntimeExecutionProbe::default());
             let (metadata, runtime) = monitor_metadata(&cfg, Some(probe));
             let mut monitor = CuSafetyMon::new(metadata, runtime).expect("safetymon new");
             let (ctx, _clock_control) = CuContext::new_mock_clock();
             monitor.start(&ctx).expect("safetymon start");
-            thread::sleep(Duration::from_millis(20));
+            thread::sleep(Duration::from_millis(STOP_RACE_SLEEP_MS));
             monitor.stop(&ctx).expect("safetymon stop");
         }
         return;
     }
 
+    let started = Instant::now();
     let output = spawn_current_test(
         "stop_does_not_trigger_lock_fault_after_shutdown_requested",
         "stop-race",
     );
+    let elapsed = started.elapsed();
     assert_eq!(
         output.status.code(),
         Some(0),
         "unexpected stop-race child exit status: {:?}\nstderr:\n{}",
         output.status,
         String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        elapsed < Duration::from_millis(STOP_RACE_MAX_CHILD_RUNTIME_MS),
+        "stop-race child took {:?}; expected stop to wake a parked watchdog well before {}ms",
+        elapsed,
+        STOP_RACE_WATCHDOG_PERIOD_MS
     );
 }
