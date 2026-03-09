@@ -140,11 +140,9 @@ impl CuLogMon {
             return None;
         }
 
-        let rate_x10 = if elapsed_ns > 0 {
-            (state.window_copperlists as u64 * 10 * 1_000_000_000u64) / elapsed_ns
-        } else {
-            0
-        };
+        let rate_x10 = (state.window_copperlists as u64 * 10 * 1_000_000_000u64)
+            .checked_div(elapsed_ns)
+            .unwrap_or(0);
 
         let top4_max_entries = find_top_components_by_max(&state.per_component, 4);
         let mut top4 = String::new();

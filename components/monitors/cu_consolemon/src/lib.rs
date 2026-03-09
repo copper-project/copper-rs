@@ -207,10 +207,8 @@ impl UI {
 
             if event::poll(Duration::from_millis(50))? {
                 match event::read()? {
-                    Event::Key(key) => {
-                        if self.handle_key(key.code) {
-                            break;
-                        }
+                    Event::Key(key) if self.handle_key(key.code) => {
+                        break;
                     }
                     Event::Mouse(mouse) => self.handle_mouse_event(mouse),
                     Event::Resize(_, _) => self.monitor_ui.mark_graph_dirty(),

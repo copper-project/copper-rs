@@ -404,7 +404,7 @@ fn build_graph_signature(graph: &CuGraph, mission: Option<&str>) -> String {
     parts.push(format!("mission={}", mission.unwrap_or("default")));
 
     let mut nodes: Vec<_> = graph.get_all_nodes();
-    nodes.sort_by(|a, b| a.1.get_id().cmp(&b.1.get_id()));
+    nodes.sort_by_key(|a| a.1.get_id());
     for (_, node) in nodes {
         parts.push(format!(
             "node|{}|{}|{}",
