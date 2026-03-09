@@ -122,6 +122,9 @@ just bevy
 
 # Run the split BevyMon simulator in the browser
 just web
+
+# Build a deployable browser bundle into dist/
+just web-dist
 ```
 
 The split BevyMon path reuses the same `cu_bevymon::spawn_split_layout(...)` shell as

@@ -123,7 +123,7 @@ impl Default for SimRcInput {
             yaw: 0.0,
             throttle: 0.0,
             armed: false,
-            mode: messages::FlightMode::Angle,
+            mode: messages::FlightMode::Acro,
         }
     }
 }
@@ -391,22 +391,10 @@ const MAX_OMEGA_RAD_S: f32 = 2200.0;
 const WORLD_MAG_FIELD_UT: [f32; 3] = [0.0, -45.0, -20.0];
 #[cfg(not(target_arch = "wasm32"))]
 const BASE_ASSETS_URL: &str = "https://cdn.copper-robotics.com/";
-#[cfg(not(target_arch = "wasm32"))]
 const SKYBOX: &str = "skybox.ktx2";
-#[cfg(not(target_arch = "wasm32"))]
 const SPECULAR_MAP: &str = "specular_map.ktx2";
-#[cfg(not(target_arch = "wasm32"))]
 const QUADCOPTER: &str = "quadcopter.glb";
-#[cfg(not(target_arch = "wasm32"))]
 const CITY: &str = "city-fixed.glb";
-#[cfg(target_arch = "wasm32")]
-const WEB_SKYBOX: &str = "skybox.web.ktx2";
-#[cfg(target_arch = "wasm32")]
-const WEB_SPECULAR_MAP: &str = "specular_map.web.ktx2";
-#[cfg(target_arch = "wasm32")]
-const WEB_QUADCOPTER: &str = "quadcopter.web.glb";
-#[cfg(target_arch = "wasm32")]
-const WEB_CITY: &str = "city-fixed.web.glb";
 // Measured from `gltf-transform inspect city.glb` in source model units.
 const LOCAL_CITY_BBOX_MIN_UNITS: Vec3 = Vec3::new(-30_614.165, -648.2196, -4_185.883);
 const LOCAL_CITY_BBOX_MAX_UNITS: Vec3 = Vec3::new(18_754.953, 11_102.407, 35_871.875);
@@ -419,10 +407,16 @@ const ARM_SWITCH_NAMES: &[&str] = &["sf", "se", "arm", "btn1"];
 // With the corrected 0.44 kg sim mass and 10% airmode idle, hover is about 0.48.
 // Keep keyboard idle slightly below hover so release-to-descend works again.
 const KEYBOARD_HOVER_THROTTLE_LOW: f32 = 0.47;
-const KEYBOARD_HOVER_THROTTLE_HIGH: f32 = 0.50;
+const KEYBOARD_HOVER_THROTTLE_HIGH: f32 = 0.52;
 
 fn spawn_rotation() -> Quat {
     Quat::from_rotation_y(SIM_SPAWN_YAW_DEG.to_radians())
+}
+
+fn init_keyboard_rc(rc_input: &mut SimRcInput) {
+    rc_input.mode = messages::FlightMode::Acro;
+    rc_input.armed = false;
+    rc_input.throttle = 0.0;
 }
 
 fn spawn_pose_components() -> (
@@ -748,13 +742,13 @@ fn setup_world(
     let city_path = precached_asset_path(&online_cache, &offline_cache, CITY)
         .expect("failed to get city.glb (online or cached)");
     #[cfg(target_arch = "wasm32")]
-    let quadcopter_path = WEB_QUADCOPTER;
+    let quadcopter_path = QUADCOPTER;
     #[cfg(target_arch = "wasm32")]
-    let skybox_path = WEB_SKYBOX;
+    let skybox_path = SKYBOX;
     #[cfg(target_arch = "wasm32")]
-    let specular_map_path = WEB_SPECULAR_MAP;
+    let specular_map_path = SPECULAR_MAP;
     #[cfg(target_arch = "wasm32")]
-    let city_path = WEB_CITY;
+    let city_path = CITY;
 
     let city_size_units = LOCAL_CITY_BBOX_MAX_UNITS - LOCAL_CITY_BBOX_MIN_UNITS;
     let city_size_m = city_size_units * LOCAL_CITY_SCALE;
@@ -1124,8 +1118,8 @@ fn spawn_help_overlay(
                     ..default()
                 },
                 Pickable::IGNORE,
-                bevy::ui::BackgroundColor(Color::srgba(0.25, 0.41, 0.88, 0.7)),
-                bevy::ui::BorderColor::all(Color::srgba(0.8, 0.8, 0.8, 0.7)),
+                bevy::ui::BackgroundColor(Color::srgba(0.03, 0.05, 0.09, 0.94)),
+                bevy::ui::BorderColor::all(Color::srgba(0.58, 0.74, 0.96, 0.95)),
             ))
             .with_children(|help| {
                 help.spawn((
@@ -1135,7 +1129,7 @@ fn spawn_help_overlay(
                         font_size: 12.0,
                         ..default()
                     },
-                    TextColor(Color::srgba(0.25, 0.25, 0.75, 1.0)),
+                    TextColor(Color::srgb(0.78, 0.86, 0.96)),
                 ));
 
                 help.spawn((
@@ -1172,11 +1166,9 @@ fn setup_joystick(
         }
         Err(err) => {
             *rc_source = RcInputSource::Keyboard;
-            rc_input.mode = messages::FlightMode::Angle;
-            rc_input.armed = true;
-            rc_input.throttle = KEYBOARD_HOVER_THROTTLE_LOW;
+            init_keyboard_rc(&mut rc_input);
             info!(
-                "sim rc: joystick unavailable ({}), using keyboard controls (auto-armed, hover throttle) (set CU_SIM_ALLOW_GENERIC_JOYSTICK=1 to allow non-radio joysticks)",
+                "sim rc: joystick unavailable ({}), using keyboard controls (disarmed start, Space arms Angle mode) (set CU_SIM_ALLOW_GENERIC_JOYSTICK=1 to allow non-radio joysticks)",
                 err.to_string()
             );
             joystick_state.reader = None;
@@ -1187,10 +1179,8 @@ fn setup_joystick(
 #[cfg(target_arch = "wasm32")]
 fn setup_joystick(mut rc_input: ResMut<SimRcInput>, mut rc_source: ResMut<RcInputSource>) {
     *rc_source = RcInputSource::Keyboard;
-    rc_input.mode = messages::FlightMode::Angle;
-    rc_input.armed = true;
-    rc_input.throttle = KEYBOARD_HOVER_THROTTLE_LOW;
-    info!("sim rc: web build using keyboard controls");
+    init_keyboard_rc(&mut rc_input);
+    info!("sim rc: web build using keyboard controls (disarmed start, Space arms Angle mode)");
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1221,9 +1211,7 @@ fn poll_joystick(
             );
             joystick.reader = None;
             *rc_source = RcInputSource::Keyboard;
-            rc_input.mode = messages::FlightMode::Angle;
-            rc_input.armed = true;
-            rc_input.throttle = KEYBOARD_HOVER_THROTTLE_LOW;
+            init_keyboard_rc(&mut rc_input);
         }
     }
 }
@@ -1318,13 +1306,14 @@ fn update_rc_input_keyboard(
     if keyboard.just_pressed(KeyCode::Digit3) {
         rc_input.mode = messages::FlightMode::PositionHold;
     }
+    if keyboard.just_pressed(KeyCode::Space) && !rc_input.armed {
+        rc_input.armed = true;
+        rc_input.mode = messages::FlightMode::Angle;
+        info!("sim rc: keyboard armed in Angle mode");
+    }
 
     if keyboard.just_pressed(KeyCode::KeyT) {
         rc_input.armed = !rc_input.armed;
-        if rc_input.armed {
-            // Keyboard arming should start in a safe stabilized mode.
-            rc_input.mode = messages::FlightMode::Angle;
-        }
         info!("sim rc: armed={} mode={:?}", rc_input.armed, rc_input.mode);
     }
 }
@@ -1345,12 +1334,18 @@ fn adjust_keyboard_throttle(
         return;
     }
 
+    if !rc_input.armed {
+        rc_input.throttle = 0.0;
+        return;
+    }
+
     // Keyboard mode is a simple "descend a bit / climb a bit" control around hover.
-    rc_input.throttle = if keyboard.pressed(KeyCode::Space) {
-        KEYBOARD_HOVER_THROTTLE_HIGH
-    } else {
-        KEYBOARD_HOVER_THROTTLE_LOW
-    };
+    rc_input.throttle =
+        if keyboard.pressed(KeyCode::Space) && !keyboard.just_pressed(KeyCode::Space) {
+            KEYBOARD_HOVER_THROTTLE_HIGH
+        } else {
+            KEYBOARD_HOVER_THROTTLE_LOW
+        };
 }
 
 fn reset_vehicle(
@@ -1367,6 +1362,8 @@ fn reset_vehicle(
     >,
     mut motors: ResMut<SimMotorCommands>,
     mut kin: ResMut<SimKinematics>,
+    rc_source: Res<RcInputSource>,
+    mut rc_input: ResMut<SimRcInput>,
     _layout: Res<WorldLayout>,
     #[cfg(feature = "bevymon")] focus: Option<Res<CuBevyMonFocus>>,
 ) {
@@ -1393,6 +1390,11 @@ fn reset_vehicle(
 
     motors.dshot = [0; 4];
     kin.prev_linear_velocity = None;
+
+    if *rc_source == RcInputSource::Keyboard {
+        init_keyboard_rc(&mut rc_input);
+        info!("sim rc: reset to disarmed keyboard start");
+    }
 }
 
 fn sync_vehicle_state(
@@ -1678,7 +1680,7 @@ fn update_help_overlay(
 
     let values = match *rc_source {
         RcInputSource::Keyboard => format!(
-            "{view_label}\nNot connected (plug RC via USB/BT)\nT\n1=Acro 2=Angle 3=PosHold\nSpace (boost)\nWASD\nQ / E\nR"
+            "{view_label}\nNot connected (plug RC via USB/BT)\nT\n1=Acro 2=Angle 3=PosHold\nSpace (arm Angle / climb)\nWASD\nQ / E\nR"
         ),
         RcInputSource::Joystick => {
             #[cfg(not(target_arch = "wasm32"))]
@@ -1695,7 +1697,7 @@ fn update_help_overlay(
             #[cfg(target_arch = "wasm32")]
             {
                 format!(
-                    "{view_label}\nWeb build keyboard mode\nT\n1=Acro 2=Angle 3=PosHold\nSpace (boost)\nWASD\nQ / E\nR"
+                    "{view_label}\nWeb build keyboard mode\nT\n1=Acro 2=Angle 3=PosHold\nSpace (arm Angle / climb)\nWASD\nQ / E\nR"
                 )
             }
         }
