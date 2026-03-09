@@ -99,7 +99,7 @@ pub fn dump_type_registry_schema(registry: &TypeRegistry) -> String {
         })
         .collect();
 
-    entries.sort_by(|(left, _), (right, _)| left.cmp(right));
+    entries.sort_by_key(|(left, _)| *left);
 
     let mut dump = String::new();
     for (type_path, info_dump) in entries {

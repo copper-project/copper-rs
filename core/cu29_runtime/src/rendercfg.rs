@@ -1253,7 +1253,7 @@ fn reorder_input_rows(table: &mut TableNode, order: &HashMap<String, usize>) {
     if inputs.len() <= 1 {
         return;
     }
-    inputs.sort_by(|a, b| a.0.cmp(&b.0));
+    inputs.sort_by_key(|a| a.0);
     let mut new_rows = Vec::with_capacity(input_rows.len());
     new_rows.push(header);
     for (_, row) in inputs {
@@ -4138,7 +4138,7 @@ fn build_graph_signature(config: &config::CuConfig, mission: Option<&str>) -> Cu
     parts.push(format!("mission={}", mission.unwrap_or("default")));
 
     let mut nodes: Vec<_> = graph.get_all_nodes();
-    nodes.sort_by(|a, b| a.1.get_id().cmp(&b.1.get_id()));
+    nodes.sort_by_key(|a| a.1.get_id());
     for (_, node) in nodes {
         parts.push(format!(
             "node|{}|{}|{}",

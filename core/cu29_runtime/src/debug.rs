@@ -412,12 +412,10 @@ where
             .ok_or_else(|| CuError::from("Requested culistid not present in log"))?;
         let start_idx = self.sections[section_idx].start_idx;
         let section = self.load_section(section_idx)?;
-        let mut idx = start_idx;
-        for cl in &section.entries {
+        for (offset, cl) in section.entries.iter().enumerate() {
             if cl.id == culistid {
-                return Ok(idx);
+                return Ok(start_idx + offset);
             }
-            idx += 1;
         }
         Err(CuError::from("culistid not found inside indexed section"))
     }

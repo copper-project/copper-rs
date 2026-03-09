@@ -315,7 +315,7 @@ fn get_upstream(conns: &[Connection], idx_node: usize) -> Vec<Connection> {
         .filter(|ea| ea.to_node == idx_node)
         .copied()
         .collect();
-    upstream.sort_by(|a, b| a.to_port.cmp(&b.to_port));
+    upstream.sort_by_key(|a| a.to_port);
     upstream
 }
 
@@ -326,7 +326,7 @@ fn get_downstream(conns: &[Connection], idx_node: usize) -> Vec<Connection> {
         .filter(|ea| ea.from_node == idx_node)
         .copied()
         .collect();
-    downstream.sort_by(|a, b| a.from_port.cmp(&b.from_port));
+    downstream.sort_by_key(|a| a.from_port);
     downstream
 }
 

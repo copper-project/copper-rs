@@ -271,10 +271,8 @@ impl MonitorUi {
                     self.active_screen = screen;
                 } else {
                     match key {
-                        'r' => {
-                            if self.active_screen == MonitorScreen::Latency {
-                                self.model.reset_latency();
-                            }
+                        'r' if self.active_screen == MonitorScreen::Latency => {
+                            self.model.reset_latency();
                         }
                         'j' => self.scroll(ScrollDirection::Down, 1),
                         'k' => self.scroll(ScrollDirection::Up, 1),
