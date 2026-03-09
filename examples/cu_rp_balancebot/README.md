@@ -42,7 +42,7 @@ $ cd examples/cu_rp_balancebot
 $ just web-dist
 ```
 
-This writes a relocatable static Trunk bundle into `dist/` with stable filenames.
+This writes a relocatable static Trunk bundle into `dist/balancebot/` with hashed asset filenames.
 
 ## To run the resimulation
 
@@ -86,7 +86,7 @@ $ cargo run --bin balancebot-logreader --release
 
 - `just bevy` — run the split-view Bevy sim with `cu_bevymon`.
 - `just web` — serve the split-view wasm demo with Trunk.
-- `just web-dist` — build a deployable static wasm bundle into `dist/`.
+- `just web-dist` — build a deployable static wasm bundle into `dist/balancebot/`.
 - `just balancebot-dump-text-logs` — extract human-readable logs from `logs/balance.copper` into `../../target/debug/cu29_log_index/strings.bin`.
 - `just balancebot-fsck` — integrity check of `logs/balance.copper`.
 - `just balancebot-set-pwm-permissions` — fix PWM sysfs permissions on the target (requires appropriate privileges).

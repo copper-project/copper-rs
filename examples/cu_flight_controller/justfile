@@ -59,7 +59,7 @@ web:
   just prepare-assets
   trunk serve --open
 
-# Build a static browser bundle into dist/ with stable filenames.
+# Build a static browser bundle into dist/flight-controller with hashed asset filenames.
 web-dist:
   #!/usr/bin/env bash
   set -euo pipefail
@@ -69,12 +69,9 @@ web-dist:
   fi
   cd "{{invocation_directory()}}"
   just prepare-assets
-  rm -rf dist
-  trunk build --release --public-url ./ --filehash false --dist dist
-  # Trunk 0.17 emits /./asset paths here; normalize them so the dist tree is
-  # relocatable and can be served from any subdirectory.
-  sed -i 's#/\./#./#g' dist/index.html
-  echo "Static web bundle written to ${PWD}/dist"
+  rm -rf dist/flight-controller
+  trunk build --release --public-url ./ --dist dist/flight-controller
+  echo "Static web bundle written to ${PWD}/dist/flight-controller"
 
 # Extract CopperLists from a log file (JSON export).
 logreader log="logs/flight_controller_sim.copper":
