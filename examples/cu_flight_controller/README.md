@@ -123,7 +123,7 @@ just bevy
 # Run the split BevyMon simulator in the browser
 just web
 
-# Build a deployable browser bundle into dist/
+# Build a deployable browser bundle into dist/flight-controller with hashed asset filenames
 just web-dist
 ```
 
