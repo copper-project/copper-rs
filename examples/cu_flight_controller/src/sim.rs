@@ -92,6 +92,7 @@ impl Default for SimVehicleState {
 struct CopperState<T: Send + Sync + 'static> {
     _runtime_state: T,
     clock: RobotClock,
+    clock_mock: RobotClockMock,
     app: gnss::FlightControllerSim,
 }
 
@@ -600,9 +601,14 @@ fn setup_copper(mut commands: Commands) {
         fs::create_dir_all(parent).expect("failed to create logs directory");
     }
 
-    let ctx = basic_copper_setup(&PathBuf::from(logger_path), LOG_SLAB_SIZE, true, None)
-        .expect("failed to setup logger");
-    let clock = ctx.clock.clone();
+    let (clock, clock_mock) = RobotClock::mock();
+    let ctx = basic_copper_setup(
+        &PathBuf::from(logger_path),
+        LOG_SLAB_SIZE,
+        true,
+        Some(clock.clone()),
+    )
+    .expect("failed to setup logger");
 
     let mut app = gnss::FlightControllerSimBuilder::new()
         .with_context(&ctx)
@@ -616,6 +622,7 @@ fn setup_copper(mut commands: Commands) {
     commands.insert_resource(CopperState {
         _runtime_state: ctx,
         clock,
+        clock_mock,
         app,
     });
 }
@@ -626,7 +633,7 @@ fn build_bevymon_copper() -> (MonitorModel, CopperState<LoggerRuntime>) {
     const LOG_SLAB_SIZE: Option<usize> = Some(128 * 1024 * 1024);
     const STRUCTURED_LOG_SECTION_SIZE: usize = 4096 * 10;
 
-    let clock = RobotClock::default();
+    let (clock, clock_mock) = RobotClock::mock();
     let unified_logger = build_unified_logger(LOG_SLAB_SIZE).expect("failed to create logger");
     let logger_runtime =
         init_logger_runtime(&clock, unified_logger.clone(), STRUCTURED_LOG_SECTION_SIZE)
@@ -648,6 +655,7 @@ fn build_bevymon_copper() -> (MonitorModel, CopperState<LoggerRuntime>) {
         CopperState {
             _runtime_state: logger_runtime,
             clock,
+            clock_mock,
             app,
         },
     )
@@ -1434,12 +1442,16 @@ fn sync_vehicle_state(
 
 fn run_copper<T: Send + Sync + 'static>(
     mut copper: ResMut<CopperState<T>>,
+    physics_time: Res<Time<Physics>>,
     sim_state: Res<SimState>,
     rc_input: Res<SimRcInput>,
     mut motor_commands: ResMut<SimMotorCommands>,
     mut osd_overlay: ResMut<SimOsdOverlay>,
     mut exit_writer: MessageWriter<AppExit>,
 ) {
+    copper
+        .clock_mock
+        .set_value(physics_time.elapsed().as_nanos() as u64);
     let vehicle = sim_state.vehicle.clone();
     let rc = rc_input.clone();
     sim_support::sim_battery_set_armed(rc.armed);
