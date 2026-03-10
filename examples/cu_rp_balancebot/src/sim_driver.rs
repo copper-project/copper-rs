@@ -25,6 +25,7 @@ use std::sync::{Arc, Mutex};
 pub struct CopperSim<T: Send + Sync + 'static> {
     _runtime_state: T,
     clock: RobotClock,
+    clock_mock: RobotClockMock,
     copper_app: crate::BalanceBotSim,
 }
 
@@ -66,10 +67,7 @@ pub fn setup_native_copper(mut commands: Commands) {
         fs::create_dir_all(parent).expect("Failed to create logs directory");
     }
 
-    eprintln!(
-        "[WARNING] BalanceBot sim using real RobotClock; revert when sim clock driving is fixed."
-    );
-    let robot_clock = RobotClock::new();
+    let (robot_clock, robot_clock_mock) = RobotClock::mock();
     let copper_ctx = basic_copper_setup(
         &PathBuf::from(logger_path),
         LOG_SLAB_SIZE,
@@ -95,6 +93,7 @@ pub fn setup_native_copper(mut commands: Commands) {
     commands.insert_resource(CopperSim {
         _runtime_state: copper_ctx,
         clock: robot_clock,
+        clock_mock: robot_clock_mock,
         copper_app,
     });
     commands.insert_resource(LastCopperTick::default());
@@ -106,12 +105,7 @@ pub fn build_bevymon_copper() -> (MonitorModel, CopperSim<LoggerRuntime>) {
     const LOG_SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);
     const STRUCTURED_LOG_SECTION_SIZE: usize = 4096 * 10;
 
-    #[cfg(not(target_arch = "wasm32"))]
-    eprintln!(
-        "[WARNING] BalanceBot sim using real RobotClock; revert when sim clock driving is fixed."
-    );
-
-    let clock = RobotClock::new();
+    let (clock, clock_mock) = RobotClock::mock();
     let unified_logger = build_unified_logger(LOG_SLAB_SIZE).expect("Failed to create logger.");
     let logger_runtime =
         init_logger_runtime(&clock, unified_logger.clone(), STRUCTURED_LOG_SECTION_SIZE)
@@ -134,6 +128,7 @@ pub fn build_bevymon_copper() -> (MonitorModel, CopperSim<LoggerRuntime>) {
         CopperSim {
             _runtime_state: logger_runtime,
             clock,
+            clock_mock,
             copper_app,
         },
     )
@@ -216,6 +211,7 @@ pub fn run_copper_callback<T: Send + Sync + 'static>(
         return;
     }
     last_tick.0 = Some(current_time);
+    copper_ctx.clock_mock.set_value(current_time);
 
     let clock = copper_ctx.clock.clone();
     let mut sim_callback = move |step: crate::default::SimStep| -> SimOverride {
