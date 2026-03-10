@@ -55,6 +55,20 @@ pub fn default_callback(step: crate::default::SimStep) -> SimOverride {
     }
 }
 
+fn set_msg_timing<T: CuMsgPayload>(clock: &RobotClock, msg: &mut CuMsg<T>) {
+    let tov = clock.now();
+    let perf = cu29::curuntime::perf_now(clock);
+    msg.tov = tov.into();
+    msg.metadata.process_time.start = perf.into();
+    msg.metadata.process_time.end = perf.into();
+}
+
+fn set_process_timing<T: CuMsgPayload>(clock: &RobotClock, msg: &mut CuMsg<T>) {
+    let perf = cu29::curuntime::perf_now(clock);
+    msg.metadata.process_time.start = perf.into();
+    msg.metadata.process_time.end = perf.into();
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg_attr(feature = "bevymon", allow(dead_code))]
 pub fn setup_native_copper(mut commands: Commands) {
@@ -228,11 +242,8 @@ pub fn run_copper_callback<T: Send + Sync + 'static>(
                 }
 
                 let analog_value = (angle_radians / (2.0 * std::f32::consts::PI) * 4096.0) as u16;
-                let now = clock.now();
                 output.set_payload(ADSReadingPayload { analog_value });
-                output.tov = now.into();
-                output.metadata.process_time.start = now.into();
-                output.metadata.process_time.end = now.into();
+                set_msg_timing(&clock, output);
                 SimOverride::ExecutedBySim
             }
             crate::default::SimStep::Balpos(_) => SimOverride::ExecutedBySim,
@@ -241,11 +252,8 @@ pub fn run_copper_callback<T: Send + Sync + 'static>(
                 let (cart_transform, _, _) =
                     bindings.single_mut().expect("Failed to get cart transform");
                 let ticks = (cart_transform.translation.x * 2000.0) as i32;
-                let now = clock.now();
                 output.set_payload(EncoderPayload { ticks });
-                output.tov = now.into();
-                output.metadata.process_time.start = now.into();
-                output.metadata.process_time.end = now.into();
+                set_msg_timing(&clock, output);
                 SimOverride::ExecutedBySim
             }
             crate::default::SimStep::Railpos(_) => SimOverride::ExecutedBySim,
@@ -255,7 +263,6 @@ pub fn run_copper_callback<T: Send + Sync + 'static>(
                     bindings.single_mut().expect("Failed to get cart force");
                 let maybe_motor_actuation = input.payload();
                 let override_motor = drag_state.override_motor;
-                let now = clock.now();
                 if override_motor {
                     if let Some(motor_actuation) = maybe_motor_actuation
                         && !motor_actuation.power.get::<ratio>().is_nan()
@@ -269,15 +276,13 @@ pub fn run_copper_callback<T: Send + Sync + 'static>(
                             .metadata
                             .set_status(format!("Applied force: {force_magnitude}"));
                     }
-                    output.metadata.process_time.start = now.into();
-                    output.metadata.process_time.end = now.into();
+                    set_process_timing(&clock, output);
                     return SimOverride::ExecutedBySim;
                 }
                 if let Some(motor_actuation) = maybe_motor_actuation {
                     if motor_actuation.power.get::<ratio>().is_nan() {
                         cart_force.0 = Vector::ZERO;
-                        output.metadata.process_time.start = now.into();
-                        output.metadata.process_time.end = now.into();
+                        set_process_timing(&clock, output);
                         return SimOverride::ExecutedBySim;
                     }
                     let total_mass = motor_model::total_mass_kg();
@@ -291,13 +296,11 @@ pub fn run_copper_callback<T: Send + Sync + 'static>(
                     output
                         .metadata
                         .set_status(format!("Applied force: {force_magnitude}"));
-                    output.metadata.process_time.start = now.into();
-                    output.metadata.process_time.end = now.into();
+                    set_process_timing(&clock, output);
                     SimOverride::ExecutedBySim
                 } else {
                     cart_force.0 = Vector::ZERO;
-                    output.metadata.process_time.start = now.into();
-                    output.metadata.process_time.end = now.into();
+                    set_process_timing(&clock, output);
                     SimOverride::Errored("Safety Mode.".into())
                 }
             }

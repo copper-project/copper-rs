@@ -114,6 +114,7 @@ sim = [
   "dep:bevy_anti_alias",
   "dep:avian3d",
   "dep:cached-path",
+  "cu29/sysclock-perf",
 ] # dependencies to run the Bevy-based balancebot sim
 bevymon = ["sim", "dep:cu-bevymon"]
 

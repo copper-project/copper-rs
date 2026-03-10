@@ -25,6 +25,7 @@
 //! - `reflect`: reflection support for runtime and units types
 //! - `textlogs`: text logging derive support
 //! - `remote-debug`: remote debug transport support
+//! - `sysclock-perf`: use a host/system clock for runtime perf timing while keeping robot time for `tov`
 //!
 //! ## Concepts behind Copper
 //!

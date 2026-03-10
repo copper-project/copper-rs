@@ -2455,7 +2455,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let run_loop = if std {
             quote! {
                 loop  {
-                    let iter_start = self.copper_runtime.clock.now();
+                    let iter_start = cu29::curuntime::perf_now(&self.copper_runtime.clock);
                     let result = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(
                         || <Self as #app_trait<S, L>>::run_one_iteration(self, #sim_callback_arg)
                     )) {
@@ -2478,7 +2478,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                     if let Some(rate) = self.copper_runtime.runtime_config.rate_target_hz {
                         let period: CuDuration = (1_000_000_000u64 / rate).into();
-                        let elapsed = self.copper_runtime.clock.now() - iter_start;
+                        let elapsed = cu29::curuntime::perf_now(&self.copper_runtime.clock) - iter_start;
                         if elapsed < period {
                             std::thread::sleep(std::time::Duration::from_nanos(period.as_nanos() - elapsed.as_nanos()));
                         }
@@ -2492,11 +2492,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         } else {
             quote! {
                 loop  {
-                    let iter_start = self.copper_runtime.clock.now();
+                    let iter_start = cu29::curuntime::perf_now(&self.copper_runtime.clock);
                     let result = <Self as #app_trait<S, L>>::run_one_iteration(self, #sim_callback_arg);
                     if let Some(rate) = self.copper_runtime.runtime_config.rate_target_hz {
                         let period: CuDuration = (1_000_000_000u64 / rate).into();
-                        let elapsed = self.copper_runtime.clock.now() - iter_start;
+                        let elapsed = cu29::curuntime::perf_now(&self.copper_runtime.clock) - iter_start;
                         if elapsed < period {
                             busy_wait_for(period - elapsed);
                         }
@@ -4564,12 +4564,12 @@ fn generate_task_execution_tokens(
     let output_start_time = if output_ports.len() == 1 {
         quote! {
             if cumsg_output.metadata.process_time.start.is_none() {
-                cumsg_output.metadata.process_time.start = clock.now().into();
+                cumsg_output.metadata.process_time.start = cu29::curuntime::perf_now(clock).into();
             }
         }
     } else {
         quote! {
-            let start_time = clock.now().into();
+            let start_time = cu29::curuntime::perf_now(clock).into();
             #( if cumsg_output.#output_ports.metadata.process_time.start.is_none() {
                 cumsg_output.#output_ports.metadata.process_time.start = start_time;
             } )*
@@ -4578,12 +4578,12 @@ fn generate_task_execution_tokens(
     let output_end_time = if output_ports.len() == 1 {
         quote! {
             if cumsg_output.metadata.process_time.end.is_none() {
-                cumsg_output.metadata.process_time.end = clock.now().into();
+                cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
             }
         }
     } else {
         quote! {
-            let end_time = clock.now().into();
+            let end_time = cu29::curuntime::perf_now(clock).into();
             #( if cumsg_output.#output_ports.metadata.process_time.end.is_none() {
                 cumsg_output.#output_ports.metadata.process_time.end = end_time;
             } )*
@@ -5065,7 +5065,7 @@ fn generate_bridge_rx_execution_tokens(
                         step: CuComponentState::Process,
                         culistid: Some(clid),
                     });
-                    cumsg_output.metadata.process_time.start = clock.now().into();
+                    cumsg_output.metadata.process_time.start = cu29::curuntime::perf_now(clock).into();
                     let maybe_error = {
                         #rt_guard
                         ctx.clear_current_task();
@@ -5075,7 +5075,7 @@ fn generate_bridge_rx_execution_tokens(
                             cumsg_output,
                         )
                     };
-                    cumsg_output.metadata.process_time.end = clock.now().into();
+                    cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
                     if let Err(error) = maybe_error {
                         let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Process, &error);
                         match decision {
@@ -5210,7 +5210,7 @@ fn generate_bridge_tx_execution_tokens(
                         step: CuComponentState::Process,
                         culistid: Some(clid),
                     });
-                    cumsg_output.metadata.process_time.start = clock.now().into();
+                    cumsg_output.metadata.process_time.start = cu29::curuntime::perf_now(clock).into();
                     let maybe_error = {
                         #rt_guard
                         ctx.clear_current_task();
@@ -5240,7 +5240,7 @@ fn generate_bridge_tx_execution_tokens(
                             }
                         }
                     }
-                    cumsg_output.metadata.process_time.end = clock.now().into();
+                    cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
                 }
             }
         },

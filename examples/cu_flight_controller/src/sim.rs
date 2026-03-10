@@ -525,10 +525,11 @@ fn default_callback(_step: gnss::SimStep) -> SimOverride {
 }
 
 fn set_msg_timing<T: CuMsgPayload>(clock: &RobotClock, msg: &mut CuMsg<T>) {
-    let now = clock.now();
-    msg.tov = Tov::Time(now);
-    msg.metadata.process_time.start = now.into();
-    msg.metadata.process_time.end = now.into();
+    let tov = clock.now();
+    let perf = cu29::curuntime::perf_now(clock);
+    msg.tov = Tov::Time(tov);
+    msg.metadata.process_time.start = perf.into();
+    msg.metadata.process_time.end = perf.into();
 }
 
 fn axis_to_rc(value: f32) -> u16 {
