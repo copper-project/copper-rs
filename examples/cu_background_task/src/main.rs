@@ -31,6 +31,7 @@ pub mod tasks {
 
     #[derive(Reflect)]
     pub struct ExampleTask {
+        sleep_duration_ms: u64,
         sleep_duration: std::time::Duration,
     }
 
@@ -50,7 +51,10 @@ pub mod tasks {
                 .get::<u64>("sleep_duration_ms")?
                 .ok_or_else(|| CuError::from("Missing sleep_duration_ms"))?;
             let sleep_duration = std::time::Duration::from_millis(sleep_duration_ms);
-            Ok(Self { sleep_duration })
+            Ok(Self {
+                sleep_duration_ms,
+                sleep_duration,
+            })
         }
 
         fn process(
@@ -65,11 +69,10 @@ pub mod tasks {
             // Emulate a long-running task
             debug!(
                 "Task is tasking a {}ms time to process input: {}",
-                self.sleep_duration.as_millis(),
-                &payload
+                self.sleep_duration_ms, &payload
             );
             sleep(self.sleep_duration);
-            debug!("Task ({}ms) done.", self.sleep_duration.as_millis());
+            debug!("Task ({}ms) done.", self.sleep_duration_ms);
             output.set_payload(payload + 1);
             Ok(())
         }
