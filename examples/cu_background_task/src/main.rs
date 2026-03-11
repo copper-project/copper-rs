@@ -62,14 +62,15 @@ pub mod tasks {
             let Some(payload) = input.payload() else {
                 return Ok(());
             };
+            let sleep_duration_ms = u64::try_from(self.sleep_duration.as_millis())
+                .expect("sleep_duration comes from u64 milliseconds");
             // Emulate a long-running task
             debug!(
                 "Task is tasking a {}ms time to process input: {}",
-                self.sleep_duration.as_millis(),
-                &payload
+                sleep_duration_ms, &payload
             );
             sleep(self.sleep_duration);
-            debug!("Task ({}ms) done.", self.sleep_duration.as_millis());
+            debug!("Task ({}ms) done.", sleep_duration_ms);
             output.set_payload(payload + 1);
             Ok(())
         }
