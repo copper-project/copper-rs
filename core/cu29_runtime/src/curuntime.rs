@@ -64,6 +64,25 @@ pub struct CopperContext {
     pub clock: RobotClock,
 }
 
+/// Returns a monotonic instant used for local runtime performance timing.
+///
+/// When `sysclock-perf` (and `std`) are enabled this uses a process-local
+/// `RobotClock::new()` instance for timing. The returned value is a
+/// monotonically increasing duration since an unspecified origin (typically
+/// process or runtime initialization), not a wall-clock time-of-day. When
+/// `sysclock-perf` is disabled it delegates to the provided `RobotClock`.
+#[inline]
+pub fn perf_now(_clock: &RobotClock) -> CuTime {
+    #[cfg(all(feature = "std", feature = "sysclock-perf"))]
+    {
+        static PERF_CLOCK: std::sync::OnceLock<RobotClock> = std::sync::OnceLock::new();
+        return PERF_CLOCK.get_or_init(RobotClock::new).now();
+    }
+
+    #[allow(unreachable_code)]
+    _clock.now()
+}
+
 /// Manages the lifecycle of the copper lists and logging.
 pub struct CopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
     pub inner: CuListsManager<P, NBCL>,

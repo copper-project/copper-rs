@@ -169,6 +169,7 @@ default = ["sim"]
 sim_core = [
   "dep:cu29",
   "cu29/std",
+  "cu29/sysclock-perf",
   "dep:cu-ahrs",
   "dep:cu-crsf",
   "dep:cu-msp-bridge",
