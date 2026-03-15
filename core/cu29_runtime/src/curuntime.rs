@@ -64,11 +64,13 @@ pub struct CopperContext {
     pub clock: RobotClock,
 }
 
-/// Returns the clock used for local runtime performance timing.
+/// Returns a monotonic instant used for local runtime performance timing.
 ///
-/// With `sysclock-perf` enabled this uses a host-local system clock, keeping
-/// simulation/robot time for `tov` while allowing process timing to reflect
-/// wall-clock execution. Otherwise it falls back to the provided runtime clock.
+/// When `sysclock-perf` (and `std`) are enabled this uses a process-local
+/// `RobotClock::new()` instance for timing. The returned value is a
+/// monotonically increasing duration since an unspecified origin (typically
+/// process or runtime initialization), not a wall-clock time-of-day. When
+/// `sysclock-perf` is disabled it delegates to the provided `RobotClock`.
 #[inline]
 pub fn perf_now(_clock: &RobotClock) -> CuTime {
     #[cfg(all(feature = "std", feature = "sysclock-perf"))]
