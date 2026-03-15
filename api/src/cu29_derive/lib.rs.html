@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_derive/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.96.0-nightly (0c68443b0 2026-03-10)" data-channel="nightly" data-search-js="search-63369b7b.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5013f961.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">cu29_derive/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>proc_macro::TokenStream;
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_derive/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.96.0-nightly (03749d625 2026-03-14)" data-channel="nightly" data-search-js="search-63369b7b.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5013f961.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">cu29_derive/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>proc_macro::TokenStream;
 <a href=#2 id=2 data-nosnippet>2</a><span class="kw">use </span>quote::{format_ident, quote};
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>std::collections::{BTreeMap, HashMap};
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>std::fs::read_to_string;
@@ -2455,7 +2455,7 @@
 <a href=#2455 id=2455 data-nosnippet>2455</a>        <span class="kw">let </span>run_loop = <span class="kw">if </span>std {
 <a href=#2456 id=2456 data-nosnippet>2456</a>            <span class="macro">quote!</span> {
 <a href=#2457 id=2457 data-nosnippet>2457</a>                <span class="kw">loop  </span>{
-<a href=#2458 id=2458 data-nosnippet>2458</a>                    <span class="kw">let </span>iter_start = <span class="self">self</span>.copper_runtime.clock.now();
+<a href=#2458 id=2458 data-nosnippet>2458</a>                    <span class="kw">let </span>iter_start = cu29::curuntime::perf_now(<span class="kw-2">&amp;</span><span class="self">self</span>.copper_runtime.clock);
 <a href=#2459 id=2459 data-nosnippet>2459</a>                    <span class="kw">let </span>result = <span class="kw">match </span>std::panic::catch_unwind(std::panic::AssertUnwindSafe(
 <a href=#2460 id=2460 data-nosnippet>2460</a>                        || &lt;<span class="self">Self </span><span class="kw">as </span>#app_trait&lt;S, L&gt;&gt;::run_one_iteration(<span class="self">self</span>, #sim_callback_arg)
 <a href=#2461 id=2461 data-nosnippet>2461</a>                    )) {
@@ -2478,7 +2478,7 @@
 <a href=#2478 id=2478 data-nosnippet>2478</a>
 <a href=#2479 id=2479 data-nosnippet>2479</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(rate) = <span class="self">self</span>.copper_runtime.runtime_config.rate_target_hz {
 <a href=#2480 id=2480 data-nosnippet>2480</a>                        <span class="kw">let </span>period: CuDuration = (<span class="number">1_000_000_000u64 </span>/ rate).into();
-<a href=#2481 id=2481 data-nosnippet>2481</a>                        <span class="kw">let </span>elapsed = <span class="self">self</span>.copper_runtime.clock.now() - iter_start;
+<a href=#2481 id=2481 data-nosnippet>2481</a>                        <span class="kw">let </span>elapsed = cu29::curuntime::perf_now(<span class="kw-2">&amp;</span><span class="self">self</span>.copper_runtime.clock) - iter_start;
 <a href=#2482 id=2482 data-nosnippet>2482</a>                        <span class="kw">if </span>elapsed &lt; period {
 <a href=#2483 id=2483 data-nosnippet>2483</a>                            std::thread::sleep(std::time::Duration::from_nanos(period.as_nanos() - elapsed.as_nanos()));
 <a href=#2484 id=2484 data-nosnippet>2484</a>                        }
@@ -2492,11 +2492,11 @@
 <a href=#2492 id=2492 data-nosnippet>2492</a>        } <span class="kw">else </span>{
 <a href=#2493 id=2493 data-nosnippet>2493</a>            <span class="macro">quote!</span> {
 <a href=#2494 id=2494 data-nosnippet>2494</a>                <span class="kw">loop  </span>{
-<a href=#2495 id=2495 data-nosnippet>2495</a>                    <span class="kw">let </span>iter_start = <span class="self">self</span>.copper_runtime.clock.now();
+<a href=#2495 id=2495 data-nosnippet>2495</a>                    <span class="kw">let </span>iter_start = cu29::curuntime::perf_now(<span class="kw-2">&amp;</span><span class="self">self</span>.copper_runtime.clock);
 <a href=#2496 id=2496 data-nosnippet>2496</a>                    <span class="kw">let </span>result = &lt;<span class="self">Self </span><span class="kw">as </span>#app_trait&lt;S, L&gt;&gt;::run_one_iteration(<span class="self">self</span>, #sim_callback_arg);
 <a href=#2497 id=2497 data-nosnippet>2497</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(rate) = <span class="self">self</span>.copper_runtime.runtime_config.rate_target_hz {
 <a href=#2498 id=2498 data-nosnippet>2498</a>                        <span class="kw">let </span>period: CuDuration = (<span class="number">1_000_000_000u64 </span>/ rate).into();
-<a href=#2499 id=2499 data-nosnippet>2499</a>                        <span class="kw">let </span>elapsed = <span class="self">self</span>.copper_runtime.clock.now() - iter_start;
+<a href=#2499 id=2499 data-nosnippet>2499</a>                        <span class="kw">let </span>elapsed = cu29::curuntime::perf_now(<span class="kw-2">&amp;</span><span class="self">self</span>.copper_runtime.clock) - iter_start;
 <a href=#2500 id=2500 data-nosnippet>2500</a>                        <span class="kw">if </span>elapsed &lt; period {
 <a href=#2501 id=2501 data-nosnippet>2501</a>                            busy_wait_for(period - elapsed);
 <a href=#2502 id=2502 data-nosnippet>2502</a>                        }
@@ -4564,12 +4564,12 @@
 <a href=#4564 id=4564 data-nosnippet>4564</a>    <span class="kw">let </span>output_start_time = <span class="kw">if </span>output_ports.len() == <span class="number">1 </span>{
 <a href=#4565 id=4565 data-nosnippet>4565</a>        <span class="macro">quote!</span> {
 <a href=#4566 id=4566 data-nosnippet>4566</a>            <span class="kw">if </span>cumsg_output.metadata.process_time.start.is_none() {
-<a href=#4567 id=4567 data-nosnippet>4567</a>                cumsg_output.metadata.process_time.start = clock.now().into();
+<a href=#4567 id=4567 data-nosnippet>4567</a>                cumsg_output.metadata.process_time.start = cu29::curuntime::perf_now(clock).into();
 <a href=#4568 id=4568 data-nosnippet>4568</a>            }
 <a href=#4569 id=4569 data-nosnippet>4569</a>        }
 <a href=#4570 id=4570 data-nosnippet>4570</a>    } <span class="kw">else </span>{
 <a href=#4571 id=4571 data-nosnippet>4571</a>        <span class="macro">quote!</span> {
-<a href=#4572 id=4572 data-nosnippet>4572</a>            <span class="kw">let </span>start_time = clock.now().into();
+<a href=#4572 id=4572 data-nosnippet>4572</a>            <span class="kw">let </span>start_time = cu29::curuntime::perf_now(clock).into();
 <a href=#4573 id=4573 data-nosnippet>4573</a>            #( <span class="kw">if </span>cumsg_output.#output_ports.metadata.process_time.start.is_none() {
 <a href=#4574 id=4574 data-nosnippet>4574</a>                cumsg_output.#output_ports.metadata.process_time.start = start_time;
 <a href=#4575 id=4575 data-nosnippet>4575</a>            } )*
@@ -4578,12 +4578,12 @@
 <a href=#4578 id=4578 data-nosnippet>4578</a>    <span class="kw">let </span>output_end_time = <span class="kw">if </span>output_ports.len() == <span class="number">1 </span>{
 <a href=#4579 id=4579 data-nosnippet>4579</a>        <span class="macro">quote!</span> {
 <a href=#4580 id=4580 data-nosnippet>4580</a>            <span class="kw">if </span>cumsg_output.metadata.process_time.end.is_none() {
-<a href=#4581 id=4581 data-nosnippet>4581</a>                cumsg_output.metadata.process_time.end = clock.now().into();
+<a href=#4581 id=4581 data-nosnippet>4581</a>                cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
 <a href=#4582 id=4582 data-nosnippet>4582</a>            }
 <a href=#4583 id=4583 data-nosnippet>4583</a>        }
 <a href=#4584 id=4584 data-nosnippet>4584</a>    } <span class="kw">else </span>{
 <a href=#4585 id=4585 data-nosnippet>4585</a>        <span class="macro">quote!</span> {
-<a href=#4586 id=4586 data-nosnippet>4586</a>            <span class="kw">let </span>end_time = clock.now().into();
+<a href=#4586 id=4586 data-nosnippet>4586</a>            <span class="kw">let </span>end_time = cu29::curuntime::perf_now(clock).into();
 <a href=#4587 id=4587 data-nosnippet>4587</a>            #( <span class="kw">if </span>cumsg_output.#output_ports.metadata.process_time.end.is_none() {
 <a href=#4588 id=4588 data-nosnippet>4588</a>                cumsg_output.#output_ports.metadata.process_time.end = end_time;
 <a href=#4589 id=4589 data-nosnippet>4589</a>            } )*
@@ -5065,7 +5065,7 @@
 <a href=#5065 id=5065 data-nosnippet>5065</a>                        step: CuComponentState::Process,
 <a href=#5066 id=5066 data-nosnippet>5066</a>                        culistid: <span class="prelude-val">Some</span>(clid),
 <a href=#5067 id=5067 data-nosnippet>5067</a>                    });
-<a href=#5068 id=5068 data-nosnippet>5068</a>                    cumsg_output.metadata.process_time.start = clock.now().into();
+<a href=#5068 id=5068 data-nosnippet>5068</a>                    cumsg_output.metadata.process_time.start = cu29::curuntime::perf_now(clock).into();
 <a href=#5069 id=5069 data-nosnippet>5069</a>                    <span class="kw">let </span>maybe_error = {
 <a href=#5070 id=5070 data-nosnippet>5070</a>                        #rt_guard
 <a href=#5071 id=5071 data-nosnippet>5071</a>                        ctx.clear_current_task();
@@ -5075,7 +5075,7 @@
 <a href=#5075 id=5075 data-nosnippet>5075</a>                            cumsg_output,
 <a href=#5076 id=5076 data-nosnippet>5076</a>                        )
 <a href=#5077 id=5077 data-nosnippet>5077</a>                    };
-<a href=#5078 id=5078 data-nosnippet>5078</a>                    cumsg_output.metadata.process_time.end = clock.now().into();
+<a href=#5078 id=5078 data-nosnippet>5078</a>                    cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
 <a href=#5079 id=5079 data-nosnippet>5079</a>                    <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = maybe_error {
 <a href=#5080 id=5080 data-nosnippet>5080</a>                        <span class="kw">let </span>decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Process, <span class="kw-2">&amp;</span>error);
 <a href=#5081 id=5081 data-nosnippet>5081</a>                        <span class="kw">match </span>decision {
@@ -5210,7 +5210,7 @@
 <a href=#5210 id=5210 data-nosnippet>5210</a>                        step: CuComponentState::Process,
 <a href=#5211 id=5211 data-nosnippet>5211</a>                        culistid: <span class="prelude-val">Some</span>(clid),
 <a href=#5212 id=5212 data-nosnippet>5212</a>                    });
-<a href=#5213 id=5213 data-nosnippet>5213</a>                    cumsg_output.metadata.process_time.start = clock.now().into();
+<a href=#5213 id=5213 data-nosnippet>5213</a>                    cumsg_output.metadata.process_time.start = cu29::curuntime::perf_now(clock).into();
 <a href=#5214 id=5214 data-nosnippet>5214</a>                    <span class="kw">let </span>maybe_error = {
 <a href=#5215 id=5215 data-nosnippet>5215</a>                        #rt_guard
 <a href=#5216 id=5216 data-nosnippet>5216</a>                        ctx.clear_current_task();
@@ -5240,7 +5240,7 @@
 <a href=#5240 id=5240 data-nosnippet>5240</a>                            }
 <a href=#5241 id=5241 data-nosnippet>5241</a>                        }
 <a href=#5242 id=5242 data-nosnippet>5242</a>                    }
-<a href=#5243 id=5243 data-nosnippet>5243</a>                    cumsg_output.metadata.process_time.end = clock.now().into();
+<a href=#5243 id=5243 data-nosnippet>5243</a>                    cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
 <a href=#5244 id=5244 data-nosnippet>5244</a>                }
 <a href=#5245 id=5245 data-nosnippet>5245</a>            }
 <a href=#5246 id=5246 data-nosnippet>5246</a>        },
