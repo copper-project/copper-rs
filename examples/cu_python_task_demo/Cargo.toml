@@ -1,0 +1,28 @@
+[package]
+name = "cu-python-task-demo"
+description = "Demonstrates Python-backed Copper tasks in process and embedded modes"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+publish = false
+
+[[bin]]
+name = "cu-python-task-demo"
+path = "src/main.rs"
+
+[dependencies]
+cu29 = { workspace = true, features = ["reflect"] }
+cu29-helpers = { workspace = true }
+cu-python-task = { path = "../../components/tasks/cu_python_task", version = "0.13.0" }
+serde = { workspace = true }
+bincode = { workspace = true }
+tempfile = { workspace = true }
+
+[package.metadata.cargo-shear]
+ignored = ["bincode", "serde"]
