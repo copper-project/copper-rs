@@ -20,7 +20,7 @@ pub mod messages {
         Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
     )]
     pub struct RightInput {
-        pub label: String,
+        pub tag: u32,
     }
 
     #[derive(
@@ -28,7 +28,7 @@ pub mod messages {
     )]
     pub struct SummaryOutput {
         pub doubled: i32,
-        pub label: String,
+        pub tag: u32,
         pub calls: u64,
     }
 
@@ -37,7 +37,7 @@ pub mod messages {
     )]
     pub struct StateOutput {
         pub total: i32,
-        pub last_label: String,
+        pub last_tag: u32,
     }
 
     #[derive(
@@ -46,7 +46,7 @@ pub mod messages {
     pub struct ExampleState {
         pub calls: u64,
         pub total: i32,
-        pub last_label: String,
+        pub last_tag: u32,
     }
 }
 
@@ -113,7 +113,7 @@ pub mod tasks {
 
     #[derive(Reflect)]
     pub struct RightSource {
-        next: usize,
+        next: u32,
     }
 
     impl Freezable for RightSource {
@@ -145,9 +145,7 @@ pub mod tasks {
         }
 
         fn process(&mut self, _ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
-            output.set_payload(messages::RightInput {
-                label: format!("tick-{}", self.next),
-            });
+            output.set_payload(messages::RightInput { tag: self.next });
             self.next += 1;
             Ok(())
         }
@@ -264,17 +262,17 @@ mod tests {
             vec![
                 messages::SummaryOutput {
                     doubled: 2,
-                    label: "tick-1".to_string(),
+                    tag: 1,
                     calls: 1,
                 },
                 messages::SummaryOutput {
                     doubled: 4,
-                    label: "tick-2".to_string(),
+                    tag: 2,
                     calls: 2,
                 },
                 messages::SummaryOutput {
                     doubled: 6,
-                    label: "tick-3".to_string(),
+                    tag: 3,
                     calls: 3,
                 },
             ]
@@ -284,15 +282,15 @@ mod tests {
             vec![
                 messages::StateOutput {
                     total: 1,
-                    last_label: "tick-1".to_string(),
+                    last_tag: 1,
                 },
                 messages::StateOutput {
                     total: 3,
-                    last_label: "tick-2".to_string(),
+                    last_tag: 2,
                 },
                 messages::StateOutput {
                     total: 6,
-                    last_label: "tick-3".to_string(),
+                    last_tag: 3,
                 },
             ]
         );
