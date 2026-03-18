@@ -3,8 +3,10 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
+use cu29_value::{Value as CuValue, py_to_value, to_value, value_to_py};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::io::{BufReader, Read, Write};
 use std::marker::PhantomData;
@@ -17,10 +19,10 @@ use std::time::{Duration, Instant};
 #[cfg(not(target_os = "macos"))]
 use pyo3::prelude::*;
 #[cfg(not(target_os = "macos"))]
-use pyo3::types::PyModule;
+use pyo3::types::{PyAny, PyModule};
 
 const DEFAULT_SCRIPT_PATH: &str = "python/task.py";
-const MAX_JSON_FRAME_BYTES: usize = 16 * 1024 * 1024;
+const MAX_CBOR_FRAME_BYTES: usize = 16 * 1024 * 1024;
 const PROCESS_START_TIMEOUT: Duration = Duration::from_secs(5);
 const PROCESS_STOP_TIMEOUT: Duration = Duration::from_secs(2);
 const PROCESS_POLL_INTERVAL: Duration = Duration::from_millis(10);
@@ -478,15 +480,15 @@ where
     O: PyOutputSpec + 'static,
 {
     fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let bytes =
-            serde_json::to_vec(&self.state).map_err(|e| EncodeError::OtherString(e.to_string()))?;
+        let bytes = minicbor_serde::to_vec(&self.state)
+            .map_err(|e| EncodeError::OtherString(e.to_string()))?;
         Encode::encode(&bytes, encoder)
     }
 
     fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
         let bytes = <Vec<u8> as Decode<D::Context>>::decode(decoder)?;
-        self.state =
-            serde_json::from_slice(&bytes).map_err(|e| DecodeError::OtherString(e.to_string()))?;
+        self.state = minicbor_serde::from_slice(&bytes)
+            .map_err(|e| DecodeError::OtherString(e.to_string()))?;
         Ok(())
     }
 }
@@ -693,7 +695,7 @@ impl ProcessBackend {
                 )));
             }
 
-            match read_json_frame::<_, ChildResponse<(), ()>>(&mut self.stdout) {
+            match read_cbor_frame::<_, ChildResponse<(), ()>>(&mut self.stdout) {
                 Ok(ChildResponse::Ready) => return Ok(()),
                 Ok(ChildResponse::Error { message }) => {
                     return Err(CuError::from(format!(
@@ -724,8 +726,8 @@ impl ProcessBackend {
         S: Serialize + DeserializeOwned,
         O: Serialize + DeserializeOwned,
     {
-        write_json_frame(&mut self.stdin, request)?;
-        match read_json_frame::<_, ChildResponse<S, O>>(&mut self.stdout)? {
+        write_cbor_frame(&mut self.stdin, request)?;
+        match read_cbor_frame::<_, ChildResponse<S, O>>(&mut self.stdout)? {
             ChildResponse::Result { state, output } => Ok(ProcessResult { state, output }),
             ChildResponse::Error { message } => Err(CuError::from(format!(
                 "Python task process raised an exception:\n{message}"
@@ -737,7 +739,7 @@ impl ProcessBackend {
     }
 
     fn stop(&mut self) -> CuResult<()> {
-        let _ = write_json_frame(&mut self.stdin, &ShutdownRequest { kind: "shutdown" });
+        let _ = write_cbor_frame(&mut self.stdin, &ShutdownRequest { kind: "shutdown" });
 
         let deadline = Instant::now() + PROCESS_STOP_TIMEOUT;
         loop {
@@ -766,7 +768,7 @@ impl ProcessBackend {
 
 #[cfg(not(target_os = "macos"))]
 struct EmbeddedBackend {
-    call_process_json: Py<PyAny>,
+    call_process: Py<PyAny>,
     process_fn: Py<PyAny>,
 }
 
@@ -793,12 +795,12 @@ impl EmbeddedBackend {
             let load_process = module
                 .getattr("load_process_function")
                 .map_err(python_error)?;
-            let call_process_json = module.getattr("call_process_json").map_err(python_error)?;
+            let call_process = module.getattr("call_process").map_err(python_error)?;
             let process_fn = load_process
                 .call1((script.display().to_string(),))
                 .map_err(python_error)?;
             Ok(Self {
-                call_process_json: call_process_json.unbind(),
+                call_process: call_process.unbind(),
                 process_fn: process_fn.unbind(),
             })
         })
@@ -813,18 +815,19 @@ impl EmbeddedBackend {
         S: Serialize + DeserializeOwned,
         O: Serialize + DeserializeOwned,
     {
-        let request_json = serde_json::to_string(request)
+        let request_value = to_value(request)
             .map_err(|e| CuError::new_with_cause("Failed to encode embedded Python request", e))?;
-        let response_json = Python::attach(|py| {
-            let call_process = self.call_process_json.bind(py);
+        let response_value = Python::attach(|py| {
+            let call_process = self.call_process.bind(py);
             let process_fn = self.process_fn.bind(py);
+            let request_py = value_to_py(&request_value, py).map_err(python_error)?;
             call_process
-                .call1((process_fn, request_json.as_str()))
-                .map_err(python_error)?
-                .extract::<String>()
+                .call1((process_fn, request_py))
                 .map_err(python_error)
+                .and_then(|response| py_to_value(&response).map_err(python_error))
         })?;
-        serde_json::from_str::<ProcessResult<S, O>>(&response_json)
+        response_value
+            .deserialize_into::<ProcessResult<S, O>>()
             .map_err(|e| CuError::new_with_cause("Failed to decode embedded Python response", e))
     }
 
@@ -891,17 +894,18 @@ fn detect_python_command() -> Option<&'static str> {
     })
 }
 
-fn write_json_frame<W, T>(writer: &mut W, value: &T) -> CuResult<()>
+fn write_cbor_frame<W, T>(writer: &mut W, value: &T) -> CuResult<()>
 where
     W: Write,
     T: Serialize,
 {
-    let payload = serde_json::to_vec(value)
-        .map_err(|e| CuError::new_with_cause("Failed to serialize Python task frame", e))?;
-    if payload.len() > MAX_JSON_FRAME_BYTES {
+    let value = to_value(value)
+        .map_err(|e| CuError::new_with_cause("Failed to encode Python task CBOR value", e))?;
+    let payload = encode_cbor_value_to_vec(&value)?;
+    if payload.len() > MAX_CBOR_FRAME_BYTES {
         return Err(CuError::from(format!(
             "Python task frame exceeded {} bytes",
-            MAX_JSON_FRAME_BYTES
+            MAX_CBOR_FRAME_BYTES
         )));
     }
     let len = u32::try_from(payload.len())
@@ -917,7 +921,7 @@ where
         .map_err(|e| CuError::new_with_cause("Failed to flush Python task frame", e))
 }
 
-fn read_json_frame<R, T>(reader: &mut R) -> CuResult<T>
+fn read_cbor_frame<R, T>(reader: &mut R) -> CuResult<T>
 where
     R: Read,
     T: DeserializeOwned,
@@ -927,10 +931,10 @@ where
         .read_exact(&mut len_bytes)
         .map_err(|e| CuError::new_with_cause("Failed to read Python task frame length", e))?;
     let len = u32::from_le_bytes(len_bytes) as usize;
-    if len > MAX_JSON_FRAME_BYTES {
+    if len > MAX_CBOR_FRAME_BYTES {
         return Err(CuError::from(format!(
             "Python task frame exceeded {} bytes",
-            MAX_JSON_FRAME_BYTES
+            MAX_CBOR_FRAME_BYTES
         )));
     }
 
@@ -938,8 +942,131 @@ where
     reader
         .read_exact(&mut payload)
         .map_err(|e| CuError::new_with_cause("Failed to read Python task frame payload", e))?;
-    serde_json::from_slice(&payload)
-        .map_err(|e| CuError::new_with_cause("Failed to decode Python task frame", e))
+    let value: CuValue = minicbor_serde::from_slice(&payload)
+        .map_err(|e| CuError::new_with_cause("Failed to decode Python task CBOR frame", e))?;
+    let value = canonicalize_wire_value(value);
+    value
+        .deserialize_into::<T>()
+        .map_err(|e| CuError::new_with_cause("Failed to decode Python task CBOR frame", e))
+}
+
+fn encode_cbor_value_to_vec(value: &CuValue) -> CuResult<Vec<u8>> {
+    let mut out = Vec::new();
+    encode_cbor_value(value, &mut out)?;
+    Ok(out)
+}
+
+fn encode_cbor_value(value: &CuValue, out: &mut Vec<u8>) -> CuResult<()> {
+    match value {
+        CuValue::Bool(v) => out.push(if *v { 0xf5 } else { 0xf4 }),
+        CuValue::U8(v) => encode_cbor_uint(out, 0, u64::from(*v)),
+        CuValue::U16(v) => encode_cbor_uint(out, 0, u64::from(*v)),
+        CuValue::U32(v) => encode_cbor_uint(out, 0, u64::from(*v)),
+        CuValue::U64(v) => encode_cbor_uint(out, 0, *v),
+        CuValue::I8(v) => encode_cbor_int(out, i64::from(*v))?,
+        CuValue::I16(v) => encode_cbor_int(out, i64::from(*v))?,
+        CuValue::I32(v) => encode_cbor_int(out, i64::from(*v))?,
+        CuValue::I64(v) => encode_cbor_int(out, *v)?,
+        CuValue::F32(v) => {
+            out.push(0xfa);
+            out.extend_from_slice(&v.to_be_bytes());
+        }
+        CuValue::F64(v) => {
+            out.push(0xfb);
+            out.extend_from_slice(&v.to_be_bytes());
+        }
+        CuValue::Char(v) => encode_cbor_text(out, &v.to_string())?,
+        CuValue::String(v) => encode_cbor_text(out, v)?,
+        CuValue::Unit | CuValue::Option(None) => out.push(0xf6),
+        CuValue::Option(Some(v)) | CuValue::Newtype(v) => encode_cbor_value(v, out)?,
+        CuValue::Seq(values) => {
+            encode_cbor_uint(out, 4, values.len() as u64);
+            for value in values {
+                encode_cbor_value(value, out)?;
+            }
+        }
+        CuValue::Map(values) => {
+            encode_cbor_uint(out, 5, values.len() as u64);
+            for (key, value) in values {
+                encode_cbor_value(key, out)?;
+                encode_cbor_value(value, out)?;
+            }
+        }
+        CuValue::Bytes(value) => encode_cbor_bytes(out, value)?,
+        CuValue::CuTime(value) => encode_cbor_uint(out, 0, value.0),
+    }
+    Ok(())
+}
+
+fn encode_cbor_uint(out: &mut Vec<u8>, major: u8, value: u64) {
+    if value < 24 {
+        out.push((major << 5) | value as u8);
+    } else if u8::try_from(value).is_ok() {
+        out.push((major << 5) | 24);
+        out.push(value as u8);
+    } else if u16::try_from(value).is_ok() {
+        out.push((major << 5) | 25);
+        out.extend_from_slice(&(value as u16).to_be_bytes());
+    } else if u32::try_from(value).is_ok() {
+        out.push((major << 5) | 26);
+        out.extend_from_slice(&(value as u32).to_be_bytes());
+    } else {
+        out.push((major << 5) | 27);
+        out.extend_from_slice(&value.to_be_bytes());
+    }
+}
+
+fn encode_cbor_int(out: &mut Vec<u8>, value: i64) -> CuResult<()> {
+    if value >= 0 {
+        encode_cbor_uint(out, 0, value as u64);
+        return Ok(());
+    }
+    let magnitude = u64::try_from(-1_i128 - i128::from(value))
+        .map_err(|_| CuError::from("Python task CBOR integer is outside the supported range"))?;
+    encode_cbor_uint(out, 1, magnitude);
+    Ok(())
+}
+
+fn encode_cbor_bytes(out: &mut Vec<u8>, value: &[u8]) -> CuResult<()> {
+    encode_cbor_uint(
+        out,
+        2,
+        u64::try_from(value.len())
+            .map_err(|_| CuError::from("Python task CBOR byte string is too large"))?,
+    );
+    out.extend_from_slice(value);
+    Ok(())
+}
+
+fn encode_cbor_text(out: &mut Vec<u8>, value: &str) -> CuResult<()> {
+    encode_cbor_uint(
+        out,
+        3,
+        u64::try_from(value.len())
+            .map_err(|_| CuError::from("Python task CBOR text string is too large"))?,
+    );
+    out.extend_from_slice(value.as_bytes());
+    Ok(())
+}
+
+fn canonicalize_wire_value(value: CuValue) -> CuValue {
+    match value {
+        CuValue::Option(None) => CuValue::Unit,
+        CuValue::Option(Some(value)) | CuValue::Newtype(value) => canonicalize_wire_value(*value),
+        CuValue::Seq(values) => CuValue::Seq(
+            values
+                .into_iter()
+                .map(canonicalize_wire_value)
+                .collect::<Vec<_>>(),
+        ),
+        CuValue::Map(values) => CuValue::Map(
+            values
+                .into_iter()
+                .map(|(key, value)| (canonicalize_wire_value(key), canonicalize_wire_value(value)))
+                .collect::<BTreeMap<_, _>>(),
+        ),
+        other => other,
+    }
 }
 
 #[cfg(test)]
@@ -954,6 +1081,11 @@ mod tests {
     struct TestPayload {
         value: i32,
         flag: bool,
+    }
+
+    #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    struct SeenState {
+        seen: bool,
     }
 
     fn cwd_lock() -> MutexGuard<'static, ()> {
@@ -1039,17 +1171,17 @@ mod tests {
         let mut backend = ProcessBackend::start(&script).expect("start backend");
         let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
 
-        let result: ProcessResult<serde_json::Value, PyCuMsg<TestPayload>> = backend
+        let result: ProcessResult<SeenState, PyCuMsg<TestPayload>> = backend
             .process(&ProcessRequest {
                 kind: "process",
                 input: (),
-                state: serde_json::json!({}),
+                state: SeenState::default(),
                 output,
             })
             .expect("process request");
         backend.stop().expect("stop backend");
 
-        assert_eq!(result.state["seen"], true);
+        assert!(result.state.seen);
         assert!(result.output.payload.is_none());
     }
 
@@ -1059,6 +1191,34 @@ mod tests {
             "def process(inp, state, output):\n    output.payload.value = 41\n    output.payload.flag = True\n",
         );
         let mut backend = ProcessBackend::start(&script).expect("start backend");
+        let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
+
+        let result: ProcessResult<(), PyCuMsg<TestPayload>> = backend
+            .process(&ProcessRequest {
+                kind: "process",
+                input: (),
+                state: (),
+                output,
+            })
+            .expect("process request");
+        backend.stop().expect("stop backend");
+
+        assert_eq!(
+            result.output.payload,
+            Some(TestPayload {
+                value: 41,
+                flag: true,
+            })
+        );
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn embedded_backend_supports_attribute_writes_on_absent_output_payload() {
+        let (_temp_dir, script) = write_test_script(
+            "def process(inp, state, output):\n    output.payload.value = 41\n    output.payload.flag = True\n",
+        );
+        let mut backend = EmbeddedBackend::start(&script).expect("start backend");
         let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
 
         let result: ProcessResult<(), PyCuMsg<TestPayload>> = backend

@@ -1,5 +1,4 @@
 import importlib.util
-import json
 import struct
 import sys
 import traceback
@@ -271,10 +270,154 @@ def call_process(process_fn, request):
     }
 
 
-def call_process_json(process_fn, request_json):
-    request = json.loads(request_json)
-    response = call_process(process_fn, request)
-    return json.dumps(response, separators=(",", ":"))
+def _read_exact(reader, length):
+    data = reader.read(length)
+    if len(data) != length:
+        raise EOFError("Incomplete CBOR payload")
+    return data
+
+
+def _read_uint(data, index, addl):
+    if addl < 24:
+        return addl, index
+    if addl == 24:
+        return data[index], index + 1
+    if addl == 25:
+        return struct.unpack_from(">H", data, index)[0], index + 2
+    if addl == 26:
+        return struct.unpack_from(">I", data, index)[0], index + 4
+    if addl == 27:
+        return struct.unpack_from(">Q", data, index)[0], index + 8
+    raise ValueError("Indefinite-length CBOR items are not supported")
+
+
+def _decode_cbor_item(data, index):
+    initial = data[index]
+    index += 1
+    major = initial >> 5
+    addl = initial & 0x1F
+
+    if major in (0, 1):
+        value, index = _read_uint(data, index, addl)
+        if major == 1:
+            value = -1 - value
+        return value, index
+    if major == 2:
+        length, index = _read_uint(data, index, addl)
+        value = bytes(data[index : index + length])
+        return value, index + length
+    if major == 3:
+        length, index = _read_uint(data, index, addl)
+        value = bytes(data[index : index + length]).decode("utf-8")
+        return value, index + length
+    if major == 4:
+        length, index = _read_uint(data, index, addl)
+        items = []
+        for _ in range(length):
+            item, index = _decode_cbor_item(data, index)
+            items.append(item)
+        return items, index
+    if major == 5:
+        length, index = _read_uint(data, index, addl)
+        items = {}
+        for _ in range(length):
+            key, index = _decode_cbor_item(data, index)
+            value, index = _decode_cbor_item(data, index)
+            items[key] = value
+        return items, index
+    if major == 6:
+        _, index = _read_uint(data, index, addl)
+        return _decode_cbor_item(data, index)
+    if major == 7:
+        if addl == 20:
+            return False, index
+        if addl == 21:
+            return True, index
+        if addl in (22, 23):
+            return None, index
+        if addl == 25:
+            return struct.unpack_from(">e", data, index)[0], index + 2
+        if addl == 26:
+            return struct.unpack_from(">f", data, index)[0], index + 4
+        if addl == 27:
+            return struct.unpack_from(">d", data, index)[0], index + 8
+    raise ValueError("Unsupported CBOR item")
+
+
+def _decode_cbor(payload):
+    value, index = _decode_cbor_item(memoryview(payload), 0)
+    if index != len(payload):
+        raise ValueError("Trailing data after CBOR payload")
+    return value
+
+
+def _write_uint(out, major, value):
+    if value < 24:
+        out.append((major << 5) | value)
+        return
+    if value <= 0xFF:
+        out.extend(((major << 5) | 24, value))
+        return
+    if value <= 0xFFFF:
+        out.append((major << 5) | 25)
+        out.extend(struct.pack(">H", value))
+        return
+    if value <= 0xFFFFFFFF:
+        out.append((major << 5) | 26)
+        out.extend(struct.pack(">I", value))
+        return
+    if value <= 0xFFFFFFFFFFFFFFFF:
+        out.append((major << 5) | 27)
+        out.extend(struct.pack(">Q", value))
+        return
+    raise OverflowError("Integer is outside the supported 64-bit CBOR range")
+
+
+def _encode_cbor_item(value, out):
+    if value is None:
+        out.append(0xF6)
+        return
+    if isinstance(value, bool):
+        out.append(0xF5 if value else 0xF4)
+        return
+    if isinstance(value, int):
+        if value >= 0:
+            _write_uint(out, 0, value)
+        else:
+            _write_uint(out, 1, -1 - value)
+        return
+    if isinstance(value, float):
+        out.append(0xFB)
+        out.extend(struct.pack(">d", value))
+        return
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        raw = bytes(value)
+        _write_uint(out, 2, len(raw))
+        out.extend(raw)
+        return
+    if isinstance(value, str):
+        raw = value.encode("utf-8")
+        _write_uint(out, 3, len(raw))
+        out.extend(raw)
+        return
+    if isinstance(value, (list, tuple)):
+        _write_uint(out, 4, len(value))
+        for item in value:
+            _encode_cbor_item(item, out)
+        return
+    if isinstance(value, dict):
+        _write_uint(out, 5, len(value))
+        for key, item in value.items():
+            _encode_cbor_item(key, out)
+            _encode_cbor_item(item, out)
+        return
+    raise TypeError(f"Unsupported CBOR value type: {type(value)!r}")
+
+
+def _encode_cbor(value):
+    out = bytearray()
+    _encode_cbor_item(value, out)
+    return bytes(out)
 
 
 def _read_frame(reader):
@@ -285,10 +428,7 @@ def _read_frame(reader):
         raise EOFError("Incomplete frame header")
 
     (length,) = struct.unpack("<I", header)
-    payload = reader.read(length)
-    if len(payload) != length:
-        raise EOFError("Incomplete frame payload")
-    return payload
+    return _read_exact(reader, length)
 
 
 def _write_frame(writer, payload):
@@ -297,8 +437,8 @@ def _write_frame(writer, payload):
     writer.flush()
 
 
-def _write_json(writer, value):
-    _write_frame(writer, json.dumps(value, separators=(",", ":")).encode("utf-8"))
+def _write_cbor(writer, value):
+    _write_frame(writer, _encode_cbor(value))
 
 
 def main():
@@ -311,9 +451,9 @@ def main():
 
     try:
         process_fn = load_process_function(script_path)
-        _write_json(writer, {"kind": "ready"})
+        _write_cbor(writer, {"kind": "ready"})
     except Exception:
-        _write_json(writer, {"kind": "error", "message": traceback.format_exc()})
+        _write_cbor(writer, {"kind": "error", "message": traceback.format_exc()})
         return 1
 
     while True:
@@ -322,7 +462,7 @@ def main():
             if frame is None:
                 return 0
 
-            request = json.loads(frame.decode("utf-8"))
+            request = _decode_cbor(frame)
             kind = request.get("kind")
 
             if kind == "shutdown":
@@ -331,9 +471,9 @@ def main():
                 raise RuntimeError(f"Unsupported request kind: {kind!r}")
 
             response = call_process(process_fn, request)
-            _write_json(writer, {"kind": "result", **response})
+            _write_cbor(writer, {"kind": "result", **response})
         except Exception:
-            _write_json(writer, {"kind": "error", "message": traceback.format_exc()})
+            _write_cbor(writer, {"kind": "error", "message": traceback.format_exc()})
 
 
 if __name__ == "__main__":

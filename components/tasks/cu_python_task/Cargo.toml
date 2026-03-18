@@ -12,9 +12,10 @@ repository.workspace = true
 
 [dependencies]
 cu29 = { workspace = true, features = ["reflect"] }
+cu29-value = { workspace = true, features = ["python"] }
 bincode = { workspace = true }
+minicbor-serde = { workspace = true, features = ["alloc"] }
 serde = { workspace = true }
-serde_json = { workspace = true }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 pyo3 = { workspace = true }
