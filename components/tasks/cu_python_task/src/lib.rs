@@ -826,7 +826,33 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, MutexGuard, OnceLock};
     use tempfile::TempDir;
+
+    fn cwd_lock() -> MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("cwd lock poisoned")
+    }
+
+    struct CurrentDirGuard {
+        original: PathBuf,
+    }
+
+    impl CurrentDirGuard {
+        fn switch_to(path: &Path) -> Self {
+            let original = std::env::current_dir().expect("cwd");
+            std::env::set_current_dir(path).expect("switch cwd");
+            Self { original }
+        }
+    }
+
+    impl Drop for CurrentDirGuard {
+        fn drop(&mut self) {
+            std::env::set_current_dir(&self.original).expect("restore cwd");
+        }
+    }
 
     #[test]
     fn mode_defaults_to_process() {
@@ -850,25 +876,25 @@ mod tests {
 
     #[test]
     fn default_script_path_uses_python_task_py_from_cwd() {
+        let _lock = cwd_lock();
         let temp_dir = TempDir::new().expect("temp dir");
-        let original = std::env::current_dir().expect("cwd");
-        std::env::set_current_dir(temp_dir.path()).expect("switch cwd");
+        let _cwd = CurrentDirGuard::switch_to(temp_dir.path());
+        let cwd = std::env::current_dir().expect("cwd after switch");
         let resolved = resolve_script_path(None).expect("resolve");
-        std::env::set_current_dir(original).expect("restore cwd");
-        assert_eq!(resolved, temp_dir.path().join("python/task.py"));
+        assert_eq!(resolved, cwd.join(DEFAULT_SCRIPT_PATH));
     }
 
     #[test]
     fn relative_script_paths_are_absolutized() {
+        let _lock = cwd_lock();
         let temp_dir = TempDir::new().expect("temp dir");
-        let original = std::env::current_dir().expect("cwd");
-        std::env::set_current_dir(temp_dir.path()).expect("switch cwd");
+        let _cwd = CurrentDirGuard::switch_to(temp_dir.path());
+        let cwd = std::env::current_dir().expect("cwd after switch");
 
         let mut cfg = ComponentConfig::new();
         cfg.set("script", "scripts/example.py".to_string());
         let resolved = resolve_script_path(Some(&cfg)).expect("resolve");
 
-        std::env::set_current_dir(original).expect("restore cwd");
-        assert_eq!(resolved, temp_dir.path().join("scripts/example.py"));
+        assert_eq!(resolved, cwd.join("scripts/example.py"));
     }
 }
