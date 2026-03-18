@@ -6,6 +6,19 @@ import traceback
 
 
 class AttrDict(dict):
+    def __init__(self, *args, on_mutate=None, **kwargs):
+        object.__setattr__(self, "_cu_on_mutate", on_mutate)
+        super().__init__()
+        if args or kwargs:
+            items = dict(*args, **kwargs)
+            for key, value in items.items():
+                super().__setitem__(key, _wrap(value, on_mutate=on_mutate))
+
+    def _cu_mark_mutated(self):
+        callback = object.__getattribute__(self, "_cu_on_mutate")
+        if callback is not None:
+            callback()
+
     def __getattr__(self, name):
         try:
             return self[name]
@@ -13,24 +26,217 @@ class AttrDict(dict):
             raise AttributeError(name) from exc
 
     def __setattr__(self, name, value):
+        if name.startswith("_cu_"):
+            object.__setattr__(self, name, value)
+            return
         self[name] = value
 
     def __delattr__(self, name):
+        if name.startswith("_cu_"):
+            object.__delattr__(self, name)
+            return
         try:
             del self[name]
         except KeyError as exc:
             raise AttributeError(name) from exc
 
+    def __setitem__(self, key, value):
+        self._cu_mark_mutated()
+        super().__setitem__(
+            key, _wrap(value, on_mutate=object.__getattribute__(self, "_cu_on_mutate"))
+        )
 
-def _wrap(value):
+    def __delitem__(self, key):
+        self._cu_mark_mutated()
+        super().__delitem__(key)
+
+    def clear(self):
+        if self:
+            self._cu_mark_mutated()
+        super().clear()
+
+    def pop(self, key, *args):
+        if key in self:
+            self._cu_mark_mutated()
+        return super().pop(key, *args)
+
+    def popitem(self):
+        self._cu_mark_mutated()
+        return super().popitem()
+
+    def setdefault(self, key, default=None):
+        if key in self:
+            return super().setdefault(key)
+        self._cu_mark_mutated()
+        return super().setdefault(
+            key, _wrap(default, on_mutate=object.__getattribute__(self, "_cu_on_mutate"))
+        )
+
+    def update(self, *args, **kwargs):
+        items = dict(*args, **kwargs)
+        for key, value in items.items():
+            self[key] = value
+
+
+class AttrList(list):
+    def __init__(self, iterable=(), on_mutate=None):
+        object.__setattr__(self, "_cu_on_mutate", on_mutate)
+        super().__init__(_wrap(item, on_mutate=on_mutate) for item in iterable)
+
+    def _cu_mark_mutated(self):
+        callback = object.__getattribute__(self, "_cu_on_mutate")
+        if callback is not None:
+            callback()
+
+    def __setitem__(self, index, value):
+        self._cu_mark_mutated()
+        if isinstance(index, slice):
+            super().__setitem__(
+                index,
+                [_wrap(item, on_mutate=object.__getattribute__(self, "_cu_on_mutate")) for item in value],
+            )
+        else:
+            super().__setitem__(
+                index, _wrap(value, on_mutate=object.__getattribute__(self, "_cu_on_mutate"))
+            )
+
+    def __delitem__(self, index):
+        self._cu_mark_mutated()
+        super().__delitem__(index)
+
+    def append(self, value):
+        self._cu_mark_mutated()
+        super().append(_wrap(value, on_mutate=object.__getattribute__(self, "_cu_on_mutate")))
+
+    def extend(self, values):
+        self._cu_mark_mutated()
+        super().extend(
+            _wrap(value, on_mutate=object.__getattribute__(self, "_cu_on_mutate"))
+            for value in values
+        )
+
+    def insert(self, index, value):
+        self._cu_mark_mutated()
+        super().insert(index, _wrap(value, on_mutate=object.__getattribute__(self, "_cu_on_mutate")))
+
+    def pop(self, index=-1):
+        self._cu_mark_mutated()
+        return super().pop(index)
+
+    def remove(self, value):
+        self._cu_mark_mutated()
+        super().remove(value)
+
+    def clear(self):
+        if self:
+            self._cu_mark_mutated()
+        super().clear()
+
+
+class MessageDict(AttrDict):
+    def __init__(self, mapping):
+        payload_present = mapping.get("__cu_payload_present__", mapping.get("payload") is not None)
+        payload_template = mapping.get("__cu_payload_template__")
+        clean = {
+            key: value
+            for key, value in mapping.items()
+            if key not in {"__cu_payload_present__", "__cu_payload_template__"}
+        }
+        super().__init__()
+        object.__setattr__(self, "_cu_payload_present", payload_present)
+        object.__setattr__(self, "_cu_payload_touched", False)
+        object.__setattr__(self, "_cu_payload_template", payload_template)
+        for key, value in clean.items():
+            if key == "payload" and value is None:
+                dict.__setitem__(self, key, None)
+            else:
+                callback = self._cu_mark_payload_touched if key == "payload" else None
+                dict.__setitem__(self, key, _wrap(value, on_mutate=callback))
+
+    def _cu_mark_payload_touched(self):
+        object.__setattr__(self, "_cu_payload_touched", True)
+
+    def _cu_materialize_payload(self):
+        payload = dict.get(self, "payload")
+        if payload is None:
+            template = object.__getattribute__(self, "_cu_payload_template")
+            if template is None:
+                return None
+            payload = _wrap(template, on_mutate=self._cu_mark_payload_touched)
+            dict.__setitem__(self, "payload", payload)
+        return payload
+
+    def __getattr__(self, name):
+        if name == "payload":
+            return self._cu_materialize_payload()
+        return super().__getattr__(name)
+
+    def __getitem__(self, key):
+        if key == "payload":
+            return self._cu_materialize_payload()
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):
+        if key == "payload":
+            payload = self._cu_materialize_payload()
+            return default if payload is None else payload
+        return super().get(key, default)
+
+    def __setattr__(self, name, value):
+        if name.startswith("_cu_"):
+            object.__setattr__(self, name, value)
+            return
+        if name == "payload":
+            self._cu_mark_payload_touched()
+            dict.__setitem__(self, "payload", _wrap(value, on_mutate=self._cu_mark_payload_touched))
+            return
+        super().__setattr__(name, value)
+
+    def __setitem__(self, key, value):
+        if key == "payload":
+            self._cu_mark_payload_touched()
+            dict.__setitem__(self, "payload", _wrap(value, on_mutate=self._cu_mark_payload_touched))
+            return
+        super().__setitem__(key, value)
+
+
+def _wrap(value, on_mutate=None, output_mode=False):
+    if isinstance(value, (MessageDict, AttrDict, AttrList)):
+        return value
     if isinstance(value, dict):
-        return AttrDict({key: _wrap(item) for key, item in value.items()})
+        if output_mode and (
+            "__cu_payload_present__" in value or "__cu_payload_template__" in value
+        ):
+            return MessageDict(value)
+        return AttrDict(
+            {
+                key: _wrap(item, on_mutate=on_mutate, output_mode=output_mode)
+                for key, item in value.items()
+            },
+            on_mutate=on_mutate,
+        )
     if isinstance(value, list):
-        return [_wrap(item) for item in value]
+        return AttrList(
+            [_wrap(item, on_mutate=on_mutate, output_mode=output_mode) for item in value],
+            on_mutate=on_mutate,
+        )
     return value
 
 
 def _unwrap(value):
+    if isinstance(value, MessageDict):
+        result = {key: _unwrap(item) for key, item in value.items() if key != "payload"}
+        if object.__getattribute__(value, "_cu_payload_present") or object.__getattribute__(
+            value, "_cu_payload_touched"
+        ):
+            result["payload"] = _unwrap(dict.get(value, "payload"))
+        else:
+            result["payload"] = None
+        return result
+    if isinstance(value, AttrDict):
+        return {key: _unwrap(item) for key, item in value.items()}
+    if isinstance(value, AttrList):
+        return [_unwrap(item) for item in value]
     if isinstance(value, dict):
         return {key: _unwrap(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
@@ -57,7 +263,7 @@ def load_process_function(script_path):
 def call_process(process_fn, request):
     input_value = _wrap(request["input"])
     state_value = _wrap(request["state"])
-    output_value = _wrap(request["output"])
+    output_value = _wrap(request["output"], output_mode=True)
     process_fn(input_value, state_value, output_value)
     return {
         "state": _unwrap(state_value),

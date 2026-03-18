@@ -13,12 +13,9 @@ def process(inp, state, output):
     state.total += left_value
     state.last_tag = right_tag
 
-    output[0].payload = {
-        "doubled": left_value * 2,
-        "tag": right_tag,
-        "calls": state.calls,
-    }
-    output[1].payload = {
-        "total": state.total,
-        "last_tag": state.last_tag,
-    }
+    output[0].payload.doubled = left_value * 2
+    output[0].payload.tag = right_tag
+    output[0].payload.calls = state.calls
+
+    output[1].payload.total = state.total
+    output[1].payload.last_tag = state.last_tag

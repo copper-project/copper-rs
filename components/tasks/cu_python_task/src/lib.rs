@@ -217,19 +217,19 @@ where
         = output_msg!(T)
     where
         Self: 'm;
-    type Owned = CuMsg<T>;
+    type Owned = PyCuMsg<T>;
 
     fn to_owned(output: &Self::Output<'_>) -> Self::Owned {
-        output.clone()
+        PyCuMsg::from_output(output)
     }
 
     fn replace_output(output: &mut Self::Output<'_>, owned: Self::Owned) {
-        *output = owned;
+        *output = owned.into_output();
     }
 }
 
 macro_rules! impl_py_output_spec_tuple {
-    ($first_ty:ident, $second_ty:ident $(, $ty:ident)* $(,)?) => {
+    ($first_ty:ident => $first_var:ident, $second_ty:ident => $second_var:ident $(, $ty:ident => $var:ident)* $(,)?) => {
         impl<$first_ty, $second_ty $(, $ty)*> PyOutputSpec for ($first_ty, $second_ty $(, $ty)*)
         where
             $first_ty: CuMsgPayload,
@@ -240,30 +240,105 @@ macro_rules! impl_py_output_spec_tuple {
                 = output_msg!($first_ty, $second_ty $(, $ty)*)
             where
                 Self: 'm;
-            type Owned = (CuMsg<$first_ty>, CuMsg<$second_ty> $(, CuMsg<$ty>)*);
+            type Owned = (PyCuMsg<$first_ty>, PyCuMsg<$second_ty> $(, PyCuMsg<$ty>)*);
 
             fn to_owned(output: &Self::Output<'_>) -> Self::Owned {
-                output.clone()
+                #[allow(non_snake_case)]
+                let ($first_var, $second_var $(, $var)*) = output;
+                (
+                    PyCuMsg::from_output($first_var),
+                    PyCuMsg::from_output($second_var)
+                    $(, PyCuMsg::from_output($var))*
+                )
             }
 
             fn replace_output(output: &mut Self::Output<'_>, owned: Self::Owned) {
-                *output = owned;
+                #[allow(non_snake_case)]
+                let ($first_var, $second_var $(, $var)*) = owned;
+                *output = (
+                    $first_var.into_output(),
+                    $second_var.into_output()
+                    $(, $var.into_output())*
+                );
             }
         }
     };
 }
 
-impl_py_output_spec_tuple!(T1, T2);
-impl_py_output_spec_tuple!(T1, T2, T3);
-impl_py_output_spec_tuple!(T1, T2, T3, T4);
-impl_py_output_spec_tuple!(T1, T2, T3, T4, T5);
-impl_py_output_spec_tuple!(T1, T2, T3, T4, T5, T6);
-impl_py_output_spec_tuple!(T1, T2, T3, T4, T5, T6, T7);
-impl_py_output_spec_tuple!(T1, T2, T3, T4, T5, T6, T7, T8);
-impl_py_output_spec_tuple!(T1, T2, T3, T4, T5, T6, T7, T8, T9);
-impl_py_output_spec_tuple!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10);
-impl_py_output_spec_tuple!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11);
-impl_py_output_spec_tuple!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12);
+impl_py_output_spec_tuple!(T1 => v1, T2 => v2);
+impl_py_output_spec_tuple!(T1 => v1, T2 => v2, T3 => v3);
+impl_py_output_spec_tuple!(T1 => v1, T2 => v2, T3 => v3, T4 => v4);
+impl_py_output_spec_tuple!(T1 => v1, T2 => v2, T3 => v3, T4 => v4, T5 => v5);
+impl_py_output_spec_tuple!(T1 => v1, T2 => v2, T3 => v3, T4 => v4, T5 => v5, T6 => v6);
+impl_py_output_spec_tuple!(
+    T1 => v1,
+    T2 => v2,
+    T3 => v3,
+    T4 => v4,
+    T5 => v5,
+    T6 => v6,
+    T7 => v7
+);
+impl_py_output_spec_tuple!(
+    T1 => v1,
+    T2 => v2,
+    T3 => v3,
+    T4 => v4,
+    T5 => v5,
+    T6 => v6,
+    T7 => v7,
+    T8 => v8
+);
+impl_py_output_spec_tuple!(
+    T1 => v1,
+    T2 => v2,
+    T3 => v3,
+    T4 => v4,
+    T5 => v5,
+    T6 => v6,
+    T7 => v7,
+    T8 => v8,
+    T9 => v9
+);
+impl_py_output_spec_tuple!(
+    T1 => v1,
+    T2 => v2,
+    T3 => v3,
+    T4 => v4,
+    T5 => v5,
+    T6 => v6,
+    T7 => v7,
+    T8 => v8,
+    T9 => v9,
+    T10 => v10
+);
+impl_py_output_spec_tuple!(
+    T1 => v1,
+    T2 => v2,
+    T3 => v3,
+    T4 => v4,
+    T5 => v5,
+    T6 => v6,
+    T7 => v7,
+    T8 => v8,
+    T9 => v9,
+    T10 => v10,
+    T11 => v11
+);
+impl_py_output_spec_tuple!(
+    T1 => v1,
+    T2 => v2,
+    T3 => v3,
+    T4 => v4,
+    T5 => v5,
+    T6 => v6,
+    T7 => v7,
+    T8 => v8,
+    T9 => v9,
+    T10 => v10,
+    T11 => v11,
+    T12 => v12
+);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect)]
 pub enum PyTaskMode {
@@ -293,6 +368,50 @@ struct ProcessRequest<I, S, O> {
 struct ProcessResult<S, O> {
     state: S,
     output: O,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound(serialize = "T: Serialize", deserialize = "T: DeserializeOwned"))]
+#[doc(hidden)]
+pub struct PyCuMsg<T>
+where
+    T: CuMsgPayload,
+{
+    payload: Option<T>,
+    tov: Tov,
+    metadata: CuMsgMetadata,
+    #[serde(default, rename = "__cu_payload_present__")]
+    payload_present: bool,
+    #[serde(
+        default,
+        rename = "__cu_payload_template__",
+        skip_serializing_if = "Option::is_none"
+    )]
+    payload_template: Option<T>,
+}
+
+impl<T> PyCuMsg<T>
+where
+    T: CuMsgPayload,
+{
+    fn from_output(output: &CuMsg<T>) -> Self {
+        let payload = output.payload().cloned();
+        let payload_present = payload.is_some();
+        Self {
+            payload,
+            tov: output.tov,
+            metadata: output.metadata.clone(),
+            payload_present,
+            payload_template: (!payload_present).then(T::default),
+        }
+    }
+
+    fn into_output(self) -> CuMsg<T> {
+        let mut output = CuMsg::new(self.payload);
+        output.tov = self.tov;
+        output.metadata = self.metadata;
+        output
+    }
 }
 
 #[derive(Serialize)]
@@ -829,6 +948,14 @@ mod tests {
     use std::sync::{Mutex, MutexGuard, OnceLock};
     use tempfile::TempDir;
 
+    #[derive(
+        Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
+    )]
+    struct TestPayload {
+        value: i32,
+        flag: bool,
+    }
+
     fn cwd_lock() -> MutexGuard<'static, ()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         LOCK.get_or_init(|| Mutex::new(()))
@@ -896,5 +1023,60 @@ mod tests {
         let resolved = resolve_script_path(Some(&cfg)).expect("resolve");
 
         assert_eq!(resolved, cwd.join("scripts/example.py"));
+    }
+
+    fn write_test_script(contents: &str) -> (TempDir, PathBuf) {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let script = temp_dir.path().join("task.py");
+        std::fs::write(&script, contents).expect("write script");
+        (temp_dir, script)
+    }
+
+    #[test]
+    fn process_backend_keeps_absent_output_payload_when_python_does_not_touch_it() {
+        let (_temp_dir, script) =
+            write_test_script("def process(inp, state, output):\n    state['seen'] = True\n");
+        let mut backend = ProcessBackend::start(&script).expect("start backend");
+        let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
+
+        let result: ProcessResult<serde_json::Value, PyCuMsg<TestPayload>> = backend
+            .process(&ProcessRequest {
+                kind: "process",
+                input: (),
+                state: serde_json::json!({}),
+                output,
+            })
+            .expect("process request");
+        backend.stop().expect("stop backend");
+
+        assert_eq!(result.state["seen"], true);
+        assert!(result.output.payload.is_none());
+    }
+
+    #[test]
+    fn process_backend_supports_attribute_writes_on_absent_output_payload() {
+        let (_temp_dir, script) = write_test_script(
+            "def process(inp, state, output):\n    output.payload.value = 41\n    output.payload.flag = True\n",
+        );
+        let mut backend = ProcessBackend::start(&script).expect("start backend");
+        let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
+
+        let result: ProcessResult<(), PyCuMsg<TestPayload>> = backend
+            .process(&ProcessRequest {
+                kind: "process",
+                input: (),
+                state: (),
+                output,
+            })
+            .expect("process request");
+        backend.stop().expect("stop backend");
+
+        assert_eq!(
+            result.output.payload,
+            Some(TestPayload {
+                value: 41,
+                flag: true,
+            })
+        );
     }
 }
