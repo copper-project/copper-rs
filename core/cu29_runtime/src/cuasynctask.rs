@@ -358,6 +358,7 @@ mod tests {
     }
 
     #[derive(Reflect)]
+    #[reflect(no_field_bounds, from_reflect = false)]
     struct ActionTask {
         #[reflect(ignore)]
         actions: Arc<Mutex<mpsc::Receiver<Option<u32>>>>,
