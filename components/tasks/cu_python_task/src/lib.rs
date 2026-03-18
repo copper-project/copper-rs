@@ -5,6 +5,7 @@ use bincode::{Decode, Encode};
 use cu29::prelude::*;
 use cu29_value::{Value as CuValue, py_to_value, to_value, value_to_py};
 use serde::de::DeserializeOwned;
+use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::ffi::CString;
@@ -424,9 +425,17 @@ struct ShutdownRequest {
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum ChildResponse<S, O> {
-    Ready,
-    Result { state: S, output: O },
-    Error { message: String },
+    Ready {
+        #[serde(default)]
+        cbor2_accelerated: bool,
+    },
+    Result {
+        state: S,
+        output: O,
+    },
+    Error {
+        message: String,
+    },
 }
 
 #[derive(Reflect)]
@@ -696,7 +705,14 @@ impl ProcessBackend {
             }
 
             match read_cbor_frame::<_, ChildResponse<(), ()>>(&mut self.stdout) {
-                Ok(ChildResponse::Ready) => return Ok(()),
+                Ok(ChildResponse::Ready { cbor2_accelerated }) => {
+                    if !cbor2_accelerated {
+                        warning!(
+                            "cu_python_task process mode is using pure-Python cbor2; install the C extension backend for better performance"
+                        );
+                    }
+                    return Ok(());
+                }
                 Ok(ChildResponse::Error { message }) => {
                     return Err(CuError::from(format!(
                         "Python task process failed during startup:\n{message}"
@@ -732,7 +748,7 @@ impl ProcessBackend {
             ChildResponse::Error { message } => Err(CuError::from(format!(
                 "Python task process raised an exception:\n{message}"
             ))),
-            ChildResponse::Ready => Err(CuError::from(
+            ChildResponse::Ready { .. } => Err(CuError::from(
                 "Python task process unexpectedly sent a second ready frame",
             )),
         }
@@ -901,7 +917,8 @@ where
 {
     let value = to_value(value)
         .map_err(|e| CuError::new_with_cause("Failed to encode Python task CBOR value", e))?;
-    let payload = encode_cbor_value_to_vec(&value)?;
+    let payload = minicbor_serde::to_vec(&PythonWireValue(&value))
+        .map_err(|e| CuError::new_with_cause("Failed to serialize Python task CBOR frame", e))?;
     if payload.len() > MAX_CBOR_FRAME_BYTES {
         return Err(CuError::from(format!(
             "Python task frame exceeded {} bytes",
@@ -950,103 +967,49 @@ where
         .map_err(|e| CuError::new_with_cause("Failed to decode Python task CBOR frame", e))
 }
 
-fn encode_cbor_value_to_vec(value: &CuValue) -> CuResult<Vec<u8>> {
-    let mut out = Vec::new();
-    encode_cbor_value(value, &mut out)?;
-    Ok(out)
-}
+struct PythonWireValue<'a>(&'a CuValue);
 
-fn encode_cbor_value(value: &CuValue, out: &mut Vec<u8>) -> CuResult<()> {
-    match value {
-        CuValue::Bool(v) => out.push(if *v { 0xf5 } else { 0xf4 }),
-        CuValue::U8(v) => encode_cbor_uint(out, 0, u64::from(*v)),
-        CuValue::U16(v) => encode_cbor_uint(out, 0, u64::from(*v)),
-        CuValue::U32(v) => encode_cbor_uint(out, 0, u64::from(*v)),
-        CuValue::U64(v) => encode_cbor_uint(out, 0, *v),
-        CuValue::I8(v) => encode_cbor_int(out, i64::from(*v))?,
-        CuValue::I16(v) => encode_cbor_int(out, i64::from(*v))?,
-        CuValue::I32(v) => encode_cbor_int(out, i64::from(*v))?,
-        CuValue::I64(v) => encode_cbor_int(out, *v)?,
-        CuValue::F32(v) => {
-            out.push(0xfa);
-            out.extend_from_slice(&v.to_be_bytes());
-        }
-        CuValue::F64(v) => {
-            out.push(0xfb);
-            out.extend_from_slice(&v.to_be_bytes());
-        }
-        CuValue::Char(v) => encode_cbor_text(out, &v.to_string())?,
-        CuValue::String(v) => encode_cbor_text(out, v)?,
-        CuValue::Unit | CuValue::Option(None) => out.push(0xf6),
-        CuValue::Option(Some(v)) | CuValue::Newtype(v) => encode_cbor_value(v, out)?,
-        CuValue::Seq(values) => {
-            encode_cbor_uint(out, 4, values.len() as u64);
-            for value in values {
-                encode_cbor_value(value, out)?;
+impl Serialize for PythonWireValue<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self.0 {
+            CuValue::Bool(v) => serializer.serialize_bool(*v),
+            CuValue::U8(v) => serializer.serialize_u8(*v),
+            CuValue::U16(v) => serializer.serialize_u16(*v),
+            CuValue::U32(v) => serializer.serialize_u32(*v),
+            CuValue::U64(v) => serializer.serialize_u64(*v),
+            CuValue::I8(v) => serializer.serialize_i8(*v),
+            CuValue::I16(v) => serializer.serialize_i16(*v),
+            CuValue::I32(v) => serializer.serialize_i32(*v),
+            CuValue::I64(v) => serializer.serialize_i64(*v),
+            CuValue::F32(v) => serializer.serialize_f32(*v),
+            CuValue::F64(v) => serializer.serialize_f64(*v),
+            CuValue::Char(v) => serializer.serialize_char(*v),
+            CuValue::String(v) => serializer.serialize_str(v),
+            CuValue::Unit | CuValue::Option(None) => serializer.serialize_none(),
+            CuValue::Option(Some(v)) | CuValue::Newtype(v) => {
+                PythonWireValue(v).serialize(serializer)
             }
-        }
-        CuValue::Map(values) => {
-            encode_cbor_uint(out, 5, values.len() as u64);
-            for (key, value) in values {
-                encode_cbor_value(key, out)?;
-                encode_cbor_value(value, out)?;
+            CuValue::Seq(values) => {
+                let mut seq = serializer.serialize_seq(Some(values.len()))?;
+                for value in values {
+                    seq.serialize_element(&PythonWireValue(value))?;
+                }
+                seq.end()
             }
+            CuValue::Map(values) => {
+                let mut map = serializer.serialize_map(Some(values.len()))?;
+                for (key, value) in values {
+                    map.serialize_entry(&PythonWireValue(key), &PythonWireValue(value))?;
+                }
+                map.end()
+            }
+            CuValue::Bytes(value) => serializer.serialize_bytes(value),
+            CuValue::CuTime(value) => serializer.serialize_u64(value.0),
         }
-        CuValue::Bytes(value) => encode_cbor_bytes(out, value)?,
-        CuValue::CuTime(value) => encode_cbor_uint(out, 0, value.0),
     }
-    Ok(())
-}
-
-fn encode_cbor_uint(out: &mut Vec<u8>, major: u8, value: u64) {
-    if value < 24 {
-        out.push((major << 5) | value as u8);
-    } else if u8::try_from(value).is_ok() {
-        out.push((major << 5) | 24);
-        out.push(value as u8);
-    } else if u16::try_from(value).is_ok() {
-        out.push((major << 5) | 25);
-        out.extend_from_slice(&(value as u16).to_be_bytes());
-    } else if u32::try_from(value).is_ok() {
-        out.push((major << 5) | 26);
-        out.extend_from_slice(&(value as u32).to_be_bytes());
-    } else {
-        out.push((major << 5) | 27);
-        out.extend_from_slice(&value.to_be_bytes());
-    }
-}
-
-fn encode_cbor_int(out: &mut Vec<u8>, value: i64) -> CuResult<()> {
-    if value >= 0 {
-        encode_cbor_uint(out, 0, value as u64);
-        return Ok(());
-    }
-    let magnitude = u64::try_from(-1_i128 - i128::from(value))
-        .map_err(|_| CuError::from("Python task CBOR integer is outside the supported range"))?;
-    encode_cbor_uint(out, 1, magnitude);
-    Ok(())
-}
-
-fn encode_cbor_bytes(out: &mut Vec<u8>, value: &[u8]) -> CuResult<()> {
-    encode_cbor_uint(
-        out,
-        2,
-        u64::try_from(value.len())
-            .map_err(|_| CuError::from("Python task CBOR byte string is too large"))?,
-    );
-    out.extend_from_slice(value);
-    Ok(())
-}
-
-fn encode_cbor_text(out: &mut Vec<u8>, value: &str) -> CuResult<()> {
-    encode_cbor_uint(
-        out,
-        3,
-        u64::try_from(value.len())
-            .map_err(|_| CuError::from("Python task CBOR text string is too large"))?,
-    );
-    out.extend_from_slice(value.as_bytes());
-    Ok(())
 }
 
 fn canonicalize_wire_value(value: CuValue) -> CuValue {
