@@ -148,6 +148,7 @@ where
             }
             if state.processing {
                 // background task still running
+                *real_output = CuMsg::default();
                 return Ok(());
             }
 
@@ -155,6 +156,7 @@ where
                 && ctx.now() < ready_at
             {
                 // result not yet allowed to surface based on recorded completion time
+                *real_output = CuMsg::default();
                 return Ok(());
             }
 
@@ -191,6 +193,10 @@ where
                     }
                 };
                 let output_ref: &mut CuMsg<O> = &mut output_guard;
+
+                // Each async run starts from an empty output so a task that
+                // chooses not to publish does not leak the previous payload.
+                *output_ref = CuMsg::default();
 
                 // Track the actual processing interval so replay can honor it.
                 if output_ref.metadata.process_time.start.is_none() {
@@ -343,6 +349,137 @@ mod tests {
             }
             Ok(())
         }
+    }
+
+    #[derive(Clone)]
+    struct ActionTaskResources {
+        actions: Arc<Mutex<mpsc::Receiver<Option<u32>>>>,
+        done: mpsc::Sender<()>,
+    }
+
+    #[derive(Reflect)]
+    struct ActionTask {
+        #[reflect(ignore)]
+        actions: Arc<Mutex<mpsc::Receiver<Option<u32>>>>,
+        #[reflect(ignore)]
+        done: mpsc::Sender<()>,
+    }
+
+    impl Freezable for ActionTask {}
+
+    impl CuTask for ActionTask {
+        type Resources<'r> = ActionTaskResources;
+        type Input<'m> = input_msg!(u32);
+        type Output<'m> = output_msg!(u32);
+
+        fn new(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
+        where
+            Self: Sized,
+        {
+            let _ = config;
+            Ok(Self {
+                actions: resources.actions,
+                done: resources.done,
+            })
+        }
+
+        fn process(
+            &mut self,
+            _ctx: &CuContext,
+            _input: &Self::Input<'_>,
+            output: &mut Self::Output<'_>,
+        ) -> CuResult<()> {
+            let action = self
+                .actions
+                .lock()
+                .unwrap()
+                .recv_timeout(Duration::from_secs(1))
+                .expect("timed out waiting for action");
+            if let Some(value) = action {
+                output.set_payload(value);
+            }
+            let _ = self.done.send(());
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn background_clears_output_while_processing() {
+        let tp = Arc::new(ThreadPoolBuilder::new().num_threads(1).build().unwrap());
+        let context = CuContext::new_with_clock();
+        let (action_tx, action_rx) = mpsc::channel::<Option<u32>>();
+        let (done_tx, done_rx) = mpsc::channel::<()>();
+        let resources = ActionTaskResources {
+            actions: Arc::new(Mutex::new(action_rx)),
+            done: done_tx,
+        };
+
+        let mut async_task: CuAsyncTask<ActionTask, u32> =
+            CuAsyncTask::new(Some(&ComponentConfig::default()), resources, tp).unwrap();
+        let input = CuMsg::new(Some(1u32));
+        let mut output = CuMsg::new(None);
+
+        async_task.process(&context, &input, &mut output).unwrap();
+        assert!(output.payload().is_none());
+
+        output.set_payload(999);
+        async_task.process(&context, &input, &mut output).unwrap();
+        assert!(
+            output.payload().is_none(),
+            "background poll should clear stale output while the worker is still running"
+        );
+
+        action_tx.send(Some(7)).unwrap();
+        done_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("background worker never finished");
+    }
+
+    #[test]
+    fn background_empty_run_does_not_reemit_previous_payload() {
+        let tp = Arc::new(ThreadPoolBuilder::new().num_threads(1).build().unwrap());
+        let context = CuContext::new_with_clock();
+        let (action_tx, action_rx) = mpsc::channel::<Option<u32>>();
+        let (done_tx, done_rx) = mpsc::channel::<()>();
+        let resources = ActionTaskResources {
+            actions: Arc::new(Mutex::new(action_rx)),
+            done: done_tx,
+        };
+
+        let mut async_task: CuAsyncTask<ActionTask, u32> =
+            CuAsyncTask::new(Some(&ComponentConfig::default()), resources, tp).unwrap();
+        let some_input = CuMsg::new(Some(1u32));
+        let no_input = CuMsg::new(None::<u32>);
+        let mut output = CuMsg::new(None);
+
+        action_tx.send(Some(42)).unwrap();
+        async_task
+            .process(&context, &some_input, &mut output)
+            .expect("failed to start first background run");
+        done_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("first background run never finished");
+
+        action_tx.send(None).unwrap();
+        async_task
+            .process(&context, &no_input, &mut output)
+            .expect("failed to start empty background run");
+        assert_eq!(output.payload(), Some(&42));
+        done_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("empty background run never finished");
+
+        action_tx.send(None).unwrap();
+        async_task
+            .process(&context, &no_input, &mut output)
+            .expect("failed to poll after empty background run");
+        assert!(
+            output.payload().is_none(),
+            "background task re-emitted the previous payload after an empty run"
+        );
+        done_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("cleanup background run never finished");
     }
 
     #[test]
