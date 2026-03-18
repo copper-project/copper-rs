@@ -361,10 +361,19 @@ impl PyTaskMode {
 
 #[derive(Serialize)]
 struct ProcessRequest<I, S, O> {
-    kind: &'static str,
     input: I,
     state: S,
     output: O,
+}
+
+impl<I, S, O> ProcessRequest<I, S, O> {
+    fn as_child_request(&self) -> ChildRequest<'_, I, S, O> {
+        ChildRequest::Process {
+            input: &self.input,
+            state: &self.state,
+            output: &self.output,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -418,8 +427,14 @@ where
 }
 
 #[derive(Serialize)]
-struct ShutdownRequest {
-    kind: &'static str,
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum ChildRequest<'a, I, S, O> {
+    Process {
+        input: &'a I,
+        state: &'a S,
+        output: &'a O,
+    },
+    Shutdown,
 }
 
 #[derive(Deserialize)]
@@ -548,7 +563,6 @@ where
         }
 
         let request = ProcessRequest {
-            kind: "process",
             input: I::to_owned(input),
             state: self.state.clone(),
             output: O::to_owned(output),
@@ -742,7 +756,8 @@ impl ProcessBackend {
         S: Serialize + DeserializeOwned,
         O: Serialize + DeserializeOwned,
     {
-        write_cbor_frame(&mut self.stdin, request)?;
+        let child_request = request.as_child_request();
+        write_cbor_frame(&mut self.stdin, &child_request)?;
         match read_cbor_frame::<_, ChildResponse<S, O>>(&mut self.stdout)? {
             ChildResponse::Result { state, output } => Ok(ProcessResult { state, output }),
             ChildResponse::Error { message } => Err(CuError::from(format!(
@@ -755,7 +770,7 @@ impl ProcessBackend {
     }
 
     fn stop(&mut self) -> CuResult<()> {
-        let _ = write_cbor_frame(&mut self.stdin, &ShutdownRequest { kind: "shutdown" });
+        let _ = write_cbor_frame(&mut self.stdin, &ChildRequest::<(), (), ()>::Shutdown);
 
         let deadline = Instant::now() + PROCESS_STOP_TIMEOUT;
         loop {
@@ -1136,7 +1151,6 @@ mod tests {
 
         let result: ProcessResult<SeenState, PyCuMsg<TestPayload>> = backend
             .process(&ProcessRequest {
-                kind: "process",
                 input: (),
                 state: SeenState::default(),
                 output,
@@ -1158,7 +1172,6 @@ mod tests {
 
         let result: ProcessResult<(), PyCuMsg<TestPayload>> = backend
             .process(&ProcessRequest {
-                kind: "process",
                 input: (),
                 state: (),
                 output,
@@ -1186,7 +1199,6 @@ mod tests {
 
         let result: ProcessResult<(), PyCuMsg<TestPayload>> = backend
             .process(&ProcessRequest {
-                kind: "process",
                 input: (),
                 state: (),
                 output,

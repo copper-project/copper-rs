@@ -2,6 +2,7 @@ import importlib.util
 import struct
 import sys
 import traceback
+from dataclasses import dataclass
 
 
 class AttrDict(dict):
@@ -243,6 +244,81 @@ def _unwrap(value):
     return value
 
 
+@dataclass(slots=True, frozen=True)
+class ProcessRequest:
+    input: object
+    state: object
+    output: object
+
+
+@dataclass(slots=True, frozen=True)
+class ShutdownRequest:
+    pass
+
+
+@dataclass(slots=True, frozen=True)
+class ReadyResponse:
+    cbor2_accelerated: bool
+
+
+@dataclass(slots=True, frozen=True)
+class ProcessResultResponse:
+    state: object
+    output: object
+
+    @classmethod
+    def from_process_result(cls, value):
+        if not isinstance(value, dict):
+            raise TypeError(f"Unsupported process result type: {type(value).__name__}")
+        try:
+            return cls(state=value["state"], output=value["output"])
+        except KeyError as exc:
+            raise RuntimeError(f"Process result is missing field {exc.args[0]!r}") from exc
+
+
+@dataclass(slots=True, frozen=True)
+class ErrorResponse:
+    message: str
+
+
+def _decode_request(value):
+    if not isinstance(value, dict):
+        raise RuntimeError(f"Expected request mapping, got {type(value).__name__}")
+
+    kind = value.get("kind")
+    if kind == "process":
+        return _coerce_process_request(value)
+    if kind == "shutdown":
+        return ShutdownRequest()
+
+    raise RuntimeError(f"Unsupported request kind: {kind!r}")
+
+
+def _encode_response(value):
+    if isinstance(value, ReadyResponse):
+        return {"kind": "ready", "cbor2_accelerated": value.cbor2_accelerated}
+    if isinstance(value, ProcessResultResponse):
+        return {"kind": "result", "state": value.state, "output": value.output}
+    if isinstance(value, ErrorResponse):
+        return {"kind": "error", "message": value.message}
+    raise TypeError(f"Unsupported response type: {type(value).__name__}")
+
+
+def _coerce_process_request(value):
+    if isinstance(value, ProcessRequest):
+        return value
+    if isinstance(value, dict):
+        try:
+            return ProcessRequest(
+                input=value["input"],
+                state=value["state"],
+                output=value["output"],
+            )
+        except KeyError as exc:
+            raise RuntimeError(f"Process request is missing field {exc.args[0]!r}") from exc
+    raise TypeError(f"Unsupported process request type: {type(value).__name__}")
+
+
 def load_process_function(script_path):
     spec = importlib.util.spec_from_file_location("cu_python_task_user", script_path)
     if spec is None or spec.loader is None:
@@ -260,9 +336,10 @@ def load_process_function(script_path):
 
 
 def call_process(process_fn, request):
-    input_value = _wrap(request["input"])
-    state_value = _wrap(request["state"])
-    output_value = _wrap(request["output"], output_mode=True)
+    request = _coerce_process_request(request)
+    input_value = _wrap(request.input)
+    state_value = _wrap(request.state)
+    output_value = _wrap(request.output, output_mode=True)
     process_fn(input_value, state_value, output_value)
     return {
         "state": _unwrap(state_value),
@@ -310,7 +387,7 @@ def _write_frame(writer, payload):
 
 
 def _write_cbor(writer, cbor2, value):
-    _write_frame(writer, cbor2.dumps(value))
+    _write_frame(writer, cbor2.dumps(_encode_response(value)))
 
 
 def main():
@@ -325,10 +402,10 @@ def main():
     try:
         cbor2, accelerated = _load_cbor2()
         process_fn = load_process_function(script_path)
-        _write_cbor(writer, cbor2, {"kind": "ready", "cbor2_accelerated": accelerated})
+        _write_cbor(writer, cbor2, ReadyResponse(cbor2_accelerated=accelerated))
     except Exception:
         if cbor2 is not None:
-            _write_cbor(writer, cbor2, {"kind": "error", "message": traceback.format_exc()})
+            _write_cbor(writer, cbor2, ErrorResponse(message=traceback.format_exc()))
         else:
             traceback.print_exc()
         return 1
@@ -339,18 +416,17 @@ def main():
             if frame is None:
                 return 0
 
-            request = cbor2.loads(frame)
-            kind = request.get("kind")
+            request = _decode_request(cbor2.loads(frame))
 
-            if kind == "shutdown":
+            if isinstance(request, ShutdownRequest):
                 return 0
-            if kind != "process":
-                raise RuntimeError(f"Unsupported request kind: {kind!r}")
 
-            response = call_process(process_fn, request)
-            _write_cbor(writer, cbor2, {"kind": "result", **response})
+            response = ProcessResultResponse.from_process_result(
+                call_process(process_fn, request)
+            )
+            _write_cbor(writer, cbor2, response)
         except Exception:
-            _write_cbor(writer, cbor2, {"kind": "error", "message": traceback.format_exc()})
+            _write_cbor(writer, cbor2, ErrorResponse(message=traceback.format_exc()))
 
 
 if __name__ == "__main__":
