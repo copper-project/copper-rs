@@ -69,11 +69,11 @@ pub fn py_to_value(value: &Bound<'_, PyAny>) -> PyResult<Value> {
         if let Ok(v) = value.extract::<u64>() {
             return Ok(Value::U64(v));
         }
-        if let Ok(v) = value.extract::<i128>() {
-            return Ok(Value::I128(v));
-        }
         if let Ok(v) = value.extract::<u128>() {
             return Ok(Value::U128(v));
+        }
+        if let Ok(v) = value.extract::<i128>() {
+            return Ok(Value::I128(v));
         }
         return Err(PyTypeError::new_err(
             "Python integer is outside the supported 128-bit range",
@@ -146,14 +146,14 @@ mod tests {
         Python::initialize();
         Python::attach(|py| {
             let u128_value = u128::from(u64::MAX) + 99;
-            let u128_py = value_to_py(&Value::U128(u128_value), py).expect("u128 to py");
+            let u128_py = value_to_py(&Value::U128(u128_value), py).expect("u128 value to py");
             assert_eq!(
                 u128_py.bind(py).extract::<u128>().expect("extract u128"),
                 u128_value
             );
 
             let i128_value = i128::from(i64::MIN) - 99;
-            let i128_py = value_to_py(&Value::I128(i128_value), py).expect("i128 to py");
+            let i128_py = value_to_py(&Value::I128(i128_value), py).expect("i128 value to py");
             assert_eq!(
                 i128_py.bind(py).extract::<i128>().expect("extract i128"),
                 i128_value
@@ -162,23 +162,20 @@ mod tests {
     }
 
     #[test]
-    fn py_large_int_maps_to_128_bit_value() {
+    fn roundtrip_large_128_bit_integers() {
         Python::initialize();
         Python::attach(|py| {
-            let positive_value = (u128::try_from(i128::MAX).expect("i128 max fits u128")) + 1;
-            let positive = positive_value.into_pyobject(py).expect("u128 py");
-            let negative = (i128::from(i64::MIN) - 99)
-                .into_pyobject(py)
-                .expect("i128 py");
+            let large_u128 = Value::U128(u128::from(u64::MAX) + 99);
+            let large_u128_py = value_to_py(&large_u128, py).expect("u128 value to py");
+            let large_u128_roundtrip =
+                py_to_value(large_u128_py.bind(py)).expect("py to value for u128");
+            assert_eq!(large_u128_roundtrip, large_u128);
 
-            assert_eq!(
-                py_to_value(&positive.into_any()).expect("u128 to value"),
-                Value::U128(positive_value)
-            );
-            assert_eq!(
-                py_to_value(&negative.into_any()).expect("i128 to value"),
-                Value::I128(i128::from(i64::MIN) - 99)
-            );
+            let large_i128 = Value::I128(i128::from(i64::MIN) - 99);
+            let large_i128_py = value_to_py(&large_i128, py).expect("i128 value to py");
+            let large_i128_roundtrip =
+                py_to_value(large_i128_py.bind(py)).expect("py to value for i128");
+            assert_eq!(large_i128_roundtrip, large_i128);
         });
     }
 }
