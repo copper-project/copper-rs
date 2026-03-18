@@ -351,6 +351,22 @@ mod tests {
         }
     }
 
+    fn wait_until_async_idle<T, O>(async_task: &CuAsyncTask<T, O>)
+    where
+        T: for<'m> CuTask<Output<'m> = CuMsg<O>> + Send + 'static,
+        O: CuMsgPayload + Send + 'static,
+    {
+        for _ in 0..100 {
+            let state = async_task.state.lock().unwrap();
+            if !state.processing {
+                return;
+            }
+            drop(state);
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        panic!("background task never became idle");
+    }
+
     #[derive(Clone)]
     struct ActionTaskResources {
         actions: Arc<Mutex<mpsc::Receiver<Option<u32>>>>,
@@ -460,6 +476,7 @@ mod tests {
         done_rx
             .recv_timeout(Duration::from_secs(1))
             .expect("first background run never finished");
+        wait_until_async_idle(&async_task);
 
         action_tx.send(None).unwrap();
         async_task
@@ -469,6 +486,7 @@ mod tests {
         done_rx
             .recv_timeout(Duration::from_secs(1))
             .expect("empty background run never finished");
+        wait_until_async_idle(&async_task);
 
         action_tx.send(None).unwrap();
         async_task
