@@ -116,7 +116,7 @@ mod tests {
     fn none_maps_to_unit() {
         Python::initialize();
         Python::attach(|py| {
-            let value = py_to_value(&py.None().bind(py)).expect("None to value");
+            let value = py_to_value(py.None().bind(py)).expect("None to value");
             assert!(matches!(value, Value::Unit));
         });
     }
