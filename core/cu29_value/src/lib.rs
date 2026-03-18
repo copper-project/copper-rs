@@ -17,9 +17,13 @@ use serde::Deserialize;
 mod bdec;
 mod benc;
 mod de;
+#[cfg(feature = "python")]
+mod python;
 mod ser;
 
 pub use de::*;
+#[cfg(feature = "python")]
+pub use python::{py_to_value, value_to_py};
 pub use ser::*;
 
 #[derive(Clone, Debug)]
