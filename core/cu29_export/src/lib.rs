@@ -1209,11 +1209,13 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
         downcast_copy!(u16);
         downcast_copy!(u32);
         downcast_copy!(u64);
+        downcast_copy!(u128);
         downcast_copy!(usize);
         downcast_copy!(i8);
         downcast_copy!(i16);
         downcast_copy!(i32);
         downcast_copy!(i64);
+        downcast_copy!(i128);
         downcast_copy!(isize);
         downcast_copy!(f32);
         downcast_copy!(f64);
@@ -1236,7 +1238,9 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
         match value {
             Value::String(s) => Ok(s.into_pyobject(py)?.into()),
             Value::U64(u) => Ok(u.into_pyobject(py)?.into()),
+            Value::U128(u) => Ok(u.into_pyobject(py)?.into()),
             Value::I64(i) => Ok(i.into_pyobject(py)?.into()),
+            Value::I128(i) => Ok(i.into_pyobject(py)?.into()),
             Value::F64(f) => Ok(f.into_pyobject(py)?.into()),
             Value::Bool(b) => Ok(b.into_pyobject(py)?.to_owned().into()),
             Value::CuTime(t) => Ok(t.0.into_pyobject(py)?.into()),
@@ -1270,6 +1274,25 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
                 let list = PyList::new(py, items)?;
                 Ok(list.into_pyobject(py)?.into())
             }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn value_to_py_preserves_128_bit_integers() {
+            Python::initialize();
+            Python::attach(|py| {
+                let u128_value = u128::from(u64::MAX) + 99;
+                let u128_py = value_to_py(&Value::U128(u128_value), py).unwrap();
+                assert_eq!(u128_py.bind(py).extract::<u128>().unwrap(), u128_value);
+
+                let i128_value = i128::from(i64::MIN) - 99;
+                let i128_py = value_to_py(&Value::I128(i128_value), py).unwrap();
+                assert_eq!(i128_py.bind(py).extract::<i128>().unwrap(), i128_value);
+            });
         }
     }
 }

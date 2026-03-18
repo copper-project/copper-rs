@@ -30,11 +30,13 @@ pub enum Value {
     U16(u16),
     U32(u32),
     U64(u64),
+    U128(u128),
 
     I8(i8),
     I16(i16),
     I32(i32),
     I64(i64),
+    I128(i128),
 
     F32(f32),
     F64(f64),
@@ -59,10 +61,12 @@ impl Display for Value {
             Value::U16(v) => write!(f, "{v}"),
             Value::U32(v) => write!(f, "{v}"),
             Value::U64(v) => write!(f, "{v}"),
+            Value::U128(v) => write!(f, "{v}"),
             Value::I8(v) => write!(f, "{v}"),
             Value::I16(v) => write!(f, "{v}"),
             Value::I32(v) => write!(f, "{v}"),
             Value::I64(v) => write!(f, "{v}"),
+            Value::I128(v) => write!(f, "{v}"),
             Value::F32(v) => write!(f, "{v}"),
             Value::F64(v) => write!(f, "{v}"),
             Value::Char(v) => write!(f, "{v}"),
@@ -120,10 +124,12 @@ impl Hash for Value {
             Value::U16(v) => v.hash(hasher),
             Value::U32(v) => v.hash(hasher),
             Value::U64(v) => v.hash(hasher),
+            Value::U128(v) => v.hash(hasher),
             Value::I8(v) => v.hash(hasher),
             Value::I16(v) => v.hash(hasher),
             Value::I32(v) => v.hash(hasher),
             Value::I64(v) => v.hash(hasher),
+            Value::I128(v) => v.hash(hasher),
             Value::F32(v) => OrderedFloat(v).hash(hasher),
             Value::F64(v) => OrderedFloat(v).hash(hasher),
             Value::Char(v) => v.hash(hasher),
@@ -150,10 +156,12 @@ impl PartialEq for Value {
             (&Value::U16(v0), &Value::U16(v1)) if v0 == v1 => true,
             (&Value::U32(v0), &Value::U32(v1)) if v0 == v1 => true,
             (&Value::U64(v0), &Value::U64(v1)) if v0 == v1 => true,
+            (&Value::U128(v0), &Value::U128(v1)) if v0 == v1 => true,
             (&Value::I8(v0), &Value::I8(v1)) if v0 == v1 => true,
             (&Value::I16(v0), &Value::I16(v1)) if v0 == v1 => true,
             (&Value::I32(v0), &Value::I32(v1)) if v0 == v1 => true,
             (&Value::I64(v0), &Value::I64(v1)) if v0 == v1 => true,
+            (&Value::I128(v0), &Value::I128(v1)) if v0 == v1 => true,
             (&Value::F32(v0), &Value::F32(v1)) if OrderedFloat(v0) == OrderedFloat(v1) => true,
             (&Value::F64(v0), &Value::F64(v1)) if OrderedFloat(v0) == OrderedFloat(v1) => true,
             (&Value::Char(v0), &Value::Char(v1)) if v0 == v1 => true,
@@ -178,10 +186,12 @@ impl Ord for Value {
             (&Value::U16(v0), Value::U16(v1)) => v0.cmp(v1),
             (&Value::U32(v0), Value::U32(v1)) => v0.cmp(v1),
             (&Value::U64(v0), Value::U64(v1)) => v0.cmp(v1),
+            (&Value::U128(v0), Value::U128(v1)) => v0.cmp(v1),
             (&Value::I8(v0), Value::I8(v1)) => v0.cmp(v1),
             (&Value::I16(v0), Value::I16(v1)) => v0.cmp(v1),
             (&Value::I32(v0), Value::I32(v1)) => v0.cmp(v1),
             (&Value::I64(v0), Value::I64(v1)) => v0.cmp(v1),
+            (&Value::I128(v0), Value::I128(v1)) => v0.cmp(v1),
             (&Value::F32(v0), &Value::F32(v1)) => OrderedFloat(v0).cmp(&OrderedFloat(v1)),
             (&Value::F64(v0), &Value::F64(v1)) => OrderedFloat(v0).cmp(&OrderedFloat(v1)),
             (&Value::Char(v0), Value::Char(v1)) => v0.cmp(v1),
@@ -206,10 +216,12 @@ impl Value {
             Value::U16(..) => 2,
             Value::U32(..) => 3,
             Value::U64(..) => 4,
+            Value::U128(..) => 19,
             Value::I8(..) => 5,
             Value::I16(..) => 6,
             Value::I32(..) => 7,
             Value::I64(..) => 8,
+            Value::I128(..) => 20,
             Value::F32(..) => 9,
             Value::F64(..) => 10,
             Value::Char(..) => 11,
@@ -231,10 +243,18 @@ impl Value {
             Value::U16(n) => serde::de::Unexpected::Unsigned(n as u64),
             Value::U32(n) => serde::de::Unexpected::Unsigned(n as u64),
             Value::U64(n) => serde::de::Unexpected::Unsigned(n),
+            Value::U128(n) => match u64::try_from(n) {
+                Ok(n) => serde::de::Unexpected::Unsigned(n),
+                Err(_) => serde::de::Unexpected::Other("128-bit unsigned integer"),
+            },
             Value::I8(n) => serde::de::Unexpected::Signed(n as i64),
             Value::I16(n) => serde::de::Unexpected::Signed(n as i64),
             Value::I32(n) => serde::de::Unexpected::Signed(n as i64),
             Value::I64(n) => serde::de::Unexpected::Signed(n),
+            Value::I128(n) => match i64::try_from(n) {
+                Ok(n) => serde::de::Unexpected::Signed(n),
+                Err(_) => serde::de::Unexpected::Other("128-bit signed integer"),
+            },
             Value::F32(n) => serde::de::Unexpected::Float(n as f64),
             Value::F64(n) => serde::de::Unexpected::Float(n),
             Value::Char(c) => serde::de::Unexpected::Char(c),
@@ -274,7 +294,7 @@ mod tests {
     #[cfg(not(feature = "std"))]
     use alloc::vec;
 
-    use bincode::{config::standard, decode_from_slice, encode_to_vec};
+    use bincode::{borrow_decode_from_slice, config::standard, decode_from_slice, encode_to_vec};
     use core::time::Duration;
     use cu29_clock::{CuDuration, CuTime, RobotClock};
     use serde_derive::{Deserialize, Serialize};
@@ -542,10 +562,12 @@ mod tests {
         check_value(Value::U16(42));
         check_value(Value::U32(42));
         check_value(Value::U64(42));
+        check_value(Value::U128(u128::from(u64::MAX) + 42));
         check_value(Value::I8(42));
         check_value(Value::I16(42));
         check_value(Value::I32(42));
         check_value(Value::I64(42));
+        check_value(Value::I128(i128::from(i64::MIN) - 42));
         check_value(Value::F32(42.42));
         check_value(Value::F64(42.42));
         check_value(Value::Char('4'));
@@ -559,6 +581,25 @@ mod tests {
             (Value::String("42".into()), Value::I32(42)),
         ])));
         check_value(Value::Bytes(vec![0x4, 0x2]));
+        check_value(Value::CuTime(CuTime::from(Duration::from_nanos(42))));
+    }
+
+    #[test]
+    fn value_borrow_decode() {
+        fn check_value(value: Value) {
+            let encoded = encode_to_vec(&value, standard()).expect("encode failed");
+            let (decoded, size) =
+                borrow_decode_from_slice::<Value, _>(encoded.as_slice(), standard())
+                    .expect("borrow decode failed");
+            assert_eq!(size, encoded.len());
+            assert_eq!(decoded, value);
+        }
+
+        check_value(Value::Bool(true));
+        check_value(Value::U128(u128::from(u64::MAX) + 7));
+        check_value(Value::I128(i128::from(i64::MIN) - 7));
+        check_value(Value::String("borrow".into()));
+        check_value(Value::Bytes(vec![1, 2, 3]));
         check_value(Value::CuTime(CuTime::from(Duration::from_nanos(42))));
     }
 
@@ -599,6 +640,8 @@ mod tests {
         let max_i8 = Value::I8(i8::MAX);
         let min_i64 = Value::I64(i64::MIN);
         let max_u64 = Value::U64(u64::MAX);
+        let min_i128 = Value::I128(i128::MIN);
+        let max_u128 = Value::U128(u128::MAX);
 
         // Special floating points
         let nan = Value::F64(f64::NAN);
@@ -613,6 +656,8 @@ mod tests {
             max_i8,
             min_i64,
             max_u64,
+            min_i128,
+            max_u128,
             nan.clone(),
             pos_inf.clone(),
             neg_inf.clone(),
@@ -1051,11 +1096,14 @@ mod tests {
         let i16_val = Value::I16(42);
         let i32_val = Value::I32(42);
         let i64_val = Value::I64(42);
+        let i128_val = Value::I128(42);
         let u8_val = Value::U8(42);
         let u16_val = Value::U16(42);
         let u32_val = Value::U32(42);
         let u64_val = Value::U64(42);
         let u64_val_large = Value::U64(u64::MAX);
+        let u128_val = Value::U128(42);
+        let u128_val_large = Value::U128(u128::from(u64::MAX) + 1);
         let f32_val = Value::F32(42.0);
         let f64_val = Value::F64(42.0);
 
@@ -1067,14 +1115,19 @@ mod tests {
         assert!(u8_val.deserialize_into::<u16>().is_ok());
         assert!(u16_val.deserialize_into::<u32>().is_ok());
         assert!(u32_val.deserialize_into::<u64>().is_ok());
+        assert!(u64_val.clone().deserialize_into::<u128>().is_ok());
+        assert!(u128_val.deserialize_into::<u128>().is_ok());
         assert!(u64_val.clone().deserialize_into::<f64>().is_ok());
         assert!(i32_val.deserialize_into::<f32>().is_ok());
         assert!(f32_val.deserialize_into::<f64>().is_ok());
         assert!(i64_val.clone().deserialize_into::<f64>().is_ok());
+        assert!(i64_val.clone().deserialize_into::<i128>().is_ok());
+        assert!(i128_val.deserialize_into::<i128>().is_ok());
         assert!(u64_val.deserialize_into::<i8>().is_ok());
 
         // Test conversions that shouldn't work
         assert!(u64_val_large.deserialize_into::<i8>().is_err());
+        assert!(u128_val_large.deserialize_into::<u64>().is_err());
         assert!(f64_val.deserialize_into::<u32>().is_err());
         assert!(i64_val.deserialize_into::<bool>().is_err());
     }
@@ -1113,9 +1166,15 @@ mod tests {
         let large_i64 = Value::I64(i64::MAX);
         assert!(large_i64.deserialize_into::<i32>().is_err());
 
+        let large_u128 = Value::U128(u128::from(u64::MAX) + 1);
+        assert!(large_u128.deserialize_into::<u64>().is_err());
+
         // Test underflow detection
         let negative = Value::I64(-1);
         assert!(negative.deserialize_into::<u64>().is_err());
+
+        let negative_i128 = Value::I128(-1);
+        assert!(negative_i128.deserialize_into::<u64>().is_err());
 
         // Edge case: exactly at boundary
         let max_i32 = Value::I64(i32::MAX as i64);
@@ -1124,6 +1183,23 @@ mod tests {
         // Edge case: one beyond boundary
         let beyond_max_i32 = Value::I64((i32::MAX as i64) + 1);
         assert!(beyond_max_i32.deserialize_into::<i32>().is_err());
+    }
+
+    #[test]
+    fn test_u128_and_i128_round_trip() {
+        let u128_value = to_value(u128::from(u64::MAX) + 99).expect("to_value failed");
+        assert_eq!(u128_value, Value::U128(u128::from(u64::MAX) + 99));
+        let round_trip_u128: u128 = u128_value
+            .deserialize_into()
+            .expect("u128 round-trip failed");
+        assert_eq!(round_trip_u128, u128::from(u64::MAX) + 99);
+
+        let i128_value = to_value(i128::from(i64::MIN) - 99).expect("to_value failed");
+        assert_eq!(i128_value, Value::I128(i128::from(i64::MIN) - 99));
+        let round_trip_i128: i128 = i128_value
+            .deserialize_into()
+            .expect("i128 round-trip failed");
+        assert_eq!(round_trip_i128, i128::from(i64::MIN) - 99);
     }
 
     #[test]

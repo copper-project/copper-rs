@@ -43,10 +43,12 @@ impl ser::Serialize for Value {
             Value::U16(v) => s.serialize_newtype_struct("Value", &(self.discriminant() as u8, v)),
             Value::U32(v) => s.serialize_newtype_struct("Value", &(self.discriminant() as u8, v)),
             Value::U64(v) => s.serialize_newtype_struct("Value", &(self.discriminant() as u8, v)),
+            Value::U128(v) => s.serialize_newtype_struct("Value", &(self.discriminant() as u8, v)),
             Value::I8(v) => s.serialize_newtype_struct("Value", &(self.discriminant() as u8, v)),
             Value::I16(v) => s.serialize_newtype_struct("Value", &(self.discriminant() as u8, v)),
             Value::I32(v) => s.serialize_newtype_struct("Value", &(self.discriminant() as u8, v)),
             Value::I64(v) => s.serialize_newtype_struct("Value", &(self.discriminant() as u8, v)),
+            Value::I128(v) => s.serialize_newtype_struct("Value", &(self.discriminant() as u8, v)),
             Value::F32(v) => s.serialize_newtype_struct("Value", &(self.discriminant() as u8, v)),
             Value::F64(v) => s.serialize_newtype_struct("Value", &(self.discriminant() as u8, v)),
             Value::Char(v) => s.serialize_newtype_struct("Value", &(self.discriminant() as u8, v)),
@@ -126,6 +128,14 @@ impl ser::Serializer for Serializer {
 
     fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
         Ok(Value::U64(v))
+    }
+
+    fn serialize_u128(self, v: u128) -> Result<Self::Ok, Self::Error> {
+        Ok(Value::U128(v))
+    }
+
+    fn serialize_i128(self, v: i128) -> Result<Self::Ok, Self::Error> {
+        Ok(Value::I128(v))
     }
 
     fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
