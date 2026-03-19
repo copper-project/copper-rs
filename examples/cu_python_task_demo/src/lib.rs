@@ -326,7 +326,6 @@ mod tests {
         assert_expected_snapshots();
     }
 
-    #[cfg(not(target_os = "macos"))]
     #[test]
     fn embedded_mode_runs_python_task_end_to_end() {
         let _guard = TEST_MUTEX.lock().unwrap();
@@ -334,7 +333,6 @@ mod tests {
         assert_expected_snapshots();
     }
 
-    #[cfg(not(target_os = "macos"))]
     #[test]
     fn both_modes_produce_the_same_outputs() {
         let _guard = TEST_MUTEX.lock().unwrap();

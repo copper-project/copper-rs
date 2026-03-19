@@ -101,11 +101,7 @@ jobs:
       - name: Set features (MacOS)
         if: runner.os == 'macOS'
         run: |
-          if [[ '${{ matrix.mode }}' == 'cuda-debug' ]]; then
-            echo "FEATURES_FLAG=--features $BASE_FEATURES,cuda" >> $GITHUB_ENV
-          else
-            echo "FEATURES_FLAG=--features $BASE_FEATURES" >> $GITHUB_ENV
-          fi
+          echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
 
       - name: Set features (Windows)
         if: runner.os == 'Windows'
@@ -230,11 +226,7 @@ jobs:
       - name: Set features (MacOS)
         if: runner.os == 'macOS'
         run: |
-          if [[ '${{ matrix.mode }}' == 'cuda-debug' ]]; then
-            echo "FEATURES_FLAG=--features $BASE_FEATURES,cuda" >> $GITHUB_ENV
-          else
-            echo "FEATURES_FLAG=--features $BASE_FEATURES" >> $GITHUB_ENV
-          fi
+          echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
 
       - name: Set features (Windows)
         if: runner.os == 'Windows'

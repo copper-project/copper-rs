@@ -53,7 +53,7 @@ pub use serde_to_jsonschema::trace_type_to_jsonschema;
 ///
 /// Applications normally call this indirectly through
 /// [`copperlist_iterator_unified_typed_py`].
-#[cfg(all(feature = "python", not(target_os = "macos")))]
+#[cfg(feature = "python")]
 pub use python::register_copperlist_python_type;
 
 /// Creates a Python CopperList iterator for a specific CopperList tuple type.
@@ -62,7 +62,7 @@ pub use python::register_copperlist_python_type;
 /// CopperList type at compile time. The helper registers the decoder and returns
 /// an iterator object that yields Python objects built from the recorded
 /// CopperLists.
-#[cfg(all(feature = "python", not(target_os = "macos")))]
+#[cfg(feature = "python")]
 pub fn copperlist_iterator_unified_typed_py<P>(
     unified_src_path: &str,
     py: pyo3::Python<'_>,
@@ -80,7 +80,7 @@ where
 ///
 /// This is useful for offline analysis scripts that need to inspect mission
 /// starts, stops, faults, and related runtime events.
-#[cfg(all(feature = "python", not(target_os = "macos")))]
+#[cfg(feature = "python")]
 pub fn runtime_lifecycle_iterator_unified_py(
     unified_src_path: &str,
     py: pyo3::Python<'_>,
@@ -203,7 +203,7 @@ pub fn run_cli<P>() -> CuResult<()>
 where
     P: CopperListTuple + CuPayloadRawBytes + mcap_export::PayloadSchemas,
 {
-    #[cfg(all(feature = "python", not(target_os = "macos")))]
+    #[cfg(feature = "python")]
     let _ = python::register_copperlist_python_type::<P>();
 
     run_cli_inner::<P>()
@@ -216,7 +216,7 @@ pub fn run_cli<P>() -> CuResult<()>
 where
     P: CopperListTuple + CuPayloadRawBytes,
 {
-    #[cfg(all(feature = "python", not(target_os = "macos")))]
+    #[cfg(feature = "python")]
     let _ = python::register_copperlist_python_type::<P>();
 
     run_cli_inner::<P>()
@@ -616,8 +616,8 @@ pub fn textlog_dump(src: impl Read, index: &Path) -> CuResult<()> {
     Ok(())
 }
 
-// only for users opting into python interface, not supported on macOS at the moment
-#[cfg(all(feature = "python", not(target_os = "macos")))]
+// Only compiled for users opting into the Python interface.
+#[cfg(feature = "python")]
 mod python {
     use bincode::config::standard;
     use bincode::decode_from_std_read;

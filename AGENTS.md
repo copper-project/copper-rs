@@ -349,7 +349,7 @@ For offline analysis:
 
 - JSON dump is acceptable when needed.
 - Prefer the Python API when querying structured logs programmatically; it is better than scraping rebuilt text.
-- Python support lives in `core/cu29_export` behind the `python` feature and is currently not supported on macOS.
+- Python support lives in `core/cu29_export` behind the `python` feature.
 - Current Python entry points in `core/cu29_export/src/lib.rs`:
   - `struct_log_iterator_unified(...)`
   - `struct_log_iterator_bare(...)`
