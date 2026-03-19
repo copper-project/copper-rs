@@ -62,12 +62,13 @@ Notes:
 The user script must export:
 
 ```python
-def process(inp, state, output):
+def process(ctx, inp, state, output):
     ...
 ```
 
 In this demo:
 
+- `ctx` exposes Copper callback metadata and clock access
 - `inp` is a 2-tuple containing the left and right input messages
 - `state` is a mutable object with `calls`, `total`, and `last_tag`
 - `output` is a 2-slot container for the output messages

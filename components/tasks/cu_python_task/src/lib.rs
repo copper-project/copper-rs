@@ -7,7 +7,7 @@
 //! lifecycle while delegating one task's algorithm body to a Python function:
 //!
 //! ```python
-//! def process(input, state, output):
+//! def process(ctx, input, state, output):
 //!     ...
 //! ```
 //!
@@ -418,6 +418,7 @@ impl PyTaskMode {
 
 #[derive(Serialize)]
 struct ProcessRequest<I, S, O> {
+    ctx: PyTaskContextSnapshot,
     input: I,
     state: S,
     output: O,
@@ -426,9 +427,31 @@ struct ProcessRequest<I, S, O> {
 impl<I, S, O> ProcessRequest<I, S, O> {
     fn as_child_request(&self) -> ChildRequest<'_, I, S, O> {
         ChildRequest::Process {
+            ctx: &self.ctx,
             input: &self.input,
             state: &self.state,
             output: &self.output,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct PyTaskContextSnapshot {
+    now_ns: u64,
+    recent_ns: u64,
+    cl_id: u64,
+    task_id: Option<&'static str>,
+    task_index: Option<usize>,
+}
+
+impl PyTaskContextSnapshot {
+    fn from_cu_context(ctx: &CuContext) -> Self {
+        Self {
+            now_ns: ctx.now().as_nanos(),
+            recent_ns: ctx.recent().as_nanos(),
+            cl_id: ctx.cl_id(),
+            task_id: ctx.task_id(),
+            task_index: ctx.task_index(),
         }
     }
 }
@@ -487,6 +510,7 @@ where
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum ChildRequest<'a, I, S, O> {
     Process {
+        ctx: &'a PyTaskContextSnapshot,
         input: &'a I,
         state: &'a S,
         output: &'a O,
@@ -516,9 +540,13 @@ enum ChildResponse<S, O> {
 /// The configured script must define:
 ///
 /// ```python
-/// def process(input, state, output):
+/// def process(ctx, input, state, output):
 ///     ...
 /// ```
+///
+/// `ctx` is passed as the first argument. In embedded mode it is a live PyO3
+/// wrapper over the current Copper context; in process mode it is a per-call
+/// snapshot exposing the same clock/task metadata API.
 ///
 /// Configuration keys:
 ///
@@ -640,6 +668,7 @@ where
         }
 
         let request = ProcessRequest {
+            ctx: PyTaskContextSnapshot::from_cu_context(ctx),
             input: I::to_owned(input),
             state: self.state.clone(),
             output: O::to_owned(output),
@@ -652,7 +681,7 @@ where
         let ProcessResult {
             state,
             output: new_output,
-        } = backend.process(&request)?;
+        } = backend.process(ctx, &request)?;
         self.state = state;
         O::replace_output(output, new_output);
         Ok(())
@@ -717,6 +746,7 @@ impl PythonBackend {
 
     fn process<I, S, O>(
         &mut self,
+        ctx: &CuContext,
         request: &ProcessRequest<I, S, O>,
     ) -> CuResult<ProcessResult<S, O>>
     where
@@ -725,8 +755,8 @@ impl PythonBackend {
         O: Serialize + DeserializeOwned,
     {
         match self {
-            Self::Process(backend) => backend.process(request),
-            Self::Embedded(backend) => backend.process(request),
+            Self::Process(backend) => backend.process(ctx, request),
+            Self::Embedded(backend) => backend.process(ctx, request),
         }
     }
 
@@ -810,6 +840,7 @@ impl ProcessBackend {
 
     fn process<I, S, O>(
         &mut self,
+        _ctx: &CuContext,
         request: &ProcessRequest<I, S, O>,
     ) -> CuResult<ProcessResult<S, O>>
     where
@@ -836,6 +867,49 @@ impl ProcessBackend {
             .wait()
             .map_err(|e| CuError::new_with_cause("Failed to wait for Python task process", e))?;
         Ok(())
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+#[pyclass(name = "CuContext")]
+struct PyEmbeddedContext {
+    ctx: CuContext,
+}
+
+#[cfg(not(target_os = "macos"))]
+#[pymethods]
+impl PyEmbeddedContext {
+    #[getter]
+    fn cl_id(&self) -> u64 {
+        self.ctx.cl_id()
+    }
+
+    #[getter]
+    fn task_id(&self) -> Option<String> {
+        self.ctx.task_id().map(str::to_string)
+    }
+
+    #[getter]
+    fn task_index(&self) -> Option<usize> {
+        self.ctx.task_index()
+    }
+
+    #[getter]
+    fn now_ns(&self) -> u64 {
+        self.ctx.now().as_nanos()
+    }
+
+    #[getter]
+    fn recent_ns(&self) -> u64 {
+        self.ctx.recent().as_nanos()
+    }
+
+    fn now(&self) -> u64 {
+        self.ctx.now().as_nanos()
+    }
+
+    fn recent(&self) -> u64 {
+        self.ctx.recent().as_nanos()
     }
 }
 
@@ -881,6 +955,7 @@ impl EmbeddedBackend {
 
     fn process<I, S, O>(
         &mut self,
+        ctx: &CuContext,
         request: &ProcessRequest<I, S, O>,
     ) -> CuResult<ProcessResult<S, O>>
     where
@@ -894,8 +969,10 @@ impl EmbeddedBackend {
             let call_process = self.call_process.bind(py);
             let process_fn = self.process_fn.bind(py);
             let request_py = value_to_py(&request_value, py).map_err(python_error)?;
+            let live_ctx =
+                Py::new(py, PyEmbeddedContext { ctx: ctx.clone() }).map_err(python_error)?;
             call_process
-                .call1((process_fn, request_py))
+                .call1((process_fn, request_py, live_ctx))
                 .map_err(python_error)
                 .and_then(|response| py_to_value(&response).map_err(python_error))
         })?;
@@ -922,6 +999,7 @@ impl EmbeddedBackend {
 
     fn process<I, S, O>(
         &mut self,
+        _ctx: &CuContext,
         _request: &ProcessRequest<I, S, O>,
     ) -> CuResult<ProcessResult<S, O>>
     where
@@ -1337,6 +1415,7 @@ fn canonicalize_wire_value(value: CuValue) -> CuValue {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cu29::prelude::{CuContext, RobotClock};
     use std::sync::{Mutex, MutexGuard, OnceLock};
     use tempfile::TempDir;
 
@@ -1352,6 +1431,8 @@ mod tests {
     struct SeenState {
         seen: bool,
     }
+
+    const TEST_TASK_IDS: &[&str] = &["py"];
 
     fn cwd_lock() -> MutexGuard<'static, ()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -1429,19 +1510,45 @@ mod tests {
         (temp_dir, script)
     }
 
+    fn test_context(now_ns: u64, cl_id: u64) -> CuContext {
+        let (clock, mock) = RobotClock::mock();
+        mock.set_value(now_ns);
+        let mut ctx = CuContext::builder(clock)
+            .cl_id(cl_id)
+            .task_ids(TEST_TASK_IDS)
+            .build();
+        ctx.set_current_task(0);
+        ctx
+    }
+
+    fn test_context_snapshot(now_ns: u64, cl_id: u64) -> PyTaskContextSnapshot {
+        PyTaskContextSnapshot {
+            now_ns,
+            recent_ns: now_ns,
+            cl_id,
+            task_id: Some("py"),
+            task_index: Some(0),
+        }
+    }
+
     #[test]
     fn process_backend_keeps_absent_output_payload_when_python_does_not_touch_it() {
+        let ctx = test_context(1, 7);
         let (_temp_dir, script) =
-            write_test_script("def process(inp, state, output):\n    state['seen'] = True\n");
+            write_test_script("def process(ctx, inp, state, output):\n    state['seen'] = True\n");
         let mut backend = ProcessBackend::start(&script).expect("start backend");
         let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
 
         let result: ProcessResult<SeenState, PyCuMsg<TestPayload>> = backend
-            .process(&ProcessRequest {
-                input: (),
-                state: SeenState::default(),
-                output,
-            })
+            .process(
+                &ctx,
+                &ProcessRequest {
+                    ctx: PyTaskContextSnapshot::from_cu_context(&ctx),
+                    input: (),
+                    state: SeenState::default(),
+                    output,
+                },
+            )
             .expect("process request");
         backend.stop().expect("stop backend");
 
@@ -1451,18 +1558,23 @@ mod tests {
 
     #[test]
     fn process_backend_supports_attribute_writes_on_absent_output_payload() {
+        let ctx = test_context(41, 7);
         let (_temp_dir, script) = write_test_script(
-            "def process(inp, state, output):\n    output.payload.value = 41\n    output.payload.flag = True\n",
+            "def process(ctx, inp, state, output):\n    output.payload.value = 41\n    output.payload.flag = True\n",
         );
         let mut backend = ProcessBackend::start(&script).expect("start backend");
         let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
 
         let result: ProcessResult<(), PyCuMsg<TestPayload>> = backend
-            .process(&ProcessRequest {
-                input: (),
-                state: (),
-                output,
-            })
+            .process(
+                &ctx,
+                &ProcessRequest {
+                    ctx: PyTaskContextSnapshot::from_cu_context(&ctx),
+                    input: (),
+                    state: (),
+                    output,
+                },
+            )
             .expect("process request");
         backend.stop().expect("stop backend");
 
@@ -1477,23 +1589,60 @@ mod tests {
 
     #[test]
     fn process_backend_preserves_rebound_scalar_state() {
+        let ctx = test_context(41, 7);
         let (_temp_dir, script) = write_test_script(
-            "def process(inp, current_state, out):\n    current_state = current_state + 1\n",
+            "def process(ctx, inp, current_state, out):\n    current_state = current_state + 1\n",
         );
         let mut backend = ProcessBackend::start(&script).expect("start backend");
         let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
 
         let result: ProcessResult<u64, PyCuMsg<TestPayload>> = backend
-            .process(&ProcessRequest {
-                input: (),
-                state: 41_u64,
-                output,
-            })
+            .process(
+                &ctx,
+                &ProcessRequest {
+                    ctx: PyTaskContextSnapshot::from_cu_context(&ctx),
+                    input: (),
+                    state: 41_u64,
+                    output,
+                },
+            )
             .expect("process request");
         backend.stop().expect("stop backend");
 
         assert_eq!(result.state, 42);
         assert!(result.output.payload.is_none());
+    }
+
+    #[test]
+    fn process_backend_receives_ctx_snapshot() {
+        let rust_ctx = test_context(1, 2);
+        let request_ctx = test_context_snapshot(41, 7);
+        let (_temp_dir, script) = write_test_script(
+            "def process(ctx, inp, state, output):\n    output.payload.value = ctx.now()\n    output.payload.flag = (ctx.cl_id == 7 and ctx.task_id == 'py' and ctx.task_index == 0)\n",
+        );
+        let mut backend = ProcessBackend::start(&script).expect("start backend");
+        let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
+
+        let result: ProcessResult<(), PyCuMsg<TestPayload>> = backend
+            .process(
+                &rust_ctx,
+                &ProcessRequest {
+                    ctx: request_ctx,
+                    input: (),
+                    state: (),
+                    output,
+                },
+            )
+            .expect("process request");
+        backend.stop().expect("stop backend");
+
+        assert_eq!(
+            result.output.payload,
+            Some(TestPayload {
+                value: 41,
+                flag: true,
+            })
+        );
     }
 
     #[test]
@@ -1518,18 +1667,23 @@ mod tests {
     #[cfg(not(target_os = "macos"))]
     #[test]
     fn embedded_backend_supports_attribute_writes_on_absent_output_payload() {
+        let ctx = test_context(41, 7);
         let (_temp_dir, script) = write_test_script(
-            "def process(inp, state, output):\n    output.payload.value = 41\n    output.payload.flag = True\n",
+            "def process(ctx, inp, state, output):\n    output.payload.value = 41\n    output.payload.flag = True\n",
         );
         let mut backend = EmbeddedBackend::start(&script).expect("start backend");
         let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
 
         let result: ProcessResult<(), PyCuMsg<TestPayload>> = backend
-            .process(&ProcessRequest {
-                input: (),
-                state: (),
-                output,
-            })
+            .process(
+                &ctx,
+                &ProcessRequest {
+                    ctx: PyTaskContextSnapshot::from_cu_context(&ctx),
+                    input: (),
+                    state: (),
+                    output,
+                },
+            )
             .expect("process request");
         backend.stop().expect("stop backend");
 
@@ -1545,22 +1699,60 @@ mod tests {
     #[cfg(not(target_os = "macos"))]
     #[test]
     fn embedded_backend_preserves_rebound_scalar_state() {
+        let ctx = test_context(41, 7);
         let (_temp_dir, script) = write_test_script(
-            "def process(inp, current_state, out):\n    current_state = current_state + 1\n",
+            "def process(ctx, inp, current_state, out):\n    current_state = current_state + 1\n",
         );
         let mut backend = EmbeddedBackend::start(&script).expect("start backend");
         let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
 
         let result: ProcessResult<u64, PyCuMsg<TestPayload>> = backend
-            .process(&ProcessRequest {
-                input: (),
-                state: 41_u64,
-                output,
-            })
+            .process(
+                &ctx,
+                &ProcessRequest {
+                    ctx: PyTaskContextSnapshot::from_cu_context(&ctx),
+                    input: (),
+                    state: 41_u64,
+                    output,
+                },
+            )
             .expect("process request");
         backend.stop().expect("stop backend");
 
         assert_eq!(result.state, 42);
         assert!(result.output.payload.is_none());
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn embedded_backend_receives_live_ctx() {
+        let ctx = test_context(41, 7);
+        let request_ctx = test_context_snapshot(1, 2);
+        let (_temp_dir, script) = write_test_script(
+            "def process(ctx, inp, state, output):\n    output.payload.value = ctx.now()\n    output.payload.flag = (ctx.cl_id == 7 and ctx.task_id == 'py' and ctx.task_index == 0)\n",
+        );
+        let mut backend = EmbeddedBackend::start(&script).expect("start backend");
+        let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
+
+        let result: ProcessResult<(), PyCuMsg<TestPayload>> = backend
+            .process(
+                &ctx,
+                &ProcessRequest {
+                    ctx: request_ctx,
+                    input: (),
+                    state: (),
+                    output,
+                },
+            )
+            .expect("process request");
+        backend.stop().expect("stop backend");
+
+        assert_eq!(
+            result.output.payload,
+            Some(TestPayload {
+                value: 41,
+                flag: true,
+            })
+        );
     }
 }

@@ -217,6 +217,41 @@ class MessageDict(AttrDict):
         super().__setitem__(key, value)
 
 
+class ContextSnapshot:
+    __slots__ = ("_cu_now_ns", "_cu_recent_ns", "cl_id", "task_id", "task_index")
+
+    def __init__(self, now_ns, recent_ns, cl_id, task_id=None, task_index=None):
+        self._cu_now_ns = now_ns
+        self._cu_recent_ns = recent_ns
+        self.cl_id = cl_id
+        self.task_id = task_id
+        self.task_index = task_index
+
+    @classmethod
+    def from_mapping(cls, mapping):
+        return cls(
+            now_ns=mapping["now_ns"],
+            recent_ns=mapping["recent_ns"],
+            cl_id=mapping["cl_id"],
+            task_id=mapping.get("task_id"),
+            task_index=mapping.get("task_index"),
+        )
+
+    @property
+    def now_ns(self):
+        return self._cu_now_ns
+
+    @property
+    def recent_ns(self):
+        return self._cu_recent_ns
+
+    def now(self):
+        return self._cu_now_ns
+
+    def recent(self):
+        return self._cu_recent_ns
+
+
 def _wrap(value, on_mutate=None, output_mode=False):
     if isinstance(value, (MessageDict, AttrDict, AttrList)):
         return value
@@ -261,8 +296,17 @@ def _unwrap(value):
     return value
 
 
+def _wrap_context(value):
+    if isinstance(value, ContextSnapshot):
+        return value
+    if isinstance(value, dict):
+        return ContextSnapshot.from_mapping(value)
+    return value
+
+
 @dataclass(slots=True, frozen=True)
 class ProcessRequest:
+    ctx: object
     input: object
     state: object
     output: object
@@ -327,6 +371,7 @@ def _coerce_process_request(value):
     if isinstance(value, dict):
         try:
             return ProcessRequest(
+                ctx=value["ctx"],
                 input=value["input"],
                 state=value["state"],
                 output=value["output"],
@@ -337,7 +382,7 @@ def _coerce_process_request(value):
 
 
 def load_process_function(script_path):
-    """Load the user script and return its ``process(input, state, output)`` callable."""
+    """Load the user script and return its ``process(ctx, input, state, output)`` callable."""
     spec = importlib.util.spec_from_file_location("cu_python_task_user", script_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Could not load Python task script from {script_path!r}")
@@ -348,17 +393,20 @@ def load_process_function(script_path):
     process_fn = getattr(module, "process", None)
     if process_fn is None or not callable(process_fn):
         raise RuntimeError(
-            f"Python task script {script_path!r} must define a callable process(input, state, output)"
+            f"Python task script {script_path!r} must define a callable process(ctx, input, state, output)"
+        )
+    positional = _inspect_process_signature(process_fn)
+    if positional is not None and len(positional) < 4:
+        raise RuntimeError(
+            f"Python task script {script_path!r} must define process(ctx, input, state, output)"
         )
     return process_fn
 
 
-def _call_and_capture_final_bindings(process_fn, *args):
-    """Call ``process_fn`` and capture the final locals of its top-level frame."""
+def _inspect_process_signature(process_fn):
     try:
         signature = inspect.signature(process_fn)
     except (TypeError, ValueError):
-        process_fn(*args)
         return None
 
     positional = [
@@ -366,9 +414,11 @@ def _call_and_capture_final_bindings(process_fn, *args):
         for param in signature.parameters.values()
         if param.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
     ]
-    if len(positional) < 3:
-        process_fn(*args)
-        return None
+    return positional
+
+
+def _call_and_capture_final_bindings(process_fn, positional, *args):
+    """Call ``process_fn`` and capture the final locals of its top-level frame."""
 
     captured = {}
     active_frame = None
@@ -390,25 +440,27 @@ def _call_and_capture_final_bindings(process_fn, *args):
         sys.setprofile(previous_profiler)
 
     return {
-        "state": captured.get(positional[1], args[1]),
-        "output": captured.get(positional[2], args[2]),
+        "state": captured.get(positional[2], args[2]),
+        "output": captured.get(positional[3], args[3]),
     }
 
 
-def call_process(process_fn, request):
+def call_process(process_fn, request, live_ctx=None):
     """Invoke the user ``process`` function and unwrap the mutated state/output values."""
     request = _coerce_process_request(request)
+    positional = _inspect_process_signature(process_fn)
+    ctx_value = live_ctx if live_ctx is not None else _wrap_context(request.ctx)
     input_value = _wrap(request.input)
     state_value = _wrap(request.state)
     output_value = _wrap(request.output, output_mode=True)
-    final_bindings = _call_and_capture_final_bindings(
-        process_fn, input_value, state_value, output_value
-    )
-    if final_bindings is not None:
+    if positional is not None:
+        final_bindings = _call_and_capture_final_bindings(
+            process_fn, positional, ctx_value, input_value, state_value, output_value
+        )
         state_value = final_bindings["state"]
         output_value = final_bindings["output"]
     else:
-        process_fn(input_value, state_value, output_value)
+        process_fn(ctx_value, input_value, state_value, output_value)
     return {
         "state": _unwrap(state_value),
         "output": _unwrap(output_value),

@@ -28,7 +28,7 @@ This is strongly not recommended for production or realtime control loops.
 script exposing:
 
 ```python
-def process(input, state, output):
+def process(ctx, input, state, output):
     ...
 ```
 
@@ -104,6 +104,10 @@ Neither is a good production answer.
 
 Inputs and outputs are exposed to Python as mutable attribute-style objects:
 
+- `ctx` is the Copper callback context
+- `ctx.now()` / `ctx.recent()` return nanoseconds from the Copper clock
+- `ctx.cl_id`, `ctx.task_id`, and `ctx.task_index` expose runtime callback metadata
+- in embedded mode `ctx` uses the live Rust clock; in process mode it is a per-call snapshot
 - `msg.payload` gives access to the message payload when present
 - `state` is a mutable object that is preserved between calls
 - `output` is a mutable tuple/list-like container of output messages

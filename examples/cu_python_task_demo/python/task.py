@@ -4,7 +4,7 @@ The function mutates both persistent state and preallocated output messages. It 
 deliberately small so the data contract is easy to read.
 """
 
-def process(inp, state, output):
+def process(ctx, inp, state, output):
     """Update the demo state and fill the two output messages."""
     left_msg, right_msg = inp
 
