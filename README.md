@@ -39,7 +39,7 @@ These are not toy mockups. BalanceBot is the same application that runs on a Ras
       <br />
       <strong><a href="https://cdn.copper-robotics.com/demo/balancebot/index.html">BalanceBot</a></strong>
       <br />
-      Real Raspberry Pi robot app, rebuilt here as a browser sim with a live Copper DAG and latency monitor.
+      Self-balancing robot sim with a live Copper DAG and latency monitor.
     </td>
     <td width="50%" valign="top">
       <a href="https://cdn.copper-robotics.com/demo/flight-controller/index.html">
@@ -48,7 +48,7 @@ These are not toy mockups. BalanceBot is the same application that runs on a Ras
       <br />
       <strong><a href="https://cdn.copper-robotics.com/demo/flight-controller/index.html">Flight Controller</a></strong>
       <br />
-      Real STM32H7 flight stack, rebuilt here as a browser sim with the same live Copper monitor.
+      Quadcopter flight sim with the same live Copper monitor.
     </td>
   </tr>
 </table>
