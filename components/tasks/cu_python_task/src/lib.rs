@@ -57,7 +57,7 @@ use std::sync::OnceLock;
 #[cfg(not(target_os = "macos"))]
 use pyo3::prelude::*;
 #[cfg(not(target_os = "macos"))]
-use pyo3::types::{PyAny, PyModule};
+use pyo3::types::{PyAny, PyModule, PyTuple};
 
 const DEFAULT_SCRIPT_PATH: &str = "python/task.py";
 const MAX_CBOR_FRAME_BYTES: usize = 16 * 1024 * 1024;
@@ -435,6 +435,27 @@ impl<I, S, O> ProcessRequest<I, S, O> {
     }
 }
 
+#[derive(Serialize)]
+struct StateRequest<S> {
+    ctx: PyTaskContextSnapshot,
+    state: S,
+}
+
+impl<S> StateRequest<S> {
+    fn as_child_request(&self, hook: StateHook) -> ChildRequest<'_, (), S, ()> {
+        match hook {
+            StateHook::Start => ChildRequest::Start {
+                ctx: &self.ctx,
+                state: &self.state,
+            },
+            StateHook::Stop => ChildRequest::Stop {
+                ctx: &self.ctx,
+                state: &self.state,
+            },
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 struct PyTaskContextSnapshot {
     now_ns: u64,
@@ -460,6 +481,11 @@ impl PyTaskContextSnapshot {
 struct ProcessResult<S, O> {
     state: S,
     output: O,
+}
+
+#[derive(Serialize, Deserialize)]
+struct StateResult<S> {
+    state: S,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -509,6 +535,14 @@ where
 #[derive(Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum ChildRequest<'a, I, S, O> {
+    Start {
+        ctx: &'a PyTaskContextSnapshot,
+        state: &'a S,
+    },
+    Stop {
+        ctx: &'a PyTaskContextSnapshot,
+        state: &'a S,
+    },
     Process {
         ctx: &'a PyTaskContextSnapshot,
         input: &'a I,
@@ -525,6 +559,9 @@ enum ChildResponse<S, O> {
         #[serde(default)]
         cbor2_accelerated: bool,
     },
+    State {
+        state: S,
+    },
     Result {
         state: S,
         output: O,
@@ -532,6 +569,12 @@ enum ChildResponse<S, O> {
     Error {
         message: String,
     },
+}
+
+#[derive(Copy, Clone)]
+enum StateHook {
+    Start,
+    Stop,
 }
 
 /// A Copper task whose `process(...)` implementation is provided by a Python
@@ -543,6 +586,18 @@ enum ChildResponse<S, O> {
 /// def process(ctx, input, state, output):
 ///     ...
 /// ```
+///
+/// It may also define optional lifecycle hooks:
+///
+/// ```python
+/// def start(ctx, state):
+///     ...
+///
+/// def stop(ctx, state):
+///     ...
+/// ```
+///
+/// Missing `start`/`stop` hooks are treated as no-ops.
 ///
 /// `ctx` is passed as the first argument. In embedded mode it is a live PyO3
 /// wrapper over the current Copper context; in process mode it is a per-call
@@ -650,9 +705,11 @@ where
         })
     }
 
-    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
+    fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
         if self.backend.is_none() {
-            self.backend = Some(PythonBackend::start(self.mode, Path::new(&self.script))?);
+            let mut backend = PythonBackend::launch(self.mode, Path::new(&self.script))?;
+            backend.start_hook(ctx, &mut self.state)?;
+            self.backend = Some(backend);
         }
         Ok(())
     }
@@ -687,9 +744,9 @@ where
         Ok(())
     }
 
-    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
+    fn stop(&mut self, ctx: &CuContext) -> CuResult<()> {
         if let Some(mut backend) = self.backend.take() {
-            backend.stop()?;
+            backend.stop(ctx, &mut self.state)?;
         }
         Ok(())
     }
@@ -737,10 +794,20 @@ enum PythonBackend {
 }
 
 impl PythonBackend {
-    fn start(mode: PyTaskMode, script: &Path) -> CuResult<Self> {
+    fn launch(mode: PyTaskMode, script: &Path) -> CuResult<Self> {
         match mode {
             PyTaskMode::Process => Ok(Self::Process(ProcessBackend::start(script)?)),
             PyTaskMode::Embedded => Ok(Self::Embedded(EmbeddedBackend::start(script)?)),
+        }
+    }
+
+    fn start_hook<S>(&mut self, ctx: &CuContext, state: &mut S) -> CuResult<()>
+    where
+        S: Serialize + DeserializeOwned + Clone,
+    {
+        match self {
+            Self::Process(backend) => backend.start_hook(ctx, state),
+            Self::Embedded(backend) => backend.start_hook(ctx, state),
         }
     }
 
@@ -760,10 +827,13 @@ impl PythonBackend {
         }
     }
 
-    fn stop(&mut self) -> CuResult<()> {
+    fn stop<S>(&mut self, ctx: &CuContext, state: &mut S) -> CuResult<()>
+    where
+        S: Serialize + DeserializeOwned + Clone,
+    {
         match self {
-            Self::Process(backend) => backend.stop(),
-            Self::Embedded(backend) => backend.stop(),
+            Self::Process(backend) => backend.stop(ctx, state),
+            Self::Embedded(backend) => backend.stop(ctx, state),
         }
     }
 }
@@ -822,6 +892,9 @@ impl ProcessBackend {
             Ok(ChildResponse::Result { .. }) => Err(CuError::from(
                 "Unexpected result frame while waiting for Python task process startup",
             )),
+            Ok(ChildResponse::State { .. }) => Err(CuError::from(
+                "Unexpected state-only frame while waiting for Python task process startup",
+            )),
             Err(read_error) => {
                 if let Some(status) = self
                     .child
@@ -852,6 +925,9 @@ impl ProcessBackend {
         write_cbor_frame(&mut self.stdin, &child_request)?;
         match read_cbor_frame::<_, ChildResponse<S, O>>(&mut self.stdout)? {
             ChildResponse::Result { state, output } => Ok(ProcessResult { state, output }),
+            ChildResponse::State { .. } => Err(CuError::from(
+                "Python task process unexpectedly sent a state-only response while processing",
+            )),
             ChildResponse::Error { message } => Err(CuError::from(format!(
                 "Python task process raised an exception:\n{message}"
             ))),
@@ -861,7 +937,50 @@ impl ProcessBackend {
         }
     }
 
-    fn stop(&mut self) -> CuResult<()> {
+    fn start_hook<S>(&mut self, ctx: &CuContext, state: &mut S) -> CuResult<()>
+    where
+        S: Serialize + DeserializeOwned + Clone,
+    {
+        self.call_state_hook(StateHook::Start, ctx, state)
+    }
+
+    fn call_state_hook<S>(
+        &mut self,
+        hook: StateHook,
+        ctx: &CuContext,
+        state: &mut S,
+    ) -> CuResult<()>
+    where
+        S: Serialize + DeserializeOwned + Clone,
+    {
+        let request = StateRequest {
+            ctx: PyTaskContextSnapshot::from_cu_context(ctx),
+            state: state.clone(),
+        };
+        let child_request = request.as_child_request(hook);
+        write_cbor_frame(&mut self.stdin, &child_request)?;
+        match read_cbor_frame::<_, ChildResponse<S, ()>>(&mut self.stdout)? {
+            ChildResponse::State { state: new_state } => {
+                *state = new_state;
+                Ok(())
+            }
+            ChildResponse::Result { .. } => Err(CuError::from(
+                "Python task process unexpectedly sent a process response for a state-only hook",
+            )),
+            ChildResponse::Error { message } => Err(CuError::from(format!(
+                "Python task process raised an exception:\n{message}"
+            ))),
+            ChildResponse::Ready { .. } => Err(CuError::from(
+                "Python task process unexpectedly sent a ready frame for a state-only hook",
+            )),
+        }
+    }
+
+    fn stop<S>(&mut self, ctx: &CuContext, state: &mut S) -> CuResult<()>
+    where
+        S: Serialize + DeserializeOwned + Clone,
+    {
+        self.call_state_hook(StateHook::Stop, ctx, state)?;
         let _ = write_cbor_frame(&mut self.stdin, &ChildRequest::<(), (), ()>::Shutdown);
         self.child
             .wait()
@@ -916,7 +1035,10 @@ impl PyEmbeddedContext {
 #[cfg(not(target_os = "macos"))]
 struct EmbeddedBackend {
     call_process: Py<PyAny>,
+    call_state_hook: Py<PyAny>,
     process_fn: Py<PyAny>,
+    start_fn: Option<Py<PyAny>>,
+    stop_fn: Option<Py<PyAny>>,
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -939,18 +1061,37 @@ impl EmbeddedBackend {
                 module_name.as_c_str(),
             )
             .map_err(python_error)?;
-            let load_process = module
-                .getattr("load_process_function")
+            let load_task_functions = module
+                .getattr("load_task_functions")
                 .map_err(python_error)?;
             let call_process = module.getattr("call_process").map_err(python_error)?;
-            let process_fn = load_process
+            let call_state_hook = module
+                .getattr("call_optional_state_hook")
+                .map_err(python_error)?;
+            let functions = load_task_functions
                 .call1((script.display().to_string(),))
                 .map_err(python_error)?;
+            let functions = functions
+                .cast::<PyTuple>()
+                .map_err(|e| CuError::from(format!("Embedded Python task error: {e}")))?;
+            let process_fn = functions.get_item(0).map_err(python_error)?;
+            let start_fn = functions.get_item(1).map_err(python_error)?;
+            let stop_fn = functions.get_item(2).map_err(python_error)?;
             Ok(Self {
                 call_process: call_process.unbind(),
+                call_state_hook: call_state_hook.unbind(),
                 process_fn: process_fn.unbind(),
+                start_fn: (!start_fn.is_none()).then(|| start_fn.unbind()),
+                stop_fn: (!stop_fn.is_none()).then(|| stop_fn.unbind()),
             })
         })
+    }
+
+    fn start_hook<S>(&self, ctx: &CuContext, state: &mut S) -> CuResult<()>
+    where
+        S: Serialize + DeserializeOwned + Clone,
+    {
+        self.call_state_hook(self.start_fn.as_ref(), ctx, state)
     }
 
     fn process<I, S, O>(
@@ -981,7 +1122,47 @@ impl EmbeddedBackend {
             .map_err(|e| CuError::new_with_cause("Failed to decode embedded Python response", e))
     }
 
-    fn stop(&mut self) -> CuResult<()> {
+    fn call_state_hook<S>(
+        &self,
+        hook_fn: Option<&Py<PyAny>>,
+        ctx: &CuContext,
+        state: &mut S,
+    ) -> CuResult<()>
+    where
+        S: Serialize + DeserializeOwned + Clone,
+    {
+        let request = StateRequest {
+            ctx: PyTaskContextSnapshot::from_cu_context(ctx),
+            state: state.clone(),
+        };
+        let request_value = to_value(&request).map_err(|e| {
+            CuError::new_with_cause("Failed to encode embedded Python hook request", e)
+        })?;
+        let response_value = Python::attach(|py| {
+            let call_state_hook = self.call_state_hook.bind(py);
+            let request_py = value_to_py(&request_value, py).map_err(python_error)?;
+            let live_ctx =
+                Py::new(py, PyEmbeddedContext { ctx: ctx.clone() }).map_err(python_error)?;
+            let hook_py = hook_fn.map_or_else(|| py.None(), |hook_fn| hook_fn.clone_ref(py));
+            call_state_hook
+                .call1((hook_py, request_py, live_ctx))
+                .map_err(python_error)
+                .and_then(|response| py_to_value(&response).map_err(python_error))
+        })?;
+        let StateResult { state: new_state } = response_value
+            .deserialize_into::<StateResult<S>>()
+            .map_err(|e| {
+                CuError::new_with_cause("Failed to decode embedded Python hook response", e)
+            })?;
+        *state = new_state;
+        Ok(())
+    }
+
+    fn stop<S>(&self, ctx: &CuContext, state: &mut S) -> CuResult<()>
+    where
+        S: Serialize + DeserializeOwned + Clone,
+    {
+        self.call_state_hook(self.stop_fn.as_ref(), ctx, state)?;
         Ok(())
     }
 }
@@ -1012,7 +1193,17 @@ impl EmbeddedBackend {
         ))
     }
 
-    fn stop(&mut self) -> CuResult<()> {
+    fn start_hook<S>(&mut self, _ctx: &CuContext, _state: &mut S) -> CuResult<()>
+    where
+        S: Serialize + DeserializeOwned + Clone,
+    {
+        Ok(())
+    }
+
+    fn stop<S>(&mut self, _ctx: &CuContext, _state: &mut S) -> CuResult<()>
+    where
+        S: Serialize + DeserializeOwned + Clone,
+    {
         Ok(())
     }
 }
@@ -1531,6 +1722,21 @@ mod tests {
         }
     }
 
+    fn stop_process_backend<S>(backend: &mut ProcessBackend, ctx: &CuContext, state: &mut S)
+    where
+        S: Serialize + DeserializeOwned + Clone,
+    {
+        backend.stop(ctx, state).expect("stop backend");
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn stop_embedded_backend<S>(backend: &mut EmbeddedBackend, ctx: &CuContext, state: &mut S)
+    where
+        S: Serialize + DeserializeOwned + Clone,
+    {
+        backend.stop(ctx, state).expect("stop backend");
+    }
+
     #[test]
     fn process_backend_keeps_absent_output_payload_when_python_does_not_touch_it() {
         let ctx = test_context(1, 7);
@@ -1539,7 +1745,7 @@ mod tests {
         let mut backend = ProcessBackend::start(&script).expect("start backend");
         let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
 
-        let result: ProcessResult<SeenState, PyCuMsg<TestPayload>> = backend
+        let mut result: ProcessResult<SeenState, PyCuMsg<TestPayload>> = backend
             .process(
                 &ctx,
                 &ProcessRequest {
@@ -1550,7 +1756,7 @@ mod tests {
                 },
             )
             .expect("process request");
-        backend.stop().expect("stop backend");
+        stop_process_backend(&mut backend, &ctx, &mut result.state);
 
         assert!(result.state.seen);
         assert!(result.output.payload.is_none());
@@ -1565,7 +1771,7 @@ mod tests {
         let mut backend = ProcessBackend::start(&script).expect("start backend");
         let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
 
-        let result: ProcessResult<(), PyCuMsg<TestPayload>> = backend
+        let mut result: ProcessResult<(), PyCuMsg<TestPayload>> = backend
             .process(
                 &ctx,
                 &ProcessRequest {
@@ -1576,7 +1782,7 @@ mod tests {
                 },
             )
             .expect("process request");
-        backend.stop().expect("stop backend");
+        stop_process_backend(&mut backend, &ctx, &mut result.state);
 
         assert_eq!(
             result.output.payload,
@@ -1596,7 +1802,7 @@ mod tests {
         let mut backend = ProcessBackend::start(&script).expect("start backend");
         let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
 
-        let result: ProcessResult<u64, PyCuMsg<TestPayload>> = backend
+        let mut result: ProcessResult<u64, PyCuMsg<TestPayload>> = backend
             .process(
                 &ctx,
                 &ProcessRequest {
@@ -1607,7 +1813,7 @@ mod tests {
                 },
             )
             .expect("process request");
-        backend.stop().expect("stop backend");
+        stop_process_backend(&mut backend, &ctx, &mut result.state);
 
         assert_eq!(result.state, 42);
         assert!(result.output.payload.is_none());
@@ -1623,7 +1829,7 @@ mod tests {
         let mut backend = ProcessBackend::start(&script).expect("start backend");
         let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
 
-        let result: ProcessResult<(), PyCuMsg<TestPayload>> = backend
+        let mut result: ProcessResult<(), PyCuMsg<TestPayload>> = backend
             .process(
                 &rust_ctx,
                 &ProcessRequest {
@@ -1634,7 +1840,7 @@ mod tests {
                 },
             )
             .expect("process request");
-        backend.stop().expect("stop backend");
+        stop_process_backend(&mut backend, &rust_ctx, &mut result.state);
 
         assert_eq!(
             result.output.payload,
@@ -1643,6 +1849,42 @@ mod tests {
                 flag: true,
             })
         );
+    }
+
+    #[test]
+    fn process_backend_optional_start_and_stop_hooks_are_noops() {
+        let ctx = test_context(41, 7);
+        let (_temp_dir, script) =
+            write_test_script("def process(ctx, inp, state, output):\n    pass\n");
+        let mut backend = ProcessBackend::start(&script).expect("start backend");
+        let mut state = 11_u64;
+
+        backend.start_hook(&ctx, &mut state).expect("start hook");
+        assert_eq!(state, 11);
+
+        stop_process_backend(&mut backend, &ctx, &mut state);
+        assert_eq!(state, 11);
+    }
+
+    #[test]
+    fn process_backend_runs_optional_start_and_stop_hooks() {
+        let start_ctx = test_context(40, 2);
+        let stop_ctx = test_context(1, 5);
+        let (_temp_dir, script) = write_test_script(
+            "def start(ctx, state):\n    state = ctx.now() + ctx.cl_id\n\n\
+def process(ctx, inp, state, output):\n    pass\n\n\
+def stop(ctx, state):\n    state = state + ctx.cl_id\n",
+        );
+        let mut backend = ProcessBackend::start(&script).expect("start backend");
+        let mut state = 0_u64;
+
+        backend
+            .start_hook(&start_ctx, &mut state)
+            .expect("start hook");
+        assert_eq!(state, 42);
+
+        stop_process_backend(&mut backend, &stop_ctx, &mut state);
+        assert_eq!(state, 47);
     }
 
     #[test]
@@ -1674,7 +1916,7 @@ mod tests {
         let mut backend = EmbeddedBackend::start(&script).expect("start backend");
         let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
 
-        let result: ProcessResult<(), PyCuMsg<TestPayload>> = backend
+        let mut result: ProcessResult<(), PyCuMsg<TestPayload>> = backend
             .process(
                 &ctx,
                 &ProcessRequest {
@@ -1685,7 +1927,7 @@ mod tests {
                 },
             )
             .expect("process request");
-        backend.stop().expect("stop backend");
+        stop_embedded_backend(&mut backend, &ctx, &mut result.state);
 
         assert_eq!(
             result.output.payload,
@@ -1706,7 +1948,7 @@ mod tests {
         let mut backend = EmbeddedBackend::start(&script).expect("start backend");
         let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
 
-        let result: ProcessResult<u64, PyCuMsg<TestPayload>> = backend
+        let mut result: ProcessResult<u64, PyCuMsg<TestPayload>> = backend
             .process(
                 &ctx,
                 &ProcessRequest {
@@ -1717,7 +1959,7 @@ mod tests {
                 },
             )
             .expect("process request");
-        backend.stop().expect("stop backend");
+        stop_embedded_backend(&mut backend, &ctx, &mut result.state);
 
         assert_eq!(result.state, 42);
         assert!(result.output.payload.is_none());
@@ -1734,7 +1976,7 @@ mod tests {
         let mut backend = EmbeddedBackend::start(&script).expect("start backend");
         let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
 
-        let result: ProcessResult<(), PyCuMsg<TestPayload>> = backend
+        let mut result: ProcessResult<(), PyCuMsg<TestPayload>> = backend
             .process(
                 &ctx,
                 &ProcessRequest {
@@ -1745,7 +1987,7 @@ mod tests {
                 },
             )
             .expect("process request");
-        backend.stop().expect("stop backend");
+        stop_embedded_backend(&mut backend, &ctx, &mut result.state);
 
         assert_eq!(
             result.output.payload,
@@ -1754,5 +1996,43 @@ mod tests {
                 flag: true,
             })
         );
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn embedded_backend_optional_start_and_stop_hooks_are_noops() {
+        let ctx = test_context(41, 7);
+        let (_temp_dir, script) =
+            write_test_script("def process(ctx, inp, state, output):\n    pass\n");
+        let mut backend = EmbeddedBackend::start(&script).expect("start backend");
+        let mut state = 11_u64;
+
+        backend.start_hook(&ctx, &mut state).expect("start hook");
+        assert_eq!(state, 11);
+
+        stop_embedded_backend(&mut backend, &ctx, &mut state);
+        assert_eq!(state, 11);
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn embedded_backend_runs_optional_start_and_stop_hooks() {
+        let start_ctx = test_context(40, 2);
+        let stop_ctx = test_context(1, 5);
+        let (_temp_dir, script) = write_test_script(
+            "def start(ctx, state):\n    state = ctx.now() + ctx.cl_id\n\n\
+def process(ctx, inp, state, output):\n    pass\n\n\
+def stop(ctx, state):\n    state = state + ctx.cl_id\n",
+        );
+        let mut backend = EmbeddedBackend::start(&script).expect("start backend");
+        let mut state = 0_u64;
+
+        backend
+            .start_hook(&start_ctx, &mut state)
+            .expect("start hook");
+        assert_eq!(state, 42);
+
+        stop_embedded_backend(&mut backend, &stop_ctx, &mut state);
+        assert_eq!(state, 47);
     }
 }

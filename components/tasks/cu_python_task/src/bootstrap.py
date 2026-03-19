@@ -313,6 +313,18 @@ class ProcessRequest:
 
 
 @dataclass(slots=True, frozen=True)
+class StartRequest:
+    ctx: object
+    state: object
+
+
+@dataclass(slots=True, frozen=True)
+class StopRequest:
+    ctx: object
+    state: object
+
+
+@dataclass(slots=True, frozen=True)
 class ShutdownRequest:
     pass
 
@@ -320,6 +332,20 @@ class ShutdownRequest:
 @dataclass(slots=True, frozen=True)
 class ReadyResponse:
     cbor2_accelerated: bool
+
+
+@dataclass(slots=True, frozen=True)
+class StateResultResponse:
+    state: object
+
+    @classmethod
+    def from_state_result(cls, value):
+        if not isinstance(value, dict):
+            raise TypeError(f"Unsupported state result type: {type(value).__name__}")
+        try:
+            return cls(state=value["state"])
+        except KeyError as exc:
+            raise RuntimeError(f"State result is missing field {exc.args[0]!r}") from exc
 
 
 @dataclass(slots=True, frozen=True)
@@ -347,6 +373,10 @@ def _decode_request(value):
         raise RuntimeError(f"Expected request mapping, got {type(value).__name__}")
 
     kind = value.get("kind")
+    if kind == "start":
+        return _coerce_state_request(value, StartRequest)
+    if kind == "stop":
+        return _coerce_state_request(value, StopRequest)
     if kind == "process":
         return _coerce_process_request(value)
     if kind == "shutdown":
@@ -358,11 +388,27 @@ def _decode_request(value):
 def _encode_response(value):
     if isinstance(value, ReadyResponse):
         return {"kind": "ready", "cbor2_accelerated": value.cbor2_accelerated}
+    if isinstance(value, StateResultResponse):
+        return {"kind": "state", "state": value.state}
     if isinstance(value, ProcessResultResponse):
         return {"kind": "result", "state": value.state, "output": value.output}
     if isinstance(value, ErrorResponse):
         return {"kind": "error", "message": value.message}
     raise TypeError(f"Unsupported response type: {type(value).__name__}")
+
+
+def _coerce_state_request(value, request_type):
+    if isinstance(value, request_type):
+        return value
+    if isinstance(value, dict):
+        try:
+            return request_type(
+                ctx=value["ctx"],
+                state=value["state"],
+            )
+        except KeyError as exc:
+            raise RuntimeError(f"State request is missing field {exc.args[0]!r}") from exc
+    raise TypeError(f"Unsupported state request type: {type(value).__name__}")
 
 
 def _coerce_process_request(value):
@@ -381,8 +427,15 @@ def _coerce_process_request(value):
     raise TypeError(f"Unsupported process request type: {type(value).__name__}")
 
 
-def load_process_function(script_path):
-    """Load the user script and return its ``process(ctx, input, state, output)`` callable."""
+def _validate_callable_signature(callable_obj, min_positional_args, script_path, signature):
+    positional = _inspect_callable_signature(callable_obj)
+    if positional is not None and len(positional) < min_positional_args:
+        raise RuntimeError(f"Python task script {script_path!r} must define {signature}")
+    return callable_obj
+
+
+def load_task_functions(script_path):
+    """Load the user script and return its process/start/stop callables."""
     spec = importlib.util.spec_from_file_location("cu_python_task_user", script_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Could not load Python task script from {script_path!r}")
@@ -395,17 +448,45 @@ def load_process_function(script_path):
         raise RuntimeError(
             f"Python task script {script_path!r} must define a callable process(ctx, input, state, output)"
         )
-    positional = _inspect_process_signature(process_fn)
-    if positional is not None and len(positional) < 4:
-        raise RuntimeError(
-            f"Python task script {script_path!r} must define process(ctx, input, state, output)"
+    process_fn = _validate_callable_signature(
+        process_fn,
+        4,
+        script_path,
+        "process(ctx, input, state, output)",
+    )
+
+    start_fn = getattr(module, "start", None)
+    if start_fn is not None:
+        if not callable(start_fn):
+            raise RuntimeError(
+                f"Python task script {script_path!r} defines non-callable start; expected start(ctx, state)"
+            )
+        start_fn = _validate_callable_signature(
+            start_fn,
+            2,
+            script_path,
+            "optional start(ctx, state)",
         )
-    return process_fn
+
+    stop_fn = getattr(module, "stop", None)
+    if stop_fn is not None:
+        if not callable(stop_fn):
+            raise RuntimeError(
+                f"Python task script {script_path!r} defines non-callable stop; expected stop(ctx, state)"
+            )
+        stop_fn = _validate_callable_signature(
+            stop_fn,
+            2,
+            script_path,
+            "optional stop(ctx, state)",
+        )
+
+    return process_fn, start_fn, stop_fn
 
 
-def _inspect_process_signature(process_fn):
+def _inspect_callable_signature(callable_obj):
     try:
-        signature = inspect.signature(process_fn)
+        signature = inspect.signature(callable_obj)
     except (TypeError, ValueError):
         return None
 
@@ -417,9 +498,7 @@ def _inspect_process_signature(process_fn):
     return positional
 
 
-def _call_and_capture_final_bindings(process_fn, positional, *args):
-    """Call ``process_fn`` and capture the final locals of its top-level frame."""
-
+def _call_and_capture_final_locals(callable_obj, *args):
     captured = {}
     active_frame = None
 
@@ -435,20 +514,31 @@ def _call_and_capture_final_bindings(process_fn, positional, *args):
     previous_profiler = sys.getprofile()
     sys.setprofile(profiler)
     try:
-        process_fn(*args)
+        callable_obj(*args)
     finally:
         sys.setprofile(previous_profiler)
 
+    return captured
+
+
+def _call_and_capture_final_bindings(process_fn, positional, *args):
+    """Call ``process_fn`` and capture the final locals of its top-level frame."""
+    captured = _call_and_capture_final_locals(process_fn, *args)
     return {
         "state": captured.get(positional[2], args[2]),
         "output": captured.get(positional[3], args[3]),
     }
 
 
+def _call_and_capture_final_state(hook_fn, positional, *args):
+    captured = _call_and_capture_final_locals(hook_fn, *args)
+    return captured.get(positional[1], args[1])
+
+
 def call_process(process_fn, request, live_ctx=None):
     """Invoke the user ``process`` function and unwrap the mutated state/output values."""
     request = _coerce_process_request(request)
-    positional = _inspect_process_signature(process_fn)
+    positional = _inspect_callable_signature(process_fn)
     ctx_value = live_ctx if live_ctx is not None else _wrap_context(request.ctx)
     input_value = _wrap(request.input)
     state_value = _wrap(request.state)
@@ -465,6 +555,23 @@ def call_process(process_fn, request, live_ctx=None):
         "state": _unwrap(state_value),
         "output": _unwrap(output_value),
     }
+
+
+def call_optional_state_hook(hook_fn, request, live_ctx=None):
+    """Invoke an optional ``start``/``stop`` hook and unwrap the resulting state."""
+    if not isinstance(request, (StartRequest, StopRequest)):
+        request = _coerce_state_request(request, StartRequest)
+    ctx_value = live_ctx if live_ctx is not None else _wrap_context(request.ctx)
+    state_value = _wrap(request.state)
+
+    if hook_fn is not None:
+        positional = _inspect_callable_signature(hook_fn)
+        if positional is not None:
+            state_value = _call_and_capture_final_state(hook_fn, positional, ctx_value, state_value)
+        else:
+            hook_fn(ctx_value, state_value)
+
+    return {"state": _unwrap(state_value)}
 
 
 def _load_cbor2():
@@ -522,7 +629,7 @@ def main():
     cbor2 = None
     try:
         cbor2, accelerated = _load_cbor2()
-        process_fn = load_process_function(script_path)
+        process_fn, start_fn, stop_fn = load_task_functions(script_path)
         _write_cbor(writer, cbor2, ReadyResponse(cbor2_accelerated=accelerated))
     except Exception:
         if cbor2 is not None:
@@ -542,9 +649,18 @@ def main():
             if isinstance(request, ShutdownRequest):
                 return 0
 
-            response = ProcessResultResponse.from_process_result(
-                call_process(process_fn, request)
-            )
+            if isinstance(request, StartRequest):
+                response = StateResultResponse.from_state_result(
+                    call_optional_state_hook(start_fn, request)
+                )
+            elif isinstance(request, StopRequest):
+                response = StateResultResponse.from_state_result(
+                    call_optional_state_hook(stop_fn, request)
+                )
+            else:
+                response = ProcessResultResponse.from_process_result(
+                    call_process(process_fn, request)
+                )
             _write_cbor(writer, cbor2, response)
         except Exception:
             _write_cbor(writer, cbor2, ErrorResponse(message=traceback.format_exc()))

@@ -66,12 +66,25 @@ def process(ctx, inp, state, output):
     ...
 ```
 
+It may also export optional lifecycle hooks:
+
+```python
+def start(ctx, state):
+    ...
+
+def stop(ctx, state):
+    ...
+```
+
+If those hooks are omitted, Copper treats them as no-ops.
+
 In this demo:
 
 - `ctx` exposes Copper callback metadata and clock access
 - `inp` is a 2-tuple containing the left and right input messages
 - `state` is a mutable object with `calls`, `total`, and `last_tag`
 - `output` is a 2-slot container for the output messages
+- `start` and `stop` are implemented only to demonstrate the optional hook shape
 
 Message payloads are exposed as attribute-style objects, so the example code can
 write:

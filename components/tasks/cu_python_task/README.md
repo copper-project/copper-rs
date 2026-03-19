@@ -32,6 +32,18 @@ def process(ctx, input, state, output):
     ...
 ```
 
+It may also expose optional lifecycle hooks:
+
+```python
+def start(ctx, state):
+    ...
+
+def stop(ctx, state):
+    ...
+```
+
+If `start` or `stop` is not defined, Copper treats that hook as a no-op.
+
 Copper still owns scheduling, logging, and task lifecycle. The Python function only
 implements the algorithm body.
 
@@ -108,6 +120,7 @@ Inputs and outputs are exposed to Python as mutable attribute-style objects:
 - `ctx.now()` / `ctx.recent()` return nanoseconds from the Copper clock
 - `ctx.cl_id`, `ctx.task_id`, and `ctx.task_index` expose runtime callback metadata
 - in embedded mode `ctx` uses the live Rust clock; in process mode it is a per-call snapshot
+- optional `start(ctx, state)` and `stop(ctx, state)` hooks share the same `ctx` and persistent `state`
 - `msg.payload` gives access to the message payload when present
 - `state` is a mutable object that is preserved between calls
 - `output` is a mutable tuple/list-like container of output messages
