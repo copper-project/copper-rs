@@ -12,9 +12,9 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version = "0.13.0", default-features = false }
+cu29 = { path = "../../../core/cu29", version = "0.14.0", default-features = false }
 cu-linux-resources = { workspace = true, optional = true }
-cu-gnss-payloads = { path = "../../payloads/cu_gnss_payloads", version = "0.13.0", default-features = false }
+cu-gnss-payloads = { path = "../../payloads/cu_gnss_payloads", version = "0.14.0", default-features = false }
 embedded-io = "0.6"
 
 [features]

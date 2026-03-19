@@ -19,7 +19,7 @@ path = "src/main.rs"
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 cu-linux-resources = { workspace = true }
-cu-feetech = { path = "../../components/bridges/cu_feetech", version = "0.13.0" }
+cu-feetech = { path = "../../components/bridges/cu_feetech", version = "0.14.0" }
 serde = { workspace = true }
 
 [package.metadata.cargo-shear]

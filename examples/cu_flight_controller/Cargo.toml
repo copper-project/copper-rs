@@ -48,12 +48,12 @@ cu-ahrs = { path = "../../components/tasks/cu_ahrs", default-features = false, o
 cu-bmi088 = { path = "../../components/sources/cu_bmi088", default-features = false, optional = true }
 cu-dps310 = { path = "../../components/sources/cu_dps310", default-features = false, optional = true }
 cu-ist8310 = { path = "../../components/sources/cu_ist8310", default-features = false, optional = true }
-cu-gnss-payloads = { path = "../../components/payloads/cu_gnss_payloads", default-features = false, version = "0.13.0", optional = true }
-cu-gnss-ublox = { path = "../../components/sources/cu_gnss_ublox", version = "0.13.0", default-features = false, optional = true }
+cu-gnss-payloads = { path = "../../components/payloads/cu_gnss_payloads", default-features = false, version = "0.14.0", optional = true }
+cu-gnss-ublox = { path = "../../components/sources/cu_gnss_ublox", version = "0.14.0", default-features = false, optional = true }
 
 ### Algos
-cu-pid = { path = "../../components/tasks/cu_pid", default-features = false, version = "0.13.0" }
-cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", default-features = false, version = "0.13.0" }
+cu-pid = { path = "../../components/tasks/cu_pid", default-features = false, version = "0.14.0" }
+cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", default-features = false, version = "0.14.0" }
 bincode = { workspace = true }
 serde = { workspace = true }
 spin = { workspace = true }
@@ -108,7 +108,7 @@ cortex-m = { workspace = true, features = [
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 cu-consolemon = { path = "../../components/monitors/cu_consolemon", optional = true }
-cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "0.13.0", optional = true }
+cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "0.14.0", optional = true }
 cu29-helpers = { workspace = true, optional = true }
 bevy = { workspace = true, default-features = false, features = [
   "x11",
@@ -139,7 +139,7 @@ cached-path = { workspace = true, features = [
 evdev = { version = "0.13.2", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "0.13.0", default-features = false, optional = true }
+cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "0.14.0", default-features = false, optional = true }
 bevy = { workspace = true, default-features = false, features = [
   "default_font",
   "bevy_render",

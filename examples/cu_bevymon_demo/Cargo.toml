@@ -13,7 +13,7 @@ default-run = "cu-bevymon-demo"
 
 [dependencies]
 bevy_ecs = { version = "0.18.0", default-features = false }
-cu29 = { path = "../../core/cu29", version = "0.13.0", default-features = false, features = [
+cu29 = { path = "../../core/cu29", version = "0.14.0", default-features = false, features = [
   "std",
   "textlogs",
 ] }
@@ -32,7 +32,7 @@ bevy = { workspace = true, default-features = false, features = [
   "bevy_ui",
   "bevy_ui_render",
 ] }
-cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "0.13.0" }
+cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "0.14.0" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 bevy = { workspace = true, default-features = false, features = [
@@ -44,7 +44,7 @@ bevy = { workspace = true, default-features = false, features = [
   "bevy_ui",
   "bevy_ui_render",
 ] }
-cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "0.13.0", default-features = false }
+cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "0.14.0", default-features = false }
 
 [[bin]]
 name = "cu-bevymon-demo"
