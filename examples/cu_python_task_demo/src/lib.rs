@@ -1,3 +1,16 @@
+//! End-to-end demo for [`cu_python_task::PyTask`].
+//!
+//! The example keeps the surrounding Copper application in Rust and delegates a
+//! single task body to [`python/task.py`](../python/task.py). It is intentionally
+//! small so the mechanics are easy to inspect:
+//!
+//! - two Rust sources feed a Python task
+//! - the Python task mutates persistent state and two outputs
+//! - two Rust sinks capture the results for tests
+//!
+//! Use this example to understand the boundary and data model, not to benchmark
+//! performance. Python on the Copper task path is for prototyping only.
+
 use bincode::{Decode, Encode};
 use cu_python_task::{PyTask, PyTaskMode};
 use cu29::prelude::*;
@@ -209,10 +222,12 @@ pub mod tasks {
 #[copper_runtime(config = "copperconfig.ron")]
 struct PythonTaskDemoApp {}
 
+/// Absolute path to the demo Python script used by the runtime.
 pub fn script_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("python/task.py")
 }
 
+/// Load the static RON config and override the Python task mode/script at runtime.
 pub fn config_for_mode(mode: PyTaskMode) -> CuConfig {
     let mut config = CuConfig::deserialize_ron(include_str!("../copperconfig.ron"))
         .expect("static config should parse");
@@ -230,6 +245,7 @@ pub fn config_for_mode(mode: PyTaskMode) -> CuConfig {
     config
 }
 
+/// Run the demo for a fixed number of iterations in the requested Python mode.
 pub fn run_demo(mode: PyTaskMode, iterations: usize) -> CuResult<()> {
     let temp_dir = tempfile::TempDir::new().map_err(|e| CuError::new_with_cause("temp dir", e))?;
     let log_path = temp_dir.path().join("python_task_demo.copper");

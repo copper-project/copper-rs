@@ -71,6 +71,24 @@ The source code for this demo is available in the [examples/cu_rp_balancebot](ex
 - Release notes: [Copper Release Notes](https://copper-project.github.io/copper-rs/Copper-Release-Notes)
 - Roadmap: [Roadmap](https://copper-project.github.io/copper-rs/Roadmap)
 
+## Python Support
+
+Copper has two very different Python stories:
+
+- Offline Python log analysis: use `cu29-export` and app-specific PyO3 modules such as
+  [examples/cu_flight_controller](examples/cu_flight_controller). This is a reasonable
+  workflow because Python stays off the runtime hot path.
+- Runtime Python task prototyping: use
+  [components/tasks/cu_python_task](components/tasks/cu_python_task) and
+  [examples/cu_python_task_demo](examples/cu_python_task_demo). This is for
+  experimentation only and is strongly not recommended for production or realtime
+  robots.
+
+Putting Python inside a Copper task defeats the performance model Copper is built
+for: it adds allocations, latency, jitter, and middleware overhead, and it ruins
+the realtime characteristics of the stack. The intended use is to sketch one task
+in Python, get the behavior right, then rewrite it in Rust.
+
 
 ## Citation
 

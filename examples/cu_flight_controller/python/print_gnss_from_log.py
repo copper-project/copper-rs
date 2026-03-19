@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""Read typed GNSS CopperLists from a flight-controller unified log.
+
+This script demonstrates the app-specific PyO3 module pattern used for offline log
+analysis. Python is inspecting recorded data here, not participating in the live
+runtime.
+"""
+
 import math
 from pathlib import Path
 import sys

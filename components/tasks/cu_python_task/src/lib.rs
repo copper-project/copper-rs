@@ -1,3 +1,41 @@
+//! Python-backed Copper tasks.
+//!
+//! This crate exists for rapid algorithm prototyping, not for production realtime
+//! robotics.
+//!
+//! A [`PyTask`] lets Copper keep ownership of scheduling, logging, replay, and task
+//! lifecycle while delegating one task's algorithm body to a Python function:
+//!
+//! ```python
+//! def process(input, state, output):
+//!     ...
+//! ```
+//!
+//! Two execution modes are available:
+//!
+//! - [`PyTaskMode::Process`]: spawn a separate interpreter and exchange
+//!   length-prefixed CBOR frames over stdin/stdout. This avoids putting the GIL
+//!   inside the Copper process, but adds another serialization layer, extra
+//!   copying, allocations, IPC overhead, and scheduler jitter.
+//! - [`PyTaskMode::Embedded`]: call Python in-process through PyO3. This avoids
+//!   the external CBOR transport, but executes under the GIL inside the Copper
+//!   process and still allocates and converts values on every call.
+//!
+//! Both modes are fundamentally at odds with Copper's design center: predictable
+//! low-latency execution with minimal allocation on the realtime path. Using
+//! Python here will increase latency, jitter, and allocation pressure enough to
+//! ruin the realtime characteristics of the stack. Compared to a native Rust
+//! Copper task, the performance is abysmal.
+//!
+//! The intended workflow is narrow:
+//!
+//! - prototype one task quickly in Python
+//! - stabilize the algorithm
+//! - rewrite it in Rust, optionally using an LLM-assisted translation as a first
+//!   draft
+//!
+//! Do not treat Python tasks as a normal production integration path.
+
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
@@ -31,6 +69,11 @@ const PROCESS_POLL_INTERVAL: Duration = Duration::from_millis(10);
 const PYTHON_BOOTSTRAP: &str = include_str!("bootstrap.py");
 const PYTHON_COMMAND_CANDIDATES: &[&str] = &["python3", "python"];
 
+/// State carried across invocations of a [`PyTask`].
+///
+/// The state must be serializable because both backends turn it into an owned,
+/// mutable Python value on every `process(...)` call and then deserialize the
+/// result back into Rust.
 pub trait PyTaskState:
     Default
     + Clone
@@ -57,6 +100,10 @@ impl<T> PyTaskState for T where
 {
 }
 
+/// Describes how a Python-backed task receives its Copper inputs.
+///
+/// Python cannot safely borrow Copper messages directly, so every call converts
+/// the runtime input into an owned representation first.
 pub trait PyInputSpec {
     type Input<'m>: CuMsgPack
     where
@@ -66,6 +113,10 @@ pub trait PyInputSpec {
     fn to_owned(input: &Self::Input<'_>) -> Self::Owned;
 }
 
+/// Describes how a Python-backed task exposes Copper outputs.
+///
+/// Outputs are converted into mutable owned values before calling Python, then
+/// written back into Copper message slots after the Python function returns.
 pub trait PyOutputSpec {
     type Output<'m>: CuMsgPayload
     where
@@ -199,6 +250,7 @@ impl_py_input_spec_tuple!(
     T12 => v12
 );
 
+/// Convenience alias for the common one-input, one-output case.
 pub type PyUnaryTask<In, State, Out> = PyTask<(In,), State, (Out,)>;
 
 impl PyOutputSpec for () {
@@ -346,7 +398,16 @@ impl_py_output_spec_tuple!(
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect)]
 pub enum PyTaskMode {
+    /// Run the task in a separate Python interpreter process.
+    ///
+    /// This keeps the GIL out of the Copper process, but every cycle pays for
+    /// CBOR serialization, copies, allocations, IPC, and process scheduling.
     Process,
+    /// Run the task inside the Copper process through PyO3.
+    ///
+    /// This removes the external transport layer, but now the GIL and Python
+    /// runtime are inside the same process as Copper. This mode is unsupported
+    /// on macOS in this workspace.
     Embedded,
 }
 
@@ -454,6 +515,25 @@ enum ChildResponse<S, O> {
     },
 }
 
+/// A Copper task whose `process(...)` implementation is provided by a Python
+/// script.
+///
+/// The configured script must define:
+///
+/// ```python
+/// def process(input, state, output):
+///     ...
+/// ```
+///
+/// Configuration keys:
+///
+/// - `script`: path to the Python file, default `python/task.py`
+/// - `mode`: `"process"` or `"embedded"`, default `"process"`
+///
+/// `input`, `state`, and `output` are all converted into owned values before the
+/// Python call. That makes the API flexible, but it also means allocations and
+/// copies happen on every call. This is the core reason the type is suitable for
+/// prototyping only and strongly discouraged on a realtime path.
 #[derive(Reflect)]
 #[reflect(no_field_bounds, from_reflect = false, type_path = false)]
 pub struct PyTask<I, S, O>

@@ -1,3 +1,19 @@
+"""Bootstrap helpers for ``cu_python_task``.
+
+This module is used by both Python backends:
+
+- embedded mode imports these helpers directly through PyO3
+- process mode executes this file in a child interpreter and speaks a small
+  length-prefixed CBOR protocol over stdin/stdout
+
+The bootstrap layer exposes Copper messages, task state, and outputs as mutable
+attribute-style Python objects. That makes the user-facing API convenient, but
+it does not make it cheap: values are still copied and allocated around every
+call.
+
+This is a prototyping bridge, not a realtime integration mechanism.
+"""
+
 import importlib.util
 import struct
 import sys
@@ -320,6 +336,7 @@ def _coerce_process_request(value):
 
 
 def load_process_function(script_path):
+    """Load the user script and return its ``process(input, state, output)`` callable."""
     spec = importlib.util.spec_from_file_location("cu_python_task_user", script_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Could not load Python task script from {script_path!r}")
@@ -336,6 +353,7 @@ def load_process_function(script_path):
 
 
 def call_process(process_fn, request):
+    """Invoke the user ``process`` function and unwrap the mutated state/output values."""
     request = _coerce_process_request(request)
     input_value = _wrap(request.input)
     state_value = _wrap(request.state)
@@ -391,6 +409,7 @@ def _write_cbor(writer, cbor2, value):
 
 
 def main():
+    """Run the process-mode request loop."""
     if len(sys.argv) != 2:
         raise RuntimeError("Expected script path argument")
 

@@ -1,6 +1,7 @@
 [package]
 name = "cu-python-task"
 description = "Python-backed CuTask implementations for Copper"
+readme = "README.md"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

@@ -1,4 +1,11 @@
+"""Example Python task used by ``cu_python_task_demo``.
+
+The function mutates both persistent state and preallocated output messages. It is
+deliberately small so the data contract is easy to read.
+"""
+
 def process(inp, state, output):
+    """Update the demo state and fill the two output messages."""
     left_msg, right_msg = inp
 
     left_value = 0

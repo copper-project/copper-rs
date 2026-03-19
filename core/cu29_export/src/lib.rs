@@ -1,3 +1,18 @@
+//! Log export helpers for Copper applications.
+//!
+//! This crate serves two related use cases:
+//!
+//! - Rust logreader binaries built with [`run_cli`]
+//! - optional Python-facing iterators for offline analysis of structured logs,
+//!   runtime lifecycle records, and app-specific CopperLists
+//!
+//! Python support here is intentionally offline. It reads data that Copper has
+//! already recorded. That is very different from putting Python on the runtime
+//! execution path, and it does not compromise realtime behavior during robot
+//! execution.
+//!
+//! For runtime Python task prototyping, see `cu-python-task` instead.
+
 mod fsck;
 pub mod logstats;
 
@@ -34,13 +49,19 @@ pub use mcap_export::{
 #[cfg(feature = "mcap")]
 pub use serde_to_jsonschema::trace_type_to_jsonschema;
 
+/// Registers the typed CopperList decoder used by the generic Python iterator.
+///
+/// Applications normally call this indirectly through
+/// [`copperlist_iterator_unified_typed_py`].
 #[cfg(all(feature = "python", not(target_os = "macos")))]
 pub use python::register_copperlist_python_type;
 
 /// Creates a Python CopperList iterator for a specific CopperList tuple type.
 ///
 /// This is intended for app-specific Python modules that know their generated
-/// CopperList type at compile time.
+/// CopperList type at compile time. The helper registers the decoder and returns
+/// an iterator object that yields Python objects built from the recorded
+/// CopperLists.
 #[cfg(all(feature = "python", not(target_os = "macos")))]
 pub fn copperlist_iterator_unified_typed_py<P>(
     unified_src_path: &str,
@@ -55,7 +76,10 @@ where
     pyo3::Py::new(py, iter).map(|obj| obj.into())
 }
 
-/// Creates a Python RuntimeLifecycle iterator from a unified log.
+/// Creates a Python `RuntimeLifecycleRecord` iterator from a unified log.
+///
+/// This is useful for offline analysis scripts that need to inspect mission
+/// starts, stops, faults, and related runtime events.
 #[cfg(all(feature = "python", not(target_os = "macos")))]
 pub fn runtime_lifecycle_iterator_unified_py(
     unified_src_path: &str,
@@ -612,28 +636,36 @@ mod python {
         for<'py> fn(&mut Box<dyn Read + Send + Sync>, Python<'py>) -> Option<PyResult<Py<PyAny>>>;
     static COPPERLIST_DECODER: OnceLock<CopperListDecodeFn> = OnceLock::new();
 
+    /// Iterator over structured Copper log entries.
     #[pyclass]
     pub struct PyLogIterator {
         reader: Box<dyn Read + Send + Sync>,
     }
 
+    /// Iterator over application-specific CopperLists decoded into Python values.
     #[pyclass]
     pub struct PyCopperListIterator {
         reader: Box<dyn Read + Send + Sync>,
         decode_next: CopperListDecodeFn,
     }
 
+    /// Iterator over runtime lifecycle records stored in a unified log.
     #[pyclass]
     pub struct PyRuntimeLifecycleIterator {
         reader: Box<dyn Read + Send + Sync>,
     }
 
+    /// Helper wrapper used when reflected unit-bearing values are exposed to Python.
     #[pyclass(get_all)]
     pub struct PyUnitValue {
         pub value: f64,
         pub unit: String,
     }
 
+    /// Register the Python decoder for one concrete CopperList tuple type.
+    ///
+    /// App-specific extension modules call this once before constructing a
+    /// `PyCopperListIterator`.
     pub fn register_copperlist_python_type<P>() -> CuResult<()>
     where
         P: CopperListTuple,
@@ -693,9 +725,11 @@ mod python {
             Some(runtime_lifecycle_record_to_py(&entry, py))
         }
     }
-    /// Creates an iterator of CuLogEntries from a bare binary structured log file (ie. not within a unified log).
-    /// This is mainly used for using the structured logging out of the Copper framework.
-    /// it returns a tuple with the iterator of log entries and the list of interned strings.
+    /// Create an iterator over structured log entries from a bare structured log file.
+    ///
+    /// This is the non-unified-log path used by standalone structured log setups.
+    /// The function returns the iterator together with the interned string table
+    /// needed to format each message.
     #[pyfunction]
     pub fn struct_log_iterator_bare(
         bare_struct_src_path: &str,
@@ -712,9 +746,10 @@ mod python {
             all_strings,
         ))
     }
-    /// Creates an iterator of CuLogEntries from a unified log file.
-    /// This function allows you to easily use python to datamind Copper's structured text logs.
-    /// it returns a tuple with the iterator of log entries and the list of interned strings.
+    /// Create an iterator over structured log entries from a unified log file.
+    ///
+    /// The function returns the iterator together with the interned string table
+    /// needed to rebuild the text messages.
     #[pyfunction]
     pub fn struct_log_iterator_unified(
         unified_src_path: &str,
@@ -745,7 +780,8 @@ mod python {
         ))
     }
 
-    /// Creates an iterator over CopperLists from a unified log file.
+    /// Create an iterator over CopperLists from a unified log file.
+    ///
     /// The concrete CopperList tuple type must be registered from Rust first with
     /// `register_copperlist_python_type::<P>()`.
     #[pyfunction]
@@ -777,7 +813,7 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
         })
     }
 
-    /// Creates an iterator over runtime lifecycle records from a unified log file.
+    /// Create an iterator over runtime lifecycle records from a unified log file.
     #[pyfunction]
     pub fn runtime_lifecycle_iterator_unified(
         unified_src_path: &str,
@@ -800,7 +836,7 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
             reader: Box::new(reader),
         })
     }
-    /// This is a python wrapper for CuLogEntries.
+    /// Python wrapper for [`CuLogEntry`].
     #[pyclass]
     pub struct PyCuLogEntry {
         pub inner: CuLogEntry,
@@ -808,7 +844,7 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
 
     #[pymethods]
     impl PyCuLogEntry {
-        /// Returns the timestamp of the log entry.
+        /// Return the timestamp of the log entry as a `datetime.timedelta`.
         pub fn ts<'a>(&self, py: Python<'a>) -> PyResult<Bound<'a, PyDelta>> {
             let nanoseconds: u64 = self.inner.time.into();
 
@@ -820,17 +856,17 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
             PyDelta::new(py, days, seconds, microseconds, false)
         }
 
-        /// Returns the index of the message in the vector of interned strings.
+        /// Return the index of the message format string in the interned string table.
         pub fn msg_index(&self) -> u32 {
             self.inner.msg_index
         }
 
-        /// Returns the index of the parameter names in the vector of interned strings.
+        /// Return the indexes of the parameter names in the interned string table.
         pub fn paramname_indexes(&self) -> Vec<u32> {
             self.inner.paramname_indexes.iter().copied().collect()
         }
 
-        /// Returns the parameters of this log line
+        /// Return the structured parameters carried by this log line.
         pub fn params(&self, py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
             self.inner
                 .params
