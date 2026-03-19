@@ -4,8 +4,9 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
 use cu29_value::{Value as CuValue, py_to_value, to_value, value_to_py};
+use minicbor::data::{IanaTag, Int as CborInt, Type as CborType};
+use minicbor::{Decoder as CborDecoder, Encoder as CborEncoder};
 use serde::de::DeserializeOwned;
-use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::ffi::CString;
@@ -932,8 +933,7 @@ where
 {
     let value = to_value(value)
         .map_err(|e| CuError::new_with_cause("Failed to encode Python task CBOR value", e))?;
-    let payload = minicbor_serde::to_vec(&PythonWireValue(&value))
-        .map_err(|e| CuError::new_with_cause("Failed to serialize Python task CBOR frame", e))?;
+    let payload = encode_wire_value(&value)?;
     if payload.len() > MAX_CBOR_FRAME_BYTES {
         return Err(CuError::from(format!(
             "Python task frame exceeded {} bytes",
@@ -974,56 +974,302 @@ where
     reader
         .read_exact(&mut payload)
         .map_err(|e| CuError::new_with_cause("Failed to read Python task frame payload", e))?;
-    let value: CuValue = minicbor_serde::from_slice(&payload)
-        .map_err(|e| CuError::new_with_cause("Failed to decode Python task CBOR frame", e))?;
-    let value = canonicalize_wire_value(value);
+    let value = decode_wire_value(&payload)?;
     value
         .deserialize_into::<T>()
         .map_err(|e| CuError::new_with_cause("Failed to decode Python task CBOR frame", e))
 }
 
-struct PythonWireValue<'a>(&'a CuValue);
+fn encode_wire_value(value: &CuValue) -> CuResult<Vec<u8>> {
+    let mut encoder = CborEncoder::new(Vec::new());
+    encode_wire_value_into(&mut encoder, value)
+        .map_err(|e| CuError::new_with_cause("Failed to serialize Python task CBOR frame", e))?;
+    Ok(encoder.into_writer())
+}
 
-impl Serialize for PythonWireValue<'_> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self.0 {
-            CuValue::Bool(v) => serializer.serialize_bool(*v),
-            CuValue::U8(v) => serializer.serialize_u8(*v),
-            CuValue::U16(v) => serializer.serialize_u16(*v),
-            CuValue::U32(v) => serializer.serialize_u32(*v),
-            CuValue::U64(v) => serializer.serialize_u64(*v),
-            CuValue::I8(v) => serializer.serialize_i8(*v),
-            CuValue::I16(v) => serializer.serialize_i16(*v),
-            CuValue::I32(v) => serializer.serialize_i32(*v),
-            CuValue::I64(v) => serializer.serialize_i64(*v),
-            CuValue::F32(v) => serializer.serialize_f32(*v),
-            CuValue::F64(v) => serializer.serialize_f64(*v),
-            CuValue::Char(v) => serializer.serialize_char(*v),
-            CuValue::String(v) => serializer.serialize_str(v),
-            CuValue::Unit | CuValue::Option(None) => serializer.serialize_none(),
-            CuValue::Option(Some(v)) | CuValue::Newtype(v) => {
-                PythonWireValue(v).serialize(serializer)
-            }
-            CuValue::Seq(values) => {
-                let mut seq = serializer.serialize_seq(Some(values.len()))?;
-                for value in values {
-                    seq.serialize_element(&PythonWireValue(value))?;
-                }
-                seq.end()
-            }
-            CuValue::Map(values) => {
-                let mut map = serializer.serialize_map(Some(values.len()))?;
-                for (key, value) in values {
-                    map.serialize_entry(&PythonWireValue(key), &PythonWireValue(value))?;
-                }
-                map.end()
-            }
-            CuValue::Bytes(value) => serializer.serialize_bytes(value),
-            CuValue::CuTime(value) => serializer.serialize_u64(value.0),
+fn encode_wire_value_into<W>(
+    encoder: &mut CborEncoder<W>,
+    value: &CuValue,
+) -> Result<(), minicbor::encode::Error<W::Error>>
+where
+    W: minicbor::encode::Write,
+{
+    match value {
+        CuValue::Bool(v) => {
+            encoder.bool(*v)?;
         }
+        CuValue::U8(v) => {
+            encoder.u8(*v)?;
+        }
+        CuValue::U16(v) => {
+            encoder.u16(*v)?;
+        }
+        CuValue::U32(v) => {
+            encoder.u32(*v)?;
+        }
+        CuValue::U64(v) => {
+            encoder.u64(*v)?;
+        }
+        CuValue::U128(v) => {
+            if let Ok(v) = u64::try_from(*v) {
+                encoder.u64(v)?;
+            } else {
+                encode_bignum(encoder, IanaTag::PosBignum, *v)?;
+            }
+        }
+        CuValue::I8(v) => {
+            encoder.i8(*v)?;
+        }
+        CuValue::I16(v) => {
+            encoder.i16(*v)?;
+        }
+        CuValue::I32(v) => {
+            encoder.i32(*v)?;
+        }
+        CuValue::I64(v) => {
+            encoder.i64(*v)?;
+        }
+        CuValue::I128(v) => {
+            if let Ok(v) = CborInt::try_from(*v) {
+                encoder.int(v)?;
+            } else {
+                encode_bignum(encoder, IanaTag::NegBignum, (-1_i128 - *v) as u128)?;
+            }
+        }
+        CuValue::F32(v) => {
+            encoder.f32(*v)?;
+        }
+        CuValue::F64(v) => {
+            encoder.f64(*v)?;
+        }
+        CuValue::Char(v) => {
+            encoder.char(*v)?;
+        }
+        CuValue::String(v) => {
+            encoder.str(v)?;
+        }
+        CuValue::Unit | CuValue::Option(None) => {
+            encoder.null()?;
+        }
+        CuValue::Option(Some(v)) | CuValue::Newtype(v) => {
+            encode_wire_value_into(encoder, v)?;
+        }
+        CuValue::Seq(values) => {
+            encoder.array(values.len() as u64)?;
+            for value in values {
+                encode_wire_value_into(encoder, value)?;
+            }
+        }
+        CuValue::Map(values) => {
+            encoder.map(values.len() as u64)?;
+            for (key, value) in values {
+                encode_wire_value_into(encoder, key)?;
+                encode_wire_value_into(encoder, value)?;
+            }
+        }
+        CuValue::Bytes(value) => {
+            encoder.bytes(value)?;
+        }
+        CuValue::CuTime(value) => {
+            encoder.u64(value.0)?;
+        }
+    }
+    Ok(())
+}
+
+fn encode_bignum<W>(
+    encoder: &mut CborEncoder<W>,
+    tag: IanaTag,
+    value: u128,
+) -> Result<(), minicbor::encode::Error<W::Error>>
+where
+    W: minicbor::encode::Write,
+{
+    let bytes = value.to_be_bytes();
+    let start = bytes
+        .iter()
+        .position(|byte| *byte != 0)
+        .unwrap_or(bytes.len() - 1);
+    encoder.tag(tag)?.bytes(&bytes[start..])?;
+    Ok(())
+}
+
+fn decode_wire_value(payload: &[u8]) -> CuResult<CuValue> {
+    let mut decoder = CborDecoder::new(payload);
+    let value = decode_wire_value_from(&mut decoder)
+        .map_err(|e| CuError::new_with_cause("Failed to decode Python task CBOR frame", e))?;
+    if decoder.position() != payload.len() {
+        return Err(CuError::from(
+            "Failed to decode Python task CBOR frame: trailing data",
+        ));
+    }
+    Ok(canonicalize_wire_value(value))
+}
+
+fn decode_wire_value_from(
+    decoder: &mut CborDecoder<'_>,
+) -> Result<CuValue, minicbor::decode::Error> {
+    match decoder.datatype()? {
+        CborType::Bool => Ok(CuValue::Bool(decoder.bool()?)),
+        CborType::Null => {
+            decoder.null()?;
+            Ok(CuValue::Option(None))
+        }
+        CborType::U8 => Ok(CuValue::U8(decoder.u8()?)),
+        CborType::U16 => Ok(CuValue::U16(decoder.u16()?)),
+        CborType::U32 => Ok(CuValue::U32(decoder.u32()?)),
+        CborType::U64 => Ok(CuValue::U64(decoder.u64()?)),
+        CborType::I8 => Ok(CuValue::I8(decoder.i8()?)),
+        CborType::I16 => Ok(CuValue::I16(decoder.i16()?)),
+        CborType::I32 => Ok(CuValue::I32(decoder.i32()?)),
+        CborType::I64 => Ok(CuValue::I64(decoder.i64()?)),
+        CborType::Int => decode_cbor_int(decoder.int()?),
+        CborType::F32 => Ok(CuValue::F32(decoder.f32()?)),
+        CborType::F64 => Ok(CuValue::F64(decoder.f64()?)),
+        CborType::Bytes | CborType::BytesIndef => Ok(CuValue::Bytes(read_byte_string(decoder)?)),
+        CborType::String | CborType::StringIndef => Ok(CuValue::String(read_text_string(decoder)?)),
+        CborType::Array | CborType::ArrayIndef => decode_array(decoder),
+        CborType::Map | CborType::MapIndef => decode_map(decoder),
+        CborType::Tag => decode_tagged_value(decoder),
+        other => Err(minicbor::decode::Error::message(format!(
+            "unsupported Python task CBOR type {other}"
+        ))),
+    }
+}
+
+fn decode_cbor_int(value: CborInt) -> Result<CuValue, minicbor::decode::Error> {
+    if let Ok(value) = u64::try_from(value) {
+        Ok(CuValue::U64(value))
+    } else if let Ok(value) = i64::try_from(value) {
+        Ok(CuValue::I64(value))
+    } else {
+        Ok(CuValue::I128(i128::from(value)))
+    }
+}
+
+fn decode_array(decoder: &mut CborDecoder<'_>) -> Result<CuValue, minicbor::decode::Error> {
+    let len = decoder.array()?;
+    let mut values = Vec::new();
+    match len {
+        Some(len) => {
+            values.reserve(len as usize);
+            for _ in 0..len {
+                values.push(decode_wire_value_from(decoder)?);
+            }
+        }
+        None => loop {
+            if decoder.datatype()? == CborType::Break {
+                decoder.skip()?;
+                break;
+            }
+            values.push(decode_wire_value_from(decoder)?);
+        },
+    }
+    Ok(CuValue::Seq(values))
+}
+
+fn decode_map(decoder: &mut CborDecoder<'_>) -> Result<CuValue, minicbor::decode::Error> {
+    let len = decoder.map()?;
+    let mut values = BTreeMap::new();
+    match len {
+        Some(len) => {
+            for _ in 0..len {
+                let key = decode_wire_value_from(decoder)?;
+                let value = decode_wire_value_from(decoder)?;
+                values.insert(key, value);
+            }
+        }
+        None => loop {
+            if decoder.datatype()? == CborType::Break {
+                decoder.skip()?;
+                break;
+            }
+            let key = decode_wire_value_from(decoder)?;
+            let value = decode_wire_value_from(decoder)?;
+            values.insert(key, value);
+        },
+    }
+    Ok(CuValue::Map(values))
+}
+
+fn decode_tagged_value(decoder: &mut CborDecoder<'_>) -> Result<CuValue, minicbor::decode::Error> {
+    match IanaTag::try_from(decoder.tag()?) {
+        Ok(IanaTag::PosBignum) => {
+            let value = decode_bignum(decoder)?;
+            if let Ok(value) = u64::try_from(value) {
+                Ok(CuValue::U64(value))
+            } else {
+                Ok(CuValue::U128(value))
+            }
+        }
+        Ok(IanaTag::NegBignum) => {
+            let value = decode_bignum(decoder)?;
+            if value <= i64::MAX as u128 {
+                Ok(CuValue::I64(-1 - value as i64))
+            } else if let Ok(value) = i128::try_from(value) {
+                Ok(CuValue::I128(-1 - value))
+            } else {
+                Err(minicbor::decode::Error::message(
+                    "Python task CBOR negative bignum exceeded i128",
+                ))
+            }
+        }
+        Ok(other) => Err(minicbor::decode::Error::message(format!(
+            "unsupported Python task CBOR tag {}",
+            u64::from(other)
+        ))),
+        Err(tag) => Err(minicbor::decode::Error::message(format!(
+            "unsupported Python task CBOR tag {tag}",
+        ))),
+    }
+}
+
+fn decode_bignum(decoder: &mut CborDecoder<'_>) -> Result<u128, minicbor::decode::Error> {
+    let bytes = read_byte_string(decoder)?;
+    let first = bytes
+        .iter()
+        .position(|byte| *byte != 0)
+        .unwrap_or(bytes.len());
+    let bytes = &bytes[first..];
+    if bytes.len() > 16 {
+        return Err(minicbor::decode::Error::message(
+            "Python task CBOR bignum exceeded u128",
+        ));
+    }
+    let mut buffer = [0_u8; 16];
+    buffer[16 - bytes.len()..].copy_from_slice(bytes);
+    Ok(u128::from_be_bytes(buffer))
+}
+
+fn read_byte_string(decoder: &mut CborDecoder<'_>) -> Result<Vec<u8>, minicbor::decode::Error> {
+    match decoder.datatype()? {
+        CborType::Bytes => Ok(decoder.bytes()?.to_vec()),
+        CborType::BytesIndef => {
+            let mut bytes = Vec::new();
+            for chunk in decoder.bytes_iter()? {
+                bytes.extend_from_slice(chunk?);
+            }
+            Ok(bytes)
+        }
+        other => Err(minicbor::decode::Error::message(format!(
+            "expected byte string, found {other}"
+        ))),
+    }
+}
+
+fn read_text_string(decoder: &mut CborDecoder<'_>) -> Result<String, minicbor::decode::Error> {
+    match decoder.datatype()? {
+        CborType::String => Ok(decoder.str()?.to_owned()),
+        CborType::StringIndef => {
+            let mut text = String::new();
+            for chunk in decoder.str_iter()? {
+                text.push_str(chunk?);
+            }
+            Ok(text)
+        }
+        other => Err(minicbor::decode::Error::message(format!(
+            "expected text string, found {other}"
+        ))),
     }
 }
 
@@ -1186,6 +1432,25 @@ mod tests {
                 flag: true,
             })
         );
+    }
+
+    #[test]
+    fn cbor_wire_frames_round_trip_128_bit_integers() {
+        let mut buffer = Vec::new();
+        let large_u128 = u128::from(u64::MAX) + 99;
+        let large_i128 = i128::from(i64::MIN) - 99;
+
+        write_cbor_frame(&mut buffer, &large_u128).expect("serialize u128");
+        let decoded_u128 = read_cbor_frame::<_, u128>(&mut std::io::Cursor::new(&buffer))
+            .expect("deserialize u128");
+        assert_eq!(decoded_u128, large_u128);
+
+        buffer.clear();
+
+        write_cbor_frame(&mut buffer, &large_i128).expect("serialize i128");
+        let decoded_i128 = read_cbor_frame::<_, i128>(&mut std::io::Cursor::new(&buffer))
+            .expect("deserialize i128");
+        assert_eq!(decoded_i128, large_i128);
     }
 
     #[cfg(not(target_os = "macos"))]

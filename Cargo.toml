@@ -274,6 +274,7 @@ image = { version = "0.25.6", default-features = false }
 libc = { version = "0.2", default-features = false }
 linux-embedded-hal = "0.4.0"
 log = { version = "0.4", default-features = false }
+minicbor = { version = "2.2.1", default-features = false }
 minicbor-serde = { version = "0.6.2", default-features = false }
 nix = { version = "0.31", default-features = false }
 panic-probe = "1.0"
