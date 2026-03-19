@@ -53,6 +53,9 @@ Notes:
 
 - process mode needs the Python package `cbor2`
 - embedded mode is not supported on macOS in this workspace
+- the demo rewrites the Python task `script` config to an absolute path in Rust so
+  `cargo run -p cu-python-task-demo` works from the workspace root; relative
+  script paths are otherwise resolved from the process current working directory
 
 ## The Python Contract
 

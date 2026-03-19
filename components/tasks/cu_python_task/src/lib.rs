@@ -527,7 +527,8 @@ enum ChildResponse<S, O> {
 ///
 /// Configuration keys:
 ///
-/// - `script`: path to the Python file, default `python/task.py`
+/// - `script`: path to the Python file, default `python/task.py`; relative
+///   paths are resolved against the process current working directory
 /// - `mode`: `"process"` or `"embedded"`, default `"process"`
 ///
 /// `input`, `state`, and `output` are all converted into owned values before the

@@ -37,7 +37,8 @@ implements the algorithm body.
 
 The task config supports two parameters:
 
-- `script`: path to the Python file. Defaults to `python/task.py`.
+- `script`: path to the Python file. Defaults to `python/task.py`. Relative
+  paths are resolved against the process current working directory.
 - `mode`: `"process"` or `"embedded"`. Defaults to `"process"`.
 
 Example RON:
@@ -52,6 +53,9 @@ Example RON:
     },
 )
 ```
+
+If you launch the app from a workspace root or another directory, use an
+absolute `script` path or rewrite the config programmatically before startup.
 
 ## Execution Modes
 

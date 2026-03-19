@@ -223,11 +223,18 @@ pub mod tasks {
 struct PythonTaskDemoApp {}
 
 /// Absolute path to the demo Python script used by the runtime.
+///
+/// The Python task resolves relative script paths against the process current
+/// working directory, so the demo uses an absolute path to stay runnable from
+/// the workspace root.
 pub fn script_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("python/task.py")
 }
 
 /// Load the static RON config and override the Python task mode/script at runtime.
+///
+/// The absolute script override keeps `cargo run -p cu-python-task-demo` working
+/// when launched from the workspace root.
 pub fn config_for_mode(mode: PyTaskMode) -> CuConfig {
     let mut config = CuConfig::deserialize_ron(include_str!("../copperconfig.ron"))
         .expect("static config should parse");
