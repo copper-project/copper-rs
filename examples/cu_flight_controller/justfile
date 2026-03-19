@@ -109,7 +109,7 @@ py-build:
   #!/usr/bin/env bash
   set -euo pipefail
   cd "{{ROOT}}"
-  cargo build -p cu-flight-controller --no-default-features --features python-bindings --lib
+  cargo rustc -p cu-flight-controller --no-default-features --features python-bindings --lib --crate-type cdylib
 
 # Python example reading the log.
 py log="logs/flight_controller_sim.copper": py-build
@@ -121,7 +121,7 @@ py log="logs/flight_controller_sim.copper": py-build
     log="${invocation_dir}/${log}"
   fi
   cd "{{ROOT}}"
-  cargo build -p cu-flight-controller --no-default-features --features python-bindings --lib
+  cargo rustc -p cu-flight-controller --no-default-features --features python-bindings --lib --crate-type cdylib
   python3 "${invocation_dir}/python/print_gnss_from_log.py" "$log"
 
 # Print GNSS coordinates from a Copper log via the Python extension.
@@ -134,7 +134,7 @@ py-gnss log="logs/flight_controller_sim.copper":
     log="${invocation_dir}/${log}"
   fi
   cd "{{ROOT}}"
-  cargo build -p cu-flight-controller --no-default-features --features python-bindings --lib
+  cargo rustc -p cu-flight-controller --no-default-features --features python-bindings --lib --crate-type cdylib
   python3 "${invocation_dir}/python/print_gnss_from_log.py" "$log"
 # Run log reader fsck against a log file.
 fsck log="logs/flight_controller_sim.copper":
