@@ -28,6 +28,8 @@
 
 No setup required. Open one of the live demos in your browser: the simulator runs on the left and the live Copper monitor runs on the right.
 
+These are not toy mockups. BalanceBot is the same application that runs on a Raspberry Pi robot, and Flight Controller is the same control stack we run on STM32H7 drones. Copper lets that same graph be recompiled for embedded hardware, a local workstation, or the browser.
+
 <table>
   <tr>
     <td width="50%" valign="top">
@@ -37,7 +39,7 @@ No setup required. Open one of the live demos in your browser: the simulator run
       <br />
       <strong><a href="https://cdn.copper-robotics.com/demo/balancebot/index.html">BalanceBot</a></strong>
       <br />
-      Self-balancing robot demo with a live Copper DAG and latency monitor.
+      Real Raspberry Pi robot app, rebuilt here as a browser sim with a live Copper DAG and latency monitor.
     </td>
     <td width="50%" valign="top">
       <a href="https://cdn.copper-robotics.com/demo/flight-controller/index.html">
@@ -46,23 +48,19 @@ No setup required. Open one of the live demos in your browser: the simulator run
       <br />
       <strong><a href="https://cdn.copper-robotics.com/demo/flight-controller/index.html">Flight Controller</a></strong>
       <br />
-      Quadcopter flight sim with the same live Copper monitor in the browser.
+      Real STM32H7 flight stack, rebuilt here as a browser sim with the same live Copper monitor.
     </td>
   </tr>
 </table>
 
-Run them locally from this checkout:
-
-- BalanceBot split-view sim + monitor: `cd examples/cu_rp_balancebot && just bevy`
-- BalanceBot local browser demo: `cd examples/cu_rp_balancebot && just web`
-- Flight controller split-view sim + monitor: `cd examples/cu_flight_controller && just bevy`
-- Flight controller local browser demo: `cd examples/cu_flight_controller && just web`
-
-Fastest local install without cloning the repo:
+Prefer a native app instead of the browser? Install the published demos directly:
 
 ```bash
 $ cargo install cu-rp-balancebot
 $ balancebot-sim
+
+$ cargo install cu-flight-controller
+$ quad-sim
 ```
 
 The source code for these demos lives in [examples/cu_rp_balancebot](examples/cu_rp_balancebot) and [examples/cu_flight_controller](examples/cu_flight_controller).
