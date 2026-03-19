@@ -206,6 +206,11 @@ proc-macro2 = { version = "1.0", default-features = false }
 quote = { version = "1.0", default-features = false } # proc macros
 syn = { version = "2.0", default-features = false, features = [
   "full",
+  "derive",
+  "parsing",
+  "printing",
+  "proc-macro",
+  "clone-impls",
 ] } # proc macros
 
 # Unit of measure to be consistent across the project
