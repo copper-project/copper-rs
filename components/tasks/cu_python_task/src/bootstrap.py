@@ -15,6 +15,7 @@ This is a prototyping bridge, not a realtime integration mechanism.
 """
 
 import importlib.util
+import inspect
 import struct
 import sys
 import traceback
@@ -352,13 +353,62 @@ def load_process_function(script_path):
     return process_fn
 
 
+def _call_and_capture_final_bindings(process_fn, *args):
+    """Call ``process_fn`` and capture the final locals of its top-level frame."""
+    try:
+        signature = inspect.signature(process_fn)
+    except (TypeError, ValueError):
+        process_fn(*args)
+        return None
+
+    positional = [
+        param.name
+        for param in signature.parameters.values()
+        if param.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    ]
+    if len(positional) < 3:
+        process_fn(*args)
+        return None
+
+    captured = {}
+    active_frame = None
+
+    def profiler(frame, event, arg):
+        nonlocal active_frame
+        if active_frame is None and event == "call":
+            active_frame = frame
+            return profiler
+        if active_frame is frame and event == "return":
+            captured.update(frame.f_locals)
+        return profiler
+
+    previous_profiler = sys.getprofile()
+    sys.setprofile(profiler)
+    try:
+        process_fn(*args)
+    finally:
+        sys.setprofile(previous_profiler)
+
+    return {
+        "state": captured.get(positional[1], args[1]),
+        "output": captured.get(positional[2], args[2]),
+    }
+
+
 def call_process(process_fn, request):
     """Invoke the user ``process`` function and unwrap the mutated state/output values."""
     request = _coerce_process_request(request)
     input_value = _wrap(request.input)
     state_value = _wrap(request.state)
     output_value = _wrap(request.output, output_mode=True)
-    process_fn(input_value, state_value, output_value)
+    final_bindings = _call_and_capture_final_bindings(
+        process_fn, input_value, state_value, output_value
+    )
+    if final_bindings is not None:
+        state_value = final_bindings["state"]
+        output_value = final_bindings["output"]
+    else:
+        process_fn(input_value, state_value, output_value)
     return {
         "state": _unwrap(state_value),
         "output": _unwrap(output_value),

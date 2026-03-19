@@ -1516,6 +1516,27 @@ mod tests {
     }
 
     #[test]
+    fn process_backend_preserves_rebound_scalar_state() {
+        let (_temp_dir, script) = write_test_script(
+            "def process(inp, current_state, out):\n    current_state = current_state + 1\n",
+        );
+        let mut backend = ProcessBackend::start(&script).expect("start backend");
+        let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
+
+        let result: ProcessResult<u64, PyCuMsg<TestPayload>> = backend
+            .process(&ProcessRequest {
+                input: (),
+                state: 41_u64,
+                output,
+            })
+            .expect("process request");
+        backend.stop().expect("stop backend");
+
+        assert_eq!(result.state, 42);
+        assert!(result.output.payload.is_none());
+    }
+
+    #[test]
     fn cbor_wire_frames_round_trip_128_bit_integers() {
         let mut buffer = Vec::new();
         let large_u128 = u128::from(u64::MAX) + 99;
@@ -1559,5 +1580,27 @@ mod tests {
                 flag: true,
             })
         );
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn embedded_backend_preserves_rebound_scalar_state() {
+        let (_temp_dir, script) = write_test_script(
+            "def process(inp, current_state, out):\n    current_state = current_state + 1\n",
+        );
+        let mut backend = EmbeddedBackend::start(&script).expect("start backend");
+        let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
+
+        let result: ProcessResult<u64, PyCuMsg<TestPayload>> = backend
+            .process(&ProcessRequest {
+                input: (),
+                state: 41_u64,
+                output,
+            })
+            .expect("process request");
+        backend.stop().expect("stop backend");
+
+        assert_eq!(result.state, 42);
+        assert!(result.output.payload.is_none());
     }
 }
