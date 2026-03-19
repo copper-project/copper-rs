@@ -1417,6 +1417,13 @@ pub struct LoggingConfig {
     #[serde(default = "default_as_true", skip_serializing_if = "Clone::clone")]
     pub enable_task_logging: bool,
 
+    /// Number of preallocated CopperLists available to the runtime.
+    ///
+    /// This is consumed by proc-macro codegen and must match the value compiled into the
+    /// application binary.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub copperlist_count: Option<usize>,
+
     /// Size of each slab in the log file. (it is the size of the memory mapped file at a time)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub slab_size_mib: Option<u64>,
@@ -2508,6 +2515,14 @@ fn escape_dot_id(value: &str) -> String {
 impl LoggingConfig {
     /// Validate the logging configuration to ensure section pre-allocation sizes do not exceed slab sizes.
     pub fn validate(&self) -> CuResult<()> {
+        if let Some(copperlist_count) = self.copperlist_count
+            && copperlist_count == 0
+        {
+            return Err(CuError::from(
+                "CopperList count cannot be zero. Set logging.copperlist_count to at least 1.",
+            ));
+        }
+
         if let Some(section_size_mib) = self.section_size_mib
             && let Some(slab_size_mib) = self.slab_size_mib
             && section_size_mib > slab_size_mib

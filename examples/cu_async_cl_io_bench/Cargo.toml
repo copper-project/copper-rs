@@ -1,0 +1,32 @@
+[package]
+name = "cu-async-cl-io-bench"
+description = "Host benchmark for CopperList logging latency and async CL I/O experiments."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+default-run = "cu-async-cl-io-bench"
+
+publish = false
+
+[dependencies]
+bincode = { workspace = true }
+clap = { workspace = true }
+cu29 = { workspace = true }
+cu29-helpers = { workspace = true }
+serde = { workspace = true }
+tempfile = { workspace = true }
+
+[[bin]]
+name = "cu-async-cl-io-bench"
+path = "src/main.rs"
+
+[features]
+async-cl-io = ["cu29/async-cl-io"]
+
+[package.metadata.cargo-shear]
+ignored = ["bincode", "serde"]

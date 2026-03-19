@@ -37,6 +37,8 @@ use cu29_log_runtime::log_debug_mode;
 #[allow(unused_imports)]
 use cu29_value::to_value;
 
+#[cfg(all(feature = "std", feature = "async-cl-io"))]
+use alloc::alloc::{alloc_zeroed, handle_alloc_error};
 use alloc::boxed::Box;
 use alloc::collections::{BTreeSet, VecDeque};
 use alloc::format;
@@ -46,6 +48,8 @@ use bincode::enc::EncoderImpl;
 use bincode::enc::write::{SizeWriter, SliceWriter};
 use bincode::error::EncodeError;
 use bincode::{Decode, Encode};
+#[cfg(all(feature = "std", feature = "async-cl-io"))]
+use core::alloc::Layout;
 use core::fmt::Result as FmtResult;
 use core::fmt::{Debug, Formatter};
 
@@ -53,8 +57,12 @@ use core::fmt::{Debug, Formatter};
 use cu29_log_runtime::LoggerRuntime;
 #[cfg(feature = "std")]
 use cu29_unifiedlog::UnifiedLoggerWrite;
+#[cfg(all(feature = "std", feature = "async-cl-io"))]
+use std::sync::mpsc::{Receiver, SyncSender, TryRecvError, sync_channel};
 #[cfg(feature = "std")]
 use std::sync::{Arc, Mutex};
+#[cfg(all(feature = "std", feature = "async-cl-io"))]
+use std::thread::JoinHandle;
 
 /// Just a simple struct to hold the various bits needed to run a Copper application.
 #[cfg(feature = "std")]
@@ -83,16 +91,55 @@ pub fn perf_now(_clock: &RobotClock) -> CuTime {
     _clock.now()
 }
 
-/// Manages the lifecycle of the copper lists and logging.
-pub struct CopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
-    pub inner: CuListsManager<P, NBCL>,
+#[cfg(all(feature = "std", feature = "async-cl-io"))]
+#[doc(hidden)]
+pub trait AsyncCopperListPayload: Send {}
+
+#[cfg(all(feature = "std", feature = "async-cl-io"))]
+impl<T: Send> AsyncCopperListPayload for T {}
+
+#[cfg(not(all(feature = "std", feature = "async-cl-io")))]
+#[doc(hidden)]
+pub trait AsyncCopperListPayload {}
+
+#[cfg(not(all(feature = "std", feature = "async-cl-io")))]
+impl<T> AsyncCopperListPayload for T {}
+
+/// Manages the lifecycle of the copper lists and logging on the synchronous path.
+pub struct SyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
+    inner: CuListsManager<P, NBCL>,
     /// Logger for the copper lists (messages between tasks)
-    pub logger: Option<Box<dyn WriteStream<CopperList<P>>>>,
+    logger: Option<Box<dyn WriteStream<CopperList<P>>>>,
     /// Last encoded size returned by logger.log
     pub last_encoded_bytes: u64,
 }
 
-impl<P: CopperListTuple + Default, const NBCL: usize> CopperListsManager<P, NBCL> {
+impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, NBCL> {
+    pub fn new(logger: Option<Box<dyn WriteStream<CopperList<P>>>>) -> CuResult<Self>
+    where
+        P: CuListZeroedInit,
+    {
+        Ok(Self {
+            inner: CuListsManager::new(),
+            logger,
+            last_encoded_bytes: 0,
+        })
+    }
+
+    pub fn next_cl_id(&self) -> u64 {
+        self.inner.next_cl_id()
+    }
+
+    pub fn last_cl_id(&self) -> u64 {
+        self.inner.last_cl_id()
+    }
+
+    pub fn create(&mut self) -> CuResult<&mut CopperList<P>> {
+        self.inner
+            .create()
+            .ok_or_else(|| CuError::from("Ran out of space for copper lists"))
+    }
+
     pub fn end_of_processing(&mut self, culistid: u64) -> CuResult<()> {
         let mut is_top = true;
         let mut nb_done = 0;
@@ -118,10 +165,269 @@ impl<P: CopperListTuple + Default, const NBCL: usize> CopperListsManager<P, NBCL
         Ok(())
     }
 
-    pub fn available_copper_lists(&self) -> usize {
-        NBCL - self.inner.len()
+    pub fn finish_pending(&mut self) -> CuResult<()> {
+        Ok(())
+    }
+
+    pub fn available_copper_lists(&mut self) -> CuResult<usize> {
+        Ok(NBCL - self.inner.len())
     }
 }
+
+#[cfg(all(feature = "std", feature = "async-cl-io"))]
+struct AsyncCopperListCompletion<P: CopperListTuple> {
+    culist: Box<CopperList<P>>,
+    log_result: CuResult<u64>,
+}
+
+#[cfg(all(feature = "std", feature = "async-cl-io"))]
+fn allocate_zeroed_copperlist<P>() -> Box<CopperList<P>>
+where
+    P: CopperListTuple + CuListZeroedInit,
+{
+    // SAFETY: We allocate zeroed memory and immediately initialize required fields.
+    let mut culist = unsafe {
+        let layout = Layout::new::<CopperList<P>>();
+        let ptr = alloc_zeroed(layout) as *mut CopperList<P>;
+        if ptr.is_null() {
+            handle_alloc_error(layout);
+        }
+        Box::from_raw(ptr)
+    };
+    culist.msgs.init_zeroed();
+    culist
+}
+
+/// Manages the lifecycle of the copper lists and logging on the asynchronous path.
+#[cfg(all(feature = "std", feature = "async-cl-io"))]
+pub struct AsyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
+    free_pool: Vec<Box<CopperList<P>>>,
+    current: Option<Box<CopperList<P>>>,
+    pending_count: usize,
+    next_cl_id: u64,
+    pending_sender: Option<SyncSender<Box<CopperList<P>>>>,
+    completion_receiver: Option<Receiver<AsyncCopperListCompletion<P>>>,
+    worker_handle: Option<JoinHandle<()>>,
+    /// Last encoded size returned by logger.log
+    pub last_encoded_bytes: u64,
+}
+
+#[cfg(all(feature = "std", feature = "async-cl-io"))]
+impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P, NBCL> {
+    pub fn new(logger: Option<Box<dyn WriteStream<CopperList<P>>>>) -> CuResult<Self>
+    where
+        P: CuListZeroedInit + AsyncCopperListPayload + 'static,
+    {
+        let mut free_pool = Vec::with_capacity(NBCL);
+        for _ in 0..NBCL {
+            free_pool.push(allocate_zeroed_copperlist::<P>());
+        }
+
+        let (pending_sender, completion_receiver, worker_handle) = if let Some(mut logger) = logger
+        {
+            let (pending_sender, pending_receiver) = sync_channel::<Box<CopperList<P>>>(NBCL);
+            let (completion_sender, completion_receiver) =
+                sync_channel::<AsyncCopperListCompletion<P>>(NBCL);
+            let worker_handle = std::thread::Builder::new()
+                .name("cu-async-cl-io".to_string())
+                .spawn(move || {
+                    while let Ok(mut culist) = pending_receiver.recv() {
+                        culist.change_state(CopperListState::BeingSerialized);
+                        let log_result = logger
+                            .log(&culist)
+                            .map(|_| logger.last_log_bytes().unwrap_or(0) as u64);
+                        let should_stop = log_result.is_err();
+                        if completion_sender
+                            .send(AsyncCopperListCompletion { culist, log_result })
+                            .is_err()
+                        {
+                            break;
+                        }
+                        if should_stop {
+                            break;
+                        }
+                    }
+                })
+                .map_err(|e| {
+                    CuError::from("Failed to spawn async CopperList serializer thread")
+                        .add_cause(e.to_string().as_str())
+                })?;
+            (
+                Some(pending_sender),
+                Some(completion_receiver),
+                Some(worker_handle),
+            )
+        } else {
+            (None, None, None)
+        };
+
+        Ok(Self {
+            free_pool,
+            current: None,
+            pending_count: 0,
+            next_cl_id: 0,
+            pending_sender,
+            completion_receiver,
+            worker_handle,
+            last_encoded_bytes: 0,
+        })
+    }
+
+    pub fn next_cl_id(&self) -> u64 {
+        self.next_cl_id
+    }
+
+    pub fn last_cl_id(&self) -> u64 {
+        self.next_cl_id.saturating_sub(1)
+    }
+
+    pub fn create(&mut self) -> CuResult<&mut CopperList<P>> {
+        if self.current.is_some() {
+            return Err(CuError::from(
+                "Attempted to create a CopperList while another one is still active",
+            ));
+        }
+
+        self.reclaim_completed()?;
+        while self.free_pool.is_empty() {
+            self.wait_for_completion()?;
+        }
+
+        let culist = self
+            .free_pool
+            .pop()
+            .ok_or_else(|| CuError::from("Ran out of space for copper lists"))?;
+        self.current = Some(culist);
+
+        let current = self
+            .current
+            .as_mut()
+            .expect("current CopperList is missing");
+        current.id = self.next_cl_id;
+        current.change_state(CopperListState::Initialized);
+        self.next_cl_id += 1;
+        Ok(current.as_mut())
+    }
+
+    pub fn end_of_processing(&mut self, culistid: u64) -> CuResult<()> {
+        self.reclaim_completed()?;
+
+        let mut culist = self.current.take().ok_or_else(|| {
+            CuError::from("Attempted to finish processing without an active CopperList")
+        })?;
+
+        if culist.id != culistid {
+            return Err(CuError::from(format!(
+                "Attempted to finish CopperList #{culistid} while CopperList #{} is active",
+                culist.id
+            )));
+        }
+
+        culist.change_state(CopperListState::DoneProcessing);
+        self.last_encoded_bytes = 0;
+
+        if let Some(pending_sender) = &self.pending_sender {
+            culist.change_state(CopperListState::QueuedForSerialization);
+            pending_sender.send(culist).map_err(|e| {
+                CuError::from("Failed to enqueue CopperList for async serialization")
+                    .add_cause(e.to_string().as_str())
+            })?;
+            self.pending_count += 1;
+            self.reclaim_completed()?;
+        } else {
+            culist.change_state(CopperListState::Free);
+            self.free_pool.push(culist);
+        }
+
+        Ok(())
+    }
+
+    pub fn finish_pending(&mut self) -> CuResult<()> {
+        if self.current.is_some() {
+            return Err(CuError::from(
+                "Cannot flush CopperList I/O while a CopperList is still active",
+            ));
+        }
+
+        while self.pending_count > 0 {
+            self.wait_for_completion()?;
+        }
+        Ok(())
+    }
+
+    pub fn available_copper_lists(&mut self) -> CuResult<usize> {
+        self.reclaim_completed()?;
+        Ok(self.free_pool.len())
+    }
+
+    fn reclaim_completed(&mut self) -> CuResult<()> {
+        loop {
+            let recv_result = {
+                let Some(completion_receiver) = self.completion_receiver.as_ref() else {
+                    return Ok(());
+                };
+                completion_receiver.try_recv()
+            };
+            let completion = match recv_result {
+                Ok(completion) => completion,
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => {
+                    return Err(CuError::from(
+                        "Async CopperList serializer thread disconnected unexpectedly",
+                    ));
+                }
+            };
+            self.handle_completion(completion)?;
+        }
+        Ok(())
+    }
+
+    fn wait_for_completion(&mut self) -> CuResult<()> {
+        let completion = self
+            .completion_receiver
+            .as_ref()
+            .ok_or_else(|| {
+                CuError::from("No async CopperList serializer is active to return a free slot")
+            })?
+            .recv()
+            .map_err(|e| {
+                CuError::from("Failed to receive completion from async CopperList serializer")
+                    .add_cause(e.to_string().as_str())
+            })?;
+        self.handle_completion(completion)
+    }
+
+    fn handle_completion(&mut self, mut completion: AsyncCopperListCompletion<P>) -> CuResult<()> {
+        self.pending_count = self.pending_count.saturating_sub(1);
+        completion.culist.change_state(CopperListState::Free);
+        self.free_pool.push(completion.culist);
+        completion.log_result.map(|_| ())
+    }
+
+    fn shutdown_worker(&mut self) -> CuResult<()> {
+        self.finish_pending()?;
+        self.pending_sender.take();
+        if let Some(worker_handle) = self.worker_handle.take() {
+            worker_handle.join().map_err(|_| {
+                CuError::from("Async CopperList serializer thread panicked while joining")
+            })?;
+        }
+        Ok(())
+    }
+}
+
+#[cfg(all(feature = "std", feature = "async-cl-io"))]
+impl<P: CopperListTuple + Default, const NBCL: usize> Drop for AsyncCopperListsManager<P, NBCL> {
+    fn drop(&mut self) {
+        let _ = self.shutdown_worker();
+    }
+}
+
+#[cfg(all(feature = "std", feature = "async-cl-io"))]
+pub type CopperListsManager<P, const NBCL: usize> = AsyncCopperListsManager<P, NBCL>;
+
+#[cfg(not(all(feature = "std", feature = "async-cl-io")))]
+pub type CopperListsManager<P, const NBCL: usize> = SyncCopperListsManager<P, NBCL>;
 
 /// Manages the frozen tasks state and logging.
 pub struct KeyFramesManager {
@@ -256,8 +562,13 @@ pub struct CuRuntime<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize
 }
 
 /// To be able to share the clock we make the runtime a clock provider.
-impl<CT, CB, P: CopperListTuple + CuListZeroedInit + Default, M: CuMonitor, const NBCL: usize>
-    ClockProvider for CuRuntime<CT, CB, P, M, NBCL>
+impl<
+    CT,
+    CB,
+    P: CopperListTuple + CuListZeroedInit + Default + AsyncCopperListPayload,
+    M: CuMonitor,
+    const NBCL: usize,
+> ClockProvider for CuRuntime<CT, CB, P, M, NBCL>
 {
     fn get_clock(&self) -> RobotClock {
         self.clock.clone()
@@ -363,7 +674,7 @@ pub struct RuntimeLifecycleRecord {
 impl<
     CT,
     CB,
-    P: CopperListTuple + CuListZeroedInit + Default + 'static,
+    P: CopperListTuple + CuListZeroedInit + Default + AsyncCopperListPayload + 'static,
     M: CuMonitor,
     const NBCL: usize,
 > CuRuntime<CT, CB, P, M, NBCL>
@@ -466,11 +777,7 @@ impl<
             ),
         };
 
-        let copperlists_manager = CopperListsManager {
-            inner: CuListsManager::new(),
-            logger: copperlists_logger,
-            last_encoded_bytes: 0,
-        };
+        let copperlists_manager = CopperListsManager::new(copperlists_logger)?;
         #[cfg(target_os = "none")]
         {
             let cl_size = core::mem::size_of::<CopperList<P>>();
@@ -610,11 +917,7 @@ impl<
             ),
         };
 
-        let copperlists_manager = CopperListsManager {
-            inner: CuListsManager::new(),
-            logger: copperlists_logger,
-            last_encoded_bytes: 0,
-        };
+        let copperlists_manager = CopperListsManager::new(copperlists_logger)?;
         #[cfg(target_os = "none")]
         {
             let cl_size = core::mem::size_of::<CopperList<P>>();
@@ -1225,6 +1528,7 @@ mod tests {
         assert!(runtime.is_ok());
     }
 
+    #[cfg(not(feature = "async-cl-io"))]
     #[test]
     fn test_copperlists_manager_lifecycle() {
         let mut config = CuConfig::default();
@@ -1252,60 +1556,92 @@ mod tests {
         {
             let copperlists = &mut runtime.copperlists_manager;
             let culist0 = copperlists
-                .inner
                 .create()
                 .expect("Ran out of space for copper lists");
-            // FIXME: error handling.
             let id = culist0.id;
             assert_eq!(id, 0);
             culist0.change_state(CopperListState::Processing);
-            assert_eq!(copperlists.available_copper_lists(), 1);
+            assert_eq!(copperlists.available_copper_lists().unwrap(), 1);
         }
 
         {
             let copperlists = &mut runtime.copperlists_manager;
             let culist1 = copperlists
-                .inner
                 .create()
-                .expect("Ran out of space for copper lists"); // FIXME: error handling.
+                .expect("Ran out of space for copper lists");
             let id = culist1.id;
             assert_eq!(id, 1);
             culist1.change_state(CopperListState::Processing);
-            assert_eq!(copperlists.available_copper_lists(), 0);
+            assert_eq!(copperlists.available_copper_lists().unwrap(), 0);
         }
 
         {
             let copperlists = &mut runtime.copperlists_manager;
-            let culist2 = copperlists.inner.create();
-            assert!(culist2.is_none());
-            assert_eq!(copperlists.available_copper_lists(), 0);
+            let culist2 = copperlists.create();
+            assert!(culist2.is_err());
+            assert_eq!(copperlists.available_copper_lists().unwrap(), 0);
             // Free in order, should let the top of the stack be serialized and freed.
             let _ = copperlists.end_of_processing(1);
-            assert_eq!(copperlists.available_copper_lists(), 1);
+            assert_eq!(copperlists.available_copper_lists().unwrap(), 1);
         }
 
         // Readd a CL
         {
             let copperlists = &mut runtime.copperlists_manager;
             let culist2 = copperlists
-                .inner
                 .create()
-                .expect("Ran out of space for copper lists"); // FIXME: error handling.
+                .expect("Ran out of space for copper lists");
             let id = culist2.id;
             assert_eq!(id, 2);
             culist2.change_state(CopperListState::Processing);
-            assert_eq!(copperlists.available_copper_lists(), 0);
+            assert_eq!(copperlists.available_copper_lists().unwrap(), 0);
             // Free out of order, the #0 first
             let _ = copperlists.end_of_processing(0);
             // Should not free up the top of the stack
-            assert_eq!(copperlists.available_copper_lists(), 0);
+            assert_eq!(copperlists.available_copper_lists().unwrap(), 0);
 
             // Free up the top of the stack
             let _ = copperlists.end_of_processing(2);
             // This should free up 2 CLs
 
-            assert_eq!(copperlists.available_copper_lists(), 2);
+            assert_eq!(copperlists.available_copper_lists().unwrap(), 2);
         }
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    #[derive(Debug, Default)]
+    struct RecordingWriter {
+        ids: Arc<Mutex<Vec<u64>>>,
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    impl WriteStream<CopperList<Msgs>> for RecordingWriter {
+        fn log(&mut self, culist: &CopperList<Msgs>) -> CuResult<()> {
+            self.ids.lock().unwrap().push(culist.id);
+            std::thread::sleep(std::time::Duration::from_millis(2));
+            Ok(())
+        }
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    #[test]
+    fn test_async_copperlists_manager_flushes_in_order() {
+        let ids = Arc::new(Mutex::new(Vec::new()));
+        let mut copperlists = CopperListsManager::<Msgs, 4>::new(Some(Box::new(RecordingWriter {
+            ids: ids.clone(),
+        })))
+        .unwrap();
+
+        for expected_id in 0..4 {
+            let culist = copperlists.create().unwrap();
+            assert_eq!(culist.id, expected_id);
+            culist.change_state(CopperListState::Processing);
+            copperlists.end_of_processing(expected_id).unwrap();
+        }
+
+        copperlists.finish_pending().unwrap();
+        assert_eq!(copperlists.available_copper_lists().unwrap(), 4);
+        assert_eq!(*ids.lock().unwrap(), vec![0, 1, 2, 3]);
     }
 
     #[test]
