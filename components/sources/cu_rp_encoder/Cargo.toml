@@ -11,7 +11,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version = "0.13.0", default-features = false, features = [
+cu29 = { path = "../../../core/cu29", version = "0.14.0", default-features = false, features = [
   "std",
   "textlogs",
   "units",

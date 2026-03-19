@@ -17,7 +17,7 @@ debug_pane = ["cu-tuimon/log_pane", "cu-tuimon/stderr_capture", "dep:arboard"]
 
 [dependencies]
 cu29 = { workspace = true }
-cu-tuimon = { path = "../../libs/cu_tuimon", version = "0.13.0", default-features = false }
+cu-tuimon = { path = "../../libs/cu_tuimon", version = "0.14.0", default-features = false }
 compact_str = { workspace = true }
 ratatui = "0.30"
 ansi-to-tui = { version = "8.0.0", default-features = false }

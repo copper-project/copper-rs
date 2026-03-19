@@ -17,10 +17,10 @@ stderr_capture = ["cu-tuimon/stderr_capture"]
 [dependencies]
 bevy = { workspace = true }
 bevy_ratatui = { workspace = true, features = ["windowed"] }
-cu29 = { path = "../../../core/cu29", version = "0.13.0", default-features = false, features = [
+cu29 = { path = "../../../core/cu29", version = "0.14.0", default-features = false, features = [
   "std",
 ] }
-cu-tuimon = { path = "../../libs/cu_tuimon", version = "0.13.0", default-features = false, features = [
+cu-tuimon = { path = "../../libs/cu_tuimon", version = "0.14.0", default-features = false, features = [
   "log_pane",
 ] }
 ratatui = { version = "0.30.0", default-features = false }
