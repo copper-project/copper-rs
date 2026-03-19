@@ -24,30 +24,54 @@
 <p><strong style="color: #b87333;">🪶 Runs anywhere</strong> – from Linux servers, workstations, SBC to bare-metal MPUs
 <p><strong style="color: #b87333;">📦 Built to ship</strong> – one stack from simulation to production
 
-### Showcasing copper-rs
+### Try Copper In 30 Seconds
 
-✈️ Flying | 🚗 Driving | 🌊 Swimming | 🚀 Spacefaring | 🤖 Humanoids
+No setup required. Open one of the live demos in your browser: the simulator runs on the left and the live Copper monitor runs on the right.
 
-[![Copper in virtual action](https://github.com/user-attachments/assets/27ab8b08-ef17-4283-a1cf-8d4271595ef6)](https://youtu.be/weV_JYaUsmo)
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="https://cdn.copper-robotics.com/demo/balancebot/index.html">
+        <img src="doc/static/demo-balancebot-browser.png" alt="BalanceBot browser demo" width="100%" />
+      </a>
+      <br />
+      <strong><a href="https://cdn.copper-robotics.com/demo/balancebot/index.html">BalanceBot</a></strong>
+      <br />
+      Self-balancing robot demo with a live Copper DAG and latency monitor.
+    </td>
+    <td width="50%" valign="top">
+      <a href="https://cdn.copper-robotics.com/demo/flight-controller/index.html">
+        <img src="doc/static/demo-flight-controller-browser.png" alt="Flight controller browser demo" width="100%" />
+      </a>
+      <br />
+      <strong><a href="https://cdn.copper-robotics.com/demo/flight-controller/index.html">Flight Controller</a></strong>
+      <br />
+      Quadcopter flight sim with the same live Copper monitor in the browser.
+    </td>
+  </tr>
+</table>
 
-### You don't have a real robot yet? Try it in our toy example right now in a sim environment!
+Run them locally from this checkout:
 
-[![Copper in virtual action](https://img.youtube.com/vi/kC6sGRZUxLE/maxresdefault.jpg)](https://youtu.be/kC6sGRZUxLE)
+- BalanceBot split-view sim + monitor: `cd examples/cu_rp_balancebot && just bevy`
+- BalanceBot local browser demo: `cd examples/cu_rp_balancebot && just web`
+- Flight controller split-view sim + monitor: `cd examples/cu_flight_controller && just bevy`
+- Flight controller local browser demo: `cd examples/cu_flight_controller && just web`
 
-Here is a Copper-based robot in action in a Bevy simulation environment!
-The realistic sim is created using [Bevy](https://crates.io/crates/bevy) (A Rust Game Engine)
-and [Avian3d](https://crates.io/crates/avian3d) (Physics Engine in Rust).
-
-On your mac or linux machine (x86-64 or Arm) just run ...
+Fastest local install without cloning the repo:
 
 ```bash
 $ cargo install cu-rp-balancebot
 $ balancebot-sim
 ```
 
-... to try it locally.
+The source code for these demos lives in [examples/cu_rp_balancebot](examples/cu_rp_balancebot) and [examples/cu_flight_controller](examples/cu_flight_controller).
 
-The source code for this demo is available in the [examples/cu_rp_balancebot](examples/cu_rp_balancebot) directory.
+### Showcasing copper-rs
+
+✈️ Flying | 🚗 Driving | 🌊 Swimming | 🚀 Spacefaring | 🤖 Humanoids
+
+[![Copper in virtual action](https://github.com/user-attachments/assets/27ab8b08-ef17-4283-a1cf-8d4271595ef6)](https://youtu.be/weV_JYaUsmo)
 
 ## Get Started
 
