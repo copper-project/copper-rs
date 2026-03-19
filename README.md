@@ -24,11 +24,13 @@
 <p><strong style="color: #b87333;">🪶 Runs anywhere</strong> – from Linux servers, workstations, SBC to bare-metal MPUs
 <p><strong style="color: #b87333;">📦 Built to ship</strong> – one stack from simulation to production
 
+Already showing up in: ✈️ Flying | 🚗 Driving | 🌊 Swimming | 🚀 Spacefaring | 🤖 Humanoids
+
 ### Try Copper In 30 Seconds
 
 No setup required. Open one of the live demos in your browser: the simulator runs on the left and the live Copper monitor runs on the right.
 
-These are not toy mockups. BalanceBot is the same application that runs on a Raspberry Pi robot, and Flight Controller is the same control stack we run on STM32H7 drones. Copper lets that same graph be recompiled for embedded hardware, a local workstation, or the browser.
+These are not mockups: BalanceBot is the exact same application that runs on a Raspberry Pi physical robot, and Flight Controller is the same control stack we run on a microcontroller (STM32H7) on real drones. Copper lets that same graph be recompiled for embedded hardware, a local workstation, or the browser.
 
 <table>
   <tr>
@@ -67,9 +69,11 @@ The source code for these demos lives in [examples/cu_rp_balancebot](examples/cu
 
 ### Showcasing copper-rs
 
-✈️ Flying | 🚗 Driving | 🌊 Swimming | 🚀 Spacefaring | 🤖 Humanoids
-
-[![Copper in virtual action](https://github.com/user-attachments/assets/27ab8b08-ef17-4283-a1cf-8d4271595ef6)](https://youtu.be/weV_JYaUsmo)
+<p align="center">
+  <a href="https://youtu.be/weV_JYaUsmo">
+    <img src="https://github.com/user-attachments/assets/27ab8b08-ef17-4283-a1cf-8d4271595ef6" alt="Copper in virtual action" width="720" />
+  </a>
+</p>
 
 ## Get Started
 
