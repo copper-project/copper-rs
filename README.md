@@ -67,11 +67,11 @@ $ quad-sim
 
 The source code for these demos lives in [examples/cu_rp_balancebot](examples/cu_rp_balancebot) and [examples/cu_flight_controller](examples/cu_flight_controller).
 
-### Showcasing copper-rs
+Want to see more Copper in action? Watch the [community showcase video](https://youtu.be/weV_JYaUsmo).
 
 <p align="center">
   <a href="https://youtu.be/weV_JYaUsmo">
-    <img src="https://github.com/user-attachments/assets/27ab8b08-ef17-4283-a1cf-8d4271595ef6" alt="Copper in virtual action" width="720" />
+    <img src="https://github.com/user-attachments/assets/27ab8b08-ef17-4283-a1cf-8d4271595ef6" alt="Copper community showcase video" width="520" />
   </a>
 </p>
 
