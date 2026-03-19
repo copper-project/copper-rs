@@ -53,8 +53,6 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::OnceLock;
-use std::thread;
-use std::time::{Duration, Instant};
 
 #[cfg(not(target_os = "macos"))]
 use pyo3::prelude::*;
@@ -63,9 +61,6 @@ use pyo3::types::{PyAny, PyModule};
 
 const DEFAULT_SCRIPT_PATH: &str = "python/task.py";
 const MAX_CBOR_FRAME_BYTES: usize = 16 * 1024 * 1024;
-const PROCESS_START_TIMEOUT: Duration = Duration::from_secs(5);
-const PROCESS_STOP_TIMEOUT: Duration = Duration::from_secs(2);
-const PROCESS_POLL_INTERVAL: Duration = Duration::from_millis(10);
 const PYTHON_BOOTSTRAP: &str = include_str!("bootstrap.py");
 const PYTHON_COMMAND_CANDIDATES: &[&str] = &["python3", "python"];
 
@@ -782,48 +777,32 @@ impl ProcessBackend {
     }
 
     fn wait_ready(&mut self) -> CuResult<()> {
-        let start = Instant::now();
-        loop {
-            if start.elapsed() > PROCESS_START_TIMEOUT {
-                return Err(CuError::from(
-                    "Timed out while waiting for Python task process to start",
-                ));
+        match read_cbor_frame::<_, ChildResponse<(), ()>>(&mut self.stdout) {
+            Ok(ChildResponse::Ready { cbor2_accelerated }) => {
+                if !cbor2_accelerated {
+                    warning!(
+                        "cu_python_task process mode is using pure-Python cbor2; install the C extension backend for better performance"
+                    );
+                }
+                Ok(())
             }
-
-            if let Some(status) = self
-                .child
-                .try_wait()
-                .map_err(|e| CuError::new_with_cause("Failed to poll Python task process", e))?
-            {
-                return Err(CuError::from(format!(
-                    "Python task process exited during startup with status {status}"
-                )));
-            }
-
-            match read_cbor_frame::<_, ChildResponse<(), ()>>(&mut self.stdout) {
-                Ok(ChildResponse::Ready { cbor2_accelerated }) => {
-                    if !cbor2_accelerated {
-                        warning!(
-                            "cu_python_task process mode is using pure-Python cbor2; install the C extension backend for better performance"
-                        );
-                    }
-                    return Ok(());
-                }
-                Ok(ChildResponse::Error { message }) => {
-                    return Err(CuError::from(format!(
-                        "Python task process failed during startup:\n{message}"
-                    )));
-                }
-                Ok(ChildResponse::Result { .. }) => {
-                    return Err(CuError::from(
-                        "Unexpected result frame while waiting for Python task process startup",
-                    ));
-                }
-                Err(error) => {
-                    if start.elapsed() > PROCESS_START_TIMEOUT {
-                        return Err(error);
-                    }
-                    thread::sleep(PROCESS_POLL_INTERVAL);
+            Ok(ChildResponse::Error { message }) => Err(CuError::from(format!(
+                "Python task process failed during startup:\n{message}"
+            ))),
+            Ok(ChildResponse::Result { .. }) => Err(CuError::from(
+                "Unexpected result frame while waiting for Python task process startup",
+            )),
+            Err(read_error) => {
+                if let Some(status) = self
+                    .child
+                    .try_wait()
+                    .map_err(|e| CuError::new_with_cause("Failed to poll Python task process", e))?
+                {
+                    Err(CuError::from(format!(
+                        "Python task process exited during startup with status {status}"
+                    )))
+                } else {
+                    Err(read_error)
                 }
             }
         }
@@ -853,29 +832,10 @@ impl ProcessBackend {
 
     fn stop(&mut self) -> CuResult<()> {
         let _ = write_cbor_frame(&mut self.stdin, &ChildRequest::<(), (), ()>::Shutdown);
-
-        let deadline = Instant::now() + PROCESS_STOP_TIMEOUT;
-        loop {
-            if let Some(_status) = self
-                .child
-                .try_wait()
-                .map_err(|e| CuError::new_with_cause("Failed to poll Python task process", e))?
-            {
-                return Ok(());
-            }
-
-            if Instant::now() >= deadline {
-                self.child.kill().map_err(|e| {
-                    CuError::new_with_cause("Failed to terminate Python task process", e)
-                })?;
-                self.child.wait().map_err(|e| {
-                    CuError::new_with_cause("Failed to reap Python task process", e)
-                })?;
-                return Ok(());
-            }
-
-            thread::sleep(PROCESS_POLL_INTERVAL);
-        }
+        self.child
+            .wait()
+            .map_err(|e| CuError::new_with_cause("Failed to wait for Python task process", e))?;
+        Ok(())
     }
 }
 
