@@ -54,9 +54,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::OnceLock;
 
-#[cfg(not(target_os = "macos"))]
 use pyo3::prelude::*;
-#[cfg(not(target_os = "macos"))]
 use pyo3::types::{PyAny, PyModule, PyTuple};
 
 const DEFAULT_SCRIPT_PATH: &str = "python/task.py";
@@ -989,13 +987,11 @@ impl ProcessBackend {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
 #[pyclass(name = "CuContext")]
 struct PyEmbeddedContext {
     ctx: CuContext,
 }
 
-#[cfg(not(target_os = "macos"))]
 #[pymethods]
 impl PyEmbeddedContext {
     #[getter]
@@ -1032,7 +1028,6 @@ impl PyEmbeddedContext {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
 struct EmbeddedBackend {
     call_process: Py<PyAny>,
     call_state_hook: Py<PyAny>,
@@ -1041,7 +1036,6 @@ struct EmbeddedBackend {
     stop_fn: Option<Py<PyAny>>,
 }
 
-#[cfg(not(target_os = "macos"))]
 impl EmbeddedBackend {
     fn start(script: &Path) -> CuResult<Self> {
         Python::initialize();
@@ -1167,48 +1161,6 @@ impl EmbeddedBackend {
     }
 }
 
-#[cfg(target_os = "macos")]
-struct EmbeddedBackend;
-
-#[cfg(target_os = "macos")]
-impl EmbeddedBackend {
-    fn start(_script: &Path) -> CuResult<Self> {
-        Err(CuError::from(
-            "Embedded Python tasks are not supported on macOS in this workspace",
-        ))
-    }
-
-    fn process<I, S, O>(
-        &mut self,
-        _ctx: &CuContext,
-        _request: &ProcessRequest<I, S, O>,
-    ) -> CuResult<ProcessResult<S, O>>
-    where
-        I: Serialize,
-        S: Serialize + DeserializeOwned,
-        O: Serialize + DeserializeOwned,
-    {
-        Err(CuError::from(
-            "Embedded Python tasks are not supported on macOS in this workspace",
-        ))
-    }
-
-    fn start_hook<S>(&mut self, _ctx: &CuContext, _state: &mut S) -> CuResult<()>
-    where
-        S: Serialize + DeserializeOwned + Clone,
-    {
-        Ok(())
-    }
-
-    fn stop<S>(&mut self, _ctx: &CuContext, _state: &mut S) -> CuResult<()>
-    where
-        S: Serialize + DeserializeOwned + Clone,
-    {
-        Ok(())
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
 fn python_error(error: PyErr) -> CuError {
     CuError::from(format!("Embedded Python task error: {error}"))
 }
@@ -1729,7 +1681,6 @@ mod tests {
         backend.stop(ctx, state).expect("stop backend");
     }
 
-    #[cfg(not(target_os = "macos"))]
     fn stop_embedded_backend<S>(backend: &mut EmbeddedBackend, ctx: &CuContext, state: &mut S)
     where
         S: Serialize + DeserializeOwned + Clone,
@@ -1906,7 +1857,6 @@ def stop(ctx, state):\n    state = state + ctx.cl_id\n",
         assert_eq!(decoded_i128, large_i128);
     }
 
-    #[cfg(not(target_os = "macos"))]
     #[test]
     fn embedded_backend_supports_attribute_writes_on_absent_output_payload() {
         let ctx = test_context(41, 7);
@@ -1938,7 +1888,6 @@ def stop(ctx, state):\n    state = state + ctx.cl_id\n",
         );
     }
 
-    #[cfg(not(target_os = "macos"))]
     #[test]
     fn embedded_backend_preserves_rebound_scalar_state() {
         let ctx = test_context(41, 7);
@@ -1965,7 +1914,6 @@ def stop(ctx, state):\n    state = state + ctx.cl_id\n",
         assert!(result.output.payload.is_none());
     }
 
-    #[cfg(not(target_os = "macos"))]
     #[test]
     fn embedded_backend_receives_live_ctx() {
         let ctx = test_context(41, 7);
@@ -1998,7 +1946,6 @@ def stop(ctx, state):\n    state = state + ctx.cl_id\n",
         );
     }
 
-    #[cfg(not(target_os = "macos"))]
     #[test]
     fn embedded_backend_optional_start_and_stop_hooks_are_noops() {
         let ctx = test_context(41, 7);
@@ -2014,7 +1961,6 @@ def stop(ctx, state):\n    state = state + ctx.cl_id\n",
         assert_eq!(state, 11);
     }
 
-    #[cfg(not(target_os = "macos"))]
     #[test]
     fn embedded_backend_runs_optional_start_and_stop_hooks() {
         let start_ctx = test_context(40, 2);

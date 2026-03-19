@@ -70,7 +70,7 @@ clippy-std:
 	features="{{BASE_FEATURES}}"
 	case "$os" in
 		Linux*) features="{{BASE_FEATURES}},python" ;;
-		Darwin*) features="{{BASE_FEATURES}}" ;;
+		Darwin*) features="{{BASE_FEATURES}},python" ;;
 		MINGW*|MSYS*|CYGWIN*|Windows_NT) features="{{WINDOWS_BASE_FEATURES}}" ;;
 		*) features="{{BASE_FEATURES}}" ;;
 	esac
@@ -129,7 +129,7 @@ std-ci mode="debug":
 	features="{{BASE_FEATURES}}"
 	case "$os" in
 		Linux*) features="{{BASE_FEATURES}},python" ;;
-		Darwin*) features="{{BASE_FEATURES}}" ;;
+		Darwin*) features="{{BASE_FEATURES}},python" ;;
 		MINGW*|MSYS*|CYGWIN*|Windows_NT) features="{{WINDOWS_BASE_FEATURES}}" ;;
 		*) features="{{BASE_FEATURES}}" ;;
 	esac

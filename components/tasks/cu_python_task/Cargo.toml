@@ -17,10 +17,8 @@ cu29-value = { workspace = true, features = ["python"] }
 bincode = { workspace = true }
 minicbor = { workspace = true, features = ["alloc"] }
 minicbor-serde = { workspace = true, features = ["alloc"] }
-serde = { workspace = true }
-
-[target.'cfg(not(target_os = "macos"))'.dependencies]
 pyo3 = { workspace = true }
+serde = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
