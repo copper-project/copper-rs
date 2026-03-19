@@ -1,0 +1,29 @@
+[package]
+name = "cu-python-task"
+description = "Python-backed CuTask implementations for Copper"
+readme = "README.md"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+cu29 = { workspace = true, features = ["reflect"] }
+cu29-value = { workspace = true, features = ["python"] }
+bincode = { workspace = true }
+minicbor = { workspace = true, features = ["alloc"] }
+minicbor-serde = { workspace = true, features = ["alloc"] }
+serde = { workspace = true }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+pyo3 = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[package.metadata.cargo-shear]
+ignored = ["bincode"]

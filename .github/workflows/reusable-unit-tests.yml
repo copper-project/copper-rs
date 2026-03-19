@@ -57,6 +57,14 @@ jobs:
           cache_shared_key: rust-${{ matrix.os }}
           install_nextest: ${{ matrix.task == 'test' }}
           sccache_key_suffix: unit-${{ matrix.task }}
+      - name: Set up Python (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      - name: Install Python task dependency (macOS)
+        if: runner.os == 'macOS'
+        run: python -m pip install --upgrade pip cbor2
 
       - name: Install CUDA
         uses: Jimver/cuda-toolkit@v0.2.30
@@ -178,6 +186,14 @@ jobs:
           cache_shared_key: rust-${{ matrix.os }}
           install_nextest: "true"
           sccache_key_suffix: tests-features
+      - name: Set up Python (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      - name: Install Python task dependency (macOS)
+        if: runner.os == 'macOS'
+        run: python -m pip install --upgrade pip cbor2
 
       - name: Install CUDA
         uses: Jimver/cuda-toolkit@v0.2.30

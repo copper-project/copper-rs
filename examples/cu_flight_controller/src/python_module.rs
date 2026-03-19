@@ -1,4 +1,14 @@
 #![cfg_attr(not(feature = "python-bindings"), no_std)]
+//! App-specific Python bindings for offline log inspection.
+//!
+//! This module demonstrates the intended Copper pattern for typed Python log
+//! access:
+//!
+//! - keep the runtime in Rust
+//! - generate the app-specific CopperList type with `gen_cumsgs!`
+//! - expose a tiny `#[pymodule]` wrapper for offline analysis scripts
+//!
+//! This is not the same thing as running task logic in Python.
 
 #[cfg(feature = "python-bindings")]
 extern crate cu29 as bevy;

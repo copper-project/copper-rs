@@ -5,6 +5,10 @@ use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyString, PyTuple};
 
+/// Convert a [`Value`] into a Python object.
+///
+/// This preserves 128-bit integer values and maps Copper's generic value tree into
+/// the closest native Python representation.
 pub fn value_to_py(value: &Value, py: Python<'_>) -> PyResult<Py<PyAny>> {
     match value {
         Value::Bool(v) => Ok(v.into_pyobject(py)?.to_owned().into()),
@@ -45,6 +49,18 @@ pub fn value_to_py(value: &Value, py: Python<'_>) -> PyResult<Py<PyAny>> {
     }
 }
 
+/// Convert a Python object into a [`Value`].
+///
+/// Supported conversions are intentionally limited so the result stays predictable:
+///
+/// - `None` -> `Value::Unit`
+/// - `bool` -> `Value::Bool`
+/// - `bytes` -> `Value::Bytes`
+/// - `str` -> `Value::String`
+/// - `float` -> `Value::F64`
+/// - `int` -> signed/unsigned Copper integer variants up to 128-bit range
+/// - `list` / `tuple` -> `Value::Seq`
+/// - `dict` -> `Value::Map`
 pub fn py_to_value(value: &Bound<'_, PyAny>) -> PyResult<Value> {
     if value.is_none() {
         return Ok(Value::Unit);

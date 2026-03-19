@@ -1,5 +1,24 @@
 #![doc(html_root_url = "https://docs.rs/serde-value/0.7.0/")]
 #![cfg_attr(not(feature = "std"), no_std)]
+//! A Copper-oriented value tree used for serialization, logging, and reflection bridges.
+//!
+//! The type is a forked/adapted serde-value-style representation with Copper-specific
+//! additions such as [`Value::CuTime`].
+//!
+//! When the `python` feature is enabled, this crate also exposes helpers for converting
+//! between [`Value`] and Python objects through PyO3. Those helpers are used by:
+//!
+//! - `cu-python-task` for runtime prototyping across the Rust/Python boundary
+//! - `cu29-export` for offline Python log analysis
+//!
+//! The Python bridge is intentionally conservative:
+//!
+//! - `None` becomes [`Value::Unit`]
+//! - Python lists and tuples become [`Value::Seq`]
+//! - Python dicts become [`Value::Map`]
+//! - Python integers are accepted up to the 128-bit range
+//! - Python bytes become [`Value::Bytes`]
+
 extern crate alloc;
 
 use alloc::boxed::Box;

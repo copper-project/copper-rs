@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-# This is an example script using the python bindings for the Copper log file format.
+"""Example script using ``libcu29_export`` to read Copper structured logs from Python."""
+
 from pathlib import Path
 import sys
 

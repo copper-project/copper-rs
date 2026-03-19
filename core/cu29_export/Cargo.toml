@@ -2,6 +2,7 @@
 name = "cu29-export"
 description = "This is the library support to build log exports for the copper project. It cannot be used independently from the copper project."
 documentation = "https://docs.rs/cu29-export"
+readme = "README.md"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

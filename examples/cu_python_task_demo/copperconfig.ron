@@ -1,0 +1,46 @@
+(
+    tasks: [
+        (
+            id: "left",
+            type: "tasks::LeftSource",
+        ),
+        (
+            id: "right",
+            type: "tasks::RightSource",
+        ),
+        (
+            id: "py",
+            type: "tasks::ExamplePythonTask",
+        ),
+        (
+            id: "summary",
+            type: "tasks::SummarySink",
+        ),
+        (
+            id: "state",
+            type: "tasks::StateSink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "left",
+            dst: "py",
+            msg: "messages::LeftInput",
+        ),
+        (
+            src: "right",
+            dst: "py",
+            msg: "messages::RightInput",
+        ),
+        (
+            src: "py",
+            dst: "summary",
+            msg: "messages::SummaryOutput",
+        ),
+        (
+            src: "py",
+            dst: "state",
+            msg: "messages::StateOutput",
+        ),
+    ],
+)

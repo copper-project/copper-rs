@@ -90,6 +90,10 @@ just textlogs log=logs/embedded.copper
 You can use the PyO3 bindings to iterate CopperLists directly from Python and
 extract GNSS fields without going through JSON.
 
+This is an offline log-analysis workflow, not a runtime Python task. Python only
+touches data that Copper has already recorded, so this does not affect the
+realtime behavior of the flight controller itself.
+
 ```bash
 # Build the Python extension module
 just py-build
@@ -103,6 +107,15 @@ The script is at `python/print_gnss_from_log.py` and can also be run directly:
 ```bash
 python3 python/print_gnss_from_log.py logs/flight_controller_sim.copper
 ```
+
+Implementation notes:
+
+- `src/python_module.rs` exposes an app-specific `#[pymodule]`
+- it uses `gen_cumsgs!("copperconfig.ron")` so the CopperList type matches this app
+- the Python script imports that module and iterates typed CopperLists plus runtime lifecycle records
+
+This pattern is the recommended Python story in Copper: post-process logs in Python
+after the run, keep Python off the control path during the run.
 
 ### RC Tester (simulation)
 
