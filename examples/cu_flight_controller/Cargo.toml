@@ -266,7 +266,6 @@ bevymon = ["sim_core", "dep:cu-bevymon", "dep:cached-path", "dep:evdev"]
 [lib]
 name = "cu_flight_controller_export"
 path = "src/python_module.rs"
-crate-type = ["cdylib"]
 
 [[bin]]
 name = "quad"

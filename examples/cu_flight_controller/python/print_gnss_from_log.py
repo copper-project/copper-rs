@@ -48,8 +48,8 @@ def main() -> int:
         print(
             "failed to import libcu_flight_controller_export; "
             "build it first with:\n"
-            "  cargo build -p cu-flight-controller --no-default-features "
-            "--features python-bindings --lib",
+            "  cargo rustc -p cu-flight-controller --no-default-features "
+            "--features python-bindings --lib --crate-type cdylib",
             file=sys.stderr,
         )
         print(f"import error: {exc}", file=sys.stderr)
