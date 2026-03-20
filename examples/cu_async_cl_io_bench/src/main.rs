@@ -301,7 +301,7 @@ pub mod tasks {
 
             let payload = output
                 .payload_mut()
-                .get_or_insert_with(|| BenchPayload::default());
+                .get_or_insert_with(BenchPayload::default);
             if payload.bytes.len() != self.payload_bytes {
                 payload.bytes.resize(self.payload_bytes, 0);
             }
@@ -466,9 +466,9 @@ fn main() -> CuResult<()> {
         args.iterations
     );
     println!(
-        "throughput_hz={:.2} mean_us={} p50_us={} p90_us={} p99_us={} p999_us={} max_us={} delta_p50_us={} delta_p90_us={} delta_p99_us={} delta_p999_us={} delta_max_us={}",
+        "throughput_hz={:.2} mean_us={:.2} p50_us={} p90_us={} p99_us={} p999_us={} max_us={} delta_p50_us={} delta_p90_us={} delta_p99_us={} delta_p999_us={} delta_max_us={}",
         iter_per_sec,
-        format!("{:.2}", mean_ns / 1_000.0),
+        mean_ns / 1_000.0,
         format_ns_as_us(percentile(&samples_ns, 50, 100)),
         format_ns_as_us(percentile(&samples_ns, 90, 100)),
         format_ns_as_us(percentile(&samples_ns, 99, 100)),
