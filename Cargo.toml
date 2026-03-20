@@ -97,6 +97,7 @@ members = [
   "examples/cu_zenoh",
   "examples/cu_zenoh_bridge_demo",
   "examples/cu_ros2_bridge_demo",
+  "examples/cu_nav2_observer",
   "examples/cu_human_pose",
   "examples/cu_debug_session",
   "examples/cu_gnss_ublox_demo",

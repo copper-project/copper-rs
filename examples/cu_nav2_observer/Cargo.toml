@@ -1,0 +1,28 @@
+[package]
+name = "cu-nav2-observer"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Copper example observing Nav2 topics over the ROS2 bridge and visualizing them in Rerun."
+
+publish = false
+
+[dependencies]
+bincode = { workspace = true }
+cu29 = { workspace = true }
+cu29-helpers = { workspace = true }
+cu-ros2-payloads = { workspace = true }
+cu-ros2-bridge = { path = "../../components/bridges/cu_ros2_bridge", version = "0.13.0" }
+rerun = { workspace = true }
+serde = { workspace = true }
+
+[features]
+humble = ["cu-ros2-bridge/humble", "cu-ros2-payloads/humble"]
+
+[package.metadata.cargo-shear]
+ignored = ["serde"]

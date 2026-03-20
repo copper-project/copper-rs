@@ -1,0 +1,34 @@
+import "../../justfile"
+
+# Clone or update the official upstream Nav2 minimal simulation repository.
+nav2-demo-pull:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	bash ./scripts/pull_upstream_nav2_demo.sh
+
+# Launch the official Nav2 TB3 simulation demo over rmw_zenoh_cpp.
+nav2-demo-run headless="False":
+	#!/usr/bin/env bash
+	set -euo pipefail
+	NAV2_HEADLESS="{{headless}}" bash ./scripts/run_nav2_tb3_demo.sh
+
+# Build the Docker image for the headless Nav2 demo.
+nav2-demo-docker-build image="copper-nav2-demo:jazzy" engine="docker":
+	{{engine}} build -t "{{image}}" -f docker/Dockerfile .
+
+# Run the ROS/Nav2 side inside Docker with automatic initial pose and goal.
+nav2-demo-docker-run image="copper-nav2-demo:jazzy" engine="docker":
+	#!/usr/bin/env bash
+	set -euo pipefail
+	engine="{{engine}}"
+	image="{{image}}"
+	if ! "$engine" image inspect "$image" >/dev/null 2>&1; then
+		"$engine" build -t "$image" -f docker/Dockerfile .
+	fi
+	"$engine" run --rm -it --network host \
+		-e ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}" \
+		"$image"
+
+# Run the Copper-side observer in a separate terminal.
+observer-run:
+	cargo run -p cu-nav2-observer
