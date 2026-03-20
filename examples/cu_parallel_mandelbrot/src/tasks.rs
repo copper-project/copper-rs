@@ -4,9 +4,9 @@ use cu29::prelude::*;
 use rerun::{ChannelDatatype, ColorModel, Image, RecordingStream, RecordingStreamBuilder};
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::{
-    _CMP_GT_OQ, _mm512_add_pd, _mm512_cmp_pd_mask, _mm512_fmadd_pd, _mm512_loadu_pd,
-    _mm512_mask_blend_pd, _mm512_mul_pd, _mm512_set_pd, _mm512_set1_pd, _mm512_storeu_pd,
-    _mm512_sub_pd,
+    _CMP_GT_OQ, _mm512_add_ps, _mm512_cmp_ps_mask, _mm512_fmadd_ps, _mm512_loadu_ps,
+    _mm512_mask_blend_ps, _mm512_mul_ps, _mm512_set_ps, _mm512_set1_ps, _mm512_storeu_ps,
+    _mm512_sub_ps,
 };
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -32,13 +32,13 @@ pub struct BenchmarkSettings {
     /// Maximum Mandelbrot iterations per pixel.
     pub max_iter: u16,
     /// Center point of the zoom in the complex plane.
-    pub center_x: f64,
+    pub center_x: f32,
     /// Center point of the zoom in the complex plane.
-    pub center_y: f64,
+    pub center_y: f32,
     /// Initial horizontal span before applying per-frame zoom.
-    pub initial_span_x: f64,
+    pub initial_span_x: f32,
     /// Multiplicative zoom applied once per frame.
-    pub zoom_ratio: f64,
+    pub zoom_ratio: f32,
 }
 
 impl BenchmarkSettings {
@@ -49,10 +49,10 @@ impl BenchmarkSettings {
             stripe_rows: required_param::<u64>(config, "stripe_rows")? as u32,
             frames: required_param::<u64>(config, "frames")? as u32,
             max_iter: required_param::<u64>(config, "max_iter")? as u16,
-            center_x: required_param::<f64>(config, "center_x")?,
-            center_y: required_param::<f64>(config, "center_y")?,
-            initial_span_x: required_param::<f64>(config, "initial_span_x")?,
-            zoom_ratio: required_param::<f64>(config, "zoom_ratio")?,
+            center_x: required_param::<f64>(config, "center_x")? as f32,
+            center_y: required_param::<f64>(config, "center_y")? as f32,
+            initial_span_x: required_param::<f64>(config, "initial_span_x")? as f32,
+            zoom_ratio: required_param::<f64>(config, "zoom_ratio")? as f32,
         })
     }
 
@@ -86,9 +86,9 @@ struct StripePlane {
     width_u32: u32,
     height_u32: u32,
     start_row: u32,
-    center_x: f64,
-    center_y: f64,
-    span_x: f64,
+    center_x: f32,
+    center_y: f32,
+    span_x: f32,
 }
 
 impl StripePlane {
@@ -107,22 +107,22 @@ impl StripePlane {
     }
 
     #[inline]
-    fn span_y(self) -> f64 {
-        self.span_x * self.height_u32 as f64 / self.width_u32 as f64
+    fn span_y(self) -> f32 {
+        self.span_x * self.height_u32 as f32 / self.width_u32 as f32
     }
 
     #[inline]
-    fn pixel_real(self, x: usize) -> f64 {
-        let width = self.width_u32.max(2) as f64;
-        let normalized = x as f64 / (width - 1.0);
+    fn pixel_real(self, x: usize) -> f32 {
+        let width = self.width_u32.max(2) as f32;
+        let normalized = x as f32 / (width - 1.0);
         self.center_x + (normalized - 0.5) * self.span_x
     }
 
     #[inline]
-    fn row_imag(self, local_row: u32) -> f64 {
-        let height = self.height_u32.max(2) as f64;
+    fn row_imag(self, local_row: u32) -> f32 {
+        let height = self.height_u32.max(2) as f32;
         let row_index = self.start_row + local_row;
-        let normalized = row_index as f64 / (height - 1.0);
+        let normalized = row_index as f32 / (height - 1.0);
         self.center_y + (normalized - 0.5) * self.span_y()
     }
 }
@@ -166,7 +166,7 @@ fn colorize_escape(escape_iter: u16, max_iter: u16) -> [u8; 3] {
 }
 
 #[inline]
-fn advance_escape_shadow(zr: f64, zi: f64, c_re: f64, row_im: f64) -> (f64, f64) {
+fn advance_escape_shadow(zr: f32, zi: f32, c_re: f32, row_im: f32) -> (f32, f32) {
     // Keep per-band work roughly fixed even after a pixel escaped so the
     // benchmark stresses Copper's scheduler instead of collapsing into a few
     // heavy early bands and many trivial late bands.
@@ -179,9 +179,9 @@ fn advance_escape_shadow(zr: f64, zi: f64, c_re: f64, row_im: f64) -> (f64, f64)
 fn iterate_row_scalar(
     plane: StripePlane,
     row_base: usize,
-    row_im: f64,
-    z_re: &mut [f64],
-    z_im: &mut [f64],
+    row_im: f32,
+    z_re: &mut [f32],
+    z_im: &mut [f32],
     escape_iter: &mut [u16],
     start_x: usize,
     start_iter: u16,
@@ -220,8 +220,8 @@ fn iterate_row_scalar(
 
 fn iterate_band_scalar(
     plane: StripePlane,
-    z_re: &mut [f64],
-    z_im: &mut [f64],
+    z_re: &mut [f32],
+    z_im: &mut [f32],
     escape_iter: &mut [u16],
     start_iter: u16,
     target_iters: u16,
@@ -245,8 +245,8 @@ fn iterate_band_scalar(
 
 #[cfg(target_arch = "x86_64")]
 #[inline]
-fn escape_mask_from_slice(escape_iter: &[u16]) -> u8 {
-    let mut mask = 0_u8;
+fn escape_mask_from_slice(escape_iter: &[u16]) -> u16 {
+    let mut mask = 0_u16;
     for (lane, &iter) in escape_iter.iter().enumerate() {
         if iter != 0 {
             mask |= 1 << lane;
@@ -257,7 +257,7 @@ fn escape_mask_from_slice(escape_iter: &[u16]) -> u8 {
 
 #[cfg(target_arch = "x86_64")]
 #[inline]
-fn record_escape_mask(escape_iter: &mut [u16], mask: u8, iter: u16) {
+fn record_escape_mask(escape_iter: &mut [u16], mask: u16, iter: u16) {
     let mut pending = mask;
     while pending != 0 {
         let lane = pending.trailing_zeros() as usize;
@@ -270,29 +270,37 @@ fn record_escape_mask(escape_iter: &mut [u16], mask: u8, iter: u16) {
 #[target_feature(enable = "avx512f,fma")]
 unsafe fn iterate_band_avx512(
     plane: StripePlane,
-    z_re: &mut [f64],
-    z_im: &mut [f64],
+    z_re: &mut [f32],
+    z_im: &mut [f32],
     escape_iter: &mut [u16],
     start_iter: u16,
     target_iters: u16,
 ) {
-    const LANES: usize = 8;
+    const LANES: usize = 16;
 
-    let four = _mm512_set1_pd(4.0);
-    let shadow_rr = _mm512_set1_pd(0.754_877_666_246_692_7);
-    let shadow_ri = _mm512_set1_pd(0.569_840_290_998_053_2);
-    let shadow_ir = _mm512_set1_pd(0.137_631_299_231_935);
-    let shadow_ii = _mm512_set1_pd(0.819_172_513_396_164_4);
+    let four = _mm512_set1_ps(4.0);
+    let shadow_rr = _mm512_set1_ps(0.754_877_7);
+    let shadow_ri = _mm512_set1_ps(0.569_840_3);
+    let shadow_ir = _mm512_set1_ps(0.137_631_3);
+    let shadow_ii = _mm512_set1_ps(0.819_172_5);
 
     for local_row in 0..plane.row_count {
         let row_base = local_row * plane.width;
         let row_im = plane.row_imag(local_row as u32);
-        let row_im_vec = _mm512_set1_pd(row_im);
+        let row_im_vec = _mm512_set1_ps(row_im);
 
         let mut x = 0;
         while x + LANES <= plane.width {
             let index = row_base + x;
-            let c_re = _mm512_set_pd(
+            let c_re = _mm512_set_ps(
+                plane.pixel_real(x + 15),
+                plane.pixel_real(x + 14),
+                plane.pixel_real(x + 13),
+                plane.pixel_real(x + 12),
+                plane.pixel_real(x + 11),
+                plane.pixel_real(x + 10),
+                plane.pixel_real(x + 9),
+                plane.pixel_real(x + 8),
                 plane.pixel_real(x + 7),
                 plane.pixel_real(x + 6),
                 plane.pixel_real(x + 5),
@@ -303,40 +311,40 @@ unsafe fn iterate_band_avx512(
                 plane.pixel_real(x),
             );
 
-            let mut zr = unsafe { _mm512_loadu_pd(z_re.as_ptr().add(index)) };
-            let mut zi = unsafe { _mm512_loadu_pd(z_im.as_ptr().add(index)) };
+            let mut zr = unsafe { _mm512_loadu_ps(z_re.as_ptr().add(index)) };
+            let mut zi = unsafe { _mm512_loadu_ps(z_im.as_ptr().add(index)) };
             let mut escaped_mask = escape_mask_from_slice(&escape_iter[index..index + LANES]);
 
             for iter in start_iter..target_iters {
-                let zr2 = _mm512_mul_pd(zr, zr);
-                let zi2 = _mm512_mul_pd(zi, zi);
-                let mag2 = _mm512_add_pd(zr2, zi2);
-                let newly_escaped = (!escaped_mask) & _mm512_cmp_pd_mask(mag2, four, _CMP_GT_OQ);
+                let zr2 = _mm512_mul_ps(zr, zr);
+                let zi2 = _mm512_mul_ps(zi, zi);
+                let mag2 = _mm512_add_ps(zr2, zi2);
+                let newly_escaped = (!escaped_mask) & _mm512_cmp_ps_mask(mag2, four, _CMP_GT_OQ);
                 if newly_escaped != 0 {
                     record_escape_mask(&mut escape_iter[index..index + LANES], newly_escaped, iter);
                 }
 
-                let zrzi = _mm512_mul_pd(zr, zi);
-                let next_re_active = _mm512_add_pd(_mm512_sub_pd(zr2, zi2), c_re);
-                let next_im_active = _mm512_add_pd(_mm512_add_pd(zrzi, zrzi), row_im_vec);
+                let zrzi = _mm512_mul_ps(zr, zi);
+                let next_re_active = _mm512_add_ps(_mm512_sub_ps(zr2, zi2), c_re);
+                let next_im_active = _mm512_add_ps(_mm512_add_ps(zrzi, zrzi), row_im_vec);
 
-                let next_re_shadow = _mm512_sub_pd(
-                    _mm512_fmadd_pd(zr, shadow_rr, c_re),
-                    _mm512_mul_pd(zi, shadow_ri),
+                let next_re_shadow = _mm512_sub_ps(
+                    _mm512_fmadd_ps(zr, shadow_rr, c_re),
+                    _mm512_mul_ps(zi, shadow_ri),
                 );
-                let next_im_shadow = _mm512_add_pd(
-                    _mm512_fmadd_pd(zi, shadow_ii, row_im_vec),
-                    _mm512_mul_pd(zr, shadow_ir),
+                let next_im_shadow = _mm512_add_ps(
+                    _mm512_fmadd_ps(zi, shadow_ii, row_im_vec),
+                    _mm512_mul_ps(zr, shadow_ir),
                 );
 
                 escaped_mask |= newly_escaped;
-                zr = _mm512_mask_blend_pd(escaped_mask, next_re_active, next_re_shadow);
-                zi = _mm512_mask_blend_pd(escaped_mask, next_im_active, next_im_shadow);
+                zr = _mm512_mask_blend_ps(escaped_mask, next_re_active, next_re_shadow);
+                zi = _mm512_mask_blend_ps(escaped_mask, next_im_active, next_im_shadow);
             }
 
             unsafe {
-                _mm512_storeu_pd(z_re.as_mut_ptr().add(index), zr);
-                _mm512_storeu_pd(z_im.as_mut_ptr().add(index), zi);
+                _mm512_storeu_ps(z_re.as_mut_ptr().add(index), zr);
+                _mm512_storeu_ps(z_im.as_mut_ptr().add(index), zi);
             }
             x += LANES;
         }
@@ -357,8 +365,8 @@ unsafe fn iterate_band_avx512(
 
 fn iterate_band(
     plane: StripePlane,
-    z_re: &mut [f64],
-    z_im: &mut [f64],
+    z_re: &mut [f32],
+    z_im: &mut [f32],
     escape_iter: &mut [u16],
     start_iter: u16,
     target_iters: u16,
@@ -455,9 +463,9 @@ pub struct MandelbrotStripeSource {
     settings: BenchmarkSettings,
     next_linear_index: u64,
     #[reflect(ignore)]
-    z_re_pool: Arc<CuHostMemoryPool<Vec<f64>>>,
+    z_re_pool: Arc<CuHostMemoryPool<Vec<f32>>>,
     #[reflect(ignore)]
-    z_im_pool: Arc<CuHostMemoryPool<Vec<f64>>>,
+    z_im_pool: Arc<CuHostMemoryPool<Vec<f32>>>,
     #[reflect(ignore)]
     escape_pool: Arc<CuHostMemoryPool<Vec<u16>>>,
     #[reflect(ignore)]
@@ -516,7 +524,7 @@ impl CuSrcTask for MandelbrotStripeSource {
             .saturating_sub(start_row)
             .min(self.settings.stripe_rows);
         let span_x =
-            self.settings.initial_span_x * self.settings.zoom_ratio.powf(frame_index as f64);
+            self.settings.initial_span_x * self.settings.zoom_ratio.powf(frame_index as f32);
 
         let z_re = self
             .z_re_pool

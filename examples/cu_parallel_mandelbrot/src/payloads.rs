@@ -28,19 +28,19 @@ pub struct MandelbrotStripe {
     /// Image height in pixels.
     pub height: u32,
     /// Complex plane center X for the frame.
-    pub center_x: f64,
+    pub center_x: f32,
     /// Complex plane center Y for the frame.
-    pub center_y: f64,
+    pub center_y: f32,
     /// Horizontal span of the frame in complex-plane units.
-    pub span_x: f64,
+    pub span_x: f32,
     /// Maximum Mandelbrot iterations for this zoom frame.
     pub max_iter: u16,
     /// Number of iterations already completed by upstream compute stages.
     pub completed_iters: u16,
     /// Mutable `z.re` state for every pixel in the stripe.
-    pub z_re: CuHandle<Vec<f64>>,
+    pub z_re: CuHandle<Vec<f32>>,
     /// Mutable `z.im` state for every pixel in the stripe.
-    pub z_im: CuHandle<Vec<f64>>,
+    pub z_im: CuHandle<Vec<f32>>,
     /// Escape iteration for every pixel, or `0` while the pixel is still active.
     pub escape_iter: CuHandle<Vec<u16>>,
     /// Final RGB bytes for the stripe; filled by the last compute stage.
@@ -59,22 +59,22 @@ impl MandelbrotStripe {
     }
 
     #[inline]
-    pub fn span_y(&self) -> f64 {
-        self.span_x * self.height as f64 / self.width as f64
+    pub fn span_y(&self) -> f32 {
+        self.span_x * self.height as f32 / self.width as f32
     }
 
     #[inline]
-    pub fn pixel_real(&self, x: usize) -> f64 {
-        let width = self.width.max(2) as f64;
-        let normalized = x as f64 / (width - 1.0);
+    pub fn pixel_real(&self, x: usize) -> f32 {
+        let width = self.width.max(2) as f32;
+        let normalized = x as f32 / (width - 1.0);
         self.center_x + (normalized - 0.5) * self.span_x
     }
 
     #[inline]
-    pub fn row_imag(&self, local_row: u32) -> f64 {
-        let height = self.height.max(2) as f64;
+    pub fn row_imag(&self, local_row: u32) -> f32 {
+        let height = self.height.max(2) as f32;
         let row_index = self.start_row + local_row;
-        let normalized = row_index as f64 / (height - 1.0);
+        let normalized = row_index as f32 / (height - 1.0);
         self.center_y + (normalized - 0.5) * self.span_y()
     }
 
@@ -200,13 +200,13 @@ impl<'de> Deserialize<'de> for MandelbrotStripe {
             stripe_rows: u32,
             width: u32,
             height: u32,
-            center_x: f64,
-            center_y: f64,
-            span_x: f64,
+            center_x: f32,
+            center_y: f32,
+            span_x: f32,
             max_iter: u16,
             completed_iters: u16,
-            z_re: Vec<f64>,
-            z_im: Vec<f64>,
+            z_re: Vec<f32>,
+            z_im: Vec<f32>,
             escape_iter: Vec<u16>,
             pixels_rgb: Vec<u8>,
         }
