@@ -550,6 +550,6 @@
         keyframe_interval: 1000000,
     ),
     monitor: (
-        type: "cu_consolemon::CuConsoleMon",
+         type: "cu_consolemon::CuConsoleMon",
     ),
 )

@@ -1,14 +1,11 @@
 //! Parallel runtime scheduler state for concurrent CopperList execution.
 //!
-//! This module keeps the runtime-side pieces separated by role:
-//! - static execution-plan metadata (`ParallelRtMetadata`)
-//! - hot causality/commit cursors (`CausalityCheckpoint`)
-//! - in-flight work ownership (`IterationTicket`)
-//! - feature-gated scheduler state (`ParallelRt`)
-//!
-//! The generated runtime owns the worker pool and ordered commit driver. This
-//! module owns the hot checkpoint state and the scheduler contract shared
-//! between proc-macro output and runtime code.
+//! The proc macro emits one ordered process-stage entry per generated runtime
+//! plan node. The feature-enabled runtime executes those stages as a FIFO
+//! pipeline: each stage worker drains CopperLists in ascending `clid` order and
+//! forwards them to the next stage. Determinism therefore comes from queue
+//! order, while commit/log handoff is still protected by an explicit ordered
+//! cursor.
 
 use crate::config::NodeId;
 use crate::copperlist::{CopperList, CuListZeroedInit};
@@ -20,13 +17,6 @@ use core::ops::{Deref, DerefMut};
 use core::sync::atomic::{AtomicU64, Ordering};
 use cu29_clock::CuTime;
 use cu29_traits::{CopperListTuple, CuResult};
-
-/// Conservative default for busy-spin handoff attempts before yielding.
-///
-/// The parallel runtime is not active yet, but the setting is part of the
-/// public scheduler contract because the checkpoint wait strategy is a core
-/// performance tradeoff.
-pub const DEFAULT_PARALLEL_RT_SPIN_ITERS: u32 = 64;
 
 /// Control-flow result returned by one generated process stage.
 ///
@@ -92,8 +82,9 @@ impl ParallelRtStageMetadata {
 /// Immutable scheduler layout shared by every runtime instance of a mission.
 ///
 /// `stages` is in the exact order emitted by the proc macro for the per-CL
-/// process path. Future parallel execution will allocate one causality
-/// checkpoint per entry.
+/// process path. The stage-affine executor spawns one FIFO worker lane per
+/// entry and hands ownership of each in-flight CopperList from one lane to the
+/// next.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ParallelRtMetadata {
     pub stages: &'static [ParallelRtStageMetadata],
@@ -115,11 +106,6 @@ impl ParallelRtMetadata {
 pub const DISABLED_PARALLEL_RT_METADATA: ParallelRtMetadata = ParallelRtMetadata::new(&[]);
 
 /// Minimal cache-line padding wrapper used for hot scheduler cursors.
-///
-/// Checkpoints are expected to be updated by different cores at a high rate,
-/// so they should not share cache lines with each other or with colder
-/// metadata. A dedicated wrapper keeps that policy explicit without pulling in
-/// another dependency.
 #[repr(align(64))]
 pub struct CachePadded<T>(pub T);
 
@@ -153,11 +139,9 @@ impl<T: Debug> Debug for CachePadded<T> {
     }
 }
 
-/// Monotonic authorization cursor for one causality stage.
+/// Monotonic authorization cursor used by ordered commit.
 ///
-/// `next_clid` is the smallest CopperList id allowed to enter the guarded
-/// stage. When a worker finishes stage `S` for CopperList `n`, it releases
-/// `n + 1` for the next worker waiting on the same stage.
+/// `next_clid` is the smallest CopperList id the serial commit path may accept.
 #[derive(Debug)]
 pub struct CausalityCheckpoint {
     pub next_clid: AtomicU64,
@@ -183,43 +167,6 @@ impl CausalityCheckpoint {
     #[inline]
     pub fn authorize_next(&self, next_clid: u64) {
         self.next_clid.store(next_clid, Ordering::Release);
-    }
-}
-
-/// Runtime-tunable scheduler settings for the future parallel executor.
-///
-/// Field meanings:
-/// - `executor_threads`: number of dedicated process workers intended to run
-///   CopperList stages.
-/// - `spin_iterations`: how many times a worker should hot-spin on a checkpoint
-///   before yielding/parking.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ParallelRtSettings {
-    pub executor_threads: usize,
-    pub spin_iterations: u32,
-}
-
-#[cfg(all(feature = "std", feature = "parallel-rt"))]
-impl Default for ParallelRtSettings {
-    fn default() -> Self {
-        let executor_threads = std::thread::available_parallelism()
-            .map(usize::from)
-            .unwrap_or(1)
-            .max(1);
-        Self {
-            executor_threads,
-            spin_iterations: DEFAULT_PARALLEL_RT_SPIN_ITERS,
-        }
-    }
-}
-
-#[cfg(not(all(feature = "std", feature = "parallel-rt")))]
-impl Default for ParallelRtSettings {
-    fn default() -> Self {
-        Self {
-            executor_threads: 1,
-            spin_iterations: 0,
-        }
     }
 }
 
@@ -271,20 +218,13 @@ where
 
 #[cfg(all(feature = "std", feature = "parallel-rt"))]
 mod imp {
-    use super::{CachePadded, CausalityCheckpoint, ParallelRtMetadata, ParallelRtSettings};
-    use alloc::boxed::Box;
-    use alloc::vec::Vec;
-    use core::sync::atomic::{AtomicBool, Ordering};
+    use super::{CachePadded, CausalityCheckpoint, ParallelRtMetadata};
     use cu29_traits::CuResult;
 
-    /// Feature-enabled parallel runtime state used by the worker/commit pipeline.
+    /// Feature-enabled runtime state shared by the generated stage pipeline.
     pub struct ParallelRt<const NBCL: usize> {
         /// Static process-stage layout emitted by the proc macro.
         metadata: &'static ParallelRtMetadata,
-        /// Scheduler tuning knobs used to shape worker handoff behavior.
-        settings: ParallelRtSettings,
-        /// One authorization cursor per generated process stage.
-        process_checkpoints: Box<[CachePadded<CausalityCheckpoint>]>,
         /// Ordered commit cursor for monitor/keyframe/log handoff.
         commit_checkpoint: CachePadded<CausalityCheckpoint>,
         /// Maximum number of CopperLists intended to be in flight at once.
@@ -293,22 +233,8 @@ mod imp {
 
     impl<const NBCL: usize> ParallelRt<NBCL> {
         pub fn new(metadata: &'static ParallelRtMetadata) -> CuResult<Self> {
-            Self::new_with_settings(metadata, ParallelRtSettings::default())
-        }
-
-        pub fn new_with_settings(
-            metadata: &'static ParallelRtMetadata,
-            settings: ParallelRtSettings,
-        ) -> CuResult<Self> {
-            let mut process_checkpoints = Vec::with_capacity(metadata.process_stage_count());
-            for _ in 0..metadata.process_stage_count() {
-                process_checkpoints.push(CachePadded::new(CausalityCheckpoint::new(0)));
-            }
-
             Ok(Self {
                 metadata,
-                settings,
-                process_checkpoints: process_checkpoints.into_boxed_slice(),
                 commit_checkpoint: CachePadded::new(CausalityCheckpoint::new(0)),
                 in_flight_limit: NBCL,
             })
@@ -325,16 +251,6 @@ mod imp {
         }
 
         #[inline]
-        pub const fn settings(&self) -> ParallelRtSettings {
-            self.settings
-        }
-
-        #[inline]
-        pub fn process_checkpoints(&self) -> &[CachePadded<CausalityCheckpoint>] {
-            &self.process_checkpoints
-        }
-
-        #[inline]
         pub const fn commit_checkpoint(&self) -> &CachePadded<CausalityCheckpoint> {
             &self.commit_checkpoint
         }
@@ -344,51 +260,10 @@ mod imp {
             self.in_flight_limit
         }
 
-        /// Reinitializes all stage and commit cursors to the next CopperList id
+        /// Reinitializes the ordered commit cursor to the next CopperList id
         /// that will be dispatched by a fresh parallel run loop.
         pub fn reset_cursors(&self, next_clid: u64) {
-            for checkpoint in self.process_checkpoints.iter() {
-                checkpoint.authorize_next(next_clid);
-            }
             self.commit_checkpoint.authorize_next(next_clid);
-        }
-
-        /// Waits until `clid` is authorized to enter `stage_index`.
-        ///
-        /// Returns `false` when global shutdown was requested before the stage
-        /// became runnable.
-        pub fn wait_for_stage(&self, stage_index: usize, clid: u64, shutdown: &AtomicBool) -> bool {
-            let checkpoint = &self.process_checkpoints[stage_index];
-            for _ in 0..self.settings.spin_iterations {
-                if checkpoint.is_authorized_for(clid) {
-                    return true;
-                }
-                if shutdown.load(Ordering::Acquire) {
-                    return false;
-                }
-                core::hint::spin_loop();
-            }
-
-            while !checkpoint.is_authorized_for(clid) {
-                if shutdown.load(Ordering::Acquire) {
-                    return false;
-                }
-                std::thread::yield_now();
-            }
-            true
-        }
-
-        #[inline]
-        pub fn release_stage(&self, stage_index: usize, next_clid: u64) {
-            self.process_checkpoints[stage_index].authorize_next(next_clid);
-        }
-
-        /// Releases every process stage from `start_stage_index` onward for a
-        /// CopperList that was aborted before completing the full plan.
-        pub fn release_remaining_stages(&self, start_stage_index: usize, next_clid: u64) {
-            for checkpoint in self.process_checkpoints[start_stage_index..].iter() {
-                checkpoint.authorize_next(next_clid);
-            }
         }
 
         #[inline]
@@ -405,7 +280,7 @@ mod imp {
 
 #[cfg(not(all(feature = "std", feature = "parallel-rt")))]
 mod imp {
-    use super::{CachePadded, CausalityCheckpoint, ParallelRtMetadata, ParallelRtSettings};
+    use super::{CachePadded, CausalityCheckpoint, ParallelRtMetadata};
     use cu29_traits::CuResult;
 
     /// Feature-disabled placeholder.
@@ -415,22 +290,13 @@ mod imp {
     /// feature.
     pub struct ParallelRt<const NBCL: usize> {
         metadata: &'static ParallelRtMetadata,
-        settings: ParallelRtSettings,
         commit_checkpoint: CachePadded<CausalityCheckpoint>,
     }
 
     impl<const NBCL: usize> ParallelRt<NBCL> {
         pub fn new(metadata: &'static ParallelRtMetadata) -> CuResult<Self> {
-            Self::new_with_settings(metadata, ParallelRtSettings::default())
-        }
-
-        pub fn new_with_settings(
-            metadata: &'static ParallelRtMetadata,
-            settings: ParallelRtSettings,
-        ) -> CuResult<Self> {
             Ok(Self {
                 metadata,
-                settings,
                 commit_checkpoint: CachePadded::new(CausalityCheckpoint::new(0)),
             })
         }
@@ -443,16 +309,6 @@ mod imp {
         #[inline]
         pub const fn metadata(&self) -> &'static ParallelRtMetadata {
             self.metadata
-        }
-
-        #[inline]
-        pub const fn settings(&self) -> ParallelRtSettings {
-            self.settings
-        }
-
-        #[inline]
-        pub fn process_checkpoints(&self) -> &[CachePadded<CausalityCheckpoint>] {
-            &[]
         }
 
         #[inline]
@@ -469,21 +325,6 @@ mod imp {
         pub fn reset_cursors(&self, next_clid: u64) {
             self.commit_checkpoint.authorize_next(next_clid);
         }
-
-        pub fn wait_for_stage(
-            &self,
-            _stage_index: usize,
-            _clid: u64,
-            _shutdown: &core::sync::atomic::AtomicBool,
-        ) -> bool {
-            true
-        }
-
-        #[inline]
-        pub fn release_stage(&self, _stage_index: usize, _next_clid: u64) {}
-
-        #[inline]
-        pub fn release_remaining_stages(&self, _start_stage_index: usize, _next_clid: u64) {}
 
         #[inline]
         pub fn current_commit_clid(&self) -> u64 {
@@ -533,7 +374,7 @@ mod tests {
 
     #[cfg(all(feature = "std", feature = "parallel-rt"))]
     #[test]
-    fn enabled_parallel_rt_allocates_one_checkpoint_per_stage() {
+    fn enabled_parallel_rt_tracks_metadata_and_limit() {
         const STAGES: &[ParallelRtStageMetadata] = &[
             ParallelRtStageMetadata::new("a", ParallelRtStageKind::Task, 0, ComponentId::new(0)),
             ParallelRtStageMetadata::new("b", ParallelRtStageKind::Task, 1, ComponentId::new(1)),
@@ -542,13 +383,13 @@ mod tests {
 
         let rt = ParallelRt::<4>::new(&METADATA).expect("parallel rt should build");
         assert!(rt.enabled());
-        assert_eq!(rt.process_checkpoints().len(), 2);
+        assert_eq!(rt.metadata().process_stage_count(), 2);
         assert_eq!(rt.in_flight_limit(), 4);
     }
 
     #[cfg(not(all(feature = "std", feature = "parallel-rt")))]
     #[test]
-    fn disabled_parallel_rt_keeps_process_checkpoints_empty() {
+    fn disabled_parallel_rt_preserves_metadata() {
         const STAGES: &[ParallelRtStageMetadata] = &[ParallelRtStageMetadata::new(
             "a",
             ParallelRtStageKind::Task,
@@ -559,6 +400,6 @@ mod tests {
 
         let rt = ParallelRt::<4>::new(&METADATA).expect("parallel rt placeholder should build");
         assert!(!rt.enabled());
-        assert!(rt.process_checkpoints().is_empty());
+        assert_eq!(rt.metadata().process_stage_count(), 1);
     }
 }
