@@ -1,0 +1,47 @@
+[package]
+name = "cu-parallel-mandelbrot"
+description = "Host-side zooming Mandelbrot benchmark for Copper's pipelined runtime."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+default-run = "cu-parallel-mandelbrot"
+
+publish = false
+
+[dependencies]
+bincode = { workspace = true }
+cu29 = { workspace = true }
+cu29-export = { workspace = true }
+cu29-helpers = { workspace = true }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.14.0" }
+cu-sensor-payloads = { workspace = true }
+libc = { workspace = true }
+rerun = { workspace = true }
+serde = { workspace = true }
+
+[features]
+default = ["std"]
+std = []
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "cu-parallel-mandelbrot"
+path = "src/main.rs"
+
+[[bin]]
+name = "cu-parallel-mandelbrot-rerun"
+path = "src/rerun.rs"
+
+[[bin]]
+name = "cu-parallel-mandelbrot-logreader"
+path = "src/logreader.rs"
+
+[package.metadata.cargo-shear]
+ignored = ["bincode", "serde"]

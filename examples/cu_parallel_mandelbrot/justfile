@@ -1,0 +1,129 @@
+ROOT := `git rev-parse --show-toplevel`
+
+# Run the parallel log-only mission in release mode and time the executable.
+default: parallel
+
+# Render the benchmark graph for the selected mission.
+dag mission="log_only":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo run -p cu29-runtime --bin cu29-rendercfg -- --mission "{{mission}}" --open examples/cu_parallel_mandelbrot/copperconfig.ron
+
+# Run the log-only mission without parallel-rt from the compiled release binary.
+serial:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot --release
+  start="$(python3 -c 'import time; print(time.perf_counter())')"
+  set +e
+  "{{ROOT}}/target/release/cu-parallel-mandelbrot"
+  status=$?
+  set -e
+  end="$(python3 -c 'import time; print(time.perf_counter())')"
+  python3 -c 'import sys; start=float(sys.argv[1]); end=float(sys.argv[2]); print(f"serial elapsed_s={end-start:.3f}")' "$start" "$end"
+  exit "$status"
+
+# Run the serial release binary in the foreground so the TUI monitor stays interactive.
+monitor-serial:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot --release
+  "{{ROOT}}/target/release/cu-parallel-mandelbrot"
+
+# Run the log-only mission with parallel-rt from the compiled release binary.
+parallel:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot --release --features 'cu29/parallel-rt'
+  start="$(python3 -c 'import time; print(time.perf_counter())')"
+  set +e
+  "{{ROOT}}/target/release/cu-parallel-mandelbrot"
+  status=$?
+  set -e
+  end="$(python3 -c 'import time; print(time.perf_counter())')"
+  python3 -c 'import sys; start=float(sys.argv[1]); end=float(sys.argv[2]); print(f"parallel elapsed_s={end-start:.3f}")' "$start" "$end"
+  exit "$status"
+
+# Run the parallel release binary in the foreground so the TUI monitor stays interactive.
+monitor-parallel:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot --release --features 'cu29/parallel-rt'
+  "{{ROOT}}/target/release/cu-parallel-mandelbrot"
+
+# Run the live Rerun mission without parallel-rt from the compiled release binary.
+rerun-serial:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot-rerun --release
+  start="$(python3 -c 'import time; print(time.perf_counter())')"
+  set +e
+  "{{ROOT}}/target/release/cu-parallel-mandelbrot-rerun"
+  status=$?
+  set -e
+  end="$(python3 -c 'import time; print(time.perf_counter())')"
+  python3 -c 'import sys; start=float(sys.argv[1]); end=float(sys.argv[2]); print(f"rerun-serial elapsed_s={end-start:.3f}")' "$start" "$end"
+  exit "$status"
+
+# Run the live Rerun mission with parallel-rt from the compiled release binary.
+rerun-parallel:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot-rerun --release --features 'cu29/parallel-rt'
+  start="$(python3 -c 'import time; print(time.perf_counter())')"
+  set +e
+  "{{ROOT}}/target/release/cu-parallel-mandelbrot-rerun"
+  status=$?
+  set -e
+  end="$(python3 -c 'import time; print(time.perf_counter())')"
+  python3 -c 'import sys; start=float(sys.argv[1]); end=float(sys.argv[2]); print(f"rerun-parallel elapsed_s={end-start:.3f}")' "$start" "$end"
+  exit "$status"
+
+# Compatibility alias for the release-timed serial run.
+serial-release:
+  just serial
+
+# Compatibility alias for the release-timed parallel run.
+parallel-release:
+  just parallel
+
+# Compatibility alias for the release-timed serial Rerun run.
+rerun-serial-release:
+  just rerun-serial
+
+# Compatibility alias for the release-timed parallel Rerun run.
+rerun-parallel-release:
+  just rerun-parallel
+
+# Extract CopperLists from the log-only mission log as JSON using the release logreader.
+logreader log="logs/parallel_mandelbrot_log_only.copper":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  invocation_dir="{{invocation_directory()}}"
+  log="{{log}}"
+  if [[ "$log" != /* ]]; then
+    log="${invocation_dir}/${log}"
+  fi
+  cd "{{ROOT}}"
+  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot-logreader --release
+  "{{ROOT}}/target/release/cu-parallel-mandelbrot-logreader" "$log" extract-copperlists --export-format json
+
+# Run fsck on a Mandelbrot log using the release logreader.
+fsck log="logs/parallel_mandelbrot_log_only.copper":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  invocation_dir="{{invocation_directory()}}"
+  log="{{log}}"
+  if [[ "$log" != /* ]]; then
+    log="${invocation_dir}/${log}"
+  fi
+  cd "{{ROOT}}"
+  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot-logreader --release
+  "{{ROOT}}/target/release/cu-parallel-mandelbrot-logreader" "$log" fsck
