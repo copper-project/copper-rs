@@ -40,6 +40,7 @@ macro_debug = ["cu29-runtime/macro_debug"]
 logviz = []
 std = ["cu29-traits/std", "cu29-unifiedlog/std"]
 async-cl-io = ["cu29-runtime/async-cl-io"]
+parallel-rt = ["cu29-runtime/parallel-rt"]
 signal-handler = []
 rtsan = []
 

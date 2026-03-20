@@ -14,6 +14,7 @@ use crate::monitoring::{
     ComponentId, CopperListInfo, CuMonitor, CuMonitoringMetadata, CuMonitoringRuntime,
     ExecutionMarker, MonitorComponentMetadata, RuntimeExecutionProbe, build_monitor_topology,
 };
+use crate::parallel_rt::{ParallelRt, ParallelRtMetadata};
 use crate::resource::ResourceManager;
 use compact_str::CompactString;
 use cu29_clock::{ClockProvider, CuTime, RobotClock};
@@ -557,6 +558,12 @@ pub struct CuRuntime<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize
     /// The logger for the state of the tasks (frozen tasks)
     pub keyframes_manager: KeyFramesManager,
 
+    /// Feature-split container for deterministic multi-CopperList execution.
+    ///
+    /// This is intentionally present even when the `parallel-rt` feature is
+    /// disabled so the rest of the runtime can compose against one stable API.
+    pub parallel_rt: ParallelRt<NBCL>,
+
     /// The runtime configuration controlling the behavior of the run loop
     pub runtime_config: RuntimeConfig,
 }
@@ -701,6 +708,7 @@ impl<
         ) -> CuResult<CT>,
         monitored_components: &'static [MonitorComponentMetadata],
         culist_component_mapping: &'static [ComponentId],
+        parallel_rt_metadata: &'static ParallelRtMetadata,
         monitor_instanciator: impl Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
         bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
@@ -715,6 +723,7 @@ impl<
             tasks_instanciator,
             monitored_components,
             culist_component_mapping,
+            parallel_rt_metadata,
             monitor_instanciator,
             bridges_instanciator,
             copperlists_logger,
@@ -735,6 +744,7 @@ impl<
         ) -> CuResult<CT>,
         monitored_components: &'static [MonitorComponentMetadata],
         culist_component_mapping: &'static [ComponentId],
+        parallel_rt_metadata: &'static ParallelRtMetadata,
         monitor_instanciator: impl Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
         bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
@@ -796,6 +806,7 @@ impl<
             forced_timestamp: None,
             locked: false,
         };
+        let parallel_rt = ParallelRt::new(parallel_rt_metadata)?;
 
         let runtime_config = config.runtime.clone().unwrap_or_default();
 
@@ -808,6 +819,7 @@ impl<
             clock,
             copperlists_manager,
             keyframes_manager,
+            parallel_rt,
             runtime_config,
         };
 
@@ -827,6 +839,7 @@ impl<
         ) -> CuResult<CT>,
         monitored_components: &'static [MonitorComponentMetadata],
         culist_component_mapping: &'static [ComponentId],
+        parallel_rt_metadata: &'static ParallelRtMetadata,
         monitor_instanciator: impl Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
         bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
@@ -843,6 +856,7 @@ impl<
             tasks_instanciator,
             monitored_components,
             culist_component_mapping,
+            parallel_rt_metadata,
             monitor_instanciator,
             bridges_instanciator,
             copperlists_logger,
@@ -863,6 +877,7 @@ impl<
         ) -> CuResult<CT>,
         monitored_components: &'static [MonitorComponentMetadata],
         culist_component_mapping: &'static [ComponentId],
+        parallel_rt_metadata: &'static ParallelRtMetadata,
         monitor_instanciator: impl Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
         bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
@@ -936,6 +951,7 @@ impl<
             forced_timestamp: None,
             locked: false,
         };
+        let parallel_rt = ParallelRt::new(parallel_rt_metadata)?;
 
         let runtime_config = config.runtime.clone().unwrap_or_default();
 
@@ -948,6 +964,7 @@ impl<
             clock,
             copperlists_manager,
             keyframes_manager,
+            parallel_rt,
             runtime_config,
         };
 
@@ -1520,6 +1537,7 @@ mod tests {
             tasks_instanciator,
             &[],
             &[],
+            &crate::parallel_rt::DISABLED_PARALLEL_RT_METADATA,
             monitor_instanciator,
             bridges_instanciator,
             FakeWriter {},
@@ -1545,6 +1563,7 @@ mod tests {
             tasks_instanciator,
             &[],
             &[],
+            &crate::parallel_rt::DISABLED_PARALLEL_RT_METADATA,
             monitor_instanciator,
             bridges_instanciator,
             FakeWriter {},

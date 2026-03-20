@@ -1142,6 +1142,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         let task_ids = task_specs.ids.clone();
         let ids = build_monitored_ids(&task_ids, &mut culist_bridge_specs);
+        let parallel_rt_stage_entries = match build_parallel_rt_stage_entries(
+            &culist_plan,
+            &culist_exec_entities,
+            &task_specs,
+            &culist_bridge_specs,
+        ) {
+            Ok(entries) => entries,
+            Err(e) => return return_error(e.to_string()),
+        };
         let monitored_component_entries: Vec<proc_macro2::TokenStream> = ids
             .iter()
             .enumerate()
@@ -2825,6 +2834,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #mission_mod::#tasks_instanciator_fn,
                     #mission_mod::MONITORED_COMPONENTS,
                     #mission_mod::CULIST_COMPONENT_MAPPING,
+                    &#mission_mod::PARALLEL_RT_METADATA,
                     #mission_mod::monitor_instanciator,
                     #mission_mod::bridges_instanciator,
                     copperlist_stream,
@@ -3288,6 +3298,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         MONITORED_COMPONENTS,
                         CULIST_COMPONENT_MAPPING,
                     );
+                pub const PARALLEL_RT_STAGES: &'static [cu29::parallel_rt::ParallelRtStageMetadata] =
+                    &[#( #parallel_rt_stage_entries ),*];
+                pub const PARALLEL_RT_METADATA: cu29::parallel_rt::ParallelRtMetadata =
+                    cu29::parallel_rt::ParallelRtMetadata::new(PARALLEL_RT_STAGES);
 
                 #[inline]
                 pub fn monitor_component_label(
@@ -4497,6 +4511,113 @@ fn build_monitor_culist_component_mapping(
         }
     }
     Ok(mapping)
+}
+
+fn build_parallel_rt_stage_entries(
+    runtime_plan: &CuExecutionLoop,
+    exec_entities: &[ExecutionEntity],
+    task_specs: &CuTaskSpecSet,
+    bridge_specs: &[BridgeSpec],
+) -> CuResult<Vec<proc_macro2::TokenStream>> {
+    let mut entries = Vec::new();
+
+    for unit in &runtime_plan.steps {
+        let CuExecutionUnit::Step(step) = unit else {
+            todo!("parallel runtime metadata for nested loops is not implemented yet")
+        };
+
+        let entity = exec_entities.get(step.node_id as usize).ok_or_else(|| {
+            CuError::from(format!(
+                "Missing execution entity for runtime plan node {} while building parallel runtime metadata",
+                step.node_id
+            ))
+        })?;
+
+        let (label, kind_tokens, component_index) = match &entity.kind {
+            ExecutionEntityKind::Task { task_index } => (
+                task_specs
+                    .ids
+                    .get(*task_index)
+                    .cloned()
+                    .ok_or_else(|| {
+                        CuError::from(format!(
+                            "Missing task id for task index {} while building parallel runtime metadata",
+                            task_index
+                        ))
+                    })?,
+                quote! { cu29::parallel_rt::ParallelRtStageKind::Task },
+                *task_index,
+            ),
+            ExecutionEntityKind::BridgeRx {
+                bridge_index,
+                channel_index,
+            } => {
+                let bridge = bridge_specs.get(*bridge_index).ok_or_else(|| {
+                    CuError::from(format!(
+                        "Missing bridge spec {} while building parallel runtime metadata",
+                        bridge_index
+                    ))
+                })?;
+                let channel = bridge.rx_channels.get(*channel_index).ok_or_else(|| {
+                    CuError::from(format!(
+                        "Missing bridge rx channel {}:{} while building parallel runtime metadata",
+                        bridge_index, channel_index
+                    ))
+                })?;
+                let component_index = channel.monitor_index.ok_or_else(|| {
+                    CuError::from(format!(
+                        "Missing monitor index for bridge rx {}:{} while building parallel runtime metadata",
+                        bridge_index, channel_index
+                    ))
+                })?;
+                (
+                    format!("bridge::{}::rx::{}", bridge.id, channel.id),
+                    quote! { cu29::parallel_rt::ParallelRtStageKind::BridgeRx },
+                    component_index,
+                )
+            }
+            ExecutionEntityKind::BridgeTx {
+                bridge_index,
+                channel_index,
+            } => {
+                let bridge = bridge_specs.get(*bridge_index).ok_or_else(|| {
+                    CuError::from(format!(
+                        "Missing bridge spec {} while building parallel runtime metadata",
+                        bridge_index
+                    ))
+                })?;
+                let channel = bridge.tx_channels.get(*channel_index).ok_or_else(|| {
+                    CuError::from(format!(
+                        "Missing bridge tx channel {}:{} while building parallel runtime metadata",
+                        bridge_index, channel_index
+                    ))
+                })?;
+                let component_index = channel.monitor_index.ok_or_else(|| {
+                    CuError::from(format!(
+                        "Missing monitor index for bridge tx {}:{} while building parallel runtime metadata",
+                        bridge_index, channel_index
+                    ))
+                })?;
+                (
+                    format!("bridge::{}::tx::{}", bridge.id, channel.id),
+                    quote! { cu29::parallel_rt::ParallelRtStageKind::BridgeTx },
+                    component_index,
+                )
+            }
+        };
+
+        let node_id = step.node_id;
+        entries.push(quote! {
+            cu29::parallel_rt::ParallelRtStageMetadata::new(
+                #label,
+                #kind_tokens,
+                #node_id,
+                cu29::monitoring::ComponentId::new(#component_index),
+            )
+        });
+    }
+
+    Ok(entries)
 }
 
 #[allow(dead_code)]

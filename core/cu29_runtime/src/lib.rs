@@ -1,6 +1,9 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(all(feature = "parallel-rt", not(feature = "std")))]
+compile_error!("feature `parallel-rt` requires `std`");
+
 extern crate alloc;
 
 #[doc(hidden)]
@@ -21,6 +24,7 @@ pub mod cutask;
 pub mod debug;
 pub(crate) mod log;
 pub mod monitoring;
+pub mod parallel_rt;
 pub mod payload;
 #[cfg(feature = "std")]
 pub mod pool;
