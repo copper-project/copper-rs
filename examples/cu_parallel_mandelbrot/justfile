@@ -56,51 +56,35 @@ monitor-parallel:
   cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot --release --features 'cu29/parallel-rt'
   "{{ROOT}}/target/release/cu-parallel-mandelbrot"
 
-# Run the live Rerun mission without parallel-rt from the compiled release binary.
-rerun-serial:
+# Run the live viewer mission without parallel-rt from the compiled release binary.
+viewer-serial:
   #!/usr/bin/env bash
   set -euo pipefail
   cd "{{ROOT}}"
-  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot-rerun --release
+  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot-viewer --release
   start="$(python3 -c 'import time; print(time.perf_counter())')"
   set +e
-  "{{ROOT}}/target/release/cu-parallel-mandelbrot-rerun"
+  "{{ROOT}}/target/release/cu-parallel-mandelbrot-viewer"
   status=$?
   set -e
   end="$(python3 -c 'import time; print(time.perf_counter())')"
-  python3 -c 'import sys; start=float(sys.argv[1]); end=float(sys.argv[2]); print(f"rerun-serial elapsed_s={end-start:.3f}")' "$start" "$end"
+  python3 -c 'import sys; start=float(sys.argv[1]); end=float(sys.argv[2]); print(f"viewer-serial elapsed_s={end-start:.3f}")' "$start" "$end"
   exit "$status"
 
-# Run the live Rerun mission with parallel-rt from the compiled release binary.
-rerun-parallel:
+# Run the live viewer mission with parallel-rt from the compiled release binary.
+viewer-parallel:
   #!/usr/bin/env bash
   set -euo pipefail
   cd "{{ROOT}}"
-  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot-rerun --release --features 'cu29/parallel-rt'
+  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot-viewer --release --features 'cu29/parallel-rt'
   start="$(python3 -c 'import time; print(time.perf_counter())')"
   set +e
-  "{{ROOT}}/target/release/cu-parallel-mandelbrot-rerun"
+  "{{ROOT}}/target/release/cu-parallel-mandelbrot-viewer"
   status=$?
   set -e
   end="$(python3 -c 'import time; print(time.perf_counter())')"
-  python3 -c 'import sys; start=float(sys.argv[1]); end=float(sys.argv[2]); print(f"rerun-parallel elapsed_s={end-start:.3f}")' "$start" "$end"
+  python3 -c 'import sys; start=float(sys.argv[1]); end=float(sys.argv[2]); print(f"viewer-parallel elapsed_s={end-start:.3f}")' "$start" "$end"
   exit "$status"
-
-# Compatibility alias for the release-timed serial run.
-serial-release:
-  just serial
-
-# Compatibility alias for the release-timed parallel run.
-parallel-release:
-  just parallel
-
-# Compatibility alias for the release-timed serial Rerun run.
-rerun-serial-release:
-  just rerun-serial
-
-# Compatibility alias for the release-timed parallel Rerun run.
-rerun-parallel-release:
-  just rerun-parallel
 
 # Extract CopperLists from the log-only mission log as JSON using the release logreader.
 logreader log="logs/parallel_mandelbrot_log_only.copper":

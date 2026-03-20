@@ -1,15 +1,17 @@
 use crate::payloads::MandelbrotStripe;
 use cu_sensor_payloads::{CuImage, CuImageBufferFormat};
 use cu29::prelude::*;
-use rerun::{ChannelDatatype, ColorModel, Image, RecordingStream, RecordingStreamBuilder};
+use minifb::{Key, Scale, ScaleMode, Window, WindowOptions};
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::{
     _CMP_GT_OQ, _mm512_add_ps, _mm512_cmp_ps_mask, _mm512_fmadd_ps, _mm512_loadu_ps,
     _mm512_mask_blend_ps, _mm512_mul_ps, _mm512_set_ps, _mm512_set1_ps, _mm512_storeu_ps,
     _mm512_sub_ps,
 };
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::{SyncSender, sync_channel};
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 const RGB_PIXEL_FORMAT: [u8; 4] = *b"RGB3";
 const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
@@ -17,6 +19,7 @@ const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 
 static FRAMES_EMITTED: AtomicU64 = AtomicU64::new(0);
 static LAST_FRAME_DIGEST: AtomicU64 = AtomicU64::new(0);
+const VIEWER_BUFFER_COUNT: usize = 2;
 
 /// Static benchmark parameters carried by the source and reused by the summary.
 #[derive(Debug, Clone, Copy)]
@@ -150,6 +153,13 @@ where
 fn hash_bytes(bytes: &[u8]) -> u64 {
     bytes.iter().fold(FNV_OFFSET, |hash, byte| {
         (hash ^ (*byte as u64)).wrapping_mul(FNV_PRIME)
+    })
+}
+
+#[inline]
+fn hash_bytes_seed(hash: u64, bytes: &[u8]) -> u64 {
+    bytes.iter().fold(hash, |current, byte| {
+        (current ^ (*byte as u64)).wrapping_mul(FNV_PRIME)
     })
 }
 
@@ -450,6 +460,14 @@ fn assembler_status(frame_index: u32, total_frames: u32, start_row: u32, row_cou
 
 fn emitted_status(frame_index: u32, total_frames: u32) -> String {
     format!("emit f{:02}/{:02}", frame_index + 1, total_frames)
+}
+
+enum ViewerCommand {
+    Present {
+        buffer_index: usize,
+        frame_index: u32,
+    },
+    Close,
 }
 
 /// Source emitting one Mandelbrot stripe per CopperList.
@@ -804,46 +822,231 @@ impl CuTask for FrameAssembler {
     }
 }
 
-/// Optional live visualization sink used only by the `rerun_live` mission.
+/// Lightweight live viewer sink used only by the `viewer_live` mission.
 #[derive(Reflect)]
 #[reflect(from_reflect = false)]
-pub struct RerunFrameSink {
+pub struct ViewerFrameSink {
+    width: u32,
+    height: u32,
+    frames: u32,
+    expected_linear_index: u64,
+    frame_digest: u64,
+    write_buffer_index: usize,
     #[reflect(ignore)]
-    rec: RecordingStream,
+    viewer_tx: SyncSender<ViewerCommand>,
+    #[reflect(ignore)]
+    viewer_open: Arc<std::sync::atomic::AtomicBool>,
+    #[reflect(ignore)]
+    framebuffers: [Arc<Mutex<Vec<u32>>>; VIEWER_BUFFER_COUNT],
 }
 
-impl Freezable for RerunFrameSink {}
+impl Freezable for ViewerFrameSink {}
 
-impl CuSinkTask for RerunFrameSink {
+impl CuSinkTask for ViewerFrameSink {
     type Resources<'r> = ();
-    type Input<'m> = input_msg!(CuImage<Vec<u8>>);
+    type Input<'m> = input_msg!(MandelbrotStripe);
 
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
-        let rec = RecordingStreamBuilder::new("Copper Mandelbrot Zoom")
-            .spawn()
-            .map_err(|err| CuError::new_with_cause("failed to spawn Rerun stream", err))?;
-        Ok(Self { rec })
+        let config = config.ok_or_else(|| CuError::from("ViewerFrameSink requires config"))?;
+        let width = required_param::<u64>(config, "width")? as u32;
+        let height = required_param::<u64>(config, "height")? as u32;
+        let frames = required_param::<u64>(config, "frames")? as u32;
+        let viewer_open = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let framebuffers = [
+            Arc::new(Mutex::new(vec![0; width as usize * height as usize])),
+            Arc::new(Mutex::new(vec![0; width as usize * height as usize])),
+        ];
+        let (viewer_tx, viewer_rx) = sync_channel::<ViewerCommand>(1);
+        let (startup_tx, startup_rx) = sync_channel::<CuResult<()>>(1);
+        let thread_open = Arc::clone(&viewer_open);
+        let thread_buffers = [Arc::clone(&framebuffers[0]), Arc::clone(&framebuffers[1])];
+
+        thread::Builder::new()
+            .name("mandelbrot-viewer".to_string())
+            .spawn(move || {
+                let mut window = match Window::new(
+                    "Copper Mandelbrot Zoom",
+                    width as usize,
+                    height as usize,
+                    WindowOptions {
+                        resize: true,
+                        scale: Scale::FitScreen,
+                        scale_mode: ScaleMode::AspectRatioStretch,
+                        ..WindowOptions::default()
+                    },
+                ) {
+                    Ok(window) => {
+                        let _ = startup_tx.send(Ok(()));
+                        window
+                    }
+                    Err(err) => {
+                        thread_open.store(false, Ordering::Release);
+                        let _ = startup_tx.send(Err(CuError::from(format!(
+                            "failed to create viewer window: {err}"
+                        ))));
+                        return;
+                    }
+                };
+
+                window.set_target_fps(60);
+                while thread_open.load(Ordering::Acquire) {
+                    match viewer_rx.recv() {
+                        Ok(ViewerCommand::Present {
+                            buffer_index,
+                            frame_index,
+                        }) => {
+                            if !window.is_open() || window.is_key_down(Key::Escape) {
+                                thread_open.store(false, Ordering::Release);
+                                break;
+                            }
+
+                            window.set_title(&format!(
+                                "Copper Mandelbrot Zoom {}/{}",
+                                frame_index + 1,
+                                frames
+                            ));
+
+                            let framebuffer = match thread_buffers[buffer_index].lock() {
+                                Ok(framebuffer) => framebuffer,
+                                Err(_) => {
+                                    error!("viewer thread framebuffer lock poisoned");
+                                    thread_open.store(false, Ordering::Release);
+                                    break;
+                                }
+                            };
+
+                            if let Err(err) = window.update_with_buffer(
+                                &framebuffer,
+                                width as usize,
+                                height as usize,
+                            ) {
+                                error!("viewer thread failed to update window: {}", err);
+                                thread_open.store(false, Ordering::Release);
+                                break;
+                            }
+
+                            if !window.is_open() || window.is_key_down(Key::Escape) {
+                                thread_open.store(false, Ordering::Release);
+                                break;
+                            }
+                        }
+                        Ok(ViewerCommand::Close) | Err(_) => {
+                            thread_open.store(false, Ordering::Release);
+                            break;
+                        }
+                    }
+                }
+            })
+            .map_err(|err| CuError::new_with_cause("failed to spawn viewer thread", err))?;
+        startup_rx.recv().map_err(|err| {
+            CuError::new_with_cause("viewer thread did not report startup", err)
+        })??;
+
+        Ok(Self {
+            width,
+            height,
+            frames,
+            expected_linear_index: 0,
+            frame_digest: FNV_OFFSET,
+            write_buffer_index: 0,
+            viewer_tx,
+            viewer_open,
+            framebuffers,
+        })
     }
 
     fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
-        let Some(image_msg) = input.payload() else {
+        let Some(payload) = input.payload() else {
             return Ok(());
         };
 
-        let rgb = image_msg.buffer_handle.with_inner(|inner| inner.to_vec());
-        let image = Image::from_color_model_and_bytes(
-            rgb,
-            [image_msg.format.width, image_msg.format.height],
-            ColorModel::RGB,
-            ChannelDatatype::U8,
-        );
+        let linear_index = payload.linear_index();
+        if linear_index != self.expected_linear_index {
+            return Err(CuError::from(format!(
+                "viewer sink observed out-of-order stripe: expected {}, got {}",
+                self.expected_linear_index, linear_index
+            )));
+        }
+        if payload.width != self.width || payload.height != self.height {
+            return Err(CuError::from(
+                "viewer sink received a stripe with mismatched dimensions",
+            ));
+        }
 
-        self.rec
-            .log("mandelbrot/frame", &image)
-            .map_err(|err| CuError::new_with_cause("failed to log frame to Rerun", err))?;
+        if !self.viewer_open.load(Ordering::Acquire) {
+            request_runtime_stop()?;
+            self.expected_linear_index += 1;
+            return Ok(());
+        }
+
+        let width = self.width as usize;
+        let row_stride = width * 3;
+        let mut frame_digest = if payload.start_row == 0 {
+            FNV_OFFSET
+        } else {
+            self.frame_digest
+        };
+        let mut framebuffer = self.framebuffers[self.write_buffer_index]
+            .lock()
+            .map_err(|_| CuError::from("viewer framebuffer lock poisoned"))?;
+
+        payload.pixels_rgb.with_inner(|stripe_pixels| {
+            for local_row in 0..payload.row_count as usize {
+                let frame_offset = (payload.start_row as usize + local_row) * width;
+                let stripe_offset = local_row * row_stride;
+                let stripe_row = &stripe_pixels[stripe_offset..stripe_offset + row_stride];
+                let framebuffer_row = &mut framebuffer[frame_offset..frame_offset + width];
+                let (rgb_pixels, remainder) = stripe_row.as_chunks::<3>();
+                debug_assert!(remainder.is_empty());
+
+                for (rgb, pixel) in rgb_pixels.iter().zip(framebuffer_row.iter_mut()) {
+                    frame_digest = hash_bytes_seed(frame_digest, rgb);
+                    *pixel = ((rgb[0] as u32) << 16) | ((rgb[1] as u32) << 8) | (rgb[2] as u32);
+                }
+            }
+        });
+        self.frame_digest = frame_digest;
+
+        if payload.start_row + payload.row_count == self.height {
+            if payload.frame_index >= self.frames {
+                return Err(CuError::from(
+                    "viewer sink received a frame past the configured limit",
+                ));
+            }
+
+            LAST_FRAME_DIGEST.store(self.frame_digest, Ordering::Release);
+            FRAMES_EMITTED.store(payload.frame_index as u64 + 1, Ordering::Release);
+            drop(framebuffer);
+            self.viewer_tx
+                .send(ViewerCommand::Present {
+                    buffer_index: self.write_buffer_index,
+                    frame_index: payload.frame_index,
+                })
+                .map_err(|err| {
+                    CuError::from(format!("failed to send frame to viewer thread: {err}"))
+                })?;
+            self.write_buffer_index = (self.write_buffer_index + 1) % VIEWER_BUFFER_COUNT;
+
+            info!(
+                "mandelbrot frame complete: frame={} digest=0x{:016x}",
+                payload.frame_index, self.frame_digest
+            );
+
+            if !self.viewer_open.load(Ordering::Acquire) {
+                request_runtime_stop()?;
+            }
+        }
+
+        self.expected_linear_index += 1;
+        Ok(())
+    }
+
+    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
+        self.viewer_open.store(false, Ordering::Release);
+        let _ = self.viewer_tx.send(ViewerCommand::Close);
         Ok(())
     }
 }

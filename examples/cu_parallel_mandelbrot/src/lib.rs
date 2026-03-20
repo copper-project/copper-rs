@@ -114,22 +114,22 @@ pub fn run_log_only() -> CuResult<()> {
     Ok(())
 }
 
-pub fn run_rerun_live() -> CuResult<()> {
+pub fn run_viewer_live() -> CuResult<()> {
     tasks::reset_benchmark_summary();
     let settings = load_benchmark_settings()?;
-    let logger_path = benchmark_logger_path("parallel_mandelbrot_rerun.copper")?;
+    let logger_path = benchmark_logger_path("parallel_mandelbrot_viewer.copper")?;
     let copper_ctx = basic_copper_setup(&logger_path, SLAB_SIZE, true, None)?;
-    let mut app = rerun_live::AppBuilder::new()
+    let mut app = viewer_live::AppBuilder::new()
         .with_context(&copper_ctx)
         .build()
-        .map_err(|err| CuError::from(format!("failed to build rerun_live mission: {err}")))?;
+        .map_err(|err| CuError::from(format!("failed to build viewer_live mission: {err}")))?;
 
     info!(
-        "parallel-mandelbrot: mission=rerun_live logger={}",
+        "parallel-mandelbrot: mission=viewer_live logger={}",
         logger_path.display()
     );
     let started = Instant::now();
     app.run()?;
-    log_summary("rerun_live", &logger_path, settings, started.elapsed());
+    log_summary("viewer_live", &logger_path, settings, started.elapsed());
     Ok(())
 }

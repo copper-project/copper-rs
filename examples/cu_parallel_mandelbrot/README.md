@@ -10,7 +10,7 @@ It is not pretending Mandelbrot is a robotics task. The point is to isolate sche
 - `band_*` tasks advance one stripe through the Mandelbrot iteration pipeline
 - `frames` assembles completed stripes into a full `CuImage<Vec<u8>>`
 - `image_drain` keeps the `log_only` mission terminal
-- `rerun_sink` adds live Rerun visualization in the `rerun_live` mission
+- `viewer_sink` assembles and displays the live zoom directly in the `viewer_live` mission
 
 The hot stripe payload is handle-backed, so the graph stresses the scheduler and compute stages instead of spending its time copying stripe buffers around.
 
@@ -28,13 +28,13 @@ If you want to change parameters, start here:
 - [copperconfig.ron](/home/gbin/projects/copper/copper-rs.checkpoints/examples/cu_parallel_mandelbrot/copperconfig.ron)
   This is the main control surface: image size, `stripe_rows`, frame count, zoom step, number of iteration bands, per-band work split, logging, monitor, and `copperlist_count`.
 - [tasks.rs](/home/gbin/projects/copper/copper-rs.checkpoints/examples/cu_parallel_mandelbrot/src/tasks.rs)
-  Source, compute bands, frame assembler, Rerun sink, and the TUI status text all live here.
+  Source, compute bands, frame assembler, viewer sink, and the TUI status text all live here.
 - [payloads.rs](/home/gbin/projects/copper/copper-rs.checkpoints/examples/cu_parallel_mandelbrot/src/payloads.rs)
   The handle-backed in-flight stripe payload lives here.
 - [lib.rs](/home/gbin/projects/copper/copper-rs.checkpoints/examples/cu_parallel_mandelbrot/src/lib.rs)
   Mission runners, logger setup, and run summaries live here.
 - [justfile](/home/gbin/projects/copper/copper-rs.checkpoints/examples/cu_parallel_mandelbrot/justfile)
-  Entry points for serial, parallel, monitor, rerun, logreader, and DAG rendering live here.
+  Entry points for serial, parallel, monitor, viewer, logreader, and DAG rendering live here.
 
 The most important knobs for packing more CPU are:
 - the number of `band_*` tasks
@@ -51,7 +51,7 @@ Run these from [examples/cu_parallel_mandelbrot](/home/gbin/projects/copper/copp
 - `just parallel`
 - `just monitor-parallel`
 - `just serial`
-- `just rerun-parallel`
+- `just viewer-parallel`
 - `just dag`
 - `just logreader`
 - `just fsck`

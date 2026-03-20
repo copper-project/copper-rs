@@ -21,7 +21,7 @@ cu29-helpers = { workspace = true }
 cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.14.0" }
 cu-sensor-payloads = { workspace = true }
 libc = { workspace = true }
-rerun = { workspace = true }
+minifb = "0.28.0"
 serde = { workspace = true }
 
 [features]
@@ -36,8 +36,8 @@ name = "cu-parallel-mandelbrot"
 path = "src/main.rs"
 
 [[bin]]
-name = "cu-parallel-mandelbrot-rerun"
-path = "src/rerun.rs"
+name = "cu-parallel-mandelbrot-viewer"
+path = "src/viewer.rs"
 
 [[bin]]
 name = "cu-parallel-mandelbrot-logreader"
