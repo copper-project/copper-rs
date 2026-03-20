@@ -2,6 +2,12 @@ use crate::payloads::MandelbrotStripe;
 use cu_sensor_payloads::{CuImage, CuImageBufferFormat};
 use cu29::prelude::*;
 use rerun::{ChannelDatatype, ColorModel, Image, RecordingStream, RecordingStreamBuilder};
+#[cfg(target_arch = "x86_64")]
+use std::arch::x86_64::{
+    _CMP_GT_OQ, _mm512_add_pd, _mm512_cmp_pd_mask, _mm512_fmadd_pd, _mm512_loadu_pd,
+    _mm512_mask_blend_pd, _mm512_mul_pd, _mm512_set_pd, _mm512_set1_pd, _mm512_storeu_pd,
+    _mm512_sub_pd,
+};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -73,6 +79,54 @@ struct IterBandConfig {
     finalize: bool,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct StripePlane {
+    width: usize,
+    row_count: usize,
+    width_u32: u32,
+    height_u32: u32,
+    start_row: u32,
+    center_x: f64,
+    center_y: f64,
+    span_x: f64,
+}
+
+impl StripePlane {
+    #[inline]
+    fn from_stripe(stripe: &MandelbrotStripe) -> Self {
+        Self {
+            width: stripe.width as usize,
+            row_count: stripe.row_count as usize,
+            width_u32: stripe.width,
+            height_u32: stripe.height,
+            start_row: stripe.start_row,
+            center_x: stripe.center_x,
+            center_y: stripe.center_y,
+            span_x: stripe.span_x,
+        }
+    }
+
+    #[inline]
+    fn span_y(self) -> f64 {
+        self.span_x * self.height_u32 as f64 / self.width_u32 as f64
+    }
+
+    #[inline]
+    fn pixel_real(self, x: usize) -> f64 {
+        let width = self.width_u32.max(2) as f64;
+        let normalized = x as f64 / (width - 1.0);
+        self.center_x + (normalized - 0.5) * self.span_x
+    }
+
+    #[inline]
+    fn row_imag(self, local_row: u32) -> f64 {
+        let height = self.height_u32.max(2) as f64;
+        let row_index = self.start_row + local_row;
+        let normalized = row_index as f64 / (height - 1.0);
+        self.center_y + (normalized - 0.5) * self.span_y()
+    }
+}
+
 fn required_param<T>(config: &ComponentConfig, key: &str) -> CuResult<T>
 where
     T: for<'a> TryFrom<&'a cu29::config::Value, Error = cu29::config::ConfigError>,
@@ -119,6 +173,209 @@ fn advance_escape_shadow(zr: f64, zi: f64, c_re: f64, row_im: f64) -> (f64, f64)
     let next_re = zr.mul_add(0.754_877_666_246_692_7, c_re) - zi * 0.569_840_290_998_053_2;
     let next_im = zi.mul_add(0.819_172_513_396_164_4, row_im) + zr * 0.137_631_299_231_935;
     (next_re, next_im)
+}
+
+#[inline]
+fn iterate_row_scalar(
+    plane: StripePlane,
+    row_base: usize,
+    row_im: f64,
+    z_re: &mut [f64],
+    z_im: &mut [f64],
+    escape_iter: &mut [u16],
+    start_x: usize,
+    start_iter: u16,
+    target_iters: u16,
+) {
+    for x in start_x..plane.width {
+        let index = row_base + x;
+        let c_re = plane.pixel_real(x);
+        let mut zr = z_re[index];
+        let mut zi = z_im[index];
+        let mut escaped = escape_iter[index] != 0;
+
+        for iter in start_iter..target_iters {
+            if escaped {
+                (zr, zi) = advance_escape_shadow(zr, zi, c_re, row_im);
+                continue;
+            }
+
+            let zr2 = zr * zr;
+            let zi2 = zi * zi;
+            if zr2 + zi2 > 4.0 {
+                escape_iter[index] = iter;
+                escaped = true;
+                (zr, zi) = advance_escape_shadow(zr, zi, c_re, row_im);
+                continue;
+            }
+
+            zi = 2.0 * zr * zi + row_im;
+            zr = zr2 - zi2 + c_re;
+        }
+
+        z_re[index] = zr;
+        z_im[index] = zi;
+    }
+}
+
+fn iterate_band_scalar(
+    plane: StripePlane,
+    z_re: &mut [f64],
+    z_im: &mut [f64],
+    escape_iter: &mut [u16],
+    start_iter: u16,
+    target_iters: u16,
+) {
+    for local_row in 0..plane.row_count {
+        let row_base = local_row * plane.width;
+        let row_im = plane.row_imag(local_row as u32);
+        iterate_row_scalar(
+            plane,
+            row_base,
+            row_im,
+            z_re,
+            z_im,
+            escape_iter,
+            0,
+            start_iter,
+            target_iters,
+        );
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[inline]
+fn escape_mask_from_slice(escape_iter: &[u16]) -> u8 {
+    let mut mask = 0_u8;
+    for (lane, &iter) in escape_iter.iter().enumerate() {
+        if iter != 0 {
+            mask |= 1 << lane;
+        }
+    }
+    mask
+}
+
+#[cfg(target_arch = "x86_64")]
+#[inline]
+fn record_escape_mask(escape_iter: &mut [u16], mask: u8, iter: u16) {
+    let mut pending = mask;
+    while pending != 0 {
+        let lane = pending.trailing_zeros() as usize;
+        escape_iter[lane] = iter;
+        pending &= pending - 1;
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f,fma")]
+unsafe fn iterate_band_avx512(
+    plane: StripePlane,
+    z_re: &mut [f64],
+    z_im: &mut [f64],
+    escape_iter: &mut [u16],
+    start_iter: u16,
+    target_iters: u16,
+) {
+    const LANES: usize = 8;
+
+    let four = _mm512_set1_pd(4.0);
+    let shadow_rr = _mm512_set1_pd(0.754_877_666_246_692_7);
+    let shadow_ri = _mm512_set1_pd(0.569_840_290_998_053_2);
+    let shadow_ir = _mm512_set1_pd(0.137_631_299_231_935);
+    let shadow_ii = _mm512_set1_pd(0.819_172_513_396_164_4);
+
+    for local_row in 0..plane.row_count {
+        let row_base = local_row * plane.width;
+        let row_im = plane.row_imag(local_row as u32);
+        let row_im_vec = _mm512_set1_pd(row_im);
+
+        let mut x = 0;
+        while x + LANES <= plane.width {
+            let index = row_base + x;
+            let c_re = _mm512_set_pd(
+                plane.pixel_real(x + 7),
+                plane.pixel_real(x + 6),
+                plane.pixel_real(x + 5),
+                plane.pixel_real(x + 4),
+                plane.pixel_real(x + 3),
+                plane.pixel_real(x + 2),
+                plane.pixel_real(x + 1),
+                plane.pixel_real(x),
+            );
+
+            let mut zr = unsafe { _mm512_loadu_pd(z_re.as_ptr().add(index)) };
+            let mut zi = unsafe { _mm512_loadu_pd(z_im.as_ptr().add(index)) };
+            let mut escaped_mask = escape_mask_from_slice(&escape_iter[index..index + LANES]);
+
+            for iter in start_iter..target_iters {
+                let zr2 = _mm512_mul_pd(zr, zr);
+                let zi2 = _mm512_mul_pd(zi, zi);
+                let mag2 = _mm512_add_pd(zr2, zi2);
+                let newly_escaped = (!escaped_mask) & _mm512_cmp_pd_mask(mag2, four, _CMP_GT_OQ);
+                if newly_escaped != 0 {
+                    record_escape_mask(&mut escape_iter[index..index + LANES], newly_escaped, iter);
+                }
+
+                let zrzi = _mm512_mul_pd(zr, zi);
+                let next_re_active = _mm512_add_pd(_mm512_sub_pd(zr2, zi2), c_re);
+                let next_im_active = _mm512_add_pd(_mm512_add_pd(zrzi, zrzi), row_im_vec);
+
+                let next_re_shadow = _mm512_sub_pd(
+                    _mm512_fmadd_pd(zr, shadow_rr, c_re),
+                    _mm512_mul_pd(zi, shadow_ri),
+                );
+                let next_im_shadow = _mm512_add_pd(
+                    _mm512_fmadd_pd(zi, shadow_ii, row_im_vec),
+                    _mm512_mul_pd(zr, shadow_ir),
+                );
+
+                escaped_mask |= newly_escaped;
+                zr = _mm512_mask_blend_pd(escaped_mask, next_re_active, next_re_shadow);
+                zi = _mm512_mask_blend_pd(escaped_mask, next_im_active, next_im_shadow);
+            }
+
+            unsafe {
+                _mm512_storeu_pd(z_re.as_mut_ptr().add(index), zr);
+                _mm512_storeu_pd(z_im.as_mut_ptr().add(index), zi);
+            }
+            x += LANES;
+        }
+
+        iterate_row_scalar(
+            plane,
+            row_base,
+            row_im,
+            z_re,
+            z_im,
+            escape_iter,
+            x,
+            start_iter,
+            target_iters,
+        );
+    }
+}
+
+fn iterate_band(
+    plane: StripePlane,
+    z_re: &mut [f64],
+    z_im: &mut [f64],
+    escape_iter: &mut [u16],
+    start_iter: u16,
+    target_iters: u16,
+) {
+    #[cfg(target_arch = "x86_64")]
+    {
+        if std::arch::is_x86_feature_detected!("avx512f")
+            && std::arch::is_x86_feature_detected!("fma")
+        {
+            unsafe {
+                iterate_band_avx512(plane, z_re, z_im, escape_iter, start_iter, target_iters);
+            }
+            return;
+        }
+    }
+
+    iterate_band_scalar(plane, z_re, z_im, escape_iter, start_iter, target_iters);
 }
 
 fn request_runtime_stop() -> CuResult<()> {
@@ -380,46 +637,13 @@ impl CuTask for MandelbrotIterBand {
             .completed_iters
             .saturating_add(self.band.band_iters)
             .min(next.max_iter);
-        let width = next.width as usize;
-        let row_count = next.row_count as usize;
+        let plane = StripePlane::from_stripe(&next);
         let start_iter = next.completed_iters;
 
         next.z_re.with_inner_mut(|z_re| {
             next.z_im.with_inner_mut(|z_im| {
                 next.escape_iter.with_inner_mut(|escape_iter| {
-                    for local_row in 0..row_count {
-                        let row_base = local_row * width;
-                        let row_im = next.row_imag(local_row as u32);
-                        for x in 0..width {
-                            let index = row_base + x;
-                            let c_re = next.pixel_real(x);
-                            let mut zr = z_re[index];
-                            let mut zi = z_im[index];
-                            let mut escaped = escape_iter[index] != 0;
-
-                            for iter in start_iter..target_iters {
-                                if escaped {
-                                    (zr, zi) = advance_escape_shadow(zr, zi, c_re, row_im);
-                                    continue;
-                                }
-
-                                let zr2 = zr * zr;
-                                let zi2 = zi * zi;
-                                if zr2 + zi2 > 4.0 {
-                                    escape_iter[index] = iter;
-                                    escaped = true;
-                                    (zr, zi) = advance_escape_shadow(zr, zi, c_re, row_im);
-                                    continue;
-                                }
-
-                                zi = 2.0 * zr * zi + row_im;
-                                zr = zr2 - zi2 + c_re;
-                            }
-
-                            z_re[index] = zr;
-                            z_im[index] = zi;
-                        }
-                    }
+                    iterate_band(plane, z_re, z_im, escape_iter, start_iter, target_iters);
                 });
             });
         });
@@ -429,10 +653,10 @@ impl CuTask for MandelbrotIterBand {
         if self.band.finalize {
             next.pixels_rgb.with_inner_mut(|pixels| {
                 next.escape_iter.with_inner(|escape_iter| {
-                    for local_row in 0..row_count {
-                        let row_base = local_row * width;
-                        let rgb_base = local_row * width * 3;
-                        for x in 0..width {
+                    for local_row in 0..plane.row_count {
+                        let row_base = local_row * plane.width;
+                        let rgb_base = local_row * plane.width * 3;
+                        for x in 0..plane.width {
                             let rgb = colorize_escape(escape_iter[row_base + x], next.max_iter);
                             let pixel_base = rgb_base + x * 3;
                             pixels[pixel_base] = rgb[0];
