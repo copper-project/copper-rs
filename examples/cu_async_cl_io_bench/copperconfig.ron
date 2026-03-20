@@ -1,0 +1,29 @@
+(
+    tasks: [
+        (
+            id: "src",
+            type: "tasks::BenchSource",
+            config: {
+                "payload_bytes": 262144,
+                "spin_iters": 150000,
+            },
+        ),
+        (
+            id: "sink",
+            type: "tasks::BenchSink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "sink",
+            msg: "tasks::BenchPayload",
+        ),
+    ],
+    logging: (
+        copperlist_count: 4,
+        slab_size_mib: 256,
+        section_size_mib: 8,
+        keyframe_interval: 1000000,
+    ),
+)

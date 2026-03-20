@@ -34,6 +34,7 @@ pub enum CopperListState {
     Initialized,
     Processing,
     DoneProcessing,
+    QueuedForSerialization,
     BeingSerialized,
 }
 
@@ -44,6 +45,7 @@ impl Display for CopperListState {
             CopperListState::Initialized => write!(f, "Initialized"),
             CopperListState::Processing => write!(f, "Processing"),
             CopperListState::DoneProcessing => write!(f, "DoneProcessing"),
+            CopperListState::QueuedForSerialization => write!(f, "QueuedForSerialization"),
             CopperListState::BeingSerialized => write!(f, "BeingSerialized"),
         }
     }

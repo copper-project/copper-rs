@@ -91,6 +91,7 @@ cuda = ["dep:cudarc"]
 macro_debug = []
 reflect = ["dep:bevy_reflect", "cu29-traits/reflect"]
 sysclock-perf = ["std"]
+async-cl-io = ["std"]
 remote-debug = [
   "std",
   "reflect",

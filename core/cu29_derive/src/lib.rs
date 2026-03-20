@@ -876,6 +876,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         Ok(cuconfig) => cuconfig,
         Err(e) => return return_error(e.to_string()),
     };
+    let copperlist_count = copper_config
+        .logging
+        .as_ref()
+        .and_then(|logging| logging.copperlist_count)
+        .unwrap_or(DEFAULT_CLNB);
+    let copperlist_count_tokens = proc_macro2::Literal::usize_unsuffixed(copperlist_count);
     let copper_config_content = match read_to_string(config_full_path(config_file.as_str())) {
         Ok(ok) => ok,
         Err(e) => {
@@ -975,11 +981,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     // add that to a new field
     let runtime_field: Field = if sim_mode {
         parse_quote! {
-            copper_runtime: cu29::curuntime::CuRuntime<CuSimTasks, CuBridges, CuStampedDataSet, #monitor_type, #DEFAULT_CLNB>
+            copper_runtime: cu29::curuntime::CuRuntime<CuSimTasks, CuBridges, CuStampedDataSet, #monitor_type, #copperlist_count_tokens>
         }
     } else {
         parse_quote! {
-            copper_runtime: cu29::curuntime::CuRuntime<CuTasks, CuBridges, CuStampedDataSet, #monitor_type, #DEFAULT_CLNB>
+            copper_runtime: cu29::curuntime::CuRuntime<CuTasks, CuBridges, CuStampedDataSet, #monitor_type, #copperlist_count_tokens>
         }
     };
     let lifecycle_stream_field: Field = parse_quote! {
@@ -2401,6 +2407,20 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
+        let copperlist_count_check = quote! {
+            let configured_copperlist_count = config
+                .logging
+                .as_ref()
+                .and_then(|logging| logging.copperlist_count)
+                .unwrap_or(#copperlist_count_tokens);
+            if configured_copperlist_count != #copperlist_count_tokens {
+                return Err(CuError::from(format!(
+                    "Configured logging.copperlist_count ({configured_copperlist_count}) does not match the runtime compiled into this binary ({})",
+                    #copperlist_count_tokens
+                )));
+            }
+        };
+
         let init_resources_sig = if std {
             quote! {
                 pub fn init_resources(config_override: Option<CuConfig>) -> CuResult<AppResources>
@@ -2524,7 +2544,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let __cu_bridges = &mut runtime.bridges;
                 let cl_manager = &mut runtime.copperlists_manager;
                 let kf_manager = &mut runtime.keyframes_manager;
-                let iteration_clid = cl_manager.inner.next_cl_id();
+                let iteration_clid = cl_manager.next_cl_id();
                 let mut ctx = cu29::context::CuContext::builder(clock.clone())
                     .cl_id(iteration_clid)
                     .task_ids(#mission_mod::TASK_IDS)
@@ -2533,7 +2553,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 // Preprocess calls can happen at any time, just packed them up front.
                 #(#preprocess_calls)*
 
-                let culist = cl_manager.inner.create().expect("Ran out of space for copper lists"); // FIXME: error handling
+                let culist = cl_manager.create()?;
                 let clid = culist.id;
                 debug_assert_eq!(clid, iteration_clid);
                 kf_manager.reset(clid, clock); // beginning of processing, we empty the serialized frozen states of the tasks.
@@ -2589,7 +2609,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::MissionStarted {
                     mission: #mission.to_string(),
                 });
-                let lifecycle_clid = self.copper_runtime.copperlists_manager.inner.last_cl_id();
+                let lifecycle_clid = self.copper_runtime.copperlists_manager.last_cl_id();
                 let mut ctx = cu29::context::CuContext::builder(self.copper_runtime.clock.clone())
                     .cl_id(lifecycle_clid)
                     .task_ids(#mission_mod::TASK_IDS)
@@ -2601,7 +2621,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             #stop_all_tasks {
-                let lifecycle_clid = self.copper_runtime.copperlists_manager.inner.last_cl_id();
+                let lifecycle_clid = self.copper_runtime.copperlists_manager.last_cl_id();
                 let mut ctx = cu29::context::CuContext::builder(self.copper_runtime.clock.clone())
                     .cl_id(lifecycle_clid)
                     .task_ids(#mission_mod::TASK_IDS)
@@ -2609,6 +2629,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #(#stop_calls)*
                 ctx.clear_current_task();
                 self.copper_runtime.monitor.stop(&ctx)?;
+                self.copper_runtime.copperlists_manager.finish_pending()?;
                 // TODO(lifecycle): emit typed stop reasons (completed/error/panic/requested)
                 // once panic/reporting flow is finalized for std and no-std.
                 let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::MissionStopped {
@@ -2678,6 +2699,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp init: loading config");
                 #config_load_stmt
+                #copperlist_count_check
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp init: config loaded");
                 if let Some(runtime) = &config.runtime {
@@ -2795,7 +2817,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: building runtime");
-                let copper_runtime = CuRuntime::<#mission_mod::#tasks_type, #mission_mod::CuBridges, #mission_mod::CuStampedDataSet, #monitor_type, #DEFAULT_CLNB>::new_with_resources(
+                let copper_runtime = CuRuntime::<#mission_mod::#tasks_type, #mission_mod::CuBridges, #mission_mod::CuStampedDataSet, #monitor_type, #copperlist_count_tokens>::new_with_resources(
                     clock,
                     &config,
                     #mission,
@@ -2856,7 +2878,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 /// Mutable access to the underlying runtime (used by tools such as deterministic re-sim).
                 #[inline]
-                pub fn copper_runtime_mut(&mut self) -> &mut CuRuntime<#mission_mod::#tasks_type, #mission_mod::CuBridges, #mission_mod::CuStampedDataSet, #monitor_type, #DEFAULT_CLNB> {
+                pub fn copper_runtime_mut(&mut self) -> &mut CuRuntime<#mission_mod::#tasks_type, #mission_mod::CuBridges, #mission_mod::CuStampedDataSet, #monitor_type, #copperlist_count_tokens> {
                     &mut self.copper_runtime
                 }
             }
