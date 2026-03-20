@@ -21,7 +21,7 @@ use core::fmt::{Debug, Formatter, Result as FmtResult};
 use core::ops::{Deref, DerefMut};
 use core::sync::atomic::{AtomicU64, Ordering};
 use cu29_clock::CuTime;
-use cu29_traits::CopperListTuple;
+use cu29_traits::{CopperListTuple, CuResult};
 
 /// Conservative default for busy-spin handoff attempts before yielding.
 ///
@@ -29,6 +29,21 @@ use cu29_traits::CopperListTuple;
 /// public scheduler contract because the checkpoint wait strategy is a core
 /// performance tradeoff.
 pub const DEFAULT_PARALLEL_RT_SPIN_ITERS: u32 = 64;
+
+/// Control-flow result returned by one generated process stage.
+///
+/// `AbortCopperList` preserves the current runtime semantics for monitor
+/// decisions that abort the current CopperList without shutting the runtime
+/// down. The outer driver remains responsible for ordered cleanup and log
+/// handoff.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProcessStepOutcome {
+    Continue,
+    AbortCopperList,
+}
+
+/// Result type used by generated process-step functions.
+pub type ProcessStepResult = CuResult<ProcessStepOutcome>;
 
 /// Scheduler-facing category for one process-stage checkpoint.
 ///
@@ -262,6 +277,7 @@ mod imp {
     use super::{CachePadded, CausalityCheckpoint, ParallelRtMetadata, ParallelRtSettings};
     use alloc::boxed::Box;
     use alloc::vec::Vec;
+    use core::sync::atomic::{AtomicBool, Ordering};
     use cu29_traits::CuResult;
 
     /// Feature-enabled parallel runtime state.
@@ -334,6 +350,63 @@ mod imp {
         pub const fn in_flight_limit(&self) -> usize {
             self.in_flight_limit
         }
+
+        /// Reinitializes all stage and commit cursors to the next CopperList id
+        /// that will be dispatched by a fresh parallel run loop.
+        pub fn reset_cursors(&self, next_clid: u64) {
+            for checkpoint in self.process_checkpoints.iter() {
+                checkpoint.authorize_next(next_clid);
+            }
+            self.commit_checkpoint.authorize_next(next_clid);
+        }
+
+        /// Waits until `clid` is authorized to enter `stage_index`.
+        ///
+        /// Returns `false` when global shutdown was requested before the stage
+        /// became runnable.
+        pub fn wait_for_stage(&self, stage_index: usize, clid: u64, shutdown: &AtomicBool) -> bool {
+            let checkpoint = &self.process_checkpoints[stage_index];
+            for _ in 0..self.settings.spin_iterations {
+                if checkpoint.is_authorized_for(clid) {
+                    return true;
+                }
+                if shutdown.load(Ordering::Acquire) {
+                    return false;
+                }
+                core::hint::spin_loop();
+            }
+
+            while !checkpoint.is_authorized_for(clid) {
+                if shutdown.load(Ordering::Acquire) {
+                    return false;
+                }
+                std::thread::yield_now();
+            }
+            true
+        }
+
+        #[inline]
+        pub fn release_stage(&self, stage_index: usize, next_clid: u64) {
+            self.process_checkpoints[stage_index].authorize_next(next_clid);
+        }
+
+        /// Releases every process stage from `start_stage_index` onward for a
+        /// CopperList that was aborted before completing the full plan.
+        pub fn release_remaining_stages(&self, start_stage_index: usize, next_clid: u64) {
+            for checkpoint in self.process_checkpoints[start_stage_index..].iter() {
+                checkpoint.authorize_next(next_clid);
+            }
+        }
+
+        #[inline]
+        pub fn current_commit_clid(&self) -> u64 {
+            self.commit_checkpoint.current_clid()
+        }
+
+        #[inline]
+        pub fn release_commit(&self, next_clid: u64) {
+            self.commit_checkpoint.authorize_next(next_clid);
+        }
     }
 }
 
@@ -397,6 +470,36 @@ mod imp {
         #[inline]
         pub const fn in_flight_limit(&self) -> usize {
             NBCL
+        }
+
+        #[inline]
+        pub fn reset_cursors(&self, next_clid: u64) {
+            self.commit_checkpoint.authorize_next(next_clid);
+        }
+
+        pub fn wait_for_stage(
+            &self,
+            _stage_index: usize,
+            _clid: u64,
+            _shutdown: &core::sync::atomic::AtomicBool,
+        ) -> bool {
+            true
+        }
+
+        #[inline]
+        pub fn release_stage(&self, _stage_index: usize, _next_clid: u64) {}
+
+        #[inline]
+        pub fn release_remaining_stages(&self, _start_stage_index: usize, _next_clid: u64) {}
+
+        #[inline]
+        pub fn current_commit_clid(&self) -> u64 {
+            self.commit_checkpoint.current_clid()
+        }
+
+        #[inline]
+        pub fn release_commit(&self, next_clid: u64) {
+            self.commit_checkpoint.authorize_next(next_clid);
         }
     }
 }

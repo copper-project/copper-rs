@@ -800,6 +800,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     #[cfg(not(feature = "std"))]
     let std = false;
     let signal_handler = cfg!(feature = "signal-handler");
+    let parallel_rt_enabled = cfg!(feature = "parallel-rt");
+    let async_cl_io_enabled = cfg!(feature = "async-cl-io");
 
     let rt_guard = rtsan_guard_tokens();
 
@@ -2200,6 +2202,173 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         preprocess_calls.extend(task_preprocess_calls);
         let mut postprocess_calls = task_postprocess_calls;
         postprocess_calls.extend(bridge_postprocess_calls);
+        let parallel_rt_run_supported =
+            std && parallel_rt_enabled && !sim_mode && !async_cl_io_enabled;
+        let parallel_preprocess_calls: Vec<proc_macro2::TokenStream> = if parallel_rt_run_supported
+        {
+            let bridge_calls = culist_bridge_specs.iter().map(|spec| {
+                let bridge_index = int2sliceindex(spec.tuple_index as u32);
+                let monitor_index = syn::Index::from(
+                    spec.monitor_index
+                        .expect("Bridge missing monitor index for preprocess"),
+                );
+                quote! {
+                    {
+                        lifecycle_rt.ctx.clear_current_task();
+                        let _bridge_lock = lifecycle_rt.bridge_locks.#bridge_index.lock().expect("parallel bridge lock poisoned");
+                        let bridge = unsafe { lifecycle_rt.bridge_ptrs.#bridge_index.as_mut() };
+                        lifecycle_rt.execution_probe.record(cu29::monitoring::ExecutionMarker {
+                            component_id: cu29::monitoring::ComponentId::new(#monitor_index),
+                            step: CuComponentState::Preprocess,
+                            culistid: None,
+                        });
+                        let maybe_error = {
+                            #rt_guard
+                            bridge.preprocess(&lifecycle_rt.ctx)
+                        };
+                        if let Err(error) = maybe_error {
+                            let decision = lifecycle_rt.monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Preprocess, &error);
+                            match decision {
+                                Decision::Abort => {
+                                    debug!("Preprocess: ABORT decision from monitoring. Component '{}' errored out during preprocess. Aborting all the other starts.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                    return Ok(false);
+                                }
+                                Decision::Ignore => {
+                                    debug!("Preprocess: IGNORE decision from monitoring. Component '{}' errored out during preprocess. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                }
+                                Decision::Shutdown => {
+                                    debug!("Preprocess: SHUTDOWN decision from monitoring. Component '{}' errored out during preprocess. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                    return Err(CuError::new_with_cause("Component errored out during preprocess.", error));
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            let task_calls = (0..task_specs.task_types.len()).map(|index| {
+                let task_index = int2sliceindex(index as u32);
+                quote! {
+                    {
+                        let _task_lock = lifecycle_rt.task_locks.#task_index.lock().expect("parallel task lock poisoned");
+                        let task = unsafe { lifecycle_rt.task_ptrs.#task_index.as_mut() };
+                        lifecycle_rt.execution_probe.record(cu29::monitoring::ExecutionMarker {
+                            component_id: cu29::monitoring::ComponentId::new(#index),
+                            step: CuComponentState::Preprocess,
+                            culistid: None,
+                        });
+                        lifecycle_rt.ctx.set_current_task(#index);
+                        let maybe_error = {
+                            #rt_guard
+                            task.preprocess(&lifecycle_rt.ctx)
+                        };
+                        if let Err(error) = maybe_error {
+                            let decision = lifecycle_rt.monitor.process_error(cu29::monitoring::ComponentId::new(#index), CuComponentState::Preprocess, &error);
+                            match decision {
+                                Decision::Abort => {
+                                    debug!("Preprocess: ABORT decision from monitoring. Component '{}' errored out during preprocess. Aborting all the other starts.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#index)));
+                                    return Ok(false);
+                                }
+                                Decision::Ignore => {
+                                    debug!("Preprocess: IGNORE decision from monitoring. Component '{}' errored out during preprocess. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#index)));
+                                }
+                                Decision::Shutdown => {
+                                    debug!("Preprocess: SHUTDOWN decision from monitoring. Component '{}' errored out during preprocess. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#index)));
+                                    return Err(CuError::new_with_cause("Component errored out during preprocess.", error));
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            bridge_calls.chain(task_calls).collect()
+        } else {
+            Vec::new()
+        };
+        let parallel_postprocess_calls: Vec<proc_macro2::TokenStream> = if parallel_rt_run_supported
+        {
+            let task_calls = (0..task_specs.task_types.len()).map(|index| {
+                let task_index = int2sliceindex(index as u32);
+                quote! {
+                    {
+                        let _task_lock = lifecycle_rt.task_locks.#task_index.lock().expect("parallel task lock poisoned");
+                        let task = unsafe { lifecycle_rt.task_ptrs.#task_index.as_mut() };
+                        lifecycle_rt.execution_probe.record(cu29::monitoring::ExecutionMarker {
+                            component_id: cu29::monitoring::ComponentId::new(#index),
+                            step: CuComponentState::Postprocess,
+                            culistid: Some(lifecycle_rt.clid),
+                        });
+                        lifecycle_rt.ctx.set_current_task(#index);
+                        let maybe_error = {
+                            #rt_guard
+                            task.postprocess(&lifecycle_rt.ctx)
+                        };
+                        if let Err(error) = maybe_error {
+                            let decision = lifecycle_rt.monitor.process_error(cu29::monitoring::ComponentId::new(#index), CuComponentState::Postprocess, &error);
+                            match decision {
+                                Decision::Abort => {
+                                    debug!("Postprocess: ABORT decision from monitoring. Component '{}' errored out during postprocess. Aborting all the other starts.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#index)));
+                                    return Ok(false);
+                                }
+                                Decision::Ignore => {
+                                    debug!("Postprocess: IGNORE decision from monitoring. Component '{}' errored out during postprocess. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#index)));
+                                }
+                                Decision::Shutdown => {
+                                    debug!("Postprocess: SHUTDOWN decision from monitoring. Component '{}' errored out during postprocess. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#index)));
+                                    return Err(CuError::new_with_cause("Component errored out during postprocess.", error));
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            let bridge_calls = culist_bridge_specs.iter().map(|spec| {
+                let bridge_index = int2sliceindex(spec.tuple_index as u32);
+                let monitor_index = syn::Index::from(
+                    spec.monitor_index
+                        .expect("Bridge missing monitor index for postprocess"),
+                );
+                quote! {
+                    {
+                        lifecycle_rt.ctx.clear_current_task();
+                        let _bridge_lock = lifecycle_rt.bridge_locks.#bridge_index.lock().expect("parallel bridge lock poisoned");
+                        let bridge = unsafe { lifecycle_rt.bridge_ptrs.#bridge_index.as_mut() };
+                        {
+                            let _keyframe_lock = lifecycle_rt.kf_lock.lock().expect("parallel keyframe lock poisoned");
+                            let kf_manager = unsafe { lifecycle_rt.kf_manager_ptr.as_mut() };
+                            kf_manager.freeze_any(lifecycle_rt.clid, bridge)?;
+                        }
+                        lifecycle_rt.execution_probe.record(cu29::monitoring::ExecutionMarker {
+                            component_id: cu29::monitoring::ComponentId::new(#monitor_index),
+                            step: CuComponentState::Postprocess,
+                            culistid: Some(lifecycle_rt.clid),
+                        });
+                        let maybe_error = {
+                            #rt_guard
+                            bridge.postprocess(&lifecycle_rt.ctx)
+                        };
+                        if let Err(error) = maybe_error {
+                            let decision = lifecycle_rt.monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Postprocess, &error);
+                            match decision {
+                                Decision::Abort => {
+                                    debug!("Postprocess: ABORT decision from monitoring. Component '{}' errored out during postprocess. Aborting all the other starts.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                    return Ok(false);
+                                }
+                                Decision::Ignore => {
+                                    debug!("Postprocess: IGNORE decision from monitoring. Component '{}' errored out during postprocess. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                }
+                                Decision::Shutdown => {
+                                    debug!("Postprocess: SHUTDOWN decision from monitoring. Component '{}' errored out during postprocess. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                    return Err(CuError::new_with_cause("Component errored out during postprocess.", error));
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            task_calls.chain(bridge_calls).collect()
+        } else {
+            Vec::new()
+        };
 
         // Bridges are frozen alongside tasks; restore them in the same order.
         let bridge_restore_code: Vec<proc_macro2::TokenStream> = culist_bridge_specs
@@ -2243,6 +2412,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             &output_pack_sizes,
                             sim_mode,
                             &mission_mod,
+                            quote! {},
+                            {
+                                let node_index = int2sliceindex(*task_index as u32);
+                                quote! { tasks.#node_index }
+                            },
                         ),
                         ExecutionEntityKind::BridgeRx {
                             bridge_index,
@@ -2255,6 +2429,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 *channel_index,
                                 &mission_mod,
                                 sim_mode,
+                                {
+                                    let bridge_tuple_index =
+                                        int2sliceindex(spec.tuple_index as u32);
+                                    quote! { let bridge = &mut __cu_bridges.#bridge_tuple_index; }
+                                },
                             )
                         }
                         ExecutionEntityKind::BridgeTx {
@@ -2269,6 +2448,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 &output_pack_sizes,
                                 &mission_mod,
                                 sim_mode,
+                                {
+                                    let bridge_tuple_index =
+                                        int2sliceindex(spec.tuple_index as u32);
+                                    quote! { let bridge = &mut __cu_bridges.#bridge_tuple_index; }
+                                },
                             )
                         }
                     }
@@ -2278,6 +2462,81 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
             })
             .collect();
+        let runtime_plan_parallel_code_and_logging: Option<
+            Vec<(proc_macro2::TokenStream, proc_macro2::TokenStream)>,
+        > = if parallel_rt_run_supported {
+            Some(
+                culist_plan
+                    .steps
+                    .iter()
+                    .map(|unit| match unit {
+                        CuExecutionUnit::Step(step) => match &culist_exec_entities
+                            [step.node_id as usize]
+                            .kind
+                        {
+                            ExecutionEntityKind::Task { task_index } => {
+                                let task_index_ts = int2sliceindex(*task_index as u32);
+                                generate_task_execution_tokens(
+                                    step,
+                                    *task_index,
+                                    &task_specs,
+                                    &output_pack_sizes,
+                                    false,
+                                    &mission_mod,
+                                    quote! {
+                                        let _task_lock = step_rt.task_locks.#task_index_ts.lock().expect("parallel task lock poisoned");
+                                        let task = unsafe { step_rt.task_ptrs.#task_index_ts.as_mut() };
+                                    },
+                                    quote! { (*task) },
+                                )
+                            }
+                            ExecutionEntityKind::BridgeRx {
+                                bridge_index,
+                                channel_index,
+                            } => {
+                                let spec = &culist_bridge_specs[*bridge_index];
+                                let bridge_index_ts = int2sliceindex(spec.tuple_index as u32);
+                                generate_bridge_rx_execution_tokens(
+                                    step,
+                                    spec,
+                                    *channel_index,
+                                    &mission_mod,
+                                    false,
+                                    quote! {
+                                        let _bridge_lock = step_rt.bridge_locks.#bridge_index_ts.lock().expect("parallel bridge lock poisoned");
+                                        let bridge = unsafe { step_rt.bridge_ptrs.#bridge_index_ts.as_mut() };
+                                    },
+                                )
+                            }
+                            ExecutionEntityKind::BridgeTx {
+                                bridge_index,
+                                channel_index,
+                            } => {
+                                let spec = &culist_bridge_specs[*bridge_index];
+                                let bridge_index_ts = int2sliceindex(spec.tuple_index as u32);
+                                generate_bridge_tx_execution_tokens(
+                                    step,
+                                    spec,
+                                    *channel_index,
+                                    &output_pack_sizes,
+                                    &mission_mod,
+                                    false,
+                                    quote! {
+                                        let _bridge_lock = step_rt.bridge_locks.#bridge_index_ts.lock().expect("parallel bridge lock poisoned");
+                                        let bridge = unsafe { step_rt.bridge_ptrs.#bridge_index_ts.as_mut() };
+                                    },
+                                )
+                            }
+                        },
+                        CuExecutionUnit::Loop(_) => {
+                            panic!("Execution loops are not supported in runtime generation");
+                        }
+                    })
+                    .collect(),
+            )
+        } else {
+            None
+        };
 
         let sim_support = if sim_mode {
             Some(gen_sim_support(
@@ -2383,8 +2642,372 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             None
         };
 
-        let (runtime_plan_code, preprocess_logging_calls): (Vec<_>, Vec<_>) =
+        let (runtime_plan_step_code, preprocess_logging_calls): (Vec<_>, Vec<_>) =
             itertools::multiunzip(runtime_plan_code_and_logging);
+        let process_step_tasks_type = if sim_mode {
+            quote!(CuSimTasks)
+        } else {
+            quote!(CuTasks)
+        };
+        let process_step_idents: Vec<Ident> = (0..runtime_plan_step_code.len())
+            .map(|index| format_ident!("__cu_process_step_{index}"))
+            .collect();
+        let process_step_fn_defs: Vec<proc_macro2::TokenStream> = process_step_idents
+            .iter()
+            .zip(runtime_plan_step_code.iter())
+            .map(|(step_ident, step_code)| {
+                if sim_mode {
+                    quote! {
+                        #[inline(always)]
+                        fn #step_ident<F>(
+                            step_rt: &mut ProcessStepRuntime<'_>,
+                            sim_callback: &mut F,
+                        ) -> cu29::parallel_rt::ProcessStepResult
+                        where
+                            F: FnMut(SimStep) -> SimOverride,
+                        {
+                            let clock = step_rt.clock;
+                            let execution_probe = step_rt.execution_probe;
+                            let monitor = &mut *step_rt.monitor;
+                            let tasks = &mut *step_rt.tasks;
+                            let __cu_bridges = &mut *step_rt.bridges;
+                            let culist = &mut *step_rt.culist;
+                            let clid = step_rt.clid;
+                            let ctx = &mut *step_rt.ctx;
+                            let kf_manager = &mut *step_rt.kf_manager;
+                            let msgs = &mut culist.msgs.0;
+                            #step_code
+                        }
+                    }
+                } else {
+                    quote! {
+                        #[inline(always)]
+                        fn #step_ident(
+                            step_rt: &mut ProcessStepRuntime<'_>,
+                        ) -> cu29::parallel_rt::ProcessStepResult {
+                            let clock = step_rt.clock;
+                            let execution_probe = step_rt.execution_probe;
+                            let monitor = &mut *step_rt.monitor;
+                            let tasks = &mut *step_rt.tasks;
+                            let __cu_bridges = &mut *step_rt.bridges;
+                            let culist = &mut *step_rt.culist;
+                            let clid = step_rt.clid;
+                            let ctx = &mut *step_rt.ctx;
+                            let kf_manager = &mut *step_rt.kf_manager;
+                            let msgs = &mut culist.msgs.0;
+                            #step_code
+                        }
+                    }
+                }
+            })
+            .collect();
+        let (
+            _parallel_process_step_idents,
+            parallel_process_step_fn_defs,
+            parallel_runtime_plan_code,
+        ): (
+            Vec<Ident>,
+            Vec<proc_macro2::TokenStream>,
+            Vec<proc_macro2::TokenStream>,
+        ) = if let Some(runtime_plan_parallel_code_and_logging) =
+            &runtime_plan_parallel_code_and_logging
+        {
+            let (runtime_plan_parallel_step_code, _): (Vec<_>, Vec<_>) =
+                itertools::multiunzip(runtime_plan_parallel_code_and_logging.clone());
+            let parallel_process_step_idents: Vec<Ident> = (0..runtime_plan_parallel_step_code
+                .len())
+                .map(|index| format_ident!("__cu_parallel_process_step_{index}"))
+                .collect();
+            let parallel_process_step_fn_defs: Vec<proc_macro2::TokenStream> =
+                parallel_process_step_idents
+                    .iter()
+                    .zip(runtime_plan_parallel_step_code.iter())
+                    .map(|(step_ident, step_code)| {
+                        quote! {
+                            #[inline(always)]
+                            fn #step_ident(
+                                step_rt: &mut ParallelProcessStepRuntime<'_>,
+                            ) -> cu29::parallel_rt::ProcessStepResult {
+                                let clock = step_rt.clock;
+                                let execution_probe = step_rt.execution_probe;
+                                let monitor = step_rt.monitor;
+                                let kf_manager = ParallelKeyFrameAccessor::new(
+                                    step_rt.kf_manager_ptr,
+                                    step_rt.kf_lock,
+                                );
+                                let culist = unsafe { &mut *step_rt.culist };
+                                let clid = step_rt.clid;
+                                let ctx = &mut step_rt.ctx;
+                                let msgs = &mut culist.msgs.0;
+                                #step_code
+                            }
+                        }
+                    })
+                    .collect();
+            let parallel_runtime_plan_code: Vec<proc_macro2::TokenStream> =
+                parallel_process_step_idents
+                    .iter()
+                    .enumerate()
+                    .map(|(stage_index, step_ident)| {
+                        let stage_index = syn::Index::from(stage_index);
+                        quote! {
+                            if !parallel_rt.wait_for_stage(#stage_index, step_rt.clid, shutdown) {
+                                return Err(CuError::from("Parallel runtime shutdown while waiting on a causality checkpoint"));
+                            }
+                            match #step_ident(step_rt)? {
+                                cu29::parallel_rt::ProcessStepOutcome::Continue => {
+                                    parallel_rt.release_stage(#stage_index, step_rt.clid + 1);
+                                }
+                                cu29::parallel_rt::ProcessStepOutcome::AbortCopperList => {
+                                    parallel_rt.release_remaining_stages(#stage_index, step_rt.clid + 1);
+                                    return Ok(cu29::parallel_rt::ProcessStepOutcome::AbortCopperList);
+                                }
+                            }
+                        }
+                    })
+                    .collect();
+            (
+                parallel_process_step_idents,
+                parallel_process_step_fn_defs,
+                parallel_runtime_plan_code,
+            )
+        } else {
+            (Vec::new(), Vec::new(), Vec::new())
+        };
+        let runtime_plan_code: Vec<proc_macro2::TokenStream> = process_step_idents
+            .iter()
+            .map(|step_ident| {
+                if sim_mode {
+                    quote! {
+                        match #step_ident(&mut __cu_process_step_rt, sim_callback)? {
+                            cu29::parallel_rt::ProcessStepOutcome::Continue => {}
+                            cu29::parallel_rt::ProcessStepOutcome::AbortCopperList => {
+                                __cu_abort_copperlist = true;
+                                break '__cu_process_steps;
+                            }
+                        }
+                    }
+                } else {
+                    quote! {
+                        match #step_ident(&mut __cu_process_step_rt)? {
+                            cu29::parallel_rt::ProcessStepOutcome::Continue => {}
+                            cu29::parallel_rt::ProcessStepOutcome::AbortCopperList => {
+                                __cu_abort_copperlist = true;
+                                break '__cu_process_steps;
+                            }
+                        }
+                    }
+                }
+            })
+            .collect();
+        let parallel_task_ptrs_type = if task_types.is_empty() {
+            quote! { () }
+        } else {
+            let elems = task_types
+                .iter()
+                .map(|ty| quote! { ParallelSharedPtr<#ty> });
+            quote! { (#(#elems),*,) }
+        };
+        let parallel_task_locks_type = if task_types.is_empty() {
+            quote! { () }
+        } else {
+            let elems = (0..task_types.len()).map(|_| quote! { std::sync::Mutex<()> });
+            quote! { (#(#elems),*,) }
+        };
+        let parallel_task_ptr_values = if task_types.is_empty() {
+            quote! { () }
+        } else {
+            let elems = (0..task_types.len()).map(|index| {
+                let index = syn::Index::from(index);
+                quote! { ParallelSharedPtr::new(&mut runtime.tasks.#index as *mut _) }
+            });
+            quote! { (#(#elems),*,) }
+        };
+        let parallel_task_lock_values = if task_types.is_empty() {
+            quote! { () }
+        } else {
+            let elems = (0..task_types.len()).map(|_| quote! { std::sync::Mutex::new(()) });
+            quote! { (#(#elems),*,) }
+        };
+        let parallel_bridge_ptrs_type = if bridge_runtime_types.is_empty() {
+            quote! { () }
+        } else {
+            let elems = bridge_runtime_types
+                .iter()
+                .map(|ty| quote! { ParallelSharedPtr<#ty> });
+            quote! { (#(#elems),*,) }
+        };
+        let parallel_bridge_locks_type = if bridge_runtime_types.is_empty() {
+            quote! { () }
+        } else {
+            let elems = (0..bridge_runtime_types.len()).map(|_| quote! { std::sync::Mutex<()> });
+            quote! { (#(#elems),*,) }
+        };
+        let parallel_bridge_ptr_values = if bridge_runtime_types.is_empty() {
+            quote! { () }
+        } else {
+            let elems = (0..bridge_runtime_types.len()).map(|index| {
+                let index = syn::Index::from(index);
+                quote! { ParallelSharedPtr::new(&mut runtime.bridges.#index as *mut _) }
+            });
+            quote! { (#(#elems),*,) }
+        };
+        let parallel_bridge_lock_values = if bridge_runtime_types.is_empty() {
+            quote! { () }
+        } else {
+            let elems =
+                (0..bridge_runtime_types.len()).map(|_| quote! { std::sync::Mutex::new(()) });
+            quote! { (#(#elems),*,) }
+        };
+        let parallel_rt_support_tokens = if parallel_rt_run_supported {
+            quote! {
+                type ParallelTaskPtrs = #parallel_task_ptrs_type;
+                type ParallelTaskLocks = #parallel_task_locks_type;
+                type ParallelBridgePtrs = #parallel_bridge_ptrs_type;
+                type ParallelBridgeLocks = #parallel_bridge_locks_type;
+
+                struct ParallelSharedPtr<T>(*mut T);
+
+                impl<T> Clone for ParallelSharedPtr<T> {
+                    #[inline(always)]
+                    fn clone(&self) -> Self {
+                        *self
+                    }
+                }
+
+                impl<T> Copy for ParallelSharedPtr<T> {}
+
+                impl<T> ParallelSharedPtr<T> {
+                    #[inline(always)]
+                    const fn new(ptr: *mut T) -> Self {
+                        Self(ptr)
+                    }
+
+                    #[inline(always)]
+                    const fn from_ref(ptr: *const T) -> Self {
+                        Self(ptr as *mut T)
+                    }
+
+                    #[inline(always)]
+                    unsafe fn as_mut<'a>(self) -> &'a mut T {
+                        unsafe { &mut *self.0 }
+                    }
+
+                    #[inline(always)]
+                    unsafe fn as_ref<'a>(self) -> &'a T {
+                        unsafe { &*self.0 }
+                    }
+                }
+
+                unsafe impl<T: Send> Send for ParallelSharedPtr<T> {}
+                unsafe impl<T: Send> Sync for ParallelSharedPtr<T> {}
+
+                struct ParallelKeyFrameAccessor<'a> {
+                    ptr: ParallelSharedPtr<cu29::curuntime::KeyFramesManager>,
+                    lock: &'a std::sync::Mutex<()>,
+                }
+
+                impl<'a> ParallelKeyFrameAccessor<'a> {
+                    #[inline(always)]
+                    fn new(
+                        ptr: ParallelSharedPtr<cu29::curuntime::KeyFramesManager>,
+                        lock: &'a std::sync::Mutex<()>,
+                    ) -> Self {
+                        Self { ptr, lock }
+                    }
+
+                    #[inline(always)]
+                    fn freeze_task(
+                        &self,
+                        culistid: u64,
+                        task: &impl cu29::cutask::Freezable,
+                    ) -> CuResult<usize> {
+                        let _guard = self.lock.lock().expect("parallel keyframe lock poisoned");
+                        let manager = unsafe { self.ptr.as_mut() };
+                        manager.freeze_task(culistid, task)
+                    }
+
+                    #[inline(always)]
+                    fn freeze_any(
+                        &self,
+                        culistid: u64,
+                        item: &impl cu29::cutask::Freezable,
+                    ) -> CuResult<usize> {
+                        let _guard = self.lock.lock().expect("parallel keyframe lock poisoned");
+                        let manager = unsafe { self.ptr.as_mut() };
+                        manager.freeze_any(culistid, item)
+                    }
+                }
+
+                struct ParallelProcessStepRuntime<'a> {
+                    clock: &'a RobotClock,
+                    execution_probe: &'a cu29::monitoring::RuntimeExecutionProbe,
+                    monitor: &'a #monitor_type,
+                    task_ptrs: &'a ParallelTaskPtrs,
+                    task_locks: &'a ParallelTaskLocks,
+                    bridge_ptrs: &'a ParallelBridgePtrs,
+                    bridge_locks: &'a ParallelBridgeLocks,
+                    kf_manager_ptr: ParallelSharedPtr<cu29::curuntime::KeyFramesManager>,
+                    kf_lock: &'a std::sync::Mutex<()>,
+                    culist: *mut CuList,
+                    clid: u64,
+                    ctx: cu29::context::CuContext,
+                }
+
+                struct ParallelLifecycleRuntime<'a> {
+                    execution_probe: &'a cu29::monitoring::RuntimeExecutionProbe,
+                    monitor: &'a #monitor_type,
+                    task_ptrs: &'a ParallelTaskPtrs,
+                    task_locks: &'a ParallelTaskLocks,
+                    bridge_ptrs: &'a ParallelBridgePtrs,
+                    bridge_locks: &'a ParallelBridgeLocks,
+                    kf_manager_ptr: ParallelSharedPtr<cu29::curuntime::KeyFramesManager>,
+                    kf_lock: &'a std::sync::Mutex<()>,
+                    clid: u64,
+                    ctx: cu29::context::CuContext,
+                }
+
+                struct ParallelWorkerJob {
+                    clid: u64,
+                    culist: *mut CuList,
+                }
+
+                struct ParallelWorkerResult {
+                    clid: u64,
+                    culist: *mut CuList,
+                    outcome: cu29::parallel_rt::ProcessStepResult,
+                    raw_payload_bytes: u64,
+                    handle_bytes: u64,
+                }
+
+                unsafe impl Send for ParallelWorkerJob {}
+                unsafe impl Send for ParallelWorkerResult {}
+
+                #[inline(always)]
+                fn assert_parallel_rt_send_bounds()
+                where
+                    CuList: Send,
+                    #process_step_tasks_type: Send,
+                    CuBridges: Send,
+                    #monitor_type: Sync,
+                {
+                }
+
+                #(#parallel_process_step_fn_defs)*
+
+                #[inline(always)]
+                fn run_parallel_process_steps(
+                    step_rt: &mut ParallelProcessStepRuntime<'_>,
+                    parallel_rt: &cu29::parallel_rt::ParallelRt<#copperlist_count_tokens>,
+                    shutdown: &std::sync::atomic::AtomicBool,
+                ) -> cu29::parallel_rt::ProcessStepResult {
+                    #(#parallel_runtime_plan_code)*
+                    Ok(cu29::parallel_rt::ProcessStepOutcome::Continue)
+                }
+            }
+        } else {
+            quote! {}
+        };
 
         let config_load_stmt = if std {
             quote! {
@@ -2540,6 +3163,421 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[build the run methods]");
+        let run_body: proc_macro2::TokenStream = if parallel_rt_run_supported {
+            quote! {
+                static STOP_FLAG: AtomicBool = AtomicBool::new(false);
+
+                #kill_handler
+
+                <Self as #app_trait<S, L>>::start_all_tasks(self)?;
+                let result = std::thread::scope(|scope| -> CuResult<()> {
+                    #mission_mod::assert_parallel_rt_send_bounds();
+
+                    let runtime = &mut self.copper_runtime;
+                    let clock = &runtime.clock;
+                    let execution_probe = runtime.execution_probe.as_ref();
+                    let monitor = &runtime.monitor;
+                    let cl_manager = &mut runtime.copperlists_manager;
+                    let parallel_rt = &runtime.parallel_rt;
+                    let execution_probe_ptr =
+                        #mission_mod::ParallelSharedPtr::from_ref(execution_probe as *const _);
+                    let monitor_ptr =
+                        #mission_mod::ParallelSharedPtr::from_ref(monitor as *const _);
+                    let parallel_rt_ptr =
+                        #mission_mod::ParallelSharedPtr::from_ref(parallel_rt as *const _);
+                    let task_ptrs: #mission_mod::ParallelTaskPtrs = #parallel_task_ptr_values;
+                    let task_locks = std::sync::Arc::new(#parallel_task_lock_values);
+                    let bridge_ptrs: #mission_mod::ParallelBridgePtrs = #parallel_bridge_ptr_values;
+                    let bridge_locks = std::sync::Arc::new(#parallel_bridge_lock_values);
+                    let kf_manager_ptr =
+                        #mission_mod::ParallelSharedPtr::new(&mut runtime.keyframes_manager as *mut _);
+                    let kf_lock = std::sync::Arc::new(std::sync::Mutex::new(()));
+                    let start_clid = cl_manager.next_cl_id();
+                    parallel_rt.reset_cursors(start_clid);
+
+                    let worker_count = parallel_rt
+                        .settings()
+                        .executor_threads
+                        .max(1)
+                        .min(parallel_rt.in_flight_limit().max(1));
+                    let queue_capacity = parallel_rt.in_flight_limit().max(1);
+                    let (job_tx, job_rx) =
+                        std::sync::mpsc::sync_channel::<Option<#mission_mod::ParallelWorkerJob>>(queue_capacity);
+                    let job_rx = std::sync::Arc::new(std::sync::Mutex::new(job_rx));
+                    let (done_tx, done_rx) =
+                        std::sync::mpsc::sync_channel::<#mission_mod::ParallelWorkerResult>(queue_capacity);
+                    let shutdown = std::sync::Arc::new(AtomicBool::new(false));
+
+                    for _worker_index in 0..worker_count {
+                        let job_rx = std::sync::Arc::clone(&job_rx);
+                        let done_tx = done_tx.clone();
+                        let shutdown = std::sync::Arc::clone(&shutdown);
+                        let clock = clock.clone();
+                        let execution_probe_ptr = execution_probe_ptr;
+                        let monitor_ptr = monitor_ptr;
+                        let parallel_rt_ptr = parallel_rt_ptr;
+                        let task_ptrs = task_ptrs;
+                        let task_locks = std::sync::Arc::clone(&task_locks);
+                        let bridge_ptrs = bridge_ptrs;
+                        let bridge_locks = std::sync::Arc::clone(&bridge_locks);
+                        let kf_manager_ptr = kf_manager_ptr;
+                        let kf_lock = std::sync::Arc::clone(&kf_lock);
+                        scope.spawn(move || {
+                            loop {
+                                let job = {
+                                    let receiver = job_rx.lock().expect("parallel job queue poisoned");
+                                    receiver.recv()
+                                };
+                                let Some(job) = (match job {
+                                    Ok(job) => job,
+                                    Err(_) => break,
+                                }) else {
+                                    break;
+                                };
+
+                                let worker_result = match std::panic::catch_unwind(
+                                    std::panic::AssertUnwindSafe(|| {
+                                        let execution_probe = unsafe { execution_probe_ptr.as_ref() };
+                                        let monitor = unsafe { monitor_ptr.as_ref() };
+                                        let parallel_rt = unsafe { parallel_rt_ptr.as_ref() };
+                                        let mut step_rt = #mission_mod::ParallelProcessStepRuntime {
+                                            clock: &clock,
+                                            execution_probe,
+                                            monitor,
+                                            task_ptrs: &task_ptrs,
+                                            task_locks: task_locks.as_ref(),
+                                            bridge_ptrs: &bridge_ptrs,
+                                            bridge_locks: bridge_locks.as_ref(),
+                                            kf_manager_ptr,
+                                            kf_lock: kf_lock.as_ref(),
+                                            culist: job.culist,
+                                            clid: job.clid,
+                                            ctx: cu29::context::CuContext::builder(clock.clone())
+                                                .cl_id(job.clid)
+                                                .task_ids(#mission_mod::TASK_IDS)
+                                                .build(),
+                                        };
+                                        let outcome = #mission_mod::run_parallel_process_steps(
+                                            &mut step_rt,
+                                            parallel_rt,
+                                            shutdown.as_ref(),
+                                        );
+                                        let (raw_payload_bytes, handle_bytes) = match outcome {
+                                            Ok(cu29::parallel_rt::ProcessStepOutcome::Continue) => {
+                                                let culist = unsafe { &*job.culist };
+                                                #mission_mod::compute_payload_bytes(culist)
+                                            }
+                                            _ => (0, 0),
+                                        };
+                                        #mission_mod::ParallelWorkerResult {
+                                            clid: job.clid,
+                                            culist: job.culist,
+                                            outcome,
+                                            raw_payload_bytes,
+                                            handle_bytes,
+                                        }
+                                    }),
+                                ) {
+                                    Ok(result) => result,
+                                    Err(payload) => {
+                                        shutdown.store(true, Ordering::Release);
+                                        let panic_message =
+                                            cu29::monitoring::panic_payload_to_string(payload.as_ref());
+                                        #mission_mod::ParallelWorkerResult {
+                                            clid: job.clid,
+                                            culist: job.culist,
+                                            outcome: Err(CuError::from(format!(
+                                                "Panic while processing CopperList #{}: {}",
+                                                job.clid, panic_message
+                                            ))),
+                                            raw_payload_bytes: 0,
+                                            handle_bytes: 0,
+                                        }
+                                    }
+                                };
+
+                                if done_tx.send(worker_result).is_err() {
+                                    break;
+                                }
+                            }
+                        });
+                    }
+                    drop(done_tx);
+
+                    let dispatch_period = runtime.runtime_config.rate_target_hz.map(|rate| {
+                        CuDuration::from(1_000_000_000u64 / rate)
+                    });
+                    let mut next_dispatch_deadline = cu29::curuntime::perf_now(clock);
+                    let mut in_flight = 0usize;
+                    let mut stop_launching = false;
+                    let mut next_commit_clid = cl_manager.next_cl_id();
+                    let mut pending_results =
+                        std::collections::BTreeMap::<u64, #mission_mod::ParallelWorkerResult>::new();
+                    let mut active_keyframe_clid: Option<u64> = None;
+
+                    loop {
+                        if !stop_launching && !shutdown.load(Ordering::Acquire) {
+                            let next_clid = cl_manager.next_cl_id();
+                            let now = cu29::curuntime::perf_now(clock);
+                            let rate_ready = dispatch_period
+                                .map(|_| now >= next_dispatch_deadline)
+                                .unwrap_or(true);
+                            let keyframe_ready = {
+                                let _keyframe_lock = kf_lock.lock().expect("parallel keyframe lock poisoned");
+                                let kf_manager = unsafe { kf_manager_ptr.as_mut() };
+                                active_keyframe_clid.is_none() || !kf_manager.captures_keyframe(next_clid)
+                            };
+
+                            if in_flight < parallel_rt.in_flight_limit()
+                                && rate_ready
+                                && keyframe_ready
+                            {
+                                let should_launch = {
+                                    let preprocess_ctx = cu29::context::CuContext::builder(clock.clone())
+                                        .cl_id(next_clid)
+                                        .task_ids(#mission_mod::TASK_IDS)
+                                        .build();
+                                    let __cu_preprocess_outcome: CuResult<bool> = (|| {
+                                        let mut lifecycle_rt = #mission_mod::ParallelLifecycleRuntime {
+                                            execution_probe,
+                                            monitor,
+                                            task_ptrs: &task_ptrs,
+                                            task_locks: task_locks.as_ref(),
+                                            bridge_ptrs: &bridge_ptrs,
+                                            bridge_locks: bridge_locks.as_ref(),
+                                            kf_manager_ptr,
+                                            kf_lock: kf_lock.as_ref(),
+                                            clid: next_clid,
+                                            ctx: preprocess_ctx,
+                                        };
+                                        #(#parallel_preprocess_calls)*
+                                        Ok(true)
+                                    })();
+                                    __cu_preprocess_outcome?
+                                };
+
+                                if let Some(period) = dispatch_period {
+                                    next_dispatch_deadline = next_dispatch_deadline + period;
+                                }
+
+                                if should_launch {
+                                    let culist = cl_manager.create()?;
+                                    let clid = culist.id;
+                                    debug_assert_eq!(clid, next_clid);
+                                    {
+                                        let _keyframe_lock =
+                                            kf_lock.lock().expect("parallel keyframe lock poisoned");
+                                        let kf_manager = unsafe { kf_manager_ptr.as_mut() };
+                                        kf_manager.reset(clid, clock);
+                                        if kf_manager.captures_keyframe(clid) {
+                                            active_keyframe_clid = Some(clid);
+                                        }
+                                    }
+                                    culist.change_state(cu29::copperlist::CopperListState::Processing);
+                                    culist.msgs.init_zeroed();
+                                    let culist_ptr = culist as *mut #mission_mod::CuList;
+                                    job_tx
+                                        .send(Some(#mission_mod::ParallelWorkerJob {
+                                            clid,
+                                            culist: culist_ptr,
+                                        }))
+                                        .map_err(|e| {
+                                            CuError::from("Failed to enqueue CopperList for parallel processing")
+                                                .add_cause(e.to_string().as_str())
+                                        })?;
+                                    in_flight += 1;
+                                }
+
+                                if STOP_FLAG.load(Ordering::SeqCst) {
+                                    stop_launching = true;
+                                }
+                                continue;
+                            }
+                        }
+
+                        if in_flight == 0 {
+                            if stop_launching || shutdown.load(Ordering::Acquire) {
+                                break;
+                            }
+
+                            if let Some(_period) = dispatch_period {
+                                let now = cu29::curuntime::perf_now(clock);
+                                if now < next_dispatch_deadline {
+                                    std::thread::sleep(std::time::Duration::from_nanos(
+                                        (next_dispatch_deadline - now).as_nanos(),
+                                    ));
+                                    continue;
+                                }
+                            }
+                        }
+
+                        let recv_result = if !stop_launching {
+                            if let Some(_period) = dispatch_period {
+                                let now = cu29::curuntime::perf_now(clock);
+                                if now < next_dispatch_deadline && in_flight > 0 {
+                                    done_rx.recv_timeout(std::time::Duration::from_nanos(
+                                        (next_dispatch_deadline - now).as_nanos(),
+                                    ))
+                                } else {
+                                    done_rx
+                                        .recv()
+                                        .map_err(|_| std::sync::mpsc::RecvTimeoutError::Disconnected)
+                                }
+                            } else {
+                                done_rx
+                                    .recv()
+                                    .map_err(|_| std::sync::mpsc::RecvTimeoutError::Disconnected)
+                            }
+                        } else {
+                            done_rx
+                                .recv()
+                                .map_err(|_| std::sync::mpsc::RecvTimeoutError::Disconnected)
+                        };
+
+                        let worker_result = match recv_result {
+                            Ok(worker_result) => worker_result,
+                            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                                if STOP_FLAG.load(Ordering::SeqCst) {
+                                    stop_launching = true;
+                                }
+                                continue;
+                            }
+                            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                                shutdown.store(true, Ordering::Release);
+                                return Err(CuError::from(
+                                    "Parallel CopperList worker thread disconnected unexpectedly",
+                                ));
+                            }
+                        };
+                        in_flight = in_flight.saturating_sub(1);
+                        pending_results.insert(worker_result.clid, worker_result);
+
+                        while let Some(worker_result) = pending_results.remove(&next_commit_clid) {
+                            if parallel_rt.current_commit_clid() != worker_result.clid {
+                                shutdown.store(true, Ordering::Release);
+                                return Err(CuError::from(format!(
+                                    "Parallel commit checkpoint out of sync: expected {}, got {}",
+                                    parallel_rt.current_commit_clid(),
+                                    worker_result.clid
+                                )));
+                            }
+
+                            let culist = unsafe { &mut *worker_result.culist };
+                            match worker_result.outcome {
+                                Ok(cu29::parallel_rt::ProcessStepOutcome::AbortCopperList) => {
+                                    let mut commit_ctx = cu29::context::CuContext::builder(clock.clone())
+                                        .cl_id(worker_result.clid)
+                                        .task_ids(#mission_mod::TASK_IDS)
+                                        .build();
+                                    commit_ctx.clear_current_task();
+                                    let monitor_result = monitor.process_copperlist(
+                                        &commit_ctx,
+                                        #mission_mod::MONITOR_LAYOUT.view(&#mission_mod::collect_metadata(&culist)),
+                                    );
+                                    cl_manager.end_of_processing(worker_result.clid)?;
+                                    monitor_result?;
+                                }
+                                Ok(cu29::parallel_rt::ProcessStepOutcome::Continue) => {
+                                    let mut commit_ctx = cu29::context::CuContext::builder(clock.clone())
+                                        .cl_id(worker_result.clid)
+                                        .task_ids(#mission_mod::TASK_IDS)
+                                        .build();
+                                    commit_ctx.clear_current_task();
+                                    let monitor_result = monitor.process_copperlist(
+                                        &commit_ctx,
+                                        #mission_mod::MONITOR_LAYOUT.view(&#mission_mod::collect_metadata(&culist)),
+                                    );
+
+                                    #(#preprocess_logging_calls)*
+
+                                    cl_manager.end_of_processing(worker_result.clid)?;
+                                    let keyframe_bytes = {
+                                        let _keyframe_lock =
+                                            kf_lock.lock().expect("parallel keyframe lock poisoned");
+                                        let kf_manager = unsafe { kf_manager_ptr.as_mut() };
+                                        kf_manager.end_of_processing(worker_result.clid)?;
+                                        kf_manager.last_encoded_bytes
+                                    };
+                                    monitor_result?;
+                                    let stats = cu29::monitoring::CopperListIoStats {
+                                        raw_culist_bytes: core::mem::size_of::<CuList>() as u64
+                                            + worker_result.raw_payload_bytes,
+                                        handle_bytes: worker_result.handle_bytes,
+                                        encoded_culist_bytes: cl_manager.last_encoded_bytes,
+                                        keyframe_bytes,
+                                        structured_log_bytes_total: ::cu29::prelude::structured_log_bytes_total(),
+                                        culistid: worker_result.clid,
+                                    };
+                                    monitor.observe_copperlist_io(stats);
+
+                                    let postprocess_ctx = cu29::context::CuContext::builder(clock.clone())
+                                        .cl_id(worker_result.clid)
+                                        .task_ids(#mission_mod::TASK_IDS)
+                                        .build();
+                                    let __cu_postprocess_outcome: CuResult<bool> = (|| {
+                                        let mut lifecycle_rt = #mission_mod::ParallelLifecycleRuntime {
+                                            execution_probe,
+                                            monitor,
+                                            task_ptrs: &task_ptrs,
+                                            task_locks: task_locks.as_ref(),
+                                            bridge_ptrs: &bridge_ptrs,
+                                            bridge_locks: bridge_locks.as_ref(),
+                                            kf_manager_ptr,
+                                            kf_lock: kf_lock.as_ref(),
+                                            clid: worker_result.clid,
+                                            ctx: postprocess_ctx,
+                                        };
+                                        #(#parallel_postprocess_calls)*
+                                        Ok(true)
+                                    })();
+                                    let _ = __cu_postprocess_outcome?;
+                                }
+                                Err(error) => {
+                                    shutdown.store(true, Ordering::Release);
+                                    return Err(error);
+                                }
+                            }
+
+                            if active_keyframe_clid == Some(worker_result.clid) {
+                                active_keyframe_clid = None;
+                            }
+                            parallel_rt.release_commit(worker_result.clid + 1);
+                            next_commit_clid += 1;
+                        }
+
+                        if STOP_FLAG.load(Ordering::SeqCst) {
+                            stop_launching = true;
+                        }
+                    }
+
+                    drop(job_tx);
+                    Ok(())
+                });
+
+                if result.is_err() {
+                    error!("A task errored out: {}", &result);
+                }
+                <Self as #app_trait<S, L>>::stop_all_tasks(self, #sim_callback_arg)?;
+                let _ = self.log_shutdown_completed();
+                result
+            }
+        } else {
+            quote! {
+                static STOP_FLAG: AtomicBool = AtomicBool::new(false);
+
+                #kill_handler
+
+                <Self as #app_trait<S, L>>::start_all_tasks(self, #sim_callback_arg)?;
+                let result = #run_loop;
+
+                if result.is_err() {
+                    error!("A task errored out: {}", &result);
+                }
+                <Self as #app_trait<S, L>>::stop_all_tasks(self, #sim_callback_arg)?;
+                let _ = self.log_shutdown_completed();
+                result
+            }
+        };
         let run_methods: proc_macro2::TokenStream = quote! {
 
             #run_one_iteration {
@@ -2558,6 +3596,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     .cl_id(iteration_clid)
                     .task_ids(#mission_mod::TASK_IDS)
                     .build();
+                let mut __cu_abort_copperlist = false;
 
                 // Preprocess calls can happen at any time, just packed them up front.
                 #(#preprocess_calls)*
@@ -2573,12 +3612,31 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     .task_ids(#mission_mod::TASK_IDS)
                     .build();
                 {
-                    let msgs = &mut culist.msgs.0;
+                    let mut __cu_process_step_rt = #mission_mod::ProcessStepRuntime {
+                        clock,
+                        execution_probe,
+                        monitor,
+                        tasks,
+                        bridges: __cu_bridges,
+                        culist,
+                        clid,
+                        ctx: &mut ctx,
+                        kf_manager,
+                    };
+                    '__cu_process_steps: {
                     #(#runtime_plan_code)*
+                    }
                 } // drop(msgs);
+                if __cu_abort_copperlist {
+                    ctx.clear_current_task();
+                    let monitor_result = monitor.process_copperlist(&ctx, #mission_mod::MONITOR_LAYOUT.view(&#mission_mod::collect_metadata(&culist)));
+                    cl_manager.end_of_processing(clid)?;
+                    monitor_result?;
+                    return Ok(());
+                }
                 let (raw_payload_bytes, handle_bytes) = #mission_mod::compute_payload_bytes(&culist);
                 ctx.clear_current_task();
-                        let monitor_result = monitor.process_copperlist(&ctx, #mission_mod::MONITOR_LAYOUT.view(&#mission_mod::collect_metadata(&culist)));
+                let monitor_result = monitor.process_copperlist(&ctx, #mission_mod::MONITOR_LAYOUT.view(&#mission_mod::collect_metadata(&culist)));
 
                 // here drop the payloads if we don't want them to be logged.
                 #(#preprocess_logging_calls)*
@@ -2649,19 +3707,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             #run {
-                static STOP_FLAG: AtomicBool = AtomicBool::new(false);
-
-                #kill_handler
-
-                <Self as #app_trait<S, L>>::start_all_tasks(self, #sim_callback_arg)?;
-                let result = #run_loop;
-
-                if result.is_err() {
-                    error!("A task errored out: {}", &result);
-                }
-                <Self as #app_trait<S, L>>::stop_all_tasks(self, #sim_callback_arg)?;
-                let _ = self.log_shutdown_completed();
-                result
+                #run_body
             }
         };
 
@@ -3311,6 +4357,42 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
 
                 #culist_support
+
+                #[cfg(feature = "std")]
+                type ProcessStepExecutionProbe<'a> =
+                    &'a cu29::monitoring::ExecutionProbeHandle;
+
+                #[cfg(not(feature = "std"))]
+                type ProcessStepExecutionProbe<'a> =
+                    &'a cu29::monitoring::RuntimeExecutionProbe;
+
+                /// Mutable per-iteration state handed to one generated process stage.
+                ///
+                /// Field meanings:
+                /// - `clock`: runtime clock used for process timing metadata.
+                /// - `execution_probe`: watchdog-visible progress probe updated before each stage.
+                /// - `monitor`: mission monitor handling stage errors and CL-level observation.
+                /// - `tasks`: tuple of instantiated mission tasks.
+                /// - `bridges`: tuple of instantiated mission bridges.
+                /// - `culist`: CopperList currently being filled by the process path.
+                /// - `clid`: deterministic CopperList id for the current iteration.
+                /// - `ctx`: shared per-iteration task context passed into components.
+                /// - `kf_manager`: keyframe accumulator frozen before each stateful stage.
+                struct ProcessStepRuntime<'a> {
+                    clock: &'a RobotClock,
+                    execution_probe: ProcessStepExecutionProbe<'a>,
+                    monitor: &'a mut #monitor_type,
+                    tasks: &'a mut #process_step_tasks_type,
+                    bridges: &'a mut CuBridges,
+                    culist: &'a mut CuList,
+                    clid: u64,
+                    ctx: &'a mut cu29::context::CuContext,
+                    kf_manager: &'a mut cu29::curuntime::KeyFramesManager,
+                }
+
+                #(#process_step_fn_defs)*
+                #parallel_rt_support_tokens
+
                 #tasks_instanciator
                 #bridges_instanciator
 
@@ -4638,6 +5720,22 @@ fn build_monitored_ids(task_ids: &[String], bridge_specs: &mut [BridgeSpec]) -> 
     names
 }
 
+fn wrap_process_step_tokens(body: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+    quote! {{
+        let __cu_process_step_result: cu29::parallel_rt::ProcessStepResult = (|| {
+            #body
+            Ok(cu29::parallel_rt::ProcessStepOutcome::Continue)
+        })();
+        __cu_process_step_result
+    }}
+}
+
+fn abort_process_step_tokens() -> proc_macro2::TokenStream {
+    quote! {
+        return Ok(cu29::parallel_rt::ProcessStepOutcome::AbortCopperList);
+    }
+}
+
 fn generate_task_execution_tokens(
     step: &CuExecutionStep,
     task_index: usize,
@@ -4645,9 +5743,10 @@ fn generate_task_execution_tokens(
     output_pack_sizes: &[usize],
     sim_mode: bool,
     mission_mod: &Ident,
+    task_setup: proc_macro2::TokenStream,
+    task_instance: proc_macro2::TokenStream,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
-    let node_index = int2sliceindex(task_index as u32);
-    let task_instance = quote! { tasks.#node_index };
+    let abort_process_step = abort_process_step_tokens();
     let comment_str = format!(
         "DEBUG ->> {} ({:?}) Id:{} I:{:?} O:{:?}",
         step.node.get_id(),
@@ -4742,11 +5841,7 @@ fn generate_task_execution_tokens(
                     Decision::Abort => {
                         debug!("Process: ABORT decision from monitoring. Component '{}' errored out \
                                 during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)), clid);
-                        ctx.clear_current_task();
-                        let monitor_result = monitor.process_copperlist(&ctx, #mission_mod::MONITOR_LAYOUT.view(&#mission_mod::collect_metadata(&culist)));
-                        cl_manager.end_of_processing(clid)?;
-                        monitor_result?;
-                        return Ok(());
+                        #abort_process_step
                     }
                     Decision::Ignore => {
                         debug!("Process: IGNORE decision from monitoring. Component '{}' errored out \
@@ -4827,28 +5922,27 @@ fn generate_task_execution_tokens(
             };
 
             (
-                quote! {
-                    {
-                        #comment_tokens
-                        kf_manager.freeze_task(clid, &#task_instance)?;
-                        #call_sim_callback
-                        let cumsg_output = &mut msgs.#output_culist_index;
-                        #maybe_sim_tick
-                        let maybe_error = if doit {
-                            execution_probe.record(cu29::monitoring::ExecutionMarker {
-                                component_id: cu29::monitoring::ComponentId::new(#tid),
-                                step: CuComponentState::Process,
-                                culistid: Some(clid),
-                            });
-                            #source_process_tokens
-                        } else {
-                            Ok(())
-                        };
-                        if let Err(error) = maybe_error {
-                            #monitoring_action
-                        }
+                wrap_process_step_tokens(quote! {
+                    #task_setup
+                    #comment_tokens
+                    kf_manager.freeze_task(clid, &#task_instance)?;
+                    #call_sim_callback
+                    let cumsg_output = &mut msgs.#output_culist_index;
+                    #maybe_sim_tick
+                    let maybe_error = if doit {
+                        execution_probe.record(cu29::monitoring::ExecutionMarker {
+                            component_id: cu29::monitoring::ComponentId::new(#tid),
+                            step: CuComponentState::Process,
+                            culistid: Some(clid),
+                        });
+                        #source_process_tokens
+                    } else {
+                        Ok(())
+                    };
+                    if let Err(error) = maybe_error {
+                        #monitoring_action
                     }
-                },
+                }),
                 logging_tokens,
             )
         }
@@ -4889,11 +5983,7 @@ fn generate_task_execution_tokens(
                     Decision::Abort => {
                         debug!("Process: ABORT decision from monitoring. Component '{}' errored out \
                                 during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)), clid);
-                        ctx.clear_current_task();
-                        let monitor_result = monitor.process_copperlist(&ctx, #mission_mod::MONITOR_LAYOUT.view(&#mission_mod::collect_metadata(&culist)));
-                        cl_manager.end_of_processing(clid)?;
-                        monitor_result?;
-                        return Ok(());
+                        #abort_process_step
                     }
                     Decision::Ignore => {
                         debug!("Process: IGNORE decision from monitoring. Component '{}' errored out \
@@ -4931,35 +6021,34 @@ fn generate_task_execution_tokens(
             };
 
             (
-                quote! {
-                    {
-                        #comment_tokens
-                        kf_manager.freeze_task(clid, &#task_instance)?;
-                        #call_sim_callback
-                        let cumsg_input = &#inputs_type;
-                        let cumsg_output = &mut msgs.#output_culist_index;
-                        let maybe_error = if doit {
-                            execution_probe.record(cu29::monitoring::ExecutionMarker {
-                                component_id: cu29::monitoring::ComponentId::new(#tid),
-                                step: CuComponentState::Process,
-                                culistid: Some(clid),
-                            });
-                            #output_start_time
-                            let result = {
-                                #rt_guard
-                                ctx.set_current_task(#tid);
-                                #task_instance.process(&ctx, cumsg_input)
-                            };
-                            #output_end_time
-                            result
-                        } else {
-                            Ok(())
+                wrap_process_step_tokens(quote! {
+                    #task_setup
+                    #comment_tokens
+                    kf_manager.freeze_task(clid, &#task_instance)?;
+                    #call_sim_callback
+                    let cumsg_input = &#inputs_type;
+                    let cumsg_output = &mut msgs.#output_culist_index;
+                    let maybe_error = if doit {
+                        execution_probe.record(cu29::monitoring::ExecutionMarker {
+                            component_id: cu29::monitoring::ComponentId::new(#tid),
+                            step: CuComponentState::Process,
+                            culistid: Some(clid),
+                        });
+                        #output_start_time
+                        let result = {
+                            #rt_guard
+                            ctx.set_current_task(#tid);
+                            #task_instance.process(&ctx, cumsg_input)
                         };
-                        if let Err(error) = maybe_error {
-                            #monitoring_action
-                        }
+                        #output_end_time
+                        result
+                    } else {
+                        Ok(())
+                    };
+                    if let Err(error) = maybe_error {
+                        #monitoring_action
                     }
-                },
+                }),
                 quote! {},
             )
         }
@@ -5000,11 +6089,7 @@ fn generate_task_execution_tokens(
                     Decision::Abort => {
                         debug!("Process: ABORT decision from monitoring. Component '{}' errored out \
                                 during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)), clid);
-                        ctx.clear_current_task();
-                        let monitor_result = monitor.process_copperlist(&ctx, #mission_mod::MONITOR_LAYOUT.view(&#mission_mod::collect_metadata(&culist)));
-                        cl_manager.end_of_processing(clid)?;
-                        monitor_result?;
-                        return Ok(());
+                        #abort_process_step
                     }
                     Decision::Ignore => {
                         debug!("Process: IGNORE decision from monitoring. Component '{}' errored out \
@@ -5087,28 +6172,27 @@ fn generate_task_execution_tokens(
             };
 
             (
-                quote! {
-                    {
-                        #comment_tokens
-                        kf_manager.freeze_task(clid, &#task_instance)?;
-                        #call_sim_callback
-                        let cumsg_input = &#inputs_type;
-                        let cumsg_output = &mut msgs.#output_culist_index;
-                        let maybe_error = if doit {
-                            execution_probe.record(cu29::monitoring::ExecutionMarker {
-                                component_id: cu29::monitoring::ComponentId::new(#tid),
-                                step: CuComponentState::Process,
-                                culistid: Some(clid),
-                            });
-                            #regular_process_tokens
-                        } else {
-                            Ok(())
-                        };
-                        if let Err(error) = maybe_error {
-                            #monitoring_action
-                        }
+                wrap_process_step_tokens(quote! {
+                    #task_setup
+                    #comment_tokens
+                    kf_manager.freeze_task(clid, &#task_instance)?;
+                    #call_sim_callback
+                    let cumsg_input = &#inputs_type;
+                    let cumsg_output = &mut msgs.#output_culist_index;
+                    let maybe_error = if doit {
+                        execution_probe.record(cu29::monitoring::ExecutionMarker {
+                            component_id: cu29::monitoring::ComponentId::new(#tid),
+                            step: CuComponentState::Process,
+                            culistid: Some(clid),
+                        });
+                        #regular_process_tokens
+                    } else {
+                        Ok(())
+                    };
+                    if let Err(error) = maybe_error {
+                        #monitoring_action
                     }
-                },
+                }),
                 logging_tokens,
             )
         }
@@ -5121,9 +6205,10 @@ fn generate_bridge_rx_execution_tokens(
     channel_index: usize,
     mission_mod: &Ident,
     sim_mode: bool,
+    bridge_setup: proc_macro2::TokenStream,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let rt_guard = rtsan_guard_tokens();
-    let bridge_tuple_index = int2sliceindex(bridge_spec.tuple_index as u32);
+    let abort_process_step = abort_process_step_tokens();
     let channel = &bridge_spec.rx_channels[channel_index];
     let output_pack = step
         .output_msg_pack
@@ -5172,11 +6257,7 @@ fn generate_bridge_rx_execution_tokens(
                     match decision {
                         Decision::Abort => {
                             debug!("Process: ABORT decision from monitoring. Component '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)), clid);
-                            ctx.clear_current_task();
-                        let monitor_result = monitor.process_copperlist(&ctx, #mission_mod::MONITOR_LAYOUT.view(&#mission_mod::collect_metadata(&culist)));
-                            cl_manager.end_of_processing(clid)?;
-                            monitor_result?;
-                            return Ok(());
+                            #abort_process_step
                         }
                         Decision::Ignore => {
                             debug!("Process: IGNORE decision from monitoring. Component '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
@@ -5197,52 +6278,46 @@ fn generate_bridge_rx_execution_tokens(
         quote! { let doit = true; }
     };
     (
-        quote! {
-            {
-                let bridge = &mut __cu_bridges.#bridge_tuple_index;
-                let cumsg_output = #output_ref;
-                #call_sim_callback
-                if doit {
-                    execution_probe.record(cu29::monitoring::ExecutionMarker {
-                        component_id: cu29::monitoring::ComponentId::new(#monitor_index),
-                        step: CuComponentState::Process,
-                        culistid: Some(clid),
-                    });
-                    cumsg_output.metadata.process_time.start = cu29::curuntime::perf_now(clock).into();
-                    let maybe_error = {
-                        #rt_guard
-                        ctx.clear_current_task();
-                        bridge.receive(
-                            &ctx,
-                            &<#bridge_type as cu29::cubridge::CuBridge>::Rx::#const_ident,
-                            cumsg_output,
-                        )
-                    };
-                    cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
-                    if let Err(error) = maybe_error {
-                        let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Process, &error);
-                        match decision {
-                            Decision::Abort => {
-                                debug!("Process: ABORT decision from monitoring. Component '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)), clid);
-                                ctx.clear_current_task();
-                        let monitor_result = monitor.process_copperlist(&ctx, #mission_mod::MONITOR_LAYOUT.view(&#mission_mod::collect_metadata(&culist)));
-                                cl_manager.end_of_processing(clid)?;
-                                monitor_result?;
-                                return Ok(());
-                            }
-                            Decision::Ignore => {
-                                debug!("Process: IGNORE decision from monitoring. Component '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
-                                cumsg_output.clear_payload();
-                            }
-                            Decision::Shutdown => {
-                                debug!("Process: SHUTDOWN decision from monitoring. Component '{}' errored out during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
-                                return Err(CuError::new_with_cause("Component errored out during process.", error));
-                            }
+        wrap_process_step_tokens(quote! {
+            #bridge_setup
+            let cumsg_output = #output_ref;
+            #call_sim_callback
+            if doit {
+                execution_probe.record(cu29::monitoring::ExecutionMarker {
+                    component_id: cu29::monitoring::ComponentId::new(#monitor_index),
+                    step: CuComponentState::Process,
+                    culistid: Some(clid),
+                });
+                cumsg_output.metadata.process_time.start = cu29::curuntime::perf_now(clock).into();
+                let maybe_error = {
+                    #rt_guard
+                    ctx.clear_current_task();
+                    bridge.receive(
+                        &ctx,
+                        &<#bridge_type as cu29::cubridge::CuBridge>::Rx::#const_ident,
+                        cumsg_output,
+                    )
+                };
+                cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
+                if let Err(error) = maybe_error {
+                    let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Process, &error);
+                    match decision {
+                        Decision::Abort => {
+                            debug!("Process: ABORT decision from monitoring. Component '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)), clid);
+                            #abort_process_step
+                        }
+                        Decision::Ignore => {
+                            debug!("Process: IGNORE decision from monitoring. Component '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                            cumsg_output.clear_payload();
+                        }
+                        Decision::Shutdown => {
+                            debug!("Process: SHUTDOWN decision from monitoring. Component '{}' errored out during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                            return Err(CuError::new_with_cause("Component errored out during process.", error));
                         }
                     }
                 }
             }
-        },
+        }),
         quote! {},
     )
 }
@@ -5254,8 +6329,10 @@ fn generate_bridge_tx_execution_tokens(
     output_pack_sizes: &[usize],
     mission_mod: &Ident,
     sim_mode: bool,
+    bridge_setup: proc_macro2::TokenStream,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let rt_guard = rtsan_guard_tokens();
+    let abort_process_step = abort_process_step_tokens();
     let channel = &bridge_spec.tx_channels[channel_index];
     let monitor_index = syn::Index::from(
         channel
@@ -5295,7 +6372,6 @@ fn generate_bridge_tx_execution_tokens(
     }
     let output_index = int2sliceindex(output_pack.culist_index);
     let output_ref = quote! { &mut msgs.#output_index };
-    let bridge_tuple_index = int2sliceindex(bridge_spec.tuple_index as u32);
     let bridge_type = runtime_bridge_type_for_spec(bridge_spec, sim_mode);
     let const_ident = &channel.const_ident;
     let enum_ident = Ident::new(
@@ -5317,11 +6393,7 @@ fn generate_bridge_tx_execution_tokens(
                     match decision {
                         Decision::Abort => {
                             debug!("Process: ABORT decision from monitoring. Component '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)), clid);
-                            ctx.clear_current_task();
-                        let monitor_result = monitor.process_copperlist(&ctx, #mission_mod::MONITOR_LAYOUT.view(&#mission_mod::collect_metadata(&culist)));
-                            cl_manager.end_of_processing(clid)?;
-                            monitor_result?;
-                            return Ok(());
+                            #abort_process_step
                         }
                         Decision::Ignore => {
                             debug!("Process: IGNORE decision from monitoring. Component '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
@@ -5341,52 +6413,46 @@ fn generate_bridge_tx_execution_tokens(
         quote! { let doit = true; }
     };
     (
-        quote! {
-            {
-                let bridge = &mut __cu_bridges.#bridge_tuple_index;
-                let cumsg_input = #input_ref;
-                let cumsg_output = #output_ref;
-                #call_sim_callback
-                if doit {
-                    execution_probe.record(cu29::monitoring::ExecutionMarker {
-                        component_id: cu29::monitoring::ComponentId::new(#monitor_index),
-                        step: CuComponentState::Process,
-                        culistid: Some(clid),
-                    });
-                    cumsg_output.metadata.process_time.start = cu29::curuntime::perf_now(clock).into();
-                    let maybe_error = {
-                        #rt_guard
-                        ctx.clear_current_task();
-                        bridge.send(
-                            &ctx,
-                            &<#bridge_type as cu29::cubridge::CuBridge>::Tx::#const_ident,
-                            &*cumsg_input,
-                        )
-                    };
-                    if let Err(error) = maybe_error {
-                        let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Process, &error);
-                        match decision {
-                            Decision::Abort => {
-                                debug!("Process: ABORT decision from monitoring. Component '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)), clid);
-                                ctx.clear_current_task();
-                        let monitor_result = monitor.process_copperlist(&ctx, #mission_mod::MONITOR_LAYOUT.view(&#mission_mod::collect_metadata(&culist)));
-                                cl_manager.end_of_processing(clid)?;
-                                monitor_result?;
-                                return Ok(());
-                            }
-                            Decision::Ignore => {
-                                debug!("Process: IGNORE decision from monitoring. Component '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
-                            }
-                            Decision::Shutdown => {
-                                debug!("Process: SHUTDOWN decision from monitoring. Component '{}' errored out during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
-                                return Err(CuError::new_with_cause("Component errored out during process.", error));
-                            }
+        wrap_process_step_tokens(quote! {
+            #bridge_setup
+            let cumsg_input = #input_ref;
+            let cumsg_output = #output_ref;
+            #call_sim_callback
+            if doit {
+                execution_probe.record(cu29::monitoring::ExecutionMarker {
+                    component_id: cu29::monitoring::ComponentId::new(#monitor_index),
+                    step: CuComponentState::Process,
+                    culistid: Some(clid),
+                });
+                cumsg_output.metadata.process_time.start = cu29::curuntime::perf_now(clock).into();
+                let maybe_error = {
+                    #rt_guard
+                    ctx.clear_current_task();
+                    bridge.send(
+                        &ctx,
+                        &<#bridge_type as cu29::cubridge::CuBridge>::Tx::#const_ident,
+                        &*cumsg_input,
+                    )
+                };
+                if let Err(error) = maybe_error {
+                    let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Process, &error);
+                    match decision {
+                        Decision::Abort => {
+                            debug!("Process: ABORT decision from monitoring. Component '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)), clid);
+                            #abort_process_step
+                        }
+                        Decision::Ignore => {
+                            debug!("Process: IGNORE decision from monitoring. Component '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                        }
+                        Decision::Shutdown => {
+                            debug!("Process: SHUTDOWN decision from monitoring. Component '{}' errored out during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                            return Err(CuError::new_with_cause("Component errored out during process.", error));
                         }
                     }
-                    cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
                 }
+                cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
             }
-        },
+        }),
         quote! {},
     )
 }

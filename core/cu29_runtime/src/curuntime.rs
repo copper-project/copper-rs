@@ -456,6 +456,11 @@ impl KeyFramesManager {
         self.logger.is_some() && culistid.is_multiple_of(self.keyframe_interval as u64)
     }
 
+    #[inline]
+    pub fn captures_keyframe(&self, culistid: u64) -> bool {
+        self.is_keyframe(culistid)
+    }
+
     pub fn reset(&mut self, culistid: u64, clock: &RobotClock) {
         if self.is_keyframe(culistid) {
             // If a recorded keyframe was preloaded for this CL, keep it as-is.
@@ -692,6 +697,23 @@ impl<
     #[inline]
     pub fn record_execution_marker(&self, marker: ExecutionMarker) {
         self.execution_probe.record(marker);
+    }
+
+    /// Returns a shared reference to the concrete runtime execution probe.
+    ///
+    /// The generated runtime uses this when it needs a uniform
+    /// `&RuntimeExecutionProbe` view across `std` and `no_std` builds.
+    #[inline]
+    pub fn execution_probe_ref(&self) -> &RuntimeExecutionProbe {
+        #[cfg(feature = "std")]
+        {
+            self.execution_probe.as_ref()
+        }
+
+        #[cfg(not(feature = "std"))]
+        {
+            &self.execution_probe
+        }
     }
 
     // FIXME(gbin): this became REALLY ugly with no-std
