@@ -7,7 +7,7 @@ use std::time::Instant;
 pub mod payloads;
 pub mod tasks;
 
-pub use payloads::MandelbrotRow;
+pub use payloads::MandelbrotStripe;
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct App {}
@@ -59,9 +59,15 @@ fn log_summary(
 ) {
     let frames_emitted = tasks::frames_emitted();
     let last_digest = tasks::last_frame_digest();
+    let stripes = settings.total_stripes() as f64;
     let rows = settings.total_rows() as f64;
     let elapsed_s = elapsed.as_secs_f64();
     let cl_hz = if elapsed_s > 0.0 {
+        stripes / elapsed_s
+    } else {
+        0.0
+    };
+    let row_hz = if elapsed_s > 0.0 {
         rows / elapsed_s
     } else {
         0.0
@@ -73,14 +79,16 @@ fn log_summary(
     };
 
     info!(
-        "parallel-mandelbrot summary: mission={} logger={} frames_emitted={} expected_frames={} rows={} elapsed_s={:.3} cl_hz={:.2} frame_hz={:.2} last_frame_digest=0x{:016x}",
+        "parallel-mandelbrot summary: mission={} logger={} frames_emitted={} expected_frames={} stripes={} rows={} elapsed_s={:.3} cl_hz={:.2} row_hz={:.2} frame_hz={:.2} last_frame_digest=0x{:016x}",
         mission,
         logger_path.display(),
         frames_emitted,
         settings.frames,
+        settings.total_stripes(),
         settings.total_rows(),
         elapsed_s,
         cl_hz,
+        row_hz,
         frame_hz,
         last_digest
     );

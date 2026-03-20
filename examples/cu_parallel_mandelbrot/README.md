@@ -6,13 +6,13 @@ It is not pretending Mandelbrot is a robotics task. The point is to isolate sche
 
 ## What The Graph Does
 
-- `src` emits one `(frame, row)` work item per CopperList
-- `band_*` tasks advance that row through the Mandelbrot iteration pipeline
-- `frames` assembles completed rows into a full `CuImage<Vec<u8>>`
+- `src` emits one `(frame, stripe)` work item per CopperList
+- `band_*` tasks advance one stripe through the Mandelbrot iteration pipeline
+- `frames` assembles completed stripes into a full `CuImage<Vec<u8>>`
 - `image_drain` keeps the `log_only` mission terminal
 - `rerun_sink` adds live Rerun visualization in the `rerun_live` mission
 
-The hot row payload is handle-backed, so the graph stresses the scheduler and compute stages instead of spending its time copying row buffers around.
+The hot stripe payload is handle-backed, so the graph stresses the scheduler and compute stages instead of spending its time copying stripe buffers around.
 
 The example also enables Copper's terminal monitor. When you run it in a real terminal, use:
 - `2` or `DAG` for the graph view
@@ -26,11 +26,11 @@ The example also enables Copper's terminal monitor. When you run it in a real te
 If you want to change parameters, start here:
 
 - [copperconfig.ron](/home/gbin/projects/copper/copper-rs.checkpoints/examples/cu_parallel_mandelbrot/copperconfig.ron)
-  This is the main control surface: image size, frame count, zoom step, number of iteration bands, per-band work split, logging, monitor, and `copperlist_count`.
+  This is the main control surface: image size, `stripe_rows`, frame count, zoom step, number of iteration bands, per-band work split, logging, monitor, and `copperlist_count`.
 - [tasks.rs](/home/gbin/projects/copper/copper-rs.checkpoints/examples/cu_parallel_mandelbrot/src/tasks.rs)
   Source, compute bands, frame assembler, Rerun sink, and the TUI status text all live here.
 - [payloads.rs](/home/gbin/projects/copper/copper-rs.checkpoints/examples/cu_parallel_mandelbrot/src/payloads.rs)
-  The handle-backed in-flight row payload lives here.
+  The handle-backed in-flight stripe payload lives here.
 - [lib.rs](/home/gbin/projects/copper/copper-rs.checkpoints/examples/cu_parallel_mandelbrot/src/lib.rs)
   Mission runners, logger setup, and run summaries live here.
 - [justfile](/home/gbin/projects/copper/copper-rs.checkpoints/examples/cu_parallel_mandelbrot/justfile)
@@ -61,8 +61,8 @@ Use the justfile itself for the full recipe list and exact command lines.
 ## What To Watch
 
 - Throughput: compare `just serial` vs `just parallel`
-- Determinism: the band tasks and assembler check strict row order and fail if mutable state is observed out of order
+- Determinism: the band tasks and assembler check strict stripe order and fail if mutable state is observed out of order
 - Monitor feedback: the DAG view shows per-stage status text while the latency view shows per-stage timing
-- Logs: only completed frame images are logged; intermediate row traffic is intentionally not logged
+- Logs: only completed frame images are logged; intermediate stripe traffic is intentionally not logged
 
 Logs are written under [logs](/home/gbin/projects/copper/copper-rs.checkpoints/examples/cu_parallel_mandelbrot/logs).

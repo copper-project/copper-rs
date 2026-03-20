@@ -1,4 +1,4 @@
-use crate::payloads::MandelbrotRow;
+use crate::payloads::MandelbrotStripe;
 use cu_sensor_payloads::{CuImage, CuImageBufferFormat};
 use cu29::prelude::*;
 use rerun::{ChannelDatatype, ColorModel, Image, RecordingStream, RecordingStreamBuilder};
@@ -19,6 +19,8 @@ pub struct BenchmarkSettings {
     pub width: u32,
     /// Output image height in pixels.
     pub height: u32,
+    /// Number of output rows grouped into one CopperList stripe.
+    pub stripe_rows: u32,
     /// Number of zoom frames to emit before stopping the runtime.
     pub frames: u32,
     /// Maximum Mandelbrot iterations per pixel.
@@ -38,6 +40,7 @@ impl BenchmarkSettings {
         Ok(Self {
             width: required_param::<u64>(config, "width")? as u32,
             height: required_param::<u64>(config, "height")? as u32,
+            stripe_rows: required_param::<u64>(config, "stripe_rows")? as u32,
             frames: required_param::<u64>(config, "frames")? as u32,
             max_iter: required_param::<u64>(config, "max_iter")? as u16,
             center_x: required_param::<f64>(config, "center_x")?,
@@ -45,6 +48,16 @@ impl BenchmarkSettings {
             initial_span_x: required_param::<f64>(config, "initial_span_x")?,
             zoom_ratio: required_param::<f64>(config, "zoom_ratio")?,
         })
+    }
+
+    #[inline]
+    pub fn stripes_per_frame(self) -> u32 {
+        self.height.div_ceil(self.stripe_rows.max(1))
+    }
+
+    #[inline]
+    pub fn total_stripes(self) -> u64 {
+        self.frames as u64 * self.stripes_per_frame() as u64
     }
 
     #[inline]
@@ -132,31 +145,41 @@ pub fn last_frame_digest() -> u64 {
     LAST_FRAME_DIGEST.load(Ordering::Acquire)
 }
 
-fn source_status(settings: BenchmarkSettings, frame_index: u32, row_index: u32) -> String {
+fn source_status(
+    settings: BenchmarkSettings,
+    frame_index: u32,
+    stripe_index: u32,
+    start_row: u32,
+    row_count: u32,
+) -> String {
     format!(
-        "src f{:02}/{:02} r{:04}",
+        "src f{:02}/{:02} s{:03}/{:03} r{:04}-{:04}",
         frame_index + 1,
         settings.frames,
-        row_index + 1
+        stripe_index + 1,
+        settings.stripes_per_frame(),
+        start_row + 1,
+        start_row + row_count
     )
 }
 
-fn band_status(stage_id: u64, row: &MandelbrotRow) -> String {
+fn band_status(stage_id: u64, stripe: &MandelbrotStripe) -> String {
     format!(
-        "b{} f{:02} r{:04} i{:03}",
+        "b{} f{:02} s{:03} i{:03}",
         stage_id,
-        row.frame_index + 1,
-        row.row_index + 1,
-        row.completed_iters
+        stripe.frame_index + 1,
+        stripe.stripe_index + 1,
+        stripe.completed_iters
     )
 }
 
-fn assembler_status(frame_index: u32, total_frames: u32, row_index: u32) -> String {
+fn assembler_status(frame_index: u32, total_frames: u32, start_row: u32, row_count: u32) -> String {
     format!(
-        "asm f{:02}/{:02} r{:04}",
+        "asm f{:02}/{:02} r{:04}-{:04}",
         frame_index + 1,
         total_frames,
-        row_index + 1
+        start_row + 1,
+        start_row + row_count
     )
 }
 
@@ -164,13 +187,13 @@ fn emitted_status(frame_index: u32, total_frames: u32) -> String {
     format!("emit f{:02}/{:02}", frame_index + 1, total_frames)
 }
 
-/// Source emitting one Mandelbrot row per CopperList.
+/// Source emitting one Mandelbrot stripe per CopperList.
 ///
-/// It owns the reusable row-state pools so the compute stages can mutate the
+/// It owns the reusable stripe-state pools so the compute stages can mutate the
 /// same buffers across the pipeline without cloning the heavy arrays.
 #[derive(Reflect)]
 #[reflect(from_reflect = false)]
-pub struct MandelbrotRowSource {
+pub struct MandelbrotStripeSource {
     #[reflect(ignore)]
     settings: BenchmarkSettings,
     next_linear_index: u64,
@@ -184,41 +207,57 @@ pub struct MandelbrotRowSource {
     pixels_pool: Arc<CuHostMemoryPool<Vec<u8>>>,
 }
 
-impl Freezable for MandelbrotRowSource {}
+impl Freezable for MandelbrotStripeSource {}
 
-impl CuSrcTask for MandelbrotRowSource {
+impl CuSrcTask for MandelbrotStripeSource {
     type Resources<'r> = ();
-    type Output<'m> = output_msg!(MandelbrotRow);
+    type Output<'m> = output_msg!(MandelbrotStripe);
 
     fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
-        let config = config.ok_or_else(|| CuError::from("MandelbrotRowSource requires config"))?;
+        let config =
+            config.ok_or_else(|| CuError::from("MandelbrotStripeSource requires config"))?;
         let settings = BenchmarkSettings::from_component_config(config)?;
         let pool_slots = optional_param::<u64>(config, "pool_slots", 8)? as usize;
         let width = settings.width as usize;
-        let rgb_len = width * 3;
+        let stripe_rows = settings.stripe_rows as usize;
+        let pixel_slots = width * stripe_rows;
+        let rgb_len = pixel_slots * 3;
 
         Ok(Self {
             settings,
             next_linear_index: 0,
-            z_re_pool: CuHostMemoryPool::new("mandelbrot-z-re", pool_slots, || vec![0.0; width])?,
-            z_im_pool: CuHostMemoryPool::new("mandelbrot-z-im", pool_slots, || vec![0.0; width])?,
-            escape_pool: CuHostMemoryPool::new("mandelbrot-escape", pool_slots, || vec![0; width])?,
+            z_re_pool: CuHostMemoryPool::new("mandelbrot-z-re", pool_slots, || {
+                vec![0.0; pixel_slots]
+            })?,
+            z_im_pool: CuHostMemoryPool::new("mandelbrot-z-im", pool_slots, || {
+                vec![0.0; pixel_slots]
+            })?,
+            escape_pool: CuHostMemoryPool::new("mandelbrot-escape", pool_slots, || {
+                vec![0; pixel_slots]
+            })?,
             pixels_pool: CuHostMemoryPool::new("mandelbrot-rgb", pool_slots, || vec![0; rgb_len])?,
         })
     }
 
     fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
-        if self.next_linear_index >= self.settings.total_rows() {
+        if self.next_linear_index >= self.settings.total_stripes() {
             output.clear_payload();
             return Ok(());
         }
 
+        let stripes_per_frame = self.settings.stripes_per_frame() as u64;
         let linear_index = self.next_linear_index;
-        let frame_index = (linear_index / self.settings.height as u64) as u32;
-        let row_index = (linear_index % self.settings.height as u64) as u32;
+        let frame_index = (linear_index / stripes_per_frame) as u32;
+        let stripe_index = (linear_index % stripes_per_frame) as u32;
+        let start_row = stripe_index * self.settings.stripe_rows;
+        let row_count = self
+            .settings
+            .height
+            .saturating_sub(start_row)
+            .min(self.settings.stripe_rows);
         let span_x =
             self.settings.initial_span_x * self.settings.zoom_ratio.powf(frame_index as f64);
 
@@ -244,9 +283,12 @@ impl CuSrcTask for MandelbrotRowSource {
         escape_iter.with_inner_mut(|inner| inner.fill(0));
         pixels_rgb.with_inner_mut(|inner| inner.fill(0));
 
-        let row = MandelbrotRow {
+        let stripe = MandelbrotStripe {
             frame_index,
-            row_index,
+            stripe_index,
+            start_row,
+            row_count,
+            stripe_rows: self.settings.stripe_rows,
             width: self.settings.width,
             height: self.settings.height,
             center_x: self.settings.center_x,
@@ -261,13 +303,17 @@ impl CuSrcTask for MandelbrotRowSource {
         };
 
         output.tov = Tov::Time(ctx.now());
-        output.set_payload(row);
-        output
-            .metadata
-            .set_status(source_status(self.settings, frame_index, row_index));
+        output.set_payload(stripe);
+        output.metadata.set_status(source_status(
+            self.settings,
+            frame_index,
+            stripe_index,
+            start_row,
+            row_count,
+        ));
 
         self.next_linear_index += 1;
-        if self.next_linear_index == self.settings.total_rows() {
+        if self.next_linear_index == self.settings.total_stripes() {
             request_runtime_stop()?;
         }
 
@@ -277,7 +323,7 @@ impl CuSrcTask for MandelbrotRowSource {
 
 /// One stateful Mandelbrot iteration band.
 ///
-/// Each task is intentionally mutable and checks that rows arrive in strict
+/// Each task is intentionally mutable and checks that stripes arrive in strict
 /// frame-major order, which makes any scheduler-induced state corruption fail
 /// immediately instead of silently producing a pretty but invalid image.
 #[derive(Reflect)]
@@ -292,8 +338,8 @@ impl Freezable for MandelbrotIterBand {}
 
 impl CuTask for MandelbrotIterBand {
     type Resources<'r> = ();
-    type Input<'m> = input_msg!(MandelbrotRow);
-    type Output<'m> = output_msg!(MandelbrotRow);
+    type Input<'m> = input_msg!(MandelbrotStripe);
+    type Output<'m> = output_msg!(MandelbrotStripe);
 
     fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
@@ -324,7 +370,7 @@ impl CuTask for MandelbrotIterBand {
         let linear_index = payload.linear_index();
         if linear_index != self.expected_linear_index {
             return Err(CuError::from(format!(
-                "stage {} observed out-of-order row: expected {}, got {}",
+                "stage {} observed out-of-order stripe: expected {}, got {}",
                 self.band.stage_id, self.expected_linear_index, linear_index
             )));
         }
@@ -334,40 +380,45 @@ impl CuTask for MandelbrotIterBand {
             .completed_iters
             .saturating_add(self.band.band_iters)
             .min(next.max_iter);
-        let row_im = next.row_imag();
         let width = next.width as usize;
+        let row_count = next.row_count as usize;
         let start_iter = next.completed_iters;
 
         next.z_re.with_inner_mut(|z_re| {
             next.z_im.with_inner_mut(|z_im| {
                 next.escape_iter.with_inner_mut(|escape_iter| {
-                    for x in 0..width {
-                        let c_re = next.pixel_real(x);
-                        let mut zr = z_re[x];
-                        let mut zi = z_im[x];
-                        let mut escaped = escape_iter[x] != 0;
+                    for local_row in 0..row_count {
+                        let row_base = local_row * width;
+                        let row_im = next.row_imag(local_row as u32);
+                        for x in 0..width {
+                            let index = row_base + x;
+                            let c_re = next.pixel_real(x);
+                            let mut zr = z_re[index];
+                            let mut zi = z_im[index];
+                            let mut escaped = escape_iter[index] != 0;
 
-                        for iter in start_iter..target_iters {
-                            if escaped {
-                                (zr, zi) = advance_escape_shadow(zr, zi, c_re, row_im);
-                                continue;
+                            for iter in start_iter..target_iters {
+                                if escaped {
+                                    (zr, zi) = advance_escape_shadow(zr, zi, c_re, row_im);
+                                    continue;
+                                }
+
+                                let zr2 = zr * zr;
+                                let zi2 = zi * zi;
+                                if zr2 + zi2 > 4.0 {
+                                    escape_iter[index] = iter;
+                                    escaped = true;
+                                    (zr, zi) = advance_escape_shadow(zr, zi, c_re, row_im);
+                                    continue;
+                                }
+
+                                zi = 2.0 * zr * zi + row_im;
+                                zr = zr2 - zi2 + c_re;
                             }
 
-                            let zr2 = zr * zr;
-                            let zi2 = zi * zi;
-                            if zr2 + zi2 > 4.0 {
-                                escape_iter[x] = iter;
-                                escaped = true;
-                                (zr, zi) = advance_escape_shadow(zr, zi, c_re, row_im);
-                                continue;
-                            }
-
-                            zi = 2.0 * zr * zi + row_im;
-                            zr = zr2 - zi2 + c_re;
+                            z_re[index] = zr;
+                            z_im[index] = zi;
                         }
-
-                        z_re[x] = zr;
-                        z_im[x] = zi;
                     }
                 });
             });
@@ -378,12 +429,16 @@ impl CuTask for MandelbrotIterBand {
         if self.band.finalize {
             next.pixels_rgb.with_inner_mut(|pixels| {
                 next.escape_iter.with_inner(|escape_iter| {
-                    for (x, escape) in escape_iter.iter().copied().enumerate() {
-                        let rgb = colorize_escape(escape, next.max_iter);
-                        let base = x * 3;
-                        pixels[base] = rgb[0];
-                        pixels[base + 1] = rgb[1];
-                        pixels[base + 2] = rgb[2];
+                    for local_row in 0..row_count {
+                        let row_base = local_row * width;
+                        let rgb_base = local_row * width * 3;
+                        for x in 0..width {
+                            let rgb = colorize_escape(escape_iter[row_base + x], next.max_iter);
+                            let pixel_base = rgb_base + x * 3;
+                            pixels[pixel_base] = rgb[0];
+                            pixels[pixel_base + 1] = rgb[1];
+                            pixels[pixel_base + 2] = rgb[2];
+                        }
                     }
                 });
             });
@@ -400,9 +455,9 @@ impl CuTask for MandelbrotIterBand {
 
 /// Stateful frame assembler that emits a Copper image only when a full frame is complete.
 ///
-/// Intermediate row traffic stays off the unified log; only the completed image
-/// messages from this task are logged, which keeps the benchmark visually useful
-/// without turning the log into a row-state dump.
+/// Intermediate stripe traffic stays off the unified log; only the completed
+/// image messages from this task are logged, which keeps the benchmark visually
+/// useful without turning the log into a stripe-state dump.
 #[derive(Reflect)]
 #[reflect(from_reflect = false)]
 pub struct FrameAssembler {
@@ -418,7 +473,7 @@ impl Freezable for FrameAssembler {}
 
 impl CuTask for FrameAssembler {
     type Resources<'r> = ();
-    type Input<'m> = input_msg!(MandelbrotRow);
+    type Input<'m> = input_msg!(MandelbrotStripe);
     type Output<'m> = output_msg!(CuImage<Vec<u8>>);
 
     fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
@@ -453,30 +508,34 @@ impl CuTask for FrameAssembler {
         let linear_index = payload.linear_index();
         if linear_index != self.expected_linear_index {
             return Err(CuError::from(format!(
-                "frame assembler observed out-of-order row: expected {}, got {}",
+                "frame assembler observed out-of-order stripe: expected {}, got {}",
                 self.expected_linear_index, linear_index
             )));
         }
         if payload.width != self.width || payload.height != self.height {
             return Err(CuError::from(
-                "frame assembler received a row with mismatched dimensions",
+                "frame assembler received a stripe with mismatched dimensions",
             ));
         }
 
         let row_stride = self.width as usize * 3;
-        let frame_offset = payload.row_index as usize * row_stride;
-        payload.pixels_rgb.with_inner(|row_pixels| {
-            self.current_frame[frame_offset..frame_offset + row_stride]
-                .copy_from_slice(&row_pixels[..row_stride]);
+        payload.pixels_rgb.with_inner(|stripe_pixels| {
+            for local_row in 0..payload.row_count as usize {
+                let frame_offset = (payload.start_row as usize + local_row) * row_stride;
+                let stripe_offset = local_row * row_stride;
+                self.current_frame[frame_offset..frame_offset + row_stride]
+                    .copy_from_slice(&stripe_pixels[stripe_offset..stripe_offset + row_stride]);
+            }
         });
 
         output.clear_payload();
         output.metadata.set_status(assembler_status(
             payload.frame_index,
             self.frames,
-            payload.row_index,
+            payload.start_row,
+            payload.row_count,
         ));
-        if payload.row_index + 1 == self.height {
+        if payload.start_row + payload.row_count == self.height {
             if payload.frame_index >= self.frames {
                 return Err(CuError::from(
                     "frame assembler received a frame past the configured limit",

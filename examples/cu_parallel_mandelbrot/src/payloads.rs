@@ -5,18 +5,24 @@ use bincode::{Decode, Encode};
 use cu29::prelude::*;
 use serde::{Deserialize, Serialize, Serializer};
 
-/// In-flight Mandelbrot state for one `(frame, row)` CopperList.
+/// In-flight Mandelbrot state for one `(frame, stripe)` CopperList.
 ///
 /// The large arrays live behind Copper handles so the benchmark stresses the
-/// scheduler and the compute stages instead of paying for row copies between
-/// tasks.
+/// scheduler and the compute stages instead of paying for stripe copies
+/// between tasks.
 #[derive(Debug, Clone, Reflect)]
 #[reflect(opaque, from_reflect = false)]
-pub struct MandelbrotRow {
-    /// Zoom frame index this row belongs to.
+pub struct MandelbrotStripe {
+    /// Zoom frame index this stripe belongs to.
     pub frame_index: u32,
-    /// Row index within the frame.
-    pub row_index: u32,
+    /// Stripe index within the frame.
+    pub stripe_index: u32,
+    /// First image row covered by this stripe.
+    pub start_row: u32,
+    /// Number of valid rows in this stripe.
+    pub row_count: u32,
+    /// Configured stripe height used to compute frame-major order.
+    pub stripe_rows: u32,
     /// Image width in pixels.
     pub width: u32,
     /// Image height in pixels.
@@ -31,20 +37,25 @@ pub struct MandelbrotRow {
     pub max_iter: u16,
     /// Number of iterations already completed by upstream compute stages.
     pub completed_iters: u16,
-    /// Mutable `z.re` state for every pixel in the row.
+    /// Mutable `z.re` state for every pixel in the stripe.
     pub z_re: CuHandle<Vec<f64>>,
-    /// Mutable `z.im` state for every pixel in the row.
+    /// Mutable `z.im` state for every pixel in the stripe.
     pub z_im: CuHandle<Vec<f64>>,
     /// Escape iteration for every pixel, or `0` while the pixel is still active.
     pub escape_iter: CuHandle<Vec<u16>>,
-    /// Final RGB bytes for the row; filled by the last compute stage.
+    /// Final RGB bytes for the stripe; filled by the last compute stage.
     pub pixels_rgb: CuHandle<Vec<u8>>,
 }
 
-impl MandelbrotRow {
+impl MandelbrotStripe {
+    #[inline]
+    pub fn stripes_per_frame(&self) -> u32 {
+        self.height.div_ceil(self.stripe_rows.max(1))
+    }
+
     #[inline]
     pub fn linear_index(&self) -> u64 {
-        self.frame_index as u64 * self.height as u64 + self.row_index as u64
+        self.frame_index as u64 * self.stripes_per_frame() as u64 + self.stripe_index as u64
     }
 
     #[inline]
@@ -60,23 +71,27 @@ impl MandelbrotRow {
     }
 
     #[inline]
-    pub fn row_imag(&self) -> f64 {
+    pub fn row_imag(&self, local_row: u32) -> f64 {
         let height = self.height.max(2) as f64;
-        let normalized = self.row_index as f64 / (height - 1.0);
+        let row_index = self.start_row + local_row;
+        let normalized = row_index as f64 / (height - 1.0);
         self.center_y + (normalized - 0.5) * self.span_y()
     }
 
     #[inline]
-    pub fn row_rgb_len(&self) -> usize {
-        self.width as usize * 3
+    pub fn stripe_rgb_len(&self) -> usize {
+        self.width as usize * self.row_count as usize * 3
     }
 }
 
-impl Default for MandelbrotRow {
+impl Default for MandelbrotStripe {
     fn default() -> Self {
         Self {
             frame_index: 0,
-            row_index: 0,
+            stripe_index: 0,
+            start_row: 0,
+            row_count: 0,
+            stripe_rows: 0,
             width: 0,
             height: 0,
             center_x: 0.0,
@@ -92,10 +107,13 @@ impl Default for MandelbrotRow {
     }
 }
 
-impl Encode for MandelbrotRow {
+impl Encode for MandelbrotStripe {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         Encode::encode(&self.frame_index, encoder)?;
-        Encode::encode(&self.row_index, encoder)?;
+        Encode::encode(&self.stripe_index, encoder)?;
+        Encode::encode(&self.start_row, encoder)?;
+        Encode::encode(&self.row_count, encoder)?;
+        Encode::encode(&self.stripe_rows, encoder)?;
         Encode::encode(&self.width, encoder)?;
         Encode::encode(&self.height, encoder)?;
         Encode::encode(&self.center_x, encoder)?;
@@ -111,11 +129,14 @@ impl Encode for MandelbrotRow {
     }
 }
 
-impl Decode<()> for MandelbrotRow {
+impl Decode<()> for MandelbrotStripe {
     fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
         Ok(Self {
             frame_index: Decode::decode(decoder)?,
-            row_index: Decode::decode(decoder)?,
+            stripe_index: Decode::decode(decoder)?,
+            start_row: Decode::decode(decoder)?,
+            row_count: Decode::decode(decoder)?,
+            stripe_rows: Decode::decode(decoder)?,
             width: Decode::decode(decoder)?,
             height: Decode::decode(decoder)?,
             center_x: Decode::decode(decoder)?,
@@ -131,16 +152,19 @@ impl Decode<()> for MandelbrotRow {
     }
 }
 
-impl Serialize for MandelbrotRow {
+impl Serialize for MandelbrotStripe {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         use serde::ser::SerializeStruct;
 
-        let mut state = serializer.serialize_struct("MandelbrotRow", 13)?;
+        let mut state = serializer.serialize_struct("MandelbrotStripe", 16)?;
         state.serialize_field("frame_index", &self.frame_index)?;
-        state.serialize_field("row_index", &self.row_index)?;
+        state.serialize_field("stripe_index", &self.stripe_index)?;
+        state.serialize_field("start_row", &self.start_row)?;
+        state.serialize_field("row_count", &self.row_count)?;
+        state.serialize_field("stripe_rows", &self.stripe_rows)?;
         state.serialize_field("width", &self.width)?;
         state.serialize_field("height", &self.height)?;
         state.serialize_field("center_x", &self.center_x)?;
@@ -162,15 +186,18 @@ impl Serialize for MandelbrotRow {
     }
 }
 
-impl<'de> Deserialize<'de> for MandelbrotRow {
+impl<'de> Deserialize<'de> for MandelbrotStripe {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         #[derive(Deserialize)]
-        struct MandelbrotRowWire {
+        struct MandelbrotStripeWire {
             frame_index: u32,
-            row_index: u32,
+            stripe_index: u32,
+            start_row: u32,
+            row_count: u32,
+            stripe_rows: u32,
             width: u32,
             height: u32,
             center_x: f64,
@@ -184,10 +211,13 @@ impl<'de> Deserialize<'de> for MandelbrotRow {
             pixels_rgb: Vec<u8>,
         }
 
-        let wire = MandelbrotRowWire::deserialize(deserializer)?;
+        let wire = MandelbrotStripeWire::deserialize(deserializer)?;
         Ok(Self {
             frame_index: wire.frame_index,
-            row_index: wire.row_index,
+            stripe_index: wire.stripe_index,
+            start_row: wire.start_row,
+            row_count: wire.row_count,
+            stripe_rows: wire.stripe_rows,
             width: wire.width,
             height: wire.height,
             center_x: wire.center_x,
