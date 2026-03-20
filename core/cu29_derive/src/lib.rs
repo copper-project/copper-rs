@@ -801,8 +801,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let std = false;
     let signal_handler = cfg!(feature = "signal-handler");
     let parallel_rt_enabled = cfg!(feature = "parallel-rt");
-    let async_cl_io_enabled = cfg!(feature = "async-cl-io");
-
     let rt_guard = rtsan_guard_tokens();
 
     // Custom parser for the attribute arguments
@@ -2202,8 +2200,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         preprocess_calls.extend(task_preprocess_calls);
         let mut postprocess_calls = task_postprocess_calls;
         postprocess_calls.extend(bridge_postprocess_calls);
-        let parallel_rt_run_supported =
-            std && parallel_rt_enabled && !sim_mode && !async_cl_io_enabled;
+        let parallel_rt_run_supported = std && parallel_rt_enabled && !sim_mode;
         let parallel_preprocess_calls: Vec<proc_macro2::TokenStream> = if parallel_rt_run_supported
         {
             let bridge_calls = culist_bridge_specs.iter().map(|spec| {
@@ -2735,7 +2732,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     step_rt.kf_manager_ptr,
                                     step_rt.kf_lock,
                                 );
-                                let culist = unsafe { &mut *step_rt.culist };
+                                let culist = &mut *step_rt.culist;
                                 let clid = step_rt.clid;
                                 let ctx = &mut step_rt.ctx;
                                 let msgs = &mut culist.msgs.0;
@@ -2949,7 +2946,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     bridge_locks: &'a ParallelBridgeLocks,
                     kf_manager_ptr: ParallelSharedPtr<cu29::curuntime::KeyFramesManager>,
                     kf_lock: &'a std::sync::Mutex<()>,
-                    culist: *mut CuList,
+                    culist: &'a mut CuList,
                     clid: u64,
                     ctx: cu29::context::CuContext,
                 }
@@ -2969,19 +2966,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 struct ParallelWorkerJob {
                     clid: u64,
-                    culist: *mut CuList,
+                    culist: Box<CuList>,
                 }
 
                 struct ParallelWorkerResult {
                     clid: u64,
-                    culist: *mut CuList,
+                    culist: Option<Box<CuList>>,
                     outcome: cu29::parallel_rt::ProcessStepResult,
                     raw_payload_bytes: u64,
                     handle_bytes: u64,
                 }
-
-                unsafe impl Send for ParallelWorkerJob {}
-                unsafe impl Send for ParallelWorkerResult {}
 
                 #[inline(always)]
                 fn assert_parallel_rt_send_bounds()
@@ -3192,6 +3186,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     let kf_manager_ptr =
                         #mission_mod::ParallelSharedPtr::new(&mut runtime.keyframes_manager as *mut _);
                     let kf_lock = std::sync::Arc::new(std::sync::Mutex::new(()));
+                    let mut free_copperlists =
+                        cu29::curuntime::allocate_boxed_copperlists::<CuStampedDataSet, #copperlist_count_tokens>();
                     let start_clid = cl_manager.next_cl_id();
                     parallel_rt.reset_cursors(start_clid);
 
@@ -3240,6 +3236,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         let execution_probe = unsafe { execution_probe_ptr.as_ref() };
                                         let monitor = unsafe { monitor_ptr.as_ref() };
                                         let parallel_rt = unsafe { parallel_rt_ptr.as_ref() };
+                                        let mut culist = job.culist;
                                         let mut step_rt = #mission_mod::ParallelProcessStepRuntime {
                                             clock: &clock,
                                             execution_probe,
@@ -3250,7 +3247,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             bridge_locks: bridge_locks.as_ref(),
                                             kf_manager_ptr,
                                             kf_lock: kf_lock.as_ref(),
-                                            culist: job.culist,
+                                            culist: culist.as_mut(),
                                             clid: job.clid,
                                             ctx: cu29::context::CuContext::builder(clock.clone())
                                                 .cl_id(job.clid)
@@ -3262,16 +3259,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             parallel_rt,
                                             shutdown.as_ref(),
                                         );
+                                        drop(step_rt);
                                         let (raw_payload_bytes, handle_bytes) = match outcome {
                                             Ok(cu29::parallel_rt::ProcessStepOutcome::Continue) => {
-                                                let culist = unsafe { &*job.culist };
-                                                #mission_mod::compute_payload_bytes(culist)
+                                                #mission_mod::compute_payload_bytes(&culist)
                                             }
                                             _ => (0, 0),
                                         };
                                         #mission_mod::ParallelWorkerResult {
                                             clid: job.clid,
-                                            culist: job.culist,
+                                            culist: Some(culist),
                                             outcome,
                                             raw_payload_bytes,
                                             handle_bytes,
@@ -3285,7 +3282,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             cu29::monitoring::panic_payload_to_string(payload.as_ref());
                                         #mission_mod::ParallelWorkerResult {
                                             clid: job.clid,
-                                            culist: job.culist,
+                                            culist: None,
                                             outcome: Err(CuError::from(format!(
                                                 "Panic while processing CopperList #{}: {}",
                                                 job.clid, panic_message
@@ -3310,14 +3307,19 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     let mut next_dispatch_deadline = cu29::curuntime::perf_now(clock);
                     let mut in_flight = 0usize;
                     let mut stop_launching = false;
-                    let mut next_commit_clid = cl_manager.next_cl_id();
+                    let mut next_launch_clid = start_clid;
+                    let mut next_commit_clid = start_clid;
                     let mut pending_results =
                         std::collections::BTreeMap::<u64, #mission_mod::ParallelWorkerResult>::new();
                     let mut active_keyframe_clid: Option<u64> = None;
 
                     loop {
+                        while let Some(recycled_culist) = cl_manager.try_reclaim_boxed()? {
+                            free_copperlists.push(recycled_culist);
+                        }
+
                         if !stop_launching && !shutdown.load(Ordering::Acquire) {
-                            let next_clid = cl_manager.next_cl_id();
+                            let next_clid = next_launch_clid;
                             let now = cu29::curuntime::perf_now(clock);
                             let rate_ready = dispatch_period
                                 .map(|_| now >= next_dispatch_deadline)
@@ -3331,6 +3333,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             if in_flight < parallel_rt.in_flight_limit()
                                 && rate_ready
                                 && keyframe_ready
+                                && !free_copperlists.is_empty()
                             {
                                 let should_launch = {
                                     let preprocess_ctx = cu29::context::CuContext::builder(clock.clone())
@@ -3361,9 +3364,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 }
 
                                 if should_launch {
-                                    let culist = cl_manager.create()?;
-                                    let clid = culist.id;
-                                    debug_assert_eq!(clid, next_clid);
+                                    let mut culist = free_copperlists
+                                        .pop()
+                                        .expect("parallel CopperList pool unexpectedly empty");
+                                    let clid = next_clid;
+                                    culist.id = clid;
+                                    culist.change_state(cu29::copperlist::CopperListState::Initialized);
                                     {
                                         let _keyframe_lock =
                                             kf_lock.lock().expect("parallel keyframe lock poisoned");
@@ -3375,16 +3381,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     }
                                     culist.change_state(cu29::copperlist::CopperListState::Processing);
                                     culist.msgs.init_zeroed();
-                                    let culist_ptr = culist as *mut #mission_mod::CuList;
                                     job_tx
                                         .send(Some(#mission_mod::ParallelWorkerJob {
                                             clid,
-                                            culist: culist_ptr,
+                                            culist,
                                         }))
                                         .map_err(|e| {
                                             CuError::from("Failed to enqueue CopperList for parallel processing")
                                                 .add_cause(e.to_string().as_str())
                                         })?;
+                                    next_launch_clid += 1;
                                     in_flight += 1;
                                 }
 
@@ -3398,6 +3404,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         if in_flight == 0 {
                             if stop_launching || shutdown.load(Ordering::Acquire) {
                                 break;
+                            }
+
+                            if free_copperlists.is_empty() {
+                                free_copperlists.push(cl_manager.wait_reclaim_boxed()?);
+                                continue;
                             }
 
                             if let Some(_period) = dispatch_period {
@@ -3462,9 +3473,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 )));
                             }
 
-                            let culist = unsafe { &mut *worker_result.culist };
+                            let mut worker_result = worker_result;
                             match worker_result.outcome {
                                 Ok(cu29::parallel_rt::ProcessStepOutcome::AbortCopperList) => {
+                                    let mut culist = worker_result
+                                        .culist
+                                        .take()
+                                        .expect("parallel abort result missing CopperList ownership");
                                     let mut commit_ctx = cu29::context::CuContext::builder(clock.clone())
                                         .cl_id(worker_result.clid)
                                         .task_ids(#mission_mod::TASK_IDS)
@@ -3474,10 +3489,19 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         &commit_ctx,
                                         #mission_mod::MONITOR_LAYOUT.view(&#mission_mod::collect_metadata(&culist)),
                                     );
-                                    cl_manager.end_of_processing(worker_result.clid)?;
+                                    match cl_manager.end_of_processing_boxed(culist)? {
+                                        cu29::curuntime::OwnedCopperListSubmission::Recycled(culist) => {
+                                            free_copperlists.push(culist);
+                                        }
+                                        cu29::curuntime::OwnedCopperListSubmission::Pending => {}
+                                    }
                                     monitor_result?;
                                 }
                                 Ok(cu29::parallel_rt::ProcessStepOutcome::Continue) => {
+                                    let mut culist = worker_result
+                                        .culist
+                                        .take()
+                                        .expect("parallel worker result missing CopperList ownership");
                                     let mut commit_ctx = cu29::context::CuContext::builder(clock.clone())
                                         .cl_id(worker_result.clid)
                                         .task_ids(#mission_mod::TASK_IDS)
@@ -3490,7 +3514,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                                     #(#preprocess_logging_calls)*
 
-                                    cl_manager.end_of_processing(worker_result.clid)?;
+                                    match cl_manager.end_of_processing_boxed(culist)? {
+                                        cu29::curuntime::OwnedCopperListSubmission::Recycled(culist) => {
+                                            free_copperlists.push(culist);
+                                        }
+                                        cu29::curuntime::OwnedCopperListSubmission::Pending => {}
+                                    }
                                     let keyframe_bytes = {
                                         let _keyframe_lock =
                                             kf_lock.lock().expect("parallel keyframe lock poisoned");
@@ -3551,6 +3580,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
 
                     drop(job_tx);
+                    free_copperlists.extend(cl_manager.finish_pending_boxed()?);
                     Ok(())
                 });
 

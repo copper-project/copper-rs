@@ -1,16 +1,14 @@
-//! Parallel runtime scaffolding for future concurrent CopperList execution.
+//! Parallel runtime scheduler state for concurrent CopperList execution.
 //!
-//! This module intentionally separates:
+//! This module keeps the runtime-side pieces separated by role:
 //! - static execution-plan metadata (`ParallelRtMetadata`)
-//! - hot synchronization cursors (`CausalityCheckpoint`)
+//! - hot causality/commit cursors (`CausalityCheckpoint`)
 //! - in-flight work ownership (`IterationTicket`)
-//! - feature-gated runtime state (`ParallelRt`)
+//! - feature-gated scheduler state (`ParallelRt`)
 //!
-//! The current implementation only wires the data structures and the clean
-//! feature split. The generated runtime still executes CopperLists
-//! synchronously. The goal is to let the proc-macro and runtime agree on a
-//! stable parallel execution model before the worker/commit pipeline is
-//! switched on.
+//! The generated runtime owns the worker pool and ordered commit driver. This
+//! module owns the hot checkpoint state and the scheduler contract shared
+//! between proc-macro output and runtime code.
 
 use crate::config::NodeId;
 use crate::copperlist::{CopperList, CuListZeroedInit};
@@ -225,12 +223,11 @@ impl Default for ParallelRtSettings {
     }
 }
 
-/// Per-CopperList scratch state that a future parallel executor will own while
-/// the list is in flight.
+/// Per-CopperList scratch state carried while a list is in flight.
 ///
-/// This mirrors the current single-threaded keyframe lifecycle but makes the
-/// ownership explicit so multiple CopperLists can carry independent snapshots at
-/// the same time.
+/// The current parallel executor still serializes keyframe capture at commit
+/// time, but the ownership model is explicit so future work can move keyframe
+/// accumulation fully into the in-flight ticket.
 #[derive(Debug, Clone, Default)]
 pub struct ParallelKeyFrameScratch {
     pub culistid: u64,
@@ -280,11 +277,7 @@ mod imp {
     use core::sync::atomic::{AtomicBool, Ordering};
     use cu29_traits::CuResult;
 
-    /// Feature-enabled parallel runtime state.
-    ///
-    /// The runtime is not executing CopperLists concurrently yet, but this
-    /// struct already reserves the hot scheduler state in the shape the future
-    /// worker pipeline expects.
+    /// Feature-enabled parallel runtime state used by the worker/commit pipeline.
     pub struct ParallelRt<const NBCL: usize> {
         /// Static process-stage layout emitted by the proc macro.
         metadata: &'static ParallelRtMetadata,

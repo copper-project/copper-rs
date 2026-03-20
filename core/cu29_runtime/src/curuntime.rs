@@ -38,7 +38,7 @@ use cu29_log_runtime::log_debug_mode;
 #[allow(unused_imports)]
 use cu29_value::to_value;
 
-#[cfg(all(feature = "std", feature = "async-cl-io"))]
+#[cfg(all(feature = "std", any(feature = "async-cl-io", feature = "parallel-rt")))]
 use alloc::alloc::{alloc_zeroed, handle_alloc_error};
 use alloc::boxed::Box;
 use alloc::collections::{BTreeSet, VecDeque};
@@ -49,7 +49,7 @@ use bincode::enc::EncoderImpl;
 use bincode::enc::write::{SizeWriter, SliceWriter};
 use bincode::error::EncodeError;
 use bincode::{Decode, Encode};
-#[cfg(all(feature = "std", feature = "async-cl-io"))]
+#[cfg(all(feature = "std", any(feature = "async-cl-io", feature = "parallel-rt")))]
 use core::alloc::Layout;
 use core::fmt::Result as FmtResult;
 use core::fmt::{Debug, Formatter};
@@ -173,6 +173,48 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     pub fn available_copper_lists(&mut self) -> CuResult<usize> {
         Ok(NBCL - self.inner.len())
     }
+
+    #[cfg(feature = "std")]
+    pub fn end_of_processing_boxed(
+        &mut self,
+        mut culist: Box<CopperList<P>>,
+    ) -> CuResult<OwnedCopperListSubmission<P>> {
+        culist.change_state(CopperListState::DoneProcessing);
+        self.last_encoded_bytes = 0;
+        if let Some(logger) = &mut self.logger {
+            culist.change_state(CopperListState::BeingSerialized);
+            logger.log(&culist)?;
+            self.last_encoded_bytes = logger.last_log_bytes().unwrap_or(0) as u64;
+        }
+        culist.change_state(CopperListState::Free);
+        Ok(OwnedCopperListSubmission::Recycled(culist))
+    }
+
+    #[cfg(feature = "std")]
+    pub fn try_reclaim_boxed(&mut self) -> CuResult<Option<Box<CopperList<P>>>> {
+        Ok(None)
+    }
+
+    #[cfg(feature = "std")]
+    pub fn wait_reclaim_boxed(&mut self) -> CuResult<Box<CopperList<P>>> {
+        Err(CuError::from(
+            "Synchronous CopperList I/O cannot block waiting for boxed completions",
+        ))
+    }
+
+    #[cfg(feature = "std")]
+    pub fn finish_pending_boxed(&mut self) -> CuResult<Vec<Box<CopperList<P>>>> {
+        Ok(Vec::new())
+    }
+}
+
+/// Result of handing an owned boxed CopperList to the runtime-side CL I/O path.
+#[cfg(feature = "std")]
+pub enum OwnedCopperListSubmission<P: CopperListTuple> {
+    /// The CL has been fully handled and can be recycled immediately by the caller.
+    Recycled(Box<CopperList<P>>),
+    /// The CL was queued asynchronously and will be returned by a later reclaim call.
+    Pending,
 }
 
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
@@ -181,7 +223,7 @@ struct AsyncCopperListCompletion<P: CopperListTuple> {
     log_result: CuResult<u64>,
 }
 
-#[cfg(all(feature = "std", feature = "async-cl-io"))]
+#[cfg(all(feature = "std", any(feature = "async-cl-io", feature = "parallel-rt")))]
 fn allocate_zeroed_copperlist<P>() -> Box<CopperList<P>>
 where
     P: CopperListTuple + CuListZeroedInit,
@@ -197,6 +239,18 @@ where
     };
     culist.msgs.init_zeroed();
     culist
+}
+
+#[cfg(all(feature = "std", feature = "parallel-rt"))]
+pub fn allocate_boxed_copperlists<P, const NBCL: usize>() -> Vec<Box<CopperList<P>>>
+where
+    P: CopperListTuple + CuListZeroedInit,
+{
+    let mut free_pool = Vec::with_capacity(NBCL);
+    for _ in 0..NBCL {
+        free_pool.push(allocate_zeroed_copperlist::<P>());
+    }
+    free_pool
 }
 
 /// Manages the lifecycle of the copper lists and logging on the asynchronous path.
@@ -361,29 +415,46 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         Ok(self.free_pool.len())
     }
 
-    fn reclaim_completed(&mut self) -> CuResult<()> {
-        loop {
-            let recv_result = {
-                let Some(completion_receiver) = self.completion_receiver.as_ref() else {
-                    return Ok(());
-                };
-                completion_receiver.try_recv()
-            };
-            let completion = match recv_result {
-                Ok(completion) => completion,
-                Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Disconnected) => {
-                    return Err(CuError::from(
-                        "Async CopperList serializer thread disconnected unexpectedly",
-                    ));
-                }
-            };
-            self.handle_completion(completion)?;
+    pub fn end_of_processing_boxed(
+        &mut self,
+        mut culist: Box<CopperList<P>>,
+    ) -> CuResult<OwnedCopperListSubmission<P>> {
+        self.reclaim_completed()?;
+        culist.change_state(CopperListState::DoneProcessing);
+        self.last_encoded_bytes = 0;
+
+        if let Some(pending_sender) = &self.pending_sender {
+            culist.change_state(CopperListState::QueuedForSerialization);
+            pending_sender.send(culist).map_err(|e| {
+                CuError::from("Failed to enqueue CopperList for async serialization")
+                    .add_cause(e.to_string().as_str())
+            })?;
+            self.pending_count += 1;
+            self.reclaim_completed()?;
+            Ok(OwnedCopperListSubmission::Pending)
+        } else {
+            culist.change_state(CopperListState::Free);
+            Ok(OwnedCopperListSubmission::Recycled(culist))
         }
-        Ok(())
     }
 
-    fn wait_for_completion(&mut self) -> CuResult<()> {
+    pub fn try_reclaim_boxed(&mut self) -> CuResult<Option<Box<CopperList<P>>>> {
+        let recv_result = {
+            let Some(completion_receiver) = self.completion_receiver.as_ref() else {
+                return Ok(None);
+            };
+            completion_receiver.try_recv()
+        };
+        match recv_result {
+            Ok(completion) => self.handle_completion(completion).map(Some),
+            Err(TryRecvError::Empty) => Ok(None),
+            Err(TryRecvError::Disconnected) => Err(CuError::from(
+                "Async CopperList serializer thread disconnected unexpectedly",
+            )),
+        }
+    }
+
+    pub fn wait_reclaim_boxed(&mut self) -> CuResult<Box<CopperList<P>>> {
         let completion = self
             .completion_receiver
             .as_ref()
@@ -398,11 +469,46 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         self.handle_completion(completion)
     }
 
-    fn handle_completion(&mut self, mut completion: AsyncCopperListCompletion<P>) -> CuResult<()> {
+    pub fn finish_pending_boxed(&mut self) -> CuResult<Vec<Box<CopperList<P>>>> {
+        let mut reclaimed = Vec::with_capacity(self.pending_count);
+        if self.current.is_some() {
+            return Err(CuError::from(
+                "Cannot flush CopperList I/O while a CopperList is still active",
+            ));
+        }
+        while self.pending_count > 0 {
+            reclaimed.push(self.wait_reclaim_boxed()?);
+        }
+        Ok(reclaimed)
+    }
+
+    fn reclaim_completed(&mut self) -> CuResult<()> {
+        loop {
+            let Some(culist) = self.try_reclaim_boxed()? else {
+                break;
+            };
+            self.free_pool.push(culist);
+        }
+        Ok(())
+    }
+
+    fn wait_for_completion(&mut self) -> CuResult<()> {
+        let culist = self.wait_reclaim_boxed()?;
+        self.free_pool.push(culist);
+        Ok(())
+    }
+
+    fn handle_completion(
+        &mut self,
+        mut completion: AsyncCopperListCompletion<P>,
+    ) -> CuResult<Box<CopperList<P>>> {
         self.pending_count = self.pending_count.saturating_sub(1);
+        if let Ok(encoded_bytes) = completion.log_result.as_ref() {
+            self.last_encoded_bytes = *encoded_bytes;
+        }
         completion.culist.change_state(CopperListState::Free);
-        self.free_pool.push(completion.culist);
-        completion.log_result.map(|_| ())
+        completion.log_result?;
+        Ok(completion.culist)
     }
 
     fn shutdown_worker(&mut self) -> CuResult<()> {
