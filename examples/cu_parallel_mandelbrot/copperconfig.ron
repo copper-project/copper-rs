@@ -1,0 +1,563 @@
+(
+    missions: [
+        (id: "log_only"),
+        (id: "viewer_live"),
+    ],
+    tasks: [
+        (
+            id: "src",
+            type: "tasks::MandelbrotStripeSource",
+            config: {
+                "width": 1920,
+                "height": 1080,
+                "stripe_rows": 64,
+                "frames": 384,
+                "max_iter": 512,
+                "pool_slots": 32,
+                "center_x": -0.743643887037151,
+                "center_y": 0.131825904205330,
+                "initial_span_x": 2.8,
+                "zoom_ratio": 0.994133335507456,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_0",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 1,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_1",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 2,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_2",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 3,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_3",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 4,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_4",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 5,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_5",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 6,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_6",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 7,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_7",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 8,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_8",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 9,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_9",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 10,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_10",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 11,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_11",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 12,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_12",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 13,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_13",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 14,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_14",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 15,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_15",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 16,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_16",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 17,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_17",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 18,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_18",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 19,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_19",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 20,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_20",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 21,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_21",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 22,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_22",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 23,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_23",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 24,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_24",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 25,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_25",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 26,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_26",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 27,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_27",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 28,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_28",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 29,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_29",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 30,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_30",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 31,
+                "band_iters": 16,
+                "finalize": false,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "band_31",
+            type: "tasks::MandelbrotIterBand",
+            config: {
+                "stage_id": 32,
+                "band_iters": 16,
+                "finalize": true,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "frames",
+            type: "tasks::FrameAssembler",
+            missions: ["log_only"],
+            config: {
+                "width": 1920,
+                "height": 1080,
+                "frames": 384,
+            },
+            logging: (enabled: true),
+        ),
+        (
+            id: "viewer_sink",
+            type: "tasks::ViewerFrameSink",
+            missions: ["viewer_live"],
+            config: {
+                "width": 1920,
+                "height": 1080,
+                "frames": 384,
+            },
+            logging: (enabled: false),
+        ),
+        (
+            id: "image_drain",
+            type: "tasks::LoggedFrameDrain",
+            missions: ["log_only"],
+            logging: (enabled: false),
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "band_0",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_0",
+            dst: "band_1",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_1",
+            dst: "band_2",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_2",
+            dst: "band_3",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_3",
+            dst: "band_4",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_4",
+            dst: "band_5",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_5",
+            dst: "band_6",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_6",
+            dst: "band_7",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_7",
+            dst: "band_8",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_8",
+            dst: "band_9",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_9",
+            dst: "band_10",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_10",
+            dst: "band_11",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_11",
+            dst: "band_12",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_12",
+            dst: "band_13",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_13",
+            dst: "band_14",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_14",
+            dst: "band_15",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_15",
+            dst: "band_16",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_16",
+            dst: "band_17",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_17",
+            dst: "band_18",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_18",
+            dst: "band_19",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_19",
+            dst: "band_20",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_20",
+            dst: "band_21",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_21",
+            dst: "band_22",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_22",
+            dst: "band_23",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_23",
+            dst: "band_24",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_24",
+            dst: "band_25",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_25",
+            dst: "band_26",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_26",
+            dst: "band_27",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_27",
+            dst: "band_28",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_28",
+            dst: "band_29",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_29",
+            dst: "band_30",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_30",
+            dst: "band_31",
+            msg: "crate::payloads::MandelbrotStripe",
+        ),
+        (
+            src: "band_31",
+            dst: "frames",
+            msg: "crate::payloads::MandelbrotStripe",
+            missions: ["log_only"],
+        ),
+        (
+            src: "band_31",
+            dst: "viewer_sink",
+            msg: "crate::payloads::MandelbrotStripe",
+            missions: ["viewer_live"],
+        ),
+        (
+            src: "frames",
+            dst: "image_drain",
+            msg: "cu_sensor_payloads::CuImage<Vec<u8>>",
+            missions: ["log_only"],
+        ),
+    ],
+    logging: (
+        enable_task_logging: true,
+        copperlist_count: 32,
+        slab_size_mib: 512,
+        section_size_mib: 64,
+        keyframe_interval: 1000000,
+    ),
+    monitor: (
+        type: "cu_consolemon::CuConsoleMon",
+    ),
+)

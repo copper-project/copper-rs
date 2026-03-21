@@ -14,6 +14,8 @@ use crate::monitoring::{
     ComponentId, CopperListInfo, CuMonitor, CuMonitoringMetadata, CuMonitoringRuntime,
     ExecutionMarker, MonitorComponentMetadata, RuntimeExecutionProbe, build_monitor_topology,
 };
+#[cfg(all(feature = "std", feature = "parallel-rt"))]
+use crate::parallel_rt::{ParallelRt, ParallelRtMetadata};
 use crate::resource::ResourceManager;
 use compact_str::CompactString;
 use cu29_clock::{ClockProvider, CuTime, RobotClock};
@@ -37,7 +39,7 @@ use cu29_log_runtime::log_debug_mode;
 #[allow(unused_imports)]
 use cu29_value::to_value;
 
-#[cfg(all(feature = "std", feature = "async-cl-io"))]
+#[cfg(all(feature = "std", any(feature = "async-cl-io", feature = "parallel-rt")))]
 use alloc::alloc::{alloc_zeroed, handle_alloc_error};
 use alloc::boxed::Box;
 use alloc::collections::{BTreeSet, VecDeque};
@@ -48,7 +50,7 @@ use bincode::enc::EncoderImpl;
 use bincode::enc::write::{SizeWriter, SliceWriter};
 use bincode::error::EncodeError;
 use bincode::{Decode, Encode};
-#[cfg(all(feature = "std", feature = "async-cl-io"))]
+#[cfg(all(feature = "std", any(feature = "async-cl-io", feature = "parallel-rt")))]
 use core::alloc::Layout;
 use core::fmt::Result as FmtResult;
 use core::fmt::{Debug, Formatter};
@@ -104,6 +106,21 @@ pub trait AsyncCopperListPayload {}
 
 #[cfg(not(all(feature = "std", feature = "async-cl-io")))]
 impl<T> AsyncCopperListPayload for T {}
+
+/// Control-flow result returned by one generated process stage.
+///
+/// `AbortCopperList` preserves the current runtime semantics for monitor
+/// decisions that abort the current CopperList without shutting the runtime
+/// down. The outer driver remains responsible for ordered cleanup and log
+/// handoff.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProcessStepOutcome {
+    Continue,
+    AbortCopperList,
+}
+
+/// Result type used by generated process-step functions.
+pub type ProcessStepResult = CuResult<ProcessStepOutcome>;
 
 /// Manages the lifecycle of the copper lists and logging on the synchronous path.
 pub struct SyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
@@ -172,6 +189,48 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     pub fn available_copper_lists(&mut self) -> CuResult<usize> {
         Ok(NBCL - self.inner.len())
     }
+
+    #[cfg(feature = "std")]
+    pub fn end_of_processing_boxed(
+        &mut self,
+        mut culist: Box<CopperList<P>>,
+    ) -> CuResult<OwnedCopperListSubmission<P>> {
+        culist.change_state(CopperListState::DoneProcessing);
+        self.last_encoded_bytes = 0;
+        if let Some(logger) = &mut self.logger {
+            culist.change_state(CopperListState::BeingSerialized);
+            logger.log(&culist)?;
+            self.last_encoded_bytes = logger.last_log_bytes().unwrap_or(0) as u64;
+        }
+        culist.change_state(CopperListState::Free);
+        Ok(OwnedCopperListSubmission::Recycled(culist))
+    }
+
+    #[cfg(feature = "std")]
+    pub fn try_reclaim_boxed(&mut self) -> CuResult<Option<Box<CopperList<P>>>> {
+        Ok(None)
+    }
+
+    #[cfg(feature = "std")]
+    pub fn wait_reclaim_boxed(&mut self) -> CuResult<Box<CopperList<P>>> {
+        Err(CuError::from(
+            "Synchronous CopperList I/O cannot block waiting for boxed completions",
+        ))
+    }
+
+    #[cfg(feature = "std")]
+    pub fn finish_pending_boxed(&mut self) -> CuResult<Vec<Box<CopperList<P>>>> {
+        Ok(Vec::new())
+    }
+}
+
+/// Result of handing an owned boxed CopperList to the runtime-side CL I/O path.
+#[cfg(feature = "std")]
+pub enum OwnedCopperListSubmission<P: CopperListTuple> {
+    /// The CL has been fully handled and can be recycled immediately by the caller.
+    Recycled(Box<CopperList<P>>),
+    /// The CL was queued asynchronously and will be returned by a later reclaim call.
+    Pending,
 }
 
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
@@ -180,7 +239,7 @@ struct AsyncCopperListCompletion<P: CopperListTuple> {
     log_result: CuResult<u64>,
 }
 
-#[cfg(all(feature = "std", feature = "async-cl-io"))]
+#[cfg(all(feature = "std", any(feature = "async-cl-io", feature = "parallel-rt")))]
 fn allocate_zeroed_copperlist<P>() -> Box<CopperList<P>>
 where
     P: CopperListTuple + CuListZeroedInit,
@@ -196,6 +255,18 @@ where
     };
     culist.msgs.init_zeroed();
     culist
+}
+
+#[cfg(all(feature = "std", feature = "parallel-rt"))]
+pub fn allocate_boxed_copperlists<P, const NBCL: usize>() -> Vec<Box<CopperList<P>>>
+where
+    P: CopperListTuple + CuListZeroedInit,
+{
+    let mut free_pool = Vec::with_capacity(NBCL);
+    for _ in 0..NBCL {
+        free_pool.push(allocate_zeroed_copperlist::<P>());
+    }
+    free_pool
 }
 
 /// Manages the lifecycle of the copper lists and logging on the asynchronous path.
@@ -360,29 +431,46 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         Ok(self.free_pool.len())
     }
 
-    fn reclaim_completed(&mut self) -> CuResult<()> {
-        loop {
-            let recv_result = {
-                let Some(completion_receiver) = self.completion_receiver.as_ref() else {
-                    return Ok(());
-                };
-                completion_receiver.try_recv()
-            };
-            let completion = match recv_result {
-                Ok(completion) => completion,
-                Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Disconnected) => {
-                    return Err(CuError::from(
-                        "Async CopperList serializer thread disconnected unexpectedly",
-                    ));
-                }
-            };
-            self.handle_completion(completion)?;
+    pub fn end_of_processing_boxed(
+        &mut self,
+        mut culist: Box<CopperList<P>>,
+    ) -> CuResult<OwnedCopperListSubmission<P>> {
+        self.reclaim_completed()?;
+        culist.change_state(CopperListState::DoneProcessing);
+        self.last_encoded_bytes = 0;
+
+        if let Some(pending_sender) = &self.pending_sender {
+            culist.change_state(CopperListState::QueuedForSerialization);
+            pending_sender.send(culist).map_err(|e| {
+                CuError::from("Failed to enqueue CopperList for async serialization")
+                    .add_cause(e.to_string().as_str())
+            })?;
+            self.pending_count += 1;
+            self.reclaim_completed()?;
+            Ok(OwnedCopperListSubmission::Pending)
+        } else {
+            culist.change_state(CopperListState::Free);
+            Ok(OwnedCopperListSubmission::Recycled(culist))
         }
-        Ok(())
     }
 
-    fn wait_for_completion(&mut self) -> CuResult<()> {
+    pub fn try_reclaim_boxed(&mut self) -> CuResult<Option<Box<CopperList<P>>>> {
+        let recv_result = {
+            let Some(completion_receiver) = self.completion_receiver.as_ref() else {
+                return Ok(None);
+            };
+            completion_receiver.try_recv()
+        };
+        match recv_result {
+            Ok(completion) => self.handle_completion(completion).map(Some),
+            Err(TryRecvError::Empty) => Ok(None),
+            Err(TryRecvError::Disconnected) => Err(CuError::from(
+                "Async CopperList serializer thread disconnected unexpectedly",
+            )),
+        }
+    }
+
+    pub fn wait_reclaim_boxed(&mut self) -> CuResult<Box<CopperList<P>>> {
         let completion = self
             .completion_receiver
             .as_ref()
@@ -397,11 +485,46 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         self.handle_completion(completion)
     }
 
-    fn handle_completion(&mut self, mut completion: AsyncCopperListCompletion<P>) -> CuResult<()> {
+    pub fn finish_pending_boxed(&mut self) -> CuResult<Vec<Box<CopperList<P>>>> {
+        let mut reclaimed = Vec::with_capacity(self.pending_count);
+        if self.current.is_some() {
+            return Err(CuError::from(
+                "Cannot flush CopperList I/O while a CopperList is still active",
+            ));
+        }
+        while self.pending_count > 0 {
+            reclaimed.push(self.wait_reclaim_boxed()?);
+        }
+        Ok(reclaimed)
+    }
+
+    fn reclaim_completed(&mut self) -> CuResult<()> {
+        loop {
+            let Some(culist) = self.try_reclaim_boxed()? else {
+                break;
+            };
+            self.free_pool.push(culist);
+        }
+        Ok(())
+    }
+
+    fn wait_for_completion(&mut self) -> CuResult<()> {
+        let culist = self.wait_reclaim_boxed()?;
+        self.free_pool.push(culist);
+        Ok(())
+    }
+
+    fn handle_completion(
+        &mut self,
+        mut completion: AsyncCopperListCompletion<P>,
+    ) -> CuResult<Box<CopperList<P>>> {
         self.pending_count = self.pending_count.saturating_sub(1);
+        if let Ok(encoded_bytes) = completion.log_result.as_ref() {
+            self.last_encoded_bytes = *encoded_bytes;
+        }
         completion.culist.change_state(CopperListState::Free);
-        self.free_pool.push(completion.culist);
-        completion.log_result.map(|_| ())
+        completion.log_result?;
+        Ok(completion.culist)
     }
 
     fn shutdown_worker(&mut self) -> CuResult<()> {
@@ -453,6 +576,11 @@ pub struct KeyFramesManager {
 impl KeyFramesManager {
     fn is_keyframe(&self, culistid: u64) -> bool {
         self.logger.is_some() && culistid.is_multiple_of(self.keyframe_interval as u64)
+    }
+
+    #[inline]
+    pub fn captures_keyframe(&self, culistid: u64) -> bool {
+        self.is_keyframe(culistid)
     }
 
     pub fn reset(&mut self, culistid: u64, clock: &RobotClock) {
@@ -556,6 +684,10 @@ pub struct CuRuntime<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize
 
     /// The logger for the state of the tasks (frozen tasks)
     pub keyframes_manager: KeyFramesManager,
+
+    /// Feature-gated container for deterministic multi-CopperList execution.
+    #[cfg(all(feature = "std", feature = "parallel-rt"))]
+    pub parallel_rt: ParallelRt<NBCL>,
 
     /// The runtime configuration controlling the behavior of the run loop
     pub runtime_config: RuntimeConfig,
@@ -687,6 +819,23 @@ impl<
         self.execution_probe.record(marker);
     }
 
+    /// Returns a shared reference to the concrete runtime execution probe.
+    ///
+    /// The generated runtime uses this when it needs a uniform
+    /// `&RuntimeExecutionProbe` view across `std` and `no_std` builds.
+    #[inline]
+    pub fn execution_probe_ref(&self) -> &RuntimeExecutionProbe {
+        #[cfg(feature = "std")]
+        {
+            self.execution_probe.as_ref()
+        }
+
+        #[cfg(not(feature = "std"))]
+        {
+            &self.execution_probe
+        }
+    }
+
     // FIXME(gbin): this became REALLY ugly with no-std
     #[allow(clippy::too_many_arguments)]
     #[cfg(feature = "std")]
@@ -701,6 +850,8 @@ impl<
         ) -> CuResult<CT>,
         monitored_components: &'static [MonitorComponentMetadata],
         culist_component_mapping: &'static [ComponentId],
+        #[cfg(all(feature = "std", feature = "parallel-rt"))]
+        parallel_rt_metadata: &'static ParallelRtMetadata,
         monitor_instanciator: impl Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
         bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
@@ -715,6 +866,8 @@ impl<
             tasks_instanciator,
             monitored_components,
             culist_component_mapping,
+            #[cfg(all(feature = "std", feature = "parallel-rt"))]
+            parallel_rt_metadata,
             monitor_instanciator,
             bridges_instanciator,
             copperlists_logger,
@@ -735,6 +888,8 @@ impl<
         ) -> CuResult<CT>,
         monitored_components: &'static [MonitorComponentMetadata],
         culist_component_mapping: &'static [ComponentId],
+        #[cfg(all(feature = "std", feature = "parallel-rt"))]
+        parallel_rt_metadata: &'static ParallelRtMetadata,
         monitor_instanciator: impl Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
         bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
@@ -796,6 +951,8 @@ impl<
             forced_timestamp: None,
             locked: false,
         };
+        #[cfg(all(feature = "std", feature = "parallel-rt"))]
+        let parallel_rt = ParallelRt::new(parallel_rt_metadata)?;
 
         let runtime_config = config.runtime.clone().unwrap_or_default();
 
@@ -808,6 +965,8 @@ impl<
             clock,
             copperlists_manager,
             keyframes_manager,
+            #[cfg(all(feature = "std", feature = "parallel-rt"))]
+            parallel_rt,
             runtime_config,
         };
 
@@ -1520,6 +1679,8 @@ mod tests {
             tasks_instanciator,
             &[],
             &[],
+            #[cfg(all(feature = "std", feature = "parallel-rt"))]
+            &crate::parallel_rt::DISABLED_PARALLEL_RT_METADATA,
             monitor_instanciator,
             bridges_instanciator,
             FakeWriter {},
@@ -1545,6 +1706,8 @@ mod tests {
             tasks_instanciator,
             &[],
             &[],
+            #[cfg(all(feature = "std", feature = "parallel-rt"))]
+            &crate::parallel_rt::DISABLED_PARALLEL_RT_METADATA,
             monitor_instanciator,
             bridges_instanciator,
             FakeWriter {},

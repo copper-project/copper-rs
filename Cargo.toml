@@ -100,6 +100,7 @@ members = [
   "examples/cu_human_pose",
   "examples/cu_debug_session",
   "examples/cu_async_cl_io_bench",
+  "examples/cu_parallel_mandelbrot",
   "examples/cu_gnss_ublox_demo",
   "examples/cu_remote_debug_session",
 ]

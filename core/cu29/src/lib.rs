@@ -26,6 +26,8 @@
 //! - `textlogs`: text logging derive support
 //! - `remote-debug`: remote debug transport support
 //! - `sysclock-perf`: use a host/system clock for runtime perf timing while keeping robot time for `tov`
+//! - `async-cl-io`: offload CopperList serialization/logging to a dedicated std thread
+//! - `parallel-rt`: prepare the runtime for a future multi-threaded deterministic executor
 //!
 //! ## Concepts behind Copper
 //!
@@ -52,6 +54,8 @@
 //!
 
 #![cfg_attr(not(feature = "std"), no_std)]
+#[cfg(all(feature = "parallel-rt", not(feature = "std")))]
+compile_error!("feature `parallel-rt` requires `std`");
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
@@ -69,6 +73,10 @@ pub use cu29_runtime::debug;
 pub use cu29_runtime::input_msg;
 pub use cu29_runtime::monitoring;
 pub use cu29_runtime::output_msg;
+#[cfg(all(feature = "std", feature = "parallel-rt"))]
+pub use cu29_runtime::parallel_queue;
+#[cfg(all(feature = "std", feature = "parallel-rt"))]
+pub use cu29_runtime::parallel_rt;
 pub use cu29_runtime::payload;
 pub use cu29_runtime::reflect;
 pub use cu29_runtime::reflect as bevy_reflect;

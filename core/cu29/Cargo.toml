@@ -61,6 +61,7 @@ reflect = [
 ]
 remote-debug = ["cu29-runtime/remote-debug"]
 async-cl-io = ["std", "cu29-derive/async-cl-io", "cu29-runtime/async-cl-io"]
+parallel-rt = ["std", "cu29-derive/parallel-rt", "cu29-runtime/parallel-rt"]
 mmap-fsync = ["std", "cu29-runtime/mmap-fsync", "cu29-unifiedlog/mmap-fsync"]
 std = [
   "rayon",
