@@ -57,6 +57,7 @@ fn log_summary(
     settings: tasks::BenchmarkSettings,
     elapsed: std::time::Duration,
 ) {
+    let logger_path_display = logger_path.display().to_string();
     let frames_emitted = tasks::frames_emitted();
     let last_digest = tasks::last_frame_digest();
     let stripes = settings.total_stripes() as f64;
@@ -81,7 +82,7 @@ fn log_summary(
     info!(
         "parallel-mandelbrot summary: mission={} logger={} frames_emitted={} expected_frames={} stripes={} rows={} elapsed_s={:.3} cl_hz={:.2} row_hz={:.2} frame_hz={:.2} last_frame_digest=0x{:016x}",
         mission,
-        logger_path.display(),
+        logger_path_display,
         frames_emitted,
         settings.frames,
         settings.total_stripes(),
@@ -98,6 +99,7 @@ pub fn run_log_only() -> CuResult<()> {
     tasks::reset_benchmark_summary();
     let settings = load_benchmark_settings()?;
     let logger_path = benchmark_logger_path("parallel_mandelbrot_log_only.copper")?;
+    let logger_path_display = logger_path.display().to_string();
     let copper_ctx = basic_copper_setup(&logger_path, SLAB_SIZE, true, None)?;
     let mut app = log_only::AppBuilder::new()
         .with_context(&copper_ctx)
@@ -106,7 +108,7 @@ pub fn run_log_only() -> CuResult<()> {
 
     info!(
         "parallel-mandelbrot: mission=log_only logger={}",
-        logger_path.display()
+        logger_path_display
     );
     let started = Instant::now();
     app.run()?;
@@ -118,6 +120,7 @@ pub fn run_viewer_live() -> CuResult<()> {
     tasks::reset_benchmark_summary();
     let settings = load_benchmark_settings()?;
     let logger_path = benchmark_logger_path("parallel_mandelbrot_viewer.copper")?;
+    let logger_path_display = logger_path.display().to_string();
     let copper_ctx = basic_copper_setup(&logger_path, SLAB_SIZE, true, None)?;
     let mut app = viewer_live::AppBuilder::new()
         .with_context(&copper_ctx)
@@ -126,7 +129,7 @@ pub fn run_viewer_live() -> CuResult<()> {
 
     info!(
         "parallel-mandelbrot: mission=viewer_live logger={}",
-        logger_path.display()
+        logger_path_display
     );
     let started = Instant::now();
     app.run()?;

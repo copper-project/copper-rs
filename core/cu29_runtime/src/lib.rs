@@ -24,6 +24,7 @@ pub mod cutask;
 pub mod debug;
 pub(crate) mod log;
 pub mod monitoring;
+#[cfg(all(feature = "std", feature = "parallel-rt"))]
 pub mod parallel_rt;
 pub mod payload;
 #[cfg(feature = "std")]

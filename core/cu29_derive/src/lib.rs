@@ -1151,6 +1151,21 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             Ok(entries) => entries,
             Err(e) => return return_error(e.to_string()),
         };
+        let parallel_rt_metadata_defs = if std && parallel_rt_enabled {
+            Some(quote! {
+                pub const PARALLEL_RT_STAGES: &'static [cu29::parallel_rt::ParallelRtStageMetadata] =
+                    &[#( #parallel_rt_stage_entries ),*];
+                pub const PARALLEL_RT_METADATA: cu29::parallel_rt::ParallelRtMetadata =
+                    cu29::parallel_rt::ParallelRtMetadata::new(PARALLEL_RT_STAGES);
+            })
+        } else {
+            None
+        };
+        let process_step_execution_probe_type = if std {
+            quote! { &'a cu29::monitoring::ExecutionProbeHandle }
+        } else {
+            quote! { &'a cu29::monitoring::RuntimeExecutionProbe }
+        };
         let monitored_component_entries: Vec<proc_macro2::TokenStream> = ids
             .iter()
             .enumerate()
@@ -2241,15 +2256,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             step,
                             *task_index,
                             &task_specs,
-                            &output_pack_sizes,
-                            sim_mode,
-                            &mission_mod,
-                            ParallelLifecyclePlacement::default(),
-                            quote! {},
-                            {
+                            StepGenerationContext::new(
+                                &output_pack_sizes,
+                                sim_mode,
+                                &mission_mod,
+                                ParallelLifecyclePlacement::default(),
+                            ),
+                            TaskExecutionTokens::new(quote! {}, {
                                 let node_index = int2sliceindex(*task_index as u32);
                                 quote! { tasks.#node_index }
-                            },
+                            }),
                         ),
                         ExecutionEntityKind::BridgeRx {
                             bridge_index,
@@ -2279,10 +2295,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 step,
                                 spec,
                                 *channel_index,
-                                &output_pack_sizes,
-                                &mission_mod,
-                                sim_mode,
-                                ParallelLifecyclePlacement::default(),
+                                StepGenerationContext::new(
+                                    &output_pack_sizes,
+                                    sim_mode,
+                                    &mission_mod,
+                                    ParallelLifecyclePlacement::default(),
+                                ),
                                 {
                                     let bridge_tuple_index =
                                         int2sliceindex(spec.tuple_index as u32);
@@ -2324,17 +2342,18 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     step,
                                     *task_index,
                                     &task_specs,
-                                    &output_pack_sizes,
-                                    false,
-                                    &mission_mod,
-                                    parallel_lifecycle_placements
-                                        .as_ref()
-                                        .expect("parallel lifecycle placements missing")[step_index],
-                                    quote! {
+                                    StepGenerationContext::new(
+                                        &output_pack_sizes,
+                                        false,
+                                        &mission_mod,
+                                        parallel_lifecycle_placements
+                                            .as_ref()
+                                            .expect("parallel lifecycle placements missing")[step_index],
+                                    ),
+                                    TaskExecutionTokens::new(quote! {
                                         let _task_lock = step_rt.task_locks.#task_index_ts.lock().expect("parallel task lock poisoned");
                                         let task = unsafe { step_rt.task_ptrs.#task_index_ts.as_mut() };
-                                    },
-                                    quote! { (*task) },
+                                    }, quote! { (*task) }),
                                 )
                             }
                             ExecutionEntityKind::BridgeRx {
@@ -2368,12 +2387,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     step,
                                     spec,
                                     *channel_index,
-                                    &output_pack_sizes,
-                                    &mission_mod,
-                                    false,
-                                    parallel_lifecycle_placements
-                                        .as_ref()
-                                        .expect("parallel lifecycle placements missing")[step_index],
+                                    StepGenerationContext::new(
+                                        &output_pack_sizes,
+                                        false,
+                                        &mission_mod,
+                                        parallel_lifecycle_placements
+                                            .as_ref()
+                                            .expect("parallel lifecycle placements missing")[step_index],
+                                    ),
                                     quote! {
                                         let _bridge_lock = step_rt.bridge_locks.#bridge_index_ts.lock().expect("parallel bridge lock poisoned");
                                         let bridge = unsafe { step_rt.bridge_ptrs.#bridge_index_ts.as_mut() };
@@ -2515,7 +2536,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         fn #step_ident<F>(
                             step_rt: &mut ProcessStepRuntime<'_>,
                             sim_callback: &mut F,
-                        ) -> cu29::parallel_rt::ProcessStepResult
+                        ) -> cu29::curuntime::ProcessStepResult
                         where
                             F: FnMut(SimStep) -> SimOverride,
                         {
@@ -2537,7 +2558,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         #[inline(always)]
                         fn #step_ident(
                             step_rt: &mut ProcessStepRuntime<'_>,
-                        ) -> cu29::parallel_rt::ProcessStepResult {
+                        ) -> cu29::curuntime::ProcessStepResult {
                             let clock = step_rt.clock;
                             let execution_probe = step_rt.execution_probe;
                             let monitor = &mut *step_rt.monitor;
@@ -2580,7 +2601,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             #[inline(always)]
                             fn #step_ident(
                                 step_rt: &mut ParallelProcessStepRuntime<'_>,
-                            ) -> cu29::parallel_rt::ProcessStepResult {
+                            ) -> cu29::curuntime::ProcessStepResult {
                                 let clock = step_rt.clock;
                                 let execution_probe = step_rt.execution_probe;
                                 let monitor = step_rt.monitor;
@@ -2668,7 +2689,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                                 drop(step_rt);
                                                 (culist, outcome)
                                             })) {
-                                                Ok((culist, Ok(cu29::parallel_rt::ProcessStepOutcome::Continue))) => {
+                                                Ok((culist, Ok(cu29::curuntime::ProcessStepOutcome::Continue))) => {
                                                     if shutdown.load(Ordering::Acquire) {
                                                         #mission_mod::ParallelWorkerResult {
                                                             clid,
@@ -2707,17 +2728,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                                         #mission_mod::ParallelWorkerResult {
                                                             clid,
                                                             culist: Some(culist),
-                                                            outcome: Ok(cu29::parallel_rt::ProcessStepOutcome::Continue),
+                                                            outcome: Ok(cu29::curuntime::ProcessStepOutcome::Continue),
                                                             raw_payload_bytes,
                                                             handle_bytes,
                                                         }
                                                     }
                                                 }
-                                                Ok((culist, Ok(cu29::parallel_rt::ProcessStepOutcome::AbortCopperList))) => {
+                                                Ok((culist, Ok(cu29::curuntime::ProcessStepOutcome::AbortCopperList))) => {
                                                     #mission_mod::ParallelWorkerResult {
                                                         clid,
                                                         culist: Some(culist),
-                                                        outcome: Ok(cu29::parallel_rt::ProcessStepOutcome::AbortCopperList),
+                                                        outcome: Ok(cu29::curuntime::ProcessStepOutcome::AbortCopperList),
                                                         raw_payload_bytes: 0,
                                                         handle_bytes: 0,
                                                     }
@@ -2777,8 +2798,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 if sim_mode {
                     quote! {
                         match #step_ident(&mut __cu_process_step_rt, sim_callback)? {
-                            cu29::parallel_rt::ProcessStepOutcome::Continue => {}
-                            cu29::parallel_rt::ProcessStepOutcome::AbortCopperList => {
+                            cu29::curuntime::ProcessStepOutcome::Continue => {}
+                            cu29::curuntime::ProcessStepOutcome::AbortCopperList => {
                                 __cu_abort_copperlist = true;
                                 break '__cu_process_steps;
                             }
@@ -2787,8 +2808,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 } else {
                     quote! {
                         match #step_ident(&mut __cu_process_step_rt)? {
-                            cu29::parallel_rt::ProcessStepOutcome::Continue => {}
-                            cu29::parallel_rt::ProcessStepOutcome::AbortCopperList => {
+                            cu29::curuntime::ProcessStepOutcome::Continue => {}
+                            cu29::curuntime::ProcessStepOutcome::AbortCopperList => {
                                 __cu_abort_copperlist = true;
                                 break '__cu_process_steps;
                             }
@@ -2959,7 +2980,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 struct ParallelWorkerResult {
                     clid: u64,
                     culist: Option<Box<CuList>>,
-                    outcome: cu29::parallel_rt::ProcessStepResult,
+                    outcome: cu29::curuntime::ProcessStepResult,
                     raw_payload_bytes: u64,
                     handle_bytes: u64,
                 }
@@ -3063,6 +3084,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! { Self::new_with_resources(clock, unified_logger, app_resources, sim_callback) }
         } else {
             quote! { Self::new_with_resources(clock, unified_logger, app_resources) }
+        };
+        let parallel_rt_metadata_arg = if std && parallel_rt_enabled {
+            Some(quote! {
+                &#mission_mod::PARALLEL_RT_METADATA,
+            })
+        } else {
+            None
         };
 
         let kill_handler = if std && signal_handler {
@@ -3353,7 +3381,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             let mut worker_result = worker_result;
                             if fatal_error.is_none() {
                                 match worker_result.outcome {
-                                    Ok(cu29::parallel_rt::ProcessStepOutcome::AbortCopperList) => {
+                                    Ok(cu29::curuntime::ProcessStepOutcome::AbortCopperList) => {
                                         let mut culist = worker_result
                                             .culist
                                             .take()
@@ -3375,7 +3403,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         }
                                         monitor_result?;
                                     }
-                                    Ok(cu29::parallel_rt::ProcessStepOutcome::Continue) => {
+                                    Ok(cu29::curuntime::ProcessStepOutcome::Continue) => {
                                         let mut culist = worker_result
                                             .culist
                                             .take()
@@ -3785,7 +3813,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #mission_mod::#tasks_instanciator_fn,
                     #mission_mod::MONITORED_COMPONENTS,
                     #mission_mod::CULIST_COMPONENT_MAPPING,
-                    &#mission_mod::PARALLEL_RT_METADATA,
+                    #parallel_rt_metadata_arg
                     #mission_mod::monitor_instanciator,
                     #mission_mod::bridges_instanciator,
                     copperlist_stream,
@@ -4249,10 +4277,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         MONITORED_COMPONENTS,
                         CULIST_COMPONENT_MAPPING,
                     );
-                pub const PARALLEL_RT_STAGES: &'static [cu29::parallel_rt::ParallelRtStageMetadata] =
-                    &[#( #parallel_rt_stage_entries ),*];
-                pub const PARALLEL_RT_METADATA: cu29::parallel_rt::ParallelRtMetadata =
-                    cu29::parallel_rt::ParallelRtMetadata::new(PARALLEL_RT_STAGES);
+                #parallel_rt_metadata_defs
 
                 #[inline]
                 pub fn monitor_component_label(
@@ -4263,13 +4288,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 #culist_support
 
-                #[cfg(feature = "std")]
-                type ProcessStepExecutionProbe<'a> =
-                    &'a cu29::monitoring::ExecutionProbeHandle;
-
-                #[cfg(not(feature = "std"))]
-                type ProcessStepExecutionProbe<'a> =
-                    &'a cu29::monitoring::RuntimeExecutionProbe;
+                type ProcessStepExecutionProbe<'a> = #process_step_execution_probe_type;
 
                 /// Mutable per-iteration state handed to one generated process stage.
                 ///
@@ -5627,9 +5646,9 @@ fn build_monitored_ids(task_ids: &[String], bridge_specs: &mut [BridgeSpec]) -> 
 
 fn wrap_process_step_tokens(body: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
     quote! {{
-        let __cu_process_step_result: cu29::parallel_rt::ProcessStepResult = (|| {
+        let __cu_process_step_result: cu29::curuntime::ProcessStepResult = (|| {
             #body
-            Ok(cu29::parallel_rt::ProcessStepOutcome::Continue)
+            Ok(cu29::curuntime::ProcessStepOutcome::Continue)
         })();
         __cu_process_step_result
     }}
@@ -5637,7 +5656,7 @@ fn wrap_process_step_tokens(body: proc_macro2::TokenStream) -> proc_macro2::Toke
 
 fn abort_process_step_tokens() -> proc_macro2::TokenStream {
     quote! {
-        return Ok(cu29::parallel_rt::ProcessStepOutcome::AbortCopperList);
+        return Ok(cu29::curuntime::ProcessStepOutcome::AbortCopperList);
     }
 }
 
@@ -5869,17 +5888,58 @@ fn parallel_bridge_lifecycle_tokens(
     (preprocess, postprocess)
 }
 
+#[derive(Clone, Copy)]
+struct StepGenerationContext<'a> {
+    output_pack_sizes: &'a [usize],
+    sim_mode: bool,
+    mission_mod: &'a Ident,
+    lifecycle_placement: ParallelLifecyclePlacement,
+}
+
+impl<'a> StepGenerationContext<'a> {
+    fn new(
+        output_pack_sizes: &'a [usize],
+        sim_mode: bool,
+        mission_mod: &'a Ident,
+        lifecycle_placement: ParallelLifecyclePlacement,
+    ) -> Self {
+        Self {
+            output_pack_sizes,
+            sim_mode,
+            mission_mod,
+            lifecycle_placement,
+        }
+    }
+}
+
+struct TaskExecutionTokens {
+    setup: proc_macro2::TokenStream,
+    instance: proc_macro2::TokenStream,
+}
+
+impl TaskExecutionTokens {
+    fn new(setup: proc_macro2::TokenStream, instance: proc_macro2::TokenStream) -> Self {
+        Self { setup, instance }
+    }
+}
+
 fn generate_task_execution_tokens(
     step: &CuExecutionStep,
     task_index: usize,
     task_specs: &CuTaskSpecSet,
-    output_pack_sizes: &[usize],
-    sim_mode: bool,
-    mission_mod: &Ident,
-    lifecycle_placement: ParallelLifecyclePlacement,
-    task_setup: proc_macro2::TokenStream,
-    task_instance: proc_macro2::TokenStream,
+    ctx: StepGenerationContext<'_>,
+    task_tokens: TaskExecutionTokens,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    let StepGenerationContext {
+        output_pack_sizes,
+        sim_mode,
+        mission_mod,
+        lifecycle_placement,
+    } = ctx;
+    let TaskExecutionTokens {
+        setup: task_setup,
+        instance: task_instance,
+    } = task_tokens;
     let abort_process_step = abort_process_step_tokens();
     let comment_str = format!(
         "DEBUG ->> {} ({:?}) Id:{} I:{:?} O:{:?}",
@@ -6487,12 +6547,15 @@ fn generate_bridge_tx_execution_tokens(
     step: &CuExecutionStep,
     bridge_spec: &BridgeSpec,
     channel_index: usize,
-    output_pack_sizes: &[usize],
-    mission_mod: &Ident,
-    sim_mode: bool,
-    lifecycle_placement: ParallelLifecyclePlacement,
+    ctx: StepGenerationContext<'_>,
     bridge_setup: proc_macro2::TokenStream,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    let StepGenerationContext {
+        output_pack_sizes,
+        sim_mode,
+        mission_mod,
+        lifecycle_placement,
+    } = ctx;
     let rt_guard = rtsan_guard_tokens();
     let abort_process_step = abort_process_step_tokens();
     let channel = &bridge_spec.tx_channels[channel_index];

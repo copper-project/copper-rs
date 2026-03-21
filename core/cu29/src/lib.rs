@@ -73,6 +73,7 @@ pub use cu29_runtime::debug;
 pub use cu29_runtime::input_msg;
 pub use cu29_runtime::monitoring;
 pub use cu29_runtime::output_msg;
+#[cfg(all(feature = "std", feature = "parallel-rt"))]
 pub use cu29_runtime::parallel_rt;
 pub use cu29_runtime::payload;
 pub use cu29_runtime::reflect;
@@ -214,7 +215,6 @@ pub mod prelude {
     pub use cu29_runtime::input_msg;
     pub use cu29_runtime::monitoring::*;
     pub use cu29_runtime::output_msg;
-    pub use cu29_runtime::parallel_rt::*;
     pub use cu29_runtime::payload::*;
     #[cfg(feature = "reflect")]
     pub use cu29_runtime::reflect::serde as reflect_serde;

@@ -180,9 +180,42 @@ fn advance_escape_shadow(zr: f32, zi: f32, c_re: f32, row_im: f32) -> (f32, f32)
     // Keep per-band work roughly fixed even after a pixel escaped so the
     // benchmark stresses Copper's scheduler instead of collapsing into a few
     // heavy early bands and many trivial late bands.
-    let next_re = zr.mul_add(0.754_877_666_246_692_7, c_re) - zi * 0.569_840_290_998_053_2;
-    let next_im = zi.mul_add(0.819_172_513_396_164_4, row_im) + zr * 0.137_631_299_231_935;
+    let next_re = zr.mul_add(0.754_877_7, c_re) - zi * 0.569_840_3;
+    let next_im = zi.mul_add(0.819_172_5, row_im) + zr * 0.137_631_3;
     (next_re, next_im)
+}
+
+struct RowIterationBuffers<'a> {
+    z_re: &'a mut [f32],
+    z_im: &'a mut [f32],
+    escape_iter: &'a mut [u16],
+}
+
+impl<'a> RowIterationBuffers<'a> {
+    fn new(z_re: &'a mut [f32], z_im: &'a mut [f32], escape_iter: &'a mut [u16]) -> Self {
+        Self {
+            z_re,
+            z_im,
+            escape_iter,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct IterationRange {
+    start_x: usize,
+    start_iter: u16,
+    target_iters: u16,
+}
+
+impl IterationRange {
+    fn new(start_x: usize, start_iter: u16, target_iters: u16) -> Self {
+        Self {
+            start_x,
+            start_iter,
+            target_iters,
+        }
+    }
 }
 
 #[inline]
@@ -190,13 +223,20 @@ fn iterate_row_scalar(
     plane: StripePlane,
     row_base: usize,
     row_im: f32,
-    z_re: &mut [f32],
-    z_im: &mut [f32],
-    escape_iter: &mut [u16],
-    start_x: usize,
-    start_iter: u16,
-    target_iters: u16,
+    buffers: RowIterationBuffers<'_>,
+    range: IterationRange,
 ) {
+    let RowIterationBuffers {
+        z_re,
+        z_im,
+        escape_iter,
+    } = buffers;
+    let IterationRange {
+        start_x,
+        start_iter,
+        target_iters,
+    } = range;
+
     for x in start_x..plane.width {
         let index = row_base + x;
         let c_re = plane.pixel_real(x);
@@ -243,12 +283,8 @@ fn iterate_band_scalar(
             plane,
             row_base,
             row_im,
-            z_re,
-            z_im,
-            escape_iter,
-            0,
-            start_iter,
-            target_iters,
+            RowIterationBuffers::new(z_re, z_im, escape_iter),
+            IterationRange::new(0, start_iter, target_iters),
         );
     }
 }
@@ -363,12 +399,8 @@ unsafe fn iterate_band_avx512(
             plane,
             row_base,
             row_im,
-            z_re,
-            z_im,
-            escape_iter,
-            x,
-            start_iter,
-            target_iters,
+            RowIterationBuffers::new(z_re, z_im, escape_iter),
+            IterationRange::new(x, start_iter, target_iters),
         );
     }
 }
@@ -923,7 +955,10 @@ impl CuSinkTask for ViewerFrameSink {
                                 width as usize,
                                 height as usize,
                             ) {
-                                error!("viewer thread failed to update window: {}", err);
+                                error!(
+                                    "viewer thread failed to update window: {}",
+                                    err.to_string()
+                                );
                                 thread_open.store(false, Ordering::Release);
                                 break;
                             }

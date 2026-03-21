@@ -14,6 +14,7 @@ use crate::monitoring::{
     ComponentId, CopperListInfo, CuMonitor, CuMonitoringMetadata, CuMonitoringRuntime,
     ExecutionMarker, MonitorComponentMetadata, RuntimeExecutionProbe, build_monitor_topology,
 };
+#[cfg(all(feature = "std", feature = "parallel-rt"))]
 use crate::parallel_rt::{ParallelRt, ParallelRtMetadata};
 use crate::resource::ResourceManager;
 use compact_str::CompactString;
@@ -105,6 +106,21 @@ pub trait AsyncCopperListPayload {}
 
 #[cfg(not(all(feature = "std", feature = "async-cl-io")))]
 impl<T> AsyncCopperListPayload for T {}
+
+/// Control-flow result returned by one generated process stage.
+///
+/// `AbortCopperList` preserves the current runtime semantics for monitor
+/// decisions that abort the current CopperList without shutting the runtime
+/// down. The outer driver remains responsible for ordered cleanup and log
+/// handoff.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProcessStepOutcome {
+    Continue,
+    AbortCopperList,
+}
+
+/// Result type used by generated process-step functions.
+pub type ProcessStepResult = CuResult<ProcessStepOutcome>;
 
 /// Manages the lifecycle of the copper lists and logging on the synchronous path.
 pub struct SyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
@@ -669,10 +685,8 @@ pub struct CuRuntime<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize
     /// The logger for the state of the tasks (frozen tasks)
     pub keyframes_manager: KeyFramesManager,
 
-    /// Feature-split container for deterministic multi-CopperList execution.
-    ///
-    /// This is intentionally present even when the `parallel-rt` feature is
-    /// disabled so the rest of the runtime can compose against one stable API.
+    /// Feature-gated container for deterministic multi-CopperList execution.
+    #[cfg(all(feature = "std", feature = "parallel-rt"))]
     pub parallel_rt: ParallelRt<NBCL>,
 
     /// The runtime configuration controlling the behavior of the run loop
@@ -836,6 +850,7 @@ impl<
         ) -> CuResult<CT>,
         monitored_components: &'static [MonitorComponentMetadata],
         culist_component_mapping: &'static [ComponentId],
+        #[cfg(all(feature = "std", feature = "parallel-rt"))]
         parallel_rt_metadata: &'static ParallelRtMetadata,
         monitor_instanciator: impl Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
         bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
@@ -851,6 +866,7 @@ impl<
             tasks_instanciator,
             monitored_components,
             culist_component_mapping,
+            #[cfg(all(feature = "std", feature = "parallel-rt"))]
             parallel_rt_metadata,
             monitor_instanciator,
             bridges_instanciator,
@@ -872,6 +888,7 @@ impl<
         ) -> CuResult<CT>,
         monitored_components: &'static [MonitorComponentMetadata],
         culist_component_mapping: &'static [ComponentId],
+        #[cfg(all(feature = "std", feature = "parallel-rt"))]
         parallel_rt_metadata: &'static ParallelRtMetadata,
         monitor_instanciator: impl Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
         bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
@@ -934,6 +951,7 @@ impl<
             forced_timestamp: None,
             locked: false,
         };
+        #[cfg(all(feature = "std", feature = "parallel-rt"))]
         let parallel_rt = ParallelRt::new(parallel_rt_metadata)?;
 
         let runtime_config = config.runtime.clone().unwrap_or_default();
@@ -947,6 +965,7 @@ impl<
             clock,
             copperlists_manager,
             keyframes_manager,
+            #[cfg(all(feature = "std", feature = "parallel-rt"))]
             parallel_rt,
             runtime_config,
         };
@@ -967,7 +986,6 @@ impl<
         ) -> CuResult<CT>,
         monitored_components: &'static [MonitorComponentMetadata],
         culist_component_mapping: &'static [ComponentId],
-        parallel_rt_metadata: &'static ParallelRtMetadata,
         monitor_instanciator: impl Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
         bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
@@ -984,7 +1002,6 @@ impl<
             tasks_instanciator,
             monitored_components,
             culist_component_mapping,
-            parallel_rt_metadata,
             monitor_instanciator,
             bridges_instanciator,
             copperlists_logger,
@@ -1005,7 +1022,6 @@ impl<
         ) -> CuResult<CT>,
         monitored_components: &'static [MonitorComponentMetadata],
         culist_component_mapping: &'static [ComponentId],
-        parallel_rt_metadata: &'static ParallelRtMetadata,
         monitor_instanciator: impl Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
         bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
@@ -1079,7 +1095,6 @@ impl<
             forced_timestamp: None,
             locked: false,
         };
-        let parallel_rt = ParallelRt::new(parallel_rt_metadata)?;
 
         let runtime_config = config.runtime.clone().unwrap_or_default();
 
@@ -1092,7 +1107,6 @@ impl<
             clock,
             copperlists_manager,
             keyframes_manager,
-            parallel_rt,
             runtime_config,
         };
 
@@ -1665,6 +1679,7 @@ mod tests {
             tasks_instanciator,
             &[],
             &[],
+            #[cfg(all(feature = "std", feature = "parallel-rt"))]
             &crate::parallel_rt::DISABLED_PARALLEL_RT_METADATA,
             monitor_instanciator,
             bridges_instanciator,
@@ -1691,6 +1706,7 @@ mod tests {
             tasks_instanciator,
             &[],
             &[],
+            #[cfg(all(feature = "std", feature = "parallel-rt"))]
             &crate::parallel_rt::DISABLED_PARALLEL_RT_METADATA,
             monitor_instanciator,
             bridges_instanciator,

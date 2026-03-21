@@ -9,6 +9,7 @@
 
 use crate::config::NodeId;
 use crate::copperlist::{CopperList, CuListZeroedInit};
+pub use crate::curuntime::{ProcessStepOutcome, ProcessStepResult};
 use crate::monitoring::ComponentId;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -16,22 +17,7 @@ use core::fmt::{Debug, Formatter, Result as FmtResult};
 use core::ops::{Deref, DerefMut};
 use core::sync::atomic::{AtomicU64, Ordering};
 use cu29_clock::CuTime;
-use cu29_traits::{CopperListTuple, CuResult};
-
-/// Control-flow result returned by one generated process stage.
-///
-/// `AbortCopperList` preserves the current runtime semantics for monitor
-/// decisions that abort the current CopperList without shutting the runtime
-/// down. The outer driver remains responsible for ordered cleanup and log
-/// handoff.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ProcessStepOutcome {
-    Continue,
-    AbortCopperList,
-}
-
-/// Result type used by generated process-step functions.
-pub type ProcessStepResult = CuResult<ProcessStepOutcome>;
+use cu29_traits::CopperListTuple;
 
 /// Scheduler-facing category for one process-stage checkpoint.
 ///
