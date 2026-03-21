@@ -2272,10 +2272,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 step,
                                 spec,
                                 *channel_index,
-                                &mission_mod,
-                                sim_mode,
-                                ParallelLifecyclePlacement::default(),
-                                false,
+                                StepGenerationContext::new(
+                                    &output_pack_sizes,
+                                    sim_mode,
+                                    &mission_mod,
+                                    ParallelLifecyclePlacement::default(),
+                                    false,
+                                ),
                                 {
                                     let bridge_tuple_index =
                                         int2sliceindex(spec.tuple_index as u32);
@@ -2365,12 +2368,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     step,
                                     spec,
                                     *channel_index,
-                                    &mission_mod,
-                                    false,
-                                    parallel_lifecycle_placements
-                                        .as_ref()
-                                        .expect("parallel lifecycle placements missing")[step_index],
-                                    true,
+                                    StepGenerationContext::new(
+                                        &output_pack_sizes,
+                                        false,
+                                        &mission_mod,
+                                        parallel_lifecycle_placements
+                                            .as_ref()
+                                            .expect("parallel lifecycle placements missing")
+                                            [step_index],
+                                        true,
+                                    ),
                                     quote! {
                                         let _bridge_lock = step_rt.bridge_locks.#bridge_index_ts.lock().expect("parallel bridge lock poisoned");
                                         let bridge = unsafe { step_rt.bridge_ptrs.#bridge_index_ts.as_mut() };
@@ -6321,12 +6328,16 @@ fn generate_bridge_rx_execution_tokens(
     step: &CuExecutionStep,
     bridge_spec: &BridgeSpec,
     channel_index: usize,
-    mission_mod: &Ident,
-    sim_mode: bool,
-    lifecycle_placement: ParallelLifecyclePlacement,
-    wrap_process_step: bool,
+    ctx: StepGenerationContext<'_>,
     bridge_setup: proc_macro2::TokenStream,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    let StepGenerationContext {
+        output_pack_sizes: _,
+        sim_mode,
+        mission_mod,
+        lifecycle_placement,
+        wrap_process_step,
+    } = ctx;
     let rt_guard = rtsan_guard_tokens();
     let abort_process_step = abort_process_step_tokens(wrap_process_step);
     let channel = &bridge_spec.rx_channels[channel_index];
