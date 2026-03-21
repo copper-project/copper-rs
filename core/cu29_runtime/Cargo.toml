@@ -94,6 +94,7 @@ reflect = ["dep:bevy_reflect", "cu29-traits/reflect"]
 sysclock-perf = ["std"]
 async-cl-io = ["std"]
 parallel-rt = ["std", "dep:rtrb"]
+mmap-fsync = ["std", "cu29-unifiedlog/mmap-fsync"]
 remote-debug = [
   "std",
   "reflect",
