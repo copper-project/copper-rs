@@ -1,0 +1,137 @@
+ROOT := `git rev-parse --show-toplevel`
+
+# Run the four benchmark modes by default.
+default warmup="128" iterations="256" spin="0" words="2048" rounds="16" seconds="1.0":
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cd "{{ROOT}}"
+	tmp="$(mktemp)"
+	trap 'rm -f "$tmp"' EXIT
+
+	cargo run --quiet --release -p cu-runtime-matrix -- --mission all --warmup {{warmup}} --iterations {{iterations}} --busy-spin-iters {{spin}} --compute-words {{words}} --compute-rounds {{rounds}} --min-seconds {{seconds}} --output-format tsv >> "$tmp"
+	cargo run --quiet --release -p cu-runtime-matrix --features async-cl-io -- --mission all --warmup {{warmup}} --iterations {{iterations}} --busy-spin-iters {{spin}} --compute-words {{words}} --compute-rounds {{rounds}} --min-seconds {{seconds}} --output-format tsv >> "$tmp"
+	cargo run --quiet --release -p cu-runtime-matrix --features parallel-rt -- --mission all --warmup {{warmup}} --iterations {{iterations}} --busy-spin-iters {{spin}} --compute-words {{words}} --compute-rounds {{rounds}} --min-seconds {{seconds}} --output-format tsv >> "$tmp"
+	cargo run --quiet --release -p cu-runtime-matrix --features async-cl-io,parallel-rt -- --mission all --warmup {{warmup}} --iterations {{iterations}} --busy-spin-iters {{spin}} --compute-words {{words}} --compute-rounds {{rounds}} --min-seconds {{seconds}} --output-format tsv >> "$tmp"
+
+	python3 - "$tmp" "{{warmup}}" "{{iterations}}" "{{spin}}" "{{words}}" "{{rounds}}" "{{seconds}}" <<-'PY'
+	import sys
+	from collections import defaultdict
+	
+	path, warmup, iterations, spin, words, rounds, seconds = sys.argv[1:]
+	modes = ["sync+serial", "async-io+serial", "sync+parallel", "async-io+parallel"]
+	missions = [
+	    "OneToMany",
+	    "OneToManyBackground",
+	    "ManyToOne",
+	    "ManyToOneBackground",
+	    "ManyToMany",
+	    "ManyToManyBackground",
+	    "BridgeFanout",
+	    "BridgeFanoutBackground",
+	]
+	
+	rows = defaultdict(dict)
+	with open(path, "r", encoding="utf-8") as fh:
+	    for raw in fh:
+	        line = raw.strip()
+	        if not line:
+	            continue
+	        mode, mission, samples, elapsed_s, throughput_hz, mean_us, p50_us, p90_us, p99_us, max_us = line.split("\t")
+	        rows[mission][mode] = {
+	            "samples": int(samples),
+	            "elapsed_s": float(elapsed_s),
+	            "throughput_hz": float(throughput_hz),
+	            "mean_us": float(mean_us),
+	            "p99_us": float(p99_us),
+	            "max_us": float(max_us),
+	        }
+	
+	def pct_delta(current, baseline, lower_is_better=False):
+	    if baseline == 0:
+	        return "n/a"
+	    delta = ((current - baseline) / baseline) * 100.0
+	    if lower_is_better:
+	        delta = -delta
+	    if abs(delta) < 0.05:
+	        return "0.0%"
+	    sign = "+" if delta >= 0 else ""
+	    return f"{sign}{delta:.1f}%"
+	
+	def hz_fmt(value):
+	    if value >= 100000:
+	        return f"{value/1000:.1f}k"
+	    if value >= 10000:
+	        return f"{value/1000:.2f}k"
+	    return f"{value:.0f}"
+	
+	def us_fmt(value):
+	    return f"{value:.2f}"
+	
+	def print_table(title, metric, lower_is_better):
+	    print(title)
+	    print(f"{'mission':<24} {'serial':>12} {'async':>18} {'parallel':>18} {'both':>18}")
+	    for mission in missions:
+	        baseline = rows[mission]["sync+serial"][metric]
+	        values = {mode: rows[mission][mode][metric] for mode in modes}
+	        formatter = us_fmt if lower_is_better else hz_fmt
+	        async_cell = f"{formatter(values['async-io+serial'])} ({pct_delta(values['async-io+serial'], baseline, lower_is_better)})"
+	        parallel_cell = f"{formatter(values['sync+parallel'])} ({pct_delta(values['sync+parallel'], baseline, lower_is_better)})"
+	        both_cell = f"{formatter(values['async-io+parallel'])} ({pct_delta(values['async-io+parallel'], baseline, lower_is_better)})"
+	        print(
+	            f"{mission:<24} "
+	            f"{formatter(baseline):>12} "
+	            f"{async_cell:>18} "
+	            f"{parallel_cell:>18} "
+	            f"{both_cell:>18}"
+	        )
+	    print()
+	
+	print("Runtime Matrix Summary")
+	print(
+	    f"warmup={warmup} min_iterations={iterations} busy_spin_iters={spin} "
+	    f"compute_words={words} compute_rounds={rounds} min_seconds={seconds}"
+	)
+	print("baseline: sync+serial")
+	print("duration gate: each mission runs until both min_iterations and min_seconds are satisfied")
+	print("note: background missions measure loop cost while work is in flight, so they are not directly comparable to foreground missions for end-to-end throughput")
+	print()
+	print_table("Throughput Hz (higher is better; delta vs serial)", "throughput_hz", False)
+	print_table("P99 Latency us (lower is better; delta vs serial)", "p99_us", True)
+	PY
+
+# Render the DAG from the checked-in config.
+# With no mission argument, cu29-rendercfg renders every mission on one page.
+dag mission="":
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cd "{{ROOT}}"
+	mission_value="{{mission}}"
+	if [[ -n "$mission_value" ]]; then
+		cargo run -p cu29-runtime --bin cu29-rendercfg -- --mission "$mission_value" --open examples/cu_runtime_matrix/copperconfig.ron
+	else
+		cargo run -p cu29-runtime --bin cu29-rendercfg -- --open examples/cu_runtime_matrix/copperconfig.ron
+	fi
+
+test-serial:
+	cargo test -p cu-runtime-matrix -- --test-threads=1
+
+test-async:
+	cargo test -p cu-runtime-matrix --features async-cl-io -- --test-threads=1
+
+test-parallel:
+	cargo test -p cu-runtime-matrix --features parallel-rt -- --test-threads=1
+
+test-both:
+	cargo test -p cu-runtime-matrix --features async-cl-io,parallel-rt -- --test-threads=1
+
+bench-serial mission="all" warmup="128" iterations="256" spin="0" words="2048" rounds="16" seconds="1.0":
+	cargo run --quiet --release -p cu-runtime-matrix -- --mission {{mission}} --warmup {{warmup}} --iterations {{iterations}} --busy-spin-iters {{spin}} --compute-words {{words}} --compute-rounds {{rounds}} --min-seconds {{seconds}}
+
+bench-async mission="all" warmup="128" iterations="256" spin="0" words="2048" rounds="16" seconds="1.0":
+	cargo run --quiet --release -p cu-runtime-matrix --features async-cl-io -- --mission {{mission}} --warmup {{warmup}} --iterations {{iterations}} --busy-spin-iters {{spin}} --compute-words {{words}} --compute-rounds {{rounds}} --min-seconds {{seconds}}
+
+bench-parallel mission="all" warmup="128" iterations="256" spin="0" words="2048" rounds="16" seconds="1.0":
+	cargo run --quiet --release -p cu-runtime-matrix --features parallel-rt -- --mission {{mission}} --warmup {{warmup}} --iterations {{iterations}} --busy-spin-iters {{spin}} --compute-words {{words}} --compute-rounds {{rounds}} --min-seconds {{seconds}}
+
+bench-both mission="all" warmup="128" iterations="256" spin="0" words="2048" rounds="16" seconds="1.0":
+	cargo run --quiet --release -p cu-runtime-matrix --features async-cl-io,parallel-rt -- --mission {{mission}} --warmup {{warmup}} --iterations {{iterations}} --busy-spin-iters {{spin}} --compute-words {{words}} --compute-rounds {{rounds}} --min-seconds {{seconds}}

@@ -1,0 +1,33 @@
+[package]
+name = "cu-runtime-matrix"
+description = "Deterministic scheduler/runtime matrix coverage for async-cl-io, parallel-rt, background tasks, and bridge topologies."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+default-run = "cu-runtime-matrix"
+
+publish = false
+
+[dependencies]
+bincode = { workspace = true }
+clap = { workspace = true }
+cu29 = { workspace = true }
+cu29-helpers = { workspace = true }
+serde = { workspace = true }
+tempfile = { workspace = true }
+
+[dev-dependencies]
+cu29-export = { workspace = true }
+cu29-unifiedlog = { workspace = true }
+
+[features]
+async-cl-io = ["cu29/async-cl-io"]
+parallel-rt = ["cu29/parallel-rt"]
+
+[package.metadata.cargo-shear]
+ignored = ["bincode", "serde"]
