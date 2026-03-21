@@ -1161,11 +1161,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         } else {
             None
         };
-        let process_step_execution_probe_type = if std {
-            quote! { &'a cu29::monitoring::ExecutionProbeHandle }
-        } else {
-            quote! { &'a cu29::monitoring::RuntimeExecutionProbe }
-        };
         let monitored_component_entries: Vec<proc_macro2::TokenStream> = ids
             .iter()
             .enumerate()
@@ -2261,6 +2256,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 sim_mode,
                                 &mission_mod,
                                 ParallelLifecyclePlacement::default(),
+                                false,
                             ),
                             TaskExecutionTokens::new(quote! {}, {
                                 let node_index = int2sliceindex(*task_index as u32);
@@ -2279,6 +2275,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 &mission_mod,
                                 sim_mode,
                                 ParallelLifecyclePlacement::default(),
+                                false,
                                 {
                                     let bridge_tuple_index =
                                         int2sliceindex(spec.tuple_index as u32);
@@ -2300,6 +2297,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     sim_mode,
                                     &mission_mod,
                                     ParallelLifecyclePlacement::default(),
+                                    false,
                                 ),
                                 {
                                     let bridge_tuple_index =
@@ -2349,6 +2347,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         parallel_lifecycle_placements
                                             .as_ref()
                                             .expect("parallel lifecycle placements missing")[step_index],
+                                        true,
                                     ),
                                     TaskExecutionTokens::new(quote! {
                                         let _task_lock = step_rt.task_locks.#task_index_ts.lock().expect("parallel task lock poisoned");
@@ -2371,6 +2370,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     parallel_lifecycle_placements
                                         .as_ref()
                                         .expect("parallel lifecycle placements missing")[step_index],
+                                    true,
                                     quote! {
                                         let _bridge_lock = step_rt.bridge_locks.#bridge_index_ts.lock().expect("parallel bridge lock poisoned");
                                         let bridge = unsafe { step_rt.bridge_ptrs.#bridge_index_ts.as_mut() };
@@ -2394,6 +2394,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         parallel_lifecycle_placements
                                             .as_ref()
                                             .expect("parallel lifecycle placements missing")[step_index],
+                                        true,
                                     ),
                                     quote! {
                                         let _bridge_lock = step_rt.bridge_locks.#bridge_index_ts.lock().expect("parallel bridge lock poisoned");
@@ -2516,65 +2517,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             None
         };
 
-        let (runtime_plan_step_code, preprocess_logging_calls): (Vec<_>, Vec<_>) =
+        let (runtime_plan_code, preprocess_logging_calls): (Vec<_>, Vec<_>) =
             itertools::multiunzip(runtime_plan_code_and_logging);
         let process_step_tasks_type = if sim_mode {
             quote!(CuSimTasks)
         } else {
             quote!(CuTasks)
         };
-        let process_step_idents: Vec<Ident> = (0..runtime_plan_step_code.len())
-            .map(|index| format_ident!("__cu_process_step_{index}"))
-            .collect();
-        let process_step_fn_defs: Vec<proc_macro2::TokenStream> = process_step_idents
-            .iter()
-            .zip(runtime_plan_step_code.iter())
-            .map(|(step_ident, step_code)| {
-                if sim_mode {
-                    quote! {
-                        #[inline(always)]
-                        fn #step_ident<F>(
-                            step_rt: &mut ProcessStepRuntime<'_>,
-                            sim_callback: &mut F,
-                        ) -> cu29::curuntime::ProcessStepResult
-                        where
-                            F: FnMut(SimStep) -> SimOverride,
-                        {
-                            let clock = step_rt.clock;
-                            let execution_probe = step_rt.execution_probe;
-                            let monitor = &mut *step_rt.monitor;
-                            let tasks = &mut *step_rt.tasks;
-                            let __cu_bridges = &mut *step_rt.bridges;
-                            let culist = &mut *step_rt.culist;
-                            let clid = step_rt.clid;
-                            let ctx = &mut *step_rt.ctx;
-                            let kf_manager = &mut *step_rt.kf_manager;
-                            let msgs = &mut culist.msgs.0;
-                            #step_code
-                        }
-                    }
-                } else {
-                    quote! {
-                        #[inline(always)]
-                        fn #step_ident(
-                            step_rt: &mut ProcessStepRuntime<'_>,
-                        ) -> cu29::curuntime::ProcessStepResult {
-                            let clock = step_rt.clock;
-                            let execution_probe = step_rt.execution_probe;
-                            let monitor = &mut *step_rt.monitor;
-                            let tasks = &mut *step_rt.tasks;
-                            let __cu_bridges = &mut *step_rt.bridges;
-                            let culist = &mut *step_rt.culist;
-                            let clid = step_rt.clid;
-                            let ctx = &mut *step_rt.ctx;
-                            let kf_manager = &mut *step_rt.kf_manager;
-                            let msgs = &mut culist.msgs.0;
-                            #step_code
-                        }
-                    }
-                }
-            })
-            .collect();
         let (
             parallel_process_step_idents,
             parallel_process_step_fn_defs,
@@ -2789,32 +2738,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         };
         let parallel_process_stage_count_tokens =
             proc_macro2::Literal::usize_unsuffixed(parallel_process_step_idents.len());
-        let runtime_plan_code: Vec<proc_macro2::TokenStream> = process_step_idents
-            .iter()
-            .map(|step_ident| {
-                if sim_mode {
-                    quote! {
-                        match #step_ident(&mut __cu_process_step_rt, sim_callback)? {
-                            cu29::curuntime::ProcessStepOutcome::Continue => {}
-                            cu29::curuntime::ProcessStepOutcome::AbortCopperList => {
-                                __cu_abort_copperlist = true;
-                                break '__cu_process_steps;
-                            }
-                        }
-                    }
-                } else {
-                    quote! {
-                        match #step_ident(&mut __cu_process_step_rt)? {
-                            cu29::curuntime::ProcessStepOutcome::Continue => {}
-                            cu29::curuntime::ProcessStepOutcome::AbortCopperList => {
-                                __cu_abort_copperlist = true;
-                                break '__cu_process_steps;
-                            }
-                        }
-                    }
-                }
-            })
-            .collect();
         let parallel_task_ptrs_type = if task_types.is_empty() {
             quote! { () }
         } else {
@@ -3542,17 +3465,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     .task_ids(#mission_mod::TASK_IDS)
                     .build();
                 {
-                    let mut __cu_process_step_rt = #mission_mod::ProcessStepRuntime {
-                        clock,
-                        execution_probe,
-                        monitor,
-                        tasks,
-                        bridges: __cu_bridges,
-                        culist,
-                        clid,
-                        ctx: &mut ctx,
-                        kf_manager,
-                    };
+                    let msgs = &mut culist.msgs.0;
                     '__cu_process_steps: {
                     #(#runtime_plan_code)*
                     }
@@ -4284,34 +4197,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
 
                 #culist_support
-
-                type ProcessStepExecutionProbe<'a> = #process_step_execution_probe_type;
-
-                /// Mutable per-iteration state handed to one generated process stage.
-                ///
-                /// Field meanings:
-                /// - `clock`: runtime clock used for process timing metadata.
-                /// - `execution_probe`: watchdog-visible progress probe updated before each stage.
-                /// - `monitor`: mission monitor handling stage errors and CL-level observation.
-                /// - `tasks`: tuple of instantiated mission tasks.
-                /// - `bridges`: tuple of instantiated mission bridges.
-                /// - `culist`: CopperList currently being filled by the process path.
-                /// - `clid`: deterministic CopperList id for the current iteration.
-                /// - `ctx`: shared per-iteration task context passed into components.
-                /// - `kf_manager`: keyframe accumulator frozen before each stateful stage.
-                struct ProcessStepRuntime<'a> {
-                    clock: &'a RobotClock,
-                    execution_probe: ProcessStepExecutionProbe<'a>,
-                    monitor: &'a mut #monitor_type,
-                    tasks: &'a mut #process_step_tasks_type,
-                    bridges: &'a mut CuBridges,
-                    culist: &'a mut CuList,
-                    clid: u64,
-                    ctx: &'a mut cu29::context::CuContext,
-                    kf_manager: &'a mut cu29::curuntime::KeyFramesManager,
-                }
-
-                #(#process_step_fn_defs)*
                 #parallel_rt_support_tokens
 
                 #tasks_instanciator
@@ -5641,19 +5526,33 @@ fn build_monitored_ids(task_ids: &[String], bridge_specs: &mut [BridgeSpec]) -> 
     names
 }
 
-fn wrap_process_step_tokens(body: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
-    quote! {{
-        let __cu_process_step_result: cu29::curuntime::ProcessStepResult = (|| {
-            #body
-            Ok(cu29::curuntime::ProcessStepOutcome::Continue)
-        })();
-        __cu_process_step_result
-    }}
+fn wrap_process_step_tokens(
+    wrap_process_step: bool,
+    body: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    if wrap_process_step {
+        quote! {{
+            let __cu_process_step_result: cu29::curuntime::ProcessStepResult = (|| {
+                #body
+                Ok(cu29::curuntime::ProcessStepOutcome::Continue)
+            })();
+            __cu_process_step_result
+        }}
+    } else {
+        body
+    }
 }
 
-fn abort_process_step_tokens() -> proc_macro2::TokenStream {
-    quote! {
-        return Ok(cu29::curuntime::ProcessStepOutcome::AbortCopperList);
+fn abort_process_step_tokens(wrap_process_step: bool) -> proc_macro2::TokenStream {
+    if wrap_process_step {
+        quote! {
+            return Ok(cu29::curuntime::ProcessStepOutcome::AbortCopperList);
+        }
+    } else {
+        quote! {
+            __cu_abort_copperlist = true;
+            break '__cu_process_steps;
+        }
     }
 }
 
@@ -5666,7 +5565,7 @@ fn parallel_task_lifecycle_tokens(
     placement: ParallelLifecyclePlacement,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let rt_guard = rtsan_guard_tokens();
-    let abort_process_step = abort_process_step_tokens();
+    let abort_process_step = abort_process_step_tokens(true);
     let task_trait = match task_kind {
         CuTaskType::Source => quote! { cu29::cutask::CuSrcTask },
         CuTaskType::Sink => quote! { cu29::cutask::CuSinkTask },
@@ -5781,7 +5680,7 @@ fn parallel_bridge_lifecycle_tokens(
     placement: ParallelLifecyclePlacement,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let rt_guard = rtsan_guard_tokens();
-    let abort_process_step = abort_process_step_tokens();
+    let abort_process_step = abort_process_step_tokens(true);
 
     let preprocess = if placement.preprocess {
         quote! {
@@ -5891,6 +5790,7 @@ struct StepGenerationContext<'a> {
     sim_mode: bool,
     mission_mod: &'a Ident,
     lifecycle_placement: ParallelLifecyclePlacement,
+    wrap_process_step: bool,
 }
 
 impl<'a> StepGenerationContext<'a> {
@@ -5899,12 +5799,14 @@ impl<'a> StepGenerationContext<'a> {
         sim_mode: bool,
         mission_mod: &'a Ident,
         lifecycle_placement: ParallelLifecyclePlacement,
+        wrap_process_step: bool,
     ) -> Self {
         Self {
             output_pack_sizes,
             sim_mode,
             mission_mod,
             lifecycle_placement,
+            wrap_process_step,
         }
     }
 }
@@ -5932,12 +5834,13 @@ fn generate_task_execution_tokens(
         sim_mode,
         mission_mod,
         lifecycle_placement,
+        wrap_process_step,
     } = ctx;
     let TaskExecutionTokens {
         setup: task_setup,
         instance: task_instance,
     } = task_tokens;
-    let abort_process_step = abort_process_step_tokens();
+    let abort_process_step = abort_process_step_tokens(wrap_process_step);
     let comment_str = format!(
         "DEBUG ->> {} ({:?}) Id:{} I:{:?} O:{:?}",
         step.node.get_id(),
@@ -6122,29 +6025,32 @@ fn generate_task_execution_tokens(
             };
 
             (
-                wrap_process_step_tokens(quote! {
-                    #task_setup
-                    #parallel_task_preprocess
-                    #comment_tokens
-                    kf_manager.freeze_task(clid, &#task_instance)?;
-                    #call_sim_callback
-                    let cumsg_output = &mut msgs.#output_culist_index;
-                    #maybe_sim_tick
-                    let maybe_error = if doit {
-                        execution_probe.record(cu29::monitoring::ExecutionMarker {
-                            component_id: cu29::monitoring::ComponentId::new(#tid),
-                            step: CuComponentState::Process,
-                            culistid: Some(clid),
-                        });
-                        #source_process_tokens
-                    } else {
-                        Ok(())
-                    };
-                    if let Err(error) = maybe_error {
-                        #monitoring_action
-                    }
-                    #parallel_task_postprocess
-                }),
+                wrap_process_step_tokens(
+                    wrap_process_step,
+                    quote! {
+                        #task_setup
+                        #parallel_task_preprocess
+                        #comment_tokens
+                        kf_manager.freeze_task(clid, &#task_instance)?;
+                        #call_sim_callback
+                        let cumsg_output = &mut msgs.#output_culist_index;
+                        #maybe_sim_tick
+                        let maybe_error = if doit {
+                            execution_probe.record(cu29::monitoring::ExecutionMarker {
+                                component_id: cu29::monitoring::ComponentId::new(#tid),
+                                step: CuComponentState::Process,
+                                culistid: Some(clid),
+                            });
+                            #source_process_tokens
+                        } else {
+                            Ok(())
+                        };
+                        if let Err(error) = maybe_error {
+                            #monitoring_action
+                        }
+                        #parallel_task_postprocess
+                    },
+                ),
                 logging_tokens,
             )
         }
@@ -6223,36 +6129,39 @@ fn generate_task_execution_tokens(
             };
 
             (
-                wrap_process_step_tokens(quote! {
-                    #task_setup
-                    #parallel_task_preprocess
-                    #comment_tokens
-                    kf_manager.freeze_task(clid, &#task_instance)?;
-                    #call_sim_callback
-                    let cumsg_input = &#inputs_type;
-                    let cumsg_output = &mut msgs.#output_culist_index;
-                    let maybe_error = if doit {
-                        execution_probe.record(cu29::monitoring::ExecutionMarker {
-                            component_id: cu29::monitoring::ComponentId::new(#tid),
-                            step: CuComponentState::Process,
-                            culistid: Some(clid),
-                        });
-                        #output_start_time
-                        let result = {
-                            #rt_guard
-                            ctx.set_current_task(#tid);
-                            #task_instance.process(&ctx, cumsg_input)
+                wrap_process_step_tokens(
+                    wrap_process_step,
+                    quote! {
+                        #task_setup
+                        #parallel_task_preprocess
+                        #comment_tokens
+                        kf_manager.freeze_task(clid, &#task_instance)?;
+                        #call_sim_callback
+                        let cumsg_input = &#inputs_type;
+                        let cumsg_output = &mut msgs.#output_culist_index;
+                        let maybe_error = if doit {
+                            execution_probe.record(cu29::monitoring::ExecutionMarker {
+                                component_id: cu29::monitoring::ComponentId::new(#tid),
+                                step: CuComponentState::Process,
+                                culistid: Some(clid),
+                            });
+                            #output_start_time
+                            let result = {
+                                #rt_guard
+                                ctx.set_current_task(#tid);
+                                #task_instance.process(&ctx, cumsg_input)
+                            };
+                            #output_end_time
+                            result
+                        } else {
+                            Ok(())
                         };
-                        #output_end_time
-                        result
-                    } else {
-                        Ok(())
-                    };
-                    if let Err(error) = maybe_error {
-                        #monitoring_action
-                    }
-                    #parallel_task_postprocess
-                }),
+                        if let Err(error) = maybe_error {
+                            #monitoring_action
+                        }
+                        #parallel_task_postprocess
+                    },
+                ),
                 quote! {},
             )
         }
@@ -6376,29 +6285,32 @@ fn generate_task_execution_tokens(
             };
 
             (
-                wrap_process_step_tokens(quote! {
-                    #task_setup
-                    #parallel_task_preprocess
-                    #comment_tokens
-                    kf_manager.freeze_task(clid, &#task_instance)?;
-                    #call_sim_callback
-                    let cumsg_input = &#inputs_type;
-                    let cumsg_output = &mut msgs.#output_culist_index;
-                    let maybe_error = if doit {
-                        execution_probe.record(cu29::monitoring::ExecutionMarker {
-                            component_id: cu29::monitoring::ComponentId::new(#tid),
-                            step: CuComponentState::Process,
-                            culistid: Some(clid),
-                        });
-                        #regular_process_tokens
-                    } else {
-                        Ok(())
-                    };
-                    if let Err(error) = maybe_error {
-                        #monitoring_action
-                    }
-                    #parallel_task_postprocess
-                }),
+                wrap_process_step_tokens(
+                    wrap_process_step,
+                    quote! {
+                        #task_setup
+                        #parallel_task_preprocess
+                        #comment_tokens
+                        kf_manager.freeze_task(clid, &#task_instance)?;
+                        #call_sim_callback
+                        let cumsg_input = &#inputs_type;
+                        let cumsg_output = &mut msgs.#output_culist_index;
+                        let maybe_error = if doit {
+                            execution_probe.record(cu29::monitoring::ExecutionMarker {
+                                component_id: cu29::monitoring::ComponentId::new(#tid),
+                                step: CuComponentState::Process,
+                                culistid: Some(clid),
+                            });
+                            #regular_process_tokens
+                        } else {
+                            Ok(())
+                        };
+                        if let Err(error) = maybe_error {
+                            #monitoring_action
+                        }
+                        #parallel_task_postprocess
+                    },
+                ),
                 logging_tokens,
             )
         }
@@ -6412,10 +6324,11 @@ fn generate_bridge_rx_execution_tokens(
     mission_mod: &Ident,
     sim_mode: bool,
     lifecycle_placement: ParallelLifecyclePlacement,
+    wrap_process_step: bool,
     bridge_setup: proc_macro2::TokenStream,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let rt_guard = rtsan_guard_tokens();
-    let abort_process_step = abort_process_step_tokens();
+    let abort_process_step = abort_process_step_tokens(wrap_process_step);
     let channel = &bridge_spec.rx_channels[channel_index];
     let output_pack = step
         .output_msg_pack
@@ -6494,48 +6407,51 @@ fn generate_bridge_rx_execution_tokens(
         quote! { let doit = true; }
     };
     (
-        wrap_process_step_tokens(quote! {
-            #bridge_setup
-            #parallel_bridge_preprocess
-            let cumsg_output = #output_ref;
-            #call_sim_callback
-            if doit {
-                execution_probe.record(cu29::monitoring::ExecutionMarker {
-                    component_id: cu29::monitoring::ComponentId::new(#monitor_index),
-                    step: CuComponentState::Process,
-                    culistid: Some(clid),
-                });
-                cumsg_output.metadata.process_time.start = cu29::curuntime::perf_now(clock).into();
-                let maybe_error = {
-                    #rt_guard
-                    ctx.clear_current_task();
-                    bridge.receive(
-                        &ctx,
-                        &<#bridge_type as cu29::cubridge::CuBridge>::Rx::#const_ident,
-                        cumsg_output,
-                    )
-                };
-                cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
-                if let Err(error) = maybe_error {
-                    let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Process, &error);
-                    match decision {
-                        Decision::Abort => {
-                            debug!("Process: ABORT decision from monitoring. Component '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)), clid);
-                            #abort_process_step
-                        }
-                        Decision::Ignore => {
-                            debug!("Process: IGNORE decision from monitoring. Component '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
-                            cumsg_output.clear_payload();
-                        }
-                        Decision::Shutdown => {
-                            debug!("Process: SHUTDOWN decision from monitoring. Component '{}' errored out during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
-                            return Err(CuError::new_with_cause("Component errored out during process.", error));
+        wrap_process_step_tokens(
+            wrap_process_step,
+            quote! {
+                #bridge_setup
+                #parallel_bridge_preprocess
+                let cumsg_output = #output_ref;
+                #call_sim_callback
+                if doit {
+                    execution_probe.record(cu29::monitoring::ExecutionMarker {
+                        component_id: cu29::monitoring::ComponentId::new(#monitor_index),
+                        step: CuComponentState::Process,
+                        culistid: Some(clid),
+                    });
+                    cumsg_output.metadata.process_time.start = cu29::curuntime::perf_now(clock).into();
+                    let maybe_error = {
+                        #rt_guard
+                        ctx.clear_current_task();
+                        bridge.receive(
+                            &ctx,
+                            &<#bridge_type as cu29::cubridge::CuBridge>::Rx::#const_ident,
+                            cumsg_output,
+                        )
+                    };
+                    cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
+                    if let Err(error) = maybe_error {
+                        let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Process, &error);
+                        match decision {
+                            Decision::Abort => {
+                                debug!("Process: ABORT decision from monitoring. Component '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)), clid);
+                                #abort_process_step
+                            }
+                            Decision::Ignore => {
+                                debug!("Process: IGNORE decision from monitoring. Component '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                cumsg_output.clear_payload();
+                            }
+                            Decision::Shutdown => {
+                                debug!("Process: SHUTDOWN decision from monitoring. Component '{}' errored out during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                return Err(CuError::new_with_cause("Component errored out during process.", error));
+                            }
                         }
                     }
                 }
-            }
-            #parallel_bridge_postprocess
-        }),
+                #parallel_bridge_postprocess
+            },
+        ),
         quote! {},
     )
 }
@@ -6552,9 +6468,10 @@ fn generate_bridge_tx_execution_tokens(
         sim_mode,
         mission_mod,
         lifecycle_placement,
+        wrap_process_step,
     } = ctx;
     let rt_guard = rtsan_guard_tokens();
-    let abort_process_step = abort_process_step_tokens();
+    let abort_process_step = abort_process_step_tokens(wrap_process_step);
     let channel = &bridge_spec.tx_channels[channel_index];
     let monitor_index = syn::Index::from(
         channel
@@ -6644,48 +6561,51 @@ fn generate_bridge_tx_execution_tokens(
         quote! { let doit = true; }
     };
     (
-        wrap_process_step_tokens(quote! {
-            #bridge_setup
-            #parallel_bridge_preprocess
-            let cumsg_input = #input_ref;
-            let cumsg_output = #output_ref;
-            #call_sim_callback
-            if doit {
-                execution_probe.record(cu29::monitoring::ExecutionMarker {
-                    component_id: cu29::monitoring::ComponentId::new(#monitor_index),
-                    step: CuComponentState::Process,
-                    culistid: Some(clid),
-                });
-                cumsg_output.metadata.process_time.start = cu29::curuntime::perf_now(clock).into();
-                let maybe_error = {
-                    #rt_guard
-                    ctx.clear_current_task();
-                    bridge.send(
-                        &ctx,
-                        &<#bridge_type as cu29::cubridge::CuBridge>::Tx::#const_ident,
-                        &*cumsg_input,
-                    )
-                };
-                if let Err(error) = maybe_error {
-                    let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Process, &error);
-                    match decision {
-                        Decision::Abort => {
-                            debug!("Process: ABORT decision from monitoring. Component '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)), clid);
-                            #abort_process_step
-                        }
-                        Decision::Ignore => {
-                            debug!("Process: IGNORE decision from monitoring. Component '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
-                        }
-                        Decision::Shutdown => {
-                            debug!("Process: SHUTDOWN decision from monitoring. Component '{}' errored out during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
-                            return Err(CuError::new_with_cause("Component errored out during process.", error));
+        wrap_process_step_tokens(
+            wrap_process_step,
+            quote! {
+                #bridge_setup
+                #parallel_bridge_preprocess
+                let cumsg_input = #input_ref;
+                let cumsg_output = #output_ref;
+                #call_sim_callback
+                if doit {
+                    execution_probe.record(cu29::monitoring::ExecutionMarker {
+                        component_id: cu29::monitoring::ComponentId::new(#monitor_index),
+                        step: CuComponentState::Process,
+                        culistid: Some(clid),
+                    });
+                    cumsg_output.metadata.process_time.start = cu29::curuntime::perf_now(clock).into();
+                    let maybe_error = {
+                        #rt_guard
+                        ctx.clear_current_task();
+                        bridge.send(
+                            &ctx,
+                            &<#bridge_type as cu29::cubridge::CuBridge>::Tx::#const_ident,
+                            &*cumsg_input,
+                        )
+                    };
+                    if let Err(error) = maybe_error {
+                        let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Process, &error);
+                        match decision {
+                            Decision::Abort => {
+                                debug!("Process: ABORT decision from monitoring. Component '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)), clid);
+                                #abort_process_step
+                            }
+                            Decision::Ignore => {
+                                debug!("Process: IGNORE decision from monitoring. Component '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                            }
+                            Decision::Shutdown => {
+                                debug!("Process: SHUTDOWN decision from monitoring. Component '{}' errored out during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                return Err(CuError::new_with_cause("Component errored out during process.", error));
+                            }
                         }
                     }
+                    cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
                 }
-                cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
-            }
-            #parallel_bridge_postprocess
-        }),
+                #parallel_bridge_postprocess
+            },
+        ),
         quote! {},
     )
 }
