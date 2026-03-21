@@ -24,6 +24,8 @@ tempfile = { workspace = true }
 [dev-dependencies]
 cu29-export = { workspace = true }
 cu29-unifiedlog = { workspace = true }
+erased-serde = { workspace = true }
+serde_json = { workspace = true }
 
 [features]
 async-cl-io = ["cu29/async-cl-io"]

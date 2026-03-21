@@ -20,16 +20,17 @@
         (
             id: "threadpool",
             provider: "cu29::resource::ThreadPoolBundle",
-            config: {
-                "threads": 2,
-            },
+            config: {"threads": 2},
         ),
     ],
     tasks: [
         (
             id: "otm_src",
             type: "tasks::SequenceSrc",
-            missions: ["OneToMany", "OneToManyBackground"],
+            missions: [
+                "OneToMany",
+                "OneToManyBackground",
+            ],
             config: {
                 "source_id": 1,
                 "emit_limit": 64,
@@ -81,15 +82,19 @@
         (
             id: "otm_sink",
             type: "tasks::SeqPairSink",
-            missions: ["OneToMany", "OneToManyBackground"],
-            config: {
-                "sink_id": 1,
-            },
+            missions: [
+                "OneToMany",
+                "OneToManyBackground",
+            ],
+            config: {"sink_id": 1},
         ),
         (
             id: "mto_src_a",
             type: "tasks::SequenceSrc",
-            missions: ["ManyToOne", "ManyToOneBackground"],
+            missions: [
+                "ManyToOne",
+                "ManyToOneBackground",
+            ],
             config: {
                 "source_id": 1,
                 "emit_limit": 64,
@@ -99,7 +104,10 @@
         (
             id: "mto_src_b",
             type: "tasks::SequenceSrc",
-            missions: ["ManyToOne", "ManyToOneBackground"],
+            missions: [
+                "ManyToOne",
+                "ManyToOneBackground",
+            ],
             config: {
                 "source_id": 2,
                 "emit_limit": 64,
@@ -140,15 +148,19 @@
         (
             id: "mto_sink",
             type: "tasks::JoinSink",
-            missions: ["ManyToOne", "ManyToOneBackground"],
-            config: {
-                "sink_id": 2,
-            },
+            missions: [
+                "ManyToOne",
+                "ManyToOneBackground",
+            ],
+            config: {"sink_id": 2},
         ),
         (
             id: "mtm_src_a",
             type: "tasks::SequenceSrc",
-            missions: ["ManyToMany", "ManyToManyBackground"],
+            missions: [
+                "ManyToMany",
+                "ManyToManyBackground",
+            ],
             config: {
                 "source_id": 1,
                 "emit_limit": 64,
@@ -158,7 +170,10 @@
         (
             id: "mtm_src_b",
             type: "tasks::SequenceSrc",
-            missions: ["ManyToMany", "ManyToManyBackground"],
+            missions: [
+                "ManyToMany",
+                "ManyToManyBackground",
+            ],
             config: {
                 "source_id": 2,
                 "emit_limit": 64,
@@ -230,10 +245,11 @@
         (
             id: "mtm_sink",
             type: "tasks::JoinPairSink",
-            missions: ["ManyToMany", "ManyToManyBackground"],
-            config: {
-                "sink_id": 3,
-            },
+            missions: [
+                "ManyToMany",
+                "ManyToManyBackground",
+            ],
+            config: {"sink_id": 3},
         ),
         (
             id: "bridge_task_left_fg",
@@ -282,7 +298,10 @@
         (
             id: "alpha",
             type: "bridges::AlphaBridge",
-            missions: ["BridgeFanout", "BridgeFanoutBackground"],
+            missions: [
+                "BridgeFanout",
+                "BridgeFanoutBackground",
+            ],
             config: {
                 "emit_limit": 64,
                 "busy_spin_iters": 0,
@@ -297,7 +316,10 @@
         (
             id: "beta",
             type: "bridges::BetaBridge",
-            missions: ["BridgeFanout", "BridgeFanoutBackground"],
+            missions: [
+                "BridgeFanout",
+                "BridgeFanoutBackground",
+            ],
             channels: [
                 Tx(
                     id: "left",

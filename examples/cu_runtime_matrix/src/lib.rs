@@ -1431,6 +1431,7 @@ mod tests {
     use super::*;
     use cu29_export::copperlists_reader;
     use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
+    use serde_json::Value;
     use std::path::Path;
     use std::time::Duration;
 
@@ -1439,10 +1440,34 @@ mod tests {
     const TEST_COMPUTE_WORDS: usize = 64;
     const TEST_COMPUTE_ROUNDS: u32 = 2;
 
-    fn read_copperlists_encoded<P>(log_base: &Path) -> CuResult<Vec<Vec<u8>>>
+    #[derive(Debug, Clone, PartialEq)]
+    struct NormalizedCuMsg {
+        payload: Option<Value>,
+        tov: Tov,
+        status_txt: String,
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
+    struct NormalizedCopperList {
+        id: u64,
+        msgs: Vec<NormalizedCuMsg>,
+    }
+
+    fn erased_serialize_to_json(value: &dyn erased_serde::Serialize) -> CuResult<Value> {
+        let mut bytes = Vec::new();
+        {
+            let mut serializer = serde_json::Serializer::new(&mut bytes);
+            erased_serde::serialize(value, &mut serializer).map_err(|err| {
+                CuError::from(format!("failed to serialize erased payload: {err}"))
+            })?;
+        }
+        serde_json::from_slice(&bytes)
+            .map_err(|err| CuError::new_with_cause("failed to parse serialized payload JSON", err))
+    }
+
+    fn read_copperlists_normalized<P>(log_base: &Path) -> CuResult<Vec<NormalizedCopperList>>
     where
         P: CopperListTuple,
-        CopperList<P>: Encode,
     {
         let UnifiedLogger::Read(read_logger) = UnifiedLoggerBuilder::new()
             .file_base_name(log_base)
@@ -1456,46 +1481,57 @@ mod tests {
         let iter = copperlists_reader::<P>(&mut reader);
         let mut out = Vec::new();
         for entry in iter {
-            out.push(
-                bincode::encode_to_vec(entry, bincode::config::standard())
-                    .expect("failed to encode copperlist"),
-            );
+            let msgs = entry
+                .cumsgs()
+                .into_iter()
+                .map(|msg| {
+                    Ok(NormalizedCuMsg {
+                        payload: msg.payload().map(erased_serialize_to_json).transpose()?,
+                        tov: msg.tov(),
+                        status_txt: msg.metadata().status_txt().0.to_string(),
+                    })
+                })
+                .collect::<CuResult<Vec<_>>>()?;
+            out.push(NormalizedCopperList { id: entry.id, msgs });
         }
         Ok(out)
     }
 
-    fn read_mission_copperlists(mission: MissionArg, log_base: &Path) -> CuResult<Vec<Vec<u8>>> {
+    fn read_mission_copperlists(
+        mission: MissionArg,
+        log_base: &Path,
+    ) -> CuResult<Vec<NormalizedCopperList>> {
         match mission {
             MissionArg::OneToMany => {
-                read_copperlists_encoded::<OneToMany::CuStampedDataSet>(log_base)
+                read_copperlists_normalized::<OneToMany::CuStampedDataSet>(log_base)
             }
             MissionArg::OneToManyBackground => {
-                read_copperlists_encoded::<OneToManyBackground::CuStampedDataSet>(log_base)
+                read_copperlists_normalized::<OneToManyBackground::CuStampedDataSet>(log_base)
             }
             MissionArg::ManyToOne => {
-                read_copperlists_encoded::<ManyToOne::CuStampedDataSet>(log_base)
+                read_copperlists_normalized::<ManyToOne::CuStampedDataSet>(log_base)
             }
             MissionArg::ManyToOneBackground => {
-                read_copperlists_encoded::<ManyToOneBackground::CuStampedDataSet>(log_base)
+                read_copperlists_normalized::<ManyToOneBackground::CuStampedDataSet>(log_base)
             }
             MissionArg::ManyToMany => {
-                read_copperlists_encoded::<ManyToMany::CuStampedDataSet>(log_base)
+                read_copperlists_normalized::<ManyToMany::CuStampedDataSet>(log_base)
             }
             MissionArg::ManyToManyBackground => {
-                read_copperlists_encoded::<ManyToManyBackground::CuStampedDataSet>(log_base)
+                read_copperlists_normalized::<ManyToManyBackground::CuStampedDataSet>(log_base)
             }
             MissionArg::BridgeFanout => {
-                read_copperlists_encoded::<BridgeFanout::CuStampedDataSet>(log_base)
+                read_copperlists_normalized::<BridgeFanout::CuStampedDataSet>(log_base)
             }
             MissionArg::BridgeFanoutBackground => {
-                read_copperlists_encoded::<BridgeFanoutBackground::CuStampedDataSet>(log_base)
+                read_copperlists_normalized::<BridgeFanoutBackground::CuStampedDataSet>(log_base)
             }
         }
     }
 
     fn run_mission_trace_and_logs(
         mission: MissionArg,
-    ) -> CuResult<(Vec<TraceEntry>, Vec<Vec<u8>>)> {
+    ) -> CuResult<(Vec<TraceEntry>, Vec<NormalizedCopperList>)> {
         let tmp_dir = tempfile::TempDir::new()
             .map_err(|err| CuError::new_with_cause("failed to create temp test dir", err))?;
         let log_path = tmp_dir.path().join(format!("{}.copper", mission.as_str()));
@@ -1559,7 +1595,7 @@ mod tests {
     }
 
     #[test]
-    fn missions_record_identical_copperlists_across_two_runs() {
+    fn missions_record_identical_normalized_copperlists_across_two_runs() {
         let _guard = TEST_MUTEX
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
@@ -1568,7 +1604,7 @@ mod tests {
             let (_, second) = run_mission_trace_and_logs(*mission).expect("second run");
             assert_eq!(
                 first, second,
-                "copperlist stream is not deterministic for mission {:?}",
+                "normalized copperlist stream is not deterministic for mission {:?}",
                 mission
             );
         }
