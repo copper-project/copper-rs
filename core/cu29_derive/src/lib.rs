@@ -2624,15 +2624,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     .enumerate()
                     .map(|(stage_index, step_ident)| {
                         let stage_index_lit = syn::Index::from(stage_index);
-                        let next_stage_index_lit = syn::Index::from(stage_index + 1);
                         let receiver_ident =
                             format_ident!("__cu_parallel_stage_rx_{stage_index}");
                         quote! {
                             {
-                                let #receiver_ident = stage_receivers
+                                let mut #receiver_ident = stage_receivers
                                     .next()
                                     .expect("parallel stage receiver missing");
-                                let next_stage_tx = stage_senders.get(#next_stage_index_lit).cloned();
+                                let mut next_stage_tx = stage_senders.next();
                                 let done_tx = done_tx.clone();
                                 let shutdown = std::sync::Arc::clone(&shutdown);
                                 let clock = clock.clone();
@@ -2647,8 +2646,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 scope.spawn(move || {
                                     loop {
                                         let job = match #receiver_ident.recv() {
-                                            Ok(Some(job)) => job,
-                                            Ok(None) | Err(_) => break,
+                                            Ok(job) => job,
+                                            Err(_) => break,
                                         };
                                         let clid = job.clid;
                                         let culist = job.culist;
@@ -2700,14 +2699,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                                             raw_payload_bytes: 0,
                                                             handle_bytes: 0,
                                                         }
-                                                    } else if let Some(next_stage_tx) = &next_stage_tx {
+                                                    } else if let Some(next_stage_tx) = next_stage_tx.as_mut() {
                                                         let forwarded_job = #mission_mod::ParallelWorkerJob { clid, culist };
-                                                        match next_stage_tx.send(Some(forwarded_job)) {
+                                                        match next_stage_tx.send(forwarded_job) {
                                                             Ok(()) => continue,
                                                             Err(send_error) => {
-                                                                let failed_job = send_error
-                                                                    .0
-                                                                    .expect("parallel stage send returned an empty job");
+                                                                let failed_job = send_error.0;
                                                                 shutdown.store(true, Ordering::Release);
                                                                 #mission_mod::ParallelWorkerResult {
                                                                     clid,
@@ -3206,15 +3203,20 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     let mut stage_senders = Vec::with_capacity(stage_count);
                     let mut stage_receivers = Vec::with_capacity(stage_count);
                     for _stage_index in 0..stage_count {
-                        let (stage_tx, stage_rx) = std::sync::mpsc::sync_channel::<
-                            Option<#mission_mod::ParallelWorkerJob>,
-                        >(queue_capacity);
+                        let (stage_tx, stage_rx) =
+                            cu29::parallel_queue::stage_queue::<#mission_mod::ParallelWorkerJob>(
+                                queue_capacity,
+                            );
                         stage_senders.push(stage_tx);
                         stage_receivers.push(stage_rx);
                     }
                     let (done_tx, done_rx) =
                         std::sync::mpsc::channel::<#mission_mod::ParallelWorkerResult>();
                     let shutdown = std::sync::Arc::new(AtomicBool::new(false));
+                    let mut stage_senders = stage_senders.into_iter();
+                    let mut entry_stage_tx = stage_senders
+                        .next()
+                        .expect("parallel stage pipeline has no entry queue");
                     let mut stage_receivers = stage_receivers.into_iter();
                     #(#parallel_stage_worker_spawns)*
                     drop(done_tx);
@@ -3280,13 +3282,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     }
                                     culist.change_state(cu29::copperlist::CopperListState::Processing);
                                     culist.msgs.init_zeroed();
-                                    stage_senders
-                                        .first()
-                                        .expect("parallel stage pipeline has no process stages")
-                                        .send(Some(#mission_mod::ParallelWorkerJob {
+                                    entry_stage_tx
+                                        .send(#mission_mod::ParallelWorkerJob {
                                             clid,
                                             culist,
-                                        }))
+                                        })
                                         .map_err(|e| {
                                             shutdown.store(true, Ordering::Release);
                                             CuError::from("Failed to enqueue CopperList for parallel stage processing")
@@ -3475,10 +3475,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         }
                     }
 
-                    for stage_tx in &stage_senders {
-                        let _ = stage_tx.send(None);
-                    }
-                    drop(stage_senders);
+                    drop(entry_stage_tx);
                     free_copperlists.extend(cl_manager.finish_pending_boxed()?);
                     if let Some(error) = fatal_error {
                         Err(error)
