@@ -152,6 +152,8 @@ struct SlabEntry {
     flushed_until_offset: usize,
     page_size: usize,
     temporary_end_marker: Option<usize>,
+    #[cfg(all(test, feature = "mmap-fsync"))]
+    sync_call_count: usize,
 }
 
 impl Drop for SlabEntry {
@@ -162,6 +164,7 @@ impl Drop for SlabEntry {
         if let Err(error) = self.file.set_len(self.current_global_position as u64) {
             eprintln!("Failed to trim datalogger file: {}", error);
         }
+        self.sync_file();
 
         if !self.sections_offsets_in_flight.is_empty() {
             eprintln!("Error: Slab not full flushed.");
@@ -184,7 +187,20 @@ impl SlabEntry {
             flushed_until_offset: 0,
             page_size,
             temporary_end_marker: None,
+            #[cfg(all(test, feature = "mmap-fsync"))]
+            sync_call_count: 0,
         })
+    }
+
+    fn sync_file(&mut self) {
+        #[cfg(feature = "mmap-fsync")]
+        {
+            self.file.sync_all().expect("Failed to fsync log file");
+            #[cfg(test)]
+            {
+                self.sync_call_count += 1;
+            }
+        }
     }
 
     /// Unsure the underlying mmap is flush to disk until the given position.
@@ -199,6 +215,7 @@ impl SlabEntry {
                 until_position - self.flushed_until_offset,
             )
             .expect("Failed to flush memory map");
+        self.sync_file();
         self.flushed_until_offset = until_position;
     }
 
@@ -1269,6 +1286,24 @@ mod tests {
         assert_eq!(v1, 1);
         assert_eq!(v2, 2);
         assert_eq!(v3, 3);
+    }
+
+    #[cfg(feature = "mmap-fsync")]
+    #[test]
+    fn test_fsync_feature_syncs_on_section_flush() {
+        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
+        let (logger, _) = make_a_logger(&tmp_dir, LARGE_SLAB);
+        {
+            let mut stream =
+                stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024).unwrap();
+            stream.log(&1u32).unwrap();
+        }
+
+        let logger = logger.lock().unwrap();
+        assert!(
+            logger.front_slab.sync_call_count > 0,
+            "expected mmap-fsync to issue at least one sync_all call"
+        );
     }
 
     /// Mimic a basic CopperList implementation.
