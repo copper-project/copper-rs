@@ -152,6 +152,10 @@ struct SlabEntry {
     flushed_until_offset: usize,
     page_size: usize,
     temporary_end_marker: Option<usize>,
+    #[cfg(test)]
+    closed_sections: Vec<(usize, usize)>,
+    #[cfg(test)]
+    flushed_ranges: Vec<(usize, usize)>,
 }
 
 impl Drop for SlabEntry {
@@ -184,7 +188,22 @@ impl SlabEntry {
             flushed_until_offset: 0,
             page_size,
             temporary_end_marker: None,
+            #[cfg(test)]
+            closed_sections: Vec::new(),
+            #[cfg(test)]
+            flushed_ranges: Vec::new(),
         })
+    }
+
+    fn flush_range(&mut self, start: usize, len: usize) {
+        if len == 0 {
+            return;
+        }
+        self.mmap_buffer
+            .flush_async_range(start, len)
+            .expect("Failed to flush memory map");
+        #[cfg(test)]
+        self.record_flushed_range(start, len);
     }
 
     /// Unsure the underlying mmap is flush to disk until the given position.
@@ -193,12 +212,10 @@ impl SlabEntry {
         if (self.flushed_until_offset == until_position) || (until_position == 0) {
             return;
         }
-        self.mmap_buffer
-            .flush_async_range(
-                self.flushed_until_offset,
-                until_position - self.flushed_until_offset,
-            )
-            .expect("Failed to flush memory map");
+        self.flush_range(
+            self.flushed_until_offset,
+            until_position - self.flushed_until_offset,
+        );
         self.flushed_until_offset = until_position;
     }
 
@@ -267,16 +284,97 @@ impl SlabEntry {
         }
 
         let base = self.mmap_buffer.as_ptr() as usize;
+        let section_start = ptr as usize - base;
+        let section_len = section.header.offset_to_next_section as usize;
+        #[cfg(test)]
+        self.record_closed_section(section_start, section_len);
         self.sections_offsets_in_flight
-            .retain(|&x| x != ptr as usize - base);
+            .retain(|&x| x != section_start);
 
         if self.sections_offsets_in_flight.is_empty() {
             self.flush_until(self.current_global_position);
             return;
         }
-        if self.flushed_until_offset < self.sections_offsets_in_flight[0] {
-            self.flush_until(self.sections_offsets_in_flight[0]);
+        let next_open_offset = self.sections_offsets_in_flight[0];
+        if self.flushed_until_offset < next_open_offset {
+            self.flush_until(next_open_offset);
         }
+        if section_start + section_len > self.flushed_until_offset {
+            // A long-lived early section can otherwise pin later closed sections
+            // behind the prefix cursor until shutdown.
+            self.flush_range(section_start, section_len);
+        }
+    }
+
+    #[cfg(test)]
+    fn record_closed_section(&mut self, start: usize, len: usize) {
+        self.closed_sections.push((start, len));
+    }
+
+    #[cfg(test)]
+    fn record_flushed_range(&mut self, start: usize, len: usize) {
+        let mut merged_start = start;
+        let mut merged_end = start + len;
+        let mut merged_ranges = Vec::with_capacity(self.flushed_ranges.len() + 1);
+        let mut inserted = false;
+
+        for (range_start, range_len) in self.flushed_ranges.drain(..) {
+            let range_end = range_start + range_len;
+            if range_end < merged_start {
+                merged_ranges.push((range_start, range_len));
+                continue;
+            }
+            if merged_end < range_start {
+                if !inserted {
+                    merged_ranges.push((merged_start, merged_end - merged_start));
+                    inserted = true;
+                }
+                merged_ranges.push((range_start, range_len));
+                continue;
+            }
+
+            merged_start = merged_start.min(range_start);
+            merged_end = merged_end.max(range_end);
+        }
+
+        if !inserted {
+            merged_ranges.push((merged_start, merged_end - merged_start));
+        }
+
+        self.flushed_ranges = merged_ranges;
+    }
+
+    #[cfg(test)]
+    fn pending_closed_bytes(&self) -> usize {
+        let mut pending = 0;
+
+        for (section_start, section_len) in &self.closed_sections {
+            let section_end = section_start + section_len;
+            let mut cursor = *section_start;
+
+            for (range_start, range_len) in &self.flushed_ranges {
+                let range_end = range_start + range_len;
+                if range_end <= cursor {
+                    continue;
+                }
+                if *range_start >= section_end {
+                    break;
+                }
+                if *range_start > cursor {
+                    pending += *range_start - cursor;
+                }
+                cursor = cursor.max(range_end);
+                if cursor >= section_end {
+                    break;
+                }
+            }
+
+            if cursor < section_end {
+                pending += section_end - cursor;
+            }
+        }
+
+        pending
     }
 
     #[inline]
@@ -1236,6 +1334,37 @@ mod tests {
             lg.front_slab.flushed_until_offset,
             lg.front_slab.current_global_position
         );
+    }
+
+    #[test]
+    fn test_closed_section_flushes_behind_open_earlier_section() {
+        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
+        let (logger, _) = make_a_logger(&tmp_dir, LARGE_SLAB);
+        let s1 = stream_write::<(), MmapSectionStorage>(
+            logger.clone(),
+            UnifiedLogType::StructuredLogLine,
+            1024,
+        )
+        .unwrap();
+        {
+            let mut s2 = stream_write::<u32, MmapSectionStorage>(
+                logger.clone(),
+                UnifiedLogType::CopperList,
+                1024,
+            )
+            .unwrap();
+            s2.log(&42u32).unwrap();
+        }
+
+        let logger_guard = logger.lock().unwrap();
+        assert_eq!(logger_guard.front_slab.sections_offsets_in_flight.len(), 1);
+        assert!(
+            logger_guard.front_slab.flushed_until_offset
+                < logger_guard.front_slab.current_global_position
+        );
+        assert_eq!(logger_guard.front_slab.pending_closed_bytes(), 0);
+        drop(logger_guard);
+        drop(s1);
     }
 
     #[test]
