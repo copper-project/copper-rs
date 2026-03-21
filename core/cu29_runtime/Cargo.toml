@@ -92,6 +92,7 @@ macro_debug = []
 reflect = ["dep:bevy_reflect", "cu29-traits/reflect"]
 sysclock-perf = ["std"]
 async-cl-io = ["std"]
+mmap-fsync = ["std", "cu29-unifiedlog/mmap-fsync"]
 remote-debug = [
   "std",
   "reflect",
