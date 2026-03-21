@@ -27,6 +27,7 @@ serde = { workspace = true }
 [features]
 default = ["std"]
 std = []
+mmap-fsync = ["cu29/mmap-fsync"]
 
 [lib]
 path = "src/lib.rs"

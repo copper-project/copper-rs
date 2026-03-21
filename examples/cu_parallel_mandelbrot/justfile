@@ -48,12 +48,35 @@ parallel:
   python3 -c 'import sys; start=float(sys.argv[1]); end=float(sys.argv[2]); print(f"parallel elapsed_s={end-start:.3f}")' "$start" "$end"
   exit "$status"
 
+# Run the log-only mission with parallel-rt and synchronous mmap fsync from the compiled release binary.
+parallel-fsync:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot --release --features 'cu29/parallel-rt mmap-fsync'
+  start="$(python3 -c 'import time; print(time.perf_counter())')"
+  set +e
+  "{{ROOT}}/target/release/cu-parallel-mandelbrot"
+  status=$?
+  set -e
+  end="$(python3 -c 'import time; print(time.perf_counter())')"
+  python3 -c 'import sys; start=float(sys.argv[1]); end=float(sys.argv[2]); print(f"parallel-fsync elapsed_s={end-start:.3f}")' "$start" "$end"
+  exit "$status"
+
 # Run the parallel release binary in the foreground so the TUI monitor stays interactive.
 monitor-parallel:
   #!/usr/bin/env bash
   set -euo pipefail
   cd "{{ROOT}}"
   cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot --release --features 'cu29/parallel-rt'
+  "{{ROOT}}/target/release/cu-parallel-mandelbrot"
+
+# Run the parallel+fsync release binary in the foreground so the TUI monitor stays interactive.
+monitor-parallel-fsync:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo build -p cu-parallel-mandelbrot --bin cu-parallel-mandelbrot --release --features 'cu29/parallel-rt mmap-fsync'
   "{{ROOT}}/target/release/cu-parallel-mandelbrot"
 
 # Run the live viewer mission without parallel-rt from the compiled release binary.
