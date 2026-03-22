@@ -16,7 +16,7 @@ default warmup="128" iterations="256" spin="0" words="2048" rounds="16" seconds=
 	python3 - "$tmp" "{{warmup}}" "{{iterations}}" "{{spin}}" "{{words}}" "{{rounds}}" "{{seconds}}" <<-'PY'
 	import sys
 	from collections import defaultdict
-	
+
 	path, warmup, iterations, spin, words, rounds, seconds = sys.argv[1:]
 	modes = ["sync+serial", "async-io+serial", "sync+parallel", "async-io+parallel"]
 	missions = [
@@ -29,7 +29,7 @@ default warmup="128" iterations="256" spin="0" words="2048" rounds="16" seconds=
 	    "BridgeFanout",
 	    "BridgeFanoutBackground",
 	]
-	
+
 	rows = defaultdict(dict)
 	with open(path, "r", encoding="utf-8") as fh:
 	    for raw in fh:
@@ -45,7 +45,7 @@ default warmup="128" iterations="256" spin="0" words="2048" rounds="16" seconds=
 	            "p99_us": float(p99_us),
 	            "max_us": float(max_us),
 	        }
-	
+
 	def pct_delta(current, baseline, lower_is_better=False):
 	    if baseline == 0:
 	        return "n/a"
@@ -56,17 +56,17 @@ default warmup="128" iterations="256" spin="0" words="2048" rounds="16" seconds=
 	        return "0.0%"
 	    sign = "+" if delta >= 0 else ""
 	    return f"{sign}{delta:.1f}%"
-	
+
 	def hz_fmt(value):
 	    if value >= 100000:
 	        return f"{value/1000:.1f}k"
 	    if value >= 10000:
 	        return f"{value/1000:.2f}k"
 	    return f"{value:.0f}"
-	
+
 	def us_fmt(value):
 	    return f"{value:.2f}"
-	
+
 	def print_table(title, metric, lower_is_better):
 	    print(title)
 	    print(f"{'mission':<24} {'serial':>12} {'async':>18} {'parallel':>18} {'both':>18}")
@@ -85,7 +85,7 @@ default warmup="128" iterations="256" spin="0" words="2048" rounds="16" seconds=
 	            f"{both_cell:>18}"
 	        )
 	    print()
-	
+
 	print("Runtime Matrix Summary")
 	print(
 	    f"warmup={warmup} min_iterations={iterations} busy_spin_iters={spin} "
