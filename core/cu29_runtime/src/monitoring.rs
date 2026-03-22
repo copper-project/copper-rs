@@ -871,7 +871,7 @@ fn begin_payload_io_measurement() {
 fn finish_payload_io_measurement() -> usize {
     #[cfg(feature = "std")]
     {
-        return PAYLOAD_HANDLE_BYTES.with(|bytes| bytes.replace(None).unwrap_or(0));
+        PAYLOAD_HANDLE_BYTES.with(|bytes| bytes.replace(None).unwrap_or(0))
     }
 
     #[cfg(not(feature = "std"))]
@@ -893,7 +893,7 @@ fn abort_payload_io_measurement() {
 fn current_payload_io_measurement() -> usize {
     #[cfg(feature = "std")]
     {
-        return PAYLOAD_HANDLE_BYTES.with(|bytes| bytes.get().unwrap_or(0));
+        PAYLOAD_HANDLE_BYTES.with(|bytes| bytes.get().unwrap_or(0))
     }
 
     #[cfg(not(feature = "std"))]
@@ -932,7 +932,7 @@ fn set_last_completed_handle_bytes(bytes: u64) {
 pub fn take_last_completed_handle_bytes() -> u64 {
     #[cfg(feature = "std")]
     {
-        return LAST_COMPLETED_HANDLE_BYTES.with(|total| total.replace(0));
+        LAST_COMPLETED_HANDLE_BYTES.with(|total| total.replace(0))
     }
 
     #[cfg(not(feature = "std"))]
@@ -947,12 +947,12 @@ pub fn take_last_completed_handle_bytes() -> u64 {
 fn with_active_capture_mut<R>(f: impl FnOnce(&mut ActiveCuMsgIoCapture) -> R) -> Option<R> {
     #[cfg(feature = "std")]
     {
-        return ACTIVE_COPPERLIST_CAPTURE.with(|capture| {
+        ACTIVE_COPPERLIST_CAPTURE.with(|capture| {
             let mut state = capture.get()?;
             let result = f(&mut state);
             capture.set(Some(state));
             Some(result)
-        });
+        })
     }
 
     #[cfg(not(feature = "std"))]
