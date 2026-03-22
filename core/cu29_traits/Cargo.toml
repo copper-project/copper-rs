@@ -22,6 +22,7 @@ bevy_reflect = { workspace = true, optional = true }
 defmt = { workspace = true, optional = true, default-features = false, features = [
   "alloc",
 ] }
+spin = { workspace = true }
 
 [features]
 default = ["std"]

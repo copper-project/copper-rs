@@ -720,9 +720,9 @@ impl MonitorUi {
             .saturating_add(stats.structured_bytes_per_cl);
         let mem_total_display = format_bytes_or(mem_total, "unknown");
         let encoded_display = format_bytes_or(stats.encoded_bytes, "n/a");
-        let efficiency_display = if raw_total > 0 && stats.encoded_bytes > 0 {
-            let ratio = (stats.encoded_bytes as f64) / (raw_total as f64);
-            format!("{:.1}%", ratio * 100.0)
+        let space_saved_display = if raw_total > 0 && stats.encoded_bytes > 0 {
+            let saved = 1.0 - (stats.encoded_bytes as f64) / (raw_total as f64);
+            format!("{:.1}%", saved * 100.0)
         } else {
             "n/a".to_string()
         };
@@ -768,7 +768,7 @@ impl MonitorUi {
 
         let disk_rows = vec![
             row("CL serialized size", encoded_display),
-            row("CL encoding efficiency", efficiency_display),
+            row("Space saved", space_saved_display),
             row("Structured log / CL", structured_display),
             row("Structured BW", structured_bw),
             spacer.clone(),
