@@ -105,7 +105,7 @@ fn param_u64(config: Option<&ComponentConfig>, key: &str, default: u64) -> CuRes
 
 fn param_u8(config: Option<&ComponentConfig>, key: &str, default: u8) -> CuResult<u8> {
     let value = param_u64(config, key, u64::from(default))?;
-    Ok(u8::try_from(value).map_err(|_| CuError::from(format!("`{key}` does not fit in u8")))?)
+    u8::try_from(value).map_err(|_| CuError::from(format!("`{key}` does not fit in u8")))
 }
 
 fn param_u32(config: Option<&ComponentConfig>, key: &str, default: u32) -> CuResult<u32> {
@@ -149,7 +149,7 @@ fn run_compute_kernel(scratch: &mut [u64], seed: u64, rounds: u32) -> u64 {
                 ^ (seed
                     .wrapping_add(index as u64)
                     .rotate_right((round & 31) + 1));
-            *slot = mixed ^ ((*slot >> 11) | (*slot << 53));
+            *slot = mixed ^ (*slot).rotate_right(11);
             acc ^= mixed
                 .wrapping_add(index as u64)
                 .rotate_left(((round + index as u32) & 31) + 1);
