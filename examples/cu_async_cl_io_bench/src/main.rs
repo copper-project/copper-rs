@@ -1,6 +1,10 @@
-use clap::Parser;
+use clap::{Parser, ValueEnum};
+use cu29::config::ConfigGraphs;
+use cu29::prelude::memmap::{MmapUnifiedLogger, MmapUnifiedLoggerBuilder};
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
+use cu29_helpers::basic_copper_setup_with_logger;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 pub mod tasks {
@@ -108,10 +112,16 @@ pub mod tasks {
 #[derive(Parser, Debug)]
 #[command(name = "cu-async-cl-io-bench")]
 struct Args {
+    #[arg(long, value_enum, default_value_t = LoggerBackend::Mmap)]
+    backend: LoggerBackend,
     #[arg(long, default_value_t = 200)]
     warmup: u32,
     #[arg(long, default_value_t = 5000)]
     iterations: u32,
+    #[arg(long, default_value_t = 256)]
+    payload_kib: u64,
+    #[arg(long, default_value_t = 150000)]
+    spin_iters: u64,
     #[arg(long, default_value_t = 8)]
     section_mib: u64,
     #[arg(long, default_value_t = 256)]
@@ -120,6 +130,15 @@ struct Args {
     keyframe_interval: u32,
     #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
     enable_task_logging: bool,
+    #[arg(long, default_value = "target/bench-logs")]
+    log_root: PathBuf,
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+enum LoggerBackend {
+    Mmap,
+    #[cfg(target_os = "linux")]
+    IoUring,
 }
 
 #[copper_runtime(config = "copperconfig.ron")]
@@ -138,22 +157,49 @@ fn format_ns_as_us(ns: u64) -> String {
     format!("{:.2}", ns as f64 / 1_000.0)
 }
 
-fn main() -> CuResult<()> {
-    let args = Args::parse();
-    let tmp_dir = tempfile::TempDir::new().expect("Could not create temporary benchmark directory");
-    let logger_path = tmp_dir.path().join("async_cl_io_bench.copper");
+fn create_benchmark_log_dir(log_root: &Path) -> CuResult<tempfile::TempDir> {
+    fs::create_dir_all(log_root)
+        .map_err(|e| CuError::new_with_cause("failed to create benchmark log root", e))?;
+    tempfile::Builder::new()
+        .prefix("cu_async_cl_io_bench_")
+        .tempdir_in(log_root)
+        .map_err(|e| CuError::new_with_cause("failed to create benchmark log directory", e))
+}
 
-    let ctx = basic_copper_setup(
-        &logger_path,
-        Some((args.slab_mib as usize) * 1024 * 1024),
-        false,
-        None,
-    )?;
+fn measure_log_bytes(log_dir: &Path) -> CuResult<u64> {
+    let mut total = 0u64;
+    for entry in fs::read_dir(log_dir)
+        .map_err(|e| CuError::new_with_cause("failed to read benchmark log directory", e))?
+    {
+        let entry =
+            entry.map_err(|e| CuError::new_with_cause("failed to read benchmark log entry", e))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|e| CuError::new_with_cause("failed to stat benchmark log entry", e))?;
+        if !file_type.is_file() {
+            continue;
+        }
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("copper") {
+            continue;
+        }
+        total = total.saturating_add(
+            entry
+                .metadata()
+                .map_err(|e| CuError::new_with_cause("failed to stat benchmark log file", e))?
+                .len(),
+        );
+    }
+    Ok(total)
+}
 
-    let bundled_config = <App as CuApplication<
-        cu29::prelude::memmap::MmapSectionStorage,
-        UnifiedLoggerWrite,
-    >>::get_original_config();
+fn benchmark_config<S, L>(args: &Args) -> CuConfig
+where
+    S: SectionStorage + 'static,
+    L: UnifiedLogWrite<S> + 'static,
+    App: CuApplication<S, L>,
+{
+    let bundled_config = <App as CuApplication<S, L>>::get_original_config();
     let mut config = CuConfig::deserialize_ron(&bundled_config)
         .expect("failed to deserialize bundled benchmark config");
 
@@ -164,9 +210,41 @@ fn main() -> CuResult<()> {
     logging.section_size_mib = Some(args.section_mib);
     logging.slab_size_mib = Some(args.slab_mib);
     logging.keyframe_interval = Some(args.keyframe_interval);
-    let copperlist_count = logging.copperlist_count.unwrap_or(2);
+    match &mut config.graphs {
+        ConfigGraphs::Simple(graph) => {
+            let src_id = graph
+                .get_node_id_by_name("src")
+                .expect("benchmark source node 'src' missing");
+            let src = graph
+                .get_node_mut(src_id)
+                .expect("benchmark source node id missing");
+            src.set_param("payload_bytes", args.payload_kib * 1024);
+            src.set_param("spin_iters", args.spin_iters);
+        }
+        ConfigGraphs::Missions(_) => panic!("benchmark config unexpectedly uses missions"),
+    }
 
-    let mut app = App::new(ctx.clock.clone(), ctx.unified_logger.clone(), Some(config))?;
+    config
+}
+
+fn run_benchmark<S, L>(args: &Args, logger: L, log_dir: &Path) -> CuResult<()>
+where
+    S: SectionStorage + 'static,
+    L: UnifiedLogWrite<S> + 'static,
+    App: CuApplication<S, L>,
+{
+    let config = benchmark_config::<S, L>(args);
+    let copperlist_count = config
+        .logging
+        .as_ref()
+        .and_then(|logging| logging.copperlist_count)
+        .unwrap_or(2);
+    let ctx = basic_copper_setup_with_logger::<S, L>(logger, None)?;
+    let mut app = <App as CuApplication<S, L>>::new(
+        ctx.clock.clone(),
+        ctx.unified_logger.clone(),
+        Some(config),
+    )?;
     app.start_all_tasks()?;
 
     for _ in 0..args.warmup {
@@ -181,9 +259,13 @@ fn main() -> CuResult<()> {
         let elapsed = iter_start.elapsed();
         samples_ns.push(elapsed.as_nanos() as u64);
     }
-    let total_elapsed = benchmark_start.elapsed();
-
+    let active_elapsed = benchmark_start.elapsed();
     app.stop_all_tasks()?;
+    drop(app);
+    let stop_elapsed = benchmark_start.elapsed();
+    drop(ctx);
+    let total_elapsed = benchmark_start.elapsed();
+    let actual_log_bytes = measure_log_bytes(log_dir)?;
 
     let mut jitter_ns = samples_ns
         .windows(2)
@@ -198,32 +280,54 @@ fn main() -> CuResult<()> {
     } else {
         0.0
     };
-    let iter_per_sec = if total_elapsed.as_secs_f64() > 0.0 {
-        samples / total_elapsed.as_secs_f64()
+    let iter_per_sec = if active_elapsed.as_secs_f64() > 0.0 {
+        samples / active_elapsed.as_secs_f64()
+    } else {
+        0.0
+    };
+    let estimated_payload_bytes = (args.payload_kib as u128) * 1024 * (args.iterations as u128);
+    let estimated_payload_gib = estimated_payload_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+    let estimated_payload_gib_s = if total_elapsed.as_secs_f64() > 0.0 {
+        estimated_payload_gib / total_elapsed.as_secs_f64()
+    } else {
+        0.0
+    };
+    let actual_log_gib = actual_log_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+    let actual_log_gib_s = if total_elapsed.as_secs_f64() > 0.0 {
+        actual_log_gib / total_elapsed.as_secs_f64()
     } else {
         0.0
     };
 
     println!(
-        "mode={} logging={} copperlist_count={} payload_kib={} spin_iters={} section_mib={} slab_mib={} keyframe_interval={} warmup={} iterations={}",
+        "mode={} backend={:?} logging={} copperlist_count={} payload_kib={} spin_iters={} section_mib={} slab_mib={} keyframe_interval={} warmup={} iterations={} log_root={} estimated_payload_gib={:.2} actual_log_gib={:.2}",
         if cfg!(feature = "async-cl-io") {
             "async-cl-io"
         } else {
             "sync-cl-io"
         },
+        args.backend,
         args.enable_task_logging,
         copperlist_count,
-        256,
-        150000,
+        args.payload_kib,
+        args.spin_iters,
         args.section_mib,
         args.slab_mib,
         args.keyframe_interval,
         args.warmup,
-        args.iterations
+        args.iterations,
+        args.log_root.display(),
+        estimated_payload_gib,
+        actual_log_gib
     );
     println!(
-        "throughput_hz={:.2} mean_us={:.2} p50_us={} p90_us={} p99_us={} p999_us={} max_us={} delta_p50_us={} delta_p90_us={} delta_p99_us={} delta_p999_us={} delta_max_us={}",
+        "active_hz={:.2} estimated_payload_gib_s={:.2} actual_log_gib_s={:.2} active_s={:.2} stop_s={:.2} total_s={:.2} mean_us={:.2} p50_us={} p90_us={} p99_us={} p999_us={} max_us={} delta_p50_us={} delta_p90_us={} delta_p99_us={} delta_p999_us={} delta_max_us={}",
         iter_per_sec,
+        estimated_payload_gib_s,
+        actual_log_gib_s,
+        active_elapsed.as_secs_f64(),
+        stop_elapsed.as_secs_f64(),
+        total_elapsed.as_secs_f64(),
         mean_ns / 1_000.0,
         format_ns_as_us(percentile(&samples_ns, 50, 100)),
         format_ns_as_us(percentile(&samples_ns, 90, 100)),
@@ -238,4 +342,54 @@ fn main() -> CuResult<()> {
     );
 
     Ok(())
+}
+
+fn main() -> CuResult<()> {
+    let args = Args::parse();
+    let tmp_dir = create_benchmark_log_dir(&args.log_root)?;
+    let logger_path = tmp_dir.path().join("async_cl_io_bench.copper");
+    let slab_size = (args.slab_mib as usize) * 1024 * 1024;
+
+    match args.backend {
+        LoggerBackend::Mmap => {
+            let logger = match MmapUnifiedLoggerBuilder::new()
+                .write(true)
+                .create(true)
+                .file_base_name(&logger_path)
+                .preallocated_size(slab_size)
+                .build()
+                .map_err(|e| CuError::new_with_cause("Failed to create mmap logger", e))?
+            {
+                MmapUnifiedLogger::Write(logger) => logger,
+                MmapUnifiedLogger::Read(_) => {
+                    return Err(CuError::from(
+                        "mmap logger builder did not create a write-capable logger",
+                    ));
+                }
+            };
+            run_benchmark::<cu29::prelude::memmap::MmapSectionStorage, UnifiedLoggerWrite>(
+                &args,
+                logger,
+                tmp_dir.path(),
+            )
+        }
+        #[cfg(target_os = "linux")]
+        LoggerBackend::IoUring => {
+            let logger = match IoUringUnifiedLoggerBuilder::new()
+                .write(true)
+                .create(true)
+                .file_base_name(&logger_path)
+                .preallocated_size(slab_size)
+                .build()
+                .map_err(|e| CuError::new_with_cause("Failed to create io_uring logger", e))?
+            {
+                IoUringUnifiedLogger::Write(logger) => logger,
+            };
+            run_benchmark::<IoUringSectionStorage, IoUringUnifiedLoggerWrite>(
+                &args,
+                logger,
+                tmp_dir.path(),
+            )
+        }
+    }
 }

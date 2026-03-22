@@ -27,6 +27,7 @@ path = "src/main.rs"
 
 [features]
 async-cl-io = ["cu29/async-cl-io"]
+mmap-fsync = ["cu29/mmap-fsync", "cu29-helpers/mmap-fsync"]
 
 [package.metadata.cargo-shear]
 ignored = ["bincode", "serde"]

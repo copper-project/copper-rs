@@ -69,8 +69,8 @@ use std::thread::JoinHandle;
 
 /// Just a simple struct to hold the various bits needed to run a Copper application.
 #[cfg(feature = "std")]
-pub struct CopperContext {
-    pub unified_logger: Arc<Mutex<UnifiedLoggerWrite>>,
+pub struct CopperContext<L = UnifiedLoggerWrite> {
+    pub unified_logger: Arc<Mutex<L>>,
     pub logger_runtime: LoggerRuntime,
     pub clock: RobotClock,
 }

@@ -36,3 +36,4 @@ std = [
   "cu29-runtime/std",
   "cu29-clock/std",
 ]
+mmap-fsync = ["std", "cu29-unifiedlog/mmap-fsync", "cu29-runtime/mmap-fsync"]

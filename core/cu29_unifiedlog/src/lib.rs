@@ -6,6 +6,10 @@ extern crate core;
 #[cfg(feature = "std")]
 pub mod memmap;
 pub mod noop;
+#[cfg(feature = "std")]
+mod std_common;
+#[cfg(all(feature = "std", target_os = "linux"))]
+pub mod uring;
 
 #[cfg(feature = "std")]
 mod compat {
@@ -21,6 +25,11 @@ mod compat {
 #[cfg(feature = "std")]
 pub use compat::*;
 pub use noop::{NoopLogger, NoopSectionStorage};
+#[cfg(all(feature = "std", target_os = "linux"))]
+pub use uring::{
+    IoUringSectionStorage, IoUringUnifiedLogger, IoUringUnifiedLoggerBuilder,
+    IoUringUnifiedLoggerWrite,
+};
 
 use alloc::string::ToString;
 use alloc::sync::Arc;

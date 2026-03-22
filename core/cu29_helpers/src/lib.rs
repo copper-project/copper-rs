@@ -6,7 +6,9 @@ use cu29_clock::RobotClock;
 use cu29_log_runtime::LoggerRuntime;
 use cu29_runtime::curuntime::CopperContext;
 use cu29_traits::{CuError, CuResult, UnifiedLogType, with_cause};
-use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, stream_write};
+use cu29_unifiedlog::{
+    SectionStorage, UnifiedLogWrite, UnifiedLogger, UnifiedLoggerBuilder, stream_write,
+};
 use simplelog::TermLogger;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -46,7 +48,19 @@ pub fn basic_copper_setup(
                 "UnifiedLoggerBuilder did not create a write-capable logger",
             ));
         }
-    };
+    }; // Keep the historical mmap default path as the simple convenience API.
+    basic_copper_setup_with_logger(logger, clock)
+}
+
+/// Basic setup variant that accepts a caller-provided unified logger.
+pub fn basic_copper_setup_with_logger<S, L>(
+    logger: L,
+    clock: Option<RobotClock>,
+) -> CuResult<CopperContext<L>>
+where
+    S: SectionStorage + 'static,
+    L: UnifiedLogWrite<S> + 'static,
+{
     let unified_logger = Arc::new(Mutex::new(logger));
     let structured_stream = stream_write(
         unified_logger.clone(),
