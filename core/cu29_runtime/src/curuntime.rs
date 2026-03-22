@@ -13,6 +13,7 @@ use crate::monitoring::MonitorExecutionProbe;
 use crate::monitoring::{
     ComponentId, CopperListInfo, CuMonitor, CuMonitoringMetadata, CuMonitoringRuntime,
     ExecutionMarker, MonitorComponentMetadata, RuntimeExecutionProbe, build_monitor_topology,
+    take_last_completed_handle_bytes,
 };
 #[cfg(all(feature = "std", feature = "parallel-rt"))]
 use crate::parallel_rt::{ParallelRt, ParallelRtMetadata};
@@ -129,6 +130,8 @@ pub struct SyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usiz
     logger: Option<Box<dyn WriteStream<CopperList<P>>>>,
     /// Last encoded size returned by logger.log
     pub last_encoded_bytes: u64,
+    /// Last handle-backed payload bytes observed during logger.log
+    pub last_handle_bytes: u64,
 }
 
 impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, NBCL> {
@@ -140,6 +143,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
             inner: CuListsManager::new(),
             logger,
             last_encoded_bytes: 0,
+            last_handle_bytes: 0,
         })
     }
 
@@ -160,6 +164,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     pub fn end_of_processing(&mut self, culistid: u64) -> CuResult<()> {
         let mut is_top = true;
         let mut nb_done = 0;
+        self.last_handle_bytes = 0;
         for cl in self.inner.iter_mut() {
             if cl.id == culistid && cl.get_state() == CopperListState::Processing {
                 cl.change_state(CopperListState::DoneProcessing);
@@ -169,6 +174,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
                     cl.change_state(CopperListState::BeingSerialized);
                     logger.log(cl)?;
                     self.last_encoded_bytes = logger.last_log_bytes().unwrap_or(0) as u64;
+                    self.last_handle_bytes = take_last_completed_handle_bytes();
                 }
                 cl.change_state(CopperListState::Free);
                 nb_done += 1;
@@ -197,10 +203,12 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     ) -> CuResult<OwnedCopperListSubmission<P>> {
         culist.change_state(CopperListState::DoneProcessing);
         self.last_encoded_bytes = 0;
+        self.last_handle_bytes = 0;
         if let Some(logger) = &mut self.logger {
             culist.change_state(CopperListState::BeingSerialized);
             logger.log(&culist)?;
             self.last_encoded_bytes = logger.last_log_bytes().unwrap_or(0) as u64;
+            self.last_handle_bytes = take_last_completed_handle_bytes();
         }
         culist.change_state(CopperListState::Free);
         Ok(OwnedCopperListSubmission::Recycled(culist))
@@ -236,7 +244,7 @@ pub enum OwnedCopperListSubmission<P: CopperListTuple> {
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
 struct AsyncCopperListCompletion<P: CopperListTuple> {
     culist: Box<CopperList<P>>,
-    log_result: CuResult<u64>,
+    log_result: CuResult<(u64, u64)>,
 }
 
 #[cfg(all(feature = "std", any(feature = "async-cl-io", feature = "parallel-rt")))]
@@ -281,6 +289,8 @@ pub struct AsyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usi
     worker_handle: Option<JoinHandle<()>>,
     /// Last encoded size returned by logger.log
     pub last_encoded_bytes: u64,
+    /// Last handle-backed payload bytes observed during logger.log
+    pub last_handle_bytes: u64,
 }
 
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
@@ -304,9 +314,12 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
                 .spawn(move || {
                     while let Ok(mut culist) = pending_receiver.recv() {
                         culist.change_state(CopperListState::BeingSerialized);
-                        let log_result = logger
-                            .log(&culist)
-                            .map(|_| logger.last_log_bytes().unwrap_or(0) as u64);
+                        let log_result = logger.log(&culist).map(|_| {
+                            (
+                                logger.last_log_bytes().unwrap_or(0) as u64,
+                                take_last_completed_handle_bytes(),
+                            )
+                        });
                         let should_stop = log_result.is_err();
                         if completion_sender
                             .send(AsyncCopperListCompletion { culist, log_result })
@@ -341,6 +354,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
             completion_receiver,
             worker_handle,
             last_encoded_bytes: 0,
+            last_handle_bytes: 0,
         })
     }
 
@@ -396,6 +410,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
 
         culist.change_state(CopperListState::DoneProcessing);
         self.last_encoded_bytes = 0;
+        self.last_handle_bytes = 0;
 
         if let Some(pending_sender) = &self.pending_sender {
             culist.change_state(CopperListState::QueuedForSerialization);
@@ -438,6 +453,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         self.reclaim_completed()?;
         culist.change_state(CopperListState::DoneProcessing);
         self.last_encoded_bytes = 0;
+        self.last_handle_bytes = 0;
 
         if let Some(pending_sender) = &self.pending_sender {
             culist.change_state(CopperListState::QueuedForSerialization);
@@ -519,8 +535,9 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         mut completion: AsyncCopperListCompletion<P>,
     ) -> CuResult<Box<CopperList<P>>> {
         self.pending_count = self.pending_count.saturating_sub(1);
-        if let Ok(encoded_bytes) = completion.log_result.as_ref() {
+        if let Ok((encoded_bytes, handle_bytes)) = completion.log_result.as_ref() {
             self.last_encoded_bytes = *encoded_bytes;
+            self.last_handle_bytes = *handle_bytes;
         }
         completion.culist.change_state(CopperListState::Free);
         completion.log_result?;

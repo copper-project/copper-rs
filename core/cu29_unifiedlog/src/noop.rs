@@ -7,7 +7,10 @@ use bincode::config::standard;
 use bincode::enc::EncoderImpl;
 use bincode::enc::write::SizeWriter;
 use bincode::error::EncodeError;
-use cu29_traits::{CuResult, UnifiedLogType};
+use cu29_traits::{
+    CuResult, ObservedWriter, UnifiedLogType, abort_observed_encode, begin_observed_encode,
+    finish_observed_encode,
+};
 
 #[derive(Debug, Default)]
 pub struct NoopSectionStorage {
@@ -85,7 +88,21 @@ impl UnifiedLogWrite<NoopSectionStorage> for NoopLogger {
 }
 
 fn encoded_size<E: Encode>(value: &E) -> Result<usize, EncodeError> {
-    let mut encoder = EncoderImpl::<_, _>::new(SizeWriter::default(), standard());
-    value.encode(&mut encoder)?;
-    Ok(encoder.into_writer().bytes_written)
+    begin_observed_encode();
+    let result = (|| {
+        let mut encoder =
+            EncoderImpl::<_, _>::new(ObservedWriter::new(SizeWriter::default()), standard());
+        value.encode(&mut encoder)?;
+        Ok(encoder.into_writer().into_inner().bytes_written)
+    })();
+    match result {
+        Ok(size) => {
+            debug_assert_eq!(size, finish_observed_encode());
+            Ok(size)
+        }
+        Err(err) => {
+            abort_observed_encode();
+            Err(err)
+        }
+    }
 }

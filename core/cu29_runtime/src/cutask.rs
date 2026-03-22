@@ -180,9 +180,7 @@ impl Display for CuMsgMetadata {
 }
 
 /// CuMsg is the envelope holding the msg payload and the metadata between tasks.
-#[derive(
-    Default, Debug, Clone, bincode::Encode, bincode::Decode, Serialize, Deserialize, Reflect,
-)]
+#[derive(Default, Debug, Clone, bincode::Decode, Serialize, Deserialize, Reflect)]
 #[reflect(opaque, from_reflect = false, no_field_bounds)]
 #[serde(bound(
     serialize = "T: Serialize, M: Serialize",
@@ -202,6 +200,38 @@ where
 
     /// This metadata is the data that is common to all messages.
     pub metadata: M,
+}
+
+impl<T, M> Encode for CuStampedData<T, M>
+where
+    T: CuMsgPayload,
+    M: Metadata,
+{
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        match &self.payload {
+            None => {
+                0u8.encode(encoder)?;
+            }
+            Some(payload) => {
+                1u8.encode(encoder)?;
+                let encoded_start = cu29_traits::observed_encode_bytes();
+                let handle_start = crate::monitoring::current_payload_handle_bytes();
+                payload.encode(encoder)?;
+                let encoded_bytes =
+                    cu29_traits::observed_encode_bytes().saturating_sub(encoded_start);
+                let handle_bytes =
+                    crate::monitoring::current_payload_handle_bytes().saturating_sub(handle_start);
+                crate::monitoring::record_current_slot_payload_io_stats(
+                    core::mem::size_of::<T>(),
+                    encoded_bytes,
+                    handle_bytes,
+                );
+            }
+        }
+        self.tov.encode(encoder)?;
+        self.metadata.encode(encoder)?;
+        Ok(())
+    }
 }
 
 impl Default for CuMsgMetadata {

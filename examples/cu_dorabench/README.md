@@ -9,7 +9,10 @@ Usage: `cargo run -r --profile screaming`
 Warning: say goodbye to your disk space, we are logging to disk 40MiB at every message as fast as your storage allows us to do.
 
 The payload in this example is a tiny newtype around `CuHandle<Vec<u8>>`.
-Copper's BW monitor and exported payload size stats now measure payload bytes
-from the actual encode path, and `CuHandle` contributes its backing buffer size
-to that measurement. That keeps this wrapper honest without forcing the wider
-payload ecosystem to add another mandatory trait impl.
+The generated `CuStampedDataSet` now carries a runtime-only IO cache beside the
+message tuple.
+
+- Location: `CuStampedDataSet(..., CuMsgIoCache<N>)`
+- Contents: resident bytes, encoded bytes, and handle-backed bytes for each message slot
+- Update point: during the normal CopperList bincode encode path
+- Purpose: reuse the measured sizes for live monitoring and generated payload-size queries instead of running a second size-only encode pass
