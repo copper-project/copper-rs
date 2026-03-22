@@ -359,8 +359,9 @@ fn gen_culist_support(
                     let port_index = syn::Index::from(port_idx);
                     quote! {
                         if let Some(payload) = culist.msgs.0.#slot_index.#port_index.payload() {
-                            raw += cu29::monitoring::CuPayloadSize::raw_bytes(payload);
-                            handles += cu29::monitoring::CuPayloadSize::handle_bytes(payload);
+                            let io = cu29::monitoring::payload_io_bytes(payload)?;
+                            raw += io.raw_bytes;
+                            handles += io.handle_bytes;
                         }
                     }
                 });
@@ -368,8 +369,9 @@ fn gen_culist_support(
             } else {
                 quote! {
                     if let Some(payload) = culist.msgs.0.#slot_index.payload() {
-                        raw += cu29::monitoring::CuPayloadSize::raw_bytes(payload);
-                        handles += cu29::monitoring::CuPayloadSize::handle_bytes(payload);
+                        let io = cu29::monitoring::payload_io_bytes(payload)?;
+                        raw += io.raw_bytes;
+                        handles += io.handle_bytes;
                     }
                 }
             }
@@ -386,9 +388,11 @@ fn gen_culist_support(
                     let port_index = syn::Index::from(port_idx);
                     quote! {
                         if let Some(payload) = self.0.#slot_index.#port_index.payload() {
-                            bytes.push(Some(
-                                cu29::monitoring::CuPayloadSize::raw_bytes(payload) as u64
-                            ));
+                            bytes.push(
+                                cu29::monitoring::payload_io_bytes(payload)
+                                    .ok()
+                                    .map(|io| io.raw_bytes as u64)
+                            );
                         } else {
                             bytes.push(None);
                         }
@@ -398,9 +402,11 @@ fn gen_culist_support(
             } else {
                 quote! {
                     if let Some(payload) = self.0.#slot_index.payload() {
-                        bytes.push(Some(
-                            cu29::monitoring::CuPayloadSize::raw_bytes(payload) as u64
-                        ));
+                        bytes.push(
+                            cu29::monitoring::payload_io_bytes(payload)
+                                .ok()
+                                .map(|io| io.raw_bytes as u64)
+                        );
                     } else {
                         bytes.push(None);
                     }
@@ -410,11 +416,11 @@ fn gen_culist_support(
         .collect();
 
     let compute_payload_bytes_fn = quote! {
-        pub fn compute_payload_bytes(culist: &CuList) -> (u64, u64) {
+        pub fn compute_payload_bytes(culist: &CuList) -> cu29::prelude::CuResult<(u64, u64)> {
             let mut raw: usize = 0;
             let mut handles: usize = 0;
             #(#payload_bytes_accumulators)*
-            (raw as u64, handles as u64)
+            Ok((raw as u64, handles as u64))
         }
     };
 
@@ -2676,14 +2682,25 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                                             }
                                                         }
                                                     } else {
-                                                        let (raw_payload_bytes, handle_bytes) =
-                                                            #mission_mod::compute_payload_bytes(&culist);
-                                                        #mission_mod::ParallelWorkerResult {
-                                                            clid,
-                                                            culist: Some(culist),
-                                                            outcome: Ok(cu29::curuntime::ProcessStepOutcome::Continue),
-                                                            raw_payload_bytes,
-                                                            handle_bytes,
+                                                        match #mission_mod::compute_payload_bytes(&culist) {
+                                                            Ok((raw_payload_bytes, handle_bytes)) => {
+                                                                #mission_mod::ParallelWorkerResult {
+                                                                    clid,
+                                                                    culist: Some(culist),
+                                                                    outcome: Ok(cu29::curuntime::ProcessStepOutcome::Continue),
+                                                                    raw_payload_bytes,
+                                                                    handle_bytes,
+                                                                }
+                                                            }
+                                                            Err(error) => {
+                                                                #mission_mod::ParallelWorkerResult {
+                                                                    clid,
+                                                                    culist: Some(culist),
+                                                                    outcome: Err(error),
+                                                                    raw_payload_bytes: 0,
+                                                                    handle_bytes: 0,
+                                                                }
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -3484,7 +3501,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     monitor_result?;
                     return Ok(());
                 }
-                let (raw_payload_bytes, handle_bytes) = #mission_mod::compute_payload_bytes(&culist);
+                let (raw_payload_bytes, handle_bytes) = #mission_mod::compute_payload_bytes(&culist)?;
                 ctx.clear_current_task();
                 let monitor_result = monitor.process_copperlist(&ctx, #mission_mod::MONITOR_LAYOUT.view(&#mission_mod::collect_metadata(&culist)));
 

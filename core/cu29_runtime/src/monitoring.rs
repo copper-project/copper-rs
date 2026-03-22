@@ -7,6 +7,10 @@ use crate::config::{
 };
 use crate::context::CuContext;
 use crate::cutask::CuMsgMetadata;
+use bincode::Encode;
+use bincode::config::standard;
+use bincode::enc::EncoderImpl;
+use bincode::enc::write::SizeWriter;
 use compact_str::CompactString;
 use cu29_clock::CuDuration;
 #[allow(unused_imports)]
@@ -24,12 +28,16 @@ extern crate alloc;
 #[cfg(feature = "std")]
 use std::sync::Arc;
 #[cfg(feature = "std")]
+use std::{cell::Cell, thread_local};
+#[cfg(feature = "std")]
 use std::{collections::HashMap as Map, string::String, string::ToString, vec::Vec};
 
 #[cfg(not(feature = "std"))]
 use alloc::{collections::BTreeMap as Map, string::String, string::ToString, vec::Vec};
 #[cfg(not(target_has_atomic = "64"))]
 use spin::Mutex;
+#[cfg(not(feature = "std"))]
+use spin::Mutex as SpinMutex;
 
 #[cfg(not(feature = "std"))]
 mod imp {
@@ -751,9 +759,16 @@ impl CopperListInfo {
 /// Reported data about CopperList IO for a single iteration.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CopperListIoStats {
-    /// CopperList struct size in RAM (excluding dynamic payloads/handles)
+    /// CopperList bytes resident in RAM for this iteration.
+    ///
+    /// This includes the fixed CopperList struct size plus any payload bytes
+    /// reported by [`payload_io_bytes`].
     pub raw_culist_bytes: u64,
-    /// Bytes held by payloads that will be serialized (currently: pooled handles, vecs, slices)
+    /// Bytes attributed to handle-backed storage while measuring payload IO.
+    ///
+    /// This is surfaced separately so monitors can show how much of the runtime
+    /// footprint lives in pooled payload buffers rather than inside the fixed
+    /// CopperList struct.
     pub handle_bytes: u64,
     /// Bytes produced by bincode serialization of the CopperList
     pub encoded_culist_bytes: u64,
@@ -765,27 +780,108 @@ pub struct CopperListIoStats {
     pub culistid: u64,
 }
 
-/// Lightweight trait to estimate the amount of data a payload will contribute when serialized.
-/// Default implementations return the stack size; specific types override to report dynamic data.
-pub trait CuPayloadSize {
-    /// Total bytes represented by the payload in memory (stack + heap backing).
-    fn raw_bytes(&self) -> usize {
-        core::mem::size_of_val(self)
-    }
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PayloadIoBytes {
+    pub raw_bytes: usize,
+    pub handle_bytes: usize,
+}
 
-    /// Bytes that correspond to reusable/pooled handles (used for IO budgeting).
-    fn handle_bytes(&self) -> usize {
-        0
+#[cfg(feature = "std")]
+thread_local! {
+    static PAYLOAD_HANDLE_BYTES: Cell<Option<usize>> = const { Cell::new(None) };
+}
+
+#[cfg(not(feature = "std"))]
+static PAYLOAD_HANDLE_BYTES: SpinMutex<Option<usize>> = SpinMutex::new(None);
+
+fn begin_payload_io_measurement() {
+    #[cfg(feature = "std")]
+    PAYLOAD_HANDLE_BYTES.with(|bytes| {
+        debug_assert!(
+            bytes.get().is_none(),
+            "payload IO byte measurement must not be nested"
+        );
+        bytes.set(Some(0));
+    });
+
+    #[cfg(not(feature = "std"))]
+    {
+        let mut bytes = PAYLOAD_HANDLE_BYTES.lock();
+        debug_assert!(
+            bytes.is_none(),
+            "payload IO byte measurement must not be nested"
+        );
+        *bytes = Some(0);
     }
 }
 
-impl<T> CuPayloadSize for T
-where
-    T: crate::cutask::CuMsgPayload,
-{
-    fn raw_bytes(&self) -> usize {
-        core::mem::size_of::<T>()
+fn finish_payload_io_measurement() -> usize {
+    #[cfg(feature = "std")]
+    {
+        return PAYLOAD_HANDLE_BYTES.with(|bytes| bytes.replace(None).unwrap_or(0));
     }
+
+    #[cfg(not(feature = "std"))]
+    {
+        PAYLOAD_HANDLE_BYTES.lock().take().unwrap_or(0)
+    }
+}
+
+fn abort_payload_io_measurement() {
+    #[cfg(feature = "std")]
+    PAYLOAD_HANDLE_BYTES.with(|bytes| bytes.set(None));
+
+    #[cfg(not(feature = "std"))]
+    {
+        *PAYLOAD_HANDLE_BYTES.lock() = None;
+    }
+}
+
+pub(crate) fn record_payload_handle_bytes(bytes: usize) {
+    #[cfg(feature = "std")]
+    PAYLOAD_HANDLE_BYTES.with(|total| {
+        if let Some(current) = total.get() {
+            total.set(Some(current.saturating_add(bytes)));
+        }
+    });
+
+    #[cfg(not(feature = "std"))]
+    {
+        let mut total = PAYLOAD_HANDLE_BYTES.lock();
+        if let Some(current) = *total {
+            *total = Some(current.saturating_add(bytes));
+        }
+    }
+}
+
+/// Measures payload bytes using the same encode path Copper uses for
+/// logging/export.
+///
+/// `raw_bytes` is the payload's encode-path size. `handle_bytes` is the subset
+/// explicitly reported by encoders such as [`crate::pool::CuHandle`] while that
+/// measurement is active.
+pub fn payload_io_bytes<T>(payload: &T) -> CuResult<PayloadIoBytes>
+where
+    T: Encode,
+{
+    begin_payload_io_measurement();
+
+    let result = (|| {
+        let mut encoder = EncoderImpl::<_, _>::new(SizeWriter::default(), standard());
+        payload.encode(&mut encoder).map_err(|e| {
+            CuError::from("Failed to measure payload IO bytes").add_cause(&e.to_string())
+        })?;
+        Ok(PayloadIoBytes {
+            raw_bytes: encoder.into_writer().bytes_written,
+            handle_bytes: finish_payload_io_measurement(),
+        })
+    })();
+
+    if result.is_err() {
+        abort_payload_io_measurement();
+    }
+
+    result
 }
 
 #[derive(Default, Debug, Clone, Copy)]
@@ -1639,6 +1735,32 @@ mod tests {
         assert_eq!(monitors.1.copperlist_calls.load(Ordering::SeqCst), 1);
         assert_eq!(monitors.0.panic_calls.load(Ordering::SeqCst), 1);
         assert_eq!(monitors.1.panic_calls.load(Ordering::SeqCst), 1);
+    }
+
+    fn encoded_size<E: Encode>(value: &E) -> usize {
+        let mut encoder = EncoderImpl::<_, _>::new(SizeWriter::default(), standard());
+        value
+            .encode(&mut encoder)
+            .expect("size measurement encoder should not fail");
+        encoder.into_writer().bytes_written
+    }
+
+    #[test]
+    fn payload_io_bytes_tracks_encode_path_size_for_plain_payloads() {
+        let payload = vec![1u8, 2, 3, 4];
+        let io = payload_io_bytes(&payload).expect("payload IO measurement should succeed");
+
+        assert_eq!(io.raw_bytes, encoded_size(&payload));
+        assert_eq!(io.handle_bytes, 0);
+    }
+
+    #[test]
+    fn payload_io_bytes_tracks_handle_backed_storage() {
+        let payload = crate::pool::CuHandle::new_detached(vec![0u8; 32]);
+        let io = payload_io_bytes(&payload).expect("payload IO measurement should succeed");
+
+        assert_eq!(io.raw_bytes, encoded_size(&payload));
+        assert_eq!(io.handle_bytes, 32);
     }
 
     #[test]

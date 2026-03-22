@@ -105,3 +105,23 @@ impl<'de> Deserialize<'de> for DoraPayload {
         Ok(DoraPayload(CuHandle::new_detached(data)))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bincode::config::standard;
+    use bincode::enc::EncoderImpl;
+    use bincode::enc::write::SizeWriter;
+
+    #[test]
+    fn dora_payload_measurement_reports_wrapped_handle_bytes() {
+        let payload = DoraPayload(CuHandle::new_detached(vec![0u8; 1024]));
+        let io = payload_io_bytes(&payload).expect("payload IO measurement should succeed");
+        let mut encoder = EncoderImpl::<_, _>::new(SizeWriter::default(), standard());
+        payload
+            .encode(&mut encoder)
+            .expect("size measurement encoder should not fail");
+        assert_eq!(io.raw_bytes, encoder.into_writer().bytes_written);
+        assert_eq!(io.handle_bytes, 1024);
+    }
+}
