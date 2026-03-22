@@ -348,7 +348,7 @@ pub fn begin_observed_encode() {
 pub fn finish_observed_encode() -> usize {
     #[cfg(feature = "std")]
     {
-        return OBSERVED_ENCODE_BYTES.with(|bytes| bytes.replace(None).unwrap_or(0));
+        OBSERVED_ENCODE_BYTES.with(|bytes| bytes.replace(None).unwrap_or(0))
     }
 
     #[cfg(not(feature = "std"))]
@@ -372,7 +372,7 @@ pub fn abort_observed_encode() {
 pub fn observed_encode_bytes() -> usize {
     #[cfg(feature = "std")]
     {
-        return OBSERVED_ENCODE_BYTES.with(|bytes| bytes.get().unwrap_or(0));
+        OBSERVED_ENCODE_BYTES.with(|bytes| bytes.get().unwrap_or(0))
     }
 
     #[cfg(not(feature = "std"))]
