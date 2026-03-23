@@ -37,6 +37,7 @@ use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+#[cfg(feature = "std")]
 use core::cell::Cell;
 #[cfg(not(feature = "std"))]
 use core::error::Error as CoreError;

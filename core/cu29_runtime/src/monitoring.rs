@@ -12,6 +12,7 @@ use bincode::config::standard;
 use bincode::enc::EncoderImpl;
 use bincode::enc::write::SizeWriter;
 use compact_str::CompactString;
+use core::cell::Cell;
 use cu29_clock::CuDuration;
 #[allow(unused_imports)]
 use cu29_log::CuLogLevel;
@@ -31,7 +32,7 @@ extern crate alloc;
 #[cfg(feature = "std")]
 use std::sync::Arc;
 #[cfg(feature = "std")]
-use std::{cell::Cell, thread_local};
+use std::thread_local;
 #[cfg(feature = "std")]
 use std::{collections::HashMap as Map, string::String, string::ToString, vec::Vec};
 
@@ -813,8 +814,8 @@ impl<const N: usize> CuMsgIoCache<N> {
         self.entries[idx].get()
     }
 
-    fn raw_parts(&self) -> (*const Cell<CuMsgIoStats>, usize) {
-        (self.entries.as_ptr(), N)
+    fn raw_parts(&self) -> (usize, usize) {
+        (self.entries.as_ptr() as usize, N)
     }
 }
 
@@ -828,7 +829,7 @@ impl<const N: usize> Default for CuMsgIoCache<N> {
 
 #[derive(Clone, Copy)]
 struct ActiveCuMsgIoCapture {
-    cache_ptr: *const Cell<CuMsgIoStats>,
+    cache_addr: usize,
     cache_len: usize,
     current_slot: Option<usize>,
 }
@@ -902,6 +903,7 @@ fn current_payload_io_measurement() -> usize {
     }
 }
 
+#[cfg(feature = "std")]
 pub(crate) fn record_payload_handle_bytes(bytes: usize) {
     #[cfg(feature = "std")]
     PAYLOAD_HANDLE_BYTES.with(|total| {
@@ -992,9 +994,9 @@ pub fn start_copperlist_io_capture<const N: usize>(cache: &CuMsgIoCache<N>) -> C
     cache.clear();
     set_last_completed_handle_bytes(0);
     begin_payload_io_measurement();
-    let (cache_ptr, cache_len) = cache.raw_parts();
+    let (cache_addr, cache_len) = cache.raw_parts();
     let capture = ActiveCuMsgIoCapture {
-        cache_ptr,
+        cache_addr,
         cache_len,
         current_slot: None,
     };
@@ -1038,7 +1040,8 @@ pub(crate) fn record_current_slot_payload_io_stats(
             return;
         }
         // SAFETY: the capture guard holds the cache alive for the duration of the encode pass.
-        let entry = unsafe { &*capture.cache_ptr.add(slot) };
+        let cache_ptr = capture.cache_addr as *const Cell<CuMsgIoStats>;
+        let entry = unsafe { &*cache_ptr.add(slot) };
         entry.set(CuMsgIoStats {
             present: true,
             resident_bytes: (fixed_bytes.saturating_add(handle_bytes)) as u64,
