@@ -7,6 +7,10 @@ use crate::config::{
 };
 use crate::context::CuContext;
 use crate::cutask::CuMsgMetadata;
+use bincode::Encode;
+use bincode::config::standard;
+use bincode::enc::EncoderImpl;
+use bincode::enc::write::SizeWriter;
 use compact_str::CompactString;
 use cu29_clock::CuDuration;
 #[allow(unused_imports)]
@@ -15,14 +19,24 @@ use cu29_log::CuLogLevel;
 use cu29_log_runtime::{
     format_message_only, register_live_log_listener, unregister_live_log_listener,
 };
-use cu29_traits::{CuError, CuResult};
+use cu29_traits::{
+    CuError, CuResult, ObservedWriter, abort_observed_encode, begin_observed_encode,
+    finish_observed_encode,
+};
+use portable_atomic::{
+    AtomicBool as PortableAtomicBool, AtomicU64 as PortableAtomicU64, Ordering as PortableOrdering,
+};
 use serde_derive::{Deserialize, Serialize};
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
 #[cfg(feature = "std")]
+use core::cell::Cell;
+#[cfg(feature = "std")]
 use std::sync::Arc;
+#[cfg(feature = "std")]
+use std::thread_local;
 #[cfg(feature = "std")]
 use std::{collections::HashMap as Map, string::String, string::ToString, vec::Vec};
 
@@ -30,6 +44,8 @@ use std::{collections::HashMap as Map, string::String, string::ToString, vec::Ve
 use alloc::{collections::BTreeMap as Map, string::String, string::ToString, vec::Vec};
 #[cfg(not(target_has_atomic = "64"))]
 use spin::Mutex;
+#[cfg(not(feature = "std"))]
+use spin::Mutex as SpinMutex;
 
 #[cfg(not(feature = "std"))]
 mod imp {
@@ -751,9 +767,16 @@ impl CopperListInfo {
 /// Reported data about CopperList IO for a single iteration.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CopperListIoStats {
-    /// CopperList struct size in RAM (excluding dynamic payloads/handles)
+    /// CopperList bytes resident in RAM for this iteration.
+    ///
+    /// This includes the fixed CopperList struct size plus any pooled or
+    /// handle-backed payload bytes observed on the real encode path.
     pub raw_culist_bytes: u64,
-    /// Bytes held by payloads that will be serialized (currently: pooled handles, vecs, slices)
+    /// Bytes attributed to handle-backed storage while measuring payload IO.
+    ///
+    /// This is surfaced separately so monitors can show how much of the runtime
+    /// footprint lives in pooled payload buffers rather than inside the fixed
+    /// CopperList struct.
     pub handle_bytes: u64,
     /// Bytes produced by bincode serialization of the CopperList
     pub encoded_culist_bytes: u64,
@@ -765,27 +788,358 @@ pub struct CopperListIoStats {
     pub culistid: u64,
 }
 
-/// Lightweight trait to estimate the amount of data a payload will contribute when serialized.
-/// Default implementations return the stack size; specific types override to report dynamic data.
-pub trait CuPayloadSize {
-    /// Total bytes represented by the payload in memory (stack + heap backing).
-    fn raw_bytes(&self) -> usize {
-        core::mem::size_of_val(self)
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PayloadIoStats {
+    pub resident_bytes: usize,
+    pub encoded_bytes: usize,
+    pub handle_bytes: usize,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CuMsgIoStats {
+    pub present: bool,
+    pub resident_bytes: u64,
+    pub encoded_bytes: u64,
+    pub handle_bytes: u64,
+}
+
+struct CuMsgIoEntry {
+    present: PortableAtomicBool,
+    resident_bytes: PortableAtomicU64,
+    encoded_bytes: PortableAtomicU64,
+    handle_bytes: PortableAtomicU64,
+}
+
+impl CuMsgIoEntry {
+    fn clear(&self) {
+        self.present.store(false, PortableOrdering::Release);
+        self.resident_bytes.store(0, PortableOrdering::Relaxed);
+        self.encoded_bytes.store(0, PortableOrdering::Relaxed);
+        self.handle_bytes.store(0, PortableOrdering::Relaxed);
     }
 
-    /// Bytes that correspond to reusable/pooled handles (used for IO budgeting).
-    fn handle_bytes(&self) -> usize {
-        0
+    fn get(&self) -> CuMsgIoStats {
+        if !self.present.load(PortableOrdering::Acquire) {
+            return CuMsgIoStats::default();
+        }
+
+        CuMsgIoStats {
+            present: true,
+            resident_bytes: self.resident_bytes.load(PortableOrdering::Relaxed),
+            encoded_bytes: self.encoded_bytes.load(PortableOrdering::Relaxed),
+            handle_bytes: self.handle_bytes.load(PortableOrdering::Relaxed),
+        }
+    }
+
+    fn set(&self, stats: CuMsgIoStats) {
+        self.resident_bytes
+            .store(stats.resident_bytes, PortableOrdering::Relaxed);
+        self.encoded_bytes
+            .store(stats.encoded_bytes, PortableOrdering::Relaxed);
+        self.handle_bytes
+            .store(stats.handle_bytes, PortableOrdering::Relaxed);
+        self.present.store(stats.present, PortableOrdering::Release);
     }
 }
 
-impl<T> CuPayloadSize for T
-where
-    T: crate::cutask::CuMsgPayload,
-{
-    fn raw_bytes(&self) -> usize {
-        core::mem::size_of::<T>()
+impl Default for CuMsgIoEntry {
+    fn default() -> Self {
+        Self {
+            present: PortableAtomicBool::new(false),
+            resident_bytes: PortableAtomicU64::new(0),
+            encoded_bytes: PortableAtomicU64::new(0),
+            handle_bytes: PortableAtomicU64::new(0),
+        }
     }
+}
+
+pub struct CuMsgIoCache<const N: usize> {
+    entries: [CuMsgIoEntry; N],
+}
+
+impl<const N: usize> CuMsgIoCache<N> {
+    pub fn clear(&self) {
+        for entry in &self.entries {
+            entry.clear();
+        }
+    }
+
+    pub fn get(&self, idx: usize) -> CuMsgIoStats {
+        self.entries[idx].get()
+    }
+
+    fn raw_parts(&self) -> (usize, usize) {
+        (self.entries.as_ptr() as usize, N)
+    }
+}
+
+impl<const N: usize> Default for CuMsgIoCache<N> {
+    fn default() -> Self {
+        Self {
+            entries: core::array::from_fn(|_| CuMsgIoEntry::default()),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct ActiveCuMsgIoCapture {
+    cache_addr: usize,
+    cache_len: usize,
+    current_slot: Option<usize>,
+}
+
+#[cfg(feature = "std")]
+thread_local! {
+    static PAYLOAD_HANDLE_BYTES: Cell<Option<usize>> = const { Cell::new(None) };
+    static ACTIVE_COPPERLIST_CAPTURE: Cell<Option<ActiveCuMsgIoCapture>> = const { Cell::new(None) };
+    static LAST_COMPLETED_HANDLE_BYTES: Cell<u64> = const { Cell::new(0) };
+}
+
+#[cfg(not(feature = "std"))]
+static PAYLOAD_HANDLE_BYTES: SpinMutex<Option<usize>> = SpinMutex::new(None);
+#[cfg(not(feature = "std"))]
+static ACTIVE_COPPERLIST_CAPTURE: SpinMutex<Option<ActiveCuMsgIoCapture>> = SpinMutex::new(None);
+#[cfg(not(feature = "std"))]
+static LAST_COMPLETED_HANDLE_BYTES: SpinMutex<u64> = SpinMutex::new(0);
+
+fn begin_payload_io_measurement() {
+    #[cfg(feature = "std")]
+    PAYLOAD_HANDLE_BYTES.with(|bytes| {
+        debug_assert!(
+            bytes.get().is_none(),
+            "payload IO byte measurement must not be nested"
+        );
+        bytes.set(Some(0));
+    });
+
+    #[cfg(not(feature = "std"))]
+    {
+        let mut bytes = PAYLOAD_HANDLE_BYTES.lock();
+        debug_assert!(
+            bytes.is_none(),
+            "payload IO byte measurement must not be nested"
+        );
+        *bytes = Some(0);
+    }
+}
+
+fn finish_payload_io_measurement() -> usize {
+    #[cfg(feature = "std")]
+    {
+        PAYLOAD_HANDLE_BYTES.with(|bytes| bytes.replace(None).unwrap_or(0))
+    }
+
+    #[cfg(not(feature = "std"))]
+    {
+        PAYLOAD_HANDLE_BYTES.lock().take().unwrap_or(0)
+    }
+}
+
+fn abort_payload_io_measurement() {
+    #[cfg(feature = "std")]
+    PAYLOAD_HANDLE_BYTES.with(|bytes| bytes.set(None));
+
+    #[cfg(not(feature = "std"))]
+    {
+        *PAYLOAD_HANDLE_BYTES.lock() = None;
+    }
+}
+
+fn current_payload_io_measurement() -> usize {
+    #[cfg(feature = "std")]
+    {
+        PAYLOAD_HANDLE_BYTES.with(|bytes| bytes.get().unwrap_or(0))
+    }
+
+    #[cfg(not(feature = "std"))]
+    {
+        PAYLOAD_HANDLE_BYTES.lock().as_ref().copied().unwrap_or(0)
+    }
+}
+
+#[cfg(feature = "std")]
+pub(crate) fn record_payload_handle_bytes(bytes: usize) {
+    #[cfg(feature = "std")]
+    PAYLOAD_HANDLE_BYTES.with(|total| {
+        if let Some(current) = total.get() {
+            total.set(Some(current.saturating_add(bytes)));
+        }
+    });
+
+    #[cfg(not(feature = "std"))]
+    {
+        let mut total = PAYLOAD_HANDLE_BYTES.lock();
+        if let Some(current) = *total {
+            *total = Some(current.saturating_add(bytes));
+        }
+    }
+}
+
+fn set_last_completed_handle_bytes(bytes: u64) {
+    #[cfg(feature = "std")]
+    LAST_COMPLETED_HANDLE_BYTES.with(|total| total.set(bytes));
+
+    #[cfg(not(feature = "std"))]
+    {
+        *LAST_COMPLETED_HANDLE_BYTES.lock() = bytes;
+    }
+}
+
+pub fn take_last_completed_handle_bytes() -> u64 {
+    #[cfg(feature = "std")]
+    {
+        LAST_COMPLETED_HANDLE_BYTES.with(|total| total.replace(0))
+    }
+
+    #[cfg(not(feature = "std"))]
+    {
+        let mut total = LAST_COMPLETED_HANDLE_BYTES.lock();
+        let value = *total;
+        *total = 0;
+        value
+    }
+}
+
+fn with_active_capture_mut<R>(f: impl FnOnce(&mut ActiveCuMsgIoCapture) -> R) -> Option<R> {
+    #[cfg(feature = "std")]
+    {
+        ACTIVE_COPPERLIST_CAPTURE.with(|capture| {
+            let mut state = capture.get()?;
+            let result = f(&mut state);
+            capture.set(Some(state));
+            Some(result)
+        })
+    }
+
+    #[cfg(not(feature = "std"))]
+    {
+        let mut capture = ACTIVE_COPPERLIST_CAPTURE.lock();
+        let state = capture.as_mut()?;
+        Some(f(state))
+    }
+}
+
+pub struct CuMsgIoCaptureGuard;
+
+impl CuMsgIoCaptureGuard {
+    pub fn select_slot(&self, slot: usize) {
+        let _ = with_active_capture_mut(|capture| {
+            debug_assert!(slot < capture.cache_len, "payload IO slot out of range");
+            capture.current_slot = Some(slot);
+        });
+    }
+}
+
+impl Drop for CuMsgIoCaptureGuard {
+    fn drop(&mut self) {
+        set_last_completed_handle_bytes(finish_payload_io_measurement() as u64);
+
+        #[cfg(feature = "std")]
+        ACTIVE_COPPERLIST_CAPTURE.with(|capture| capture.set(None));
+
+        #[cfg(not(feature = "std"))]
+        {
+            *ACTIVE_COPPERLIST_CAPTURE.lock() = None;
+        }
+    }
+}
+
+pub fn start_copperlist_io_capture<const N: usize>(cache: &CuMsgIoCache<N>) -> CuMsgIoCaptureGuard {
+    cache.clear();
+    set_last_completed_handle_bytes(0);
+    begin_payload_io_measurement();
+    let (cache_addr, cache_len) = cache.raw_parts();
+    let capture = ActiveCuMsgIoCapture {
+        cache_addr,
+        cache_len,
+        current_slot: None,
+    };
+
+    #[cfg(feature = "std")]
+    ACTIVE_COPPERLIST_CAPTURE.with(|state| {
+        debug_assert!(
+            state.get().is_none(),
+            "CopperList payload IO capture must not be nested"
+        );
+        state.set(Some(capture));
+    });
+
+    #[cfg(not(feature = "std"))]
+    {
+        let mut state = ACTIVE_COPPERLIST_CAPTURE.lock();
+        debug_assert!(
+            state.is_none(),
+            "CopperList payload IO capture must not be nested"
+        );
+        *state = Some(capture);
+    }
+
+    CuMsgIoCaptureGuard
+}
+
+pub(crate) fn current_payload_handle_bytes() -> usize {
+    current_payload_io_measurement()
+}
+
+pub(crate) fn record_current_slot_payload_io_stats(
+    fixed_bytes: usize,
+    encoded_bytes: usize,
+    handle_bytes: usize,
+) {
+    let _ = with_active_capture_mut(|capture| {
+        let Some(slot) = capture.current_slot else {
+            return;
+        };
+        if slot >= capture.cache_len {
+            return;
+        }
+        // SAFETY: the capture guard holds the cache alive for the duration of the encode pass.
+        let cache_ptr = capture.cache_addr as *const CuMsgIoEntry;
+        let entry = unsafe { &*cache_ptr.add(slot) };
+        entry.set(CuMsgIoStats {
+            present: true,
+            resident_bytes: (fixed_bytes.saturating_add(handle_bytes)) as u64,
+            encoded_bytes: encoded_bytes as u64,
+            handle_bytes: handle_bytes as u64,
+        });
+    });
+}
+
+/// Measures payload bytes using the same encode path Copper uses for
+/// logging/export.
+///
+/// `resident_bytes` is the payload's in-memory fixed footprint plus any
+/// handle-backed dynamic storage reported during encoding. `encoded_bytes` is
+/// the exact bincode payload size.
+pub fn payload_io_stats<T>(payload: &T) -> CuResult<PayloadIoStats>
+where
+    T: Encode,
+{
+    begin_payload_io_measurement();
+    begin_observed_encode();
+
+    let result = (|| {
+        let mut encoder =
+            EncoderImpl::<_, _>::new(ObservedWriter::new(SizeWriter::default()), standard());
+        payload.encode(&mut encoder).map_err(|e| {
+            CuError::from("Failed to measure payload IO bytes").add_cause(&e.to_string())
+        })?;
+        let encoded_bytes = encoder.into_writer().into_inner().bytes_written;
+        debug_assert_eq!(encoded_bytes, finish_observed_encode());
+        let handle_bytes = finish_payload_io_measurement();
+        Ok(PayloadIoStats {
+            resident_bytes: core::mem::size_of::<T>().saturating_add(handle_bytes),
+            encoded_bytes,
+            handle_bytes,
+        })
+    })();
+
+    if result.is_err() {
+        abort_payload_io_measurement();
+        abort_observed_encode();
+    }
+
+    result
 }
 
 #[derive(Default, Debug, Clone, Copy)]
@@ -1639,6 +1993,37 @@ mod tests {
         assert_eq!(monitors.1.copperlist_calls.load(Ordering::SeqCst), 1);
         assert_eq!(monitors.0.panic_calls.load(Ordering::SeqCst), 1);
         assert_eq!(monitors.1.panic_calls.load(Ordering::SeqCst), 1);
+    }
+
+    fn encoded_size<E: Encode>(value: &E) -> usize {
+        let mut encoder = EncoderImpl::<_, _>::new(SizeWriter::default(), standard());
+        value
+            .encode(&mut encoder)
+            .expect("size measurement encoder should not fail");
+        encoder.into_writer().bytes_written
+    }
+
+    #[test]
+    fn payload_io_stats_tracks_encode_path_size_for_plain_payloads() {
+        let payload = vec![1u8, 2, 3, 4];
+        let io = payload_io_stats(&payload).expect("payload IO measurement should succeed");
+
+        assert_eq!(io.encoded_bytes, encoded_size(&payload));
+        assert_eq!(io.resident_bytes, core::mem::size_of::<Vec<u8>>());
+        assert_eq!(io.handle_bytes, 0);
+    }
+
+    #[test]
+    fn payload_io_stats_tracks_handle_backed_storage() {
+        let payload = crate::pool::CuHandle::new_detached(vec![0u8; 32]);
+        let io = payload_io_stats(&payload).expect("payload IO measurement should succeed");
+
+        assert_eq!(io.encoded_bytes, encoded_size(&payload));
+        assert_eq!(
+            io.resident_bytes,
+            core::mem::size_of::<crate::pool::CuHandle<Vec<u8>>>() + 32
+        );
+        assert_eq!(io.handle_bytes, 32);
     }
 
     #[test]

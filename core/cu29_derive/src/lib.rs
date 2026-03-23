@@ -277,11 +277,12 @@ fn gen_culist_support(
     #[cfg(feature = "macro_debug")]
     eprintln!("[build the copperlist struct]");
     let msgs_types_tuple: TypeTuple = build_culist_tuple(&slot_types);
+    let cumsg_count: usize = output_packs.iter().map(|pack| pack.msg_types.len()).sum();
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[build the copperlist tuple bincode support]");
-    let msgs_types_tuple_encode = build_culist_tuple_encode(&slot_types);
-    let msgs_types_tuple_decode = build_culist_tuple_decode(&slot_types);
+    let msgs_types_tuple_encode = build_culist_tuple_encode(&output_packs);
+    let msgs_types_tuple_decode = build_culist_tuple_decode(&slot_types, cumsg_count);
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[build the copperlist tuple debug support]");
@@ -293,7 +294,7 @@ fn gen_culist_support(
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[build the default tuple support]");
-    let msgs_types_tuple_default = build_culist_tuple_default(&slot_types);
+    let msgs_types_tuple_default = build_culist_tuple_default(&slot_types, cumsg_count);
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[build erasedcumsgs]");
@@ -345,11 +346,9 @@ fn gen_culist_support(
         }
     };
 
-    let cumsg_count: usize = output_packs.iter().map(|pack| pack.msg_types.len()).sum();
-
     let payload_bytes_accumulators: Vec<proc_macro2::TokenStream> = culist_indices_in_plan_order
         .iter()
-        .map(|idx| {
+        .scan(0usize, |flat_idx, idx| {
             let slot_index = syn::Index::from(*idx);
             let pack = output_packs
                 .get(*idx)
@@ -357,21 +356,45 @@ fn gen_culist_support(
             if pack.is_multi() {
                 let iter = (0..pack.msg_types.len()).map(|port_idx| {
                     let port_index = syn::Index::from(port_idx);
+                    let cache_index = syn::Index::from(*flat_idx);
+                    *flat_idx += 1;
                     quote! {
                         if let Some(payload) = culist.msgs.0.#slot_index.#port_index.payload() {
-                            raw += cu29::monitoring::CuPayloadSize::raw_bytes(payload);
-                            handles += cu29::monitoring::CuPayloadSize::handle_bytes(payload);
+                            let cached = culist.msgs.1.get(#cache_index);
+                            let io = if cached.present {
+                                cu29::monitoring::PayloadIoStats {
+                                    resident_bytes: cached.resident_bytes as usize,
+                                    encoded_bytes: cached.encoded_bytes as usize,
+                                    handle_bytes: cached.handle_bytes as usize,
+                                }
+                            } else {
+                                cu29::monitoring::payload_io_stats(payload)?
+                            };
+                            raw += io.resident_bytes;
+                            handles += io.handle_bytes;
                         }
                     }
                 });
-                quote! { #(#iter)* }
+                Some(quote! { #(#iter)* })
             } else {
-                quote! {
+                let cache_index = syn::Index::from(*flat_idx);
+                *flat_idx += 1;
+                Some(quote! {
                     if let Some(payload) = culist.msgs.0.#slot_index.payload() {
-                        raw += cu29::monitoring::CuPayloadSize::raw_bytes(payload);
-                        handles += cu29::monitoring::CuPayloadSize::handle_bytes(payload);
+                        let cached = culist.msgs.1.get(#cache_index);
+                        let io = if cached.present {
+                            cu29::monitoring::PayloadIoStats {
+                                resident_bytes: cached.resident_bytes as usize,
+                                encoded_bytes: cached.encoded_bytes as usize,
+                                handle_bytes: cached.handle_bytes as usize,
+                            }
+                        } else {
+                            cu29::monitoring::payload_io_stats(payload)?
+                        };
+                        raw += io.resident_bytes;
+                        handles += io.handle_bytes;
                     }
-                }
+                })
             }
         })
         .collect();
@@ -379,42 +402,56 @@ fn gen_culist_support(
     let payload_raw_bytes_accumulators: Vec<proc_macro2::TokenStream> = output_packs
         .iter()
         .enumerate()
-        .map(|(slot_idx, pack)| {
+        .scan(0usize, |flat_idx, (slot_idx, pack)| {
             let slot_index = syn::Index::from(slot_idx);
             if pack.is_multi() {
                 let iter = (0..pack.msg_types.len()).map(|port_idx| {
                     let port_index = syn::Index::from(port_idx);
+                    let cache_index = syn::Index::from(*flat_idx);
+                    *flat_idx += 1;
                     quote! {
                         if let Some(payload) = self.0.#slot_index.#port_index.payload() {
-                            bytes.push(Some(
-                                cu29::monitoring::CuPayloadSize::raw_bytes(payload) as u64
-                            ));
+                            let cached = self.1.get(#cache_index);
+                            bytes.push(if cached.present {
+                                Some(cached.resident_bytes)
+                            } else {
+                                cu29::monitoring::payload_io_stats(payload)
+                                    .ok()
+                                    .map(|io| io.resident_bytes as u64)
+                            });
                         } else {
                             bytes.push(None);
                         }
                     }
                 });
-                quote! { #(#iter)* }
+                Some(quote! { #(#iter)* })
             } else {
-                quote! {
+                let cache_index = syn::Index::from(*flat_idx);
+                *flat_idx += 1;
+                Some(quote! {
                     if let Some(payload) = self.0.#slot_index.payload() {
-                        bytes.push(Some(
-                            cu29::monitoring::CuPayloadSize::raw_bytes(payload) as u64
-                        ));
+                        let cached = self.1.get(#cache_index);
+                        bytes.push(if cached.present {
+                            Some(cached.resident_bytes)
+                        } else {
+                            cu29::monitoring::payload_io_stats(payload)
+                                .ok()
+                                .map(|io| io.resident_bytes as u64)
+                        });
                     } else {
                         bytes.push(None);
                     }
-                }
+                })
             }
         })
         .collect();
 
     let compute_payload_bytes_fn = quote! {
-        pub fn compute_payload_bytes(culist: &CuList) -> (u64, u64) {
+        pub fn compute_payload_bytes(culist: &CuList) -> cu29::prelude::CuResult<(u64, u64)> {
             let mut raw: usize = 0;
             let mut handles: usize = 0;
             #(#payload_bytes_accumulators)*
-            (raw as u64, handles as u64)
+            Ok((raw as u64, handles as u64))
         }
     };
 
@@ -611,7 +648,7 @@ fn gen_culist_support(
         #collect_metadata_function
         #compute_payload_bytes_fn
 
-        pub struct CuStampedDataSet(pub #msgs_types_tuple);
+        pub struct CuStampedDataSet(pub #msgs_types_tuple, cu29::monitoring::CuMsgIoCache<#cumsg_count>);
 
         pub type CuList = CopperList<CuStampedDataSet>;
 
@@ -661,6 +698,7 @@ fn gen_culist_support(
 
         impl CuListZeroedInit for CuStampedDataSet {
             fn init_zeroed(&mut self) {
+                self.1.clear();
                 #(#zeroed_init_tokens)*
             }
         }
@@ -2676,14 +2714,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                                             }
                                                         }
                                                     } else {
-                                                        let (raw_payload_bytes, handle_bytes) =
-                                                            #mission_mod::compute_payload_bytes(&culist);
                                                         #mission_mod::ParallelWorkerResult {
                                                             clid,
                                                             culist: Some(culist),
                                                             outcome: Ok(cu29::curuntime::ProcessStepOutcome::Continue),
-                                                            raw_payload_bytes,
-                                                            handle_bytes,
+                                                            raw_payload_bytes: 0,
+                                                            handle_bytes: 0,
                                                         }
                                                     }
                                                 }
@@ -3366,8 +3402,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         monitor_result?;
                                         let stats = cu29::monitoring::CopperListIoStats {
                                             raw_culist_bytes: core::mem::size_of::<CuList>() as u64
-                                                + worker_result.raw_payload_bytes,
-                                            handle_bytes: worker_result.handle_bytes,
+                                                + cl_manager.last_handle_bytes,
+                                            handle_bytes: cl_manager.last_handle_bytes,
                                             encoded_culist_bytes: cl_manager.last_encoded_bytes,
                                             keyframe_bytes,
                                             structured_log_bytes_total: ::cu29::prelude::structured_log_bytes_total(),
@@ -3484,7 +3520,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     monitor_result?;
                     return Ok(());
                 }
-                let (raw_payload_bytes, handle_bytes) = #mission_mod::compute_payload_bytes(&culist);
                 ctx.clear_current_task();
                 let monitor_result = monitor.process_copperlist(&ctx, #mission_mod::MONITOR_LAYOUT.view(&#mission_mod::collect_metadata(&culist)));
 
@@ -3495,8 +3530,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 kf_manager.end_of_processing(clid)?;
                 monitor_result?;
                 let stats = cu29::monitoring::CopperListIoStats {
-                    raw_culist_bytes: core::mem::size_of::<CuList>() as u64 + raw_payload_bytes,
-                    handle_bytes,
+                    raw_culist_bytes: core::mem::size_of::<CuList>() as u64 + cl_manager.last_handle_bytes,
+                    handle_bytes: cl_manager.last_handle_bytes,
                     encoded_culist_bytes: cl_manager.last_encoded_bytes,
                     keyframe_bytes: kf_manager.last_encoded_bytes,
                     structured_log_bytes_total: ::cu29::prelude::structured_log_bytes_total(),
@@ -4528,21 +4563,36 @@ fn build_culist_tuple(slot_types: &[Type]) -> TypeTuple {
 }
 
 /// This is the bincode encoding part of the CuStampedDataSet
-fn build_culist_tuple_encode(slot_types: &[Type]) -> ItemImpl {
-    let indices: Vec<usize> = (0..slot_types.len()).collect();
+fn build_culist_tuple_encode(output_packs: &[OutputPack]) -> ItemImpl {
+    let mut flat_idx = 0usize;
+    let mut encode_fields = Vec::new();
 
-    // Generate the `self.#i.encode(encoder)?` for each tuple index, including `()` types
-    let encode_fields: Vec<_> = indices
-        .iter()
-        .map(|i| {
-            let idx = syn::Index::from(*i);
-            quote! { self.0.#idx.encode(encoder)?; }
-        })
-        .collect();
+    for (slot_idx, pack) in output_packs.iter().enumerate() {
+        let slot_index = syn::Index::from(slot_idx);
+        if pack.is_multi() {
+            for port_idx in 0..pack.msg_types.len() {
+                let port_index = syn::Index::from(port_idx);
+                let cache_index = flat_idx;
+                flat_idx += 1;
+                encode_fields.push(quote! {
+                    __cu_capture.select_slot(#cache_index);
+                    self.0.#slot_index.#port_index.encode(encoder)?;
+                });
+            }
+        } else {
+            let cache_index = flat_idx;
+            flat_idx += 1;
+            encode_fields.push(quote! {
+                __cu_capture.select_slot(#cache_index);
+                self.0.#slot_index.encode(encoder)?;
+            });
+        }
+    }
 
     parse_quote! {
         impl Encode for CuStampedDataSet {
             fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+                let __cu_capture = cu29::monitoring::start_copperlist_io_capture(&self.1);
                 #(#encode_fields)*
                 Ok(())
             }
@@ -4551,7 +4601,7 @@ fn build_culist_tuple_encode(slot_types: &[Type]) -> ItemImpl {
 }
 
 /// This is the bincode decoding part of the CuStampedDataSet
-fn build_culist_tuple_decode(slot_types: &[Type]) -> ItemImpl {
+fn build_culist_tuple_decode(slot_types: &[Type], cumsg_count: usize) -> ItemImpl {
     let indices: Vec<usize> = (0..slot_types.len()).collect();
 
     let decode_fields: Vec<_> = indices
@@ -4565,9 +4615,12 @@ fn build_culist_tuple_decode(slot_types: &[Type]) -> ItemImpl {
     parse_quote! {
         impl Decode<()> for CuStampedDataSet {
             fn decode<D: Decoder<Context=()>>(decoder: &mut D) -> Result<Self, DecodeError> {
-                Ok(CuStampedDataSet ((
-                    #(#decode_fields),*
-                )))
+                Ok(CuStampedDataSet(
+                    (
+                        #(#decode_fields),*
+                    ),
+                    cu29::monitoring::CuMsgIoCache::<#cumsg_count>::default(),
+                ))
             }
         }
     }
@@ -4651,7 +4704,7 @@ fn build_culist_tuple_serialize(slot_types: &[Type]) -> ItemImpl {
 }
 
 /// This is the default implementation for CuStampedDataSet
-fn build_culist_tuple_default(slot_types: &[Type]) -> ItemImpl {
+fn build_culist_tuple_default(slot_types: &[Type], cumsg_count: usize) -> ItemImpl {
     let default_fields: Vec<_> = slot_types
         .iter()
         .map(|slot_type| quote! { <#slot_type as Default>::default() })
@@ -4661,9 +4714,12 @@ fn build_culist_tuple_default(slot_types: &[Type]) -> ItemImpl {
         impl Default for CuStampedDataSet {
             fn default() -> CuStampedDataSet
             {
-                CuStampedDataSet((
-                    #(#default_fields),*
-                ))
+                CuStampedDataSet(
+                    (
+                        #(#default_fields),*
+                    ),
+                    cu29::monitoring::CuMsgIoCache::<#cumsg_count>::default(),
+                )
             }
         }
     }

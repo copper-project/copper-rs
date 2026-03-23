@@ -10,10 +10,15 @@ use crate::SECTION_HEADER_COMPACT_SIZE;
 
 use AllocatedSection::Section;
 use bincode::config::standard;
+use bincode::enc::EncoderImpl;
+use bincode::enc::write::SliceWriter;
 use bincode::error::EncodeError;
 use bincode::{Encode, decode_from_slice, encode_into_slice};
 use core::slice::from_raw_parts_mut;
-use cu29_traits::{CuError, CuResult, UnifiedLogType};
+use cu29_traits::{
+    CuError, CuResult, ObservedWriter, UnifiedLogType, abort_observed_encode,
+    begin_observed_encode, finish_observed_encode,
+};
 use memmap2::{Mmap, MmapMut};
 use std::fs::{File, OpenOptions};
 use std::io::Read;
@@ -53,7 +58,25 @@ impl SectionStorage for MmapSectionStorage {
     }
 
     fn append<E: Encode>(&mut self, entry: &E) -> Result<usize, EncodeError> {
-        let size = encode_into_slice(entry, &mut self.buffer[self.offset..], standard())?;
+        begin_observed_encode();
+        let result = (|| {
+            let mut encoder = EncoderImpl::new(
+                ObservedWriter::new(SliceWriter::new(&mut self.buffer[self.offset..])),
+                standard(),
+            );
+            entry.encode(&mut encoder)?;
+            Ok(encoder.into_writer().into_inner().bytes_written())
+        })();
+        let size = match result {
+            Ok(size) => {
+                debug_assert_eq!(size, finish_observed_encode());
+                size
+            }
+            Err(err) => {
+                abort_observed_encode();
+                return Err(err);
+            }
+        };
         self.offset += size;
         Ok(size)
     }
