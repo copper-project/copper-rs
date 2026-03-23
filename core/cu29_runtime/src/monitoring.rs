@@ -12,7 +12,6 @@ use bincode::config::standard;
 use bincode::enc::EncoderImpl;
 use bincode::enc::write::SizeWriter;
 use compact_str::CompactString;
-use core::cell::Cell;
 use cu29_clock::CuDuration;
 #[allow(unused_imports)]
 use cu29_log::CuLogLevel;
@@ -24,11 +23,16 @@ use cu29_traits::{
     CuError, CuResult, ObservedWriter, abort_observed_encode, begin_observed_encode,
     finish_observed_encode,
 };
+use portable_atomic::{
+    AtomicBool as PortableAtomicBool, AtomicU64 as PortableAtomicU64, Ordering as PortableOrdering,
+};
 use serde_derive::{Deserialize, Serialize};
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+#[cfg(feature = "std")]
+use core::cell::Cell;
 #[cfg(feature = "std")]
 use std::sync::Arc;
 #[cfg(feature = "std")]
@@ -799,14 +803,64 @@ pub struct CuMsgIoStats {
     pub handle_bytes: u64,
 }
 
+struct CuMsgIoEntry {
+    present: PortableAtomicBool,
+    resident_bytes: PortableAtomicU64,
+    encoded_bytes: PortableAtomicU64,
+    handle_bytes: PortableAtomicU64,
+}
+
+impl CuMsgIoEntry {
+    fn clear(&self) {
+        self.present.store(false, PortableOrdering::Release);
+        self.resident_bytes.store(0, PortableOrdering::Relaxed);
+        self.encoded_bytes.store(0, PortableOrdering::Relaxed);
+        self.handle_bytes.store(0, PortableOrdering::Relaxed);
+    }
+
+    fn get(&self) -> CuMsgIoStats {
+        if !self.present.load(PortableOrdering::Acquire) {
+            return CuMsgIoStats::default();
+        }
+
+        CuMsgIoStats {
+            present: true,
+            resident_bytes: self.resident_bytes.load(PortableOrdering::Relaxed),
+            encoded_bytes: self.encoded_bytes.load(PortableOrdering::Relaxed),
+            handle_bytes: self.handle_bytes.load(PortableOrdering::Relaxed),
+        }
+    }
+
+    fn set(&self, stats: CuMsgIoStats) {
+        self.resident_bytes
+            .store(stats.resident_bytes, PortableOrdering::Relaxed);
+        self.encoded_bytes
+            .store(stats.encoded_bytes, PortableOrdering::Relaxed);
+        self.handle_bytes
+            .store(stats.handle_bytes, PortableOrdering::Relaxed);
+        self.present.store(stats.present, PortableOrdering::Release);
+    }
+}
+
+impl Default for CuMsgIoEntry {
+    fn default() -> Self {
+        Self {
+            present: PortableAtomicBool::new(false),
+            resident_bytes: PortableAtomicU64::new(0),
+            encoded_bytes: PortableAtomicU64::new(0),
+            handle_bytes: PortableAtomicU64::new(0),
+        }
+    }
+}
+
 pub struct CuMsgIoCache<const N: usize> {
-    entries: [Cell<CuMsgIoStats>; N],
+    entries: [CuMsgIoEntry; N],
 }
 
 impl<const N: usize> CuMsgIoCache<N> {
     pub fn clear(&self) {
         for entry in &self.entries {
-            entry.set(CuMsgIoStats::default());
+            entry.clear();
         }
     }
 
@@ -822,7 +876,7 @@ impl<const N: usize> CuMsgIoCache<N> {
 impl<const N: usize> Default for CuMsgIoCache<N> {
     fn default() -> Self {
         Self {
-            entries: core::array::from_fn(|_| Cell::new(CuMsgIoStats::default())),
+            entries: core::array::from_fn(|_| CuMsgIoEntry::default()),
         }
     }
 }
@@ -1040,7 +1094,7 @@ pub(crate) fn record_current_slot_payload_io_stats(
             return;
         }
         // SAFETY: the capture guard holds the cache alive for the duration of the encode pass.
-        let cache_ptr = capture.cache_addr as *const Cell<CuMsgIoStats>;
+        let cache_ptr = capture.cache_addr as *const CuMsgIoEntry;
         let entry = unsafe { &*cache_ptr.add(slot) };
         entry.set(CuMsgIoStats {
             present: true,

@@ -43,6 +43,9 @@ petgraph = { workspace = true, default-features = false, features = [
 ron = { version = "0.12", default-features = false }
 hashbrown = { workspace = true }
 paste = { workspace = true }
+portable-atomic = { version = "1.11", default-features = false, features = [
+  "fallback",
+] }
 bevy_reflect = { workspace = true, optional = true }
 cu29-reflect-derive = { workspace = true }
 layout = { package = "layout-rs", version = "0.1.3", optional = true }
@@ -111,6 +114,8 @@ std = [
   "dep:svg",
   "dep:serde_json",
   "ron/std",
+  "portable-atomic/std",
+  "portable-atomic/require-cas",
   "cu29-clock/std",
   "cu29-log/std",
   "cu29-log-runtime/std",
