@@ -19,10 +19,11 @@ It is intentionally synthetic. The point is to exercise scheduler and logging se
 The tests check two things:
 
 - the observed runtime trace matches the expected foreground or delayed-background behavior
-- the normalized CopperList stream is identical across two runs of the same mission
+- the normalized CopperList stream is identical across two live runs of the same foreground mission
 
 That second check is the part that makes `async-cl-io` relevant instead of just incidental.
 It intentionally ignores volatile wall-clock processing-time metadata and compares the logged message content instead.
+Background missions are not covered by that cross-run equality check because their worker scheduling is outside the live-run determinism contract; replay is the place where equivalence is expected.
 
 ## Commands
 
