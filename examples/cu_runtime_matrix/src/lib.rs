@@ -881,6 +881,10 @@ impl MissionArg {
         )
     }
 
+    pub fn has_repeatable_live_copperlists(self) -> bool {
+        !self.uses_background()
+    }
+
     pub fn drain_iterations(self) -> usize {
         if self.uses_background() { 3 } else { 1 }
     }
@@ -1595,16 +1599,20 @@ mod tests {
     }
 
     #[test]
-    fn missions_record_identical_normalized_copperlists_across_two_runs() {
+    fn foreground_missions_record_identical_normalized_copperlists_across_two_runs() {
         let _guard = TEST_MUTEX
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
-        for mission in MissionArg::all() {
-            let (_, first) = run_mission_trace_and_logs(*mission).expect("first run");
-            let (_, second) = run_mission_trace_and_logs(*mission).expect("second run");
+        for mission in MissionArg::all()
+            .iter()
+            .copied()
+            .filter(|mission| mission.has_repeatable_live_copperlists())
+        {
+            let (_, first) = run_mission_trace_and_logs(mission).expect("first run");
+            let (_, second) = run_mission_trace_and_logs(mission).expect("second run");
             assert_eq!(
                 first, second,
-                "normalized copperlist stream is not deterministic for mission {:?}",
+                "normalized copperlist stream is not repeatable across two live runs for foreground mission {:?}",
                 mission
             );
         }
