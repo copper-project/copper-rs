@@ -743,21 +743,29 @@ mod tests {
         thaw_freezable(task, bytes).expect("failed to thaw task");
     }
 
+    fn wait_until_state_idle<O, P>(state: &Arc<Mutex<AsyncState<O, P>>>)
+    where
+        O: CuMsgPayload + Send + 'static,
+        P: Default,
+    {
+        for _ in 0..100 {
+            let guard = lock_or_recover(state);
+            if !guard.inflight {
+                return;
+            }
+            drop(guard);
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        panic!("background task never became idle");
+    }
+
     fn wait_until_async_idle<T, I, O>(async_task: &CuAsyncTask<T, I, O>)
     where
         T: for<'i, 'o> CuTask<Input<'i> = CuMsg<I>, Output<'o> = CuMsg<O>> + Send + 'static,
         I: CuMsgPayload + Send + Sync + 'static,
         O: CuMsgPayload + Send + 'static,
     {
-        for _ in 0..100 {
-            let state = lock_or_recover(&async_task.core.state);
-            if !state.inflight {
-                return;
-            }
-            drop(state);
-            std::thread::sleep(Duration::from_millis(1));
-        }
-        panic!("background task never became idle");
+        wait_until_state_idle(&async_task.core.state);
     }
 
     #[derive(Reflect)]
@@ -1183,6 +1191,7 @@ mod tests {
         done_rx
             .recv_timeout(Duration::from_secs(1))
             .expect("worker never finished");
+        wait_until_state_idle(&original.core.state);
 
         let frozen = freeze_bytes(&original);
 
@@ -1207,6 +1216,7 @@ mod tests {
         replay_done_rx
             .recv_timeout(Duration::from_secs(1))
             .expect("second worker never finished");
+        wait_until_state_idle(&replayed.core.state);
 
         replay_clock.set_value(20);
         replayed
@@ -1249,6 +1259,7 @@ mod tests {
         done_rx
             .recv_timeout(Duration::from_secs(1))
             .expect("worker never finished");
+        wait_until_state_idle(&original.core.state);
 
         let frozen = freeze_bytes(&original);
 
@@ -1279,6 +1290,7 @@ mod tests {
         replay_done_rx
             .recv_timeout(Duration::from_secs(1))
             .expect("closest worker never finished");
+        wait_until_state_idle(&replayed.core.state);
 
         replay_clock.set_value(305);
         replayed
