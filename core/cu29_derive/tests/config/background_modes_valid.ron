@@ -1,0 +1,55 @@
+(
+    tasks: [
+        (id: "src", type: "Source"),
+        (
+            id: "next",
+            type: "Proc",
+            background: "next",
+        ),
+        (
+            id: "previous",
+            type: "Proc",
+            background: "previous",
+        ),
+        (
+            id: "closest",
+            type: "Proc",
+            background: "closest",
+        ),
+        (id: "sink_next", type: "Sink"),
+        (id: "sink_previous", type: "Sink"),
+        (id: "sink_closest", type: "Sink"),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "next",
+            msg: "i32",
+        ),
+        (
+            src: "src",
+            dst: "previous",
+            msg: "i32",
+        ),
+        (
+            src: "src",
+            dst: "closest",
+            msg: "i32",
+        ),
+        (
+            src: "next",
+            dst: "sink_next",
+            msg: "i32",
+        ),
+        (
+            src: "previous",
+            dst: "sink_previous",
+            msg: "i32",
+        ),
+        (
+            src: "closest",
+            dst: "sink_closest",
+            msg: "i32",
+        ),
+    ],
+)

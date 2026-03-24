@@ -1,68 +1,555 @@
 use crate::config::ComponentConfig;
 use crate::context::CuContext;
-use crate::cutask::{CuMsg, CuMsgPayload, CuTask, Freezable};
+use crate::cutask::{BincodeAdapter, CuMsg, CuMsgPayload, CuTask, Freezable};
 use crate::reflect::{Reflect, TypePath};
-use cu29_clock::CuTime;
+use bincode::de::{Decoder, DecoderImpl, read::SliceReader};
+use bincode::enc::{Encoder, EncoderImpl, write::SizeWriter, write::SliceWriter};
+use bincode::error::{DecodeError, EncodeError};
+use bincode::{Decode, Encode};
+use cu29_clock::{CuDuration, CuTime, Tov};
 use cu29_traits::{CuError, CuResult};
 use rayon::ThreadPool;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
-struct AsyncState {
-    processing: bool,
+fn lock_or_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(|poison| poison.into_inner())
+}
+
+fn encode_freezable(task: &impl Freezable, bytes: &mut Vec<u8>) -> Result<(), EncodeError> {
+    encode_value(&BincodeAdapter(task), bytes)
+}
+
+fn encode_value(value: &impl Encode, bytes: &mut Vec<u8>) -> Result<(), EncodeError> {
+    let config = bincode::config::standard();
+    let mut sizer = EncoderImpl::<_, _>::new(SizeWriter::default(), config);
+    value.encode(&mut sizer)?;
+    let required = sizer.into_writer().bytes_written as usize;
+
+    bytes.clear();
+    bytes.resize(required, 0);
+    let mut encoder = EncoderImpl::<_, _>::new(SliceWriter::new(bytes.as_mut_slice()), config);
+    value.encode(&mut encoder)?;
+    Ok(())
+}
+
+fn thaw_freezable(task: &mut impl Freezable, bytes: &[u8]) -> Result<(), DecodeError> {
+    let config = bincode::config::standard();
+    let reader = SliceReader::new(bytes);
+    let mut decoder = DecoderImpl::new(reader, config, ());
+    task.thaw(&mut decoder)
+}
+
+fn mutex_poison_encode_error(name: &str) -> EncodeError {
+    EncodeError::OtherString(format!("{name} mutex poisoned"))
+}
+
+fn mutex_poison_decode_error(name: &str) -> DecodeError {
+    DecodeError::OtherString(format!("{name} mutex poisoned"))
+}
+
+#[derive(Clone, Debug, Encode, Decode)]
+struct FrozenCuError {
+    text: String,
+}
+
+impl From<&CuError> for FrozenCuError {
+    fn from(error: &CuError) -> Self {
+        Self {
+            text: error.to_string(),
+        }
+    }
+}
+
+impl From<FrozenCuError> for CuError {
+    fn from(error: FrozenCuError) -> Self {
+        CuError::from(error.text)
+    }
+}
+
+#[derive(Clone, Debug, Encode, Decode)]
+struct DispatchSnapshot<I>
+where
+    I: CuMsgPayload,
+{
+    input: CuMsg<I>,
+    task_state: Vec<u8>,
+    dispatch_now: CuTime,
+    dispatch_clid: u64,
+}
+
+#[derive(Clone, Debug, Encode, Decode)]
+struct FrozenAsyncState<I, O, P>
+where
+    I: CuMsgPayload,
+    O: CuMsgPayload,
+    P: Clone + Encode + Decode<()>,
+{
+    live_task_state: Vec<u8>,
+    inflight: Option<DispatchSnapshot<I>>,
+    ready_output: CuMsg<O>,
+    ready_at: Option<CuTime>,
+    last_error: Option<FrozenCuError>,
+    policy: P,
+}
+
+struct AsyncState<I, O, P>
+where
+    I: CuMsgPayload,
+    O: CuMsgPayload,
+    P: Default,
+{
+    inflight: Option<DispatchSnapshot<I>>,
+    relaunch_pending: bool,
+    ready_output: CuMsg<O>,
     ready_at: Option<CuTime>,
     last_error: Option<CuError>,
+    policy: P,
 }
 
-fn record_async_error(state: &Mutex<AsyncState>, error: CuError) {
-    let mut guard = match state.lock() {
-        Ok(guard) => guard,
-        Err(poison) => poison.into_inner(),
-    };
-    guard.processing = false;
-    guard.ready_at = None;
-    guard.last_error = Some(error);
-}
-
-#[derive(Reflect)]
-#[reflect(no_field_bounds, from_reflect = false, type_path = false)]
-pub struct CuAsyncTask<T, O>
+impl<I, O, P> Default for AsyncState<I, O, P>
 where
-    T: for<'m> CuTask<Output<'m> = CuMsg<O>> + Send + 'static,
-    O: CuMsgPayload + Send + 'static,
+    I: CuMsgPayload,
+    O: CuMsgPayload,
+    P: Default,
 {
-    #[reflect(ignore)]
+    fn default() -> Self {
+        Self {
+            inflight: None,
+            relaunch_pending: false,
+            ready_output: CuMsg::default(),
+            ready_at: None,
+            last_error: None,
+            policy: P::default(),
+        }
+    }
+}
+
+impl<I, O, P> AsyncState<I, O, P>
+where
+    I: CuMsgPayload,
+    O: CuMsgPayload,
+    P: Default,
+{
+    fn blocks_new_launches(&self, now: CuTime) -> bool {
+        self.inflight.is_some() || self.ready_at.is_some_and(|ready_at| now < ready_at)
+    }
+
+    fn take_ready_output(&mut self) -> CuMsg<O> {
+        self.ready_at = None;
+        std::mem::take(&mut self.ready_output)
+    }
+}
+
+trait AsyncPolicy<I>: Clone + Default + Encode + Decode<()> + Send + 'static
+where
+    I: CuMsgPayload + Send + Sync + 'static,
+{
+    fn observe_blocked_input(&mut self, input: &CuMsg<I>, now: CuTime);
+    fn decide_launch(&mut self, input: &CuMsg<I>, now: CuTime) -> LaunchDecision<I>;
+}
+
+enum LaunchDecision<I>
+where
+    I: CuMsgPayload,
+{
+    Launch(CuMsg<I>),
+    Hold,
+}
+
+impl<I> AsyncPolicy<I> for ()
+where
+    I: CuMsgPayload + Send + Sync + 'static,
+{
+    fn observe_blocked_input(&mut self, _input: &CuMsg<I>, _now: CuTime) {}
+
+    fn decide_launch(&mut self, input: &CuMsg<I>, _now: CuTime) -> LaunchDecision<I> {
+        LaunchDecision::Launch(input.clone())
+    }
+}
+
+impl<I> AsyncPolicy<I> for Option<CuMsg<I>>
+where
+    I: CuMsgPayload + Send + Sync + 'static,
+{
+    fn observe_blocked_input(&mut self, input: &CuMsg<I>, _now: CuTime) {
+        *self = Some(input.clone());
+    }
+
+    fn decide_launch(&mut self, input: &CuMsg<I>, _now: CuTime) -> LaunchDecision<I> {
+        if let Some(buffered) = self.take() {
+            *self = Some(input.clone());
+            LaunchDecision::Launch(buffered)
+        } else {
+            LaunchDecision::Launch(input.clone())
+        }
+    }
+}
+
+#[derive(Default, Copy, Clone, Debug, Encode, Decode)]
+struct ArrivalPredictor {
+    last_observed: Option<CuTime>,
+    interval: Option<CuDuration>,
+}
+
+impl ArrivalPredictor {
+    fn observe<I>(&mut self, msg: &CuMsg<I>, now: CuTime)
+    where
+        I: CuMsgPayload,
+    {
+        let observed = observed_time(msg, now);
+        if let Some(previous) = self.last_observed {
+            if observed < previous {
+                return;
+            }
+            self.interval = Some(observed - previous);
+        }
+        self.last_observed = Some(observed);
+    }
+
+    fn projected_next(&self) -> Option<CuTime> {
+        self.last_observed
+            .zip(self.interval)
+            .map(|(last, interval)| last + interval)
+    }
+
+    fn should_wait_for<I>(&self, pending: &CuMsg<I>, now: CuTime) -> bool
+    where
+        I: CuMsgPayload,
+    {
+        let Some(projected_next) = self.projected_next() else {
+            return false;
+        };
+        if projected_next <= now {
+            return false;
+        }
+
+        time_distance(projected_next, now) < msg_distance_to_now(pending, now)
+    }
+}
+
+#[derive(Clone, Debug, Encode, Decode)]
+struct ClosestPolicyState<I>
+where
+    I: CuMsgPayload,
+{
+    pending: Option<CuMsg<I>>,
+    predictor: ArrivalPredictor,
+}
+
+impl<I> Default for ClosestPolicyState<I>
+where
+    I: CuMsgPayload,
+{
+    fn default() -> Self {
+        Self {
+            pending: None,
+            predictor: ArrivalPredictor::default(),
+        }
+    }
+}
+
+impl<I> AsyncPolicy<I> for ClosestPolicyState<I>
+where
+    I: CuMsgPayload + Send + Sync + 'static,
+{
+    fn observe_blocked_input(&mut self, input: &CuMsg<I>, now: CuTime) {
+        self.predictor.observe(input, now);
+        self.pending = Some(input.clone());
+    }
+
+    fn decide_launch(&mut self, input: &CuMsg<I>, now: CuTime) -> LaunchDecision<I> {
+        self.predictor.observe(input, now);
+
+        let Some(buffered) = self.pending.take() else {
+            return LaunchDecision::Launch(input.clone());
+        };
+
+        if msg_distance_to_now(input, now) < msg_distance_to_now(&buffered, now) {
+            return LaunchDecision::Launch(input.clone());
+        }
+
+        if self.predictor.should_wait_for(&buffered, now) {
+            self.pending = Some(buffered);
+            return LaunchDecision::Hold;
+        }
+
+        self.pending = Some(input.clone());
+        LaunchDecision::Launch(buffered)
+    }
+}
+
+fn metadata_time<T>(msg: &CuMsg<T>) -> Option<CuTime>
+where
+    T: CuMsgPayload,
+{
+    let end: Option<CuTime> = msg.metadata.process_time.end.into();
+    if end.is_some() {
+        return end;
+    }
+    msg.metadata.process_time.start.into()
+}
+
+fn observed_time<T>(msg: &CuMsg<T>, fallback: CuTime) -> CuTime
+where
+    T: CuMsgPayload,
+{
+    match msg.tov {
+        Tov::Time(time) => time,
+        Tov::Range(range) => range.end,
+        Tov::None => metadata_time(msg).unwrap_or(fallback),
+    }
+}
+
+fn time_distance(lhs: CuTime, rhs: CuTime) -> CuDuration {
+    if lhs >= rhs { lhs - rhs } else { rhs - lhs }
+}
+
+fn msg_distance_to_now<T>(msg: &CuMsg<T>, now: CuTime) -> CuDuration
+where
+    T: CuMsgPayload,
+{
+    match msg.tov {
+        Tov::Time(time) => time_distance(time, now),
+        Tov::Range(range) => {
+            if now < range.start {
+                range.start - now
+            } else if now > range.end {
+                now - range.end
+            } else {
+                CuDuration::default()
+            }
+        }
+        Tov::None => time_distance(observed_time(msg, now), now),
+    }
+}
+
+struct AsyncTaskCore<T, I, O, P>
+where
+    T: for<'i, 'o> CuTask<Input<'i> = CuMsg<I>, Output<'o> = CuMsg<O>> + Send + 'static,
+    I: CuMsgPayload + Send + Sync + 'static,
+    O: CuMsgPayload + Send + 'static,
+    P: AsyncPolicy<I>,
+{
     task: Arc<Mutex<T>>,
-    #[reflect(ignore)]
-    output: Arc<Mutex<CuMsg<O>>>,
-    #[reflect(ignore)]
-    state: Arc<Mutex<AsyncState>>,
-    #[reflect(ignore)]
+    state: Arc<Mutex<AsyncState<I, O, P>>>,
     tp: Arc<ThreadPool>,
 }
 
-impl<T, O> TypePath for CuAsyncTask<T, O>
+impl<T, I, O, P> AsyncTaskCore<T, I, O, P>
 where
-    T: for<'m> CuTask<Output<'m> = CuMsg<O>> + Send + 'static,
+    T: for<'i, 'o> CuTask<Input<'i> = CuMsg<I>, Output<'o> = CuMsg<O>> + Send + 'static,
+    I: CuMsgPayload + Send + Sync + 'static,
     O: CuMsgPayload + Send + 'static,
+    P: AsyncPolicy<I>,
 {
-    fn type_path() -> &'static str {
-        "cu29_runtime::cuasynctask::CuAsyncTask"
+    fn new(
+        config: Option<&ComponentConfig>,
+        resources: T::Resources<'_>,
+        tp: Arc<ThreadPool>,
+    ) -> CuResult<Self> {
+        Ok(Self {
+            task: Arc::new(Mutex::new(T::new(config, resources)?)),
+            state: Arc::new(Mutex::new(AsyncState::default())),
+            tp,
+        })
     }
 
-    fn short_type_path() -> &'static str {
-        "CuAsyncTask"
+    fn prepare_dispatch(&self, ctx: &CuContext, input: CuMsg<I>) -> CuResult<DispatchSnapshot<I>> {
+        let mut task_state = Vec::new();
+        let task = self.task.lock().map_err(|_| {
+            CuError::from("Async task mutex poisoned while capturing background snapshot")
+        })?;
+        encode_freezable(&*task, &mut task_state).map_err(|error| {
+            CuError::from(format!("Failed to snapshot background task: {error}"))
+        })?;
+
+        Ok(DispatchSnapshot {
+            input,
+            task_state,
+            dispatch_now: ctx.now(),
+            dispatch_clid: ctx.cl_id(),
+        })
     }
 
-    fn type_ident() -> Option<&'static str> {
-        Some("CuAsyncTask")
+    fn spawn_worker(
+        &self,
+        dispatch_ctx: CuContext,
+        worker_input: CuMsg<I>,
+        dispatch: DispatchSnapshot<I>,
+    ) {
+        {
+            let mut state = lock_or_recover(&self.state);
+            state.inflight = Some(dispatch);
+            state.relaunch_pending = false;
+        }
+
+        self.tp.spawn_fifo({
+            let task = self.task.clone();
+            let state = self.state.clone();
+            move || {
+                let mut output = CuMsg::<O>::default();
+                if output.metadata.process_time.start.is_none() {
+                    output.metadata.process_time.start = dispatch_ctx.now().into();
+                }
+
+                let task_result = match task.lock() {
+                    Ok(mut task_guard) => {
+                        task_guard.process(&dispatch_ctx, &worker_input, &mut output)
+                    }
+                    Err(poison) => Err(CuError::from(format!(
+                        "Async task mutex poisoned: {poison}"
+                    ))),
+                };
+
+                let mut guard = lock_or_recover(&state);
+                guard.inflight = None;
+                guard.relaunch_pending = false;
+
+                match task_result {
+                    Ok(()) => {
+                        let end_from_metadata: Option<CuTime> =
+                            output.metadata.process_time.end.into();
+                        let ready_at = end_from_metadata.unwrap_or_else(|| {
+                            let now = dispatch_ctx.now();
+                            output.metadata.process_time.end = now.into();
+                            now
+                        });
+                        guard.ready_output = output;
+                        guard.ready_at = Some(ready_at);
+                        guard.last_error = None;
+                    }
+                    Err(error) => {
+                        guard.ready_output = CuMsg::default();
+                        guard.ready_at = None;
+                        guard.last_error = Some(error);
+                    }
+                }
+            }
+        });
     }
 
-    fn crate_name() -> Option<&'static str> {
-        Some("cu29_runtime")
+    fn relaunch_if_needed(&self, ctx: &CuContext) -> CuResult<bool> {
+        let dispatch = {
+            let mut state = self.state.lock().map_err(|_| {
+                CuError::from("Async task state mutex poisoned while relaunching background work")
+            })?;
+            if !state.relaunch_pending {
+                None
+            } else {
+                state.relaunch_pending = false;
+                state.inflight.clone()
+            }
+        };
+
+        let Some(dispatch) = dispatch else {
+            return Ok(false);
+        };
+
+        let dispatch_ctx = ctx.clone_with_fixed_time(dispatch.dispatch_clid, dispatch.dispatch_now);
+        self.spawn_worker(dispatch_ctx, dispatch.input.clone(), dispatch);
+        Ok(true)
     }
 
-    fn module_path() -> Option<&'static str> {
-        Some("cuasynctask")
+    fn process(
+        &self,
+        ctx: &CuContext,
+        input: &CuMsg<I>,
+        real_output: &mut CuMsg<O>,
+    ) -> CuResult<()> {
+        let relaunched = self.relaunch_if_needed(ctx)?;
+
+        let launch = {
+            let mut state = self.state.lock().map_err(|_| {
+                CuError::from("Async task state mutex poisoned while scheduling background work")
+            })?;
+
+            if let Some(error) = state.last_error.take() {
+                return Err(error);
+            }
+
+            if relaunched || state.blocks_new_launches(ctx.now()) {
+                state.policy.observe_blocked_input(input, ctx.now());
+                *real_output = CuMsg::default();
+                None
+            } else {
+                *real_output = state.take_ready_output();
+                match state.policy.decide_launch(input, ctx.now()) {
+                    LaunchDecision::Launch(next_input) => Some(next_input),
+                    LaunchDecision::Hold => None,
+                }
+            }
+        };
+
+        let Some(next_input) = launch else {
+            return Ok(());
+        };
+
+        let worker_input = next_input.clone();
+        let dispatch = self.prepare_dispatch(ctx, next_input)?;
+        let dispatch_ctx = ctx.clone_with_fixed_time(ctx.cl_id(), ctx.now());
+        self.spawn_worker(dispatch_ctx, worker_input, dispatch);
+        Ok(())
+    }
+
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| mutex_poison_encode_error("Async task state"))?;
+
+        let mut live_task_state = Vec::new();
+        if state.inflight.is_none() {
+            let task = self
+                .task
+                .lock()
+                .map_err(|_| mutex_poison_encode_error("Async task"))?;
+            encode_freezable(&*task, &mut live_task_state)?;
+        }
+
+        let frozen = FrozenAsyncState::<I, O, P> {
+            live_task_state,
+            inflight: state.inflight.clone(),
+            ready_output: state.ready_output.clone(),
+            ready_at: state.ready_at,
+            last_error: state.last_error.as_ref().map(FrozenCuError::from),
+            policy: state.policy.clone(),
+        };
+        let mut bytes = Vec::new();
+        encode_value(&frozen, &mut bytes)?;
+        bytes.encode(encoder)
+    }
+
+    fn thaw<D: Decoder>(&self, decoder: &mut D) -> Result<(), DecodeError> {
+        let frozen_bytes = Vec::<u8>::decode(decoder)?;
+        let config = bincode::config::standard();
+        let reader = SliceReader::new(&frozen_bytes);
+        let mut inner = DecoderImpl::new(reader, config, ());
+        let frozen = FrozenAsyncState::<I, O, P>::decode(&mut inner)?;
+
+        {
+            let mut task = self
+                .task
+                .lock()
+                .map_err(|_| mutex_poison_decode_error("Async task"))?;
+            let snapshot = frozen
+                .inflight
+                .as_ref()
+                .map(|dispatch| dispatch.task_state.as_slice())
+                .unwrap_or(frozen.live_task_state.as_slice());
+            thaw_freezable(&mut *task, snapshot)?;
+        }
+
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| mutex_poison_decode_error("Async task state"))?;
+        state.inflight = frozen.inflight;
+        state.relaunch_pending = state.inflight.is_some();
+        state.ready_output = frozen.ready_output;
+        state.ready_at = frozen.ready_at;
+        state.last_error = frozen.last_error.map(CuError::from);
+        state.policy = frozen.policy;
+        Ok(())
     }
 }
 
@@ -72,177 +559,174 @@ pub struct CuAsyncTaskResources<'r, T: CuTask> {
     pub threadpool: Arc<ThreadPool>,
 }
 
-impl<T, O> CuAsyncTask<T, O>
-where
-    T: for<'m> CuTask<Output<'m> = CuMsg<O>> + Send + 'static,
-    O: CuMsgPayload + Send + 'static,
-{
-    #[allow(unused)]
-    pub fn new(
-        config: Option<&ComponentConfig>,
-        resources: T::Resources<'_>,
-        tp: Arc<ThreadPool>,
-    ) -> CuResult<Self> {
-        let task = Arc::new(Mutex::new(T::new(config, resources)?));
-        let output = Arc::new(Mutex::new(CuMsg::default()));
-        Ok(Self {
-            task,
-            output,
-            state: Arc::new(Mutex::new(AsyncState {
-                processing: false,
-                ready_at: None,
-                last_error: None,
-            })),
-            tp,
-        })
-    }
-}
-
-impl<T, O> Freezable for CuAsyncTask<T, O>
-where
-    T: for<'m> CuTask<Output<'m> = CuMsg<O>> + Send + 'static,
-    O: CuMsgPayload + Send + 'static,
-{
-}
-
-impl<T, I, O> CuTask for CuAsyncTask<T, O>
+#[derive(Reflect)]
+#[reflect(no_field_bounds, from_reflect = false, type_path = false)]
+pub struct CuAsyncTask<T, I, O>
 where
     T: for<'i, 'o> CuTask<Input<'i> = CuMsg<I>, Output<'o> = CuMsg<O>> + Send + 'static,
     I: CuMsgPayload + Send + Sync + 'static,
     O: CuMsgPayload + Send + 'static,
 {
-    type Resources<'r> = CuAsyncTaskResources<'r, T>;
-    type Input<'m> = T::Input<'m>;
-    type Output<'m> = T::Output<'m>;
+    #[reflect(ignore)]
+    core: AsyncTaskCore<T, I, O, ()>,
+}
 
-    fn new(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
-    where
-        Self: Sized,
-    {
-        let task = Arc::new(Mutex::new(T::new(config, resources.inner)?));
-        let output = Arc::new(Mutex::new(CuMsg::default()));
-        Ok(Self {
-            task,
-            output,
-            state: Arc::new(Mutex::new(AsyncState {
-                processing: false,
-                ready_at: None,
-                last_error: None,
-            })),
-            tp: resources.threadpool,
-        })
-    }
+#[derive(Reflect)]
+#[reflect(no_field_bounds, from_reflect = false, type_path = false)]
+pub struct CuAsyncTaskPrevious<T, I, O>
+where
+    T: for<'i, 'o> CuTask<Input<'i> = CuMsg<I>, Output<'o> = CuMsg<O>> + Send + 'static,
+    I: CuMsgPayload + Send + Sync + 'static,
+    O: CuMsgPayload + Send + 'static,
+{
+    #[reflect(ignore)]
+    core: AsyncTaskCore<T, I, O, Option<CuMsg<I>>>,
+}
 
-    fn process<'i, 'o>(
-        &mut self,
-        ctx: &CuContext,
-        input: &Self::Input<'i>,
-        real_output: &mut Self::Output<'o>,
-    ) -> CuResult<()> {
+#[derive(Reflect)]
+#[reflect(no_field_bounds, from_reflect = false, type_path = false)]
+pub struct CuAsyncTaskClosest<T, I, O>
+where
+    T: for<'i, 'o> CuTask<Input<'i> = CuMsg<I>, Output<'o> = CuMsg<O>> + Send + 'static,
+    I: CuMsgPayload + Send + Sync + 'static,
+    O: CuMsgPayload + Send + 'static,
+{
+    #[reflect(ignore)]
+    core: AsyncTaskCore<T, I, O, ClosestPolicyState<I>>,
+}
+
+macro_rules! impl_async_type_path {
+    ($name:ident, $path:literal, $short:literal) => {
+        impl<T, I, O> TypePath for $name<T, I, O>
+        where
+            T: for<'i, 'o> CuTask<Input<'i> = CuMsg<I>, Output<'o> = CuMsg<O>> + Send + 'static,
+            I: CuMsgPayload + Send + Sync + 'static,
+            O: CuMsgPayload + Send + 'static,
         {
-            let mut state = self.state.lock().map_err(|_| {
-                CuError::from("Async task state mutex poisoned while scheduling background work")
-            })?;
-            if let Some(error) = state.last_error.take() {
-                return Err(error);
-            }
-            if state.processing {
-                // background task still running
-                *real_output = CuMsg::default();
-                return Ok(());
+            fn type_path() -> &'static str {
+                $path
             }
 
-            if let Some(ready_at) = state.ready_at
-                && ctx.now() < ready_at
-            {
-                // result not yet allowed to surface based on recorded completion time
-                *real_output = CuMsg::default();
-                return Ok(());
+            fn short_type_path() -> &'static str {
+                $short
             }
 
-            // mark as processing before spawning the next job
-            state.processing = true;
-            state.ready_at = None;
+            fn type_ident() -> Option<&'static str> {
+                Some($short)
+            }
+
+            fn crate_name() -> Option<&'static str> {
+                Some("cu29_runtime")
+            }
+
+            fn module_path() -> Option<&'static str> {
+                Some("cuasynctask")
+            }
+        }
+    };
+}
+
+impl_async_type_path!(
+    CuAsyncTask,
+    "cu29_runtime::cuasynctask::CuAsyncTask",
+    "CuAsyncTask"
+);
+impl_async_type_path!(
+    CuAsyncTaskPrevious,
+    "cu29_runtime::cuasynctask::CuAsyncTaskPrevious",
+    "CuAsyncTaskPrevious"
+);
+impl_async_type_path!(
+    CuAsyncTaskClosest,
+    "cu29_runtime::cuasynctask::CuAsyncTaskClosest",
+    "CuAsyncTaskClosest"
+);
+
+macro_rules! impl_async_wrapper {
+    ($name:ident, $policy:ty) => {
+        impl<T, I, O> $name<T, I, O>
+        where
+            T: for<'i, 'o> CuTask<Input<'i> = CuMsg<I>, Output<'o> = CuMsg<O>> + Send + 'static,
+            I: CuMsgPayload + Send + Sync + 'static,
+            O: CuMsgPayload + Send + 'static,
+        {
+            #[allow(unused)]
+            pub fn new(
+                config: Option<&ComponentConfig>,
+                resources: T::Resources<'_>,
+                tp: Arc<ThreadPool>,
+            ) -> CuResult<Self> {
+                Ok(Self {
+                    core: AsyncTaskCore::<T, I, O, $policy>::new(config, resources, tp)?,
+                })
+            }
         }
 
-        // clone the last finished output (if any) as the visible result for this polling round
-        let buffered_output = self.output.lock().map_err(|_| {
-            let error = CuError::from("Async task output mutex poisoned");
-            record_async_error(&self.state, error.clone());
-            error
-        })?;
-        *real_output = buffered_output.clone();
-
-        // immediately requeue a task based on the new input
-        self.tp.spawn_fifo({
-            let ctx = ctx.clone();
-            let input = (*input).clone();
-            let output = self.output.clone();
-            let task = self.task.clone();
-            let state = self.state.clone();
-            move || {
-                let input_ref: &CuMsg<I> = &input;
-                let mut output_guard = match output.lock() {
-                    Ok(guard) => guard,
-                    Err(_) => {
-                        record_async_error(
-                            &state,
-                            CuError::from("Async task output mutex poisoned"),
-                        );
-                        return;
-                    }
-                };
-                let output_ref: &mut CuMsg<O> = &mut output_guard;
-
-                // Each async run starts from an empty output so a task that
-                // chooses not to publish does not leak the previous payload.
-                *output_ref = CuMsg::default();
-
-                // Track the actual processing interval so replay can honor it.
-                if output_ref.metadata.process_time.start.is_none() {
-                    output_ref.metadata.process_time.start = ctx.now().into();
-                }
-                let task_result = match task.lock() {
-                    Ok(mut task_guard) => task_guard.process(&ctx, input_ref, output_ref),
-                    Err(poison) => Err(CuError::from(format!(
-                        "Async task mutex poisoned: {poison}"
-                    ))),
-                };
-
-                let mut guard = state.lock().unwrap_or_else(|poison| poison.into_inner());
-                guard.processing = false;
-
-                match task_result {
-                    Ok(()) => {
-                        let end_from_metadata: Option<CuTime> =
-                            output_ref.metadata.process_time.end.into();
-                        let end_time = end_from_metadata.unwrap_or_else(|| {
-                            let now = ctx.now();
-                            output_ref.metadata.process_time.end = now.into();
-                            now
-                        });
-                        guard.ready_at = Some(end_time);
-                    }
-                    Err(error) => {
-                        guard.ready_at = None;
-                        guard.last_error = Some(error);
-                    }
-                }
+        impl<T, I, O> Freezable for $name<T, I, O>
+        where
+            T: for<'i, 'o> CuTask<Input<'i> = CuMsg<I>, Output<'o> = CuMsg<O>> + Send + 'static,
+            I: CuMsgPayload + Send + Sync + 'static,
+            O: CuMsgPayload + Send + 'static,
+        {
+            fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+                self.core.freeze(encoder)
             }
-        });
-        Ok(())
-    }
+
+            fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+                self.core.thaw(decoder)
+            }
+        }
+
+        impl<T, I, O> CuTask for $name<T, I, O>
+        where
+            T: for<'i, 'o> CuTask<Input<'i> = CuMsg<I>, Output<'o> = CuMsg<O>> + Send + 'static,
+            I: CuMsgPayload + Send + Sync + 'static,
+            O: CuMsgPayload + Send + 'static,
+        {
+            type Resources<'r> = CuAsyncTaskResources<'r, T>;
+            type Input<'m> = T::Input<'m>;
+            type Output<'m> = T::Output<'m>;
+
+            fn new(
+                config: Option<&ComponentConfig>,
+                resources: Self::Resources<'_>,
+            ) -> CuResult<Self>
+            where
+                Self: Sized,
+            {
+                Ok(Self {
+                    core: AsyncTaskCore::<T, I, O, $policy>::new(
+                        config,
+                        resources.inner,
+                        resources.threadpool,
+                    )?,
+                })
+            }
+
+            fn process<'i, 'o>(
+                &mut self,
+                ctx: &CuContext,
+                input: &Self::Input<'i>,
+                real_output: &mut Self::Output<'o>,
+            ) -> CuResult<()> {
+                self.core.process(ctx, input, real_output)
+            }
+        }
+    };
 }
+
+impl_async_wrapper!(CuAsyncTask, ());
+impl_async_wrapper!(CuAsyncTaskPrevious, Option<CuMsg<I>>);
+impl_async_wrapper!(CuAsyncTaskClosest, ClosestPolicyState<I>);
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::config::ComponentConfig;
     use crate::cutask::CuMsg;
-    use crate::cutask::Freezable;
     use crate::input_msg;
     use crate::output_msg;
-    use cu29_traits::CuResult;
+    use cu29_clock::CuTimeRange;
     use rayon::ThreadPoolBuilder;
     use std::borrow::BorrowMut;
     use std::sync::OnceLock;
@@ -251,8 +735,36 @@ mod tests {
 
     static READY_RX: OnceLock<Arc<Mutex<mpsc::Receiver<CuTime>>>> = OnceLock::new();
     static DONE_TX: OnceLock<mpsc::Sender<()>> = OnceLock::new();
+
+    fn freeze_bytes(task: &impl Freezable) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        encode_freezable(task, &mut bytes).expect("failed to encode task");
+        bytes
+    }
+
+    fn thaw_bytes(task: &mut impl Freezable, bytes: &[u8]) {
+        thaw_freezable(task, bytes).expect("failed to thaw task");
+    }
+
+    fn wait_until_async_idle<T, I, O>(async_task: &CuAsyncTask<T, I, O>)
+    where
+        T: for<'i, 'o> CuTask<Input<'i> = CuMsg<I>, Output<'o> = CuMsg<O>> + Send + 'static,
+        I: CuMsgPayload + Send + Sync + 'static,
+        O: CuMsgPayload + Send + 'static,
+    {
+        for _ in 0..100 {
+            let state = lock_or_recover(&async_task.core.state);
+            if state.inflight.is_none() {
+                return;
+            }
+            drop(state);
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        panic!("background task never became idle");
+    }
+
     #[derive(Reflect)]
-    struct TestTask {}
+    struct TestTask;
 
     impl Freezable for TestTask {}
 
@@ -265,7 +777,7 @@ mod tests {
         where
             Self: Sized,
         {
-            Ok(Self {})
+            Ok(Self)
         }
 
         fn process(
@@ -281,26 +793,16 @@ mod tests {
 
     #[test]
     fn test_lifecycle() {
-        let tp = Arc::new(
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(1)
-                .build()
-                .unwrap(),
-        );
-
+        let tp = Arc::new(ThreadPoolBuilder::new().num_threads(1).build().unwrap());
         let config = ComponentConfig::default();
         let context = CuContext::new_with_clock();
-        let mut async_task: CuAsyncTask<TestTask, u32> =
+        let mut async_task: CuAsyncTask<TestTask, u32, u32> =
             CuAsyncTask::new(Some(&config), (), tp).unwrap();
         let input = CuMsg::new(Some(42u32));
         let mut output = CuMsg::new(None);
 
         loop {
-            {
-                let output_ref: &mut CuMsg<u32> = &mut output;
-                async_task.process(&context, &input, output_ref).unwrap();
-            }
-
+            async_task.process(&context, &input, &mut output).unwrap();
             if let Some(val) = output.payload() {
                 assert_eq!(*val, 42u32);
                 break;
@@ -322,7 +824,7 @@ mod tests {
         where
             Self: Sized,
         {
-            Ok(Self {})
+            Ok(Self)
         }
 
         fn process(
@@ -349,22 +851,6 @@ mod tests {
             }
             Ok(())
         }
-    }
-
-    fn wait_until_async_idle<T, O>(async_task: &CuAsyncTask<T, O>)
-    where
-        T: for<'m> CuTask<Output<'m> = CuMsg<O>> + Send + 'static,
-        O: CuMsgPayload + Send + 'static,
-    {
-        for _ in 0..100 {
-            let state = async_task.state.lock().unwrap();
-            if !state.processing {
-                return;
-            }
-            drop(state);
-            std::thread::sleep(Duration::from_millis(1));
-        }
-        panic!("background task never became idle");
     }
 
     #[derive(Clone)]
@@ -420,6 +906,90 @@ mod tests {
         }
     }
 
+    #[derive(Clone)]
+    struct BlockingTaskResources {
+        release_rx: Arc<Mutex<mpsc::Receiver<()>>>,
+        done_tx: mpsc::Sender<()>,
+    }
+
+    #[derive(Reflect)]
+    #[reflect(no_field_bounds, from_reflect = false)]
+    struct BlockingStampTask {
+        seq: u32,
+        #[reflect(ignore)]
+        release_rx: Arc<Mutex<mpsc::Receiver<()>>>,
+        #[reflect(ignore)]
+        done_tx: mpsc::Sender<()>,
+    }
+
+    impl Freezable for BlockingStampTask {
+        fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+            self.seq.encode(encoder)
+        }
+
+        fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+            self.seq = u32::decode(decoder)?;
+            Ok(())
+        }
+    }
+
+    impl CuTask for BlockingStampTask {
+        type Resources<'r> = BlockingTaskResources;
+        type Input<'m> = input_msg!(u32);
+        type Output<'m> = output_msg!(u32);
+
+        fn new(_config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
+        where
+            Self: Sized,
+        {
+            Ok(Self {
+                seq: 0,
+                release_rx: resources.release_rx,
+                done_tx: resources.done_tx,
+            })
+        }
+
+        fn process(
+            &mut self,
+            ctx: &CuContext,
+            input: &Self::Input<'_>,
+            output: &mut Self::Output<'_>,
+        ) -> CuResult<()> {
+            self.release_rx
+                .lock()
+                .unwrap()
+                .recv_timeout(Duration::from_secs(1))
+                .expect("timed out waiting for release");
+
+            let payload = input.payload().copied().unwrap_or_default();
+            output.metadata.process_time.start = ctx.now().into();
+            output.metadata.process_time.end = (ctx.now() + CuDuration::from_nanos(5)).into();
+            output.set_payload(payload + self.seq + ctx.now().as_nanos() as u32);
+            self.seq = self.seq.saturating_add(1);
+            let _ = self.done_tx.send(());
+            Ok(())
+        }
+    }
+
+    fn blocking_resources() -> (BlockingTaskResources, mpsc::Sender<()>, mpsc::Receiver<()>) {
+        let (release_tx, release_rx) = mpsc::channel();
+        let (done_tx, done_rx) = mpsc::channel();
+        (
+            BlockingTaskResources {
+                release_rx: Arc::new(Mutex::new(release_rx)),
+                done_tx,
+            },
+            release_tx,
+            done_rx,
+        )
+    }
+
+    fn msg_with_tov(payload: u32, tov_ns: u64) -> CuMsg<u32> {
+        let mut msg = CuMsg::new(Some(payload));
+        msg.tov = Tov::Time(CuTime::from(tov_ns));
+        msg
+    }
+
     #[test]
     fn background_clears_output_while_processing() {
         let tp = Arc::new(ThreadPoolBuilder::new().num_threads(1).build().unwrap());
@@ -431,7 +1001,7 @@ mod tests {
             done: done_tx,
         };
 
-        let mut async_task: CuAsyncTask<ActionTask, u32> =
+        let mut async_task: CuAsyncTask<ActionTask, u32, u32> =
             CuAsyncTask::new(Some(&ComponentConfig::default()), resources, tp).unwrap();
         let input = CuMsg::new(Some(1u32));
         let mut output = CuMsg::new(None);
@@ -463,7 +1033,7 @@ mod tests {
             done: done_tx,
         };
 
-        let mut async_task: CuAsyncTask<ActionTask, u32> =
+        let mut async_task: CuAsyncTask<ActionTask, u32, u32> =
             CuAsyncTask::new(Some(&ComponentConfig::default()), resources, tp).unwrap();
         let some_input = CuMsg::new(Some(1u32));
         let no_input = CuMsg::new(None::<u32>);
@@ -506,7 +1076,6 @@ mod tests {
         let tp = Arc::new(ThreadPoolBuilder::new().num_threads(1).build().unwrap());
         let (context, clock_mock) = CuContext::new_mock_clock();
 
-        // Install the control channels for the task.
         let (ready_tx, ready_rx) = mpsc::channel::<CuTime>();
         let (done_tx, done_rx) = mpsc::channel::<()>();
         READY_RX
@@ -516,46 +1085,26 @@ mod tests {
             .set(done_tx)
             .expect("completion channel already set");
 
-        let mut async_task: CuAsyncTask<ControlledTask, u32> =
+        let mut async_task: CuAsyncTask<ControlledTask, u32, u32> =
             CuAsyncTask::new(Some(&ComponentConfig::default()), (), tp.clone()).unwrap();
         let input = CuMsg::new(Some(1u32));
         let mut output = CuMsg::new(None);
 
-        // Copperlist 0: kick off processing, nothing ready yet.
         clock_mock.set_value(0);
         async_task.process(&context, &input, &mut output).unwrap();
         assert!(output.payload().is_none());
 
-        // Copperlist 1 at time 10: still running in the background.
         clock_mock.set_value(10);
         async_task.process(&context, &input, &mut output).unwrap();
         assert!(output.payload().is_none());
 
-        // The background thread finishes at time 30 (recorded in metadata).
         clock_mock.set_value(30);
         ready_tx.send(CuTime::from(30u64)).unwrap();
         done_rx
             .recv_timeout(Duration::from_secs(1))
             .expect("background task never finished");
-        // Wait until the async wrapper has cleared its processing flag and captured ready_at.
-        let mut ready_at_recorded = None;
-        for _ in 0..100 {
-            let state = async_task.state.lock().unwrap();
-            if !state.processing {
-                ready_at_recorded = state.ready_at;
-                if ready_at_recorded.is_some() {
-                    break;
-                }
-            }
-            drop(state);
-            std::thread::sleep(Duration::from_millis(1));
-        }
-        assert!(
-            ready_at_recorded.is_some(),
-            "background task finished without recording ready_at"
-        );
+        wait_until_async_idle(&async_task);
 
-        // Replay earlier than the recorded end time: the output should be held back.
         clock_mock.set_value(20);
         async_task.process(&context, &input, &mut output).unwrap();
         assert!(
@@ -563,13 +1112,220 @@ mod tests {
             "Output surfaced before recorded ready time"
         );
 
-        // Once the mock clock reaches the recorded end time, the result is released.
         clock_mock.set_value(30);
         async_task.process(&context, &input, &mut output).unwrap();
         assert_eq!(output.payload(), Some(&30u32));
 
-        // Allow the background worker spawned by the last poll to complete so the thread pool shuts down cleanly.
         ready_tx.send(CuTime::from(40u64)).unwrap();
         let _ = done_rx.recv_timeout(Duration::from_secs(1));
+    }
+
+    #[test]
+    fn background_keyframe_relaunches_inflight_with_original_dispatch_context() {
+        let tp = Arc::new(ThreadPoolBuilder::new().num_threads(1).build().unwrap());
+        let (orig_context, orig_clock) = CuContext::new_mock_clock();
+        let (orig_resources, orig_release_tx, orig_done_rx) = blocking_resources();
+        let mut original: CuAsyncTask<BlockingStampTask, u32, u32> = CuAsyncTask::new(
+            Some(&ComponentConfig::default()),
+            orig_resources,
+            tp.clone(),
+        )
+        .unwrap();
+        let mut output = CuMsg::default();
+
+        orig_clock.set_value(10);
+        original
+            .process(&orig_context, &CuMsg::new(Some(1u32)), &mut output)
+            .unwrap();
+        assert!(output.payload().is_none());
+
+        let frozen = freeze_bytes(&original);
+
+        orig_release_tx.send(()).unwrap();
+        orig_done_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("original worker never finished");
+
+        let (replay_context, replay_clock) = CuContext::new_mock_clock();
+        let (replay_resources, replay_release_tx, replay_done_rx) = blocking_resources();
+        let mut replayed: CuAsyncTask<BlockingStampTask, u32, u32> = CuAsyncTask::new(
+            Some(&ComponentConfig::default()),
+            replay_resources,
+            tp.clone(),
+        )
+        .unwrap();
+        thaw_bytes(&mut replayed, &frozen);
+
+        replay_clock.set_value(20);
+        replayed
+            .process(&replay_context, &CuMsg::new(Some(99u32)), &mut output)
+            .unwrap();
+        assert!(output.payload().is_none());
+
+        replay_release_tx.send(()).unwrap();
+        replay_done_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("replayed worker never finished");
+
+        replay_clock.set_value(14);
+        replayed
+            .process(&replay_context, &CuMsg::new(Some(2u32)), &mut output)
+            .unwrap();
+        assert!(output.payload().is_none());
+
+        replay_clock.set_value(15);
+        replayed
+            .process(&replay_context, &CuMsg::new(Some(2u32)), &mut output)
+            .unwrap();
+        assert_eq!(output.payload(), Some(&11u32));
+
+        replay_release_tx.send(()).unwrap();
+        replay_done_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("cleanup replayed worker never finished");
+    }
+
+    #[test]
+    fn previous_policy_restores_pending_input_from_keyframe() {
+        let tp = Arc::new(ThreadPoolBuilder::new().num_threads(1).build().unwrap());
+        let (context, clock) = CuContext::new_mock_clock();
+        let (resources, release_tx, done_rx) = blocking_resources();
+        let mut original: CuAsyncTaskPrevious<BlockingStampTask, u32, u32> =
+            CuAsyncTaskPrevious::new(Some(&ComponentConfig::default()), resources, tp.clone())
+                .unwrap();
+        let mut output = CuMsg::default();
+
+        clock.set_value(10);
+        original
+            .process(&context, &CuMsg::new(Some(1u32)), &mut output)
+            .unwrap();
+
+        clock.set_value(11);
+        original
+            .process(&context, &CuMsg::new(Some(2u32)), &mut output)
+            .unwrap();
+
+        release_tx.send(()).unwrap();
+        done_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("worker never finished");
+
+        let frozen = freeze_bytes(&original);
+
+        let (replay_context, replay_clock) = CuContext::new_mock_clock();
+        let (replay_resources, replay_release_tx, replay_done_rx) = blocking_resources();
+        let mut replayed: CuAsyncTaskPrevious<BlockingStampTask, u32, u32> =
+            CuAsyncTaskPrevious::new(
+                Some(&ComponentConfig::default()),
+                replay_resources,
+                tp.clone(),
+            )
+            .unwrap();
+        thaw_bytes(&mut replayed, &frozen);
+
+        replay_clock.set_value(15);
+        replayed
+            .process(&replay_context, &CuMsg::new(Some(3u32)), &mut output)
+            .unwrap();
+        assert_eq!(output.payload(), Some(&11u32));
+
+        replay_release_tx.send(()).unwrap();
+        replay_done_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("second worker never finished");
+
+        replay_clock.set_value(20);
+        replayed
+            .process(&replay_context, &CuMsg::new(Some(4u32)), &mut output)
+            .unwrap();
+        assert_eq!(output.payload(), Some(&18u32));
+
+        replay_release_tx.send(()).unwrap();
+        replay_done_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("cleanup worker never finished");
+    }
+
+    #[test]
+    fn closest_policy_waits_for_predicted_fresher_message_after_restore() {
+        let tp = Arc::new(ThreadPoolBuilder::new().num_threads(1).build().unwrap());
+        let (context, clock) = CuContext::new_mock_clock();
+        let (resources, release_tx, done_rx) = blocking_resources();
+        let mut original: CuAsyncTaskClosest<BlockingStampTask, u32, u32> =
+            CuAsyncTaskClosest::new(Some(&ComponentConfig::default()), resources, tp.clone())
+                .unwrap();
+        let mut output = CuMsg::default();
+
+        clock.set_value(0);
+        original
+            .process(&context, &CuMsg::new(Some(1u32)), &mut output)
+            .unwrap();
+
+        clock.set_value(100);
+        original
+            .process(&context, &msg_with_tov(2, 100), &mut output)
+            .unwrap();
+
+        clock.set_value(200);
+        original
+            .process(&context, &msg_with_tov(3, 200), &mut output)
+            .unwrap();
+
+        release_tx.send(()).unwrap();
+        done_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("worker never finished");
+
+        let frozen = freeze_bytes(&original);
+
+        let (replay_context, replay_clock) = CuContext::new_mock_clock();
+        let (replay_resources, replay_release_tx, replay_done_rx) = blocking_resources();
+        let mut replayed: CuAsyncTaskClosest<BlockingStampTask, u32, u32> =
+            CuAsyncTaskClosest::new(
+                Some(&ComponentConfig::default()),
+                replay_resources,
+                tp.clone(),
+            )
+            .unwrap();
+        thaw_bytes(&mut replayed, &frozen);
+
+        replay_clock.set_value(290);
+        replayed
+            .process(&replay_context, &msg_with_tov(9, 150), &mut output)
+            .unwrap();
+        assert_eq!(output.payload(), Some(&1u32));
+
+        replay_clock.set_value(300);
+        replayed
+            .process(&replay_context, &msg_with_tov(4, 300), &mut output)
+            .unwrap();
+        assert!(output.payload().is_none());
+
+        replay_release_tx.send(()).unwrap();
+        replay_done_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("closest worker never finished");
+
+        replay_clock.set_value(305);
+        replayed
+            .process(&replay_context, &msg_with_tov(5, 305), &mut output)
+            .unwrap();
+        assert_eq!(output.payload(), Some(&305u32));
+
+        replay_release_tx.send(()).unwrap();
+        replay_done_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("cleanup closest worker never finished");
+    }
+
+    #[test]
+    fn closest_distance_uses_tov_ranges() {
+        let now = CuTime::from(250u64);
+        let mut msg = CuMsg::new(Some(1u32));
+        msg.tov = Tov::Range(CuTimeRange {
+            start: CuTime::from(200u64),
+            end: CuTime::from(300u64),
+        });
+        assert_eq!(msg_distance_to_now(&msg, now), CuDuration::default());
     }
 }

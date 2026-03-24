@@ -444,6 +444,39 @@ pub enum Flavor {
     Bridge,
 }
 
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum BackgroundMode {
+    #[default]
+    Foreground,
+    Next,
+    Previous,
+    Closest,
+}
+
+impl BackgroundMode {
+    pub const fn is_background(self) -> bool {
+        !matches!(self, Self::Foreground)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq)]
+#[serde(untagged)]
+enum BackgroundSetting {
+    Bool(bool),
+    Mode(BackgroundMode),
+}
+
+impl BackgroundSetting {
+    const fn normalize(self) -> BackgroundMode {
+        match self {
+            Self::Bool(false) => BackgroundMode::Foreground,
+            Self::Bool(true) => BackgroundMode::Next,
+            Self::Mode(mode) => mode,
+        }
+    }
+}
+
 /// A node in the configuration graph.
 /// A node represents a Task in the system Graph.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -466,10 +499,15 @@ pub struct Node {
     /// Missions for which this task is run.
     missions: Option<Vec<String>>,
 
-    /// Run this task in the background:
-    /// ie. Will be set to run on a background thread and until it is finished `CuTask::process` will return None.
+    /// Run this task in the background.
+    ///
+    /// `true` keeps the legacy "next" behavior.
+    /// String modes:
+    /// - `next`: launch the current input once the previous background run is fully released.
+    /// - `previous`: keep one pending untreated input while another run is in flight.
+    /// - `closest`: like `previous`, but it may wait one cycle for a predicted fresher input.
     #[serde(skip_serializing_if = "Option::is_none")]
-    background: Option<bool>,
+    background: Option<BackgroundSetting>,
 
     /// Option to include/exclude stubbing for simulation.
     /// By default, sources and sinks are replaces (stubbed) by the runtime to avoid trying to compile hardware specific code for sensing or actuation.
@@ -545,7 +583,14 @@ impl Node {
 
     #[allow(dead_code)]
     pub fn is_background(&self) -> bool {
-        self.background.unwrap_or(false)
+        self.background_mode().is_background()
+    }
+
+    #[allow(dead_code)]
+    pub fn background_mode(&self) -> BackgroundMode {
+        self.background
+            .map(BackgroundSetting::normalize)
+            .unwrap_or(BackgroundMode::Foreground)
     }
 
     #[allow(dead_code)]
@@ -2887,6 +2932,41 @@ mod tests {
             .get::<u32>("scalar")
             .expect("scalar lookup failed");
         assert_eq!(scalar, Some(7));
+    }
+
+    #[test]
+    fn test_background_mode_normalization() {
+        let txt = r#"
+            (
+                tasks: [
+                    (id: "fg", type: "pkg::Fg", background: false),
+                    (id: "next_bool", type: "pkg::NextBool", background: true),
+                    (id: "next_str", type: "pkg::NextStr", background: "next"),
+                    (id: "previous", type: "pkg::Previous", background: "previous"),
+                    (id: "closest", type: "pkg::Closest", background: "closest"),
+                ],
+                cnx: [],
+            )
+        "#;
+        let config = CuConfig::deserialize_ron(txt).expect("failed to parse config");
+        let graph = config.graphs.get_graph(None).expect("missing graph");
+
+        let modes: Vec<BackgroundMode> = graph
+            .get_all_nodes()
+            .iter()
+            .map(|(_, node)| node.background_mode())
+            .collect();
+
+        assert_eq!(
+            modes,
+            vec![
+                BackgroundMode::Foreground,
+                BackgroundMode::Next,
+                BackgroundMode::Next,
+                BackgroundMode::Previous,
+                BackgroundMode::Closest,
+            ]
+        );
     }
 
     #[test]
