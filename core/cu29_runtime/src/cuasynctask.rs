@@ -1,9 +1,15 @@
 use crate::config::ComponentConfig;
 use crate::context::CuContext;
-use crate::cutask::{BincodeAdapter, CuMsg, CuMsgPayload, CuTask, Freezable};
+#[cfg(test)]
+use crate::cutask::BincodeAdapter;
+use crate::cutask::{CuMsg, CuMsgPayload, CuTask, Freezable};
 use crate::reflect::{Reflect, TypePath};
-use bincode::de::{Decoder, DecoderImpl, read::SliceReader};
-use bincode::enc::{Encoder, EncoderImpl, write::SizeWriter, write::SliceWriter};
+use bincode::de::Decoder;
+#[cfg(test)]
+use bincode::de::{DecoderImpl, read::SliceReader};
+use bincode::enc::Encoder;
+#[cfg(test)]
+use bincode::enc::{EncoderImpl, write::SizeWriter, write::SliceWriter};
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29_clock::{CuDuration, CuTime, Tov};
@@ -15,10 +21,12 @@ fn lock_or_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|poison| poison.into_inner())
 }
 
+#[cfg(test)]
 fn encode_freezable(task: &impl Freezable, bytes: &mut Vec<u8>) -> Result<(), EncodeError> {
     encode_value(&BincodeAdapter(task), bytes)
 }
 
+#[cfg(test)]
 fn encode_value(value: &impl Encode, bytes: &mut Vec<u8>) -> Result<(), EncodeError> {
     let config = bincode::config::standard();
     let mut sizer = EncoderImpl::<_, _>::new(SizeWriter::default(), config);
@@ -32,6 +40,7 @@ fn encode_value(value: &impl Encode, bytes: &mut Vec<u8>) -> Result<(), EncodeEr
     Ok(())
 }
 
+#[cfg(test)]
 fn thaw_freezable(task: &mut impl Freezable, bytes: &[u8]) -> Result<(), DecodeError> {
     let config = bincode::config::standard();
     let reader = SliceReader::new(bytes);
@@ -66,56 +75,28 @@ impl From<FrozenCuError> for CuError {
     }
 }
 
-#[derive(Clone, Debug, Encode, Decode)]
-struct DispatchSnapshot<I>
+struct AsyncState<O, P>
 where
-    I: CuMsgPayload,
-{
-    input: CuMsg<I>,
-    task_state: Vec<u8>,
-    dispatch_now: CuTime,
-    dispatch_clid: u64,
-}
-
-#[derive(Clone, Debug, Encode, Decode)]
-struct FrozenAsyncState<I, O, P>
-where
-    I: CuMsgPayload,
-    O: CuMsgPayload,
-    P: Clone + Encode + Decode<()>,
-{
-    live_task_state: Vec<u8>,
-    inflight: Option<DispatchSnapshot<I>>,
-    ready_output: CuMsg<O>,
-    ready_at: Option<CuTime>,
-    last_error: Option<FrozenCuError>,
-    policy: P,
-}
-
-struct AsyncState<I, O, P>
-where
-    I: CuMsgPayload,
     O: CuMsgPayload,
     P: Default,
 {
-    inflight: Option<DispatchSnapshot<I>>,
-    relaunch_pending: bool,
+    inflight: bool,
+    keyframe_gap: bool,
     ready_output: CuMsg<O>,
     ready_at: Option<CuTime>,
     last_error: Option<CuError>,
     policy: P,
 }
 
-impl<I, O, P> Default for AsyncState<I, O, P>
+impl<O, P> Default for AsyncState<O, P>
 where
-    I: CuMsgPayload,
     O: CuMsgPayload,
     P: Default,
 {
     fn default() -> Self {
         Self {
-            inflight: None,
-            relaunch_pending: false,
+            inflight: false,
+            keyframe_gap: false,
             ready_output: CuMsg::default(),
             ready_at: None,
             last_error: None,
@@ -124,14 +105,13 @@ where
     }
 }
 
-impl<I, O, P> AsyncState<I, O, P>
+impl<O, P> AsyncState<O, P>
 where
-    I: CuMsgPayload,
     O: CuMsgPayload,
     P: Default,
 {
     fn blocks_new_launches(&self, now: CuTime) -> bool {
-        self.inflight.is_some() || self.ready_at.is_some_and(|ready_at| now < ready_at)
+        self.inflight || self.ready_at.is_some_and(|ready_at| now < ready_at)
     }
 
     fn take_ready_output(&mut self) -> CuMsg<O> {
@@ -140,10 +120,23 @@ where
     }
 }
 
-trait AsyncPolicy<I>: Clone + Default + Encode + Decode<()> + Send + 'static
+fn background_keyframe_gap_error() -> CuError {
+    CuError::from(
+        "Background task state unavailable: keyframe captured while the task was in flight",
+    )
+}
+
+const ASYNC_STATE_QUIESCENT: u8 = 0;
+const ASYNC_STATE_UNAVAILABLE: u8 = 1;
+
+trait AsyncPolicy<I>: Clone + Default + Send + 'static
 where
     I: CuMsgPayload + Send + Sync + 'static,
 {
+    fn encode_state<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError>;
+    fn decode_state<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError>
+    where
+        Self: Sized;
     fn observe_blocked_input(&mut self, input: &CuMsg<I>, now: CuTime);
     fn decide_launch(&mut self, input: &CuMsg<I>, now: CuTime) -> LaunchDecision<I>;
 }
@@ -160,6 +153,14 @@ impl<I> AsyncPolicy<I> for ()
 where
     I: CuMsgPayload + Send + Sync + 'static,
 {
+    fn encode_state<E: Encoder>(&self, _encoder: &mut E) -> Result<(), EncodeError> {
+        Ok(())
+    }
+
+    fn decode_state<D: Decoder<Context = ()>>(_decoder: &mut D) -> Result<Self, DecodeError> {
+        Ok(())
+    }
+
     fn observe_blocked_input(&mut self, _input: &CuMsg<I>, _now: CuTime) {}
 
     fn decide_launch(&mut self, input: &CuMsg<I>, _now: CuTime) -> LaunchDecision<I> {
@@ -171,6 +172,14 @@ impl<I> AsyncPolicy<I> for Option<CuMsg<I>>
 where
     I: CuMsgPayload + Send + Sync + 'static,
 {
+    fn encode_state<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        self.encode(encoder)
+    }
+
+    fn decode_state<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        Option::<CuMsg<I>>::decode(decoder)
+    }
+
     fn observe_blocked_input(&mut self, input: &CuMsg<I>, _now: CuTime) {
         *self = Some(input.clone());
     }
@@ -252,6 +261,23 @@ impl<I> AsyncPolicy<I> for ClosestPolicyState<I>
 where
     I: CuMsgPayload + Send + Sync + 'static,
 {
+    fn encode_state<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        self.pending.encode(encoder)?;
+        self.predictor.last_observed.encode(encoder)?;
+        self.predictor.interval.encode(encoder)?;
+        Ok(())
+    }
+
+    fn decode_state<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        Ok(Self {
+            pending: Option::<CuMsg<I>>::decode(decoder)?,
+            predictor: ArrivalPredictor {
+                last_observed: Option::<CuTime>::decode(decoder)?,
+                interval: Option::<CuDuration>::decode(decoder)?,
+            },
+        })
+    }
+
     fn observe_blocked_input(&mut self, input: &CuMsg<I>, now: CuTime) {
         self.predictor.observe(input, now);
         self.pending = Some(input.clone());
@@ -331,7 +357,7 @@ where
     P: AsyncPolicy<I>,
 {
     task: Arc<Mutex<T>>,
-    state: Arc<Mutex<AsyncState<I, O, P>>>,
+    state: Arc<Mutex<AsyncState<O, P>>>,
     tp: Arc<ThreadPool>,
 }
 
@@ -354,33 +380,10 @@ where
         })
     }
 
-    fn prepare_dispatch(&self, ctx: &CuContext, input: CuMsg<I>) -> CuResult<DispatchSnapshot<I>> {
-        let mut task_state = Vec::new();
-        let task = self.task.lock().map_err(|_| {
-            CuError::from("Async task mutex poisoned while capturing background snapshot")
-        })?;
-        encode_freezable(&*task, &mut task_state).map_err(|error| {
-            CuError::from(format!("Failed to snapshot background task: {error}"))
-        })?;
-
-        Ok(DispatchSnapshot {
-            input,
-            task_state,
-            dispatch_now: ctx.now(),
-            dispatch_clid: ctx.cl_id(),
-        })
-    }
-
-    fn spawn_worker(
-        &self,
-        dispatch_ctx: CuContext,
-        worker_input: CuMsg<I>,
-        dispatch: DispatchSnapshot<I>,
-    ) {
+    fn spawn_worker(&self, dispatch_ctx: CuContext, worker_input: CuMsg<I>) {
         {
             let mut state = lock_or_recover(&self.state);
-            state.inflight = Some(dispatch);
-            state.relaunch_pending = false;
+            state.inflight = true;
         }
 
         self.tp.spawn_fifo({
@@ -402,8 +405,7 @@ where
                 };
 
                 let mut guard = lock_or_recover(&state);
-                guard.inflight = None;
-                guard.relaunch_pending = false;
+                guard.inflight = false;
 
                 match task_result {
                     Ok(()) => {
@@ -428,46 +430,26 @@ where
         });
     }
 
-    fn relaunch_if_needed(&self, ctx: &CuContext) -> CuResult<bool> {
-        let dispatch = {
-            let mut state = self.state.lock().map_err(|_| {
-                CuError::from("Async task state mutex poisoned while relaunching background work")
-            })?;
-            if !state.relaunch_pending {
-                None
-            } else {
-                state.relaunch_pending = false;
-                state.inflight.clone()
-            }
-        };
-
-        let Some(dispatch) = dispatch else {
-            return Ok(false);
-        };
-
-        let dispatch_ctx = ctx.clone_with_fixed_time(dispatch.dispatch_clid, dispatch.dispatch_now);
-        self.spawn_worker(dispatch_ctx, dispatch.input.clone(), dispatch);
-        Ok(true)
-    }
-
     fn process(
         &self,
         ctx: &CuContext,
         input: &CuMsg<I>,
         real_output: &mut CuMsg<O>,
     ) -> CuResult<()> {
-        let relaunched = self.relaunch_if_needed(ctx)?;
-
         let launch = {
             let mut state = self.state.lock().map_err(|_| {
                 CuError::from("Async task state mutex poisoned while scheduling background work")
             })?;
 
+            if state.keyframe_gap {
+                return Err(background_keyframe_gap_error());
+            }
+
             if let Some(error) = state.last_error.take() {
                 return Err(error);
             }
 
-            if relaunched || state.blocks_new_launches(ctx.now()) {
+            if state.blocks_new_launches(ctx.now()) {
                 state.policy.observe_blocked_input(input, ctx.now());
                 *real_output = CuMsg::default();
                 None
@@ -484,10 +466,7 @@ where
             return Ok(());
         };
 
-        let worker_input = next_input.clone();
-        let dispatch = self.prepare_dispatch(ctx, next_input)?;
-        let dispatch_ctx = ctx.clone_with_fixed_time(ctx.cl_id(), ctx.now());
-        self.spawn_worker(dispatch_ctx, worker_input, dispatch);
+        self.spawn_worker(ctx.clone(), next_input);
         Ok(())
     }
 
@@ -497,58 +476,76 @@ where
             .lock()
             .map_err(|_| mutex_poison_encode_error("Async task state"))?;
 
-        let mut live_task_state = Vec::new();
-        if state.inflight.is_none() {
+        if state.inflight || state.keyframe_gap {
+            ASYNC_STATE_UNAVAILABLE.encode(encoder)?;
+        } else {
+            ASYNC_STATE_QUIESCENT.encode(encoder)?;
+            state.ready_output.encode(encoder)?;
+            state.ready_at.encode(encoder)?;
+            match state.last_error.as_ref() {
+                Some(error) => {
+                    true.encode(encoder)?;
+                    FrozenCuError::from(error).text.encode(encoder)?;
+                }
+                None => false.encode(encoder)?,
+            }
+            state.policy.encode_state(encoder)?;
             let task = self
                 .task
                 .lock()
                 .map_err(|_| mutex_poison_encode_error("Async task"))?;
-            encode_freezable(&*task, &mut live_task_state)?;
+            task.freeze(encoder)?;
         }
 
-        let frozen = FrozenAsyncState::<I, O, P> {
-            live_task_state,
-            inflight: state.inflight.clone(),
-            ready_output: state.ready_output.clone(),
-            ready_at: state.ready_at,
-            last_error: state.last_error.as_ref().map(FrozenCuError::from),
-            policy: state.policy.clone(),
-        };
-        let mut bytes = Vec::new();
-        encode_value(&frozen, &mut bytes)?;
-        bytes.encode(encoder)
+        Ok(())
     }
 
     fn thaw<D: Decoder>(&self, decoder: &mut D) -> Result<(), DecodeError> {
-        let frozen_bytes = Vec::<u8>::decode(decoder)?;
-        let config = bincode::config::standard();
-        let reader = SliceReader::new(&frozen_bytes);
-        let mut inner = DecoderImpl::new(reader, config, ());
-        let frozen = FrozenAsyncState::<I, O, P>::decode(&mut inner)?;
-
-        {
-            let mut task = self
-                .task
-                .lock()
-                .map_err(|_| mutex_poison_decode_error("Async task"))?;
-            let snapshot = frozen
-                .inflight
-                .as_ref()
-                .map(|dispatch| dispatch.task_state.as_slice())
-                .unwrap_or(frozen.live_task_state.as_slice());
-            thaw_freezable(&mut *task, snapshot)?;
-        }
+        let mut decoder = decoder.with_context(());
+        let tag = u8::decode(&mut decoder)?;
 
         let mut state = self
             .state
             .lock()
             .map_err(|_| mutex_poison_decode_error("Async task state"))?;
-        state.inflight = frozen.inflight;
-        state.relaunch_pending = state.inflight.is_some();
-        state.ready_output = frozen.ready_output;
-        state.ready_at = frozen.ready_at;
-        state.last_error = frozen.last_error.map(CuError::from);
-        state.policy = frozen.policy;
+
+        match tag {
+            ASYNC_STATE_QUIESCENT => {
+                let ready_output = CuMsg::<O>::decode(&mut decoder)?;
+                let ready_at = Option::<CuTime>::decode(&mut decoder)?;
+                let has_error = bool::decode(&mut decoder)?;
+                let last_error = if has_error {
+                    Some(CuError::from(String::decode(&mut decoder)?))
+                } else {
+                    None
+                };
+                let policy = P::decode_state(&mut decoder)?;
+                let mut task = self
+                    .task
+                    .lock()
+                    .map_err(|_| mutex_poison_decode_error("Async task"))?;
+                task.thaw(&mut decoder)?;
+                state.inflight = false;
+                state.keyframe_gap = false;
+                state.ready_output = ready_output;
+                state.ready_at = ready_at;
+                state.last_error = last_error;
+                state.policy = policy;
+            }
+            ASYNC_STATE_UNAVAILABLE => {
+                state.inflight = false;
+                state.keyframe_gap = true;
+                state.ready_output = CuMsg::default();
+                state.ready_at = None;
+                state.last_error = None;
+                state.policy = P::default();
+            }
+            _ => {
+                return Err(DecodeError::OtherString(
+                    "Unknown async task state tag".into(),
+                ));
+            }
+        }
         Ok(())
     }
 }
@@ -754,7 +751,7 @@ mod tests {
     {
         for _ in 0..100 {
             let state = lock_or_recover(&async_task.core.state);
-            if state.inflight.is_none() {
+            if !state.inflight {
                 return;
             }
             drop(state);
@@ -963,8 +960,8 @@ mod tests {
 
             let payload = input.payload().copied().unwrap_or_default();
             output.metadata.process_time.start = ctx.now().into();
-            output.metadata.process_time.end = (ctx.now() + CuDuration::from_nanos(5)).into();
-            output.set_payload(payload + self.seq + ctx.now().as_nanos() as u32);
+            output.metadata.process_time.end = ctx.now().into();
+            output.set_payload(payload + self.seq);
             self.seq = self.seq.saturating_add(1);
             let _ = self.done_tx.send(());
             Ok(())
@@ -1121,68 +1118,45 @@ mod tests {
     }
 
     #[test]
-    fn background_keyframe_relaunches_inflight_with_original_dispatch_context() {
+    fn background_inflight_keyframe_restores_gap_marker() {
         let tp = Arc::new(ThreadPoolBuilder::new().num_threads(1).build().unwrap());
-        let (orig_context, orig_clock) = CuContext::new_mock_clock();
-        let (orig_resources, orig_release_tx, orig_done_rx) = blocking_resources();
-        let mut original: CuAsyncTask<BlockingStampTask, u32, u32> = CuAsyncTask::new(
-            Some(&ComponentConfig::default()),
-            orig_resources,
-            tp.clone(),
-        )
-        .unwrap();
+        let (context, clock) = CuContext::new_mock_clock();
+        let (resources, release_tx, done_rx) = blocking_resources();
+        let mut original: CuAsyncTask<BlockingStampTask, u32, u32> =
+            CuAsyncTask::new(Some(&ComponentConfig::default()), resources, tp.clone()).unwrap();
         let mut output = CuMsg::default();
 
-        orig_clock.set_value(10);
+        clock.set_value(10);
         original
-            .process(&orig_context, &CuMsg::new(Some(1u32)), &mut output)
+            .process(&context, &CuMsg::new(Some(1u32)), &mut output)
             .unwrap();
         assert!(output.payload().is_none());
 
         let frozen = freeze_bytes(&original);
 
-        orig_release_tx.send(()).unwrap();
-        orig_done_rx
+        release_tx.send(()).unwrap();
+        done_rx
             .recv_timeout(Duration::from_secs(1))
             .expect("original worker never finished");
 
         let (replay_context, replay_clock) = CuContext::new_mock_clock();
-        let (replay_resources, replay_release_tx, replay_done_rx) = blocking_resources();
-        let mut replayed: CuAsyncTask<BlockingStampTask, u32, u32> = CuAsyncTask::new(
-            Some(&ComponentConfig::default()),
-            replay_resources,
-            tp.clone(),
-        )
-        .unwrap();
+        let (replay_resources, _replay_release_tx, _replay_done_rx) = blocking_resources();
+        let mut replayed: CuAsyncTask<BlockingStampTask, u32, u32> =
+            CuAsyncTask::new(Some(&ComponentConfig::default()), replay_resources, tp).unwrap();
         thaw_bytes(&mut replayed, &frozen);
 
+        assert!(lock_or_recover(&replayed.core.state).keyframe_gap);
+
         replay_clock.set_value(20);
-        replayed
-            .process(&replay_context, &CuMsg::new(Some(99u32)), &mut output)
-            .unwrap();
-        assert!(output.payload().is_none());
-
-        replay_release_tx.send(()).unwrap();
-        replay_done_rx
-            .recv_timeout(Duration::from_secs(1))
-            .expect("replayed worker never finished");
-
-        replay_clock.set_value(14);
-        replayed
+        let error = replayed
             .process(&replay_context, &CuMsg::new(Some(2u32)), &mut output)
-            .unwrap();
-        assert!(output.payload().is_none());
-
-        replay_clock.set_value(15);
-        replayed
-            .process(&replay_context, &CuMsg::new(Some(2u32)), &mut output)
-            .unwrap();
-        assert_eq!(output.payload(), Some(&11u32));
-
-        replay_release_tx.send(()).unwrap();
-        replay_done_rx
-            .recv_timeout(Duration::from_secs(1))
-            .expect("cleanup replayed worker never finished");
+            .expect_err("partial background keyframe should not resume transparently");
+        assert!(
+            error
+                .to_string()
+                .contains("Background task state unavailable"),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]
@@ -1227,7 +1201,7 @@ mod tests {
         replayed
             .process(&replay_context, &CuMsg::new(Some(3u32)), &mut output)
             .unwrap();
-        assert_eq!(output.payload(), Some(&11u32));
+        assert_eq!(output.payload(), Some(&1u32));
 
         replay_release_tx.send(()).unwrap();
         replay_done_rx
@@ -1238,7 +1212,7 @@ mod tests {
         replayed
             .process(&replay_context, &CuMsg::new(Some(4u32)), &mut output)
             .unwrap();
-        assert_eq!(output.payload(), Some(&18u32));
+        assert_eq!(output.payload(), Some(&3u32));
 
         replay_release_tx.send(()).unwrap();
         replay_done_rx
@@ -1310,7 +1284,7 @@ mod tests {
         replayed
             .process(&replay_context, &msg_with_tov(5, 305), &mut output)
             .unwrap();
-        assert_eq!(output.payload(), Some(&305u32));
+        assert_eq!(output.payload(), Some(&5u32));
 
         replay_release_tx.send(()).unwrap();
         replay_done_rx

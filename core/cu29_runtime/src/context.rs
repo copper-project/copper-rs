@@ -1,7 +1,6 @@
 //! User-facing execution context passed to task and bridge process callbacks.
 
 use core::ops::Deref;
-use cu29_clock::CuTime;
 use cu29_clock::{RobotClock, RobotClockMock};
 
 /// Execution context passed to task and bridge callbacks.
@@ -102,17 +101,6 @@ impl CuContext {
     pub fn task_id(&self) -> Option<&'static str> {
         self.current_task_index
             .and_then(|idx| self.task_ids.get(idx).copied())
-    }
-
-    pub(crate) fn clone_with_fixed_time(&self, cl_id: u64, now: CuTime) -> Self {
-        let (clock, mock) = RobotClock::mock();
-        mock.set_value(now.as_nanos());
-        Self {
-            clock,
-            cl_id,
-            task_ids: self.task_ids,
-            current_task_index: self.current_task_index,
-        }
     }
 }
 
