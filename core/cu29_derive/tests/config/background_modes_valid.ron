@@ -17,8 +17,14 @@
             background: "closest",
         ),
         (id: "sink_next", type: "Sink"),
-        (id: "sink_previous", type: "Sink"),
-        (id: "sink_closest", type: "Sink"),
+        (
+            id: "sink_previous",
+            type: "Sink",
+        ),
+        (
+            id: "sink_closest",
+            type: "Sink",
+        ),
     ],
     cnx: [
         (
