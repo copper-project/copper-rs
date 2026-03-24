@@ -4369,9 +4369,7 @@ fn extract_tasks_single_input_types(graph: &CuGraph) -> Vec<Option<Type>> {
         .iter()
         .map(|(_, node)| {
             let id = node.get_id();
-            let Some(type_names) = graph.get_node_input_msg_types(id.as_str()) else {
-                return None;
-            };
+            let type_names = graph.get_node_input_msg_types(id.as_str())?;
             if type_names.len() != 1 {
                 return None;
             }
