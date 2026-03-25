@@ -22,6 +22,7 @@ use ron::extensions::Extensions;
 use ron::value::Value as RonValue;
 use ron::{Number, Options};
 use serde::de::DeserializeOwned;
+use serde::de::{self, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 #[cfg(not(feature = "std"))]
@@ -460,11 +461,64 @@ impl BackgroundMode {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq)]
-#[serde(untagged)]
+#[derive(Serialize, Debug, Copy, Clone, PartialEq, Eq)]
 enum BackgroundSetting {
     Bool(bool),
     Mode(BackgroundMode),
+}
+
+impl<'de> Deserialize<'de> for BackgroundSetting {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct BackgroundSettingVisitor;
+
+        impl Visitor<'_> for BackgroundSettingVisitor {
+            type Value = BackgroundSetting;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(
+                    formatter,
+                    "`background` to be `false`, `true`, or one of \"foreground\", \"next\", \"previous\", \"closest\""
+                )
+            }
+
+            fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(BackgroundSetting::Bool(value))
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                let mode = match value {
+                    "foreground" => BackgroundMode::Foreground,
+                    "next" => BackgroundMode::Next,
+                    "previous" => BackgroundMode::Previous,
+                    "closest" => BackgroundMode::Closest,
+                    _ => {
+                        return Err(E::custom(format!(
+                            "Invalid value for `background`: {value:?}. Expected `false`, `true`, or one of \"foreground\", \"next\", \"previous\", \"closest\". `true` is equivalent to \"next\"."
+                        )));
+                    }
+                };
+                Ok(BackgroundSetting::Mode(mode))
+            }
+
+            fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                self.visit_str(&value)
+            }
+        }
+
+        deserializer.deserialize_any(BackgroundSettingVisitor)
+    }
 }
 
 impl BackgroundSetting {
@@ -2967,6 +3021,24 @@ mod tests {
                 BackgroundMode::Closest,
             ]
         );
+    }
+
+    #[test]
+    fn test_background_mode_invalid_value_reports_allowed_values() {
+        let txt = r#"
+            (
+                tasks: [
+                    (id: "bad", type: "pkg::Bad", background: "nxt"),
+                ],
+                cnx: [],
+            )
+        "#;
+        let err = CuConfig::deserialize_ron(txt).expect_err("expected invalid background value");
+        let err = err.to_string();
+
+        assert!(err.contains("Invalid value for `background`: \"nxt\""));
+        assert!(err.contains("\"foreground\", \"next\", \"previous\", \"closest\""));
+        assert!(err.contains("`true` is equivalent to \"next\""));
     }
 
     #[test]

@@ -1,5 +1,5 @@
 error: Section size (2 MiB) cannot be larger than slab size (1 MiB). Adjust the parameters accordingly.
-          context:None
+       Fix this configuration error first; later Rust errors are follow-on failures because `#[copper_runtime]` could not generate the runtime types.
  --> tests/compile_fail/copper_runtime/invalid_logging_config.rs:3:1
   |
 3 | #[copper_runtime(config = "config/invalid_logging_config.ron")]

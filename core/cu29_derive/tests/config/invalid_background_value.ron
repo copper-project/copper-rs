@@ -1,0 +1,10 @@
+(
+    tasks: [
+        (
+            id: "worker",
+            type: "Worker",
+            background: "nxt",
+        ),
+    ],
+    cnx: [],
+)

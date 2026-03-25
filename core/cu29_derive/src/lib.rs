@@ -42,6 +42,21 @@ fn return_error(msg: String) -> TokenStream {
         .into()
 }
 
+fn format_macro_error(err: impl std::fmt::Display) -> String {
+    let message = err.to_string();
+    message
+        .strip_suffix("\n   context:None")
+        .unwrap_or(&message)
+        .to_string()
+}
+
+fn format_runtime_config_error(err: impl std::fmt::Display) -> String {
+    format!(
+        "{}\nFix this configuration error first; later Rust errors are follow-on failures because `#[copper_runtime]` could not generate the runtime types.",
+        format_macro_error(err)
+    )
+}
+
 fn rtsan_guard_tokens() -> proc_macro2::TokenStream {
     if cfg!(feature = "rtsan") {
         quote! {
@@ -109,7 +124,7 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
     eprintln!("[gen culist support with {config:?}]");
     let cuconfig = match read_config(&config) {
         Ok(cuconfig) => cuconfig,
-        Err(e) => return return_error(e.to_string()),
+        Err(e) => return return_error(format_macro_error(e)),
     };
 
     let extra_imports = if !std {
@@ -912,7 +927,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let copper_config = match read_config(&config_file) {
         Ok(cuconfig) => cuconfig,
-        Err(e) => return return_error(e.to_string()),
+        Err(e) => return return_error(format_runtime_config_error(e)),
     };
     let copperlist_count = copper_config
         .logging
