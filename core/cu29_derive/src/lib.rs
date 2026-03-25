@@ -14,7 +14,7 @@ use syn::{
 use crate::utils::{config_id_to_bridge_const, config_id_to_enum, config_id_to_struct_member};
 use cu29_runtime::config::CuConfig;
 use cu29_runtime::config::{
-    BridgeChannelConfigRepresentation, ConfigGraphs, CuGraph, Flavor, Node, NodeId,
+    BackgroundMode, BridgeChannelConfigRepresentation, ConfigGraphs, CuGraph, Flavor, Node, NodeId,
     ResourceBundleConfig, read_configuration,
 };
 use cu29_runtime::curuntime::{
@@ -40,6 +40,21 @@ fn return_error(msg: String) -> TokenStream {
     syn::Error::new(Span::call_site(), msg)
         .to_compile_error()
         .into()
+}
+
+fn format_macro_error(err: impl std::fmt::Display) -> String {
+    let message = err.to_string();
+    message
+        .strip_suffix("\n   context:None")
+        .unwrap_or(&message)
+        .to_string()
+}
+
+fn format_runtime_config_error(err: impl std::fmt::Display) -> String {
+    format!(
+        "{}\nFix this configuration error first; later Rust errors are follow-on failures because `#[copper_runtime]` could not generate the runtime types.",
+        format_macro_error(err)
+    )
 }
 
 fn rtsan_guard_tokens() -> proc_macro2::TokenStream {
@@ -109,7 +124,7 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
     eprintln!("[gen culist support with {config:?}]");
     let cuconfig = match read_config(&config) {
         Ok(cuconfig) => cuconfig,
-        Err(e) => return return_error(e.to_string()),
+        Err(e) => return return_error(format_macro_error(e)),
     };
 
     let extra_imports = if !std {
@@ -912,7 +927,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let copper_config = match read_config(&config_file) {
         Ok(cuconfig) => cuconfig,
-        Err(e) => return return_error(e.to_string()),
+        Err(e) => return return_error(format_runtime_config_error(e)),
     };
     let copperlist_count = copper_config
         .logging
@@ -1059,6 +1074,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         #[cfg(feature = "macro_debug")]
         eprintln!("[extract tasks ids & types]");
         let task_specs = CuTaskSpecSet::from_graph(graph);
+        if !std
+            && task_specs
+                .background_modes
+                .iter()
+                .any(|mode| mode.is_background())
+        {
+            return return_error("Background tasks require the `std` feature".to_string());
+        }
 
         let culist_channel_usage = collect_bridge_channel_usage(graph);
         let mut culist_bridge_specs =
@@ -1097,7 +1120,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             task_resource_mappings,
             bridge_resource_mappings,
         ) = if ignore_resources {
-            if task_specs.background_flags.iter().any(|&flag| flag) {
+            if task_specs
+                .background_modes
+                .iter()
+                .any(|mode| mode.is_background())
+            {
                 return return_error(
                     "`ignore_resources` cannot be used with background tasks because they require the threadpool resource bundle"
                         .to_string(),
@@ -1130,7 +1157,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 Ok(specs) => specs,
                 Err(e) => return return_error(e.to_string()),
             };
-            let threadpool_bundle_index = if task_specs.background_flags.iter().any(|&flag| flag) {
+            let threadpool_bundle_index = if task_specs
+                .background_modes
+                .iter()
+                .any(|mode| mode.is_background())
+            {
                 match bundle_specs
                     .iter()
                     .position(|bundle| bundle.id == "threadpool")
@@ -1483,13 +1514,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             .iter()
             .zip(&task_specs.cutypes)
             .zip(&task_specs.sim_task_types)
-            .zip(&task_specs.background_flags)
+            .zip(&task_specs.background_modes)
             .zip(&task_specs.run_in_sim_flags)
+            .zip(task_specs.input_types.iter())
             .zip(task_specs.output_types.iter())
-            .map(|(((((task_id, task_type), sim_type), background), run_in_sim), output_type)| {
+            .map(
+                |((((((task_id, task_type), sim_type), background_mode), run_in_sim), input_type), output_type)| {
                 match task_type {
                     CuTaskType::Source => {
-                        if *background {
+                        if background_mode.is_background() {
                             panic!("CuSrcTask {task_id} cannot be a background task, it should be a regular task.");
                         }
                         if *run_in_sim {
@@ -1503,9 +1536,19 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         }
                     }
                     CuTaskType::Regular => {
-                        if *background {
+                        if background_mode.is_background() {
+                            let input_type = input_type.as_ref().unwrap_or_else(|| {
+                                panic!(
+                                    "{task_id}: Background tasks currently require exactly one input message"
+                                )
+                            });
                             if let Some(out_ty) = output_type {
-                                parse_quote!(CuAsyncTask<#sim_type, #out_ty>)
+                                wrap_background_task_type(
+                                    *background_mode,
+                                    sim_type,
+                                    input_type,
+                                    out_ty,
+                                )
                             } else {
                                 panic!("{task_id}: If a task is background, it has to have an output");
                             }
@@ -1515,7 +1558,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         }
                     },
                     CuTaskType::Sink => {
-                        if *background {
+                        if background_mode.is_background() {
                             panic!("CuSinkTask {task_id} cannot be a background task, it should be a regular task.");
                         }
 
@@ -1570,7 +1613,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     task_specs.type_names[index], index
                 );
                 let mapping_ref = task_resource_mappings.refs[index].clone();
-                let background = task_specs.background_flags[index];
+                let background_mode = task_specs.background_modes[index];
                 let inner_task_type = &task_specs.sim_task_types[index];
                 match task_specs.cutypes[index] {
                     CuTaskType::Source => quote! {
@@ -1584,7 +1627,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         }
                     },
                     CuTaskType::Regular => {
-                        if background {
+                        if background_mode.is_background() {
                             let threadpool_bundle_index = threadpool_bundle_index
                                 .expect("threadpool bundle missing for background tasks");
                             quote! {
@@ -1636,9 +1679,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let task_instances_init_code = task_specs
             .instantiation_types
             .iter()
-            .zip(&task_specs.background_flags)
+            .zip(&task_specs.background_modes)
             .enumerate()
-            .map(|(index, (task_type, background))| {
+            .map(|(index, (task_type, background_mode))| {
                 let additional_error_info = format!(
                     "Failed to get create instance for {}, instance index {}.",
                     task_specs.type_names[index], index
@@ -1657,7 +1700,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         }
                     },
                     CuTaskType::Regular => {
-                        if *background {
+                        if background_mode.is_background() {
                             let threadpool_bundle_index = threadpool_bundle_index
                                 .expect("threadpool bundle missing for background tasks");
                             quote! {
@@ -4125,6 +4168,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {
                 use cu29::rayon::ThreadPool;
                 use cu29::cuasynctask::CuAsyncTask;
+                use cu29::cuasynctask::CuAsyncTaskClosest;
+                use cu29::cuasynctask::CuAsyncTaskPrevious;
                 use cu29::curuntime::CopperContext;
                 use cu29::resource::{ResourceBindings, ResourceManager};
                 use cu29::prelude::SectionStorage;
@@ -4333,16 +4378,73 @@ fn extract_tasks_output_types(graph: &CuGraph) -> Vec<Option<Type>> {
         .collect()
 }
 
+fn extract_tasks_single_input_types(graph: &CuGraph) -> Vec<Option<Type>> {
+    graph
+        .get_all_nodes()
+        .iter()
+        .map(|(_, node)| {
+            let id = node.get_id();
+            let type_names = graph.get_node_input_msg_types(id.as_str())?;
+            if type_names.len() != 1 {
+                return None;
+            }
+            Some(
+                parse_str::<Type>(type_names[0].as_str())
+                    .expect("Could not parse input message type."),
+            )
+        })
+        .collect()
+}
+
+fn wrap_background_task_type(
+    mode: BackgroundMode,
+    inner_type: &Type,
+    input_type: &Type,
+    output_type: &Type,
+) -> Type {
+    match mode {
+        BackgroundMode::Foreground => inner_type.clone(),
+        BackgroundMode::Next => parse_quote!(CuAsyncTask<#inner_type, #input_type, #output_type>),
+        BackgroundMode::Previous => {
+            parse_quote!(CuAsyncTaskPrevious<#inner_type, #input_type, #output_type>)
+        }
+        BackgroundMode::Closest => {
+            parse_quote!(CuAsyncTaskClosest<#inner_type, #input_type, #output_type>)
+        }
+    }
+}
+
+fn wrap_background_instantiation_type(
+    mode: BackgroundMode,
+    inner_type: &Type,
+    input_type: &Type,
+    output_type: &Type,
+) -> Type {
+    match mode {
+        BackgroundMode::Foreground => inner_type.clone(),
+        BackgroundMode::Next => {
+            parse_quote!(CuAsyncTask::<#inner_type, #input_type, #output_type>)
+        }
+        BackgroundMode::Previous => {
+            parse_quote!(CuAsyncTaskPrevious::<#inner_type, #input_type, #output_type>)
+        }
+        BackgroundMode::Closest => {
+            parse_quote!(CuAsyncTaskClosest::<#inner_type, #input_type, #output_type>)
+        }
+    }
+}
+
 struct CuTaskSpecSet {
     pub ids: Vec<String>,
     pub cutypes: Vec<CuTaskType>,
-    pub background_flags: Vec<bool>,
+    pub background_modes: Vec<BackgroundMode>,
     pub logging_enabled: Vec<bool>,
     pub type_names: Vec<String>,
     pub task_types: Vec<Type>,
     pub instantiation_types: Vec<Type>,
     pub sim_task_types: Vec<Type>,
     pub run_in_sim_flags: Vec<bool>,
+    pub input_types: Vec<Option<Type>>,
     #[allow(dead_code)]
     pub output_types: Vec<Option<Type>>,
     pub node_id_to_task_index: Vec<Option<usize>>,
@@ -4366,9 +4468,9 @@ impl CuTaskSpecSet {
             .map(|(id, _)| find_task_type_for_id(graph, *id))
             .collect();
 
-        let background_flags: Vec<bool> = all_id_nodes
+        let background_modes: Vec<BackgroundMode> = all_id_nodes
             .iter()
-            .map(|(_, node)| node.is_background())
+            .map(|(_, node)| node.background_mode())
             .collect();
 
         let logging_enabled: Vec<bool> = all_id_nodes
@@ -4381,19 +4483,31 @@ impl CuTaskSpecSet {
             .map(|(_, node)| node.get_type().to_string())
             .collect();
 
+        let input_types = extract_tasks_single_input_types(graph);
         let output_types = extract_tasks_output_types(graph);
 
         let task_types = type_names
             .iter()
-            .zip(background_flags.iter())
+            .zip(background_modes.iter())
+            .zip(input_types.iter())
             .zip(output_types.iter())
-            .map(|((name, &background), output_type)| {
+            .map(|(((name, &background_mode), input_type), output_type)| {
                 let name_type = parse_str::<Type>(name).unwrap_or_else(|error| {
                     panic!("Could not transform {name} into a Task Rust type: {error}");
                 });
-                if background {
+                if background_mode.is_background() {
+                    let input_type = input_type.as_ref().unwrap_or_else(|| {
+                        panic!(
+                            "{name}: Background tasks currently require exactly one input message"
+                        )
+                    });
                     if let Some(output_type) = output_type {
-                        parse_quote!(CuAsyncTask<#name_type, #output_type>)
+                        wrap_background_task_type(
+                            background_mode,
+                            &name_type,
+                            input_type,
+                            output_type,
+                        )
                     } else {
                         panic!("{name}: If a task is background, it has to have an output");
                     }
@@ -4405,15 +4519,26 @@ impl CuTaskSpecSet {
 
         let instantiation_types = type_names
             .iter()
-            .zip(background_flags.iter())
+            .zip(background_modes.iter())
+            .zip(input_types.iter())
             .zip(output_types.iter())
-            .map(|((name, &background), output_type)| {
+            .map(|(((name, &background_mode), input_type), output_type)| {
                 let name_type = parse_str::<Type>(name).unwrap_or_else(|error| {
                     panic!("Could not transform {name} into a Task Rust type: {error}");
                 });
-                if background {
+                if background_mode.is_background() {
+                    let input_type = input_type.as_ref().unwrap_or_else(|| {
+                        panic!(
+                            "{name}: Background tasks currently require exactly one input message"
+                        )
+                    });
                     if let Some(output_type) = output_type {
-                        parse_quote!(CuAsyncTask::<#name_type, #output_type>)
+                        wrap_background_instantiation_type(
+                            background_mode,
+                            &name_type,
+                            input_type,
+                            output_type,
+                        )
                     } else {
                         panic!("{name}: If a task is background, it has to have an output");
                     }
@@ -4446,13 +4571,14 @@ impl CuTaskSpecSet {
         Self {
             ids,
             cutypes,
-            background_flags,
+            background_modes,
             logging_enabled,
             type_names,
             task_types,
             instantiation_types,
             sim_task_types,
             run_in_sim_flags,
+            input_types,
             output_types,
             node_id_to_task_index,
         }
@@ -5118,7 +5244,7 @@ fn build_task_resource_mappings(
             continue;
         }
 
-        let binding_task_type = if task_specs.background_flags[idx] {
+        let binding_task_type = if task_specs.background_modes[idx].is_background() {
             &task_specs.sim_task_types[idx]
         } else {
             &task_specs.task_types[idx]

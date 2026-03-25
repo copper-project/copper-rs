@@ -1,0 +1,29 @@
+(
+    tasks: [
+        (id: "src_a", type: "SourceA"),
+        (id: "src_b", type: "SourceB"),
+        (
+            id: "join",
+            type: "JoinTask",
+            background: "previous",
+        ),
+        (id: "sink", type: "Sink"),
+    ],
+    cnx: [
+        (
+            src: "src_a",
+            dst: "join",
+            msg: "i32",
+        ),
+        (
+            src: "src_b",
+            dst: "join",
+            msg: "i32",
+        ),
+        (
+            src: "join",
+            dst: "sink",
+            msg: "i32",
+        ),
+    ],
+)

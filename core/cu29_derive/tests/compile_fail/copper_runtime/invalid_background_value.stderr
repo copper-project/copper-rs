@@ -1,0 +1,8 @@
+error: Failed to parse configuration: Error: Invalid value for `background`: "nxt". Expected `false`, `true`, or one of "foreground", "next", "previous", "closest". `true` is equivalent to "next". at position 6:26-6:30
+       Fix this configuration error first; later Rust errors are follow-on failures because `#[copper_runtime]` could not generate the runtime types.
+ --> tests/compile_fail/copper_runtime/invalid_background_value.rs:3:1
+  |
+3 | #[copper_runtime(config = "config/invalid_background_value.ron")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `copper_runtime` (in Nightly builds, run with -Z macro-backtrace for more info)

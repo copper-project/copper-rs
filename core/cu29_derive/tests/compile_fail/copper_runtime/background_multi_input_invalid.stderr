@@ -1,0 +1,7 @@
+error: custom attribute panicked
+  --> tests/compile_fail/copper_runtime/background_multi_input_invalid.rs:87:1
+   |
+87 | #[copper_runtime(config = "config/background_multi_input_invalid.ron")]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: message: JoinTask: Background tasks currently require exactly one input message

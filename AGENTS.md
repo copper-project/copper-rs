@@ -215,6 +215,8 @@ Implications:
 ## Runtime And Memory Constraints
 
 - Copper should never allocate on the real-time stack/path.
+- Treat keyframe construction and task/bridge freezing as part of the live path, not startup/teardown.
+- Do not introduce heap allocation/deallocation in keyframe capture, task freeze/thaw plumbing used during live execution, or any other per-copperlist hot path.
 - Copper should be very cautious about startup allocation volume.
   - `no_std` targets may have extremely small memory budgets.
 - Prefer preallocation, fixed capacity, and compile-time sizing where practical.
