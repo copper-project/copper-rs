@@ -16,10 +16,10 @@
 //! - [`PyTaskMode::Process`]: spawn a separate interpreter and exchange
 //!   length-prefixed CBOR frames over stdin/stdout. This avoids putting the GIL
 //!   inside the Copper process, but adds another serialization layer, extra
-//!   copying, allocations, IPC overhead, and scheduler jitter.
-//! - [`PyTaskMode::ProcessShm`]: like process mode, but `CuHandle` fields backed
-//!   by Copper shared-memory buffers are exported as descriptors so Python can
-//!   read or write the underlying bytes without copying them through CBOR.
+//!   copying, allocations, IPC overhead, and scheduler jitter. If a payload
+//!   contains `CuHandle<CuSharedMemoryBuffer<T>>`, the handle is exported by
+//!   descriptor so Python can read or write the underlying shared-memory bytes
+//!   without copying them through CBOR.
 //! - [`PyTaskMode::Embedded`]: call Python in-process through PyO3. This avoids
 //!   the external CBOR transport, but executes under the GIL inside the Copper
 //!   process and still allocates and converts values on every call.
@@ -398,10 +398,9 @@ pub enum PyTaskMode {
     ///
     /// This keeps the GIL out of the Copper process, but every cycle pays for
     /// CBOR serialization, copies, allocations, IPC, and process scheduling.
+    /// Shared-memory-backed `CuHandle` buffers are exported by descriptor
+    /// automatically on this path.
     Process,
-    /// Run the task in a separate Python interpreter and export shared-memory
-    /// `CuHandle` buffers by descriptor instead of by value.
-    ProcessShm,
     /// Run the task inside the Copper process through PyO3.
     ///
     /// This removes the external transport layer, but now the GIL and Python
@@ -414,7 +413,6 @@ impl PyTaskMode {
     fn parse(value: &str) -> Option<Self> {
         match value.trim().to_ascii_lowercase().as_str() {
             "process" => Some(Self::Process),
-            "process_shm" | "process-shm" => Some(Self::ProcessShm),
             "embedded" => Some(Self::Embedded),
             _ => None,
         }
@@ -766,7 +764,7 @@ fn parse_mode(config: Option<&ComponentConfig>) -> CuResult<PyTaskMode> {
     };
     PyTaskMode::parse(&raw).ok_or_else(|| {
         CuError::from(format!(
-            "Unsupported Python task mode '{raw}', expected 'process', 'process_shm', or 'embedded'"
+            "Unsupported Python task mode '{raw}', expected 'process' or 'embedded'"
         ))
     })
 }
@@ -801,8 +799,7 @@ enum PythonBackend {
 impl PythonBackend {
     fn launch(mode: PyTaskMode, script: &Path) -> CuResult<Self> {
         match mode {
-            PyTaskMode::Process => Ok(Self::Process(ProcessBackend::start(script, false)?)),
-            PyTaskMode::ProcessShm => Ok(Self::Process(ProcessBackend::start(script, true)?)),
+            PyTaskMode::Process => Ok(Self::Process(ProcessBackend::start(script)?)),
             PyTaskMode::Embedded => Ok(Self::Embedded(EmbeddedBackend::start(script)?)),
         }
     }
@@ -848,11 +845,10 @@ struct ProcessBackend {
     child: Child,
     stdin: ChildStdin,
     stdout: BufReader<ChildStdout>,
-    shared_handles: bool,
 }
 
 impl ProcessBackend {
-    fn start(script: &Path, shared_handles: bool) -> CuResult<Self> {
+    fn start(script: &Path) -> CuResult<Self> {
         let python = python_command()?;
         let mut child = Command::new(python)
             .arg("-u")
@@ -878,7 +874,6 @@ impl ProcessBackend {
             child,
             stdin,
             stdout: BufReader::new(stdout),
-            shared_handles,
         };
         backend.wait_ready()?;
         Ok(backend)
@@ -930,7 +925,7 @@ impl ProcessBackend {
         O: Serialize + DeserializeOwned,
     {
         let child_request = request.as_child_request();
-        write_cbor_frame(&mut self.stdin, &child_request, self.shared_handles)?;
+        write_cbor_frame(&mut self.stdin, &child_request)?;
         match read_cbor_frame::<_, ChildResponse<S, O>>(&mut self.stdout)? {
             ChildResponse::Result { state, output } => Ok(ProcessResult { state, output }),
             ChildResponse::State { .. } => Err(CuError::from(
@@ -966,7 +961,7 @@ impl ProcessBackend {
             state: state.clone(),
         };
         let child_request = request.as_child_request(hook);
-        write_cbor_frame(&mut self.stdin, &child_request, self.shared_handles)?;
+        write_cbor_frame(&mut self.stdin, &child_request)?;
         match read_cbor_frame::<_, ChildResponse<S, ()>>(&mut self.stdout)? {
             ChildResponse::State { state: new_state } => {
                 *state = new_state;
@@ -989,11 +984,7 @@ impl ProcessBackend {
         S: Serialize + DeserializeOwned + Clone,
     {
         self.call_state_hook(StateHook::Stop, ctx, state)?;
-        let _ = write_cbor_frame(
-            &mut self.stdin,
-            &ChildRequest::<(), (), ()>::Shutdown,
-            self.shared_handles,
-        );
+        let _ = write_cbor_frame(&mut self.stdin, &ChildRequest::<(), (), ()>::Shutdown);
         self.child
             .wait()
             .map_err(|e| CuError::new_with_cause("Failed to wait for Python task process", e))?;
@@ -1202,18 +1193,14 @@ fn detect_python_command() -> Option<&'static str> {
     })
 }
 
-fn write_cbor_frame<W, T>(writer: &mut W, value: &T, shared_handles: bool) -> CuResult<()>
+fn write_cbor_frame<W, T>(writer: &mut W, value: &T) -> CuResult<()>
 where
     W: Write,
     T: Serialize,
 {
-    let value = if shared_handles {
-        let _guard = enable_shared_handle_serialization();
-        to_value(value)
-    } else {
-        to_value(value)
-    }
-    .map_err(|e| CuError::new_with_cause("Failed to encode Python task CBOR value", e))?;
+    let _guard = enable_shared_handle_serialization();
+    let value = to_value(value)
+        .map_err(|e| CuError::new_with_cause("Failed to encode Python task CBOR value", e))?;
     let payload = encode_wire_value(&value)?;
     if payload.len() > MAX_CBOR_FRAME_BYTES {
         return Err(CuError::from(format!(
@@ -1639,13 +1626,6 @@ mod tests {
     }
 
     #[test]
-    fn mode_parses_process_shm() {
-        let mut cfg = ComponentConfig::new();
-        cfg.set("mode", "process_shm".to_string());
-        assert_eq!(parse_mode(Some(&cfg)).unwrap(), PyTaskMode::ProcessShm);
-    }
-
-    #[test]
     fn invalid_mode_is_rejected() {
         let mut cfg = ComponentConfig::new();
         cfg.set("mode", "nope".to_string());
@@ -1724,7 +1704,7 @@ mod tests {
         let ctx = test_context(1, 7);
         let (_temp_dir, script) =
             write_test_script("def process(ctx, inp, state, output):\n    state['seen'] = True\n");
-        let mut backend = ProcessBackend::start(&script, false).expect("start backend");
+        let mut backend = ProcessBackend::start(&script).expect("start backend");
         let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
 
         let mut result: ProcessResult<SeenState, PyCuMsg<TestPayload>> = backend
@@ -1750,7 +1730,7 @@ mod tests {
         let (_temp_dir, script) = write_test_script(
             "def process(ctx, inp, state, output):\n    output.payload.value = 41\n    output.payload.flag = True\n",
         );
-        let mut backend = ProcessBackend::start(&script, false).expect("start backend");
+        let mut backend = ProcessBackend::start(&script).expect("start backend");
         let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
 
         let mut result: ProcessResult<(), PyCuMsg<TestPayload>> = backend
@@ -1781,7 +1761,7 @@ mod tests {
         let (_temp_dir, script) = write_test_script(
             "def process(ctx, inp, current_state, out):\n    current_state = current_state + 1\n",
         );
-        let mut backend = ProcessBackend::start(&script, false).expect("start backend");
+        let mut backend = ProcessBackend::start(&script).expect("start backend");
         let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
 
         let mut result: ProcessResult<u64, PyCuMsg<TestPayload>> = backend
@@ -1808,7 +1788,7 @@ mod tests {
         let (_temp_dir, script) = write_test_script(
             "def process(ctx, inp, state, output):\n    output.payload.value = ctx.now()\n    output.payload.flag = (ctx.cl_id == 7 and ctx.task_id == 'py' and ctx.task_index == 0)\n",
         );
-        let mut backend = ProcessBackend::start(&script, false).expect("start backend");
+        let mut backend = ProcessBackend::start(&script).expect("start backend");
         let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
 
         let mut result: ProcessResult<(), PyCuMsg<TestPayload>> = backend
@@ -1838,7 +1818,7 @@ mod tests {
         let ctx = test_context(41, 7);
         let (_temp_dir, script) =
             write_test_script("def process(ctx, inp, state, output):\n    pass\n");
-        let mut backend = ProcessBackend::start(&script, false).expect("start backend");
+        let mut backend = ProcessBackend::start(&script).expect("start backend");
         let mut state = 11_u64;
 
         backend.start_hook(&ctx, &mut state).expect("start hook");
@@ -1857,7 +1837,7 @@ mod tests {
 def process(ctx, inp, state, output):\n    pass\n\n\
 def stop(ctx, state):\n    state = state + ctx.cl_id\n",
         );
-        let mut backend = ProcessBackend::start(&script, false).expect("start backend");
+        let mut backend = ProcessBackend::start(&script).expect("start backend");
         let mut state = 0_u64;
 
         backend
@@ -1883,7 +1863,7 @@ def stop(ctx, state):\n    state = state + ctx.cl_id\n",
         let handle = pool.acquire().expect("pooled handle");
         handle.with_inner_mut(|inner| inner.copy_from_slice(&[1, 2, 3, 4]));
 
-        let mut backend = ProcessBackend::start(&script, true).expect("start backend");
+        let mut backend = ProcessBackend::start(&script).expect("start backend");
         let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
         let mut result: ProcessResult<(), PyCuMsg<TestPayload>> = backend
             .process(
@@ -1917,14 +1897,14 @@ def stop(ctx, state):\n    state = state + ctx.cl_id\n",
         let large_u128 = u128::from(u64::MAX) + 99;
         let large_i128 = i128::from(i64::MIN) - 99;
 
-        write_cbor_frame(&mut buffer, &large_u128, false).expect("serialize u128");
+        write_cbor_frame(&mut buffer, &large_u128).expect("serialize u128");
         let decoded_u128 = read_cbor_frame::<_, u128>(&mut std::io::Cursor::new(&buffer))
             .expect("deserialize u128");
         assert_eq!(decoded_u128, large_u128);
 
         buffer.clear();
 
-        write_cbor_frame(&mut buffer, &large_i128, false).expect("serialize i128");
+        write_cbor_frame(&mut buffer, &large_i128).expect("serialize i128");
         let decoded_i128 = read_cbor_frame::<_, i128>(&mut std::io::Cursor::new(&buffer))
             .expect("deserialize i128");
         assert_eq!(decoded_i128, large_i128);

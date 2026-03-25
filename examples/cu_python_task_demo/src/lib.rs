@@ -245,7 +245,6 @@ pub fn config_for_mode(mode: PyTaskMode) -> CuConfig {
         "mode",
         match mode {
             PyTaskMode::Process => "process".to_string(),
-            PyTaskMode::ProcessShm => "process_shm".to_string(),
             PyTaskMode::Embedded => "embedded".to_string(),
         },
     );
