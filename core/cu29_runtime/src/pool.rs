@@ -6,12 +6,22 @@ use bincode::{Decode, Encode};
 use cu29_traits::CuResult;
 use hashbrown::HashMap;
 use object_pool::{Pool, ReusableOwned};
+use serde::de::{self, MapAccess, SeqAccess, Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::SmallVec;
 use std::alloc::{Layout, alloc, dealloc};
+use std::cell::Cell;
+use std::cell::UnsafeCell;
 use std::fmt::Debug;
+use std::fs::OpenOptions;
+use std::marker::PhantomData;
 use std::mem::{align_of, size_of};
 use std::ops::{Deref, DerefMut};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
+
+use memmap2::{MmapMut, MmapOptions};
+use tempfile::NamedTempFile;
 
 type PoolID = ArrayString<64>;
 
@@ -97,6 +107,314 @@ pub trait ArrayLike: Deref<Target = [Self::Element]> + DerefMut + Debug + Sync +
     type Element: ElementType;
 }
 
+thread_local! {
+    static SHARED_HANDLE_SERIALIZATION_ENABLED: Cell<bool> = const { Cell::new(false) };
+}
+
+pub struct SharedHandleSerializationGuard {
+    previous: bool,
+}
+
+impl Drop for SharedHandleSerializationGuard {
+    fn drop(&mut self) {
+        SHARED_HANDLE_SERIALIZATION_ENABLED.with(|enabled| enabled.set(self.previous));
+    }
+}
+
+pub fn enable_shared_handle_serialization() -> SharedHandleSerializationGuard {
+    let previous = SHARED_HANDLE_SERIALIZATION_ENABLED.with(|enabled| {
+        let previous = enabled.get();
+        enabled.set(true);
+        previous
+    });
+    SharedHandleSerializationGuard { previous }
+}
+
+fn shared_handle_serialization_enabled() -> bool {
+    SHARED_HANDLE_SERIALIZATION_ENABLED.with(Cell::get)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CuSharedMemoryElementType {
+    U8,
+    U16,
+    U32,
+    U64,
+    I8,
+    I16,
+    I32,
+    I64,
+    F32,
+    F64,
+}
+
+impl CuSharedMemoryElementType {
+    pub fn of<E: ElementType + 'static>() -> Option<Self> {
+        let type_id = core::any::TypeId::of::<E>();
+        if type_id == core::any::TypeId::of::<u8>() {
+            Some(Self::U8)
+        } else if type_id == core::any::TypeId::of::<u16>() {
+            Some(Self::U16)
+        } else if type_id == core::any::TypeId::of::<u32>() {
+            Some(Self::U32)
+        } else if type_id == core::any::TypeId::of::<u64>() {
+            Some(Self::U64)
+        } else if type_id == core::any::TypeId::of::<i8>() {
+            Some(Self::I8)
+        } else if type_id == core::any::TypeId::of::<i16>() {
+            Some(Self::I16)
+        } else if type_id == core::any::TypeId::of::<i32>() {
+            Some(Self::I32)
+        } else if type_id == core::any::TypeId::of::<i64>() {
+            Some(Self::I64)
+        } else if type_id == core::any::TypeId::of::<f32>() {
+            Some(Self::F32)
+        } else if type_id == core::any::TypeId::of::<f64>() {
+            Some(Self::F64)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CuSharedMemoryHandleDescriptor {
+    #[serde(rename = "__cu_shm_handle__")]
+    pub marker: bool,
+    pub path: String,
+    pub offset_bytes: usize,
+    pub len_elements: usize,
+    pub element_type: CuSharedMemoryElementType,
+}
+
+impl CuSharedMemoryHandleDescriptor {
+    fn new(
+        path: String,
+        offset_bytes: usize,
+        len_elements: usize,
+        element_type: CuSharedMemoryElementType,
+    ) -> Self {
+        Self {
+            marker: true,
+            path,
+            offset_bytes,
+            len_elements,
+            element_type,
+        }
+    }
+}
+
+struct CuSharedMemoryRegion {
+    path: PathBuf,
+    mmap: UnsafeCell<MmapMut>,
+    _backing_file: Option<NamedTempFile>,
+}
+
+impl CuSharedMemoryRegion {
+    fn create(byte_len: usize) -> CuResult<Arc<Self>> {
+        let file = NamedTempFile::new()
+            .map_err(|e| cu29_traits::CuError::new_with_cause("create shared memory file", e))?;
+        file.as_file()
+            .set_len(byte_len as u64)
+            .map_err(|e| cu29_traits::CuError::new_with_cause("size shared memory file", e))?;
+        let mmap = unsafe {
+            MmapOptions::new()
+                .len(byte_len)
+                .map_mut(file.as_file())
+                .map_err(|e| cu29_traits::CuError::new_with_cause("map shared memory file", e))?
+        };
+        let region = Arc::new(Self {
+            path: file.path().to_path_buf(),
+            mmap: UnsafeCell::new(mmap),
+            _backing_file: Some(file),
+        });
+        cache_shared_region(region.clone());
+        Ok(region)
+    }
+
+    fn open(path: &Path) -> CuResult<Arc<Self>> {
+        if let Some(region) = cached_shared_region(path) {
+            return Ok(region);
+        }
+
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(path)
+            .map_err(|e| cu29_traits::CuError::new_with_cause("open shared memory file", e))?;
+        let len = file
+            .metadata()
+            .map_err(|e| cu29_traits::CuError::new_with_cause("stat shared memory file", e))?
+            .len() as usize;
+        let mmap = unsafe {
+            MmapOptions::new()
+                .len(len)
+                .map_mut(&file)
+                .map_err(|e| cu29_traits::CuError::new_with_cause("map shared memory file", e))?
+        };
+        let region = Arc::new(Self {
+            path: path.to_path_buf(),
+            mmap: UnsafeCell::new(mmap),
+            _backing_file: None,
+        });
+        cache_shared_region(region.clone());
+        Ok(region)
+    }
+}
+
+impl Debug for CuSharedMemoryRegion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CuSharedMemoryRegion")
+            .field("path", &self.path)
+            .finish_non_exhaustive()
+    }
+}
+
+// SAFETY:
+// Access to the mapped bytes is mediated through Copper handles and pool slot
+// leasing, so cross-thread aliasing follows the same external synchronization as
+// other mutable payload buffers.
+unsafe impl Send for CuSharedMemoryRegion {}
+// SAFETY:
+// See `Send` rationale above.
+unsafe impl Sync for CuSharedMemoryRegion {}
+
+fn shared_region_cache() -> &'static Mutex<HashMap<PathBuf, std::sync::Weak<CuSharedMemoryRegion>>>
+{
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, std::sync::Weak<CuSharedMemoryRegion>>>> =
+        OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn cache_shared_region(region: Arc<CuSharedMemoryRegion>) {
+    lock_unpoison(shared_region_cache()).insert(region.path.clone(), Arc::downgrade(&region));
+}
+
+fn cached_shared_region(path: &Path) -> Option<Arc<CuSharedMemoryRegion>> {
+    lock_unpoison(shared_region_cache())
+        .get(path)
+        .and_then(std::sync::Weak::upgrade)
+}
+
+fn shared_slot_stride<E: ElementType>(len_elements: usize) -> usize {
+    let raw_bytes = len_elements
+        .checked_mul(size_of::<E>())
+        .expect("shared memory slot size overflow");
+    let alignment = align_of::<E>().max(1);
+    raw_bytes.div_ceil(alignment) * alignment
+}
+
+#[derive(Debug)]
+pub struct CuSharedMemoryBuffer<E: ElementType> {
+    region: Arc<CuSharedMemoryRegion>,
+    offset_bytes: usize,
+    len_elements: usize,
+    _marker: PhantomData<E>,
+}
+
+impl<E: ElementType + 'static> CuSharedMemoryBuffer<E> {
+    fn from_region(
+        region: Arc<CuSharedMemoryRegion>,
+        offset_bytes: usize,
+        len_elements: usize,
+    ) -> Self {
+        Self {
+            region,
+            offset_bytes,
+            len_elements,
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn from_vec_detached(data: Vec<E>) -> CuResult<Self> {
+        let len_elements = data.len();
+        let slot_stride = shared_slot_stride::<E>(len_elements.max(1));
+        let region = CuSharedMemoryRegion::create(slot_stride)?;
+        let mut buffer = Self::from_region(region, 0, len_elements);
+        if !data.is_empty() {
+            buffer.copy_from_slice(&data);
+        }
+        Ok(buffer)
+    }
+
+    pub fn from_descriptor(descriptor: &CuSharedMemoryHandleDescriptor) -> CuResult<Self> {
+        let expected = CuSharedMemoryElementType::of::<E>()
+            .ok_or_else(|| cu29_traits::CuError::from("unsupported shared memory element type"))?;
+        if descriptor.element_type != expected {
+            return Err(cu29_traits::CuError::from(
+                "shared memory descriptor element type mismatch",
+            ));
+        }
+        let region = CuSharedMemoryRegion::open(Path::new(&descriptor.path))?;
+        Ok(Self::from_region(
+            region,
+            descriptor.offset_bytes,
+            descriptor.len_elements,
+        ))
+    }
+
+    pub fn descriptor(&self) -> Option<CuSharedMemoryHandleDescriptor>
+    where
+        E: 'static,
+    {
+        CuSharedMemoryElementType::of::<E>().map(|element_type| {
+            CuSharedMemoryHandleDescriptor::new(
+                self.region.path.display().to_string(),
+                self.offset_bytes,
+                self.len_elements,
+                element_type,
+            )
+        })
+    }
+}
+
+impl<E: ElementType> Deref for CuSharedMemoryBuffer<E> {
+    type Target = [E];
+
+    fn deref(&self) -> &Self::Target {
+        let ptr = unsafe { (*self.region.mmap.get()).as_ptr().add(self.offset_bytes) as *const E };
+        unsafe { std::slice::from_raw_parts(ptr, self.len_elements) }
+    }
+}
+
+impl<E: ElementType> DerefMut for CuSharedMemoryBuffer<E> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        let ptr = unsafe {
+            (*self.region.mmap.get())
+                .as_mut_ptr()
+                .add(self.offset_bytes) as *mut E
+        };
+        unsafe { std::slice::from_raw_parts_mut(ptr, self.len_elements) }
+    }
+}
+
+impl<E: ElementType> ArrayLike for CuSharedMemoryBuffer<E> {
+    type Element = E;
+}
+
+impl<E: ElementType> Encode for CuSharedMemoryBuffer<E> {
+    fn encode<Enc: Encoder>(&self, encoder: &mut Enc) -> Result<(), EncodeError> {
+        let len = self.len_elements as u64;
+        Encode::encode(&len, encoder)?;
+        for value in self.deref() {
+            value.encode(encoder)?;
+        }
+        Ok(())
+    }
+}
+
+impl<E: ElementType + 'static> Decode<()> for CuSharedMemoryBuffer<E> {
+    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let len = <u64 as Decode<()>>::decode(decoder)? as usize;
+        let mut vec = Vec::with_capacity(len);
+        for _ in 0..len {
+            vec.push(E::decode(decoder)?);
+        }
+        Self::from_vec_detached(vec).map_err(|e| DecodeError::OtherString(e.to_string()))
+    }
+}
+
 /// A Handle to a Buffer.
 /// For onboard usages, the buffer should be Pooled (ie, coming from a preallocated pool).
 /// The Detached version is for offline usages where we don't really need a pool to deserialize them.
@@ -140,8 +458,14 @@ impl<T: ArrayLike> DerefMut for CuHandleInner<T> {
 }
 
 /// A shareable handle to an Array coming from a pool (either host or device).
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct CuHandle<T: ArrayLike>(Arc<Mutex<CuHandleInner<T>>>);
+
+impl<T: ArrayLike> Clone for CuHandle<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
 
 impl<T: ArrayLike> Deref for CuHandle<T> {
     type Target = Arc<Mutex<CuHandleInner<T>>>;
@@ -167,6 +491,109 @@ impl<T: ArrayLike> CuHandle<T> {
     pub fn with_inner_mut<R>(&self, f: impl FnOnce(&mut CuHandleInner<T>) -> R) -> R {
         let mut lock = lock_unpoison(&self.0);
         f(&mut *lock)
+    }
+}
+
+impl<U> Serialize for CuHandle<Vec<U>>
+where
+    U: ElementType + Serialize + 'static,
+{
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let inner = lock_unpoison(&self.0);
+        match inner.deref() {
+            CuHandleInner::Pooled(pooled) => pooled.deref().serialize(serializer),
+            CuHandleInner::Detached(detached) => detached.serialize(serializer),
+        }
+    }
+}
+
+impl<'de, U> Deserialize<'de> for CuHandle<Vec<U>>
+where
+    U: ElementType + Deserialize<'de> + 'static,
+{
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Vec::<U>::deserialize(deserializer).map(CuHandle::new_detached)
+    }
+}
+
+impl<U> Serialize for CuHandle<CuSharedMemoryBuffer<U>>
+where
+    U: ElementType + Serialize + 'static,
+{
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let inner = lock_unpoison(&self.0);
+        let buffer = match inner.deref() {
+            CuHandleInner::Pooled(pooled) => pooled.deref(),
+            CuHandleInner::Detached(detached) => detached,
+        };
+
+        if shared_handle_serialization_enabled()
+            && let Some(descriptor) = buffer.descriptor()
+        {
+            return descriptor.serialize(serializer);
+        }
+
+        buffer.deref().serialize(serializer)
+    }
+}
+
+impl<'de, U> Deserialize<'de> for CuHandle<CuSharedMemoryBuffer<U>>
+where
+    U: ElementType + Deserialize<'de> + 'static,
+{
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        enum Repr<U> {
+            Descriptor(CuSharedMemoryHandleDescriptor),
+            Data(Vec<U>),
+        }
+
+        impl<'de, U> Deserialize<'de> for Repr<U>
+        where
+            U: ElementType + Deserialize<'de>,
+        {
+            fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                struct ReprVisitor<U>(PhantomData<U>);
+
+                impl<'de, U> Visitor<'de> for ReprVisitor<U>
+                where
+                    U: ElementType + Deserialize<'de>,
+                {
+                    type Value = Repr<U>;
+
+                    fn expecting(
+                        &self,
+                        formatter: &mut std::fmt::Formatter<'_>,
+                    ) -> std::fmt::Result {
+                        formatter
+                            .write_str("a shared-memory handle descriptor or an element sequence")
+                    }
+
+                    fn visit_seq<A: SeqAccess<'de>>(self, seq: A) -> Result<Self::Value, A::Error> {
+                        let data =
+                            Vec::<U>::deserialize(de::value::SeqAccessDeserializer::new(seq))?;
+                        Ok(Repr::Data(data))
+                    }
+
+                    fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+                        let descriptor = CuSharedMemoryHandleDescriptor::deserialize(
+                            de::value::MapAccessDeserializer::new(map),
+                        )?;
+                        Ok(Repr::Descriptor(descriptor))
+                    }
+                }
+
+                deserializer.deserialize_any(ReprVisitor(PhantomData))
+            }
+        }
+
+        match Repr::<U>::deserialize(deserializer)? {
+            Repr::Descriptor(descriptor) => CuSharedMemoryBuffer::from_descriptor(&descriptor)
+                .map(CuHandle::new_detached)
+                .map_err(de::Error::custom),
+            Repr::Data(data) => CuSharedMemoryBuffer::from_vec_detached(data)
+                .map(CuHandle::new_detached)
+                .map_err(de::Error::custom),
+        }
     }
 }
 
@@ -196,6 +623,15 @@ impl<U: ElementType + Decode<()> + 'static> Decode<()> for CuHandle<Vec<U>> {
     fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let vec: Vec<U> = Vec::decode(decoder)?;
         Ok(CuHandle(Arc::new(Mutex::new(CuHandleInner::Detached(vec)))))
+    }
+}
+
+impl<U: ElementType + Decode<()> + 'static> Decode<()> for CuHandle<CuSharedMemoryBuffer<U>> {
+    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let buffer = CuSharedMemoryBuffer::<U>::decode(decoder)?;
+        Ok(CuHandle(Arc::new(Mutex::new(CuHandleInner::Detached(
+            buffer,
+        )))))
     }
 }
 
@@ -280,6 +716,100 @@ impl<T: ArrayLike> CuPool<T> for CuHostMemoryPool<T> {
     }
 
     fn copy_from<O: ArrayLike<Element = T::Element>>(&self, from: &mut CuHandle<O>) -> CuHandle<T> {
+        let to_handle = self.acquire().expect("No available buffers in the pool");
+
+        match lock_unpoison(&from.0).deref() {
+            CuHandleInner::Detached(source) => match lock_unpoison(&to_handle.0).deref_mut() {
+                CuHandleInner::Detached(destination) => {
+                    destination.copy_from_slice(source);
+                }
+                CuHandleInner::Pooled(destination) => {
+                    destination.copy_from_slice(source);
+                }
+            },
+            CuHandleInner::Pooled(source) => match lock_unpoison(&to_handle.0).deref_mut() {
+                CuHandleInner::Detached(destination) => {
+                    destination.copy_from_slice(source);
+                }
+                CuHandleInner::Pooled(destination) => {
+                    destination.copy_from_slice(source);
+                }
+            },
+        }
+        to_handle
+    }
+}
+
+/// A pool of fixed-size shared-memory buffers that can be leased to a child
+/// process without copying the underlying bytes.
+pub struct CuSharedMemoryPool<E: ElementType> {
+    id: PoolID,
+    pool: Arc<Pool<CuSharedMemoryBuffer<E>>>,
+    size: usize,
+    buffer_size: usize,
+}
+
+impl<E: ElementType + 'static> CuSharedMemoryPool<E> {
+    pub fn new(id: &str, size: usize, elements_per_buffer: usize) -> CuResult<Arc<Self>> {
+        let slot_stride = shared_slot_stride::<E>(elements_per_buffer.max(1));
+        let region = CuSharedMemoryRegion::create(
+            slot_stride
+                .checked_mul(size)
+                .ok_or_else(|| cu29_traits::CuError::from("shared memory pool size overflow"))?,
+        )?;
+        let next_slot = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let initializer_region = region.clone();
+        let initializer_next_slot = next_slot.clone();
+        let pool = Arc::new(Pool::new(size, move || {
+            let slot = initializer_next_slot.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            assert!(slot < size, "shared memory pool slot index overflow");
+            CuSharedMemoryBuffer::from_region(
+                initializer_region.clone(),
+                slot * slot_stride,
+                elements_per_buffer,
+            )
+        }));
+
+        let pool = Arc::new(Self {
+            id: PoolID::from(id).map_err(|_| "Failed to create PoolID")?,
+            pool,
+            size,
+            buffer_size: elements_per_buffer * size_of::<E>(),
+        });
+        register_pool(pool.clone());
+        Ok(pool)
+    }
+}
+
+impl<E: ElementType> PoolMonitor for CuSharedMemoryPool<E> {
+    fn id(&self) -> PoolID {
+        self.id
+    }
+
+    fn space_left(&self) -> usize {
+        self.pool.len()
+    }
+
+    fn total_size(&self) -> usize {
+        self.size
+    }
+
+    fn buffer_size(&self) -> usize {
+        self.buffer_size
+    }
+}
+
+impl<E: ElementType> CuPool<CuSharedMemoryBuffer<E>> for CuSharedMemoryPool<E> {
+    fn acquire(&self) -> Option<CuHandle<CuSharedMemoryBuffer<E>>> {
+        self.pool
+            .try_pull_owned()
+            .map(|reusable| CuHandle(Arc::new(Mutex::new(CuHandleInner::Pooled(reusable)))))
+    }
+
+    fn copy_from<O>(&self, from: &mut CuHandle<O>) -> CuHandle<CuSharedMemoryBuffer<E>>
+    where
+        O: ArrayLike<Element = E>,
+    {
         let to_handle = self.acquire().expect("No available buffers in the pool");
 
         match lock_unpoison(&from.0).deref() {

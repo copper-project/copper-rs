@@ -1,4 +1,3 @@
-use alloc::vec::Vec;
 use bincode::de::Decoder;
 use bincode::error::DecodeError;
 use bincode::{Decode, Encode};
@@ -64,12 +63,15 @@ where
     }
 }
 
-impl Decode<()> for CuImage<Vec<u8>> {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+impl<A> Decode<()> for CuImage<A>
+where
+    A: ArrayLike<Element = u8> + Send + Sync + 'static,
+    CuHandle<A>: Decode<()>,
+{
+    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let seq: u64 = Decode::decode(decoder)?;
         let format: CuImageBufferFormat = Decode::decode(decoder)?;
-        let buffer: Vec<u8> = Decode::decode(decoder)?;
-        let buffer_handle = CuHandle::new_detached(buffer);
+        let buffer_handle: CuHandle<A> = Decode::decode(decoder)?;
 
         Ok(Self {
             seq,
@@ -79,23 +81,27 @@ impl Decode<()> for CuImage<Vec<u8>> {
     }
 }
 
-impl<'de> Deserialize<'de> for CuImage<Vec<u8>> {
+impl<'de, A> Deserialize<'de> for CuImage<A>
+where
+    A: ArrayLike<Element = u8> + Send + Sync + 'static,
+    CuHandle<A>: Deserialize<'de>,
+{
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         #[derive(Deserialize)]
-        struct CuImageWire {
+        struct CuImageWire<H> {
             seq: u64,
             format: CuImageBufferFormat,
-            handle: Vec<u8>,
+            handle: H,
         }
 
-        let wire = CuImageWire::deserialize(deserializer)?;
+        let wire = CuImageWire::<CuHandle<A>>::deserialize(deserializer)?;
         Ok(Self {
             seq: wire.seq,
             format: wire.format,
-            buffer_handle: CuHandle::new_detached(wire.handle),
+            buffer_handle: wire.handle,
         })
     }
 }
@@ -103,6 +109,7 @@ impl<'de> Deserialize<'de> for CuImage<Vec<u8>> {
 impl<A> Serialize for CuImage<A>
 where
     A: ArrayLike<Element = u8> + Send + Sync + 'static,
+    CuHandle<A>: Serialize,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -112,9 +119,7 @@ where
         let mut struct_ = serializer.serialize_struct("CuImage", 3)?;
         struct_.serialize_field("seq", &self.seq)?;
         struct_.serialize_field("format", &self.format)?;
-        // Use empty Vec as placeholder for buffer_handle to keep it opaque
-        let placeholder_buffer: Vec<u8> = Vec::new();
-        struct_.serialize_field("handle", &placeholder_buffer)?;
+        struct_.serialize_field("handle", &self.buffer_handle)?;
         struct_.end()
     }
 }

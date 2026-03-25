@@ -51,7 +51,7 @@ The task config supports two parameters:
 
 - `script`: path to the Python file. Defaults to `python/task.py`. Relative
   paths are resolved against the process current working directory.
-- `mode`: `"process"` or `"embedded"`. Defaults to `"process"`.
+- `mode`: `"process"`, `"process_shm"`, or `"embedded"`. Defaults to `"process"`.
 
 Example RON:
 
@@ -87,6 +87,29 @@ Tradeoffs:
   process scheduling jitter
 - Con: you now depend on `cbor2`, and the pure-Python backend is slower still
 
+### `process_shm`
+
+The Python task still runs in a separate interpreter process, but shared-memory
+handles are exported by descriptor instead of by value.
+
+- Copper still uses the normal length-prefixed CBOR control channel
+- fields typed as `CuHandle<CuSharedMemoryBuffer<T>>` are sent as shared-memory
+  descriptors instead of copying the underlying blob into the CBOR frame
+- the Python side exposes those descriptors as `SharedMemoryHandle` objects with
+  `.memoryview()` and `.numpy(...)` helpers
+
+Tradeoffs:
+
+- Pro: large handle-backed blobs can be read and written from Python without an
+  extra IPC copy
+- Pro: the GIL still stays out of the Copper process
+- Con: this is Linux-host-oriented shared-memory plumbing, not a generic
+  zero-copy path for arbitrary payload graphs
+- Con: only `CuHandle<CuSharedMemoryBuffer<T>>` fields use this path; everything
+  else still goes through normal CBOR serialization
+- Con: you now need to allocate those buffers from a shared-memory pool on the
+  Rust side
+
 ### `embedded`
 
 The Python task runs inside the Copper process through PyO3.
@@ -108,6 +131,8 @@ Tradeoffs:
 If you are choosing between the two, the practical answer is usually:
 
 - `process` if you want better isolation while you experiment
+- `process_shm` if your Python task mostly touches large `CuHandle` blobs and you
+  can opt those buffers into a shared-memory pool
 - `embedded` if you want slightly less overhead and are willing to accept the GIL in-process
 
 Neither is a good production answer.
@@ -124,6 +149,8 @@ Inputs and outputs are exposed to Python as mutable attribute-style objects:
 - `msg.payload` gives access to the message payload when present
 - `state` is a mutable object that is preserved between calls
 - `output` is a mutable tuple/list-like container of output messages
+- shared-memory-backed handle fields arrive in Python as `SharedMemoryHandle`
+  objects that can expose a `memoryview` or NumPy ndarray over the mapped bytes
 
 When an output message has no payload yet, the bootstrap layer lazily materializes a
 default payload object the first time Python accesses `output[i].payload`.
