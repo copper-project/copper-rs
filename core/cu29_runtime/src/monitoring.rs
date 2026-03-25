@@ -1583,8 +1583,8 @@ pub struct LiveStatistics {
     buckets: [u64; BUCKET_COUNT],
     min_val: u64,
     max_val: u64,
-    sum: u64,
-    sum_sq: u64,
+    sum: u128,
+    sum_sq: u128,
     count: u64,
     max_value: u64,
 }
@@ -1702,8 +1702,9 @@ impl LiveStatistics {
         if value > self.max_val {
             self.max_val = value;
         }
-        self.sum += value;
-        self.sum_sq += value * value;
+        let value_u128 = value as u128;
+        self.sum += value_u128;
+        self.sum_sq += value_u128 * value_u128;
         self.count += 1;
 
         let bucket = self.value_to_bucket(value);
@@ -1950,6 +1951,19 @@ mod tests {
         assert_eq!(stats.jitter_mean(), CuDuration((100 + 300 + 100) / 3));
         stats.reset();
         assert_eq!(stats.len(), 0);
+    }
+
+    #[test]
+    fn test_duration_stats_large_samples_do_not_overflow() {
+        let mut stats = CuDurationStatistics::new(CuDuration(10_000_000_000));
+        stats.record(CuDuration(5_000_000_000));
+        stats.record(CuDuration(8_000_000_000));
+
+        assert_eq!(stats.min(), CuDuration(5_000_000_000));
+        assert_eq!(stats.max(), CuDuration(8_000_000_000));
+        assert_eq!(stats.mean(), CuDuration(6_500_000_000));
+        assert!(stats.stddev().as_nanos().abs_diff(1_500_000_000) <= 1);
+        assert_eq!(stats.jitter_mean(), CuDuration(3_000_000_000));
     }
 
     #[test]
