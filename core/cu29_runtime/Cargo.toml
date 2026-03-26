@@ -68,6 +68,7 @@ rayon = { workspace = true, optional = true }      # Used for async tasks
 tempfile = { workspace = true, optional = true }   # only used in CLI for svg generation
 object-pool = { version = "0.6", optional = true } # used for large object pooling, this will never happen in no-std
 rtrb = { version = "0.3.3", optional = true }
+memmap2 = { version = "0.9", optional = true }
 
 # no std only dependencies
 spin = { workspace = true }                          # should be removed when std is on, but cargo is bad at negative features
@@ -110,6 +111,7 @@ std = [
   "dep:rayon",
   "dep:tempfile",
   "dep:object-pool",
+  "dep:memmap2",
   "dep:layout",
   "dep:svg",
   "dep:serde_json",

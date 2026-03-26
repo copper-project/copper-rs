@@ -16,10 +16,108 @@ This is a prototyping bridge, not a realtime integration mechanism.
 
 import importlib.util
 import inspect
+import mmap
 import struct
 import sys
 import traceback
 from dataclasses import dataclass
+
+
+_SHM_FILE_CACHE = {}
+_SHM_MMAP_CACHE = {}
+_SHM_ELEMENT_SIZES = {
+    "u8": 1,
+    "u16": 2,
+    "u32": 4,
+    "u64": 8,
+    "i8": 1,
+    "i16": 2,
+    "i32": 4,
+    "i64": 8,
+    "f32": 4,
+    "f64": 8,
+}
+_SHM_NUMPY_DTYPES = {
+    "u8": "u1",
+    "u16": "u2",
+    "u32": "u4",
+    "u64": "u8",
+    "i8": "i1",
+    "i16": "i2",
+    "i32": "i4",
+    "i64": "i8",
+    "f32": "f4",
+    "f64": "f8",
+}
+
+
+def _is_shm_handle_descriptor(value):
+    return isinstance(value, dict) and value.get("__cu_shm_handle__") is True
+
+
+class SharedMemoryHandle:
+    __slots__ = ("_descriptor",)
+
+    def __init__(self, descriptor):
+        self._descriptor = dict(descriptor)
+
+    @property
+    def path(self):
+        return self._descriptor["path"]
+
+    @property
+    def offset_bytes(self):
+        return self._descriptor["offset_bytes"]
+
+    @property
+    def len_elements(self):
+        return self._descriptor["len_elements"]
+
+    @property
+    def element_type(self):
+        return self._descriptor["element_type"]
+
+    @property
+    def byte_len(self):
+        return self.len_elements * _SHM_ELEMENT_SIZES[self.element_type]
+
+    def descriptor(self):
+        return dict(self._descriptor)
+
+    def _mmap(self):
+        cached = _SHM_MMAP_CACHE.get(self.path)
+        if cached is not None:
+            return cached
+
+        file_obj = open(self.path, "r+b", buffering=0)
+        mapped = mmap.mmap(file_obj.fileno(), 0)
+        _SHM_FILE_CACHE[self.path] = file_obj
+        _SHM_MMAP_CACHE[self.path] = mapped
+        return mapped
+
+    def memoryview(self):
+        start = self.offset_bytes
+        end = start + self.byte_len
+        return memoryview(self._mmap())[start:end]
+
+    def numpy(self, shape=None):
+        try:
+            import numpy as np
+        except ImportError as exc:
+            raise RuntimeError("numpy is required to expose shared-memory handles as ndarrays") from exc
+
+        dtype = np.dtype(_SHM_NUMPY_DTYPES[self.element_type])
+        if shape is None:
+            shape = (self.len_elements,)
+        expected = 1
+        for dim in shape:
+            expected *= dim
+        if expected != self.len_elements:
+            raise ValueError(f"shape {shape!r} does not match len_elements={self.len_elements}")
+        return np.ndarray(shape=shape, dtype=dtype, buffer=self._mmap(), offset=self.offset_bytes)
+
+    def __len__(self):
+        return self.len_elements
 
 
 class AttrDict(dict):
@@ -253,8 +351,12 @@ class ContextSnapshot:
 
 
 def _wrap(value, on_mutate=None, output_mode=False):
+    if isinstance(value, SharedMemoryHandle):
+        return value
     if isinstance(value, (MessageDict, AttrDict, AttrList)):
         return value
+    if _is_shm_handle_descriptor(value):
+        return SharedMemoryHandle(value)
     if isinstance(value, dict):
         if output_mode and (
             "__cu_payload_present__" in value or "__cu_payload_template__" in value
@@ -276,6 +378,8 @@ def _wrap(value, on_mutate=None, output_mode=False):
 
 
 def _unwrap(value):
+    if isinstance(value, SharedMemoryHandle):
+        return value.descriptor()
     if isinstance(value, MessageDict):
         result = {key: _unwrap(item) for key, item in value.items() if key != "payload"}
         if object.__getattribute__(value, "_cu_payload_present") or object.__getattribute__(

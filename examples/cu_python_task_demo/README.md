@@ -3,7 +3,7 @@
 This example shows how Copper can run one task from Python while the rest of the
 application stays in Rust.
 
-It demonstrates both execution modes provided by
+It demonstrates the execution modes provided by
 [`cu-python-task`](/home/gbin/projects/copper/copper-rs.python/components/tasks/cu_python_task/README.md):
 
 - `process`: Python runs in a separate interpreter and exchanges CBOR frames with Rust
@@ -52,6 +52,9 @@ cargo test -p cu-python-task-demo
 Notes:
 
 - process mode needs the Python package `cbor2`
+- in process mode, any payload field typed as `CuHandle<CuSharedMemoryBuffer<T>>`
+  is exported to Python by shared-memory descriptor automatically; this demo's
+  default payloads are ordinary values, so it exercises the normal path
 - embedded mode is not supported on macOS in this workspace
 - the demo rewrites the Python task `script` config to an absolute path in Rust so
   `cargo run -p cu-python-task-demo` works from the workspace root; relative

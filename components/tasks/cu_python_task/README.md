@@ -78,13 +78,19 @@ The Python task runs in a separate interpreter process.
 - Copper spawns `python3` or `python`
 - requests and responses are sent as length-prefixed CBOR frames over stdin/stdout
 - the Python side uses `cbor2` to decode and encode those frames
+- if a payload contains `CuHandle<CuSharedMemoryBuffer<T>>`, that handle is sent
+  as a shared-memory descriptor instead of copying the blob into the CBOR frame
 
 Tradeoffs:
 
 - Pro: the GIL stays out of the Copper process
 - Pro: a Python crash or import failure is isolated to the child process
+- Pro: large shared-memory-backed handle blobs can be read and written from Python
+  without an extra IPC copy
 - Con: every cycle pays extra serialization, copying, allocations, IPC overhead, and
   process scheduling jitter
+- Con: only `CuHandle<CuSharedMemoryBuffer<T>>` uses the shared-memory path;
+  everything else still goes through normal CBOR serialization
 - Con: you now depend on `cbor2`, and the pure-Python backend is slower still
 
 ### `embedded`
@@ -124,6 +130,8 @@ Inputs and outputs are exposed to Python as mutable attribute-style objects:
 - `msg.payload` gives access to the message payload when present
 - `state` is a mutable object that is preserved between calls
 - `output` is a mutable tuple/list-like container of output messages
+- shared-memory-backed handle fields arrive in Python as `SharedMemoryHandle`
+  objects that can expose a `memoryview` or NumPy ndarray over the mapped bytes
 
 When an output message has no payload yet, the bootstrap layer lazily materializes a
 default payload object the first time Python accesses `output[i].payload`.

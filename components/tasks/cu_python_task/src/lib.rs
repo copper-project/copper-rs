@@ -16,7 +16,10 @@
 //! - [`PyTaskMode::Process`]: spawn a separate interpreter and exchange
 //!   length-prefixed CBOR frames over stdin/stdout. This avoids putting the GIL
 //!   inside the Copper process, but adds another serialization layer, extra
-//!   copying, allocations, IPC overhead, and scheduler jitter.
+//!   copying, allocations, IPC overhead, and scheduler jitter. If a payload
+//!   contains `CuHandle<CuSharedMemoryBuffer<T>>`, the handle is exported by
+//!   descriptor so Python can read or write the underlying shared-memory bytes
+//!   without copying them through CBOR.
 //! - [`PyTaskMode::Embedded`]: call Python in-process through PyO3. This avoids
 //!   the external CBOR transport, but executes under the GIL inside the Copper
 //!   process and still allocates and converts values on every call.
@@ -395,6 +398,8 @@ pub enum PyTaskMode {
     ///
     /// This keeps the GIL out of the Copper process, but every cycle pays for
     /// CBOR serialization, copies, allocations, IPC, and process scheduling.
+    /// Shared-memory-backed `CuHandle` buffers are exported by descriptor
+    /// automatically on this path.
     Process,
     /// Run the task inside the Copper process through PyO3.
     ///
@@ -1193,6 +1198,7 @@ where
     W: Write,
     T: Serialize,
 {
+    let _guard = enable_shared_handle_serialization();
     let value = to_value(value)
         .map_err(|e| CuError::new_with_cause("Failed to encode Python task CBOR value", e))?;
     let payload = encode_wire_value(&value)?;
@@ -1575,6 +1581,11 @@ mod tests {
         seen: bool,
     }
 
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct SharedHandleInput {
+        data: CuHandle<CuSharedMemoryBuffer<u8>>,
+    }
+
     const TEST_TASK_IDS: &[&str] = &["py"];
 
     fn cwd_lock() -> MutexGuard<'static, ()> {
@@ -1836,6 +1847,48 @@ def stop(ctx, state):\n    state = state + ctx.cl_id\n",
 
         stop_process_backend(&mut backend, &stop_ctx, &mut state);
         assert_eq!(state, 47);
+    }
+
+    #[test]
+    fn process_backend_shared_handles_are_exposed_without_copying() {
+        let ctx = test_context(41, 7);
+        let (_temp_dir, script) = write_test_script(
+            "def process(ctx, inp, state, output):\n\
+             \x20\x20\x20\x20view = inp.data.memoryview()\n\
+             \x20\x20\x20\x20output.payload.value = view[0] + view[1] + view[2] + view[3]\n\
+             \x20\x20\x20\x20output.payload.flag = True\n\
+             \x20\x20\x20\x20view[0] = 9\n",
+        );
+        let pool = CuSharedMemoryPool::<u8>::new("py_shm_test", 1, 4).expect("shared pool");
+        let handle = pool.acquire().expect("pooled handle");
+        handle.with_inner_mut(|inner| inner.copy_from_slice(&[1, 2, 3, 4]));
+
+        let mut backend = ProcessBackend::start(&script).expect("start backend");
+        let output = PyCuMsg::from_output(&CuMsg::<TestPayload>::default());
+        let mut result: ProcessResult<(), PyCuMsg<TestPayload>> = backend
+            .process(
+                &ctx,
+                &ProcessRequest {
+                    ctx: PyTaskContextSnapshot::from_cu_context(&ctx),
+                    input: SharedHandleInput {
+                        data: handle.clone(),
+                    },
+                    state: (),
+                    output,
+                },
+            )
+            .expect("process request");
+        stop_process_backend(&mut backend, &ctx, &mut result.state);
+
+        assert_eq!(
+            result.output.payload,
+            Some(TestPayload {
+                value: 10,
+                flag: true,
+            })
+        );
+        let observed = handle.with_inner(|inner| inner[0]);
+        assert_eq!(observed, 9);
     }
 
     #[test]
