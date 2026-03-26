@@ -1,14 +1,44 @@
 (
     subsystems: [
-        (id: "ping", config: "ping_config.ron"),
-        (id: "pong", config: "pong_config.ron"),
+        (
+            id: "ping",
+            config: "ping_config.ron",
+        ),
+        (
+            id: "pong",
+            config: "pong_config.ron",
+        ),
     ],
     interconnects: [
-        (from: "ping/zenoh/ping_bin", to: "pong/zenoh/ping_bin", msg: "messages::Ping"),
-        (from: "ping/zenoh/ping_json", to: "pong/zenoh/ping_json", msg: "messages::Ping"),
-        (from: "ping/zenoh/ping_cbor", to: "pong/zenoh/ping_cbor", msg: "messages::Ping"),
-        (from: "pong/zenoh/pong_bin", to: "ping/zenoh/pong_bin", msg: "messages::Pong"),
-        (from: "pong/zenoh/pong_json", to: "ping/zenoh/pong_json", msg: "messages::Pong"),
-        (from: "pong/zenoh/pong_cbor", to: "ping/zenoh/pong_cbor", msg: "messages::Pong"),
+        (
+            from: "ping/zenoh/ping_bin",
+            to: "pong/zenoh/ping_bin",
+            msg: "messages::Ping",
+        ),
+        (
+            from: "ping/zenoh/ping_json",
+            to: "pong/zenoh/ping_json",
+            msg: "messages::Ping",
+        ),
+        (
+            from: "ping/zenoh/ping_cbor",
+            to: "pong/zenoh/ping_cbor",
+            msg: "messages::Ping",
+        ),
+        (
+            from: "pong/zenoh/pong_bin",
+            to: "ping/zenoh/pong_bin",
+            msg: "messages::Pong",
+        ),
+        (
+            from: "pong/zenoh/pong_json",
+            to: "ping/zenoh/pong_json",
+            msg: "messages::Pong",
+        ),
+        (
+            from: "pong/zenoh/pong_cbor",
+            to: "ping/zenoh/pong_cbor",
+            msg: "messages::Pong",
+        ),
     ],
 )
