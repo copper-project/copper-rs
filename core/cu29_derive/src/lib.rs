@@ -2629,6 +2629,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let done_tx = done_tx.clone();
                                 let shutdown = std::sync::Arc::clone(&shutdown);
                                 let clock = clock.clone();
+                                let instance_id = instance_id;
                                 let execution_probe_ptr = execution_probe_ptr;
                                 let monitor_ptr = monitor_ptr;
                                 let task_ptrs = task_ptrs;
@@ -2675,6 +2676,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                                     clid,
                                                     ctx: cu29::context::CuContext::builder(clock.clone())
                                                         .cl_id(clid)
+                                                        .instance_id(instance_id)
                                                         .task_ids(#mission_mod::TASK_IDS)
                                                         .build(),
                                                 };
@@ -3137,6 +3139,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                     let runtime = &mut self.copper_runtime;
                     let clock = &runtime.clock;
+                    let instance_id = runtime.instance_id();
                     let execution_probe = runtime.execution_probe.as_ref();
                     let monitor = &runtime.monitor;
                     let cl_manager = &mut runtime.copperlists_manager;
@@ -3354,6 +3357,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             .expect("parallel abort result missing CopperList ownership");
                                         let mut commit_ctx = cu29::context::CuContext::builder(clock.clone())
                                             .cl_id(worker_result.clid)
+                                            .instance_id(instance_id)
                                             .task_ids(#mission_mod::TASK_IDS)
                                             .build();
                                         commit_ctx.clear_current_task();
@@ -3376,6 +3380,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             .expect("parallel worker result missing CopperList ownership");
                                         let mut commit_ctx = cu29::context::CuContext::builder(clock.clone())
                                             .cl_id(worker_result.clid)
+                                            .instance_id(instance_id)
                                             .task_ids(#mission_mod::TASK_IDS)
                                             .build();
                                         commit_ctx.clear_current_task();
@@ -3481,6 +3486,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 // Pre-explode the runtime to avoid complexity with partial borrowing in the generated code.
                 let runtime = &mut self.copper_runtime;
                 let clock = &runtime.clock;
+                let instance_id = runtime.instance_id();
                 let execution_probe = &runtime.execution_probe;
                 let monitor = &mut runtime.monitor;
                 let tasks = &mut runtime.tasks;
@@ -3490,6 +3496,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let iteration_clid = cl_manager.next_cl_id();
                 let mut ctx = cu29::context::CuContext::builder(clock.clone())
                     .cl_id(iteration_clid)
+                    .instance_id(instance_id)
                     .task_ids(#mission_mod::TASK_IDS)
                     .build();
                 let mut __cu_abort_copperlist = false;
@@ -3505,6 +3512,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 culist.msgs.init_zeroed();
                 let mut ctx = cu29::context::CuContext::builder(clock.clone())
                     .cl_id(iteration_clid)
+                    .instance_id(instance_id)
                     .task_ids(#mission_mod::TASK_IDS)
                     .build();
                 {
@@ -3564,6 +3572,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let lifecycle_clid = self.copper_runtime.copperlists_manager.last_cl_id();
                 let mut ctx = cu29::context::CuContext::builder(self.copper_runtime.clock.clone())
                     .cl_id(lifecycle_clid)
+                    .instance_id(self.copper_runtime.instance_id())
                     .task_ids(#mission_mod::TASK_IDS)
                     .build();
                 #(#start_calls)*
@@ -3576,6 +3585,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let lifecycle_clid = self.copper_runtime.copperlists_manager.last_cl_id();
                 let mut ctx = cu29::context::CuContext::builder(self.copper_runtime.clock.clone())
                     .cl_id(lifecycle_clid)
+                    .instance_id(self.copper_runtime.instance_id())
                     .task_ids(#mission_mod::TASK_IDS)
                     .build();
                 #(#stop_calls)*
@@ -3883,6 +3893,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     pub struct #builder_name <'a, F> {
                         clock: Option<RobotClock>,
                         unified_logger: Option<Arc<Mutex<UnifiedLoggerWrite>>>,
+                        instance_id: u32,
                         config_override: Option<CuConfig>,
                         sim_callback: Option<&'a mut F>
                     }
@@ -3893,6 +3904,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         Self {
                             clock: None,
                             unified_logger: None,
+                            instance_id: 0,
                             config_override: None,
                             sim_callback: None,
                         }
@@ -3922,6 +3934,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     pub struct #builder_name {
                         clock: Option<RobotClock>,
                         unified_logger: Option<Arc<Mutex<UnifiedLoggerWrite>>>,
+                        instance_id: u32,
                         config_override: Option<CuConfig>,
                     }
                 },
@@ -3931,6 +3944,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         Self {
                             clock: None,
                             unified_logger: None,
+                            instance_id: 0,
                             config_override: None,
                         }
                     }
@@ -4005,9 +4019,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
 
                     #[allow(dead_code)]
+                    pub fn with_instance_id(mut self, instance_id: u32) -> Self {
+                        self.instance_id = instance_id;
+                        self
+                    }
+
+                    #[allow(dead_code)]
                     pub fn with_context(mut self, copper_ctx: &CopperContext) -> Self {
                         self.clock = Some(copper_ctx.clock.clone());
                         self.unified_logger = Some(copper_ctx.unified_logger.clone());
+                        self.instance_id = copper_ctx.instance_id();
                         self
                     }
 
@@ -4021,14 +4042,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                     #[allow(dead_code)]
                     pub fn build(self) -> CuResult<#application_name> {
-                        #application_name::new(
+                        let mut application = #application_name::new(
                             self.clock
                                 .ok_or(CuError::from("Clock missing from builder"))?,
                             self.unified_logger
                                 .ok_or(CuError::from("Unified logger missing from builder"))?,
                             self.config_override,
                             #builder_build_sim_callback_arg
-                        )
+                        )?;
+                        application.copper_runtime_mut().set_instance_id(self.instance_id);
+                        Ok(application)
                     }
                 }
             })

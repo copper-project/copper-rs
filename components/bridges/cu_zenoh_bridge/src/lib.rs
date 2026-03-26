@@ -58,6 +58,7 @@ struct ZenohRxChannel<Id: Copy> {
 
 struct ZenohContext<TxId: Copy, RxId: Copy> {
     session: zenoh::Session,
+    local_instance_id: u32,
     tx_channels: Vec<ZenohTxChannel<TxId>>,
     rx_channels: Vec<ZenohRxChannel<RxId>>,
 }
@@ -283,7 +284,7 @@ where
         })
     }
 
-    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
+    fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
         let session = zenoh::Wait::wait(zenoh::open(self.session_config.clone()))
             .map_err(cu_error_map("ZenohBridge: Failed to open session"))?;
 
@@ -315,6 +316,7 @@ where
 
         self.ctx = Some(ZenohContext {
             session,
+            local_instance_id: ctx.instance_id(),
             tx_channels,
             rx_channels,
         });
@@ -323,19 +325,20 @@ where
 
     fn send<'a, Payload>(
         &mut self,
-        _ctx: &CuContext,
+        ctx: &CuContext,
         channel: &'static BridgeChannel<<Self::Tx as BridgeChannelSet>::Id, Payload>,
         msg: &CuMsg<Payload>,
     ) -> CuResult<()>
     where
         Payload: CuMsgPayload + 'a,
     {
-        let ctx = self
+        let runtime_ctx = self
             .ctx
             .as_mut()
             .ok_or_else(|| CuError::from("ZenohBridge: Context not initialized"))?;
-        let tx_channel =
-            Self::find_tx_channel_mut(&mut ctx.tx_channels, channel.id()).ok_or_else(|| {
+        debug_assert_eq!(runtime_ctx.local_instance_id, ctx.instance_id());
+        let tx_channel = Self::find_tx_channel_mut(&mut runtime_ctx.tx_channels, channel.id())
+            .ok_or_else(|| {
                 CuError::from(format!(
                     "ZenohBridge: Unknown Tx channel {:?}",
                     channel.id()
@@ -366,6 +369,7 @@ where
             .ctx
             .as_mut()
             .ok_or_else(|| CuError::from("ZenohBridge: Context not initialized"))?;
+        debug_assert_eq!(runtime_ctx.local_instance_id, ctx.instance_id());
         let rx_channel = Self::find_rx_channel_mut(&mut runtime_ctx.rx_channels, channel.id())
             .ok_or_else(|| {
                 CuError::from(format!(
@@ -395,6 +399,7 @@ where
             session,
             tx_channels,
             rx_channels,
+            ..
         }) = self.ctx.take()
         {
             for channel in tx_channels {

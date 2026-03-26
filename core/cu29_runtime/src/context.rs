@@ -8,6 +8,7 @@ use cu29_clock::{RobotClock, RobotClockMock};
 /// `CuContext` provides callback code with:
 /// - time access through `clock` and `Deref<Target = RobotClock>`
 /// - current execution sequence id via `cl_id()`
+/// - process instance metadata via `instance_id()`
 /// - current task metadata via `task_id()` / `task_index()`
 ///
 /// The execution sequence id matches the copper-list id of the iteration being
@@ -22,6 +23,7 @@ pub struct CuContext {
     /// Runtime clock. Kept as a field for direct access (`context.clock.now()`).
     pub clock: RobotClock,
     cl_id: u64,
+    instance_id: u32,
     task_ids: &'static [&'static str],
     current_task_index: Option<usize>,
 }
@@ -32,6 +34,7 @@ impl CuContext {
         CuContextBuilder {
             clock,
             cl_id: 0,
+            instance_id: 0,
             task_ids: &[],
         }
     }
@@ -64,10 +67,16 @@ impl CuContext {
     }
 
     /// Internal constructor used by runtime internals and code generation.
-    pub(crate) fn new(clock: RobotClock, clid: u64, task_ids: &'static [&'static str]) -> Self {
+    pub(crate) fn new(
+        clock: RobotClock,
+        clid: u64,
+        instance_id: u32,
+        task_ids: &'static [&'static str],
+    ) -> Self {
         Self {
             clock,
             cl_id: clid,
+            instance_id,
             task_ids,
             current_task_index: None,
         }
@@ -92,6 +101,11 @@ impl CuContext {
         self.cl_id
     }
 
+    /// Returns the runtime instance id attached to this context.
+    pub fn instance_id(&self) -> u32 {
+        self.instance_id
+    }
+
     /// Returns the current task index, if any.
     pub fn task_index(&self) -> Option<usize> {
         self.current_task_index
@@ -109,6 +123,7 @@ impl CuContext {
 pub struct CuContextBuilder {
     clock: RobotClock,
     cl_id: u64,
+    instance_id: u32,
     task_ids: &'static [&'static str],
 }
 
@@ -116,6 +131,12 @@ impl CuContextBuilder {
     /// Sets the copper-list id for the context.
     pub fn cl_id(mut self, cl_id: u64) -> Self {
         self.cl_id = cl_id;
+        self
+    }
+
+    /// Sets the runtime instance id carried by the context.
+    pub fn instance_id(mut self, instance_id: u32) -> Self {
+        self.instance_id = instance_id;
         self
     }
 
@@ -127,7 +148,7 @@ impl CuContextBuilder {
 
     /// Builds a context value.
     pub fn build(self) -> CuContext {
-        CuContext::new(self.clock, self.cl_id, self.task_ids)
+        CuContext::new(self.clock, self.cl_id, self.instance_id, self.task_ids)
     }
 }
 
@@ -136,5 +157,27 @@ impl Deref for CuContext {
 
     fn deref(&self) -> &Self::Target {
         &self.clock
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CuContext;
+    use cu29_clock::RobotClock;
+
+    #[test]
+    fn default_instance_id_is_zero() {
+        let ctx = CuContext::from_clock(RobotClock::default());
+        assert_eq!(ctx.instance_id(), 0);
+    }
+
+    #[test]
+    fn builder_overrides_instance_id() {
+        let ctx = CuContext::builder(RobotClock::default())
+            .cl_id(7)
+            .instance_id(42)
+            .build();
+        assert_eq!(ctx.cl_id(), 7);
+        assert_eq!(ctx.instance_id(), 42);
     }
 }

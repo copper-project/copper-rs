@@ -73,6 +73,26 @@ pub struct CopperContext {
     pub unified_logger: Arc<Mutex<UnifiedLoggerWrite>>,
     pub logger_runtime: LoggerRuntime,
     pub clock: RobotClock,
+    pub instance_id: u32,
+}
+
+#[cfg(feature = "std")]
+impl CopperContext {
+    /// Returns the runtime instance id attached to this setup context.
+    pub fn instance_id(&self) -> u32 {
+        self.instance_id
+    }
+
+    /// Attaches a runtime instance id to this setup context.
+    pub fn with_instance_id(mut self, instance_id: u32) -> Self {
+        self.instance_id = instance_id;
+        self
+    }
+
+    /// Sets the runtime instance id on this setup context.
+    pub fn set_instance_id(&mut self, instance_id: u32) {
+        self.instance_id = instance_id;
+    }
 }
 
 /// Returns a monotonic instant used for local runtime performance timing.
@@ -674,6 +694,9 @@ pub struct CuRuntime<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize
     /// The base clock the runtime will be using to record time.
     pub clock: RobotClock, // TODO: remove public at some point
 
+    /// Deployment/runtime instance identity for this Copper process.
+    pub instance_id: u32,
+
     /// The tuple of all the tasks in order of execution.
     pub tasks: CT,
 
@@ -721,6 +744,20 @@ impl<
 {
     fn get_clock(&self) -> RobotClock {
         self.clock.clone()
+    }
+}
+
+impl<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize> CuRuntime<CT, CB, P, M, NBCL> {
+    /// Returns the configured runtime instance id for this process.
+    #[inline]
+    pub fn instance_id(&self) -> u32 {
+        self.instance_id
+    }
+
+    /// Updates the runtime instance id used when synthesizing callback contexts.
+    #[inline]
+    pub fn set_instance_id(&mut self, instance_id: u32) {
+        self.instance_id = instance_id;
     }
 }
 
@@ -974,6 +1011,7 @@ impl<
         let runtime_config = config.runtime.clone().unwrap_or_default();
 
         let runtime = Self {
+            instance_id: 0,
             tasks,
             bridges,
             resources,
@@ -1116,6 +1154,7 @@ impl<
         let runtime_config = config.runtime.clone().unwrap_or_default();
 
         let runtime = Self {
+            instance_id: 0,
             tasks,
             bridges,
             resources,
