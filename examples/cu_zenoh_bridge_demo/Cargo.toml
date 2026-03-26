@@ -29,3 +29,7 @@ path = "src/bin/ping.rs"
 [[bin]]
 name = "zenoh-pong"
 path = "src/bin/pong.rs"
+
+[[bin]]
+name = "validate-multi-config"
+path = "src/bin/validate_multi_config.rs"

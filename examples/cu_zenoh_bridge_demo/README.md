@@ -21,3 +21,12 @@ zenohd
 ```
 
 You should see pong logs tagged with `pong-bincode`, `pong-json`, and `pong-cbor` in the ping app.
+
+## Validate The Strict Multi-Copper Config Layer
+
+This example also includes `multi_copper.ron`, a strict umbrella config that models the ping and
+pong apps as two explicit Copper subsystems connected through bridge channels.
+
+```bash
+cargo run -p cu-zenoh-bridge-demo --bin validate-multi-config
+```
