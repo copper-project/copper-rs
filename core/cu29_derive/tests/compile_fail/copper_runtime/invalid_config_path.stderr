@@ -1,4 +1,5 @@
 error: The configuration file `path/to/config.ron` does not exist. Please provide a valid path.
+          context:None
  --> tests/compile_fail/copper_runtime/invalid_config_path.rs:3:1
   |
 3 | #[copper_runtime(config = "path/to/config.ron")]
