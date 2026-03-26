@@ -694,6 +694,9 @@ pub struct CuRuntime<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize
     /// The base clock the runtime will be using to record time.
     pub clock: RobotClock, // TODO: remove public at some point
 
+    /// Compile-time subsystem identity for this Copper process.
+    subsystem_code: u16,
+
     /// Deployment/runtime instance identity for this Copper process.
     pub instance_id: u32,
 
@@ -748,6 +751,12 @@ impl<
 }
 
 impl<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize> CuRuntime<CT, CB, P, M, NBCL> {
+    /// Returns the compile-time subsystem code for this process.
+    #[inline]
+    pub fn subsystem_code(&self) -> u16 {
+        self.subsystem_code
+    }
+
     /// Returns the configured runtime instance id for this process.
     #[inline]
     pub fn instance_id(&self) -> u32 {
@@ -895,6 +904,7 @@ impl<
     #[cfg(feature = "std")]
     pub fn new(
         clock: RobotClock,
+        subsystem_code: u16,
         config: &CuConfig,
         mission: &str,
         resources_instanciator: impl Fn(&CuConfig) -> CuResult<ResourceManager>,
@@ -914,6 +924,7 @@ impl<
         let resources = resources_instanciator(config)?;
         Self::new_with_resources(
             clock,
+            subsystem_code,
             config,
             mission,
             resources,
@@ -933,6 +944,7 @@ impl<
     #[cfg(feature = "std")]
     pub fn new_with_resources(
         clock: RobotClock,
+        subsystem_code: u16,
         config: &CuConfig,
         mission: &str,
         mut resources: ResourceManager,
@@ -1011,6 +1023,7 @@ impl<
         let runtime_config = config.runtime.clone().unwrap_or_default();
 
         let runtime = Self {
+            subsystem_code,
             instance_id: 0,
             tasks,
             bridges,
@@ -1032,6 +1045,7 @@ impl<
     #[cfg(not(feature = "std"))]
     pub fn new(
         clock: RobotClock,
+        subsystem_code: u16,
         config: &CuConfig,
         mission: &str,
         resources_instanciator: impl Fn(&CuConfig) -> CuResult<ResourceManager>,
@@ -1051,6 +1065,7 @@ impl<
         let resources = resources_instanciator(config)?;
         Self::new_with_resources(
             clock,
+            subsystem_code,
             config,
             mission,
             resources,
@@ -1068,6 +1083,7 @@ impl<
     #[cfg(not(feature = "std"))]
     pub fn new_with_resources(
         clock: RobotClock,
+        subsystem_code: u16,
         config: &CuConfig,
         mission: &str,
         mut resources: ResourceManager,
@@ -1154,6 +1170,7 @@ impl<
         let runtime_config = config.runtime.clone().unwrap_or_default();
 
         let runtime = Self {
+            subsystem_code,
             instance_id: 0,
             tasks,
             bridges,
@@ -1729,6 +1746,7 @@ mod tests {
         graph.connect(0, 1, "()").unwrap();
         let runtime = CuRuntime::<Tasks, (), Msgs, NoMonitor, 2>::new(
             RobotClock::default(),
+            0,
             &config,
             crate::config::DEFAULT_MISSION_ID,
             resources_instanciator,
@@ -1756,6 +1774,7 @@ mod tests {
 
         let mut runtime = CuRuntime::<Tasks, (), Msgs, NoMonitor, 2>::new(
             RobotClock::default(),
+            0,
             &config,
             crate::config::DEFAULT_MISSION_ID,
             resources_instanciator,

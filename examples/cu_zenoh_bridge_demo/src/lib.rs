@@ -1,9 +1,10 @@
 use bincode::{Decode, Encode};
+use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 
 pub mod messages {
     use super::*;
-    use cu29::prelude::*;
 
     #[derive(Debug, Default, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
     pub struct Ping {
@@ -16,6 +17,75 @@ pub mod messages {
         pub seq: u64,
         pub reply: String,
     }
+}
+
+pub struct DemoRunOptions {
+    pub log_path: PathBuf,
+    pub instance_id: u32,
+    pub iterations: Option<usize>,
+}
+
+pub fn default_log_path(file_name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("logs")
+        .join(file_name)
+}
+
+pub fn parse_run_options(default_log_file: &str) -> CuResult<DemoRunOptions> {
+    let mut log_path = default_log_path(default_log_file);
+    let mut instance_id = 0u32;
+    let mut iterations = None;
+
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--log" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| CuError::from("missing value for --log"))?;
+                log_path = PathBuf::from(value);
+            }
+            "--instance-id" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| CuError::from("missing value for --instance-id"))?;
+                instance_id = value.parse::<u32>().map_err(|e| {
+                    CuError::from(format!("invalid --instance-id '{value}'"))
+                        .add_cause(e.to_string().as_str())
+                })?;
+            }
+            "--iterations" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| CuError::from("missing value for --iterations"))?;
+                iterations = Some(value.parse::<usize>().map_err(|e| {
+                    CuError::from(format!("invalid --iterations '{value}'"))
+                        .add_cause(e.to_string().as_str())
+                })?);
+            }
+            other => {
+                return Err(CuError::from(format!(
+                    "unsupported argument '{other}', expected --log, --instance-id or --iterations"
+                )));
+            }
+        }
+    }
+
+    if let Some(parent) = log_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| {
+            CuError::from(format!(
+                "failed to create log directory '{}'",
+                parent.display()
+            ))
+            .add_cause(e.to_string().as_str())
+        })?;
+    }
+
+    Ok(DemoRunOptions {
+        log_path,
+        instance_id,
+        iterations,
+    })
 }
 
 pub mod bridges {

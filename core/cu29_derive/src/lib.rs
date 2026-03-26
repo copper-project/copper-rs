@@ -6,6 +6,7 @@ use std::path::Path;
 use std::process::Command;
 use syn::Fields::{Named, Unnamed};
 use syn::meta::parser;
+use syn::parse::Parser;
 use syn::{
     Field, Fields, ItemImpl, ItemStruct, LitStr, Type, TypeTuple, parse_macro_input, parse_quote,
     parse_str,
@@ -77,6 +78,79 @@ fn detect_git_info(repo_root: &Path) -> (Option<String>, Option<bool>) {
     // Porcelain output is empty when tree is clean.
     let dirty = git_output_trimmed(repo_root, &["status", "--porcelain"]).map(|s| !s.is_empty());
     (commit, dirty)
+}
+
+#[derive(Debug, Clone)]
+struct CopperRuntimeArgs {
+    config_path: String,
+    subsystem_id: Option<String>,
+    sim_mode: bool,
+    ignore_resources: bool,
+}
+
+impl CopperRuntimeArgs {
+    fn parse_tokens(args: proc_macro2::TokenStream) -> Result<Self, syn::Error> {
+        let mut config_file: Option<LitStr> = None;
+        let mut subsystem_id: Option<LitStr> = None;
+        let mut sim_mode = false;
+        let mut ignore_resources = false;
+
+        let parser = parser(|meta| {
+            if meta.path.is_ident("config") {
+                config_file = Some(meta.value()?.parse()?);
+                Ok(())
+            } else if meta.path.is_ident("subsystem") {
+                subsystem_id = Some(meta.value()?.parse()?);
+                Ok(())
+            } else if meta.path.is_ident("sim_mode") {
+                if meta.input.peek(syn::Token![=]) {
+                    meta.input.parse::<syn::Token![=]>()?;
+                    let value: syn::LitBool = meta.input.parse()?;
+                    sim_mode = value.value();
+                } else {
+                    sim_mode = true;
+                }
+                Ok(())
+            } else if meta.path.is_ident("ignore_resources") {
+                if meta.input.peek(syn::Token![=]) {
+                    meta.input.parse::<syn::Token![=]>()?;
+                    let value: syn::LitBool = meta.input.parse()?;
+                    ignore_resources = value.value();
+                } else {
+                    ignore_resources = true;
+                }
+                Ok(())
+            } else {
+                Err(meta.error("unsupported property"))
+            }
+        });
+
+        parser.parse2(args)?;
+
+        let config_path = config_file
+            .ok_or_else(|| {
+                syn::Error::new(
+                    Span::call_site(),
+                    "Expected config file attribute like #[copper_runtime(config = \"path\")]",
+                )
+            })?
+            .value();
+
+        Ok(Self {
+            config_path,
+            subsystem_id: subsystem_id.map(|value| value.value()),
+            sim_mode,
+            ignore_resources,
+        })
+    }
+}
+
+#[derive(Debug)]
+struct ResolvedRuntimeConfig {
+    local_config: CuConfig,
+    bundled_local_config_content: String,
+    subsystem_id: Option<String>,
+    subsystem_code: u16,
 }
 
 #[proc_macro]
@@ -330,6 +404,7 @@ fn gen_culist_support(
                         cu29::clock::OptionCuTime::none();
                     self.0.#slot_index.#port_index.metadata.process_time.end =
                         cu29::clock::OptionCuTime::none();
+                    self.0.#slot_index.#port_index.metadata.bridge_origin = None;
                 });
             }
         } else {
@@ -337,6 +412,7 @@ fn gen_culist_support(
                 self.0.#slot_index.metadata.status_txt = CuCompactString::default();
                 self.0.#slot_index.metadata.process_time.start = cu29::clock::OptionCuTime::none();
                 self.0.#slot_index.metadata.process_time.end = cu29::clock::OptionCuTime::none();
+                self.0.#slot_index.metadata.bridge_origin = None;
             });
         }
     }
@@ -814,10 +890,12 @@ fn gen_sim_support(
     }
 }
 
-/// Adds `#[copper_runtime(config = "path", sim_mode = false/true, ignore_resources = false/true)]`
+/// Adds `#[copper_runtime(config = "path", subsystem = "id", sim_mode = false/true, ignore_resources = false/true)]`
 /// to your application struct to generate the runtime.
 /// if sim_mode is omitted, it is set to false.
 /// if ignore_resources is omitted, it is set to false.
+/// if `subsystem` is provided, `config` must point to a strict multi-Copper config and the
+/// selected subsystem local config will be embedded into the generated runtime.
 /// This will add a "runtime" field to your struct and implement the "new" and "run" methods.
 #[proc_macro_attribute]
 pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
@@ -827,10 +905,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let application_name = &application_struct.ident;
     let builder_name = format_ident!("{}Builder", application_name);
-
-    let mut config_file: Option<LitStr> = None;
-    let mut sim_mode = false;
-    let mut ignore_resources = false;
+    let runtime_args = match CopperRuntimeArgs::parse_tokens(args.into()) {
+        Ok(runtime_args) => runtime_args,
+        Err(err) => return err.to_compile_error().into(),
+    };
+    let config_file = runtime_args.config_path.clone();
+    let sim_mode = runtime_args.sim_mode;
+    let ignore_resources = runtime_args.ignore_resources;
 
     #[cfg(feature = "std")]
     let std = true;
@@ -840,43 +921,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let signal_handler = cfg!(feature = "signal-handler");
     let parallel_rt_enabled = cfg!(feature = "parallel-rt");
     let rt_guard = rtsan_guard_tokens();
-
-    // Custom parser for the attribute arguments
-    let attribute_config_parser = parser(|meta| {
-        if meta.path.is_ident("config") {
-            config_file = Some(meta.value()?.parse()?);
-            Ok(())
-        } else if meta.path.is_ident("sim_mode") {
-            // Check if `sim_mode` has an explicit value (true/false)
-            if meta.input.peek(syn::Token![=]) {
-                meta.input.parse::<syn::Token![=]>()?;
-                let value: syn::LitBool = meta.input.parse()?;
-                sim_mode = value.value();
-                Ok(())
-            } else {
-                // If no value is provided, default to true
-                sim_mode = true;
-                Ok(())
-            }
-        } else if meta.path.is_ident("ignore_resources") {
-            if meta.input.peek(syn::Token![=]) {
-                meta.input.parse::<syn::Token![=]>()?;
-                let value: syn::LitBool = meta.input.parse()?;
-                ignore_resources = value.value();
-                Ok(())
-            } else {
-                ignore_resources = true;
-                Ok(())
-            }
-        } else {
-            Err(meta.error("unsupported property"))
-        }
-    });
-
-    #[cfg(feature = "macro_debug")]
-    eprintln!("[parse]");
-    // Parse the provided args with the custom parser
-    parse_macro_input!(args with attribute_config_parser);
 
     if ignore_resources && !sim_mode {
         return return_error(
@@ -893,41 +937,20 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     //         .push(syn::parse_quote!(L: UnifiedLogWrite + 'static));
     // }
 
-    // Check if the config file was provided
-    let config_file = match config_file {
-        Some(file) => file.value(),
-        None => {
-            return return_error(
-                "Expected config file attribute like #[CopperRuntime(config = \"path\")]"
-                    .to_string(),
-            );
-        }
-    };
-
-    if !std::path::Path::new(&config_full_path(&config_file)).exists() {
-        return return_error(format!(
-            "The configuration file `{config_file}` does not exist. Please provide a valid path."
-        ));
-    }
-
-    let copper_config = match read_config(&config_file) {
-        Ok(cuconfig) => cuconfig,
+    let resolved_runtime_config = match resolve_runtime_config(&runtime_args) {
+        Ok(resolved_runtime_config) => resolved_runtime_config,
         Err(e) => return return_error(e.to_string()),
     };
+    let subsystem_code = resolved_runtime_config.subsystem_code;
+    let subsystem_id = resolved_runtime_config.subsystem_id.clone();
+    let copper_config_content = resolved_runtime_config.bundled_local_config_content.clone();
+    let copper_config = resolved_runtime_config.local_config;
     let copperlist_count = copper_config
         .logging
         .as_ref()
         .and_then(|logging| logging.copperlist_count)
         .unwrap_or(DEFAULT_CLNB);
     let copperlist_count_tokens = proc_macro2::Literal::usize_unsuffixed(copperlist_count);
-    let copper_config_content = match read_to_string(config_full_path(config_file.as_str())) {
-        Ok(ok) => ok,
-        Err(e) => {
-            return return_error(format!(
-                "Could not read the config file (should not happen because we just succeeded just before). {e}"
-            ));
-        }
-    };
     let caller_root = utils::caller_crate_root();
     let (git_commit, git_dirty) = detect_git_info(&caller_root);
     let git_commit_tokens = if let Some(commit) = git_commit {
@@ -937,6 +960,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     };
     let git_dirty_tokens = if let Some(dirty) = git_dirty {
         quote! { Some(#dirty) }
+    } else {
+        quote! { None }
+    };
+    let subsystem_code_literal = proc_macro2::Literal::u16_unsuffixed(subsystem_code);
+    let subsystem_id_tokens = if let Some(subsystem_id) = subsystem_id.as_deref() {
+        quote! { Some(#subsystem_id) }
     } else {
         quote! { None }
     };
@@ -2630,6 +2659,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let shutdown = std::sync::Arc::clone(&shutdown);
                                 let clock = clock.clone();
                                 let instance_id = instance_id;
+                                let subsystem_code = subsystem_code;
                                 let execution_probe_ptr = execution_probe_ptr;
                                 let monitor_ptr = monitor_ptr;
                                 let task_ptrs = task_ptrs;
@@ -2674,11 +2704,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                                     kf_lock: kf_lock.as_ref(),
                                                     culist: culist.as_mut(),
                                                     clid,
-                                                    ctx: cu29::context::CuContext::builder(clock.clone())
-                                                        .cl_id(clid)
-                                                        .instance_id(instance_id)
-                                                        .task_ids(#mission_mod::TASK_IDS)
-                                                        .build(),
+                                                    ctx: cu29::context::CuContext::from_runtime_metadata(
+                                                        clock.clone(),
+                                                        clid,
+                                                        instance_id,
+                                                        subsystem_code,
+                                                        #mission_mod::TASK_IDS,
+                                                    ),
                                                 };
                                                 let outcome = #step_ident(&mut step_rt);
                                                 drop(step_rt);
@@ -2966,35 +2998,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {}
         };
 
-        let config_load_stmt = if std {
-            quote! {
-                let (config, config_source) = if let Some(overridden_config) = config_override {
-                    debug!("CuConfig: Overridden programmatically.");
-                    (overridden_config, RuntimeLifecycleConfigSource::ProgrammaticOverride)
-                } else if ::std::path::Path::new(config_filename).exists() {
-                    debug!("CuConfig: Reading configuration from file: {}", config_filename);
-                    (
-                        cu29::config::read_configuration(config_filename)?,
-                        RuntimeLifecycleConfigSource::ExternalFile,
-                    )
-                } else {
-                    let original_config = Self::original_config();
-                    debug!("CuConfig: Using the bundled configuration compiled into the binary.");
-                    (
-                        cu29::config::read_configuration_str(original_config, None)?,
-                        RuntimeLifecycleConfigSource::BundledDefault,
-                    )
-                };
-            }
-        } else {
-            quote! {
-                // Only the original config is available in no-std
-                let original_config = Self::original_config();
-                debug!("CuConfig: Using the bundled configuration compiled into the binary.");
-                let config = cu29::config::read_configuration_str(original_config, None)?;
-                let config_source = RuntimeLifecycleConfigSource::BundledDefault;
-            }
-        };
+        let config_load_stmt =
+            build_config_load_stmt(std, application_name, subsystem_id.as_deref());
 
         let copperlist_count_check = quote! {
             let configured_copperlist_count = config
@@ -3140,6 +3145,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     let runtime = &mut self.copper_runtime;
                     let clock = &runtime.clock;
                     let instance_id = runtime.instance_id();
+                    let subsystem_code = runtime.subsystem_code();
                     let execution_probe = runtime.execution_probe.as_ref();
                     let monitor = &runtime.monitor;
                     let cl_manager = &mut runtime.copperlists_manager;
@@ -3355,11 +3361,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             .culist
                                             .take()
                                             .expect("parallel abort result missing CopperList ownership");
-                                        let mut commit_ctx = cu29::context::CuContext::builder(clock.clone())
-                                            .cl_id(worker_result.clid)
-                                            .instance_id(instance_id)
-                                            .task_ids(#mission_mod::TASK_IDS)
-                                            .build();
+                                        let mut commit_ctx = cu29::context::CuContext::from_runtime_metadata(
+                                            clock.clone(),
+                                            worker_result.clid,
+                                            instance_id,
+                                            subsystem_code,
+                                            #mission_mod::TASK_IDS,
+                                        );
                                         commit_ctx.clear_current_task();
                                         let monitor_result = monitor.process_copperlist(
                                             &commit_ctx,
@@ -3378,11 +3386,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             .culist
                                             .take()
                                             .expect("parallel worker result missing CopperList ownership");
-                                        let mut commit_ctx = cu29::context::CuContext::builder(clock.clone())
-                                            .cl_id(worker_result.clid)
-                                            .instance_id(instance_id)
-                                            .task_ids(#mission_mod::TASK_IDS)
-                                            .build();
+                                        let mut commit_ctx = cu29::context::CuContext::from_runtime_metadata(
+                                            clock.clone(),
+                                            worker_result.clid,
+                                            instance_id,
+                                            subsystem_code,
+                                            #mission_mod::TASK_IDS,
+                                        );
                                         commit_ctx.clear_current_task();
                                         let monitor_result = monitor.process_copperlist(
                                             &commit_ctx,
@@ -3487,6 +3497,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let runtime = &mut self.copper_runtime;
                 let clock = &runtime.clock;
                 let instance_id = runtime.instance_id();
+                let subsystem_code = runtime.subsystem_code();
                 let execution_probe = &runtime.execution_probe;
                 let monitor = &mut runtime.monitor;
                 let tasks = &mut runtime.tasks;
@@ -3494,11 +3505,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let cl_manager = &mut runtime.copperlists_manager;
                 let kf_manager = &mut runtime.keyframes_manager;
                 let iteration_clid = cl_manager.next_cl_id();
-                let mut ctx = cu29::context::CuContext::builder(clock.clone())
-                    .cl_id(iteration_clid)
-                    .instance_id(instance_id)
-                    .task_ids(#mission_mod::TASK_IDS)
-                    .build();
+                let mut ctx = cu29::context::CuContext::from_runtime_metadata(
+                    clock.clone(),
+                    iteration_clid,
+                    instance_id,
+                    subsystem_code,
+                    #mission_mod::TASK_IDS,
+                );
                 let mut __cu_abort_copperlist = false;
 
                 // Preprocess calls can happen at any time, just packed them up front.
@@ -3510,11 +3523,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 kf_manager.reset(clid, clock); // beginning of processing, we empty the serialized frozen states of the tasks.
                 culist.change_state(cu29::copperlist::CopperListState::Processing);
                 culist.msgs.init_zeroed();
-                let mut ctx = cu29::context::CuContext::builder(clock.clone())
-                    .cl_id(iteration_clid)
-                    .instance_id(instance_id)
-                    .task_ids(#mission_mod::TASK_IDS)
-                    .build();
+                let mut ctx = cu29::context::CuContext::from_runtime_metadata(
+                    clock.clone(),
+                    iteration_clid,
+                    instance_id,
+                    subsystem_code,
+                    #mission_mod::TASK_IDS,
+                );
                 {
                     let msgs = &mut culist.msgs.0;
                     '__cu_process_steps: {
@@ -3570,11 +3585,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     mission: #mission.to_string(),
                 });
                 let lifecycle_clid = self.copper_runtime.copperlists_manager.last_cl_id();
-                let mut ctx = cu29::context::CuContext::builder(self.copper_runtime.clock.clone())
-                    .cl_id(lifecycle_clid)
-                    .instance_id(self.copper_runtime.instance_id())
-                    .task_ids(#mission_mod::TASK_IDS)
-                    .build();
+                let mut ctx = cu29::context::CuContext::from_runtime_metadata(
+                    self.copper_runtime.clock.clone(),
+                    lifecycle_clid,
+                    self.copper_runtime.instance_id(),
+                    self.copper_runtime.subsystem_code(),
+                    #mission_mod::TASK_IDS,
+                );
                 #(#start_calls)*
                 ctx.clear_current_task();
                 self.copper_runtime.monitor.start(&ctx)?;
@@ -3583,11 +3600,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
             #stop_all_tasks {
                 let lifecycle_clid = self.copper_runtime.copperlists_manager.last_cl_id();
-                let mut ctx = cu29::context::CuContext::builder(self.copper_runtime.clock.clone())
-                    .cl_id(lifecycle_clid)
-                    .instance_id(self.copper_runtime.instance_id())
-                    .task_ids(#mission_mod::TASK_IDS)
-                    .build();
+                let mut ctx = cu29::context::CuContext::from_runtime_metadata(
+                    self.copper_runtime.clock.clone(),
+                    lifecycle_clid,
+                    self.copper_runtime.instance_id(),
+                    self.copper_runtime.subsystem_code(),
+                    #mission_mod::TASK_IDS,
+                );
                 #(#stop_calls)*
                 ctx.clear_current_task();
                 self.copper_runtime.monitor.stop(&ctx)?;
@@ -3769,6 +3788,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 ::cu29::prelude::info!("CuApp new: building runtime");
                 let copper_runtime = CuRuntime::<#mission_mod::#tasks_type, #mission_mod::CuBridges, #mission_mod::CuStampedDataSet, #monitor_type, #copperlist_count_tokens>::new_with_resources(
                     clock,
+                    #application_name::SUBSYSTEM_CODE,
                     &config,
                     #mission,
                     resources,
@@ -3796,6 +3816,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         let app_inherent_impl = quote! {
             impl #application_name {
+                pub const SUBSYSTEM_CODE: u16 = #subsystem_code_literal;
+                pub const SUBSYSTEM_ID: Option<&'static str> = #subsystem_id_tokens;
+
                 pub fn original_config() -> String {
                     #copper_config_content.to_string()
                 }
@@ -4326,20 +4349,156 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     result.into()
 }
 
-fn read_config(config_file: &str) -> CuResult<CuConfig> {
-    let filename = config_full_path(config_file);
+fn resolve_runtime_config(args: &CopperRuntimeArgs) -> CuResult<ResolvedRuntimeConfig> {
+    let caller_root = utils::caller_crate_root();
+    resolve_runtime_config_with_root(args, &caller_root)
+}
 
-    read_configuration(filename.as_str())
+fn resolve_runtime_config_with_root(
+    args: &CopperRuntimeArgs,
+    caller_root: &Path,
+) -> CuResult<ResolvedRuntimeConfig> {
+    let filename = config_full_path_from_root(caller_root, &args.config_path);
+    if !Path::new(&filename).exists() {
+        return Err(CuError::from(format!(
+            "The configuration file `{}` does not exist. Please provide a valid path.",
+            args.config_path
+        )));
+    }
+
+    if let Some(subsystem_id) = args.subsystem_id.as_deref() {
+        let multi_config = cu29_runtime::config::read_multi_configuration(filename.as_str())
+            .map_err(|e| {
+                CuError::from(format!(
+                    "When `subsystem = \"{subsystem_id}\"` is provided, `config = \"{}\"` must point to a valid multi-Copper configuration: {e}",
+                    args.config_path
+                ))
+            })?;
+        let subsystem = multi_config.subsystem(subsystem_id).ok_or_else(|| {
+            CuError::from(format!(
+                "Subsystem '{subsystem_id}' was not found in multi-Copper configuration '{}'.",
+                args.config_path
+            ))
+        })?;
+        let bundled_local_config_content = read_to_string(&subsystem.config_path).map_err(|e| {
+            CuError::from(format!(
+                "Failed to read bundled local configuration for subsystem '{subsystem_id}' from '{}'.",
+                subsystem.config_path
+            ))
+            .add_cause(e.to_string().as_str())
+        })?;
+
+        Ok(ResolvedRuntimeConfig {
+            local_config: subsystem.config.clone(),
+            bundled_local_config_content,
+            subsystem_id: Some(subsystem_id.to_string()),
+            subsystem_code: subsystem.subsystem_code,
+        })
+    } else {
+        Ok(ResolvedRuntimeConfig {
+            local_config: read_configuration(filename.as_str())?,
+            bundled_local_config_content: read_to_string(&filename).map_err(|e| {
+                CuError::from(format!(
+                    "Could not read the configuration file '{}'.",
+                    args.config_path
+                ))
+                .add_cause(e.to_string().as_str())
+            })?,
+            subsystem_id: None,
+            subsystem_code: 0,
+        })
+    }
+}
+
+fn build_config_load_stmt(
+    std_enabled: bool,
+    application_name: &Ident,
+    subsystem_id: Option<&str>,
+) -> proc_macro2::TokenStream {
+    if std_enabled {
+        if let Some(subsystem_id) = subsystem_id {
+            quote! {
+                let (config, config_source) = if let Some(overridden_config) = config_override {
+                    debug!("CuConfig: Overridden programmatically.");
+                    (overridden_config, RuntimeLifecycleConfigSource::ProgrammaticOverride)
+                } else if ::std::path::Path::new(config_filename).exists() {
+                    let subsystem_id = #application_name::SUBSYSTEM_ID
+                        .expect("generated multi-Copper runtime is missing SUBSYSTEM_ID");
+                    debug!(
+                        "CuConfig: Reading multi-Copper configuration from file: {} (subsystem={})",
+                        config_filename,
+                        subsystem_id
+                    );
+                    let multi_config = cu29::config::read_multi_configuration(config_filename)?;
+                    let subsystem = multi_config.subsystem(subsystem_id).ok_or_else(|| {
+                        CuError::from(format!(
+                            "Multi-Copper configuration '{}' does not define subsystem '{}'.",
+                            config_filename,
+                            subsystem_id
+                        ))
+                    })?;
+                    (subsystem.config.clone(), RuntimeLifecycleConfigSource::ExternalFile)
+                } else {
+                    let original_config = Self::original_config();
+                    debug!(
+                        "CuConfig: Using the bundled subsystem configuration compiled into the binary (subsystem={}).",
+                        #subsystem_id
+                    );
+                    (
+                        cu29::config::read_configuration_str(original_config, None)?,
+                        RuntimeLifecycleConfigSource::BundledDefault,
+                    )
+                };
+            }
+        } else {
+            quote! {
+                let (config, config_source) = if let Some(overridden_config) = config_override {
+                    debug!("CuConfig: Overridden programmatically.");
+                    (overridden_config, RuntimeLifecycleConfigSource::ProgrammaticOverride)
+                } else if ::std::path::Path::new(config_filename).exists() {
+                    debug!("CuConfig: Reading configuration from file: {}", config_filename);
+                    (
+                        cu29::config::read_configuration(config_filename)?,
+                        RuntimeLifecycleConfigSource::ExternalFile,
+                    )
+                } else {
+                    let original_config = Self::original_config();
+                    debug!("CuConfig: Using the bundled configuration compiled into the binary.");
+                    (
+                        cu29::config::read_configuration_str(original_config, None)?,
+                        RuntimeLifecycleConfigSource::BundledDefault,
+                    )
+                };
+            }
+        }
+    } else {
+        quote! {
+            // Only the original config is available in no-std
+            let original_config = Self::original_config();
+            debug!("CuConfig: Using the bundled configuration compiled into the binary.");
+            let config = cu29::config::read_configuration_str(original_config, None)?;
+            let config_source = RuntimeLifecycleConfigSource::BundledDefault;
+        }
+    }
 }
 
 fn config_full_path(config_file: &str) -> String {
-    let mut config_full_path = utils::caller_crate_root();
+    config_full_path_from_root(&utils::caller_crate_root(), config_file)
+}
+
+fn config_full_path_from_root(caller_root: &Path, config_file: &str) -> String {
+    let mut config_full_path = caller_root.to_path_buf();
     config_full_path.push(config_file);
     let filename = config_full_path
         .as_os_str()
         .to_str()
         .expect("Could not interpret the config file name");
     filename.to_string()
+}
+
+fn read_config(config_file: &str) -> CuResult<CuConfig> {
+    let filename = config_full_path(config_file);
+    read_configuration(filename.as_str())
 }
 
 fn extract_tasks_output_types(graph: &CuGraph) -> Vec<Option<Type>> {
@@ -6848,6 +7007,24 @@ enum ExecutionEntityKind {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    fn unique_test_dir(name: &str) -> PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock before unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("cu29_derive_{name}_{nanos}"))
+    }
+
+    fn write_file(path: &Path, content: &str) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create parent dirs");
+        }
+        fs::write(path, content).expect("write file");
+    }
+
     // See tests/compile_file directory for more information
     #[test]
     fn test_compile_fail() {
@@ -7006,5 +7183,139 @@ mod tests {
         assert_eq!(specs[0].binding_name, "serial");
         assert_eq!(specs[0].bundle_index, 0);
         assert_eq!(specs[0].resource_name, "serial0");
+    }
+
+    #[test]
+    fn copper_runtime_args_parse_subsystem_mode() {
+        use super::*;
+        use quote::quote;
+
+        let args = CopperRuntimeArgs::parse_tokens(quote!(
+            config = "multi_copper.ron",
+            subsystem = "ping",
+            sim_mode,
+            ignore_resources
+        ))
+        .expect("parse runtime args");
+
+        assert_eq!(args.config_path, "multi_copper.ron");
+        assert_eq!(args.subsystem_id.as_deref(), Some("ping"));
+        assert!(args.sim_mode);
+        assert!(args.ignore_resources);
+    }
+
+    #[test]
+    fn resolve_runtime_config_from_multi_config_selects_local_subsystem() {
+        use super::*;
+
+        let root = unique_test_dir("multi_runtime_resolve");
+        let alpha_config = root.join("alpha.ron");
+        let beta_config = root.join("beta.ron");
+        let network_config = root.join("multi.ron");
+
+        write_file(
+            &alpha_config,
+            r#"
+(
+    tasks: [
+        (id: "src", type: "AlphaSource", run_in_sim: true),
+        (id: "sink", type: "AlphaSink", run_in_sim: true),
+    ],
+    cnx: [
+        (src: "src", dst: "sink", msg: "u32"),
+    ],
+)
+"#,
+        );
+        write_file(
+            &beta_config,
+            r#"
+(
+    tasks: [
+        (id: "src", type: "BetaSource", run_in_sim: true),
+        (id: "sink", type: "BetaSink", run_in_sim: true),
+    ],
+    cnx: [
+        (src: "src", dst: "sink", msg: "u64"),
+    ],
+)
+"#,
+        );
+        write_file(
+            &network_config,
+            r#"
+(
+    subsystems: [
+        (id: "beta", config: "beta.ron"),
+        (id: "alpha", config: "alpha.ron"),
+    ],
+    interconnects: [],
+)
+"#,
+        );
+
+        let args = CopperRuntimeArgs {
+            config_path: "multi.ron".to_string(),
+            subsystem_id: Some("beta".to_string()),
+            sim_mode: false,
+            ignore_resources: false,
+        };
+
+        let resolved =
+            resolve_runtime_config_with_root(&args, &root).expect("resolve multi runtime config");
+
+        assert_eq!(resolved.subsystem_id.as_deref(), Some("beta"));
+        assert_eq!(resolved.subsystem_code, 1);
+        let graph = resolved
+            .local_config
+            .get_graph(None)
+            .expect("resolved local config graph");
+        assert!(graph.get_node_id_by_name("src").is_some());
+        assert!(resolved.bundled_local_config_content.contains("BetaSource"));
+    }
+
+    #[test]
+    fn resolve_runtime_config_rejects_missing_subsystem() {
+        use super::*;
+
+        let root = unique_test_dir("multi_runtime_missing_subsystem");
+        let alpha_config = root.join("alpha.ron");
+        let network_config = root.join("multi.ron");
+
+        write_file(
+            &alpha_config,
+            r#"
+(
+    tasks: [
+        (id: "src", type: "AlphaSource", run_in_sim: true),
+        (id: "sink", type: "AlphaSink", run_in_sim: true),
+    ],
+    cnx: [
+        (src: "src", dst: "sink", msg: "u32"),
+    ],
+)
+"#,
+        );
+        write_file(
+            &network_config,
+            r#"
+(
+    subsystems: [
+        (id: "alpha", config: "alpha.ron"),
+    ],
+    interconnects: [],
+)
+"#,
+        );
+
+        let args = CopperRuntimeArgs {
+            config_path: "multi.ron".to_string(),
+            subsystem_id: Some("missing".to_string()),
+            sim_mode: false,
+            ignore_resources: false,
+        };
+
+        let err = resolve_runtime_config_with_root(&args, &root).expect_err("missing subsystem");
+        assert!(err.to_string().contains("Subsystem 'missing'"));
     }
 }

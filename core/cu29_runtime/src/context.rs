@@ -9,6 +9,7 @@ use cu29_clock::{RobotClock, RobotClockMock};
 /// - time access through `clock` and `Deref<Target = RobotClock>`
 /// - current execution sequence id via `cl_id()`
 /// - process instance metadata via `instance_id()`
+/// - compile-time subsystem identity via `subsystem_code()`
 /// - current task metadata via `task_id()` / `task_index()`
 ///
 /// The execution sequence id matches the copper-list id of the iteration being
@@ -24,6 +25,7 @@ pub struct CuContext {
     pub clock: RobotClock,
     cl_id: u64,
     instance_id: u32,
+    subsystem_code: u16,
     task_ids: &'static [&'static str],
     current_task_index: Option<usize>,
 }
@@ -35,6 +37,7 @@ impl CuContext {
             clock,
             cl_id: 0,
             instance_id: 0,
+            subsystem_code: 0,
             task_ids: &[],
         }
     }
@@ -71,15 +74,29 @@ impl CuContext {
         clock: RobotClock,
         clid: u64,
         instance_id: u32,
+        subsystem_code: u16,
         task_ids: &'static [&'static str],
     ) -> Self {
         Self {
             clock,
             cl_id: clid,
             instance_id,
+            subsystem_code,
             task_ids,
             current_task_index: None,
         }
+    }
+
+    /// Internal constructor used by generated runtime code.
+    #[doc(hidden)]
+    pub fn from_runtime_metadata(
+        clock: RobotClock,
+        clid: u64,
+        instance_id: u32,
+        subsystem_code: u16,
+        task_ids: &'static [&'static str],
+    ) -> Self {
+        Self::new(clock, clid, instance_id, subsystem_code, task_ids)
     }
 
     /// Sets the currently executing task index.
@@ -106,6 +123,11 @@ impl CuContext {
         self.instance_id
     }
 
+    /// Returns the compile-time subsystem code for this Copper process.
+    pub fn subsystem_code(&self) -> u16 {
+        self.subsystem_code
+    }
+
     /// Returns the current task index, if any.
     pub fn task_index(&self) -> Option<usize> {
         self.current_task_index
@@ -124,6 +146,7 @@ pub struct CuContextBuilder {
     clock: RobotClock,
     cl_id: u64,
     instance_id: u32,
+    subsystem_code: u16,
     task_ids: &'static [&'static str],
 }
 
@@ -148,7 +171,13 @@ impl CuContextBuilder {
 
     /// Builds a context value.
     pub fn build(self) -> CuContext {
-        CuContext::new(self.clock, self.cl_id, self.instance_id, self.task_ids)
+        CuContext::new(
+            self.clock,
+            self.cl_id,
+            self.instance_id,
+            self.subsystem_code,
+            self.task_ids,
+        )
     }
 }
 
@@ -169,6 +198,7 @@ mod tests {
     fn default_instance_id_is_zero() {
         let ctx = CuContext::from_clock(RobotClock::default());
         assert_eq!(ctx.instance_id(), 0);
+        assert_eq!(ctx.subsystem_code(), 0);
     }
 
     #[test]
@@ -179,5 +209,14 @@ mod tests {
             .build();
         assert_eq!(ctx.cl_id(), 7);
         assert_eq!(ctx.instance_id(), 42);
+        assert_eq!(ctx.subsystem_code(), 0);
+    }
+
+    #[test]
+    fn runtime_metadata_sets_subsystem_code() {
+        let ctx = CuContext::from_runtime_metadata(RobotClock::default(), 9, 42, 7, &[]);
+        assert_eq!(ctx.cl_id(), 9);
+        assert_eq!(ctx.instance_id(), 42);
+        assert_eq!(ctx.subsystem_code(), 7);
     }
 }

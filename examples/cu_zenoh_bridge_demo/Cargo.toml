@@ -16,11 +16,11 @@ default-run = "zenoh-ping"
 
 [dependencies]
 cu29 = { workspace = true }
+cu29-export = { workspace = true }
 cu29-helpers = { workspace = true }
 cu-zenoh-bridge = { path = "../../components/bridges/cu_zenoh_bridge", version = "0.14.0" }
 serde = { workspace = true }
 bincode = { workspace = true }
-tempfile = { workspace = true }
 
 [[bin]]
 name = "zenoh-ping"
@@ -33,3 +33,11 @@ path = "src/bin/pong.rs"
 [[bin]]
 name = "validate-multi-config"
 path = "src/bin/validate_multi_config.rs"
+
+[[bin]]
+name = "inspect-ping-provenance"
+path = "src/bin/inspect_ping_provenance.rs"
+
+[[bin]]
+name = "inspect-pong-provenance"
+path = "src/bin/inspect_pong_provenance.rs"

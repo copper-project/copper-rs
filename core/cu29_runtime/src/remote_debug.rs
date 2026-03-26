@@ -2635,6 +2635,13 @@ fn metadata_to_json(metadata: &dyn CuMsgMetadataTrait, tov: Tov) -> Value {
     let process = metadata.process_time();
     let start: Option<CuTime> = process.start.into();
     let end: Option<CuTime> = process.end.into();
+    let bridge_origin = metadata.bridge_origin().map(|origin| {
+        json!({
+            "subsystem_code": origin.subsystem_code,
+            "instance_id": origin.instance_id,
+            "cl_id": origin.cl_id,
+        })
+    });
     json!({
         "tov": tov_to_json(tov),
         "process_time": {
@@ -2642,6 +2649,7 @@ fn metadata_to_json(metadata: &dyn CuMsgMetadataTrait, tov: Tov) -> Value {
             "end_ns": end.map(|t| t.as_nanos()),
         },
         "status_txt": metadata.status_txt().0.to_string(),
+        "bridge_origin": bridge_origin,
     })
 }
 

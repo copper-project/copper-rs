@@ -58,9 +58,17 @@ struct ZenohRxChannel<Id: Copy> {
 
 struct ZenohContext<TxId: Copy, RxId: Copy> {
     session: zenoh::Session,
+    local_subsystem_code: u16,
     local_instance_id: u32,
     tx_channels: Vec<ZenohTxChannel<TxId>>,
     rx_channels: Vec<ZenohRxChannel<RxId>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, bincode::Encode, bincode::Decode)]
+struct CopperBridgeAttachment {
+    subsystem_code: u16,
+    instance_id: u32,
+    cl_id: u64,
 }
 
 #[derive(Reflect)]
@@ -229,6 +237,33 @@ where
     ) -> Option<&mut ZenohRxChannel<Rx::Id>> {
         channels.iter_mut().find(|channel| channel.id == id)
     }
+
+    fn encode_attachment(ctx: &CuContext) -> CuResult<Vec<u8>> {
+        bincode::encode_to_vec(
+            CopperBridgeAttachment {
+                subsystem_code: ctx.subsystem_code(),
+                instance_id: ctx.instance_id(),
+                cl_id: ctx.cl_id(),
+            },
+            bincode::config::standard(),
+        )
+        .map_err(|e| CuError::new_with_cause("ZenohBridge: attachment encode failed", e))
+    }
+
+    fn decode_attachment(sample: &zenoh::sample::Sample) -> CuResult<Option<CuMsgBridgeOrigin>> {
+        let Some(attachment) = sample.attachment() else {
+            return Ok(None);
+        };
+        let attachment_bytes = attachment.to_bytes();
+        let (decoded, _): (CopperBridgeAttachment, usize) =
+            bincode::decode_from_slice(attachment_bytes.as_ref(), bincode::config::standard())
+                .map_err(|e| CuError::new_with_cause("ZenohBridge: attachment decode failed", e))?;
+        Ok(Some(CuMsgBridgeOrigin {
+            subsystem_code: decoded.subsystem_code,
+            instance_id: decoded.instance_id,
+            cl_id: decoded.cl_id,
+        }))
+    }
 }
 
 impl<Tx, Rx> CuBridge for ZenohBridge<Tx, Rx>
@@ -316,6 +351,7 @@ where
 
         self.ctx = Some(ZenohContext {
             session,
+            local_subsystem_code: ctx.subsystem_code(),
             local_instance_id: ctx.instance_id(),
             tx_channels,
             rx_channels,
@@ -336,6 +372,7 @@ where
             .ctx
             .as_mut()
             .ok_or_else(|| CuError::from("ZenohBridge: Context not initialized"))?;
+        debug_assert_eq!(runtime_ctx.local_subsystem_code, ctx.subsystem_code());
         debug_assert_eq!(runtime_ctx.local_instance_id, ctx.instance_id());
         let tx_channel = Self::find_tx_channel_mut(&mut runtime_ctx.tx_channels, channel.id())
             .ok_or_else(|| {
@@ -346,11 +383,13 @@ where
             })?;
 
         let encoded = Self::encode_message(tx_channel.wire_format, msg)?;
+        let attachment = Self::encode_attachment(ctx)?;
         zenoh::Wait::wait(
             tx_channel
                 .publisher
                 .put(encoded)
-                .encoding(tx_channel.wire_format.encoding()),
+                .encoding(tx_channel.wire_format.encoding())
+                .attachment(attachment),
         )
         .map_err(cu_error_map("ZenohBridge: Failed to publish"))?;
         Ok(())
@@ -369,6 +408,7 @@ where
             .ctx
             .as_mut()
             .ok_or_else(|| CuError::from("ZenohBridge: Context not initialized"))?;
+        debug_assert_eq!(runtime_ctx.local_subsystem_code, ctx.subsystem_code());
         debug_assert_eq!(runtime_ctx.local_instance_id, ctx.instance_id());
         let rx_channel = Self::find_rx_channel_mut(&mut runtime_ctx.rx_channels, channel.id())
             .ok_or_else(|| {
@@ -385,11 +425,18 @@ where
             .try_recv()
             .map_err(|e| CuError::from(format!("ZenohBridge: receive failed: {e}")))?;
         if let Some(sample) = sample {
+            let bridge_origin = Self::decode_attachment(&sample)?;
             let payload = sample.payload().to_bytes();
             let decoded = Self::decode_message(rx_channel.wire_format, payload.as_ref())?;
             *msg = decoded;
+            if let Some(bridge_origin) = bridge_origin {
+                msg.metadata.set_bridge_origin(bridge_origin);
+            } else {
+                msg.metadata.clear_bridge_origin();
+            }
         } else {
             msg.clear_payload();
+            msg.metadata.clear_bridge_origin();
         }
         Ok(())
     }
