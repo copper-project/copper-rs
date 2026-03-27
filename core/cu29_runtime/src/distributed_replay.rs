@@ -1,10 +1,13 @@
-//! Discovery/catalog helpers for distributed deterministic replay.
+//! Discovery, validation, and planning helpers for distributed deterministic replay.
 //!
-//! This module is intentionally limited to offline log discovery for now:
+//! This module currently stops at a validated replay plan:
 //! it scans Copper unified logs, normalizes slab paths back to their base
-//! `.copper` path, and extracts the runtime identity recorded in the
-//! `RuntimeLifecycle::Instantiated` event.
+//! `.copper` path, extracts runtime identity from `RuntimeLifecycle::Instantiated`,
+//! matches those logs against a strict multi-Copper topology, validates typed
+//! subsystem registrations, and prepares a per-instance/per-subsystem plan.
 
+use crate::app::{CuSubsystemMetadata, Subsystem};
+use crate::config::{MultiCopperConfig, read_multi_configuration};
 use crate::curuntime::{
     RuntimeLifecycleConfigSource, RuntimeLifecycleEvent, RuntimeLifecycleRecord,
     RuntimeLifecycleStackInfo,
@@ -14,7 +17,8 @@ use bincode::decode_from_std_read;
 use bincode::error::DecodeError;
 use cu29_traits::{CuError, CuResult, UnifiedLogType};
 use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
-use std::collections::BTreeSet;
+use std::any::type_name;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::fs;
 use std::io::Read;
@@ -211,6 +215,410 @@ impl DistributedReplayCatalog {
     }
 }
 
+/// One typed subsystem registration provided to the distributed replay builder.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DistributedReplayAppRegistration {
+    pub subsystem: Subsystem,
+    pub app_type_name: &'static str,
+}
+
+/// One validated log assignment for a subsystem instance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DistributedReplayAssignment {
+    pub instance_id: u32,
+    pub subsystem_id: String,
+    pub log: DistributedReplayLog,
+    pub registration: DistributedReplayAppRegistration,
+}
+
+/// Validated replay plan produced by [`DistributedReplayBuilder`].
+#[derive(Debug, Clone)]
+pub struct DistributedReplayPlan {
+    pub multi_config_path: PathBuf,
+    pub multi_config: MultiCopperConfig,
+    pub catalog: DistributedReplayCatalog,
+    pub selected_instances: Vec<u32>,
+    pub mission: Option<String>,
+    pub registrations: Vec<DistributedReplayAppRegistration>,
+    pub assignments: Vec<DistributedReplayAssignment>,
+}
+
+impl DistributedReplayPlan {
+    #[inline]
+    pub fn builder(multi_config_path: impl AsRef<Path>) -> CuResult<DistributedReplayBuilder> {
+        DistributedReplayBuilder::new(multi_config_path)
+    }
+
+    #[inline]
+    pub fn assignment(
+        &self,
+        instance_id: u32,
+        subsystem_id: &str,
+    ) -> Option<&DistributedReplayAssignment> {
+        self.assignments.iter().find(|assignment| {
+            assignment.instance_id == instance_id && assignment.subsystem_id == subsystem_id
+        })
+    }
+}
+
+/// Aggregated validation diagnostics emitted while constructing a distributed replay plan.
+#[derive(Debug, Clone, Default)]
+pub struct DistributedReplayValidationError {
+    pub issues: Vec<String>,
+}
+
+impl DistributedReplayValidationError {
+    fn push(&mut self, issue: impl Into<String>) {
+        self.issues.push(issue.into());
+    }
+
+    fn is_empty(&self) -> bool {
+        self.issues.is_empty()
+    }
+}
+
+impl Display for DistributedReplayValidationError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        writeln!(f, "Distributed replay validation failed:")?;
+        for issue in &self.issues {
+            writeln!(f, " - {issue}")?;
+        }
+        Ok(())
+    }
+}
+
+/// Builder for a validated distributed replay plan.
+#[derive(Debug, Clone)]
+pub struct DistributedReplayBuilder {
+    multi_config_path: PathBuf,
+    multi_config: MultiCopperConfig,
+    discovery_inputs: Vec<PathBuf>,
+    catalog: Option<DistributedReplayCatalog>,
+    registrations: BTreeMap<String, DistributedReplayAppRegistration>,
+    selected_instances: Option<BTreeSet<u32>>,
+}
+
+impl DistributedReplayBuilder {
+    /// Load a strict multi-Copper config and start building a distributed replay plan.
+    pub fn new(multi_config_path: impl AsRef<Path>) -> CuResult<Self> {
+        let multi_config_path = multi_config_path.as_ref().to_path_buf();
+        let multi_config = read_multi_configuration(&multi_config_path.to_string_lossy())?;
+        Ok(Self {
+            multi_config_path,
+            multi_config,
+            discovery_inputs: Vec::new(),
+            catalog: None,
+            registrations: BTreeMap::new(),
+            selected_instances: None,
+        })
+    }
+
+    /// Replace the discovered catalog explicitly.
+    pub fn with_catalog(mut self, catalog: DistributedReplayCatalog) -> Self {
+        self.catalog = Some(catalog);
+        self
+    }
+
+    /// Discover logs from files and/or directories.
+    ///
+    /// Directories are walked recursively by [`DistributedReplayCatalog`].
+    pub fn discover_logs<I, P>(mut self, inputs: I) -> CuResult<Self>
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
+        self.discovery_inputs
+            .extend(inputs.into_iter().map(|path| path.as_ref().to_path_buf()));
+        self.catalog = Some(DistributedReplayCatalog::discover(
+            self.discovery_inputs.iter().collect::<Vec<_>>(),
+        )?);
+        Ok(self)
+    }
+
+    /// Convenience wrapper for recursive discovery under one root directory.
+    pub fn discover_logs_under(self, root: impl AsRef<Path>) -> CuResult<Self> {
+        self.discover_logs([root.as_ref().to_path_buf()])
+    }
+
+    /// Restrict plan construction to a subset of instance ids.
+    pub fn instances<I>(mut self, instances: I) -> Self
+    where
+        I: IntoIterator<Item = u32>,
+    {
+        self.selected_instances = Some(instances.into_iter().collect());
+        self
+    }
+
+    /// Register the generated app type expected for one subsystem.
+    pub fn register<App>(mut self, subsystem_id: &str) -> CuResult<Self>
+    where
+        App: CuSubsystemMetadata + 'static,
+    {
+        if self.registrations.contains_key(subsystem_id) {
+            return Err(CuError::from(format!(
+                "Subsystem '{}' is already registered for distributed replay",
+                subsystem_id
+            )));
+        }
+
+        let expected_subsystem = self.multi_config.subsystem(subsystem_id).ok_or_else(|| {
+            CuError::from(format!(
+                "Multi-Copper config '{}' does not define subsystem '{}'",
+                self.multi_config_path.display(),
+                subsystem_id
+            ))
+        })?;
+
+        let registered_subsystem = App::subsystem();
+        let Some(registered_subsystem_id) = registered_subsystem.id() else {
+            return Err(CuError::from(format!(
+                "App type '{}' was not generated for a multi-Copper subsystem and cannot be registered for distributed replay",
+                type_name::<App>()
+            )));
+        };
+
+        if registered_subsystem_id != subsystem_id {
+            return Err(CuError::from(format!(
+                "App type '{}' declares subsystem '{}' but was registered as '{}'",
+                type_name::<App>(),
+                registered_subsystem_id,
+                subsystem_id
+            )));
+        }
+
+        let registered_subsystem_code = registered_subsystem.code();
+        if registered_subsystem_code != expected_subsystem.subsystem_code {
+            return Err(CuError::from(format!(
+                "App type '{}' declares subsystem code {} for '{}' but multi-Copper config '{}' expects {}",
+                type_name::<App>(),
+                registered_subsystem_code,
+                subsystem_id,
+                self.multi_config_path.display(),
+                expected_subsystem.subsystem_code
+            )));
+        }
+
+        self.registrations.insert(
+            subsystem_id.to_string(),
+            DistributedReplayAppRegistration {
+                subsystem: registered_subsystem,
+                app_type_name: type_name::<App>(),
+            },
+        );
+        Ok(self)
+    }
+
+    /// Validate discovery + registrations and prepare a typed replay plan.
+    pub fn build(self) -> CuResult<DistributedReplayPlan> {
+        let catalog = match self.catalog {
+            Some(catalog) => catalog,
+            None if self.discovery_inputs.is_empty() => DistributedReplayCatalog::default(),
+            None => DistributedReplayCatalog::discover(
+                self.discovery_inputs.iter().collect::<Vec<_>>(),
+            )?,
+        };
+
+        let mut validation = DistributedReplayValidationError::default();
+
+        for failure in &catalog.failures {
+            validation.push(format!(
+                "discovery failure for '{}': {}",
+                failure.candidate_path.display(),
+                failure.error
+            ));
+        }
+
+        let subsystem_map: BTreeMap<_, _> = self
+            .multi_config
+            .subsystems
+            .iter()
+            .map(|subsystem| (subsystem.id.clone(), subsystem))
+            .collect();
+
+        for subsystem in subsystem_map.keys() {
+            if !self.registrations.contains_key(subsystem) {
+                validation.push(format!(
+                    "missing app registration for subsystem '{}'",
+                    subsystem
+                ));
+            }
+        }
+
+        let mut discovered_instances = BTreeSet::new();
+        let mut logs_by_target: BTreeMap<(u32, String), Vec<DistributedReplayLog>> =
+            BTreeMap::new();
+
+        for log in &catalog.logs {
+            let Some(subsystem_id) = log.subsystem_id() else {
+                validation.push(format!(
+                    "discovered log '{}' is missing subsystem_id runtime metadata",
+                    log.base_path.display()
+                ));
+                continue;
+            };
+
+            let Some(expected_subsystem) = subsystem_map.get(subsystem_id) else {
+                validation.push(format!(
+                    "discovered log '{}' belongs to subsystem '{}' which is not present in multi-Copper config '{}'",
+                    log.base_path.display(),
+                    subsystem_id,
+                    self.multi_config_path.display()
+                ));
+                continue;
+            };
+
+            if log.subsystem_code() != expected_subsystem.subsystem_code {
+                validation.push(format!(
+                    "discovered log '{}' reports subsystem code {} for '{}' but multi-Copper config '{}' expects {}",
+                    log.base_path.display(),
+                    log.subsystem_code(),
+                    subsystem_id,
+                    self.multi_config_path.display(),
+                    expected_subsystem.subsystem_code
+                ));
+            }
+
+            discovered_instances.insert(log.instance_id());
+            logs_by_target
+                .entry((log.instance_id(), subsystem_id.to_string()))
+                .or_default()
+                .push(log.clone());
+        }
+
+        for ((instance_id, subsystem_id), logs) in &logs_by_target {
+            if logs.len() > 1 {
+                validation.push(format!(
+                    "found {} logs for instance {} subsystem '{}': {}",
+                    logs.len(),
+                    instance_id,
+                    subsystem_id,
+                    join_log_paths(logs)
+                ));
+            }
+        }
+
+        let selected_instances: Vec<u32> =
+            if let Some(selected_instances) = &self.selected_instances {
+                let mut selected_instances: Vec<_> = selected_instances.iter().copied().collect();
+                selected_instances.sort_unstable();
+                for instance_id in &selected_instances {
+                    if !discovered_instances.contains(instance_id) {
+                        validation.push(format!(
+                            "selected instance {} has no discovered logs",
+                            instance_id
+                        ));
+                    }
+                }
+                selected_instances
+            } else {
+                discovered_instances.iter().copied().collect()
+            };
+
+        if selected_instances.is_empty() {
+            validation.push("no instances selected for distributed replay");
+        }
+
+        for instance_id in &selected_instances {
+            for subsystem in &self.multi_config.subsystems {
+                if !logs_by_target.contains_key(&(*instance_id, subsystem.id.clone())) {
+                    validation.push(format!(
+                        "missing log for instance {} subsystem '{}'",
+                        instance_id, subsystem.id
+                    ));
+                }
+            }
+        }
+
+        let mut known_missions = BTreeSet::new();
+        for instance_id in &selected_instances {
+            for subsystem in &self.multi_config.subsystems {
+                if let Some(logs) = logs_by_target.get(&(*instance_id, subsystem.id.clone()))
+                    && let Some(log) = logs.first()
+                    && let Some(mission) = &log.mission
+                {
+                    known_missions.insert(mission.clone());
+                }
+            }
+        }
+        if known_missions.len() > 1 {
+            validation.push(format!(
+                "selected logs disagree on mission: {}",
+                known_missions.into_iter().collect::<Vec<_>>().join(", ")
+            ));
+        }
+
+        if !validation.is_empty() {
+            return Err(CuError::from(validation.to_string()));
+        }
+
+        let mission = selected_instances
+            .iter()
+            .flat_map(|instance_id| {
+                self.multi_config.subsystems.iter().filter_map(|subsystem| {
+                    logs_by_target
+                        .get(&(*instance_id, subsystem.id.clone()))
+                        .and_then(|logs| logs.first())
+                        .and_then(|log| log.mission.clone())
+                })
+            })
+            .next();
+
+        let mut registrations: Vec<_> = self.registrations.into_values().collect();
+        registrations.sort_by(|left, right| left.subsystem.id().cmp(&right.subsystem.id()));
+
+        let mut assignments = Vec::new();
+        for instance_id in &selected_instances {
+            for subsystem in &self.multi_config.subsystems {
+                let log = logs_by_target
+                    .get(&(*instance_id, subsystem.id.clone()))
+                    .and_then(|logs| logs.first())
+                    .expect("validated distributed replay plan is missing a log")
+                    .clone();
+                let registration = registrations
+                    .iter()
+                    .find(|registration| registration.subsystem.id() == Some(subsystem.id.as_str()))
+                    .expect("validated distributed replay plan is missing a registration")
+                    .clone();
+                assignments.push(DistributedReplayAssignment {
+                    instance_id: *instance_id,
+                    subsystem_id: subsystem.id.clone(),
+                    log,
+                    registration,
+                });
+            }
+        }
+        assignments.sort_by(|left, right| {
+            (
+                left.instance_id,
+                left.registration.subsystem.code(),
+                left.subsystem_id.as_str(),
+            )
+                .cmp(&(
+                    right.instance_id,
+                    right.registration.subsystem.code(),
+                    right.subsystem_id.as_str(),
+                ))
+        });
+
+        Ok(DistributedReplayPlan {
+            multi_config_path: self.multi_config_path,
+            multi_config: self.multi_config,
+            catalog,
+            selected_instances,
+            mission,
+            registrations,
+            assignments,
+        })
+    }
+}
+
+fn join_log_paths(logs: &[DistributedReplayLog]) -> String {
+    logs.iter()
+        .map(|log| log.base_path.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 fn collect_candidate_base_paths(path: &Path, out: &mut BTreeSet<PathBuf>) -> CuResult<()> {
     if path.is_dir() {
         let mut entries = fs::read_dir(path)
@@ -300,6 +708,7 @@ fn read_next_entry<T: bincode::Decode<()>>(src: &mut impl Read) -> CuResult<Opti
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::CuSubsystemMetadata;
     use cu29_clock::CuTime;
     use cu29_traits::WriteStream;
     use cu29_unifiedlog::memmap::MmapSectionStorage;
@@ -377,6 +786,74 @@ mod tests {
             subsystem_id: Some(subsystem_id.to_string()),
             subsystem_code,
             instance_id,
+        }
+    }
+
+    fn write_multi_config_fixture(temp_dir: &TempDir, subsystem_ids: &[&str]) -> CuResult<PathBuf> {
+        for subsystem_id in subsystem_ids {
+            let subsystem_config = temp_dir.path().join(format!("{subsystem_id}_config.ron"));
+            fs::write(&subsystem_config, "(tasks: [], cnx: [])").map_err(|err| {
+                CuError::new_with_cause(
+                    &format!(
+                        "Failed to write subsystem config '{}'",
+                        subsystem_config.display()
+                    ),
+                    err,
+                )
+            })?;
+        }
+
+        let subsystem_entries = subsystem_ids
+            .iter()
+            .map(|subsystem_id| {
+                format!(
+                    r#"(
+            id: "{subsystem_id}",
+            config: "{subsystem_id}_config.ron",
+        )"#
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",\n");
+
+        let multi_config = format!(
+            "(\n    subsystems: [\n{entries}\n    ],\n    interconnects: [],\n)\n",
+            entries = subsystem_entries
+        );
+        let multi_config_path = temp_dir.path().join("multi_copper.ron");
+        fs::write(&multi_config_path, multi_config).map_err(|err| {
+            CuError::new_with_cause(
+                &format!(
+                    "Failed to write multi-Copper config '{}'",
+                    multi_config_path.display()
+                ),
+                err,
+            )
+        })?;
+        Ok(multi_config_path)
+    }
+
+    struct PingRegisteredApp;
+
+    impl CuSubsystemMetadata for PingRegisteredApp {
+        fn subsystem() -> Subsystem {
+            Subsystem::new(Some("ping"), 0)
+        }
+    }
+
+    struct PongRegisteredApp;
+
+    impl CuSubsystemMetadata for PongRegisteredApp {
+        fn subsystem() -> Subsystem {
+            Subsystem::new(Some("pong"), 1)
+        }
+    }
+
+    struct PingWrongCodeApp;
+
+    impl CuSubsystemMetadata for PingWrongCodeApp {
+        fn subsystem() -> Subsystem {
+            Subsystem::new(Some("ping"), 99)
         }
     }
 
@@ -469,6 +946,159 @@ mod tests {
         assert_eq!(
             catalog.failures[0].candidate_path,
             temp_dir.path().join("logs/bad.copper")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn builder_builds_validated_plan_for_selected_instances() -> CuResult<()> {
+        let temp_dir = TempDir::new()
+            .map_err(|err| CuError::new_with_cause("Failed to create temp dir", err))?;
+        let multi_config_path = write_multi_config_fixture(&temp_dir, &["ping", "pong"])?;
+        let logs_root = temp_dir.path().join("logs");
+
+        write_runtime_lifecycle_log(
+            &logs_root.join("instance1_ping.copper"),
+            test_stack("ping", 0, 1),
+            Some("default"),
+        )?;
+        write_runtime_lifecycle_log(
+            &logs_root.join("instance1_pong.copper"),
+            test_stack("pong", 1, 1),
+            Some("default"),
+        )?;
+        write_runtime_lifecycle_log(
+            &logs_root.join("instance2_ping.copper"),
+            test_stack("ping", 0, 2),
+            Some("default"),
+        )?;
+        write_runtime_lifecycle_log(
+            &logs_root.join("instance2_pong.copper"),
+            test_stack("pong", 1, 2),
+            Some("default"),
+        )?;
+
+        let plan = DistributedReplayPlan::builder(&multi_config_path)?
+            .discover_logs_under(&logs_root)?
+            .register::<PingRegisteredApp>("ping")?
+            .register::<PongRegisteredApp>("pong")?
+            .instances([2])
+            .build()?;
+
+        assert_eq!(plan.selected_instances, vec![2]);
+        assert_eq!(plan.mission.as_deref(), Some("default"));
+        assert_eq!(plan.assignments.len(), 2);
+        assert_eq!(
+            plan.assignment(2, "ping").unwrap().log.base_path,
+            logs_root.join("instance2_ping.copper")
+        );
+        assert_eq!(
+            plan.assignment(2, "pong").unwrap().log.base_path,
+            logs_root.join("instance2_pong.copper")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn register_rejects_subsystem_code_mismatch() -> CuResult<()> {
+        let temp_dir = TempDir::new()
+            .map_err(|err| CuError::new_with_cause("Failed to create temp dir", err))?;
+        let multi_config_path = write_multi_config_fixture(&temp_dir, &["ping", "pong"])?;
+
+        let err = DistributedReplayPlan::builder(&multi_config_path)?
+            .register::<PingWrongCodeApp>("ping")
+            .unwrap_err();
+        assert!(err.to_string().contains("declares subsystem code 99"));
+        Ok(())
+    }
+
+    #[test]
+    fn build_reports_missing_logs_and_missing_registrations() -> CuResult<()> {
+        let temp_dir = TempDir::new()
+            .map_err(|err| CuError::new_with_cause("Failed to create temp dir", err))?;
+        let multi_config_path = write_multi_config_fixture(&temp_dir, &["ping", "pong"])?;
+        let logs_root = temp_dir.path().join("logs");
+
+        write_runtime_lifecycle_log(
+            &logs_root.join("instance1_ping.copper"),
+            test_stack("ping", 0, 1),
+            Some("default"),
+        )?;
+
+        let err = DistributedReplayPlan::builder(&multi_config_path)?
+            .discover_logs_under(&logs_root)?
+            .register::<PingRegisteredApp>("ping")?
+            .build()
+            .unwrap_err();
+        let err_text = err.to_string();
+        assert!(err_text.contains("missing app registration for subsystem 'pong'"));
+        assert!(err_text.contains("missing log for instance 1 subsystem 'pong'"));
+        Ok(())
+    }
+
+    #[test]
+    fn build_reports_duplicate_logs_for_one_target() -> CuResult<()> {
+        let temp_dir = TempDir::new()
+            .map_err(|err| CuError::new_with_cause("Failed to create temp dir", err))?;
+        let multi_config_path = write_multi_config_fixture(&temp_dir, &["ping", "pong"])?;
+        let logs_root = temp_dir.path().join("logs");
+
+        write_runtime_lifecycle_log(
+            &logs_root.join("instance1_ping_a.copper"),
+            test_stack("ping", 0, 1),
+            Some("default"),
+        )?;
+        write_runtime_lifecycle_log(
+            &logs_root.join("instance1_ping_b.copper"),
+            test_stack("ping", 0, 1),
+            Some("default"),
+        )?;
+        write_runtime_lifecycle_log(
+            &logs_root.join("instance1_pong.copper"),
+            test_stack("pong", 1, 1),
+            Some("default"),
+        )?;
+
+        let err = DistributedReplayPlan::builder(&multi_config_path)?
+            .discover_logs_under(&logs_root)?
+            .register::<PingRegisteredApp>("ping")?
+            .register::<PongRegisteredApp>("pong")?
+            .build()
+            .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("found 2 logs for instance 1 subsystem 'ping'")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn build_reports_mission_mismatch_across_selected_logs() -> CuResult<()> {
+        let temp_dir = TempDir::new()
+            .map_err(|err| CuError::new_with_cause("Failed to create temp dir", err))?;
+        let multi_config_path = write_multi_config_fixture(&temp_dir, &["ping", "pong"])?;
+        let logs_root = temp_dir.path().join("logs");
+
+        write_runtime_lifecycle_log(
+            &logs_root.join("instance1_ping.copper"),
+            test_stack("ping", 0, 1),
+            Some("default"),
+        )?;
+        write_runtime_lifecycle_log(
+            &logs_root.join("instance1_pong.copper"),
+            test_stack("pong", 1, 1),
+            Some("recovery"),
+        )?;
+
+        let err = DistributedReplayPlan::builder(&multi_config_path)?
+            .discover_logs_under(&logs_root)?
+            .register::<PingRegisteredApp>("ping")?
+            .register::<PongRegisteredApp>("pong")?
+            .build()
+            .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("selected logs disagree on mission: default, recovery")
         );
         Ok(())
     }

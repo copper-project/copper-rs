@@ -40,6 +40,36 @@ impl<T> CuStdApplication for T where
 {
 }
 
+/// Compile-time subsystem identity embedded in generated Copper applications.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Subsystem {
+    id: Option<&'static str>,
+    code: u16,
+}
+
+impl Subsystem {
+    #[inline]
+    pub const fn new(id: Option<&'static str>, code: u16) -> Self {
+        Self { id, code }
+    }
+
+    #[inline]
+    pub const fn id(self) -> Option<&'static str> {
+        self.id
+    }
+
+    #[inline]
+    pub const fn code(self) -> u16 {
+        self.code
+    }
+}
+
+/// Compile-time subsystem identity embedded in generated Copper applications.
+pub trait CuSubsystemMetadata {
+    /// Multi-Copper subsystem identity for this generated application.
+    fn subsystem() -> Subsystem;
+}
+
 /// A trait that defines the structure and behavior of a CuApplication.
 ///
 /// CuApplication is the normal, running on robot version of an application and its runtime.
