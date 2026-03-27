@@ -1,0 +1,42 @@
+(
+    tasks: [
+        (
+            id: "scout",
+            type: "tasks::ScoutTask",
+            config: {"seed": 17},
+        ),
+    ],
+    bridges: [
+        (
+            id: "zenoh",
+            type: "bridges::DemoZenohBridge",
+            channels: [
+                Rx(
+                    id: "feedback",
+                    route: "distributed_resim/feedback",
+                ),
+                Tx(
+                    id: "pulse",
+                    route: "distributed_resim/pulse",
+                ),
+            ],
+        ),
+    ],
+    cnx: [
+        (
+            src: "zenoh/feedback",
+            dst: "scout",
+            msg: "messages::Feedback",
+        ),
+        (
+            src: "scout",
+            dst: "zenoh/pulse",
+            msg: "messages::Pulse",
+        ),
+    ],
+    logging: (
+        keyframe_interval: 4,
+        slab_size_mib: 32,
+        section_size_mib: 8,
+    ),
+)

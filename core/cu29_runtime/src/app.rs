@@ -40,6 +40,36 @@ impl<T> CuStdApplication for T where
 {
 }
 
+/// Compile-time subsystem identity embedded in generated Copper applications.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Subsystem {
+    id: Option<&'static str>,
+    code: u16,
+}
+
+impl Subsystem {
+    #[inline]
+    pub const fn new(id: Option<&'static str>, code: u16) -> Self {
+        Self { id, code }
+    }
+
+    #[inline]
+    pub const fn id(self) -> Option<&'static str> {
+        self.id
+    }
+
+    #[inline]
+    pub const fn code(self) -> u16 {
+        self.code
+    }
+}
+
+/// Compile-time subsystem identity embedded in generated Copper applications.
+pub trait CuSubsystemMetadata {
+    /// Multi-Copper subsystem identity for this generated application.
+    fn subsystem() -> Subsystem;
+}
+
 /// A trait that defines the structure and behavior of a CuApplication.
 ///
 /// CuApplication is the normal, running on robot version of an application and its runtime.
@@ -246,4 +276,24 @@ pub trait CuRecordedReplayApplication<S: SectionStorage, L: UnifiedLogWrite<S> +
         copperlist: &CopperList<Self::RecordedDataSet>,
         keyframe: Option<&KeyFrame>,
     ) -> CuResult<()>;
+}
+
+/// Simulation-enabled applications that can be instantiated for distributed replay.
+///
+/// This extends exact-output replay with the one extra capability the
+/// distributed engine needs: build a replayable app for a specific
+/// deployment `instance_id` while keeping app construction type-safe.
+#[cfg(feature = "std")]
+pub trait CuDistributedReplayApplication<S: SectionStorage, L: UnifiedLogWrite<S> + 'static>:
+    CuRecordedReplayApplication<S, L> + CuSubsystemMetadata
+{
+    /// Build this app for deterministic distributed replay.
+    fn build_distributed_replay(
+        clock: RobotClock,
+        unified_logger: Arc<Mutex<L>>,
+        instance_id: u32,
+        config_override: Option<CuConfig>,
+    ) -> CuResult<Self>
+    where
+        Self: Sized;
 }

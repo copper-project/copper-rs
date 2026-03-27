@@ -1,0 +1,84 @@
+import "../../justfile"
+
+package := "cu-distributed-resim-demo"
+
+build:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cargo build -p {{package}} --bins
+
+clean-logs:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	rm -rf logs/record logs/replay
+
+scout-1:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cargo run -p {{package}} --bin distributed-scout -- --instance-id 1 --iterations 18 --period-ms 30 --log logs/record/scout_i1.copper
+
+scout-2:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cargo run -p {{package}} --bin distributed-scout -- --instance-id 2 --iterations 18 --period-ms 30 --log logs/record/scout_i2.copper
+
+plan-1:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cargo run -p {{package}} --bin distributed-plan -- --instance-id 1 --iterations 72 --period-ms 10 --log logs/record/plan_i1.copper
+
+plan-2:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cargo run -p {{package}} --bin distributed-plan -- --instance-id 2 --iterations 72 --period-ms 10 --log logs/record/plan_i2.copper
+
+control-1:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cargo run -p {{package}} --bin distributed-control -- --instance-id 1 --iterations 72 --period-ms 10 --log logs/record/control_i1.copper
+
+control-2:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cargo run -p {{package}} --bin distributed-control -- --instance-id 2 --iterations 72 --period-ms 10 --log logs/record/control_i2.copper
+
+record: clean-logs build
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	mkdir -p logs/record
+	pids=()
+	start() {
+		"$@" &
+		pids+=($!)
+	}
+	cleanup() {
+		for pid in "${pids[@]:-}"; do
+			kill "$pid" 2>/dev/null || true
+		done
+	}
+	trap cleanup EXIT
+
+	start {{ROOT}}/target/debug/distributed-plan --instance-id 1 --iterations 72 --period-ms 10 --log logs/record/plan_i1.copper
+	start {{ROOT}}/target/debug/distributed-plan --instance-id 2 --iterations 72 --period-ms 10 --log logs/record/plan_i2.copper
+	start {{ROOT}}/target/debug/distributed-control --instance-id 1 --iterations 72 --period-ms 10 --log logs/record/control_i1.copper
+	start {{ROOT}}/target/debug/distributed-control --instance-id 2 --iterations 72 --period-ms 10 --log logs/record/control_i2.copper
+
+	sleep 0.5
+
+	start {{ROOT}}/target/debug/distributed-scout --instance-id 1 --iterations 18 --period-ms 30 --log logs/record/scout_i1.copper
+	start {{ROOT}}/target/debug/distributed-scout --instance-id 2 --iterations 18 --period-ms 30 --log logs/record/scout_i2.copper
+
+	for pid in "${pids[@]}"; do
+		wait "$pid"
+	done
+
+	trap - EXIT
+
+resim: build
+	#!/usr/bin/env bash
+	set -euo pipefail
+	mkdir -p logs/replay
+	cargo run -p {{package}} --bin distributed-resim -- --logs-root logs/record --replay-root logs/replay
+
+check: record resim

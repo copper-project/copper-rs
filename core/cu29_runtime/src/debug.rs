@@ -50,13 +50,13 @@ pub struct SectionCacheStats {
 /// Metadata for one copperlist section (no payload kept).
 #[derive(Debug, Clone)]
 pub(crate) struct SectionIndexEntry {
-    pos: LogPosition,
-    start_idx: usize,
-    len: usize,
-    first_id: u64,
-    last_id: u64,
-    first_ts: Option<CuTime>,
-    last_ts: Option<CuTime>,
+    pub(crate) pos: LogPosition,
+    pub(crate) start_idx: usize,
+    pub(crate) len: usize,
+    pub(crate) first_id: u64,
+    pub(crate) last_id: u64,
+    pub(crate) first_ts: Option<CuTime>,
+    pub(crate) last_ts: Option<CuTime>,
 }
 
 /// Cached copperlists for one section.
@@ -639,7 +639,7 @@ where
 }
 /// Decode all copperlists contained in a single unified-log section.
 #[allow(clippy::type_complexity)]
-fn decode_copperlists<
+pub(crate) fn decode_copperlists<
     P: CopperListTuple,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime>,
 >(
@@ -735,7 +735,7 @@ fn scan_copperlist_section<
 }
 
 /// Build a reusable read-only unified logger for this session.
-fn build_read_logger(log_base: &Path) -> CuResult<UnifiedLoggerRead> {
+pub(crate) fn build_read_logger(log_base: &Path) -> CuResult<UnifiedLoggerRead> {
     let logger = UnifiedLoggerBuilder::new()
         .file_base_name(log_base)
         .build()
@@ -747,7 +747,7 @@ fn build_read_logger(log_base: &Path) -> CuResult<UnifiedLoggerRead> {
 }
 
 /// Read a specific section at a given position from disk using an existing handle.
-fn read_section_at(
+pub(crate) fn read_section_at(
     log_reader: &mut UnifiedLoggerRead,
     pos: LogPosition,
 ) -> CuResult<(SectionHeader, Vec<u8>)> {
@@ -756,7 +756,7 @@ fn read_section_at(
 }
 
 /// Build a section-level index in one pass (copperlists + keyframes).
-fn index_log<P, TF>(
+pub(crate) fn index_log<P, TF>(
     log_base: &Path,
     time_of: &TF,
 ) -> CuResult<(Vec<SectionIndexEntry>, Vec<KeyFrame>, usize)>
