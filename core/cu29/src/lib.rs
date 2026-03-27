@@ -132,6 +132,8 @@ pub mod defmt {
 }
 #[cfg(feature = "std")]
 pub use cu29_runtime::config::read_configuration;
+#[cfg(feature = "std")]
+pub use cu29_runtime::config::read_multi_configuration;
 pub use cu29_traits::*;
 
 #[cfg(feature = "std")]

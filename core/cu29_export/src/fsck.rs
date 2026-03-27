@@ -32,6 +32,12 @@ fn print_runtime_lifecycle_record(index: usize, entry: &RuntimeLifecycleRecord) 
                     .map(|v| if v { "true" } else { "false" })
                     .unwrap_or("n/a")
             );
+            println!(
+                "        subsystem_id: {}",
+                stack.subsystem_id.as_deref().unwrap_or("n/a")
+            );
+            println!("        subsystem_code: {}", stack.subsystem_code);
+            println!("        instance_id: {}", stack.instance_id);
             println!("      effective_config_ron:");
             for line in effective_config_ron.lines() {
                 println!("        {line}");

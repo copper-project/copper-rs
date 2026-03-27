@@ -1465,6 +1465,110 @@ pub struct IncludesConfig {
     pub missions: Option<Vec<String>>,
 }
 
+/// One subsystem participating in a multi-Copper deployment.
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct MultiCopperSubsystemConfig {
+    pub id: String,
+    pub config: String,
+}
+
+/// One explicit interconnect between two subsystem bridge channels.
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct MultiCopperInterconnectConfig {
+    pub from: String,
+    pub to: String,
+    pub msg: String,
+}
+
+/// Typed endpoint reference used by validated multi-Copper interconnects.
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MultiCopperEndpoint {
+    pub subsystem_id: String,
+    pub bridge_id: String,
+    pub channel_id: String,
+}
+
+#[cfg(feature = "std")]
+impl Display for MultiCopperEndpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}/{}/{}",
+            self.subsystem_id, self.bridge_id, self.channel_id
+        )
+    }
+}
+
+/// Validated subsystem entry with its compiler-assigned numeric subsystem code and parsed local Copper config.
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub struct MultiCopperSubsystem {
+    pub id: String,
+    pub subsystem_code: u16,
+    pub config_path: String,
+    pub config: CuConfig,
+}
+
+/// Validated explicit interconnect between two subsystem endpoints.
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MultiCopperInterconnect {
+    pub from: MultiCopperEndpoint,
+    pub to: MultiCopperEndpoint,
+    pub msg: String,
+    pub bridge_type: String,
+}
+
+/// Strict umbrella configuration describing multiple Copper subsystems and their explicit links.
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub struct MultiCopperConfig {
+    pub subsystems: Vec<MultiCopperSubsystem>,
+    pub interconnects: Vec<MultiCopperInterconnect>,
+}
+
+#[cfg(feature = "std")]
+impl MultiCopperConfig {
+    #[allow(dead_code)]
+    pub fn subsystem(&self, id: &str) -> Option<&MultiCopperSubsystem> {
+        self.subsystems.iter().find(|subsystem| subsystem.id == id)
+    }
+}
+
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+struct MultiCopperConfigRepresentation {
+    subsystems: Vec<MultiCopperSubsystemConfig>,
+    interconnects: Vec<MultiCopperInterconnectConfig>,
+}
+
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MultiCopperChannelDirection {
+    Rx,
+    Tx,
+}
+
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+struct MultiCopperChannelContract {
+    bridge_type: String,
+    direction: MultiCopperChannelDirection,
+    msg: Option<String>,
+}
+
 /// This is the main Copper configuration representation.
 #[derive(Serialize, Deserialize, Default)]
 struct CuConfigRepresentation {
@@ -2699,6 +2803,356 @@ fn process_includes(
     Ok(result)
 }
 
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+fn parse_multi_config_string(content: &str) -> CuResult<MultiCopperConfigRepresentation> {
+    Options::default()
+        .with_default_extension(Extensions::IMPLICIT_SOME)
+        .with_default_extension(Extensions::UNWRAP_NEWTYPES)
+        .with_default_extension(Extensions::UNWRAP_VARIANT_NEWTYPES)
+        .from_str(content)
+        .map_err(|e| {
+            CuError::from(format!(
+                "Failed to parse multi-Copper configuration: Error: {} at position {}",
+                e.code, e.span
+            ))
+        })
+}
+
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+fn resolve_relative_config_path(base_path: Option<&str>, referenced_path: &str) -> String {
+    if referenced_path.starts_with('/') || base_path.is_none() {
+        return referenced_path.to_string();
+    }
+
+    let current_dir = std::path::Path::new(base_path.expect("checked above"))
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new(""))
+        .to_path_buf();
+    current_dir
+        .join(referenced_path)
+        .to_string_lossy()
+        .to_string()
+}
+
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+fn parse_multi_endpoint(endpoint: &str) -> CuResult<MultiCopperEndpoint> {
+    let mut parts = endpoint.split('/');
+    let subsystem_id = parts.next().unwrap_or_default();
+    let bridge_id = parts.next().unwrap_or_default();
+    let channel_id = parts.next().unwrap_or_default();
+
+    if subsystem_id.is_empty()
+        || bridge_id.is_empty()
+        || channel_id.is_empty()
+        || parts.next().is_some()
+    {
+        return Err(CuError::from(format!(
+            "Invalid multi-Copper endpoint '{endpoint}'. Expected 'subsystem/bridge/channel'."
+        )));
+    }
+
+    Ok(MultiCopperEndpoint {
+        subsystem_id: subsystem_id.to_string(),
+        bridge_id: bridge_id.to_string(),
+        channel_id: channel_id.to_string(),
+    })
+}
+
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+fn multi_channel_key(bridge_id: &str, channel_id: &str) -> String {
+    format!("{bridge_id}/{channel_id}")
+}
+
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+fn register_multi_channel_msg(
+    contracts: &mut HashMap<String, MultiCopperChannelContract>,
+    bridge_id: &str,
+    channel_id: &str,
+    expected_direction: MultiCopperChannelDirection,
+    msg: &str,
+) -> CuResult<()> {
+    let key = multi_channel_key(bridge_id, channel_id);
+    let contract = contracts.get_mut(&key).ok_or_else(|| {
+        CuError::from(format!(
+            "Bridge channel '{bridge_id}/{channel_id}' is referenced by the graph but not declared in the bridge config."
+        ))
+    })?;
+
+    if contract.direction != expected_direction {
+        let expected = match expected_direction {
+            MultiCopperChannelDirection::Rx => "Rx",
+            MultiCopperChannelDirection::Tx => "Tx",
+        };
+        return Err(CuError::from(format!(
+            "Bridge channel '{bridge_id}/{channel_id}' is used as {expected} in the graph but declared with the opposite direction."
+        )));
+    }
+
+    match &contract.msg {
+        Some(existing) if existing != msg => Err(CuError::from(format!(
+            "Bridge channel '{bridge_id}/{channel_id}' carries inconsistent message types '{existing}' and '{msg}'."
+        ))),
+        Some(_) => Ok(()),
+        None => {
+            contract.msg = Some(msg.to_string());
+            Ok(())
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+fn build_multi_bridge_channel_contracts(
+    config: &CuConfig,
+) -> CuResult<HashMap<String, MultiCopperChannelContract>> {
+    let graph = config.graphs.get_default_mission_graph().map_err(|e| {
+        CuError::from(format!(
+            "Multi-Copper subsystem configs currently require exactly one local graph: {e}"
+        ))
+    })?;
+
+    let mut contracts = HashMap::new();
+    for bridge in &config.bridges {
+        for channel in &bridge.channels {
+            let (channel_id, direction) = match channel {
+                BridgeChannelConfigRepresentation::Rx { id, .. } => {
+                    (id.as_str(), MultiCopperChannelDirection::Rx)
+                }
+                BridgeChannelConfigRepresentation::Tx { id, .. } => {
+                    (id.as_str(), MultiCopperChannelDirection::Tx)
+                }
+            };
+
+            let key = multi_channel_key(&bridge.id, channel_id);
+            if contracts.contains_key(&key) {
+                return Err(CuError::from(format!(
+                    "Duplicate bridge channel declaration for '{key}'."
+                )));
+            }
+
+            contracts.insert(
+                key,
+                MultiCopperChannelContract {
+                    bridge_type: bridge.type_.clone(),
+                    direction,
+                    msg: None,
+                },
+            );
+        }
+    }
+
+    for edge in graph.edges() {
+        if let Some(channel_id) = &edge.src_channel {
+            register_multi_channel_msg(
+                &mut contracts,
+                &edge.src,
+                channel_id,
+                MultiCopperChannelDirection::Rx,
+                &edge.msg,
+            )?;
+        }
+        if let Some(channel_id) = &edge.dst_channel {
+            register_multi_channel_msg(
+                &mut contracts,
+                &edge.dst,
+                channel_id,
+                MultiCopperChannelDirection::Tx,
+                &edge.msg,
+            )?;
+        }
+    }
+
+    Ok(contracts)
+}
+
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+fn validate_multi_config_representation(
+    representation: MultiCopperConfigRepresentation,
+    file_path: Option<&str>,
+) -> CuResult<MultiCopperConfig> {
+    if representation.subsystems.is_empty() {
+        return Err(CuError::from(
+            "Multi-Copper config must declare at least one subsystem.",
+        ));
+    }
+    if representation.subsystems.len() > usize::from(u16::MAX) + 1 {
+        return Err(CuError::from(
+            "Multi-Copper config supports at most 65536 distinct subsystem ids.",
+        ));
+    }
+
+    let mut seen_subsystems = std::collections::HashSet::new();
+    for subsystem in &representation.subsystems {
+        if subsystem.id.trim().is_empty() {
+            return Err(CuError::from(
+                "Multi-Copper subsystem ids must not be empty.",
+            ));
+        }
+        if !seen_subsystems.insert(subsystem.id.clone()) {
+            return Err(CuError::from(format!(
+                "Duplicate multi-Copper subsystem id '{}'.",
+                subsystem.id
+            )));
+        }
+    }
+
+    let mut sorted_ids: Vec<_> = representation
+        .subsystems
+        .iter()
+        .map(|subsystem| subsystem.id.clone())
+        .collect();
+    sorted_ids.sort();
+    let subsystem_code_map: HashMap<_, _> = sorted_ids
+        .into_iter()
+        .enumerate()
+        .map(|(idx, id)| {
+            (
+                id,
+                u16::try_from(idx).expect("subsystem count was validated against u16 range"),
+            )
+        })
+        .collect();
+
+    let mut subsystem_contracts: HashMap<String, HashMap<String, MultiCopperChannelContract>> =
+        HashMap::new();
+    let mut subsystems = Vec::with_capacity(representation.subsystems.len());
+
+    for subsystem in representation.subsystems {
+        let resolved_config_path = resolve_relative_config_path(file_path, &subsystem.config);
+        let config = read_configuration(&resolved_config_path).map_err(|e| {
+            CuError::from(format!(
+                "Failed to read subsystem '{}' from '{}': {e}",
+                subsystem.id, resolved_config_path
+            ))
+        })?;
+        let contracts = build_multi_bridge_channel_contracts(&config).map_err(|e| {
+            CuError::from(format!(
+                "Invalid subsystem '{}' for multi-Copper validation: {e}",
+                subsystem.id
+            ))
+        })?;
+        subsystem_contracts.insert(subsystem.id.clone(), contracts);
+        subsystems.push(MultiCopperSubsystem {
+            subsystem_code: *subsystem_code_map
+                .get(&subsystem.id)
+                .expect("subsystem code map must contain every subsystem"),
+            id: subsystem.id,
+            config_path: resolved_config_path,
+            config,
+        });
+    }
+
+    let mut interconnects = Vec::with_capacity(representation.interconnects.len());
+    for interconnect in representation.interconnects {
+        let from = parse_multi_endpoint(&interconnect.from).map_err(|e| {
+            CuError::from(format!(
+                "Invalid multi-Copper interconnect source '{}': {e}",
+                interconnect.from
+            ))
+        })?;
+        let to = parse_multi_endpoint(&interconnect.to).map_err(|e| {
+            CuError::from(format!(
+                "Invalid multi-Copper interconnect destination '{}': {e}",
+                interconnect.to
+            ))
+        })?;
+
+        let from_contracts = subsystem_contracts.get(&from.subsystem_id).ok_or_else(|| {
+            CuError::from(format!(
+                "Interconnect source '{}' references unknown subsystem '{}'.",
+                from, from.subsystem_id
+            ))
+        })?;
+        let to_contracts = subsystem_contracts.get(&to.subsystem_id).ok_or_else(|| {
+            CuError::from(format!(
+                "Interconnect destination '{}' references unknown subsystem '{}'.",
+                to, to.subsystem_id
+            ))
+        })?;
+
+        let from_contract = from_contracts
+            .get(&multi_channel_key(&from.bridge_id, &from.channel_id))
+            .ok_or_else(|| {
+                CuError::from(format!(
+                    "Interconnect source '{}' references unknown bridge channel.",
+                    from
+                ))
+            })?;
+        let to_contract = to_contracts
+            .get(&multi_channel_key(&to.bridge_id, &to.channel_id))
+            .ok_or_else(|| {
+                CuError::from(format!(
+                    "Interconnect destination '{}' references unknown bridge channel.",
+                    to
+                ))
+            })?;
+
+        if from_contract.direction != MultiCopperChannelDirection::Tx {
+            return Err(CuError::from(format!(
+                "Interconnect source '{}' must reference a Tx bridge channel.",
+                from
+            )));
+        }
+        if to_contract.direction != MultiCopperChannelDirection::Rx {
+            return Err(CuError::from(format!(
+                "Interconnect destination '{}' must reference an Rx bridge channel.",
+                to
+            )));
+        }
+
+        if from_contract.bridge_type != to_contract.bridge_type {
+            return Err(CuError::from(format!(
+                "Interconnect '{}' -> '{}' mixes incompatible bridge types '{}' and '{}'.",
+                from, to, from_contract.bridge_type, to_contract.bridge_type
+            )));
+        }
+
+        let from_msg = from_contract.msg.as_ref().ok_or_else(|| {
+            CuError::from(format!(
+                "Interconnect source '{}' is not wired inside subsystem '{}', so its message type cannot be inferred.",
+                from, from.subsystem_id
+            ))
+        })?;
+        let to_msg = to_contract.msg.as_ref().ok_or_else(|| {
+            CuError::from(format!(
+                "Interconnect destination '{}' is not wired inside subsystem '{}', so its message type cannot be inferred.",
+                to, to.subsystem_id
+            ))
+        })?;
+
+        if from_msg != to_msg {
+            return Err(CuError::from(format!(
+                "Interconnect '{}' -> '{}' connects incompatible message types '{}' and '{}'.",
+                from, to, from_msg, to_msg
+            )));
+        }
+        if interconnect.msg != *from_msg {
+            return Err(CuError::from(format!(
+                "Interconnect '{}' -> '{}' declares message type '{}' but subsystem graphs require '{}'.",
+                from, to, interconnect.msg, from_msg
+            )));
+        }
+
+        interconnects.push(MultiCopperInterconnect {
+            from,
+            to,
+            msg: interconnect.msg,
+            bridge_type: from_contract.bridge_type.clone(),
+        });
+    }
+
+    Ok(MultiCopperConfig {
+        subsystems,
+        interconnects,
+    })
+}
+
 /// Read a copper configuration from a file.
 #[cfg(feature = "std")]
 pub fn read_configuration(config_filename: &str) -> CuResult<CuConfig> {
@@ -2765,6 +3219,31 @@ pub fn read_configuration_str(
     config_representation_to_config(representation)
 }
 
+/// Read a strict multi-Copper umbrella configuration from a file.
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+pub fn read_multi_configuration(config_filename: &str) -> CuResult<MultiCopperConfig> {
+    let config_content = read_to_string(config_filename).map_err(|e| {
+        CuError::from(format!(
+            "Failed to read multi-Copper configuration file: {:?}",
+            &config_filename
+        ))
+        .add_cause(e.to_string().as_str())
+    })?;
+    read_multi_configuration_str(config_content, Some(config_filename))
+}
+
+/// Read a strict multi-Copper umbrella configuration from a string.
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+pub fn read_multi_configuration_str(
+    config_content: String,
+    file_path: Option<&str>,
+) -> CuResult<MultiCopperConfig> {
+    let representation = parse_multi_config_string(&config_content)?;
+    validate_multi_config_representation(representation, file_path)
+}
+
 // tests
 #[cfg(test)]
 mod tests {
@@ -2772,6 +3251,8 @@ mod tests {
     #[cfg(not(feature = "std"))]
     use alloc::vec;
     use serde::Deserialize;
+    #[cfg(feature = "std")]
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn test_plain_serialize() {
@@ -3724,6 +4205,163 @@ mod tests {
                 .map(|(msg, order)| (msg.as_str(), order))
                 .collect::<Vec<_>>(),
             vec![("msg::A", 0)]
+        );
+    }
+
+    #[cfg(feature = "std")]
+    fn multi_config_test_dir(name: &str) -> PathBuf {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system time before unix epoch")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("cu29_multi_config_{name}_{unique}"));
+        std::fs::create_dir_all(&dir).expect("create temp test dir");
+        dir
+    }
+
+    #[cfg(feature = "std")]
+    fn write_multi_config_file(dir: &Path, name: &str, contents: &str) -> PathBuf {
+        let path = dir.join(name);
+        std::fs::write(&path, contents).expect("write temp config file");
+        path
+    }
+
+    #[cfg(feature = "std")]
+    fn alpha_subsystem_config() -> &'static str {
+        r#"(
+            tasks: [
+                (id: "src", type: "demo::Src"),
+                (id: "sink", type: "demo::Sink"),
+            ],
+            bridges: [
+                (
+                    id: "zenoh",
+                    type: "demo::ZenohBridge",
+                    channels: [
+                        Tx(id: "ping"),
+                        Rx(id: "pong"),
+                    ],
+                ),
+            ],
+            cnx: [
+                (src: "src", dst: "zenoh/ping", msg: "demo::Ping"),
+                (src: "zenoh/pong", dst: "sink", msg: "demo::Pong"),
+            ],
+        )"#
+    }
+
+    #[cfg(feature = "std")]
+    fn beta_subsystem_config() -> &'static str {
+        r#"(
+            tasks: [
+                (id: "responder", type: "demo::Responder"),
+            ],
+            bridges: [
+                (
+                    id: "zenoh",
+                    type: "demo::ZenohBridge",
+                    channels: [
+                        Rx(id: "ping"),
+                        Tx(id: "pong"),
+                    ],
+                ),
+            ],
+            cnx: [
+                (src: "zenoh/ping", dst: "responder", msg: "demo::Ping"),
+                (src: "responder", dst: "zenoh/pong", msg: "demo::Pong"),
+            ],
+        )"#
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_read_multi_configuration_assigns_stable_subsystem_codes() {
+        let dir = multi_config_test_dir("stable_ids");
+        write_multi_config_file(&dir, "alpha.ron", alpha_subsystem_config());
+        write_multi_config_file(&dir, "beta.ron", beta_subsystem_config());
+        let network_path = write_multi_config_file(
+            &dir,
+            "network.ron",
+            r#"(
+                subsystems: [
+                    (id: "beta", config: "beta.ron"),
+                    (id: "alpha", config: "alpha.ron"),
+                ],
+                interconnects: [
+                    (from: "alpha/zenoh/ping", to: "beta/zenoh/ping", msg: "demo::Ping"),
+                    (from: "beta/zenoh/pong", to: "alpha/zenoh/pong", msg: "demo::Pong"),
+                ],
+            )"#,
+        );
+
+        let config =
+            read_multi_configuration(network_path.to_str().expect("network path utf8")).unwrap();
+
+        let alpha = config.subsystem("alpha").expect("alpha subsystem missing");
+        let beta = config.subsystem("beta").expect("beta subsystem missing");
+        assert_eq!(alpha.subsystem_code, 0);
+        assert_eq!(beta.subsystem_code, 1);
+        assert_eq!(config.interconnects.len(), 2);
+        assert_eq!(config.interconnects[0].bridge_type, "demo::ZenohBridge");
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_read_multi_configuration_rejects_wrong_direction() {
+        let dir = multi_config_test_dir("wrong_direction");
+        write_multi_config_file(&dir, "alpha.ron", alpha_subsystem_config());
+        write_multi_config_file(&dir, "beta.ron", beta_subsystem_config());
+        let network_path = write_multi_config_file(
+            &dir,
+            "network.ron",
+            r#"(
+                subsystems: [
+                    (id: "alpha", config: "alpha.ron"),
+                    (id: "beta", config: "beta.ron"),
+                ],
+                interconnects: [
+                    (from: "alpha/zenoh/pong", to: "beta/zenoh/ping", msg: "demo::Pong"),
+                ],
+            )"#,
+        );
+
+        let err = read_multi_configuration(network_path.to_str().expect("network path utf8"))
+            .expect_err("direction mismatch should fail");
+
+        assert!(
+            err.to_string()
+                .contains("must reference a Tx bridge channel"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_read_multi_configuration_rejects_declared_message_mismatch() {
+        let dir = multi_config_test_dir("msg_mismatch");
+        write_multi_config_file(&dir, "alpha.ron", alpha_subsystem_config());
+        write_multi_config_file(&dir, "beta.ron", beta_subsystem_config());
+        let network_path = write_multi_config_file(
+            &dir,
+            "network.ron",
+            r#"(
+                subsystems: [
+                    (id: "alpha", config: "alpha.ron"),
+                    (id: "beta", config: "beta.ron"),
+                ],
+                interconnects: [
+                    (from: "alpha/zenoh/ping", to: "beta/zenoh/ping", msg: "demo::Wrong"),
+                ],
+            )"#,
+        );
+
+        let err = read_multi_configuration(network_path.to_str().expect("network path utf8"))
+            .expect_err("message mismatch should fail");
+
+        assert!(
+            err.to_string()
+                .contains("declares message type 'demo::Wrong'"),
+            "unexpected error: {err}"
         );
     }
 }

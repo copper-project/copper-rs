@@ -62,5 +62,6 @@ pub fn basic_copper_setup(
         unified_logger: unified_logger.clone(),
         logger_runtime: structured_logging,
         clock,
+        instance_id: 0,
     })
 }
