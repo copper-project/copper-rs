@@ -1,6 +1,8 @@
 mod config;
 use clap::Parser;
-use config::{ConfigGraphs, PortLookup, build_render_topology, read_configuration};
+use config::{
+    ConfigGraphs, PortLookup, build_render_topology, read_configuration, read_multi_configuration,
+};
 pub use cu29_traits::*;
 use hashbrown::HashMap;
 use hashbrown::hash_map::Entry;
@@ -64,6 +66,7 @@ const RESOURCE_UNUSED_BG: &str = "#f1f1f1";
 const RESOURCE_UNUSED_TEXT: &str = "#8d8d8d";
 const PERF_TITLE_BG: &str = "#eaf2ff";
 const COPPER_LINK_COLOR: &str = "#0000E0";
+const INTERCONNECT_EDGE_COLOR: &str = "#6b7280";
 const EDGE_COLOR_PALETTE: [&str; 10] = [
     "#1F77B4", "#FF7F0E", "#2CA02C", "#D62728", "#9467BD", "#8C564B", "#E377C2", "#7F7F7F",
     "#BCBD22", "#17BECF",
@@ -183,44 +186,91 @@ struct Args {
     open: bool,
 }
 
+enum RenderInput {
+    Single(config::CuConfig),
+    Multi(config::MultiCopperConfig),
+}
+
+struct InterconnectRender {
+    from_section_id: String,
+    from_bridge_id: String,
+    from_channel_id: String,
+    to_section_id: String,
+    to_bridge_id: String,
+    to_channel_id: String,
+    label: String,
+}
+
 /// Render the configuration file to an SVG and optionally opens it with inkscape.
 /// CLI entrypoint that parses args, renders SVG, and optionally opens it.
 fn main() -> std::io::Result<()> {
     // Parse command line arguments
     let args = Args::parse();
-
-    let config = read_configuration(args.config.to_str().unwrap())
-        .expect("Failed to read configuration file");
-
-    if args.list_missions {
-        print_mission_list(&config);
-        return Ok(());
-    }
-
-    let mission = match validate_mission_arg(&config, args.mission.as_deref()) {
-        Ok(mission) => mission,
+    let input = match load_render_input(&args.config) {
+        Ok(input) => input,
         Err(err) => {
             eprintln!("{err}");
             std::process::exit(1);
         }
     };
 
-    let logstats = match args.logstats.as_deref() {
-        Some(path) => match load_logstats(path, &config, args.mission.as_deref()) {
-            Ok(stats) => Some(stats),
-            Err(err) => {
-                eprintln!("{err}");
+    let graph_svg = match input {
+        RenderInput::Single(config) => {
+            if args.list_missions {
+                print_mission_list(&config);
+                return Ok(());
+            }
+
+            let mission = match validate_mission_arg(&config, args.mission.as_deref()) {
+                Ok(mission) => mission,
+                Err(err) => {
+                    eprintln!("{err}");
+                    std::process::exit(1);
+                }
+            };
+
+            let logstats = match args.logstats.as_deref() {
+                Some(path) => match load_logstats(path, &config, args.mission.as_deref()) {
+                    Ok(stats) => Some(stats),
+                    Err(err) => {
+                        eprintln!("{err}");
+                        std::process::exit(1);
+                    }
+                },
+                None => None,
+            };
+
+            match render_config_svg(&config, mission.as_deref(), logstats.as_ref()) {
+                Ok(svg) => svg,
+                Err(err) => {
+                    eprintln!("{err}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        RenderInput::Multi(config) => {
+            if args.list_missions {
+                println!("default");
+                return Ok(());
+            }
+            if let Some(mission) = args.mission.as_deref() {
+                eprintln!(
+                    "Multi-Copper DAG rendering does not support --mission (received '{mission}')."
+                );
                 std::process::exit(1);
             }
-        },
-        None => None,
-    };
+            if args.logstats.is_some() {
+                eprintln!("Multi-Copper DAG rendering does not support --logstats yet.");
+                std::process::exit(1);
+            }
 
-    let graph_svg = match render_config_svg(&config, mission.as_deref(), logstats.as_ref()) {
-        Ok(svg) => svg,
-        Err(err) => {
-            eprintln!("{err}");
-            std::process::exit(1);
+            match render_multi_config_svg(&config) {
+                Ok(svg) => svg,
+                Err(err) => {
+                    eprintln!("{err}");
+                    std::process::exit(1);
+                }
+            }
         }
     };
 
@@ -240,6 +290,26 @@ fn main() -> std::io::Result<()> {
         svg_file.write_all(graph_svg.as_slice())?;
     }
     Ok(())
+}
+
+fn load_render_input(path: &Path) -> CuResult<RenderInput> {
+    let path_str = path.to_str().ok_or_else(|| {
+        CuError::from(format!(
+            "Config path '{}' is not valid UTF-8",
+            path.display()
+        ))
+    })?;
+
+    match read_multi_configuration(path_str) {
+        Ok(config) => Ok(RenderInput::Multi(config)),
+        Err(multi_err) => match read_configuration(path_str) {
+            Ok(config) => Ok(RenderInput::Single(config)),
+            Err(single_err) => Err(CuError::from(format!(
+                "Failed to read '{}' as either a Copper config or a multi-Copper config.\nCopper config: {single_err}\nMulti-Copper config: {multi_err}",
+                path.display()
+            ))),
+        },
+    }
 }
 
 /// Hide platform-specific open commands behind a single helper.
@@ -288,7 +358,59 @@ fn render_config_svg(
         eprintln!("Warning: logstats did not match any rendered mission");
     }
 
-    Ok(render_sections_to_svg(&layouts).into_bytes())
+    Ok(render_sections_to_svg(&layouts, &[])?.into_bytes())
+}
+
+fn render_multi_config_svg(config: &config::MultiCopperConfig) -> CuResult<Vec<u8>> {
+    let mut layouts = Vec::new();
+
+    for subsystem in &config.subsystems {
+        let graph = subsystem.config.graphs.get_default_mission_graph().map_err(|e| {
+            CuError::from(format!(
+                "Distributed DAG rendering expects one local graph per subsystem. Subsystem '{}' is not renderable as a single graph: {e}",
+                subsystem.id
+            ))
+        })?;
+        let section = SectionRef {
+            section_id: subsystem.id.clone(),
+            title: Some(format!("Subsystem: {}", subsystem.id)),
+            mission_id: None,
+            graph,
+        };
+        let resource_catalog = collect_resource_catalog(&subsystem.config)?;
+        layouts.push(build_section_layout(
+            &subsystem.config,
+            &section,
+            &resource_catalog,
+            None,
+        )?);
+    }
+
+    let interconnects = config
+        .interconnects
+        .iter()
+        .map(|interconnect| {
+            let channel_label = if interconnect.from.channel_id == interconnect.to.channel_id {
+                interconnect.from.channel_id.clone()
+            } else {
+                format!(
+                    "{} -> {}",
+                    interconnect.from.channel_id, interconnect.to.channel_id
+                )
+            };
+            InterconnectRender {
+                from_section_id: interconnect.from.subsystem_id.clone(),
+                from_bridge_id: interconnect.from.bridge_id.clone(),
+                from_channel_id: interconnect.from.channel_id.clone(),
+                to_section_id: interconnect.to.subsystem_id.clone(),
+                to_bridge_id: interconnect.to.bridge_id.clone(),
+                to_channel_id: interconnect.to.channel_id.clone(),
+                label: format!("{channel_label}: {}", interconnect.msg),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    Ok(render_sections_to_svg(&layouts, &interconnects)?.into_bytes())
 }
 
 fn load_logstats(
@@ -349,7 +471,8 @@ fn build_sections<'a>(
 ) -> CuResult<Vec<SectionRef<'a>>> {
     let sections = match (&config.graphs, mission_id) {
         (ConfigGraphs::Simple(graph), _) => vec![SectionRef {
-            label: Some("Default".to_string()),
+            section_id: "default".to_string(),
+            title: Some("Mission: Default".to_string()),
             mission_id: None,
             graph,
         }],
@@ -358,7 +481,8 @@ fn build_sections<'a>(
                 .get(id)
                 .ok_or_else(|| CuError::from(format!("Mission {id} not found")))?;
             vec![SectionRef {
-                label: Some(id.to_string()),
+                section_id: id.to_string(),
+                title: Some(format!("Mission: {id}")),
                 mission_id: Some(id.to_string()),
                 graph,
             }]
@@ -369,7 +493,8 @@ fn build_sections<'a>(
             missions
                 .into_iter()
                 .map(|(label, graph)| SectionRef {
-                    label: Some(label.clone()),
+                    section_id: label.clone(),
+                    title: Some(format!("Mission: {label}")),
                     mission_id: Some(label.clone()),
                     graph,
                 })
@@ -537,11 +662,14 @@ fn build_section_layout(
     let perf_table = logstats.map(|stats| build_perf_table(&stats.perf));
 
     Ok(SectionLayout {
-        label: section.label.clone(),
+        section_id: section.section_id.clone(),
+        title: section.title.clone(),
         graph,
         nodes,
         edges,
         bounds: (min, max),
+        node_handles,
+        port_lookups,
         port_anchors,
         resource_tables,
         perf_table,
@@ -1266,20 +1394,24 @@ fn reorder_input_rows(table: &mut TableNode, order: &HashMap<String, usize>) {
 }
 
 /// Render each section and merge them into a single SVG canvas.
-fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
+fn render_sections_to_svg(
+    sections: &[SectionLayout],
+    interconnects: &[InterconnectRender],
+) -> CuResult<String> {
     let mut svg = SvgWriter::new();
     let mut cursor_y = GRAPH_MARGIN;
     let mut last_section_bottom = GRAPH_MARGIN;
     let mut last_section_right = GRAPH_MARGIN;
+    let mut placed_sections = Vec::with_capacity(sections.len());
 
     for section in sections {
-        let cluster_margin = if section.label.is_some() {
+        let cluster_margin = if section.title.is_some() {
             CLUSTER_MARGIN
         } else {
             0.0
         };
         let (min, max) = section.bounds;
-        let label_padding = if section.label.is_some() {
+        let label_padding = if section.title.is_some() {
             FONT_SIZE as f64
         } else {
             0.0
@@ -1415,8 +1547,8 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
         let label_bounds_max =
             Point::new(cluster_bottom_right.x - 4.0, cluster_bottom_right.y - 4.0);
 
-        if let Some(label) = &section.label {
-            draw_cluster(&mut svg, section_min, section_max, label, offset);
+        if let Some(title) = &section.title {
+            draw_cluster(&mut svg, section_min, section_max, title, offset);
         }
 
         let mut blocked_boxes: Vec<(Point, Point)> = node_bounds
@@ -1432,9 +1564,8 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
                 )
             })
             .collect();
-        if let Some(label) = &section.label {
-            let label_text = format!("Mission: {label}");
-            let label_size = get_size_for_str(&label_text, FONT_SIZE);
+        if let Some(title) = &section.title {
+            let label_size = get_size_for_str(title, FONT_SIZE);
             let label_pos = Point::new(
                 section_min.x + offset.x + CELL_PADDING,
                 section_min.y + offset.y + FONT_SIZE as f64,
@@ -1620,13 +1751,21 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
             draw_resource_table(&mut svg, table, top_left.add(content_offset));
         }
 
+        placed_sections.push(PlacedSection {
+            layout: section,
+            content_offset,
+        });
         cursor_y += (section_max.y - section_min.y) + SECTION_SPACING;
     }
+
+    let interconnect_bounds = draw_interconnects(&mut svg, &placed_sections, interconnects)?;
+    last_section_bottom = last_section_bottom.max(interconnect_bounds.y);
+    last_section_right = last_section_right.max(interconnect_bounds.x);
 
     let legend_top = last_section_bottom + GRAPH_MARGIN;
     let _legend_height = draw_legend(&mut svg, legend_top, last_section_right);
 
-    svg.finalize()
+    Ok(svg.finalize())
 }
 
 /// Draw table cells manually since the layout engine only positions shapes.
@@ -1687,17 +1826,16 @@ fn draw_resource_table(svg: &mut SvgWriter, table: &ResourceTable, top_left: Poi
     );
 }
 
-/// Visually group mission sections with a labeled bounding box.
-fn draw_cluster(svg: &mut SvgWriter, min: Point, max: Point, label: &str, offset: Point) {
+/// Visually group rendered sections with a labeled bounding box.
+fn draw_cluster(svg: &mut SvgWriter, min: Point, max: Point, title: &str, offset: Point) {
     let top_left = min.add(offset);
     let size = max.sub(min);
     svg.draw_rect(top_left, size, Some(CLUSTER_COLOR), 1.0, None, 10.0);
 
-    let label_text = format!("Mission: {label}");
     let label_pos = Point::new(top_left.x + CELL_PADDING, top_left.y + FONT_SIZE as f64);
     svg.draw_text(
         label_pos,
-        &label_text,
+        title,
         FONT_SIZE,
         DIM_GRAY,
         true,
@@ -2015,20 +2153,29 @@ fn format_mission_list(graphs: &HashMap<String, config::CuGraph>) -> String {
 }
 
 struct SectionRef<'a> {
-    label: Option<String>,
+    section_id: String,
+    title: Option<String>,
     mission_id: Option<String>,
     graph: &'a config::CuGraph,
 }
 
 struct SectionLayout {
-    label: Option<String>,
+    section_id: String,
+    title: Option<String>,
     graph: VisualGraph,
     nodes: Vec<NodeRender>,
     edges: Vec<RenderEdge>,
     bounds: (Point, Point),
+    node_handles: HashMap<String, NodeHandle>,
+    port_lookups: HashMap<String, PortLookup>,
     port_anchors: HashMap<NodeHandle, HashMap<String, Point>>,
     resource_tables: Vec<ResourceTable>,
     perf_table: Option<ResourceTable>,
+}
+
+struct PlacedSection<'a> {
+    layout: &'a SectionLayout,
+    content_offset: Point,
 }
 
 struct NodeRender {
@@ -3048,6 +3195,163 @@ fn resolve_anchor(section: &SectionLayout, node: NodeHandle, port: Option<&Strin
     }
 
     section.graph.element(node).position().center()
+}
+
+fn draw_interconnects(
+    svg: &mut SvgWriter,
+    placed_sections: &[PlacedSection<'_>],
+    interconnects: &[InterconnectRender],
+) -> CuResult<Point> {
+    if interconnects.is_empty() {
+        return Ok(Point::new(0.0, 0.0));
+    }
+
+    let mut sections_by_id = HashMap::new();
+    for section in placed_sections {
+        sections_by_id.insert(section.layout.section_id.as_str(), section);
+    }
+
+    let edge_look = StyleAttr::new(
+        Color::fast(INTERCONNECT_EDGE_COLOR),
+        1,
+        None,
+        0,
+        EDGE_FONT_SIZE,
+    );
+    let mut max_bounds = Point::new(0.0, 0.0);
+
+    for interconnect in interconnects {
+        let from_section = sections_by_id
+            .get(interconnect.from_section_id.as_str())
+            .ok_or_else(|| {
+                CuError::from(format!(
+                    "Unknown subsystem section '{}' while rendering interconnects",
+                    interconnect.from_section_id
+                ))
+            })?;
+        let to_section = sections_by_id
+            .get(interconnect.to_section_id.as_str())
+            .ok_or_else(|| {
+                CuError::from(format!(
+                    "Unknown subsystem section '{}' while rendering interconnects",
+                    interconnect.to_section_id
+                ))
+            })?;
+
+        let start = resolve_interconnect_anchor(
+            from_section,
+            &interconnect.from_bridge_id,
+            &interconnect.from_channel_id,
+            true,
+        )?;
+        let end = resolve_interconnect_anchor(
+            to_section,
+            &interconnect.to_bridge_id,
+            &interconnect.to_channel_id,
+            false,
+        )?;
+
+        let lane_y = (start.y + end.y) / 2.0;
+        let path = build_lane_path(start, end, lane_y, 1.0, 1.0);
+
+        for segment in &path {
+            extend_max_bounds(&mut max_bounds, segment.start);
+            extend_max_bounds(&mut max_bounds, segment.c1);
+            extend_max_bounds(&mut max_bounds, segment.c2);
+            extend_max_bounds(&mut max_bounds, segment.end);
+        }
+
+        let (text, font_size) = fit_label_to_width(
+            &interconnect.label,
+            approximate_path_length(&path) * EDGE_LABEL_FIT_RATIO,
+            EDGE_FONT_SIZE,
+        );
+        let label = if text.is_empty() {
+            None
+        } else {
+            let label_pos =
+                place_detour_label(&text, font_size, (start.x + end.x) / 2.0, lane_y, true, &[]);
+            let size = get_size_for_str(&text, font_size);
+            extend_max_bounds(
+                &mut max_bounds,
+                Point::new(label_pos.x + size.x / 2.0, label_pos.y + size.y / 2.0),
+            );
+            Some(
+                ArrowLabel::new(
+                    text,
+                    INTERCONNECT_EDGE_COLOR,
+                    font_size,
+                    true,
+                    FontFamily::Mono,
+                )
+                .with_position(label_pos),
+            )
+        };
+
+        svg.draw_arrow(&path, true, (false, true), &edge_look, label.as_ref(), None);
+    }
+
+    Ok(max_bounds)
+}
+
+fn resolve_interconnect_anchor(
+    section: &PlacedSection<'_>,
+    bridge_id: &str,
+    channel_id: &str,
+    outgoing: bool,
+) -> CuResult<Point> {
+    let handle = section.layout.node_handles.get(bridge_id).ok_or_else(|| {
+        CuError::from(format!(
+            "Bridge '{}' is missing from rendered subsystem '{}'",
+            bridge_id, section.layout.section_id
+        ))
+    })?;
+    let port_lookup = section.layout.port_lookups.get(bridge_id).ok_or_else(|| {
+        CuError::from(format!(
+            "Bridge '{}' has no port lookup in rendered subsystem '{}'",
+            bridge_id, section.layout.section_id
+        ))
+    })?;
+    let port_id = if outgoing {
+        port_lookup.inputs.get(channel_id)
+    } else {
+        port_lookup.outputs.get(channel_id)
+    }
+    .ok_or_else(|| {
+        let direction = if outgoing { "Tx" } else { "Rx" };
+        CuError::from(format!(
+            "Bridge channel '{}:{}' ({direction}) is missing from rendered subsystem '{}'",
+            bridge_id, channel_id, section.layout.section_id
+        ))
+    })?;
+    let port_anchor = section
+        .layout
+        .port_anchors
+        .get(handle)
+        .and_then(|anchors| anchors.get(port_id))
+        .ok_or_else(|| {
+            CuError::from(format!(
+                "Rendered anchor missing for bridge channel '{}:{}' in subsystem '{}'",
+                bridge_id, channel_id, section.layout.section_id
+            ))
+        })?;
+
+    let pos = section.layout.graph.element(*handle).position();
+    let center = pos.center();
+    let size = pos.size(false);
+    let port_offset = PORT_LINE_GAP + PORT_DOT_RADIUS;
+    let x = if outgoing {
+        center.x + size.x / 2.0 + port_offset
+    } else {
+        center.x - size.x / 2.0 - port_offset
+    };
+
+    Ok(Point::new(x, port_anchor.y).add(section.content_offset))
+}
+
+fn extend_max_bounds(bounds: &mut Point, point: Point) {
+    bounds.x = bounds.x.max(point.x);
+    bounds.y = bounds.y.max(point.y);
 }
 
 #[derive(Clone, Copy)]
@@ -4194,6 +4498,8 @@ fn fnv1a64(data: &[u8]) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use tempfile::tempdir;
 
     #[test]
     fn tooltip_formats_missing_values() {
@@ -4254,5 +4560,71 @@ mod tests {
         for slot in LINUX_RESOURCE_SLOT_NAMES {
             assert!(linux_slots.contains(slot), "missing slot {slot}");
         }
+    }
+
+    #[test]
+    fn multi_copper_render_outputs_subsystems_and_dashed_interconnects() {
+        let dir = tempdir().expect("temp dir");
+        let alpha_path = dir.path().join("alpha.ron");
+        let beta_path = dir.path().join("beta.ron");
+        let network_path = dir.path().join("network.ron");
+
+        fs::write(
+            &alpha_path,
+            r#"(
+                tasks: [(id: "src", type: "demo::Src")],
+                bridges: [
+                    (
+                        id: "zenoh",
+                        type: "demo::ZenohBridge",
+                        channels: [Tx(id: "ping")],
+                    ),
+                ],
+                cnx: [(src: "src", dst: "zenoh/ping", msg: "demo::Ping")],
+            )"#,
+        )
+        .expect("write alpha config");
+        fs::write(
+            &beta_path,
+            r#"(
+                tasks: [(id: "sink", type: "demo::Sink")],
+                bridges: [
+                    (
+                        id: "zenoh",
+                        type: "demo::ZenohBridge",
+                        channels: [Rx(id: "ping")],
+                    ),
+                ],
+                cnx: [(src: "zenoh/ping", dst: "sink", msg: "demo::Ping")],
+            )"#,
+        )
+        .expect("write beta config");
+        fs::write(
+            &network_path,
+            r#"(
+                subsystems: [
+                    (id: "alpha", config: "alpha.ron"),
+                    (id: "beta", config: "beta.ron"),
+                ],
+                interconnects: [
+                    (from: "alpha/zenoh/ping", to: "beta/zenoh/ping", msg: "demo::Ping"),
+                ],
+            )"#,
+        )
+        .expect("write network config");
+
+        let input = load_render_input(network_path.as_path()).expect("multi config should load");
+        let multi = match input {
+            RenderInput::Multi(config) => config,
+            RenderInput::Single(_) => panic!("expected multi-Copper config"),
+        };
+
+        let svg = String::from_utf8(render_multi_config_svg(&multi).expect("render svg"))
+            .expect("svg should be utf8");
+
+        assert!(svg.contains("Subsystem: alpha"));
+        assert!(svg.contains("Subsystem: beta"));
+        assert!(svg.contains("stroke-dasharray=\"5,5\""));
+        assert!(svg.contains("demo::Ping"));
     }
 }
