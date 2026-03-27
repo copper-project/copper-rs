@@ -1,0 +1,41 @@
+(
+    tasks: [
+        (
+            id: "planner",
+            type: "tasks::PlannerTask",
+        ),
+    ],
+    bridges: [
+        (
+            id: "zenoh",
+            type: "bridges::DemoZenohBridge",
+            channels: [
+                Rx(
+                    id: "pulse",
+                    route: "distributed_resim/pulse",
+                ),
+                Tx(
+                    id: "plan",
+                    route: "distributed_resim/plan",
+                ),
+            ],
+        ),
+    ],
+    cnx: [
+        (
+            src: "zenoh/pulse",
+            dst: "planner",
+            msg: "messages::Pulse",
+        ),
+        (
+            src: "planner",
+            dst: "zenoh/plan",
+            msg: "messages::Plan",
+        ),
+    ],
+    logging: (
+        keyframe_interval: 4,
+        slab_size_mib: 32,
+        section_size_mib: 8,
+    ),
+)

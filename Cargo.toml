@@ -71,6 +71,7 @@ members = [
   "examples/cu_bridge_test",
   "examples/cu_bevymon_demo",
   "examples/cu_caterpillar",
+  "examples/cu_distributed_resim_demo",
   "examples/cu_config_gen",
   "examples/cu_config_variation",
   "examples/cu_dorabench",

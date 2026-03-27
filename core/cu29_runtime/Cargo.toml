@@ -84,6 +84,7 @@ cudarc = { version = "0.19", optional = true, default-features = false, features
 
 [dev-dependencies]
 cu29 = { workspace = true }
+cu29-export = { workspace = true }
 cu29-log-derive = { workspace = true }
 cu29-value = { workspace = true }
 serde = { workspace = true }
