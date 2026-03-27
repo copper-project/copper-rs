@@ -3,9 +3,13 @@ use crate::MonitorModel;
 use crate::logpane::StyledLine;
 use crate::model::{ComponentStatus, MonitorFooterIdentity};
 use crate::palette;
+#[cfg(feature = "sysinfo")]
 use crate::system_info::{SystemInfo, default_system_info};
 use crate::tui_nodes::{Connection, NodeGraph, NodeLayout};
-#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
+#[cfg(all(
+    not(all(target_family = "wasm", target_os = "unknown")),
+    feature = "sysinfo"
+))]
 use ansi_to_tui::IntoText;
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
@@ -22,6 +26,7 @@ use cu29::monitoring::{ComponentId, ComponentType, MonitorComponentMetadata};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MonitorScreen {
+    #[cfg(feature = "sysinfo")]
     System,
     Dag,
     Latency,
@@ -88,7 +93,6 @@ pub struct MonitorUiOptions {
 struct TabDef {
     screen: MonitorScreen,
     label: &'static str,
-    key: &'static str,
 }
 
 #[derive(Clone, Copy)]
@@ -123,36 +127,31 @@ struct FooterBadge {
 }
 
 const TAB_DEFS: &[TabDef] = &[
+    #[cfg(feature = "sysinfo")]
     TabDef {
         screen: MonitorScreen::System,
         label: "SYS",
-        key: "1",
     },
     TabDef {
         screen: MonitorScreen::Dag,
         label: "DAG",
-        key: "2",
     },
     TabDef {
         screen: MonitorScreen::Latency,
         label: "LAT",
-        key: "3",
     },
     TabDef {
         screen: MonitorScreen::CopperList,
         label: "BW",
-        key: "4",
     },
     TabDef {
         screen: MonitorScreen::MemoryPools,
         label: "MEM",
-        key: "5",
     },
     #[cfg(feature = "log_pane")]
     TabDef {
         screen: MonitorScreen::Logs,
         label: "LOG",
-        key: "6",
     },
 ];
 
@@ -203,6 +202,7 @@ pub struct MonitorUi {
     model: MonitorModel,
     runtime_node_col_width: u16,
     active_screen: MonitorScreen,
+    #[cfg(feature = "sysinfo")]
     system_info: SystemInfo,
     show_quit_hint: bool,
     tab_hitboxes: Vec<TabHitbox>,
@@ -227,6 +227,7 @@ impl MonitorUi {
             model,
             runtime_node_col_width,
             active_screen: MonitorScreen::Dag,
+            #[cfg(feature = "sysinfo")]
             system_info: default_system_info(),
             show_quit_hint: options.show_quit_hint,
             tab_hitboxes: Vec::new(),
@@ -418,6 +419,7 @@ impl MonitorUi {
         );
 
         match self.active_screen {
+            #[cfg(feature = "sysinfo")]
             MonitorScreen::System => self.draw_system_info(f, area),
             MonitorScreen::Dag => self.draw_nodes(f, area),
             MonitorScreen::Latency => self.draw_latency_table(f, area),
@@ -447,6 +449,7 @@ impl MonitorUi {
         self.model.components()[component_id.index()].id()
     }
 
+    #[cfg(feature = "sysinfo")]
     fn draw_system_info(&self, f: &mut Frame, area: Rect) {
         const VERSION: &str = env!("CARGO_PKG_VERSION");
         let mut lines = vec![
@@ -991,7 +994,8 @@ impl MonitorUi {
         spans.push(Span::styled(" ", Style::default().bg(base_bg)));
         cursor_x = cursor_x.saturating_add(1);
 
-        for tab in TAB_DEFS {
+        for (i, tab) in TAB_DEFS.iter().enumerate() {
+            let key = ((b'1' + i as u8) as char).to_string();
             let is_active = self.active_screen == tab.screen;
             let bg = if is_active { active_bg } else { inactive_bg };
             let fg = if is_active { active_fg } else { inactive_fg };
@@ -1000,7 +1004,7 @@ impl MonitorUi {
             } else {
                 Style::default().fg(fg).bg(bg)
             };
-            let tab_width = segment_width(tab.key, tab.label);
+            let tab_width = segment_width(&key, tab.label);
             self.tab_hitboxes.push(TabHitbox {
                 screen: tab.screen,
                 x: cursor_x,
@@ -1013,7 +1017,7 @@ impl MonitorUi {
             spans.push(Span::styled("", Style::default().fg(bg).bg(base_bg)));
             spans.push(Span::styled(" ", Style::default().bg(bg)));
             spans.push(Span::styled(
-                tab.key,
+                key,
                 Style::default()
                     .fg(key_fg)
                     .bg(bg)
@@ -1383,37 +1387,20 @@ fn segment_width(key: &str, label: &str) -> u16 {
 fn screen_for_tab_key(key: char) -> Option<MonitorScreen> {
     TAB_DEFS
         .iter()
-        .find(|tab| tab.key.len() == 1 && tab.key.starts_with(key))
-        .map(|tab| tab.screen)
+        .enumerate()
+        .find(|(i, _)| (b'1' + *i as u8) as char == key)
+        .map(|(_, tab)| tab.screen)
 }
 
 fn tab_key_hint() -> String {
-    let keys = TAB_DEFS.iter().map(|tab| tab.key).collect::<Vec<_>>();
-    if keys.is_empty() {
+    let n = TAB_DEFS.len();
+    if n == 0 {
         return "tabs".to_string();
     }
-
-    let numeric_keys = keys
-        .iter()
-        .map(|key| key.parse::<u8>())
-        .collect::<Result<Vec<_>, _>>();
-
-    if let Ok(numeric_keys) = numeric_keys {
-        let is_contiguous = numeric_keys
-            .windows(2)
-            .all(|window| window[1] == window[0].saturating_add(1));
-        if is_contiguous
-            && let (Some(first), Some(last)) = (numeric_keys.first(), numeric_keys.last())
-        {
-            return if first == last {
-                first.to_string()
-            } else {
-                format!("{first}-{last}")
-            };
-        }
+    if n == 1 {
+        return "1".to_string();
     }
-
-    keys.join("/")
+    format!("1-{n}")
 }
 
 #[cfg(feature = "log_pane")]
