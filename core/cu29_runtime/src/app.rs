@@ -277,3 +277,23 @@ pub trait CuRecordedReplayApplication<S: SectionStorage, L: UnifiedLogWrite<S> +
         keyframe: Option<&KeyFrame>,
     ) -> CuResult<()>;
 }
+
+/// Simulation-enabled applications that can be instantiated for distributed replay.
+///
+/// This extends exact-output replay with the one extra capability the
+/// distributed engine needs: build a replayable app for a specific
+/// deployment `instance_id` while keeping app construction type-safe.
+#[cfg(feature = "std")]
+pub trait CuDistributedReplayApplication<S: SectionStorage, L: UnifiedLogWrite<S> + 'static>:
+    CuRecordedReplayApplication<S, L> + CuSubsystemMetadata
+{
+    /// Build this app for deterministic distributed replay.
+    fn build_distributed_replay(
+        clock: RobotClock,
+        unified_logger: Arc<Mutex<L>>,
+        instance_id: u32,
+        config_override: Option<CuConfig>,
+    ) -> CuResult<Self>
+    where
+        Self: Sized;
+}

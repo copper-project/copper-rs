@@ -852,12 +852,27 @@ fn gen_sim_support(
                     let enum_entry_name = config_id_to_enum(&format!("{}_tx_{}", bridge_spec.id, channel.id));
                     let enum_ident = Ident::new(&enum_entry_name, Span::call_site());
                     let channel_type: Type = parse_str::<Type>(channel.msg_type_name.as_str()).unwrap();
+                    let output_pack = step
+                        .output_msg_pack
+                        .as_ref()
+                        .expect("Bridge Tx channel missing output pack for sim support");
+                    let output_types: Vec<Type> = output_pack
+                        .msg_types
+                        .iter()
+                        .map(|msg_type| {
+                            parse_str::<Type>(msg_type.as_str()).unwrap_or_else(|_| {
+                                panic!("Could not transform {msg_type} into a message Rust type.")
+                            })
+                        })
+                        .collect();
+                    let output_type = build_output_slot_type(&output_types);
                     let bridge_type = runtime_bridge_type_for_spec(bridge_spec, true);
                     let _const_ident = &channel.const_ident;
                     quote! {
                         #enum_ident {
                             channel: &'static cu29::cubridge::BridgeChannel<< <#bridge_type as cu29::cubridge::CuBridge>::Tx as cu29::cubridge::BridgeChannelSet >::Id, #channel_type>,
                             msg: &'a CuMsg<#channel_type>,
+                            output: &'a mut #output_type,
                         }
                     }
                 }
@@ -961,8 +976,16 @@ fn gen_recorded_replay_support(
                     let enum_entry_name =
                         config_id_to_enum(&format!("{}_tx_{}", bridge_spec.id, channel.id));
                     let enum_ident = Ident::new(&enum_entry_name, Span::call_site());
+                    let output_pack = step
+                        .output_msg_pack
+                        .as_ref()
+                        .expect("Bridge Tx channel missing output pack for recorded replay");
+                    let culist_index = int2sliceindex(output_pack.culist_index);
                     Some(quote! {
-                        SimStep::#enum_ident { .. } => SimOverride::ExecutedBySim
+                        SimStep::#enum_ident { output, .. } => {
+                            *output = recorded.msgs.0.#culist_index.clone();
+                            SimOverride::ExecutedBySim
+                        }
                     })
                 }
             },
@@ -3895,7 +3918,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: building runtime");
-                let copper_runtime = CuRuntime::<#mission_mod::#tasks_type, #mission_mod::CuBridges, #mission_mod::CuStampedDataSet, #monitor_type, #copperlist_count_tokens>::new_with_resources(
+                let mut copper_runtime = CuRuntime::<#mission_mod::#tasks_type, #mission_mod::CuBridges, #mission_mod::CuStampedDataSet, #monitor_type, #copperlist_count_tokens>::new_with_resources(
                     clock,
                     #application_name::subsystem().code(),
                     &config,
@@ -3909,6 +3932,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #mission_mod::bridges_instanciator,
                     copperlist_stream,
                     keyframes_stream)?;
+                copper_runtime.set_instance_id(instance_id);
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: runtime built");
 
@@ -4073,6 +4097,34 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             #mission_mod::recorded_replay_step(step, copperlist)
                         };
                         <Self as CuSimApplication<S, L>>::run_one_iteration(self, &mut sim_callback)
+                    }
+                }
+            })
+        } else {
+            None
+        };
+
+        let distributed_replay_app_impl = if sim_mode {
+            Some(quote! {
+                impl<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>
+                    cu29::prelude::app::CuDistributedReplayApplication<S, L> for #application_name
+                {
+                    fn build_distributed_replay(
+                        clock: cu29::clock::RobotClock,
+                        unified_logger: std::sync::Arc<std::sync::Mutex<L>>,
+                        instance_id: u32,
+                        config_override: Option<cu29::config::CuConfig>,
+                    ) -> CuResult<Self> {
+                        let mut noop =
+                            |_step: SimStep<'_>| cu29::simulation::SimOverride::ExecuteByRuntime;
+                        let mut app = <Self as CuSimApplication<S, L>>::new(
+                            clock,
+                            unified_logger,
+                            config_override,
+                            &mut noop,
+                        )?;
+                        app.copper_runtime_mut().set_instance_id(instance_id);
+                        Ok(app)
                     }
                 }
             })
@@ -4504,6 +4556,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #app_reflect_impl
                 #application_impl
                 #recorded_replay_app_impl
+                #distributed_replay_app_impl
 
                 #std_application_impl
 
@@ -6982,6 +7035,7 @@ fn generate_bridge_tx_execution_tokens(
                 let state = SimStep::#enum_ident {
                     channel: &<#bridge_type as cu29::cubridge::CuBridge>::Tx::#const_ident,
                     msg: &*cumsg_input,
+                    output: cumsg_output,
                 };
                 let ovr = sim_callback(state);
                 if let SimOverride::Errored(reason) = ovr  {
