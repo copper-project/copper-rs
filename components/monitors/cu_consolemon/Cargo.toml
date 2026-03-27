@@ -14,6 +14,7 @@ repository.workspace = true
 default = ["debug_pane"]
 # Enables 'Debug Output' Pane
 debug_pane = ["cu-tuimon/log_pane", "cu-tuimon/stderr_capture", "dep:arboard"]
+sysinfo = ["cu-tuimon/sysinfo"]
 
 [dependencies]
 cu29 = { workspace = true }
