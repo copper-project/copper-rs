@@ -3037,6 +3037,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     clock: RobotClock,
                     unified_logger: Arc<Mutex<L>>,
                     app_resources: AppResources,
+                    instance_id: u32,
                     sim_callback: &mut impl FnMut(SimStep) -> SimOverride,
                 ) -> CuResult<Self>
             }
@@ -3046,14 +3047,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     clock: RobotClock,
                     unified_logger: Arc<Mutex<L>>,
                     app_resources: AppResources,
+                    instance_id: u32,
                 ) -> CuResult<Self>
             }
         };
 
         let new_with_resources_call = if sim_mode {
-            quote! { Self::new_with_resources(clock, unified_logger, app_resources, sim_callback) }
+            quote! { Self::new_with_resources(clock, unified_logger, app_resources, 0, sim_callback) }
         } else {
-            quote! { Self::new_with_resources(clock, unified_logger, app_resources) }
+            quote! { Self::new_with_resources(clock, unified_logger, app_resources, 0) }
         };
         let parallel_rt_metadata_arg = if std && parallel_rt_enabled {
             Some(quote! {
@@ -3772,6 +3774,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     app_version: env!("CARGO_PKG_VERSION").to_string(),
                     git_commit: #git_commit_tokens,
                     git_dirty: #git_dirty_tokens,
+                    subsystem_id: #application_name::SUBSYSTEM_ID.map(str::to_string),
+                    subsystem_code: #application_name::SUBSYSTEM_CODE,
+                    instance_id,
                 };
                 runtime_lifecycle_stream.log(&RuntimeLifecycleRecord {
                     timestamp: clock.now(),
@@ -4065,16 +4070,20 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                     #[allow(dead_code)]
                     pub fn build(self) -> CuResult<#application_name> {
-                        let mut application = #application_name::new(
-                            self.clock
-                                .ok_or(CuError::from("Clock missing from builder"))?,
-                            self.unified_logger
-                                .ok_or(CuError::from("Unified logger missing from builder"))?,
-                            self.config_override,
+                        let clock = self
+                            .clock
+                            .ok_or(CuError::from("Clock missing from builder"))?;
+                        let unified_logger = self
+                            .unified_logger
+                            .ok_or(CuError::from("Unified logger missing from builder"))?;
+                        let app_resources = #application_name::init_resources(self.config_override)?;
+                        #application_name::new_with_resources(
+                            clock,
+                            unified_logger,
+                            app_resources,
+                            self.instance_id,
                             #builder_build_sim_callback_arg
-                        )?;
-                        application.copper_runtime_mut().set_instance_id(self.instance_id);
-                        Ok(application)
+                        )
                     }
                 }
             })

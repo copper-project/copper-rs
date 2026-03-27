@@ -823,13 +823,16 @@ pub enum RuntimeLifecycleConfigSource {
     BundledDefault,
 }
 
-/// Build-time stack identification metadata.
+/// Stack and process identification metadata persisted in the runtime lifecycle log.
 #[derive(Clone, Encode, Decode, Debug, PartialEq, Eq)]
 pub struct RuntimeLifecycleStackInfo {
     pub app_name: String,
     pub app_version: String,
     pub git_commit: Option<String>,
     pub git_dirty: Option<bool>,
+    pub subsystem_id: Option<String>,
+    pub subsystem_code: u16,
+    pub instance_id: u32,
 }
 
 /// Runtime lifecycle events emitted in the dedicated lifecycle section.

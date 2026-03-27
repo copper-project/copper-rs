@@ -961,6 +961,9 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
                 stack_py.set_item("app_version", &stack.app_version)?;
                 stack_py.set_item("git_commit", &stack.git_commit)?;
                 stack_py.set_item("git_dirty", stack.git_dirty)?;
+                stack_py.set_item("subsystem_id", &stack.subsystem_id)?;
+                stack_py.set_item("subsystem_code", stack.subsystem_code)?;
+                stack_py.set_item("instance_id", stack.instance_id)?;
                 root.set_item("stack", dict_to_namespace(stack_py, py)?)?;
             }
             RuntimeLifecycleEvent::MissionStarted { mission } => {
@@ -1493,6 +1496,9 @@ mod tests {
                         app_version: "0.1.0".to_string(),
                         git_commit: None,
                         git_dirty: None,
+                        subsystem_id: Some("ping".to_string()),
+                        subsystem_code: 7,
+                        instance_id: 42,
                     },
                 },
             },
