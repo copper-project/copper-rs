@@ -38,6 +38,7 @@
 //! Otherwise, use config to point to the right board resource and you're done.
 
 use crate::config::ComponentConfig;
+use alloc::format;
 use core::any::Any;
 use core::fmt;
 use core::marker::PhantomData;
