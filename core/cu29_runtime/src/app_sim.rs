@@ -18,4 +18,9 @@ where
     pub fn lock_keyframe(&mut self, keyframe: &KeyFrame) {
         self.keyframes_manager.lock_keyframe(keyframe);
     }
+
+    #[cfg(feature = "std")]
+    pub fn captures_keyframe(&self, culistid: u64) -> bool {
+        self.keyframes_manager.captures_keyframe(culistid)
+    }
 }

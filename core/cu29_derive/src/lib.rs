@@ -890,6 +890,100 @@ fn gen_sim_support(
     }
 }
 
+fn gen_recorded_replay_support(
+    runtime_plan: &CuExecutionLoop,
+    exec_entities: &[ExecutionEntity],
+    bridge_specs: &[BridgeSpec],
+) -> proc_macro2::TokenStream {
+    let replay_arms: Vec<proc_macro2::TokenStream> = runtime_plan
+        .steps
+        .iter()
+        .filter_map(|unit| match unit {
+            CuExecutionUnit::Step(step) => match &exec_entities[step.node_id as usize].kind {
+                ExecutionEntityKind::Task { .. } => {
+                    let enum_entry_name = config_id_to_enum(step.node.get_id().as_str());
+                    let enum_ident = Ident::new(&enum_entry_name, Span::call_site());
+                    let output_pack = step
+                        .output_msg_pack
+                        .as_ref()
+                        .expect("Task step missing output pack for recorded replay");
+                    let culist_index = int2sliceindex(output_pack.culist_index);
+                    Some(quote! {
+                        SimStep::#enum_ident(CuTaskCallbackState::Process(_, output)) => {
+                            *output = recorded.msgs.0.#culist_index.clone();
+                            SimOverride::ExecutedBySim
+                        }
+                    })
+                }
+                ExecutionEntityKind::BridgeRx {
+                    bridge_index,
+                    channel_index,
+                } => {
+                    let bridge_spec = &bridge_specs[*bridge_index];
+                    let channel = &bridge_spec.rx_channels[*channel_index];
+                    let enum_entry_name =
+                        config_id_to_enum(&format!("{}_rx_{}", bridge_spec.id, channel.id));
+                    let enum_ident = Ident::new(&enum_entry_name, Span::call_site());
+                    let output_pack = step
+                        .output_msg_pack
+                        .as_ref()
+                        .expect("Bridge Rx channel missing output pack for recorded replay");
+                    let port_index = output_pack
+                        .msg_types
+                        .iter()
+                        .position(|msg| msg == &channel.msg_type_name)
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "Bridge Rx channel '{}' missing output port for '{}'",
+                                channel.id, channel.msg_type_name
+                            )
+                        });
+                    let culist_index = int2sliceindex(output_pack.culist_index);
+                    let recorded_slot = if output_pack.msg_types.len() == 1 {
+                        quote! { recorded.msgs.0.#culist_index.clone() }
+                    } else {
+                        let port_index = syn::Index::from(port_index);
+                        quote! { recorded.msgs.0.#culist_index.#port_index.clone() }
+                    };
+                    Some(quote! {
+                        SimStep::#enum_ident { msg, .. } => {
+                            *msg = #recorded_slot;
+                            SimOverride::ExecutedBySim
+                        }
+                    })
+                }
+                ExecutionEntityKind::BridgeTx {
+                    bridge_index,
+                    channel_index,
+                } => {
+                    let bridge_spec = &bridge_specs[*bridge_index];
+                    let channel = &bridge_spec.tx_channels[*channel_index];
+                    let enum_entry_name =
+                        config_id_to_enum(&format!("{}_tx_{}", bridge_spec.id, channel.id));
+                    let enum_ident = Ident::new(&enum_entry_name, Span::call_site());
+                    Some(quote! {
+                        SimStep::#enum_ident { .. } => SimOverride::ExecutedBySim
+                    })
+                }
+            },
+            CuExecutionUnit::Loop(_) => None,
+        })
+        .collect();
+
+    quote! {
+        #[allow(dead_code)]
+        pub fn recorded_replay_step<'a>(
+            step: SimStep<'a>,
+            recorded: &CopperList<CuStampedDataSet>,
+        ) -> SimOverride {
+            match step {
+                #(#replay_arms),*,
+                _ => SimOverride::ExecuteByRuntime,
+            }
+        }
+    }
+}
+
 /// Adds `#[copper_runtime(config = "path", subsystem = "id", sim_mode = false/true, ignore_resources = false/true)]`
 /// to your application struct to generate the runtime.
 /// if sim_mode is omitted, it is set to false.
@@ -2497,6 +2591,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             None
         };
 
+        let recorded_replay_support = if sim_mode {
+            Some(gen_recorded_replay_support(
+                &culist_plan,
+                &culist_exec_entities,
+                &culist_bridge_specs,
+            ))
+        } else {
+            None
+        };
+
         let (new, run_one_iteration, start_all_tasks, stop_all_tasks, run) = if sim_mode {
             (
                 quote! {
@@ -3908,6 +4012,61 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
+        let recorded_replay_app_impl = if sim_mode {
+            Some(quote! {
+                impl<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>
+                    CuRecordedReplayApplication<S, L> for #application_name
+                {
+                    type RecordedDataSet = #mission_mod::CuStampedDataSet;
+
+                    fn replay_recorded_copperlist(
+                        &mut self,
+                        clock_mock: &RobotClockMock,
+                        copperlist: &CopperList<Self::RecordedDataSet>,
+                        keyframe: Option<&KeyFrame>,
+                    ) -> CuResult<()> {
+                        if let Some(keyframe) = keyframe {
+                            if keyframe.culistid != copperlist.id {
+                                return Err(CuError::from(format!(
+                                    "Recorded keyframe culistid {} does not match copperlist {}",
+                                    keyframe.culistid, copperlist.id
+                                )));
+                            }
+
+                            if !self.copper_runtime_mut().captures_keyframe(copperlist.id) {
+                                return Err(CuError::from(format!(
+                                    "CopperList {} is not configured to capture a keyframe in this runtime",
+                                    copperlist.id
+                                )));
+                            }
+
+                            self.copper_runtime_mut()
+                                .set_forced_keyframe_timestamp(keyframe.timestamp);
+                            self.copper_runtime_mut().lock_keyframe(keyframe);
+                            clock_mock.set_value(keyframe.timestamp.as_nanos());
+                        } else {
+                            let timestamp =
+                                cu29::simulation::recorded_copperlist_timestamp(copperlist)
+                                    .ok_or_else(|| {
+                                        CuError::from(format!(
+                                            "Recorded copperlist {} has no process_time.start timestamps",
+                                            copperlist.id
+                                        ))
+                                    })?;
+                            clock_mock.set_value(timestamp.as_nanos());
+                        }
+
+                        let mut sim_callback = |step: SimStep<'_>| -> SimOverride {
+                            #mission_mod::recorded_replay_step(step, copperlist)
+                        };
+                        <Self as CuSimApplication<S, L>>::run_one_iteration(self, &mut sim_callback)
+                    }
+                }
+            })
+        } else {
+            None
+        };
+
         let (
             builder_struct,
             builder_new,
@@ -4001,6 +4160,19 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             }
                             pub fn stop_all_tasks(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()> {
                                 <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::stop_all_tasks(self, sim_callback)
+                            }
+                            pub fn replay_recorded_copperlist(
+                                &mut self,
+                                clock_mock: &RobotClockMock,
+                                copperlist: &CopperList<CuStampedDataSet>,
+                                keyframe: Option<&KeyFrame>,
+                            ) -> CuResult<()> {
+                                <Self as CuRecordedReplayApplication<MmapSectionStorage, UnifiedLoggerWrite>>::replay_recorded_copperlist(
+                                    self,
+                                    clock_mock,
+                                    copperlist,
+                                    keyframe,
+                                )
                             }
                         }
             })
@@ -4100,6 +4272,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::simulation::CuSimSinkTask;
                 use cu29::simulation::CuSimBridge;
                 use cu29::prelude::app::CuSimApplication;
+                use cu29::prelude::app::CuRecordedReplayApplication;
                 use cu29::cubridge::BridgeChannelSet;
             })
         } else {
@@ -4225,6 +4398,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::bincode::de::DecoderImpl;
                 use cu29::bincode::error::DecodeError;
                 use cu29::clock::RobotClock;
+                use cu29::clock::RobotClockMock;
                 use cu29::config::CuConfig;
                 use cu29::config::ComponentConfig;
                 use cu29::curuntime::CuRuntime;
@@ -4272,6 +4446,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 #sim_tasks
                 #sim_support
+                #recorded_replay_support
                 #sim_tasks_instanciator
 
                 pub const TASK_IDS: &'static [&'static str] = &[#( #task_ids ),*];
@@ -4314,6 +4489,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #app_inherent_impl
                 #app_reflect_impl
                 #application_impl
+                #recorded_replay_app_impl
 
                 #std_application_impl
 

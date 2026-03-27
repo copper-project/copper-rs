@@ -109,6 +109,7 @@
 
 use crate::config::ComponentConfig;
 use crate::context::CuContext;
+use crate::copperlist::CopperList;
 use crate::cubridge::{
     BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
 };
@@ -122,7 +123,21 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use core::marker::PhantomData;
-use cu29_traits::CuResult;
+use cu29_clock::CuTime;
+use cu29_traits::{CopperListTuple, CuResult, ErasedCuStampedDataSet};
+
+/// Returns the earliest recorded `process_time.start` found in a CopperList.
+///
+/// This is the default timestamp used by exact-output replay when no matching
+/// recorded keyframe is being injected for the current CL.
+pub fn recorded_copperlist_timestamp<P: CopperListTuple>(
+    copperlist: &CopperList<P>,
+) -> Option<CuTime> {
+    <CopperList<P> as ErasedCuStampedDataSet>::cumsgs(copperlist)
+        .into_iter()
+        .filter_map(|msg| Option::<CuTime>::from(msg.metadata().process_time().start))
+        .min()
+}
 
 /// This is the state that will be passed to the simulation support to hook
 /// into the lifecycle of the tasks.

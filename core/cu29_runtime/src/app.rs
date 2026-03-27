@@ -3,6 +3,13 @@ use cu29_clock::RobotClock;
 use cu29_traits::CuResult;
 use cu29_unifiedlog::{SectionStorage, UnifiedLogWrite};
 
+#[cfg(feature = "std")]
+use crate::copperlist::CopperList;
+#[cfg(feature = "std")]
+use cu29_clock::RobotClockMock;
+#[cfg(feature = "std")]
+use cu29_traits::CopperListTuple;
+
 #[cfg(not(feature = "std"))]
 mod imp {
     pub use alloc::string::String;
@@ -217,4 +224,26 @@ pub trait CuSimApplication<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> {
 
     /// Restore all tasks from the given frozen state
     fn restore_keyframe(&mut self, freezer: &KeyFrame) -> CuResult<()>;
+}
+
+/// Simulation-enabled applications that can replay a recorded CopperList verbatim.
+///
+/// This is the exact-output replay primitive used by deterministic re-sim flows:
+/// task outputs and bridge receives are overridden from the recorded CopperList,
+/// bridge sends are skipped, and an optional recorded keyframe can be injected
+/// verbatim when the current CL is expected to capture one.
+#[cfg(feature = "std")]
+pub trait CuRecordedReplayApplication<S: SectionStorage, L: UnifiedLogWrite<S> + 'static>:
+    CuSimApplication<S, L>
+{
+    /// The generated recorded CopperList payload set for this application.
+    type RecordedDataSet: CopperListTuple;
+
+    /// Replay one recorded CopperList exactly as logged.
+    fn replay_recorded_copperlist(
+        &mut self,
+        clock_mock: &RobotClockMock,
+        copperlist: &CopperList<Self::RecordedDataSet>,
+        keyframe: Option<&KeyFrame>,
+    ) -> CuResult<()>;
 }
