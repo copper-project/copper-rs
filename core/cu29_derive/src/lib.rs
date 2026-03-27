@@ -4080,6 +4080,34 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             None
         };
 
+        let distributed_replay_app_impl = if sim_mode {
+            Some(quote! {
+                impl<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>
+                    cu29::prelude::app::CuDistributedReplayApplication<S, L> for #application_name
+                {
+                    fn build_distributed_replay(
+                        clock: cu29::clock::RobotClock,
+                        unified_logger: std::sync::Arc<std::sync::Mutex<L>>,
+                        instance_id: u32,
+                        config_override: Option<cu29::config::CuConfig>,
+                    ) -> CuResult<Self> {
+                        let mut noop =
+                            |_step: SimStep<'_>| cu29::simulation::SimOverride::ExecuteByRuntime;
+                        let mut app = <Self as CuSimApplication<S, L>>::new(
+                            clock,
+                            unified_logger,
+                            config_override,
+                            &mut noop,
+                        )?;
+                        app.copper_runtime_mut().set_instance_id(instance_id);
+                        Ok(app)
+                    }
+                }
+            })
+        } else {
+            None
+        };
+
         let (
             builder_struct,
             builder_new,
@@ -4504,6 +4532,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #app_reflect_impl
                 #application_impl
                 #recorded_replay_app_impl
+                #distributed_replay_app_impl
 
                 #std_application_impl
 
