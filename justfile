@@ -347,7 +347,8 @@ extract-log dev out="logs/embedded_0.copper":
 	echo "Reading Cu29 partition $PART -> $OUT"
 	sudo dd if="$PART" of="$OUT" bs=4M status=progress conv=fsync
 
-# Render copperconfig.ron from the current working directory.
+# Render the current Copper config from the working directory.
+# Prefers `copperconfig.ron`, and falls back to `multi_copper.ron` for distributed demos.
 dag mission="":
 	#!/usr/bin/env bash
 	set -euo pipefail
@@ -355,8 +356,11 @@ dag mission="":
 	invocation_dir="{{invocation_directory()}}"
 	cfg_path="${invocation_dir}/copperconfig.ron"
 	if [[ ! -f "$cfg_path" ]]; then
-		echo "No copperconfig.ron found in ${invocation_dir}" >&2
-		exit 1
+		cfg_path="${invocation_dir}/multi_copper.ron"
+		if [[ ! -f "$cfg_path" ]]; then
+			echo "No copperconfig.ron or multi_copper.ron found in ${invocation_dir}" >&2
+			exit 1
+		fi
 	fi
 
 	cd "{{ROOT}}"
