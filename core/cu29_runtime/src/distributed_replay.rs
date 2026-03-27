@@ -27,9 +27,10 @@ use bincode::decode_from_std_read;
 use bincode::error::DecodeError;
 use cu29_clock::{RobotClock, RobotClockMock};
 use cu29_traits::{CopperListTuple, CuError, CuResult, ErasedCuStampedDataSet, UnifiedLogType};
+use cu29_unifiedlog::memmap::MmapSectionStorage;
 use cu29_unifiedlog::{
-    NoopLogger, NoopSectionStorage, UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader,
-    UnifiedLoggerRead,
+    NoopLogger, NoopSectionStorage, SectionStorage, UnifiedLogWrite, UnifiedLogger,
+    UnifiedLoggerBuilder, UnifiedLoggerIOReader, UnifiedLoggerRead, UnifiedLoggerWrite,
 };
 use std::any::type_name;
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
@@ -230,10 +231,18 @@ impl DistributedReplayCatalog {
     }
 }
 
-type DistributedReplaySessionFactory =
-    fn(&DistributedReplayAssignment) -> CuResult<DistributedReplaySessionBuild>;
+type DistributedReplaySessionFactory = fn(
+    &DistributedReplayAssignment,
+    &DistributedReplaySessionConfig,
+) -> CuResult<DistributedReplaySessionBuild>;
 
 const DEFAULT_SECTION_CACHE_CAP: usize = 8;
+const DEFAULT_REPLAY_LOG_SIZE_BYTES: usize = 64 * 1024 * 1024;
+
+#[derive(Debug, Clone, Default)]
+struct DistributedReplaySessionConfig {
+    output_root: Option<PathBuf>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct DistributedReplayOriginKey {
@@ -294,6 +303,7 @@ struct DistributedReplayReadyNode {
 struct DistributedReplaySessionBuild {
     session: Box<dyn DistributedReplaySession>,
     nodes: Vec<DistributedReplayNodeDescriptor>,
+    output_log_path: Option<PathBuf>,
 }
 
 trait DistributedReplaySession {
@@ -306,10 +316,12 @@ struct RecordedReplayCachedSection<P: CopperListTuple> {
     entries: Vec<Arc<CopperList<P>>>,
 }
 
-struct RecordedReplaySession<App, P>
+struct RecordedReplaySession<App, P, S, L>
 where
-    App: CuDistributedReplayApplication<NoopSectionStorage, NoopLogger>,
+    App: CuDistributedReplayApplication<S, L>,
     P: CopperListTuple,
+    S: SectionStorage,
+    L: UnifiedLogWrite<S> + 'static,
 {
     assignment: DistributedReplayAssignment,
     app: App,
@@ -324,25 +336,26 @@ where
     cache: HashMap<usize, RecordedReplayCachedSection<P>>,
     cache_order: VecDeque<usize>,
     cache_cap: usize,
+    phantom: std::marker::PhantomData<(S, L)>,
 }
 
-impl<App, P> RecordedReplaySession<App, P>
+impl<App, P, S, L> RecordedReplaySession<App, P, S, L>
 where
-    App: CuDistributedReplayApplication<NoopSectionStorage, NoopLogger>
-        + CuRecordedReplayApplication<NoopSectionStorage, NoopLogger, RecordedDataSet = P>,
+    App: CuDistributedReplayApplication<S, L>
+        + CuRecordedReplayApplication<S, L, RecordedDataSet = P>,
     P: CopperListTuple,
+    S: SectionStorage,
+    L: UnifiedLogWrite<S> + 'static,
 {
     fn from_log(
         assignment: DistributedReplayAssignment,
         app: App,
-        clock: RobotClock,
         clock_mock: RobotClockMock,
         log_base: &Path,
     ) -> CuResult<Self> {
         let (sections, keyframes, total_entries) =
             index_log::<P, _>(log_base, &recorded_copperlist_timestamp::<P>)?;
         let log_reader = build_read_logger(log_base)?;
-        let _ = clock;
         Ok(Self {
             assignment,
             app,
@@ -357,6 +370,7 @@ where
             cache: HashMap::new(),
             cache_order: VecDeque::new(),
             cache_cap: DEFAULT_SECTION_CACHE_CAP,
+            phantom: std::marker::PhantomData,
         })
     }
 
@@ -388,10 +402,7 @@ where
             return Ok(());
         }
         let mut noop = |_step: App::Step<'_>| crate::simulation::SimOverride::ExecuteByRuntime;
-        <App as CuSimApplication<NoopSectionStorage, NoopLogger>>::start_all_tasks(
-            &mut self.app,
-            &mut noop,
-        )?;
+        <App as CuSimApplication<S, L>>::start_all_tasks(&mut self.app, &mut noop)?;
         self.started = true;
         Ok(())
     }
@@ -405,10 +416,7 @@ where
     }
 
     fn restore_keyframe(&mut self, keyframe: &KeyFrame) -> CuResult<()> {
-        <App as CuSimApplication<NoopSectionStorage, NoopLogger>>::restore_keyframe(
-            &mut self.app,
-            keyframe,
-        )?;
+        <App as CuSimApplication<S, L>>::restore_keyframe(&mut self.app, keyframe)?;
         self.clock_mock.set_value(keyframe.timestamp.as_nanos());
         self.last_keyframe = Some(keyframe.culistid);
         Ok(())
@@ -523,7 +531,7 @@ where
                 .or(keyframe
                     .as_ref()
                     .filter(|candidate| candidate.culistid == copperlist.id));
-            <App as CuRecordedReplayApplication<NoopSectionStorage, NoopLogger>>::replay_recorded_copperlist(
+            <App as CuRecordedReplayApplication<S, L>>::replay_recorded_copperlist(
                 &mut self.app,
                 &self.clock_mock,
                 copperlist.as_ref(),
@@ -577,11 +585,13 @@ where
     }
 }
 
-impl<App, P> DistributedReplaySession for RecordedReplaySession<App, P>
+impl<App, P, S, L> DistributedReplaySession for RecordedReplaySession<App, P, S, L>
 where
-    App: CuDistributedReplayApplication<NoopSectionStorage, NoopLogger>
-        + CuRecordedReplayApplication<NoopSectionStorage, NoopLogger, RecordedDataSet = P>,
+    App: CuDistributedReplayApplication<S, L>
+        + CuRecordedReplayApplication<S, L, RecordedDataSet = P>,
     P: CopperListTuple + 'static,
+    S: SectionStorage,
+    L: UnifiedLogWrite<S> + 'static,
 {
     fn goto_cl(&mut self, cl_id: u64) -> CuResult<()> {
         let target_idx = self.index_for_cl_id(cl_id)?;
@@ -594,10 +604,7 @@ where
         }
 
         let mut noop = |_step: App::Step<'_>| crate::simulation::SimOverride::ExecuteByRuntime;
-        <App as CuSimApplication<NoopSectionStorage, NoopLogger>>::stop_all_tasks(
-            &mut self.app,
-            &mut noop,
-        )?;
+        <App as CuSimApplication<S, L>>::stop_all_tasks(&mut self.app, &mut noop)?;
         self.started = false;
         Ok(())
     }
@@ -668,7 +675,20 @@ impl DistributedReplayPlan {
 
     /// Build a causal distributed replay engine from this validated plan.
     pub fn start(self) -> CuResult<DistributedReplayEngine> {
-        DistributedReplayEngine::new(self)
+        DistributedReplayEngine::new(self, DistributedReplaySessionConfig::default())
+    }
+
+    /// Build a causal distributed replay engine and persist replayed logs under `output_root`.
+    pub fn start_recording_logs_under(
+        self,
+        output_root: impl AsRef<Path>,
+    ) -> CuResult<DistributedReplayEngine> {
+        DistributedReplayEngine::new(
+            self,
+            DistributedReplaySessionConfig {
+                output_root: Some(output_root.as_ref().to_path_buf()),
+            },
+        )
     }
 }
 
@@ -763,7 +783,9 @@ impl DistributedReplayBuilder {
     /// Register the generated app type expected for one subsystem.
     pub fn register<App>(mut self, subsystem_id: &str) -> CuResult<Self>
     where
-        App: CuDistributedReplayApplication<NoopSectionStorage, NoopLogger> + 'static,
+        App: CuDistributedReplayApplication<NoopSectionStorage, NoopLogger>
+            + CuDistributedReplayApplication<MmapSectionStorage, UnifiedLoggerWrite>
+            + 'static,
     {
         if self.registrations.contains_key(subsystem_id) {
             return Err(CuError::from(format!(
@@ -1026,9 +1048,12 @@ impl DistributedReplayBuilder {
 
 fn build_distributed_replay_session<App>(
     assignment: &DistributedReplayAssignment,
+    session_config: &DistributedReplaySessionConfig,
 ) -> CuResult<DistributedReplaySessionBuild>
 where
-    App: CuDistributedReplayApplication<NoopSectionStorage, NoopLogger> + 'static,
+    App: CuDistributedReplayApplication<NoopSectionStorage, NoopLogger>
+        + CuDistributedReplayApplication<MmapSectionStorage, UnifiedLoggerWrite>
+        + 'static,
 {
     let config = read_configuration_str(assignment.log.effective_config_ron.clone(), None)
         .map_err(|err| {
@@ -1038,17 +1063,51 @@ where
             ))
         })?;
     let (clock, clock_mock) = RobotClock::mock();
+
+    if let Some(output_root) = &session_config.output_root {
+        let output_log_path = replay_output_log_path(output_root, assignment)?;
+        let logger = build_replay_output_logger(
+            &output_log_path,
+            replay_output_log_size_bytes(assignment, &config),
+        )?;
+        let app = <App as CuDistributedReplayApplication<
+            MmapSectionStorage,
+            UnifiedLoggerWrite,
+        >>::build_distributed_replay(
+            clock.clone(), logger, assignment.instance_id, Some(config)
+        )?;
+        let mut session = RecordedReplaySession::<
+            App,
+            <App as CuRecordedReplayApplication<
+                MmapSectionStorage,
+                UnifiedLoggerWrite,
+            >>::RecordedDataSet,
+            MmapSectionStorage,
+            UnifiedLoggerWrite,
+        >::from_log(assignment.clone(), app, clock_mock, &assignment.log.base_path)?;
+        let nodes = session.describe_nodes()?;
+        return Ok(DistributedReplaySessionBuild {
+            session: Box::new(session),
+            nodes,
+            output_log_path: Some(output_log_path),
+        });
+    }
+
     let logger = Arc::new(Mutex::new(NoopLogger::new()));
     let app = <App as CuDistributedReplayApplication<NoopSectionStorage, NoopLogger>>::build_distributed_replay(
-        clock.clone(),
+        clock,
         logger,
         assignment.instance_id,
         Some(config),
     )?;
-    let mut session = RecordedReplaySession::<App, App::RecordedDataSet>::from_log(
+    let mut session = RecordedReplaySession::<
+        App,
+        <App as CuRecordedReplayApplication<NoopSectionStorage, NoopLogger>>::RecordedDataSet,
+        NoopSectionStorage,
+        NoopLogger,
+    >::from_log(
         assignment.clone(),
         app,
-        clock,
         clock_mock,
         &assignment.log.base_path,
     )?;
@@ -1056,7 +1115,82 @@ where
     Ok(DistributedReplaySessionBuild {
         session: Box::new(session),
         nodes,
+        output_log_path: None,
     })
+}
+
+fn replay_output_log_path(
+    output_root: &Path,
+    assignment: &DistributedReplayAssignment,
+) -> CuResult<PathBuf> {
+    let file_name = assignment
+        .log
+        .base_path
+        .file_name()
+        .ok_or_else(|| {
+            CuError::from(format!(
+                "Replay assignment log '{}' has no file name",
+                assignment.log.base_path.display()
+            ))
+        })?
+        .to_owned();
+    Ok(output_root.join(file_name))
+}
+
+fn build_replay_output_logger(
+    path: &Path,
+    preallocated_size: usize,
+) -> CuResult<Arc<Mutex<UnifiedLoggerWrite>>> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|err| {
+            CuError::new_with_cause(
+                &format!(
+                    "Failed to create replay log directory '{}'",
+                    parent.display()
+                ),
+                err,
+            )
+        })?;
+    }
+    let UnifiedLogger::Write(writer) = UnifiedLoggerBuilder::new()
+        .write(true)
+        .create(true)
+        .file_base_name(path)
+        .preallocated_size(preallocated_size)
+        .build()
+        .map_err(|err| {
+            CuError::new_with_cause(
+                &format!("Failed to create replay log '{}'", path.display()),
+                err,
+            )
+        })?
+    else {
+        return Err(CuError::from(format!(
+            "Expected writable replay logger for '{}'",
+            path.display()
+        )));
+    };
+    Ok(Arc::new(Mutex::new(writer)))
+}
+
+fn replay_output_log_size_bytes(
+    assignment: &DistributedReplayAssignment,
+    config: &crate::config::CuConfig,
+) -> usize {
+    if let Some(slab_zero) = slab_zero_path(&assignment.log.base_path)
+        && let Ok(metadata) = fs::metadata(slab_zero)
+        && let Ok(size) = usize::try_from(metadata.len())
+    {
+        return size.max(DEFAULT_REPLAY_LOG_SIZE_BYTES);
+    }
+
+    config
+        .logging
+        .as_ref()
+        .and_then(|logging| logging.slab_size_mib)
+        .and_then(|size_mib| usize::try_from(size_mib).ok())
+        .and_then(|size_mib| size_mib.checked_mul(1024 * 1024))
+        .unwrap_or(DEFAULT_REPLAY_LOG_SIZE_BYTES)
 }
 
 fn copperlist_origins<P: CopperListTuple>(
@@ -1078,6 +1212,7 @@ struct DistributedReplayEngineState {
     sessions: Vec<Box<dyn DistributedReplaySession>>,
     nodes: Vec<DistributedReplayGraphNode>,
     node_lookup: BTreeMap<(u32, String, u64), usize>,
+    output_log_paths: BTreeMap<(u32, String), PathBuf>,
     ready: BTreeSet<DistributedReplayReadyNode>,
     frontier: Vec<Option<DistributedReplayCursor>>,
 }
@@ -1085,9 +1220,11 @@ struct DistributedReplayEngineState {
 /// One causal distributed replay engine built from a validated plan.
 pub struct DistributedReplayEngine {
     plan: DistributedReplayPlan,
+    session_config: DistributedReplaySessionConfig,
     sessions: Vec<Box<dyn DistributedReplaySession>>,
     nodes: Vec<DistributedReplayGraphNode>,
     node_lookup: BTreeMap<(u32, String, u64), usize>,
+    output_log_paths: BTreeMap<(u32, String), PathBuf>,
     ready: BTreeSet<DistributedReplayReadyNode>,
     frontier: Vec<Option<DistributedReplayCursor>>,
     executed: Vec<bool>,
@@ -1095,14 +1232,19 @@ pub struct DistributedReplayEngine {
 }
 
 impl DistributedReplayEngine {
-    fn new(plan: DistributedReplayPlan) -> CuResult<Self> {
-        let state = Self::build_state(&plan)?;
+    fn new(
+        plan: DistributedReplayPlan,
+        session_config: DistributedReplaySessionConfig,
+    ) -> CuResult<Self> {
+        let state = Self::build_state(&plan, &session_config)?;
         let executed = vec![false; state.nodes.len()];
         Ok(Self {
             plan,
+            session_config,
             sessions: state.sessions,
             nodes: state.nodes,
             node_lookup: state.node_lookup,
+            output_log_paths: state.output_log_paths,
             ready: state.ready,
             frontier: state.frontier,
             executed,
@@ -1110,19 +1252,35 @@ impl DistributedReplayEngine {
         })
     }
 
-    fn build_state(plan: &DistributedReplayPlan) -> CuResult<DistributedReplayEngineState> {
+    fn build_state(
+        plan: &DistributedReplayPlan,
+        session_config: &DistributedReplaySessionConfig,
+    ) -> CuResult<DistributedReplayEngineState> {
         let mut sessions = Vec::with_capacity(plan.assignments.len());
         let mut pending_nodes = Vec::new();
         let mut session_nodes = Vec::with_capacity(plan.assignments.len());
+        let mut output_log_paths = BTreeMap::new();
 
         for assignment in &plan.assignments {
-            let build = (assignment.registration.session_factory)(assignment)?;
+            let build = (assignment.registration.session_factory)(assignment, session_config)?;
             let session_index = sessions.len();
             let mut node_indices = Vec::with_capacity(build.nodes.len());
             for node in build.nodes {
                 let pending_index = pending_nodes.len();
                 pending_nodes.push((session_index, node));
                 node_indices.push(pending_index);
+            }
+            if let Some(output_log_path) = build.output_log_path {
+                let replaced = output_log_paths.insert(
+                    (assignment.instance_id, assignment.subsystem_id.clone()),
+                    output_log_path,
+                );
+                if replaced.is_some() {
+                    return Err(CuError::from(format!(
+                        "Duplicate replay output log assignment for instance {} subsystem '{}'",
+                        assignment.instance_id, assignment.subsystem_id
+                    )));
+                }
             }
             sessions.push(build.session);
             session_nodes.push(node_indices);
@@ -1238,6 +1396,7 @@ impl DistributedReplayEngine {
             sessions,
             nodes,
             node_lookup,
+            output_log_paths,
             ready,
         })
     }
@@ -1262,10 +1421,11 @@ impl DistributedReplayEngine {
     /// Reset all replay sessions and graph execution state back to the beginning.
     pub fn reset(&mut self) -> CuResult<()> {
         Self::shutdown_sessions(&mut self.sessions)?;
-        let state = Self::build_state(&self.plan)?;
+        let state = Self::build_state(&self.plan, &self.session_config)?;
         self.sessions = state.sessions;
         self.nodes = state.nodes;
         self.node_lookup = state.node_lookup;
+        self.output_log_paths = state.output_log_paths;
         self.ready = state.ready;
         self.frontier = state.frontier;
         self.executed = vec![false; self.nodes.len()];
@@ -1340,6 +1500,12 @@ impl DistributedReplayEngine {
             .iter()
             .filter_map(|cursor| cursor.clone())
             .collect()
+    }
+
+    pub fn output_log_path(&self, instance_id: u32, subsystem_id: &str) -> Option<&Path> {
+        self.output_log_paths
+            .get(&(instance_id, subsystem_id.to_string()))
+            .map(PathBuf::as_path)
     }
 
     #[inline]
@@ -1461,7 +1627,7 @@ mod tests {
     use cu29_clock::CuTime;
     use cu29_traits::{ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks, WriteStream};
     use cu29_unifiedlog::memmap::MmapSectionStorage;
-    use cu29_unifiedlog::{NoopLogger, NoopSectionStorage, stream_write};
+    use cu29_unifiedlog::stream_write;
     use serde::Serialize;
     use std::sync::{Arc, Mutex};
     use tempfile::TempDir;
@@ -1608,7 +1774,9 @@ mod tests {
                 }
             }
 
-            impl CuSimApplication<NoopSectionStorage, NoopLogger> for $name {
+            impl<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>
+                CuSimApplication<S, L> for $name
+            {
                 type Step<'z> = ();
 
                 fn get_original_config() -> String {
@@ -1617,7 +1785,7 @@ mod tests {
 
                 fn new(
                     _clock: RobotClock,
-                    _unified_logger: Arc<Mutex<NoopLogger>>,
+                    _unified_logger: Arc<Mutex<L>>,
                     _config_override: Option<CuConfig>,
                     _sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
                 ) -> CuResult<Self> {
@@ -1657,7 +1825,9 @@ mod tests {
                 }
             }
 
-            impl CuRecordedReplayApplication<NoopSectionStorage, NoopLogger> for $name {
+            impl<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>
+                CuRecordedReplayApplication<S, L> for $name
+            {
                 type RecordedDataSet = DummyRecordedDataSet;
 
                 fn replay_recorded_copperlist(
@@ -1670,15 +1840,17 @@ mod tests {
                 }
             }
 
-            impl CuDistributedReplayApplication<NoopSectionStorage, NoopLogger> for $name {
+            impl<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>
+                CuDistributedReplayApplication<S, L> for $name
+            {
                 fn build_distributed_replay(
                     clock: RobotClock,
-                    unified_logger: Arc<Mutex<NoopLogger>>,
+                    unified_logger: Arc<Mutex<L>>,
                     _instance_id: u32,
                     config_override: Option<CuConfig>,
                 ) -> CuResult<Self> {
                     let mut noop = |_step: ()| SimOverride::ExecuteByRuntime;
-                    <Self as CuSimApplication<NoopSectionStorage, NoopLogger>>::new(
+                    <Self as CuSimApplication<S, L>>::new(
                         clock,
                         unified_logger,
                         config_override,
@@ -1743,6 +1915,13 @@ mod tests {
             .map(|assignment| assignment.registration.clone())
             .collect();
         registrations.sort_by(|left, right| left.subsystem.id().cmp(&right.subsystem.id()));
+        let mut selected_instances: Vec<_> = assignments
+            .iter()
+            .map(|assignment| assignment.instance_id)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        selected_instances.sort_unstable();
         DistributedReplayPlan {
             multi_config_path: PathBuf::from("fake_multi.ron"),
             multi_config: MultiCopperConfig {
@@ -1750,7 +1929,7 @@ mod tests {
                 interconnects: Vec::new(),
             },
             catalog: DistributedReplayCatalog::default(),
-            selected_instances: vec![1],
+            selected_instances,
             mission: Some("default".to_string()),
             registrations,
             assignments,
@@ -1759,6 +1938,7 @@ mod tests {
 
     fn fake_ping_session(
         assignment: &DistributedReplayAssignment,
+        _session_config: &DistributedReplaySessionConfig,
     ) -> CuResult<DistributedReplaySessionBuild> {
         Ok(DistributedReplaySessionBuild {
             session: Box::new(FakeReplaySession),
@@ -1792,11 +1972,13 @@ mod tests {
                     incoming_origins: BTreeSet::new(),
                 },
             ],
+            output_log_path: None,
         })
     }
 
     fn fake_pong_session(
         assignment: &DistributedReplayAssignment,
+        _session_config: &DistributedReplaySessionConfig,
     ) -> CuResult<DistributedReplaySessionBuild> {
         Ok(DistributedReplaySessionBuild {
             session: Box::new(FakeReplaySession),
@@ -1838,11 +2020,13 @@ mod tests {
                     }]),
                 },
             ],
+            output_log_path: None,
         })
     }
 
     fn fake_bad_pong_session(
         assignment: &DistributedReplayAssignment,
+        _session_config: &DistributedReplaySessionConfig,
     ) -> CuResult<DistributedReplaySessionBuild> {
         Ok(DistributedReplaySessionBuild {
             session: Box::new(FakeReplaySession),
@@ -1864,7 +2048,185 @@ mod tests {
                     cl_id: 99,
                 }]),
             }],
+            output_log_path: None,
         })
+    }
+
+    const STRESS_SUBSYSTEMS: [(&str, u16); 4] =
+        [("sense", 0), ("plan", 1), ("control", 2), ("telemetry", 3)];
+
+    fn stress_origins_for(
+        subsystem_id: &str,
+        instance_id: u32,
+        cl_id: u64,
+    ) -> BTreeSet<DistributedReplayOriginKey> {
+        match subsystem_id {
+            "sense" => BTreeSet::new(),
+            "plan" => BTreeSet::from([DistributedReplayOriginKey {
+                instance_id,
+                subsystem_code: 0,
+                cl_id,
+            }]),
+            "control" => BTreeSet::from([DistributedReplayOriginKey {
+                instance_id,
+                subsystem_code: 1,
+                cl_id,
+            }]),
+            "telemetry" => BTreeSet::from([
+                DistributedReplayOriginKey {
+                    instance_id,
+                    subsystem_code: 0,
+                    cl_id,
+                },
+                DistributedReplayOriginKey {
+                    instance_id,
+                    subsystem_code: 2,
+                    cl_id,
+                },
+            ]),
+            _ => panic!("unexpected synthetic stress subsystem '{subsystem_id}'"),
+        }
+    }
+
+    fn build_stress_session(
+        assignment: &DistributedReplayAssignment,
+        _session_config: &DistributedReplaySessionConfig,
+        cl_count: u64,
+    ) -> CuResult<DistributedReplaySessionBuild> {
+        let subsystem_code = assignment.log.subsystem_code();
+        let nodes = (0..cl_count)
+            .map(|cl_id| DistributedReplayNodeDescriptor {
+                cursor: DistributedReplayCursor::new(
+                    assignment.instance_id,
+                    assignment.subsystem_id.clone(),
+                    subsystem_code,
+                    cl_id,
+                ),
+                origin_key: DistributedReplayOriginKey {
+                    instance_id: assignment.instance_id,
+                    subsystem_code,
+                    cl_id,
+                },
+                incoming_origins: stress_origins_for(
+                    &assignment.subsystem_id,
+                    assignment.instance_id,
+                    cl_id,
+                ),
+            })
+            .collect();
+        Ok(DistributedReplaySessionBuild {
+            session: Box::new(FakeReplaySession),
+            nodes,
+            output_log_path: None,
+        })
+    }
+
+    fn stress_session_ci(
+        assignment: &DistributedReplayAssignment,
+        session_config: &DistributedReplaySessionConfig,
+    ) -> CuResult<DistributedReplaySessionBuild> {
+        build_stress_session(assignment, session_config, 24)
+    }
+
+    fn stress_session_goto(
+        assignment: &DistributedReplayAssignment,
+        session_config: &DistributedReplaySessionConfig,
+    ) -> CuResult<DistributedReplaySessionBuild> {
+        build_stress_session(assignment, session_config, 32)
+    }
+
+    fn stress_session_heavy(
+        assignment: &DistributedReplayAssignment,
+        session_config: &DistributedReplaySessionConfig,
+    ) -> CuResult<DistributedReplaySessionBuild> {
+        build_stress_session(assignment, session_config, 96)
+    }
+
+    fn stress_plan(
+        instance_count: u32,
+        session_factory: DistributedReplaySessionFactory,
+    ) -> DistributedReplayPlan {
+        let assignments = (1..=instance_count)
+            .flat_map(|instance_id| {
+                STRESS_SUBSYSTEMS
+                    .into_iter()
+                    .map(move |(subsystem_id, subsystem_code)| {
+                        fake_assignment(instance_id, subsystem_id, subsystem_code, session_factory)
+                    })
+            })
+            .collect();
+        fake_plan(assignments)
+    }
+
+    fn collect_engine_order(
+        engine: &mut DistributedReplayEngine,
+    ) -> CuResult<Vec<DistributedReplayCursor>> {
+        let mut order = Vec::new();
+        while let Some(cursor) = engine.step_causal()? {
+            order.push(cursor);
+        }
+        Ok(order)
+    }
+
+    fn assert_stress_order_is_topological(
+        order: &[DistributedReplayCursor],
+        instance_count: u32,
+        cl_count: u64,
+    ) {
+        let expected_len = instance_count as usize * STRESS_SUBSYSTEMS.len() * cl_count as usize;
+        assert_eq!(order.len(), expected_len);
+
+        let positions: BTreeMap<_, _> = order
+            .iter()
+            .enumerate()
+            .map(|(idx, cursor)| {
+                (
+                    (
+                        cursor.instance_id,
+                        cursor.subsystem_id.clone(),
+                        cursor.cl_id,
+                    ),
+                    idx,
+                )
+            })
+            .collect();
+        assert_eq!(positions.len(), expected_len);
+
+        for instance_id in 1..=instance_count {
+            for (subsystem_id, _) in STRESS_SUBSYSTEMS {
+                for cl_id in 1..cl_count {
+                    let previous = positions
+                        .get(&(instance_id, subsystem_id.to_string(), cl_id - 1))
+                        .expect("previous local node missing");
+                    let current = positions
+                        .get(&(instance_id, subsystem_id.to_string(), cl_id))
+                        .expect("current local node missing");
+                    assert!(
+                        previous < current,
+                        "local order violated for instance {instance_id} subsystem '{subsystem_id}' cl {cl_id}"
+                    );
+                }
+            }
+
+            for cl_id in 0..cl_count {
+                let sense = positions
+                    .get(&(instance_id, "sense".to_string(), cl_id))
+                    .expect("sense node missing");
+                let plan = positions
+                    .get(&(instance_id, "plan".to_string(), cl_id))
+                    .expect("plan node missing");
+                let control = positions
+                    .get(&(instance_id, "control".to_string(), cl_id))
+                    .expect("control node missing");
+                let telemetry = positions
+                    .get(&(instance_id, "telemetry".to_string(), cl_id))
+                    .expect("telemetry node missing");
+                assert!(sense < plan);
+                assert!(plan < control);
+                assert!(sense < telemetry);
+                assert!(control < telemetry);
+            }
+        }
     }
 
     #[test]
@@ -2176,6 +2538,72 @@ mod tests {
         assert!(
             err.to_string()
                 .contains("Unresolved recorded provenance edge")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn engine_run_all_scales_across_many_identical_instances() -> CuResult<()> {
+        let mut engine = stress_plan(6, stress_session_ci).start()?;
+        let order = collect_engine_order(&mut engine)?;
+
+        assert_stress_order_is_topological(&order, 6, 24);
+        assert_eq!(engine.executed_nodes(), 6 * STRESS_SUBSYSTEMS.len() * 24);
+
+        let frontier = engine.current_frontier();
+        assert_eq!(frontier.len(), 6 * STRESS_SUBSYSTEMS.len());
+        for instance_id in 1..=6 {
+            for (subsystem_id, _) in STRESS_SUBSYSTEMS {
+                assert!(frontier.iter().any(|cursor| {
+                    cursor.instance_id == instance_id
+                        && cursor.subsystem_id == subsystem_id
+                        && cursor.cl_id == 23
+                }));
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn engine_goto_matches_manual_replay_on_large_graph() -> CuResult<()> {
+        let plan = stress_plan(5, stress_session_goto);
+        let mut manual = plan.clone().start()?;
+
+        let (expected_steps, expected_frontier) = {
+            let mut expected_steps = 0usize;
+            loop {
+                let Some(cursor) = manual.step_causal()? else {
+                    return Err(CuError::from(
+                        "manual distributed replay exhausted before reaching stress target",
+                    ));
+                };
+                expected_steps += 1;
+                if cursor.instance_id == 4 && cursor.subsystem_id == "control" && cursor.cl_id == 17
+                {
+                    break (expected_steps, manual.current_frontier());
+                }
+            }
+        };
+
+        let mut via_goto = plan.start()?;
+        via_goto.goto(4, "control", 17)?;
+
+        assert_eq!(via_goto.executed_nodes(), expected_steps);
+        assert_eq!(via_goto.current_frontier(), expected_frontier);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "stress"]
+    fn engine_heavy_stress_run_all_completes() -> CuResult<()> {
+        let mut engine = stress_plan(12, stress_session_heavy).start()?;
+        engine.run_all()?;
+
+        let expected = 12 * STRESS_SUBSYSTEMS.len() * 96;
+        assert_eq!(engine.executed_nodes(), expected);
+        assert_eq!(
+            engine.current_frontier().len(),
+            12 * STRESS_SUBSYSTEMS.len()
         );
         Ok(())
     }
