@@ -275,10 +275,12 @@ impl ResourceManager {
         key: ResourceKey<T>,
     ) -> CuResult<Borrowed<'r, T>> {
         let entry = self.entry(key)?;
-        entry
-            .as_shared::<T>()
-            .map(Borrowed)
-            .ok_or_else(|| CuError::from("Resource has unexpected type"))
+        entry.as_shared::<T>().map(Borrowed).ok_or_else(|| {
+            CuError::from(format!(
+                "Borrowing Resource has unexpected type, expected '{}'",
+                core::any::type_name::<T>()
+            ))
+        })
     }
 
     /// Borrow a shared `Arc`-backed resource by key, cloning the `Arc` for the caller.
@@ -288,18 +290,23 @@ impl ResourceManager {
         key: ResourceKey<T>,
     ) -> CuResult<Arc<T>> {
         let entry = self.entry(key)?;
-        entry
-            .as_shared_arc::<T>()
-            .ok_or_else(|| CuError::from("Resource has unexpected type"))
+        entry.as_shared_arc::<T>().ok_or_else(|| {
+            CuError::from(format!(
+                "Borrow Shared Resource '{}' has unexpected type",
+                core::any::type_name::<T>()
+            ))
+        })
     }
 
     /// Take ownership of a resource by key.
     pub fn take<T: 'static + Send + Sync>(&mut self, key: ResourceKey<T>) -> CuResult<Owned<T>> {
         let entry = self.take_entry(key)?;
-        entry
-            .into_owned::<T>()
-            .map(Owned)
-            .ok_or_else(|| CuError::from("Resource is not owned or has unexpected type"))
+        entry.into_owned::<T>().map(Owned).ok_or_else(|| {
+            CuError::from(format!(
+                "Resource {} is not owned or has unexpected type",
+                core::any::type_name::<T>()
+            ))
+        })
     }
 
     /// Insert a prebuilt bundle by running a caller-supplied function. This is
