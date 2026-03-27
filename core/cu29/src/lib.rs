@@ -70,6 +70,8 @@ pub use cu29_runtime::curuntime;
 pub use cu29_runtime::cutask;
 #[cfg(feature = "std")]
 pub use cu29_runtime::debug;
+#[cfg(feature = "std")]
+pub use cu29_runtime::distributed_replay;
 pub use cu29_runtime::input_msg;
 pub use cu29_runtime::monitoring;
 pub use cu29_runtime::output_msg;
