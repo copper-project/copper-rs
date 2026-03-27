@@ -271,3 +271,23 @@ fn replay_recorded_copperlist_without_keyframe_uses_recorded_timestamp() -> CuRe
 
     Ok(())
 }
+
+#[test]
+fn builder_propagates_instance_id_into_runtime() -> CuResult<()> {
+    let temp_dir = tempfile::tempdir()
+        .map_err(|e| cu29::CuError::new_with_cause("create temp dir failed", e))?;
+    let log_path = temp_dir.path().join("instance_id_runtime.copper");
+    let logger = build_logger(&log_path)?;
+    let (clock, _clock_mock) = RobotClock::mock();
+    let mut noop = |_step: default::SimStep<'_>| SimOverride::ExecuteByRuntime;
+
+    let mut app = ReplayAppBuilder::new()
+        .with_clock(clock)
+        .with_unified_logger(logger)
+        .with_instance_id(42)
+        .with_sim_callback(&mut noop)
+        .build()?;
+
+    assert_eq!(app.copper_runtime_mut().instance_id(), 42);
+    Ok(())
+}
