@@ -2669,13 +2669,14 @@ fn process_includes(
             let include_path = if include.path.starts_with('/') {
                 include.path.clone()
             } else {
-                let current_dir = std::path::Path::new(file_path)
-                    .parent()
-                    .unwrap_or_else(|| std::path::Path::new(""))
-                    .to_string_lossy()
-                    .to_string();
+                let current_dir = std::path::Path::new(file_path).parent();
 
-                format!("{}/{}", current_dir, include.path)
+                match current_dir.map(|path| path.to_string_lossy().to_string()) {
+                    Some(current_dir) if !current_dir.is_empty() => {
+                        format!("{}/{}", current_dir, include.path)
+                    }
+                    _ => include.path,
+                }
             };
 
             let include_content = read_to_string(&include_path).map_err(|e| {
