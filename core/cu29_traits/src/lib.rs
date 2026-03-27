@@ -460,10 +460,10 @@ pub trait Metadata: Default + Debug + Clone + Encode + Decode<()> + Serialize {}
 
 impl Metadata for () {}
 
-/// Origin metadata captured when a Copper-aware bridge receives a remote message.
+/// Origin metadata captured when a Copper-aware transport receives a remote message.
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
 #[cfg_attr(feature = "reflect", derive(Reflect))]
-pub struct CuMsgBridgeOrigin {
+pub struct CuMsgOrigin {
     pub subsystem_code: u16,
     pub instance_id: u32,
     pub cl_id: u64,
@@ -477,8 +477,8 @@ pub trait CuMsgMetadataTrait {
     /// Small status text for user UI to get the realtime state of task (max 24 chrs)
     fn status_txt(&self) -> &CuCompactString;
 
-    /// Remote Copper provenance captured by a Copper-aware bridge on receive.
-    fn bridge_origin(&self) -> Option<&CuMsgBridgeOrigin> {
+    /// Remote Copper provenance captured on receive.
+    fn origin(&self) -> Option<&CuMsgOrigin> {
         None
     }
 }

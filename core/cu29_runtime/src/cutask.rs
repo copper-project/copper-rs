@@ -15,8 +15,8 @@ use compact_str::{CompactString, ToCompactString};
 use core::any::{TypeId, type_name};
 use cu29_clock::{PartialCuTimeRange, Tov};
 use cu29_traits::{
-    COMPACT_STRING_CAPACITY, CuCompactString, CuError, CuMsgBridgeOrigin, CuMsgMetadataTrait,
-    CuResult, ErasedCuStampedData, Metadata,
+    COMPACT_STRING_CAPACITY, CuCompactString, CuError, CuMsgMetadataTrait, CuMsgOrigin, CuResult,
+    ErasedCuStampedData, Metadata,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -149,8 +149,8 @@ pub struct CuMsgMetadata {
     /// A small string for real time feedback purposes.
     /// This is useful for to display on the field when the tasks are operating correctly.
     pub status_txt: CuCompactString,
-    /// Remote Copper provenance captured on bridge receive, when available.
-    pub bridge_origin: Option<CuMsgBridgeOrigin>,
+    /// Remote Copper provenance captured on receive, when available.
+    pub origin: Option<CuMsgOrigin>,
 }
 
 impl Metadata for CuMsgMetadata {}
@@ -160,12 +160,12 @@ impl CuMsgMetadata {
         self.status_txt = CuCompactString(status.to_compact_string());
     }
 
-    pub fn set_bridge_origin(&mut self, origin: CuMsgBridgeOrigin) {
-        self.bridge_origin = Some(origin);
+    pub fn set_origin(&mut self, origin: CuMsgOrigin) {
+        self.origin = Some(origin);
     }
 
-    pub fn clear_bridge_origin(&mut self) {
-        self.bridge_origin = None;
+    pub fn clear_origin(&mut self) {
+        self.origin = None;
     }
 }
 
@@ -178,8 +178,8 @@ impl CuMsgMetadataTrait for CuMsgMetadata {
         &self.status_txt
     }
 
-    fn bridge_origin(&self) -> Option<&CuMsgBridgeOrigin> {
-        self.bridge_origin.as_ref()
+    fn origin(&self) -> Option<&CuMsgOrigin> {
+        self.origin.as_ref()
     }
 }
 
@@ -253,7 +253,7 @@ impl Default for CuMsgMetadata {
         CuMsgMetadata {
             process_time: PartialCuTimeRange::default(),
             status_txt: CuCompactString(CompactString::with_capacity(COMPACT_STRING_CAPACITY)),
-            bridge_origin: None,
+            origin: None,
         }
     }
 }

@@ -49,7 +49,7 @@ where
 
     for copperlist in copperlists_reader::<P>(&mut reader) {
         for (slot_id, msg) in slot_ids.iter().zip(copperlist.cumsgs()) {
-            if let Some(origin) = msg.metadata().bridge_origin() {
+            if let Some(origin) = msg.metadata().origin() {
                 found = true;
                 println!(
                     "{slot_id} local_cl={} origin={{subsystem_code={}, instance_id={}, cl_id={}}}",

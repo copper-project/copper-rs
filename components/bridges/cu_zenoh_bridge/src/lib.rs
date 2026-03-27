@@ -250,7 +250,7 @@ where
         .map_err(|e| CuError::new_with_cause("ZenohBridge: attachment encode failed", e))
     }
 
-    fn decode_attachment(sample: &zenoh::sample::Sample) -> CuResult<Option<CuMsgBridgeOrigin>> {
+    fn decode_attachment(sample: &zenoh::sample::Sample) -> CuResult<Option<CuMsgOrigin>> {
         let Some(attachment) = sample.attachment() else {
             return Ok(None);
         };
@@ -258,7 +258,7 @@ where
         let (decoded, _): (CopperBridgeAttachment, usize) =
             bincode::decode_from_slice(attachment_bytes.as_ref(), bincode::config::standard())
                 .map_err(|e| CuError::new_with_cause("ZenohBridge: attachment decode failed", e))?;
-        Ok(Some(CuMsgBridgeOrigin {
+        Ok(Some(CuMsgOrigin {
             subsystem_code: decoded.subsystem_code,
             instance_id: decoded.instance_id,
             cl_id: decoded.cl_id,
@@ -425,18 +425,18 @@ where
             .try_recv()
             .map_err(|e| CuError::from(format!("ZenohBridge: receive failed: {e}")))?;
         if let Some(sample) = sample {
-            let bridge_origin = Self::decode_attachment(&sample)?;
+            let origin = Self::decode_attachment(&sample)?;
             let payload = sample.payload().to_bytes();
             let decoded = Self::decode_message(rx_channel.wire_format, payload.as_ref())?;
             *msg = decoded;
-            if let Some(bridge_origin) = bridge_origin {
-                msg.metadata.set_bridge_origin(bridge_origin);
+            if let Some(origin) = origin {
+                msg.metadata.set_origin(origin);
             } else {
-                msg.metadata.clear_bridge_origin();
+                msg.metadata.clear_origin();
             }
         } else {
             msg.clear_payload();
-            msg.metadata.clear_bridge_origin();
+            msg.metadata.clear_origin();
         }
         Ok(())
     }

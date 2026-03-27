@@ -1012,14 +1012,14 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
         let metadata_py = PyDict::new(py);
         metadata_py.set_item("process_time", dict_to_namespace(process_time, py)?)?;
         metadata_py.set_item("status_txt", metadata.status_txt().0.to_string())?;
-        if let Some(origin) = metadata.bridge_origin() {
-            let bridge_origin = PyDict::new(py);
-            bridge_origin.set_item("subsystem_code", origin.subsystem_code)?;
-            bridge_origin.set_item("instance_id", origin.instance_id)?;
-            bridge_origin.set_item("cl_id", origin.cl_id)?;
-            metadata_py.set_item("bridge_origin", dict_to_namespace(bridge_origin, py)?)?;
+        if let Some(origin) = metadata.origin() {
+            let origin_py = PyDict::new(py);
+            origin_py.set_item("subsystem_code", origin.subsystem_code)?;
+            origin_py.set_item("instance_id", origin.instance_id)?;
+            origin_py.set_item("cl_id", origin.cl_id)?;
+            metadata_py.set_item("origin", dict_to_namespace(origin_py, py)?)?;
         } else {
-            metadata_py.set_item("bridge_origin", py.None())?;
+            metadata_py.set_item("origin", py.None())?;
         }
         dict_to_namespace(metadata_py, py)
     }
