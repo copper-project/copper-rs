@@ -1,0 +1,104 @@
+(
+    tasks: [
+        (
+            id: "viz",
+            type: "tasks::RerunNav2Viz",
+        ),
+    ],
+    bridges: [
+        (
+            id: "ros2",
+            type: "bridges::Nav2ObserverBridge",
+            config: {
+                "domain_id": 0,
+                "namespace": "copper",
+                "node": "nav2_observer",
+                "zenoh_config_json": r#"
+                    {
+                      mode: "peer",
+                      connect: {
+                        endpoints: ["tcp/localhost:7447"],
+                      },
+                      listen: {
+                        endpoints: ["tcp/localhost:0"],
+                      },
+                      scouting: {
+                        multicast: {
+                          enabled: false,
+                        },
+                      },
+                    }
+                "#,
+            },
+            channels: [
+                Rx(
+                    id: "global_plan",
+                    route: "/plan",
+                    config: {
+                        "queue_mode": "ring",
+                        "ring_size": 1,
+                    },
+                ),
+                Rx(
+                    id: "received_global_plan",
+                    route: "/received_global_plan",
+                    config: {
+                        "queue_mode": "ring",
+                        "ring_size": 1,
+                    },
+                ),
+                Rx(
+                    id: "smoothed_plan",
+                    route: "/plan_smoothed",
+                    config: {
+                        "queue_mode": "ring",
+                        "ring_size": 1,
+                    },
+                ),
+                Rx(
+                    id: "local_plan",
+                    route: "/local_plan",
+                    config: {
+                        "queue_mode": "ring",
+                        "ring_size": 1,
+                    },
+                ),
+                Rx(
+                    id: "odom",
+                    route: "/odom",
+                    config: {
+                        "queue_mode": "ring",
+                        "ring_size": 32,
+                    },
+                ),
+            ],
+        ),
+    ],
+    cnx: [
+        (
+            src: "ros2/global_plan",
+            dst: "viz",
+            msg: "payloads::NavPathPayload",
+        ),
+        (
+            src: "ros2/received_global_plan",
+            dst: "viz",
+            msg: "payloads::NavPathPayload",
+        ),
+        (
+            src: "ros2/smoothed_plan",
+            dst: "viz",
+            msg: "payloads::NavPathPayload",
+        ),
+        (
+            src: "ros2/local_plan",
+            dst: "viz",
+            msg: "payloads::NavPathPayload",
+        ),
+        (
+            src: "ros2/odom",
+            dst: "viz",
+            msg: "payloads::Odometry2DPayload",
+        ),
+    ],
+)
