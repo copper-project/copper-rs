@@ -22,6 +22,8 @@ pub mod curuntime;
 pub mod cutask;
 #[cfg(feature = "std")]
 pub mod debug;
+#[cfg(feature = "std")]
+pub mod distributed_replay;
 pub(crate) mod log;
 pub mod monitoring;
 #[cfg(all(feature = "std", feature = "parallel-rt"))]

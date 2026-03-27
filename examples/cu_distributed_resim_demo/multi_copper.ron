@@ -1,0 +1,33 @@
+(
+    subsystems: [
+        (
+            id: "scout",
+            config: "scout_config.ron",
+        ),
+        (
+            id: "plan",
+            config: "plan_config.ron",
+        ),
+        (
+            id: "control",
+            config: "control_config.ron",
+        ),
+    ],
+    interconnects: [
+        (
+            from: "scout/zenoh/pulse",
+            to: "plan/zenoh/pulse",
+            msg: "messages::Pulse",
+        ),
+        (
+            from: "plan/zenoh/plan",
+            to: "control/zenoh/plan",
+            msg: "messages::Plan",
+        ),
+        (
+            from: "control/zenoh/feedback",
+            to: "scout/zenoh/feedback",
+            msg: "messages::Feedback",
+        ),
+    ],
+)
