@@ -15,7 +15,7 @@ use compact_str::{CompactString, ToCompactString};
 use core::any::{TypeId, type_name};
 use cu29_clock::{PartialCuTimeRange, Tov};
 use cu29_traits::{
-    COMPACT_STRING_CAPACITY, CuCompactString, CuError, CuMsgMetadataTrait, CuResult,
+    COMPACT_STRING_CAPACITY, CuCompactString, CuError, CuMsgMetadataTrait, CuMsgOrigin, CuResult,
     ErasedCuStampedData, Metadata,
 };
 use serde::de::DeserializeOwned;
@@ -149,6 +149,8 @@ pub struct CuMsgMetadata {
     /// A small string for real time feedback purposes.
     /// This is useful for to display on the field when the tasks are operating correctly.
     pub status_txt: CuCompactString,
+    /// Remote Copper provenance captured on receive, when available.
+    pub origin: Option<CuMsgOrigin>,
 }
 
 impl Metadata for CuMsgMetadata {}
@@ -156,6 +158,14 @@ impl Metadata for CuMsgMetadata {}
 impl CuMsgMetadata {
     pub fn set_status(&mut self, status: impl ToCompactString) {
         self.status_txt = CuCompactString(status.to_compact_string());
+    }
+
+    pub fn set_origin(&mut self, origin: CuMsgOrigin) {
+        self.origin = Some(origin);
+    }
+
+    pub fn clear_origin(&mut self) {
+        self.origin = None;
     }
 }
 
@@ -166,6 +176,10 @@ impl CuMsgMetadataTrait for CuMsgMetadata {
 
     fn status_txt(&self) -> &CuCompactString {
         &self.status_txt
+    }
+
+    fn origin(&self) -> Option<&CuMsgOrigin> {
+        self.origin.as_ref()
     }
 }
 
@@ -239,6 +253,7 @@ impl Default for CuMsgMetadata {
         CuMsgMetadata {
             process_time: PartialCuTimeRange::default(),
             status_txt: CuCompactString(CompactString::with_capacity(COMPACT_STRING_CAPACITY)),
+            origin: None,
         }
     }
 }

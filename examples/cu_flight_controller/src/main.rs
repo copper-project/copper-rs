@@ -85,7 +85,7 @@ fn main() -> ! {
     let clock = build_clock();
     let writer = Arc::new(Mutex::new(logger));
 
-    match FlightControllerApp::new_with_resources(clock, writer, resources) {
+    match FlightControllerApp::new_with_resources(clock, writer, resources, 0) {
         Ok(mut app) => {
             log_heap_stats("before-run");
             let _ = <FlightControllerApp as CuApplication<LogStorage, Logger>>::run(&mut app);
