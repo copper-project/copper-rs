@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"trait":["CuApplication","CuSimApplication","CuStdApplication"]};
+window.SIDEBAR_ITEMS = {"struct":["Subsystem"],"trait":["CuApplication","CuDistributedReplayApplication","CuRecordedReplayApplication","CuSimApplication","CuStdApplication","CuSubsystemMetadata"]};
