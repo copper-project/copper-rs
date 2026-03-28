@@ -1,0 +1,10 @@
+(
+    subsystems: [
+        (
+            id: "robot",
+            config: "robot_base.ron",
+        ),
+    ],
+    interconnects: [],
+    instance_overrides_root: "instances",
+)

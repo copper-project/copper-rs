@@ -76,6 +76,7 @@ members = [
   "examples/cu_config_variation",
   "examples/cu_dorabench",
   "examples/cu_image_aligner",
+  "examples/cu_instance_overrides_demo",
   "examples/cu_iceoryx2_bridge_demo",
   "examples/cu_logging_size",
   "examples/cu_logviz_demo",

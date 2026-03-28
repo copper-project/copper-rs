@@ -3147,12 +3147,22 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         let init_resources_sig = if std {
             quote! {
-                pub fn init_resources(config_override: Option<CuConfig>) -> CuResult<AppResources>
+                pub fn init_resources_for_instance(instance_id: u32, config_override: Option<CuConfig>) -> CuResult<AppResources>
             }
         } else {
             quote! {
                 pub fn init_resources() -> CuResult<AppResources>
             }
+        };
+
+        let init_resources_compat_fn = if std {
+            Some(quote! {
+                pub fn init_resources(config_override: Option<CuConfig>) -> CuResult<AppResources> {
+                    Self::init_resources_for_instance(0, config_override)
+                }
+            })
+        } else {
+            None
         };
 
         let init_resources_call = if std {
@@ -3991,6 +4001,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::ShutdownCompleted)
                 }
 
+                #init_resources_compat_fn
+
                 #init_resources_fn
 
                 #new_with_resources_fn
@@ -4124,7 +4136,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     ) -> CuResult<Self> {
                         let mut noop =
                             |_step: SimStep<'_>| cu29::simulation::SimOverride::ExecuteByRuntime;
-                        let app_resources = Self::init_resources(config_override)?;
+                        let app_resources =
+                            Self::init_resources_for_instance(instance_id, config_override)?;
                         Self::new_with_resources(
                             clock,
                             unified_logger,
@@ -4320,7 +4333,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         let unified_logger = self
                             .unified_logger
                             .ok_or(CuError::from("Unified logger missing from builder"))?;
-                        let app_resources = #application_name::init_resources(self.config_override)?;
+                        let app_resources = #application_name::init_resources_for_instance(
+                            self.instance_id,
+                            self.config_override,
+                        )?;
                         #application_name::new_with_resources(
                             clock,
                             unified_logger,
@@ -4692,20 +4708,23 @@ fn build_config_load_stmt(
                         subsystem_id
                     );
                     let multi_config = cu29::config::read_multi_configuration(config_filename)?;
-                    let subsystem = multi_config.subsystem(subsystem_id).ok_or_else(|| {
-                        CuError::from(format!(
-                            "Multi-Copper configuration '{}' does not define subsystem '{}'.",
-                            config_filename,
-                            subsystem_id
-                        ))
-                    })?;
-                    (subsystem.config.clone(), RuntimeLifecycleConfigSource::ExternalFile)
+                    (
+                        multi_config.resolve_subsystem_config_for_instance(subsystem_id, instance_id)?,
+                        RuntimeLifecycleConfigSource::ExternalFile,
+                    )
                 } else {
                     let original_config = Self::original_config();
                     debug!(
                         "CuConfig: Using the bundled subsystem configuration compiled into the binary (subsystem={}).",
                         #subsystem_id
                     );
+                    if instance_id != 0 {
+                        debug!(
+                            "CuConfig: runtime file '{}' is missing, so instance-specific overrides for instance_id={} cannot be resolved; using bundled subsystem defaults.",
+                            config_filename,
+                            instance_id
+                        );
+                    }
                     (
                         cu29::config::read_configuration_str(original_config, None)?,
                         RuntimeLifecycleConfigSource::BundledDefault,

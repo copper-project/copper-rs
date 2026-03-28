@@ -1,0 +1,23 @@
+(
+    tasks: [
+        (
+            id: "reporter",
+            type: "CalibrationReporter",
+            config: {
+                "label": "base-robot",
+                "gyro_bias": [0.0, 0.0, 0.0],
+            },
+        ),
+        (
+            id: "collector",
+            type: "CalibrationSink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "reporter",
+            dst: "collector",
+            msg: "i64",
+        ),
+    ],
+)

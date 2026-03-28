@@ -1927,6 +1927,7 @@ mod tests {
             multi_config: MultiCopperConfig {
                 subsystems: Vec::new(),
                 interconnects: Vec::new(),
+                instance_overrides_root: None,
             },
             catalog: DistributedReplayCatalog::default(),
             selected_instances,
