@@ -1,5 +1,4 @@
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 use std::time::Duration;
 
 // Expose the library's bridge definitions under the expected `bridges` module name.
@@ -30,9 +29,10 @@ fn main() {
 fn drive() -> CuResult<()> {
     let tmp_dir = tempfile::TempDir::new().expect("could not create temp dir");
     let logger_path = tmp_dir.path().join("iceoryx2_pong.copper");
-    let ctx = basic_copper_setup(&logger_path, SLAB_SIZE, true, None)?;
 
-    let mut app = PongApp::new(ctx.clock.clone(), ctx.unified_logger.clone(), None)?;
+    let mut app = PongApp::builder()
+        .with_log_path(&logger_path, SLAB_SIZE)?
+        .build()?;
     app.start_all_tasks()?;
 
     loop {

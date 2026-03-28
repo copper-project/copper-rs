@@ -24,7 +24,6 @@ spidev = "0.7.0"
 
 [dev-dependencies]
 tempfile = { workspace = true }
-cu29-helpers = { workspace = true }
 
 [build-dependencies]
 cfg_aliases = { workspace = true }

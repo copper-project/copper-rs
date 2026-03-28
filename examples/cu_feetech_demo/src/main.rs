@@ -8,15 +8,14 @@
 //! ```
 
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct FeetechDemoApp {}
 
-use arm_publisher::FeetechDemoAppBuilder as ArmPublisherBuilder;
-use leader_follower::FeetechDemoAppBuilder as LeaderFollowerBuilder;
+use arm_publisher::FeetechDemoApp as ArmPublisherApp;
+use leader_follower::FeetechDemoApp as LeaderFollowerApp;
 
 const SLAB_SIZE: Option<usize> = Some(64 * 1024 * 1024);
 
@@ -42,14 +41,12 @@ fn main() {
         fs::create_dir_all(parent).expect("Failed to create logs directory");
     }
 
-    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, true, None)
-        .expect("Failed to setup logger.");
-
     match mission.as_str() {
         "arm_publisher" => {
             debug!("Starting ARM_PUBLISHER mission – reading positions.");
-            let mut app = ArmPublisherBuilder::new()
-                .with_context(&copper_ctx)
+            let mut app = ArmPublisherApp::builder()
+                .with_log_path(logger_path, SLAB_SIZE)
+                .expect("Failed to setup logger.")
                 .build()
                 .unwrap_or_else(|e| {
                     print_setup_help(&e);
@@ -61,8 +58,9 @@ fn main() {
         }
         "leader_follower" => {
             debug!("Starting LEADER_FOLLOWER mission – leader drives follower.");
-            let mut app = LeaderFollowerBuilder::new()
-                .with_context(&copper_ctx)
+            let mut app = LeaderFollowerApp::builder()
+                .with_log_path(logger_path, SLAB_SIZE)
+                .expect("Failed to setup logger.")
                 .build()
                 .unwrap_or_else(|e| {
                     print_setup_help(&e);

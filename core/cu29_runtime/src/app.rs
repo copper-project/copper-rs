@@ -1,5 +1,4 @@
 use crate::curuntime::KeyFrame;
-use cu29_clock::RobotClock;
 use cu29_traits::CuResult;
 use cu29_unifiedlog::{SectionStorage, UnifiedLogWrite};
 
@@ -13,14 +12,13 @@ use cu29_traits::CopperListTuple;
 #[cfg(not(feature = "std"))]
 mod imp {
     pub use alloc::string::String;
-    pub use alloc::sync::Arc;
-    pub use spin::Mutex;
 }
 
 #[cfg(feature = "std")]
 mod imp {
     pub use crate::config::CuConfig;
     pub use crate::simulation::SimOverride;
+    pub use cu29_clock::RobotClock;
     pub use cu29_unifiedlog::memmap::MmapSectionStorage;
     pub use std::sync::{Arc, Mutex};
 }
@@ -84,30 +82,6 @@ pub trait CuApplication<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> {
     /// This configuration represents the default settings for the application before any overrides.
     fn get_original_config() -> String;
 
-    /// Creates a new application.
-    ///
-    /// # Arguments
-    ///
-    /// * `clock` - A `RobotClock` instance to be used for time-related operations in the implementing struct.
-    /// * `unified_logger` - A thread-safe, shared reference to `UnifiedLoggerWrite`, enabling logging functionalities.
-    /// * `config_override` - An optional `CuConfig` instance that allows overriding the default configuration values.
-    ///   - If `Some`, the provided configuration will be used.
-    ///   - If `None`, the default configuration will be applied.
-    ///
-    /// # Returns
-    ///
-    /// A result containing either:
-    /// - An instantiated object of the implementing type (`Self`), or
-    /// - A `CuResult` error in case of failure during initialization.
-    ///
-    fn new(
-        clock: RobotClock,
-        unified_logger: Arc<Mutex<L>>,
-        #[cfg(feature = "std")] config_override: Option<CuConfig>, // No config override in no-std, the bundled config is always the config
-    ) -> CuResult<Self>
-    where
-        Self: Sized;
-
     /// Starts all tasks managed by the application/runtime.
     ///
     /// # Returns
@@ -165,32 +139,6 @@ pub trait CuSimApplication<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> {
     /// Returns the original configuration as a string, typically loaded from a RON file.
     /// This configuration represents the default settings for the application before any overrides.
     fn get_original_config() -> String;
-
-    /// Creates a new simulation-enabled application.
-    ///
-    /// # Arguments
-    ///
-    /// * `clock` - A `RobotClock` instance to be used for time-related operations in the implementing struct.
-    /// * `unified_logger` - A thread-safe, shared reference to `UnifiedLoggerWrite`, enabling logging functionalities.
-    /// * `config_override` - An optional `CuConfig` instance that allows overriding the default configuration values.
-    ///   - If `Some`, the provided configuration will be used.
-    ///   - If `None`, the default configuration will be applied.
-    /// * `sim_callback` - A mutable function reference that allows overriding individual simulation steps.
-    ///   The callback receives a Step parameter and returns a SimOverride indicating how to handle the step.
-    ///
-    /// # Returns
-    ///
-    /// A result containing either:
-    /// - An instantiated object of the implementing type (`Self`), or
-    /// - A `CuResult` error in case of failure during initialization.
-    fn new(
-        clock: RobotClock,
-        unified_logger: Arc<Mutex<L>>,
-        config_override: Option<CuConfig>,
-        sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
-    ) -> CuResult<Self>
-    where
-        Self: Sized;
 
     /// Starts all tasks managed by the application/runtime in simulation mode.
     ///

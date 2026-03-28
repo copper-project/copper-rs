@@ -20,7 +20,6 @@ path = "src/main.rs"
 [dependencies]
 clap = { workspace = true }
 cu29 = { workspace = true, features = ["log-level-debug"] }
-cu29-helpers = { workspace = true }
 cu29-unifiedlog = { workspace = true }
 cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.14.0" }
 serde = { workspace = true }

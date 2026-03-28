@@ -1,7 +1,6 @@
 pub mod tasks;
 
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 use std::path::PathBuf;
 
 #[copper_runtime(config = "copperconfig.ron")]
@@ -16,10 +15,9 @@ fn main() {
         std::fs::create_dir_all(parent).expect("Failed to create log directory");
     }
 
-    let copper_ctx = basic_copper_setup(&log_path, Some(10 * 1024 * 1024), false, None)
-        .expect("Failed to setup copper");
-    let mut application = LogvizDemoAppBuilder::new()
-        .with_context(&copper_ctx)
+    let mut application = LogvizDemoApp::builder()
+        .with_log_path(&log_path, Some(10 * 1024 * 1024))
+        .expect("Failed to setup copper")
         .build()
         .expect("Failed to create application");
     application

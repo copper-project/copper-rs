@@ -3,8 +3,7 @@ pub mod tasks;
 use cu29::prelude::*;
 use cu29_export::copperlists_reader;
 use cu29_export::keyframes_reader;
-use cu29_helpers::basic_copper_setup;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 // To enable resim, it is just your regular macro with sim_mode true
 #[copper_runtime(config = "copperconfig.ron", sim_mode = true)]
@@ -122,16 +121,10 @@ fn main() {
     const LOG_SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);
     let logger_path = "logs/balanceresim.copper";
     let (robot_clock, mut robot_clock_mock) = RobotClock::mock();
-    let copper_ctx = basic_copper_setup(
-        &PathBuf::from(logger_path),
-        LOG_SLAB_SIZE,
-        true,
-        Some(robot_clock.clone()),
-    )
-    .expect("Failed to setup logger.");
-
-    let mut copper_app = BalanceBotReSimBuilder::new()
-        .with_context(&copper_ctx)
+    let mut copper_app = BalanceBotReSim::builder()
+        .with_clock(robot_clock.clone())
+        .with_log_path(logger_path, LOG_SLAB_SIZE)
+        .expect("Failed to setup logger.")
         .with_sim_callback(&mut default_callback)
         .build()
         .expect("Failed to create runtime.");

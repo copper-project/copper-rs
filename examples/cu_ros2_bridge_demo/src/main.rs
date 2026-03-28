@@ -1,5 +1,4 @@
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
@@ -104,13 +103,7 @@ fn drive() -> CuResult<()> {
 
     let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
     let logger_path = tmp_dir.path().join("ros2_bridge.copper");
-    let copper_ctx = basic_copper_setup(&logger_path, None, true, None)?;
-
-    let mut app = App::new(
-        copper_ctx.clock.clone(),
-        copper_ctx.unified_logger.clone(),
-        None,
-    )?;
+    let mut app = App::builder().with_log_path(&logger_path, None)?.build()?;
     app.start_all_tasks()?;
 
     for _ in 0..ITERATIONS {

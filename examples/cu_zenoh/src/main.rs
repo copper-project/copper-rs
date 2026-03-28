@@ -1,5 +1,4 @@
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 
 pub mod cu_zenoh {
     use cu_zenoh_sink::ZenohSink;
@@ -44,12 +43,14 @@ const SLAB_SIZE: Option<usize> = Some(150 * 1024 * 1024);
 fn main() {
     let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
     let logger_path = tmp_dir.path().join("zenoh.copper");
-    let copper_ctx =
-        basic_copper_setup(&logger_path, SLAB_SIZE, true, None).expect("Failed to setup logger.");
     debug!("Logger created at {}.", path = &logger_path);
-    let clock = copper_ctx.clock;
+    let clock = RobotClock::default();
     debug!("Creating application... ");
-    let mut application = App::new(clock.clone(), copper_ctx.unified_logger.clone(), None)
+    let mut application = App::builder()
+        .with_clock(clock.clone())
+        .with_log_path(&logger_path, SLAB_SIZE)
+        .expect("Failed to setup logger.")
+        .build()
         .expect("Failed to create application.");
     debug!("Running... starting clock: {}.", clock.now());
 

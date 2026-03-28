@@ -14,7 +14,6 @@ publish = false
 
 [dependencies]
 cu29 = { workspace = true, features = ["reflect"] }
-cu29-helpers = { workspace = true }
 cu-pid = { workspace = true, features = ["reflect"] }
 serde = { workspace = true }
 bincode = { workspace = true }

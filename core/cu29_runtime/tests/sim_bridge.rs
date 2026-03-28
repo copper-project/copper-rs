@@ -230,9 +230,9 @@ fn bridge_sim_callbacks_fire_and_override() -> CuResult<()> {
         }
     };
 
-    let mut app = AppBuilder::new()
+    let mut app = App::builder()
         .with_clock(robot_clock.clone())
-        .with_unified_logger(logger)
+        .with_logger::<MmapSectionStorage, MmapUnifiedLoggerWrite>(logger)
         .with_sim_callback(&mut sim_cb)
         .build()?;
 

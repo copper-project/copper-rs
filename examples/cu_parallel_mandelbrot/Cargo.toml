@@ -17,7 +17,6 @@ publish = false
 bincode = { workspace = true }
 cu29 = { workspace = true }
 cu29-export = { workspace = true, features = ["mcap"] }
-cu29-helpers = { workspace = true }
 cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.14.0" }
 cu-sensor-payloads = { workspace = true }
 libc = { workspace = true }

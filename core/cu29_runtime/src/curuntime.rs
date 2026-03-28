@@ -58,39 +58,10 @@ use core::fmt::Result as FmtResult;
 use core::fmt::{Debug, Formatter};
 use core::marker::PhantomData;
 
-#[cfg(feature = "std")]
-use cu29_log_runtime::LoggerRuntime;
-#[cfg(feature = "std")]
-use cu29_unifiedlog::UnifiedLoggerWrite;
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
 use std::sync::mpsc::{Receiver, SyncSender, TryRecvError, sync_channel};
-#[cfg(feature = "std")]
-use std::sync::{Arc, Mutex};
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
 use std::thread::JoinHandle;
-
-/// Just a simple struct to hold the various bits needed to run a Copper application.
-#[cfg(feature = "std")]
-pub struct CopperContext {
-    pub unified_logger: Arc<Mutex<UnifiedLoggerWrite>>,
-    pub logger_runtime: LoggerRuntime,
-    pub clock: RobotClock,
-    pub instance_id: u32,
-}
-
-#[cfg(feature = "std")]
-impl CopperContext {
-    /// Returns the runtime instance id attached to this setup context.
-    pub fn instance_id(&self) -> u32 {
-        self.instance_id
-    }
-
-    /// Attaches a runtime instance id to this setup context.
-    pub fn with_instance_id(mut self, instance_id: u32) -> Self {
-        self.instance_id = instance_id;
-        self
-    }
-}
 
 pub type TasksInstantiator<CT> =
     for<'c> fn(Vec<Option<&'c ComponentConfig>>, &mut ResourceManager) -> CuResult<CT>;

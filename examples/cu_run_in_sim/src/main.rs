@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use cu29::bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
@@ -140,20 +140,15 @@ fn main() -> CuResult<()> {
 
     // here we set up a mock clock so the simulation can take control of it.
     let (robot_clock, _mock) = RobotClock::mock();
-    let copper_ctx = cu29_helpers::basic_copper_setup(
-        &PathBuf::from(logger_path),
-        LOG_SLAB_SIZE,
-        true,
-        Some(robot_clock.clone()),
-    )
-    .expect("Failed to setup logger.");
     debug!(
         "Logger created at {}. This is a simulation.",
         path = logger_path
     );
 
-    let mut copper_app = AppBuilder::new()
-        .with_context(&copper_ctx)
+    let mut copper_app = App::builder()
+        .with_clock(robot_clock.clone())
+        .with_log_path(logger_path, LOG_SLAB_SIZE)
+        .expect("Failed to setup logger.")
         .with_sim_callback(&mut sim_callback)
         .build()
         .expect("Failed to create runtime.");

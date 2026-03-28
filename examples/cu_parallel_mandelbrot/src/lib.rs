@@ -1,5 +1,4 @@
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -100,9 +99,8 @@ pub fn run_log_only() -> CuResult<()> {
     let settings = load_benchmark_settings()?;
     let logger_path = benchmark_logger_path("parallel_mandelbrot_log_only.copper")?;
     let logger_path_display = logger_path.display().to_string();
-    let copper_ctx = basic_copper_setup(&logger_path, SLAB_SIZE, true, None)?;
-    let mut app = log_only::AppBuilder::new()
-        .with_context(&copper_ctx)
+    let mut app = log_only::App::builder()
+        .with_log_path(&logger_path, SLAB_SIZE)?
         .build()
         .map_err(|err| CuError::from(format!("failed to build log_only mission: {err}")))?;
 
@@ -121,9 +119,8 @@ pub fn run_viewer_live() -> CuResult<()> {
     let settings = load_benchmark_settings()?;
     let logger_path = benchmark_logger_path("parallel_mandelbrot_viewer.copper")?;
     let logger_path_display = logger_path.display().to_string();
-    let copper_ctx = basic_copper_setup(&logger_path, SLAB_SIZE, true, None)?;
-    let mut app = viewer_live::AppBuilder::new()
-        .with_context(&copper_ctx)
+    let mut app = viewer_live::App::builder()
+        .with_log_path(&logger_path, SLAB_SIZE)?
         .build()
         .map_err(|err| CuError::from(format!("failed to build viewer_live mission: {err}")))?;
 

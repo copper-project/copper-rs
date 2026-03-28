@@ -6,7 +6,6 @@ use cu29::cutask::CuMsgMetadata;
 use cu29::prelude::*;
 use cu29::simulation::CuTaskCallbackState;
 use cu29_export::copperlists_reader;
-use cu29_helpers::basic_copper_setup;
 use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
 use std::{
     fs,
@@ -46,15 +45,40 @@ fn drive() -> CuResult<()> {
     ensure_log_dir(&output_path)?;
 
     let (robot_clock, robot_clock_mock) = RobotClock::mock();
-    let ctx = basic_copper_setup(&output_path, LOG_SLAB_SIZE, true, Some(robot_clock.clone()))?;
-
     match args.mission {
-        MissionArg::BridgeOnlyAb => resim_bridge_only_ab(&ctx, &robot_clock_mock, input_path)?,
-        MissionArg::BridgeLoopback => resim_bridge_loopback(&ctx, &robot_clock_mock, input_path)?,
-        MissionArg::SourceToBridge => resim_source_to_bridge(&ctx, &robot_clock_mock, input_path)?,
-        MissionArg::BridgeToSink => resim_bridge_to_sink(&ctx, &robot_clock_mock, input_path)?,
-        MissionArg::BridgeTaskSame => resim_bridge_task_same(&ctx, &robot_clock_mock, input_path)?,
-        MissionArg::BridgeFanout => resim_bridge_fanout(&ctx, &robot_clock_mock, input_path)?,
+        MissionArg::BridgeOnlyAb => resim_bridge_only_ab(
+            &output_path,
+            robot_clock.clone(),
+            &robot_clock_mock,
+            input_path,
+        )?,
+        MissionArg::BridgeLoopback => resim_bridge_loopback(
+            &output_path,
+            robot_clock.clone(),
+            &robot_clock_mock,
+            input_path,
+        )?,
+        MissionArg::SourceToBridge => resim_source_to_bridge(
+            &output_path,
+            robot_clock.clone(),
+            &robot_clock_mock,
+            input_path,
+        )?,
+        MissionArg::BridgeToSink => resim_bridge_to_sink(
+            &output_path,
+            robot_clock.clone(),
+            &robot_clock_mock,
+            input_path,
+        )?,
+        MissionArg::BridgeTaskSame => resim_bridge_task_same(
+            &output_path,
+            robot_clock.clone(),
+            &robot_clock_mock,
+            input_path,
+        )?,
+        MissionArg::BridgeFanout => {
+            resim_bridge_fanout(&output_path, robot_clock, &robot_clock_mock, input_path)?
+        }
     }
 
     Ok(())
@@ -97,17 +121,18 @@ fn open_copperlist_reader(log_path: &Path) -> CuResult<UnifiedLoggerIOReader> {
 }
 
 macro_rules! resim_default {
-    ($app:ident, $ctx:expr, $clock:expr, $log_path:expr) => {{
+    ($app:ident, $output_path:expr, $robot_clock:expr, $clock_mock:expr, $input_log_path:expr) => {{
         let mut default_cb = |_step: $app::SimStep<'_>| SimOverride::ExecuteByRuntime;
-        let mut app = $app::BridgeSchedulerReSimBuilder::new()
-            .with_context($ctx)
+        let mut app = $app::BridgeSchedulerReSim::builder()
+            .with_clock($robot_clock)
+            .with_log_path($output_path, LOG_SLAB_SIZE)?
             .with_sim_callback(&mut default_cb)
             .build()?;
         app.start_all_tasks(&mut default_cb)?;
 
-        let mut reader = open_copperlist_reader($log_path)?;
+        let mut reader = open_copperlist_reader($input_log_path)?;
         for entry in copperlists_reader::<$app::CuStampedDataSet>(&mut reader) {
-            sync_robot_clock($app::collect_metadata(&entry), $clock);
+            sync_robot_clock($app::collect_metadata(&entry), $clock_mock);
             let mut sim_cb = |_step: $app::SimStep<'_>| SimOverride::ExecuteByRuntime;
             app.run_one_iteration(&mut sim_cb)?;
         }
@@ -118,44 +143,55 @@ macro_rules! resim_default {
 }
 
 fn resim_bridge_only_ab(
-    ctx: &CopperContext,
-    robot_clock: &RobotClockMock,
-    log_path: &Path,
+    output_path: &Path,
+    clock: RobotClock,
+    clock_mock: &RobotClockMock,
+    input_log_path: &Path,
 ) -> CuResult<()> {
-    resim_default!(BridgeOnlyAB, ctx, robot_clock, log_path)
+    resim_default!(BridgeOnlyAB, output_path, clock, clock_mock, input_log_path)
 }
 
 fn resim_bridge_loopback(
-    ctx: &CopperContext,
-    robot_clock: &RobotClockMock,
-    log_path: &Path,
+    output_path: &Path,
+    clock: RobotClock,
+    clock_mock: &RobotClockMock,
+    input_log_path: &Path,
 ) -> CuResult<()> {
-    resim_default!(BridgeLoopback, ctx, robot_clock, log_path)
+    resim_default!(
+        BridgeLoopback,
+        output_path,
+        clock,
+        clock_mock,
+        input_log_path
+    )
 }
 
 fn resim_bridge_fanout(
-    ctx: &CopperContext,
-    robot_clock: &RobotClockMock,
-    log_path: &Path,
+    output_path: &Path,
+    clock: RobotClock,
+    clock_mock: &RobotClockMock,
+    input_log_path: &Path,
 ) -> CuResult<()> {
-    resim_default!(BridgeFanout, ctx, robot_clock, log_path)
+    resim_default!(BridgeFanout, output_path, clock, clock_mock, input_log_path)
 }
 
 fn resim_source_to_bridge(
-    ctx: &CopperContext,
-    robot_clock: &RobotClockMock,
-    log_path: &Path,
+    output_path: &Path,
+    clock: RobotClock,
+    clock_mock: &RobotClockMock,
+    input_log_path: &Path,
 ) -> CuResult<()> {
     let mut default_cb = |_step: SourceToBridge::SimStep<'_>| SimOverride::ExecuteByRuntime;
-    let mut app = SourceToBridge::BridgeSchedulerReSimBuilder::new()
-        .with_context(ctx)
+    let mut app = SourceToBridge::BridgeSchedulerReSim::builder()
+        .with_clock(clock)
+        .with_log_path(output_path, LOG_SLAB_SIZE)?
         .with_sim_callback(&mut default_cb)
         .build()?;
     app.start_all_tasks(&mut default_cb)?;
 
-    let mut reader = open_copperlist_reader(log_path)?;
+    let mut reader = open_copperlist_reader(input_log_path)?;
     for entry in copperlists_reader::<SourceToBridge::CuStampedDataSet>(&mut reader) {
-        sync_robot_clock(SourceToBridge::collect_metadata(&entry), robot_clock);
+        sync_robot_clock(SourceToBridge::collect_metadata(&entry), clock_mock);
         let mut sim_cb = make_source_to_bridge_cb(&entry);
         app.run_one_iteration(&mut sim_cb)?;
     }
@@ -178,20 +214,22 @@ fn make_source_to_bridge_cb(
 }
 
 fn resim_bridge_to_sink(
-    ctx: &CopperContext,
-    robot_clock: &RobotClockMock,
-    log_path: &Path,
+    output_path: &Path,
+    clock: RobotClock,
+    clock_mock: &RobotClockMock,
+    input_log_path: &Path,
 ) -> CuResult<()> {
     let mut default_cb = |_step: BridgeToSink::SimStep<'_>| SimOverride::ExecuteByRuntime;
-    let mut app = BridgeToSink::BridgeSchedulerReSimBuilder::new()
-        .with_context(ctx)
+    let mut app = BridgeToSink::BridgeSchedulerReSim::builder()
+        .with_clock(clock)
+        .with_log_path(output_path, LOG_SLAB_SIZE)?
         .with_sim_callback(&mut default_cb)
         .build()?;
     app.start_all_tasks(&mut default_cb)?;
 
-    let mut reader = open_copperlist_reader(log_path)?;
+    let mut reader = open_copperlist_reader(input_log_path)?;
     for entry in copperlists_reader::<BridgeToSink::CuStampedDataSet>(&mut reader) {
-        sync_robot_clock(BridgeToSink::collect_metadata(&entry), robot_clock);
+        sync_robot_clock(BridgeToSink::collect_metadata(&entry), clock_mock);
         let mut sim_cb = make_bridge_to_sink_cb(&entry);
         app.run_one_iteration(&mut sim_cb)?;
     }
@@ -214,20 +252,22 @@ fn make_bridge_to_sink_cb(
 }
 
 fn resim_bridge_task_same(
-    ctx: &CopperContext,
-    robot_clock: &RobotClockMock,
-    log_path: &Path,
+    output_path: &Path,
+    clock: RobotClock,
+    clock_mock: &RobotClockMock,
+    input_log_path: &Path,
 ) -> CuResult<()> {
     let mut default_cb = |_step: BridgeTaskSame::SimStep<'_>| SimOverride::ExecuteByRuntime;
-    let mut app = BridgeTaskSame::BridgeSchedulerReSimBuilder::new()
-        .with_context(ctx)
+    let mut app = BridgeTaskSame::BridgeSchedulerReSim::builder()
+        .with_clock(clock)
+        .with_log_path(output_path, LOG_SLAB_SIZE)?
         .with_sim_callback(&mut default_cb)
         .build()?;
     app.start_all_tasks(&mut default_cb)?;
 
-    let mut reader = open_copperlist_reader(log_path)?;
+    let mut reader = open_copperlist_reader(input_log_path)?;
     for entry in copperlists_reader::<BridgeTaskSame::CuStampedDataSet>(&mut reader) {
-        sync_robot_clock(BridgeTaskSame::collect_metadata(&entry), robot_clock);
+        sync_robot_clock(BridgeTaskSame::collect_metadata(&entry), clock_mock);
         let mut sim_cb = make_bridge_task_same_cb(&entry);
         app.run_one_iteration(&mut sim_cb)?;
     }

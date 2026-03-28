@@ -13,8 +13,6 @@ use cu29::prelude::debug;
 use cu29::prelude::{error, *};
 use cu29::units::si::ratio::ratio;
 #[cfg(not(target_arch = "wasm32"))]
-use cu29_helpers::basic_copper_setup;
-#[cfg(not(target_arch = "wasm32"))]
 use std::fs;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::{Path, PathBuf};
@@ -22,8 +20,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 #[derive(Resource)]
-pub struct CopperSim<T: Send + Sync + 'static> {
-    _runtime_state: T,
+pub struct CopperSim {
     clock: RobotClock,
     clock_mock: RobotClockMock,
     copper_app: crate::BalanceBotSim,
@@ -82,20 +79,15 @@ pub fn setup_native_copper(mut commands: Commands) {
     }
 
     let (robot_clock, robot_clock_mock) = RobotClock::mock();
-    let copper_ctx = basic_copper_setup(
-        &PathBuf::from(logger_path),
-        LOG_SLAB_SIZE,
-        true,
-        Some(robot_clock.clone()),
-    )
-    .expect("Failed to setup logger.");
     debug!(
         "Logger created at {path}. This is a simulation.",
         path = logger_path
     );
 
-    let mut copper_app = crate::BalanceBotSimBuilder::new()
-        .with_context(&copper_ctx)
+    let mut copper_app = crate::BalanceBotSim::builder()
+        .with_clock(robot_clock.clone())
+        .with_log_path(PathBuf::from(logger_path), LOG_SLAB_SIZE)
+        .expect("Failed to create logger.")
         .with_sim_callback(&mut default_callback)
         .build()
         .expect("Failed to create runtime.");
@@ -105,7 +97,6 @@ pub fn setup_native_copper(mut commands: Commands) {
         .expect("Failed to start all tasks.");
 
     commands.insert_resource(CopperSim {
-        _runtime_state: copper_ctx,
         clock: robot_clock,
         clock_mock: robot_clock_mock,
         copper_app,
@@ -114,23 +105,20 @@ pub fn setup_native_copper(mut commands: Commands) {
 }
 
 #[cfg(feature = "bevymon")]
-pub fn build_bevymon_copper() -> (MonitorModel, CopperSim<LoggerRuntime>) {
+pub fn build_bevymon_copper() -> (MonitorModel, CopperSim) {
     #[allow(clippy::identity_op)]
     const LOG_SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);
-    const STRUCTURED_LOG_SECTION_SIZE: usize = 4096 * 10;
 
     let (clock, clock_mock) = RobotClock::mock();
     let unified_logger = build_unified_logger(LOG_SLAB_SIZE).expect("Failed to create logger.");
-    let logger_runtime =
-        init_logger_runtime(&clock, unified_logger.clone(), STRUCTURED_LOG_SECTION_SIZE)
-            .expect("Failed to initialize Copper structured logging.");
 
     let mut sim_callback = default_callback;
-    let mut copper_app = <crate::BalanceBotSim as CuSimApplication<
-        BevyMonSectionStorage,
-        BevyMonUnifiedLogger,
-    >>::new(clock.clone(), unified_logger, None, &mut sim_callback)
-    .expect("Failed to create runtime.");
+    let mut copper_app = crate::BalanceBotSim::builder()
+        .with_clock(clock.clone())
+        .with_logger::<BevyMonSectionStorage, BevyMonUnifiedLogger>(unified_logger)
+        .with_sim_callback(&mut sim_callback)
+        .build()
+        .expect("Failed to create runtime.");
 
     copper_app
         .start_all_tasks(&mut sim_callback)
@@ -140,30 +128,11 @@ pub fn build_bevymon_copper() -> (MonitorModel, CopperSim<LoggerRuntime>) {
     (
         monitor_model,
         CopperSim {
-            _runtime_state: logger_runtime,
             clock,
             clock_mock,
             copper_app,
         },
     )
-}
-
-#[cfg(feature = "bevymon")]
-fn init_logger_runtime(
-    clock: &RobotClock,
-    unified_logger: Arc<Mutex<BevyMonUnifiedLogger>>,
-    structured_log_section_size: usize,
-) -> CuResult<LoggerRuntime> {
-    let structured_stream = stream_write::<CuLogEntry, BevyMonSectionStorage>(
-        unified_logger,
-        UnifiedLogType::StructuredLogLine,
-        structured_log_section_size,
-    )?;
-    Ok(LoggerRuntime::init(
-        clock.clone(),
-        structured_stream,
-        None::<NullLog>,
-    ))
 }
 
 #[cfg(feature = "bevymon")]
@@ -205,13 +174,13 @@ fn build_unified_logger(
 }
 
 #[allow(clippy::type_complexity)]
-pub fn run_copper_callback<T: Send + Sync + 'static>(
+pub fn run_copper_callback(
     mut query_set: ParamSet<(
         Query<(&Transform, &mut ConstantForce, &mut AppliedForce), With<Cart>>,
         Query<&Transform, With<Rod>>,
     )>,
     physics_time: Res<Time<Physics>>,
-    mut copper_ctx: ResMut<CopperSim<T>>,
+    mut copper_ctx: ResMut<CopperSim>,
     mut last_tick: ResMut<LastCopperTick>,
     drag_state: Res<DragState>,
     mut exit_writer: MessageWriter<AppExit>,
@@ -315,9 +284,9 @@ pub fn run_copper_callback<T: Send + Sync + 'static>(
     }
 }
 
-pub fn stop_copper_on_exit<T: Send + Sync + 'static>(
+pub fn stop_copper_on_exit(
     mut exit_events: MessageReader<AppExit>,
-    mut copper_ctx: ResMut<CopperSim<T>>,
+    mut copper_ctx: ResMut<CopperSim>,
 ) {
     if exit_events.read().next().is_some() {
         copper_ctx

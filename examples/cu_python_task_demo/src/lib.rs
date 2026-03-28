@@ -14,7 +14,6 @@
 use bincode::{Decode, Encode};
 use cu_python_task::{PyTask, PyTaskMode};
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex};
@@ -256,12 +255,10 @@ pub fn config_for_mode(mode: PyTaskMode) -> CuConfig {
 pub fn run_demo(mode: PyTaskMode, iterations: usize) -> CuResult<()> {
     let temp_dir = tempfile::TempDir::new().map_err(|e| CuError::new_with_cause("temp dir", e))?;
     let log_path = temp_dir.path().join("python_task_demo.copper");
-    let ctx = basic_copper_setup(&log_path, Some(32 * 1024 * 1024), false, None)?;
-    let mut app = PythonTaskDemoApp::new(
-        ctx.clock.clone(),
-        ctx.unified_logger.clone(),
-        Some(config_for_mode(mode)),
-    )?;
+    let mut app = PythonTaskDemoApp::builder()
+        .with_log_path(&log_path, Some(32 * 1024 * 1024))?
+        .with_config(config_for_mode(mode))
+        .build()?;
 
     reset_sinks();
     app.start_all_tasks()?;

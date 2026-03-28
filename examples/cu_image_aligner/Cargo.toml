@@ -15,7 +15,6 @@ publish = false
 
 [dependencies]
 cu29 = { workspace = true }
-cu29-helpers = { workspace = true }
 cu29-clock = { workspace = true }
 tempfile = { workspace = true }
 cu-aligner = { path = "../../components/tasks/cu_aligner", version = "0.14.0" }

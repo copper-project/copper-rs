@@ -1,8 +1,7 @@
 pub mod tasks;
 
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -18,20 +17,15 @@ fn main() {
             std::fs::create_dir_all(parent).expect("Failed to create logs directory");
         }
     }
-    let copper_ctx = basic_copper_setup(
-        &PathBuf::from(&logger_path),
-        PREALLOCATED_STORAGE_SIZE,
-        true,
-        None,
-    )
-    .expect("Failed to setup logger.");
+    let clock = RobotClock::default();
     debug!("Logger created at {}.", logger_path);
     debug!("Creating application... ");
-    let mut application = {{project-name | upper_camel_case}}ApplicationBuilder::new()
-        .with_context(&copper_ctx)
+    let mut application = {{project-name | upper_camel_case}}Application::builder()
+        .with_clock(clock.clone())
+        .with_log_path(logger_path, PREALLOCATED_STORAGE_SIZE)
+        .expect("Failed to setup logger.")
         .build()
         .expect("Failed to create application.");
-    let clock = copper_ctx.clock.clone();
     debug!("Running... starting clock: {}.", clock.now());
 
     application.run().expect("Failed to run application.");

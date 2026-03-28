@@ -41,7 +41,6 @@ avian3d = { workspace = true, default-features = false, features = [
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 cu29 = { workspace = true }
-cu29-helpers = { workspace = true }
 cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.14.0" }
 cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "0.14.0", optional = true }
 bevy = { workspace = true, default-features = false, features = [

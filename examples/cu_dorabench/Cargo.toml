@@ -24,7 +24,6 @@ path = "src/logreader.rs"
 [dependencies]
 bincode = { workspace = true }
 cu29 = { workspace = true }
-cu29-helpers = { workspace = true }
 cu29-export = { workspace = true, features = ["python", "mcap"] }
 serde = { workspace = true }
 cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.14.0" }
