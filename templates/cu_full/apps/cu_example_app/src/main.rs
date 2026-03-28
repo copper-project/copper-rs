@@ -21,7 +21,7 @@ fn main() {
             std::fs::create_dir_all(parent).expect("Failed to create logs directory");
         }
     }
-    debug!("Logger created at {}.", logger_path);
+    debug!("Logger created at {}.", &logger_path);
     debug!("Creating application... ");
     let mut application = CuExampleAppApplication::builder()
         .with_log_path(&logger_path, PREALLOCATED_STORAGE_SIZE)
