@@ -1094,7 +1094,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         (
             quote! { NoMonitor },
             quote! {
-                let monitor = NoMonitor::new(metadata, runtime)
+                let monitor_metadata = metadata.with_subsystem_id(#subsystem_id_tokens);
+                let monitor = NoMonitor::new(monitor_metadata, runtime)
                     .expect("Failed to create NoMonitor.");
                 monitor
             },
@@ -1110,7 +1111,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         .get_monitor_configs()
                         .first()
                         .and_then(|entry| entry.get_config().cloned())
-                );
+                )
+                .with_subsystem_id(#subsystem_id_tokens);
                 let monitor = #only_monitor_type::new(monitor_metadata, runtime)
                     .expect("Failed to create the given monitor.");
                 monitor
@@ -1142,7 +1144,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         .and_then(|entry| entry.get_config().cloned());
                     let __cu_monitor_metadata = metadata
                         .clone()
-                        .with_monitor_config(__cu_monitor_cfg_entry);
+                        .with_monitor_config(__cu_monitor_cfg_entry)
+                        .with_subsystem_id(#subsystem_id_tokens);
                     let #monitor_binding = #monitor_ty::new(__cu_monitor_metadata, runtime.clone())
                     .expect("Failed to create one of the configured monitors.");
                 }
