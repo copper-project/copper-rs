@@ -19,19 +19,17 @@ fn main() {
         fs::create_dir_all(parent).expect("Failed to create logs directory");
     }
 
-    let clock = RobotClock::default();
     debug!("Logger created at {}.", path = &logger_path);
 
     debug!("Creating application... ");
 
     let mut application = BalanceBot::builder()
-        .with_clock(clock.clone())
         .with_log_path(logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
         .build()
         .expect("Failed to create runtime.");
 
-    debug!("Running... starting clock: {}.", clock.now());
+    debug!("Running... starting clock: {}.", application.clock().now());
     application.run().expect("Failed to run application.");
-    debug!("End of app: final clock: {}.", clock.now());
+    debug!("End of app: final clock: {}.", application.clock().now());
 }

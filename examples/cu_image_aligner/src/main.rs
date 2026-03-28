@@ -13,15 +13,13 @@ fn main() {
     let logger_path = tmp_dir.path().join("image-aligner.copper");
     debug!("Logger created at {}.", path = &logger_path);
     debug!("Creating application...");
-    let clock = RobotClock::default();
 
     let mut application = ImageAlignerApp::builder()
-        .with_clock(clock.clone())
         .with_log_path(&logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
         .build()
         .expect("Failed to create runtime.");
-    debug!("Running... starting clock: {}.", clock.now());
+    debug!("Running... starting clock: {}.", application.clock().now());
 
     application
         .start_all_tasks()
@@ -31,5 +29,5 @@ fn main() {
             .run_one_iteration()
             .expect("Failed to run iteration.");
     }
-    debug!("End of program: {}.", clock.now());
+    debug!("End of program: {}.", application.clock().now());
 }

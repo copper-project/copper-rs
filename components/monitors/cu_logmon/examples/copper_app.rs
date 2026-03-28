@@ -97,15 +97,13 @@ fn main() {
     }
 
     info!("Logger created at {}", &logger_path);
-    let clock = RobotClock::default();
 
     let mut application = App::builder()
-        .with_clock(clock.clone())
         .with_log_path(&logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
         .build()
         .expect("Failed to create runtime");
-    info!("Starting app at {}", clock.now());
+    info!("Starting app at {}", application.clock().now());
     application
         .start_all_tasks()
         .expect("Failed to start application.");
@@ -122,5 +120,5 @@ fn main() {
     application
         .stop_all_tasks()
         .expect("Failed to stop application.");
-    info!("App stopped at {}", clock.now());
+    info!("App stopped at {}", application.clock().now());
 }

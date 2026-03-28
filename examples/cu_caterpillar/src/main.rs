@@ -17,9 +17,7 @@ fn main() {
         fs::create_dir_all(parent).expect("Failed to create logs directory");
     }
 
-    let clock = RobotClock::default();
     let mut application = CaterpillarApplication::builder()
-        .with_clock(clock)
         .with_log_path(logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
         .build()

@@ -832,6 +832,12 @@ impl<
 }
 
 impl<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize> CuRuntime<CT, CB, P, M, NBCL> {
+    /// Returns a clone of the runtime clock handle.
+    #[inline]
+    pub fn clock(&self) -> RobotClock {
+        self.clock.clone()
+    }
+
     /// Returns the compile-time subsystem code for this process.
     #[inline]
     pub fn subsystem_code(&self) -> u16 {

@@ -44,15 +44,13 @@ fn main() {
     let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
     let logger_path = tmp_dir.path().join("zenoh.copper");
     debug!("Logger created at {}.", path = &logger_path);
-    let clock = RobotClock::default();
     debug!("Creating application... ");
     let mut application = App::builder()
-        .with_clock(clock.clone())
         .with_log_path(&logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
         .build()
         .expect("Failed to create application.");
-    debug!("Running... starting clock: {}.", clock.now());
+    debug!("Running... starting clock: {}.", application.clock().now());
 
     if let Err(error) = application.run() {
         debug!("Application Ended: {}", error)

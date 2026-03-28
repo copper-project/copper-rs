@@ -170,10 +170,8 @@ struct App {}
 fn main() {
     let tmp_dir = tempfile::TempDir::new().expect("Could not create temporary directory");
     let logger_path = tmp_dir.path().join("logger.copper");
-    let clock = RobotClock::default();
 
     let mut application = App::builder()
-        .with_clock(clock.clone())
         .with_log_path(&logger_path, None)
         .expect("Failed to setup logger.")
         .build()

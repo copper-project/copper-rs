@@ -90,15 +90,13 @@ fn main() {
         fs::create_dir_all(parent).expect("Failed to create logs directory");
     }
     debug!("Logger created at {}.", path = &logger_path);
-    let clock = RobotClock::default();
     debug!("Creating application... ");
     let mut application = App::builder()
-        .with_clock(clock.clone())
         .with_log_path(logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
         .build()
         .expect("Failed to create application.");
-    debug!("Running... starting clock: {}.", clock.now());
+    debug!("Running... starting clock: {}.", application.clock().now());
     application
         .start_all_tasks()
         .expect("Failed to start application.");
@@ -106,6 +104,6 @@ fn main() {
     application
         .stop_all_tasks()
         .expect("Failed to stop application.");
-    debug!("End of program: {}.", clock.now());
+    debug!("End of program: {}.", application.clock().now());
     // check if the logger file is at least 1 section in length
 }

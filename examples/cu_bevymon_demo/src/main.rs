@@ -129,7 +129,6 @@ fn main() {
 }
 
 fn build_copper_driver() -> CopperDriver {
-    let clock = RobotClock::default();
     let unified_logger = build_unified_logger().expect("Failed to create demo logger.");
 
     #[cfg(target_arch = "wasm32")]
@@ -140,7 +139,6 @@ fn build_copper_driver() -> CopperDriver {
     debug!("Creating Copper BevyMon demo application.");
 
     let copper_app = BevyMonDemoApp::builder()
-        .with_clock(clock)
         .with_logger::<DemoSectionStorage, DemoUnifiedLogger>(unified_logger)
         .build()
         .expect("Failed to create Copper runtime.");

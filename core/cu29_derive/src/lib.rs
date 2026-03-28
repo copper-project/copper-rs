@@ -3976,6 +3976,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #(#reflect_type_registration_calls)*
                 }
 
+                /// Returns a clone of the runtime clock handle.
+                #[inline]
+                pub fn clock(&self) -> cu29::clock::RobotClock {
+                    self.copper_runtime.clock()
+                }
+
                 /// Log one runtime lifecycle event with the current runtime timestamp.
                 pub fn log_runtime_lifecycle_event(
                     &mut self,

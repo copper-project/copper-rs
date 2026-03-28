@@ -17,18 +17,16 @@ fn main() {
             std::fs::create_dir_all(parent).expect("Failed to create logs directory");
         }
     }
-    let clock = RobotClock::default();
     debug!("Logger created at {}.", logger_path);
     debug!("Creating application... ");
     let mut application = {{project-name | upper_camel_case}}Application::builder()
-        .with_clock(clock.clone())
         .with_log_path(logger_path, PREALLOCATED_STORAGE_SIZE)
         .expect("Failed to setup logger.")
         .build()
         .expect("Failed to create application.");
-    debug!("Running... starting clock: {}.", clock.now());
+    debug!("Running... starting clock: {}.", application.clock().now());
 
     application.run().expect("Failed to run application.");
-    debug!("End of program: {}.", clock.now());
+    debug!("End of program: {}.", application.clock().now());
     sleep(Duration::from_secs(1));
 }
