@@ -2,6 +2,7 @@
 //! It is exposed to the user via the `copper_runtime` macro injecting it as a field in their application struct.
 //!
 
+use crate::app::Subsystem;
 use crate::config::{ComponentConfig, CuDirection, DEFAULT_KEYFRAME_INTERVAL, Node};
 use crate::config::{CuConfig, CuGraph, NodeId, RuntimeConfig};
 use crate::copperlist::{CopperList, CopperListState, CuListZeroedInit, CuListsManager};
@@ -55,6 +56,7 @@ use bincode::{Decode, Encode};
 use core::alloc::Layout;
 use core::fmt::Result as FmtResult;
 use core::fmt::{Debug, Formatter};
+use core::marker::PhantomData;
 
 #[cfg(feature = "std")]
 use cu29_log_runtime::LoggerRuntime;
@@ -88,10 +90,118 @@ impl CopperContext {
         self.instance_id = instance_id;
         self
     }
+}
 
-    /// Sets the runtime instance id on this setup context.
-    pub fn set_instance_id(&mut self, instance_id: u32) {
+pub type TasksInstantiator<CT> =
+    for<'c> fn(Vec<Option<&'c ComponentConfig>>, &mut ResourceManager) -> CuResult<CT>;
+pub type BridgesInstantiator<CB> = fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>;
+pub type MonitorInstantiator<M> = fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M;
+
+pub struct CuRuntimeParts<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, MI> {
+    pub tasks_instanciator: TI,
+    pub monitored_components: &'static [MonitorComponentMetadata],
+    pub culist_component_mapping: &'static [ComponentId],
+    #[cfg(all(feature = "std", feature = "parallel-rt"))]
+    pub parallel_rt_metadata: &'static ParallelRtMetadata,
+    pub monitor_instanciator: MI,
+    pub bridges_instanciator: BI,
+    _payload: PhantomData<(CT, CB, P, M, [(); NBCL])>,
+}
+
+impl<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, MI>
+    CuRuntimeParts<CT, CB, P, M, NBCL, TI, BI, MI>
+{
+    pub const fn new(
+        tasks_instanciator: TI,
+        monitored_components: &'static [MonitorComponentMetadata],
+        culist_component_mapping: &'static [ComponentId],
+        #[cfg(all(feature = "std", feature = "parallel-rt"))]
+        parallel_rt_metadata: &'static ParallelRtMetadata,
+        monitor_instanciator: MI,
+        bridges_instanciator: BI,
+    ) -> Self {
+        Self {
+            tasks_instanciator,
+            monitored_components,
+            culist_component_mapping,
+            #[cfg(all(feature = "std", feature = "parallel-rt"))]
+            parallel_rt_metadata,
+            monitor_instanciator,
+            bridges_instanciator,
+            _payload: PhantomData,
+        }
+    }
+}
+
+pub struct CuRuntimeBuilder<
+    'cfg,
+    CT,
+    CB,
+    P: CopperListTuple,
+    M: CuMonitor,
+    const NBCL: usize,
+    TI,
+    BI,
+    MI,
+    CLW,
+    KFW,
+> {
+    clock: RobotClock,
+    config: &'cfg CuConfig,
+    mission: &'cfg str,
+    subsystem: Subsystem,
+    instance_id: u32,
+    resources: Option<ResourceManager>,
+    parts: CuRuntimeParts<CT, CB, P, M, NBCL, TI, BI, MI>,
+    copperlists_logger: CLW,
+    keyframes_logger: KFW,
+}
+
+impl<'cfg, CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, MI, CLW, KFW>
+    CuRuntimeBuilder<'cfg, CT, CB, P, M, NBCL, TI, BI, MI, CLW, KFW>
+{
+    pub fn new(
+        clock: RobotClock,
+        config: &'cfg CuConfig,
+        mission: &'cfg str,
+        parts: CuRuntimeParts<CT, CB, P, M, NBCL, TI, BI, MI>,
+        copperlists_logger: CLW,
+        keyframes_logger: KFW,
+    ) -> Self {
+        Self {
+            clock,
+            config,
+            mission,
+            subsystem: Subsystem::new(None, 0),
+            instance_id: 0,
+            resources: None,
+            parts,
+            copperlists_logger,
+            keyframes_logger,
+        }
+    }
+
+    pub fn with_subsystem(mut self, subsystem: Subsystem) -> Self {
+        self.subsystem = subsystem;
+        self
+    }
+
+    pub fn with_instance_id(mut self, instance_id: u32) -> Self {
         self.instance_id = instance_id;
+        self
+    }
+
+    pub fn with_resources(mut self, resources: ResourceManager) -> Self {
+        self.resources = Some(resources);
+        self
+    }
+
+    pub fn try_with_resources_instantiator(
+        mut self,
+        resources_instantiator: impl FnOnce(&CuConfig) -> CuResult<ResourceManager>,
+    ) -> CuResult<Self> {
+        self.resources = Some(resources_instantiator(self.config)?);
+        Ok(self)
     }
 }
 
@@ -762,11 +872,127 @@ impl<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize> CuRuntime<CT, 
     pub fn instance_id(&self) -> u32 {
         self.instance_id
     }
+}
 
-    /// Updates the runtime instance id used when synthesizing callback contexts.
-    #[inline]
-    pub fn set_instance_id(&mut self, instance_id: u32) {
-        self.instance_id = instance_id;
+impl<
+    'cfg,
+    CT,
+    CB,
+    P: CopperListTuple + CuListZeroedInit + Default + AsyncCopperListPayload + 'static,
+    M: CuMonitor,
+    const NBCL: usize,
+    TI,
+    BI,
+    MI,
+    CLW,
+    KFW,
+> CuRuntimeBuilder<'cfg, CT, CB, P, M, NBCL, TI, BI, MI, CLW, KFW>
+where
+    TI: for<'c> Fn(Vec<Option<&'c ComponentConfig>>, &mut ResourceManager) -> CuResult<CT>,
+    BI: Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
+    MI: Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
+    CLW: WriteStream<CopperList<P>> + 'static,
+    KFW: WriteStream<KeyFrame> + 'static,
+{
+    pub fn build(self) -> CuResult<CuRuntime<CT, CB, P, M, NBCL>> {
+        let Self {
+            clock,
+            config,
+            mission,
+            subsystem,
+            instance_id,
+            resources,
+            parts,
+            copperlists_logger,
+            keyframes_logger,
+        } = self;
+        let mut resources =
+            resources.ok_or_else(|| CuError::from("Resources missing from CuRuntimeBuilder"))?;
+
+        let graph = config.get_graph(Some(mission))?;
+        let all_instances_configs: Vec<Option<&ComponentConfig>> = graph
+            .get_all_nodes()
+            .iter()
+            .map(|(_, node)| node.get_instance_config())
+            .collect();
+
+        let tasks = (parts.tasks_instanciator)(all_instances_configs, &mut resources)?;
+
+        #[cfg(feature = "std")]
+        let execution_probe = std::sync::Arc::new(RuntimeExecutionProbe::default());
+        #[cfg(not(feature = "std"))]
+        let execution_probe = RuntimeExecutionProbe::default();
+        let monitor_metadata = CuMonitoringMetadata::new(
+            CompactString::from(mission),
+            parts.monitored_components,
+            parts.culist_component_mapping,
+            CopperListInfo::new(core::mem::size_of::<CopperList<P>>(), NBCL),
+            build_monitor_topology(config, mission)?,
+            None,
+        )?
+        .with_subsystem_id(subsystem.id())
+        .with_instance_id(instance_id);
+        #[cfg(feature = "std")]
+        let monitor_runtime =
+            CuMonitoringRuntime::new(MonitorExecutionProbe::from_shared(execution_probe.clone()));
+        #[cfg(not(feature = "std"))]
+        let monitor_runtime = CuMonitoringRuntime::unavailable();
+        let monitor = (parts.monitor_instanciator)(config, monitor_metadata, monitor_runtime);
+        let bridges = (parts.bridges_instanciator)(config, &mut resources)?;
+
+        let (copperlists_logger, keyframes_logger, keyframe_interval) = match &config.logging {
+            Some(logging_config) if logging_config.enable_task_logging => (
+                Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
+                Some(Box::new(keyframes_logger) as Box<dyn WriteStream<KeyFrame>>),
+                logging_config.keyframe_interval.unwrap(),
+            ),
+            Some(_) => (None, None, 0),
+            None => (
+                Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
+                Some(Box::new(keyframes_logger) as Box<dyn WriteStream<KeyFrame>>),
+                DEFAULT_KEYFRAME_INTERVAL,
+            ),
+        };
+
+        let copperlists_manager = CopperListsManager::new(copperlists_logger)?;
+        #[cfg(target_os = "none")]
+        {
+            let cl_size = core::mem::size_of::<CopperList<P>>();
+            let total_bytes = cl_size.saturating_mul(NBCL);
+            info!(
+                "CuRuntime::new: copperlists count={} cl_size={} total_bytes={}",
+                NBCL, cl_size, total_bytes
+            );
+        }
+
+        let keyframes_manager = KeyFramesManager {
+            inner: KeyFrame::new(),
+            logger: keyframes_logger,
+            keyframe_interval,
+            last_encoded_bytes: 0,
+            forced_timestamp: None,
+            locked: false,
+        };
+        #[cfg(all(feature = "std", feature = "parallel-rt"))]
+        let parallel_rt = ParallelRt::new(parts.parallel_rt_metadata)?;
+
+        let runtime_config = config.runtime.clone().unwrap_or_default();
+
+        Ok(CuRuntime {
+            subsystem_code: subsystem.code(),
+            instance_id,
+            tasks,
+            bridges,
+            resources,
+            monitor,
+            execution_probe,
+            clock,
+            copperlists_manager,
+            keyframes_manager,
+            #[cfg(all(feature = "std", feature = "parallel-rt"))]
+            parallel_rt,
+            runtime_config,
+        })
     }
 }
 
@@ -905,6 +1131,7 @@ impl<
     // FIXME(gbin): this became REALLY ugly with no-std
     #[allow(clippy::too_many_arguments)]
     #[cfg(feature = "std")]
+    #[deprecated(note = "Use CuRuntimeBuilder instead of CuRuntime::new(...).")]
     pub fn new(
         clock: RobotClock,
         subsystem_code: u16,
@@ -924,13 +1151,7 @@ impl<
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
         keyframes_logger: impl WriteStream<KeyFrame> + 'static,
     ) -> CuResult<Self> {
-        let resources = resources_instanciator(config)?;
-        Self::new_with_resources(
-            clock,
-            subsystem_code,
-            config,
-            mission,
-            resources,
+        let parts = CuRuntimeParts::new(
             tasks_instanciator,
             monitored_components,
             culist_component_mapping,
@@ -938,19 +1159,29 @@ impl<
             parallel_rt_metadata,
             monitor_instanciator,
             bridges_instanciator,
+        );
+        CuRuntimeBuilder::new(
+            clock,
+            config,
+            mission,
+            parts,
             copperlists_logger,
             keyframes_logger,
         )
+        .with_subsystem(Subsystem::new(None, subsystem_code))
+        .try_with_resources_instantiator(resources_instanciator)?
+        .build()
     }
 
     #[allow(clippy::too_many_arguments)]
     #[cfg(feature = "std")]
+    #[deprecated(note = "Use CuRuntimeBuilder instead of CuRuntime::new_with_resources(...).")]
     pub fn new_with_resources(
         clock: RobotClock,
         subsystem_code: u16,
         config: &CuConfig,
         mission: &str,
-        mut resources: ResourceManager,
+        resources: ResourceManager,
         tasks_instanciator: impl for<'c> Fn(
             Vec<Option<&'c ComponentConfig>>,
             &mut ResourceManager,
@@ -964,88 +1195,31 @@ impl<
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
         keyframes_logger: impl WriteStream<KeyFrame> + 'static,
     ) -> CuResult<Self> {
-        let graph = config.get_graph(Some(mission))?;
-        let all_instances_configs: Vec<Option<&ComponentConfig>> = graph
-            .get_all_nodes()
-            .iter()
-            .map(|(_, node)| node.get_instance_config())
-            .collect();
-
-        let tasks = tasks_instanciator(all_instances_configs, &mut resources)?;
-        let execution_probe = std::sync::Arc::new(RuntimeExecutionProbe::default());
-        let monitor_metadata = CuMonitoringMetadata::new(
-            CompactString::from(mission),
+        let parts = CuRuntimeParts::new(
+            tasks_instanciator,
             monitored_components,
             culist_component_mapping,
-            CopperListInfo::new(core::mem::size_of::<CopperList<P>>(), NBCL),
-            build_monitor_topology(config, mission)?,
-            None,
-        )?;
-        let monitor_runtime =
-            CuMonitoringRuntime::new(MonitorExecutionProbe::from_shared(execution_probe.clone()));
-        let monitor = monitor_instanciator(config, monitor_metadata, monitor_runtime);
-        let bridges = bridges_instanciator(config, &mut resources)?;
-
-        let (copperlists_logger, keyframes_logger, keyframe_interval) = match &config.logging {
-            Some(logging_config) if logging_config.enable_task_logging => (
-                Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
-                Some(Box::new(keyframes_logger) as Box<dyn WriteStream<KeyFrame>>),
-                logging_config.keyframe_interval.unwrap(), // it is set to a default at parsing time
-            ),
-            Some(_) => (None, None, 0), // explicit no enable logging
-            None => (
-                // default
-                Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
-                Some(Box::new(keyframes_logger) as Box<dyn WriteStream<KeyFrame>>),
-                DEFAULT_KEYFRAME_INTERVAL,
-            ),
-        };
-
-        let copperlists_manager = CopperListsManager::new(copperlists_logger)?;
-        #[cfg(target_os = "none")]
-        {
-            let cl_size = core::mem::size_of::<CopperList<P>>();
-            let total_bytes = cl_size.saturating_mul(NBCL);
-            info!(
-                "CuRuntime::new: copperlists count={} cl_size={} total_bytes={}",
-                NBCL, cl_size, total_bytes
-            );
-        }
-
-        let keyframes_manager = KeyFramesManager {
-            inner: KeyFrame::new(),
-            logger: keyframes_logger,
-            keyframe_interval,
-            last_encoded_bytes: 0,
-            forced_timestamp: None,
-            locked: false,
-        };
-        #[cfg(all(feature = "std", feature = "parallel-rt"))]
-        let parallel_rt = ParallelRt::new(parallel_rt_metadata)?;
-
-        let runtime_config = config.runtime.clone().unwrap_or_default();
-
-        let runtime = Self {
-            subsystem_code,
-            instance_id: 0,
-            tasks,
-            bridges,
-            resources,
-            monitor,
-            execution_probe,
-            clock,
-            copperlists_manager,
-            keyframes_manager,
             #[cfg(all(feature = "std", feature = "parallel-rt"))]
-            parallel_rt,
-            runtime_config,
-        };
-
-        Ok(runtime)
+            parallel_rt_metadata,
+            monitor_instanciator,
+            bridges_instanciator,
+        );
+        CuRuntimeBuilder::new(
+            clock,
+            config,
+            mission,
+            parts,
+            copperlists_logger,
+            keyframes_logger,
+        )
+        .with_subsystem(Subsystem::new(None, subsystem_code))
+        .with_resources(resources)
+        .build()
     }
 
     #[allow(clippy::too_many_arguments)]
     #[cfg(not(feature = "std"))]
+    #[deprecated(note = "Use CuRuntimeBuilder instead of CuRuntime::new(...).")]
     pub fn new(
         clock: RobotClock,
         subsystem_code: u16,
@@ -1063,33 +1237,35 @@ impl<
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
         keyframes_logger: impl WriteStream<KeyFrame> + 'static,
     ) -> CuResult<Self> {
-        #[cfg(target_os = "none")]
-        info!("CuRuntime::new: resources instanciator");
-        let resources = resources_instanciator(config)?;
-        Self::new_with_resources(
-            clock,
-            subsystem_code,
-            config,
-            mission,
-            resources,
+        let parts = CuRuntimeParts::new(
             tasks_instanciator,
             monitored_components,
             culist_component_mapping,
             monitor_instanciator,
             bridges_instanciator,
+        );
+        CuRuntimeBuilder::new(
+            clock,
+            config,
+            mission,
+            parts,
             copperlists_logger,
             keyframes_logger,
         )
+        .with_subsystem(Subsystem::new(None, subsystem_code))
+        .try_with_resources_instantiator(resources_instanciator)?
+        .build()
     }
 
     #[allow(clippy::too_many_arguments)]
     #[cfg(not(feature = "std"))]
+    #[deprecated(note = "Use CuRuntimeBuilder instead of CuRuntime::new_with_resources(...).")]
     pub fn new_with_resources(
         clock: RobotClock,
         subsystem_code: u16,
         config: &CuConfig,
         mission: &str,
-        mut resources: ResourceManager,
+        resources: ResourceManager,
         tasks_instanciator: impl for<'c> Fn(
             Vec<Option<&'c ComponentConfig>>,
             &mut ResourceManager,
@@ -1101,92 +1277,24 @@ impl<
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
         keyframes_logger: impl WriteStream<KeyFrame> + 'static,
     ) -> CuResult<Self> {
-        #[cfg(target_os = "none")]
-        info!("CuRuntime::new: get graph");
-        let graph = config.get_graph(Some(mission))?;
-        #[cfg(target_os = "none")]
-        info!("CuRuntime::new: graph ok");
-        let all_instances_configs: Vec<Option<&ComponentConfig>> = graph
-            .get_all_nodes()
-            .iter()
-            .map(|(_, node)| node.get_instance_config())
-            .collect();
-
-        #[cfg(target_os = "none")]
-        info!("CuRuntime::new: tasks instanciator");
-        let tasks = tasks_instanciator(all_instances_configs, &mut resources)?;
-
-        #[cfg(target_os = "none")]
-        info!("CuRuntime::new: monitor instanciator");
-        let monitor_metadata = CuMonitoringMetadata::new(
-            CompactString::from(mission),
+        let parts = CuRuntimeParts::new(
+            tasks_instanciator,
             monitored_components,
             culist_component_mapping,
-            CopperListInfo::new(core::mem::size_of::<CopperList<P>>(), NBCL),
-            build_monitor_topology(config, mission)?,
-            None,
-        )?;
-        let monitor_runtime = CuMonitoringRuntime::unavailable();
-        let monitor = monitor_instanciator(config, monitor_metadata, monitor_runtime);
-        let execution_probe = RuntimeExecutionProbe::default();
-        #[cfg(target_os = "none")]
-        info!("CuRuntime::new: monitor instanciator ok");
-        #[cfg(target_os = "none")]
-        info!("CuRuntime::new: bridges instanciator");
-        let bridges = bridges_instanciator(config, &mut resources)?;
-
-        let (copperlists_logger, keyframes_logger, keyframe_interval) = match &config.logging {
-            Some(logging_config) if logging_config.enable_task_logging => (
-                Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
-                Some(Box::new(keyframes_logger) as Box<dyn WriteStream<KeyFrame>>),
-                logging_config.keyframe_interval.unwrap(), // it is set to a default at parsing time
-            ),
-            Some(_) => (None, None, 0), // explicit no enable logging
-            None => (
-                // default
-                Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
-                Some(Box::new(keyframes_logger) as Box<dyn WriteStream<KeyFrame>>),
-                DEFAULT_KEYFRAME_INTERVAL,
-            ),
-        };
-
-        let copperlists_manager = CopperListsManager::new(copperlists_logger)?;
-        #[cfg(target_os = "none")]
-        {
-            let cl_size = core::mem::size_of::<CopperList<P>>();
-            let total_bytes = cl_size.saturating_mul(NBCL);
-            info!(
-                "CuRuntime::new: copperlists count={} cl_size={} total_bytes={}",
-                NBCL, cl_size, total_bytes
-            );
-        }
-
-        let keyframes_manager = KeyFramesManager {
-            inner: KeyFrame::new(),
-            logger: keyframes_logger,
-            keyframe_interval,
-            last_encoded_bytes: 0,
-            forced_timestamp: None,
-            locked: false,
-        };
-
-        let runtime_config = config.runtime.clone().unwrap_or_default();
-
-        let runtime = Self {
-            subsystem_code,
-            instance_id: 0,
-            tasks,
-            bridges,
-            resources,
-            monitor,
-            execution_probe,
+            monitor_instanciator,
+            bridges_instanciator,
+        );
+        CuRuntimeBuilder::new(
             clock,
-            copperlists_manager,
-            keyframes_manager,
-            runtime_config,
-        };
-
-        Ok(runtime)
+            config,
+            mission,
+            parts,
+            copperlists_logger,
+            keyframes_logger,
+        )
+        .with_subsystem(Subsystem::new(None, subsystem_code))
+        .with_resources(resources)
+        .build()
     }
 }
 
@@ -1673,6 +1781,8 @@ mod tests {
 
     // Those should be generated by the derive macro
     type Tasks = (TestSource, TestSink);
+    type TestRuntime = CuRuntime<Tasks, (), Msgs, NoMonitor, 2>;
+    const TEST_NBCL: usize = 2;
 
     #[derive(Debug, Encode, Decode, Serialize, Deserialize, Default)]
     struct Msgs(());
@@ -1747,22 +1857,25 @@ mod tests {
         graph.add_node(Node::new("a", "TestSource")).unwrap();
         graph.add_node(Node::new("b", "TestSink")).unwrap();
         graph.connect(0, 1, "()").unwrap();
-        let runtime = CuRuntime::<Tasks, (), Msgs, NoMonitor, 2>::new(
-            RobotClock::default(),
-            0,
-            &config,
-            crate::config::DEFAULT_MISSION_ID,
-            resources_instanciator,
-            tasks_instanciator,
-            &[],
-            &[],
-            #[cfg(all(feature = "std", feature = "parallel-rt"))]
-            &crate::parallel_rt::DISABLED_PARALLEL_RT_METADATA,
-            monitor_instanciator,
-            bridges_instanciator,
-            FakeWriter {},
-            FakeWriter {},
-        );
+        let runtime: CuResult<TestRuntime> =
+            CuRuntimeBuilder::<Tasks, (), Msgs, NoMonitor, TEST_NBCL, _, _, _, _, _>::new(
+                RobotClock::default(),
+                &config,
+                crate::config::DEFAULT_MISSION_ID,
+                CuRuntimeParts::new(
+                    tasks_instanciator,
+                    &[],
+                    &[],
+                    #[cfg(all(feature = "std", feature = "parallel-rt"))]
+                    &crate::parallel_rt::DISABLED_PARALLEL_RT_METADATA,
+                    monitor_instanciator,
+                    bridges_instanciator,
+                ),
+                FakeWriter {},
+                FakeWriter {},
+            )
+            .try_with_resources_instantiator(resources_instanciator)
+            .and_then(|builder| builder.build());
         assert!(runtime.is_ok());
     }
 
@@ -1775,23 +1888,26 @@ mod tests {
         graph.add_node(Node::new("b", "TestSink")).unwrap();
         graph.connect(0, 1, "()").unwrap();
 
-        let mut runtime = CuRuntime::<Tasks, (), Msgs, NoMonitor, 2>::new(
-            RobotClock::default(),
-            0,
-            &config,
-            crate::config::DEFAULT_MISSION_ID,
-            resources_instanciator,
-            tasks_instanciator,
-            &[],
-            &[],
-            #[cfg(all(feature = "std", feature = "parallel-rt"))]
-            &crate::parallel_rt::DISABLED_PARALLEL_RT_METADATA,
-            monitor_instanciator,
-            bridges_instanciator,
-            FakeWriter {},
-            FakeWriter {},
-        )
-        .unwrap();
+        let mut runtime: TestRuntime =
+            CuRuntimeBuilder::<Tasks, (), Msgs, NoMonitor, TEST_NBCL, _, _, _, _, _>::new(
+                RobotClock::default(),
+                &config,
+                crate::config::DEFAULT_MISSION_ID,
+                CuRuntimeParts::new(
+                    tasks_instanciator,
+                    &[],
+                    &[],
+                    #[cfg(all(feature = "std", feature = "parallel-rt"))]
+                    &crate::parallel_rt::DISABLED_PARALLEL_RT_METADATA,
+                    monitor_instanciator,
+                    bridges_instanciator,
+                ),
+                FakeWriter {},
+                FakeWriter {},
+            )
+            .try_with_resources_instantiator(resources_instanciator)
+            .and_then(|builder| builder.build())
+            .unwrap();
 
         // Now emulates the generated runtime
         {

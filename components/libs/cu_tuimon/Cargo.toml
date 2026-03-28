@@ -32,6 +32,7 @@ web-time = "1.1.0"
 
 [target.'cfg(not(all(target_family = "wasm", target_os = "unknown")))'.dependencies]
 dotenvy = "0.15.7"
+libc = { workspace = true }
 libmacchina = "8.1.0"
 pfetch = "2.11.1"
 pfetch-logo-parser = "0.1.1"
@@ -39,4 +40,9 @@ pfetch-logo-parser = "0.1.1"
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
 js-sys = "0.3"
 wasm-bindgen = "0.2"
-web-sys = { version = "0.3", features = ["Navigator", "Screen", "Window"] }
+web-sys = { version = "0.3", features = [
+  "Location",
+  "Navigator",
+  "Screen",
+  "Window",
+] }

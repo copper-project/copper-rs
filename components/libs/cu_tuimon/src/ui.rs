@@ -1,7 +1,7 @@
 use crate::MonitorModel;
 #[cfg(feature = "log_pane")]
 use crate::logpane::StyledLine;
-use crate::model::ComponentStatus;
+use crate::model::{ComponentStatus, MonitorFooterIdentity};
 use crate::palette;
 use crate::system_info::{SystemInfo, default_system_info};
 use crate::tui_nodes::{Connection, NodeGraph, NodeLayout};
@@ -113,6 +113,13 @@ struct HelpHitbox {
     y: u16,
     width: u16,
     height: u16,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct FooterBadge {
+    inner: String,
+    bg: Color,
+    fg: Color,
 }
 
 const TAB_DEFS: &[TabDef] = &[
@@ -1094,36 +1101,38 @@ impl MonitorUi {
             .block(Block::default().style(Style::default().bg(base_bg)));
         f.render_widget(help, area);
 
-        let clid_inner = {
-            let stats = self.model.inner.copperlist_stats.lock().unwrap();
-            let value = stats.last_seen_clid.unwrap_or(0);
-            format!(" CL {:020} ", value)
-        };
-        let clid_width = (clid_inner.chars().count() + 2) as u16;
-        if area.width > clid_width + 2 && area.height >= 1 {
-            let clid_area = Rect {
-                x: area
-                    .x
-                    .saturating_add(area.width.saturating_sub(clid_width + 1)),
-                y: area.y,
-                width: clid_width,
-                height: 1,
-            };
-            let badge_bg = Color::Rgb(216, 157, 63);
-            f.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::styled("", Style::default().fg(badge_bg).bg(base_bg)),
-                    Span::styled(
-                        clid_inner,
-                        Style::default()
-                            .fg(palette::BACKGROUND)
-                            .bg(badge_bg)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled("", Style::default().fg(badge_bg).bg(base_bg)),
-                ])),
-                clid_area,
-            );
+        self.render_footer_badges(f, area, base_bg);
+    }
+
+    fn render_footer_badges(&self, f: &mut Frame, area: Rect, base_bg: Color) {
+        if area.width == 0 || area.height == 0 {
+            return;
+        }
+
+        let clid = self
+            .model
+            .inner
+            .copperlist_stats
+            .lock()
+            .unwrap()
+            .last_seen_clid
+            .unwrap_or(0);
+        let mut badges = footer_badges(self.model.footer_identity(), clid);
+        while !badges.is_empty() {
+            let (line, width) = footer_badge_line(&badges, base_bg);
+            if width <= area.width {
+                f.render_widget(
+                    Paragraph::new(line),
+                    Rect {
+                        x: area.x.saturating_add(area.width.saturating_sub(width)),
+                        y: area.y,
+                        width,
+                        height: 1,
+                    },
+                );
+                return;
+            }
+            badges.remove(0);
         }
     }
 }
@@ -1203,6 +1212,69 @@ mod tests {
         assert_eq!(resized_content_size, initial_content_size);
         assert_eq!(state.graph_cache.key, initial_key);
         assert_eq!(offset, Position::new(max_x, max_y));
+    }
+
+    #[test]
+    fn footer_badges_render_identity_in_requested_order() {
+        let badges = footer_badges(
+            MonitorFooterIdentity {
+                system_name: "robot-alpha".into(),
+                subsystem_name: Some("drivetrain".into()),
+                mission_name: "autonomous".into(),
+                instance_id: 42,
+            },
+            12846,
+        );
+
+        let labels = badges
+            .into_iter()
+            .map(|badge| badge.inner)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            labels,
+            vec![
+                " robot-alpha ".to_string(),
+                " drivetrain ".to_string(),
+                " 42 ".to_string(),
+                " autonomous ".to_string(),
+                " 00000000000000012846 ".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn footer_badges_skip_subsystem_when_absent() {
+        let badges = footer_badges(
+            MonitorFooterIdentity {
+                system_name: "robot-alpha".into(),
+                subsystem_name: None,
+                mission_name: "autonomous".into(),
+                instance_id: 42,
+            },
+            12846,
+        );
+
+        let labels = badges
+            .into_iter()
+            .map(|badge| badge.inner)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            labels,
+            vec![
+                " robot-alpha ".to_string(),
+                " 42 ".to_string(),
+                " autonomous ".to_string(),
+                " 00000000000000012846 ".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn clip_with_ellipsis_truncates_long_footer_values() {
+        assert_eq!(
+            clip_with_ellipsis("balancebot-simulator-east", 12),
+            "balancebo..."
+        );
     }
 
     fn test_monitor_model() -> MonitorModel {
@@ -1808,6 +1880,91 @@ fn clip_tail(value: &str, max_chars: usize) -> String {
         .map(|(idx, _)| idx)
         .unwrap_or(value.len());
     value[start..].to_string()
+}
+
+fn clip_with_ellipsis(value: &str, max_chars: usize) -> String {
+    if max_chars == 0 {
+        return String::new();
+    }
+    let char_count = value.chars().count();
+    if char_count <= max_chars {
+        return value.to_string();
+    }
+    if max_chars <= 3 {
+        return value.chars().take(max_chars).collect();
+    }
+    let prefix: String = value.chars().take(max_chars - 3).collect();
+    format!("{prefix}...")
+}
+
+fn footer_badges(identity: MonitorFooterIdentity, clid: u64) -> Vec<FooterBadge> {
+    let mut badges = vec![FooterBadge {
+        inner: format!(
+            " {} ",
+            clip_with_ellipsis(identity.system_name.as_str(), 18)
+        ),
+        bg: Color::Rgb(92, 102, 150),
+        fg: Color::Rgb(236, 236, 236),
+    }];
+    if let Some(subsystem_name) = identity.subsystem_name {
+        badges.push(FooterBadge {
+            inner: format!(" {} ", clip_with_ellipsis(subsystem_name.as_str(), 18)),
+            bg: Color::Rgb(116, 88, 128),
+            fg: Color::Rgb(236, 236, 236),
+        });
+    }
+    badges.extend([
+        FooterBadge {
+            inner: format!(" {} ", identity.instance_id),
+            bg: Color::Rgb(136, 92, 78),
+            fg: Color::Rgb(248, 231, 176),
+        },
+        FooterBadge {
+            inner: format!(
+                " {} ",
+                clip_with_ellipsis(identity.mission_name.as_str(), 16)
+            ),
+            bg: Color::Rgb(86, 114, 98),
+            fg: Color::Rgb(236, 236, 236),
+        },
+        FooterBadge {
+            inner: format!(" {:020} ", clid),
+            bg: Color::Rgb(198, 146, 64),
+            fg: palette::BACKGROUND,
+        },
+    ]);
+    badges
+}
+
+fn footer_badge_line(badges: &[FooterBadge], base_bg: Color) -> (Line<'static>, u16) {
+    if badges.is_empty() {
+        return (Line::default(), 0);
+    }
+
+    let mut spans = Vec::with_capacity(badges.len().saturating_mul(2).saturating_add(1));
+    let mut width = 0u16;
+    spans.push(Span::styled(
+        "",
+        Style::default().fg(badges[0].bg).bg(base_bg),
+    ));
+    width = width.saturating_add(1);
+
+    for (idx, badge) in badges.iter().enumerate() {
+        spans.push(Span::styled(
+            badge.inner.clone(),
+            Style::default()
+                .fg(badge.fg)
+                .bg(badge.bg)
+                .add_modifier(Modifier::BOLD),
+        ));
+        width = width.saturating_add(badge.inner.chars().count() as u16);
+
+        let next_bg = badges.get(idx + 1).map(|next| next.bg).unwrap_or(base_bg);
+        spans.push(Span::styled("", Style::default().fg(badge.bg).bg(next_bg)));
+        width = width.saturating_add(1);
+    }
+
+    (Line::from(spans), width)
 }
 
 fn initial_graph_scroll_offset(area: Rect, content_size: Size, graph_bounds: Size) -> Position {
