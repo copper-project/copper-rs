@@ -3921,21 +3921,25 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: building runtime");
-                let mut copper_runtime = CuRuntime::<#mission_mod::#tasks_type, #mission_mod::CuBridges, #mission_mod::CuStampedDataSet, #monitor_type, #copperlist_count_tokens>::new_with_resources(
+                let copper_runtime = CuRuntimeBuilder::<#mission_mod::#tasks_type, #mission_mod::CuBridges, #mission_mod::CuStampedDataSet, #monitor_type, #copperlist_count_tokens, _, _, _, _, _>::new(
                     clock,
-                    #application_name::subsystem().code(),
                     &config,
                     #mission,
-                    resources,
-                    #mission_mod::#tasks_instanciator_fn,
-                    #mission_mod::MONITORED_COMPONENTS,
-                    #mission_mod::CULIST_COMPONENT_MAPPING,
-                    #parallel_rt_metadata_arg
-                    #mission_mod::monitor_instanciator,
-                    #mission_mod::bridges_instanciator,
+                    CuRuntimeParts::new(
+                        #mission_mod::#tasks_instanciator_fn,
+                        #mission_mod::MONITORED_COMPONENTS,
+                        #mission_mod::CULIST_COMPONENT_MAPPING,
+                        #parallel_rt_metadata_arg
+                        #mission_mod::monitor_instanciator,
+                        #mission_mod::bridges_instanciator,
+                    ),
                     copperlist_stream,
-                    keyframes_stream)?;
-                copper_runtime.set_instance_id(instance_id);
+                    keyframes_stream,
+                )
+                .with_subsystem(#application_name::subsystem())
+                .with_instance_id(instance_id)
+                .with_resources(resources)
+                .build()?;
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: runtime built");
 
@@ -4120,14 +4124,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     ) -> CuResult<Self> {
                         let mut noop =
                             |_step: SimStep<'_>| cu29::simulation::SimOverride::ExecuteByRuntime;
-                        let mut app = <Self as CuSimApplication<S, L>>::new(
+                        let app_resources = Self::init_resources(config_override)?;
+                        Self::new_with_resources(
                             clock,
                             unified_logger,
-                            config_override,
+                            app_resources,
+                            instance_id,
                             &mut noop,
-                        )?;
-                        app.copper_runtime_mut().set_instance_id(instance_id);
-                        Ok(app)
+                        )
                     }
                 }
             })
@@ -4470,6 +4474,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::config::CuConfig;
                 use cu29::config::ComponentConfig;
                 use cu29::curuntime::CuRuntime;
+                use cu29::curuntime::CuRuntimeBuilder;
+                use cu29::curuntime::CuRuntimeParts;
                 use cu29::curuntime::KeyFrame;
                 use cu29::curuntime::RuntimeLifecycleConfigSource;
                 use cu29::curuntime::RuntimeLifecycleEvent;

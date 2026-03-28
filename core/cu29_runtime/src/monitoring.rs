@@ -551,6 +551,7 @@ impl MonitorComponentMetadata {
 pub struct CuMonitoringMetadata {
     mission_id: CompactString,
     subsystem_id: Option<CompactString>,
+    instance_id: u32,
     layout: CopperListLayout,
     copperlist_info: CopperListInfo,
     topology: MonitorTopology,
@@ -571,6 +572,7 @@ impl CuMonitoringMetadata {
         Ok(Self {
             mission_id,
             subsystem_id: None,
+            instance_id: 0,
             layout: CopperListLayout::new(components, culist_component_mapping),
             copperlist_info,
             topology,
@@ -617,6 +619,11 @@ impl CuMonitoringMetadata {
     /// multi-Copper deployment.
     pub fn subsystem_id(&self) -> Option<&str> {
         self.subsystem_id.as_deref()
+    }
+
+    /// Deployment/runtime instance identity for this runtime instance.
+    pub fn instance_id(&self) -> u32 {
+        self.instance_id
     }
 
     /// Canonical table of monitored runtime components.
@@ -694,6 +701,11 @@ impl CuMonitoringMetadata {
 
     pub fn with_subsystem_id(mut self, subsystem_id: Option<&str>) -> Self {
         self.subsystem_id = subsystem_id.map(CompactString::from);
+        self
+    }
+
+    pub fn with_instance_id(mut self, instance_id: u32) -> Self {
+        self.instance_id = instance_id;
         self
     }
 }

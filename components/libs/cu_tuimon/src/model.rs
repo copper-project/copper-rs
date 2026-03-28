@@ -10,7 +10,6 @@ use cu29::monitoring::{
 use cu29::prelude::{CuCompactString, CuTime, pool};
 #[cfg(feature = "log_pane")]
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 use std::time::{Duration, Instant};
@@ -32,7 +31,7 @@ pub(crate) struct MonitorModelInner {
     pub(crate) system_name: CompactString,
     pub(crate) subsystem_name: Option<CompactString>,
     pub(crate) mission_name: CompactString,
-    pub(crate) instance_id: AtomicU32,
+    pub(crate) instance_id: u32,
     pub(crate) component_stats: Mutex<ComponentStats>,
     pub(crate) component_statuses: Mutex<Vec<ComponentStatus>>,
     pub(crate) pool_stats: Mutex<Vec<PoolStats>>,
@@ -49,6 +48,7 @@ impl MonitorModel {
             metadata.topology().clone(),
             metadata.mission_id(),
             metadata.subsystem_id(),
+            metadata.instance_id(),
         )
     }
 
@@ -57,7 +57,7 @@ impl MonitorModel {
         copperlist_info: CopperListInfo,
         topology: MonitorTopology,
     ) -> Self {
-        Self::from_parts_with_identity(components, copperlist_info, topology, "default", None)
+        Self::from_parts_with_identity(components, copperlist_info, topology, "default", None, 0)
     }
 
     fn from_parts_with_identity(
@@ -66,6 +66,7 @@ impl MonitorModel {
         topology: MonitorTopology,
         mission_name: &str,
         subsystem_name: Option<&str>,
+        instance_id: u32,
     ) -> Self {
         let component_count = components.len();
         let mut copperlist_stats = CopperListStats::new();
@@ -80,7 +81,7 @@ impl MonitorModel {
                     .filter(|name| !name.trim().is_empty())
                     .map(CompactString::from),
                 mission_name: CompactString::from(mission_name),
-                instance_id: AtomicU32::new(0),
+                instance_id,
                 component_stats: Mutex::new(ComponentStats::new(
                     component_count,
                     CuDuration::from(Duration::from_secs(5)),
@@ -106,16 +107,12 @@ impl MonitorModel {
         self.inner.components.len()
     }
 
-    pub fn set_instance_id(&self, instance_id: u32) {
-        self.inner.instance_id.store(instance_id, Ordering::Relaxed);
-    }
-
     pub(crate) fn footer_identity(&self) -> MonitorFooterIdentity {
         MonitorFooterIdentity {
             system_name: self.inner.system_name.clone(),
             subsystem_name: self.inner.subsystem_name.clone(),
             mission_name: self.inner.mission_name.clone(),
-            instance_id: self.inner.instance_id.load(Ordering::Relaxed),
+            instance_id: self.inner.instance_id,
         }
     }
 
@@ -512,10 +509,10 @@ mod tests {
             None,
         )
         .expect("valid monitoring metadata")
-        .with_subsystem_id(Some("balancebot"));
+        .with_subsystem_id(Some("balancebot"))
+        .with_instance_id(7);
 
         let model = MonitorModel::from_metadata(&metadata);
-        model.set_instance_id(7);
 
         let identity = model.footer_identity();
         assert_eq!(identity.subsystem_name.as_deref(), Some("balancebot"));
