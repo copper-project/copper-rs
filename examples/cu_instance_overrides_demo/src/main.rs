@@ -1,5 +1,4 @@
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -151,9 +150,8 @@ fn drive() -> CuResult<()> {
             .map_err(|err| CuError::new_with_cause("failed to create log directory", err))?;
     }
 
-    let ctx = basic_copper_setup(&logger_path, None, true, None)?;
-    let mut app = AppBuilder::new()
-        .with_context(&ctx)
+    let mut app = App::builder()
+        .with_log_path(&logger_path, None)?
         .with_instance_id(instance_id)
         .build()?;
     app.start_all_tasks()?;
