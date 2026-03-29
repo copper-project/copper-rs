@@ -137,6 +137,14 @@ impl ComponentConfig {
         let ComponentConfig(config) = self;
         config.insert(key.to_string(), value.into());
     }
+
+    #[allow(dead_code)]
+    pub fn merge_from(&mut self, other: &ComponentConfig) {
+        let ComponentConfig(config) = self;
+        for (key, value) in &other.0 {
+            config.insert(key.clone(), value.clone());
+        }
+    }
 }
 
 fn ron_value_to_cu_value(value: &RonValue) -> Result<CuValue, ConfigError> {
@@ -1484,6 +1492,15 @@ pub struct MultiCopperInterconnectConfig {
     pub msg: String,
 }
 
+/// One path-based config overlay applied to a parsed local Copper config.
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct InstanceConfigSetOperation {
+    pub path: String,
+    pub value: ComponentConfig,
+}
+
 /// Typed endpoint reference used by validated multi-Copper interconnects.
 #[cfg(feature = "std")]
 #[allow(dead_code)]
@@ -1534,6 +1551,7 @@ pub struct MultiCopperInterconnect {
 pub struct MultiCopperConfig {
     pub subsystems: Vec<MultiCopperSubsystem>,
     pub interconnects: Vec<MultiCopperInterconnect>,
+    pub instance_overrides_root: Option<String>,
 }
 
 #[cfg(feature = "std")]
@@ -1541,6 +1559,35 @@ impl MultiCopperConfig {
     #[allow(dead_code)]
     pub fn subsystem(&self, id: &str) -> Option<&MultiCopperSubsystem> {
         self.subsystems.iter().find(|subsystem| subsystem.id == id)
+    }
+
+    #[allow(dead_code)]
+    pub fn resolve_subsystem_config_for_instance(
+        &self,
+        subsystem_id: &str,
+        instance_id: u32,
+    ) -> CuResult<CuConfig> {
+        let subsystem = self.subsystem(subsystem_id).ok_or_else(|| {
+            CuError::from(format!(
+                "Multi-Copper config does not define subsystem '{}'.",
+                subsystem_id
+            ))
+        })?;
+        let mut config = subsystem.config.clone();
+
+        let Some(root) = &self.instance_overrides_root else {
+            return Ok(config);
+        };
+
+        let override_path = std::path::Path::new(root)
+            .join(instance_id.to_string())
+            .join(format!("{subsystem_id}.ron"));
+        if !override_path.exists() {
+            return Ok(config);
+        }
+
+        apply_instance_overrides_from_file(&mut config, &override_path)?;
+        Ok(config)
     }
 }
 
@@ -1550,6 +1597,14 @@ impl MultiCopperConfig {
 struct MultiCopperConfigRepresentation {
     subsystems: Vec<MultiCopperSubsystemConfig>,
     interconnects: Vec<MultiCopperInterconnectConfig>,
+    instance_overrides_root: Option<String>,
+}
+
+#[cfg(feature = "std")]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+struct InstanceConfigOverridesRepresentation {
+    #[serde(default)]
+    set: Vec<InstanceConfigSetOperation>,
 }
 
 #[cfg(feature = "std")]
@@ -1567,6 +1622,14 @@ struct MultiCopperChannelContract {
     bridge_type: String,
     direction: MultiCopperChannelDirection,
     msg: Option<String>,
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InstanceConfigTargetKind {
+    Task,
+    Resource,
+    Bridge,
 }
 
 /// This is the main Copper configuration representation.
@@ -2805,6 +2868,211 @@ fn process_includes(
 }
 
 #[cfg(feature = "std")]
+fn parse_instance_config_overrides_string(
+    content: &str,
+) -> CuResult<InstanceConfigOverridesRepresentation> {
+    Options::default()
+        .with_default_extension(Extensions::IMPLICIT_SOME)
+        .with_default_extension(Extensions::UNWRAP_NEWTYPES)
+        .with_default_extension(Extensions::UNWRAP_VARIANT_NEWTYPES)
+        .from_str(content)
+        .map_err(|e| {
+            CuError::from(format!(
+                "Failed to parse instance override file: Error: {} at position {}",
+                e.code, e.span
+            ))
+        })
+}
+
+#[cfg(feature = "std")]
+fn merge_component_config(target: &mut Option<ComponentConfig>, value: &ComponentConfig) {
+    if let Some(existing) = target {
+        existing.merge_from(value);
+    } else {
+        *target = Some(value.clone());
+    }
+}
+
+#[cfg(feature = "std")]
+fn apply_task_config_override_to_graph(
+    graph: &mut CuGraph,
+    task_id: &str,
+    value: &ComponentConfig,
+) -> usize {
+    let mut matches = 0usize;
+    let node_indices: Vec<_> = graph.0.node_indices().collect();
+    for node_index in node_indices {
+        let node = &mut graph.0[node_index];
+        if node.get_flavor() == Flavor::Task && node.id == task_id {
+            merge_component_config(&mut node.config, value);
+            matches += 1;
+        }
+    }
+    matches
+}
+
+#[cfg(feature = "std")]
+fn apply_bridge_node_config_override_to_graph(
+    graph: &mut CuGraph,
+    bridge_id: &str,
+    value: &ComponentConfig,
+) {
+    let node_indices: Vec<_> = graph.0.node_indices().collect();
+    for node_index in node_indices {
+        let node = &mut graph.0[node_index];
+        if node.get_flavor() == Flavor::Bridge && node.id == bridge_id {
+            merge_component_config(&mut node.config, value);
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+fn parse_instance_override_target(path: &str) -> CuResult<(InstanceConfigTargetKind, String)> {
+    let mut parts = path.split('/');
+    let scope = parts.next().unwrap_or_default();
+    let id = parts.next().unwrap_or_default();
+    let leaf = parts.next().unwrap_or_default();
+
+    if scope.is_empty() || id.is_empty() || leaf.is_empty() || parts.next().is_some() {
+        return Err(CuError::from(format!(
+            "Invalid instance override path '{}'. Expected 'tasks/<id>/config', 'resources/<id>/config', or 'bridges/<id>/config'.",
+            path
+        )));
+    }
+
+    if leaf != "config" {
+        return Err(CuError::from(format!(
+            "Invalid instance override path '{}'. Only the '/config' leaf is supported.",
+            path
+        )));
+    }
+
+    let kind = match scope {
+        "tasks" => InstanceConfigTargetKind::Task,
+        "resources" => InstanceConfigTargetKind::Resource,
+        "bridges" => InstanceConfigTargetKind::Bridge,
+        _ => {
+            return Err(CuError::from(format!(
+                "Invalid instance override path '{}'. Supported roots are 'tasks', 'resources', and 'bridges'.",
+                path
+            )));
+        }
+    };
+
+    Ok((kind, id.to_string()))
+}
+
+#[cfg(feature = "std")]
+fn apply_instance_config_set_operation(
+    config: &mut CuConfig,
+    operation: &InstanceConfigSetOperation,
+) -> CuResult<()> {
+    let (target_kind, target_id) = parse_instance_override_target(&operation.path)?;
+
+    match target_kind {
+        InstanceConfigTargetKind::Task => {
+            let matches = match &mut config.graphs {
+                ConfigGraphs::Simple(graph) => {
+                    apply_task_config_override_to_graph(graph, &target_id, &operation.value)
+                }
+                ConfigGraphs::Missions(graphs) => graphs
+                    .values_mut()
+                    .map(|graph| {
+                        apply_task_config_override_to_graph(graph, &target_id, &operation.value)
+                    })
+                    .sum(),
+            };
+
+            if matches == 0 {
+                return Err(CuError::from(format!(
+                    "Instance override path '{}' targets unknown task '{}'.",
+                    operation.path, target_id
+                )));
+            }
+        }
+        InstanceConfigTargetKind::Resource => {
+            let mut matches = 0usize;
+            for resource in &mut config.resources {
+                if resource.id == target_id {
+                    merge_component_config(&mut resource.config, &operation.value);
+                    matches += 1;
+                }
+            }
+            if matches == 0 {
+                return Err(CuError::from(format!(
+                    "Instance override path '{}' targets unknown resource '{}'.",
+                    operation.path, target_id
+                )));
+            }
+        }
+        InstanceConfigTargetKind::Bridge => {
+            let mut matches = 0usize;
+            for bridge in &mut config.bridges {
+                if bridge.id == target_id {
+                    merge_component_config(&mut bridge.config, &operation.value);
+                    matches += 1;
+                }
+            }
+            if matches == 0 {
+                return Err(CuError::from(format!(
+                    "Instance override path '{}' targets unknown bridge '{}'.",
+                    operation.path, target_id
+                )));
+            }
+
+            match &mut config.graphs {
+                ConfigGraphs::Simple(graph) => {
+                    apply_bridge_node_config_override_to_graph(graph, &target_id, &operation.value);
+                }
+                ConfigGraphs::Missions(graphs) => {
+                    for graph in graphs.values_mut() {
+                        apply_bridge_node_config_override_to_graph(
+                            graph,
+                            &target_id,
+                            &operation.value,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "std")]
+fn apply_instance_overrides(
+    config: &mut CuConfig,
+    overrides: &InstanceConfigOverridesRepresentation,
+) -> CuResult<()> {
+    for operation in &overrides.set {
+        apply_instance_config_set_operation(config, operation)?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "std")]
+fn apply_instance_overrides_from_file(
+    config: &mut CuConfig,
+    override_path: &std::path::Path,
+) -> CuResult<()> {
+    let override_content = read_to_string(override_path).map_err(|e| {
+        CuError::from(format!(
+            "Failed to read instance override file '{}'",
+            override_path.display()
+        ))
+        .add_cause(e.to_string().as_str())
+    })?;
+    let overrides = parse_instance_config_overrides_string(&override_content).map_err(|e| {
+        CuError::from(format!(
+            "Failed to parse instance override file '{}': {e}",
+            override_path.display()
+        ))
+    })?;
+    apply_instance_overrides(config, &overrides)
+}
+
+#[cfg(feature = "std")]
 #[allow(dead_code)]
 fn parse_multi_config_string(content: &str) -> CuResult<MultiCopperConfigRepresentation> {
     Options::default()
@@ -2977,6 +3245,16 @@ fn validate_multi_config_representation(
     representation: MultiCopperConfigRepresentation,
     file_path: Option<&str>,
 ) -> CuResult<MultiCopperConfig> {
+    if representation
+        .instance_overrides_root
+        .as_ref()
+        .is_some_and(|root| root.trim().is_empty())
+    {
+        return Err(CuError::from(
+            "Multi-Copper instance_overrides_root must not be empty.",
+        ));
+    }
+
     if representation.subsystems.is_empty() {
         return Err(CuError::from(
             "Multi-Copper config must declare at least one subsystem.",
@@ -3148,9 +3426,15 @@ fn validate_multi_config_representation(
         });
     }
 
+    let instance_overrides_root = representation
+        .instance_overrides_root
+        .as_ref()
+        .map(|root| resolve_relative_config_path(file_path, root));
+
     Ok(MultiCopperConfig {
         subsystems,
         interconnects,
+        instance_overrides_root,
     })
 }
 
@@ -4275,6 +4559,47 @@ mod tests {
     }
 
     #[cfg(feature = "std")]
+    fn instance_override_subsystem_config() -> &'static str {
+        r#"(
+            tasks: [
+                (
+                    id: "imu",
+                    type: "demo::ImuTask",
+                    config: {
+                        "sample_hz": 200,
+                    },
+                ),
+            ],
+            resources: [
+                (
+                    id: "board",
+                    provider: "demo::BoardBundle",
+                    config: {
+                        "bus": "i2c-1",
+                    },
+                ),
+            ],
+            bridges: [
+                (
+                    id: "radio",
+                    type: "demo::RadioBridge",
+                    config: {
+                        "mtu": 32,
+                    },
+                    channels: [
+                        Tx(id: "tx"),
+                        Rx(id: "rx"),
+                    ],
+                ),
+            ],
+            cnx: [
+                (src: "imu", dst: "radio/tx", msg: "demo::Packet"),
+                (src: "radio/rx", dst: "imu", msg: "demo::Packet"),
+            ],
+        )"#
+    }
+
+    #[cfg(feature = "std")]
     #[test]
     fn test_read_multi_configuration_assigns_stable_subsystem_codes() {
         let dir = multi_config_test_dir("stable_ids");
@@ -4362,6 +4687,171 @@ mod tests {
         assert!(
             err.to_string()
                 .contains("declares message type 'demo::Wrong'"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_read_multi_configuration_resolves_instance_override_root() {
+        let dir = multi_config_test_dir("instance_root");
+        write_multi_config_file(&dir, "robot.ron", instance_override_subsystem_config());
+        let network_path = write_multi_config_file(
+            &dir,
+            "multi_copper.ron",
+            r#"(
+                subsystems: [
+                    (id: "robot", config: "robot.ron"),
+                ],
+                interconnects: [],
+                instance_overrides_root: "instances",
+            )"#,
+        );
+
+        let config =
+            read_multi_configuration(network_path.to_str().expect("network path utf8")).unwrap();
+
+        assert_eq!(
+            config.instance_overrides_root.as_deref().map(Path::new),
+            Some(dir.join("instances").as_path())
+        );
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_resolve_subsystem_config_for_instance_applies_overrides() {
+        let dir = multi_config_test_dir("instance_apply");
+        write_multi_config_file(&dir, "robot.ron", instance_override_subsystem_config());
+        let instances_dir = dir.join("instances").join("17");
+        std::fs::create_dir_all(&instances_dir).expect("create instance dir");
+        write_multi_config_file(
+            &instances_dir,
+            "robot.ron",
+            r#"(
+                set: [
+                    (
+                        path: "tasks/imu/config",
+                        value: {
+                            "gyro_bias": [0.1, -0.2, 0.3],
+                        },
+                    ),
+                    (
+                        path: "resources/board/config",
+                        value: {
+                            "bus": "robot17-imu",
+                        },
+                    ),
+                    (
+                        path: "bridges/radio/config",
+                        value: {
+                            "mtu": 64,
+                        },
+                    ),
+                ],
+            )"#,
+        );
+        let network_path = write_multi_config_file(
+            &dir,
+            "multi_copper.ron",
+            r#"(
+                subsystems: [
+                    (id: "robot", config: "robot.ron"),
+                ],
+                interconnects: [],
+                instance_overrides_root: "instances",
+            )"#,
+        );
+
+        let multi =
+            read_multi_configuration(network_path.to_str().expect("network path utf8")).unwrap();
+        let effective = multi
+            .resolve_subsystem_config_for_instance("robot", 17)
+            .expect("effective config");
+
+        let graph = effective.get_graph(None).expect("graph");
+        let imu_id = graph.get_node_id_by_name("imu").expect("imu node");
+        let imu = graph.get_node(imu_id).expect("imu weight");
+        let imu_cfg = imu.get_instance_config().expect("imu config");
+        assert_eq!(imu_cfg.get::<u64>("sample_hz").unwrap(), Some(200));
+        let gyro_bias: Vec<f64> = imu_cfg
+            .get_value("gyro_bias")
+            .expect("gyro_bias deserialize")
+            .expect("gyro_bias value");
+        assert_eq!(gyro_bias, vec![0.1, -0.2, 0.3]);
+
+        let board = effective
+            .resources
+            .iter()
+            .find(|resource| resource.id == "board")
+            .expect("board resource");
+        assert_eq!(
+            board.config.as_ref().unwrap().get::<String>("bus").unwrap(),
+            Some("robot17-imu".to_string())
+        );
+
+        let radio = effective
+            .bridges
+            .iter()
+            .find(|bridge| bridge.id == "radio")
+            .expect("radio bridge");
+        assert_eq!(
+            radio.config.as_ref().unwrap().get::<u64>("mtu").unwrap(),
+            Some(64)
+        );
+
+        let radio_id = graph.get_node_id_by_name("radio").expect("radio node");
+        let radio_node = graph.get_node(radio_id).expect("radio weight");
+        assert_eq!(
+            radio_node
+                .get_instance_config()
+                .unwrap()
+                .get::<u64>("mtu")
+                .unwrap(),
+            Some(64)
+        );
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_resolve_subsystem_config_for_instance_rejects_unknown_path() {
+        let dir = multi_config_test_dir("instance_unknown");
+        write_multi_config_file(&dir, "robot.ron", instance_override_subsystem_config());
+        let instances_dir = dir.join("instances").join("17");
+        std::fs::create_dir_all(&instances_dir).expect("create instance dir");
+        write_multi_config_file(
+            &instances_dir,
+            "robot.ron",
+            r#"(
+                set: [
+                    (
+                        path: "tasks/missing/config",
+                        value: {
+                            "gyro_bias": [1.0, 2.0, 3.0],
+                        },
+                    ),
+                ],
+            )"#,
+        );
+        let network_path = write_multi_config_file(
+            &dir,
+            "multi_copper.ron",
+            r#"(
+                subsystems: [
+                    (id: "robot", config: "robot.ron"),
+                ],
+                interconnects: [],
+                instance_overrides_root: "instances",
+            )"#,
+        );
+
+        let multi =
+            read_multi_configuration(network_path.to_str().expect("network path utf8")).unwrap();
+        let err = multi
+            .resolve_subsystem_config_for_instance("robot", 17)
+            .expect_err("unknown task override should fail");
+
+        assert!(
+            err.to_string().contains("targets unknown task 'missing'"),
             "unexpected error: {err}"
         );
     }

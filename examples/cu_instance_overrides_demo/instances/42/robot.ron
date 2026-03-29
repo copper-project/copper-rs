@@ -1,0 +1,11 @@
+(
+    set: [
+        (
+            path: "tasks/reporter/config",
+            value: {
+                "label": "robot-42",
+                "gyro_bias": [-0.021, 0.005, 0.014],
+            },
+        ),
+    ],
+)

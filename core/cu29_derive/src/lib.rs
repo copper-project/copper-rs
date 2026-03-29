@@ -3140,6 +3140,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let prepare_config_sig = if std {
             quote! {
                 fn prepare_config(
+                    instance_id: u32,
                     config_override: Option<CuConfig>,
                 ) -> CuResult<(CuConfig, RuntimeLifecycleConfigSource)>
             }
@@ -3150,19 +3151,57 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         };
 
         let prepare_config_call = if std {
-            quote! { Self::prepare_config(config_override)? }
+            quote! { Self::prepare_config(instance_id, config_override)? }
         } else {
             quote! { Self::prepare_config()? }
         };
 
         let prepare_resources_sig = if std {
             quote! {
-                pub fn prepare_resources(config_override: Option<CuConfig>) -> CuResult<AppResources>
+                pub fn prepare_resources_for_instance(
+                    instance_id: u32,
+                    config_override: Option<CuConfig>,
+                ) -> CuResult<AppResources>
             }
         } else {
             quote! {
                 pub fn prepare_resources() -> CuResult<AppResources>
             }
+        };
+
+        let prepare_resources_compat_fn = if std {
+            Some(quote! {
+                pub fn prepare_resources(
+                    config_override: Option<CuConfig>,
+                ) -> CuResult<AppResources> {
+                    Self::prepare_resources_for_instance(0, config_override)
+                }
+            })
+        } else {
+            None
+        };
+
+        let init_resources_compat_fn = if std {
+            Some(quote! {
+                pub fn init_resources_for_instance(
+                    instance_id: u32,
+                    config_override: Option<CuConfig>,
+                ) -> CuResult<AppResources> {
+                    Self::prepare_resources_for_instance(instance_id, config_override)
+                }
+
+                pub fn init_resources(
+                    config_override: Option<CuConfig>,
+                ) -> CuResult<AppResources> {
+                    Self::prepare_resources(config_override)
+                }
+            })
+        } else {
+            Some(quote! {
+                pub fn init_resources() -> CuResult<AppResources> {
+                    Self::prepare_resources()
+                }
+            })
         };
 
         let build_with_resources_sig = if sim_mode {
@@ -3834,6 +3873,37 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
+        let new_with_resources_compat_fn = if sim_mode {
+            quote! {
+                pub fn new_with_resources<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>(
+                    clock: RobotClock,
+                    unified_logger: Arc<Mutex<L>>,
+                    app_resources: AppResources,
+                    instance_id: u32,
+                    sim_callback: &mut impl FnMut(SimStep) -> SimOverride,
+                ) -> CuResult<Self> {
+                    Self::build_with_resources(
+                        clock,
+                        unified_logger,
+                        app_resources,
+                        instance_id,
+                        sim_callback,
+                    )
+                }
+            }
+        } else {
+            quote! {
+                pub fn new_with_resources<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>(
+                    clock: RobotClock,
+                    unified_logger: Arc<Mutex<L>>,
+                    app_resources: AppResources,
+                    instance_id: u32,
+                ) -> CuResult<Self> {
+                    Self::build_with_resources(clock, unified_logger, app_resources, instance_id)
+                }
+            }
+        };
+
         let build_with_resources_fn = quote! {
             #build_with_resources_sig {
                 let AppResources {
@@ -4002,9 +4072,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
 
                 #prepare_config_fn
-
+                #prepare_resources_compat_fn
                 #prepare_resources_fn
-
+                #init_resources_compat_fn
+                #new_with_resources_compat_fn
                 #build_with_resources_fn
 
                 /// Mutable access to the underlying runtime (used by tools such as deterministic re-sim).
@@ -4149,7 +4220,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         };
 
         let builder_prepare_config_call = if std {
-            quote! { #application_name::prepare_config(self.config_override)? }
+            quote! { #application_name::prepare_config(self.instance_id, self.config_override)? }
         } else {
             quote! {{
                 let _ = self.config_override;
@@ -4337,6 +4408,20 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             None
         };
 
+        let builder_with_unified_logger_method = if std {
+            Some(quote! {
+                #[allow(dead_code)]
+                pub fn with_unified_logger(
+                    self,
+                    unified_logger: Arc<Mutex<UnifiedLoggerWrite>>,
+                ) -> #builder_name<#builder_log_path_generics> {
+                    self.with_logger::<MmapSectionStorage, UnifiedLoggerWrite>(unified_logger)
+                }
+            })
+        } else {
+            None
+        };
+
         // backward compat on std non-parameterized impl.
         let std_application_impl = if sim_mode {
             // sim mode
@@ -4421,6 +4506,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         _storage: core::marker::PhantomData,
                     }
                 }
+
+                #builder_with_unified_logger_method
 
                 #[allow(dead_code)]
                 pub fn with_instance_id(mut self, instance_id: u32) -> Self {
@@ -4827,20 +4914,23 @@ fn build_config_load_stmt(
                         subsystem_id
                     );
                     let multi_config = cu29::config::read_multi_configuration(config_filename)?;
-                    let subsystem = multi_config.subsystem(subsystem_id).ok_or_else(|| {
-                        CuError::from(format!(
-                            "Multi-Copper configuration '{}' does not define subsystem '{}'.",
-                            config_filename,
-                            subsystem_id
-                        ))
-                    })?;
-                    (subsystem.config.clone(), RuntimeLifecycleConfigSource::ExternalFile)
+                    (
+                        multi_config.resolve_subsystem_config_for_instance(subsystem_id, instance_id)?,
+                        RuntimeLifecycleConfigSource::ExternalFile,
+                    )
                 } else {
                     let original_config = Self::original_config();
                     debug!(
                         "CuConfig: Using the bundled subsystem configuration compiled into the binary (subsystem={}).",
                         #subsystem_id
                     );
+                    if instance_id != 0 {
+                        debug!(
+                            "CuConfig: runtime file '{}' is missing, so instance-specific overrides for instance_id={} cannot be resolved; using bundled subsystem defaults.",
+                            config_filename,
+                            instance_id
+                        );
+                    }
                     (
                         cu29::config::read_configuration_str(original_config, None)?,
                         RuntimeLifecycleConfigSource::BundledDefault,
@@ -4849,6 +4939,7 @@ fn build_config_load_stmt(
             }
         } else {
             quote! {
+                let _ = instance_id;
                 let (config, config_source) = if let Some(overridden_config) = config_override {
                     debug!("CuConfig: Overridden programmatically.");
                     (overridden_config, RuntimeLifecycleConfigSource::ProgrammaticOverride)

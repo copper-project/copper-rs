@@ -1,0 +1,17 @@
+[package]
+name = "cu-instance-overrides-demo"
+description = "Example showing instance-specific config overlays resolved from multi_copper.ron"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+publish = false
+
+[dependencies]
+cu29 = { workspace = true }
+serde = { workspace = true }
