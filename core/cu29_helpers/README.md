@@ -6,7 +6,7 @@ It exists as a compatibility stub so downstream users who still depend on
 `cu29-helpers` get a compile-time migration message that points them at the new
 generated app builder API:
 
-```rust
+```rust,ignore
 let mut app = MyApp::builder()
     .with_log_path(log_path, slab_size)?
     .build()?;
