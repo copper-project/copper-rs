@@ -109,7 +109,6 @@ cortex-m = { workspace = true, features = [
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 cu-consolemon = { path = "../../components/monitors/cu_consolemon", optional = true }
 cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "0.14.0", optional = true }
-cu29-helpers = { workspace = true, optional = true }
 bevy = { workspace = true, default-features = false, features = [
   "x11",
   "wayland",
@@ -254,13 +253,7 @@ python-bindings = [
   "cu29-export/python",
   "dep:pyo3",
 ]
-sim = [
-  "sim_core",
-  "dep:cu29-helpers",
-  "dep:cu-consolemon",
-  "dep:cached-path",
-  "dep:evdev",
-]
+sim = ["sim_core", "dep:cu-consolemon", "dep:cached-path", "dep:evdev"]
 bevymon = ["sim_core", "dep:cu-bevymon", "dep:cached-path", "dep:evdev"]
 
 [lib]

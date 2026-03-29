@@ -1,7 +1,6 @@
 pub mod tasks;
 
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -23,9 +22,11 @@ fn run() -> CuResult<()> {
     let log_dir = tempfile::TempDir::new()
         .map_err(|e| CuError::new_with_cause("failed to create temporary log directory", e))?;
     let log_path = log_dir.path().join("cu_gnss_ublox_demo.copper");
-    let ctx = basic_copper_setup(&log_path, Some(16 * 1024 * 1024), true, None)?;
 
-    let mut app = CuGnssUbloxDemoBuilder::new().with_context(&ctx).build()?;
+    let mut app = CuGnssUbloxDemo::builder()
+        .with_log_path(&log_path, Some(16 * 1024 * 1024))?
+        .build()?;
+    let clock = app.clock();
     app.start_all_tasks()?;
 
     let running = Arc::new(AtomicBool::new(true));
@@ -40,11 +41,7 @@ fn run() -> CuResult<()> {
         "This demo logs message counters and GNSS values; `sats_in_view` is a per-epoch count that can move up/down as tracking changes."
     );
     let heartbeat_period_ns = CuDuration::from_secs(5).as_nanos();
-    let mut next_heartbeat_ns = ctx
-        .clock
-        .now()
-        .as_nanos()
-        .saturating_add(heartbeat_period_ns);
+    let mut next_heartbeat_ns = clock.now().as_nanos().saturating_add(heartbeat_period_ns);
 
     let mut run_error: Option<CuError> = None;
     while running.load(Ordering::Relaxed) {
@@ -53,7 +50,7 @@ fn run() -> CuResult<()> {
             break;
         }
 
-        let now_ns = ctx.clock.now().as_nanos();
+        let now_ns = clock.now().as_nanos();
         if now_ns >= next_heartbeat_ns {
             info!("[gnss/heartbeat] {}", tasks::state::summary());
             next_heartbeat_ns = now_ns.saturating_add(heartbeat_period_ns);

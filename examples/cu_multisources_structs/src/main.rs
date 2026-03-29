@@ -1,8 +1,7 @@
 pub mod tasks;
 
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -20,27 +19,20 @@ fn main() {
     {
         std::fs::create_dir_all(parent).expect("Failed to create logs directory");
     }
-    let copper_ctx = basic_copper_setup(
-        &PathBuf::from(&logger_path),
-        PREALLOCATED_STORAGE_SIZE,
-        true,
-        None,
-    )
-    .expect("Failed to setup logger.");
-    debug!("Logger created at {}.", logger_path);
+    debug!("Logger created at {}.", &logger_path);
     debug!("Creating application... ");
-    let mut application = SimTestApplicationBuilder::new()
+    let mut application = SimTestApplication::builder()
         .with_sim_callback(&mut default_callback)
-        .with_context(&copper_ctx)
+        .with_log_path(logger_path, PREALLOCATED_STORAGE_SIZE)
+        .expect("Failed to setup logger.")
         .build()
         .expect("Failed to create application.");
-    let clock = copper_ctx.clock.clone();
-    debug!("Running... starting clock: {}.", clock.now());
+    debug!("Running... starting clock: {}.", application.clock().now());
 
     application
         .run(&mut default_callback)
         .expect("Failed to run application.");
-    debug!("End of program: {}.", clock.now());
+    debug!("End of program: {}.", application.clock().now());
     sleep(Duration::from_secs(1));
 }
 

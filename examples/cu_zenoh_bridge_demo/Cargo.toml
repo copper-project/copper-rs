@@ -17,7 +17,6 @@ default-run = "zenoh-ping"
 [dependencies]
 cu29 = { workspace = true }
 cu29-export = { workspace = true }
-cu29-helpers = { workspace = true }
 cu-zenoh-bridge = { path = "../../components/bridges/cu_zenoh_bridge", version = "0.14.0" }
 serde = { workspace = true }
 bincode = { workspace = true }

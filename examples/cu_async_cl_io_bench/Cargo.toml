@@ -17,7 +17,6 @@ publish = false
 bincode = { workspace = true }
 clap = { workspace = true }
 cu29 = { workspace = true }
-cu29-helpers = { workspace = true }
 serde = { workspace = true }
 tempfile = { workspace = true }
 

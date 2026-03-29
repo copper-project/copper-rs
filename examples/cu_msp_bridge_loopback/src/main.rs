@@ -3,7 +3,6 @@ use cu_msp_lib::commands::MspCommandCode;
 use cu_msp_lib::structs::{MspRc, MspResponse};
 use cu_msp_lib::{MspPacket, MspParser};
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 use nix::errno::Errno;
 use nix::fcntl::{FcntlArg, OFlag, fcntl};
 use nix::pty::openpty;
@@ -37,7 +36,6 @@ fn drive() -> CuResult<()> {
         )
     })?;
     let logger_path = logs_dir.join("cu_msp_bridge_loopback.copper");
-    let ctx = basic_copper_setup(&logger_path, Some(16 * 1024 * 1024), true, None)?;
 
     let config_path = manifest_dir.join("copperconfig.ron");
     let config_path_str = config_path
@@ -49,8 +47,8 @@ fn drive() -> CuResult<()> {
     emulator.configure_bridge(&mut config)?;
     install_ctrlc_cleanup(emulator.symlink_path.clone())?;
 
-    let mut app = CuMspBridgeLoopbackAppBuilder::new()
-        .with_context(&ctx)
+    let mut app = CuMspBridgeLoopbackApp::builder()
+        .with_log_path(&logger_path, Some(16 * 1024 * 1024))?
         .with_config(config)
         .build()?;
 

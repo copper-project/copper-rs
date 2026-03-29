@@ -65,7 +65,7 @@ fn main() -> ! {
     report_last_fault();
     init_heap();
 
-    let mut resources = FlightControllerApp::init_resources().unwrap_or_else(|e| {
+    let mut resources = FlightControllerApp::prepare_resources().unwrap_or_else(|e| {
         defmt::error!("Resource init failed: {}", e); // defmt here because we don't have a copper logger yet.
         loop {
             asm::wfi();
@@ -85,7 +85,12 @@ fn main() -> ! {
     let clock = build_clock();
     let writer = Arc::new(Mutex::new(logger));
 
-    match FlightControllerApp::new_with_resources(clock, writer, resources, 0) {
+    match FlightControllerApp::builder()
+        .with_clock(clock)
+        .with_logger::<LogStorage, Logger>(writer)
+        .with_resources(move |_| Ok(resources.resources))
+        .build()
+    {
         Ok(mut app) => {
             log_heap_stats("before-run");
             let _ = <FlightControllerApp as CuApplication<LogStorage, Logger>>::run(&mut app);

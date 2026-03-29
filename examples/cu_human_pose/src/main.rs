@@ -22,10 +22,8 @@ mod yolo;
 
 use std::fs;
 use std::path::Path;
-use std::path::PathBuf;
 
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 
 // Re-export for RON config visibility
 pub use payloads::*;
@@ -45,13 +43,10 @@ fn main() {
         fs::create_dir_all(parent).expect("Failed to create logs directory");
     }
 
-    // Initialize Copper context
-    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, true, None)
-        .expect("Failed to set up Copper context");
-
     // Build the application from RON config
-    let mut application = YoloPoseDemoApplicationBuilder::new()
-        .with_context(&copper_ctx)
+    let mut application = YoloPoseDemoApplication::builder()
+        .with_log_path(logger_path, SLAB_SIZE)
+        .expect("Failed to set up Copper logging")
         .build()
         .expect("Failed to build application");
 

@@ -1,5 +1,4 @@
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -97,17 +96,14 @@ fn main() {
         let _ = fs::create_dir_all(parent);
     }
 
-    let copper_ctx =
-        basic_copper_setup(&logger_path, SLAB_SIZE, true, None).expect("Failed to setup logger.");
-    info!("Logger created at {}", logger_path);
+    info!("Logger created at {}", &logger_path);
 
-    let mut application = AppBuilder::new()
-        .with_context(&copper_ctx)
+    let mut application = App::builder()
+        .with_log_path(&logger_path, SLAB_SIZE)
+        .expect("Failed to setup logger.")
         .build()
         .expect("Failed to create runtime");
-
-    let clock = copper_ctx.clock;
-    info!("Starting app at {}", clock.now());
+    info!("Starting app at {}", application.clock().now());
     application
         .start_all_tasks()
         .expect("Failed to start application.");
@@ -124,5 +120,5 @@ fn main() {
     application
         .stop_all_tasks()
         .expect("Failed to stop application.");
-    info!("App stopped at {}", clock.now());
+    info!("App stopped at {}", application.clock().now());
 }

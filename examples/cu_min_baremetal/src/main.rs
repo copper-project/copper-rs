@@ -93,14 +93,17 @@ pub extern "C" fn main() {
         },
     );
     let writer = Arc::new(Mutex::new(NoopLogger::new()));
-    let mut app = MinimalNoStdApp::new(clock, writer).unwrap();
+    let mut app = MinimalNoStdApp::builder()
+        .with_clock(clock)
+        .with_logger::<NoopSectionStorage, NoopLogger>(writer)
+        .build()
+        .unwrap();
     let _ = <MinimalNoStdApp as CuApplication<NoopSectionStorage, NoopLogger>>::run(&mut app);
 }
 
 #[cfg(feature = "std")]
 fn main() {
     // the standard version
-    use cu29_helpers::basic_copper_setup;
     use std::fs;
     use std::path::PathBuf;
 
@@ -113,10 +116,9 @@ fn main() {
         }
     }
 
-    let copper_ctx =
-        basic_copper_setup(&logger_path, SLAB_SIZE, true, None).expect("Failed to setup logger.");
-    let mut application = MinimalNoStdAppBuilder::new()
-        .with_context(&copper_ctx)
+    let mut application = MinimalNoStdApp::builder()
+        .with_log_path(&logger_path, SLAB_SIZE)
+        .expect("Failed to setup logger.")
         .build()
         .expect("Failed to create application.");
 

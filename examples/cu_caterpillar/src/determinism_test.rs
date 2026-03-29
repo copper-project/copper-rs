@@ -10,7 +10,6 @@ use cu_rp_gpio::RPGpioPayload;
 use cu29::bincode;
 use cu29::prelude::*;
 use cu29_export::{copperlists_reader, keyframes_reader};
-use cu29_helpers::basic_copper_setup;
 
 use crate::tasks;
 use std::fs;
@@ -61,12 +60,6 @@ fn record_run(log_base: &Path, iterations: usize, dt_ticks: u64) -> CuResult<()>
 
     let slab_size = DET_LOG_SLAB_SIZE;
 
-    let ctx = basic_copper_setup(
-        log_base,
-        slab_size,
-        /*text_log=*/ false,
-        Some(clock.clone()),
-    )?;
     let mut sim_state = true;
     let clock_for_sim = clock.clone();
     let mut record_callback = move |step: default::SimStep| -> SimOverride {
@@ -107,8 +100,9 @@ fn record_run(log_base: &Path, iterations: usize, dt_ticks: u64) -> CuResult<()>
         }
     };
 
-    let mut app = CaterpillarDeterminismAppBuilder::new()
-        .with_context(&ctx)
+    let mut app = CaterpillarDeterminismApp::builder()
+        .with_clock(clock.clone())
+        .with_log_path(log_base, slab_size)?
         .with_sim_callback(&mut record_callback)
         .build()
         .expect("failed to build app");
@@ -229,19 +223,13 @@ fn resim_run(input_log_base: &Path, output_log_base: &Path) -> CuResult<()> {
 
     let (clock, mut clock_mock) = RobotClock::mock();
     let slab_size = DET_LOG_SLAB_SIZE;
-    let ctx = basic_copper_setup(
-        output_log_base,
-        slab_size,
-        /*text_log=*/ false,
-        Some(clock.clone()),
-    )?;
-
     fn init_cb(_step: default::SimStep) -> SimOverride {
         SimOverride::ExecuteByRuntime
     }
 
-    let mut app = CaterpillarDeterminismAppBuilder::new()
-        .with_context(&ctx)
+    let mut app = CaterpillarDeterminismApp::builder()
+        .with_clock(clock.clone())
+        .with_log_path(output_log_base, slab_size)?
         .with_sim_callback(&mut init_cb)
         .build()
         .expect("failed to build resim app");

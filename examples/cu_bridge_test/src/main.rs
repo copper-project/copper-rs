@@ -1,12 +1,11 @@
 use clap::Parser;
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 use cu29_unifiedlog::{UnifiedLoggerWrite, memmap::MmapSectionStorage};
 use std::{fs, path::PathBuf};
 
 use cu_bridge_test::{
-    BridgeFanoutBuilder, BridgeLoopbackBuilder, BridgeOnlyABBuilder, BridgeTaskSameBuilder,
-    BridgeToSinkBuilder, MissionArg, SourceToBridgeBuilder,
+    BridgeFanoutApp, BridgeLoopbackApp, BridgeOnlyABApp, BridgeTaskSameApp, BridgeToSinkApp,
+    MissionArg, SourceToBridgeApp,
 };
 
 const SLAB_SIZE: Option<usize> = Some(32 * 1024 * 1024);
@@ -49,31 +48,41 @@ fn drive() -> CuResult<()> {
         ));
     }
 
-    let ctx = basic_copper_setup(&logger_path, SLAB_SIZE, true, None)?;
-
     match args.mission {
         MissionArg::BridgeOnlyAb => {
-            let mut app = BridgeOnlyABBuilder::new().with_context(&ctx).build()?;
+            let mut app = BridgeOnlyABApp::builder()
+                .with_log_path(&logger_path, SLAB_SIZE)?
+                .build()?;
             run_once(&mut app)?;
         }
         MissionArg::BridgeLoopback => {
-            let mut app = BridgeLoopbackBuilder::new().with_context(&ctx).build()?;
+            let mut app = BridgeLoopbackApp::builder()
+                .with_log_path(&logger_path, SLAB_SIZE)?
+                .build()?;
             run_once(&mut app)?;
         }
         MissionArg::SourceToBridge => {
-            let mut app = SourceToBridgeBuilder::new().with_context(&ctx).build()?;
+            let mut app = SourceToBridgeApp::builder()
+                .with_log_path(&logger_path, SLAB_SIZE)?
+                .build()?;
             run_once(&mut app)?;
         }
         MissionArg::BridgeToSink => {
-            let mut app = BridgeToSinkBuilder::new().with_context(&ctx).build()?;
+            let mut app = BridgeToSinkApp::builder()
+                .with_log_path(&logger_path, SLAB_SIZE)?
+                .build()?;
             run_once(&mut app)?;
         }
         MissionArg::BridgeTaskSame => {
-            let mut app = BridgeTaskSameBuilder::new().with_context(&ctx).build()?;
+            let mut app = BridgeTaskSameApp::builder()
+                .with_log_path(&logger_path, SLAB_SIZE)?
+                .build()?;
             run_once(&mut app)?;
         }
         MissionArg::BridgeFanout => {
-            let mut app = BridgeFanoutBuilder::new().with_context(&ctx).build()?;
+            let mut app = BridgeFanoutApp::builder()
+                .with_log_path(&logger_path, SLAB_SIZE)?
+                .build()?;
             run_once(&mut app)?;
         }
     }

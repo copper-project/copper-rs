@@ -2,7 +2,6 @@ use cu_hesai::LidarCuMsgPayload;
 use cu_hesai::parser::Packet;
 use cu_udp_inject::PcapStreamer;
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 use rerun::Position3D;
 
 const SLAB_SIZE: Option<usize> = Some(100 * 1024 * 1024);
@@ -58,10 +57,9 @@ fn main() {
     const PACKET_SIZE: usize = size_of::<Packet>();
     let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
     let logger_path = tmp_dir.path().join("ptclouds.copper");
-    let copper_ctx =
-        basic_copper_setup(&logger_path, SLAB_SIZE, false, None).expect("Failed to setup copper.");
-    let mut application = PtCloudsApplicationBuilder::new()
-        .with_context(&copper_ctx)
+    let mut application = PtCloudsApplication::builder()
+        .with_log_path(&logger_path, SLAB_SIZE)
+        .expect("Failed to setup copper.")
         .build()
         .expect("Failed to create application");
     application

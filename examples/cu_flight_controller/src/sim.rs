@@ -43,8 +43,6 @@ use cu_bevymon::{
     CuBevyMonSurface, CuBevyMonTexture, MonitorModel, MonitorUiOptions, spawn_split_layout,
 };
 use cu29::prelude::*;
-#[cfg(all(not(target_arch = "wasm32"), feature = "sim"))]
-use cu29_helpers::basic_copper_setup;
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::rc_joystick::{RcAxisBindings, RcFrame, RcJoystick};
@@ -89,8 +87,7 @@ impl Default for SimVehicleState {
 }
 
 #[derive(Resource)]
-struct CopperState<T: Send + Sync + 'static> {
-    _runtime_state: T,
+struct CopperState {
     clock: RobotClock,
     clock_mock: RobotClockMock,
     app: gnss::FlightControllerSim,
@@ -603,16 +600,10 @@ fn setup_copper(mut commands: Commands) {
     }
 
     let (clock, clock_mock) = RobotClock::mock();
-    let ctx = basic_copper_setup(
-        &PathBuf::from(logger_path),
-        LOG_SLAB_SIZE,
-        true,
-        Some(clock.clone()),
-    )
-    .expect("failed to setup logger");
-
-    let mut app = gnss::FlightControllerSimBuilder::new()
-        .with_context(&ctx)
+    let mut app = gnss::FlightControllerSim::builder()
+        .with_clock(clock.clone())
+        .with_log_path(PathBuf::from(logger_path), LOG_SLAB_SIZE)
+        .expect("failed to create logger")
         .with_sim_callback(&mut default_callback)
         .build()
         .expect("failed to create runtime");
@@ -621,7 +612,6 @@ fn setup_copper(mut commands: Commands) {
         .expect("failed to start tasks");
 
     commands.insert_resource(CopperState {
-        _runtime_state: ctx,
         clock,
         clock_mock,
         app,
@@ -629,23 +619,20 @@ fn setup_copper(mut commands: Commands) {
 }
 
 #[cfg(feature = "bevymon")]
-fn build_bevymon_copper() -> (MonitorModel, CopperState<LoggerRuntime>) {
+fn build_bevymon_copper() -> (MonitorModel, CopperState) {
     #[allow(clippy::identity_op)]
     const LOG_SLAB_SIZE: Option<usize> = Some(128 * 1024 * 1024);
-    const STRUCTURED_LOG_SECTION_SIZE: usize = 4096 * 10;
 
     let (clock, clock_mock) = RobotClock::mock();
     let unified_logger = build_unified_logger(LOG_SLAB_SIZE).expect("failed to create logger");
-    let logger_runtime =
-        init_logger_runtime(&clock, unified_logger.clone(), STRUCTURED_LOG_SECTION_SIZE)
-            .expect("failed to initialize structured logger");
 
     let mut sim_callback = default_callback;
-    let mut app = <gnss::FlightControllerSim as CuSimApplication<
-        BevyMonSectionStorage,
-        BevyMonUnifiedLogger,
-    >>::new(clock.clone(), unified_logger, None, &mut sim_callback)
-    .expect("failed to create runtime");
+    let mut app = gnss::FlightControllerSim::builder()
+        .with_clock(clock.clone())
+        .with_logger::<BevyMonSectionStorage, BevyMonUnifiedLogger>(unified_logger)
+        .with_sim_callback(&mut sim_callback)
+        .build()
+        .expect("failed to create runtime");
 
     app.start_all_tasks(&mut sim_callback)
         .expect("failed to start tasks");
@@ -654,30 +641,11 @@ fn build_bevymon_copper() -> (MonitorModel, CopperState<LoggerRuntime>) {
     (
         monitor_model,
         CopperState {
-            _runtime_state: logger_runtime,
             clock,
             clock_mock,
             app,
         },
     )
-}
-
-#[cfg(feature = "bevymon")]
-fn init_logger_runtime(
-    clock: &RobotClock,
-    unified_logger: Arc<Mutex<BevyMonUnifiedLogger>>,
-    structured_log_section_size: usize,
-) -> CuResult<LoggerRuntime> {
-    let structured_stream = stream_write::<CuLogEntry, BevyMonSectionStorage>(
-        unified_logger,
-        UnifiedLogType::StructuredLogLine,
-        structured_log_section_size,
-    )?;
-    Ok(LoggerRuntime::init(
-        clock.clone(),
-        structured_stream,
-        None::<NullLog>,
-    ))
 }
 
 #[cfg(feature = "bevymon")]
@@ -1441,8 +1409,8 @@ fn sync_vehicle_state(
     };
 }
 
-fn run_copper<T: Send + Sync + 'static>(
-    mut copper: ResMut<CopperState<T>>,
+fn run_copper(
+    mut copper: ResMut<CopperState>,
     physics_time: Res<Time<Physics>>,
     sim_state: Res<SimState>,
     rc_input: Res<SimRcInput>,
@@ -1889,10 +1857,7 @@ fn update_osd_overlay(
     rasterize_osd_canvas(&osd_overlay, &raster_source, canvas_image);
 }
 
-fn stop_copper_on_exit<T: Send + Sync + 'static>(
-    mut exit_events: MessageReader<AppExit>,
-    mut copper: ResMut<CopperState<T>>,
-) {
+fn stop_copper_on_exit(mut exit_events: MessageReader<AppExit>, mut copper: ResMut<CopperState>) {
     for _ in exit_events.read() {
         let _ = copper.app.stop_all_tasks(&mut default_callback);
         let _ = copper.app.log_shutdown_completed();
@@ -2133,11 +2098,11 @@ pub fn run_sim() {
         app.add_systems(Startup, setup_copper);
         app.add_systems(
             FixedUpdate,
-            (run_copper::<CopperContext>, apply_multicopter_dynamics)
+            (run_copper, apply_multicopter_dynamics)
                 .chain()
                 .after(sync_vehicle_state),
         );
-        app.add_systems(PostUpdate, stop_copper_on_exit::<CopperContext>);
+        app.add_systems(PostUpdate, stop_copper_on_exit);
     }
     app.run();
 }
@@ -2160,11 +2125,11 @@ pub fn run_bevymon() {
         .add_systems(Update, spawn_bevymon_layout)
         .add_systems(
             FixedUpdate,
-            (run_copper::<LoggerRuntime>, apply_multicopter_dynamics)
+            (run_copper, apply_multicopter_dynamics)
                 .chain()
                 .after(sync_vehicle_state),
         )
-        .add_systems(PostUpdate, stop_copper_on_exit::<LoggerRuntime>);
+        .add_systems(PostUpdate, stop_copper_on_exit);
     app.run();
 }
 

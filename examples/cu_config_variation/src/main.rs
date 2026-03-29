@@ -1,5 +1,4 @@
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 use std::path::{Path, PathBuf};
 
 #[copper_runtime(config = "copperconfig.ron")]
@@ -21,13 +20,14 @@ fn main() {
     {
         std::fs::create_dir_all(parent).expect("Failed to create logs directory");
     }
-    let copper_ctx =
-        basic_copper_setup(&logger_path, None, true, None).expect("Failed to setup logger.");
+    let clock = RobotClock::default();
 
     // First run with the base configuration
     {
-        let mut application = MyAppBuilder::new()
-            .with_context(&copper_ctx)
+        let mut application = MyApp::builder()
+            .with_clock(clock.clone())
+            .with_log_path(&logger_path, None)
+            .expect("Failed to setup logger.")
             .with_config(copperconfig.clone())
             .build()
             .expect("Failed to create application.");
@@ -44,8 +44,10 @@ fn main() {
             node.set_param("pin", 42);
         }
 
-        let mut application = MyAppBuilder::new()
-            .with_context(&copper_ctx)
+        let mut application = MyApp::builder()
+            .with_clock(clock.clone())
+            .with_log_path(&logger_path, None)
+            .expect("Failed to setup logger.")
             .with_config(copperconfig.clone())
             .build()
             .expect("Failed to create application.");

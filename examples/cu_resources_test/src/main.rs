@@ -1,6 +1,5 @@
 use clap::{Parser, ValueEnum};
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 use cu29_unifiedlog::{UnifiedLoggerWrite, memmap::MmapSectionStorage};
 use std::{fs, path::PathBuf};
 
@@ -11,8 +10,8 @@ mod tasks;
 #[copper_runtime(config = "copperconfig.ron")]
 struct App {}
 // Mission-specific builders emitted by the macro.
-use A::AppBuilder as AppBuilderA;
-use B::AppBuilder as AppBuilderB;
+use A::App as MissionAApp;
+use B::App as MissionBApp;
 
 #[derive(Parser)]
 #[command(author, version, about = "Resource coverage demo", long_about = None)]
@@ -62,15 +61,17 @@ fn drive() -> CuResult<()> {
         ));
     }
 
-    let ctx = basic_copper_setup(&logger_path, SLAB_SIZE, true, None)?;
-
     match args.mission {
         MissionArg::A => {
-            let mut app = AppBuilderA::new().with_context(&ctx).build()?;
+            let mut app = MissionAApp::builder()
+                .with_log_path(&logger_path, SLAB_SIZE)?
+                .build()?;
             run_once(&mut app)?;
         }
         MissionArg::B => {
-            let mut app = AppBuilderB::new().with_context(&ctx).build()?;
+            let mut app = MissionBApp::builder()
+                .with_log_path(&logger_path, SLAB_SIZE)?
+                .build()?;
             run_once(&mut app)?;
         }
     }

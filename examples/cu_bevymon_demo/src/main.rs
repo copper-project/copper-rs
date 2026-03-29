@@ -28,7 +28,6 @@ const CAMERA_ZOOM_SPEED: f32 = 0.65;
 const COPPER_TICK_HZ: f32 = 10.0;
 #[cfg(not(target_arch = "wasm32"))]
 const LOG_SLAB_SIZE: Option<usize> = Some(64 * 1024 * 1024);
-const STRUCTURED_LOG_SECTION_SIZE: usize = 4096 * 10;
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct BevyMonDemoApp {}
@@ -66,7 +65,6 @@ struct SplitUiCamera(Entity);
 
 #[derive(Resource)]
 struct CopperDriver {
-    _logger_runtime: LoggerRuntime,
     copper_app: BevyMonDemoApp,
     iteration_timer: Timer,
     started: bool,
@@ -131,10 +129,7 @@ fn main() {
 }
 
 fn build_copper_driver() -> CopperDriver {
-    let clock = RobotClock::default();
     let unified_logger = build_unified_logger().expect("Failed to create demo logger.");
-    let logger_runtime = init_logger_runtime(&clock, unified_logger.clone())
-        .expect("Failed to initialize Copper structured logging.");
 
     #[cfg(target_arch = "wasm32")]
     debug!("Using no-op unified logger for wasm BevyMon demo.");
@@ -143,15 +138,12 @@ fn build_copper_driver() -> CopperDriver {
 
     debug!("Creating Copper BevyMon demo application.");
 
-    let copper_app = <BevyMonDemoApp as CuApplication<DemoSectionStorage, DemoUnifiedLogger>>::new(
-        clock,
-        unified_logger,
-        None,
-    )
-    .expect("Failed to create Copper runtime.");
+    let copper_app = BevyMonDemoApp::builder()
+        .with_logger::<DemoSectionStorage, DemoUnifiedLogger>(unified_logger)
+        .build()
+        .expect("Failed to create Copper runtime.");
 
     CopperDriver {
-        _logger_runtime: logger_runtime,
         copper_app,
         iteration_timer: Timer::from_seconds(1.0 / COPPER_TICK_HZ, TimerMode::Repeating),
         started: false,
@@ -185,22 +177,6 @@ fn primary_window() -> Window {
         fit_canvas_to_parent: true,
         ..default()
     }
-}
-
-fn init_logger_runtime(
-    clock: &RobotClock,
-    unified_logger: Arc<Mutex<DemoUnifiedLogger>>,
-) -> CuResult<LoggerRuntime> {
-    let structured_stream = stream_write::<CuLogEntry, DemoSectionStorage>(
-        unified_logger,
-        UnifiedLogType::StructuredLogLine,
-        STRUCTURED_LOG_SECTION_SIZE,
-    )?;
-    Ok(LoggerRuntime::init(
-        clock.clone(),
-        structured_stream,
-        None::<NullLog>,
-    ))
 }
 
 #[cfg(target_arch = "wasm32")]

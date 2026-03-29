@@ -34,7 +34,6 @@ bincode = { workspace = true }
 cu29 = { path = "../../core/cu29", default-features = false, version = "0.14.0", features = [
   "textlogs",
 ] } # default-features = false -> enables no-std for all cu29 dependencies
-cu29-helpers = { workspace = true, optional = true } # std only
 serde = { workspace = true }
 spin = { workspace = true }
 embedded-alloc = { workspace = true, features = ["llff"] }
@@ -47,5 +46,5 @@ cu29-export = { workspace = true, features = [
 ], optional = true }
 
 [features]
-default = ["std"]                                                         # Compile with --no-default-features to target no_std
-std = ["dep:cu29-helpers", "dep:cu29-export", "bincode/std", "serde/std"]
+default = ["std"]                                     # Compile with --no-default-features to target no_std
+std = ["dep:cu29-export", "bincode/std", "serde/std"]

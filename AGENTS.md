@@ -103,7 +103,6 @@ If the task is about resources / HAL wiring:
 
 If the task is about logging / export / replay:
 
-- `core/cu29_helpers/src/lib.rs`
 - `core/cu29_export/`
 - `core/cu29_unifiedlog/`
 - `examples/cu_caterpillar/src/logreader.rs`
@@ -202,7 +201,7 @@ Implications:
   - prefer `.is_multiple_of(...)` over `% ... == 0` when checking divisibility
 - Use `cargo expand` when proc-macro behavior is unclear.
 - Many examples/apps create logs under their own `logs/` directories.
-- `basic_copper_setup(...)` is the common logger/runtime bootstrap helper, but examples may customize around it.
+- App builders own unified log setup via `.with_log_path(...)`; examples may still inject a custom logger directly with `.with_logger(...)` when needed.
 - Some examples intentionally disable task logging in config even though a unified log slab is still allocated.
 - Do not introduce environment variables as invisible API unless explicitly requested.
   - Prefer constants.

@@ -14,7 +14,6 @@ default-run = "nologging-tasks"
 publish = false
 [dependencies]
 cu29 = { workspace = true }
-cu29-helpers = { workspace = true }
 serde = { workspace = true }                            # Keep
 cu29-export = { workspace = true, features = ["mcap"] } # Keep
 

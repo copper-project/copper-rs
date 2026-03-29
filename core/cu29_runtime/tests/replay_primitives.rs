@@ -8,7 +8,7 @@ use cu29::prelude::copper_runtime;
 use cu29::prelude::*;
 use cu29::simulation::recorded_copperlist_timestamp;
 use cu29_export::{copperlists_reader, keyframes_reader};
-use cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite;
+use cu29_unifiedlog::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
 use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -187,9 +187,9 @@ fn record_reference_run(
     let (clock, _clock_mock) = RobotClock::mock();
     let mut noop = |_step: default::SimStep<'_>| SimOverride::ExecuteByRuntime;
 
-    let mut app = ReplayAppBuilder::new()
+    let mut app = ReplayApp::builder()
         .with_clock(clock)
-        .with_unified_logger(logger)
+        .with_logger::<MmapSectionStorage, MmapUnifiedLoggerWrite>(logger)
         .with_sim_callback(&mut noop)
         .build()?;
 
@@ -214,9 +214,9 @@ fn replay_run(
     let (clock, clock_mock) = RobotClock::mock();
     let mut noop = |_step: default::SimStep<'_>| SimOverride::ExecuteByRuntime;
 
-    let mut app = ReplayAppBuilder::new()
+    let mut app = ReplayApp::builder()
         .with_clock(clock)
-        .with_unified_logger(logger)
+        .with_logger::<MmapSectionStorage, MmapUnifiedLoggerWrite>(logger)
         .with_sim_callback(&mut noop)
         .build()?;
 
@@ -281,9 +281,9 @@ fn builder_propagates_instance_id_into_runtime() -> CuResult<()> {
     let (clock, _clock_mock) = RobotClock::mock();
     let mut noop = |_step: default::SimStep<'_>| SimOverride::ExecuteByRuntime;
 
-    let mut app = ReplayAppBuilder::new()
+    let mut app = ReplayApp::builder()
         .with_clock(clock)
-        .with_unified_logger(logger)
+        .with_logger::<MmapSectionStorage, MmapUnifiedLoggerWrite>(logger)
         .with_instance_id(42)
         .with_sim_callback(&mut noop)
         .build()?;

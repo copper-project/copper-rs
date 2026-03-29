@@ -329,13 +329,13 @@ pub mod bridges {
 #[copper_runtime(config = "copperconfig.ron")]
 struct BridgeSchedulerApp {}
 
-// Expose builders for the generated mission runtimes to external callers.
-pub type BridgeLoopbackBuilder = BridgeLoopback::BridgeSchedulerAppBuilder;
-pub type BridgeOnlyABBuilder = BridgeOnlyAB::BridgeSchedulerAppBuilder;
-pub type BridgeTaskSameBuilder = BridgeTaskSame::BridgeSchedulerAppBuilder;
-pub type BridgeToSinkBuilder = BridgeToSink::BridgeSchedulerAppBuilder;
-pub type SourceToBridgeBuilder = SourceToBridge::BridgeSchedulerAppBuilder;
-pub type BridgeFanoutBuilder = BridgeFanout::BridgeSchedulerAppBuilder;
+// Expose the generated mission applications to the bin target.
+pub type BridgeLoopbackApp = BridgeLoopback::BridgeSchedulerApp;
+pub type BridgeOnlyABApp = BridgeOnlyAB::BridgeSchedulerApp;
+pub type BridgeTaskSameApp = BridgeTaskSame::BridgeSchedulerApp;
+pub type BridgeToSinkApp = BridgeToSink::BridgeSchedulerApp;
+pub type SourceToBridgeApp = SourceToBridge::BridgeSchedulerApp;
+pub type BridgeFanoutApp = BridgeFanout::BridgeSchedulerApp;
 
 #[cfg(test)]
 mod tests {
@@ -343,7 +343,6 @@ mod tests {
     use super::messages;
     use cu29::prelude::*;
     use cu29_export::copperlists_reader;
-    use cu29_helpers::basic_copper_setup;
     use cu29_unifiedlog::{
         UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader, UnifiedLoggerWrite,
         memmap::MmapSectionStorage,
@@ -351,24 +350,17 @@ mod tests {
     use std::sync::{LazyLock, Mutex};
     use tempfile::TempDir;
 
-    use super::BridgeLoopback::BridgeSchedulerAppBuilder as BridgeLoopbackBuilder;
-    use super::BridgeOnlyAB::BridgeSchedulerAppBuilder as BridgeOnlyBuilder;
-    use super::BridgeTaskSame::BridgeSchedulerAppBuilder as BridgeTaskBuilder;
-    use super::BridgeToSink::BridgeSchedulerAppBuilder as BridgeToSinkBuilder;
-    use super::SourceToBridge::BridgeSchedulerAppBuilder as SourceToBridgeBuilder;
-
     fn run_mission<AppBuilderFn, App>(builder: AppBuilderFn) -> Vec<&'static str>
     where
-        AppBuilderFn: FnOnce(&CopperContext) -> CuResult<App>,
+        AppBuilderFn: FnOnce(&std::path::Path, RobotClock) -> CuResult<App>,
         App: CuApplication<MmapSectionStorage, UnifiedLoggerWrite>,
     {
         let temp_dir = TempDir::new().expect("temp dir");
         let log_path = temp_dir.path().join("bridge_sched.copper");
-        let ctx =
-            basic_copper_setup(&log_path, Some(32 * 1024 * 1024), false, None).expect("context");
+        let clock = RobotClock::default();
 
         events::reset();
-        let mut app = builder(&ctx).expect("build app");
+        let mut app = builder(&log_path, clock).expect("build app");
         <App as CuApplication<MmapSectionStorage, UnifiedLoggerWrite>>::start_all_tasks(&mut app)
             .expect("start");
         <App as CuApplication<MmapSectionStorage, UnifiedLoggerWrite>>::run_one_iteration(&mut app)
@@ -401,35 +393,65 @@ mod tests {
     #[test]
     fn bridge_only_ab_orders_bridges_like_sources_and_sinks() {
         let _guard = TEST_MUTEX.lock().unwrap();
-        let events = run_mission(|ctx| BridgeOnlyBuilder::new().with_context(ctx).build());
+        let events = run_mission(|log_path, clock| {
+            super::BridgeOnlyABApp::builder()
+                .with_clock(clock)
+                .with_log_path(log_path, Some(32 * 1024 * 1024))
+                .expect("logger")
+                .build()
+        });
         assert_eq!(events, vec!["alpha.rx.ingress", "beta.tx.egress"]);
     }
 
     #[test]
     fn bridge_loopback_stays_on_one_bridge() {
         let _guard = TEST_MUTEX.lock().unwrap();
-        let events = run_mission(|ctx| BridgeLoopbackBuilder::new().with_context(ctx).build());
+        let events = run_mission(|log_path, clock| {
+            super::BridgeLoopbackApp::builder()
+                .with_clock(clock)
+                .with_log_path(log_path, Some(32 * 1024 * 1024))
+                .expect("logger")
+                .build()
+        });
         assert_eq!(events, vec!["alpha.rx.loop", "alpha.tx.loop"]);
     }
 
     #[test]
     fn source_to_bridge_executes_source_before_tx() {
         let _guard = TEST_MUTEX.lock().unwrap();
-        let events = run_mission(|ctx| SourceToBridgeBuilder::new().with_context(ctx).build());
+        let events = run_mission(|log_path, clock| {
+            super::SourceToBridgeApp::builder()
+                .with_clock(clock)
+                .with_log_path(log_path, Some(32 * 1024 * 1024))
+                .expect("logger")
+                .build()
+        });
         assert_eq!(events, vec!["source_to_bridge.process", "beta.tx.from_src"]);
     }
 
     #[test]
     fn bridge_to_sink_executes_rx_before_sink() {
         let _guard = TEST_MUTEX.lock().unwrap();
-        let events = run_mission(|ctx| BridgeToSinkBuilder::new().with_context(ctx).build());
+        let events = run_mission(|log_path, clock| {
+            super::BridgeToSinkApp::builder()
+                .with_clock(clock)
+                .with_log_path(log_path, Some(32 * 1024 * 1024))
+                .expect("logger")
+                .build()
+        });
         assert_eq!(events, vec!["alpha.rx.to_sink", "sink_from_bridge.process"]);
     }
 
     #[test]
     fn bridge_task_bridge_same_bridge_is_linearized() {
         let _guard = TEST_MUTEX.lock().unwrap();
-        let events = run_mission(|ctx| BridgeTaskBuilder::new().with_context(ctx).build());
+        let events = run_mission(|log_path, clock| {
+            super::BridgeTaskSameApp::builder()
+                .with_clock(clock)
+                .with_log_path(log_path, Some(32 * 1024 * 1024))
+                .expect("logger")
+                .build()
+        });
         assert_eq!(
             events,
             vec![
@@ -445,12 +467,13 @@ mod tests {
         let _guard = TEST_MUTEX.lock().unwrap();
         let temp_dir = TempDir::new().expect("temp dir");
         let log_path = temp_dir.path().join("bridge_sched_process_time.copper");
+        let clock = RobotClock::default();
 
         {
-            let ctx =
-                basic_copper_setup(&log_path, Some(32 * 1024 * 1024), false, None).expect("ctx");
-            let mut app = BridgeTaskBuilder::new()
-                .with_context(&ctx)
+            let mut app = super::BridgeTaskSameApp::builder()
+                .with_clock(clock.clone())
+                .with_log_path(&log_path, Some(32 * 1024 * 1024))
+                .expect("logger")
                 .build()
                 .expect("build app");
             app.start_all_tasks().expect("start");
@@ -497,12 +520,16 @@ mod tests {
         let _guard = TEST_MUTEX.lock().unwrap();
         let temp_dir = TempDir::new().expect("temp dir");
         let log_path = temp_dir.path().join("bridge_sched_switch.copper");
-        let ctx =
-            basic_copper_setup(&log_path, Some(32 * 1024 * 1024), false, None).expect("context");
+        let clock = RobotClock::default();
 
         events::reset();
         {
-            let mut app = BridgeOnlyBuilder::new().with_context(&ctx).build().unwrap();
+            let mut app = super::BridgeOnlyABApp::builder()
+                .with_clock(clock.clone())
+                .with_log_path(&log_path, Some(32 * 1024 * 1024))
+                .expect("logger")
+                .build()
+                .unwrap();
             app.start_all_tasks().unwrap();
             app.run_one_iteration().unwrap();
             app.stop_all_tasks().unwrap();
@@ -511,8 +538,10 @@ mod tests {
         assert_eq!(first, vec!["alpha.rx.ingress", "beta.tx.egress"]);
 
         {
-            let mut app = BridgeLoopbackBuilder::new()
-                .with_context(&ctx)
+            let mut app = super::BridgeLoopbackApp::builder()
+                .with_clock(clock)
+                .with_log_path(&log_path, Some(32 * 1024 * 1024))
+                .expect("logger")
                 .build()
                 .unwrap();
             app.start_all_tasks().unwrap();

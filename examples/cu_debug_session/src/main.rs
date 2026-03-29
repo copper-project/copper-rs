@@ -5,7 +5,6 @@ use cu29::bincode::{Decode, Encode};
 use cu29::prelude::CopperList;
 use cu29::prelude::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -144,18 +143,13 @@ fn clean_logs() -> CuResult<()> {
 fn record_log() -> CuResult<()> {
     clean_logs()?;
     let (clock, clock_mock) = RobotClock::mock();
-    let ctx = basic_copper_setup(
-        Path::new(LOG_PATH),
-        LOG_SLAB_SIZE,
-        /*text_log=*/ false,
-        Some(clock.clone()),
-    )?;
 
     // Pass-through sim callback so real tasks run.
     let mut sim_cb = |_step: default::SimStep| SimOverride::ExecuteByRuntime;
 
-    let mut app = DebugAppBuilder::new()
-        .with_context(&ctx)
+    let mut app = DebugApp::builder()
+        .with_clock(clock.clone())
+        .with_log_path(Path::new(LOG_PATH), LOG_SLAB_SIZE)?
         .with_sim_callback(&mut sim_cb)
         .build()?;
 
@@ -172,15 +166,10 @@ fn record_log() -> CuResult<()> {
 fn run_debug_session() -> CuResult<()> {
     // Build a fresh app for debugging; its logger writes to a separate replay file.
     let (clock, clock_mock) = RobotClock::mock();
-    let ctx = basic_copper_setup(
-        Path::new(REPLAY_LOG_PATH),
-        REPLAY_LOG_SLAB_SIZE,
-        /*text_log=*/ false,
-        Some(clock.clone()),
-    )?;
     let mut sim_cb = |_step: default::SimStep| SimOverride::ExecuteByRuntime;
-    let app = DebugAppBuilder::new()
-        .with_context(&ctx)
+    let app = DebugApp::builder()
+        .with_clock(clock.clone())
+        .with_log_path(Path::new(REPLAY_LOG_PATH), REPLAY_LOG_SLAB_SIZE)?
         .with_sim_callback(&mut sim_cb)
         .build()?;
 

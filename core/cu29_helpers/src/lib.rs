@@ -1,67 +1,40 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-#[cfg(not(feature = "std"))]
-extern crate alloc;
+#![doc = include_str!("../README.md")]
 
-use cu29_clock::RobotClock;
-use cu29_log_runtime::LoggerRuntime;
-use cu29_runtime::curuntime::CopperContext;
-use cu29_traits::{CuError, CuResult, UnifiedLogType, with_cause};
-use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, stream_write};
-use simplelog::TermLogger;
-use std::path::Path;
-use std::sync::{Arc, Mutex};
+const _: () = {
+    if option_env!("CARGO_PRIMARY_PACKAGE").is_none() {
+        panic!(
+            r#"`cu29-helpers` was retired. Port your app to the generated App builder API.
 
-/// This is a basic setup for a copper application to get you started.
-/// Duplicate and customize as needed when your needs grow.
+Old pattern:
+    let ctx = cu29_helpers::basic_copper_setup(log_path, slab_size, text_log, Some(clock))?;
+    let mut app = MyApp::new(clock.clone(), ctx.unified_logger.clone(), config_override)?;
+
+New pattern:
+    let mut app = MyApp::builder()
+        .with_clock(clock)                 // optional; defaults to RobotClock::default()
+        .with_config(config_override)      // optional
+        .with_log_path(log_path, slab_size)?
+        .build()?;
+
+If you already constructed the unified logger yourself:
+    let mut app = MyApp::builder()
+        .with_clock(clock)
+        .with_logger::<MmapSectionStorage, UnifiedLoggerWrite>(unified_logger)
+        .build()?;
+
+Notes:
+    - Drop `basic_copper_setup(...)`.
+    - Drop `App::new(...)` / `App::new_with_resources(...)` in favor of `App::builder()`.
+    - The app now owns logging setup.
+    - See `templates/cu_project/src/main.rs` or `examples/cu_caterpillar/src/main.rs`.
+"#
+        );
+    }
+};
+
+/// Compatibility stub for workspace builds.
 ///
-/// unifiedlogger_output_base_name: The base name of the log file. The logger will create a set of files based on this name
-///                                  for example if named "toto.copper" it will create toto_0.copper, toto_1.copper etc.
-///
-/// text_log: if true, the log will be printed to the console as a simple log.
-/// It is useful to debug an application in real-time but should be set to false in production
-/// as it is an order of magnitude slower than the default copper structured logging.
-/// It will create a LoggerRuntime that can be used as a robot clock source too.
-///
-/// slab_size: The logger will pre-allocate large files of those sizes. With the name of the given file _0, _1 etc.
-/// clock: if you let it to None it will create a default clock otherwise you can provide your own, for example a simulation clock.
-///        with let (clock , mock) = RobotClock::mock();
-pub fn basic_copper_setup(
-    unifiedlogger_output_base_name: &Path,
-    slab_size: Option<usize>,
-    _text_log: bool,
-    clock: Option<RobotClock>,
-) -> CuResult<CopperContext> {
-    let preallocated_size = slab_size.unwrap_or(1024 * 1024 * 10);
-    let logger = UnifiedLoggerBuilder::new()
-        .write(true)
-        .create(true)
-        .file_base_name(unifiedlogger_output_base_name)
-        .preallocated_size(preallocated_size)
-        .build()
-        .map_err(|e| with_cause("Failed to create unified logger", e))?;
-    let logger = match logger {
-        UnifiedLogger::Write(logger) => logger,
-        UnifiedLogger::Read(_) => {
-            return Err(CuError::from(
-                "UnifiedLoggerBuilder did not create a write-capable logger",
-            ));
-        }
-    };
-    let unified_logger = Arc::new(Mutex::new(logger));
-    let structured_stream = stream_write(
-        unified_logger.clone(),
-        UnifiedLogType::StructuredLogLine,
-        4096 * 10,
-    )?;
-
-    let extra: Option<TermLogger> = None;
-
-    let clock = clock.unwrap_or_default();
-    let structured_logging = LoggerRuntime::init(clock.clone(), structured_stream, extra);
-    Ok(CopperContext {
-        unified_logger: unified_logger.clone(),
-        logger_runtime: structured_logging,
-        clock,
-        instance_id: 0,
-    })
-}
+/// When `cu29-helpers` is used as a dependency, this crate emits a compile
+/// error with migration instructions to the app-builder API.
+pub mod compatibility_stub {}

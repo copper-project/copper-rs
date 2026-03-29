@@ -20,7 +20,6 @@ logreader = ["dep:cu29-export"]
 
 [dependencies]
 cu29 = { workspace = true }
-cu29-helpers = { workspace = true }
 cu29-export = { workspace = true, optional = true }
 bincode = { workspace = true }
 serde = { workspace = true }
