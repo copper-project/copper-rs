@@ -1,6 +1,6 @@
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 use std::fs::metadata;
+use std::sync::{Arc, Mutex};
 
 pub mod tasks {
     use cu29::prelude::*;
@@ -81,19 +81,28 @@ pub mod tasks {
 struct App {}
 
 const SLAB_SIZE_BYTES: usize = 150 * 1024 * 1024;
-const SLAB_SIZE: Option<usize> = Some(SLAB_SIZE_BYTES);
 const MIN_USED_BYTES: usize = 100 * 1024 * 1024;
 fn main() {
     let tmp_dir = tempfile::TempDir::new().expect("Could not create temporary directory");
     let logger_path = tmp_dir.path().join("logger.copper");
-    let copper_ctx =
-        basic_copper_setup(&logger_path, SLAB_SIZE, true, None).expect("Failed to setup logger.");
+    let logger = UnifiedLoggerBuilder::new()
+        .write(true)
+        .create(true)
+        .file_base_name(&logger_path)
+        .preallocated_size(SLAB_SIZE_BYTES)
+        .build()
+        .expect("Failed to setup logger.");
+    let UnifiedLogger::Write(logger) = logger else {
+        panic!("UnifiedLoggerBuilder did not create a write-capable logger");
+    };
+    let unified_logger = Arc::new(Mutex::new(logger));
     debug!("Logger created at {}.", path = &logger_path);
-    let clock = copper_ctx.clock;
     debug!("Creating application... ");
-    let mut application = App::new(clock.clone(), copper_ctx.unified_logger.clone(), None)
+    let mut application = App::builder()
+        .with_logger::<memmap::MmapSectionStorage, UnifiedLoggerWrite>(unified_logger.clone())
+        .build()
         .expect("Failed to create application.");
-    debug!("Running... starting clock: {}.", clock.now());
+    debug!("Running... starting clock: {}.", application.clock().now());
     application
         .start_all_tasks()
         .expect("Failed to start application.");
@@ -103,7 +112,7 @@ fn main() {
     application
         .stop_all_tasks()
         .expect("Failed to stop application.");
-    debug!("End of program: {}.", clock.now());
+    debug!("End of program: {}.", application.clock().now());
     // check if the logger file is at least 1 section in length
 
     // change the end of the logger_path from copper to _0.copper
@@ -119,6 +128,6 @@ fn main() {
         }
     }
     let (current_slab_used, _current_slab_offsets, _back_slab_in_flight) =
-        copper_ctx.unified_logger.lock().unwrap().stats();
+        unified_logger.lock().unwrap().stats();
     assert!(current_slab_used > MIN_USED_BYTES); // in the ron file we said:  section_size_mib: 100 so at least that amount should be used before it the logger is closed and trimmed
 }

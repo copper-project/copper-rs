@@ -42,7 +42,6 @@ logviz = [
 clap = { workspace = true, optional = true }
 cu29 = { workspace = true }
 cu29-export = { workspace = true, optional = true }
-cu29-helpers = { workspace = true }
 cu29-logviz = { workspace = true, optional = true }
 cu-sensor-payloads = { workspace = true }
 cu-spatial-payloads = { workspace = true }

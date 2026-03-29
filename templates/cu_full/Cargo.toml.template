@@ -7,7 +7,6 @@ resolver = "2"
 
 [workspace.dependencies]
 cu29 = { {%if copper_source == "crates.io" %} version = "*" {%elsif copper_source == "git" %} git = "https://github.com/copper-project/copper-rs.git" {%elsif copper_source == "local" %}path = "{{copper_root_path}}/core/cu29" {%endif %} }
-cu29-helpers = { {%if copper_source == "crates.io" %}version = "*" {%elsif copper_source == "git" %} git = "https://github.com/copper-project/copper-rs.git" {%elsif copper_source == "local" %}path = "{{copper_root_path}}/core/cu29_helpers" {%endif %} }
 cu29-export = { {%if copper_source == "crates.io" %}version = "*" {%elsif copper_source == "git" %} git = "https://github.com/copper-project/copper-rs.git" {%elsif copper_source == "local" %}path = "{{copper_root_path}}/core/cu29_export" {%endif %} }
 bincode = { package = "cu-bincode", version = "2.0", default-features = false, features = ["derive", "alloc"] }
 serde = { version = "*", features = ["derive"] }

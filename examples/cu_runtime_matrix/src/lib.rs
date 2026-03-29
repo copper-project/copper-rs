@@ -1,9 +1,9 @@
 use bincode::{Decode, Encode};
 use clap::{Parser, ValueEnum};
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 use serde::{Deserialize, Serialize};
 use std::hint::black_box;
+use std::path::Path;
 use std::sync::{LazyLock, Mutex};
 use std::time::Instant;
 
@@ -1108,55 +1108,73 @@ pub fn configure_runtime_matrix(
 
 fn build_mission_app(
     mission: MissionArg,
-    copper_ctx: &CopperContext,
+    clock: RobotClock,
+    log_path: &Path,
+    instance_id: u32,
     config: CuConfig,
 ) -> CuResult<MissionApp> {
     match mission {
         MissionArg::OneToMany => Ok(MissionApp::OneToMany(
-            OneToMany::RuntimeMatrixAppBuilder::new()
-                .with_context(copper_ctx)
+            OneToMany::RuntimeMatrixApp::builder()
+                .with_clock(clock.clone())
+                .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
+                .with_instance_id(instance_id)
                 .with_config(config)
                 .build()?,
         )),
         MissionArg::OneToManyBackground => Ok(MissionApp::OneToManyBackground(
-            OneToManyBackground::RuntimeMatrixAppBuilder::new()
-                .with_context(copper_ctx)
+            OneToManyBackground::RuntimeMatrixApp::builder()
+                .with_clock(clock.clone())
+                .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
+                .with_instance_id(instance_id)
                 .with_config(config)
                 .build()?,
         )),
         MissionArg::ManyToOne => Ok(MissionApp::ManyToOne(
-            ManyToOne::RuntimeMatrixAppBuilder::new()
-                .with_context(copper_ctx)
+            ManyToOne::RuntimeMatrixApp::builder()
+                .with_clock(clock.clone())
+                .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
+                .with_instance_id(instance_id)
                 .with_config(config)
                 .build()?,
         )),
         MissionArg::ManyToOneBackground => Ok(MissionApp::ManyToOneBackground(
-            ManyToOneBackground::RuntimeMatrixAppBuilder::new()
-                .with_context(copper_ctx)
+            ManyToOneBackground::RuntimeMatrixApp::builder()
+                .with_clock(clock.clone())
+                .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
+                .with_instance_id(instance_id)
                 .with_config(config)
                 .build()?,
         )),
         MissionArg::ManyToMany => Ok(MissionApp::ManyToMany(
-            ManyToMany::RuntimeMatrixAppBuilder::new()
-                .with_context(copper_ctx)
+            ManyToMany::RuntimeMatrixApp::builder()
+                .with_clock(clock.clone())
+                .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
+                .with_instance_id(instance_id)
                 .with_config(config)
                 .build()?,
         )),
         MissionArg::ManyToManyBackground => Ok(MissionApp::ManyToManyBackground(
-            ManyToManyBackground::RuntimeMatrixAppBuilder::new()
-                .with_context(copper_ctx)
+            ManyToManyBackground::RuntimeMatrixApp::builder()
+                .with_clock(clock.clone())
+                .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
+                .with_instance_id(instance_id)
                 .with_config(config)
                 .build()?,
         )),
         MissionArg::BridgeFanout => Ok(MissionApp::BridgeFanout(
-            BridgeFanout::RuntimeMatrixAppBuilder::new()
-                .with_context(copper_ctx)
+            BridgeFanout::RuntimeMatrixApp::builder()
+                .with_clock(clock.clone())
+                .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
+                .with_instance_id(instance_id)
                 .with_config(config)
                 .build()?,
         )),
         MissionArg::BridgeFanoutBackground => Ok(MissionApp::BridgeFanoutBackground(
-            BridgeFanoutBackground::RuntimeMatrixAppBuilder::new()
-                .with_context(copper_ctx)
+            BridgeFanoutBackground::RuntimeMatrixApp::builder()
+                .with_clock(clock)
+                .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
+                .with_instance_id(instance_id)
                 .with_config(config)
                 .build()?,
         )),
@@ -1343,13 +1361,6 @@ pub fn run_bench_cli() -> CuResult<()> {
             .map_err(|err| CuError::new_with_cause("failed to create temp benchmark dir", err))?;
         let logger_path = tmp_dir.path().join(format!("{}.copper", mission.as_str()));
         let (clock, clock_mock) = RobotClock::mock();
-        let ctx = basic_copper_setup(
-            &logger_path,
-            DEFAULT_LOG_SLAB_SIZE,
-            false,
-            Some(clock.clone()),
-        )?;
-
         let mut config = load_runtime_matrix_config()?;
         configure_runtime_matrix(
             &mut config,
@@ -1359,7 +1370,7 @@ pub fn run_bench_cli() -> CuResult<()> {
             args.compute_rounds,
             args.enable_task_logging,
         )?;
-        let mut app = build_mission_app(mission, &ctx, config)?;
+        let mut app = build_mission_app(mission, clock.clone(), &logger_path, 0, config)?;
 
         app.start_all_tasks()?;
         for i in 0..args.warmup {
@@ -1540,8 +1551,6 @@ mod tests {
             .map_err(|err| CuError::new_with_cause("failed to create temp test dir", err))?;
         let log_path = tmp_dir.path().join(format!("{}.copper", mission.as_str()));
         let (clock, clock_mock) = RobotClock::mock();
-        let ctx = basic_copper_setup(&log_path, DEFAULT_LOG_SLAB_SIZE, false, Some(clock.clone()))?;
-
         let mut config = load_runtime_matrix_config()?;
         configure_runtime_matrix(
             &mut config,
@@ -1553,7 +1562,7 @@ mod tests {
         )?;
         clear_trace();
 
-        let mut app = build_mission_app(mission, &ctx, config)?;
+        let mut app = build_mission_app(mission, clock.clone(), &log_path, 0, config)?;
         app.start_all_tasks()?;
 
         let total_iterations = TEST_EMIT_LIMIT

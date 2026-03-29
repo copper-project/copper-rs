@@ -66,11 +66,8 @@ fn main() {
     .add_systems(Update, sync_split_loading_overlay);
 
     world::build_world(&mut app, false, true);
-    app.add_systems(
-        FixedUpdate,
-        sim_driver::run_copper_callback::<LoggerRuntime>,
-    );
-    app.add_systems(PostUpdate, sim_driver::stop_copper_on_exit::<LoggerRuntime>);
+    app.add_systems(FixedUpdate, sim_driver::run_copper_callback);
+    app.add_systems(PostUpdate, sim_driver::stop_copper_on_exit);
     app.run();
 }
 

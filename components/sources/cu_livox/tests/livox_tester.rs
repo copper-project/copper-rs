@@ -4,7 +4,6 @@ use cu_livox::LidarCuMsgPayload;
 use cu_livox::parser::LidarFrame;
 use cu_udp_inject::PcapStreamer;
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 
 use std::thread;
 use std::time::Duration;
@@ -74,9 +73,7 @@ struct LivoxTester {}
 fn main() {
     let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
     let logger_path = tmp_dir.path().join("livox_tester.copper");
-    let copper_ctx =
-        basic_copper_setup(&logger_path, None, true, None).expect("Failed to setup logger.");
-    debug!("Logger created at {}.", logger_path);
+    debug!("Logger created at {}.", &logger_path);
 
     thread::spawn(|| {
         let mut streamer = PcapStreamer::new("tests/livox_tele15_small.pcap", "127.0.0.1:56001");
@@ -91,9 +88,13 @@ fn main() {
         }
     });
 
-    let clock = copper_ctx.clock;
+    let clock = RobotClock::default();
     debug!("Creating application... ");
-    let mut application = LivoxTester::new(clock.clone(), copper_ctx.unified_logger.clone(), None)
+    let mut application = LivoxTester::builder()
+        .with_clock(clock.clone())
+        .with_log_path(&logger_path, None)
+        .expect("Failed to setup logger.")
+        .build()
         .expect("Failed to create runtime.");
     debug!("Running... starting clock: {}.", clock.now());
     for _ in 0..20 {

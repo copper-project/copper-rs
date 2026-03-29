@@ -207,7 +207,11 @@ fn main() -> ! {
         EMMCLogger::new(sd, blk_id, blk_len).expect("Could not create EMMCLogger"),
     ));
 
-    let mut app = BlinkyApp::new(clock, writer).unwrap();
+    let mut app = BlinkyApp::builder()
+        .with_clock(clock)
+        .with_logger::<EMMCSectionStorage<TSPimodoriSdCard>, EMMCLogger<TSPimodoriSdCard>>(writer)
+        .build()
+        .unwrap();
     info!("Starting Copper...");
 
     let _ = <BlinkyApp as CuApplication<

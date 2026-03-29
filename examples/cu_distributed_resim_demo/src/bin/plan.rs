@@ -2,7 +2,6 @@ use cu_distributed_resim_demo::{
     DEFAULT_PLAN_PERIOD_MS, LOG_SLAB_SIZE, parse_run_options, sleep_period,
 };
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 
 pub mod bridges {
     pub use cu_distributed_resim_demo::bridges::*;
@@ -28,10 +27,10 @@ fn main() {
 
 fn drive() -> CuResult<()> {
     let options = parse_run_options("plan.copper", DEFAULT_PLAN_PERIOD_MS)?;
-    let ctx = basic_copper_setup(&options.log_path, LOG_SLAB_SIZE, true, None)?
-        .with_instance_id(options.instance_id);
-
-    let mut app = PlanAppBuilder::new().with_context(&ctx).build()?;
+    let mut app = PlanApp::builder()
+        .with_log_path(&options.log_path, LOG_SLAB_SIZE)?
+        .with_instance_id(options.instance_id)
+        .build()?;
     app.start_all_tasks()?;
 
     if let Some(iterations) = options.iterations {

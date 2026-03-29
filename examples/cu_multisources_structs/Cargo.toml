@@ -29,5 +29,4 @@ logreader = ["dep:cu29-export"]
 cu29 = { workspace = true }
 bincode = { workspace = true, features = ["derive"] }
 serde = { workspace = true, features = ["derive"] }
-cu29-helpers = { workspace = true }
 cu29-export = { workspace = true, optional = true }

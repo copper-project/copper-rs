@@ -1783,15 +1783,6 @@ mod tests {
                     "(tasks: [], cnx: [])".to_string()
                 }
 
-                fn new(
-                    _clock: RobotClock,
-                    _unified_logger: Arc<Mutex<L>>,
-                    _config_override: Option<CuConfig>,
-                    _sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
-                ) -> CuResult<Self> {
-                    Ok(Self)
-                }
-
                 fn start_all_tasks(
                     &mut self,
                     _sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
@@ -1844,18 +1835,12 @@ mod tests {
                 CuDistributedReplayApplication<S, L> for $name
             {
                 fn build_distributed_replay(
-                    clock: RobotClock,
-                    unified_logger: Arc<Mutex<L>>,
+                    _clock: RobotClock,
+                    _unified_logger: Arc<Mutex<L>>,
                     _instance_id: u32,
-                    config_override: Option<CuConfig>,
+                    _config_override: Option<CuConfig>,
                 ) -> CuResult<Self> {
-                    let mut noop = |_step: ()| SimOverride::ExecuteByRuntime;
-                    <Self as CuSimApplication<S, L>>::new(
-                        clock,
-                        unified_logger,
-                        config_override,
-                        &mut noop,
-                    )
+                    Ok(Self)
                 }
             }
         };

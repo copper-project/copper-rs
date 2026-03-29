@@ -1,5 +1,4 @@
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 
 static LAST_I32: AtomicI32 = AtomicI32::new(0);
@@ -171,11 +170,11 @@ struct App {}
 fn main() {
     let tmp_dir = tempfile::TempDir::new().expect("Could not create temporary directory");
     let logger_path = tmp_dir.path().join("logger.copper");
-    let copper_ctx =
-        basic_copper_setup(&logger_path, None, true, None).expect("Failed to setup logger.");
-    let clock = copper_ctx.clock.clone();
 
-    let mut application = App::new(clock.clone(), copper_ctx.unified_logger.clone(), None)
+    let mut application = App::builder()
+        .with_log_path(&logger_path, None)
+        .expect("Failed to setup logger.")
+        .build()
         .expect("Failed to create application.");
     application
         .start_all_tasks()

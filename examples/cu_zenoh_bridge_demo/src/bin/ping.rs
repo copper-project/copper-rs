@@ -1,6 +1,5 @@
 use cu_zenoh_bridge_demo::parse_run_options;
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 use std::time::Duration;
 
 pub mod bridges {
@@ -29,10 +28,10 @@ fn main() {
 
 fn drive() -> CuResult<()> {
     let options = parse_run_options("zenoh_ping.copper")?;
-    let ctx = basic_copper_setup(&options.log_path, SLAB_SIZE, true, None)?
-        .with_instance_id(options.instance_id);
-
-    let mut app = PingAppBuilder::new().with_context(&ctx).build()?;
+    let mut app = PingApp::builder()
+        .with_log_path(&options.log_path, SLAB_SIZE)?
+        .with_instance_id(options.instance_id)
+        .build()?;
     app.start_all_tasks()?;
 
     if let Some(iterations) = options.iterations {

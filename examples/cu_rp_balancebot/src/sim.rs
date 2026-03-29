@@ -66,11 +66,8 @@ pub fn make_world(headless: bool) -> App {
 
     world::build_world(&mut app, headless, false);
     app.add_systems(Startup, sim_driver::setup_native_copper);
-    app.add_systems(
-        FixedUpdate,
-        sim_driver::run_copper_callback::<CopperContext>,
-    );
-    app.add_systems(PostUpdate, sim_driver::stop_copper_on_exit::<CopperContext>);
+    app.add_systems(FixedUpdate, sim_driver::run_copper_callback);
+    app.add_systems(PostUpdate, sim_driver::stop_copper_on_exit);
     app
 }
 

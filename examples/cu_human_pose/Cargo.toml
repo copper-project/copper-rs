@@ -19,7 +19,6 @@ cuda = ["candle-core/cuda", "candle-nn/cuda"]
 
 [dependencies]
 cu29 = { workspace = true, features = ["log-level-debug", "textlogs"] }
-cu29-helpers = { workspace = true }
 cu-gstreamer = { path = "../../components/sources/cu_gstreamer", version = "0.14.0", features = [
   "gst",
 ] }

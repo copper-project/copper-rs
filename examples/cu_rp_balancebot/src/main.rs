@@ -1,9 +1,8 @@
 pub mod tasks;
 
 use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct BalanceBot {}
@@ -20,20 +19,17 @@ fn main() {
         fs::create_dir_all(parent).expect("Failed to create logs directory");
     }
 
-    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, true, None)
-        .expect("Failed to setup logger.");
-    debug!("Logger created at {}.", path = logger_path);
+    debug!("Logger created at {}.", path = &logger_path);
 
     debug!("Creating application... ");
 
-    let mut application = BalanceBotBuilder::new()
-        .with_context(&copper_ctx)
+    let mut application = BalanceBot::builder()
+        .with_log_path(logger_path, SLAB_SIZE)
+        .expect("Failed to setup logger.")
         .build()
         .expect("Failed to create runtime.");
 
-    let clock = copper_ctx.clock;
-
-    debug!("Running... starting clock: {}.", clock.now());
+    debug!("Running... starting clock: {}.", application.clock().now());
     application.run().expect("Failed to run application.");
-    debug!("End of app: final clock: {}.", clock.now());
+    debug!("End of app: final clock: {}.", application.clock().now());
 }

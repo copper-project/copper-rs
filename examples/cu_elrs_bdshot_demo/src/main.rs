@@ -226,7 +226,11 @@ fn main() -> ! {
         EMMCLogger::new(sd, blk_id, blk_len).expect("Could not create EMMC logger"),
     ));
 
-    let mut app = BdshotDemoApp::new(clock, writer).unwrap();
+    let mut app = BdshotDemoApp::builder()
+        .with_clock(clock)
+        .with_logger::<EMMCSectionStorage<TSPimodoriSdCard>, EMMCLogger<TSPimodoriSdCard>>(writer)
+        .build()
+        .unwrap();
     info!("Starting cu-bdshot-demo...");
 
     let _ = <BdshotDemoApp as CuApplication<

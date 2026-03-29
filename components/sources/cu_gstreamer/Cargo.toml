@@ -22,7 +22,6 @@ serde = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 rerun = { workspace = true }
-cu29-helpers = { workspace = true }
 
 [build-dependencies]
 cfg_aliases = { workspace = true }

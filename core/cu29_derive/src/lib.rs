@@ -1178,6 +1178,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let lifecycle_stream_field: Field = parse_quote! {
         runtime_lifecycle_stream: Option<Box<dyn WriteStream<RuntimeLifecycleRecord>>>
     };
+    let logger_runtime_field: Field = parse_quote! {
+        logger_runtime: cu29::prelude::LoggerRuntime
+    };
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[match struct anonymity]");
@@ -1185,10 +1188,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         Named(fields_named) => {
             fields_named.named.push(runtime_field);
             fields_named.named.push(lifecycle_stream_field);
+            fields_named.named.push(logger_runtime_field);
         }
         Unnamed(fields_unnamed) => {
             fields_unnamed.unnamed.push(runtime_field);
             fields_unnamed.unnamed.push(lifecycle_stream_field);
+            fields_unnamed.unnamed.push(logger_runtime_field);
         }
         Fields::Unit => {
             panic!(
@@ -2627,11 +2632,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             None
         };
 
-        let (new, run_one_iteration, start_all_tasks, stop_all_tasks, run) = if sim_mode {
+        let (run_one_iteration, start_all_tasks, stop_all_tasks, run) = if sim_mode {
             (
-                quote! {
-                    fn new(clock:RobotClock, unified_logger: Arc<Mutex<L>>, config_override: Option<CuConfig>, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<Self>
-                },
                 quote! {
                     fn run_one_iteration(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()>
                 },
@@ -2647,16 +2649,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             )
         } else {
             (
-                if std {
-                    quote! {
-                        fn new(clock:RobotClock, unified_logger: Arc<Mutex<L>>, config_override: Option<CuConfig>) -> CuResult<Self>
-                    }
-                } else {
-                    quote! {
-                        // no config override is possible in no-std
-                        fn new(clock:RobotClock, unified_logger: Arc<Mutex<L>>) -> CuResult<Self>
-                    }
-                },
                 quote! {
                     fn run_one_iteration(&mut self) -> CuResult<()>
                 },
@@ -3145,35 +3137,76 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
-        let init_resources_sig = if std {
+        let prepare_config_sig = if std {
             quote! {
-                pub fn init_resources_for_instance(instance_id: u32, config_override: Option<CuConfig>) -> CuResult<AppResources>
+                fn prepare_config(
+                    instance_id: u32,
+                    config_override: Option<CuConfig>,
+                ) -> CuResult<(CuConfig, RuntimeLifecycleConfigSource)>
             }
         } else {
             quote! {
-                pub fn init_resources() -> CuResult<AppResources>
+                fn prepare_config() -> CuResult<(CuConfig, RuntimeLifecycleConfigSource)>
             }
         };
 
-        let init_resources_compat_fn = if std {
+        let prepare_config_call = if std {
+            quote! { Self::prepare_config(instance_id, config_override)? }
+        } else {
+            quote! { Self::prepare_config()? }
+        };
+
+        let prepare_resources_sig = if std {
+            quote! {
+                pub fn prepare_resources_for_instance(
+                    instance_id: u32,
+                    config_override: Option<CuConfig>,
+                ) -> CuResult<AppResources>
+            }
+        } else {
+            quote! {
+                pub fn prepare_resources() -> CuResult<AppResources>
+            }
+        };
+
+        let prepare_resources_compat_fn = if std {
             Some(quote! {
-                pub fn init_resources(config_override: Option<CuConfig>) -> CuResult<AppResources> {
-                    Self::init_resources_for_instance(0, config_override)
+                pub fn prepare_resources(
+                    config_override: Option<CuConfig>,
+                ) -> CuResult<AppResources> {
+                    Self::prepare_resources_for_instance(0, config_override)
                 }
             })
         } else {
             None
         };
 
-        let init_resources_call = if std {
-            quote! { Self::init_resources(config_override)? }
+        let init_resources_compat_fn = if std {
+            Some(quote! {
+                pub fn init_resources_for_instance(
+                    instance_id: u32,
+                    config_override: Option<CuConfig>,
+                ) -> CuResult<AppResources> {
+                    Self::prepare_resources_for_instance(instance_id, config_override)
+                }
+
+                pub fn init_resources(
+                    config_override: Option<CuConfig>,
+                ) -> CuResult<AppResources> {
+                    Self::prepare_resources(config_override)
+                }
+            })
         } else {
-            quote! { Self::init_resources()? }
+            Some(quote! {
+                pub fn init_resources() -> CuResult<AppResources> {
+                    Self::prepare_resources()
+                }
+            })
         };
 
-        let new_with_resources_sig = if sim_mode {
+        let build_with_resources_sig = if sim_mode {
             quote! {
-                pub fn new_with_resources<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>(
+                fn build_with_resources<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>(
                     clock: RobotClock,
                     unified_logger: Arc<Mutex<L>>,
                     app_resources: AppResources,
@@ -3183,19 +3216,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         } else {
             quote! {
-                pub fn new_with_resources<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>(
+                fn build_with_resources<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>(
                     clock: RobotClock,
                     unified_logger: Arc<Mutex<L>>,
                     app_resources: AppResources,
                     instance_id: u32,
                 ) -> CuResult<Self>
             }
-        };
-
-        let new_with_resources_call = if sim_mode {
-            quote! { Self::new_with_resources(clock, unified_logger, app_resources, 0, sim_callback) }
-        } else {
-            quote! { Self::new_with_resources(clock, unified_logger, app_resources, 0) }
         };
         let parallel_rt_metadata_arg = if std && parallel_rt_enabled {
             Some(quote! {
@@ -3801,8 +3828,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
-        let init_resources_fn = quote! {
-            #init_resources_sig {
+        let prepare_config_fn = quote! {
+            #prepare_config_sig {
                 let config_filename = #config_file;
 
                 #[cfg(target_os = "none")]
@@ -3824,6 +3851,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     ::cu29::prelude::info!("CuApp init: rate_target_hz=none");
                 }
 
+                Ok((config, config_source))
+            }
+        };
+
+        let prepare_resources_fn = quote! {
+            #prepare_resources_sig {
+                let (config, config_source) = #prepare_config_call;
+
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp init: building resources");
                 let resources = #mission_mod::resources_instanciator(&config)?;
@@ -3838,30 +3873,58 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
-        let new_with_resources_fn = quote! {
-            #new_with_resources_sig {
+        let new_with_resources_compat_fn = if sim_mode {
+            quote! {
+                pub fn new_with_resources<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>(
+                    clock: RobotClock,
+                    unified_logger: Arc<Mutex<L>>,
+                    app_resources: AppResources,
+                    instance_id: u32,
+                    sim_callback: &mut impl FnMut(SimStep) -> SimOverride,
+                ) -> CuResult<Self> {
+                    Self::build_with_resources(
+                        clock,
+                        unified_logger,
+                        app_resources,
+                        instance_id,
+                        sim_callback,
+                    )
+                }
+            }
+        } else {
+            quote! {
+                pub fn new_with_resources<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>(
+                    clock: RobotClock,
+                    unified_logger: Arc<Mutex<L>>,
+                    app_resources: AppResources,
+                    instance_id: u32,
+                ) -> CuResult<Self> {
+                    Self::build_with_resources(clock, unified_logger, app_resources, instance_id)
+                }
+            }
+        };
+
+        let build_with_resources_fn = quote! {
+            #build_with_resources_sig {
                 let AppResources {
                     config,
                     config_source,
                     resources,
                 } = app_resources;
 
-                #[cfg(target_os = "none")]
-                {
-                    let structured_stream = ::cu29::prelude::stream_write::<
-                        ::cu29::prelude::CuLogEntry,
-                        S,
-                    >(
-                        unified_logger.clone(),
-                        ::cu29::prelude::UnifiedLogType::StructuredLogLine,
-                        4096 * 10,
-                    )?;
-                    let _logger_runtime = ::cu29::prelude::LoggerRuntime::init(
-                        clock.clone(),
-                        structured_stream,
-                        None::<::cu29::prelude::NullLog>,
-                    );
-                }
+                let structured_stream = ::cu29::prelude::stream_write::<
+                    ::cu29::prelude::CuLogEntry,
+                    S,
+                >(
+                    unified_logger.clone(),
+                    ::cu29::prelude::UnifiedLogType::StructuredLogLine,
+                    4096 * 10,
+                )?;
+                let logger_runtime = ::cu29::prelude::LoggerRuntime::init(
+                    clock.clone(),
+                    structured_stream,
+                    None::<::cu29::prelude::NullLog>,
+                );
 
                 // For simple cases we can say the section is just a bunch of Copper Lists.
                 // But we can now have allocations outside of it so we can override it from the config.
@@ -3956,6 +4019,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let application = Ok(#application_name {
                     copper_runtime,
                     runtime_lifecycle_stream: Some(Box::new(runtime_lifecycle_stream)),
+                    logger_runtime,
                 });
 
                 #sim_callback_on_new
@@ -3982,6 +4046,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #(#reflect_type_registration_calls)*
                 }
 
+                /// Returns a clone of the runtime clock handle.
+                #[inline]
+                pub fn clock(&self) -> cu29::clock::RobotClock {
+                    self.copper_runtime.clock()
+                }
+
                 /// Log one runtime lifecycle event with the current runtime timestamp.
                 pub fn log_runtime_lifecycle_event(
                     &mut self,
@@ -4001,11 +4071,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::ShutdownCompleted)
                 }
 
+                #prepare_config_fn
+                #prepare_resources_compat_fn
+                #prepare_resources_fn
                 #init_resources_compat_fn
-
-                #init_resources_fn
-
-                #new_with_resources_fn
+                #new_with_resources_compat_fn
+                #build_with_resources_fn
 
                 /// Mutable access to the underlying runtime (used by tools such as deterministic re-sim).
                 #[inline]
@@ -4054,11 +4125,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let application_impl = quote! {
             #app_impl_decl {
                 #simstep_type_decl
-
-                #new {
-                    let app_resources = #init_resources_call;
-                    #new_with_resources_call
-                }
 
                 fn get_original_config() -> String {
                     Self::original_config()
@@ -4136,15 +4202,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     ) -> CuResult<Self> {
                         let mut noop =
                             |_step: SimStep<'_>| cu29::simulation::SimOverride::ExecuteByRuntime;
-                        let app_resources =
-                            Self::init_resources_for_instance(instance_id, config_override)?;
-                        Self::new_with_resources(
-                            clock,
-                            unified_logger,
-                            app_resources,
-                            instance_id,
-                            &mut noop,
-                        )
+                        let builder = Self::builder()
+                            .with_logger::<S, L>(unified_logger)
+                            .with_clock(clock)
+                            .with_instance_id(instance_id);
+                        let builder = if let Some(config_override) = config_override {
+                            builder.with_config(config_override)
+                        } else {
+                            builder
+                        };
+                        builder.with_sim_callback(&mut noop).build()
                     }
                 }
             })
@@ -4152,44 +4219,89 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             None
         };
 
+        let builder_prepare_config_call = if std {
+            quote! { #application_name::prepare_config(self.instance_id, self.config_override)? }
+        } else {
+            quote! {{
+                let _ = self.config_override;
+                #application_name::prepare_config()?
+            }}
+        };
+
+        let builder_with_config_method = if std {
+            Some(quote! {
+                #[allow(dead_code)]
+                pub fn with_config(mut self, config_override: CuConfig) -> Self {
+                    self.config_override = Some(config_override);
+                    self
+                }
+            })
+        } else {
+            None
+        };
+
+        let builder_default_clock = if std {
+            quote! { Some(RobotClock::default()) }
+        } else {
+            quote! { None }
+        };
+
         let (
             builder_struct,
-            builder_new,
             builder_impl,
+            builder_ctor,
+            builder_log_path_generics,
             builder_sim_callback_method,
             builder_build_sim_callback_arg,
         ) = if sim_mode {
             (
                 quote! {
                     #[allow(dead_code)]
-                    pub struct #builder_name <'a, F> {
+                    pub struct #builder_name<'a, F, S, L, R>
+                    where
+                        S: SectionStorage + 'static,
+                        L: UnifiedLogWrite<S> + 'static,
+                        R: FnOnce(&CuConfig) -> CuResult<ResourceManager>,
+                        F: FnMut(SimStep) -> SimOverride,
+                    {
                         clock: Option<RobotClock>,
-                        unified_logger: Option<Arc<Mutex<UnifiedLoggerWrite>>>,
+                        unified_logger: Arc<Mutex<L>>,
                         instance_id: u32,
                         config_override: Option<CuConfig>,
-                        sim_callback: Option<&'a mut F>
+                        resources_factory: R,
+                        sim_callback: Option<&'a mut F>,
+                        _storage: core::marker::PhantomData<S>,
                     }
+                },
+                quote! {
+                    impl<'a, F, S, L, R> #builder_name<'a, F, S, L, R>
+                    where
+                        S: SectionStorage + 'static,
+                        L: UnifiedLogWrite<S> + 'static,
+                        R: FnOnce(&CuConfig) -> CuResult<ResourceManager>,
+                        F: FnMut(SimStep) -> SimOverride,
                 },
                 quote! {
                     #[allow(dead_code)]
-                    pub fn new() -> Self {
-                        Self {
-                            clock: None,
-                            unified_logger: None,
+                    pub fn builder<'a, F>() -> #builder_name<'a, F, cu29::prelude::NoopSectionStorage, cu29::prelude::NoopLogger, fn(&CuConfig) -> CuResult<ResourceManager>>
+                    where
+                        F: FnMut(SimStep) -> SimOverride,
+                    {
+                        #builder_name {
+                            clock: #builder_default_clock,
+                            unified_logger: Arc::new(Mutex::new(cu29::prelude::NoopLogger::new())),
                             instance_id: 0,
                             config_override: None,
+                            resources_factory: #mission_mod::resources_instanciator as fn(&CuConfig) -> CuResult<ResourceManager>,
                             sim_callback: None,
+                            _storage: core::marker::PhantomData,
                         }
                     }
                 },
-                quote! {
-                    impl<'a, F> #builder_name <'a, F>
-                    where
-                        F: FnMut(SimStep) -> SimOverride,
-                },
+                quote! {'a, F, MmapSectionStorage, UnifiedLoggerWrite, R},
                 Some(quote! {
-                    pub fn with_sim_callback(mut self, sim_callback: &'a mut F) -> Self
-                    {
+                    #[allow(dead_code)]
+                    pub fn with_sim_callback(mut self, sim_callback: &'a mut F) -> Self {
                         self.sim_callback = Some(sim_callback);
                         self
                     }
@@ -4203,30 +4315,111 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             (
                 quote! {
                     #[allow(dead_code)]
-                    pub struct #builder_name {
+                    pub struct #builder_name<S, L, R>
+                    where
+                        S: SectionStorage + 'static,
+                        L: UnifiedLogWrite<S> + 'static,
+                        R: FnOnce(&CuConfig) -> CuResult<ResourceManager>,
+                    {
                         clock: Option<RobotClock>,
-                        unified_logger: Option<Arc<Mutex<UnifiedLoggerWrite>>>,
+                        unified_logger: Arc<Mutex<L>>,
                         instance_id: u32,
                         config_override: Option<CuConfig>,
+                        resources_factory: R,
+                        _storage: core::marker::PhantomData<S>,
                     }
+                },
+                quote! {
+                    impl<S, L, R> #builder_name<S, L, R>
+                    where
+                        S: SectionStorage + 'static,
+                        L: UnifiedLogWrite<S> + 'static,
+                        R: FnOnce(&CuConfig) -> CuResult<ResourceManager>,
                 },
                 quote! {
                     #[allow(dead_code)]
-                    pub fn new() -> Self {
-                        Self {
-                            clock: None,
-                            unified_logger: None,
+                    pub fn builder() -> #builder_name<cu29::prelude::NoopSectionStorage, cu29::prelude::NoopLogger, fn(&CuConfig) -> CuResult<ResourceManager>> {
+                        #builder_name {
+                            clock: #builder_default_clock,
+                            unified_logger: Arc::new(Mutex::new(cu29::prelude::NoopLogger::new())),
                             instance_id: 0,
                             config_override: None,
+                            resources_factory: #mission_mod::resources_instanciator as fn(&CuConfig) -> CuResult<ResourceManager>,
+                            _storage: core::marker::PhantomData,
                         }
                     }
                 },
-                quote! {
-                    impl #builder_name
-                },
+                quote! {MmapSectionStorage, UnifiedLoggerWrite, R},
                 None,
                 None,
             )
+        };
+
+        let builder_with_logger_generics = if sim_mode {
+            quote! {'a, F, S2, L2, R}
+        } else {
+            quote! {S2, L2, R}
+        };
+
+        let builder_with_resources_generics = if sim_mode {
+            quote! {'a, F, S, L, R2}
+        } else {
+            quote! {S, L, R2}
+        };
+
+        let builder_sim_callback_field_copy = if sim_mode {
+            Some(quote! {
+                sim_callback: self.sim_callback,
+            })
+        } else {
+            None
+        };
+
+        let builder_with_log_path_method = if std {
+            Some(quote! {
+                #[allow(dead_code)]
+                pub fn with_log_path(
+                    self,
+                    path: impl AsRef<std::path::Path>,
+                    slab_size: Option<usize>,
+                ) -> CuResult<#builder_name<#builder_log_path_generics>> {
+                    let preallocated_size = slab_size.unwrap_or(1024 * 1024 * 10);
+                    let logger = cu29::prelude::UnifiedLoggerBuilder::new()
+                        .write(true)
+                        .create(true)
+                        .file_base_name(path.as_ref())
+                        .preallocated_size(preallocated_size)
+                        .build()
+                        .map_err(|e| CuError::new_with_cause("Failed to create unified logger", e))?;
+                    let logger = match logger {
+                        cu29::prelude::UnifiedLogger::Write(logger) => logger,
+                        cu29::prelude::UnifiedLogger::Read(_) => {
+                            return Err(CuError::from(
+                                "UnifiedLoggerBuilder did not create a write-capable logger",
+                            ));
+                        }
+                    };
+                    Ok(self.with_logger::<MmapSectionStorage, UnifiedLoggerWrite>(Arc::new(Mutex::new(
+                        logger,
+                    ))))
+                }
+            })
+        } else {
+            None
+        };
+
+        let builder_with_unified_logger_method = if std {
+            Some(quote! {
+                #[allow(dead_code)]
+                pub fn with_unified_logger(
+                    self,
+                    unified_logger: Arc<Mutex<UnifiedLoggerWrite>>,
+                ) -> #builder_name<#builder_log_path_generics> {
+                    self.with_logger::<MmapSectionStorage, UnifiedLoggerWrite>(unified_logger)
+                }
+            })
+        } else {
+            None
         };
 
         // backward compat on std non-parameterized impl.
@@ -4283,73 +4476,91 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             None // if no-std, let the user figure our the correct logger type they need to provide anyway.
         };
 
-        let application_builder = if std {
-            Some(quote! {
-                #builder_struct
+        let application_builder = Some(quote! {
+            #builder_struct
 
-                #builder_impl
+            #builder_impl
+            {
+                #[allow(dead_code)]
+                pub fn with_clock(mut self, clock: RobotClock) -> Self {
+                    self.clock = Some(clock);
+                    self
+                }
+
+                #[allow(dead_code)]
+                pub fn with_logger<S2, L2>(
+                    self,
+                    unified_logger: Arc<Mutex<L2>>,
+                ) -> #builder_name<#builder_with_logger_generics>
+                where
+                    S2: SectionStorage + 'static,
+                    L2: UnifiedLogWrite<S2> + 'static,
                 {
-                    #builder_new
-
-                    #[allow(dead_code)]
-                    pub fn with_clock(mut self, clock: RobotClock) -> Self {
-                        self.clock = Some(clock);
-                        self
-                    }
-
-                    #[allow(dead_code)]
-                    pub fn with_unified_logger(mut self, unified_logger: Arc<Mutex<UnifiedLoggerWrite>>) -> Self {
-                        self.unified_logger = Some(unified_logger);
-                        self
-                    }
-
-                    #[allow(dead_code)]
-                    pub fn with_instance_id(mut self, instance_id: u32) -> Self {
-                        self.instance_id = instance_id;
-                        self
-                    }
-
-                    #[allow(dead_code)]
-                    pub fn with_context(mut self, copper_ctx: &CopperContext) -> Self {
-                        self.clock = Some(copper_ctx.clock.clone());
-                        self.unified_logger = Some(copper_ctx.unified_logger.clone());
-                        self.instance_id = copper_ctx.instance_id();
-                        self
-                    }
-
-                    #[allow(dead_code)]
-                    pub fn with_config(mut self, config_override: CuConfig) -> Self {
-                            self.config_override = Some(config_override);
-                            self
-                    }
-
-                    #builder_sim_callback_method
-
-                    #[allow(dead_code)]
-                    pub fn build(self) -> CuResult<#application_name> {
-                        let clock = self
-                            .clock
-                            .ok_or(CuError::from("Clock missing from builder"))?;
-                        let unified_logger = self
-                            .unified_logger
-                            .ok_or(CuError::from("Unified logger missing from builder"))?;
-                        let app_resources = #application_name::init_resources_for_instance(
-                            self.instance_id,
-                            self.config_override,
-                        )?;
-                        #application_name::new_with_resources(
-                            clock,
-                            unified_logger,
-                            app_resources,
-                            self.instance_id,
-                            #builder_build_sim_callback_arg
-                        )
+                    #builder_name {
+                        clock: self.clock,
+                        unified_logger,
+                        instance_id: self.instance_id,
+                        config_override: self.config_override,
+                        resources_factory: self.resources_factory,
+                        #builder_sim_callback_field_copy
+                        _storage: core::marker::PhantomData,
                     }
                 }
-            })
-        } else {
-            // in no-std the user has to construct that manually anyway so don't make any helper here.
-            None
+
+                #builder_with_unified_logger_method
+
+                #[allow(dead_code)]
+                pub fn with_instance_id(mut self, instance_id: u32) -> Self {
+                    self.instance_id = instance_id;
+                    self
+                }
+
+                pub fn with_resources<R2>(self, resources_factory: R2) -> #builder_name<#builder_with_resources_generics>
+                where
+                    R2: FnOnce(&CuConfig) -> CuResult<ResourceManager>,
+                {
+                    #builder_name {
+                        clock: self.clock,
+                        unified_logger: self.unified_logger,
+                        instance_id: self.instance_id,
+                        config_override: self.config_override,
+                        resources_factory,
+                        #builder_sim_callback_field_copy
+                        _storage: core::marker::PhantomData,
+                    }
+                }
+
+                #builder_with_config_method
+                #builder_with_log_path_method
+                #builder_sim_callback_method
+
+                #[allow(dead_code)]
+                pub fn build(self) -> CuResult<#application_name> {
+                    let clock = self
+                        .clock
+                        .ok_or(CuError::from("Clock missing from builder"))?;
+                    let (config, config_source) = #builder_prepare_config_call;
+                    let resources = (self.resources_factory)(&config)?;
+                    let app_resources = AppResources {
+                        config,
+                        config_source,
+                        resources,
+                    };
+                    #application_name::build_with_resources(
+                        clock,
+                        self.unified_logger,
+                        app_resources,
+                        self.instance_id,
+                        #builder_build_sim_callback_arg
+                    )
+                }
+            }
+        });
+
+        let app_builder_inherent_impl = quote! {
+            impl #application_name {
+                #builder_ctor
+            }
         };
 
         let sim_imports = if sim_mode {
@@ -4441,7 +4652,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {
                 use cu29::rayon::ThreadPool;
                 use cu29::cuasynctask::CuAsyncTask;
-                use cu29::curuntime::CopperContext;
                 use cu29::resource::{ResourceBindings, ResourceManager};
                 use cu29::prelude::SectionStorage;
                 use cu29::prelude::UnifiedLoggerWrite;
@@ -4577,6 +4787,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 pub #application_struct
 
                 #app_inherent_impl
+                #app_builder_inherent_impl
                 #app_metadata_impl
                 #app_reflect_impl
                 #application_impl
@@ -4593,14 +4804,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     }
 
     let default_application_tokens = if all_missions.contains_key("default") {
-        let default_builder = if std {
-            Some(quote! {
-                // you can bypass the builder and not use it
-                #[allow(unused_imports)]
-                use default::#builder_name;
-            })
-        } else {
-            None
+        let default_builder = quote! {
+            #[allow(unused_imports)]
+            use default::#builder_name;
         };
         quote! {
             #default_builder
@@ -4733,6 +4939,7 @@ fn build_config_load_stmt(
             }
         } else {
             quote! {
+                let _ = instance_id;
                 let (config, config_source) = if let Some(overridden_config) = config_override {
                     debug!("CuConfig: Overridden programmatically.");
                     (overridden_config, RuntimeLifecycleConfigSource::ProgrammaticOverride)
