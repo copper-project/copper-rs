@@ -32,7 +32,7 @@ let
   # Create a derivation that creates a symlink to the LLVM shared libraries
   llvmLibs = pkgs.symlinkJoin {
     name = "llvm-libs";
-    paths = with pkgs.llvmPackages_14; [
+    paths = with pkgs.llvmPackages_21; [
       libllvm
       libclang
       clang
@@ -63,16 +63,21 @@ let
     glib
     openssl
 
+    # Bevy/Graphics
+    vulkan-loader
+    wayland
+    libxkbcommon
+
     # GStreamer libraries
     gst_all_1.gstreamer
     gst_all_1.gst-plugins-base
 
     # LLVM libraries
-    llvmPackages_14.libllvm
-    llvmPackages_14.libclang
-    llvmPackages_14.clang
-    "${llvmPackages_14.libllvm}/lib"
-    "${llvmPackages_14.clang}/lib"
+    llvmPackages_21.libllvm
+    llvmPackages_21.libclang
+    llvmPackages_21.clang
+    "${llvmPackages_21.libllvm}/lib"
+    "${llvmPackages_21.clang}/lib"
     "${llvmLibs}/lib"
   ];
 
@@ -104,13 +109,30 @@ pkgs.mkShell {
       glib
       openssl
       mold
+      (python314.withPackages (
+        python-pkgs: with python-pkgs; [
+          cbor2
+        ]
+      ))
+
+      # Bevy/Graphics
+      # Audio (Linux only)
+      alsa-lib
+      # Cross Platform 3D Graphics API
+      vulkan-loader
+      # For debugging around vulkan
+      vulkan-tools
+      # Other dependencies
+      libudev-zero
+      wayland
+      libxkbcommon
 
       # LLVM dependencies
       clang
       libclang
-      llvmPackages_14.clang
-      llvmPackages_14.libclang
-      llvmPackages_14.libllvm
+      llvmPackages_21.clang
+      llvmPackages_21.libclang
+      llvmPackages_21.libllvm
 
       # GStreamer dependencies
       gst_all_1.gstreamer
@@ -120,10 +142,14 @@ pkgs.mkShell {
       gst_all_1.gst-plugins-ugly
       gst_all_1.gst-devtools
 
+      # Extras
+      apriltag
+
       # Rust and tooling
       rustWithComponents
       cargo-nextest
       cargo-generate
+      just
     ]
     ++ cudaPackages; # Conditionally add CUDA packages
 
@@ -137,16 +163,16 @@ pkgs.mkShell {
     export FEATURES_FLAG="--features mock,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode${cudaFeatureFlag}"
 
     # LLVM configuration
-    export LLVM_CONFIG=${pkgs.llvmPackages_14.llvm}/bin/llvm-config
-    export LIBCLANG_PATH="${pkgs.llvmPackages_14.libclang.lib}/lib"
+    export LLVM_CONFIG=${pkgs.llvmPackages_21.llvm}/bin/llvm-config
+    export LIBCLANG_PATH="${pkgs.llvmPackages_21.libclang.lib}/lib"
 
-    # Create directory with symlink for libLLVM-14.so.1
+    # Create directory with symlink for libLLVM-21.so.1
     mkdir -p $HOME/.nix-llvm-libs
-    ln -sf ${pkgs.llvmPackages_14.libllvm}/lib/libLLVM-14.so $HOME/.nix-llvm-libs/libLLVM-14.so.1 || true
+    ln -sf ${pkgs.llvmPackages_21.libllvm}/lib/libLLVM-21.so $HOME/.nix-llvm-libs/libLLVM-21.so.1 || true
     export LD_LIBRARY_PATH=$HOME/.nix-llvm-libs:${pkgs.lib.makeLibraryPath allLibraryPaths}:$LD_LIBRARY_PATH
 
     # Bindgen configuration
-    export BINDGEN_EXTRA_CLANG_ARGS="-I${pkgs.llvmPackages_14.libclang.lib}/lib/clang/${pkgs.llvmPackages_14.libclang.version}/include -I${pkgs.glib.dev}/include/glib-2.0 -I${pkgs.glib.out}/lib/glib-2.0/include"
+    export BINDGEN_EXTRA_CLANG_ARGS="-I${pkgs.llvmPackages_21.libclang.lib}/lib/clang/${pkgs.llvmPackages_21.libclang.version}/include -I${pkgs.glib.dev}/include/glib-2.0 -I${pkgs.glib.out}/lib/glib-2.0/include"
 
     # CUDA configuration if enabled
     ${

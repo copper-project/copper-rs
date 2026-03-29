@@ -43,8 +43,8 @@
         };
 
         # Choose LLVM version based on platform
-        # Use latest LLVM on macOS to avoid version conflicts, LLVM 14 on Linux for consistency
-        llvmPackages = if isDarwin then pkgs.llvmPackages else pkgs.llvmPackages_14;
+        # Use latest LLVM on macOS to avoid version conflicts, LLVM 21 on Linux for consistency
+        llvmPackages = if isDarwin then pkgs.llvmPackages else pkgs.llvmPackages_21;
 
         # Create a derivation that creates a symlink to the LLVM shared libraries (Linux only)
         llvmLibs =
@@ -105,6 +105,23 @@
               pkg-config
               glib
               openssl
+              (python314.withPackages (
+                python-pkgs: with python-pkgs; [
+                  cbor2
+                ]
+              ))
+
+              # Bevy/Graphics
+              # Audio (Linux only)
+              alsa-lib
+              # Cross Platform 3D Graphics API
+              vulkan-loader
+              # For debugging around vulkan
+              vulkan-tools
+              # Other dependencies
+              libudev-zero
+              wayland
+              libxkbcommon
 
               # LLVM dependencies (version varies by platform)
               llvmPackages.clang
@@ -119,10 +136,14 @@
               gst_all_1.gst-plugins-ugly
               gst_all_1.gst-devtools
 
+              # Extras
+              apriltag
+
               # Rust and tooling
               rustWithComponents
               cargo-nextest
               cargo-generate
+              just
             ];
 
             # Define feature flag string based on CUDA availability
@@ -139,11 +160,16 @@
                   glib
                   openssl
 
+                  # Bevy/Graphics
+                  vulkan-loader
+                  wayland
+                  libxkbcommon
+
                   # GStreamer libraries
                   gst_all_1.gstreamer
                   gst_all_1.gst-plugins-base
 
-                  # LLVM libraries (LLVM 14 on Linux)
+                  # LLVM libraries (LLVM 21 on Linux)
                   llvmPackages.libllvm
                   llvmPackages.libclang
                   llvmPackages.clang
@@ -187,7 +213,7 @@
                 ''
                   # Linux-specific LLVM library symlink setup
                   mkdir -p $HOME/.nix-llvm-libs
-                  ln -sf ${llvmPackages.libllvm}/lib/libLLVM-14.so $HOME/.nix-llvm-libs/libLLVM-14.so.1 || true
+                  ln -sf ${llvmPackages.libllvm}/lib/libLLVM-21.so $HOME/.nix-llvm-libs/libLLVM-21.so.1 || true
                   export LD_LIBRARY_PATH=$HOME/.nix-llvm-libs:${pkgs.lib.makeLibraryPath allLibraryPaths}:$LD_LIBRARY_PATH
 
                   ${
