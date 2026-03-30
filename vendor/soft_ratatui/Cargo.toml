@@ -1,6 +1,6 @@
 [package]
 name = "soft_ratatui"
-version = "0.1.3"
+version = "0.2.0"
 edition = "2024"
 authors = ["gold-silver-copper"]
 
@@ -50,6 +50,7 @@ required-features = ["embedded-ttf"]
 [package.metadata.docs.rs]
 # Enable all features for documentation
 all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [profile.release]
 

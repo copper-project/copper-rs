@@ -36,6 +36,6 @@ cu-tuimon = { path = "../../libs/cu_tuimon", version = "0.14.0", default-feature
   "log_pane",
 ] }
 ratatui = { version = "0.30.0", default-features = false }
-soft_ratatui = { version = "0.1.3", default-features = false, features = [
+soft_ratatui = { version = "0.2.0", default-features = false, features = [
   "embedded-ttf",
 ] }

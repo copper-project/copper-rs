@@ -1,11 +1,11 @@
-//! This module provides the `SoftBackend` implementation for the [`Backend`] trait.
-//! It is used in the integration tests to verify the correctness of the library.
+//! Embedded-graphics rasterization backend for [`SoftBackend`].
 
 use rustc_hash::FxHashSet;
 
 use crate::colors::*;
 use crate::pixmap::RgbPixmap;
 use crate::soft_backend::RasterBackend;
+use crate::soft_backend::{BlinkConfig, CursorConfig};
 
 use embedded_graphics::Drawable;
 
@@ -20,7 +20,10 @@ use ratatui_core::buffer::{Buffer, Cell};
 use ratatui_core::layout::Rect;
 use ratatui_core::style;
 
-/// PREFERRED: uses the embedded-graphics library for rendering, best when paired with embedded-graphics-unicodefonts (enabled by default)
+/// Raster backend built on `embedded-graphics` mono fonts.
+///
+/// This is the most direct backend for bitmap-style terminal rendering and pairs
+/// naturally with `embedded-graphics-unicodefonts`.
 pub struct EmbeddedGraphics {
     pub font_regular: MonoFont<'static>,
     /// Bold font.
@@ -124,11 +127,24 @@ impl SoftBackend<EmbeddedGraphics> {
     ///
     /// # Examples
     /// ```rust
-    /// use embedded_graphics_unicodefonts::{mono_8x13_atlas, mono_8x13_bold_atlas, mono_8x13_italic_atlas};
-    /// use embedded_graphics::mono_font::{ascii::FONT_8X13, MonoFont};
+    /// use soft_ratatui::embedded_graphics_unicodefonts::{
+    ///     mono_8x13_atlas, mono_8x13_bold_atlas, mono_8x13_italic_atlas,
+    /// };
+    /// use soft_ratatui::{EmbeddedGraphics, SoftBackend};
     ///
-    ///  let backend = SoftBackend::<EmbeddedGraphics>::new(100,50,font_regular,Some(font_bold),Some(font_italic));
+    /// let font_regular = mono_8x13_atlas();
+    /// let font_bold = mono_8x13_bold_atlas();
+    /// let font_italic = mono_8x13_italic_atlas();
+    /// let backend = SoftBackend::<EmbeddedGraphics>::new(
+    ///     100,
+    ///     50,
+    ///     font_regular,
+    ///     Some(font_bold),
+    ///     Some(font_italic),
+    /// );
+    /// let _ = backend;
     /// ```
+
     pub fn new(
         width: u16,
         height: u16,
@@ -144,8 +160,9 @@ impl SoftBackend<EmbeddedGraphics> {
             buffer: Buffer::empty(Rect::new(0, 0, width, height)),
             cursor: false,
             cursor_pos: (0, 0),
+            cursor_config: CursorConfig::default(),
             raster_backend: EmbeddedGraphics {
-                font_regular,
+                font_regular: font_regular,
                 font_bold,
                 font_italic,
             },
@@ -155,10 +172,10 @@ impl SoftBackend<EmbeddedGraphics> {
             char_width,
             char_height,
 
-            blink_counter: 0,
-            blinking_fast: false,
-            blinking_slow: false,
+            frame_count: 0,
+            blink_config: BlinkConfig::default(),
             always_redraw_list: FxHashSet::default(),
+            rendered_cursor: None,
         };
         _ = return_struct.clear();
         return_struct

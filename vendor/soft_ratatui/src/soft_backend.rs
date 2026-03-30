@@ -10,23 +10,140 @@ use ratatui_core::backend::{Backend, ClearType, WindowSize};
 
 use ratatui_core::layout::{Position, Rect, Size};
 
-/// SoftBackend is a Software rendering backend for Ratatui. It stores the generated image internally as rgb_pixmap.
+/// How the cursor is rendered on the pixmap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CursorStyle {
+    /// Invert the colors of the current character cell.
+    Inverse,
+    /// Draw a one-pixel underline at the bottom of the current character cell.
+    Underline,
+    /// Draw a one-pixel outline around the current character cell.
+    Outline,
+    /// Draw corner markers inspired by Japanese IME cursors.
+    Japanese,
+}
+
+/// Cursor appearance and blink behavior.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CursorConfig {
+    /// Visual style for the cursor overlay.
+    pub style: CursorStyle,
+    /// Whether the cursor should hide using the slow blink cadence.
+    pub blink: bool,
+    /// RGB color for non-inverse cursor styles.
+    pub color: [u8; 3],
+}
+
+impl Default for CursorConfig {
+    fn default() -> Self {
+        Self {
+            style: CursorStyle::Inverse,
+            blink: true,
+            color: [255, 255, 255],
+        }
+    }
+}
+
+/// Timing parameters for a single blink pattern.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BlinkTiming {
+    /// How many times per second the element toggles.
+    pub blinks_per_sec: u16,
+    /// Percentage of each cycle spent hidden.
+    pub duty_percent: u16,
+    hidden: bool,
+}
+
+impl BlinkTiming {
+    /// Returns `true` when the blink target should currently be hidden.
+    pub fn is_hidden(&self) -> bool {
+        self.hidden
+    }
+
+    fn update(&mut self, frame_count: u16, fps: u16) {
+        if self.blinks_per_sec == 0 || fps == 0 {
+            self.hidden = false;
+            return;
+        }
+
+        let cycle_len = fps / self.blinks_per_sec;
+        if cycle_len == 0 {
+            self.hidden = false;
+            return;
+        }
+
+        let pos = frame_count % cycle_len;
+        let hidden_frames = ((self.duty_percent * cycle_len + 50) / 100).max(1);
+        self.hidden = pos >= cycle_len.saturating_sub(hidden_frames);
+    }
+}
+
+/// Blink configuration for text modifiers and cursor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BlinkConfig {
+    /// Display refresh rate used to convert frames to time.
+    pub fps: u16,
+    /// Timing for slow blink text and the cursor.
+    pub slow: BlinkTiming,
+    /// Timing for rapid blink text.
+    pub fast: BlinkTiming,
+    prev_state: (bool, bool),
+}
+
+impl BlinkConfig {
+    /// Advances the blink state and returns `true` when visibility changed.
+    pub fn tick(&mut self, frame_count: u16) -> bool {
+        self.slow.update(frame_count, self.fps);
+        self.fast.update(frame_count, self.fps);
+
+        let state = (self.slow.hidden, self.fast.hidden);
+        let toggled = state != self.prev_state;
+        self.prev_state = state;
+        toggled
+    }
+}
+
+impl Default for BlinkConfig {
+    fn default() -> Self {
+        Self {
+            fps: 60,
+            slow: BlinkTiming {
+                blinks_per_sec: 1,
+                duty_percent: 15,
+                hidden: false,
+            },
+            fast: BlinkTiming {
+                blinks_per_sec: 3,
+                duty_percent: 50,
+                hidden: false,
+            },
+            prev_state: (false, false),
+        }
+    }
+}
+
+/// A software-rendering [`Backend`] for Ratatui.
+///
+/// `SoftBackend` rasterizes terminal cells into an internal [`RgbPixmap`], which
+/// can then be consumed by GUI toolkits, game engines, or other non-terminal
+/// renderers.
 pub struct SoftBackend<R: RasterBackend> {
     pub buffer: Buffer,
     pub cursor: bool,
     pub cursor_pos: (u16, u16),
+    pub cursor_config: CursorConfig,
     pub char_width: usize,
     pub char_height: usize,
-    pub blink_counter: u16,
-    pub blinking_fast: bool,
-    pub blinking_slow: bool,
+    pub frame_count: u16,
+    pub blink_config: BlinkConfig,
     pub rgb_pixmap: RgbPixmap,
     pub always_redraw_list: FxHashSet<(u16, u16)>,
     pub raster_backend: R,
+    #[doc(hidden)]
+    pub rendered_cursor: Option<(u16, u16)>,
 }
-/// Trait for raster backends (TTF, embedded-graphics, etc.)
+/// Trait implemented by font rasterizers used by [`SoftBackend`].
 pub trait RasterBackend {
-    #[allow(clippy::too_many_arguments)]
     fn draw_cell(
         &mut self,
         x: u16,
@@ -49,6 +166,8 @@ impl<R: RasterBackend> Backend for SoftBackend<R> {
         I: Iterator<Item = (u16, u16, &'a Cell)>,
     {
         self.update_blinking();
+        let blinking_fast = self.fast_blink_hidden();
+        let blinking_slow = self.slow_blink_hidden();
         for (x, y, c) in content {
             self.buffer[(x, y)] = c.clone();
             self.raster_backend.draw_cell(
@@ -56,8 +175,8 @@ impl<R: RasterBackend> Backend for SoftBackend<R> {
                 y,
                 c,
                 &mut self.always_redraw_list,
-                self.blinking_fast,
-                self.blinking_slow,
+                blinking_fast,
+                blinking_slow,
                 self.char_width,
                 self.char_height,
                 &mut self.rgb_pixmap,
@@ -70,8 +189,8 @@ impl<R: RasterBackend> Backend for SoftBackend<R> {
                 *y,
                 c,
                 &mut self.always_redraw_list,
-                self.blinking_fast,
-                self.blinking_slow,
+                blinking_fast,
+                blinking_slow,
                 self.char_width,
                 self.char_height,
                 &mut self.rgb_pixmap,
@@ -105,6 +224,8 @@ impl<R: RasterBackend> Backend for SoftBackend<R> {
         let clear_cell = Cell::EMPTY;
         let colorik = rat_to_rgb(&clear_cell.bg, false);
         self.rgb_pixmap.fill([colorik[0], colorik[1], colorik[2]]);
+        self.rendered_cursor = None;
+        self.sync_cursor_overlay();
         Ok(())
     }
 
@@ -124,6 +245,7 @@ impl<R: RasterBackend> Backend for SoftBackend<R> {
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
+        self.sync_cursor_overlay();
         Ok(())
     }
 
@@ -181,22 +303,28 @@ impl<R: RasterBackend> SoftBackend<R> {
         self.rgb_pixmap.height()
     }
 
-    /// Returns a reference to the internal buffer of the `SoftBackend`.
+    /// Returns a reference to the current Ratatui cell buffer.
     pub const fn buffer(&self) -> &Buffer {
         &self.buffer
     }
 
-    /// Resizes the `SoftBackend` to the specified width and height.
+    /// Resizes the terminal in character cells and reallocates the backing pixmap.
     pub fn resize(&mut self, width: u16, height: u16) {
         self.buffer.resize(Rect::new(0, 0, width, height));
-        let rgb_pixmap = RgbPixmap::new(self.char_width * width as usize, self.char_height * height as usize);
+        let rgb_pixmap = RgbPixmap::new(
+            self.char_width as usize * width as usize,
+            self.char_height as usize * height as usize,
+        );
         self.rgb_pixmap = rgb_pixmap;
+        self.rendered_cursor = None;
         self.redraw();
     }
 
-    /// Redraws the pixmap
+    /// Redraws the entire pixmap from the current cell buffer.
     pub fn redraw(&mut self) {
         self.always_redraw_list = FxHashSet::default();
+        let blinking_fast = self.fast_blink_hidden();
+        let blinking_slow = self.slow_blink_hidden();
         for x in 0..self.buffer.area.width {
             for y in 0..self.buffer.area.height {
                 let c = &self.buffer[(x, y)];
@@ -205,20 +333,171 @@ impl<R: RasterBackend> SoftBackend<R> {
                     y,
                     c,
                     &mut self.always_redraw_list,
-                    self.blinking_fast,
-                    self.blinking_slow,
+                    blinking_fast,
+                    blinking_slow,
                     self.char_width,
                     self.char_height,
                     &mut self.rgb_pixmap,
                 );
             }
         }
+        self.rendered_cursor = None;
+        self.sync_cursor_overlay();
     }
 
     fn update_blinking(&mut self) {
-        self.blink_counter = (self.blink_counter + 1) % 200;
+        self.frame_count = self.frame_count.wrapping_add(1);
+        let _ = self.blink_config.tick(self.frame_count);
+    }
 
-        self.blinking_fast = matches!(self.blink_counter % 100, 0..=5);
-        self.blinking_slow = matches!(self.blink_counter, 20..=25);
+    fn sync_cursor_overlay(&mut self) {
+        self.restore_cursor_cell();
+
+        if let Some((x, y)) = self.cursor_to_render() {
+            self.draw_cursor_overlay(x, y);
+            self.rendered_cursor = Some((x, y));
+        }
+    }
+
+    fn restore_cursor_cell(&mut self) {
+        if let Some((x, y)) = self.rendered_cursor.take()
+            && self.position_in_bounds((x, y))
+        {
+            self.redraw_cell(x, y);
+        }
+    }
+
+    fn cursor_to_render(&self) -> Option<(u16, u16)> {
+        if !self.cursor || !self.position_in_bounds(self.cursor_pos) {
+            return None;
+        }
+
+        if self.cursor_config.blink && self.slow_blink_hidden() {
+            return None;
+        }
+
+        Some(self.cursor_pos)
+    }
+
+    fn position_in_bounds(&self, (x, y): (u16, u16)) -> bool {
+        x < self.buffer.area.width && y < self.buffer.area.height
+    }
+
+    fn redraw_cell(&mut self, x: u16, y: u16) {
+        let c = &self.buffer[(x, y)];
+        let blinking_fast = self.fast_blink_hidden();
+        let blinking_slow = self.slow_blink_hidden();
+        self.raster_backend.draw_cell(
+            x,
+            y,
+            c,
+            &mut self.always_redraw_list,
+            blinking_fast,
+            blinking_slow,
+            self.char_width,
+            self.char_height,
+            &mut self.rgb_pixmap,
+        );
+    }
+
+    fn fast_blink_hidden(&self) -> bool {
+        self.blink_config.fast.is_hidden()
+    }
+
+    fn slow_blink_hidden(&self) -> bool {
+        self.blink_config.slow.is_hidden()
+    }
+
+    fn draw_cursor_overlay(&mut self, x: u16, y: u16) {
+        let base_x = x as usize * self.char_width;
+        let base_y = y as usize * self.char_height;
+
+        match self.cursor_config.style {
+            CursorStyle::Inverse => {
+                self.rgb_pixmap
+                    .invert_rect(base_x, base_y, self.char_width, self.char_height);
+            }
+            CursorStyle::Underline => {
+                if self.char_height > 0 {
+                    self.rgb_pixmap.fill_rect(
+                        base_x,
+                        base_y + self.char_height - 1,
+                        self.char_width,
+                        1,
+                        self.cursor_config.color,
+                    );
+                }
+            }
+            CursorStyle::Outline => {
+                if self.char_width == 0 || self.char_height == 0 {
+                    return;
+                }
+
+                self.rgb_pixmap.fill_rect(
+                    base_x,
+                    base_y,
+                    self.char_width,
+                    1,
+                    self.cursor_config.color,
+                );
+                self.rgb_pixmap.fill_rect(
+                    base_x,
+                    base_y + self.char_height - 1,
+                    self.char_width,
+                    1,
+                    self.cursor_config.color,
+                );
+                self.rgb_pixmap.fill_rect(
+                    base_x,
+                    base_y,
+                    1,
+                    self.char_height,
+                    self.cursor_config.color,
+                );
+                self.rgb_pixmap.fill_rect(
+                    base_x + self.char_width - 1,
+                    base_y,
+                    1,
+                    self.char_height,
+                    self.cursor_config.color,
+                );
+            }
+            CursorStyle::Japanese => {
+                if self.char_width == 0 || self.char_height == 0 {
+                    return;
+                }
+
+                let corner_width = (self.char_width / 2).max(1);
+                let corner_height = (self.char_height / 2).max(1);
+                self.rgb_pixmap.fill_rect(
+                    base_x,
+                    base_y,
+                    corner_width,
+                    1,
+                    self.cursor_config.color,
+                );
+                self.rgb_pixmap.fill_rect(
+                    base_x,
+                    base_y,
+                    1,
+                    corner_height,
+                    self.cursor_config.color,
+                );
+                self.rgb_pixmap.fill_rect(
+                    base_x + self.char_width - 1,
+                    base_y + self.char_height.saturating_sub(corner_height),
+                    1,
+                    corner_height,
+                    self.cursor_config.color,
+                );
+                self.rgb_pixmap.fill_rect(
+                    base_x + self.char_width.saturating_sub(corner_width),
+                    base_y + self.char_height - 1,
+                    corner_width,
+                    1,
+                    self.cursor_config.color,
+                );
+            }
+        }
     }
 }
