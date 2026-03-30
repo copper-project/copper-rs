@@ -158,6 +158,7 @@ runs:
         sudo apt-get update
         sudo apt-get install -y \
           python3-cbor2 \
+          python3-dev \
           pkg-config \
           libasound2-dev \
           libudev-dev \
