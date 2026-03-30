@@ -2,6 +2,7 @@
 mod logpane;
 mod model;
 mod palette;
+#[cfg(feature = "sysinfo")]
 mod system_info;
 mod tui_nodes;
 mod ui;
