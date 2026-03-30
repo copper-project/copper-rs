@@ -67,7 +67,7 @@ jobs:
         run: python -m pip install --upgrade pip cbor2
 
       - name: Install CUDA
-        uses: Jimver/cuda-toolkit@v0.2.30
+        uses: Jimver/cuda-toolkit@v0.2.35
         if: runner.os != 'macOS' && matrix.mode == 'cuda-debug'
         with:
           cuda: 12.6.1
@@ -192,7 +192,7 @@ jobs:
         run: python -m pip install --upgrade pip cbor2
 
       - name: Install CUDA
-        uses: Jimver/cuda-toolkit@v0.2.30
+        uses: Jimver/cuda-toolkit@v0.2.35
         if: runner.os != 'macOS' && matrix.mode == 'cuda-debug'
         with:
           cuda: 12.6.1
