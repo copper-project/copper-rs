@@ -1,6 +1,6 @@
 # cu_bevymon
 
-`cu_bevymon` is a Copper monitor frontend that renders the shared TUI monitor UI inside Bevy using `bevy_ratatui`.
+`cu_bevymon` is a Copper monitor frontend that renders the shared TUI monitor UI inside Bevy using a `soft_ratatui` backend uploaded into a Bevy texture.
 
 By default, the Bevy windowed monitor uses bundled JetBrains Mono Nerd Font Mono TTF files so the Bevy rendering is much closer to the console monitor than the stock `mono_8x13` backend.
 

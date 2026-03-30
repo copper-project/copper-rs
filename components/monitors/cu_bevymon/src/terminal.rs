@@ -1,7 +1,6 @@
 use std::ops::{Deref, DerefMut};
 
 use bevy::prelude::{Resource, Result, Vec2};
-use bevy_ratatui::{RatatuiPlugins, context::TerminalContext};
 use ratatui::Terminal;
 use soft_ratatui::rusttype::Font;
 use soft_ratatui::{EmbeddedTTF, SoftBackend};
@@ -64,23 +63,6 @@ impl Deref for CuBevyMonTerminal {
 impl DerefMut for CuBevyMonTerminal {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
-    }
-}
-
-impl TerminalContext<SoftBackend<EmbeddedTTF>> for CuBevyMonTerminal {
-    fn init() -> Result<Self> {
-        Self::from_options(&CuBevyMonFontOptions::default())
-    }
-
-    fn restore() -> Result<()> {
-        Ok(())
-    }
-
-    fn configure_plugin_group(
-        _group: &RatatuiPlugins,
-        builder: bevy::app::PluginGroupBuilder,
-    ) -> bevy::app::PluginGroupBuilder {
-        builder
     }
 }
 

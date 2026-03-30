@@ -15,8 +15,20 @@ default = ["stderr_capture"]
 stderr_capture = ["cu-tuimon/stderr_capture"]
 
 [dependencies]
-bevy = { workspace = true }
-bevy_ratatui = { workspace = true, features = ["windowed"] }
+bevy = { workspace = true, features = [
+  "std",
+  "bevy_asset",
+  "bevy_camera",
+  "bevy_color",
+  "bevy_core_pipeline",
+  "bevy_image",
+  "bevy_render",
+  "bevy_ui",
+  "bevy_ui_render",
+  "bevy_window",
+  "keyboard",
+  "mouse",
+] }
 cu29 = { path = "../../../core/cu29", version = "0.14.0", default-features = false, features = [
   "std",
 ] }
