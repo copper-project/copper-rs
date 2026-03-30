@@ -1,6 +1,9 @@
 use ratatui_core::style::Color as RatColor;
 
-///Converts a Ratatui Color into a rgb [u8;3]
+/// Converts a Ratatui color to an RGB triplet.
+///
+/// `Reset` maps to the crate's default foreground or background fallback color,
+/// depending on `is_a_fg`.
 pub fn rat_to_rgb(rat_col: &RatColor, is_a_fg: bool) -> [u8; 3] {
     match rat_col {
         RatColor::Reset => {
@@ -27,13 +30,20 @@ pub fn rat_to_rgb(rat_col: &RatColor, is_a_fg: bool) -> [u8; 3] {
         RatColor::LightCyan => [224, 255, 255],
         RatColor::White => [255, 255, 255],
         RatColor::Indexed(i) => {
-            let i = *i;
+            let i = *i as u8;
             [i.wrapping_mul(i), i.wrapping_add(i), i]
         }
         RatColor::Rgb(r, g, b) => [*r, *g, *b],
     }
 }
 
+#[cfg(any(
+    feature = "embedded-graphics",
+    feature = "embedded-ttf",
+    feature = "cosmic-text",
+    feature = "bdf-parser"
+))]
+/// Applies a fixed dimming factor to an RGB color.
 pub fn dim_rgb(color: [u8; 3]) -> [u8; 3] {
     let factor = 77; // 77 ≈ 255 * 0.3
     [
@@ -50,8 +60,8 @@ pub fn dim_rgb(color: [u8; 3]) -> [u8; 3] {
 /// * `fg` - [R, G, B, A] foreground color
 /// * `bg` - [R, G, B, A] background color
 ///
-/// Returns: blended color as [u8; 4]
 #[cfg(feature = "cosmic-text")]
+/// Returns the blended color as `[u8; 3]`.
 pub fn blend_rgba(fg: [u8; 4], bg: [u8; 4]) -> [u8; 3] {
     let fg_a = fg[3] as f32 / 255.0;
     let bg_a = bg[3] as f32 / 255.0;

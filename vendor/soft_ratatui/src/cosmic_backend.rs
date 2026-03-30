@@ -1,10 +1,10 @@
-//! This module provides the `SoftBackend` implementation for the [`Backend`] trait.
-//! It is used in the integration tests to verify the correctness of the library.
+//! Cosmic Text rasterization backend for [`SoftBackend`].
 
 use crate::SoftBackend;
 use crate::colors::*;
 use crate::pixmap::RgbPixmap;
 use crate::soft_backend::RasterBackend;
+use crate::soft_backend::{BlinkConfig, CursorConfig};
 use cosmic_text::fontdb::Database;
 use cosmic_text::{
     Attrs, AttrsList, CacheKeyFlags, Family, LineEnding, Metrics, Shaping, Weight, Wrap,
@@ -17,7 +17,11 @@ use ratatui_core::style::Modifier;
 use cosmic_text::{Buffer as CosmicBuffer, FontSystem, SwashCache};
 use rustc_hash::FxHashSet;
 
-/// Uses cosmic-text for rendering, not recommended as it has anti aliasing issues which are not good for a terminal (also i messed up the offsets i think lol)
+/// Raster backend built on `cosmic-text`.
+///
+/// This backend supports more advanced shaping than the bitmap-oriented
+/// backends, but its anti-aliased output may be less desirable for
+/// terminal-style rendering.
 pub struct CosmicText {
     font_system: FontSystem,
 
@@ -26,12 +30,12 @@ pub struct CosmicText {
     swash_cache: SwashCache,
 }
 
-fn add_strikeout(text: &str) -> String {
+fn add_strikeout(text: &String) -> String {
     let strike = '\u{0336}';
     text.chars().flat_map(|c| [c, strike]).collect()
 }
 
-fn add_underline(text: &str) -> String {
+fn add_underline(text: &String) -> String {
     let strike = '\u{0332}';
     text.chars().flat_map(|c| [c, strike]).collect()
 }
@@ -88,13 +92,13 @@ impl RasterBackend for CosmicText {
         if rat_cell.modifier.contains(Modifier::SLOW_BLINK) {
             always_redraw_list.insert((xik, yik));
             if blinking_slow {
-                fg_color = bg_color;
+                fg_color = bg_color.clone();
             }
         }
         if rat_cell.modifier.contains(Modifier::RAPID_BLINK) {
             always_redraw_list.insert((xik, yik));
             if blinking_fast {
-                fg_color = bg_color;
+                fg_color = bg_color.clone();
             }
         }
 
@@ -222,9 +226,14 @@ impl SoftBackend<CosmicText> {
     ///
     /// # Examples
     /// ```rust
-    /// static FONT_DATA: &[u8] = include_bytes!("../../assets/iosevka.ttf");
-    /// let backend = SoftBackend::<CosmicText>::new_with_font(20, 20, 16, FONT_DATA);
+    /// use soft_ratatui::{CosmicText, SoftBackend};
+    ///
+    /// static FONT_DATA: &[u8] =
+    ///     include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/iosevka.ttf"));
+    /// let backend = SoftBackend::<CosmicText>::new(20, 20, 16, FONT_DATA);
+    /// let _ = backend;
     /// ```
+
     pub fn new(width: u16, height: u16, font_size: i32, font_data: &[u8]) -> Self {
         let mut swash_cache = SwashCache::new();
 
@@ -278,6 +287,7 @@ impl SoftBackend<CosmicText> {
             buffer: Buffer::empty(Rect::new(0, 0, width, height)),
             cursor: false,
             cursor_pos: (0, 0),
+            cursor_config: CursorConfig::default(),
 
             raster_backend: CosmicText {
                 font_system,
@@ -289,10 +299,10 @@ impl SoftBackend<CosmicText> {
             char_width,
             char_height,
 
-            blink_counter: 0,
-            blinking_fast: false,
-            blinking_slow: false,
+            frame_count: 0,
+            blink_config: BlinkConfig::default(),
             always_redraw_list: FxHashSet::default(),
+            rendered_cursor: None,
         };
         _ = return_struct.clear();
         return_struct
