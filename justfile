@@ -89,8 +89,10 @@ clippy-std:
 	cargo +stable clippy --workspace --all-targets $features_flag $embedded_excludes -- --deny warnings
 
 # Run the Unit-Tests job locally via act (debug/ubuntu matrix).
+# Local act runs disable sccache because the act+sccache path can
+# intermittently lose Rust artifacts and produce missing-rlib failures.
 ci:
-  act -W .github/workflows/general.yml -j Unit-Tests --matrix os:ubuntu-latest --matrix mode:debug -P ubuntu-latest=ghcr.io/catthehacker/ubuntu:act-latest
+  act --rm --env COPPER_ACT_DISABLE_SCCACHE=1 -W .github/workflows/general.yml -j Unit-Tests --matrix os:ubuntu-latest --matrix mode:debug -P ubuntu-latest=ghcr.io/catthehacker/ubuntu:act-latest
 
 # Host target detection for cross-platform logreader builds
 host_target := `rustc +stable -vV | sed -n 's/host: //p'`

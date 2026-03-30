@@ -56,8 +56,10 @@ runs:
         toolchain: ${{ inputs.toolchain }}
         components: rustc,cargo,rust-std,rustfmt,clippy
     - name: Run sccache-cache
+      if: env.COPPER_ACT_DISABLE_SCCACHE != '1'
       uses: mozilla-actions/sccache-action@v0.0.9
     - name: Configure sccache
+      if: env.COPPER_ACT_DISABLE_SCCACHE != '1'
       shell: bash
       run: |
         SCCACHE_DIR="${{ inputs.sccache_dir }}"
@@ -68,7 +70,7 @@ runs:
         echo "SCCACHE_DIR=$SCCACHE_DIR" >> "$GITHUB_ENV"
         echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
     - name: Restore sccache
-      if: inputs.sccache_restore == 'true'
+      if: inputs.sccache_restore == 'true' && env.COPPER_ACT_DISABLE_SCCACHE != '1'
       id: restore_sccache
       uses: actions/cache/restore@v4
       with:
