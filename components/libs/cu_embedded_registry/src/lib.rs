@@ -231,10 +231,19 @@ pub fn clear_all() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::fmt;
     use embedded_io::{ErrorKind, ErrorType};
 
     #[derive(Debug, Clone, Copy)]
     struct TestError;
+
+    impl fmt::Display for TestError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("TestError")
+        }
+    }
+
+    impl core::error::Error for TestError {}
 
     impl embedded_io::Error for TestError {
         fn kind(&self) -> ErrorKind {

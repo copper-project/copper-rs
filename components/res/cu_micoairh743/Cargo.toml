@@ -30,7 +30,7 @@ cu-sdlogger = { path = "../../libs/cu_sdlogger", version = "0.14.0" }
 cortex-m = { workspace = true, features = ["critical-section-single-core"] }
 defmt = { workspace = true, optional = true }
 embedded-hal = { version = "0.2.7", default-features = false }
-embedded-io = { version = "0.6.1", default-features = false }
+embedded-io = { version = "0.7.1", default-features = false }
 spin = { workspace = true }
 stm32h7xx-hal = { workspace = true, default-features = false, features = [
   "stm32h743v",

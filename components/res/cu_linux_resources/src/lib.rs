@@ -1,9 +1,7 @@
 use cu29::bundle_resources;
 use cu29::prelude::*;
 use cu29::resource::{ResourceBundle, ResourceManager};
-use embedded_io::{Read as EmbeddedRead, Write as EmbeddedWrite};
-#[cfg(feature = "embedded-io-07")]
-use embedded_io_07 as embedded_io07;
+use embedded_io::{ErrorType as EmbeddedErrorType, Read as EmbeddedRead, Write as EmbeddedWrite};
 use serialport::{Parity as SerialParity, StopBits as SerialStopBits};
 use std::string::String;
 
@@ -133,20 +131,17 @@ impl<T: std::io::Write> std::io::Write for Exclusive<T> {
     }
 }
 
-#[cfg(feature = "embedded-io-07")]
-impl<T: embedded_io07::ErrorType> embedded_io07::ErrorType for Exclusive<T> {
+impl<T: EmbeddedErrorType> EmbeddedErrorType for Exclusive<T> {
     type Error = T::Error;
 }
 
-#[cfg(feature = "embedded-io-07")]
-impl<T: embedded_io07::Read> embedded_io07::Read for Exclusive<T> {
+impl<T: EmbeddedRead> EmbeddedRead for Exclusive<T> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
         self.0.read(buf)
     }
 }
 
-#[cfg(feature = "embedded-io-07")]
-impl<T: embedded_io07::Write> embedded_io07::Write for Exclusive<T> {
+impl<T: EmbeddedWrite> EmbeddedWrite for Exclusive<T> {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
         self.0.write(buf)
     }
@@ -1026,7 +1021,6 @@ mod tests {
         assert!(read_gpio_slot_config(Some(&cfg), &GPIO_SLOTS[0]).is_err());
     }
 
-    #[cfg(feature = "embedded-io-07")]
     struct MockIo {
         rx: [u8; 4],
         rx_len: usize,
@@ -1034,7 +1028,6 @@ mod tests {
         tx_len: usize,
     }
 
-    #[cfg(feature = "embedded-io-07")]
     impl MockIo {
         fn new(rx: &[u8]) -> Self {
             let mut buf = [0_u8; 4];
@@ -1048,13 +1041,11 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "embedded-io-07")]
-    impl embedded_io_07::ErrorType for MockIo {
+    impl embedded_io::ErrorType for MockIo {
         type Error = core::convert::Infallible;
     }
 
-    #[cfg(feature = "embedded-io-07")]
-    impl embedded_io_07::Read for MockIo {
+    impl embedded_io::Read for MockIo {
         fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
             let n = core::cmp::min(buf.len(), self.rx_len);
             buf[..n].copy_from_slice(&self.rx[..n]);
@@ -1062,8 +1053,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "embedded-io-07")]
-    impl embedded_io_07::Write for MockIo {
+    impl embedded_io::Write for MockIo {
         fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
             let n = core::cmp::min(buf.len(), self.tx.len());
             self.tx[..n].copy_from_slice(&buf[..n]);
@@ -1076,19 +1066,18 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "embedded-io-07")]
     #[test]
-    fn exclusive_forwards_embedded_io_07_traits() {
+    fn exclusive_forwards_embedded_io_traits() {
         let mut wrapped = Exclusive::new(MockIo::new(&[1, 2, 3]));
 
         let mut rx = [0_u8; 4];
-        let read = embedded_io_07::Read::read(&mut wrapped, &mut rx).unwrap();
+        let read = embedded_io::Read::read(&mut wrapped, &mut rx).unwrap();
         assert_eq!(read, 3);
         assert_eq!(&rx[..3], &[1, 2, 3]);
 
-        let written = embedded_io_07::Write::write(&mut wrapped, &[9, 8]).unwrap();
+        let written = embedded_io::Write::write(&mut wrapped, &[9, 8]).unwrap();
         assert_eq!(written, 2);
-        embedded_io_07::Write::flush(&mut wrapped).unwrap();
+        embedded_io::Write::flush(&mut wrapped).unwrap();
 
         let inner = wrapped.into_inner();
         assert_eq!(&inner.tx[..inner.tx_len], &[9, 8]);
