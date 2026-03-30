@@ -6,7 +6,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
   issues: write
 
 jobs:
@@ -14,17 +13,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check PR source branch
+        if: ${{ github.event.pull_request.head.repo.fork && (github.event.pull_request.head.ref == 'master' || github.event.pull_request.head.ref == 'main') }}
         run: |
-          if [[ "${{ github.event.pull_request.head.repo.fork }}" == "true" ]]; then
-            if [[ "${{ github.event.pull_request.head.ref }}" == "master" || "${{ github.event.pull_request.head.ref }}" == "main" ]]; then
-              echo "ERROR: Pull requests from the master/main branch of forks are not allowed, because it prevents maintainers from contributing to your PR."
-              echo "Please create a feature branch in your fork and submit the PR from that branch instead."
-              exit 1
-            fi
-          fi
+          echo "ERROR: Pull requests from the master/main branch of forks are not allowed, because it prevents maintainers from contributing to your PR."
+          echo "Please create a feature branch in your fork and submit the PR from that branch instead."
+          exit 1
 
       - name: Leave comment if PR is from master/main branch of fork
-        if: ${{ failure() }}
+        if: ${{ github.event.pull_request.head.repo.fork && (github.event.pull_request.head.ref == 'master' || github.event.pull_request.head.ref == 'main') }}
         uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
