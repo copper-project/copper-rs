@@ -2,6 +2,7 @@
 
 extern crate alloc;
 
+use alloc::format;
 use core::fmt::Debug;
 
 use core::marker::PhantomData;
