@@ -4,9 +4,7 @@ extern crate alloc;
 
 use core::fmt::Debug;
 
-use alloc::format;
 use core::marker::PhantomData;
-use cu_embedded_registry as reg;
 pub use cu_sensor_payloads::ImuPayload;
 use cu29::prelude::*;
 use embedded_hal_1 as eh1;
@@ -87,6 +85,19 @@ where
     }
 }
 
+resources!(for <SPI, CS, D>
+where
+    SPI: eh1::spi::SpiBus<u8> + Send + Sync + 'static,
+    SPI::Error: Debug + Send + 'static,
+    CS: eh1::digital::OutputPin + Send + Sync + 'static,
+    CS::Error: Debug + Send + 'static,
+    D: eh1::delay::DelayNs + Send + Sync + 'static,
+{
+    spi => Owned<SPI>,
+    cs => Owned<CS>,
+    delay => Owned<D>,
+});
+
 /// Copper source task for the MPU9250.
 #[derive(Reflect)]
 #[reflect(no_field_bounds, from_reflect = false, type_path = false)]
@@ -96,7 +107,7 @@ where
     SPI::Error: Debug + Send + 'static,
     CS: eh1::digital::OutputPin + Send + Sync + 'static,
     CS::Error: Debug + Send + 'static,
-    D: eh1::delay::DelayNs + Send + 'static,
+    D: eh1::delay::DelayNs + Send + Sync + 'static,
 {
     #[reflect(ignore)]
     driver: embedded_hal::EmbeddedHalDriver<SPI, CS>,
@@ -110,7 +121,7 @@ where
     SPI::Error: Debug + Send + 'static,
     CS: eh1::digital::OutputPin + Send + Sync + 'static,
     CS::Error: Debug + Send + 'static,
-    D: eh1::delay::DelayNs + Send + 'static,
+    D: eh1::delay::DelayNs + Send + Sync + 'static,
 {
     fn type_path() -> &'static str {
         "cu_mpu9250::Mpu9250Source"
@@ -139,7 +150,7 @@ where
     SPI::Error: Debug + Send + 'static,
     CS: eh1::digital::OutputPin + Send + Sync + 'static,
     CS::Error: Debug + Send + 'static,
-    D: eh1::delay::DelayNs + Send + 'static,
+    D: eh1::delay::DelayNs + Send + Sync + 'static,
 {
 }
 
@@ -149,47 +160,19 @@ where
     SPI::Error: Debug + Send + 'static,
     CS: eh1::digital::OutputPin + Send + Sync + 'static,
     CS::Error: Debug + Send + 'static,
-    D: eh1::delay::DelayNs + Send + 'static,
+    D: eh1::delay::DelayNs + Send + Sync + 'static,
 {
-    type Resources<'r> = ();
+    type Resources<'r> = Resources<SPI, CS, D>;
     type Output<'m> = output_msg!(ImuPayload);
 
-    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
+    fn new(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self> {
         let settings = embedded_hal::EmbeddedHalSettings::from_config(config)?;
-
-        let spi_slot = match config {
-            Some(cfg) => cfg.get::<u32>("spi_slot")?.unwrap_or(0) as usize,
-            None => 0,
-        };
-        let cs_slot = match config {
-            Some(cfg) => cfg.get::<u32>("cs_slot")?.unwrap_or(0) as usize,
-            None => 0,
-        };
-        let delay_slot = match config {
-            Some(cfg) => cfg.get::<u32>("delay_slot")?.unwrap_or(0) as usize,
-            None => 0,
-        };
-
-        let spi: SPI = reg::take_spi(spi_slot).ok_or_else(|| {
-            CuError::from(format!(
-                "mpu9250 SPI slot {spi_slot} empty (max {})",
-                reg::MAX_SPI_SLOTS - 1
-            ))
-        })?;
-        let cs: CS = reg::take_cs(cs_slot).ok_or_else(|| {
-            CuError::from(format!(
-                "mpu9250 CS slot {cs_slot} empty (max {})",
-                reg::MAX_CS_SLOTS - 1
-            ))
-        })?;
-        let delay: D = reg::take_delay(delay_slot).ok_or_else(|| {
-            CuError::from(format!(
-                "mpu9250 delay slot {delay_slot} empty (max {})",
-                reg::MAX_DELAY_SLOTS - 1
-            ))
-        })?;
-
-        let driver = embedded_hal::EmbeddedHalDriver::new(spi, cs, delay, settings)?;
+        let driver = embedded_hal::EmbeddedHalDriver::new(
+            resources.spi.0,
+            resources.cs.0,
+            resources.delay.0,
+            settings,
+        )?;
 
         Ok(Self {
             driver,

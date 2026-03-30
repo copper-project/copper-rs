@@ -23,7 +23,6 @@ members = [
   "components/bridges/cu_zenoh_bridge",
   "components/bridges/cu_ros2_bridge",
   "components/libs/cu_msp_lib",
-  "components/libs/cu_embedded_registry",
   "components/libs/cu_transform",
   "core/cu29_units",
   "components/libs/cu_tuimon",

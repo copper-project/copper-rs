@@ -18,11 +18,13 @@ CARGO_CONFIG=components/tasks/cu_ahrs/.cargo/config.rp2350.toml \
     -p cu-ahrs --example rp2350_copper
 ```
 
-The RP235x backend supports optional config fields:
-- `xosc_hz` (u32): External crystal frequency (default 12_000_000).
-- `spi_hz` (u32): SPI1 bus speed (default 1_000_000).
-- `gyro_cal_ms` (u32): Gyro calibration dwell time in ms (default 0 = disabled).
-- `gyro_sample_delay_ms` (u32): Delay between calibration samples in ms (default 10).
+In Copper apps, bind `spi`, `cs`, and `delay` from a board resource bundle into
+`cu_mpu9250::Mpu9250Source<...>`.
+
+The RP2350 AHRS demo initializes those HAL handles in firmware setup, exposes
+them through `resources::Rp2350ImuBundle`, and configures the task with:
+- `gyro_cal_ms` (u32, default 0 = disabled)
+- `gyro_sample_delay_ms` (u32, default 10)
 
 ## Linux embedded-hal usage
 

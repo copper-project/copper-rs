@@ -328,13 +328,22 @@ impl CuTask for CuAhrs {
         #[cfg(not(feature = "firmware"))]
         output.metadata.set_status(alloc::format!(
             "r{} p{} y{}",
-            pose.roll.get::<radian>().to_degrees().round() as i16,
-            pose.pitch.get::<radian>().to_degrees().round() as i16,
-            pose.yaw.get::<radian>().to_degrees().round() as i16
+            round_degrees_to_i16(pose.roll.get::<radian>().to_degrees()),
+            round_degrees_to_i16(pose.pitch.get::<radian>().to_degrees()),
+            round_degrees_to_i16(pose.yaw.get::<radian>().to_degrees())
         ));
         output.set_payload(pose);
 
         Ok(())
+    }
+}
+
+#[cfg(not(feature = "firmware"))]
+fn round_degrees_to_i16(value: f32) -> i16 {
+    if value >= 0.0 {
+        (value + 0.5) as i16
+    } else {
+        (value - 0.5) as i16
     }
 }
 

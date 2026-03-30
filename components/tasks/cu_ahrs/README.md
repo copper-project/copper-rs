@@ -17,7 +17,7 @@ The task outputs absolute filter orientation (no startup zero reference).
 
 Two RP2350 no-std options mirroring `mpu9250-whoami`:
 - `examples/rp2350_ahrs.rs`: stand-alone loop (no Copper runtime) printing RPY.
-- `examples/rp2350_copper.rs` + `examples/rp_copperconfig.ron`: full Copper app wiring `registry::RpMpu9250Source -> cu_ahrs::CuAhrs -> tasks::RpySink`, with SPI/CS/delay registered via `cu_embedded_registry` in board init.
+- `examples/rp2350_copper.rs` + `examples/rp_copperconfig.ron`: full Copper app wiring `resources::RpMpu9250Source -> cu_ahrs::CuAhrs -> tasks::RpySink`, with SPI/CS/delay provided by a normal Copper resource bundle and a dummy magnetometer source feeding the optional mag input.
 
 ```bash
 # Host clippy/tests remain on the default host target.

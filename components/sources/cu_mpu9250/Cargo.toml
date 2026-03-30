@@ -17,9 +17,6 @@ cu29 = { path = "../../../core/cu29", version = "0.14.0", default-features = fal
 cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "0.14.0", default-features = false }
 mpu9250 = { version = "0.25.0", default-features = false }
 serde = { workspace = true }
-cu-embedded-registry = { path = "../../libs/cu_embedded_registry", version = "0.14.0", default-features = false, features = [
-  "alloc",
-] }
 embedded-hal-1 = { package = "embedded-hal", version = "1.0.0", default-features = false }
 embedded-hal = { version = "0.2.7", default-features = false }
 linux-embedded-hal = { workspace = true, optional = true }
@@ -27,11 +24,7 @@ linux-embedded-hal = { workspace = true, optional = true }
 [features]
 default = []
 std = ["cu29/std", "cu-sensor-payloads/std", "serde/std"]
-textlogs = [
-  "cu29/textlogs",
-  "cu-sensor-payloads/textlogs",
-  "cu-embedded-registry/textlogs",
-]
+textlogs = ["cu29/textlogs", "cu-sensor-payloads/textlogs"]
 embedded-hal = []
 linux-embedded-hal = ["std", "dep:linux-embedded-hal"]
 mock = []
