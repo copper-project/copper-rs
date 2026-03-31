@@ -1,5 +1,5 @@
 (
-    runtime: (rate_target_hz: 2),
+    runtime: (rate_target_hz: 1000),
     tasks: [
         (
             id: "task0",

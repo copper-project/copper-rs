@@ -1459,6 +1459,12 @@ pub struct RuntimeConfig {
     pub rate_target_hz: Option<u64>,
 }
 
+/// Maximum representable Copper runtime rate target in whole Hertz.
+///
+/// Copper stores runtime periods in integer nanoseconds, so anything above 1 GHz
+/// would round down to a zero-duration period.
+pub const MAX_RATE_TARGET_HZ: u64 = 1_000_000_000;
+
 /// Missions are used to generate alternative DAGs within the same configuration.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MissionsConfig {
@@ -2239,6 +2245,14 @@ impl CuConfig {
         }
         Ok(())
     }
+
+    /// Validate the runtime configuration.
+    pub fn validate_runtime_config(&self) -> CuResult<()> {
+        if let Some(runtime) = &self.runtime {
+            return runtime.validate();
+        }
+        Ok(())
+    }
 }
 
 #[cfg(feature = "std")]
@@ -2697,6 +2711,27 @@ impl LoggingConfig {
             return Err(CuError::from(format!(
                 "Section size ({section_size_mib} MiB) cannot be larger than slab size ({slab_size_mib} MiB). Adjust the parameters accordingly."
             )));
+        }
+
+        Ok(())
+    }
+}
+
+impl RuntimeConfig {
+    /// Validate runtime loop-rate settings.
+    pub fn validate(&self) -> CuResult<()> {
+        if let Some(rate_target_hz) = self.rate_target_hz {
+            if rate_target_hz == 0 {
+                return Err(CuError::from(
+                    "Runtime rate target cannot be zero. Set runtime.rate_target_hz to at least 1.",
+                ));
+            }
+
+            if rate_target_hz > MAX_RATE_TARGET_HZ {
+                return Err(CuError::from(format!(
+                    "Runtime rate target ({rate_target_hz} Hz) exceeds the supported maximum of {MAX_RATE_TARGET_HZ} Hz."
+                )));
+            }
         }
 
         Ok(())
@@ -3479,6 +3514,7 @@ fn config_representation_to_config(representation: CuConfigRepresentation) -> Cu
     cuconfig.ensure_threadpool_bundle();
 
     cuconfig.validate_logging_config()?;
+    cuconfig.validate_runtime_config()?;
 
     Ok(cuconfig)
 }
@@ -4426,6 +4462,41 @@ mod tests {
         let config = CuConfig::deserialize_ron(txt).unwrap();
         let logging_config = config.logging.unwrap();
         assert_eq!(logging_config.keyframe_interval.unwrap(), 100);
+    }
+
+    #[test]
+    fn test_runtime_rate_target_rejects_zero() {
+        let txt = r#"(
+            tasks: [(id: "src", type: "a"), (id: "sink", type: "b")],
+            cnx: [(src: "src", dst: "sink", msg: "msg::A")],
+            runtime: (rate_target_hz: 0)
+        )"#;
+
+        let err =
+            read_configuration_str(txt.to_string(), None).expect_err("runtime config should fail");
+        assert!(
+            err.to_string()
+                .contains("Runtime rate target cannot be zero"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_runtime_rate_target_rejects_above_nanosecond_resolution() {
+        let txt = format!(
+            r#"(
+                tasks: [(id: "src", type: "a"), (id: "sink", type: "b")],
+                cnx: [(src: "src", dst: "sink", msg: "msg::A")],
+                runtime: (rate_target_hz: {})
+            )"#,
+            MAX_RATE_TARGET_HZ + 1
+        );
+
+        let err = read_configuration_str(txt, None).expect_err("runtime config should fail");
+        assert!(
+            err.to_string().contains("exceeds the supported maximum"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]

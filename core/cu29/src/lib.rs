@@ -26,6 +26,7 @@
 //! - `textlogs`: text logging derive support
 //! - `remote-debug`: remote debug transport support
 //! - `sysclock-perf`: use a host/system clock for runtime perf timing while keeping robot time for `tov`
+//! - `high-precision-limiter`: std-only hybrid sleep/spin loop limiter for tighter `rate_target_hz` cadence
 //! - `async-cl-io`: offload CopperList serialization/logging to a dedicated std thread
 //! - `parallel-rt`: prepare the runtime for a future multi-threaded deterministic executor
 //!
