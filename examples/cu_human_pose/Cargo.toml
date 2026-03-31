@@ -19,11 +19,11 @@ cuda = ["candle-core/cuda", "candle-nn/cuda"]
 
 [dependencies]
 cu29 = { workspace = true, features = ["log-level-debug", "textlogs"] }
-cu-gstreamer = { path = "../../components/sources/cu_gstreamer", version = "0.14.0", features = [
+cu-gstreamer = { path = "../../components/sources/cu_gstreamer", version = "0.15.0", features = [
   "gst",
 ] }
-cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", version = "0.14.0" }
-cu-logmon = { path = "../../components/monitors/cu_logmon", version = "0.14.0" }
+cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", version = "0.15.0" }
+cu-logmon = { path = "../../components/monitors/cu_logmon", version = "0.15.0" }
 
 # Candle ML framework
 candle-core = "0.9.2"

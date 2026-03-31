@@ -24,7 +24,7 @@ sysinfo = [
 [dependencies]
 ansi-to-tui = { version = "8.0.0", default-features = false }
 compact_str = { workspace = true }
-cu29 = { path = "../../../core/cu29", version = "0.14.0", default-features = false, features = [
+cu29 = { path = "../../../core/cu29", version = "0.15.0", default-features = false, features = [
   "std",
 ] }
 cu29-log = { workspace = true, optional = true }

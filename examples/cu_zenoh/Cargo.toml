@@ -13,7 +13,7 @@ description = "Copper example to use zenoh as a middleware."
 publish = false
 [dependencies]
 cu29 = { workspace = true }
-cu-zenoh-sink = { path = "../../components/sinks/cu_zenoh_sink", version = "0.14.0" }
+cu-zenoh-sink = { path = "../../components/sinks/cu_zenoh_sink", version = "0.15.0" }
 tempfile = { workspace = true }
 serde = { workspace = true }
 
