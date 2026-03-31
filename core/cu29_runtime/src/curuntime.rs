@@ -183,6 +183,9 @@ impl<'cfg, CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, 
 /// monotonically increasing duration since an unspecified origin (typically
 /// process or runtime initialization), not a wall-clock time-of-day. When
 /// `sysclock-perf` is disabled it delegates to the provided `RobotClock`.
+///
+/// This is intentionally separate from `LoopRateLimiter`, which always uses the
+/// provided `RobotClock` so `runtime.rate_target_hz` stays tied to robot time.
 #[inline]
 pub fn perf_now(_clock: &RobotClock) -> CuTime {
     #[cfg(all(feature = "std", feature = "sysclock-perf"))]
@@ -219,7 +222,9 @@ pub fn rate_target_period(rate_target_hz: u64) -> CuResult<CuDuration> {
 /// Runtime loop limiter that preserves phase with absolute deadlines.
 ///
 /// This is intentionally a small runtime helper so generated applications do
-/// not have to open-code loop scheduling policy.
+/// not have to open-code loop scheduling policy. Deadlines are tracked against
+/// the provided `RobotClock`, even when `sysclock-perf` is enabled for
+/// process-time measurements.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LoopRateLimiter {
     period: CuDuration,
@@ -232,7 +237,7 @@ impl LoopRateLimiter {
         let period = rate_target_period(rate_target_hz)?;
         Ok(Self {
             period,
-            next_deadline: perf_now(clock) + period,
+            next_deadline: clock.now() + period,
         })
     }
 
@@ -243,7 +248,7 @@ impl LoopRateLimiter {
 
     #[inline]
     pub fn remaining(&self, clock: &RobotClock) -> Option<CuDuration> {
-        let now = perf_now(clock);
+        let now = clock.now();
         if now < self.next_deadline {
             Some(self.next_deadline - now)
         } else {
@@ -264,7 +269,7 @@ impl LoopRateLimiter {
             if remaining > spin_window {
                 std::thread::sleep(std::time::Duration::from(remaining - spin_window));
             }
-            while perf_now(clock) < deadline {
+            while clock.now() < deadline {
                 core::hint::spin_loop();
             }
         }
@@ -278,7 +283,7 @@ impl LoopRateLimiter {
         #[cfg(not(feature = "std"))]
         {
             let _ = remaining;
-            while perf_now(clock) < deadline {
+            while clock.now() < deadline {
                 core::hint::spin_loop();
             }
         }
@@ -286,7 +291,7 @@ impl LoopRateLimiter {
 
     #[inline]
     pub fn mark_tick(&mut self, clock: &RobotClock) {
-        self.advance_from(perf_now(clock));
+        self.advance_from(clock.now());
     }
 
     #[inline]
