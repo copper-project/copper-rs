@@ -1,15 +1,15 @@
-#[cfg(all(target_family = "wasm", target_os = "unknown"))]
+#[cfg(browser)]
 use ratatui::text::Text;
 
 #[derive(Clone)]
 pub(crate) enum SystemInfo {
-    #[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
+    #[cfg(native)]
     Ansi(String),
-    #[cfg(all(target_family = "wasm", target_os = "unknown"))]
+    #[cfg(browser)]
     Rich(Text<'static>),
 }
 
-#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
+#[cfg(native)]
 mod native {
     use crate::system_info::SystemInfo;
     use libmacchina::{
@@ -225,7 +225,7 @@ mod native {
     }
 }
 
-#[cfg(all(target_family = "wasm", target_os = "unknown"))]
+#[cfg(browser)]
 mod browser {
     use crate::palette;
     use crate::system_info::SystemInfo;
@@ -655,7 +655,12 @@ mod browser {
     }
 
     fn colored_logo_line(color: Color, text: &'static str) -> Line<'static> {
-        let style = Style::default().fg(palette::explicit_fg(color));
+        let style = Style::default().fg(palette::resolve_color(
+            color,
+            palette::FOREGROUND,
+            palette::BACKGROUND,
+            true,
+        ));
         let mut spans = Vec::new();
         let mut buf = String::new();
         let mut buf_is_space: Option<bool> = None;
@@ -709,8 +714,8 @@ mod browser {
     }
 }
 
-#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
+#[cfg(native)]
 pub(crate) use native::default_system_info;
 
-#[cfg(all(target_family = "wasm", target_os = "unknown"))]
+#[cfg(browser)]
 pub(crate) use browser::default_system_info;

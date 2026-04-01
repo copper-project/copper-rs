@@ -14,7 +14,7 @@ repository.workspace = true
 default = []
 log_pane = ["dep:cu29-log", "dep:cu29-log-runtime"]
 stderr_capture = ["log_pane", "dep:gag"]
-sysinfo = [
+sysinfo_pane = [
   "dep:dotenvy",
   "dep:libmacchina",
   "dep:pfetch",
@@ -53,3 +53,7 @@ web-sys = { version = "0.3", features = [
   "Screen",
   "Window",
 ] }
+
+
+[build-dependencies]
+cfg_aliases = { workspace = true }
