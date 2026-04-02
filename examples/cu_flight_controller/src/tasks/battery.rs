@@ -2,6 +2,7 @@ use super::*;
 use cu29::units::si::electric_potential::volt;
 use cu29::units::si::f32::ElectricPotential;
 
+#[derive(Reflect)]
 struct BatteryAdcCalibration {
     vref_mv: u32,
     vbat_scale: u32,

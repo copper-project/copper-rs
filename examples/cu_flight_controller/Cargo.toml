@@ -243,6 +243,7 @@ python-bindings = [
   "dep:pyo3",
 ]
 sim = ["sim_core", "dep:cu-consolemon", "dep:cached-path", "dep:evdev"]
+sim-debug = ["sim", "cu29/reflect", "cu29/remote-debug"]
 bevymon = ["sim_core", "dep:cu-bevymon", "dep:cached-path", "dep:evdev"]
 
 [lib]
@@ -273,11 +274,11 @@ path = "src/sim.rs"
 required-features = ["sim"]
 
 [[bin]]
+name = "quad-resim"
+path = "src/resim.rs"
+required-features = ["sim-debug"]
+
+[[bin]]
 name = "quad-bevymon"
 path = "src/bevymon.rs"
 required-features = ["bevymon"]
-#
-# [[bin]]
-# name = "quad-resim"
-# path = "src/resim.rs"
-# required-features = ["sim"]
