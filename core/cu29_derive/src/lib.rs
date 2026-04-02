@@ -3820,6 +3820,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote!()
         };
 
+        let mission_id_method = if sim_mode {
+            quote! {
+                fn mission_id() -> Option<&'static str> {
+                    Some(#mission)
+                }
+            }
+        } else {
+            quote!()
+        };
+
         let app_resources_struct = quote! {
             pub struct AppResources {
                 pub config: CuConfig,
@@ -4129,6 +4139,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 fn get_original_config() -> String {
                     Self::original_config()
                 }
+
+                #mission_id_method
 
                 #run_methods
             }

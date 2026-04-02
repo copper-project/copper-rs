@@ -3007,7 +3007,8 @@ where
 {
     let config_str = <App as CuSimApplication<S, L>>::get_original_config();
     let config = read_configuration_str(config_str, None)?;
-    let graph = config.get_graph(None)?;
+    let mission_id = <App as CuSimApplication<S, L>>::mission_id();
+    let graph = config.get_graph(mission_id)?;
 
     let mut nodes = Vec::new();
     for (node_id, node) in graph.get_all_nodes() {
@@ -3044,6 +3045,7 @@ where
     let bridges: Vec<Value> = config
         .bridges
         .iter()
+        .filter(|bridge| graph.get_node_id_by_name(bridge.id.as_str()).is_some())
         .map(|bridge| {
             let channels: Vec<Value> = bridge
                 .channels
@@ -3075,6 +3077,7 @@ where
     types.dedup();
 
     Ok(json!({
+        "mission_id": mission_id,
         "tasks": nodes,
         "bridges": bridges,
         "edges": edges,
@@ -3154,5 +3157,104 @@ fn hex_digit(n: u8) -> char {
     match n {
         0..=9 => (b'0' + n) as char,
         _ => (b'a' + (n - 10)) as char,
+    }
+}
+
+#[cfg(all(test, feature = "std"))]
+mod tests {
+    use super::build_stack_schema;
+    use crate::app::CuSimApplication;
+    use crate::curuntime::KeyFrame;
+    use crate::reflect::{Reflect, ReflectTaskIntrospection};
+    use crate::simulation::SimOverride;
+    use cu29_traits::CuResult;
+    use cu29_unifiedlog::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
+    struct MissionStackApp;
+
+    impl ReflectTaskIntrospection for MissionStackApp {
+        fn reflect_task(&self, _task_id: &str) -> Option<&dyn Reflect> {
+            None
+        }
+
+        fn reflect_task_mut(&mut self, _task_id: &str) -> Option<&mut dyn Reflect> {
+            None
+        }
+    }
+
+    impl CuSimApplication<MmapSectionStorage, MmapUnifiedLoggerWrite> for MissionStackApp {
+        type Step<'z> = ();
+
+        fn get_original_config() -> String {
+            include_str!("../tests/remote_debug_missions_config.ron").to_string()
+        }
+
+        fn mission_id() -> Option<&'static str> {
+            Some("Beta")
+        }
+
+        fn start_all_tasks(
+            &mut self,
+            _sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
+        ) -> CuResult<()> {
+            Ok(())
+        }
+
+        fn run_one_iteration(
+            &mut self,
+            _sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
+        ) -> CuResult<()> {
+            Ok(())
+        }
+
+        fn run(
+            &mut self,
+            _sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
+        ) -> CuResult<()> {
+            Ok(())
+        }
+
+        fn stop_all_tasks(
+            &mut self,
+            _sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
+        ) -> CuResult<()> {
+            Ok(())
+        }
+
+        fn restore_keyframe(&mut self, _freezer: &KeyFrame) -> CuResult<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn stack_schema_uses_generated_mission_id() -> CuResult<()> {
+        let mission_id = <MissionStackApp as CuSimApplication<
+            MmapSectionStorage,
+            MmapUnifiedLoggerWrite,
+        >>::mission_id();
+        assert_eq!(mission_id, Some("Beta"));
+
+        let schema =
+            build_stack_schema::<MissionStackApp, MmapSectionStorage, MmapUnifiedLoggerWrite>()?;
+        assert_eq!(schema.get("mission_id"), Some(&serde_json::json!("Beta")));
+
+        let mut task_ids: Vec<&str> = schema["tasks"]
+            .as_array()
+            .expect("tasks array")
+            .iter()
+            .filter_map(|task| task["id"].as_str())
+            .collect();
+        task_ids.sort_unstable();
+        assert_eq!(task_ids, vec!["beta_bridge", "beta_sink", "beta_src"]);
+
+        let mut bridge_ids: Vec<&str> = schema["bridges"]
+            .as_array()
+            .expect("bridges array")
+            .iter()
+            .filter_map(|bridge| bridge["id"].as_str())
+            .collect();
+        bridge_ids.sort_unstable();
+        assert_eq!(bridge_ids, vec!["beta_bridge"]);
+
+        Ok(())
     }
 }

@@ -1,0 +1,92 @@
+(
+    missions: [
+        (id: "Alpha"),
+        (id: "Beta"),
+    ],
+    tasks: [
+        (
+            id: "alpha_src",
+            type: "MissionSrc",
+            missions: ["Alpha"],
+            run_in_sim: true,
+        ),
+        (
+            id: "alpha_sink",
+            type: "MissionSink",
+            missions: ["Alpha"],
+            run_in_sim: true,
+        ),
+        (
+            id: "beta_src",
+            type: "MissionSrc",
+            missions: ["Beta"],
+            run_in_sim: true,
+        ),
+        (
+            id: "beta_sink",
+            type: "MissionSink",
+            missions: ["Beta"],
+            run_in_sim: true,
+        ),
+    ],
+    bridges: [
+        (
+            id: "alpha_bridge",
+            type: "MissionBridge",
+            missions: ["Alpha"],
+            run_in_sim: true,
+            channels: [
+                Tx(
+                    id: "tx",
+                    msg: "MissionMsg",
+                ),
+                Rx(
+                    id: "rx",
+                    msg: "MissionMsg",
+                ),
+            ],
+        ),
+        (
+            id: "beta_bridge",
+            type: "MissionBridge",
+            missions: ["Beta"],
+            run_in_sim: true,
+            channels: [
+                Tx(
+                    id: "tx",
+                    msg: "MissionMsg",
+                ),
+                Rx(
+                    id: "rx",
+                    msg: "MissionMsg",
+                ),
+            ],
+        ),
+    ],
+    cnx: [
+        (
+            src: "alpha_src",
+            dst: "alpha_bridge/tx",
+            msg: "MissionMsg",
+            missions: ["Alpha"],
+        ),
+        (
+            src: "alpha_bridge/rx",
+            dst: "alpha_sink",
+            msg: "MissionMsg",
+            missions: ["Alpha"],
+        ),
+        (
+            src: "beta_src",
+            dst: "beta_bridge/tx",
+            msg: "MissionMsg",
+            missions: ["Beta"],
+        ),
+        (
+            src: "beta_bridge/rx",
+            dst: "beta_sink",
+            msg: "MissionMsg",
+            missions: ["Beta"],
+        ),
+    ],
+)

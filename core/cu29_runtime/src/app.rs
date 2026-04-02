@@ -140,6 +140,11 @@ pub trait CuSimApplication<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> {
     /// This configuration represents the default settings for the application before any overrides.
     fn get_original_config() -> String;
 
+    /// Returns the mission id this generated application is bound to, when applicable.
+    fn mission_id() -> Option<&'static str> {
+        None
+    }
+
     /// Starts all tasks managed by the application/runtime in simulation mode.
     ///
     /// # Arguments
