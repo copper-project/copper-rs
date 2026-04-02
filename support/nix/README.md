@@ -67,6 +67,7 @@ cargo nextest run --workspace $FEATURES_FLAG
 **CUDA not accessible (Linux)**: Ensure NVIDIA drivers are installed, check `/dev/nvidia*` permissions
 **macOS OpenSSL issues**: PKG_CONFIG_PATH is automatically configured
 **LLVM library issues**: Symlinks created automatically in `$HOME/.nix-llvm-libs`
+For graphic issues with bevy, refer to https://github.com/bevyengine/bevy/blob/latest/docs/linux_dependencies.md#nix
 
 ## Notes
 

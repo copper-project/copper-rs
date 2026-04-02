@@ -1,80 +1,29 @@
+// DEAD_CODE: This module is mostly used for debugging, we can afford having unused consts and helpers lying around
+#![allow(dead_code)]
+
 use ratatui::style::Color;
-#[cfg(any(
-    feature = "sysinfo",
-    test,
-    all(target_family = "wasm", target_os = "unknown")
-))]
 use ratatui::text::Text;
 
-pub(crate) const BACKGROUND: Color = Color::Rgb(0, 0, 0);
-pub(crate) const RED: Color = Color::Rgb(204, 4, 3);
-pub(crate) const GREEN: Color = Color::Rgb(25, 203, 0);
-pub(crate) const YELLOW: Color = Color::Rgb(206, 203, 0);
-pub(crate) const BLUE: Color = Color::Rgb(13, 115, 204);
-pub(crate) const MAGENTA: Color = Color::Rgb(203, 30, 209);
-pub(crate) const CYAN: Color = Color::Rgb(13, 205, 205);
-pub(crate) const GRAY: Color = Color::Rgb(221, 221, 221);
-pub(crate) const DARK_GRAY: Color = Color::Rgb(118, 118, 118);
-#[cfg(any(
-    feature = "sysinfo",
-    test,
-    all(target_family = "wasm", target_os = "unknown")
-))]
-pub(crate) const BLACK: Color = Color::Rgb(0, 0, 0);
-#[cfg(any(
-    feature = "sysinfo",
-    test,
-    all(target_family = "wasm", target_os = "unknown")
-))]
-pub(crate) const LIGHT_RED: Color = Color::Rgb(242, 32, 31);
-#[cfg(any(
-    feature = "sysinfo",
-    test,
-    all(target_family = "wasm", target_os = "unknown")
-))]
-pub(crate) const LIGHT_GREEN: Color = Color::Rgb(35, 253, 0);
-#[cfg(any(
-    feature = "sysinfo",
-    test,
-    all(target_family = "wasm", target_os = "unknown")
-))]
-pub(crate) const LIGHT_YELLOW: Color = Color::Rgb(255, 253, 0);
-#[cfg(any(
-    feature = "sysinfo",
-    test,
-    all(target_family = "wasm", target_os = "unknown")
-))]
-pub(crate) const LIGHT_BLUE: Color = Color::Rgb(26, 143, 255);
-#[cfg(any(
-    feature = "sysinfo",
-    test,
-    all(target_family = "wasm", target_os = "unknown")
-))]
-pub(crate) const LIGHT_MAGENTA: Color = Color::Rgb(253, 40, 255);
-#[cfg(any(
-    feature = "sysinfo",
-    test,
-    all(target_family = "wasm", target_os = "unknown")
-))]
-pub(crate) const LIGHT_CYAN: Color = Color::Rgb(20, 255, 255);
-pub(crate) const WHITE: Color = Color::Rgb(255, 255, 255);
-#[cfg(any(
-    feature = "sysinfo",
-    test,
-    all(target_family = "wasm", target_os = "unknown")
-))]
+pub(crate) const BACKGROUND: Color = BLACK;
 pub(crate) const FOREGROUND: Color = GRAY;
 
-#[cfg(all(target_family = "wasm", target_os = "unknown"))]
-pub(crate) fn explicit_fg(color: Color) -> Color {
-    resolve_color(color, FOREGROUND, BACKGROUND, true)
-}
+pub(crate) const BLACK: Color = Color::Rgb(0, 0, 0);
+pub(crate) const BLUE: Color = Color::Rgb(13, 115, 204);
+pub(crate) const CYAN: Color = Color::Rgb(13, 205, 205);
+pub(crate) const DARK_GRAY: Color = Color::Rgb(118, 118, 118);
+pub(crate) const GRAY: Color = Color::Rgb(221, 221, 221);
+pub(crate) const GREEN: Color = Color::Rgb(25, 203, 0);
+pub(crate) const LIGHT_BLUE: Color = Color::Rgb(26, 143, 255);
+pub(crate) const LIGHT_CYAN: Color = Color::Rgb(20, 255, 255);
+pub(crate) const LIGHT_GREEN: Color = Color::Rgb(35, 253, 0);
+pub(crate) const LIGHT_MAGENTA: Color = Color::Rgb(253, 40, 255);
+pub(crate) const LIGHT_RED: Color = Color::Rgb(242, 32, 31);
+pub(crate) const LIGHT_YELLOW: Color = Color::Rgb(255, 253, 0);
+pub(crate) const MAGENTA: Color = Color::Rgb(203, 30, 209);
+pub(crate) const RED: Color = Color::Rgb(204, 4, 3);
+pub(crate) const WHITE: Color = Color::Rgb(255, 255, 255);
+pub(crate) const YELLOW: Color = Color::Rgb(206, 203, 0);
 
-#[cfg(any(
-    feature = "sysinfo",
-    test,
-    all(target_family = "wasm", target_os = "unknown")
-))]
 pub(crate) fn normalize_text_colors(text: &mut Text<'_>, fallback_fg: Color, fallback_bg: Color) {
     for line in &mut text.lines {
         for span in &mut line.spans {
@@ -88,11 +37,6 @@ pub(crate) fn normalize_text_colors(text: &mut Text<'_>, fallback_fg: Color, fal
     }
 }
 
-#[cfg(any(
-    feature = "sysinfo",
-    test,
-    all(target_family = "wasm", target_os = "unknown")
-))]
 fn indexed_color(index: u8) -> Color {
     match index {
         0 => BLACK,
@@ -125,11 +69,6 @@ fn indexed_color(index: u8) -> Color {
     }
 }
 
-#[cfg(any(
-    feature = "sysinfo",
-    test,
-    all(target_family = "wasm", target_os = "unknown")
-))]
 fn resolve_color(color: Color, fallback_fg: Color, fallback_bg: Color, is_fg: bool) -> Color {
     match color {
         Color::Reset => {
@@ -160,11 +99,6 @@ fn resolve_color(color: Color, fallback_fg: Color, fallback_bg: Color, is_fg: bo
     }
 }
 
-#[cfg(any(
-    feature = "sysinfo",
-    test,
-    all(target_family = "wasm", target_os = "unknown")
-))]
 fn cube_level(component: u8) -> u8 {
     match component {
         0 => 0,

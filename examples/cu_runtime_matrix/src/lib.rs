@@ -97,6 +97,11 @@ fn take_trace() -> Vec<TraceEntry> {
     TRACE_LOG.lock().unwrap().drain(..).collect()
 }
 
+#[cfg(test)]
+fn trace_len() -> usize {
+    TRACE_LOG.lock().unwrap().len()
+}
+
 fn param_u64(config: Option<&ComponentConfig>, key: &str, default: u64) -> CuResult<u64> {
     Ok(config
         .and_then(|cfg| cfg.get::<u64>(key).ok().flatten())
@@ -1454,6 +1459,8 @@ mod tests {
     const TEST_EMIT_LIMIT: u64 = 8;
     const TEST_COMPUTE_WORDS: usize = 64;
     const TEST_COMPUTE_ROUNDS: u32 = 2;
+    const MAX_BG_SETTLE_ITERS: u64 = 32;
+    const BG_STABLE_PASSES: usize = 4;
 
     #[derive(Debug, Clone, PartialEq)]
     struct NormalizedCuMsg {
@@ -1544,6 +1551,290 @@ mod tests {
         }
     }
 
+    fn background_delay_steps() -> u64 {
+        (DEFAULT_BG_DELAY_TICKS / DEFAULT_CLOCK_STEP_TICKS).max(1)
+    }
+
+    fn background_output_limit(emit_limit: u64) -> usize {
+        usize::try_from(emit_limit.div_ceil(background_delay_steps()))
+            .expect("background output limit should fit in usize")
+    }
+
+    fn settle_background_trace(
+        mission: MissionArg,
+        app: &mut MissionApp,
+        clock_mock: &RobotClockMock,
+    ) -> CuResult<()> {
+        let base_iter = TEST_EMIT_LIMIT
+            .saturating_add(u64::try_from(mission.drain_iterations()).expect("drain fits"));
+        let mut last_len = trace_len();
+        let mut stable_passes = 0usize;
+
+        for extra in 0..MAX_BG_SETTLE_ITERS {
+            clock_mock.set_value(
+                DEFAULT_CLOCK_STEP_TICKS.saturating_mul(base_iter.saturating_add(extra)),
+            );
+            app.run_one_iteration()?;
+            std::thread::yield_now();
+            std::thread::sleep(Duration::from_millis(1));
+
+            let len = trace_len();
+            if len > 0 && len == last_len {
+                stable_passes = stable_passes.saturating_add(1);
+                if stable_passes >= BG_STABLE_PASSES {
+                    break;
+                }
+            } else {
+                stable_passes = 0;
+                last_len = len;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn assert_sampled_progress(
+        mission: MissionArg,
+        emit_limit: u64,
+        seq: u32,
+        tick: u64,
+        prev: &mut Option<(u32, u64)>,
+    ) {
+        let min_tick = DEFAULT_CLOCK_STEP_TICKS
+            .saturating_mul(u64::from(seq).saturating_add(background_delay_steps()));
+        assert!(
+            u64::from(seq) < emit_limit,
+            "sampled seq {seq} exceeds emit limit {emit_limit} for mission {:?}",
+            mission
+        );
+        assert_eq!(
+            tick % DEFAULT_CLOCK_STEP_TICKS,
+            0,
+            "sampled tick {tick} is not aligned to the mock clock step for mission {:?}",
+            mission
+        );
+        assert!(
+            tick >= min_tick,
+            "sampled tick {tick} is earlier than the delayed lower bound {min_tick} for mission {:?}",
+            mission
+        );
+        if let Some((prev_seq, prev_tick)) = *prev {
+            assert!(
+                seq > prev_seq,
+                "sampled seq {seq} did not advance past {prev_seq} for mission {:?}",
+                mission
+            );
+            assert!(
+                tick > prev_tick,
+                "sampled tick {tick} did not advance past {prev_tick} for mission {:?}",
+                mission
+            );
+        }
+        *prev = Some((seq, tick));
+    }
+
+    fn assert_background_trace_matches_contract(
+        mission: MissionArg,
+        trace: &[TraceEntry],
+        emit_limit: u64,
+    ) {
+        assert!(
+            !trace.is_empty(),
+            "expected sampled background outputs for mission {:?}",
+            mission
+        );
+        assert!(
+            trace.len() <= background_output_limit(emit_limit),
+            "background mission {:?} produced too many sampled outputs: {}",
+            mission,
+            trace.len()
+        );
+
+        match mission {
+            MissionArg::OneToManyBackground => {
+                let mut prev = None;
+                for entry in trace {
+                    let TraceEntry::SeqPair {
+                        sink_id,
+                        tick,
+                        left_seq,
+                        right_seq,
+                        left_stage,
+                        right_stage,
+                    } = entry
+                    else {
+                        panic!(
+                            "expected SeqPair trace for mission {:?}, got {:?}",
+                            mission, entry
+                        );
+                    };
+                    assert_eq!(
+                        *sink_id, OTM_SINK_ID,
+                        "unexpected sink id for mission {:?}",
+                        mission
+                    );
+                    assert_eq!(
+                        *left_seq, *right_seq,
+                        "sampled pair drifted for mission {:?}",
+                        mission
+                    );
+                    assert_eq!(
+                        *left_stage, OTM_LEFT_STAGE,
+                        "unexpected left stage for mission {:?}",
+                        mission
+                    );
+                    assert_eq!(
+                        *right_stage, OTM_RIGHT_STAGE,
+                        "unexpected right stage for mission {:?}",
+                        mission
+                    );
+                    assert_sampled_progress(mission, emit_limit, *left_seq, *tick, &mut prev);
+                }
+            }
+            MissionArg::ManyToOneBackground => {
+                let mut prev = None;
+                for entry in trace {
+                    let TraceEntry::Join {
+                        sink_id,
+                        tick,
+                        left_seq,
+                        right_seq,
+                        stage_id,
+                    } = entry
+                    else {
+                        panic!(
+                            "expected Join trace for mission {:?}, got {:?}",
+                            mission, entry
+                        );
+                    };
+                    assert_eq!(
+                        *sink_id, MTO_SINK_ID,
+                        "unexpected sink id for mission {:?}",
+                        mission
+                    );
+                    assert_eq!(
+                        *left_seq, *right_seq,
+                        "sampled join drifted for mission {:?}",
+                        mission
+                    );
+                    assert_eq!(
+                        *stage_id, MTO_STAGE,
+                        "unexpected stage for mission {:?}",
+                        mission
+                    );
+                    assert_sampled_progress(mission, emit_limit, *left_seq, *tick, &mut prev);
+                }
+            }
+            MissionArg::ManyToManyBackground => {
+                let mut prev = None;
+                for entry in trace {
+                    let TraceEntry::JoinPair {
+                        sink_id,
+                        tick,
+                        left_left_seq,
+                        left_right_seq,
+                        right_left_seq,
+                        right_right_seq,
+                        left_stage,
+                        right_stage,
+                    } = entry
+                    else {
+                        panic!(
+                            "expected JoinPair trace for mission {:?}, got {:?}",
+                            mission, entry
+                        );
+                    };
+                    assert_eq!(
+                        *sink_id, MTM_SINK_ID,
+                        "unexpected sink id for mission {:?}",
+                        mission
+                    );
+                    assert_eq!(
+                        *left_left_seq, *left_right_seq,
+                        "left sampled join drifted for mission {:?}",
+                        mission
+                    );
+                    assert_eq!(
+                        *right_left_seq, *right_right_seq,
+                        "right sampled join drifted for mission {:?}",
+                        mission
+                    );
+                    assert_eq!(
+                        *left_left_seq, *right_left_seq,
+                        "sampled join pair drifted for mission {:?}",
+                        mission
+                    );
+                    assert_eq!(
+                        *left_stage, MTM_LEFT_STAGE,
+                        "unexpected left stage for mission {:?}",
+                        mission
+                    );
+                    assert_eq!(
+                        *right_stage, MTM_RIGHT_STAGE,
+                        "unexpected right stage for mission {:?}",
+                        mission
+                    );
+                    assert_sampled_progress(mission, emit_limit, *left_left_seq, *tick, &mut prev);
+                }
+            }
+            MissionArg::BridgeFanoutBackground => {
+                let mut prev = None;
+                for (idx, entry) in trace.iter().enumerate() {
+                    let TraceEntry::BridgePair {
+                        tick,
+                        left_seq,
+                        right_seq,
+                        left_stage,
+                        right_stage,
+                    } = entry
+                    else {
+                        panic!(
+                            "expected BridgePair trace for mission {:?}, got {:?}",
+                            mission, entry
+                        );
+                    };
+                    let expected_seq =
+                        u32::try_from(idx).expect("background bridge sample index should fit");
+                    assert_eq!(
+                        *left_seq, expected_seq,
+                        "unexpected left bridge sample index for mission {:?}",
+                        mission
+                    );
+                    assert_eq!(
+                        *right_seq, expected_seq,
+                        "unexpected right bridge sample index for mission {:?}",
+                        mission
+                    );
+                    assert_eq!(
+                        *left_stage, BRIDGE_LEFT_STAGE,
+                        "unexpected left stage for mission {:?}",
+                        mission
+                    );
+                    assert_eq!(
+                        *right_stage, BRIDGE_RIGHT_STAGE,
+                        "unexpected right stage for mission {:?}",
+                        mission
+                    );
+                    assert_sampled_progress(mission, emit_limit, expected_seq, *tick, &mut prev);
+                }
+            }
+            _ => panic!("background trace assertion is only valid for background missions"),
+        }
+    }
+
+    fn assert_trace_matches_contract(mission: MissionArg, trace: &[TraceEntry], emit_limit: u64) {
+        if mission.uses_background() {
+            assert_background_trace_matches_contract(mission, trace, emit_limit);
+        } else {
+            assert_eq!(
+                trace,
+                mission.expected_trace(emit_limit),
+                "trace mismatch for mission {:?}",
+                mission
+            );
+        }
+    }
+
     fn run_mission_trace_and_logs(
         mission: MissionArg,
     ) -> CuResult<(Vec<TraceEntry>, Vec<NormalizedCopperList>)> {
@@ -1576,6 +1867,7 @@ mod tests {
             }
         }
         if mission.uses_background() {
+            settle_background_trace(mission, &mut app, &clock_mock)?;
             std::thread::sleep(Duration::from_millis(5));
         }
         app.stop_all_tasks()?;
@@ -1593,12 +1885,7 @@ mod tests {
             .unwrap_or_else(|poison| poison.into_inner());
         for mission in MissionArg::all() {
             let (trace, copperlists) = run_mission_trace_and_logs(*mission).expect("run mission");
-            assert_eq!(
-                trace,
-                mission.expected_trace(TEST_EMIT_LIMIT),
-                "trace mismatch for mission {:?}",
-                mission
-            );
+            assert_trace_matches_contract(*mission, &trace, TEST_EMIT_LIMIT);
             assert!(
                 !copperlists.is_empty(),
                 "expected copperlists for mission {:?}",

@@ -1,16 +1,7 @@
 use crate::MonitorModel;
-#[cfg(feature = "log_pane")]
-use crate::logpane::StyledLine;
 use crate::model::{ComponentStatus, MonitorFooterIdentity};
 use crate::palette;
-#[cfg(feature = "sysinfo")]
-use crate::system_info::{SystemInfo, default_system_info};
 use crate::tui_nodes::{Connection, NodeGraph, NodeLayout};
-#[cfg(all(
-    not(all(target_family = "wasm", target_os = "unknown")),
-    feature = "sysinfo"
-))]
-use ansi_to_tui::IntoText;
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Position, Rect, Size};
@@ -24,9 +15,18 @@ use tui_widgets::scrollview::{ScrollView, ScrollViewState};
 
 use cu29::monitoring::{ComponentId, ComponentType, MonitorComponentMetadata};
 
+#[cfg(feature = "log_pane")]
+use crate::log_pane::{LogPane, SelectionPoint, StyledLine};
+
+#[cfg(feature = "sysinfo_pane")]
+use crate::sysinfo_pane::{SystemInfo, default_system_info};
+
+#[cfg(all(native, feature = "sysinfo_pane"))]
+use ansi_to_tui::IntoText;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MonitorScreen {
-    #[cfg(feature = "sysinfo")]
+    #[cfg(feature = "sysinfo_pane")]
     System,
     Dag,
     Latency,
@@ -48,6 +48,7 @@ pub enum ScrollDirection {
 pub enum MonitorUiAction {
     None,
     QuitRequested,
+
     #[cfg(feature = "log_pane")]
     CopyLogSelection(String),
 }
@@ -68,6 +69,11 @@ pub enum MonitorUiEvent {
         col: u16,
         row: u16,
     },
+    Scroll {
+        direction: ScrollDirection,
+        steps: usize,
+    },
+
     #[cfg(feature = "log_pane")]
     MouseDrag {
         col: u16,
@@ -77,10 +83,6 @@ pub enum MonitorUiEvent {
     MouseUp {
         col: u16,
         row: u16,
-    },
-    Scroll {
-        direction: ScrollDirection,
-        steps: usize,
     },
 }
 
@@ -127,7 +129,7 @@ struct FooterBadge {
 }
 
 const TAB_DEFS: &[TabDef] = &[
-    #[cfg(feature = "sysinfo")]
+    #[cfg(feature = "sysinfo_pane")]
     TabDef {
         screen: MonitorScreen::System,
         label: "SYS",
@@ -155,93 +157,43 @@ const TAB_DEFS: &[TabDef] = &[
     },
 ];
 
-#[cfg(feature = "log_pane")]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-struct SelectionPoint {
-    row: usize,
-    col: usize,
-}
-
-#[cfg(feature = "log_pane")]
-#[derive(Clone, Copy, Debug, Default)]
-struct LogSelection {
-    anchor: Option<SelectionPoint>,
-    cursor: Option<SelectionPoint>,
-}
-
-#[cfg(feature = "log_pane")]
-impl LogSelection {
-    fn clear(&mut self) {
-        self.anchor = None;
-        self.cursor = None;
-    }
-
-    fn start(&mut self, point: SelectionPoint) {
-        self.anchor = Some(point);
-        self.cursor = Some(point);
-    }
-
-    fn update(&mut self, point: SelectionPoint) {
-        if self.anchor.is_some() {
-            self.cursor = Some(point);
-        }
-    }
-
-    fn range(&self) -> Option<(SelectionPoint, SelectionPoint)> {
-        let anchor = self.anchor?;
-        let cursor = self.cursor?;
-        if (anchor.row, anchor.col) <= (cursor.row, cursor.col) {
-            Some((anchor, cursor))
-        } else {
-            Some((cursor, anchor))
-        }
-    }
-}
-
 pub struct MonitorUi {
     model: MonitorModel,
     runtime_node_col_width: u16,
     active_screen: MonitorScreen,
-    #[cfg(feature = "sysinfo")]
-    system_info: SystemInfo,
     show_quit_hint: bool,
     tab_hitboxes: Vec<TabHitbox>,
     help_hitboxes: Vec<HelpHitbox>,
     nodes_scrollable_widget_state: NodesScrollableWidgetState,
     latency_scroll_state: ScrollViewState,
+
+    #[cfg(feature = "sysinfo_pane")]
+    system_info: SystemInfo,
+
     #[cfg(feature = "log_pane")]
-    log_area: Option<Rect>,
-    #[cfg(feature = "log_pane")]
-    log_lines: Vec<StyledLine>,
-    #[cfg(feature = "log_pane")]
-    log_selection: LogSelection,
-    #[cfg(feature = "log_pane")]
-    log_offset_from_bottom: usize,
+    log_pane: LogPane,
 }
 
 impl MonitorUi {
     pub fn new(model: MonitorModel, options: MonitorUiOptions) -> Self {
         let runtime_node_col_width = Self::compute_runtime_node_col_width(model.components());
         let nodes_scrollable_widget_state = NodesScrollableWidgetState::new(model.clone());
+
         Self {
             model,
             runtime_node_col_width,
             active_screen: MonitorScreen::Dag,
-            #[cfg(feature = "sysinfo")]
-            system_info: default_system_info(),
             show_quit_hint: options.show_quit_hint,
             tab_hitboxes: Vec::new(),
             help_hitboxes: Vec::new(),
             nodes_scrollable_widget_state,
             latency_scroll_state: ScrollViewState::default(),
+
+            #[cfg(feature = "sysinfo_pane")]
+            system_info: default_system_info(),
+
             #[cfg(feature = "log_pane")]
-            log_area: None,
-            #[cfg(feature = "log_pane")]
-            log_lines: Vec::new(),
-            #[cfg(feature = "log_pane")]
-            log_selection: LogSelection::default(),
-            #[cfg(feature = "log_pane")]
-            log_offset_from_bottom: 0,
+            log_pane: Default::default(),
         }
     }
 
@@ -261,14 +213,15 @@ impl MonitorUi {
         match event {
             MonitorUiEvent::Key(key) => self.handle_key(key),
             MonitorUiEvent::MouseDown { col, row } => self.click(col, row),
-            #[cfg(feature = "log_pane")]
-            MonitorUiEvent::MouseDrag { col, row } => self.drag_log_selection(col, row),
-            #[cfg(feature = "log_pane")]
-            MonitorUiEvent::MouseUp { col, row } => self.finish_log_selection(col, row),
             MonitorUiEvent::Scroll { direction, steps } => {
                 self.scroll(direction, steps);
                 MonitorUiAction::None
             }
+
+            #[cfg(feature = "log_pane")]
+            MonitorUiEvent::MouseDrag { col, row } => self.drag_log_selection(col, row),
+            #[cfg(feature = "log_pane")]
+            MonitorUiEvent::MouseUp { col, row } => self.finish_log_selection(col, row),
         }
     }
 
@@ -346,13 +299,16 @@ impl MonitorUi {
                     self.latency_scroll_state.scroll_left();
                 }
             }
+
             #[cfg(feature = "log_pane")]
             (MonitorScreen::Logs, ScrollDirection::Up) => {
-                self.log_offset_from_bottom = self.log_offset_from_bottom.saturating_add(steps);
+                self.log_pane.offset_from_bottom =
+                    self.log_pane.offset_from_bottom.saturating_add(steps);
             }
             #[cfg(feature = "log_pane")]
             (MonitorScreen::Logs, ScrollDirection::Down) => {
-                self.log_offset_from_bottom = self.log_offset_from_bottom.saturating_sub(steps);
+                self.log_pane.offset_from_bottom =
+                    self.log_pane.offset_from_bottom.saturating_sub(steps);
             }
             _ => {}
         }
@@ -419,12 +375,14 @@ impl MonitorUi {
         );
 
         match self.active_screen {
-            #[cfg(feature = "sysinfo")]
-            MonitorScreen::System => self.draw_system_info(f, area),
             MonitorScreen::Dag => self.draw_nodes(f, area),
             MonitorScreen::Latency => self.draw_latency_table(f, area),
             MonitorScreen::CopperList => self.draw_copperlist_stats(f, area),
             MonitorScreen::MemoryPools => self.draw_memory_pools(f, area),
+
+            #[cfg(feature = "sysinfo_pane")]
+            MonitorScreen::System => self.draw_system_info(f, area),
+
             #[cfg(feature = "log_pane")]
             MonitorScreen::Logs => self.draw_logs(f, area),
         }
@@ -449,7 +407,7 @@ impl MonitorUi {
         self.model.components()[component_id.index()].id()
     }
 
-    #[cfg(feature = "sysinfo")]
+    #[cfg(feature = "sysinfo_pane")]
     fn draw_system_info(&self, f: &mut Frame, area: Rect) {
         const VERSION: &str = env!("CARGO_PKG_VERSION");
         let mut lines = vec![
@@ -457,16 +415,18 @@ impl MonitorUi {
             Line::raw(format!("   -> Copper v{VERSION}")),
             Line::raw(""),
         ];
-        let mut body = match &self.system_info {
-            #[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
-            SystemInfo::Ansi(raw) => raw
-                .clone()
-                .into_text()
-                .map(|text| text.to_owned())
-                .unwrap_or_else(|_| Text::from(raw.clone())),
-            #[cfg(all(target_family = "wasm", target_os = "unknown"))]
-            SystemInfo::Rich(text) => text.clone(),
-        };
+
+        #[cfg(native)]
+        let mut body = self
+            .system_info
+            .clone()
+            .into_text()
+            .map(|text| text.to_owned())
+            .unwrap_or_else(|_| Text::from(self.system_info.clone()));
+
+        #[cfg(browser)]
+        let mut body = self.system_info.clone();
+
         palette::normalize_text_colors(&mut body, palette::FOREGROUND, palette::BACKGROUND);
         lines.append(&mut body.lines);
         lines.push(Line::raw(" "));
@@ -825,19 +785,19 @@ impl MonitorUi {
 
     #[cfg(feature = "log_pane")]
     fn start_log_selection(&mut self, col: u16, row: u16) -> MonitorUiAction {
-        let Some(area) = self.log_area else {
-            self.log_selection.clear();
+        let Some(area) = self.log_pane.area else {
+            self.log_pane.selection.clear();
             return MonitorUiAction::None;
         };
         if !point_inside(col, row, area.x, area.y, area.width, area.height) {
-            self.log_selection.clear();
+            self.log_pane.selection.clear();
             return MonitorUiAction::None;
         }
 
         let Some(point) = self.log_selection_point(col, row) else {
             return MonitorUiAction::None;
         };
-        self.log_selection.start(point);
+        self.log_pane.selection.start(point);
         MonitorUiAction::None
     }
 
@@ -846,17 +806,17 @@ impl MonitorUi {
         let Some(point) = self.log_selection_point(col, row) else {
             return MonitorUiAction::None;
         };
-        self.log_selection.update(point);
+        self.log_pane.selection.update(point);
         MonitorUiAction::None
     }
 
     #[cfg(feature = "log_pane")]
     fn finish_log_selection(&mut self, col: u16, row: u16) -> MonitorUiAction {
         let Some(point) = self.log_selection_point(col, row) else {
-            self.log_selection.clear();
+            self.log_pane.selection.clear();
             return MonitorUiAction::None;
         };
-        self.log_selection.update(point);
+        self.log_pane.selection.update(point);
         self.selected_log_text()
             .map(MonitorUiAction::CopyLogSelection)
             .unwrap_or(MonitorUiAction::None)
@@ -864,7 +824,7 @@ impl MonitorUi {
 
     #[cfg(feature = "log_pane")]
     fn log_selection_point(&self, col: u16, row: u16) -> Option<SelectionPoint> {
-        let area = self.log_area?;
+        let area = self.log_pane.area?;
         if !point_inside(col, row, area.x, area.y, area.width, area.height) {
             return None;
         }
@@ -872,7 +832,7 @@ impl MonitorUi {
         let rel_row = (row - area.y) as usize;
         let rel_col = (col - area.x) as usize;
         let line_index = self.visible_log_offset(area).saturating_add(rel_row);
-        let line = self.log_lines.get(line_index)?;
+        let line = self.log_pane.lines.get(line_index)?;
         Some(SelectionPoint {
             row: line_index,
             col: rel_col.min(line.text.chars().count()),
@@ -882,9 +842,9 @@ impl MonitorUi {
     #[cfg(feature = "log_pane")]
     fn visible_log_offset(&self, area: Rect) -> usize {
         let visible_rows = area.height as usize;
-        let total_lines = self.log_lines.len();
+        let total_lines = self.log_pane.lines.len();
         let max_offset = total_lines.saturating_sub(visible_rows);
-        let offset_from_bottom = self.log_offset_from_bottom.min(max_offset);
+        let offset_from_bottom = self.log_pane.offset_from_bottom.min(max_offset);
         total_lines.saturating_sub(visible_rows.saturating_add(offset_from_bottom))
     }
 
@@ -896,14 +856,14 @@ impl MonitorUi {
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded);
         let inner = block.inner(area);
-        self.log_area = Some(inner);
-        self.log_lines = self.model.log_lines();
+        self.log_pane.area = Some(inner);
+        self.log_pane.lines = self.model.log_lines();
 
         let visible_offset = self.visible_log_offset(inner);
-        if let Some((start, end)) = self.log_selection.range()
-            && (start.row >= self.log_lines.len() || end.row >= self.log_lines.len())
+        if let Some((start, end)) = self.log_pane.selection.range()
+            && (start.row >= self.log_pane.lines.len() || end.row >= self.log_pane.lines.len())
         {
-            self.log_selection.clear();
+            self.log_pane.selection.clear();
         }
 
         let paragraph = Paragraph::new(self.build_log_text(inner, visible_offset)).block(block);
@@ -914,12 +874,14 @@ impl MonitorUi {
     fn build_log_text(&self, area: Rect, visible_offset: usize) -> Text<'static> {
         let mut rendered_lines = Vec::new();
         let selection = self
-            .log_selection
+            .log_pane
+            .selection
             .range()
             .filter(|(start, end)| start != end);
         let selection_style = Style::default().bg(palette::BLUE).fg(palette::BACKGROUND);
         let visible_lines = self
-            .log_lines
+            .log_pane
+            .lines
             .iter()
             .skip(visible_offset)
             .take(area.height as usize);
@@ -956,17 +918,17 @@ impl MonitorUi {
 
     #[cfg(feature = "log_pane")]
     fn selected_log_text(&self) -> Option<String> {
-        let (start, end) = self.log_selection.range()?;
-        if start == end || self.log_lines.is_empty() {
+        let (start, end) = self.log_pane.selection.range()?;
+        if start == end || self.log_pane.lines.is_empty() {
             return None;
         }
-        if start.row >= self.log_lines.len() || end.row >= self.log_lines.len() {
+        if start.row >= self.log_pane.lines.len() || end.row >= self.log_pane.lines.len() {
             return None;
         }
 
         let mut selected = Vec::new();
         for row in start.row..=end.row {
-            let line = &self.log_lines[row];
+            let line = &self.log_pane.lines[row];
             let line_len = line.text.chars().count();
             let Some((start_col, end_col)) = line_selection_bounds(row, line_len, start, end)
             else {

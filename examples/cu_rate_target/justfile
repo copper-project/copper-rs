@@ -1,0 +1,44 @@
+ROOT := `git rev-parse --show-toplevel`
+RT_PRIO := "80"
+
+default: loose
+
+# Run the standard limiter example in the screaming profile.
+loose:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo build -p cu-rate-target --bin rate-target --profile screaming
+  "{{ROOT}}/target/screaming/rate-target"
+
+# Run the high-precision limiter example in the screaming profile.
+precise:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo build -p cu-rate-target --bin rate-target-precise --profile screaming --features high-precision-limiter
+  "{{ROOT}}/target/screaming/rate-target-precise"
+
+# Run the standard limiter example under Linux SCHED_FIFO in the screaming profile.
+rt-loose:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo build -p cu-rate-target --bin rate-target --profile screaming
+  if ! chrt --fifo "{{RT_PRIO}}" true >/dev/null 2>&1; then
+    echo "Realtime scheduling requires CAP_SYS_NICE or sudo. Try: sudo just rt-loose" >&2
+    exit 1
+  fi
+  exec chrt --fifo "{{RT_PRIO}}" "{{ROOT}}/target/screaming/rate-target"
+
+# Run the high-precision limiter example under Linux SCHED_FIFO in the screaming profile.
+rt-precise:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo build -p cu-rate-target --bin rate-target-precise --profile screaming --features high-precision-limiter
+  if ! chrt --fifo "{{RT_PRIO}}" true >/dev/null 2>&1; then
+    echo "Realtime scheduling requires CAP_SYS_NICE or sudo. Try: sudo just rt-precise" >&2
+    exit 1
+  fi
+  exec chrt --fifo "{{RT_PRIO}}" "{{ROOT}}/target/screaming/rate-target-precise"
