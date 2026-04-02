@@ -4,7 +4,7 @@
 
 use crate::app::Subsystem;
 use crate::config::{ComponentConfig, CuDirection, DEFAULT_KEYFRAME_INTERVAL, Node};
-use crate::config::{CuConfig, CuGraph, NodeId, RuntimeConfig};
+use crate::config::{CuConfig, CuGraph, MAX_RATE_TARGET_HZ, NodeId, RuntimeConfig};
 use crate::copperlist::{CopperList, CopperListState, CuListZeroedInit, CuListsManager};
 use crate::cutask::{BincodeAdapter, Freezable};
 #[cfg(feature = "std")]
@@ -20,7 +20,7 @@ use crate::monitoring::{
 use crate::parallel_rt::{ParallelRt, ParallelRtMetadata};
 use crate::resource::ResourceManager;
 use compact_str::CompactString;
-use cu29_clock::{ClockProvider, CuTime, RobotClock};
+use cu29_clock::{ClockProvider, CuDuration, CuTime, RobotClock};
 use cu29_traits::CuResult;
 use cu29_traits::WriteStream;
 use cu29_traits::{CopperListTuple, CuError};
@@ -183,6 +183,9 @@ impl<'cfg, CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, 
 /// monotonically increasing duration since an unspecified origin (typically
 /// process or runtime initialization), not a wall-clock time-of-day. When
 /// `sysclock-perf` is disabled it delegates to the provided `RobotClock`.
+///
+/// This is intentionally separate from `LoopRateLimiter`, which always uses the
+/// provided `RobotClock` so `runtime.rate_target_hz` stays tied to robot time.
 #[inline]
 pub fn perf_now(_clock: &RobotClock) -> CuTime {
     #[cfg(all(feature = "std", feature = "sysclock-perf"))]
@@ -193,6 +196,132 @@ pub fn perf_now(_clock: &RobotClock) -> CuTime {
 
     #[allow(unreachable_code)]
     _clock.now()
+}
+
+#[cfg(all(feature = "std", feature = "high-precision-limiter"))]
+const HIGH_PRECISION_LIMITER_SPIN_WINDOW_NS: u64 = 200_000;
+
+/// Convert a configured runtime rate target to an integer-nanosecond period.
+#[inline]
+pub fn rate_target_period(rate_target_hz: u64) -> CuResult<CuDuration> {
+    if rate_target_hz == 0 {
+        return Err(CuError::from(
+            "Runtime rate target cannot be zero. Set runtime.rate_target_hz to at least 1.",
+        ));
+    }
+
+    if rate_target_hz > MAX_RATE_TARGET_HZ {
+        return Err(CuError::from(format!(
+            "Runtime rate target ({rate_target_hz} Hz) exceeds the supported maximum of {MAX_RATE_TARGET_HZ} Hz."
+        )));
+    }
+
+    Ok(CuDuration::from(MAX_RATE_TARGET_HZ / rate_target_hz))
+}
+
+/// Runtime loop limiter that preserves phase with absolute deadlines.
+///
+/// This is intentionally a small runtime helper so generated applications do
+/// not have to open-code loop scheduling policy. Deadlines are tracked against
+/// the provided `RobotClock`, even when `sysclock-perf` is enabled for
+/// process-time measurements.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LoopRateLimiter {
+    period: CuDuration,
+    next_deadline: CuTime,
+}
+
+impl LoopRateLimiter {
+    #[inline]
+    pub fn from_rate_target_hz(rate_target_hz: u64, clock: &RobotClock) -> CuResult<Self> {
+        let period = rate_target_period(rate_target_hz)?;
+        Ok(Self {
+            period,
+            next_deadline: clock.now() + period,
+        })
+    }
+
+    #[inline]
+    pub fn is_ready(&self, clock: &RobotClock) -> bool {
+        self.remaining(clock).is_none()
+    }
+
+    #[inline]
+    pub fn remaining(&self, clock: &RobotClock) -> Option<CuDuration> {
+        let now = clock.now();
+        if now < self.next_deadline {
+            Some(self.next_deadline - now)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    pub fn wait_until_ready(&self, clock: &RobotClock) {
+        let deadline = self.next_deadline;
+        let Some(remaining) = self.remaining(clock) else {
+            return;
+        };
+
+        #[cfg(all(feature = "std", feature = "high-precision-limiter"))]
+        {
+            let spin_window = self.spin_window();
+            if remaining > spin_window {
+                std::thread::sleep(std::time::Duration::from(remaining - spin_window));
+            }
+            while clock.now() < deadline {
+                core::hint::spin_loop();
+            }
+        }
+
+        #[cfg(all(feature = "std", not(feature = "high-precision-limiter")))]
+        {
+            let _ = deadline;
+            std::thread::sleep(std::time::Duration::from(remaining));
+        }
+
+        #[cfg(not(feature = "std"))]
+        {
+            let _ = remaining;
+            while clock.now() < deadline {
+                core::hint::spin_loop();
+            }
+        }
+    }
+
+    #[inline]
+    pub fn mark_tick(&mut self, clock: &RobotClock) {
+        self.advance_from(clock.now());
+    }
+
+    #[inline]
+    pub fn limit(&mut self, clock: &RobotClock) {
+        self.wait_until_ready(clock);
+        self.mark_tick(clock);
+    }
+
+    #[inline]
+    fn advance_from(&mut self, now: CuTime) {
+        let steps = if now < self.next_deadline {
+            1
+        } else {
+            (now - self.next_deadline).as_nanos() / self.period.as_nanos() + 1
+        };
+        self.next_deadline += steps * self.period;
+    }
+
+    #[cfg(all(feature = "std", feature = "high-precision-limiter"))]
+    #[inline]
+    fn spin_window(&self) -> CuDuration {
+        let _ = self.period;
+        CuDuration::from(HIGH_PRECISION_LIMITER_SPIN_WINDOW_NS)
+    }
+
+    #[cfg(test)]
+    #[inline]
+    fn next_deadline(&self) -> CuTime {
+        self.next_deadline
+    }
 }
 
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
@@ -954,6 +1083,7 @@ where
         let parallel_rt = ParallelRt::new(parts.parallel_rt_metadata)?;
 
         let runtime_config = config.runtime.clone().unwrap_or_default();
+        runtime_config.validate()?;
 
         Ok(CuRuntime {
             subsystem_code: subsystem.code(),
@@ -1854,6 +1984,50 @@ mod tests {
             .try_with_resources_instantiator(resources_instanciator)
             .and_then(|builder| builder.build());
         assert!(runtime.is_ok());
+    }
+
+    #[test]
+    fn test_rate_target_period_rejects_zero() {
+        let err = rate_target_period(0).expect_err("zero rate target should fail");
+        assert!(
+            err.to_string()
+                .contains("Runtime rate target cannot be zero"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_loop_rate_limiter_advances_to_next_period_when_on_time() {
+        let (clock, mock) = RobotClock::mock();
+        let mut limiter = LoopRateLimiter::from_rate_target_hz(100, &clock).unwrap();
+        assert_eq!(limiter.next_deadline(), CuDuration::from(10_000_000));
+
+        mock.set_value(10_000_000);
+        limiter.mark_tick(&clock);
+
+        assert_eq!(limiter.next_deadline(), CuDuration::from(20_000_000));
+    }
+
+    #[test]
+    fn test_loop_rate_limiter_skips_missed_periods_without_resetting_phase() {
+        let (clock, mock) = RobotClock::mock();
+        let mut limiter = LoopRateLimiter::from_rate_target_hz(100, &clock).unwrap();
+
+        mock.set_value(35_000_000);
+        limiter.mark_tick(&clock);
+
+        assert_eq!(limiter.next_deadline(), CuDuration::from(40_000_000));
+    }
+
+    #[cfg(all(feature = "std", feature = "high-precision-limiter"))]
+    #[test]
+    fn test_loop_rate_limiter_spin_window_is_fixed_scheduler_window() {
+        let (clock, _) = RobotClock::mock();
+        let limiter = LoopRateLimiter::from_rate_target_hz(1_000, &clock).unwrap();
+        assert_eq!(limiter.spin_window(), CuDuration::from(200_000));
+
+        let fast = LoopRateLimiter::from_rate_target_hz(10_000, &clock).unwrap();
+        assert_eq!(fast.spin_window(), CuDuration::from(200_000));
     }
 
     #[cfg(not(feature = "async-cl-io"))]

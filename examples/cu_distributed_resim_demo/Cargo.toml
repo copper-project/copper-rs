@@ -17,7 +17,7 @@ default-run = "distributed-scout"
 cu29 = { workspace = true }
 cu29-export = { workspace = true }
 cu29-unifiedlog = { workspace = true }
-cu-zenoh-bridge = { path = "../../components/bridges/cu_zenoh_bridge", version = "0.14.0" }
+cu-zenoh-bridge = { path = "../../components/bridges/cu_zenoh_bridge", version = "0.15.0" }
 serde = { workspace = true }
 bincode = { workspace = true }
 

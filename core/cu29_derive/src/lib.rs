@@ -3243,9 +3243,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         };
 
         let run_loop = if std {
-            quote! {
+            quote! {{
+                let mut rate_limiter = self
+                    .copper_runtime
+                    .runtime_config
+                    .rate_target_hz
+                    .map(|rate| cu29::curuntime::LoopRateLimiter::from_rate_target_hz(
+                        rate,
+                        &self.copper_runtime.clock,
+                    ))
+                    .transpose()?;
                 loop  {
-                    let iter_start = cu29::curuntime::perf_now(&self.copper_runtime.clock);
                     let result = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(
                         || <Self as #app_trait<S, L>>::run_one_iteration(self, #sim_callback_arg)
                     )) {
@@ -3266,37 +3274,37 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         }
                     };
 
-                    if let Some(rate) = self.copper_runtime.runtime_config.rate_target_hz {
-                        let period: CuDuration = (1_000_000_000u64 / rate).into();
-                        let elapsed = cu29::curuntime::perf_now(&self.copper_runtime.clock) - iter_start;
-                        if elapsed < period {
-                            std::thread::sleep(std::time::Duration::from_nanos(period.as_nanos() - elapsed.as_nanos()));
-                        }
+                    if let Some(rate_limiter) = rate_limiter.as_mut() {
+                        rate_limiter.limit(&self.copper_runtime.clock);
                     }
 
                     if STOP_FLAG.load(Ordering::SeqCst) || result.is_err() {
                         break result;
                     }
                 }
-            }
+            }}
         } else {
-            quote! {
+            quote! {{
+                let mut rate_limiter = self
+                    .copper_runtime
+                    .runtime_config
+                    .rate_target_hz
+                    .map(|rate| cu29::curuntime::LoopRateLimiter::from_rate_target_hz(
+                        rate,
+                        &self.copper_runtime.clock,
+                    ))
+                    .transpose()?;
                 loop  {
-                    let iter_start = cu29::curuntime::perf_now(&self.copper_runtime.clock);
                     let result = <Self as #app_trait<S, L>>::run_one_iteration(self, #sim_callback_arg);
-                    if let Some(rate) = self.copper_runtime.runtime_config.rate_target_hz {
-                        let period: CuDuration = (1_000_000_000u64 / rate).into();
-                        let elapsed = cu29::curuntime::perf_now(&self.copper_runtime.clock) - iter_start;
-                        if elapsed < period {
-                            busy_wait_for(period - elapsed);
-                        }
+                    if let Some(rate_limiter) = rate_limiter.as_mut() {
+                        rate_limiter.limit(&self.copper_runtime.clock);
                     }
 
                     if STOP_FLAG.load(Ordering::SeqCst) || result.is_err() {
                         break result;
                     }
                 }
-            }
+            }}
         };
 
         #[cfg(feature = "macro_debug")]
@@ -3365,10 +3373,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #(#parallel_stage_worker_spawns)*
                     drop(done_tx);
 
-                    let dispatch_period = runtime.runtime_config.rate_target_hz.map(|rate| {
-                        CuDuration::from(1_000_000_000u64 / rate)
-                    });
-                    let mut next_dispatch_deadline = cu29::curuntime::perf_now(clock);
+                    let mut dispatch_limiter = runtime
+                        .runtime_config
+                        .rate_target_hz
+                        .map(|rate| cu29::curuntime::LoopRateLimiter::from_rate_target_hz(rate, clock))
+                        .transpose()?;
                     let mut in_flight = 0usize;
                     let mut stop_launching = false;
                     let mut next_launch_clid = start_clid;
@@ -3385,9 +3394,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                         if !stop_launching && fatal_error.is_none() {
                             let next_clid = next_launch_clid;
-                            let now = cu29::curuntime::perf_now(clock);
-                            let rate_ready = dispatch_period
-                                .map(|_| now >= next_dispatch_deadline)
+                            let rate_ready = dispatch_limiter
+                                .as_ref()
+                                .map(|limiter| limiter.is_ready(clock))
                                 .unwrap_or(true);
                             let keyframe_ready = {
                                 let _keyframe_lock = kf_lock.lock().expect("parallel keyframe lock poisoned");
@@ -3403,10 +3412,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 // Parallel lifecycle is attached to component-local stage work,
                                 // so dispatch itself can launch the next CopperList immediately.
                                 let should_launch = true;
-
-                                if let Some(period) = dispatch_period {
-                                    next_dispatch_deadline = next_dispatch_deadline + period;
-                                }
 
                                 if should_launch {
                                     let mut culist = free_copperlists
@@ -3438,6 +3443,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         })?;
                                     next_launch_clid += 1;
                                     in_flight += 1;
+                                    if let Some(limiter) = dispatch_limiter.as_mut() {
+                                        limiter.mark_tick(clock);
+                                    }
                                 }
 
                                 if STOP_FLAG.load(Ordering::SeqCst) {
@@ -3457,24 +3465,20 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 continue;
                             }
 
-                            if let Some(_period) = dispatch_period {
-                                let now = cu29::curuntime::perf_now(clock);
-                                if now < next_dispatch_deadline {
-                                    std::thread::sleep(std::time::Duration::from_nanos(
-                                        (next_dispatch_deadline - now).as_nanos(),
-                                    ));
-                                    continue;
-                                }
+                            if let Some(limiter) = dispatch_limiter.as_ref()
+                                && !limiter.is_ready(clock)
+                            {
+                                limiter.wait_until_ready(clock);
+                                continue;
                             }
                         }
 
                         let recv_result = if !stop_launching && fatal_error.is_none() {
-                            if let Some(_period) = dispatch_period {
-                                let now = cu29::curuntime::perf_now(clock);
-                                if now < next_dispatch_deadline && in_flight > 0 {
-                                    done_rx.recv_timeout(std::time::Duration::from_nanos(
-                                        (next_dispatch_deadline - now).as_nanos(),
-                                    ))
+                            if let Some(limiter) = dispatch_limiter.as_ref() {
+                                if let Some(remaining) = limiter.remaining(clock)
+                                    && in_flight > 0
+                                {
+                                    done_rx.recv_timeout(std::time::Duration::from(remaining))
                                 } else {
                                     done_rx
                                         .recv()

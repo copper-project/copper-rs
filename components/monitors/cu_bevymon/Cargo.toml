@@ -29,10 +29,10 @@ bevy = { workspace = true, features = [
   "keyboard",
   "mouse",
 ] }
-cu29 = { path = "../../../core/cu29", version = "0.14.0", default-features = false, features = [
+cu29 = { path = "../../../core/cu29", version = "0.15.0", default-features = false, features = [
   "std",
 ] }
-cu-tuimon = { path = "../../libs/cu_tuimon", version = "0.14.0", default-features = false, features = [
+cu-tuimon = { path = "../../libs/cu_tuimon", version = "0.15.0", default-features = false, features = [
   "log_pane",
 ] }
 ratatui = { version = "0.30.0", default-features = false }

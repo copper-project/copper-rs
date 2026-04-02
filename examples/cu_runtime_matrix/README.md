@@ -18,7 +18,7 @@ It is intentionally synthetic. The point is to exercise scheduler and logging se
 
 The tests check two things:
 
-- the observed runtime trace matches the expected foreground or delayed-background behavior
+- the observed runtime trace matches the exact foreground trace and the sampled-delay contract for background missions
 - the normalized CopperList stream is identical across two live runs of the same foreground mission
 
 That second check is the part that makes `async-cl-io` relevant instead of just incidental.

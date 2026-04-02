@@ -11,8 +11,8 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version = "0.14.0", default-features = false }
-cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "0.14.0", default-features = false }
+cu29 = { path = "../../../core/cu29", version = "0.15.0", default-features = false }
+cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "0.15.0", default-features = false }
 serde = { workspace = true }
 embedded-hal = { version = "0.2.7", default-features = false }
 

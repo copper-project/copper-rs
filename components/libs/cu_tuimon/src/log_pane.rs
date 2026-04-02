@@ -1,24 +1,75 @@
 use crate::MonitorModel;
 use crate::palette;
-#[cfg(debug_assertions)]
-use ratatui::style::Color;
+use ratatui::layout::Rect;
 use ratatui::style::Style;
 
 #[cfg(debug_assertions)]
-use cu29::clock::CuTime;
+mod cfg_debug_assertions {
+    pub use cu29::clock::CuTime;
+    pub use cu29_log::{CuLogEntry, CuLogLevel};
+    pub use cu29_log_runtime::format_message_only;
+    pub use cu29_log_runtime::register_live_log_listener;
+    pub use ratatui::style::Color;
+    pub use std::collections::HashMap;
+}
 #[cfg(debug_assertions)]
-use cu29_log::{CuLogEntry, CuLogLevel};
-#[cfg(debug_assertions)]
-use cu29_log_runtime::format_message_only;
-#[cfg(debug_assertions)]
-use cu29_log_runtime::register_live_log_listener;
-#[cfg(feature = "stderr_capture")]
-use gag::BufferRedirect;
-#[cfg(feature = "stderr_capture")]
-use std::io::Read;
+use cfg_debug_assertions::*;
 
-#[cfg(debug_assertions)]
-use std::collections::HashMap;
+#[cfg(feature = "stderr_capture")]
+mod cfg_stderr_capture {
+    pub use gag::BufferRedirect;
+    pub use std::io::Read;
+}
+#[cfg(feature = "stderr_capture")]
+use cfg_stderr_capture::*;
+
+#[derive(Default)]
+pub struct LogPane {
+    pub area: Option<Rect>,
+    pub lines: Vec<StyledLine>,
+    pub selection: LogSelection,
+    pub offset_from_bottom: usize,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct LogSelection {
+    anchor: Option<SelectionPoint>,
+    cursor: Option<SelectionPoint>,
+}
+
+impl LogSelection {
+    pub fn clear(&mut self) {
+        self.anchor = None;
+        self.cursor = None;
+    }
+
+    pub fn start(&mut self, point: SelectionPoint) {
+        self.anchor = Some(point);
+        self.cursor = Some(point);
+    }
+
+    pub fn update(&mut self, point: SelectionPoint) {
+        if self.anchor.is_some() {
+            self.cursor = Some(point);
+        }
+    }
+
+    pub fn range(&self) -> Option<(SelectionPoint, SelectionPoint)> {
+        let anchor = self.anchor?;
+        let cursor = self.cursor?;
+        if (anchor.row, anchor.col) <= (cursor.row, cursor.col) {
+            Some((anchor, cursor))
+        } else {
+            Some((cursor, anchor))
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct SelectionPoint {
+    pub row: usize,
+    pub col: usize,
+}
 
 #[derive(Clone, Debug)]
 pub struct StyledRun {
