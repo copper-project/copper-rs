@@ -4,10 +4,10 @@ mod tui_nodes;
 mod ui;
 
 #[cfg(feature = "sysinfo_pane")]
-mod system_info;
+mod sysinfo_pane;
 
 #[cfg(feature = "log_pane")]
-mod logpane;
+mod log_pane;
 
 pub use model::MonitorModel;
 pub use ui::{
@@ -16,4 +16,4 @@ pub use ui::{
 };
 
 #[cfg(feature = "log_pane")]
-pub use logpane::{MonitorLogCapture, StyledLine, StyledRun};
+pub use log_pane::{MonitorLogCapture, StyledLine, StyledRun};

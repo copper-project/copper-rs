@@ -1,5 +1,3 @@
-#[cfg(feature = "log_pane")]
-use crate::logpane::StyledLine;
 use compact_str::{CompactString, ToCompactString};
 use cu29::clock::CuDuration;
 use cu29::cutask::CuMsgMetadata;
@@ -8,15 +6,20 @@ use cu29::monitoring::{
     CuMonitoringMetadata, MonitorComponentMetadata, MonitorTopology,
 };
 use cu29::prelude::{CuCompactString, CuTime, pool};
+use std::sync::{Arc, Mutex};
+
+#[cfg(feature = "log_pane")]
+use crate::log_pane::StyledLine;
 #[cfg(feature = "log_pane")]
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
-#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+
+#[cfg(native)]
 use std::time::{Duration, Instant};
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+#[cfg(browser)]
 use web_time::{Duration, Instant};
 
 const COPPERLIST_RATE_WINDOW: Duration = Duration::from_secs(1);
+
 #[cfg(feature = "log_pane")]
 const DEFAULT_LOG_CAPACITY: usize = 1_024;
 
@@ -36,6 +39,7 @@ pub(crate) struct MonitorModelInner {
     pub(crate) component_statuses: Mutex<Vec<ComponentStatus>>,
     pub(crate) pool_stats: Mutex<Vec<PoolStats>>,
     pub(crate) copperlist_stats: Mutex<CopperListStats>,
+
     #[cfg(feature = "log_pane")]
     pub(crate) log_lines: Mutex<VecDeque<StyledLine>>,
 }
@@ -89,6 +93,7 @@ impl MonitorModel {
                 component_statuses: Mutex::new(vec![ComponentStatus::default(); component_count]),
                 pool_stats: Mutex::new(Vec::new()),
                 copperlist_stats: Mutex::new(copperlist_stats),
+
                 #[cfg(feature = "log_pane")]
                 log_lines: Mutex::new(VecDeque::with_capacity(DEFAULT_LOG_CAPACITY)),
             }),
@@ -221,8 +226,10 @@ impl MonitorModel {
             self.upsert_pool_stat(id.to_string(), space_left, total_size, buffer_size);
         }
     }
+}
 
-    #[cfg(feature = "log_pane")]
+#[cfg(feature = "log_pane")]
+impl MonitorModel {
     pub fn push_log_line(&self, line: StyledLine) {
         if line.text.is_empty() {
             return;
@@ -235,7 +242,6 @@ impl MonitorModel {
         }
     }
 
-    #[cfg(feature = "log_pane")]
     pub fn log_lines(&self) -> Vec<StyledLine> {
         self.inner
             .log_lines
@@ -246,7 +252,6 @@ impl MonitorModel {
             .collect()
     }
 
-    #[cfg(feature = "log_pane")]
     pub fn log_line_count(&self) -> usize {
         self.inner.log_lines.lock().unwrap().len()
     }
@@ -341,7 +346,7 @@ pub(crate) struct MonitorFooterIdentity {
     pub(crate) instance_id: u32,
 }
 
-#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+#[cfg(native)]
 fn cached_system_name() -> CompactString {
     let mut buf = [0u8; 256];
     let result = unsafe { libc::gethostname(buf.as_mut_ptr().cast(), buf.len()) };
@@ -357,7 +362,7 @@ fn cached_system_name() -> CompactString {
     CompactString::from("unknown-host")
 }
 
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+#[cfg(browser)]
 fn cached_system_name() -> CompactString {
     web_sys::window()
         .and_then(|window| window.location().hostname().ok())

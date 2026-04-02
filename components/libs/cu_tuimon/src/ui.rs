@@ -16,10 +16,10 @@ use tui_widgets::scrollview::{ScrollView, ScrollViewState};
 use cu29::monitoring::{ComponentId, ComponentType, MonitorComponentMetadata};
 
 #[cfg(feature = "log_pane")]
-use crate::logpane::{LogPane, SelectionPoint, StyledLine};
+use crate::log_pane::{LogPane, SelectionPoint, StyledLine};
 
 #[cfg(feature = "sysinfo_pane")]
-use crate::system_info::{SystemInfo, default_system_info};
+use crate::sysinfo_pane::{SystemInfo, default_system_info};
 
 #[cfg(all(native, feature = "sysinfo_pane"))]
 use ansi_to_tui::IntoText;
@@ -415,16 +415,18 @@ impl MonitorUi {
             Line::raw(format!("   -> Copper v{VERSION}")),
             Line::raw(""),
         ];
-        let mut body = match &self.system_info {
-            #[cfg(native)]
-            SystemInfo::Ansi(raw) => raw
-                .clone()
-                .into_text()
-                .map(|text| text.to_owned())
-                .unwrap_or_else(|_| Text::from(raw.clone())),
-            #[cfg(browser)]
-            SystemInfo::Rich(text) => text.clone(),
-        };
+
+        #[cfg(native)]
+        let mut body = self
+            .system_info
+            .clone()
+            .into_text()
+            .map(|text| text.to_owned())
+            .unwrap_or_else(|_| Text::from(self.system_info.clone()));
+
+        #[cfg(browser)]
+        let mut body = self.system_info.clone();
+
         palette::normalize_text_colors(&mut body, palette::FOREGROUND, palette::BACKGROUND);
         lines.append(&mut body.lines);
         lines.push(Line::raw(" "));

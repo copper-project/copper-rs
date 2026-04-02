@@ -3,13 +3,8 @@ use crate::palette;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 
-#[cfg(feature = "stderr_capture")]
-use gag::BufferRedirect;
-#[cfg(feature = "stderr_capture")]
-use std::io::Read;
-
 #[cfg(debug_assertions)]
-mod debug_assertions {
+mod cfg_debug_assertions {
     pub use cu29::clock::CuTime;
     pub use cu29_log::{CuLogEntry, CuLogLevel};
     pub use cu29_log_runtime::format_message_only;
@@ -17,7 +12,16 @@ mod debug_assertions {
     pub use ratatui::style::Color;
     pub use std::collections::HashMap;
 }
-use debug_assertions::*;
+#[cfg(debug_assertions)]
+use cfg_debug_assertions::*;
+
+#[cfg(feature = "stderr_capture")]
+mod cfg_stderr_capture {
+    pub use gag::BufferRedirect;
+    pub use std::io::Read;
+}
+#[cfg(feature = "stderr_capture")]
+use cfg_stderr_capture::*;
 
 #[derive(Default)]
 pub struct LogPane {
