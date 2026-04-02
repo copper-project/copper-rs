@@ -188,7 +188,7 @@ fn ron_value_to_cu_value(value: &RonValue) -> Result<CuValue, ConfigError> {
             Number::U64(v) => Ok(CuValue::U64(*v)),
             Number::F32(v) => Ok(CuValue::F32(v.0)),
             Number::F64(v) => Ok(CuValue::F64(v.0)),
-            Number::__NonExhaustive(_) => Err(ConfigError {
+            _ => Err(ConfigError {
                 message: "Unsupported RON number variant".to_string(),
             }),
         },
@@ -293,7 +293,10 @@ macro_rules! impl_from_value_for_int {
                             Number::U16(n) => n as $target,
                             Number::U32(n) => n as $target,
                             Number::U64(n) => n as $target,
-                            Number::F32(_) | Number::F64(_) | Number::__NonExhaustive(_) => {
+                            Number::F32(_) | Number::F64(_) => {
+                                panic!("Expected an integer Number variant but got {num:?}")
+                            }
+                            _ => {
                                 panic!("Expected an integer Number variant but got {num:?}")
                             }
                         }
@@ -325,7 +328,10 @@ macro_rules! impl_try_from_value_for_int {
                             Number::U16(n) => Ok(*n as $target),
                             Number::U32(n) => Ok(*n as $target),
                             Number::U64(n) => Ok(*n as $target),
-                            Number::F32(_) | Number::F64(_) | Number::__NonExhaustive(_) => {
+                            Number::F32(_) | Number::F64(_) => {
+                                Err(ConfigError::type_mismatch("integer", value))
+                            }
+                            _ => {
                                 Err(ConfigError::type_mismatch("integer", value))
                             }
                         }
@@ -356,7 +362,7 @@ impl TryFrom<&Value> for f64 {
                 Number::U64(n) => *n as f64,
                 Number::F32(n) => n.0 as f64,
                 Number::F64(n) => n.0,
-                Number::__NonExhaustive(_) => {
+                _ => {
                     return Err(ConfigError::type_mismatch("number", value));
                 }
             };
