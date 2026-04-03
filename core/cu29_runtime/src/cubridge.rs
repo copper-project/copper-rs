@@ -17,12 +17,22 @@ use cu29_traits::CuResult;
 /// This links its identifier to a payload type enforced at compile time and optionally provides a
 /// backend-specific default route/topic/path suggestion. Missions can override that default (or
 /// leave it unset) via the bridge configuration file.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum TxEmptyPolicy {
+    /// Skip the bridge `send` call when the channel's input `CuMsg` has no payload.
+    Skip,
+    /// Still call the bridge `send` method with a metadata-only `CuMsg`.
+    Publish,
+}
+
 #[derive(Copy, Clone)]
 pub struct BridgeChannel<Id, Payload> {
     /// Strongly typed identifier used to select this channel.
     pub id: Id,
     /// Backend-specific route/topic/path default the bridge should bind to, if any.
     pub default_route: Option<&'static str>,
+    /// Static transmit policy for empty `CuMsg`s on this channel.
+    pub tx_empty_policy: TxEmptyPolicy,
     _payload: PhantomData<fn() -> Payload>,
 }
 
@@ -32,6 +42,7 @@ impl<Id, Payload> BridgeChannel<Id, Payload> {
         Self {
             id,
             default_route: None,
+            tx_empty_policy: TxEmptyPolicy::Skip,
             _payload: PhantomData,
         }
     }
@@ -41,8 +52,20 @@ impl<Id, Payload> BridgeChannel<Id, Payload> {
         Self {
             id,
             default_route: Some(route),
+            tx_empty_policy: TxEmptyPolicy::Skip,
             _payload: PhantomData,
         }
+    }
+
+    /// Marks this channel to publish metadata-only bridge messages when the payload is empty.
+    pub const fn publish_empty(mut self) -> Self {
+        self.tx_empty_policy = TxEmptyPolicy::Publish;
+        self
+    }
+
+    /// Returns whether the runtime should call the bridge `send` method for this message.
+    pub const fn should_send(&self, has_payload: bool) -> bool {
+        has_payload || matches!(self.tx_empty_policy, TxEmptyPolicy::Publish)
     }
 }
 
@@ -51,6 +74,7 @@ impl<Id: Debug, Payload> Debug for BridgeChannel<Id, Payload> {
         f.debug_struct("BridgeChannel")
             .field("id", &self.id)
             .field("default_route", &self.default_route)
+            .field("tx_empty_policy", &self.tx_empty_policy)
             .finish()
     }
 }
@@ -61,6 +85,8 @@ pub trait BridgeChannelInfo<Id: Copy> {
     fn id(&self) -> Id;
     /// Default backend-specific route/topic/path the bridge recommends binding to.
     fn default_route(&self) -> Option<&'static str>;
+    /// Static transmit policy for metadata-only messages on this channel.
+    fn tx_empty_policy(&self) -> TxEmptyPolicy;
 }
 
 impl<Id: Copy, Payload> BridgeChannelInfo<Id> for BridgeChannel<Id, Payload> {
@@ -70,6 +96,10 @@ impl<Id: Copy, Payload> BridgeChannelInfo<Id> for BridgeChannel<Id, Payload> {
 
     fn default_route(&self) -> Option<&'static str> {
         self.default_route
+    }
+
+    fn tx_empty_policy(&self) -> TxEmptyPolicy {
+        self.tx_empty_policy
     }
 }
 
@@ -81,11 +111,21 @@ pub struct BridgeChannelDescriptor<Id: Copy> {
     pub id: Id,
     /// Backend-specific default route/topic/path the bridge suggests binding to.
     pub default_route: Option<&'static str>,
+    /// Static transmit policy for metadata-only messages on this channel.
+    pub tx_empty_policy: TxEmptyPolicy,
 }
 
 impl<Id: Copy> BridgeChannelDescriptor<Id> {
-    pub const fn new(id: Id, default_route: Option<&'static str>) -> Self {
-        Self { id, default_route }
+    pub const fn new(
+        id: Id,
+        default_route: Option<&'static str>,
+        tx_empty_policy: TxEmptyPolicy,
+    ) -> Self {
+        Self {
+            id,
+            default_route,
+            tx_empty_policy,
+        }
     }
 }
 
@@ -94,7 +134,11 @@ where
     T: BridgeChannelInfo<Id> + ?Sized,
 {
     fn from(channel: &T) -> Self {
-        BridgeChannelDescriptor::new(channel.id(), channel.default_route())
+        BridgeChannelDescriptor::new(
+            channel.id(),
+            channel.default_route(),
+            channel.tx_empty_policy(),
+        )
     }
 }
 
@@ -224,8 +268,15 @@ macro_rules! __cu29_bridge_channel_ctor {
     ($id:ident, $variant:ident, $payload:ty) => {
         $crate::cubridge::BridgeChannel::<$id, $payload>::new($id::$variant)
     };
+    ($id:ident, $variant:ident, $payload:ty, [publish_empty]) => {
+        $crate::cubridge::BridgeChannel::<$id, $payload>::new($id::$variant).publish_empty()
+    };
     ($id:ident, $variant:ident, $payload:ty, $route:expr) => {
         $crate::cubridge::BridgeChannel::<$id, $payload>::with_channel($id::$variant, $route)
+    };
+    ($id:ident, $variant:ident, $payload:ty, $route:expr, [publish_empty]) => {
+        $crate::cubridge::BridgeChannel::<$id, $payload>::with_channel($id::$variant, $route)
+            .publish_empty()
     };
 }
 
@@ -252,14 +303,14 @@ macro_rules! __cu29_define_bridge_channels {
         @accum
         $vis:vis struct $channels:ident : $id:ident
         [ $($parsed:tt)* ]
-        $(#[$chan_meta:meta])* $const_name:ident : $variant:ident => $payload:ty $(= $route:expr)? , $($rest:tt)*
+        $(#[$chan_meta:meta])* $( [ $publish_empty:ident ] )? $const_name:ident : $variant:ident => $payload:ty $(= $route:expr)? , $($rest:tt)*
     ) => {
         $crate::__cu29_define_bridge_channels!(
             @accum
             $vis struct $channels : $id
             [
                 $($parsed)*
-                $(#[$chan_meta])* $const_name : $variant => $payload $(= $route)?,
+                $(#[$chan_meta])* $( [ $publish_empty ] )? $const_name : $variant => $payload $(= $route)?,
             ]
             $($rest)*
         );
@@ -268,14 +319,14 @@ macro_rules! __cu29_define_bridge_channels {
         @accum
         $vis:vis struct $channels:ident : $id:ident
         [ $($parsed:tt)* ]
-        $(#[$chan_meta:meta])* $const_name:ident : $variant:ident => $payload:ty $(= $route:expr)?
+        $(#[$chan_meta:meta])* $( [ $publish_empty:ident ] )? $const_name:ident : $variant:ident => $payload:ty $(= $route:expr)?
     ) => {
         $crate::__cu29_define_bridge_channels!(
             @accum
             $vis struct $channels : $id
             [
                 $($parsed)*
-                $(#[$chan_meta])* $const_name : $variant => $payload $(= $route)?,
+                $(#[$chan_meta])* $( [ $publish_empty ] )? $const_name : $variant => $payload $(= $route)?,
             ]
         );
     };
@@ -283,7 +334,7 @@ macro_rules! __cu29_define_bridge_channels {
         @accum
         $vis:vis struct $channels:ident : $id:ident
         [ $($parsed:tt)* ]
-        $(#[$chan_meta:meta])* $name:ident => $payload:ty $(= $route:expr)? , $($rest:tt)*
+        $(#[$chan_meta:meta])* $( [ $publish_empty:ident ] )? $name:ident => $payload:ty $(= $route:expr)? , $($rest:tt)*
     ) => {
         $crate::__cu29_paste! {
             $crate::__cu29_define_bridge_channels!(
@@ -291,7 +342,7 @@ macro_rules! __cu29_define_bridge_channels {
                 $vis struct $channels : $id
                 [
                     $($parsed)*
-                    $(#[$chan_meta])* [<$name:snake:upper>] : [<$name:camel>] => $payload $(= $route)?,
+                    $(#[$chan_meta])* $( [ $publish_empty ] )? [<$name:snake:upper>] : [<$name:camel>] => $payload $(= $route)?,
                 ]
                 $($rest)*
             );
@@ -301,7 +352,7 @@ macro_rules! __cu29_define_bridge_channels {
         @accum
         $vis:vis struct $channels:ident : $id:ident
         [ $($parsed:tt)* ]
-        $(#[$chan_meta:meta])* $name:ident => $payload:ty $(= $route:expr)?
+        $(#[$chan_meta:meta])* $( [ $publish_empty:ident ] )? $name:ident => $payload:ty $(= $route:expr)?
     ) => {
         $crate::__cu29_paste! {
             $crate::__cu29_define_bridge_channels!(
@@ -309,7 +360,7 @@ macro_rules! __cu29_define_bridge_channels {
                 $vis struct $channels : $id
                 [
                     $($parsed)*
-                    $(#[$chan_meta])* [<$name:snake:upper>] : [<$name:camel>] => $payload $(= $route)?,
+                    $(#[$chan_meta])* $( [ $publish_empty ] )? [<$name:snake:upper>] : [<$name:camel>] => $payload $(= $route)?,
                 ]
             );
         }
@@ -333,10 +384,10 @@ macro_rules! __cu29_define_bridge_channels {
 macro_rules! __cu29_emit_bridge_channels {
     (
         $vis:vis struct $channels:ident : $id:ident {
-            $(
-                $(#[$chan_meta:meta])*
-                $const_name:ident : $variant:ident => $payload:ty $(= $route:expr)?,
-            )+
+                $(
+                    $(#[$chan_meta:meta])*
+                    $( [ $publish_empty:ident ] )? $const_name:ident : $variant:ident => $payload:ty $(= $route:expr)?,
+                )+
         }
     ) => {
         #[derive(Copy, Clone, Debug, Eq, PartialEq, ::serde::Serialize, ::serde::Deserialize)]
@@ -363,7 +414,7 @@ macro_rules! __cu29_emit_bridge_channels {
                 $(#[$chan_meta])*
                 $vis const $const_name: $crate::cubridge::BridgeChannel<$id, $payload> =
                     $crate::__cu29_bridge_channel_ctor!(
-                        $id, $variant, $payload $(, $route)?
+                        $id, $variant, $payload $(, $route)? $(, [ $publish_empty ])?
                     );
             )+
         }
@@ -390,7 +441,7 @@ macro_rules! __cu29_emit_bridge_channels {
 /// # struct EscCommand;
 /// tx_channels! {
 ///     esc0 => EscCommand,
-///     esc1 => EscCommand = "motor/esc1",
+///     [publish_empty] esc1 => EscCommand = "motor/esc1",
 /// }
 /// ```
 ///
@@ -407,20 +458,20 @@ macro_rules! __cu29_emit_bridge_channels {
 /// Channels declared through the macro gain `#[repr(usize)]` identifiers and an
 /// inherent `as_index()` helper that returns the zero-based ordinal (matching
 /// declaration order), which is convenient when indexing fixed arrays.
+///
+/// By default, Tx channels skip bridge `send` calls when their upstream `CuMsg`
+/// has no payload. Prefix a Tx declaration with `[publish_empty]` to keep
+/// metadata-only sends enabled for backends that support them.
 #[macro_export]
 macro_rules! tx_channels {
     (
         $vis:vis struct $channels:ident : $id:ident {
-            $(
-                $(#[$chan_meta:meta])* $entry:tt => $payload:ty $(= $route:expr)?
-            ),+ $(,)?
+            $($body:tt)*
         }
     ) => {
         $crate::__cu29_define_bridge_channels! {
             $vis struct $channels : $id {
-                $(
-                    $(#[$chan_meta])* $entry => $payload $(= $route)?,
-                )+
+                $($body)*
             }
         }
     };
@@ -441,16 +492,12 @@ macro_rules! tx_channels {
 macro_rules! rx_channels {
     (
         $vis:vis struct $channels:ident : $id:ident {
-            $(
-                $(#[$chan_meta:meta])* $entry:tt => $payload:ty $(= $route:expr)?
-            ),+ $(,)?
+            $($body:tt)*
         }
     ) => {
         $crate::__cu29_define_bridge_channels! {
             $vis struct $channels : $id {
-                $(
-                    $(#[$chan_meta])* $entry => $payload $(= $route)?,
-                )+
+                $($body)*
             }
         }
     };
@@ -506,7 +553,7 @@ mod tests {
     tx_channels! {
         struct MacroTxChannels : MacroTxId {
             imu_stream => ImuMsg = "telemetry/imu",
-            motor_stream => MotorCmd,
+            [publish_empty] motor_stream => MotorCmd,
         }
     }
 
@@ -537,7 +584,7 @@ mod tests {
         pub const IMU: BridgeChannel<TxId, ImuMsg> =
             BridgeChannel::with_channel(TxId::Imu, "telemetry/imu");
         pub const MOTOR: BridgeChannel<TxId, MotorCmd> =
-            BridgeChannel::with_channel(TxId::Motor, "motor/cmd");
+            BridgeChannel::with_channel(TxId::Motor, "motor/cmd").publish_empty();
     }
 
     impl BridgeChannelSet for TxChannels {
@@ -662,6 +709,14 @@ mod tests {
             Some("telemetry/imu")
         );
         assert!(MacroTxChannels::MOTOR_STREAM.default_route.is_none());
+        assert_eq!(
+            MacroTxChannels::IMU_STREAM.tx_empty_policy,
+            TxEmptyPolicy::Skip
+        );
+        assert_eq!(
+            MacroTxChannels::MOTOR_STREAM.tx_empty_policy,
+            TxEmptyPolicy::Publish
+        );
         assert_eq!(MacroTxId::ImuStream as u8, MacroTxId::ImuStream as u8);
         assert_eq!(MacroTxId::ImuStream.as_index(), 0);
         assert_eq!(MacroTxId::MotorStream.as_index(), 1);
@@ -701,6 +756,14 @@ mod tests {
                 .effective_route()
                 .map(|route| route.into_owned()),
             Some("motor/cmd".to_string())
+        );
+        assert_eq!(
+            tx_descriptors[0].channel.tx_empty_policy,
+            TxEmptyPolicy::Skip
+        );
+        assert_eq!(
+            tx_descriptors[1].channel.tx_empty_policy,
+            TxEmptyPolicy::Publish
         );
         let overridden = BridgeChannelConfig::from_static(
             &TxChannels::MOTOR,
@@ -743,5 +806,17 @@ mod tests {
             .expect("receive should handle other payload types too");
         assert!(alert_msg.payload().is_some());
         assert_eq!(bridge.alert_codes, vec![0xDEAD_BEEF]);
+    }
+
+    #[test]
+    fn bridge_channel_should_send_respects_empty_policy() {
+        let default_channel = BridgeChannel::<TxId, MotorCmd>::new(TxId::Motor);
+        assert!(!default_channel.should_send(false));
+        assert!(default_channel.should_send(true));
+
+        let publish_empty_channel =
+            BridgeChannel::<TxId, MotorCmd>::new(TxId::Motor).publish_empty();
+        assert!(publish_empty_channel.should_send(false));
+        assert!(publish_empty_channel.should_send(true));
     }
 }

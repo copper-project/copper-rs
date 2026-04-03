@@ -7322,6 +7322,7 @@ fn generate_bridge_tx_execution_tokens(
                 #parallel_bridge_preprocess
                 let cumsg_input = #input_ref;
                 let cumsg_output = #output_ref;
+                let bridge_channel = &<#bridge_type as cu29::cubridge::CuBridge>::Tx::#const_ident;
                 #call_sim_callback
                 if doit {
                     execution_probe.record(cu29::monitoring::ExecutionMarker {
@@ -7330,14 +7331,18 @@ fn generate_bridge_tx_execution_tokens(
                         culistid: Some(clid),
                     });
                     cumsg_output.metadata.process_time.start = cu29::curuntime::perf_now(clock).into();
-                    let maybe_error = {
-                        #rt_guard
-                        ctx.clear_current_task();
-                        bridge.send(
-                            &ctx,
-                            &<#bridge_type as cu29::cubridge::CuBridge>::Tx::#const_ident,
-                            &*cumsg_input,
-                        )
+                    let maybe_error = if bridge_channel.should_send(cumsg_input.payload().is_some()) {
+                        {
+                            #rt_guard
+                            ctx.clear_current_task();
+                            bridge.send(
+                                &ctx,
+                                bridge_channel,
+                                &*cumsg_input,
+                            )
+                        }
+                    } else {
+                        Ok(())
                     };
                     if let Err(error) = maybe_error {
                         let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Process, &error);
