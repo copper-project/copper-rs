@@ -57,6 +57,12 @@ struct LatencyProbe {
     max_seq_gap: u64,
 }
 
+impl Default for LatencyProbe {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LatencyProbe {
     fn new() -> Self {
         Self {
