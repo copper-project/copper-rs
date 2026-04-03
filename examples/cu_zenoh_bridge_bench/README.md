@@ -65,6 +65,38 @@ The embedded `tx_config.ron` / `rx_config.ron` stay on the shmem baseline for DA
 
 For TCP, UDP, and shmem direct-connect presets, the TX side is configured as a Zenoh `peer` with `connect.timeout_ms = -1` and `connect.exit_on_failure = false`, so starting TX before RX is expected to work without a Copper-side retry loop.
 
+## Local Snapshot
+
+On the same host, your current measurements put the three transports in this rough order:
+
+- shmem: best median and tail, typically around `p50 ~= 50-70 us`
+- tcp: close behind shmem, typically around `p50 ~= 56-78 us`
+- udp: slower and a bit noisier here, typically around `p50 ~= 66-90 us`
+
+Those numbers already suggest scheduler noise is part of the remaining tail, so it is reasonable to try Linux realtime scheduling on both processes.
+
+## Realtime Scheduling
+
+The example now ships with `chrt --fifo 80` launch recipes:
+
+```bash
+sudo just rx-rt
+sudo just tx-rt
+```
+
+```bash
+sudo just rx-udp-rt
+sudo just tx-udp-rt
+```
+
+```bash
+sudo just rx-tcp-rt
+sudo just tx-tcp-rt
+```
+
+These recipes build the normal release binaries first and then launch the binaries themselves under `SCHED_FIFO`, so the expensive part stays in plain `cargo build -r`.
+They require `CAP_SYS_NICE` or `sudo`.
+
 What this benchmark measures:
 
 - TX task timestamping

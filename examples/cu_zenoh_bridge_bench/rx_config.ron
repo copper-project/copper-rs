@@ -1,7 +1,5 @@
 (
-    logging: (
-        enable_task_logging: false,
-    ),
+    logging: (enable_task_logging: false),
     tasks: [
         (
             id: "sink",
@@ -14,8 +12,6 @@
             type: "bridges::BenchZenohBridge",
             config: {
                 "wire_format": "bincode",
-                // Default baseline for the embedded config and DAG rendering.
-                // `--transport udp|tcp` overrides this at runtime.
                 "zenoh_config_json": r#"
                     {
                       mode: "peer",
