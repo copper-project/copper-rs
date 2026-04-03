@@ -1,0 +1,41 @@
+import "../../justfile"
+
+tx:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo run -r -p cu-zenoh-bridge-bench --bin zenoh-bench-tx
+
+tx-udp:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo run -r -p cu-zenoh-bridge-bench --bin zenoh-bench-tx -- --transport udp
+
+tx-tcp:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo run -r -p cu-zenoh-bridge-bench --bin zenoh-bench-tx -- --transport tcp
+
+rx:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo run -r -p cu-zenoh-bridge-bench --bin zenoh-bench-rx
+
+rx-udp:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo run -r -p cu-zenoh-bridge-bench --bin zenoh-bench-rx -- --transport udp
+
+rx-tcp:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo run -r -p cu-zenoh-bridge-bench --bin zenoh-bench-rx -- --transport tcp
+
+dag-tx:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo run -p cu29-runtime --bin cu29-rendercfg -- --open tx_config.ron
+
+dag-rx:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo run -p cu29-runtime --bin cu29-rendercfg -- --open rx_config.ron

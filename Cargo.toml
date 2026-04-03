@@ -96,6 +96,7 @@ members = [
   "examples/cu_run_in_sim",
   "examples/cu_standalone_structlog",
   "examples/cu_zenoh",
+  "examples/cu_zenoh_bridge_bench",
   "examples/cu_zenoh_bridge_demo",
   "examples/cu_ros2_bridge_demo",
   "examples/cu_human_pose",

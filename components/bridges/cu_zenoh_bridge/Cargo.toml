@@ -11,9 +11,6 @@ repository.workspace = true
 description = "Copper bridge for bidirectional Zenoh messaging."
 
 [dependencies]
-zenoh = { workspace = true, default-features = false, features = [
-  "transport_tcp",
-] }
 cu29 = { workspace = true }
 serde = { workspace = true }
 serde_json = { version = "1.0", default-features = false }
@@ -21,3 +18,17 @@ minicbor-serde = { workspace = true, default-features = false, features = [
   "alloc",
 ] }
 bincode = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+zenoh = { workspace = true, default-features = false, features = [
+  "shared-memory",
+  "transport_tcp",
+  "transport_udp",
+  "transport_unixsock-stream",
+] }
+
+[target.'cfg(not(unix))'.dependencies]
+zenoh = { workspace = true, default-features = false, features = [
+  "transport_tcp",
+  "transport_udp",
+] }
