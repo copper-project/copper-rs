@@ -1,0 +1,21 @@
+#![deny(unsafe_op_in_unsafe_fn)]
+
+#[cfg(not(target_os = "linux"))]
+compile_error!("zed-sdk currently supports Linux targets only");
+
+mod camera;
+mod error;
+mod mat;
+mod types;
+
+pub use camera::Camera;
+pub use error::{Error, ErrorCode, Result};
+pub use mat::{Mat, MatElement, MatType, MatView, MatViewMut};
+pub use types::{
+    Bgr8, Bgra8, CameraInformation, CoordinateSystem, DepthMode, InputSource, InputType,
+    MemoryType, OpenOptions, Point3Color, ReferenceFrame, Resolution, ResolutionPreset, Rgba8,
+    RuntimeParameters, Unit, Vec2f, Vec3f, Vec4f,
+};
+pub use zed_sdk_sys as sys;
+
+pub const HAS_NATIVE_ZED_WRAPPER: bool = sys::HAS_NATIVE_ZED_WRAPPER;

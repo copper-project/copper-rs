@@ -1,0 +1,11 @@
+default:
+	just neural-light
+
+performance:
+	cargo run --release -- PERFORMANCE
+
+neural-light:
+	cargo run --release -- NEURAL_LIGHT
+
+neural:
+	cargo run --release -- NEURAL

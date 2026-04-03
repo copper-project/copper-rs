@@ -1,0 +1,21 @@
+[package]
+name = "zed-sdk"
+version = "0.15.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Safe Rust wrapper for the Stereolabs ZED C API"
+repository = "https://github.com/copper-project/copper-rs"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "zed_viz_demo"
+path = "src/bin/zed_viz_demo.rs"
+
+[dependencies]
+eframe = "0.33"
+zed-sdk-sys = { path = "../zed_sdk_sys" }
+
+[package.metadata.cargo-shear]
+ignored = []
