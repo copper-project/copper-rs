@@ -1,0 +1,3 @@
+[submodule "components/libs/zed_sdk_sys/vendor/zed-c-api"]
+	path = components/libs/zed_sdk_sys/vendor/zed-c-api
+	url = https://github.com/stereolabs/zed-c-api.git

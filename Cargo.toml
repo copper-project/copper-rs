@@ -107,6 +107,8 @@ members = [
   "examples/cu_remote_debug_session",
 ]
 
+exclude = ["components/libs/zed_sdk_sys"]
+
 # put only the core crates here that are not platform specific
 default-members = [
   "core/cu29",

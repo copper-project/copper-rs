@@ -1,0 +1,22 @@
+[package]
+name = "zed-sdk-sys"
+version = "0.15.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Raw Rust FFI bindings for the Stereolabs ZED C API"
+repository = "https://github.com/copper-project/copper-rs"
+links = "sl_zed_c"
+build = "build.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "zed_open_retry"
+path = "src/bin/zed_open_retry.rs"
+
+[features]
+default = []
+
+[package.metadata.cargo-shear]
+ignored = []
