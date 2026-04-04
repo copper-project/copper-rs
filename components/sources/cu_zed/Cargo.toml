@@ -10,6 +10,9 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[features]
+zed-rerun-demo = []
+
 [dependencies]
 cu29 = { workspace = true }
 cu-sensor-payloads = { workspace = true }
@@ -24,3 +27,7 @@ zed-sdk = { path = "../../libs/zed_sdk" }
 bytemuck = { workspace = true }
 cu29-logviz = { workspace = true }
 rerun = { workspace = true }
+
+[[example]]
+name = "zed_rerun_demo"
+required-features = ["zed-rerun-demo"]

@@ -29,7 +29,7 @@ check:
 	repo_root="$(cd "{{justfile_directory()}}/../../.." && pwd)"
 	just --justfile "$repo_root/components/libs/zed_sdk_sys/justfile" vendor-init
 	cd "$repo_root"
-	cargo check -p cu-zed --example zed_rerun_demo
+	cargo check -p cu-zed --example zed_rerun_demo --features zed-rerun-demo
 
 demo:
 	#!/usr/bin/env bash
