@@ -1,0 +1,57 @@
+(
+    tasks: [
+        (
+            id: "empty_default_src",
+            type: "EmptyDefaultSrc",
+        ),
+        (
+            id: "empty_publish_src",
+            type: "EmptyPublishSrc",
+        ),
+        (
+            id: "payload_default_src",
+            type: "PayloadDefaultSrc",
+        ),
+    ],
+    bridges: [
+        (
+            id: "bridge",
+            type: "RecordingBridge",
+            channels: [
+                Tx(
+                    id: "empty_default",
+                    msg: "BridgePayload",
+                ),
+                Tx(
+                    id: "empty_publish",
+                    msg: "BridgePayload",
+                ),
+                Tx(
+                    id: "payload_default",
+                    msg: "BridgePayload",
+                ),
+                Rx(
+                    id: "unused",
+                    msg: "BridgePayload",
+                ),
+            ],
+        ),
+    ],
+    cnx: [
+        (
+            src: "empty_default_src",
+            dst: "bridge/empty_default",
+            msg: "BridgePayload",
+        ),
+        (
+            src: "empty_publish_src",
+            dst: "bridge/empty_publish",
+            msg: "BridgePayload",
+        ),
+        (
+            src: "payload_default_src",
+            dst: "bridge/payload_default",
+            msg: "BridgePayload",
+        ),
+    ],
+)

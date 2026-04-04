@@ -18,6 +18,22 @@ Per-channel config (inside `channels`):
 - `route`: Zenoh key expression for the channel.
 - `config.wire_format`: override the default wire format per channel.
 
+Tx empty-message behavior is static and comes from the Rust channel declaration, not from
+`copperconfig.ron`:
+- Tx channels skip `send` by default when their `CuMsg` payload is empty.
+- Prefix a `tx_channels!` declaration with `[publish_empty]` to keep metadata-only publishes enabled.
+
+Example declaration:
+```rust
+tx_channels! {
+    ping_bin => Ping,
+    [publish_empty] heartbeat => Tick = "demo/heartbeat",
+}
+```
+
+With `cu-zenoh-bridge`, `[publish_empty]` means the bridge will still publish a `CuMsg` carrying
+`payload = None`, `tov`, Copper metadata, and the usual Zenoh attachment provenance.
+
 Example:
 ```ron
 bridges: [

@@ -1,0 +1,29 @@
+[package]
+name = "cu-zenoh-bridge-bench"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Minimal two-task Zenoh bridge latency benchmark."
+
+publish = false
+
+default-run = "zenoh-bench-rx"
+
+[dependencies]
+cu29 = { workspace = true }
+cu-zenoh-bridge = { path = "../../components/bridges/cu_zenoh_bridge", version = "0.15.0" }
+serde = { workspace = true }
+bincode = { workspace = true }
+
+[[bin]]
+name = "zenoh-bench-tx"
+path = "src/bin/tx.rs"
+
+[[bin]]
+name = "zenoh-bench-rx"
+path = "src/bin/rx.rs"

@@ -1,0 +1,50 @@
+(
+    logging: (enable_task_logging: false),
+    tasks: [
+        (
+            id: "sink",
+            type: "tasks::LatencySink",
+        ),
+    ],
+    bridges: [
+        (
+            id: "zenoh",
+            type: "bridges::BenchZenohBridge",
+            config: {
+                "wire_format": "bincode",
+                "zenoh_config_json": r#"
+                    {
+                      mode: "peer",
+                      scouting: {
+                        multicast: { enabled: false },
+                      },
+                      connect: { endpoints: [] },
+                      listen: { endpoints: ["unixsock-stream//tmp/cu29_zenoh_bridge_bench.sock?rel=0"] },
+                      transport: {
+                        shared_memory: {
+                          enabled: true,
+                          transport_optimization: {
+                            enabled: true,
+                            message_size_threshold: 1,
+                          },
+                        },
+                      },
+                    }
+                "#,
+            },
+            channels: [
+                Rx(
+                    id: "latency",
+                    route: "benchmark/zenoh/latency",
+                ),
+            ],
+        ),
+    ],
+    cnx: [
+        (
+            src: "zenoh/latency",
+            dst: "sink",
+            msg: "messages::LatencySample",
+        ),
+    ],
+)
