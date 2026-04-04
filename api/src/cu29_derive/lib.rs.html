@@ -7322,506 +7322,511 @@
 <a href=#7322 id=7322 data-nosnippet>7322</a>                #parallel_bridge_preprocess
 <a href=#7323 id=7323 data-nosnippet>7323</a>                <span class="kw">let </span>cumsg_input = #input_ref;
 <a href=#7324 id=7324 data-nosnippet>7324</a>                <span class="kw">let </span>cumsg_output = #output_ref;
-<a href=#7325 id=7325 data-nosnippet>7325</a>                #call_sim_callback
-<a href=#7326 id=7326 data-nosnippet>7326</a>                <span class="kw">if </span>doit {
-<a href=#7327 id=7327 data-nosnippet>7327</a>                    execution_probe.record(cu29::monitoring::ExecutionMarker {
-<a href=#7328 id=7328 data-nosnippet>7328</a>                        component_id: cu29::monitoring::ComponentId::new(#monitor_index),
-<a href=#7329 id=7329 data-nosnippet>7329</a>                        step: CuComponentState::Process,
-<a href=#7330 id=7330 data-nosnippet>7330</a>                        culistid: <span class="prelude-val">Some</span>(clid),
-<a href=#7331 id=7331 data-nosnippet>7331</a>                    });
-<a href=#7332 id=7332 data-nosnippet>7332</a>                    cumsg_output.metadata.process_time.start = cu29::curuntime::perf_now(clock).into();
-<a href=#7333 id=7333 data-nosnippet>7333</a>                    <span class="kw">let </span>maybe_error = {
-<a href=#7334 id=7334 data-nosnippet>7334</a>                        #rt_guard
-<a href=#7335 id=7335 data-nosnippet>7335</a>                        ctx.clear_current_task();
-<a href=#7336 id=7336 data-nosnippet>7336</a>                        bridge.send(
-<a href=#7337 id=7337 data-nosnippet>7337</a>                            <span class="kw-2">&amp;</span>ctx,
-<a href=#7338 id=7338 data-nosnippet>7338</a>                            <span class="kw-2">&amp;</span>&lt;#bridge_type <span class="kw">as </span>cu29::cubridge::CuBridge&gt;::Tx::#const_ident,
-<a href=#7339 id=7339 data-nosnippet>7339</a>                            <span class="kw-2">&amp;*</span>cumsg_input,
-<a href=#7340 id=7340 data-nosnippet>7340</a>                        )
-<a href=#7341 id=7341 data-nosnippet>7341</a>                    };
-<a href=#7342 id=7342 data-nosnippet>7342</a>                    <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = maybe_error {
-<a href=#7343 id=7343 data-nosnippet>7343</a>                        <span class="kw">let </span>decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Process, <span class="kw-2">&amp;</span>error);
-<a href=#7344 id=7344 data-nosnippet>7344</a>                        <span class="kw">match </span>decision {
-<a href=#7345 id=7345 data-nosnippet>7345</a>                            Decision::Abort =&gt; {
-<a href=#7346 id=7346 data-nosnippet>7346</a>                                <span class="macro">debug!</span>(<span class="string">"Process: ABORT decision from monitoring. Component '{}' errored out during process. Skipping the processing of CL {}."</span>, #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)), clid);
-<a href=#7347 id=7347 data-nosnippet>7347</a>                                #abort_process_step
-<a href=#7348 id=7348 data-nosnippet>7348</a>                            }
-<a href=#7349 id=7349 data-nosnippet>7349</a>                            Decision::Ignore =&gt; {
-<a href=#7350 id=7350 data-nosnippet>7350</a>                                <span class="macro">debug!</span>(<span class="string">"Process: IGNORE decision from monitoring. Component '{}' errored out during process. The runtime will continue with a forced empty message."</span>, #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
-<a href=#7351 id=7351 data-nosnippet>7351</a>                            }
-<a href=#7352 id=7352 data-nosnippet>7352</a>                            Decision::Shutdown =&gt; {
-<a href=#7353 id=7353 data-nosnippet>7353</a>                                <span class="macro">debug!</span>(<span class="string">"Process: SHUTDOWN decision from monitoring. Component '{}' errored out during process. The runtime cannot continue."</span>, #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
-<a href=#7354 id=7354 data-nosnippet>7354</a>                                <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::new_with_cause(<span class="string">"Component errored out during process."</span>, error));
-<a href=#7355 id=7355 data-nosnippet>7355</a>                            }
-<a href=#7356 id=7356 data-nosnippet>7356</a>                        }
-<a href=#7357 id=7357 data-nosnippet>7357</a>                    }
-<a href=#7358 id=7358 data-nosnippet>7358</a>                    cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
-<a href=#7359 id=7359 data-nosnippet>7359</a>                }
-<a href=#7360 id=7360 data-nosnippet>7360</a>                #parallel_bridge_postprocess
-<a href=#7361 id=7361 data-nosnippet>7361</a>            },
-<a href=#7362 id=7362 data-nosnippet>7362</a>        ),
-<a href=#7363 id=7363 data-nosnippet>7363</a>        <span class="macro">quote!</span> {},
-<a href=#7364 id=7364 data-nosnippet>7364</a>    )
-<a href=#7365 id=7365 data-nosnippet>7365</a>}
-<a href=#7366 id=7366 data-nosnippet>7366</a>
-<a href=#7367 id=7367 data-nosnippet>7367</a><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-<a href=#7368 id=7368 data-nosnippet>7368</a></span><span class="kw">enum </span>BridgeChannelDirection {
-<a href=#7369 id=7369 data-nosnippet>7369</a>    Rx,
-<a href=#7370 id=7370 data-nosnippet>7370</a>    Tx,
-<a href=#7371 id=7371 data-nosnippet>7371</a>}
-<a href=#7372 id=7372 data-nosnippet>7372</a>
-<a href=#7373 id=7373 data-nosnippet>7373</a><span class="attr">#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-<a href=#7374 id=7374 data-nosnippet>7374</a></span><span class="kw">struct </span>BridgeChannelKey {
-<a href=#7375 id=7375 data-nosnippet>7375</a>    bridge_id: String,
-<a href=#7376 id=7376 data-nosnippet>7376</a>    channel_id: String,
-<a href=#7377 id=7377 data-nosnippet>7377</a>    direction: BridgeChannelDirection,
-<a href=#7378 id=7378 data-nosnippet>7378</a>}
-<a href=#7379 id=7379 data-nosnippet>7379</a>
-<a href=#7380 id=7380 data-nosnippet>7380</a><span class="attr">#[derive(Clone)]
-<a href=#7381 id=7381 data-nosnippet>7381</a></span><span class="kw">struct </span>BridgeChannelSpec {
-<a href=#7382 id=7382 data-nosnippet>7382</a>    id: String,
-<a href=#7383 id=7383 data-nosnippet>7383</a>    const_ident: Ident,
-<a href=#7384 id=7384 data-nosnippet>7384</a>    <span class="attr">#[allow(dead_code)]
-<a href=#7385 id=7385 data-nosnippet>7385</a>    </span>msg_type: Type,
-<a href=#7386 id=7386 data-nosnippet>7386</a>    msg_type_name: String,
-<a href=#7387 id=7387 data-nosnippet>7387</a>    config_index: usize,
-<a href=#7388 id=7388 data-nosnippet>7388</a>    plan_node_id: <span class="prelude-ty">Option</span>&lt;NodeId&gt;,
-<a href=#7389 id=7389 data-nosnippet>7389</a>    culist_index: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-<a href=#7390 id=7390 data-nosnippet>7390</a>    monitor_index: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-<a href=#7391 id=7391 data-nosnippet>7391</a>}
-<a href=#7392 id=7392 data-nosnippet>7392</a>
-<a href=#7393 id=7393 data-nosnippet>7393</a><span class="attr">#[derive(Clone)]
-<a href=#7394 id=7394 data-nosnippet>7394</a></span><span class="kw">struct </span>BridgeSpec {
-<a href=#7395 id=7395 data-nosnippet>7395</a>    id: String,
-<a href=#7396 id=7396 data-nosnippet>7396</a>    type_path: Type,
-<a href=#7397 id=7397 data-nosnippet>7397</a>    run_in_sim: bool,
-<a href=#7398 id=7398 data-nosnippet>7398</a>    config_index: usize,
-<a href=#7399 id=7399 data-nosnippet>7399</a>    tuple_index: usize,
-<a href=#7400 id=7400 data-nosnippet>7400</a>    monitor_index: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-<a href=#7401 id=7401 data-nosnippet>7401</a>    rx_channels: Vec&lt;BridgeChannelSpec&gt;,
-<a href=#7402 id=7402 data-nosnippet>7402</a>    tx_channels: Vec&lt;BridgeChannelSpec&gt;,
-<a href=#7403 id=7403 data-nosnippet>7403</a>}
-<a href=#7404 id=7404 data-nosnippet>7404</a>
-<a href=#7405 id=7405 data-nosnippet>7405</a><span class="attr">#[derive(Clone, Copy, Debug, Default)]
-<a href=#7406 id=7406 data-nosnippet>7406</a></span><span class="kw">struct </span>ParallelLifecyclePlacement {
-<a href=#7407 id=7407 data-nosnippet>7407</a>    preprocess: bool,
-<a href=#7408 id=7408 data-nosnippet>7408</a>    postprocess: bool,
-<a href=#7409 id=7409 data-nosnippet>7409</a>}
-<a href=#7410 id=7410 data-nosnippet>7410</a>
-<a href=#7411 id=7411 data-nosnippet>7411</a><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-<a href=#7412 id=7412 data-nosnippet>7412</a></span><span class="kw">enum </span>ParallelLifecycleKey {
-<a href=#7413 id=7413 data-nosnippet>7413</a>    Task(usize),
-<a href=#7414 id=7414 data-nosnippet>7414</a>    Bridge(usize),
-<a href=#7415 id=7415 data-nosnippet>7415</a>}
-<a href=#7416 id=7416 data-nosnippet>7416</a>
-<a href=#7417 id=7417 data-nosnippet>7417</a><span class="kw">fn </span>build_parallel_lifecycle_placements(
-<a href=#7418 id=7418 data-nosnippet>7418</a>    culist_plan: <span class="kw-2">&amp;</span>CuExecutionLoop,
-<a href=#7419 id=7419 data-nosnippet>7419</a>    culist_exec_entities: <span class="kw-2">&amp;</span>[ExecutionEntity],
-<a href=#7420 id=7420 data-nosnippet>7420</a>) -&gt; Vec&lt;ParallelLifecyclePlacement&gt; {
-<a href=#7421 id=7421 data-nosnippet>7421</a>    <span class="kw">let </span>step_keys: Vec&lt;<span class="prelude-ty">Option</span>&lt;ParallelLifecycleKey&gt;&gt; = culist_plan
-<a href=#7422 id=7422 data-nosnippet>7422</a>        .steps
-<a href=#7423 id=7423 data-nosnippet>7423</a>        .iter()
-<a href=#7424 id=7424 data-nosnippet>7424</a>        .map(|unit| <span class="kw">match </span>unit {
-<a href=#7425 id=7425 data-nosnippet>7425</a>            CuExecutionUnit::Step(step) =&gt; {
-<a href=#7426 id=7426 data-nosnippet>7426</a>                <span class="kw">match </span><span class="kw-2">&amp;</span>culist_exec_entities[step.node_id <span class="kw">as </span>usize].kind {
-<a href=#7427 id=7427 data-nosnippet>7427</a>                    ExecutionEntityKind::Task { task_index } =&gt; {
-<a href=#7428 id=7428 data-nosnippet>7428</a>                        <span class="prelude-val">Some</span>(ParallelLifecycleKey::Task(<span class="kw-2">*</span>task_index))
-<a href=#7429 id=7429 data-nosnippet>7429</a>                    }
-<a href=#7430 id=7430 data-nosnippet>7430</a>                    ExecutionEntityKind::BridgeRx { bridge_index, .. }
-<a href=#7431 id=7431 data-nosnippet>7431</a>                    | ExecutionEntityKind::BridgeTx { bridge_index, .. } =&gt; {
-<a href=#7432 id=7432 data-nosnippet>7432</a>                        <span class="prelude-val">Some</span>(ParallelLifecycleKey::Bridge(<span class="kw-2">*</span>bridge_index))
-<a href=#7433 id=7433 data-nosnippet>7433</a>                    }
-<a href=#7434 id=7434 data-nosnippet>7434</a>                }
-<a href=#7435 id=7435 data-nosnippet>7435</a>            }
-<a href=#7436 id=7436 data-nosnippet>7436</a>            CuExecutionUnit::Loop(<span class="kw">_</span>) =&gt; <span class="prelude-val">None</span>,
-<a href=#7437 id=7437 data-nosnippet>7437</a>        })
-<a href=#7438 id=7438 data-nosnippet>7438</a>        .collect();
-<a href=#7439 id=7439 data-nosnippet>7439</a>
-<a href=#7440 id=7440 data-nosnippet>7440</a>    <span class="kw">let </span><span class="kw-2">mut </span>placements = <span class="macro">vec!</span>[ParallelLifecyclePlacement::default(); step_keys.len()];
-<a href=#7441 id=7441 data-nosnippet>7441</a>    <span class="kw">let </span><span class="kw-2">mut </span>seen_forward = std::collections::HashSet::new();
-<a href=#7442 id=7442 data-nosnippet>7442</a>    <span class="kw">for </span>(index, key) <span class="kw">in </span>step_keys.iter().enumerate() {
-<a href=#7443 id=7443 data-nosnippet>7443</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(key) = key <span class="kw">else </span>{
-<a href=#7444 id=7444 data-nosnippet>7444</a>            <span class="kw">continue</span>;
-<a href=#7445 id=7445 data-nosnippet>7445</a>        };
-<a href=#7446 id=7446 data-nosnippet>7446</a>        <span class="kw">if </span>seen_forward.insert(<span class="kw-2">*</span>key) {
-<a href=#7447 id=7447 data-nosnippet>7447</a>            placements[index].preprocess = <span class="bool-val">true</span>;
-<a href=#7448 id=7448 data-nosnippet>7448</a>        }
-<a href=#7449 id=7449 data-nosnippet>7449</a>    }
-<a href=#7450 id=7450 data-nosnippet>7450</a>
-<a href=#7451 id=7451 data-nosnippet>7451</a>    <span class="kw">let </span><span class="kw-2">mut </span>seen_reverse = std::collections::HashSet::new();
-<a href=#7452 id=7452 data-nosnippet>7452</a>    <span class="kw">for </span>(index, key) <span class="kw">in </span>step_keys.iter().enumerate().rev() {
-<a href=#7453 id=7453 data-nosnippet>7453</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(key) = key <span class="kw">else </span>{
-<a href=#7454 id=7454 data-nosnippet>7454</a>            <span class="kw">continue</span>;
-<a href=#7455 id=7455 data-nosnippet>7455</a>        };
-<a href=#7456 id=7456 data-nosnippet>7456</a>        <span class="kw">if </span>seen_reverse.insert(<span class="kw-2">*</span>key) {
-<a href=#7457 id=7457 data-nosnippet>7457</a>            placements[index].postprocess = <span class="bool-val">true</span>;
-<a href=#7458 id=7458 data-nosnippet>7458</a>        }
-<a href=#7459 id=7459 data-nosnippet>7459</a>    }
-<a href=#7460 id=7460 data-nosnippet>7460</a>
-<a href=#7461 id=7461 data-nosnippet>7461</a>    placements
-<a href=#7462 id=7462 data-nosnippet>7462</a>}
-<a href=#7463 id=7463 data-nosnippet>7463</a>
-<a href=#7464 id=7464 data-nosnippet>7464</a><span class="kw">fn </span>sim_bridge_channel_set_idents(bridge_tuple_index: usize) -&gt; (Ident, Ident, Ident, Ident) {
-<a href=#7465 id=7465 data-nosnippet>7465</a>    (
-<a href=#7466 id=7466 data-nosnippet>7466</a>        <span class="macro">format_ident!</span>(<span class="string">"__CuSimBridge{}TxChannels"</span>, bridge_tuple_index),
-<a href=#7467 id=7467 data-nosnippet>7467</a>        <span class="macro">format_ident!</span>(<span class="string">"__CuSimBridge{}TxId"</span>, bridge_tuple_index),
-<a href=#7468 id=7468 data-nosnippet>7468</a>        <span class="macro">format_ident!</span>(<span class="string">"__CuSimBridge{}RxChannels"</span>, bridge_tuple_index),
-<a href=#7469 id=7469 data-nosnippet>7469</a>        <span class="macro">format_ident!</span>(<span class="string">"__CuSimBridge{}RxId"</span>, bridge_tuple_index),
-<a href=#7470 id=7470 data-nosnippet>7470</a>    )
-<a href=#7471 id=7471 data-nosnippet>7471</a>}
-<a href=#7472 id=7472 data-nosnippet>7472</a>
-<a href=#7473 id=7473 data-nosnippet>7473</a><span class="kw">fn </span>runtime_bridge_type_for_spec(bridge_spec: <span class="kw-2">&amp;</span>BridgeSpec, sim_mode: bool) -&gt; Type {
-<a href=#7474 id=7474 data-nosnippet>7474</a>    <span class="kw">if </span>sim_mode &amp;&amp; !bridge_spec.run_in_sim {
-<a href=#7475 id=7475 data-nosnippet>7475</a>        <span class="kw">let </span>(tx_set_ident, _tx_id_ident, rx_set_ident, _rx_id_ident) =
-<a href=#7476 id=7476 data-nosnippet>7476</a>            sim_bridge_channel_set_idents(bridge_spec.tuple_index);
-<a href=#7477 id=7477 data-nosnippet>7477</a>        <span class="kw">let </span>tx_type: Type = <span class="kw">if </span>bridge_spec.tx_channels.is_empty() {
-<a href=#7478 id=7478 data-nosnippet>7478</a>            <span class="macro">parse_quote!</span>(cu29::simulation::CuNoBridgeChannels)
-<a href=#7479 id=7479 data-nosnippet>7479</a>        } <span class="kw">else </span>{
-<a href=#7480 id=7480 data-nosnippet>7480</a>            <span class="macro">parse_quote!</span>(#tx_set_ident)
-<a href=#7481 id=7481 data-nosnippet>7481</a>        };
-<a href=#7482 id=7482 data-nosnippet>7482</a>        <span class="kw">let </span>rx_type: Type = <span class="kw">if </span>bridge_spec.rx_channels.is_empty() {
+<a href=#7325 id=7325 data-nosnippet>7325</a>                <span class="kw">let </span>bridge_channel = <span class="kw-2">&amp;</span>&lt;#bridge_type <span class="kw">as </span>cu29::cubridge::CuBridge&gt;::Tx::#const_ident;
+<a href=#7326 id=7326 data-nosnippet>7326</a>                #call_sim_callback
+<a href=#7327 id=7327 data-nosnippet>7327</a>                <span class="kw">if </span>doit {
+<a href=#7328 id=7328 data-nosnippet>7328</a>                    execution_probe.record(cu29::monitoring::ExecutionMarker {
+<a href=#7329 id=7329 data-nosnippet>7329</a>                        component_id: cu29::monitoring::ComponentId::new(#monitor_index),
+<a href=#7330 id=7330 data-nosnippet>7330</a>                        step: CuComponentState::Process,
+<a href=#7331 id=7331 data-nosnippet>7331</a>                        culistid: <span class="prelude-val">Some</span>(clid),
+<a href=#7332 id=7332 data-nosnippet>7332</a>                    });
+<a href=#7333 id=7333 data-nosnippet>7333</a>                    cumsg_output.metadata.process_time.start = cu29::curuntime::perf_now(clock).into();
+<a href=#7334 id=7334 data-nosnippet>7334</a>                    <span class="kw">let </span>maybe_error = <span class="kw">if </span>bridge_channel.should_send(cumsg_input.payload().is_some()) {
+<a href=#7335 id=7335 data-nosnippet>7335</a>                        {
+<a href=#7336 id=7336 data-nosnippet>7336</a>                            #rt_guard
+<a href=#7337 id=7337 data-nosnippet>7337</a>                            ctx.clear_current_task();
+<a href=#7338 id=7338 data-nosnippet>7338</a>                            bridge.send(
+<a href=#7339 id=7339 data-nosnippet>7339</a>                                <span class="kw-2">&amp;</span>ctx,
+<a href=#7340 id=7340 data-nosnippet>7340</a>                                bridge_channel,
+<a href=#7341 id=7341 data-nosnippet>7341</a>                                <span class="kw-2">&amp;*</span>cumsg_input,
+<a href=#7342 id=7342 data-nosnippet>7342</a>                            )
+<a href=#7343 id=7343 data-nosnippet>7343</a>                        }
+<a href=#7344 id=7344 data-nosnippet>7344</a>                    } <span class="kw">else </span>{
+<a href=#7345 id=7345 data-nosnippet>7345</a>                        <span class="prelude-val">Ok</span>(())
+<a href=#7346 id=7346 data-nosnippet>7346</a>                    };
+<a href=#7347 id=7347 data-nosnippet>7347</a>                    <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = maybe_error {
+<a href=#7348 id=7348 data-nosnippet>7348</a>                        <span class="kw">let </span>decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Process, <span class="kw-2">&amp;</span>error);
+<a href=#7349 id=7349 data-nosnippet>7349</a>                        <span class="kw">match </span>decision {
+<a href=#7350 id=7350 data-nosnippet>7350</a>                            Decision::Abort =&gt; {
+<a href=#7351 id=7351 data-nosnippet>7351</a>                                <span class="macro">debug!</span>(<span class="string">"Process: ABORT decision from monitoring. Component '{}' errored out during process. Skipping the processing of CL {}."</span>, #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)), clid);
+<a href=#7352 id=7352 data-nosnippet>7352</a>                                #abort_process_step
+<a href=#7353 id=7353 data-nosnippet>7353</a>                            }
+<a href=#7354 id=7354 data-nosnippet>7354</a>                            Decision::Ignore =&gt; {
+<a href=#7355 id=7355 data-nosnippet>7355</a>                                <span class="macro">debug!</span>(<span class="string">"Process: IGNORE decision from monitoring. Component '{}' errored out during process. The runtime will continue with a forced empty message."</span>, #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+<a href=#7356 id=7356 data-nosnippet>7356</a>                            }
+<a href=#7357 id=7357 data-nosnippet>7357</a>                            Decision::Shutdown =&gt; {
+<a href=#7358 id=7358 data-nosnippet>7358</a>                                <span class="macro">debug!</span>(<span class="string">"Process: SHUTDOWN decision from monitoring. Component '{}' errored out during process. The runtime cannot continue."</span>, #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+<a href=#7359 id=7359 data-nosnippet>7359</a>                                <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::new_with_cause(<span class="string">"Component errored out during process."</span>, error));
+<a href=#7360 id=7360 data-nosnippet>7360</a>                            }
+<a href=#7361 id=7361 data-nosnippet>7361</a>                        }
+<a href=#7362 id=7362 data-nosnippet>7362</a>                    }
+<a href=#7363 id=7363 data-nosnippet>7363</a>                    cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
+<a href=#7364 id=7364 data-nosnippet>7364</a>                }
+<a href=#7365 id=7365 data-nosnippet>7365</a>                #parallel_bridge_postprocess
+<a href=#7366 id=7366 data-nosnippet>7366</a>            },
+<a href=#7367 id=7367 data-nosnippet>7367</a>        ),
+<a href=#7368 id=7368 data-nosnippet>7368</a>        <span class="macro">quote!</span> {},
+<a href=#7369 id=7369 data-nosnippet>7369</a>    )
+<a href=#7370 id=7370 data-nosnippet>7370</a>}
+<a href=#7371 id=7371 data-nosnippet>7371</a>
+<a href=#7372 id=7372 data-nosnippet>7372</a><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+<a href=#7373 id=7373 data-nosnippet>7373</a></span><span class="kw">enum </span>BridgeChannelDirection {
+<a href=#7374 id=7374 data-nosnippet>7374</a>    Rx,
+<a href=#7375 id=7375 data-nosnippet>7375</a>    Tx,
+<a href=#7376 id=7376 data-nosnippet>7376</a>}
+<a href=#7377 id=7377 data-nosnippet>7377</a>
+<a href=#7378 id=7378 data-nosnippet>7378</a><span class="attr">#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+<a href=#7379 id=7379 data-nosnippet>7379</a></span><span class="kw">struct </span>BridgeChannelKey {
+<a href=#7380 id=7380 data-nosnippet>7380</a>    bridge_id: String,
+<a href=#7381 id=7381 data-nosnippet>7381</a>    channel_id: String,
+<a href=#7382 id=7382 data-nosnippet>7382</a>    direction: BridgeChannelDirection,
+<a href=#7383 id=7383 data-nosnippet>7383</a>}
+<a href=#7384 id=7384 data-nosnippet>7384</a>
+<a href=#7385 id=7385 data-nosnippet>7385</a><span class="attr">#[derive(Clone)]
+<a href=#7386 id=7386 data-nosnippet>7386</a></span><span class="kw">struct </span>BridgeChannelSpec {
+<a href=#7387 id=7387 data-nosnippet>7387</a>    id: String,
+<a href=#7388 id=7388 data-nosnippet>7388</a>    const_ident: Ident,
+<a href=#7389 id=7389 data-nosnippet>7389</a>    <span class="attr">#[allow(dead_code)]
+<a href=#7390 id=7390 data-nosnippet>7390</a>    </span>msg_type: Type,
+<a href=#7391 id=7391 data-nosnippet>7391</a>    msg_type_name: String,
+<a href=#7392 id=7392 data-nosnippet>7392</a>    config_index: usize,
+<a href=#7393 id=7393 data-nosnippet>7393</a>    plan_node_id: <span class="prelude-ty">Option</span>&lt;NodeId&gt;,
+<a href=#7394 id=7394 data-nosnippet>7394</a>    culist_index: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#7395 id=7395 data-nosnippet>7395</a>    monitor_index: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#7396 id=7396 data-nosnippet>7396</a>}
+<a href=#7397 id=7397 data-nosnippet>7397</a>
+<a href=#7398 id=7398 data-nosnippet>7398</a><span class="attr">#[derive(Clone)]
+<a href=#7399 id=7399 data-nosnippet>7399</a></span><span class="kw">struct </span>BridgeSpec {
+<a href=#7400 id=7400 data-nosnippet>7400</a>    id: String,
+<a href=#7401 id=7401 data-nosnippet>7401</a>    type_path: Type,
+<a href=#7402 id=7402 data-nosnippet>7402</a>    run_in_sim: bool,
+<a href=#7403 id=7403 data-nosnippet>7403</a>    config_index: usize,
+<a href=#7404 id=7404 data-nosnippet>7404</a>    tuple_index: usize,
+<a href=#7405 id=7405 data-nosnippet>7405</a>    monitor_index: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#7406 id=7406 data-nosnippet>7406</a>    rx_channels: Vec&lt;BridgeChannelSpec&gt;,
+<a href=#7407 id=7407 data-nosnippet>7407</a>    tx_channels: Vec&lt;BridgeChannelSpec&gt;,
+<a href=#7408 id=7408 data-nosnippet>7408</a>}
+<a href=#7409 id=7409 data-nosnippet>7409</a>
+<a href=#7410 id=7410 data-nosnippet>7410</a><span class="attr">#[derive(Clone, Copy, Debug, Default)]
+<a href=#7411 id=7411 data-nosnippet>7411</a></span><span class="kw">struct </span>ParallelLifecyclePlacement {
+<a href=#7412 id=7412 data-nosnippet>7412</a>    preprocess: bool,
+<a href=#7413 id=7413 data-nosnippet>7413</a>    postprocess: bool,
+<a href=#7414 id=7414 data-nosnippet>7414</a>}
+<a href=#7415 id=7415 data-nosnippet>7415</a>
+<a href=#7416 id=7416 data-nosnippet>7416</a><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+<a href=#7417 id=7417 data-nosnippet>7417</a></span><span class="kw">enum </span>ParallelLifecycleKey {
+<a href=#7418 id=7418 data-nosnippet>7418</a>    Task(usize),
+<a href=#7419 id=7419 data-nosnippet>7419</a>    Bridge(usize),
+<a href=#7420 id=7420 data-nosnippet>7420</a>}
+<a href=#7421 id=7421 data-nosnippet>7421</a>
+<a href=#7422 id=7422 data-nosnippet>7422</a><span class="kw">fn </span>build_parallel_lifecycle_placements(
+<a href=#7423 id=7423 data-nosnippet>7423</a>    culist_plan: <span class="kw-2">&amp;</span>CuExecutionLoop,
+<a href=#7424 id=7424 data-nosnippet>7424</a>    culist_exec_entities: <span class="kw-2">&amp;</span>[ExecutionEntity],
+<a href=#7425 id=7425 data-nosnippet>7425</a>) -&gt; Vec&lt;ParallelLifecyclePlacement&gt; {
+<a href=#7426 id=7426 data-nosnippet>7426</a>    <span class="kw">let </span>step_keys: Vec&lt;<span class="prelude-ty">Option</span>&lt;ParallelLifecycleKey&gt;&gt; = culist_plan
+<a href=#7427 id=7427 data-nosnippet>7427</a>        .steps
+<a href=#7428 id=7428 data-nosnippet>7428</a>        .iter()
+<a href=#7429 id=7429 data-nosnippet>7429</a>        .map(|unit| <span class="kw">match </span>unit {
+<a href=#7430 id=7430 data-nosnippet>7430</a>            CuExecutionUnit::Step(step) =&gt; {
+<a href=#7431 id=7431 data-nosnippet>7431</a>                <span class="kw">match </span><span class="kw-2">&amp;</span>culist_exec_entities[step.node_id <span class="kw">as </span>usize].kind {
+<a href=#7432 id=7432 data-nosnippet>7432</a>                    ExecutionEntityKind::Task { task_index } =&gt; {
+<a href=#7433 id=7433 data-nosnippet>7433</a>                        <span class="prelude-val">Some</span>(ParallelLifecycleKey::Task(<span class="kw-2">*</span>task_index))
+<a href=#7434 id=7434 data-nosnippet>7434</a>                    }
+<a href=#7435 id=7435 data-nosnippet>7435</a>                    ExecutionEntityKind::BridgeRx { bridge_index, .. }
+<a href=#7436 id=7436 data-nosnippet>7436</a>                    | ExecutionEntityKind::BridgeTx { bridge_index, .. } =&gt; {
+<a href=#7437 id=7437 data-nosnippet>7437</a>                        <span class="prelude-val">Some</span>(ParallelLifecycleKey::Bridge(<span class="kw-2">*</span>bridge_index))
+<a href=#7438 id=7438 data-nosnippet>7438</a>                    }
+<a href=#7439 id=7439 data-nosnippet>7439</a>                }
+<a href=#7440 id=7440 data-nosnippet>7440</a>            }
+<a href=#7441 id=7441 data-nosnippet>7441</a>            CuExecutionUnit::Loop(<span class="kw">_</span>) =&gt; <span class="prelude-val">None</span>,
+<a href=#7442 id=7442 data-nosnippet>7442</a>        })
+<a href=#7443 id=7443 data-nosnippet>7443</a>        .collect();
+<a href=#7444 id=7444 data-nosnippet>7444</a>
+<a href=#7445 id=7445 data-nosnippet>7445</a>    <span class="kw">let </span><span class="kw-2">mut </span>placements = <span class="macro">vec!</span>[ParallelLifecyclePlacement::default(); step_keys.len()];
+<a href=#7446 id=7446 data-nosnippet>7446</a>    <span class="kw">let </span><span class="kw-2">mut </span>seen_forward = std::collections::HashSet::new();
+<a href=#7447 id=7447 data-nosnippet>7447</a>    <span class="kw">for </span>(index, key) <span class="kw">in </span>step_keys.iter().enumerate() {
+<a href=#7448 id=7448 data-nosnippet>7448</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(key) = key <span class="kw">else </span>{
+<a href=#7449 id=7449 data-nosnippet>7449</a>            <span class="kw">continue</span>;
+<a href=#7450 id=7450 data-nosnippet>7450</a>        };
+<a href=#7451 id=7451 data-nosnippet>7451</a>        <span class="kw">if </span>seen_forward.insert(<span class="kw-2">*</span>key) {
+<a href=#7452 id=7452 data-nosnippet>7452</a>            placements[index].preprocess = <span class="bool-val">true</span>;
+<a href=#7453 id=7453 data-nosnippet>7453</a>        }
+<a href=#7454 id=7454 data-nosnippet>7454</a>    }
+<a href=#7455 id=7455 data-nosnippet>7455</a>
+<a href=#7456 id=7456 data-nosnippet>7456</a>    <span class="kw">let </span><span class="kw-2">mut </span>seen_reverse = std::collections::HashSet::new();
+<a href=#7457 id=7457 data-nosnippet>7457</a>    <span class="kw">for </span>(index, key) <span class="kw">in </span>step_keys.iter().enumerate().rev() {
+<a href=#7458 id=7458 data-nosnippet>7458</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(key) = key <span class="kw">else </span>{
+<a href=#7459 id=7459 data-nosnippet>7459</a>            <span class="kw">continue</span>;
+<a href=#7460 id=7460 data-nosnippet>7460</a>        };
+<a href=#7461 id=7461 data-nosnippet>7461</a>        <span class="kw">if </span>seen_reverse.insert(<span class="kw-2">*</span>key) {
+<a href=#7462 id=7462 data-nosnippet>7462</a>            placements[index].postprocess = <span class="bool-val">true</span>;
+<a href=#7463 id=7463 data-nosnippet>7463</a>        }
+<a href=#7464 id=7464 data-nosnippet>7464</a>    }
+<a href=#7465 id=7465 data-nosnippet>7465</a>
+<a href=#7466 id=7466 data-nosnippet>7466</a>    placements
+<a href=#7467 id=7467 data-nosnippet>7467</a>}
+<a href=#7468 id=7468 data-nosnippet>7468</a>
+<a href=#7469 id=7469 data-nosnippet>7469</a><span class="kw">fn </span>sim_bridge_channel_set_idents(bridge_tuple_index: usize) -&gt; (Ident, Ident, Ident, Ident) {
+<a href=#7470 id=7470 data-nosnippet>7470</a>    (
+<a href=#7471 id=7471 data-nosnippet>7471</a>        <span class="macro">format_ident!</span>(<span class="string">"__CuSimBridge{}TxChannels"</span>, bridge_tuple_index),
+<a href=#7472 id=7472 data-nosnippet>7472</a>        <span class="macro">format_ident!</span>(<span class="string">"__CuSimBridge{}TxId"</span>, bridge_tuple_index),
+<a href=#7473 id=7473 data-nosnippet>7473</a>        <span class="macro">format_ident!</span>(<span class="string">"__CuSimBridge{}RxChannels"</span>, bridge_tuple_index),
+<a href=#7474 id=7474 data-nosnippet>7474</a>        <span class="macro">format_ident!</span>(<span class="string">"__CuSimBridge{}RxId"</span>, bridge_tuple_index),
+<a href=#7475 id=7475 data-nosnippet>7475</a>    )
+<a href=#7476 id=7476 data-nosnippet>7476</a>}
+<a href=#7477 id=7477 data-nosnippet>7477</a>
+<a href=#7478 id=7478 data-nosnippet>7478</a><span class="kw">fn </span>runtime_bridge_type_for_spec(bridge_spec: <span class="kw-2">&amp;</span>BridgeSpec, sim_mode: bool) -&gt; Type {
+<a href=#7479 id=7479 data-nosnippet>7479</a>    <span class="kw">if </span>sim_mode &amp;&amp; !bridge_spec.run_in_sim {
+<a href=#7480 id=7480 data-nosnippet>7480</a>        <span class="kw">let </span>(tx_set_ident, _tx_id_ident, rx_set_ident, _rx_id_ident) =
+<a href=#7481 id=7481 data-nosnippet>7481</a>            sim_bridge_channel_set_idents(bridge_spec.tuple_index);
+<a href=#7482 id=7482 data-nosnippet>7482</a>        <span class="kw">let </span>tx_type: Type = <span class="kw">if </span>bridge_spec.tx_channels.is_empty() {
 <a href=#7483 id=7483 data-nosnippet>7483</a>            <span class="macro">parse_quote!</span>(cu29::simulation::CuNoBridgeChannels)
 <a href=#7484 id=7484 data-nosnippet>7484</a>        } <span class="kw">else </span>{
-<a href=#7485 id=7485 data-nosnippet>7485</a>            <span class="macro">parse_quote!</span>(#rx_set_ident)
+<a href=#7485 id=7485 data-nosnippet>7485</a>            <span class="macro">parse_quote!</span>(#tx_set_ident)
 <a href=#7486 id=7486 data-nosnippet>7486</a>        };
-<a href=#7487 id=7487 data-nosnippet>7487</a>        <span class="macro">parse_quote!</span>(cu29::simulation::CuSimBridge&lt;#tx_type, #rx_type&gt;)
-<a href=#7488 id=7488 data-nosnippet>7488</a>    } <span class="kw">else </span>{
-<a href=#7489 id=7489 data-nosnippet>7489</a>        bridge_spec.type_path.clone()
-<a href=#7490 id=7490 data-nosnippet>7490</a>    }
-<a href=#7491 id=7491 data-nosnippet>7491</a>}
-<a href=#7492 id=7492 data-nosnippet>7492</a>
-<a href=#7493 id=7493 data-nosnippet>7493</a><span class="attr">#[derive(Clone)]
-<a href=#7494 id=7494 data-nosnippet>7494</a></span><span class="kw">struct </span>ExecutionEntity {
-<a href=#7495 id=7495 data-nosnippet>7495</a>    kind: ExecutionEntityKind,
+<a href=#7487 id=7487 data-nosnippet>7487</a>        <span class="kw">let </span>rx_type: Type = <span class="kw">if </span>bridge_spec.rx_channels.is_empty() {
+<a href=#7488 id=7488 data-nosnippet>7488</a>            <span class="macro">parse_quote!</span>(cu29::simulation::CuNoBridgeChannels)
+<a href=#7489 id=7489 data-nosnippet>7489</a>        } <span class="kw">else </span>{
+<a href=#7490 id=7490 data-nosnippet>7490</a>            <span class="macro">parse_quote!</span>(#rx_set_ident)
+<a href=#7491 id=7491 data-nosnippet>7491</a>        };
+<a href=#7492 id=7492 data-nosnippet>7492</a>        <span class="macro">parse_quote!</span>(cu29::simulation::CuSimBridge&lt;#tx_type, #rx_type&gt;)
+<a href=#7493 id=7493 data-nosnippet>7493</a>    } <span class="kw">else </span>{
+<a href=#7494 id=7494 data-nosnippet>7494</a>        bridge_spec.type_path.clone()
+<a href=#7495 id=7495 data-nosnippet>7495</a>    }
 <a href=#7496 id=7496 data-nosnippet>7496</a>}
 <a href=#7497 id=7497 data-nosnippet>7497</a>
 <a href=#7498 id=7498 data-nosnippet>7498</a><span class="attr">#[derive(Clone)]
-<a href=#7499 id=7499 data-nosnippet>7499</a></span><span class="kw">enum </span>ExecutionEntityKind {
-<a href=#7500 id=7500 data-nosnippet>7500</a>    Task {
-<a href=#7501 id=7501 data-nosnippet>7501</a>        task_index: usize,
-<a href=#7502 id=7502 data-nosnippet>7502</a>    },
-<a href=#7503 id=7503 data-nosnippet>7503</a>    BridgeRx {
-<a href=#7504 id=7504 data-nosnippet>7504</a>        bridge_index: usize,
-<a href=#7505 id=7505 data-nosnippet>7505</a>        channel_index: usize,
-<a href=#7506 id=7506 data-nosnippet>7506</a>    },
-<a href=#7507 id=7507 data-nosnippet>7507</a>    BridgeTx {
-<a href=#7508 id=7508 data-nosnippet>7508</a>        bridge_index: usize,
-<a href=#7509 id=7509 data-nosnippet>7509</a>        channel_index: usize,
-<a href=#7510 id=7510 data-nosnippet>7510</a>    },
-<a href=#7511 id=7511 data-nosnippet>7511</a>}
-<a href=#7512 id=7512 data-nosnippet>7512</a>
-<a href=#7513 id=7513 data-nosnippet>7513</a><span class="attr">#[cfg(test)]
-<a href=#7514 id=7514 data-nosnippet>7514</a></span><span class="kw">mod </span>tests {
-<a href=#7515 id=7515 data-nosnippet>7515</a>    <span class="kw">use </span>std::fs;
-<a href=#7516 id=7516 data-nosnippet>7516</a>    <span class="kw">use </span>std::path::{Path, PathBuf};
+<a href=#7499 id=7499 data-nosnippet>7499</a></span><span class="kw">struct </span>ExecutionEntity {
+<a href=#7500 id=7500 data-nosnippet>7500</a>    kind: ExecutionEntityKind,
+<a href=#7501 id=7501 data-nosnippet>7501</a>}
+<a href=#7502 id=7502 data-nosnippet>7502</a>
+<a href=#7503 id=7503 data-nosnippet>7503</a><span class="attr">#[derive(Clone)]
+<a href=#7504 id=7504 data-nosnippet>7504</a></span><span class="kw">enum </span>ExecutionEntityKind {
+<a href=#7505 id=7505 data-nosnippet>7505</a>    Task {
+<a href=#7506 id=7506 data-nosnippet>7506</a>        task_index: usize,
+<a href=#7507 id=7507 data-nosnippet>7507</a>    },
+<a href=#7508 id=7508 data-nosnippet>7508</a>    BridgeRx {
+<a href=#7509 id=7509 data-nosnippet>7509</a>        bridge_index: usize,
+<a href=#7510 id=7510 data-nosnippet>7510</a>        channel_index: usize,
+<a href=#7511 id=7511 data-nosnippet>7511</a>    },
+<a href=#7512 id=7512 data-nosnippet>7512</a>    BridgeTx {
+<a href=#7513 id=7513 data-nosnippet>7513</a>        bridge_index: usize,
+<a href=#7514 id=7514 data-nosnippet>7514</a>        channel_index: usize,
+<a href=#7515 id=7515 data-nosnippet>7515</a>    },
+<a href=#7516 id=7516 data-nosnippet>7516</a>}
 <a href=#7517 id=7517 data-nosnippet>7517</a>
-<a href=#7518 id=7518 data-nosnippet>7518</a>    <span class="kw">fn </span>unique_test_dir(name: <span class="kw-2">&amp;</span>str) -&gt; PathBuf {
-<a href=#7519 id=7519 data-nosnippet>7519</a>        <span class="kw">let </span>nanos = std::time::SystemTime::now()
-<a href=#7520 id=7520 data-nosnippet>7520</a>            .duration_since(std::time::UNIX_EPOCH)
-<a href=#7521 id=7521 data-nosnippet>7521</a>            .expect(<span class="string">"system clock before unix epoch"</span>)
-<a href=#7522 id=7522 data-nosnippet>7522</a>            .as_nanos();
-<a href=#7523 id=7523 data-nosnippet>7523</a>        std::env::temp_dir().join(<span class="macro">format!</span>(<span class="string">"cu29_derive_{name}_{nanos}"</span>))
-<a href=#7524 id=7524 data-nosnippet>7524</a>    }
-<a href=#7525 id=7525 data-nosnippet>7525</a>
-<a href=#7526 id=7526 data-nosnippet>7526</a>    <span class="kw">fn </span>write_file(path: <span class="kw-2">&amp;</span>Path, content: <span class="kw-2">&amp;</span>str) {
-<a href=#7527 id=7527 data-nosnippet>7527</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(parent) = path.parent() {
-<a href=#7528 id=7528 data-nosnippet>7528</a>            fs::create_dir_all(parent).expect(<span class="string">"create parent dirs"</span>);
-<a href=#7529 id=7529 data-nosnippet>7529</a>        }
-<a href=#7530 id=7530 data-nosnippet>7530</a>        fs::write(path, content).expect(<span class="string">"write file"</span>);
-<a href=#7531 id=7531 data-nosnippet>7531</a>    }
-<a href=#7532 id=7532 data-nosnippet>7532</a>
-<a href=#7533 id=7533 data-nosnippet>7533</a>    <span class="comment">// See tests/compile_file directory for more information
-<a href=#7534 id=7534 data-nosnippet>7534</a>    </span><span class="attr">#[test]
-<a href=#7535 id=7535 data-nosnippet>7535</a>    </span><span class="kw">fn </span>test_compile_fail() {
-<a href=#7536 id=7536 data-nosnippet>7536</a>        <span class="kw">use </span>rustc_version::{Channel, version_meta};
-<a href=#7537 id=7537 data-nosnippet>7537</a>        <span class="kw">use </span>std::{env, fs, path::Path};
-<a href=#7538 id=7538 data-nosnippet>7538</a>
-<a href=#7539 id=7539 data-nosnippet>7539</a>        <span class="kw">let </span>log_index_dir = env::temp_dir()
-<a href=#7540 id=7540 data-nosnippet>7540</a>            .join(<span class="string">"cu29_derive_trybuild_log_index"</span>)
-<a href=#7541 id=7541 data-nosnippet>7541</a>            .join(<span class="string">"a"</span>)
-<a href=#7542 id=7542 data-nosnippet>7542</a>            .join(<span class="string">"b"</span>)
-<a href=#7543 id=7543 data-nosnippet>7543</a>            .join(<span class="string">"c"</span>);
-<a href=#7544 id=7544 data-nosnippet>7544</a>        fs::create_dir_all(<span class="kw-2">&amp;</span>log_index_dir).unwrap();
-<a href=#7545 id=7545 data-nosnippet>7545</a>        <span class="kw">unsafe </span>{
-<a href=#7546 id=7546 data-nosnippet>7546</a>            env::set_var(<span class="string">"LOG_INDEX_DIR"</span>, <span class="kw-2">&amp;</span>log_index_dir);
-<a href=#7547 id=7547 data-nosnippet>7547</a>        }
-<a href=#7548 id=7548 data-nosnippet>7548</a>
-<a href=#7549 id=7549 data-nosnippet>7549</a>        <span class="kw">let </span>dir = Path::new(<span class="string">"tests/compile_fail"</span>);
-<a href=#7550 id=7550 data-nosnippet>7550</a>        <span class="kw">for </span>entry <span class="kw">in </span>fs::read_dir(dir).unwrap() {
-<a href=#7551 id=7551 data-nosnippet>7551</a>            <span class="kw">let </span>entry = entry.unwrap();
-<a href=#7552 id=7552 data-nosnippet>7552</a>            <span class="kw">if </span>!entry.file_type().unwrap().is_dir() {
-<a href=#7553 id=7553 data-nosnippet>7553</a>                <span class="kw">continue</span>;
-<a href=#7554 id=7554 data-nosnippet>7554</a>            }
-<a href=#7555 id=7555 data-nosnippet>7555</a>            <span class="kw">for </span>file <span class="kw">in </span>fs::read_dir(entry.path()).unwrap() {
-<a href=#7556 id=7556 data-nosnippet>7556</a>                <span class="kw">let </span>file = file.unwrap();
-<a href=#7557 id=7557 data-nosnippet>7557</a>                <span class="kw">let </span>p = file.path();
-<a href=#7558 id=7558 data-nosnippet>7558</a>                <span class="kw">if </span>p.extension().and_then(|x| x.to_str()) != <span class="prelude-val">Some</span>(<span class="string">"rs"</span>) {
-<a href=#7559 id=7559 data-nosnippet>7559</a>                    <span class="kw">continue</span>;
-<a href=#7560 id=7560 data-nosnippet>7560</a>                }
-<a href=#7561 id=7561 data-nosnippet>7561</a>
-<a href=#7562 id=7562 data-nosnippet>7562</a>                <span class="kw">let </span>base = p.with_extension(<span class="string">"stderr"</span>); <span class="comment">// the file trybuild reads
-<a href=#7563 id=7563 data-nosnippet>7563</a>                </span><span class="kw">let </span>src = <span class="kw">match </span>version_meta().unwrap().channel {
-<a href=#7564 id=7564 data-nosnippet>7564</a>                    Channel::Beta =&gt; Path::new(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}.beta"</span>, base.display())).to_path_buf(),
-<a href=#7565 id=7565 data-nosnippet>7565</a>                    <span class="kw">_ </span>=&gt; Path::new(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}.stable"</span>, base.display())).to_path_buf(),
-<a href=#7566 id=7566 data-nosnippet>7566</a>                };
-<a href=#7567 id=7567 data-nosnippet>7567</a>
-<a href=#7568 id=7568 data-nosnippet>7568</a>                <span class="kw">if </span>src.exists() {
-<a href=#7569 id=7569 data-nosnippet>7569</a>                    fs::copy(src, <span class="kw-2">&amp;</span>base).unwrap();
-<a href=#7570 id=7570 data-nosnippet>7570</a>                }
-<a href=#7571 id=7571 data-nosnippet>7571</a>            }
-<a href=#7572 id=7572 data-nosnippet>7572</a>        }
-<a href=#7573 id=7573 data-nosnippet>7573</a>
-<a href=#7574 id=7574 data-nosnippet>7574</a>        <span class="kw">let </span>t = trybuild::TestCases::new();
-<a href=#7575 id=7575 data-nosnippet>7575</a>        t.compile_fail(<span class="string">"tests/compile_fail/*/*.rs"</span>);
-<a href=#7576 id=7576 data-nosnippet>7576</a>        t.pass(<span class="string">"tests/compile_pass/*/*.rs"</span>);
-<a href=#7577 id=7577 data-nosnippet>7577</a>    }
+<a href=#7518 id=7518 data-nosnippet>7518</a><span class="attr">#[cfg(test)]
+<a href=#7519 id=7519 data-nosnippet>7519</a></span><span class="kw">mod </span>tests {
+<a href=#7520 id=7520 data-nosnippet>7520</a>    <span class="kw">use </span>std::fs;
+<a href=#7521 id=7521 data-nosnippet>7521</a>    <span class="kw">use </span>std::path::{Path, PathBuf};
+<a href=#7522 id=7522 data-nosnippet>7522</a>
+<a href=#7523 id=7523 data-nosnippet>7523</a>    <span class="kw">fn </span>unique_test_dir(name: <span class="kw-2">&amp;</span>str) -&gt; PathBuf {
+<a href=#7524 id=7524 data-nosnippet>7524</a>        <span class="kw">let </span>nanos = std::time::SystemTime::now()
+<a href=#7525 id=7525 data-nosnippet>7525</a>            .duration_since(std::time::UNIX_EPOCH)
+<a href=#7526 id=7526 data-nosnippet>7526</a>            .expect(<span class="string">"system clock before unix epoch"</span>)
+<a href=#7527 id=7527 data-nosnippet>7527</a>            .as_nanos();
+<a href=#7528 id=7528 data-nosnippet>7528</a>        std::env::temp_dir().join(<span class="macro">format!</span>(<span class="string">"cu29_derive_{name}_{nanos}"</span>))
+<a href=#7529 id=7529 data-nosnippet>7529</a>    }
+<a href=#7530 id=7530 data-nosnippet>7530</a>
+<a href=#7531 id=7531 data-nosnippet>7531</a>    <span class="kw">fn </span>write_file(path: <span class="kw-2">&amp;</span>Path, content: <span class="kw-2">&amp;</span>str) {
+<a href=#7532 id=7532 data-nosnippet>7532</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(parent) = path.parent() {
+<a href=#7533 id=7533 data-nosnippet>7533</a>            fs::create_dir_all(parent).expect(<span class="string">"create parent dirs"</span>);
+<a href=#7534 id=7534 data-nosnippet>7534</a>        }
+<a href=#7535 id=7535 data-nosnippet>7535</a>        fs::write(path, content).expect(<span class="string">"write file"</span>);
+<a href=#7536 id=7536 data-nosnippet>7536</a>    }
+<a href=#7537 id=7537 data-nosnippet>7537</a>
+<a href=#7538 id=7538 data-nosnippet>7538</a>    <span class="comment">// See tests/compile_file directory for more information
+<a href=#7539 id=7539 data-nosnippet>7539</a>    </span><span class="attr">#[test]
+<a href=#7540 id=7540 data-nosnippet>7540</a>    </span><span class="kw">fn </span>test_compile_fail() {
+<a href=#7541 id=7541 data-nosnippet>7541</a>        <span class="kw">use </span>rustc_version::{Channel, version_meta};
+<a href=#7542 id=7542 data-nosnippet>7542</a>        <span class="kw">use </span>std::{env, fs, path::Path};
+<a href=#7543 id=7543 data-nosnippet>7543</a>
+<a href=#7544 id=7544 data-nosnippet>7544</a>        <span class="kw">let </span>log_index_dir = env::temp_dir()
+<a href=#7545 id=7545 data-nosnippet>7545</a>            .join(<span class="string">"cu29_derive_trybuild_log_index"</span>)
+<a href=#7546 id=7546 data-nosnippet>7546</a>            .join(<span class="string">"a"</span>)
+<a href=#7547 id=7547 data-nosnippet>7547</a>            .join(<span class="string">"b"</span>)
+<a href=#7548 id=7548 data-nosnippet>7548</a>            .join(<span class="string">"c"</span>);
+<a href=#7549 id=7549 data-nosnippet>7549</a>        fs::create_dir_all(<span class="kw-2">&amp;</span>log_index_dir).unwrap();
+<a href=#7550 id=7550 data-nosnippet>7550</a>        <span class="kw">unsafe </span>{
+<a href=#7551 id=7551 data-nosnippet>7551</a>            env::set_var(<span class="string">"LOG_INDEX_DIR"</span>, <span class="kw-2">&amp;</span>log_index_dir);
+<a href=#7552 id=7552 data-nosnippet>7552</a>        }
+<a href=#7553 id=7553 data-nosnippet>7553</a>
+<a href=#7554 id=7554 data-nosnippet>7554</a>        <span class="kw">let </span>dir = Path::new(<span class="string">"tests/compile_fail"</span>);
+<a href=#7555 id=7555 data-nosnippet>7555</a>        <span class="kw">for </span>entry <span class="kw">in </span>fs::read_dir(dir).unwrap() {
+<a href=#7556 id=7556 data-nosnippet>7556</a>            <span class="kw">let </span>entry = entry.unwrap();
+<a href=#7557 id=7557 data-nosnippet>7557</a>            <span class="kw">if </span>!entry.file_type().unwrap().is_dir() {
+<a href=#7558 id=7558 data-nosnippet>7558</a>                <span class="kw">continue</span>;
+<a href=#7559 id=7559 data-nosnippet>7559</a>            }
+<a href=#7560 id=7560 data-nosnippet>7560</a>            <span class="kw">for </span>file <span class="kw">in </span>fs::read_dir(entry.path()).unwrap() {
+<a href=#7561 id=7561 data-nosnippet>7561</a>                <span class="kw">let </span>file = file.unwrap();
+<a href=#7562 id=7562 data-nosnippet>7562</a>                <span class="kw">let </span>p = file.path();
+<a href=#7563 id=7563 data-nosnippet>7563</a>                <span class="kw">if </span>p.extension().and_then(|x| x.to_str()) != <span class="prelude-val">Some</span>(<span class="string">"rs"</span>) {
+<a href=#7564 id=7564 data-nosnippet>7564</a>                    <span class="kw">continue</span>;
+<a href=#7565 id=7565 data-nosnippet>7565</a>                }
+<a href=#7566 id=7566 data-nosnippet>7566</a>
+<a href=#7567 id=7567 data-nosnippet>7567</a>                <span class="kw">let </span>base = p.with_extension(<span class="string">"stderr"</span>); <span class="comment">// the file trybuild reads
+<a href=#7568 id=7568 data-nosnippet>7568</a>                </span><span class="kw">let </span>src = <span class="kw">match </span>version_meta().unwrap().channel {
+<a href=#7569 id=7569 data-nosnippet>7569</a>                    Channel::Beta =&gt; Path::new(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}.beta"</span>, base.display())).to_path_buf(),
+<a href=#7570 id=7570 data-nosnippet>7570</a>                    <span class="kw">_ </span>=&gt; Path::new(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}.stable"</span>, base.display())).to_path_buf(),
+<a href=#7571 id=7571 data-nosnippet>7571</a>                };
+<a href=#7572 id=7572 data-nosnippet>7572</a>
+<a href=#7573 id=7573 data-nosnippet>7573</a>                <span class="kw">if </span>src.exists() {
+<a href=#7574 id=7574 data-nosnippet>7574</a>                    fs::copy(src, <span class="kw-2">&amp;</span>base).unwrap();
+<a href=#7575 id=7575 data-nosnippet>7575</a>                }
+<a href=#7576 id=7576 data-nosnippet>7576</a>            }
+<a href=#7577 id=7577 data-nosnippet>7577</a>        }
 <a href=#7578 id=7578 data-nosnippet>7578</a>
-<a href=#7579 id=7579 data-nosnippet>7579</a>    <span class="attr">#[test]
-<a href=#7580 id=7580 data-nosnippet>7580</a>    </span><span class="kw">fn </span>runtime_plan_keeps_nc_order_for_non_first_connected_output() {
-<a href=#7581 id=7581 data-nosnippet>7581</a>        <span class="kw">use </span>super::<span class="kw-2">*</span>;
-<a href=#7582 id=7582 data-nosnippet>7582</a>        <span class="kw">use </span>cu29::config::CuConfig;
-<a href=#7583 id=7583 data-nosnippet>7583</a>        <span class="kw">use </span>cu29::curuntime::{CuExecutionUnit, compute_runtime_plan};
-<a href=#7584 id=7584 data-nosnippet>7584</a>
-<a href=#7585 id=7585 data-nosnippet>7585</a>        <span class="kw">let </span>config: CuConfig =
-<a href=#7586 id=7586 data-nosnippet>7586</a>            read_config(<span class="string">"tests/config/multi_output_source_non_first_connected_valid.ron"</span>)
-<a href=#7587 id=7587 data-nosnippet>7587</a>                .expect(<span class="string">"failed to read test config"</span>);
-<a href=#7588 id=7588 data-nosnippet>7588</a>        <span class="kw">let </span>graph = config.get_graph(<span class="prelude-val">None</span>).expect(<span class="string">"missing graph"</span>);
-<a href=#7589 id=7589 data-nosnippet>7589</a>        <span class="kw">let </span>src_id = graph.get_node_id_by_name(<span class="string">"src"</span>).expect(<span class="string">"missing src node"</span>);
-<a href=#7590 id=7590 data-nosnippet>7590</a>
-<a href=#7591 id=7591 data-nosnippet>7591</a>        <span class="kw">let </span>runtime = compute_runtime_plan(graph).expect(<span class="string">"runtime plan failed"</span>);
-<a href=#7592 id=7592 data-nosnippet>7592</a>        <span class="kw">let </span>src_step = runtime
-<a href=#7593 id=7593 data-nosnippet>7593</a>            .steps
-<a href=#7594 id=7594 data-nosnippet>7594</a>            .iter()
-<a href=#7595 id=7595 data-nosnippet>7595</a>            .find_map(|step| <span class="kw">match </span>step {
-<a href=#7596 id=7596 data-nosnippet>7596</a>                CuExecutionUnit::Step(step) <span class="kw">if </span>step.node_id == src_id =&gt; <span class="prelude-val">Some</span>(step),
-<a href=#7597 id=7597 data-nosnippet>7597</a>                <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#7598 id=7598 data-nosnippet>7598</a>            })
-<a href=#7599 id=7599 data-nosnippet>7599</a>            .expect(<span class="string">"missing source step"</span>);
-<a href=#7600 id=7600 data-nosnippet>7600</a>
-<a href=#7601 id=7601 data-nosnippet>7601</a>        <span class="macro">assert_eq!</span>(
-<a href=#7602 id=7602 data-nosnippet>7602</a>            src_step.output_msg_pack.as_ref().unwrap().msg_types,
-<a href=#7603 id=7603 data-nosnippet>7603</a>            <span class="macro">vec!</span>[<span class="string">"i32"</span>, <span class="string">"bool"</span>]
-<a href=#7604 id=7604 data-nosnippet>7604</a>        );
-<a href=#7605 id=7605 data-nosnippet>7605</a>    }
-<a href=#7606 id=7606 data-nosnippet>7606</a>
-<a href=#7607 id=7607 data-nosnippet>7607</a>    <span class="attr">#[test]
-<a href=#7608 id=7608 data-nosnippet>7608</a>    </span><span class="kw">fn </span>matching_task_ids_are_flattened_per_output_message() {
-<a href=#7609 id=7609 data-nosnippet>7609</a>        <span class="kw">use </span>super::<span class="kw-2">*</span>;
-<a href=#7610 id=7610 data-nosnippet>7610</a>        <span class="kw">use </span>cu29::config::CuConfig;
+<a href=#7579 id=7579 data-nosnippet>7579</a>        <span class="kw">let </span>t = trybuild::TestCases::new();
+<a href=#7580 id=7580 data-nosnippet>7580</a>        t.compile_fail(<span class="string">"tests/compile_fail/*/*.rs"</span>);
+<a href=#7581 id=7581 data-nosnippet>7581</a>        t.pass(<span class="string">"tests/compile_pass/*/*.rs"</span>);
+<a href=#7582 id=7582 data-nosnippet>7582</a>    }
+<a href=#7583 id=7583 data-nosnippet>7583</a>
+<a href=#7584 id=7584 data-nosnippet>7584</a>    <span class="attr">#[test]
+<a href=#7585 id=7585 data-nosnippet>7585</a>    </span><span class="kw">fn </span>runtime_plan_keeps_nc_order_for_non_first_connected_output() {
+<a href=#7586 id=7586 data-nosnippet>7586</a>        <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#7587 id=7587 data-nosnippet>7587</a>        <span class="kw">use </span>cu29::config::CuConfig;
+<a href=#7588 id=7588 data-nosnippet>7588</a>        <span class="kw">use </span>cu29::curuntime::{CuExecutionUnit, compute_runtime_plan};
+<a href=#7589 id=7589 data-nosnippet>7589</a>
+<a href=#7590 id=7590 data-nosnippet>7590</a>        <span class="kw">let </span>config: CuConfig =
+<a href=#7591 id=7591 data-nosnippet>7591</a>            read_config(<span class="string">"tests/config/multi_output_source_non_first_connected_valid.ron"</span>)
+<a href=#7592 id=7592 data-nosnippet>7592</a>                .expect(<span class="string">"failed to read test config"</span>);
+<a href=#7593 id=7593 data-nosnippet>7593</a>        <span class="kw">let </span>graph = config.get_graph(<span class="prelude-val">None</span>).expect(<span class="string">"missing graph"</span>);
+<a href=#7594 id=7594 data-nosnippet>7594</a>        <span class="kw">let </span>src_id = graph.get_node_id_by_name(<span class="string">"src"</span>).expect(<span class="string">"missing src node"</span>);
+<a href=#7595 id=7595 data-nosnippet>7595</a>
+<a href=#7596 id=7596 data-nosnippet>7596</a>        <span class="kw">let </span>runtime = compute_runtime_plan(graph).expect(<span class="string">"runtime plan failed"</span>);
+<a href=#7597 id=7597 data-nosnippet>7597</a>        <span class="kw">let </span>src_step = runtime
+<a href=#7598 id=7598 data-nosnippet>7598</a>            .steps
+<a href=#7599 id=7599 data-nosnippet>7599</a>            .iter()
+<a href=#7600 id=7600 data-nosnippet>7600</a>            .find_map(|step| <span class="kw">match </span>step {
+<a href=#7601 id=7601 data-nosnippet>7601</a>                CuExecutionUnit::Step(step) <span class="kw">if </span>step.node_id == src_id =&gt; <span class="prelude-val">Some</span>(step),
+<a href=#7602 id=7602 data-nosnippet>7602</a>                <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#7603 id=7603 data-nosnippet>7603</a>            })
+<a href=#7604 id=7604 data-nosnippet>7604</a>            .expect(<span class="string">"missing source step"</span>);
+<a href=#7605 id=7605 data-nosnippet>7605</a>
+<a href=#7606 id=7606 data-nosnippet>7606</a>        <span class="macro">assert_eq!</span>(
+<a href=#7607 id=7607 data-nosnippet>7607</a>            src_step.output_msg_pack.as_ref().unwrap().msg_types,
+<a href=#7608 id=7608 data-nosnippet>7608</a>            <span class="macro">vec!</span>[<span class="string">"i32"</span>, <span class="string">"bool"</span>]
+<a href=#7609 id=7609 data-nosnippet>7609</a>        );
+<a href=#7610 id=7610 data-nosnippet>7610</a>    }
 <a href=#7611 id=7611 data-nosnippet>7611</a>
-<a href=#7612 id=7612 data-nosnippet>7612</a>        <span class="kw">let </span>config: CuConfig =
-<a href=#7613 id=7613 data-nosnippet>7613</a>            read_config(<span class="string">"tests/config/multi_output_source_non_first_connected_valid.ron"</span>)
-<a href=#7614 id=7614 data-nosnippet>7614</a>                .expect(<span class="string">"failed to read test config"</span>);
-<a href=#7615 id=7615 data-nosnippet>7615</a>        <span class="kw">let </span>graph = config.get_graph(<span class="prelude-val">None</span>).expect(<span class="string">"missing graph"</span>);
-<a href=#7616 id=7616 data-nosnippet>7616</a>        <span class="kw">let </span>task_specs = CuTaskSpecSet::from_graph(graph);
-<a href=#7617 id=7617 data-nosnippet>7617</a>        <span class="kw">let </span>channel_usage = collect_bridge_channel_usage(graph);
-<a href=#7618 id=7618 data-nosnippet>7618</a>        <span class="kw">let </span><span class="kw-2">mut </span>bridge_specs = build_bridge_specs(<span class="kw-2">&amp;</span>config, graph, <span class="kw-2">&amp;</span>channel_usage);
-<a href=#7619 id=7619 data-nosnippet>7619</a>        <span class="kw">let </span>(runtime_plan, exec_entities, plan_to_original) =
-<a href=#7620 id=7620 data-nosnippet>7620</a>            build_execution_plan(graph, <span class="kw-2">&amp;</span>task_specs, <span class="kw-2">&amp;mut </span>bridge_specs)
-<a href=#7621 id=7621 data-nosnippet>7621</a>                .expect(<span class="string">"runtime plan failed"</span>);
-<a href=#7622 id=7622 data-nosnippet>7622</a>        <span class="kw">let </span>output_packs = extract_output_packs(<span class="kw-2">&amp;</span>runtime_plan);
-<a href=#7623 id=7623 data-nosnippet>7623</a>        <span class="kw">let </span>task_names = collect_task_names(graph);
-<a href=#7624 id=7624 data-nosnippet>7624</a>        <span class="kw">let </span>(<span class="kw">_</span>, node_output_positions) = collect_culist_metadata(
-<a href=#7625 id=7625 data-nosnippet>7625</a>            <span class="kw-2">&amp;</span>runtime_plan,
-<a href=#7626 id=7626 data-nosnippet>7626</a>            <span class="kw-2">&amp;</span>exec_entities,
-<a href=#7627 id=7627 data-nosnippet>7627</a>            <span class="kw-2">&amp;mut </span>bridge_specs,
-<a href=#7628 id=7628 data-nosnippet>7628</a>            <span class="kw-2">&amp;</span>plan_to_original,
-<a href=#7629 id=7629 data-nosnippet>7629</a>        );
-<a href=#7630 id=7630 data-nosnippet>7630</a>
-<a href=#7631 id=7631 data-nosnippet>7631</a>        <span class="comment">// Rebuild per-slot origin ids like `gen_culist_support` does.
-<a href=#7632 id=7632 data-nosnippet>7632</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>slot_origin_ids: Vec&lt;<span class="prelude-ty">Option</span>&lt;String&gt;&gt; = <span class="macro">vec!</span>[<span class="prelude-val">None</span>; output_packs.len()];
-<a href=#7633 id=7633 data-nosnippet>7633</a>        <span class="kw">for </span>(node_id, task_id, <span class="kw">_</span>) <span class="kw">in </span>task_names {
-<a href=#7634 id=7634 data-nosnippet>7634</a>            <span class="kw">let </span>output_position = node_output_positions
-<a href=#7635 id=7635 data-nosnippet>7635</a>                .get(<span class="kw-2">&amp;</span>node_id)
-<a href=#7636 id=7636 data-nosnippet>7636</a>                .unwrap_or_else(|| <span class="macro">panic!</span>(<span class="string">"Task {task_id} (node id: {node_id}) not found"</span>));
-<a href=#7637 id=7637 data-nosnippet>7637</a>            slot_origin_ids[<span class="kw-2">*</span>output_position] = <span class="prelude-val">Some</span>(task_id);
-<a href=#7638 id=7638 data-nosnippet>7638</a>        }
-<a href=#7639 id=7639 data-nosnippet>7639</a>
-<a href=#7640 id=7640 data-nosnippet>7640</a>        <span class="kw">let </span>flattened_ids = flatten_slot_origin_ids(<span class="kw-2">&amp;</span>output_packs, slot_origin_ids);
-<a href=#7641 id=7641 data-nosnippet>7641</a>
-<a href=#7642 id=7642 data-nosnippet>7642</a>        <span class="comment">// src emits two messages (i32 + bool), both map to src.
-<a href=#7643 id=7643 data-nosnippet>7643</a>        // sink contributes its own output slot (CuMsg&lt;()&gt;), mapped to sink.
-<a href=#7644 id=7644 data-nosnippet>7644</a>        </span><span class="macro">assert_eq!</span>(
-<a href=#7645 id=7645 data-nosnippet>7645</a>            flattened_ids,
-<a href=#7646 id=7646 data-nosnippet>7646</a>            <span class="macro">vec!</span>[<span class="string">"src"</span>.to_string(), <span class="string">"src"</span>.to_string(), <span class="string">"sink"</span>.to_string()]
-<a href=#7647 id=7647 data-nosnippet>7647</a>        );
-<a href=#7648 id=7648 data-nosnippet>7648</a>    }
-<a href=#7649 id=7649 data-nosnippet>7649</a>
-<a href=#7650 id=7650 data-nosnippet>7650</a>    <span class="attr">#[test]
-<a href=#7651 id=7651 data-nosnippet>7651</a>    </span><span class="kw">fn </span>bridge_resources_are_collected() {
-<a href=#7652 id=7652 data-nosnippet>7652</a>        <span class="kw">use </span>super::<span class="kw-2">*</span>;
-<a href=#7653 id=7653 data-nosnippet>7653</a>        <span class="kw">use </span>cu29::config::{CuGraph, Flavor, Node};
-<a href=#7654 id=7654 data-nosnippet>7654</a>        <span class="kw">use </span>std::collections::HashMap;
-<a href=#7655 id=7655 data-nosnippet>7655</a>        <span class="kw">use </span>syn::parse_str;
-<a href=#7656 id=7656 data-nosnippet>7656</a>
-<a href=#7657 id=7657 data-nosnippet>7657</a>        <span class="kw">let </span><span class="kw-2">mut </span>graph = CuGraph::default();
-<a href=#7658 id=7658 data-nosnippet>7658</a>        <span class="kw">let </span><span class="kw-2">mut </span>node = Node::new_with_flavor(<span class="string">"radio"</span>, <span class="string">"bridge::Dummy"</span>, Flavor::Bridge);
-<a href=#7659 id=7659 data-nosnippet>7659</a>        <span class="kw">let </span><span class="kw-2">mut </span>res = HashMap::new();
-<a href=#7660 id=7660 data-nosnippet>7660</a>        res.insert(<span class="string">"serial"</span>.to_string(), <span class="string">"fc.serial0"</span>.to_string());
-<a href=#7661 id=7661 data-nosnippet>7661</a>        node.set_resources(<span class="prelude-val">Some</span>(res));
-<a href=#7662 id=7662 data-nosnippet>7662</a>        graph.add_node(node).expect(<span class="string">"bridge node"</span>);
-<a href=#7663 id=7663 data-nosnippet>7663</a>
-<a href=#7664 id=7664 data-nosnippet>7664</a>        <span class="kw">let </span>task_specs = CuTaskSpecSet::from_graph(<span class="kw-2">&amp;</span>graph);
-<a href=#7665 id=7665 data-nosnippet>7665</a>        <span class="kw">let </span>bridge_spec = BridgeSpec {
-<a href=#7666 id=7666 data-nosnippet>7666</a>            id: <span class="string">"radio"</span>.to_string(),
-<a href=#7667 id=7667 data-nosnippet>7667</a>            type_path: parse_str(<span class="string">"bridge::Dummy"</span>).unwrap(),
-<a href=#7668 id=7668 data-nosnippet>7668</a>            run_in_sim: <span class="bool-val">true</span>,
-<a href=#7669 id=7669 data-nosnippet>7669</a>            config_index: <span class="number">0</span>,
-<a href=#7670 id=7670 data-nosnippet>7670</a>            tuple_index: <span class="number">0</span>,
-<a href=#7671 id=7671 data-nosnippet>7671</a>            monitor_index: <span class="prelude-val">None</span>,
-<a href=#7672 id=7672 data-nosnippet>7672</a>            rx_channels: Vec::new(),
-<a href=#7673 id=7673 data-nosnippet>7673</a>            tx_channels: Vec::new(),
-<a href=#7674 id=7674 data-nosnippet>7674</a>        };
-<a href=#7675 id=7675 data-nosnippet>7675</a>
-<a href=#7676 id=7676 data-nosnippet>7676</a>        <span class="kw">let </span><span class="kw-2">mut </span>config = cu29::config::CuConfig::default();
-<a href=#7677 id=7677 data-nosnippet>7677</a>        config.resources.push(ResourceBundleConfig {
-<a href=#7678 id=7678 data-nosnippet>7678</a>            id: <span class="string">"fc"</span>.to_string(),
-<a href=#7679 id=7679 data-nosnippet>7679</a>            provider: <span class="string">"board::Bundle"</span>.to_string(),
-<a href=#7680 id=7680 data-nosnippet>7680</a>            config: <span class="prelude-val">None</span>,
-<a href=#7681 id=7681 data-nosnippet>7681</a>            missions: <span class="prelude-val">None</span>,
-<a href=#7682 id=7682 data-nosnippet>7682</a>        });
-<a href=#7683 id=7683 data-nosnippet>7683</a>        <span class="kw">let </span>bundle_specs = build_bundle_specs(<span class="kw-2">&amp;</span>config, <span class="string">"default"</span>).expect(<span class="string">"bundle specs"</span>);
-<a href=#7684 id=7684 data-nosnippet>7684</a>        <span class="kw">let </span>specs = collect_resource_specs(<span class="kw-2">&amp;</span>graph, <span class="kw-2">&amp;</span>task_specs, <span class="kw-2">&amp;</span>[bridge_spec], <span class="kw-2">&amp;</span>bundle_specs)
-<a href=#7685 id=7685 data-nosnippet>7685</a>            .expect(<span class="string">"collect specs"</span>);
-<a href=#7686 id=7686 data-nosnippet>7686</a>        <span class="macro">assert_eq!</span>(specs.len(), <span class="number">1</span>);
-<a href=#7687 id=7687 data-nosnippet>7687</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(specs[<span class="number">0</span>].owner, ResourceOwner::Bridge(<span class="number">0</span>)));
-<a href=#7688 id=7688 data-nosnippet>7688</a>        <span class="macro">assert_eq!</span>(specs[<span class="number">0</span>].binding_name, <span class="string">"serial"</span>);
-<a href=#7689 id=7689 data-nosnippet>7689</a>        <span class="macro">assert_eq!</span>(specs[<span class="number">0</span>].bundle_index, <span class="number">0</span>);
-<a href=#7690 id=7690 data-nosnippet>7690</a>        <span class="macro">assert_eq!</span>(specs[<span class="number">0</span>].resource_name, <span class="string">"serial0"</span>);
-<a href=#7691 id=7691 data-nosnippet>7691</a>    }
-<a href=#7692 id=7692 data-nosnippet>7692</a>
-<a href=#7693 id=7693 data-nosnippet>7693</a>    <span class="attr">#[test]
-<a href=#7694 id=7694 data-nosnippet>7694</a>    </span><span class="kw">fn </span>copper_runtime_args_parse_subsystem_mode() {
-<a href=#7695 id=7695 data-nosnippet>7695</a>        <span class="kw">use </span>super::<span class="kw-2">*</span>;
-<a href=#7696 id=7696 data-nosnippet>7696</a>        <span class="kw">use </span>quote::quote;
+<a href=#7612 id=7612 data-nosnippet>7612</a>    <span class="attr">#[test]
+<a href=#7613 id=7613 data-nosnippet>7613</a>    </span><span class="kw">fn </span>matching_task_ids_are_flattened_per_output_message() {
+<a href=#7614 id=7614 data-nosnippet>7614</a>        <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#7615 id=7615 data-nosnippet>7615</a>        <span class="kw">use </span>cu29::config::CuConfig;
+<a href=#7616 id=7616 data-nosnippet>7616</a>
+<a href=#7617 id=7617 data-nosnippet>7617</a>        <span class="kw">let </span>config: CuConfig =
+<a href=#7618 id=7618 data-nosnippet>7618</a>            read_config(<span class="string">"tests/config/multi_output_source_non_first_connected_valid.ron"</span>)
+<a href=#7619 id=7619 data-nosnippet>7619</a>                .expect(<span class="string">"failed to read test config"</span>);
+<a href=#7620 id=7620 data-nosnippet>7620</a>        <span class="kw">let </span>graph = config.get_graph(<span class="prelude-val">None</span>).expect(<span class="string">"missing graph"</span>);
+<a href=#7621 id=7621 data-nosnippet>7621</a>        <span class="kw">let </span>task_specs = CuTaskSpecSet::from_graph(graph);
+<a href=#7622 id=7622 data-nosnippet>7622</a>        <span class="kw">let </span>channel_usage = collect_bridge_channel_usage(graph);
+<a href=#7623 id=7623 data-nosnippet>7623</a>        <span class="kw">let </span><span class="kw-2">mut </span>bridge_specs = build_bridge_specs(<span class="kw-2">&amp;</span>config, graph, <span class="kw-2">&amp;</span>channel_usage);
+<a href=#7624 id=7624 data-nosnippet>7624</a>        <span class="kw">let </span>(runtime_plan, exec_entities, plan_to_original) =
+<a href=#7625 id=7625 data-nosnippet>7625</a>            build_execution_plan(graph, <span class="kw-2">&amp;</span>task_specs, <span class="kw-2">&amp;mut </span>bridge_specs)
+<a href=#7626 id=7626 data-nosnippet>7626</a>                .expect(<span class="string">"runtime plan failed"</span>);
+<a href=#7627 id=7627 data-nosnippet>7627</a>        <span class="kw">let </span>output_packs = extract_output_packs(<span class="kw-2">&amp;</span>runtime_plan);
+<a href=#7628 id=7628 data-nosnippet>7628</a>        <span class="kw">let </span>task_names = collect_task_names(graph);
+<a href=#7629 id=7629 data-nosnippet>7629</a>        <span class="kw">let </span>(<span class="kw">_</span>, node_output_positions) = collect_culist_metadata(
+<a href=#7630 id=7630 data-nosnippet>7630</a>            <span class="kw-2">&amp;</span>runtime_plan,
+<a href=#7631 id=7631 data-nosnippet>7631</a>            <span class="kw-2">&amp;</span>exec_entities,
+<a href=#7632 id=7632 data-nosnippet>7632</a>            <span class="kw-2">&amp;mut </span>bridge_specs,
+<a href=#7633 id=7633 data-nosnippet>7633</a>            <span class="kw-2">&amp;</span>plan_to_original,
+<a href=#7634 id=7634 data-nosnippet>7634</a>        );
+<a href=#7635 id=7635 data-nosnippet>7635</a>
+<a href=#7636 id=7636 data-nosnippet>7636</a>        <span class="comment">// Rebuild per-slot origin ids like `gen_culist_support` does.
+<a href=#7637 id=7637 data-nosnippet>7637</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>slot_origin_ids: Vec&lt;<span class="prelude-ty">Option</span>&lt;String&gt;&gt; = <span class="macro">vec!</span>[<span class="prelude-val">None</span>; output_packs.len()];
+<a href=#7638 id=7638 data-nosnippet>7638</a>        <span class="kw">for </span>(node_id, task_id, <span class="kw">_</span>) <span class="kw">in </span>task_names {
+<a href=#7639 id=7639 data-nosnippet>7639</a>            <span class="kw">let </span>output_position = node_output_positions
+<a href=#7640 id=7640 data-nosnippet>7640</a>                .get(<span class="kw-2">&amp;</span>node_id)
+<a href=#7641 id=7641 data-nosnippet>7641</a>                .unwrap_or_else(|| <span class="macro">panic!</span>(<span class="string">"Task {task_id} (node id: {node_id}) not found"</span>));
+<a href=#7642 id=7642 data-nosnippet>7642</a>            slot_origin_ids[<span class="kw-2">*</span>output_position] = <span class="prelude-val">Some</span>(task_id);
+<a href=#7643 id=7643 data-nosnippet>7643</a>        }
+<a href=#7644 id=7644 data-nosnippet>7644</a>
+<a href=#7645 id=7645 data-nosnippet>7645</a>        <span class="kw">let </span>flattened_ids = flatten_slot_origin_ids(<span class="kw-2">&amp;</span>output_packs, slot_origin_ids);
+<a href=#7646 id=7646 data-nosnippet>7646</a>
+<a href=#7647 id=7647 data-nosnippet>7647</a>        <span class="comment">// src emits two messages (i32 + bool), both map to src.
+<a href=#7648 id=7648 data-nosnippet>7648</a>        // sink contributes its own output slot (CuMsg&lt;()&gt;), mapped to sink.
+<a href=#7649 id=7649 data-nosnippet>7649</a>        </span><span class="macro">assert_eq!</span>(
+<a href=#7650 id=7650 data-nosnippet>7650</a>            flattened_ids,
+<a href=#7651 id=7651 data-nosnippet>7651</a>            <span class="macro">vec!</span>[<span class="string">"src"</span>.to_string(), <span class="string">"src"</span>.to_string(), <span class="string">"sink"</span>.to_string()]
+<a href=#7652 id=7652 data-nosnippet>7652</a>        );
+<a href=#7653 id=7653 data-nosnippet>7653</a>    }
+<a href=#7654 id=7654 data-nosnippet>7654</a>
+<a href=#7655 id=7655 data-nosnippet>7655</a>    <span class="attr">#[test]
+<a href=#7656 id=7656 data-nosnippet>7656</a>    </span><span class="kw">fn </span>bridge_resources_are_collected() {
+<a href=#7657 id=7657 data-nosnippet>7657</a>        <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#7658 id=7658 data-nosnippet>7658</a>        <span class="kw">use </span>cu29::config::{CuGraph, Flavor, Node};
+<a href=#7659 id=7659 data-nosnippet>7659</a>        <span class="kw">use </span>std::collections::HashMap;
+<a href=#7660 id=7660 data-nosnippet>7660</a>        <span class="kw">use </span>syn::parse_str;
+<a href=#7661 id=7661 data-nosnippet>7661</a>
+<a href=#7662 id=7662 data-nosnippet>7662</a>        <span class="kw">let </span><span class="kw-2">mut </span>graph = CuGraph::default();
+<a href=#7663 id=7663 data-nosnippet>7663</a>        <span class="kw">let </span><span class="kw-2">mut </span>node = Node::new_with_flavor(<span class="string">"radio"</span>, <span class="string">"bridge::Dummy"</span>, Flavor::Bridge);
+<a href=#7664 id=7664 data-nosnippet>7664</a>        <span class="kw">let </span><span class="kw-2">mut </span>res = HashMap::new();
+<a href=#7665 id=7665 data-nosnippet>7665</a>        res.insert(<span class="string">"serial"</span>.to_string(), <span class="string">"fc.serial0"</span>.to_string());
+<a href=#7666 id=7666 data-nosnippet>7666</a>        node.set_resources(<span class="prelude-val">Some</span>(res));
+<a href=#7667 id=7667 data-nosnippet>7667</a>        graph.add_node(node).expect(<span class="string">"bridge node"</span>);
+<a href=#7668 id=7668 data-nosnippet>7668</a>
+<a href=#7669 id=7669 data-nosnippet>7669</a>        <span class="kw">let </span>task_specs = CuTaskSpecSet::from_graph(<span class="kw-2">&amp;</span>graph);
+<a href=#7670 id=7670 data-nosnippet>7670</a>        <span class="kw">let </span>bridge_spec = BridgeSpec {
+<a href=#7671 id=7671 data-nosnippet>7671</a>            id: <span class="string">"radio"</span>.to_string(),
+<a href=#7672 id=7672 data-nosnippet>7672</a>            type_path: parse_str(<span class="string">"bridge::Dummy"</span>).unwrap(),
+<a href=#7673 id=7673 data-nosnippet>7673</a>            run_in_sim: <span class="bool-val">true</span>,
+<a href=#7674 id=7674 data-nosnippet>7674</a>            config_index: <span class="number">0</span>,
+<a href=#7675 id=7675 data-nosnippet>7675</a>            tuple_index: <span class="number">0</span>,
+<a href=#7676 id=7676 data-nosnippet>7676</a>            monitor_index: <span class="prelude-val">None</span>,
+<a href=#7677 id=7677 data-nosnippet>7677</a>            rx_channels: Vec::new(),
+<a href=#7678 id=7678 data-nosnippet>7678</a>            tx_channels: Vec::new(),
+<a href=#7679 id=7679 data-nosnippet>7679</a>        };
+<a href=#7680 id=7680 data-nosnippet>7680</a>
+<a href=#7681 id=7681 data-nosnippet>7681</a>        <span class="kw">let </span><span class="kw-2">mut </span>config = cu29::config::CuConfig::default();
+<a href=#7682 id=7682 data-nosnippet>7682</a>        config.resources.push(ResourceBundleConfig {
+<a href=#7683 id=7683 data-nosnippet>7683</a>            id: <span class="string">"fc"</span>.to_string(),
+<a href=#7684 id=7684 data-nosnippet>7684</a>            provider: <span class="string">"board::Bundle"</span>.to_string(),
+<a href=#7685 id=7685 data-nosnippet>7685</a>            config: <span class="prelude-val">None</span>,
+<a href=#7686 id=7686 data-nosnippet>7686</a>            missions: <span class="prelude-val">None</span>,
+<a href=#7687 id=7687 data-nosnippet>7687</a>        });
+<a href=#7688 id=7688 data-nosnippet>7688</a>        <span class="kw">let </span>bundle_specs = build_bundle_specs(<span class="kw-2">&amp;</span>config, <span class="string">"default"</span>).expect(<span class="string">"bundle specs"</span>);
+<a href=#7689 id=7689 data-nosnippet>7689</a>        <span class="kw">let </span>specs = collect_resource_specs(<span class="kw-2">&amp;</span>graph, <span class="kw-2">&amp;</span>task_specs, <span class="kw-2">&amp;</span>[bridge_spec], <span class="kw-2">&amp;</span>bundle_specs)
+<a href=#7690 id=7690 data-nosnippet>7690</a>            .expect(<span class="string">"collect specs"</span>);
+<a href=#7691 id=7691 data-nosnippet>7691</a>        <span class="macro">assert_eq!</span>(specs.len(), <span class="number">1</span>);
+<a href=#7692 id=7692 data-nosnippet>7692</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(specs[<span class="number">0</span>].owner, ResourceOwner::Bridge(<span class="number">0</span>)));
+<a href=#7693 id=7693 data-nosnippet>7693</a>        <span class="macro">assert_eq!</span>(specs[<span class="number">0</span>].binding_name, <span class="string">"serial"</span>);
+<a href=#7694 id=7694 data-nosnippet>7694</a>        <span class="macro">assert_eq!</span>(specs[<span class="number">0</span>].bundle_index, <span class="number">0</span>);
+<a href=#7695 id=7695 data-nosnippet>7695</a>        <span class="macro">assert_eq!</span>(specs[<span class="number">0</span>].resource_name, <span class="string">"serial0"</span>);
+<a href=#7696 id=7696 data-nosnippet>7696</a>    }
 <a href=#7697 id=7697 data-nosnippet>7697</a>
-<a href=#7698 id=7698 data-nosnippet>7698</a>        <span class="kw">let </span>args = CopperRuntimeArgs::parse_tokens(<span class="macro">quote!</span>(
-<a href=#7699 id=7699 data-nosnippet>7699</a>            config = <span class="string">"multi_copper.ron"</span>,
-<a href=#7700 id=7700 data-nosnippet>7700</a>            subsystem = <span class="string">"ping"</span>,
-<a href=#7701 id=7701 data-nosnippet>7701</a>            sim_mode,
-<a href=#7702 id=7702 data-nosnippet>7702</a>            ignore_resources
-<a href=#7703 id=7703 data-nosnippet>7703</a>        ))
-<a href=#7704 id=7704 data-nosnippet>7704</a>        .expect(<span class="string">"parse runtime args"</span>);
-<a href=#7705 id=7705 data-nosnippet>7705</a>
-<a href=#7706 id=7706 data-nosnippet>7706</a>        <span class="macro">assert_eq!</span>(args.config_path, <span class="string">"multi_copper.ron"</span>);
-<a href=#7707 id=7707 data-nosnippet>7707</a>        <span class="macro">assert_eq!</span>(args.subsystem_id.as_deref(), <span class="prelude-val">Some</span>(<span class="string">"ping"</span>));
-<a href=#7708 id=7708 data-nosnippet>7708</a>        <span class="macro">assert!</span>(args.sim_mode);
-<a href=#7709 id=7709 data-nosnippet>7709</a>        <span class="macro">assert!</span>(args.ignore_resources);
-<a href=#7710 id=7710 data-nosnippet>7710</a>    }
-<a href=#7711 id=7711 data-nosnippet>7711</a>
-<a href=#7712 id=7712 data-nosnippet>7712</a>    <span class="attr">#[test]
-<a href=#7713 id=7713 data-nosnippet>7713</a>    </span><span class="kw">fn </span>resolve_runtime_config_from_multi_config_selects_local_subsystem() {
-<a href=#7714 id=7714 data-nosnippet>7714</a>        <span class="kw">use </span>super::<span class="kw-2">*</span>;
-<a href=#7715 id=7715 data-nosnippet>7715</a>
-<a href=#7716 id=7716 data-nosnippet>7716</a>        <span class="kw">let </span>root = unique_test_dir(<span class="string">"multi_runtime_resolve"</span>);
-<a href=#7717 id=7717 data-nosnippet>7717</a>        <span class="kw">let </span>alpha_config = root.join(<span class="string">"alpha.ron"</span>);
-<a href=#7718 id=7718 data-nosnippet>7718</a>        <span class="kw">let </span>beta_config = root.join(<span class="string">"beta.ron"</span>);
-<a href=#7719 id=7719 data-nosnippet>7719</a>        <span class="kw">let </span>network_config = root.join(<span class="string">"multi.ron"</span>);
+<a href=#7698 id=7698 data-nosnippet>7698</a>    <span class="attr">#[test]
+<a href=#7699 id=7699 data-nosnippet>7699</a>    </span><span class="kw">fn </span>copper_runtime_args_parse_subsystem_mode() {
+<a href=#7700 id=7700 data-nosnippet>7700</a>        <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#7701 id=7701 data-nosnippet>7701</a>        <span class="kw">use </span>quote::quote;
+<a href=#7702 id=7702 data-nosnippet>7702</a>
+<a href=#7703 id=7703 data-nosnippet>7703</a>        <span class="kw">let </span>args = CopperRuntimeArgs::parse_tokens(<span class="macro">quote!</span>(
+<a href=#7704 id=7704 data-nosnippet>7704</a>            config = <span class="string">"multi_copper.ron"</span>,
+<a href=#7705 id=7705 data-nosnippet>7705</a>            subsystem = <span class="string">"ping"</span>,
+<a href=#7706 id=7706 data-nosnippet>7706</a>            sim_mode,
+<a href=#7707 id=7707 data-nosnippet>7707</a>            ignore_resources
+<a href=#7708 id=7708 data-nosnippet>7708</a>        ))
+<a href=#7709 id=7709 data-nosnippet>7709</a>        .expect(<span class="string">"parse runtime args"</span>);
+<a href=#7710 id=7710 data-nosnippet>7710</a>
+<a href=#7711 id=7711 data-nosnippet>7711</a>        <span class="macro">assert_eq!</span>(args.config_path, <span class="string">"multi_copper.ron"</span>);
+<a href=#7712 id=7712 data-nosnippet>7712</a>        <span class="macro">assert_eq!</span>(args.subsystem_id.as_deref(), <span class="prelude-val">Some</span>(<span class="string">"ping"</span>));
+<a href=#7713 id=7713 data-nosnippet>7713</a>        <span class="macro">assert!</span>(args.sim_mode);
+<a href=#7714 id=7714 data-nosnippet>7714</a>        <span class="macro">assert!</span>(args.ignore_resources);
+<a href=#7715 id=7715 data-nosnippet>7715</a>    }
+<a href=#7716 id=7716 data-nosnippet>7716</a>
+<a href=#7717 id=7717 data-nosnippet>7717</a>    <span class="attr">#[test]
+<a href=#7718 id=7718 data-nosnippet>7718</a>    </span><span class="kw">fn </span>resolve_runtime_config_from_multi_config_selects_local_subsystem() {
+<a href=#7719 id=7719 data-nosnippet>7719</a>        <span class="kw">use </span>super::<span class="kw-2">*</span>;
 <a href=#7720 id=7720 data-nosnippet>7720</a>
-<a href=#7721 id=7721 data-nosnippet>7721</a>        write_file(
-<a href=#7722 id=7722 data-nosnippet>7722</a>            <span class="kw-2">&amp;</span>alpha_config,
-<a href=#7723 id=7723 data-nosnippet>7723</a>            <span class="string">r#"
-<a href=#7724 id=7724 data-nosnippet>7724</a>(
-<a href=#7725 id=7725 data-nosnippet>7725</a>    tasks: [
-<a href=#7726 id=7726 data-nosnippet>7726</a>        (id: "src", type: "AlphaSource", run_in_sim: true),
-<a href=#7727 id=7727 data-nosnippet>7727</a>        (id: "sink", type: "AlphaSink", run_in_sim: true),
-<a href=#7728 id=7728 data-nosnippet>7728</a>    ],
-<a href=#7729 id=7729 data-nosnippet>7729</a>    cnx: [
-<a href=#7730 id=7730 data-nosnippet>7730</a>        (src: "src", dst: "sink", msg: "u32"),
-<a href=#7731 id=7731 data-nosnippet>7731</a>    ],
-<a href=#7732 id=7732 data-nosnippet>7732</a>)
-<a href=#7733 id=7733 data-nosnippet>7733</a>"#</span>,
-<a href=#7734 id=7734 data-nosnippet>7734</a>        );
-<a href=#7735 id=7735 data-nosnippet>7735</a>        write_file(
-<a href=#7736 id=7736 data-nosnippet>7736</a>            <span class="kw-2">&amp;</span>beta_config,
-<a href=#7737 id=7737 data-nosnippet>7737</a>            <span class="string">r#"
-<a href=#7738 id=7738 data-nosnippet>7738</a>(
-<a href=#7739 id=7739 data-nosnippet>7739</a>    tasks: [
-<a href=#7740 id=7740 data-nosnippet>7740</a>        (id: "src", type: "BetaSource", run_in_sim: true),
-<a href=#7741 id=7741 data-nosnippet>7741</a>        (id: "sink", type: "BetaSink", run_in_sim: true),
-<a href=#7742 id=7742 data-nosnippet>7742</a>    ],
-<a href=#7743 id=7743 data-nosnippet>7743</a>    cnx: [
-<a href=#7744 id=7744 data-nosnippet>7744</a>        (src: "src", dst: "sink", msg: "u64"),
-<a href=#7745 id=7745 data-nosnippet>7745</a>    ],
-<a href=#7746 id=7746 data-nosnippet>7746</a>)
-<a href=#7747 id=7747 data-nosnippet>7747</a>"#</span>,
-<a href=#7748 id=7748 data-nosnippet>7748</a>        );
-<a href=#7749 id=7749 data-nosnippet>7749</a>        write_file(
-<a href=#7750 id=7750 data-nosnippet>7750</a>            <span class="kw-2">&amp;</span>network_config,
-<a href=#7751 id=7751 data-nosnippet>7751</a>            <span class="string">r#"
-<a href=#7752 id=7752 data-nosnippet>7752</a>(
-<a href=#7753 id=7753 data-nosnippet>7753</a>    subsystems: [
-<a href=#7754 id=7754 data-nosnippet>7754</a>        (id: "beta", config: "beta.ron"),
-<a href=#7755 id=7755 data-nosnippet>7755</a>        (id: "alpha", config: "alpha.ron"),
-<a href=#7756 id=7756 data-nosnippet>7756</a>    ],
-<a href=#7757 id=7757 data-nosnippet>7757</a>    interconnects: [],
-<a href=#7758 id=7758 data-nosnippet>7758</a>)
-<a href=#7759 id=7759 data-nosnippet>7759</a>"#</span>,
-<a href=#7760 id=7760 data-nosnippet>7760</a>        );
-<a href=#7761 id=7761 data-nosnippet>7761</a>
-<a href=#7762 id=7762 data-nosnippet>7762</a>        <span class="kw">let </span>args = CopperRuntimeArgs {
-<a href=#7763 id=7763 data-nosnippet>7763</a>            config_path: <span class="string">"multi.ron"</span>.to_string(),
-<a href=#7764 id=7764 data-nosnippet>7764</a>            subsystem_id: <span class="prelude-val">Some</span>(<span class="string">"beta"</span>.to_string()),
-<a href=#7765 id=7765 data-nosnippet>7765</a>            sim_mode: <span class="bool-val">false</span>,
-<a href=#7766 id=7766 data-nosnippet>7766</a>            ignore_resources: <span class="bool-val">false</span>,
-<a href=#7767 id=7767 data-nosnippet>7767</a>        };
-<a href=#7768 id=7768 data-nosnippet>7768</a>
-<a href=#7769 id=7769 data-nosnippet>7769</a>        <span class="kw">let </span>resolved =
-<a href=#7770 id=7770 data-nosnippet>7770</a>            resolve_runtime_config_with_root(<span class="kw-2">&amp;</span>args, <span class="kw-2">&amp;</span>root).expect(<span class="string">"resolve multi runtime config"</span>);
-<a href=#7771 id=7771 data-nosnippet>7771</a>
-<a href=#7772 id=7772 data-nosnippet>7772</a>        <span class="macro">assert_eq!</span>(resolved.subsystem_id.as_deref(), <span class="prelude-val">Some</span>(<span class="string">"beta"</span>));
-<a href=#7773 id=7773 data-nosnippet>7773</a>        <span class="macro">assert_eq!</span>(resolved.subsystem_code, <span class="number">1</span>);
-<a href=#7774 id=7774 data-nosnippet>7774</a>        <span class="kw">let </span>graph = resolved
-<a href=#7775 id=7775 data-nosnippet>7775</a>            .local_config
-<a href=#7776 id=7776 data-nosnippet>7776</a>            .get_graph(<span class="prelude-val">None</span>)
-<a href=#7777 id=7777 data-nosnippet>7777</a>            .expect(<span class="string">"resolved local config graph"</span>);
-<a href=#7778 id=7778 data-nosnippet>7778</a>        <span class="macro">assert!</span>(graph.get_node_id_by_name(<span class="string">"src"</span>).is_some());
-<a href=#7779 id=7779 data-nosnippet>7779</a>        <span class="macro">assert!</span>(resolved.bundled_local_config_content.contains(<span class="string">"BetaSource"</span>));
-<a href=#7780 id=7780 data-nosnippet>7780</a>    }
-<a href=#7781 id=7781 data-nosnippet>7781</a>
-<a href=#7782 id=7782 data-nosnippet>7782</a>    <span class="attr">#[test]
-<a href=#7783 id=7783 data-nosnippet>7783</a>    </span><span class="kw">fn </span>resolve_runtime_config_rejects_missing_subsystem() {
-<a href=#7784 id=7784 data-nosnippet>7784</a>        <span class="kw">use </span>super::<span class="kw-2">*</span>;
-<a href=#7785 id=7785 data-nosnippet>7785</a>
-<a href=#7786 id=7786 data-nosnippet>7786</a>        <span class="kw">let </span>root = unique_test_dir(<span class="string">"multi_runtime_missing_subsystem"</span>);
-<a href=#7787 id=7787 data-nosnippet>7787</a>        <span class="kw">let </span>alpha_config = root.join(<span class="string">"alpha.ron"</span>);
-<a href=#7788 id=7788 data-nosnippet>7788</a>        <span class="kw">let </span>network_config = root.join(<span class="string">"multi.ron"</span>);
-<a href=#7789 id=7789 data-nosnippet>7789</a>
-<a href=#7790 id=7790 data-nosnippet>7790</a>        write_file(
-<a href=#7791 id=7791 data-nosnippet>7791</a>            <span class="kw-2">&amp;</span>alpha_config,
-<a href=#7792 id=7792 data-nosnippet>7792</a>            <span class="string">r#"
-<a href=#7793 id=7793 data-nosnippet>7793</a>(
-<a href=#7794 id=7794 data-nosnippet>7794</a>    tasks: [
-<a href=#7795 id=7795 data-nosnippet>7795</a>        (id: "src", type: "AlphaSource", run_in_sim: true),
-<a href=#7796 id=7796 data-nosnippet>7796</a>        (id: "sink", type: "AlphaSink", run_in_sim: true),
-<a href=#7797 id=7797 data-nosnippet>7797</a>    ],
-<a href=#7798 id=7798 data-nosnippet>7798</a>    cnx: [
-<a href=#7799 id=7799 data-nosnippet>7799</a>        (src: "src", dst: "sink", msg: "u32"),
-<a href=#7800 id=7800 data-nosnippet>7800</a>    ],
-<a href=#7801 id=7801 data-nosnippet>7801</a>)
-<a href=#7802 id=7802 data-nosnippet>7802</a>"#</span>,
-<a href=#7803 id=7803 data-nosnippet>7803</a>        );
-<a href=#7804 id=7804 data-nosnippet>7804</a>        write_file(
-<a href=#7805 id=7805 data-nosnippet>7805</a>            <span class="kw-2">&amp;</span>network_config,
-<a href=#7806 id=7806 data-nosnippet>7806</a>            <span class="string">r#"
-<a href=#7807 id=7807 data-nosnippet>7807</a>(
-<a href=#7808 id=7808 data-nosnippet>7808</a>    subsystems: [
-<a href=#7809 id=7809 data-nosnippet>7809</a>        (id: "alpha", config: "alpha.ron"),
-<a href=#7810 id=7810 data-nosnippet>7810</a>    ],
-<a href=#7811 id=7811 data-nosnippet>7811</a>    interconnects: [],
-<a href=#7812 id=7812 data-nosnippet>7812</a>)
-<a href=#7813 id=7813 data-nosnippet>7813</a>"#</span>,
-<a href=#7814 id=7814 data-nosnippet>7814</a>        );
-<a href=#7815 id=7815 data-nosnippet>7815</a>
-<a href=#7816 id=7816 data-nosnippet>7816</a>        <span class="kw">let </span>args = CopperRuntimeArgs {
-<a href=#7817 id=7817 data-nosnippet>7817</a>            config_path: <span class="string">"multi.ron"</span>.to_string(),
-<a href=#7818 id=7818 data-nosnippet>7818</a>            subsystem_id: <span class="prelude-val">Some</span>(<span class="string">"missing"</span>.to_string()),
-<a href=#7819 id=7819 data-nosnippet>7819</a>            sim_mode: <span class="bool-val">false</span>,
-<a href=#7820 id=7820 data-nosnippet>7820</a>            ignore_resources: <span class="bool-val">false</span>,
-<a href=#7821 id=7821 data-nosnippet>7821</a>        };
-<a href=#7822 id=7822 data-nosnippet>7822</a>
-<a href=#7823 id=7823 data-nosnippet>7823</a>        <span class="kw">let </span>err = resolve_runtime_config_with_root(<span class="kw-2">&amp;</span>args, <span class="kw-2">&amp;</span>root).expect_err(<span class="string">"missing subsystem"</span>);
-<a href=#7824 id=7824 data-nosnippet>7824</a>        <span class="macro">assert!</span>(err.to_string().contains(<span class="string">"Subsystem 'missing'"</span>));
-<a href=#7825 id=7825 data-nosnippet>7825</a>    }
-<a href=#7826 id=7826 data-nosnippet>7826</a>}
+<a href=#7721 id=7721 data-nosnippet>7721</a>        <span class="kw">let </span>root = unique_test_dir(<span class="string">"multi_runtime_resolve"</span>);
+<a href=#7722 id=7722 data-nosnippet>7722</a>        <span class="kw">let </span>alpha_config = root.join(<span class="string">"alpha.ron"</span>);
+<a href=#7723 id=7723 data-nosnippet>7723</a>        <span class="kw">let </span>beta_config = root.join(<span class="string">"beta.ron"</span>);
+<a href=#7724 id=7724 data-nosnippet>7724</a>        <span class="kw">let </span>network_config = root.join(<span class="string">"multi.ron"</span>);
+<a href=#7725 id=7725 data-nosnippet>7725</a>
+<a href=#7726 id=7726 data-nosnippet>7726</a>        write_file(
+<a href=#7727 id=7727 data-nosnippet>7727</a>            <span class="kw-2">&amp;</span>alpha_config,
+<a href=#7728 id=7728 data-nosnippet>7728</a>            <span class="string">r#"
+<a href=#7729 id=7729 data-nosnippet>7729</a>(
+<a href=#7730 id=7730 data-nosnippet>7730</a>    tasks: [
+<a href=#7731 id=7731 data-nosnippet>7731</a>        (id: "src", type: "AlphaSource", run_in_sim: true),
+<a href=#7732 id=7732 data-nosnippet>7732</a>        (id: "sink", type: "AlphaSink", run_in_sim: true),
+<a href=#7733 id=7733 data-nosnippet>7733</a>    ],
+<a href=#7734 id=7734 data-nosnippet>7734</a>    cnx: [
+<a href=#7735 id=7735 data-nosnippet>7735</a>        (src: "src", dst: "sink", msg: "u32"),
+<a href=#7736 id=7736 data-nosnippet>7736</a>    ],
+<a href=#7737 id=7737 data-nosnippet>7737</a>)
+<a href=#7738 id=7738 data-nosnippet>7738</a>"#</span>,
+<a href=#7739 id=7739 data-nosnippet>7739</a>        );
+<a href=#7740 id=7740 data-nosnippet>7740</a>        write_file(
+<a href=#7741 id=7741 data-nosnippet>7741</a>            <span class="kw-2">&amp;</span>beta_config,
+<a href=#7742 id=7742 data-nosnippet>7742</a>            <span class="string">r#"
+<a href=#7743 id=7743 data-nosnippet>7743</a>(
+<a href=#7744 id=7744 data-nosnippet>7744</a>    tasks: [
+<a href=#7745 id=7745 data-nosnippet>7745</a>        (id: "src", type: "BetaSource", run_in_sim: true),
+<a href=#7746 id=7746 data-nosnippet>7746</a>        (id: "sink", type: "BetaSink", run_in_sim: true),
+<a href=#7747 id=7747 data-nosnippet>7747</a>    ],
+<a href=#7748 id=7748 data-nosnippet>7748</a>    cnx: [
+<a href=#7749 id=7749 data-nosnippet>7749</a>        (src: "src", dst: "sink", msg: "u64"),
+<a href=#7750 id=7750 data-nosnippet>7750</a>    ],
+<a href=#7751 id=7751 data-nosnippet>7751</a>)
+<a href=#7752 id=7752 data-nosnippet>7752</a>"#</span>,
+<a href=#7753 id=7753 data-nosnippet>7753</a>        );
+<a href=#7754 id=7754 data-nosnippet>7754</a>        write_file(
+<a href=#7755 id=7755 data-nosnippet>7755</a>            <span class="kw-2">&amp;</span>network_config,
+<a href=#7756 id=7756 data-nosnippet>7756</a>            <span class="string">r#"
+<a href=#7757 id=7757 data-nosnippet>7757</a>(
+<a href=#7758 id=7758 data-nosnippet>7758</a>    subsystems: [
+<a href=#7759 id=7759 data-nosnippet>7759</a>        (id: "beta", config: "beta.ron"),
+<a href=#7760 id=7760 data-nosnippet>7760</a>        (id: "alpha", config: "alpha.ron"),
+<a href=#7761 id=7761 data-nosnippet>7761</a>    ],
+<a href=#7762 id=7762 data-nosnippet>7762</a>    interconnects: [],
+<a href=#7763 id=7763 data-nosnippet>7763</a>)
+<a href=#7764 id=7764 data-nosnippet>7764</a>"#</span>,
+<a href=#7765 id=7765 data-nosnippet>7765</a>        );
+<a href=#7766 id=7766 data-nosnippet>7766</a>
+<a href=#7767 id=7767 data-nosnippet>7767</a>        <span class="kw">let </span>args = CopperRuntimeArgs {
+<a href=#7768 id=7768 data-nosnippet>7768</a>            config_path: <span class="string">"multi.ron"</span>.to_string(),
+<a href=#7769 id=7769 data-nosnippet>7769</a>            subsystem_id: <span class="prelude-val">Some</span>(<span class="string">"beta"</span>.to_string()),
+<a href=#7770 id=7770 data-nosnippet>7770</a>            sim_mode: <span class="bool-val">false</span>,
+<a href=#7771 id=7771 data-nosnippet>7771</a>            ignore_resources: <span class="bool-val">false</span>,
+<a href=#7772 id=7772 data-nosnippet>7772</a>        };
+<a href=#7773 id=7773 data-nosnippet>7773</a>
+<a href=#7774 id=7774 data-nosnippet>7774</a>        <span class="kw">let </span>resolved =
+<a href=#7775 id=7775 data-nosnippet>7775</a>            resolve_runtime_config_with_root(<span class="kw-2">&amp;</span>args, <span class="kw-2">&amp;</span>root).expect(<span class="string">"resolve multi runtime config"</span>);
+<a href=#7776 id=7776 data-nosnippet>7776</a>
+<a href=#7777 id=7777 data-nosnippet>7777</a>        <span class="macro">assert_eq!</span>(resolved.subsystem_id.as_deref(), <span class="prelude-val">Some</span>(<span class="string">"beta"</span>));
+<a href=#7778 id=7778 data-nosnippet>7778</a>        <span class="macro">assert_eq!</span>(resolved.subsystem_code, <span class="number">1</span>);
+<a href=#7779 id=7779 data-nosnippet>7779</a>        <span class="kw">let </span>graph = resolved
+<a href=#7780 id=7780 data-nosnippet>7780</a>            .local_config
+<a href=#7781 id=7781 data-nosnippet>7781</a>            .get_graph(<span class="prelude-val">None</span>)
+<a href=#7782 id=7782 data-nosnippet>7782</a>            .expect(<span class="string">"resolved local config graph"</span>);
+<a href=#7783 id=7783 data-nosnippet>7783</a>        <span class="macro">assert!</span>(graph.get_node_id_by_name(<span class="string">"src"</span>).is_some());
+<a href=#7784 id=7784 data-nosnippet>7784</a>        <span class="macro">assert!</span>(resolved.bundled_local_config_content.contains(<span class="string">"BetaSource"</span>));
+<a href=#7785 id=7785 data-nosnippet>7785</a>    }
+<a href=#7786 id=7786 data-nosnippet>7786</a>
+<a href=#7787 id=7787 data-nosnippet>7787</a>    <span class="attr">#[test]
+<a href=#7788 id=7788 data-nosnippet>7788</a>    </span><span class="kw">fn </span>resolve_runtime_config_rejects_missing_subsystem() {
+<a href=#7789 id=7789 data-nosnippet>7789</a>        <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#7790 id=7790 data-nosnippet>7790</a>
+<a href=#7791 id=7791 data-nosnippet>7791</a>        <span class="kw">let </span>root = unique_test_dir(<span class="string">"multi_runtime_missing_subsystem"</span>);
+<a href=#7792 id=7792 data-nosnippet>7792</a>        <span class="kw">let </span>alpha_config = root.join(<span class="string">"alpha.ron"</span>);
+<a href=#7793 id=7793 data-nosnippet>7793</a>        <span class="kw">let </span>network_config = root.join(<span class="string">"multi.ron"</span>);
+<a href=#7794 id=7794 data-nosnippet>7794</a>
+<a href=#7795 id=7795 data-nosnippet>7795</a>        write_file(
+<a href=#7796 id=7796 data-nosnippet>7796</a>            <span class="kw-2">&amp;</span>alpha_config,
+<a href=#7797 id=7797 data-nosnippet>7797</a>            <span class="string">r#"
+<a href=#7798 id=7798 data-nosnippet>7798</a>(
+<a href=#7799 id=7799 data-nosnippet>7799</a>    tasks: [
+<a href=#7800 id=7800 data-nosnippet>7800</a>        (id: "src", type: "AlphaSource", run_in_sim: true),
+<a href=#7801 id=7801 data-nosnippet>7801</a>        (id: "sink", type: "AlphaSink", run_in_sim: true),
+<a href=#7802 id=7802 data-nosnippet>7802</a>    ],
+<a href=#7803 id=7803 data-nosnippet>7803</a>    cnx: [
+<a href=#7804 id=7804 data-nosnippet>7804</a>        (src: "src", dst: "sink", msg: "u32"),
+<a href=#7805 id=7805 data-nosnippet>7805</a>    ],
+<a href=#7806 id=7806 data-nosnippet>7806</a>)
+<a href=#7807 id=7807 data-nosnippet>7807</a>"#</span>,
+<a href=#7808 id=7808 data-nosnippet>7808</a>        );
+<a href=#7809 id=7809 data-nosnippet>7809</a>        write_file(
+<a href=#7810 id=7810 data-nosnippet>7810</a>            <span class="kw-2">&amp;</span>network_config,
+<a href=#7811 id=7811 data-nosnippet>7811</a>            <span class="string">r#"
+<a href=#7812 id=7812 data-nosnippet>7812</a>(
+<a href=#7813 id=7813 data-nosnippet>7813</a>    subsystems: [
+<a href=#7814 id=7814 data-nosnippet>7814</a>        (id: "alpha", config: "alpha.ron"),
+<a href=#7815 id=7815 data-nosnippet>7815</a>    ],
+<a href=#7816 id=7816 data-nosnippet>7816</a>    interconnects: [],
+<a href=#7817 id=7817 data-nosnippet>7817</a>)
+<a href=#7818 id=7818 data-nosnippet>7818</a>"#</span>,
+<a href=#7819 id=7819 data-nosnippet>7819</a>        );
+<a href=#7820 id=7820 data-nosnippet>7820</a>
+<a href=#7821 id=7821 data-nosnippet>7821</a>        <span class="kw">let </span>args = CopperRuntimeArgs {
+<a href=#7822 id=7822 data-nosnippet>7822</a>            config_path: <span class="string">"multi.ron"</span>.to_string(),
+<a href=#7823 id=7823 data-nosnippet>7823</a>            subsystem_id: <span class="prelude-val">Some</span>(<span class="string">"missing"</span>.to_string()),
+<a href=#7824 id=7824 data-nosnippet>7824</a>            sim_mode: <span class="bool-val">false</span>,
+<a href=#7825 id=7825 data-nosnippet>7825</a>            ignore_resources: <span class="bool-val">false</span>,
+<a href=#7826 id=7826 data-nosnippet>7826</a>        };
+<a href=#7827 id=7827 data-nosnippet>7827</a>
+<a href=#7828 id=7828 data-nosnippet>7828</a>        <span class="kw">let </span>err = resolve_runtime_config_with_root(<span class="kw-2">&amp;</span>args, <span class="kw-2">&amp;</span>root).expect_err(<span class="string">"missing subsystem"</span>);
+<a href=#7829 id=7829 data-nosnippet>7829</a>        <span class="macro">assert!</span>(err.to_string().contains(<span class="string">"Subsystem 'missing'"</span>));
+<a href=#7830 id=7830 data-nosnippet>7830</a>    }
+<a href=#7831 id=7831 data-nosnippet>7831</a>}
 </code></pre></div></section></main></body></html>
