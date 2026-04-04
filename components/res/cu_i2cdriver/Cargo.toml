@@ -1,0 +1,28 @@
+[package]
+name = "cu-i2cdriver"
+description = "I2C Driver (a USB to I2C bridge) support."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+cu29 = { path = "../../../core/cu29", version = "0.15", default-features = false, features = ["std"] }
+embedded-hal = { version = "1.0.0", default-features = false }
+embedded-io = { version = "0.7.1", default-features = false, features = ["std"] }
+
+linux-embedded-hal = { workspace = true }
+
+serialport = { workspace = true }
+i2cdriver = { version = "0.2" }
+
+[features]
+default = []
+defmt = ["embedded-io/defmt", "embedded-hal/defmt-03", "cu29/defmt"]
+alloc = ["embedded-io/alloc"]
+
+# [patch.crates-io]
