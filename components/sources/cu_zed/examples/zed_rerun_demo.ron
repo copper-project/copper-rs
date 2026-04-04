@@ -1,6 +1,6 @@
 (
     logging: (
-        enable_task_logging: true,
+        enable_task_logging: false,
         slab_size_mib: 256,
         section_size_mib: 64,
     ),
