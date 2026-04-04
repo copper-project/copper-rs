@@ -1,0 +1,38 @@
+[package]
+name = "cu-spidriver"
+description = "SPI Driver (a USB to SPI bridge) support."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+cu29 = { path = "../../../core/cu29", version = "0.15", default-features = false, features = [
+  "std",
+] }
+embedded-hal = { version = "1.0.0", default-features = false }
+embedded-hal-nb = "1.0.0"
+embedded-io = { version = "0.7.1", default-features = false, features = [
+  "std",
+] }
+
+serialport = { workspace = true }
+linux-embedded-hal = { workspace = true }
+
+# spidriver = "0.1"
+# spidriver-hal = "0.1"
+spidriver = {version = "0.1", git = "https://github.com/LechevSpace/spidriver", branch = "feat/bump-dependencies" }
+spidriver-hal = {version = "0.1", git = "https://github.com/LechevSpace/spidriver", branch = "feat/bump-dependencies" }
+# spidriver = {version = "0.1", path ="../spidriver/spidriver" }
+# spidriver-hal = {version = "0.1", path ="../spidriver/spidriver-hal" }
+
+thiserror = "2"
+
+[features]
+default = []
+defmt = ["embedded-io/defmt", "embedded-hal/defmt-03", "cu29/defmt"]
+alloc = ["embedded-io/alloc"]
