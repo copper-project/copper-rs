@@ -23,12 +23,9 @@ embedded-io = { version = "0.7.1", default-features = false, features = [
 serialport = { workspace = true }
 linux-embedded-hal = { workspace = true }
 
-# spidriver = "0.1"
-# spidriver-hal = "0.1"
-spidriver = {version = "0.1", git = "https://github.com/LechevSpace/spidriver", branch = "feat/bump-dependencies" }
-spidriver-hal = {version = "0.1", git = "https://github.com/LechevSpace/spidriver", branch = "feat/bump-dependencies" }
-# spidriver = {version = "0.1", path ="../spidriver/spidriver" }
-# spidriver-hal = {version = "0.1", path ="../spidriver/spidriver-hal" }
+#for embedded-hal 1.0 support:
+spidriver = { version = "0.1", git = "https://github.com/LechevSpace/spidriver", branch = "feat/bump-dependencies" }
+spidriver-hal = { version = "0.1", git = "https://github.com/LechevSpace/spidriver", branch = "feat/bump-dependencies" }
 
 thiserror = "2"
 
