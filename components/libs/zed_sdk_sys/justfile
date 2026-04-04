@@ -1,0 +1,86 @@
+default: build
+
+doctor:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	repo_root="$(cd "{{justfile_directory()}}/../../.." && pwd)"
+	submodule_path="$repo_root/components/libs/zed_sdk_sys/vendor/zed-c-api"
+
+	echo "repo root: $repo_root"
+
+	if [[ -f "$submodule_path/CMakeLists.txt" ]]; then
+		echo "zed-c-api submodule: ready"
+	else
+		echo "zed-c-api submodule: missing contents"
+	fi
+
+	if [[ -f /usr/local/zed/lib/libsl_zed_c.so || -f /usr/local/zed/lib/libsl_zed_c.so.1 ]]; then
+		echo "native wrapper: found under /usr/local/zed/lib"
+	elif [[ -f /opt/zed-sdk/lib/libsl_zed_c.so || -f /opt/zed-sdk/lib/libsl_zed_c.so.1 ]]; then
+		echo "native wrapper: found under /opt/zed-sdk/lib"
+	else
+		echo "native wrapper: not preinstalled"
+	fi
+
+	if [[ -d /usr/local/zed/include && -d /usr/local/zed/lib ]]; then
+		echo "zed sdk root: /usr/local/zed"
+	elif [[ -d /opt/zed-sdk/include && -d /opt/zed-sdk/lib ]]; then
+		echo "zed sdk root: /opt/zed-sdk"
+	else
+		echo "zed sdk root: missing"
+		echo "install the Stereolabs ZED SDK under /usr/local/zed or /opt/zed-sdk"
+	fi
+
+vendor-init:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	repo_root="$(cd "{{justfile_directory()}}/../../.." && pwd)"
+	submodule_rel="components/libs/zed_sdk_sys/vendor/zed-c-api"
+	submodule_path="$repo_root/$submodule_rel"
+
+	if [[ -f "$submodule_path/CMakeLists.txt" ]]; then
+		echo "zed-c-api submodule already initialized"
+		exit 0
+	fi
+
+	echo "initializing $submodule_rel"
+	git -C "$repo_root" submodule update --init --recursive -- "$submodule_rel"
+	echo "initialized $submodule_rel"
+
+build: vendor-init
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	repo_root="$(cd "{{justfile_directory()}}/../../.." && pwd)"
+
+	if [[ ! -d /usr/local/zed/include || ! -d /usr/local/zed/lib ]]; then
+		if [[ ! -d /opt/zed-sdk/include || ! -d /opt/zed-sdk/lib ]]; then
+			echo "Missing ZED SDK install under /usr/local/zed or /opt/zed-sdk" >&2
+			exit 1
+		fi
+	fi
+
+	cd "$repo_root"
+	cargo build -p cu-zed --example zed_rerun_demo
+
+demo: vendor-init
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	repo_root="$(cd "{{justfile_directory()}}/../../.." && pwd)"
+
+	if [[ ! -d /usr/local/zed/include || ! -d /usr/local/zed/lib ]]; then
+		if [[ ! -d /opt/zed-sdk/include || ! -d /opt/zed-sdk/lib ]]; then
+			echo "Missing ZED SDK install under /usr/local/zed or /opt/zed-sdk" >&2
+			exit 1
+		fi
+	fi
+
+	cd "$repo_root"
+	cargo run -r -p cu-zed --example zed_rerun_demo
+
+build-demo: build
+
+run-demo: demo

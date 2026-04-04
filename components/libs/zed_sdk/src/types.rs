@@ -124,6 +124,26 @@ impl Display for ResolutionPreset {
     }
 }
 
+impl FromStr for ResolutionPreset {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        match value {
+            "HD4K" => Ok(Self::Hd4k),
+            "QHDPLUS" => Ok(Self::QhdPlus),
+            "HD2K" => Ok(Self::Hd2k),
+            "HD1536" => Ok(Self::Hd1536),
+            "HD1080" => Ok(Self::Hd1080),
+            "HD1200" => Ok(Self::Hd1200),
+            "HD720" => Ok(Self::Hd720),
+            "SVGA" => Ok(Self::Svga),
+            "VGA" => Ok(Self::Vga),
+            "AUTO" => Ok(Self::Auto),
+            _ => Err("unsupported resolution preset"),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CoordinateSystem {
     Image,
@@ -609,6 +629,248 @@ impl CameraInformation {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CameraParameters {
+    pub fx: f32,
+    pub fy: f32,
+    pub cx: f32,
+    pub cy: f32,
+    pub disto: [f64; 12],
+    pub v_fov: f32,
+    pub h_fov: f32,
+    pub d_fov: f32,
+    pub image_size: Resolution,
+    pub focal_length_metric: f32,
+}
+
+impl CameraParameters {
+    pub(crate) fn from_raw(raw: sys::SL_CameraParameters) -> Result<Self> {
+        Ok(Self {
+            fx: raw.fx,
+            fy: raw.fy,
+            cx: raw.cx,
+            cy: raw.cy,
+            disto: raw.disto,
+            v_fov: raw.v_fov,
+            h_fov: raw.h_fov,
+            d_fov: raw.d_fov,
+            image_size: Resolution::try_from_raw(
+                raw.image_size.width,
+                raw.image_size.height,
+                "camera parameters",
+            )?,
+            focal_length_metric: raw.focal_length_metric,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CalibrationParameters {
+    pub left_cam: CameraParameters,
+    pub right_cam: CameraParameters,
+    pub rotation_rodrigues: [f32; 3],
+    pub rotation_w: f32,
+    pub translation: Vec3f,
+}
+
+impl CalibrationParameters {
+    pub(crate) fn from_raw(raw: sys::SL_CalibrationParameters) -> Result<Self> {
+        Ok(Self {
+            left_cam: CameraParameters::from_raw(raw.left_cam)?,
+            right_cam: CameraParameters::from_raw(raw.right_cam)?,
+            rotation_rodrigues: [raw.rotation.x, raw.rotation.y, raw.rotation.z],
+            rotation_w: raw.rotation.w,
+            translation: vec3_from_raw(raw.translation),
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SensorParameters {
+    pub resolution: f32,
+    pub sampling_rate: f32,
+    pub range: Vec2f,
+    pub noise_density: f32,
+    pub random_walk: f32,
+    pub is_available: bool,
+}
+
+impl SensorParameters {
+    pub(crate) fn from_raw(raw: sys::SL_SensorParameters) -> Self {
+        Self {
+            resolution: raw.resolution,
+            sampling_rate: raw.sampling_rate,
+            range: Vec2f {
+                x: raw.range.x,
+                y: raw.range.y,
+            },
+            noise_density: raw.noise_density,
+            random_walk: raw.random_walk,
+            is_available: raw.is_available,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SensorsConfiguration {
+    pub camera_imu_rotation: Vec4f,
+    pub camera_imu_translation: Vec3f,
+    pub imu_magnetometer_rotation: Vec4f,
+    pub imu_magnetometer_translation: Vec3f,
+    pub accelerometer: SensorParameters,
+    pub gyroscope: SensorParameters,
+    pub magnetometer: SensorParameters,
+    pub barometer: SensorParameters,
+}
+
+impl SensorsConfiguration {
+    pub(crate) fn from_raw(raw: sys::SL_SensorsConfiguration) -> Self {
+        Self {
+            camera_imu_rotation: vec4_from_raw(raw.camera_ium_rotation),
+            camera_imu_translation: vec3_from_raw(raw.camera_imu_translation),
+            imu_magnetometer_rotation: vec4_from_raw(raw.ium_magnetometer_rotation),
+            imu_magnetometer_translation: vec3_from_raw(raw.ium_magnetometer_translation),
+            accelerometer: SensorParameters::from_raw(raw.accelerometer_parameters),
+            gyroscope: SensorParameters::from_raw(raw.gyroscope_parameters),
+            magnetometer: SensorParameters::from_raw(raw.magnetometer_parameters),
+            barometer: SensorParameters::from_raw(raw.barometer_parameters),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CameraImuTransform {
+    pub translation: Vec3f,
+    pub rotation_xyzw: [f32; 4],
+}
+
+impl CameraImuTransform {
+    pub(crate) fn from_raw(translation: sys::SL_Vector3, rotation: sys::SL_Quaternion) -> Self {
+        Self {
+            translation: vec3_from_raw(translation),
+            rotation_xyzw: [rotation.x, rotation.y, rotation.z, rotation.w],
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ImuData {
+    pub timestamp_ns: u64,
+    pub angular_velocity: Vec3f,
+    pub linear_acceleration: Vec3f,
+    pub angular_velocity_unc: Vec3f,
+    pub linear_acceleration_unc: Vec3f,
+    pub orientation_xyzw: [f32; 4],
+    pub orientation_covariance: [f32; 9],
+    pub angular_velocity_covariance: [f32; 9],
+    pub linear_acceleration_covariance: [f32; 9],
+}
+
+impl ImuData {
+    pub(crate) fn from_raw(raw: sys::SL_IMUData) -> Option<Self> {
+        raw.is_available.then_some(Self {
+            timestamp_ns: raw.timestamp_ns,
+            angular_velocity: vec3_from_raw(raw.angular_velocity),
+            linear_acceleration: vec3_from_raw(raw.linear_acceleration),
+            angular_velocity_unc: vec3_from_raw(raw.angular_velocity_unc),
+            linear_acceleration_unc: vec3_from_raw(raw.linear_acceleration_unc),
+            orientation_xyzw: [
+                raw.orientation.x,
+                raw.orientation.y,
+                raw.orientation.z,
+                raw.orientation.w,
+            ],
+            orientation_covariance: raw.orientation_covariance.p,
+            angular_velocity_covariance: raw.angular_velocity_convariance.p,
+            linear_acceleration_covariance: raw.linear_acceleration_convariance.p,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BarometerData {
+    pub timestamp_ns: u64,
+    pub pressure_pa: f32,
+    pub relative_altitude_m: f32,
+}
+
+impl BarometerData {
+    pub(crate) fn from_raw(raw: sys::SL_BarometerData) -> Option<Self> {
+        raw.is_available.then_some(Self {
+            timestamp_ns: raw.timestamp_ns,
+            pressure_pa: raw.pressure,
+            relative_altitude_m: raw.relative_altitude,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MagnetometerData {
+    pub timestamp_ns: u64,
+    pub magnetic_field_ut: Vec3f,
+    pub magnetic_field_unc_ut: Vec3f,
+    pub magnetic_heading: f32,
+    pub magnetic_heading_state: u32,
+    pub magnetic_heading_accuracy: f32,
+    pub effective_rate_hz: f32,
+}
+
+impl MagnetometerData {
+    pub(crate) fn from_raw(raw: sys::SL_MagnetometerData) -> Option<Self> {
+        raw.is_available.then_some(Self {
+            timestamp_ns: raw.timestamp_ns,
+            magnetic_field_ut: vec3_from_raw(raw.magnetic_field_c),
+            magnetic_field_unc_ut: vec3_from_raw(raw.magnetic_field_unc),
+            magnetic_heading: raw.magnetic_heading,
+            magnetic_heading_state: raw.magnetic_heading_state,
+            magnetic_heading_accuracy: raw.magnetic_heading_accuracy,
+            effective_rate_hz: raw.effective_rate,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TemperatureData {
+    pub imu_temp_c: f32,
+    pub barometer_temp_c: f32,
+    pub onboard_left_temp_c: f32,
+    pub onboard_right_temp_c: f32,
+}
+
+impl TemperatureData {
+    pub(crate) fn from_raw(raw: sys::SL_TemperatureData) -> Self {
+        Self {
+            imu_temp_c: raw.imu_temp,
+            barometer_temp_c: raw.barometer_temp,
+            onboard_left_temp_c: raw.onboard_left_temp,
+            onboard_right_temp_c: raw.onboard_right_temp,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SensorsData {
+    pub imu: Option<ImuData>,
+    pub barometer: Option<BarometerData>,
+    pub magnetometer: Option<MagnetometerData>,
+    pub temperature: TemperatureData,
+    pub camera_moving_state: i32,
+    pub image_sync_trigger: i32,
+}
+
+impl SensorsData {
+    pub(crate) fn from_raw(raw: sys::SL_SensorsData) -> Self {
+        Self {
+            imu: ImuData::from_raw(raw.imu),
+            barometer: BarometerData::from_raw(raw.barometer),
+            magnetometer: MagnetometerData::from_raw(raw.magnetometer),
+            temperature: TemperatureData::from_raw(raw.temperature),
+            camera_moving_state: raw.camera_moving_state,
+            image_sync_trigger: raw.image_sync_trigger,
+        }
+    }
+}
+
 #[repr(C)]
 #[derive(Default, Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Bgr8 {
@@ -683,5 +945,22 @@ impl Point3Color {
 
     pub fn is_finite(self) -> bool {
         self.x.is_finite() && self.y.is_finite() && self.z.is_finite()
+    }
+}
+
+fn vec3_from_raw(raw: sys::SL_Vector3) -> Vec3f {
+    Vec3f {
+        x: raw.x,
+        y: raw.y,
+        z: raw.z,
+    }
+}
+
+fn vec4_from_raw(raw: sys::SL_Vector4) -> Vec4f {
+    Vec4f {
+        x: raw.x,
+        y: raw.y,
+        z: raw.z,
+        w: raw.w,
     }
 }

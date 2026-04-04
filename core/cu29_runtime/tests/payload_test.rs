@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use bincode::{Decode, Encode, config};
-    use cu29_runtime::payload::CuArrayVec;
+    use cu29_runtime::payload::{CuArrayVec, CuLatchedState, CuLatchedStateUpdate};
 
     // Test default initialization
     #[test]
@@ -120,5 +120,39 @@ mod tests {
         assert_eq!(decoded.0.len(), 2);
         assert_eq!(decoded.0[0], "hello");
         assert_eq!(decoded.0[1], "world");
+    }
+
+    #[test]
+    fn test_culatched_state_update_lifecycle() {
+        let mut state = CuLatchedState::<u32>::default();
+        assert!(state.is_unset());
+
+        let no_change = CuLatchedStateUpdate::NoChange;
+        state.update(&no_change);
+        assert!(state.is_unset());
+
+        let set = CuLatchedStateUpdate::Set(42);
+        state.update(&set);
+        assert_eq!(state.get(), Some(&42));
+
+        state.update_owned(CuLatchedStateUpdate::Clear);
+        assert!(state.is_unset());
+    }
+
+    #[test]
+    fn test_culatched_state_round_trip() {
+        let config = config::standard();
+        let encoded = bincode::encode_to_vec(CuLatchedStateUpdate::Set(7u32), config).unwrap();
+        let (decoded, _): (CuLatchedStateUpdate<u32>, _) =
+            bincode::decode_from_slice(&encoded, config).unwrap();
+        assert_eq!(decoded, CuLatchedStateUpdate::Set(7));
+    }
+
+    #[test]
+    fn test_culatched_no_change_encodes_to_zero_discriminant() {
+        let config = config::standard();
+        let encoded =
+            bincode::encode_to_vec(CuLatchedStateUpdate::<u32>::NoChange, config).unwrap();
+        assert_eq!(encoded, vec![0]);
     }
 }

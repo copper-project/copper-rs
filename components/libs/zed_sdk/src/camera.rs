@@ -7,8 +7,8 @@ use crate::error::{Error, ErrorCode, Result};
 use crate::mat::{Mat, MatElement};
 use crate::sys;
 use crate::types::{
-    CameraInformation, InputSource, OpenOptions, Point3Color, Resolution, Rgba8, RuntimeParameters,
-    Vec3f,
+    CalibrationParameters, CameraImuTransform, CameraInformation, InputSource, OpenOptions,
+    Point3Color, Resolution, Rgba8, RuntimeParameters, SensorsConfiguration, SensorsData, Vec3f,
 };
 
 static RESERVED_CAMERA_IDS: Mutex<[bool; sys::MAX_CAMERA_PLUGIN]> =
@@ -181,8 +181,16 @@ impl Camera {
         self.retrieve_image_raw(sys::SL_VIEW::SL_VIEW_LEFT, target)
     }
 
+    pub fn retrieve_right(&mut self, target: &mut Mat<Rgba8>) -> Result<()> {
+        self.retrieve_image_raw(sys::SL_VIEW::SL_VIEW_RIGHT, target)
+    }
+
     pub fn retrieve_depth(&mut self, target: &mut Mat<f32>) -> Result<()> {
         self.retrieve_measure_raw(sys::SL_MEASURE::SL_MEASURE_DEPTH, target)
+    }
+
+    pub fn retrieve_confidence(&mut self, target: &mut Mat<f32>) -> Result<()> {
+        self.retrieve_measure_raw(sys::SL_MEASURE::SL_MEASURE_CONFIDENCE, target)
     }
 
     pub fn retrieve_xyz(&mut self, target: &mut Mat<Vec3f>) -> Result<()> {
@@ -229,6 +237,49 @@ impl Camera {
                 ptr::null_mut(),
             )
         })
+    }
+
+    pub fn calibration_parameters(&self, raw: bool) -> Result<CalibrationParameters> {
+        let ptr = unsafe { sys::sl_get_calibration_parameters(self.camera_id, raw) };
+        if ptr.is_null() {
+            return Err(Error::NullPointer {
+                operation: "sl_get_calibration_parameters",
+            });
+        }
+
+        CalibrationParameters::from_raw(unsafe { *ptr })
+    }
+
+    pub fn sensors_configuration(&self) -> Result<SensorsConfiguration> {
+        let ptr = unsafe { sys::sl_get_sensors_configuration(self.camera_id) };
+        if ptr.is_null() {
+            return Err(Error::NullPointer {
+                operation: "sl_get_sensors_configuration",
+            });
+        }
+
+        Ok(SensorsConfiguration::from_raw(unsafe { *ptr }))
+    }
+
+    pub fn camera_imu_transform(&self) -> Result<CameraImuTransform> {
+        let mut translation = sys::SL_Vector3::default();
+        let mut rotation = sys::SL_Quaternion::default();
+        unsafe {
+            sys::sl_get_camera_imu_transform(self.camera_id, &mut translation, &mut rotation);
+        }
+        Ok(CameraImuTransform::from_raw(translation, rotation))
+    }
+
+    pub fn sensors_data(&self) -> Result<SensorsData> {
+        let mut raw = sys::SL_SensorsData::default();
+        check_code("sl_get_sensors_data", unsafe {
+            sys::sl_get_sensors_data(
+                self.camera_id,
+                &mut raw,
+                sys::SL_TIME_REFERENCE::SL_TIME_REFERENCE_IMAGE,
+            )
+        })?;
+        Ok(SensorsData::from_raw(raw))
     }
 }
 

@@ -12,9 +12,11 @@ pub use camera::Camera;
 pub use error::{Error, ErrorCode, Result};
 pub use mat::{Mat, MatElement, MatType, MatView, MatViewMut};
 pub use types::{
-    Bgr8, Bgra8, CameraInformation, CoordinateSystem, DepthMode, InputSource, InputType,
-    MemoryType, OpenOptions, Point3Color, ReferenceFrame, Resolution, ResolutionPreset, Rgba8,
-    RuntimeParameters, Unit, Vec2f, Vec3f, Vec4f,
+    BarometerData, Bgr8, Bgra8, CalibrationParameters, CameraImuTransform, CameraInformation,
+    CameraParameters, CoordinateSystem, DepthMode, ImuData, InputSource, InputType,
+    MagnetometerData, MemoryType, OpenOptions, Point3Color, ReferenceFrame, Resolution,
+    ResolutionPreset, Rgba8, RuntimeParameters, SensorParameters, SensorsConfiguration,
+    SensorsData, TemperatureData, Unit, Vec2f, Vec3f, Vec4f,
 };
 pub use zed_sdk_sys as sys;
 

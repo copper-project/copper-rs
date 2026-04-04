@@ -226,6 +226,9 @@ pub enum Error {
         capacity: usize,
     },
     CameraInformationUnavailable,
+    NullPointer {
+        operation: &'static str,
+    },
     NullMatAllocation {
         width: u32,
         height: u32,
@@ -275,6 +278,9 @@ impl Display for Error {
             }
             Self::CameraInformationUnavailable => {
                 write!(f, "sl_get_camera_information returned a null pointer")
+            }
+            Self::NullPointer { operation } => {
+                write!(f, "{operation} returned a null pointer")
             }
             Self::NullMatAllocation {
                 width,

@@ -1,0 +1,45 @@
+default: demo
+
+dag:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	repo_root="$(cd "{{justfile_directory()}}/../../.." && pwd)"
+	cd "$repo_root"
+	cargo run -p cu29-runtime --bin cu29-rendercfg -- --open components/sources/cu_zed/examples/zed_rerun_demo.ron
+
+doctor:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	repo_root="$(cd "{{justfile_directory()}}/../../.." && pwd)"
+	just --justfile "$repo_root/components/libs/zed_sdk_sys/justfile" doctor
+
+build:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	repo_root="$(cd "{{justfile_directory()}}/../../.." && pwd)"
+	just --justfile "$repo_root/components/libs/zed_sdk_sys/justfile" build
+
+check:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	repo_root="$(cd "{{justfile_directory()}}/../../.." && pwd)"
+	just --justfile "$repo_root/components/libs/zed_sdk_sys/justfile" vendor-init
+	cd "$repo_root"
+	cargo check -p cu-zed --example zed_rerun_demo
+
+demo:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	repo_root="$(cd "{{justfile_directory()}}/../../.." && pwd)"
+	just --justfile "$repo_root/components/libs/zed_sdk_sys/justfile" demo
+
+run: demo
+
+build-demo: build
+
+run-demo: demo

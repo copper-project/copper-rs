@@ -1,0 +1,76 @@
+(
+    logging: (
+        enable_task_logging: true,
+        slab_size_mib: 256,
+        section_size_mib: 64,
+    ),
+    tasks: [
+        (
+            id: "zed",
+            type: "cu_zed::Zed",
+            config: {
+                "frame_id_prefix": "zed",
+                "depth_mode": "NEURAL_PLUS",
+                "depth_maximum_distance_m": 5.0,
+                "enable_fill_mode": true,
+                "confidence_threshold": 30,
+                "texture_confidence_threshold": 30,
+                "emit_confidence": true,
+                "emit_imu": true,
+                "emit_mag": true,
+                "emit_baro": true,
+            },
+        ),
+        (
+            id: "rerun",
+            type: "ZedRerunSink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "zed",
+            dst: "rerun",
+            msg: "cu_zed::ZedStereoImages",
+        ),
+        (
+            src: "zed",
+            dst: "rerun",
+            msg: "cu_zed::ZedDepthMap<Vec<f32>>",
+        ),
+        (
+            src: "zed",
+            dst: "rerun",
+            msg: "cu_zed::ZedConfidenceMap<Vec<f32>>",
+        ),
+        (
+            src: "zed",
+            dst: "rerun",
+            msg: "cu29::prelude::CuLatchedStateUpdate<cu_zed::ZedCalibrationBundle>",
+        ),
+        (
+            src: "zed",
+            dst: "rerun",
+            msg: "cu29::prelude::CuLatchedStateUpdate<cu_zed::ZedRigTransforms>",
+        ),
+        (
+            src: "zed",
+            dst: "rerun",
+            msg: "cu_sensor_payloads::ImuPayload",
+        ),
+        (
+            src: "zed",
+            dst: "rerun",
+            msg: "cu_sensor_payloads::MagnetometerPayload",
+        ),
+        (
+            src: "zed",
+            dst: "rerun",
+            msg: "cu_sensor_payloads::BarometerPayload",
+        ),
+        (
+            src: "zed",
+            dst: "rerun",
+            msg: "cu_zed::ZedFrameMeta",
+        ),
+    ],
+)

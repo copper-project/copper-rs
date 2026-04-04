@@ -195,6 +195,10 @@ Implications:
   - No hacks to hide a deeper design/runtime problem.
   - No shortcut that creates spaghetti code or weakens the architecture.
 - Prefer `just` targets over inventing ad hoc command sequences.
+- Do not hand users megalong or non-obvious command lines when a task can be mapped to a local `justfile`.
+  - Add a documented `justfile` target instead.
+  - Prefer `just` itself to be the reasonable default action the user is likely asking for.
+  - If a crate/example has a non-obvious `cargo run --example ...` or similar invocation, hide it behind `just`.
 - After each edit pass, run `just fmt` from the repo root before moving on.
 - When touching Rust code, avoid clippy-denied cleanup mistakes that keep recurring here:
   - do not keep redundant same-type casts such as `u64` to `u64`

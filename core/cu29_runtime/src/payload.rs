@@ -171,3 +171,103 @@ where
         Ok(CuArrayVec(array_vec))
     }
 }
+
+/// Generic update payload for a stateful value that is cached by consumers.
+///
+/// `NoChange` is intentionally the first variant so its bincode discriminant is zero.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect)]
+#[reflect(opaque, from_reflect = false, no_field_bounds)]
+pub enum CuLatchedStateUpdate<T: Clone> {
+    #[default]
+    NoChange,
+    Set(T),
+    Clear,
+}
+
+impl<T: Clone> CuLatchedStateUpdate<T> {
+    pub fn is_no_change(&self) -> bool {
+        matches!(self, Self::NoChange)
+    }
+
+    pub fn is_set(&self) -> bool {
+        matches!(self, Self::Set(_))
+    }
+
+    pub fn is_clear(&self) -> bool {
+        matches!(self, Self::Clear)
+    }
+}
+
+impl<T: Clone> From<T> for CuLatchedStateUpdate<T> {
+    fn from(value: T) -> Self {
+        Self::Set(value)
+    }
+}
+
+/// Cached state container updated by [`CuLatchedStateUpdate`].
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect)]
+#[reflect(opaque, from_reflect = false, no_field_bounds)]
+pub enum CuLatchedState<T: Clone> {
+    #[default]
+    Unset,
+    Set(T),
+}
+
+impl<T: Clone> CuLatchedState<T> {
+    pub fn new() -> Self {
+        Self::Unset
+    }
+
+    pub fn is_set(&self) -> bool {
+        matches!(self, Self::Set(_))
+    }
+
+    pub fn is_unset(&self) -> bool {
+        matches!(self, Self::Unset)
+    }
+
+    pub fn get(&self) -> Option<&T> {
+        match self {
+            Self::Unset => None,
+            Self::Set(value) => Some(value),
+        }
+    }
+
+    pub fn as_ref(&self) -> Option<&T> {
+        self.get()
+    }
+
+    pub fn set(&mut self, value: T) {
+        *self = Self::Set(value);
+    }
+
+    pub fn clear(&mut self) {
+        *self = Self::Unset;
+    }
+
+    pub fn take(&mut self) -> Option<T> {
+        let previous = core::mem::take(self);
+        match previous {
+            Self::Unset => None,
+            Self::Set(value) => Some(value),
+        }
+    }
+
+    pub fn update_owned(&mut self, update: CuLatchedStateUpdate<T>) {
+        match update {
+            CuLatchedStateUpdate::NoChange => {}
+            CuLatchedStateUpdate::Set(value) => self.set(value),
+            CuLatchedStateUpdate::Clear => self.clear(),
+        }
+    }
+}
+
+impl<T: Clone> CuLatchedState<T> {
+    pub fn update(&mut self, update: &CuLatchedStateUpdate<T>) {
+        match update {
+            CuLatchedStateUpdate::NoChange => {}
+            CuLatchedStateUpdate::Set(value) => self.set(value.clone()),
+            CuLatchedStateUpdate::Clear => self.clear(),
+        }
+    }
+}
