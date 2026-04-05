@@ -263,9 +263,38 @@ mod linux_impl {
     use zed_sdk::{
         CalibrationParameters, Camera, CameraImuTransform, CameraInformation, CameraParameters,
         CoordinateSystem, DepthMode, ErrorCode, InputSource, OpenOptions, ReferenceFrame,
-        ResolutionPreset, RuntimeParameters, SensorsConfiguration, SensorsData, Unit,
+        Resolution, ResolutionPreset, RuntimeParameters, SensorsConfiguration, SensorsData, Unit,
     };
     use zed_sdk::{Mat, Rgba8};
+
+    struct ImageSlot {
+        handle: CuHandle<Vec<u8>>,
+        mat: Mat<Rgba8>,
+    }
+
+    struct RasterSlot {
+        handle: CuHandle<Vec<f32>>,
+        mat: Mat<f32>,
+    }
+
+    struct OutputSlot {
+        left: ImageSlot,
+        right: ImageSlot,
+        depth: RasterSlot,
+        confidence: Option<RasterSlot>,
+    }
+
+    impl OutputSlot {
+        fn is_available(&self) -> bool {
+            handle_is_available(&self.left.handle)
+                && handle_is_available(&self.right.handle)
+                && handle_is_available(&self.depth.handle)
+                && self
+                    .confidence
+                    .as_ref()
+                    .is_none_or(|slot| handle_is_available(&slot.handle))
+        }
+    }
 
     #[derive(Reflect)]
     #[reflect(from_reflect = false)]
@@ -275,21 +304,8 @@ mod linux_impl {
         #[reflect(ignore)]
         runtime: RuntimeParameters,
         #[reflect(ignore)]
-        left_mat: Mat<Rgba8>,
-        #[reflect(ignore)]
-        right_mat: Mat<Rgba8>,
-        #[reflect(ignore)]
-        depth_mat: Mat<f32>,
-        #[reflect(ignore)]
-        confidence_mat: Option<Mat<f32>>,
-        #[reflect(ignore)]
-        left_pool: Arc<CuHostMemoryPool<Vec<u8>>>,
-        #[reflect(ignore)]
-        right_pool: Arc<CuHostMemoryPool<Vec<u8>>>,
-        #[reflect(ignore)]
-        depth_pool: Arc<CuHostMemoryPool<Vec<f32>>>,
-        #[reflect(ignore)]
-        confidence_pool: Option<Arc<CuHostMemoryPool<Vec<f32>>>>,
+        slots: Vec<OutputSlot>,
+        next_slot: usize,
         #[reflect(ignore)]
         left_format: CuImageBufferFormat,
         #[reflect(ignore)]
@@ -361,49 +377,18 @@ mod linux_impl {
                 .resolution()
                 .map_err(|e| CuError::new_with_cause("Could not read ZED camera resolution", e))?;
 
-            let left_mat = Mat::new_cpu(resolution)
-                .map_err(|e| CuError::new_with_cause("Could not allocate ZED left frame mat", e))?;
-            let right_mat = Mat::new_cpu(resolution).map_err(|e| {
-                CuError::new_with_cause("Could not allocate ZED right frame mat", e)
-            })?;
-            let depth_mat = Mat::new_cpu(resolution)
-                .map_err(|e| CuError::new_with_cause("Could not allocate ZED depth mat", e))?;
-            let confidence_mat = if emit_confidence {
-                Some(Mat::new_cpu(resolution).map_err(|e| {
-                    CuError::new_with_cause("Could not allocate ZED confidence mat", e)
-                })?)
-            } else {
-                None
-            };
-
-            let left_format = rgba_format(&left_mat)
-                .map_err(|e| CuError::new_with_cause("Could not inspect ZED left mat", e))?;
-            let right_format = rgba_format(&right_mat)
-                .map_err(|e| CuError::new_with_cause("Could not inspect ZED right mat", e))?;
-            let depth_format = raster_format(&depth_mat)
-                .map_err(|e| CuError::new_with_cause("Could not inspect ZED depth mat", e))?;
-            let confidence_format = confidence_mat
-                .as_ref()
-                .map(raster_format)
-                .transpose()
-                .map_err(|e| CuError::new_with_cause("Could not inspect ZED confidence mat", e))?;
-
-            let left_pool = CuHostMemoryPool::new("zed-left", pool_slots, || {
-                vec![0u8; left_format.byte_size()]
-            })?;
-            let right_pool = CuHostMemoryPool::new("zed-right", pool_slots, || {
-                vec![0u8; right_format.byte_size()]
-            })?;
-            let depth_pool = CuHostMemoryPool::new("zed-depth", pool_slots, || {
-                vec![0f32; depth_format.len_elements()]
-            })?;
-            let confidence_pool = confidence_format
-                .map(|format| {
-                    CuHostMemoryPool::new("zed-confidence", pool_slots, || {
-                        vec![0f32; format.len_elements()]
-                    })
-                })
-                .transpose()?;
+            let left_format = rgba_format(resolution);
+            let right_format = rgba_format(resolution);
+            let depth_format = raster_format(resolution);
+            let confidence_format = emit_confidence.then_some(depth_format);
+            let slots = build_output_slots(
+                pool_slots,
+                resolution,
+                left_format,
+                right_format,
+                depth_format,
+                confidence_format,
+            )?;
 
             let pending_calibration = Some(build_calibration_bundle(
                 &info,
@@ -428,14 +413,8 @@ mod linux_impl {
             Ok(Self {
                 camera,
                 runtime,
-                left_mat,
-                right_mat,
-                depth_mat,
-                confidence_mat,
-                left_pool,
-                right_pool,
-                depth_pool,
-                confidence_pool,
+                slots,
+                next_slot: 0,
                 left_format,
                 right_format,
                 depth_format,
@@ -460,54 +439,56 @@ mod linux_impl {
             let frame_tov: CuTime = self.camera.image_timestamp().into();
             let seq = self.seq;
             self.seq = self.seq.wrapping_add(1);
+            let slot_index = acquire_output_slot_index(&self.slots, &mut self.next_slot)
+                .ok_or_else(|| {
+                    CuError::from(
+                        "No reusable ZED output slot available; increase pool_slots or release downstream handles sooner",
+                    )
+                })?;
+            let slot = &mut self.slots[slot_index];
 
             self.camera
-                .retrieve_left(&mut self.left_mat)
+                .retrieve_left(&mut slot.left.mat)
                 .map_err(|e| CuError::new_with_cause("Could not retrieve ZED left image", e))?;
             self.camera
-                .retrieve_right(&mut self.right_mat)
+                .retrieve_right(&mut slot.right.mat)
                 .map_err(|e| CuError::new_with_cause("Could not retrieve ZED right image", e))?;
             self.camera
-                .retrieve_depth(&mut self.depth_mat)
+                .retrieve_depth(&mut slot.depth.mat)
                 .map_err(|e| CuError::new_with_cause("Could not retrieve ZED depth map", e))?;
 
             stereo.set_payload((
-                copy_image_payload(seq, &self.left_mat, &self.left_pool, self.left_format)?,
-                copy_image_payload(seq, &self.right_mat, &self.right_pool, self.right_format)?,
+                image_payload_from_handle(seq, &slot.left.handle, self.left_format),
+                image_payload_from_handle(seq, &slot.right.handle, self.right_format),
             ));
             stereo.tov = Tov::Time(frame_tov);
 
-            depth.set_payload(copy_raster_payload(
+            depth.set_payload(raster_payload_from_handle(
                 seq,
-                &self.depth_mat,
-                &self.depth_pool,
+                &slot.depth.handle,
                 self.depth_format,
                 ZedDepthMap::new,
-            )?);
+            ));
             depth.tov = Tov::Time(frame_tov);
 
             if self.emit_confidence {
-                let confidence_mat = self.confidence_mat.as_mut().ok_or_else(|| {
+                let confidence_slot = slot.confidence.as_mut().ok_or_else(|| {
                     CuError::from("confidence output requested without a backing mat")
                 })?;
                 self.camera
-                    .retrieve_confidence(confidence_mat)
+                    .retrieve_confidence(&mut confidence_slot.mat)
                     .map_err(|e| {
                         CuError::new_with_cause("Could not retrieve ZED confidence map", e)
                     })?;
-                let confidence_pool = self.confidence_pool.as_ref().ok_or_else(|| {
-                    CuError::from("confidence output requested without a backing pool")
-                })?;
                 let confidence_format = self
                     .confidence_format
                     .ok_or_else(|| CuError::from("confidence output requested without a format"))?;
-                confidence.set_payload(copy_raster_payload(
+                confidence.set_payload(raster_payload_from_handle(
                     seq,
-                    confidence_mat,
-                    confidence_pool,
+                    &confidence_slot.handle,
                     confidence_format,
                     ZedConfidenceMap::new,
-                )?);
+                ));
                 confidence.tov = Tov::Time(frame_tov);
             } else {
                 confidence.clear_payload();
@@ -820,63 +801,133 @@ mod linux_impl {
         config.accelerometer.is_available || config.gyroscope.is_available
     }
 
-    fn rgba_format(mat: &Mat<Rgba8>) -> zed_sdk::Result<CuImageBufferFormat> {
-        let view = mat.view()?;
-        Ok(CuImageBufferFormat {
-            width: view.width() as u32,
-            height: view.height() as u32,
-            stride: (view.stride_elems() * size_of::<Rgba8>()) as u32,
+    fn rgba_format(resolution: Resolution) -> CuImageBufferFormat {
+        CuImageBufferFormat {
+            width: resolution.width(),
+            height: resolution.height(),
+            stride: (resolution.width() as usize * size_of::<Rgba8>()) as u32,
             pixel_format: *b"RGBA",
-        })
+        }
     }
 
-    fn raster_format(mat: &Mat<f32>) -> zed_sdk::Result<ZedRasterFormat> {
-        let view = mat.view()?;
-        Ok(ZedRasterFormat {
-            width: view.width() as u32,
-            height: view.height() as u32,
-            stride: view.stride_elems() as u32,
-        })
+    fn raster_format(resolution: Resolution) -> ZedRasterFormat {
+        ZedRasterFormat {
+            width: resolution.width(),
+            height: resolution.height(),
+            stride: resolution.width(),
+        }
     }
 
-    fn copy_image_payload(
-        seq: u64,
-        mat: &Mat<Rgba8>,
-        pool: &Arc<CuHostMemoryPool<Vec<u8>>>,
+    fn build_output_slots(
+        slot_count: usize,
+        resolution: Resolution,
+        left_format: CuImageBufferFormat,
+        right_format: CuImageBufferFormat,
+        depth_format: ZedRasterFormat,
+        confidence_format: Option<ZedRasterFormat>,
+    ) -> CuResult<Vec<OutputSlot>> {
+        (0..slot_count)
+            .map(|_| {
+                Ok(OutputSlot {
+                    left: build_image_slot(resolution, left_format)?,
+                    right: build_image_slot(resolution, right_format)?,
+                    depth: build_raster_slot(resolution, depth_format)?,
+                    confidence: confidence_format
+                        .map(|format| build_raster_slot(resolution, format))
+                        .transpose()?,
+                })
+            })
+            .collect()
+    }
+
+    fn build_image_slot(
+        resolution: Resolution,
         format: CuImageBufferFormat,
-    ) -> CuResult<CuImage<Vec<u8>>> {
-        let view = mat
-            .view()
-            .map_err(|e| CuError::new_with_cause("Could not map ZED image mat", e))?;
-        let handle = pool
-            .acquire()
-            .ok_or_else(|| CuError::from("No free pooled buffer available for ZED image"))?;
-        handle.with_inner_mut(|inner| inner.copy_from_slice(view.as_padded_bytes()));
-        let mut image = CuImage::new(format, handle);
-        image.seq = seq;
-        Ok(image)
+    ) -> CuResult<ImageSlot> {
+        let handle = CuHandle::new_detached(vec![0u8; format.byte_size()]);
+        let stride_bytes = format.stride as usize;
+        let stride_elems = stride_bytes / size_of::<Rgba8>();
+        if stride_elems * size_of::<Rgba8>() != stride_bytes {
+            return Err(CuError::from(
+                "ZED image stride is not aligned to the RGBA pixel size",
+            ));
+        }
+        let (ptr, len_bytes) = handle.with_inner_mut(|inner| (inner.as_mut_ptr(), inner.len()));
+        if len_bytes % size_of::<Rgba8>() != 0 {
+            return Err(CuError::from(
+                "ZED image buffer length is not aligned to the RGBA pixel size",
+            ));
+        }
+
+        let mat = unsafe {
+            Mat::from_external_cpu_buffer(
+                resolution,
+                stride_elems,
+                len_bytes / size_of::<Rgba8>(),
+                ptr.cast::<Rgba8>(),
+            )
+        }
+        .map_err(|e| CuError::new_with_cause("Could not alias ZED image buffer as sl::Mat", e))?;
+
+        Ok(ImageSlot { handle, mat })
     }
 
-    fn copy_raster_payload<P>(
+    fn build_raster_slot(resolution: Resolution, format: ZedRasterFormat) -> CuResult<RasterSlot> {
+        let handle = CuHandle::new_detached(vec![0f32; format.len_elements()]);
+        let (ptr, len_elements) = handle.with_inner_mut(|inner| (inner.as_mut_ptr(), inner.len()));
+        let mat = unsafe {
+            Mat::from_external_cpu_buffer(resolution, format.stride as usize, len_elements, ptr)
+        }
+        .map_err(|e| CuError::new_with_cause("Could not alias ZED raster buffer as sl::Mat", e))?;
+
+        Ok(RasterSlot { handle, mat })
+    }
+
+    fn handle_is_available<T>(handle: &CuHandle<T>) -> bool
+    where
+        T: ArrayLike,
+    {
+        Arc::strong_count(&*handle) == 1
+    }
+
+    fn acquire_output_slot_index(slots: &[OutputSlot], next_slot: &mut usize) -> Option<usize> {
+        if slots.is_empty() {
+            return None;
+        }
+
+        for offset in 0..slots.len() {
+            let index = (*next_slot + offset) % slots.len();
+            if slots[index].is_available() {
+                *next_slot = (index + 1) % slots.len();
+                return Some(index);
+            }
+        }
+
+        None
+    }
+
+    fn image_payload_from_handle(
         seq: u64,
-        mat: &Mat<f32>,
-        pool: &Arc<CuHostMemoryPool<Vec<f32>>>,
+        handle: &CuHandle<Vec<u8>>,
+        format: CuImageBufferFormat,
+    ) -> CuImage<Vec<u8>> {
+        let mut image = CuImage::new(format, handle.clone());
+        image.seq = seq;
+        image
+    }
+
+    fn raster_payload_from_handle<P>(
+        seq: u64,
+        handle: &CuHandle<Vec<f32>>,
         format: ZedRasterFormat,
         ctor: impl FnOnce(ZedRasterFormat, CuHandle<Vec<f32>>) -> P,
-    ) -> CuResult<P>
+    ) -> P
     where
         P: RasterSeq,
     {
-        let view = mat
-            .view()
-            .map_err(|e| CuError::new_with_cause("Could not map ZED raster mat", e))?;
-        let handle = pool
-            .acquire()
-            .ok_or_else(|| CuError::from("No free pooled buffer available for ZED raster"))?;
-        handle.with_inner_mut(|inner| inner.copy_from_slice(view.as_padded_slice()));
-        let mut payload = ctor(format, handle);
+        let mut payload = ctor(format, handle.clone());
         payload.set_seq(seq);
-        Ok(payload)
+        payload
     }
 
     trait RasterSeq {

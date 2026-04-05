@@ -22,7 +22,11 @@ pub struct CuImageBufferFormat {
 
 impl CuImageBufferFormat {
     pub fn byte_size(&self) -> usize {
-        self.stride as usize * self.height as usize
+        let plane_size = self.stride as usize * self.height as usize;
+        match &self.pixel_format {
+            b"NV12" | b"NV21" | b"I420" | b"YV12" => plane_size + plane_size / 2,
+            _ => plane_size,
+        }
     }
 }
 
@@ -138,6 +142,47 @@ where
             format,
             buffer_handle,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CuImageBufferFormat;
+
+    #[test]
+    fn byte_size_for_packed_formats_is_stride_times_height() {
+        let format = CuImageBufferFormat {
+            width: 4,
+            height: 3,
+            stride: 16,
+            pixel_format: *b"BGRA",
+        };
+
+        assert_eq!(format.byte_size(), 48);
+    }
+
+    #[test]
+    fn byte_size_for_nv12_includes_uv_plane() {
+        let format = CuImageBufferFormat {
+            width: 1280,
+            height: 720,
+            stride: 1280,
+            pixel_format: *b"NV12",
+        };
+
+        assert_eq!(format.byte_size(), 1_382_400);
+    }
+
+    #[test]
+    fn byte_size_for_i420_includes_chroma_planes() {
+        let format = CuImageBufferFormat {
+            width: 640,
+            height: 480,
+            stride: 640,
+            pixel_format: *b"I420",
+        };
+
+        assert_eq!(format.byte_size(), 460_800);
     }
 }
 

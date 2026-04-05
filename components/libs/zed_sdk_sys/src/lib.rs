@@ -7,7 +7,9 @@
 compile_error!("zed-sdk-sys currently supports Linux targets only");
 
 mod bindings;
+mod local_shim;
 
 pub use bindings::*;
+pub use local_shim::*;
 
 pub const HAS_NATIVE_ZED_WRAPPER: bool = cfg!(zed_sdk_sys_has_native);

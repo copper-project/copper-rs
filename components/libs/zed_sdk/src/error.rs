@@ -246,6 +246,14 @@ pub enum Error {
         step_bytes: usize,
         element_size: usize,
     },
+    MatStrideTooSmall {
+        width_elems: usize,
+        stride_elems: usize,
+    },
+    MatBufferTooSmall {
+        required_elems: usize,
+        actual_elems: usize,
+    },
     MatPointerUnavailable,
 }
 
@@ -303,6 +311,20 @@ impl Display for Error {
             } => write!(
                 f,
                 "mat row stride {step_bytes} bytes is not aligned to element size {element_size}"
+            ),
+            Self::MatStrideTooSmall {
+                width_elems,
+                stride_elems,
+            } => write!(
+                f,
+                "mat row stride {stride_elems} elements is smaller than width {width_elems}"
+            ),
+            Self::MatBufferTooSmall {
+                required_elems,
+                actual_elems,
+            } => write!(
+                f,
+                "mat buffer needs {required_elems} elements but only {actual_elems} are available"
             ),
             Self::MatPointerUnavailable => write!(f, "mat returned a null data pointer"),
         }

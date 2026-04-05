@@ -20,3 +20,6 @@ default = []
 
 [package.metadata.cargo-shear]
 ignored = []
+
+[build-dependencies]
+cc = "1.2"

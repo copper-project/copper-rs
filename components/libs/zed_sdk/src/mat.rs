@@ -142,6 +142,80 @@ impl<T: MatElement> Mat<T> {
         Self::new(resolution, MemoryType::Cpu)
     }
 
+    /// Creates a CPU-backed `sl::Mat` alias over caller-owned memory.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must remain valid, writable, and stable for the full lifetime of the returned mat.
+    /// The backing storage must contain at least `buffer_len_elems` initialized elements and must
+    /// not be reallocated while the mat exists.
+    pub unsafe fn from_external_cpu_buffer(
+        resolution: Resolution,
+        stride_elems: usize,
+        buffer_len_elems: usize,
+        ptr: *mut T,
+    ) -> Result<Self> {
+        let width = resolution.width() as usize;
+        let height = resolution.height() as usize;
+        if ptr.is_null() {
+            return Err(Error::MatPointerUnavailable);
+        }
+        if stride_elems < width {
+            return Err(Error::MatStrideTooSmall {
+                width_elems: width,
+                stride_elems,
+            });
+        }
+
+        let required_elems =
+            stride_elems
+                .checked_mul(height)
+                .ok_or(Error::MatStrideMisaligned {
+                    step_bytes: 0,
+                    element_size: size_of::<T>(),
+                })?;
+        if buffer_len_elems < required_elems {
+            return Err(Error::MatBufferTooSmall {
+                required_elems,
+                actual_elems: buffer_len_elems,
+            });
+        }
+
+        let step_bytes =
+            stride_elems
+                .checked_mul(size_of::<T>())
+                .ok_or(Error::MatStrideMisaligned {
+                    step_bytes: 0,
+                    element_size: size_of::<T>(),
+                })?;
+        let width_i32 = resolution.width_i32()?;
+        let height_i32 = resolution.height_i32()?;
+        let ptr = unsafe {
+            sys::sl_mat_create_alias(
+                width_i32,
+                height_i32,
+                T::MAT_TYPE.as_raw(),
+                MemoryType::Cpu.as_raw(),
+                ptr.cast::<c_void>(),
+                step_bytes,
+            )
+        };
+        if ptr.is_null() {
+            return Err(Error::NullMatAllocation {
+                width: resolution.width(),
+                height: resolution.height(),
+                mat_type: T::MAT_TYPE,
+                memory: MemoryType::Cpu,
+            });
+        }
+
+        Ok(Self {
+            ptr,
+            memory: MemoryType::Cpu,
+            marker: PhantomData,
+        })
+    }
+
     pub fn resolution(&self) -> Result<Resolution> {
         let width = unsafe { sys::sl_mat_get_width(self.ptr) };
         let height = unsafe { sys::sl_mat_get_height(self.ptr) };
@@ -159,6 +233,10 @@ impl<T: MatElement> Mat<T> {
 
     pub fn pixel_size(&self) -> usize {
         unsafe { sys::sl_mat_get_pixel_bytes(self.ptr) as usize }
+    }
+
+    pub fn is_memory_owner(&self) -> bool {
+        unsafe { sys::sl_mat_is_memory_owner(self.ptr) }
     }
 
     pub fn view(&self) -> Result<MatView<'_, T>> {

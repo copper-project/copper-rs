@@ -6,6 +6,7 @@ use std::process::Command;
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=src/local_shim.cpp");
     println!("cargo:rerun-if-changed=vendor/zed-c-api/CMakeLists.txt");
     println!("cargo:rerun-if-changed=vendor/zed-c-api/include/sl/c_api/zed_interface.h");
     println!("cargo:rerun-if-changed=vendor/zed-c-api/include/sl/c_api/types_c.h");
@@ -24,6 +25,7 @@ fn main() {
 
     if let Some(installed_dir) = find_installed_wrapper() {
         emit_native_link(&installed_dir);
+        build_local_shim().unwrap_or_else(|err| panic!("failed to build local ZED shim: {err}"));
         println!("cargo:rustc-cfg=zed_sdk_sys_has_native");
         return;
     }
@@ -31,6 +33,8 @@ fn main() {
     match try_build_vendored_wrapper() {
         Ok(built_dir) => {
             emit_native_link(&built_dir);
+            build_local_shim()
+                .unwrap_or_else(|err| panic!("failed to build local ZED shim: {err}"));
             println!("cargo:rustc-cfg=zed_sdk_sys_has_native");
         }
         Err(err) => {
@@ -49,6 +53,40 @@ fn emit_native_link(lib_dir: &Path) {
             println!("cargo:rustc-link-search=native={}", sdk_lib_dir.display());
         }
     }
+}
+
+fn build_local_shim() -> Result<(), String> {
+    let sdk_root = find_sdk_root().ok_or_else(|| {
+        "expected the ZED SDK under /usr/local/zed or /opt/zed-sdk; install the Stereolabs SDK first"
+            .to_owned()
+    })?;
+    let manifest_dir =
+        PathBuf::from(env::var("CARGO_MANIFEST_DIR").map_err(|err| err.to_string())?);
+    let shim_path = manifest_dir.join("src/local_shim.cpp");
+    if !shim_path.exists() {
+        return Err(format!(
+            "missing local shim source at {}",
+            shim_path.display()
+        ));
+    }
+
+    let mut build = cc::Build::new();
+    build
+        .cpp(true)
+        .file(&shim_path)
+        .include(sdk_root.join("include"))
+        .flag_if_supported("-std=c++17");
+
+    if let Some(cuda_include) = find_cuda_include() {
+        build.include(cuda_include);
+    }
+
+    build.compile("zed_sdk_sys_local_shim");
+
+    println!("cargo:rustc-link-lib=dylib=sl_zed");
+    println!("cargo:rustc-link-lib=dylib=stdc++");
+
+    Ok(())
 }
 
 fn find_installed_wrapper() -> Option<PathBuf> {
@@ -92,6 +130,19 @@ fn find_zed_cmake_dir() -> Option<PathBuf> {
         .find(|path| {
             path.join("zed-config.cmake").exists() || path.join("ZEDConfig.cmake").exists()
         })
+        .map(Path::to_path_buf)
+}
+
+fn find_cuda_include() -> Option<PathBuf> {
+    let candidates = [
+        "/usr/local/cuda/include",
+        "/opt/cuda/include",
+        "/usr/include",
+    ];
+    candidates
+        .iter()
+        .map(Path::new)
+        .find(|path| path.join("cuda_runtime.h").exists())
         .map(Path::to_path_buf)
 }
 
