@@ -132,7 +132,7 @@ fn main() -> ExitCode {
                 return ExitCode::from(2);
             }
         },
-        None => SL_DEPTH_MODE::SL_DEPTH_MODE_PERFORMANCE,
+        None => SL_DEPTH_MODE::SL_DEPTH_MODE_NEURAL_LIGHT,
     };
 
     let created = unsafe { sl_create_camera(CAMERA_ID) };
@@ -143,7 +143,7 @@ fn main() -> ExitCode {
 
     let mut init_params = build_init_parameters(depth_mode);
     println!(
-        "Opening ZED with open_timeout_sec={}, resolution=HD720, fps={}, depth_mode={}",
+        "Running zed_lowlevel_demo with open_timeout_sec={}, resolution=HD720, fps={}, depth_mode={}",
         init_params.open_timeout_sec,
         init_params.camera_fps,
         depth_mode_name(init_params.depth_mode)
