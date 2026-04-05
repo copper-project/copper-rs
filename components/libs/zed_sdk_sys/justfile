@@ -63,7 +63,7 @@ build: vendor-init
 	fi
 
 	cd "$repo_root"
-	cargo build -p cu-zed --example zed_rerun_demo
+	cargo build -p cu-zed --example zed_rerun_demo --features zed-rerun-demo
 
 demo: vendor-init
 	#!/usr/bin/env bash
@@ -79,7 +79,7 @@ demo: vendor-init
 	fi
 
 	cd "$repo_root"
-	cargo run -r -p cu-zed --example zed_rerun_demo
+	cargo run -r -p cu-zed --example zed_rerun_demo --features zed-rerun-demo
 
 build-demo: build
 
