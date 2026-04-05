@@ -83,6 +83,12 @@ impl<C> CodecState<C> {
     }
 }
 
+impl<C> Default for CodecState<C> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub struct EffectiveConfigEntry {
     version: AtomicU64,
     ron: Mutex<String>,

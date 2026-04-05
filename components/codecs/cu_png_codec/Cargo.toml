@@ -14,5 +14,5 @@ repository.workspace = true
 bincode = { workspace = true }
 cu29 = { workspace = true }
 cu-sensor-payloads = { workspace = true }
-image = { workspace = true, default-features = false, features = ["png"] }
+png = { workspace = true }
 serde = { workspace = true }

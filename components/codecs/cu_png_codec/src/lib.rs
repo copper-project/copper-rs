@@ -4,12 +4,30 @@ use bincode::error::{DecodeError, EncodeError};
 use cu_sensor_payloads::{CuImage, CuImageBufferFormat};
 use cu29::logcodec::CuLogCodec;
 use cu29::prelude::{CuError, CuHandle, CuResult};
-use image::ColorType;
-use image::ImageDecoder;
-use image::ImageEncoder;
-use image::codecs::png::{CompressionType, FilterType, PngDecoder, PngEncoder};
+use png::{
+    BitDepth, ColorType, Compression, Decoder as PngDecoder, DeflateCompression,
+    Encoder as PngEncoder, Filter,
+};
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
+
+#[derive(Debug, Clone, Copy)]
+enum PngCompressionSetting {
+    Simple(Compression),
+    DeflateLevel(u8),
+}
+
+impl PngCompressionSetting {
+    fn apply<W: std::io::Write>(self, encoder: &mut PngEncoder<'_, W>) {
+        match self {
+            Self::Simple(compression) => encoder.set_compression(compression),
+            Self::DeflateLevel(level) => {
+                encoder.set_compression(Compression::Fast);
+                encoder.set_deflate_compression(DeflateCompression::Level(level));
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub enum CuPngCompression {
@@ -22,13 +40,13 @@ pub enum CuPngCompression {
 }
 
 impl CuPngCompression {
-    fn into_image(self) -> CuResult<CompressionType> {
+    fn into_png(self) -> CuResult<PngCompressionSetting> {
         match self {
-            Self::Default => Ok(CompressionType::Default),
-            Self::Fast => Ok(CompressionType::Fast),
-            Self::Best => Ok(CompressionType::Best),
-            Self::Uncompressed => Ok(CompressionType::Uncompressed),
-            Self::Level(level @ 1..=9) => Ok(CompressionType::Level(level)),
+            Self::Default => Ok(PngCompressionSetting::Simple(Compression::Balanced)),
+            Self::Fast => Ok(PngCompressionSetting::Simple(Compression::Fast)),
+            Self::Best => Ok(PngCompressionSetting::Simple(Compression::High)),
+            Self::Uncompressed => Ok(PngCompressionSetting::Simple(Compression::NoCompression)),
+            Self::Level(level @ 1..=9) => Ok(PngCompressionSetting::DeflateLevel(level)),
             Self::Level(level) => Err(CuError::from(format!(
                 "PNG compression level must be in 1..=9, got {level}"
             ))),
@@ -47,15 +65,15 @@ pub enum CuPngFilter {
     Adaptive,
 }
 
-impl From<CuPngFilter> for FilterType {
+impl From<CuPngFilter> for Filter {
     fn from(value: CuPngFilter) -> Self {
         match value {
-            CuPngFilter::NoFilter => FilterType::NoFilter,
-            CuPngFilter::Sub => FilterType::Sub,
-            CuPngFilter::Up => FilterType::Up,
-            CuPngFilter::Avg => FilterType::Avg,
-            CuPngFilter::Paeth => FilterType::Paeth,
-            CuPngFilter::Adaptive => FilterType::Adaptive,
+            CuPngFilter::NoFilter => Filter::NoFilter,
+            CuPngFilter::Sub => Filter::Sub,
+            CuPngFilter::Up => Filter::Up,
+            CuPngFilter::Avg => Filter::Avg,
+            CuPngFilter::Paeth => Filter::Paeth,
+            CuPngFilter::Adaptive => Filter::Adaptive,
         }
     }
 }
@@ -70,8 +88,8 @@ pub struct CuPngCodecConfig {
 
 #[derive(Debug)]
 pub struct CuPngCodec {
-    compression: CompressionType,
-    filter: FilterType,
+    compression: PngCompressionSetting,
+    filter: Filter,
     scratch: Vec<u8>,
 }
 
@@ -97,7 +115,7 @@ impl CuLogCodec<CuImage<Vec<u8>>> for CuPngCodec {
 
     fn new(config: Self::Config) -> CuResult<Self> {
         Ok(Self {
-            compression: config.compression.into_image()?,
+            compression: config.compression.into_png()?,
             filter: config.filter.into(),
             scratch: Vec::new(),
         })
@@ -135,13 +153,20 @@ impl CuLogCodec<CuImage<Vec<u8>>> for CuPngCodec {
                 )));
             }
 
-            PngEncoder::new_with_quality(&mut self.scratch, self.compression, self.filter)
-                .write_image(
-                    &image_bytes[..byte_size],
-                    payload.format.width,
-                    payload.format.height,
-                    ColorType::Rgb8.into(),
-                )
+            let mut png_encoder = PngEncoder::new(
+                &mut self.scratch,
+                payload.format.width,
+                payload.format.height,
+            );
+            png_encoder.set_color(ColorType::Rgb);
+            png_encoder.set_depth(BitDepth::Eight);
+            self.compression.apply(&mut png_encoder);
+            png_encoder.set_filter(self.filter);
+
+            png_encoder
+                .write_header()
+                .map_err(|err| Self::encode_error(err.to_string()))?
+                .write_image_data(&image_bytes[..byte_size])
                 .map_err(|err| Self::encode_error(err.to_string()))
         })?;
 
@@ -157,28 +182,34 @@ impl CuLogCodec<CuImage<Vec<u8>>> for CuPngCodec {
         let seq: u64 = Decode::decode(decoder)?;
         let png_bytes: Vec<u8> = Decode::decode(decoder)?;
 
-        let png = PngDecoder::new(Cursor::new(&png_bytes))
+        let mut png = PngDecoder::new(Cursor::new(png_bytes.as_slice()))
+            .read_info()
             .map_err(|err| Self::decode_error(err.to_string()))?;
-        let color_type = png.color_type();
-        if color_type != ColorType::Rgb8.into() {
+        let (color_type, bit_depth) = png.output_color_type();
+        if color_type != ColorType::Rgb || bit_depth != BitDepth::Eight {
             return Err(Self::decode_error(format!(
-                "PNG codec expected RGB8 decode output, got {color_type:?}"
+                "PNG codec expected RGB8 decode output, got {color_type:?} / {bit_depth:?}"
             )));
         }
 
-        let (width, height) = png.dimensions();
-        let mut buffer = vec![0u8; png.total_bytes() as usize];
-        png.read_image(&mut buffer)
+        let output_size = png
+            .output_buffer_size()
+            .ok_or_else(|| Self::decode_error("PNG codec output buffer size overflow"))?;
+        let mut buffer = vec![0u8; output_size];
+        let info = png
+            .next_frame(&mut buffer)
             .map_err(|err| Self::decode_error(err.to_string()))?;
+        buffer.truncate(info.buffer_size());
 
-        let stride = width
+        let stride = info
+            .width
             .checked_mul(3)
             .ok_or_else(|| Self::decode_error("PNG codec image stride overflow"))?;
         Ok(CuImage {
             seq,
             format: CuImageBufferFormat {
-                width,
-                height,
+                width: info.width,
+                height: info.height,
                 stride,
                 pixel_format: *b"RGB3",
             },
