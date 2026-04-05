@@ -887,7 +887,7 @@ mod linux_impl {
     where
         T: ArrayLike,
     {
-        Arc::strong_count(&*handle) == 1
+        Arc::strong_count(handle) == 1
     }
 
     fn acquire_output_slot_index(slots: &[OutputSlot], next_slot: &mut usize) -> Option<usize> {
