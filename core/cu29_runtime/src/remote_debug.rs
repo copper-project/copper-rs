@@ -541,7 +541,7 @@ struct QueryCursorSnapshot {
 
 struct SessionState<App, P, CB, TF, S, L>
 where
-    P: CopperListTuple,
+    P: CopperListTuple + 'static,
     S: SectionStorage,
     L: UnifiedLogWrite<S> + 'static,
 {
@@ -558,7 +558,7 @@ where
 
 impl<App, P, CB, TF, S, L> SessionState<App, P, CB, TF, S, L>
 where
-    P: CopperListTuple,
+    P: CopperListTuple + 'static,
     S: SectionStorage,
     L: UnifiedLogWrite<S> + 'static,
 {
@@ -699,7 +699,7 @@ where
     App: CuSimApplication<S, L> + ReflectTaskIntrospection,
     L: UnifiedLogWrite<S> + 'static,
     S: SectionStorage,
-    P: CopperListTuple,
+    P: CopperListTuple + 'static,
     CB: for<'a> Fn(
             &'a crate::copperlist::CopperList<P>,
             RobotClock,
@@ -730,7 +730,7 @@ where
     App: CuSimApplication<S, L> + ReflectTaskIntrospection,
     L: UnifiedLogWrite<S> + 'static,
     S: SectionStorage,
-    P: CopperListTuple,
+    P: CopperListTuple + 'static,
     CB: for<'a> Fn(
             &'a crate::copperlist::CopperList<P>,
             RobotClock,
@@ -2349,7 +2349,7 @@ fn update_after_jump<App, P, CB, TF, S, L>(
     state: &mut SessionState<App, P, CB, TF, S, L>,
     jump: &JumpOutcome,
 ) where
-    P: CopperListTuple,
+    P: CopperListTuple + 'static,
     S: SectionStorage,
     L: UnifiedLogWrite<S> + 'static,
 {
@@ -2366,7 +2366,7 @@ where
     App: CuSimApplication<S, L>,
     L: UnifiedLogWrite<S> + 'static,
     S: SectionStorage,
-    P: CopperListTuple,
+    P: CopperListTuple + 'static,
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
@@ -2387,7 +2387,7 @@ where
     App: CuSimApplication<S, L>,
     L: UnifiedLogWrite<S> + 'static,
     S: SectionStorage,
-    P: CopperListTuple,
+    P: CopperListTuple + 'static,
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
@@ -2415,7 +2415,7 @@ where
     App: CuSimApplication<S, L>,
     L: UnifiedLogWrite<S> + 'static,
     S: SectionStorage,
-    P: CopperListTuple,
+    P: CopperListTuple + 'static,
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
@@ -2450,7 +2450,7 @@ where
     App: CuSimApplication<S, L>,
     L: UnifiedLogWrite<S> + 'static,
     S: SectionStorage,
-    P: CopperListTuple,
+    P: CopperListTuple + 'static,
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
@@ -2479,7 +2479,7 @@ where
     App: CuSimApplication<S, L>,
     L: UnifiedLogWrite<S> + 'static,
     S: SectionStorage,
-    P: CopperListTuple,
+    P: CopperListTuple + 'static,
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
@@ -2577,7 +2577,7 @@ where
     }
 }
 
-fn copperlist_snapshot<P: CopperListTuple>(
+fn copperlist_snapshot<P: CopperListTuple + 'static>(
     cl: &crate::copperlist::CopperList<P>,
     time_of: &impl Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime>,
     include_payloads: bool,
@@ -2684,7 +2684,7 @@ where
     App: CuSimApplication<S, L> + ReflectTaskIntrospection,
     L: UnifiedLogWrite<S> + 'static,
     S: SectionStorage,
-    P: CopperListTuple,
+    P: CopperListTuple + 'static,
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
@@ -2725,7 +2725,7 @@ where
     App: CuSimApplication<S, L> + ReflectTaskIntrospection,
     L: UnifiedLogWrite<S> + 'static,
     S: SectionStorage,
-    P: CopperListTuple,
+    P: CopperListTuple + 'static,
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,

@@ -14,10 +14,10 @@ use bincode::decode_from_std_read;
 use bincode::enc::{Encode, Encoder};
 use bincode::error::{DecodeError, EncodeError};
 use core::any::TypeId;
-use core::sync::atomic::{AtomicU64, Ordering};
 use cu29_clock::Tov;
-use cu29_traits::{CuError, CuResult, UnifiedLogType, observed_encode_bytes};
+use cu29_traits::{CuError, CuResult, observed_encode_bytes};
 use hashbrown::HashMap;
+use portable_atomic::{AtomicU64, Ordering};
 use serde::de::DeserializeOwned;
 #[cfg(feature = "std")]
 use std::io::Read;
@@ -370,7 +370,8 @@ pub fn read_effective_config_ron_from_log(log_base: &Path) -> CuResult<Option<St
         ));
     };
 
-    let mut reader = UnifiedLoggerIOReader::new(read_logger, UnifiedLogType::RuntimeLifecycle);
+    let mut reader =
+        UnifiedLoggerIOReader::new(read_logger, cu29_traits::UnifiedLogType::RuntimeLifecycle);
     while let Some(record) = read_next_entry::<RuntimeLifecycleRecord>(&mut reader)? {
         if let RuntimeLifecycleEvent::Instantiated {
             effective_config_ron,

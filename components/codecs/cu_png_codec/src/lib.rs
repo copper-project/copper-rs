@@ -45,7 +45,7 @@ impl<W: BincodeWriter> Write for BincodeWriterAdapter<'_, W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.inner
             .write(buf)
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err.to_string()))?;
+            .map_err(|err| io::Error::other(err.to_string()))?;
         Ok(buf.len())
     }
 
