@@ -1,4 +1,6 @@
+use bincode::de::read::Reader as BincodeReader;
 use bincode::de::{Decode, Decoder};
+use bincode::enc::write::Writer as BincodeWriter;
 use bincode::enc::{Encode, Encoder};
 use bincode::error::{DecodeError, EncodeError};
 use cu_sensor_payloads::{CuImage, CuImageBufferFormat};
@@ -9,7 +11,7 @@ use png::{
     Encoder as PngEncoder, Filter,
 };
 use serde::{Deserialize, Serialize};
-use std::io::Cursor;
+use std::io::{self, BufRead, Read, Seek, SeekFrom, Write};
 
 #[derive(Debug, Clone, Copy)]
 enum PngCompressionSetting {
@@ -25,6 +27,135 @@ impl PngCompressionSetting {
                 encoder.set_compression(Compression::Fast);
                 encoder.set_deflate_compression(DeflateCompression::Level(level));
             }
+        }
+    }
+}
+
+struct BincodeWriterAdapter<'a, W> {
+    inner: &'a mut W,
+}
+
+impl<'a, W> BincodeWriterAdapter<'a, W> {
+    fn new(inner: &'a mut W) -> Self {
+        Self { inner }
+    }
+}
+
+impl<W: BincodeWriter> Write for BincodeWriterAdapter<'_, W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.inner
+            .write(buf)
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err.to_string()))?;
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+struct BincodeReaderAdapter<'a, R> {
+    inner: &'a mut R,
+    position: u64,
+}
+
+impl<'a, R> BincodeReaderAdapter<'a, R> {
+    fn new(inner: &'a mut R) -> Self {
+        Self { inner, position: 0 }
+    }
+
+    fn peek_window_len(&mut self) -> usize
+    where
+        R: BincodeReader,
+    {
+        if self.inner.peek_read(8192).is_some() {
+            8192
+        } else if self.inner.peek_read(4096).is_some() {
+            4096
+        } else if self.inner.peek_read(2048).is_some() {
+            2048
+        } else if self.inner.peek_read(1024).is_some() {
+            1024
+        } else if self.inner.peek_read(512).is_some() {
+            512
+        } else if self.inner.peek_read(256).is_some() {
+            256
+        } else if self.inner.peek_read(128).is_some() {
+            128
+        } else if self.inner.peek_read(64).is_some() {
+            64
+        } else if self.inner.peek_read(32).is_some() {
+            32
+        } else if self.inner.peek_read(16).is_some() {
+            16
+        } else if self.inner.peek_read(8).is_some() {
+            8
+        } else if self.inner.peek_read(4).is_some() {
+            4
+        } else if self.inner.peek_read(2).is_some() {
+            2
+        } else if self.inner.peek_read(1).is_some() {
+            1
+        } else {
+            0
+        }
+    }
+
+    fn fill_from_peek(&mut self) -> io::Result<&[u8]>
+    where
+        R: BincodeReader,
+    {
+        let peek_len = self.peek_window_len();
+        if peek_len == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "PNG codec expected more bytes from the bincode decoder",
+            ));
+        }
+
+        self.inner.peek_read(peek_len).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "PNG codec expected more bytes from the bincode decoder",
+            )
+        })
+    }
+}
+
+impl<R: BincodeReader> Read for BincodeReaderAdapter<'_, R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if buf.is_empty() {
+            return Ok(0);
+        }
+
+        let available = self.fill_from_peek()?;
+        let count = available.len().min(buf.len());
+        buf[..count].copy_from_slice(&available[..count]);
+        self.consume(count);
+        Ok(count)
+    }
+}
+
+impl<R: BincodeReader> BufRead for BincodeReaderAdapter<'_, R> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        self.fill_from_peek()
+    }
+
+    fn consume(&mut self, amt: usize) {
+        self.inner.consume(amt);
+        self.position = self.position.saturating_add(amt as u64);
+    }
+}
+
+impl<R> Seek for BincodeReaderAdapter<'_, R> {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        match pos {
+            SeekFrom::Current(0) => Ok(self.position),
+            SeekFrom::Start(target) if target == self.position => Ok(self.position),
+            _ => Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "PNG codec only supports forward streaming decode",
+            )),
         }
     }
 }
@@ -90,7 +221,6 @@ pub struct CuPngCodecConfig {
 pub struct CuPngCodec {
     compression: PngCompressionSetting,
     filter: Filter,
-    scratch: Vec<u8>,
 }
 
 impl CuPngCodec {
@@ -117,7 +247,6 @@ impl CuLogCodec<CuImage<Vec<u8>>> for CuPngCodec {
         Ok(Self {
             compression: config.compression.into_png()?,
             filter: config.filter.into(),
-            scratch: Vec::new(),
         })
     }
 
@@ -142,7 +271,7 @@ impl CuLogCodec<CuImage<Vec<u8>>> for CuPngCodec {
         }
 
         let byte_size = payload.format.byte_size();
-        self.scratch.clear();
+        payload.seq.encode(encoder)?;
         payload.buffer_handle.with_inner(|inner| {
             let image_bytes: &[u8] = inner;
             if image_bytes.len() < byte_size {
@@ -153,11 +282,9 @@ impl CuLogCodec<CuImage<Vec<u8>>> for CuPngCodec {
                 )));
             }
 
-            let mut png_encoder = PngEncoder::new(
-                &mut self.scratch,
-                payload.format.width,
-                payload.format.height,
-            );
+            let mut writer = BincodeWriterAdapter::new(encoder.writer());
+            let mut png_encoder =
+                PngEncoder::new(&mut writer, payload.format.width, payload.format.height);
             png_encoder.set_color(ColorType::Rgb);
             png_encoder.set_depth(BitDepth::Eight);
             self.compression.apply(&mut png_encoder);
@@ -169,9 +296,6 @@ impl CuLogCodec<CuImage<Vec<u8>>> for CuPngCodec {
                 .write_image_data(&image_bytes[..byte_size])
                 .map_err(|err| Self::encode_error(err.to_string()))
         })?;
-
-        payload.seq.encode(encoder)?;
-        self.scratch.encode(encoder)?;
         Ok(())
     }
 
@@ -180,9 +304,8 @@ impl CuLogCodec<CuImage<Vec<u8>>> for CuPngCodec {
         decoder: &mut D,
     ) -> Result<CuImage<Vec<u8>>, DecodeError> {
         let seq: u64 = Decode::decode(decoder)?;
-        let png_bytes: Vec<u8> = Decode::decode(decoder)?;
-
-        let mut png = PngDecoder::new(Cursor::new(png_bytes.as_slice()))
+        let mut reader = BincodeReaderAdapter::new(decoder.reader());
+        let mut png = PngDecoder::new(&mut reader)
             .read_info()
             .map_err(|err| Self::decode_error(err.to_string()))?;
         let (color_type, bit_depth) = png.output_color_type();
@@ -198,6 +321,8 @@ impl CuLogCodec<CuImage<Vec<u8>>> for CuPngCodec {
         let mut buffer = vec![0u8; output_size];
         let info = png
             .next_frame(&mut buffer)
+            .map_err(|err| Self::decode_error(err.to_string()))?;
+        png.finish()
             .map_err(|err| Self::decode_error(err.to_string()))?;
         buffer.truncate(info.buffer_size());
 
