@@ -1,7 +1,15 @@
+//! Copper-friendly payload helpers used in task messages and task-local caches.
+//!
+//! Payload types need to stay compatible with Copper's preallocated message buffers,
+//! deterministic logging, and `no_std` targets. This module therefore focuses on
+//! fixed-capacity containers and explicit state-transition payloads such as
+//! [`CuLatchedStateUpdate`] and [`CuLatchedState`].
+//!
+//! A latched state is useful when a value changes rarely, but consumers still need a
+//! deterministic view of it during live execution, logging, and replay. Producers send
+//! updates with [`CuLatchedStateUpdate`], and each consumer keeps its own local cache in
+//! [`CuLatchedState`].
 use crate::reflect::Reflect;
-/// This module is a collection of Copper friendly data structures for message payloads.
-///
-/// The constraint on the messages is that they can be part of a copper list, fixed sized and bincode serializable.
 use arrayvec::ArrayVec;
 #[cfg(feature = "reflect")]
 use bevy_reflect;
@@ -172,27 +180,61 @@ where
     }
 }
 
-/// Generic update payload for a stateful value that is cached by consumers.
+/// Producer-side update for a stateful value cached by downstream consumers.
+///
+/// Use this when a value is logically "sticky" across cycles, but you still want its
+/// evolution to be explicit in the message stream. A typical producer pattern is:
+///
+/// - emit [`Self::Set`] when the value first becomes available or changes
+/// - emit [`Self::NoChange`] on cycles where the previously latched value remains valid
+/// - emit [`Self::Clear`] when the cached value must be invalidated
+///
+/// Each consumer that cares about the value should keep a local [`CuLatchedState`] and
+/// apply incoming updates to it. Copper does not implicitly retain or replay the previous
+/// payload for you; the state transition is part of the payload itself.
 ///
 /// `NoChange` is intentionally the first variant so its bincode discriminant is zero.
+///
+/// # Examples
+///
+/// ```
+/// use cu29_runtime::payload::{CuLatchedState, CuLatchedStateUpdate};
+///
+/// let mut calibration = CuLatchedState::default();
+///
+/// calibration.update(&CuLatchedStateUpdate::Set(42u32));
+/// assert_eq!(calibration.get(), Some(&42));
+///
+/// calibration.update(&CuLatchedStateUpdate::NoChange);
+/// assert_eq!(calibration.get(), Some(&42));
+///
+/// calibration.update_owned(CuLatchedStateUpdate::Clear);
+/// assert!(calibration.is_unset());
+/// ```
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect)]
 #[reflect(opaque, from_reflect = false, no_field_bounds)]
 pub enum CuLatchedStateUpdate<T: Clone> {
+    /// Leave the consumer-side cache unchanged for this cycle.
     #[default]
     NoChange,
+    /// Replace the consumer-side cache with a new value.
     Set(T),
+    /// Remove the consumer-side cached value.
     Clear,
 }
 
 impl<T: Clone> CuLatchedStateUpdate<T> {
+    /// Returns `true` when this update leaves the cached value unchanged.
     pub fn is_no_change(&self) -> bool {
         matches!(self, Self::NoChange)
     }
 
+    /// Returns `true` when this update carries a replacement value.
     pub fn is_set(&self) -> bool {
         matches!(self, Self::Set(_))
     }
 
+    /// Returns `true` when this update clears the cached value.
     pub fn is_clear(&self) -> bool {
         matches!(self, Self::Clear)
     }
@@ -204,28 +246,38 @@ impl<T: Clone> From<T> for CuLatchedStateUpdate<T> {
     }
 }
 
-/// Cached state container updated by [`CuLatchedStateUpdate`].
+/// Consumer-side cache updated by [`CuLatchedStateUpdate`].
+///
+/// This is typically stored in a task struct and updated as messages arrive. It is not a
+/// runtime-managed global store; each consumer keeps its own copy of the latched state so
+/// replay and deterministic execution follow the same update sequence as live execution.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect)]
 #[reflect(opaque, from_reflect = false, no_field_bounds)]
 pub enum CuLatchedState<T: Clone> {
+    /// No value has been latched yet, or the previous value was cleared.
     #[default]
     Unset,
+    /// The most recently latched value.
     Set(T),
 }
 
 impl<T: Clone> CuLatchedState<T> {
+    /// Creates an empty latched state.
     pub fn new() -> Self {
         Self::Unset
     }
 
+    /// Returns `true` when a value is currently latched.
     pub fn is_set(&self) -> bool {
         matches!(self, Self::Set(_))
     }
 
+    /// Returns `true` when no value is currently latched.
     pub fn is_unset(&self) -> bool {
         matches!(self, Self::Unset)
     }
 
+    /// Returns the currently latched value, if any.
     pub fn get(&self) -> Option<&T> {
         match self {
             Self::Unset => None,
@@ -233,18 +285,24 @@ impl<T: Clone> CuLatchedState<T> {
         }
     }
 
+    /// Returns the currently latched value as a shared reference, if any.
+    ///
+    /// This is equivalent to [`Self::get`].
     pub fn as_ref(&self) -> Option<&T> {
         self.get()
     }
 
+    /// Replaces the currently latched value.
     pub fn set(&mut self, value: T) {
         *self = Self::Set(value);
     }
 
+    /// Clears the currently latched value.
     pub fn clear(&mut self) {
         *self = Self::Unset;
     }
 
+    /// Removes and returns the currently latched value, leaving the state unset.
     pub fn take(&mut self) -> Option<T> {
         let previous = core::mem::take(self);
         match previous {
@@ -253,6 +311,7 @@ impl<T: Clone> CuLatchedState<T> {
         }
     }
 
+    /// Applies an owned update without cloning the payload value.
     pub fn update_owned(&mut self, update: CuLatchedStateUpdate<T>) {
         match update {
             CuLatchedStateUpdate::NoChange => {}
@@ -263,6 +322,7 @@ impl<T: Clone> CuLatchedState<T> {
 }
 
 impl<T: Clone> CuLatchedState<T> {
+    /// Applies a borrowed update, cloning only when the update contains a new value.
     pub fn update(&mut self, update: &CuLatchedStateUpdate<T>) {
         match update {
             CuLatchedStateUpdate::NoChange => {}
