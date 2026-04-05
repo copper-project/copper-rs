@@ -3,9 +3,11 @@ use std::fmt::{self, Display, Formatter};
 
 use crate::{MatType, MemoryType};
 
+/// Crate-wide result type returned by safe ZED SDK operations.
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// SDK status codes returned by the native C API.
 pub enum ErrorCode {
     SensorConfigurationChanged,
     PotentialCalibrationIssue,
@@ -52,6 +54,7 @@ pub enum ErrorCode {
 }
 
 impl ErrorCode {
+    /// Converts a raw SDK status code into the typed Rust enum.
     pub fn from_raw(raw: i32) -> Self {
         match raw {
             -6 => Self::SensorConfigurationChanged,
@@ -99,6 +102,7 @@ impl ErrorCode {
         }
     }
 
+    /// Returns the original numeric SDK status code.
     pub fn raw(self) -> i32 {
         match self {
             Self::SensorConfigurationChanged => -6,
@@ -146,10 +150,12 @@ impl ErrorCode {
         }
     }
 
+    /// Returns `true` when the code represents a successful SDK call.
     pub fn is_success(self) -> bool {
         matches!(self, Self::Success)
     }
 
+    /// Returns the canonical SDK constant name for this code.
     pub fn name(self) -> &'static str {
         match self {
             Self::SensorConfigurationChanged => "SENSOR_CONFIGURATION_CHANGED",
@@ -205,6 +211,7 @@ impl Display for ErrorCode {
 }
 
 #[derive(Debug)]
+/// Errors produced by the safe wrapper layer.
 pub enum Error {
     Sdk {
         operation: &'static str,
@@ -250,6 +257,7 @@ pub enum Error {
 }
 
 impl Error {
+    /// Returns the underlying SDK status code when the error came from a native call.
     pub fn sdk_code(&self) -> Option<ErrorCode> {
         match self {
             Self::Sdk { code, .. } => Some(*code),

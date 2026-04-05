@@ -8,6 +8,7 @@ use crate::sys;
 use crate::types::{Bgr8, Bgra8, MemoryType, Point3Color, Resolution, Rgba8, Vec2f, Vec3f, Vec4f};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Element layout understood by the native `sl::Mat` allocation.
 pub enum MatType {
     F32C1,
     F32C2,
@@ -56,6 +57,9 @@ impl MatType {
     }
 }
 
+/// Marker trait for Rust types that can back a ZED SDK matrix.
+///
+/// Implementations must match the native SDK element layout exactly.
 pub unsafe trait MatElement: Copy + 'static {
     const MAT_TYPE: MatType;
 }
@@ -110,6 +114,11 @@ unsafe impl MatElement for Rgba8 {
     const MAT_TYPE: MatType = MatType::U8C4;
 }
 
+/// Owned `sl::Mat` allocation with an explicit Rust element type.
+///
+/// Use [`Mat::new_cpu`] when you need direct Rust access through [`Mat::view`] or
+/// [`Mat::view_mut`]. GPU-backed mats can still be used as SDK targets and synchronized back to
+/// CPU memory with [`Mat::sync_cpu_from_gpu`].
 pub struct Mat<T: MatElement> {
     ptr: *mut c_void,
     memory: MemoryType,
@@ -117,6 +126,7 @@ pub struct Mat<T: MatElement> {
 }
 
 impl<T: MatElement> Mat<T> {
+    /// Allocates a matrix with the requested resolution and backing memory type.
     pub fn new(resolution: Resolution, memory: MemoryType) -> Result<Self> {
         let width = resolution.width_i32()?;
         let height = resolution.height_i32()?;
@@ -138,29 +148,38 @@ impl<T: MatElement> Mat<T> {
         })
     }
 
+    /// Allocates a CPU-backed matrix.
     pub fn new_cpu(resolution: Resolution) -> Result<Self> {
         Self::new(resolution, MemoryType::Cpu)
     }
 
+    /// Returns the matrix resolution reported by the SDK.
     pub fn resolution(&self) -> Result<Resolution> {
         let width = unsafe { sys::sl_mat_get_width(self.ptr) };
         let height = unsafe { sys::sl_mat_get_height(self.ptr) };
         Resolution::try_from_raw(width, height, "mat")
     }
 
+    /// Returns the memory type requested when the matrix was created.
     pub fn memory_type(&self) -> MemoryType {
         self.memory
     }
 
+    /// Returns the SDK data type for this matrix allocation.
     pub fn mat_type(&self) -> MatType {
         let raw = unsafe { sys::sl_mat_get_data_type(self.ptr) };
         MatType::from_raw(raw)
     }
 
+    /// Returns the number of bytes per pixel element.
     pub fn pixel_size(&self) -> usize {
         unsafe { sys::sl_mat_get_pixel_bytes(self.ptr) as usize }
     }
 
+    /// Borrows the matrix as an immutable CPU view.
+    ///
+    /// This requires the matrix to expose CPU-visible memory and for `T` to match the native
+    /// matrix element type.
     pub fn view(&self) -> Result<MatView<'_, T>> {
         let metadata = self.view_metadata()?;
         let ptr = unsafe { sys::sl_mat_get_ptr(self.ptr, sys::SL_MEM::SL_MEM_CPU) }.cast::<T>();
@@ -177,6 +196,10 @@ impl<T: MatElement> Mat<T> {
         })
     }
 
+    /// Borrows the matrix as a mutable CPU view.
+    ///
+    /// This requires the matrix to expose CPU-visible memory and for `T` to match the native
+    /// matrix element type.
     pub fn view_mut(&mut self) -> Result<MatViewMut<'_, T>> {
         let metadata = self.view_metadata()?;
         let ptr = unsafe { sys::sl_mat_get_ptr(self.ptr, sys::SL_MEM::SL_MEM_CPU) }.cast::<T>();
@@ -193,6 +216,7 @@ impl<T: MatElement> Mat<T> {
         })
     }
 
+    /// Synchronizes the CPU side of a GPU-backed matrix.
     pub fn sync_cpu_from_gpu(&mut self) -> Result<()> {
         let code = unsafe { sys::sl_mat_update_cpu_from_gpu(self.ptr) };
         let code = ErrorCode::from_raw(code);
@@ -288,22 +312,27 @@ pub struct MatView<'a, T> {
 }
 
 impl<'a, T> MatView<'a, T> {
+    /// Returns the visible width in elements.
     pub fn width(&self) -> usize {
         self.width
     }
 
+    /// Returns the visible height in rows.
     pub fn height(&self) -> usize {
         self.height
     }
 
+    /// Returns the row stride in elements, including padding.
     pub fn stride_elems(&self) -> usize {
         self.stride_elems
     }
 
+    /// Returns `true` when rows are tightly packed with no padding.
     pub fn is_tightly_packed(&self) -> bool {
         self.stride_elems == self.width
     }
 
+    /// Returns a single row slice.
     pub fn row(&self, y: usize) -> Option<&'a [T]> {
         if y >= self.height {
             return None;
@@ -314,6 +343,7 @@ impl<'a, T> MatView<'a, T> {
         Some(&self.data[start..end])
     }
 
+    /// Iterates over visible rows.
     pub fn rows(&self) -> impl ExactSizeIterator<Item = &[T]> + Clone + '_ {
         (0..self.height).map(move |row| {
             let start = row * self.stride_elems;
@@ -322,25 +352,30 @@ impl<'a, T> MatView<'a, T> {
         })
     }
 
+    /// Returns a single element by `(x, y)` coordinates.
     pub fn get(&self, x: usize, y: usize) -> Option<&'a T> {
         self.row(y).and_then(|row| row.get(x))
     }
 
+    /// Returns the matrix contents as a contiguous slice when there is no row padding.
     pub fn as_slice(&self) -> Option<&'a [T]> {
         self.is_tightly_packed()
             .then_some(&self.data[..self.width * self.height])
     }
 
+    /// Returns the full backing slice, including any row padding.
     pub fn as_padded_slice(&self) -> &'a [T] {
         self.data
     }
 
+    /// Returns the visible contents as raw bytes when rows are tightly packed.
     pub fn as_bytes(&self) -> Option<&'a [u8]> {
         self.as_slice().map(|data| unsafe {
             slice::from_raw_parts(data.as_ptr().cast::<u8>(), std::mem::size_of_val(data))
         })
     }
 
+    /// Returns the full backing storage as raw bytes, including row padding.
     pub fn as_padded_bytes(&self) -> &'a [u8] {
         unsafe {
             slice::from_raw_parts(
@@ -351,6 +386,7 @@ impl<'a, T> MatView<'a, T> {
     }
 }
 
+/// Mutable CPU view over a [`Mat`].
 pub struct MatViewMut<'a, T> {
     width: usize,
     height: usize,
@@ -359,22 +395,27 @@ pub struct MatViewMut<'a, T> {
 }
 
 impl<'a, T> MatViewMut<'a, T> {
+    /// Returns the visible width in elements.
     pub fn width(&self) -> usize {
         self.width
     }
 
+    /// Returns the visible height in rows.
     pub fn height(&self) -> usize {
         self.height
     }
 
+    /// Returns the row stride in elements, including padding.
     pub fn stride_elems(&self) -> usize {
         self.stride_elems
     }
 
+    /// Returns `true` when rows are tightly packed with no padding.
     pub fn is_tightly_packed(&self) -> bool {
         self.stride_elems == self.width
     }
 
+    /// Returns a mutable slice for a single row.
     pub fn row_mut(&mut self, y: usize) -> Option<&mut [T]> {
         if y >= self.height {
             return None;
@@ -385,10 +426,12 @@ impl<'a, T> MatViewMut<'a, T> {
         Some(&mut self.data[start..end])
     }
 
+    /// Returns a mutable reference to a single element by `(x, y)` coordinates.
     pub fn get_mut(&mut self, x: usize, y: usize) -> Option<&mut T> {
         self.row_mut(y).and_then(|row| row.get_mut(x))
     }
 
+    /// Returns the visible contents as a contiguous mutable slice when there is no row padding.
     pub fn as_mut_slice(&mut self) -> Option<&mut [T]> {
         let width = self.width;
         let height = self.height;

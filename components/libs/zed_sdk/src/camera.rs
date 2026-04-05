@@ -16,11 +16,20 @@ static RESERVED_CAMERA_IDS: Mutex<[bool; sys::MAX_CAMERA_PLUGIN]> =
 
 const EMPTY_CSTR: &[u8] = b"\0";
 
+/// Open handle to a ZED camera, SVO file, network stream, or GMSL source.
+///
+/// Use [`Camera::open`] with [`OpenOptions`] to create an instance, then call [`Camera::grab`]
+/// followed by one or more retrieval methods such as [`Camera::retrieve_left`] or
+/// [`Camera::retrieve_depth`].
 pub struct Camera {
     camera_id: i32,
 }
 
 impl Camera {
+    /// Opens a source described by [`OpenOptions`].
+    ///
+    /// The selected source can be a USB camera, serial-numbered device, SVO file, stream, or
+    /// GMSL endpoint.
     pub fn open(options: OpenOptions) -> Result<Self> {
         let camera_id = reserve_camera_id()?;
         let mut init = options.to_raw();
@@ -119,10 +128,12 @@ impl Camera {
         }
     }
 
+    /// Returns whether the underlying SDK camera handle is currently opened.
     pub fn is_opened(&self) -> bool {
         unsafe { sys::sl_is_opened(self.camera_id) }
     }
 
+    /// Returns the SDK version string reported by the native library.
     pub fn sdk_version() -> Option<String> {
         let ptr = unsafe { sys::sl_get_sdk_version() };
         if ptr.is_null() {
@@ -136,6 +147,7 @@ impl Camera {
         )
     }
 
+    /// Returns camera metadata such as serial number, model, source type, and configured mode.
     pub fn info(&self) -> Result<CameraInformation> {
         let ptr = unsafe { sys::sl_get_camera_information(self.camera_id, 0, 0) };
         if ptr.is_null() {
@@ -146,61 +158,79 @@ impl Camera {
         CameraInformation::from_raw(raw)
     }
 
+    /// Returns the active output resolution for the opened source.
     pub fn resolution(&self) -> Result<Resolution> {
         let width = unsafe { sys::sl_get_width(self.camera_id) };
         let height = unsafe { sys::sl_get_height(self.camera_id) };
         Resolution::try_from_raw(width, height, "camera")
     }
 
+    /// Returns the nominal camera frame rate configured for the source.
     pub fn camera_fps(&self) -> f32 {
         unsafe { sys::sl_get_camera_fps(self.camera_id) }
     }
 
+    /// Returns the current measured frame rate reported by the SDK.
     pub fn current_fps(&self) -> f32 {
         unsafe { sys::sl_get_current_fps(self.camera_id) }
     }
 
+    /// Returns the timestamp of the latest image in nanoseconds.
     pub fn image_timestamp(&self) -> u64 {
         unsafe { sys::sl_get_image_timestamp(self.camera_id) }
     }
 
+    /// Returns the most recent SDK timestamp in nanoseconds.
     pub fn current_timestamp(&self) -> u64 {
         unsafe { sys::sl_get_current_timestamp(self.camera_id) }
     }
 
+    /// Grabs the next frame using the provided runtime parameters.
+    ///
+    /// Call this before retrieving images, depth, or point clouds for the current frame.
     pub fn grab(&mut self, runtime: &RuntimeParameters) -> Result<()> {
         let mut raw = runtime.to_raw();
         check_code("sl_grab", unsafe { sys::sl_grab(self.camera_id, &mut raw) })
     }
 
+    /// Reads from the source without performing a full `grab`.
     pub fn read(&mut self) -> Result<()> {
         check_code("sl_read", unsafe { sys::sl_read(self.camera_id) })
     }
 
+    /// Retrieves the left image into an `RGBA8` matrix.
     pub fn retrieve_left(&mut self, target: &mut Mat<Rgba8>) -> Result<()> {
         self.retrieve_image_raw(sys::SL_VIEW::SL_VIEW_LEFT, target)
     }
 
+    /// Retrieves the right image into an `RGBA8` matrix.
     pub fn retrieve_right(&mut self, target: &mut Mat<Rgba8>) -> Result<()> {
         self.retrieve_image_raw(sys::SL_VIEW::SL_VIEW_RIGHT, target)
     }
 
+    /// Retrieves the depth map in the configured coordinate unit.
     pub fn retrieve_depth(&mut self, target: &mut Mat<f32>) -> Result<()> {
         self.retrieve_measure_raw(sys::SL_MEASURE::SL_MEASURE_DEPTH, target)
     }
 
+    /// Retrieves the depth confidence map.
     pub fn retrieve_confidence(&mut self, target: &mut Mat<f32>) -> Result<()> {
         self.retrieve_measure_raw(sys::SL_MEASURE::SL_MEASURE_CONFIDENCE, target)
     }
 
+    /// Retrieves the XYZ point map.
     pub fn retrieve_xyz(&mut self, target: &mut Mat<Vec3f>) -> Result<()> {
         self.retrieve_measure_raw(sys::SL_MEASURE::SL_MEASURE_XYZ, target)
     }
 
+    /// Retrieves the colored XYZ point map as packed position and color values.
     pub fn retrieve_xyzrgba(&mut self, target: &mut Mat<Point3Color>) -> Result<()> {
         self.retrieve_measure_raw(sys::SL_MEASURE::SL_MEASURE_XYZRGBA, target)
     }
 
+    /// Retrieves any SDK image view into a typed target matrix.
+    ///
+    /// Most callers should prefer the typed convenience methods such as [`Camera::retrieve_left`].
     pub fn retrieve_image_raw<T: MatElement>(
         &mut self,
         view: sys::SL_VIEW,
@@ -220,6 +250,10 @@ impl Camera {
         })
     }
 
+    /// Retrieves any SDK measure into a typed target matrix.
+    ///
+    /// Most callers should prefer the typed convenience methods such as [`Camera::retrieve_depth`]
+    /// or [`Camera::retrieve_xyzrgba`].
     pub fn retrieve_measure_raw<T: MatElement>(
         &mut self,
         measure: sys::SL_MEASURE,
@@ -239,6 +273,9 @@ impl Camera {
         })
     }
 
+    /// Returns the stereo calibration parameters for the opened source.
+    ///
+    /// Pass `raw = true` to request the unrectified calibration values from the SDK.
     pub fn calibration_parameters(&self, raw: bool) -> Result<CalibrationParameters> {
         let ptr = unsafe { sys::sl_get_calibration_parameters(self.camera_id, raw) };
         if ptr.is_null() {
@@ -250,6 +287,7 @@ impl Camera {
         CalibrationParameters::from_raw(unsafe { *ptr })
     }
 
+    /// Returns the available IMU, magnetometer, and barometer configuration.
     pub fn sensors_configuration(&self) -> Result<SensorsConfiguration> {
         let ptr = unsafe { sys::sl_get_sensors_configuration(self.camera_id) };
         if ptr.is_null() {
@@ -261,6 +299,7 @@ impl Camera {
         Ok(SensorsConfiguration::from_raw(unsafe { *ptr }))
     }
 
+    /// Returns the camera-to-IMU transform reported by the SDK.
     pub fn camera_imu_transform(&self) -> Result<CameraImuTransform> {
         let mut translation = sys::SL_Vector3::default();
         let mut rotation = sys::SL_Quaternion::default();
@@ -270,6 +309,7 @@ impl Camera {
         Ok(CameraImuTransform::from_raw(translation, rotation))
     }
 
+    /// Returns the latest synchronized sensor readings for the current image time reference.
     pub fn sensors_data(&self) -> Result<SensorsData> {
         let mut raw = sys::SL_SensorsData::default();
         check_code("sl_get_sensors_data", unsafe {
