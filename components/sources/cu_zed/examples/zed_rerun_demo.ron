@@ -25,6 +25,10 @@
             id: "rerun",
             type: "ZedRerunSink",
         ),
+        (
+            id: "pointcloud",
+            type: "cu_zed::ZedDepthToPointCloudHd720",
+        ),
     ],
     cnx: [
         (
@@ -51,6 +55,21 @@
             src: "zed",
             dst: "rerun",
             msg: "cu29::prelude::CuLatchedStateUpdate<cu_zed::ZedRigTransforms>",
+        ),
+        (
+            src: "zed",
+            dst: "pointcloud",
+            msg: "cu_zed::ZedDepthMap<Vec<f32>>",
+        ),
+        (
+            src: "zed",
+            dst: "pointcloud",
+            msg: "cu29::prelude::CuLatchedStateUpdate<cu_zed::ZedCalibrationBundle>",
+        ),
+        (
+            src: "pointcloud",
+            dst: "rerun",
+            msg: "cu_zed::ZedPointCloudHd720",
         ),
         (
             src: "zed",

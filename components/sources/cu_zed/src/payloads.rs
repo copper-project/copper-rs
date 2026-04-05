@@ -145,6 +145,33 @@ impl_f32_raster_payload!(
     "ZedConfidenceMap"
 );
 
+#[derive(
+    Default, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
+)]
+#[reflect(from_reflect = false)]
+pub enum ZedCoordinateSystem {
+    Image,
+    #[default]
+    LeftHandedYUp,
+    RightHandedYUp,
+    RightHandedZUp,
+    LeftHandedZUp,
+    RightHandedZUpXForward,
+}
+
+#[derive(
+    Default, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
+)]
+#[reflect(from_reflect = false)]
+pub enum ZedCoordinateUnit {
+    Millimeter,
+    Centimeter,
+    #[default]
+    Meter,
+    Inch,
+    Foot,
+}
+
 #[derive(Default, Clone, Debug, Serialize, Deserialize, Encode, Decode, Reflect)]
 #[reflect(from_reflect = false)]
 pub struct ZedCameraIntrinsics {
@@ -168,6 +195,8 @@ pub struct ZedCalibrationBundle {
     pub width: u32,
     pub height: u32,
     pub fps: f32,
+    pub coordinate_system: ZedCoordinateSystem,
+    pub coordinate_unit: ZedCoordinateUnit,
     pub left: ZedCameraIntrinsics,
     pub right: ZedCameraIntrinsics,
     pub stereo_rotation_rodrigues: [f32; 3],

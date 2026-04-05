@@ -3,10 +3,13 @@ mod payloads;
 pub use payloads::*;
 
 use cu_sensor_payloads::{
-    BarometerPayload, CuImage, CuImageBufferFormat, ImuPayload, MagnetometerPayload,
+    BarometerPayload, CuImage, CuImageBufferFormat, Distance, ImuPayload, MagnetometerPayload,
+    PointCloudSoa, Reflectivity,
 };
 use cu_transform::FrameTransform;
 use cu29::prelude::*;
+use cu29::units::si::length::meter;
+use cu29::units::si::ratio::percent;
 
 pub type ZedStereoImages = (CuImage<Vec<u8>>, CuImage<Vec<u8>>);
 
@@ -21,6 +24,195 @@ pub type ZedSourceOutputs = (
     CuMsg<BarometerPayload>,
     CuMsg<ZedFrameMeta>,
 );
+
+/// Standard dense point cloud capacity for the default ZED `HD720` resolution.
+pub type ZedPointCloudHd720 = PointCloudSoa<{ 1280 * 720 }>;
+
+/// Pure projection task sized for the default ZED `HD720` resolution.
+pub type ZedDepthToPointCloudHd720 = ZedDepthToPointCloud<{ 1280 * 720 }>;
+
+/// Projects a `ZedDepthMap` into a standard `PointCloudSoa`.
+///
+/// The task consumes the latest latched calibration bundle and currently supports
+/// `IMAGE` and `LEFT_HANDED_Y_UP` ZED coordinate systems. Use a capacity large
+/// enough for the expected number of valid depth samples. The `Hd720` alias
+/// matches the source crate's default resolution.
+#[derive(Default, Reflect)]
+#[reflect(from_reflect = false)]
+pub struct ZedDepthToPointCloud<const MAX_POINTS: usize> {
+    calibration: CuLatchedState<ZedCalibrationBundle>,
+}
+
+impl<const MAX_POINTS: usize> Freezable for ZedDepthToPointCloud<MAX_POINTS> {}
+
+impl<const MAX_POINTS: usize> CuTask for ZedDepthToPointCloud<MAX_POINTS> {
+    type Resources<'r> = ();
+    type Input<'m> =
+        input_msg!('m, ZedDepthMap<Vec<f32>>, CuLatchedStateUpdate<ZedCalibrationBundle>);
+    type Output<'m> = output_msg!(PointCloudSoa<MAX_POINTS>);
+
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        Ok(Self::default())
+    }
+
+    fn process(
+        &mut self,
+        _ctx: &CuContext,
+        input: &Self::Input<'_>,
+        output: &mut Self::Output<'_>,
+    ) -> CuResult<()> {
+        let (depth_msg, calibration_msg) = *input;
+        self.apply_calibration_update(calibration_msg.payload());
+
+        let Some(depth) = depth_msg.payload() else {
+            output.clear_payload();
+            output.tov = depth_msg.tov;
+            output.metadata.set_status("no depth");
+            return Ok(());
+        };
+
+        let Some(calibration) = self.calibration.as_ref() else {
+            output.clear_payload();
+            output.tov = depth_msg.tov;
+            output.metadata.set_status("no calib");
+            return Ok(());
+        };
+
+        let projection = ProjectionIntrinsics::from_bundle(depth.format, calibration)?;
+        let point_tov = representative_tov(depth_msg.tov);
+        let projected_points = {
+            let pointcloud = output.payload_mut().get_or_insert_with(Default::default);
+            pointcloud.len = 0;
+
+            depth.buffer_handle.with_inner(|samples| {
+                for row in 0..depth.format.height as usize {
+                    let row_offset = row * depth.format.stride as usize;
+                    for col in 0..depth.format.width as usize {
+                        let depth_value = samples[row_offset + col];
+                        if !depth_value.is_finite() || depth_value <= 0.0 {
+                            continue;
+                        }
+
+                        if pointcloud.len == MAX_POINTS {
+                            return Err(CuError::from(format!(
+                                "ZED point cloud capacity {MAX_POINTS} exceeded while projecting {}x{} depth map",
+                                depth.format.width, depth.format.height
+                            )));
+                        }
+
+                        let (x, y, z) = projection.project(col as f32, row as f32, depth_value)?;
+                        let idx = pointcloud.len;
+                        pointcloud.tov[idx] = point_tov;
+                        pointcloud.x[idx] = Distance::new::<meter>(x);
+                        pointcloud.y[idx] = Distance::new::<meter>(y);
+                        pointcloud.z[idx] = Distance::new::<meter>(z);
+                        pointcloud.i[idx] = Reflectivity::new::<percent>(0.0);
+                        pointcloud.return_order[idx] = 0;
+                        pointcloud.len += 1;
+                    }
+                }
+
+                Ok(pointcloud.len)
+            })?
+        };
+
+        output.tov = depth_msg.tov;
+        output.metadata.set_status(projected_points);
+        Ok(())
+    }
+}
+
+impl<const MAX_POINTS: usize> ZedDepthToPointCloud<MAX_POINTS> {
+    fn apply_calibration_update(
+        &mut self,
+        update: Option<&CuLatchedStateUpdate<ZedCalibrationBundle>>,
+    ) {
+        match update {
+            Some(CuLatchedStateUpdate::Set(bundle)) => {
+                self.calibration = CuLatchedState::Set(bundle.clone());
+            }
+            Some(CuLatchedStateUpdate::Clear) => {
+                self.calibration = CuLatchedState::Unset;
+            }
+            Some(CuLatchedStateUpdate::NoChange) | None => {}
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ProjectionIntrinsics {
+    fx: f32,
+    fy: f32,
+    cx: f32,
+    cy: f32,
+    y_sign: f32,
+    depth_scale_m: f32,
+}
+
+impl ProjectionIntrinsics {
+    fn from_bundle(format: ZedRasterFormat, calibration: &ZedCalibrationBundle) -> CuResult<Self> {
+        if calibration.left.width == 0 || calibration.left.height == 0 {
+            return Err(CuError::from("ZED calibration reported a zero-sized image"));
+        }
+        if calibration.left.fx.abs() <= f32::EPSILON || calibration.left.fy.abs() <= f32::EPSILON {
+            return Err(CuError::from("ZED calibration reported zero focal length"));
+        }
+
+        let scale_x = format.width as f32 / calibration.left.width as f32;
+        let scale_y = format.height as f32 / calibration.left.height as f32;
+        let y_sign = match calibration.coordinate_system {
+            ZedCoordinateSystem::Image => 1.0,
+            ZedCoordinateSystem::LeftHandedYUp => -1.0,
+            other => {
+                return Err(CuError::from(format!(
+                    "ZedDepthToPointCloud only supports IMAGE and LEFT_HANDED_Y_UP depth projections, got {other:?}"
+                )));
+            }
+        };
+
+        Ok(Self {
+            fx: calibration.left.fx * scale_x,
+            fy: calibration.left.fy * scale_y,
+            cx: calibration.left.cx * scale_x,
+            cy: calibration.left.cy * scale_y,
+            y_sign,
+            depth_scale_m: depth_unit_scale_m(calibration.coordinate_unit),
+        })
+    }
+
+    fn project(&self, pixel_x: f32, pixel_y: f32, raw_depth: f32) -> CuResult<(f32, f32, f32)> {
+        let z = raw_depth * self.depth_scale_m;
+        let x = (pixel_x - self.cx) * z / self.fx;
+        let y = self.y_sign * (pixel_y - self.cy) * z / self.fy;
+        if !x.is_finite() || !y.is_finite() || !z.is_finite() {
+            return Err(CuError::from(
+                "ZED depth projection produced a non-finite point",
+            ));
+        }
+        Ok((x, y, z))
+    }
+}
+
+fn depth_unit_scale_m(unit: ZedCoordinateUnit) -> f32 {
+    match unit {
+        ZedCoordinateUnit::Millimeter => 1.0e-3,
+        ZedCoordinateUnit::Centimeter => 1.0e-2,
+        ZedCoordinateUnit::Meter => 1.0,
+        ZedCoordinateUnit::Inch => 0.0254,
+        ZedCoordinateUnit::Foot => 0.3048,
+    }
+}
+
+fn representative_tov(tov: Tov) -> CuTime {
+    match tov {
+        Tov::Time(time) => time,
+        Tov::Range(range) => range.start,
+        Tov::None => CuTime::default(),
+    }
+}
 
 #[cfg(not(target_os = "linux"))]
 mod empty_impl {
@@ -135,7 +327,9 @@ mod linux_impl {
         where
             Self: Sized,
         {
-            let open = build_open_options(config)?;
+            let coordinate_system = config_zed_coordinate_system(config)?;
+            let coordinate_unit = config_zed_coordinate_unit(config)?;
+            let open = build_open_options(config, coordinate_system, coordinate_unit)?;
             let runtime = build_runtime_parameters(config)?;
             let emit_confidence = config_bool(config, "emit_confidence", false)?;
             let emit_imu = config_bool(config, "emit_imu", true)?;
@@ -215,6 +409,8 @@ mod linux_impl {
                 &info,
                 &calibration,
                 camera_imu.as_ref(),
+                coordinate_system,
+                coordinate_unit,
             ));
             let pending_left_to_right = build_left_to_right_transform(&frame_prefix, &calibration);
             let pending_camera_to_imu = camera_imu
@@ -420,7 +616,11 @@ mod linux_impl {
         }
     }
 
-    fn build_open_options(config: Option<&ComponentConfig>) -> CuResult<OpenOptions> {
+    fn build_open_options(
+        config: Option<&ComponentConfig>,
+        coordinate_system: ZedCoordinateSystem,
+        coordinate_unit: ZedCoordinateUnit,
+    ) -> CuResult<OpenOptions> {
         let mut options = OpenOptions::default();
 
         if let (Some(serial_number), Some(port)) = (
@@ -463,14 +663,8 @@ mod linux_impl {
                 .map_err(|err| CuError::from(format!("Invalid ZED depth mode: {err}")))?;
             options = options.depth_mode(parsed);
         }
-        if let Some(coordinate_system) = config_string_opt(config, "coordinate_system")? {
-            let parsed = parse_coordinate_system(&coordinate_system)?;
-            options = options.coordinate_system(parsed);
-        }
-        if let Some(coordinate_unit) = config_string_opt(config, "coordinate_unit")? {
-            let parsed = parse_coordinate_unit(&coordinate_unit)?;
-            options = options.coordinate_unit(parsed);
-        }
+        options = options.coordinate_system(to_sdk_coordinate_system(coordinate_system));
+        options = options.coordinate_unit(to_sdk_coordinate_unit(coordinate_unit));
 
         let depth_min = config_f32_opt(config, "depth_minimum_distance_m")?;
         let depth_max = config_f32_opt(config, "depth_maximum_distance_m")?.unwrap_or(40.0);
@@ -493,6 +687,22 @@ mod linux_impl {
         }
 
         Ok(options)
+    }
+
+    fn config_zed_coordinate_system(
+        config: Option<&ComponentConfig>,
+    ) -> CuResult<ZedCoordinateSystem> {
+        match config_string_opt(config, "coordinate_system")? {
+            Some(value) => parse_zed_coordinate_system(&value),
+            None => Ok(ZedCoordinateSystem::default()),
+        }
+    }
+
+    fn config_zed_coordinate_unit(config: Option<&ComponentConfig>) -> CuResult<ZedCoordinateUnit> {
+        match config_string_opt(config, "coordinate_unit")? {
+            Some(value) => parse_zed_coordinate_unit(&value),
+            None => Ok(ZedCoordinateUnit::default()),
+        }
     }
 
     fn build_runtime_parameters(config: Option<&ComponentConfig>) -> CuResult<RuntimeParameters> {
@@ -546,15 +756,15 @@ mod linux_impl {
         }
     }
 
-    fn parse_coordinate_system(value: &str) -> CuResult<CoordinateSystem> {
+    fn parse_zed_coordinate_system(value: &str) -> CuResult<ZedCoordinateSystem> {
         match value.to_ascii_uppercase().as_str() {
-            "IMAGE" => Ok(CoordinateSystem::Image),
-            "LEFT_HANDED_Y_UP" => Ok(CoordinateSystem::LeftHandedYUp),
-            "RIGHT_HANDED_Y_UP" => Ok(CoordinateSystem::RightHandedYUp),
-            "RIGHT_HANDED_Z_UP" => Ok(CoordinateSystem::RightHandedZUp),
-            "LEFT_HANDED_Z_UP" => Ok(CoordinateSystem::LeftHandedZUp),
+            "IMAGE" => Ok(ZedCoordinateSystem::Image),
+            "LEFT_HANDED_Y_UP" => Ok(ZedCoordinateSystem::LeftHandedYUp),
+            "RIGHT_HANDED_Y_UP" => Ok(ZedCoordinateSystem::RightHandedYUp),
+            "RIGHT_HANDED_Z_UP" => Ok(ZedCoordinateSystem::RightHandedZUp),
+            "LEFT_HANDED_Z_UP" => Ok(ZedCoordinateSystem::LeftHandedZUp),
             "RIGHT_HANDED_Z_UP_X_FWD" | "RIGHT_HANDED_Z_UP_X_FORWARD" => {
-                Ok(CoordinateSystem::RightHandedZUpXForward)
+                Ok(ZedCoordinateSystem::RightHandedZUpXForward)
             }
             _ => Err(CuError::from(format!(
                 "Invalid ZED coordinate_system: {value}"
@@ -562,16 +772,37 @@ mod linux_impl {
         }
     }
 
-    fn parse_coordinate_unit(value: &str) -> CuResult<Unit> {
+    fn parse_zed_coordinate_unit(value: &str) -> CuResult<ZedCoordinateUnit> {
         match value.to_ascii_uppercase().as_str() {
-            "MILLIMETER" | "MILLIMETERS" => Ok(Unit::Millimeter),
-            "CENTIMETER" | "CENTIMETERS" => Ok(Unit::Centimeter),
-            "METER" | "METERS" => Ok(Unit::Meter),
-            "INCH" | "INCHES" => Ok(Unit::Inch),
-            "FOOT" | "FEET" => Ok(Unit::Foot),
+            "MILLIMETER" | "MILLIMETERS" => Ok(ZedCoordinateUnit::Millimeter),
+            "CENTIMETER" | "CENTIMETERS" => Ok(ZedCoordinateUnit::Centimeter),
+            "METER" | "METERS" => Ok(ZedCoordinateUnit::Meter),
+            "INCH" | "INCHES" => Ok(ZedCoordinateUnit::Inch),
+            "FOOT" | "FEET" => Ok(ZedCoordinateUnit::Foot),
             _ => Err(CuError::from(format!(
                 "Invalid ZED coordinate_unit: {value}"
             ))),
+        }
+    }
+
+    fn to_sdk_coordinate_system(value: ZedCoordinateSystem) -> CoordinateSystem {
+        match value {
+            ZedCoordinateSystem::Image => CoordinateSystem::Image,
+            ZedCoordinateSystem::LeftHandedYUp => CoordinateSystem::LeftHandedYUp,
+            ZedCoordinateSystem::RightHandedYUp => CoordinateSystem::RightHandedYUp,
+            ZedCoordinateSystem::RightHandedZUp => CoordinateSystem::RightHandedZUp,
+            ZedCoordinateSystem::LeftHandedZUp => CoordinateSystem::LeftHandedZUp,
+            ZedCoordinateSystem::RightHandedZUpXForward => CoordinateSystem::RightHandedZUpXForward,
+        }
+    }
+
+    fn to_sdk_coordinate_unit(value: ZedCoordinateUnit) -> Unit {
+        match value {
+            ZedCoordinateUnit::Millimeter => Unit::Millimeter,
+            ZedCoordinateUnit::Centimeter => Unit::Centimeter,
+            ZedCoordinateUnit::Meter => Unit::Meter,
+            ZedCoordinateUnit::Inch => Unit::Inch,
+            ZedCoordinateUnit::Foot => Unit::Foot,
         }
     }
 
@@ -680,12 +911,16 @@ mod linux_impl {
         info: &CameraInformation,
         calibration: &CalibrationParameters,
         camera_imu: Option<&CameraImuTransform>,
+        coordinate_system: ZedCoordinateSystem,
+        coordinate_unit: ZedCoordinateUnit,
     ) -> ZedCalibrationBundle {
         ZedCalibrationBundle {
             serial_number: info.serial_number,
             width: info.resolution.width(),
             height: info.resolution.height(),
             fps: info.fps,
+            coordinate_system,
+            coordinate_unit,
             left: intrinsics_from_sdk(&calibration.left_cam),
             right: intrinsics_from_sdk(&calibration.right_cam),
             stereo_rotation_rodrigues: calibration.rotation_rodrigues,
@@ -877,3 +1112,138 @@ mod linux_impl {
 
 #[cfg(target_os = "linux")]
 pub use linux_impl::Zed;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn calibration_bundle(
+        coordinate_system: ZedCoordinateSystem,
+        width: u32,
+        height: u32,
+    ) -> ZedCalibrationBundle {
+        ZedCalibrationBundle {
+            serial_number: 1,
+            width,
+            height,
+            fps: 30.0,
+            coordinate_system,
+            coordinate_unit: ZedCoordinateUnit::Meter,
+            left: ZedCameraIntrinsics {
+                fx: width as f32,
+                fy: height as f32,
+                cx: width as f32 / 2.0,
+                cy: height as f32 / 2.0,
+                width,
+                height,
+                ..Default::default()
+            },
+            right: ZedCameraIntrinsics {
+                width,
+                height,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    fn depth_msg(width: u32, height: u32, values: Vec<f32>) -> CuMsg<ZedDepthMap<Vec<f32>>> {
+        let mut msg = CuMsg::new(Some(ZedDepthMap::new(
+            ZedRasterFormat {
+                width,
+                height,
+                stride: width,
+            },
+            CuHandle::new_detached(values),
+        )));
+        msg.tov = Tov::Time(CuDuration(42));
+        msg
+    }
+
+    #[test]
+    fn depth_to_pointcloud_projects_image_coordinates() {
+        let ctx = CuContext::new_with_clock();
+        let mut task = ZedDepthToPointCloud::<4>::new(None, ()).expect("task");
+        let depth = depth_msg(2, 2, vec![2.0, 2.0, 2.0, 2.0]);
+        let calibration = CuMsg::new(Some(CuLatchedStateUpdate::Set(calibration_bundle(
+            ZedCoordinateSystem::Image,
+            2,
+            2,
+        ))));
+        let input = (&depth, &calibration);
+        let mut output: <ZedDepthToPointCloud<4> as CuTask>::Output<'_> = Default::default();
+
+        task.process(&ctx, &input, &mut output).expect("process");
+
+        let payload = output.payload().expect("payload");
+        assert_eq!(payload.len, 4);
+        assert_eq!(payload.x[0].value, -1.0);
+        assert_eq!(payload.y[0].value, -1.0);
+        assert_eq!(payload.z[0].value, 2.0);
+        assert_eq!(payload.x[3].value, 0.0);
+        assert_eq!(payload.y[3].value, 0.0);
+        assert_eq!(payload.z[3].value, 2.0);
+    }
+
+    #[test]
+    fn depth_to_pointcloud_flips_y_for_left_handed_y_up() {
+        let ctx = CuContext::new_with_clock();
+        let mut task = ZedDepthToPointCloud::<4>::new(None, ()).expect("task");
+        let depth = depth_msg(2, 2, vec![1.0, 1.0, 1.0, 1.0]);
+        let calibration = CuMsg::new(Some(CuLatchedStateUpdate::Set(calibration_bundle(
+            ZedCoordinateSystem::LeftHandedYUp,
+            2,
+            2,
+        ))));
+        let input = (&depth, &calibration);
+        let mut output: <ZedDepthToPointCloud<4> as CuTask>::Output<'_> = Default::default();
+
+        task.process(&ctx, &input, &mut output).expect("process");
+
+        let payload = output.payload().expect("payload");
+        assert_eq!(payload.len, 4);
+        assert_eq!(payload.y[0].value, 0.5);
+        assert_eq!(payload.y[2].value, -0.0);
+    }
+
+    #[test]
+    fn depth_to_pointcloud_scales_intrinsics_to_raster_size() {
+        let ctx = CuContext::new_with_clock();
+        let mut task = ZedDepthToPointCloud::<4>::new(None, ()).expect("task");
+        let depth = depth_msg(2, 2, vec![4.0, 4.0, 4.0, 4.0]);
+        let calibration = CuMsg::new(Some(CuLatchedStateUpdate::Set(calibration_bundle(
+            ZedCoordinateSystem::Image,
+            4,
+            4,
+        ))));
+        let input = (&depth, &calibration);
+        let mut output: <ZedDepthToPointCloud<4> as CuTask>::Output<'_> = Default::default();
+
+        task.process(&ctx, &input, &mut output).expect("process");
+
+        let payload = output.payload().expect("payload");
+        assert_eq!(payload.len, 4);
+        assert_eq!(payload.x[3].value, 0.0);
+        assert_eq!(payload.y[3].value, 0.0);
+    }
+
+    #[test]
+    fn depth_to_pointcloud_skips_invalid_depth_samples() {
+        let ctx = CuContext::new_with_clock();
+        let mut task = ZedDepthToPointCloud::<4>::new(None, ()).expect("task");
+        let depth = depth_msg(2, 2, vec![1.0, 0.0, f32::NAN, -1.0]);
+        let calibration = CuMsg::new(Some(CuLatchedStateUpdate::Set(calibration_bundle(
+            ZedCoordinateSystem::Image,
+            2,
+            2,
+        ))));
+        let input = (&depth, &calibration);
+        let mut output: <ZedDepthToPointCloud<4> as CuTask>::Output<'_> = Default::default();
+
+        task.process(&ctx, &input, &mut output).expect("process");
+
+        let payload = output.payload().expect("payload");
+        assert_eq!(payload.len, 1);
+        assert_eq!(payload.z[0].value, 1.0);
+    }
+}

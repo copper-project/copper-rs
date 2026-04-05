@@ -1,11 +1,11 @@
 use cu_sensor_payloads::{BarometerPayload, ImuPayload, MagnetometerPayload};
 use cu_zed::{
-    ZedCalibrationBundle, ZedConfidenceMap, ZedDepthMap, ZedFrameMeta, ZedRigTransforms,
-    ZedStereoImages,
+    ZedCalibrationBundle, ZedConfidenceMap, ZedDepthMap, ZedFrameMeta, ZedPointCloudHd720,
+    ZedRigTransforms, ZedStereoImages,
 };
 use cu29::clock::Tov;
 use cu29::prelude::*;
-use cu29_logviz::{apply_tov, log_as_components, log_fallback_payload, log_imu};
+use cu29_logviz::{apply_tov, log_as_components, log_fallback_payload, log_imu, log_pointcloud};
 use rerun::{Arrows3D, DepthImage, Image, RecordingStream, RecordingStreamBuilder};
 use std::path::PathBuf;
 
@@ -30,6 +30,7 @@ impl CuSinkTask for ZedRerunSink {
         ZedConfidenceMap<Vec<f32>>,
         CuLatchedStateUpdate<ZedCalibrationBundle>,
         CuLatchedStateUpdate<ZedRigTransforms>,
+        ZedPointCloudHd720,
         ImuPayload,
         MagnetometerPayload,
         BarometerPayload,
@@ -58,6 +59,7 @@ impl CuSinkTask for ZedRerunSink {
             confidence_msg,
             calibration_msg,
             transforms_msg,
+            pointcloud_msg,
             imu_msg,
             mag_msg,
             baro_msg,
@@ -81,6 +83,11 @@ impl CuSinkTask for ZedRerunSink {
         if let Some(confidence) = confidence_msg.payload() {
             apply_tov(&self.rec, &confidence_msg.tov);
             log_depth_map(&self.rec, "zed/left_camera/confidence", confidence)?;
+        }
+
+        if let Some(pointcloud) = pointcloud_msg.payload() {
+            apply_tov(&self.rec, &pointcloud_msg.tov);
+            log_pointcloud(&self.rec, "zed/pointcloud", pointcloud)?;
         }
 
         if let Some(imu) = imu_msg.payload() {
