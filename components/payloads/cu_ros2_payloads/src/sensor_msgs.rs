@@ -362,9 +362,20 @@ impl TryFrom<Image> for CuImage<Vec<u8>> {
     type Error = String;
 
     fn try_from(value: Image) -> Result<Self, Self::Error> {
-        let required = (value.step as usize)
-            .checked_mul(value.height as usize)
-            .ok_or_else(|| "Image: step*height overflow".to_string())?;
+        let format = CuImageBufferFormat {
+            width: value.width,
+            height: value.height,
+            stride: value.step,
+            pixel_format: encoding_to_pixel_format(&value.encoding),
+        };
+        if !format.is_valid() {
+            return Err(format!(
+                "Image: encoding '{}' is not valid for width={}, height={}, step={}",
+                value.encoding, value.width, value.height, value.step
+            ));
+        }
+
+        let required = format.required_bytes();
         if value.data.len() < required {
             return Err(format!(
                 "Image: data length {} < expected {}",
@@ -372,13 +383,6 @@ impl TryFrom<Image> for CuImage<Vec<u8>> {
                 required
             ));
         }
-
-        let format = CuImageBufferFormat {
-            width: value.width,
-            height: value.height,
-            stride: value.step,
-            pixel_format: encoding_to_pixel_format(&value.encoding),
-        };
         Ok(CuImage::new(format, CuHandle::new_detached(value.data)))
     }
 }
@@ -497,6 +501,12 @@ fn pixel_format_to_encoding(pixel_format: [u8; 4]) -> String {
         b"BGR3" => "bgr8".to_string(),
         b"RGBA" => "rgba8".to_string(),
         b"BGRA" => "bgra8".to_string(),
+        b"NV12" => "nv12".to_string(),
+        b"NV21" => "nv21".to_string(),
+        b"I420" => "i420".to_string(),
+        b"YV12" => "yv12".to_string(),
+        b"YUYV" => "yuyv".to_string(),
+        b"UYVY" => "uyvy".to_string(),
         _ => {
             let end = pixel_format
                 .iter()
@@ -514,6 +524,12 @@ fn encoding_to_pixel_format(encoding: &str) -> [u8; 4] {
         "bgr8" => *b"BGR3",
         "rgba8" => *b"RGBA",
         "bgra8" => *b"BGRA",
+        "nv12" | "NV12" => *b"NV12",
+        "nv21" | "NV21" => *b"NV21",
+        "i420" | "I420" => *b"I420",
+        "yv12" | "YV12" => *b"YV12",
+        "yuyv" | "YUYV" => *b"YUYV",
+        "uyvy" | "UYVY" => *b"UYVY",
         _ => {
             let mut out = [0u8; 4];
             let bytes = encoding.as_bytes();
@@ -591,6 +607,29 @@ mod tests {
         assert_eq!(recovered.format.height, format.height);
         assert_eq!(recovered.format.stride, format.stride);
         assert_eq!(recovered.format.pixel_format, format.pixel_format);
+        let recovered_bytes = recovered.buffer_handle.with_inner(|inner| inner.to_vec());
+        assert_eq!(recovered_bytes, bytes);
+    }
+
+    #[test]
+    fn image_roundtrip_nv12_uses_layout_aware_size() {
+        let format = CuImageBufferFormat {
+            width: 4,
+            height: 2,
+            stride: 4,
+            pixel_format: *b"NV12",
+        };
+        let bytes = (0u8..12).collect::<Vec<_>>();
+        let image = CuImage::new(format, CuHandle::new_detached(bytes.clone()));
+
+        let ros_value = image.to_ros_message();
+        assert_eq!(ros_value.encoding, "nv12");
+        assert_eq!(ros_value.step, 4);
+
+        let recovered =
+            CuImage::<Vec<u8>>::from_ros_message(ros_value).expect("adapter decode should work");
+        assert_eq!(recovered.format.pixel_format, *b"NV12");
+        assert_eq!(recovered.format.required_bytes(), 12);
         let recovered_bytes = recovered.buffer_handle.with_inner(|inner| inner.to_vec());
         assert_eq!(recovered_bytes, bytes);
     }

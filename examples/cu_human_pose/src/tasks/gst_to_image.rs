@@ -12,10 +12,7 @@ static GST_LOG_COUNT: AtomicUsize = AtomicUsize::new(0);
 #[derive(Reflect)]
 #[reflect(from_reflect = false)]
 pub struct GstToCuImage {
-    width: u32,
-    height: u32,
-    stride: u32,
-    pixel_format: [u8; 4],
+    format: CuImageBufferFormat,
     #[reflect(ignore)]
     pool: Arc<CuHostMemoryPool<Vec<u8>>>,
     last_payload_ns: Option<u64>,
@@ -54,9 +51,20 @@ impl CuTask for GstToCuImage {
         let stride = config
             .get::<u32>("stride")?
             .unwrap_or_else(|| default_stride(width, pixel_format));
+        let format = CuImageBufferFormat {
+            width,
+            height,
+            stride,
+            pixel_format,
+        };
+        if !format.is_valid() {
+            return Err(CuError::from(format!(
+                "Invalid image layout for fourcc={} width={} height={} stride={}",
+                fourcc, width, height, stride
+            )));
+        }
 
-        // Calculate buffer size based on pixel format
-        let buffer_size = compute_buffer_size(height, stride, pixel_format);
+        let buffer_size = format.byte_size();
         let pool_size = config.get::<u32>("pool_size")?.unwrap_or(4) as usize;
         let pool_id = config
             .get::<String>("pool_id")?
@@ -65,10 +73,7 @@ impl CuTask for GstToCuImage {
         let pool = CuHostMemoryPool::new(&pool_id, pool_size, || vec![0u8; buffer_size])?;
 
         Ok(Self {
-            width,
-            height,
-            stride,
-            pixel_format,
+            format,
             pool,
             last_payload_ns: None,
             last_warn_ns: 0,
@@ -105,17 +110,17 @@ impl CuTask for GstToCuImage {
             .map_readable()
             .map_err(|e| CuError::new_with_cause("Failed to map GStreamer buffer", e))?;
         let src = mapped.as_slice();
-        let min_len = (self.stride * self.height) as usize;
+        let min_len = self.format.required_bytes();
         let log_idx = GST_LOG_COUNT.fetch_add(1, Ordering::Relaxed);
         if log_idx < 5 {
             info!(
                 "gst_to_image: buf_len={} min_len={} width={} height={} stride={} fourcc={}",
                 src.len(),
                 min_len,
-                self.width,
-                self.height,
-                self.stride,
-                String::from_utf8_lossy(&self.pixel_format)
+                self.format.width,
+                self.format.height,
+                self.format.stride,
+                String::from_utf8_lossy(&self.format.pixel_format)
             );
         }
         if src.len() < min_len {
@@ -139,15 +144,7 @@ impl CuTask for GstToCuImage {
             dest[..copy_len].copy_from_slice(&src[..copy_len]);
         });
 
-        let image = CuImage::new(
-            CuImageBufferFormat {
-                width: self.width,
-                height: self.height,
-                stride: self.stride,
-                pixel_format: self.pixel_format,
-            },
-            handle,
-        );
+        let image = CuImage::new(self.format, handle);
         output.tov = input.tov;
         output.set_payload(image);
         Ok(())
@@ -170,24 +167,4 @@ fn fourcc_to_bytes(fourcc: &str) -> CuResult<[u8; 4]> {
     let mut out = [0u8; 4];
     out.copy_from_slice(&bytes[0..4]);
     Ok(out)
-}
-
-/// Compute the buffer size in bytes for a given image format.
-fn compute_buffer_size(height: u32, stride: u32, pixel_format: [u8; 4]) -> usize {
-    match &pixel_format {
-        // NV12/NV21: Y plane (stride * height) + UV plane (stride * height/2)
-        b"NV12" | b"NV21" => (stride * height + stride * height / 2) as usize,
-        // I420/YV12: Y plane + U plane (stride/2 * height/2) + V plane (stride/2 * height/2)
-        b"I420" | b"YV12" => (stride * height + stride * height / 2) as usize,
-        // YUYV/UYVY: 2 bytes per pixel, packed
-        b"YUYV" | b"UYVY" => (stride * height) as usize,
-        // RGB/BGR 24-bit
-        b"BGR3" | b"RGB3" | b"BGR " | b"RGB " => (stride * height) as usize,
-        // RGBA/BGRA 32-bit
-        b"RGBA" | b"BGRA" => (stride * height) as usize,
-        // Grayscale
-        b"GRAY" | b"Y800" => (stride * height) as usize,
-        // Default fallback: assume stride already accounts for bytes per row
-        _ => (stride * height) as usize,
-    }
 }
