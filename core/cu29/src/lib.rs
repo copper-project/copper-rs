@@ -74,6 +74,7 @@ pub use cu29_runtime::debug;
 #[cfg(feature = "std")]
 pub use cu29_runtime::distributed_replay;
 pub use cu29_runtime::input_msg;
+pub use cu29_runtime::logcodec;
 pub use cu29_runtime::monitoring;
 pub use cu29_runtime::output_msg;
 #[cfg(all(feature = "std", feature = "parallel-rt"))]
@@ -220,6 +221,7 @@ pub mod prelude {
     #[cfg(feature = "std")]
     pub use cu29_runtime::debug::*;
     pub use cu29_runtime::input_msg;
+    pub use cu29_runtime::logcodec::*;
     pub use cu29_runtime::monitoring::*;
     pub use cu29_runtime::output_msg;
     pub use cu29_runtime::payload::*;

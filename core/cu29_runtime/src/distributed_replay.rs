@@ -343,7 +343,7 @@ impl<App, P, S, L> RecordedReplaySession<App, P, S, L>
 where
     App: CuDistributedReplayApplication<S, L>
         + CuRecordedReplayApplication<S, L, RecordedDataSet = P>,
-    P: CopperListTuple,
+    P: CopperListTuple + 'static,
     S: SectionStorage,
     L: UnifiedLogWrite<S> + 'static,
 {
@@ -353,6 +353,7 @@ where
         clock_mock: RobotClockMock,
         log_base: &Path,
     ) -> CuResult<Self> {
+        crate::logcodec::set_effective_config_ron::<P>(&assignment.log.effective_config_ron);
         let (sections, keyframes, total_entries) =
             index_log::<P, _>(log_base, &recorded_copperlist_timestamp::<P>)?;
         let log_reader = build_read_logger(log_base)?;

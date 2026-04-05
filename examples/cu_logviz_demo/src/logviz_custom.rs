@@ -209,6 +209,8 @@ fn main() {
     .expect("Failed to log view coordinates");
     log_axes(&rec, paths.lidar, 0.2).expect("Failed to log axes");
 
+    cu29::logcodec::seed_effective_config_from_log::<CuStampedDataSet>(&args.unifiedlog_base)
+        .expect("Failed to load effective config from unified log");
     let dl = build_read_logger(&args.unifiedlog_base).expect("Failed to open unified log");
     let mut reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
 

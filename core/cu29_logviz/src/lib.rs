@@ -251,13 +251,14 @@ pub fn logviz_emit_dataset<P: LogvizDataSet>(dataset: &P, rec: &RecordingStream)
 
 pub fn run_cli<P>() -> CuResult<()>
 where
-    P: CopperListTuple + LogvizDataSet,
+    P: CopperListTuple + LogvizDataSet + 'static,
 {
     let args = LogVizCli::parse();
     let (rec, _guard) = args
         .rerun
         .init("cu29-logviz")
         .map_err(|e| CuError::from(format!("Failed to init rerun: {e}")))?;
+    let _ = cu29::logcodec::seed_effective_config_from_log::<P>(&args.unifiedlog_base)?;
     let dl = build_read_logger(&args.unifiedlog_base)?;
     let mut reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
     for culist in copperlists_reader::<P>(&mut reader) {

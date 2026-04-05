@@ -25,6 +25,7 @@ pub mod debug;
 #[cfg(feature = "std")]
 pub mod distributed_replay;
 pub(crate) mod log;
+pub mod logcodec;
 pub mod monitoring;
 #[cfg(all(feature = "std", feature = "parallel-rt"))]
 pub mod parallel_queue;

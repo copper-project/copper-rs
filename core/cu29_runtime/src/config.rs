@@ -133,6 +133,27 @@ impl ComponentConfig {
     }
 
     #[allow(dead_code)]
+    pub fn deserialize_into<T>(&self) -> Result<T, ConfigError>
+    where
+        T: DeserializeOwned,
+    {
+        let mut map = BTreeMap::new();
+        for (key, value) in &self.0 {
+            let mapped_value = ron_value_to_cu_value(&value.0).map_err(|err| err.with_key(key))?;
+            map.insert(CuValue::String(key.clone()), mapped_value);
+        }
+
+        CuValue::Map(map)
+            .deserialize_into::<T>()
+            .map_err(|err| ConfigError {
+                message: format!(
+                    "Config failed to deserialize as {}: {err}",
+                    type_name::<T>()
+                ),
+            })
+    }
+
+    #[allow(dead_code)]
     pub fn set<T: Into<Value>>(&mut self, key: &str, value: T) {
         let ComponentConfig(config) = self;
         config.insert(key.to_string(), value.into());
@@ -446,7 +467,47 @@ impl Display for Value {
 /// Configuration for logging in the node.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NodeLogging {
+    #[serde(default = "default_as_true")]
     enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    codec: Option<String>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    codecs: HashMap<String, String>,
+}
+
+impl NodeLogging {
+    #[allow(dead_code)]
+    pub fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    #[allow(dead_code)]
+    pub fn codec(&self) -> Option<&str> {
+        self.codec.as_deref()
+    }
+
+    #[allow(dead_code)]
+    pub fn codecs(&self) -> &HashMap<String, String> {
+        &self.codecs
+    }
+
+    #[allow(dead_code)]
+    pub fn codec_for_msg_type(&self, msg_type: &str) -> Option<&str> {
+        self.codecs
+            .get(msg_type)
+            .map(String::as_str)
+            .or(self.codec.as_deref())
+    }
+}
+
+impl Default for NodeLogging {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            codec: None,
+            codecs: HashMap::new(),
+        }
+    }
 }
 
 /// Distinguishes regular tasks from bridge nodes so downstream stages can apply
@@ -582,10 +643,15 @@ impl Node {
     #[allow(dead_code)]
     pub fn is_logging_enabled(&self) -> bool {
         if let Some(logging) = &self.logging {
-            logging.enabled
+            logging.enabled()
         } else {
             true
         }
+    }
+
+    #[allow(dead_code)]
+    pub fn get_logging(&self) -> Option<&NodeLogging> {
+        self.logging.as_ref()
     }
 
     #[allow(dead_code)]
@@ -1425,7 +1491,7 @@ fn default_keyframe_interval() -> Option<u32> {
     Some(DEFAULT_KEYFRAME_INTERVAL)
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LoggingConfig {
     /// Enable task logging to the log file.
     #[serde(default = "default_as_true", skip_serializing_if = "Clone::clone")]
@@ -1452,6 +1518,32 @@ pub struct LoggingConfig {
         skip_serializing_if = "Option::is_none"
     )]
     pub keyframe_interval: Option<u32>,
+
+    /// Named log codec specs reusable across task output bindings.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub codecs: Vec<LoggingCodecSpec>,
+}
+
+impl Default for LoggingConfig {
+    fn default() -> Self {
+        Self {
+            enable_task_logging: true,
+            copperlist_count: None,
+            slab_size_mib: None,
+            section_size_mib: None,
+            keyframe_interval: default_keyframe_interval(),
+            codecs: Vec::new(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct LoggingCodecSpec {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub type_: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config: Option<ComponentConfig>,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
@@ -2243,6 +2335,26 @@ impl CuConfig {
         self.runtime.as_ref()
     }
 
+    #[allow(dead_code)]
+    pub fn find_task_node(&self, mission_id: Option<&str>, task_id: &str) -> Option<&Node> {
+        self.get_graph(mission_id)
+            .ok()?
+            .get_all_nodes()
+            .into_iter()
+            .find_map(|(_, node)| {
+                (node.get_flavor() == Flavor::Task && node.id == task_id).then_some(node)
+            })
+    }
+
+    #[allow(dead_code)]
+    pub fn find_logging_codec_spec(&self, codec_id: &str) -> Option<&LoggingCodecSpec> {
+        self.logging
+            .as_ref()?
+            .codecs
+            .iter()
+            .find(|spec| spec.id == codec_id)
+    }
+
     /// Validate the logging configuration to ensure section pre-allocation sizes do not exceed slab sizes.
     /// This method is wrapper around [LoggingConfig::validate]
     pub fn validate_logging_config(&self) -> CuResult<()> {
@@ -2717,6 +2829,16 @@ impl LoggingConfig {
             return Err(CuError::from(format!(
                 "Section size ({section_size_mib} MiB) cannot be larger than slab size ({slab_size_mib} MiB). Adjust the parameters accordingly."
             )));
+        }
+
+        let mut codec_ids = HashMap::new();
+        for codec in &self.codecs {
+            if codec_ids.insert(codec.id.as_str(), ()).is_some() {
+                return Err(CuError::from(format!(
+                    "Duplicate logging codec id '{}'. Codec ids must be unique.",
+                    codec.id
+                )));
+            }
         }
 
         Ok(())

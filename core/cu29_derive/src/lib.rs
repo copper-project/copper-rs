@@ -325,6 +325,8 @@ fn build_gen_cumsgs_support(
     }
 
     Ok(gen_culist_support(
+        cuconfig,
+        mission_label,
         &culist_plan,
         &culist_order,
         &node_output_positions,
@@ -335,6 +337,8 @@ fn build_gen_cumsgs_support(
 
 /// Build the inner support of the copper list.
 fn gen_culist_support(
+    cuconfig: &CuConfig,
+    mission_label: Option<&str>,
     runtime_plan: &CuExecutionLoop,
     culist_indices_in_plan_order: &[usize],
     node_output_positions: &HashMap<NodeId, usize>,
@@ -352,11 +356,41 @@ fn gen_culist_support(
     eprintln!("[build the copperlist struct]");
     let msgs_types_tuple: TypeTuple = build_culist_tuple(&slot_types);
     let cumsg_count: usize = output_packs.iter().map(|pack| pack.msg_types.len()).sum();
+    let flat_codec_bindings = build_flat_slot_codec_bindings(
+        cuconfig,
+        mission_label,
+        &output_packs,
+        node_output_positions,
+        task_names,
+    )
+    .unwrap_or_else(|err| panic!("Could not resolve log codec bindings: {err}"));
+    let default_config_ron_ident = format_ident!("__CU_LOGCODEC_DEFAULT_CONFIG_RON");
+    let default_config_ron = cuconfig
+        .serialize_ron()
+        .unwrap_or_else(|_| "<failed to serialize config>".to_string());
+    let default_config_ron_lit = LitStr::new(&default_config_ron, Span::call_site());
+    let (codec_helper_fns, encode_helper_names, decode_helper_names) = build_culist_codec_helpers(
+        &flat_codec_bindings,
+        &default_config_ron_ident,
+        mission_label,
+    );
+    let default_config_ron_const = if flat_codec_bindings.iter().any(Option::is_some) {
+        quote! {
+            const #default_config_ron_ident: &str = #default_config_ron_lit;
+        }
+    } else {
+        quote! {}
+    };
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[build the copperlist tuple bincode support]");
-    let msgs_types_tuple_encode = build_culist_tuple_encode(&output_packs);
-    let msgs_types_tuple_decode = build_culist_tuple_decode(&slot_types, cumsg_count);
+    let msgs_types_tuple_encode = build_culist_tuple_encode(&output_packs, &encode_helper_names);
+    let msgs_types_tuple_decode = build_culist_tuple_decode(
+        &output_packs,
+        &slot_types,
+        cumsg_count,
+        &decode_helper_names,
+    );
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[build the copperlist tuple debug support]");
@@ -723,6 +757,8 @@ fn gen_culist_support(
     quote! {
         #collect_metadata_function
         #compute_payload_bytes_fn
+        #default_config_ron_const
+        #(#codec_helper_fns)*
 
         pub struct CuStampedDataSet(pub #msgs_types_tuple, cu29::monitoring::CuMsgIoCache<#cumsg_count>);
 
@@ -1237,6 +1273,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         }
 
         let culist_support: proc_macro2::TokenStream = gen_culist_support(
+            &copper_config,
+            Some(mission.as_str()),
             &culist_plan,
             &culist_call_order,
             &node_output_positions,
@@ -3986,6 +4024,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let effective_config_ron = config
                     .serialize_ron()
                     .unwrap_or_else(|_| "<failed to serialize config>".to_string());
+                ::cu29::logcodec::set_effective_config_ron::<super::#mission_mod::CuStampedDataSet>(&effective_config_ron);
                 let stack_info = RuntimeLifecycleStackInfo {
                     app_name: env!("CARGO_PKG_NAME").to_string(),
                     app_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -5148,6 +5187,7 @@ impl CuTaskSpecSet {
 #[derive(Clone)]
 struct OutputPack {
     msg_types: Vec<Type>,
+    msg_type_names: Vec<String>,
 }
 
 impl OutputPack {
@@ -5209,7 +5249,13 @@ fn extract_output_packs(runtime_plan: &CuExecutionLoop) -> Vec<OutputPack> {
                             })
                         })
                         .collect();
-                    Some((output_pack.culist_index, OutputPack { msg_types }))
+                    Some((
+                        output_pack.culist_index,
+                        OutputPack {
+                            msg_types,
+                            msg_type_names: output_pack.msg_types.clone(),
+                        },
+                    ))
                 } else {
                     None
                 }
@@ -5220,6 +5266,162 @@ fn extract_output_packs(runtime_plan: &CuExecutionLoop) -> Vec<OutputPack> {
 
     packs.sort_by_key(|(index, _)| *index);
     packs.into_iter().map(|(_, pack)| pack).collect()
+}
+
+#[derive(Clone)]
+struct SlotCodecBinding {
+    payload_type: Type,
+    task_id: String,
+    msg_type: String,
+    codec_type: syn::Path,
+    codec_type_path: String,
+}
+
+fn build_flat_slot_codec_bindings(
+    cuconfig: &CuConfig,
+    mission_label: Option<&str>,
+    output_packs: &[OutputPack],
+    node_output_positions: &HashMap<NodeId, usize>,
+    task_names: &[(NodeId, String, String)],
+) -> CuResult<Vec<Option<SlotCodecBinding>>> {
+    let mut slot_task_ids: Vec<Option<String>> = vec![None; output_packs.len()];
+    for (node_id, task_id, _) in task_names {
+        let Some(output_position) = node_output_positions.get(node_id) else {
+            continue;
+        };
+        slot_task_ids[*output_position] = Some(task_id.clone());
+    }
+
+    let mut bindings =
+        Vec::with_capacity(output_packs.iter().map(|pack| pack.msg_types.len()).sum());
+    for (slot_idx, pack) in output_packs.iter().enumerate() {
+        let task_id = slot_task_ids.get(slot_idx).and_then(|id| id.as_ref());
+        for (port_idx, payload_type) in pack.msg_types.iter().enumerate() {
+            let Some(task_id) = task_id else {
+                bindings.push(None);
+                continue;
+            };
+            let Some(msg_type) = pack.msg_type_names.get(port_idx) else {
+                return Err(CuError::from(format!(
+                    "Missing message type name for task '{task_id}' slot {slot_idx} port {port_idx}."
+                )));
+            };
+
+            let spec = cuconfig
+                .find_task_node(mission_label, task_id)
+                .and_then(|node| node.get_logging())
+                .and_then(|logging| logging.codec_for_msg_type(msg_type))
+                .map(|codec_id| {
+                    cuconfig.find_logging_codec_spec(codec_id).ok_or_else(|| {
+                        CuError::from(format!(
+                            "Task '{task_id}' binds output '{msg_type}' to unknown logging codec '{codec_id}'."
+                        ))
+                    })
+                })
+                .transpose()?;
+
+            if let Some(spec) = spec {
+                let codec_type = parse_str::<syn::Path>(&spec.type_).map_err(|_| {
+                    CuError::from(format!(
+                        "Logging codec '{}' for task '{task_id}' output '{msg_type}' is not a valid Rust type path.",
+                        spec.type_
+                    ))
+                })?;
+                bindings.push(Some(SlotCodecBinding {
+                    payload_type: payload_type.clone(),
+                    task_id: task_id.clone(),
+                    msg_type: msg_type.clone(),
+                    codec_type,
+                    codec_type_path: spec.type_.clone(),
+                }));
+            } else {
+                bindings.push(None);
+            }
+        }
+    }
+
+    Ok(bindings)
+}
+
+fn build_culist_codec_helpers(
+    flat_codec_bindings: &[Option<SlotCodecBinding>],
+    default_config_ron_ident: &Ident,
+    mission_label: Option<&str>,
+) -> (
+    Vec<proc_macro2::TokenStream>,
+    Vec<Option<Ident>>,
+    Vec<Option<Ident>>,
+) {
+    let mission_tokens = if let Some(mission) = mission_label {
+        let lit = LitStr::new(mission, Span::call_site());
+        quote! { Some(#lit) }
+    } else {
+        quote! { None }
+    };
+
+    let mut helpers = Vec::new();
+    let mut encode_helper_names = Vec::with_capacity(flat_codec_bindings.len());
+    let mut decode_helper_names = Vec::with_capacity(flat_codec_bindings.len());
+
+    for (flat_idx, binding) in flat_codec_bindings.iter().enumerate() {
+        let Some(binding) = binding else {
+            encode_helper_names.push(None);
+            decode_helper_names.push(None);
+            continue;
+        };
+
+        let encode_fn = format_ident!("__cu_logcodec_encode_slot_{flat_idx}");
+        let decode_fn = format_ident!("__cu_logcodec_decode_slot_{flat_idx}");
+        let payload_type = &binding.payload_type;
+        let codec_type = &binding.codec_type;
+        let task_id = LitStr::new(&binding.task_id, Span::call_site());
+        let msg_type = LitStr::new(&binding.msg_type, Span::call_site());
+        let codec_type_path = LitStr::new(&binding.codec_type_path, Span::call_site());
+
+        helpers.push(quote! {
+            fn #encode_fn<E: Encoder>(msg: &CuMsg<#payload_type>, encoder: &mut E) -> Result<(), EncodeError> {
+                static STATE: ::cu29::logcodec::CodecState<#codec_type> = ::cu29::logcodec::CodecState::new();
+                let config_entry = ::cu29::logcodec::effective_config_entry::<CuStampedDataSet>(#default_config_ron_ident);
+                ::cu29::logcodec::with_codec_for_encode(
+                    &STATE,
+                    config_entry,
+                    |effective_config_ron| {
+                        ::cu29::logcodec::instantiate_codec::<#codec_type, #payload_type>(
+                            effective_config_ron,
+                            #mission_tokens,
+                            #task_id,
+                            #msg_type,
+                            #codec_type_path,
+                        )
+                    },
+                    |codec| ::cu29::logcodec::encode_msg_with_codec(msg, codec, encoder),
+                )
+            }
+
+            fn #decode_fn<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<CuMsg<#payload_type>, DecodeError> {
+                static STATE: ::cu29::logcodec::CodecState<#codec_type> = ::cu29::logcodec::CodecState::new();
+                let config_entry = ::cu29::logcodec::effective_config_entry::<CuStampedDataSet>(#default_config_ron_ident);
+                ::cu29::logcodec::with_codec_for_decode(
+                    &STATE,
+                    config_entry,
+                    |effective_config_ron| {
+                        ::cu29::logcodec::instantiate_codec::<#codec_type, #payload_type>(
+                            effective_config_ron,
+                            #mission_tokens,
+                            #task_id,
+                            #msg_type,
+                            #codec_type_path,
+                        )
+                    },
+                    |codec| ::cu29::logcodec::decode_msg_with_codec(decoder, codec),
+                )
+            }
+        });
+        encode_helper_names.push(Some(encode_fn));
+        decode_helper_names.push(Some(decode_fn));
+    }
+
+    (helpers, encode_helper_names, decode_helper_names)
 }
 
 fn collect_output_pack_sizes(runtime_plan: &CuExecutionLoop) -> Vec<usize> {
@@ -5249,7 +5451,10 @@ fn build_culist_tuple(slot_types: &[Type]) -> TypeTuple {
 }
 
 /// This is the bincode encoding part of the CuStampedDataSet
-fn build_culist_tuple_encode(output_packs: &[OutputPack]) -> ItemImpl {
+fn build_culist_tuple_encode(
+    output_packs: &[OutputPack],
+    encode_helper_names: &[Option<Ident>],
+) -> ItemImpl {
     let mut flat_idx = 0usize;
     let mut encode_fields = Vec::new();
 
@@ -5259,19 +5464,35 @@ fn build_culist_tuple_encode(output_packs: &[OutputPack]) -> ItemImpl {
             for port_idx in 0..pack.msg_types.len() {
                 let port_index = syn::Index::from(port_idx);
                 let cache_index = flat_idx;
+                let encode_helper = encode_helper_names[flat_idx].clone();
                 flat_idx += 1;
-                encode_fields.push(quote! {
-                    __cu_capture.select_slot(#cache_index);
-                    self.0.#slot_index.#port_index.encode(encoder)?;
-                });
+                if let Some(encode_helper) = encode_helper {
+                    encode_fields.push(quote! {
+                        __cu_capture.select_slot(#cache_index);
+                        #encode_helper(&self.0.#slot_index.#port_index, encoder)?;
+                    });
+                } else {
+                    encode_fields.push(quote! {
+                        __cu_capture.select_slot(#cache_index);
+                        self.0.#slot_index.#port_index.encode(encoder)?;
+                    });
+                }
             }
         } else {
             let cache_index = flat_idx;
+            let encode_helper = encode_helper_names[flat_idx].clone();
             flat_idx += 1;
-            encode_fields.push(quote! {
-                __cu_capture.select_slot(#cache_index);
-                self.0.#slot_index.encode(encoder)?;
-            });
+            if let Some(encode_helper) = encode_helper {
+                encode_fields.push(quote! {
+                    __cu_capture.select_slot(#cache_index);
+                    #encode_helper(&self.0.#slot_index, encoder)?;
+                });
+            } else {
+                encode_fields.push(quote! {
+                    __cu_capture.select_slot(#cache_index);
+                    self.0.#slot_index.encode(encoder)?;
+                });
+            }
         }
     }
 
@@ -5287,16 +5508,37 @@ fn build_culist_tuple_encode(output_packs: &[OutputPack]) -> ItemImpl {
 }
 
 /// This is the bincode decoding part of the CuStampedDataSet
-fn build_culist_tuple_decode(slot_types: &[Type], cumsg_count: usize) -> ItemImpl {
-    let indices: Vec<usize> = (0..slot_types.len()).collect();
-
-    let decode_fields: Vec<_> = indices
-        .iter()
-        .map(|i| {
-            let slot_type = &slot_types[*i];
-            quote! { <#slot_type as Decode<()>>::decode(decoder)? }
-        })
-        .collect();
+fn build_culist_tuple_decode(
+    output_packs: &[OutputPack],
+    slot_types: &[Type],
+    cumsg_count: usize,
+    decode_helper_names: &[Option<Ident>],
+) -> ItemImpl {
+    let mut flat_idx = 0usize;
+    let mut decode_fields = Vec::with_capacity(slot_types.len());
+    for (slot_idx, pack) in output_packs.iter().enumerate() {
+        let slot_type = &slot_types[slot_idx];
+        if pack.is_multi() {
+            let mut slot_fields = Vec::with_capacity(pack.msg_types.len());
+            for _ in 0..pack.msg_types.len() {
+                let decode_helper = decode_helper_names[flat_idx].clone();
+                flat_idx += 1;
+                if let Some(decode_helper) = decode_helper {
+                    slot_fields.push(quote! { #decode_helper(decoder)? });
+                } else {
+                    let msg_type = &pack.msg_types[slot_fields.len()];
+                    slot_fields.push(quote! { <CuMsg<#msg_type> as Decode<()>>::decode(decoder)? });
+                }
+            }
+            decode_fields.push(quote! { ( #(#slot_fields),* ) });
+        } else if let Some(decode_helper) = decode_helper_names[flat_idx].clone() {
+            flat_idx += 1;
+            decode_fields.push(quote! { #decode_helper(decoder)? });
+        } else {
+            flat_idx += 1;
+            decode_fields.push(quote! { <#slot_type as Decode<()>>::decode(decoder)? });
+        }
+    }
 
     parse_quote! {
         impl Decode<()> for CuStampedDataSet {

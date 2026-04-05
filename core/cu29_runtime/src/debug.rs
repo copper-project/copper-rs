@@ -106,7 +106,7 @@ where
     App: CuSimApplication<S, L>,
     L: UnifiedLogWrite<S> + 'static,
     S: SectionStorage,
-    P: CopperListTuple,
+    P: CopperListTuple + 'static,
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
@@ -122,6 +122,7 @@ where
         build_callback: CB,
         time_of: TF,
     ) -> CuResult<Self> {
+        let _ = crate::logcodec::seed_effective_config_from_log::<P>(log_base)?;
         let (sections, keyframes, total_entries) = index_log::<P, _>(log_base, &time_of)?;
         let log_reader = build_read_logger(log_base)?;
         Ok(Self::new(
@@ -147,6 +148,7 @@ where
         time_of: TF,
         cache_cap: usize,
     ) -> CuResult<Self> {
+        let _ = crate::logcodec::seed_effective_config_from_log::<P>(log_base)?;
         let (sections, keyframes, total_entries) = index_log::<P, _>(log_base, &time_of)?;
         let log_reader = build_read_logger(log_base)?;
         Ok(Self::new_with_cache_cap(

@@ -1,0 +1,18 @@
+[package]
+name = "cu-png-codec"
+description = "PNG log codec for Copper image payloads"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+bincode = { workspace = true }
+cu29 = { workspace = true }
+cu-sensor-payloads = { workspace = true }
+image = { workspace = true, default-features = false, features = ["png"] }
+serde = { workspace = true }

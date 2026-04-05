@@ -263,12 +263,16 @@ where
     T: CuMsgPayload,
     M: Metadata,
 {
-    pub fn new(payload: Option<T>) -> Self {
+    pub(crate) fn from_parts(payload: Option<T>, tov: Tov, metadata: M) -> Self {
         CuStampedData {
             payload,
-            tov: Tov::default(),
-            metadata: M::default(),
+            tov,
+            metadata,
         }
+    }
+
+    pub fn new(payload: Option<T>) -> Self {
+        Self::from_parts(payload, Tov::default(), M::default())
     }
     pub fn payload(&self) -> Option<&T> {
         self.payload.as_ref()

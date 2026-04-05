@@ -11,6 +11,32 @@ const IMAGE_HEIGHT: u32 = 48;
 const IMAGE_STRIDE: u32 = IMAGE_WIDTH * 3;
 const POINTS: usize = 64;
 
+fn normalized_coord(index: usize, extent: u32) -> f32 {
+    if extent <= 1 {
+        return 0.0;
+    }
+    index as f32 / (extent - 1) as f32
+}
+
+fn unit_to_u8(value: f32) -> u8 {
+    (value.clamp(0.0, 1.0) * 255.0).round() as u8
+}
+
+fn demo_pixel(x: usize, y: usize, phase: f32) -> [u8; 3] {
+    let x_norm = normalized_coord(x, IMAGE_WIDTH);
+    let y_norm = normalized_coord(y, IMAGE_HEIGHT);
+
+    let tint = 0.5 + 0.5 * (phase * 0.35).sin();
+    let sweep = 0.5 + 0.5 * (phase * 0.2 + x_norm * PI).cos();
+    let lift = 0.5 + 0.5 * (phase * 0.5 + y_norm * PI).sin();
+
+    [
+        unit_to_u8(0.15 + 0.65 * x_norm + 0.20 * tint),
+        unit_to_u8(0.10 + 0.60 * y_norm + 0.30 * sweep),
+        unit_to_u8(0.20 + 0.35 * (1.0 - x_norm) + 0.45 * lift),
+    ]
+}
+
 #[derive(Clone, Reflect)]
 #[reflect(opaque, from_reflect = false)]
 pub struct LogvizDemoSrc {
@@ -65,14 +91,14 @@ impl CuSrcTask for LogvizDemoSrc {
 
         self.image.buffer_handle.with_inner_mut(|inner| {
             let data = &mut inner[..];
-            let tick = self.tick as u8;
             for y in 0..IMAGE_HEIGHT as usize {
                 let row = y * IMAGE_STRIDE as usize;
                 for x in 0..IMAGE_WIDTH as usize {
                     let idx = row + x * 3;
-                    data[idx] = (x as u8).wrapping_add(tick);
-                    data[idx + 1] = (y as u8).wrapping_add(tick.wrapping_mul(2));
-                    data[idx + 2] = (x as u8).wrapping_add(y as u8);
+                    let [r, g, b] = demo_pixel(x, y, phase);
+                    data[idx] = r;
+                    data[idx + 1] = g;
+                    data[idx + 2] = b;
                 }
             }
         });
@@ -173,6 +199,23 @@ mod tests {
     fn demo_pointcloud_len_is_initialized() {
         let src = LogvizDemoSrc::new(None, ()).expect("failed to build demo source");
         assert_eq!(src.pointcloud.len, POINTS);
+    }
+
+    #[test]
+    fn demo_image_stays_visually_continuous_at_end_of_run() {
+        let phase = 120.0 * 0.1;
+        let mut max_green_delta = 0u8;
+
+        for y in 1..IMAGE_HEIGHT as usize {
+            let prev = demo_pixel(0, y - 1, phase)[1];
+            let next = demo_pixel(0, y, phase)[1];
+            max_green_delta = max_green_delta.max(prev.abs_diff(next));
+        }
+
+        assert!(
+            max_green_delta < 32,
+            "unexpected vertical seam in generated image, max green delta was {max_green_delta}"
+        );
     }
 
     #[test]

@@ -68,8 +68,10 @@ pub fn copperlist_iterator_unified_typed_py<P>(
     py: pyo3::Python<'_>,
 ) -> pyo3::PyResult<pyo3::Py<pyo3::PyAny>>
 where
-    P: CopperListTuple,
+    P: CopperListTuple + 'static,
 {
+    let _ = cu29::logcodec::seed_effective_config_from_log::<P>(Path::new(unified_src_path))
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
     register_copperlist_python_type::<P>()
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
     let iter = python::copperlist_iterator_unified(unified_src_path)?;
@@ -201,7 +203,7 @@ fn build_read_logger(unifiedlog_base: &Path) -> CuResult<UnifiedLoggerRead> {
 #[cfg(feature = "mcap")]
 pub fn run_cli<P>() -> CuResult<()>
 where
-    P: CopperListTuple + CuPayloadRawBytes + mcap_export::PayloadSchemas,
+    P: CopperListTuple + CuPayloadRawBytes + mcap_export::PayloadSchemas + 'static,
 {
     #[cfg(feature = "python")]
     let _ = python::register_copperlist_python_type::<P>();
@@ -214,7 +216,7 @@ where
 #[cfg(not(feature = "mcap"))]
 pub fn run_cli<P>() -> CuResult<()>
 where
-    P: CopperListTuple + CuPayloadRawBytes,
+    P: CopperListTuple + CuPayloadRawBytes + 'static,
 {
     #[cfg(feature = "python")]
     let _ = python::register_copperlist_python_type::<P>();
@@ -225,10 +227,11 @@ where
 #[cfg(feature = "mcap")]
 fn run_cli_inner<P>() -> CuResult<()>
 where
-    P: CopperListTuple + CuPayloadRawBytes + mcap_export::PayloadSchemas,
+    P: CopperListTuple + CuPayloadRawBytes + mcap_export::PayloadSchemas + 'static,
 {
     let args = LogReaderCli::parse();
     let unifiedlog_base = args.unifiedlog_base;
+    let _ = cu29::logcodec::seed_effective_config_from_log::<P>(&unifiedlog_base)?;
 
     let mut dl = build_read_logger(&unifiedlog_base)?;
 
@@ -341,10 +344,11 @@ where
 #[cfg(not(feature = "mcap"))]
 fn run_cli_inner<P>() -> CuResult<()>
 where
-    P: CopperListTuple + CuPayloadRawBytes,
+    P: CopperListTuple + CuPayloadRawBytes + 'static,
 {
     let args = LogReaderCli::parse();
     let unifiedlog_base = args.unifiedlog_base;
+    let _ = cu29::logcodec::seed_effective_config_from_log::<P>(&unifiedlog_base)?;
 
     let mut dl = build_read_logger(&unifiedlog_base)?;
 
