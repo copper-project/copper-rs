@@ -1,0 +1,150 @@
+import "../../justfile"
+
+# Generate the demo Copper log.
+run log="logs/logviz_demo.copper":
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	invocation_dir="{{invocation_directory()}}"
+	log_path="{{log}}"
+	if [[ "$log_path" != /* ]]; then
+		log_path="${invocation_dir}/${log_path}"
+	fi
+	mkdir -p "$(dirname "$log_path")"
+
+	cd "{{ROOT}}"
+	LOGVIZ_DEMO_LOG="$log_path" cargo run -p cu-logviz-demo --bin cu-logviz-demo
+
+# Visualize the demo log in Rerun.
+logviz log="logs/logviz_demo.copper":
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	invocation_dir="{{invocation_directory()}}"
+	log_path="{{log}}"
+	if [[ "$log_path" != /* ]]; then
+		log_path="${invocation_dir}/${log_path}"
+	fi
+
+	cd "{{ROOT}}"
+	cargo run -p cu-logviz-demo --bin cu-logviz-demo-logviz --features logviz -- "$log_path" --spawn
+
+# Visualize the demo log with the custom frame tree.
+logviz-custom log="logs/logviz_demo.copper":
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	invocation_dir="{{invocation_directory()}}"
+	log_path="{{log}}"
+	if [[ "$log_path" != /* ]]; then
+		log_path="${invocation_dir}/${log_path}"
+	fi
+
+	cd "{{ROOT}}"
+	cargo run -p cu-logviz-demo --bin cu-logviz-demo-logviz-custom --features logviz -- "$log_path" --spawn
+
+# Save the default logviz view to an RRD file.
+save-rrd log="logs/logviz_demo.copper" out="out.rrd":
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	invocation_dir="{{invocation_directory()}}"
+	log_path="{{log}}"
+	if [[ "$log_path" != /* ]]; then
+		log_path="${invocation_dir}/${log_path}"
+	fi
+
+	out_path="{{out}}"
+	if [[ "$out_path" != /* ]]; then
+		out_path="${invocation_dir}/${out_path}"
+	fi
+	mkdir -p "$(dirname "$out_path")"
+
+	cd "{{ROOT}}"
+	cargo run -p cu-logviz-demo --bin cu-logviz-demo-logviz --features logviz -- "$log_path" --save "$out_path"
+
+# Run fsck against the demo Copper log.
+fsck log="logs/logviz_demo.copper":
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	invocation_dir="{{invocation_directory()}}"
+	log_path="{{log}}"
+	if [[ "$log_path" != /* ]]; then
+		log_path="${invocation_dir}/${log_path}"
+	fi
+
+	cd "{{ROOT}}"
+	cargo run -p cu-logviz-demo --features logreader --bin cu-logviz-demo-logreader -- "$log_path" fsck
+
+# Export log statistics to JSON.
+log-stats log="logs/logviz_demo.copper" out="target/cu29_logstats.json" mission="":
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	invocation_dir="{{invocation_directory()}}"
+	cfg_path="${invocation_dir}/copperconfig.ron"
+
+	log_path="{{log}}"
+	if [[ "$log_path" != /* ]]; then
+		log_path="${invocation_dir}/${log_path}"
+	fi
+
+	out_path="{{out}}"
+	if [[ "$out_path" != /* ]]; then
+		out_path="${invocation_dir}/${out_path}"
+	fi
+	mkdir -p "$(dirname "$out_path")"
+
+	mission_value="{{mission}}"
+
+	cd "{{ROOT}}"
+	if [[ -n "$mission_value" ]]; then
+		cargo run -p cu-logviz-demo --features logreader --bin cu-logviz-demo-logreader -- \
+			"$log_path" log-stats --config "$cfg_path" --output "$out_path" --mission "$mission_value"
+	else
+		cargo run -p cu-logviz-demo --features logreader --bin cu-logviz-demo-logreader -- \
+			"$log_path" log-stats --config "$cfg_path" --output "$out_path"
+	fi
+
+# Render a DAG annotated with log-derived statistics.
+dag-logstats log="logs/logviz_demo.copper" mission="" out="target/cu29_logstats.json":
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	invocation_dir="{{invocation_directory()}}"
+	cfg_path="${invocation_dir}/copperconfig.ron"
+
+	log_path="{{log}}"
+	if [[ "$log_path" != /* ]]; then
+		log_path="${invocation_dir}/${log_path}"
+	fi
+	log_base="$log_path"
+	if [[ "$log_base" == *_0.copper ]]; then
+		log_base="${log_base%_0.copper}.copper"
+	fi
+	if [[ "$log_base" == *.copper ]]; then
+		log_slab="${log_base%.copper}_0.copper"
+	else
+		log_slab="${log_base}_0.copper"
+	fi
+	[[ -f "$log_base" || -f "$log_slab" ]] || { echo "Log file not found: $log_path" >&2; exit 1; }
+
+	out_path="{{out}}"
+	if [[ "$out_path" != /* ]]; then
+		out_path="${invocation_dir}/${out_path}"
+	fi
+	mkdir -p "$(dirname "$out_path")"
+
+	mission_value="{{mission}}"
+
+	cd "{{ROOT}}"
+	if [[ -n "$mission_value" ]]; then
+		cargo run -p cu-logviz-demo --features logreader --bin cu-logviz-demo-logreader -- \
+			"$log_base" log-stats --config "$cfg_path" --output "$out_path" --mission "$mission_value"
+		cargo run -p cu29-runtime --bin cu29-rendercfg -- --logstats "$out_path" --open "$cfg_path" --mission "$mission_value"
+	else
+		cargo run -p cu-logviz-demo --features logreader --bin cu-logviz-demo-logreader -- \
+			"$log_base" log-stats --config "$cfg_path" --output "$out_path"
+		cargo run -p cu29-runtime --bin cu29-rendercfg -- --logstats "$out_path" --open "$cfg_path"
+	fi

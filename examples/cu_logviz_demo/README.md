@@ -12,15 +12,28 @@ Then you can visualize it via the app-specific logviz binary.
 
 ```bash
 # Generate a log
-cargo run -p cu-logviz-demo --bin cu-logviz-demo
+just run
+
 # Visualize it in Rerun
-cargo run -p cu-logviz-demo --bin cu-logviz-demo-logviz --features logviz -- logs/logviz_demo.copper --spawn
+just logviz
 
 # Visualize it in Rerun with the custom frame tree (map/base_link/...)
-cargo run -p cu-logviz-demo --bin cu-logviz-demo-logviz-custom --features logviz -- logs/logviz_demo.copper --spawn
+just logviz-custom
 
-# Or save to an .rrd file
-cargo run -p cu-logviz-demo --bin cu-logviz-demo-logviz --features logviz -- logs/logviz_demo.copper --save out.rrd
+# Save the default view to an .rrd file
+just save-rrd
+
+# Inspect the log and export stats
+just fsck
+just log-stats
+
+# Render the config DAG annotated with the measured log stats
+just dag-logstats
 ```
 
-You can override the output path by setting `LOGVIZ_DEMO_LOG`.
+All targets accept a custom log path, for example:
+
+```bash
+just run log=/tmp/logviz_demo.copper
+just logviz log=/tmp/logviz_demo.copper
+```
