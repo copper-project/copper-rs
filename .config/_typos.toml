@@ -9,6 +9,7 @@ NED = "NED"
 arange = "arange"
 mmaped = "mmaped"
 consts = "consts"
+Paeth = "Paeth"
 
 [files]
 extend-exclude = ["patches/*", "components/payloads/cu_ros2_payloads/**"]
