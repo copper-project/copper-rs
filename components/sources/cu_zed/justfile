@@ -1,5 +1,12 @@
 default: demo
 
+_ffi-vendor-init:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	repo_root="$(cd "{{justfile_directory()}}/../../.." && pwd)"
+	just --justfile "$repo_root/components/libs/zed_sdk_sys/justfile" _vendor-init
+
 dag:
 	#!/usr/bin/env bash
 	set -euo pipefail
@@ -8,35 +15,29 @@ dag:
 	cd "$repo_root"
 	cargo run -p cu29-runtime --bin cu29-rendercfg -- --open components/sources/cu_zed/examples/zed_rerun_demo.ron
 
-doctor:
+build: _ffi-vendor-init
 	#!/usr/bin/env bash
 	set -euo pipefail
 
 	repo_root="$(cd "{{justfile_directory()}}/../../.." && pwd)"
-	just --justfile "$repo_root/components/libs/zed_sdk_sys/justfile" doctor
+	cd "$repo_root"
+	cargo build -p cu-zed --example zed_rerun_demo --features zed-rerun-demo
 
-build:
+check: _ffi-vendor-init
 	#!/usr/bin/env bash
 	set -euo pipefail
 
 	repo_root="$(cd "{{justfile_directory()}}/../../.." && pwd)"
-	just --justfile "$repo_root/components/libs/zed_sdk_sys/justfile" build
-
-check:
-	#!/usr/bin/env bash
-	set -euo pipefail
-
-	repo_root="$(cd "{{justfile_directory()}}/../../.." && pwd)"
-	just --justfile "$repo_root/components/libs/zed_sdk_sys/justfile" vendor-init
 	cd "$repo_root"
 	cargo check -p cu-zed --example zed_rerun_demo --features zed-rerun-demo
 
-demo:
+demo: _ffi-vendor-init
 	#!/usr/bin/env bash
 	set -euo pipefail
 
 	repo_root="$(cd "{{justfile_directory()}}/../../.." && pwd)"
-	just --justfile "$repo_root/components/libs/zed_sdk_sys/justfile" demo
+	cd "$repo_root"
+	cargo run -r -p cu-zed --example zed_rerun_demo --features zed-rerun-demo
 
 run: demo
 

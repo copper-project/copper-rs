@@ -12,8 +12,8 @@ build = "build.rs"
 path = "src/lib.rs"
 
 [[bin]]
-name = "zed_open_retry"
-path = "src/bin/zed_open_retry.rs"
+name = "zed_lowlevel_demo"
+path = "src/bin/zed_lowlevel_demo.rs"
 
 [features]
 default = []

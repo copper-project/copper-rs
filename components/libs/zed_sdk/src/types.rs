@@ -7,13 +7,21 @@ use crate::error::{Error, Result};
 use crate::sys;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Depth reconstruction mode used by the SDK during camera open and frame grab.
 pub enum DepthMode {
+    /// Disable depth processing.
     None,
+    /// Fastest classic stereo mode.
     Performance,
+    /// Higher-quality classic stereo mode.
     Quality,
+    /// Highest-quality classic stereo mode.
     Ultra,
+    /// Lightweight neural depth mode.
     NeuralLight,
+    /// Neural depth mode.
     Neural,
+    /// Highest-quality neural depth mode.
     NeuralPlus,
 }
 
@@ -70,16 +78,27 @@ impl Display for DepthMode {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Output image resolution preset requested during camera open.
 pub enum ResolutionPreset {
+    /// 4K HD preset.
     Hd4k,
+    /// QHD+ preset.
     QhdPlus,
+    /// 2K HD preset.
     Hd2k,
+    /// 1536p preset.
     Hd1536,
+    /// 1080p preset.
     Hd1080,
+    /// 1200p preset.
     Hd1200,
+    /// 720p preset.
     Hd720,
+    /// SVGA preset.
     Svga,
+    /// VGA preset.
     Vga,
+    /// Let the SDK choose automatically.
     Auto,
 }
 
@@ -145,12 +164,19 @@ impl FromStr for ResolutionPreset {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Coordinate system used for depth, point cloud, and pose outputs.
 pub enum CoordinateSystem {
+    /// Image-space coordinates.
     Image,
+    /// Left-handed coordinates with +Y pointing up.
     LeftHandedYUp,
+    /// Right-handed coordinates with +Y pointing up.
     RightHandedYUp,
+    /// Right-handed coordinates with +Z pointing up.
     RightHandedZUp,
+    /// Left-handed coordinates with +Z pointing up.
     LeftHandedZUp,
+    /// Right-handed coordinates with +Z up and +X forward.
     RightHandedZUpXForward,
 }
 
@@ -180,11 +206,17 @@ impl Default for CoordinateSystem {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Unit used for SDK distance values.
 pub enum Unit {
+    /// Millimeters.
     Millimeter,
+    /// Centimeters.
     Centimeter,
+    /// Meters.
     Meter,
+    /// Inches.
     Inch,
+    /// Feet.
     Foot,
 }
 
@@ -207,8 +239,11 @@ impl Default for Unit {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Reference frame used when retrieving runtime measurements.
 pub enum ReferenceFrame {
+    /// Measurements are expressed in the world frame.
     World,
+    /// Measurements are expressed in the current camera frame.
     Camera,
 }
 
@@ -228,9 +263,13 @@ impl Default for ReferenceFrame {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Memory placement for matrix allocations.
 pub enum MemoryType {
+    /// CPU-visible memory only.
     Cpu,
+    /// GPU memory only.
     Gpu,
+    /// Memory accessible from both CPU and GPU.
     Both,
 }
 
@@ -258,6 +297,7 @@ impl MemoryType {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// High-level category of input selected for camera open.
 pub enum InputType {
     Usb,
     Svo,
@@ -277,11 +317,17 @@ impl InputType {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+/// Concrete source used to open the SDK.
 pub enum InputSource {
+    /// Local USB camera selected by device id.
     Usb { device_id: i32 },
+    /// Local camera selected by serial number.
     SerialNumber(u32),
+    /// Recorded SVO file on disk.
     SvoFile(PathBuf),
+    /// Network stream source.
     Stream { ip: String, port: i32 },
+    /// GMSL camera selected by serial number and port.
     Gmsl { serial_number: u32, port: i32 },
 }
 
@@ -310,20 +356,24 @@ impl Default for InputSource {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Concrete width and height pair.
 pub struct Resolution {
     width: u32,
     height: u32,
 }
 
 impl Resolution {
+    /// Creates a resolution from width and height in pixels.
     pub const fn new(width: u32, height: u32) -> Self {
         Self { width, height }
     }
 
+    /// Returns the width in pixels.
     pub const fn width(self) -> u32 {
         self.width
     }
 
+    /// Returns the height in pixels.
     pub const fn height(self) -> u32 {
         self.height
     }
@@ -356,6 +406,9 @@ impl Resolution {
 }
 
 #[derive(Clone, Debug)]
+/// Builder-style camera open options.
+///
+/// Start from [`OpenOptions::default`] and adjust only the fields you care about.
 pub struct OpenOptions {
     pub(crate) source: InputSource,
     pub(crate) resolution: ResolutionPreset,
@@ -381,102 +434,123 @@ pub struct OpenOptions {
 }
 
 impl OpenOptions {
+    /// Replaces the input source.
     pub fn source(mut self, source: InputSource) -> Self {
         self.source = source;
         self
     }
 
+    /// Selects a USB camera by device id.
     pub fn camera_device_id(mut self, device_id: i32) -> Self {
         self.source = InputSource::Usb { device_id };
         self
     }
 
+    /// Sets the requested output resolution preset.
     pub fn resolution(mut self, resolution: ResolutionPreset) -> Self {
         self.resolution = resolution;
         self
     }
 
+    /// Sets the requested frame rate.
     pub fn fps(mut self, fps: i32) -> Self {
         self.fps = fps;
         self
     }
 
+    /// Sets the depth reconstruction mode.
     pub fn depth_mode(mut self, depth_mode: DepthMode) -> Self {
         self.depth_mode = depth_mode;
         self
     }
 
+    /// Sets the unit used for distances returned by the SDK.
     pub fn coordinate_unit(mut self, coordinate_unit: Unit) -> Self {
         self.coordinate_unit = coordinate_unit;
         self
     }
 
+    /// Sets the coordinate system used for depth and point cloud outputs.
     pub fn coordinate_system(mut self, coordinate_system: CoordinateSystem) -> Self {
         self.coordinate_system = coordinate_system;
         self
     }
 
+    /// Sets the minimum and maximum depth range in meters.
     pub fn depth_range_m(mut self, min: Option<f32>, max: f32) -> Self {
         self.depth_minimum_distance_m = min;
         self.depth_maximum_distance_m = max;
         self
     }
 
+    /// Sets the open timeout used by the SDK.
     pub fn open_timeout(mut self, open_timeout: Duration) -> Self {
         self.open_timeout = open_timeout;
         self
     }
 
+    /// Enables retrieval of the right-side depth measure when supported.
     pub fn enable_right_side_measure(mut self, enable_right_side_measure: bool) -> Self {
         self.enable_right_side_measure = enable_right_side_measure;
         self
     }
 
+    /// Requires motion sensors to be available during open.
     pub fn sensors_required(mut self, sensors_required: bool) -> Self {
         self.sensors_required = sensors_required;
         self
     }
 
+    /// Sets the SDK verbosity level.
     pub fn sdk_verbose(mut self, sdk_verbose: i32) -> Self {
         self.sdk_verbose = sdk_verbose;
         self
     }
 
+    /// Writes the SDK log output to a file.
     pub fn output_log_file(mut self, output_log_file: impl Into<PathBuf>) -> Self {
         self.output_log_file = Some(output_log_file.into());
         self
     }
 
+    /// Uses an alternate SDK settings directory or file path.
     pub fn settings_path(mut self, settings_path: impl Into<PathBuf>) -> Self {
         self.settings_path = Some(settings_path.into());
         self
     }
 
+    /// Uses an alternate OpenCV calibration file path.
     pub fn opencv_calibration_path(mut self, opencv_calibration_path: impl Into<PathBuf>) -> Self {
         self.opencv_calibration_path = Some(opencv_calibration_path.into());
         self
     }
 
+    /// Returns the configured source.
     pub fn source_ref(&self) -> &InputSource {
         &self.source
     }
 
+    /// Returns the configured resolution preset.
     pub fn resolution_preset(&self) -> ResolutionPreset {
         self.resolution
     }
 
+    /// Returns the configured frame rate.
     pub fn fps_value(&self) -> i32 {
         self.fps
     }
 
+    /// Returns the configured depth mode.
     pub fn depth_mode_value(&self) -> DepthMode {
         self.depth_mode
     }
 
+    /// Returns the configured open timeout.
     pub fn open_timeout_value(&self) -> Duration {
         self.open_timeout
     }
 
+    /// Returns the configured maximum depth distance in meters.
     pub fn depth_maximum_distance_m_value(&self) -> f32 {
         self.depth_maximum_distance_m
     }
@@ -544,6 +618,7 @@ impl Default for OpenOptions {
 }
 
 #[derive(Clone, Copy, Debug)]
+/// Per-grab runtime tuning options.
 pub struct RuntimeParameters {
     pub(crate) reference_frame: ReferenceFrame,
     pub(crate) enable_depth: bool,
@@ -554,26 +629,31 @@ pub struct RuntimeParameters {
 }
 
 impl RuntimeParameters {
+    /// Sets the reference frame for runtime measurements.
     pub fn reference_frame(mut self, reference_frame: ReferenceFrame) -> Self {
         self.reference_frame = reference_frame;
         self
     }
 
+    /// Enables or disables depth computation during `grab`.
     pub fn enable_depth(mut self, enable_depth: bool) -> Self {
         self.enable_depth = enable_depth;
         self
     }
 
+    /// Enables hole filling in depth results.
     pub fn enable_fill_mode(mut self, enable_fill_mode: bool) -> Self {
         self.enable_fill_mode = enable_fill_mode;
         self
     }
 
+    /// Sets the depth confidence threshold.
     pub fn confidence_threshold(mut self, confidence_threshold: i32) -> Self {
         self.confidence_threshold = confidence_threshold;
         self
     }
 
+    /// Sets the texture confidence threshold.
     pub fn texture_confidence_threshold(mut self, texture_confidence_threshold: i32) -> Self {
         self.texture_confidence_threshold = texture_confidence_threshold;
         self
@@ -605,6 +685,7 @@ impl Default for RuntimeParameters {
 }
 
 #[derive(Clone, Copy, Debug)]
+/// High-level metadata for an opened camera or playback source.
 pub struct CameraInformation {
     pub serial_number: u32,
     pub model: sys::SL_MODEL,
@@ -630,6 +711,7 @@ impl CameraInformation {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+/// Intrinsic parameters for one camera eye.
 pub struct CameraParameters {
     pub fx: f32,
     pub fy: f32,
@@ -665,6 +747,7 @@ impl CameraParameters {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+/// Stereo calibration for the left and right cameras.
 pub struct CalibrationParameters {
     pub left_cam: CameraParameters,
     pub right_cam: CameraParameters,
@@ -686,6 +769,7 @@ impl CalibrationParameters {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+/// Capability and noise data for one physical sensor.
 pub struct SensorParameters {
     pub resolution: f32,
     pub sampling_rate: f32,
@@ -712,6 +796,7 @@ impl SensorParameters {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+/// Static configuration for the motion and environmental sensors.
 pub struct SensorsConfiguration {
     pub camera_imu_rotation: Vec4f,
     pub camera_imu_translation: Vec3f,
@@ -739,6 +824,7 @@ impl SensorsConfiguration {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+/// Camera-to-IMU extrinsic transform.
 pub struct CameraImuTransform {
     pub translation: Vec3f,
     pub rotation_xyzw: [f32; 4],
@@ -754,6 +840,7 @@ impl CameraImuTransform {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+/// IMU sample synchronized to the image timeline.
 pub struct ImuData {
     pub timestamp_ns: u64,
     pub angular_velocity: Vec3f,
@@ -788,6 +875,7 @@ impl ImuData {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+/// Barometer sample synchronized to the image timeline.
 pub struct BarometerData {
     pub timestamp_ns: u64,
     pub pressure_pa: f32,
@@ -805,6 +893,7 @@ impl BarometerData {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+/// Magnetometer sample synchronized to the image timeline.
 pub struct MagnetometerData {
     pub timestamp_ns: u64,
     pub magnetic_field_ut: Vec3f,
@@ -830,6 +919,7 @@ impl MagnetometerData {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+/// Temperature readings reported by the camera module.
 pub struct TemperatureData {
     pub imu_temp_c: f32,
     pub barometer_temp_c: f32,
@@ -849,6 +939,7 @@ impl TemperatureData {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+/// Collection of sensor samples returned by the SDK for one image time reference.
 pub struct SensorsData {
     pub imu: Option<ImuData>,
     pub barometer: Option<BarometerData>,
@@ -873,6 +964,7 @@ impl SensorsData {
 
 #[repr(C)]
 #[derive(Default, Clone, Copy, Debug, Eq, PartialEq)]
+/// Packed BGR pixel.
 pub struct Bgr8 {
     pub b: u8,
     pub g: u8,
@@ -881,6 +973,7 @@ pub struct Bgr8 {
 
 #[repr(C)]
 #[derive(Default, Clone, Copy, Debug, Eq, PartialEq)]
+/// Packed BGRA pixel.
 pub struct Bgra8 {
     pub b: u8,
     pub g: u8,
@@ -890,6 +983,7 @@ pub struct Bgra8 {
 
 #[repr(C)]
 #[derive(Default, Clone, Copy, Debug, Eq, PartialEq)]
+/// Packed RGBA pixel.
 pub struct Rgba8 {
     pub r: u8,
     pub g: u8,
@@ -899,6 +993,7 @@ pub struct Rgba8 {
 
 #[repr(C)]
 #[derive(Default, Clone, Copy, Debug, PartialEq)]
+/// Two-lane `f32` vector.
 pub struct Vec2f {
     pub x: f32,
     pub y: f32,
@@ -906,6 +1001,7 @@ pub struct Vec2f {
 
 #[repr(C)]
 #[derive(Default, Clone, Copy, Debug, PartialEq)]
+/// Three-lane `f32` vector.
 pub struct Vec3f {
     pub x: f32,
     pub y: f32,
@@ -914,6 +1010,7 @@ pub struct Vec3f {
 
 #[repr(C)]
 #[derive(Default, Clone, Copy, Debug, PartialEq)]
+/// Four-lane `f32` vector.
 pub struct Vec4f {
     pub x: f32,
     pub y: f32,
@@ -923,6 +1020,7 @@ pub struct Vec4f {
 
 #[repr(C)]
 #[derive(Default, Clone, Copy, Debug, PartialEq)]
+/// Packed XYZ point with an SDK-encoded RGBA payload.
 pub struct Point3Color {
     pub x: f32,
     pub y: f32,
@@ -931,18 +1029,22 @@ pub struct Point3Color {
 }
 
 impl Point3Color {
+    /// Returns the XYZ position as a plain array.
     pub fn position(self) -> [f32; 3] {
         [self.x, self.y, self.z]
     }
 
+    /// Returns the packed RGBA value as raw bits.
     pub fn rgba_bits(self) -> u32 {
         self.rgba.to_bits()
     }
 
+    /// Returns the packed RGBA value as native-endian bytes.
     pub fn rgba_bytes(self) -> [u8; 4] {
         self.rgba_bits().to_ne_bytes()
     }
 
+    /// Returns `true` when all XYZ coordinates are finite.
     pub fn is_finite(self) -> bool {
         self.x.is_finite() && self.y.is_finite() && self.z.is_finite()
     }
