@@ -1,5 +1,5 @@
 use proc_macro::TokenStream;
-use quote::{format_ident, quote};
+use quote::{ToTokens, format_ident, quote};
 use std::collections::{BTreeMap, HashMap};
 use std::fs::read_to_string;
 use std::path::Path;
@@ -668,7 +668,23 @@ fn gen_culist_support(
         }
     }
 
-    let task_name_literals = flatten_slot_origin_ids(&output_packs, slot_origin_ids);
+    let task_name_literals = flatten_slot_origin_ids(&output_packs, &slot_origin_ids);
+    let task_output_specs = flatten_task_output_specs(&output_packs, &slot_origin_ids);
+    let task_output_spec_literals: Vec<proc_macro2::TokenStream> = task_output_specs
+        .iter()
+        .map(|(task_id, msg_type, payload_type_path)| {
+            let task_id = LitStr::new(task_id, Span::call_site());
+            let msg_type = LitStr::new(msg_type, Span::call_site());
+            let payload_type_path = LitStr::new(payload_type_path, Span::call_site());
+            quote! {
+                cu29::TaskOutputSpec {
+                    task_id: #task_id,
+                    msg_type: #msg_type,
+                    payload_type_path: #payload_type_path,
+                }
+            }
+        })
+        .collect();
 
     let mut logviz_blocks = Vec::new();
     for (slot_idx, pack) in output_packs.iter().enumerate() {
@@ -785,6 +801,11 @@ fn gen_culist_support(
             #[allow(dead_code)]
             fn get_all_task_ids() -> &'static [&'static str] {
                 &[#(#task_name_literals),*]
+            }
+
+            #[allow(dead_code)]
+            fn get_output_specs() -> &'static [cu29::TaskOutputSpec] {
+                &[#(#task_output_spec_literals),*]
             }
         }
 
@@ -5213,7 +5234,7 @@ fn build_output_slot_type(msg_types: &[Type]) -> Type {
 
 fn flatten_slot_origin_ids(
     output_packs: &[OutputPack],
-    slot_origin_ids: Vec<Option<String>>,
+    slot_origin_ids: &[Option<String>],
 ) -> Vec<String> {
     let mut ids = Vec::new();
     for (slot, pack) in output_packs.iter().enumerate() {
@@ -5229,6 +5250,38 @@ fn flatten_slot_origin_ids(
         }
     }
     ids
+}
+
+fn flatten_task_output_specs(
+    output_packs: &[OutputPack],
+    slot_origin_ids: &[Option<String>],
+) -> Vec<(String, String, String)> {
+    let mut specs = Vec::new();
+    for (slot, pack) in output_packs.iter().enumerate() {
+        if pack.msg_types.is_empty() {
+            continue;
+        }
+        let origin = slot_origin_ids
+            .get(slot)
+            .and_then(|origin| origin.as_ref())
+            .unwrap_or_else(|| panic!("Missing slot origin id for copperlist output slot {slot}"));
+        for (msg_type, payload_type) in pack.msg_type_names.iter().zip(pack.msg_types.iter()) {
+            specs.push((
+                origin.clone(),
+                msg_type.clone(),
+                rust_type_path_literal(payload_type),
+            ));
+        }
+    }
+    specs
+}
+
+fn rust_type_path_literal(ty: &Type) -> String {
+    ty.to_token_stream()
+        .to_string()
+        .chars()
+        .filter(|ch| !ch.is_whitespace())
+        .collect()
 }
 
 fn extract_output_packs(runtime_plan: &CuExecutionLoop) -> Vec<OutputPack> {

@@ -509,8 +509,19 @@ pub trait CuPayloadRawBytes {
 ///
 /// The returned slice must be aligned with `ErasedCuStampedDataSet::cumsgs()`:
 /// index `i` maps to copperlist slot `i`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TaskOutputSpec {
+    pub task_id: &'static str,
+    pub msg_type: &'static str,
+    pub payload_type_path: &'static str,
+}
+
 pub trait MatchingTasks {
     fn get_all_task_ids() -> &'static [&'static str];
+
+    fn get_output_specs() -> &'static [TaskOutputSpec] {
+        &[]
+    }
 }
 
 /// Trait for providing JSON schemas for CopperList payload types.
