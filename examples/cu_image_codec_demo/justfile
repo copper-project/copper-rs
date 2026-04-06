@@ -1,0 +1,50 @@
+import "../../justfile"
+
+run log="logs/image_codec_demo.copper":
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	invocation_dir="{{invocation_directory()}}"
+	log_path="{{log}}"
+	if [[ "$log_path" != /* ]]; then
+		log_path="${invocation_dir}/${log_path}"
+	fi
+	mkdir -p "$(dirname "$log_path")"
+
+	cd "{{ROOT}}"
+	cargo run -p cu-image-codec-demo --features ffv1 --bin cu-image-codec-demo -- "$log_path"
+
+fsck log="logs/image_codec_demo.copper":
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	invocation_dir="{{invocation_directory()}}"
+	log_path="{{log}}"
+	if [[ "$log_path" != /* ]]; then
+		log_path="${invocation_dir}/${log_path}"
+	fi
+
+	cd "{{ROOT}}"
+	cargo run -p cu-image-codec-demo --features logreader --bin cu-image-codec-demo-logreader -- "$log_path" fsck
+
+log-stats log="logs/image_codec_demo.copper" out="target/cu29_logstats.json":
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	invocation_dir="{{invocation_directory()}}"
+	cfg_path="${invocation_dir}/copperconfig.ron"
+
+	log_path="{{log}}"
+	if [[ "$log_path" != /* ]]; then
+		log_path="${invocation_dir}/${log_path}"
+	fi
+
+	out_path="{{out}}"
+	if [[ "$out_path" != /* ]]; then
+		out_path="${invocation_dir}/${out_path}"
+	fi
+	mkdir -p "$(dirname "$out_path")"
+
+	cd "{{ROOT}}"
+	cargo run -p cu-image-codec-demo --features logreader --bin cu-image-codec-demo-logreader -- \
+		"$log_path" log-stats --config "$cfg_path" --output "$out_path"

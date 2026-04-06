@@ -1,0 +1,67 @@
+(
+    logging: (
+        slab_size_mib: 64,
+        section_size_mib: 8,
+        codecs: [
+            (
+                id: "png",
+                type: "cu_png_codec::CuPngCodec",
+            ),
+            (
+                id: "ffv1",
+                type: "cu_ffv1_codec::CuFfv1Codec",
+            ),
+        ],
+    ),
+    tasks: [
+        (
+            id: "image_src",
+            type: "tasks::SyntheticImageSrc",
+            logging: (enabled: false),
+        ),
+        (
+            id: "png_encode",
+            type: "tasks::ImagePassThrough",
+            logging: (
+                codecs: {
+                    "cu_sensor_payloads::CuImage<Vec<u8>>": "png",
+                },
+            ),
+        ),
+        (
+            id: "ffv1_encode",
+            type: "tasks::ImagePassThrough",
+            logging: (
+                codecs: {
+                    "cu_sensor_payloads::CuImage<Vec<u8>>": "ffv1",
+                },
+            ),
+        ),
+        (
+            id: "image_sink",
+            type: "tasks::ImageSink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "image_src",
+            dst: "png_encode",
+            msg: "cu_sensor_payloads::CuImage<Vec<u8>>",
+        ),
+        (
+            src: "image_src",
+            dst: "ffv1_encode",
+            msg: "cu_sensor_payloads::CuImage<Vec<u8>>",
+        ),
+        (
+            src: "png_encode",
+            dst: "image_sink",
+            msg: "cu_sensor_payloads::CuImage<Vec<u8>>",
+        ),
+        (
+            src: "ffv1_encode",
+            dst: "image_sink",
+            msg: "cu_sensor_payloads::CuImage<Vec<u8>>",
+        ),
+    ],
+)

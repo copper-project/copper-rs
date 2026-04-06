@@ -7,8 +7,8 @@ use cu_sensor_payloads::{CuImage, CuImageBufferFormat};
 use cu29::logcodec::CuLogCodec;
 use cu29::prelude::{CuError, CuHandle, CuResult};
 use png::{
-    BitDepth, ColorType, Compression, Decoder as PngDecoder, DeflateCompression,
-    Encoder as PngEncoder, Filter,
+    BitDepth, ColorType, Compression, Decoder as PngDecoder, DecodingError as PngDecodingError,
+    DeflateCompression, Encoder as PngEncoder, Filter,
 };
 use serde::{Deserialize, Serialize};
 use std::io::{self, BufRead, Read, Seek, SeekFrom, Write};
@@ -33,19 +33,32 @@ impl PngCompressionSetting {
 
 struct BincodeWriterAdapter<'a, W> {
     inner: &'a mut W,
+    last_error: Option<EncodeError>,
 }
 
 impl<'a, W> BincodeWriterAdapter<'a, W> {
     fn new(inner: &'a mut W) -> Self {
-        Self { inner }
+        Self {
+            inner,
+            last_error: None,
+        }
+    }
+
+    fn take_encode_error(&mut self, fallback: impl Into<String>) -> EncodeError {
+        self.last_error
+            .take()
+            .unwrap_or_else(|| EncodeError::OtherString(fallback.into()))
     }
 }
 
 impl<W: BincodeWriter> Write for BincodeWriterAdapter<'_, W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.inner
-            .write(buf)
-            .map_err(|err| io::Error::other(err.to_string()))?;
+        self.inner.write(buf).map_err(|err| {
+            if self.last_error.is_none() {
+                self.last_error = Some(err);
+            }
+            io::Error::other("bincode writer failure")
+        })?;
         Ok(buf.len())
     }
 
@@ -232,6 +245,15 @@ impl CuPngCodec {
         DecodeError::OtherString(message.into())
     }
 
+    fn png_decode_error(err: PngDecodingError) -> DecodeError {
+        match err {
+            PngDecodingError::IoError(inner) if inner.kind() == io::ErrorKind::UnexpectedEof => {
+                DecodeError::UnexpectedEnd { additional: 1 }
+            }
+            other => Self::decode_error(other.to_string()),
+        }
+    }
+
     fn expected_rgb_stride(format: CuImageBufferFormat) -> Result<u32, String> {
         format
             .width
@@ -283,18 +305,20 @@ impl CuLogCodec<CuImage<Vec<u8>>> for CuPngCodec {
             }
 
             let mut writer = BincodeWriterAdapter::new(encoder.writer());
-            let mut png_encoder =
-                PngEncoder::new(&mut writer, payload.format.width, payload.format.height);
-            png_encoder.set_color(ColorType::Rgb);
-            png_encoder.set_depth(BitDepth::Eight);
-            self.compression.apply(&mut png_encoder);
-            png_encoder.set_filter(self.filter);
+            let png_result = {
+                let mut png_encoder =
+                    PngEncoder::new(&mut writer, payload.format.width, payload.format.height);
+                png_encoder.set_color(ColorType::Rgb);
+                png_encoder.set_depth(BitDepth::Eight);
+                self.compression.apply(&mut png_encoder);
+                png_encoder.set_filter(self.filter);
 
-            png_encoder
-                .write_header()
-                .map_err(|err| Self::encode_error(err.to_string()))?
-                .write_image_data(&image_bytes[..byte_size])
-                .map_err(|err| Self::encode_error(err.to_string()))
+                match png_encoder.write_header() {
+                    Ok(mut png_writer) => png_writer.write_image_data(&image_bytes[..byte_size]),
+                    Err(err) => Err(err),
+                }
+            };
+            png_result.map_err(|err| writer.take_encode_error(err.to_string()))
         })?;
         Ok(())
     }
@@ -307,7 +331,7 @@ impl CuLogCodec<CuImage<Vec<u8>>> for CuPngCodec {
         let mut reader = BincodeReaderAdapter::new(decoder.reader());
         let mut png = PngDecoder::new(&mut reader)
             .read_info()
-            .map_err(|err| Self::decode_error(err.to_string()))?;
+            .map_err(Self::png_decode_error)?;
         let (color_type, bit_depth) = png.output_color_type();
         if color_type != ColorType::Rgb || bit_depth != BitDepth::Eight {
             return Err(Self::decode_error(format!(
@@ -321,9 +345,8 @@ impl CuLogCodec<CuImage<Vec<u8>>> for CuPngCodec {
         let mut buffer = vec![0u8; output_size];
         let info = png
             .next_frame(&mut buffer)
-            .map_err(|err| Self::decode_error(err.to_string()))?;
-        png.finish()
-            .map_err(|err| Self::decode_error(err.to_string()))?;
+            .map_err(Self::png_decode_error)?;
+        png.finish().map_err(Self::png_decode_error)?;
         buffer.truncate(info.buffer_size());
 
         let stride = info
@@ -365,6 +388,7 @@ mod tests {
         }
     }
 
+    #[derive(Debug)]
     struct DecodedWithCodec(CuImage<Vec<u8>>);
 
     impl Decode<()> for DecodedWithCodec {
@@ -446,5 +470,45 @@ mod tests {
             bytes.to_vec()
         });
         assert_eq!(decoded_bytes, original_bytes);
+    }
+
+    #[test]
+    fn png_codec_preserves_unexpected_end() {
+        let original = sample_image();
+        let mut buffer = vec![0u8; 32];
+        let err = bincode::encode_into_slice(
+            EncodedWithCodec {
+                image: &original,
+                codec: std::cell::RefCell::new(
+                    CuPngCodec::new(CuPngCodecConfig::default()).expect("codec"),
+                ),
+            },
+            &mut buffer,
+            standard(),
+        )
+        .expect_err("expected short buffer failure");
+
+        assert!(matches!(err, EncodeError::UnexpectedEnd));
+    }
+
+    #[test]
+    fn png_codec_decode_truncation_is_unexpected_end() {
+        let original = sample_image();
+        let mut encoded = encode_to_vec(
+            EncodedWithCodec {
+                image: &original,
+                codec: std::cell::RefCell::new(
+                    CuPngCodec::new(CuPngCodecConfig::default()).expect("codec"),
+                ),
+            },
+            standard(),
+        )
+        .expect("encode");
+        encoded.pop().expect("encoded payload should not be empty");
+
+        let err = decode_from_slice::<DecodedWithCodec, _>(&encoded, standard())
+            .expect_err("expected truncated decode failure");
+
+        assert!(matches!(err, DecodeError::UnexpectedEnd { .. }));
     }
 }
