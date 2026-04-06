@@ -1,10 +1,10 @@
+use cu29::prelude::*;
+use cu29::units::si::f32::Ratio;
+use cu29::units::si::ratio::ratio;
 use cu_ads7883_new::ADSReadingPayload;
 use cu_pid::{GenericPIDTask, PIDControlOutputPayload};
 use cu_rp_encoder::EncoderPayload;
 use cu_rp_sn754410_new::MotorPayload;
-use cu29::prelude::*;
-use cu29::units::si::f32::Ratio;
-use cu29::units::si::ratio::ratio;
 
 pub type BalPID = GenericPIDTask<ADSReadingPayload>;
 pub type PosPID = GenericPIDTask<EncoderPayload>;

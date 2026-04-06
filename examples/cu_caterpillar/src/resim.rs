@@ -1,14 +1,34 @@
 pub mod tasks;
+
 use cu29::prelude::app::CuSimApplication;
 use cu29::prelude::*;
+use cu29::remote_debug::SessionOpenParams;
+use cu29::replay::{
+    ensure_log_family_exists, per_session_replay_log_base, remove_log_family, serve_remote_debug,
+    ReplayCli, ReplayDefaults,
+};
 use cu29_export::{copperlists_reader, keyframes_reader};
 use cu29_unifiedlog::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
 use default::SimStep::{Gpio0, Gpio1, Gpio2, Gpio3, Gpio4, Gpio5, Gpio6, Gpio7, Src};
+use std::error::Error;
 use std::path::Path;
+
+const DEFAULT_LOG_BASE: &str = "logs/caterpillar.copper";
+const DEFAULT_REPLAY_LOG_BASE: &str = "logs/caterpillarresim.copper";
+#[allow(clippy::identity_op)]
+const REPLAY_LOG_SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);
 
 // To enable resim, it is just your regular macro with sim_mode true
 #[copper_runtime(config = "copperconfig.ron", sim_mode = true)]
 struct CaterpillarReSim {}
+
+type ReplayCopperList = CopperList<default::CuStampedDataSet>;
+type ReplayBuildCallback =
+    for<'a> fn(
+        &'a ReplayCopperList,
+        RobotClock,
+    ) -> Box<dyn for<'z> FnMut(default::SimStep<'z>) -> SimOverride + 'a>;
+type ReplayTimeExtractor = fn(&ReplayCopperList) -> Option<CuTime>;
 
 fn default_callback(step: default::SimStep) -> SimOverride {
     match step {
@@ -17,6 +37,7 @@ fn default_callback(step: default::SimStep) -> SimOverride {
         _ => SimOverride::ExecuteByRuntime,
     }
 }
+
 fn run_one_copperlist(
     copper_app: &mut CaterpillarReSim,
     robot_clock: &mut RobotClockMock,
@@ -28,7 +49,6 @@ fn run_one_copperlist(
     let msgs = copper_list.msgs;
 
     if let Some(CuDuration(ts)) = pending_kf_ts {
-        // Align clock exactly to the recorded keyframe timestamp for this CL.
         copper_app
             .copper_runtime_mut()
             .set_forced_keyframe_timestamp(CuDuration(ts));
@@ -39,8 +59,8 @@ fn run_one_copperlist(
     }
 
     let mut sim_callback = move |step: default::SimStep| -> SimOverride {
-        use CuTaskCallbackState::*;
         use default::SimStep::*;
+        use CuTaskCallbackState::*;
         match step {
             Src(Process(_, output)) => {
                 *output = msgs.get_src_output().clone();
@@ -115,7 +135,7 @@ fn run_one_copperlist(
     };
     copper_app
         .run_one_iteration(&mut sim_callback)
-        .expect("Failed to run application.");
+        .expect("failed to run resim iteration");
 }
 
 fn open_log_reader(log_path: &Path, log_type: UnifiedLogType) -> CuResult<UnifiedLoggerIOReader> {
@@ -129,61 +149,56 @@ fn open_log_reader(log_path: &Path, log_type: UnifiedLogType) -> CuResult<Unifie
     Ok(UnifiedLoggerIOReader::new(reader, log_type))
 }
 
-fn main() {
-    // Create the Copper App in simulation mode.
-    #[allow(clippy::identity_op)]
-    const LOG_SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);
-    let logger_path = "logs/caterpillarresim.copper";
-    let (robot_clock, mut robot_clock_mock) = RobotClock::mock();
-    let mut copper_app = CaterpillarReSim::builder()
+fn build_callback<'a>(
+    copper_list: &'a ReplayCopperList,
+    _clock_for_callbacks: RobotClock,
+) -> Box<dyn for<'z> FnMut(default::SimStep<'z>) -> SimOverride + 'a> {
+    Box::new(move |step: default::SimStep<'_>| default::recorded_replay_step(step, copper_list))
+}
+
+fn extract_time(copperlist: &ReplayCopperList) -> Option<CuTime> {
+    cu29::simulation::recorded_copperlist_timestamp(copperlist)
+}
+
+fn make_app(log_base: &Path) -> CuResult<(CaterpillarReSim, RobotClock, RobotClockMock)> {
+    let (robot_clock, robot_clock_mock) = RobotClock::mock();
+    let copper_app = CaterpillarReSim::builder()
         .with_clock(robot_clock.clone())
-        .with_log_path(logger_path, LOG_SLAB_SIZE)
-        .expect("Failed to setup logger.")
+        .with_log_path(log_base, REPLAY_LOG_SLAB_SIZE)?
         .with_sim_callback(&mut default_callback)
-        .build()
-        .expect("Failed to create runtime.");
+        .build()?;
+    Ok((copper_app, robot_clock, robot_clock_mock))
+}
 
-    copper_app
-        .start_all_tasks(&mut default_callback)
-        .expect("Failed to start all tasks.");
+fn run_one_shot(log_base: &Path, replay_log_base: &Path) -> CuResult<()> {
+    remove_log_family(replay_log_base)?;
+    let (mut copper_app, _robot_clock, mut robot_clock_mock) = make_app(replay_log_base)?;
 
-    // Restore tasks from the first keyframe so sim starts from the recorded state.
-    let mut keyframes_ioreader = open_log_reader(
-        Path::new("logs/caterpillar.copper"),
-        UnifiedLogType::FrozenTasks,
-    )
-    .expect("Failed to open log");
+    copper_app.start_all_tasks(&mut default_callback)?;
+
+    let mut keyframes_ioreader = open_log_reader(log_base, UnifiedLogType::FrozenTasks)?;
     let mut kf_iter = keyframes_reader(&mut keyframes_ioreader).peekable();
 
     if let Some(first_kf) = kf_iter.peek() {
         <CaterpillarReSim as CuSimApplication<MmapSectionStorage, MmapUnifiedLoggerWrite>>::restore_keyframe(
             &mut copper_app,
             first_kf,
-        )
-        .expect("Failed to restore keyframe state");
+        )?;
         let CuDuration(ts) = first_kf.timestamp;
         robot_clock_mock.set_value(ts);
     }
 
-    // Read back the logs from a previous run, applying keyframes exactly at their culistid.
-    let mut copperlists = open_log_reader(
-        Path::new("logs/caterpillar.copper"),
-        UnifiedLogType::CopperList,
-    )
-    .expect("Failed to open log");
+    let mut copperlists = open_log_reader(log_base, UnifiedLogType::CopperList)?;
     let cl_iter = copperlists_reader::<default::CuStampedDataSet>(&mut copperlists);
     for entry in cl_iter {
-        // Apply next keyframe if it corresponds to this CL id
         let pending_kf_ts = if let Some(kf) = kf_iter.peek() {
             if kf.culistid == entry.id {
                 let ts = kf.timestamp;
-                // Lock the recorded keyframe so it is replayed verbatim; also restore live state.
                 copper_app.copper_runtime_mut().lock_keyframe(kf);
                 <CaterpillarReSim as CuSimApplication<
                     MmapSectionStorage,
                     MmapUnifiedLoggerWrite,
-                >>::restore_keyframe(&mut copper_app, kf)
-                .expect("Failed to restore keyframe state");
+                >>::restore_keyframe(&mut copper_app, kf)?;
                 kf_iter.next();
                 Some(ts)
             } else {
@@ -196,12 +211,55 @@ fn main() {
         run_one_copperlist(&mut copper_app, &mut robot_clock_mock, entry, pending_kf_ts);
     }
 
-    // let cl_iter = copperlists_reader::<default::CuStampedDataSet>(&mut copperlists_reader);
-    // for entry in cl_iter {
-    //     println!("{entry:#?}");
-    //     run_one_copperlist(&mut copper_app, &mut robot_clock_mock, entry);
-    // }
-    // copper_app
-    //     .stop_all_tasks(&mut default_callback)
-    //     .expect("Failed to stop all tasks.");
+    Ok(())
+}
+
+fn app_factory(
+    params: &SessionOpenParams,
+    replay_template: &Path,
+) -> CuResult<(CaterpillarReSim, RobotClock, RobotClockMock)> {
+    let replay_log_base = per_session_replay_log_base(
+        replay_template,
+        [params.role.as_deref().unwrap_or("session")],
+    );
+    remove_log_family(&replay_log_base)?;
+    make_app(&replay_log_base)
+}
+
+fn run_remote_debug_server(
+    debug_base: &str,
+    log_base: &Path,
+    replay_log_base: &Path,
+) -> CuResult<()> {
+    let replay_template = replay_log_base.to_path_buf();
+    serve_remote_debug::<
+        CaterpillarReSim,
+        default::CuStampedDataSet,
+        ReplayBuildCallback,
+        ReplayTimeExtractor,
+        MmapSectionStorage,
+        MmapUnifiedLoggerWrite,
+        _,
+    >(
+        debug_base,
+        log_base,
+        move |params| app_factory(params, &replay_template),
+        build_callback,
+        extract_time,
+    )
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let cli = ReplayCli::parse(ReplayDefaults::new(
+        DEFAULT_LOG_BASE,
+        DEFAULT_REPLAY_LOG_BASE,
+    ));
+
+    ensure_log_family_exists(&cli.log_base)?;
+    if let Some(debug_base) = cli.debug_base.as_deref() {
+        run_remote_debug_server(debug_base, &cli.log_base, &cli.replay_log_base)?;
+    } else {
+        run_one_shot(&cli.log_base, &cli.replay_log_base)?;
+    }
+    Ok(())
 }

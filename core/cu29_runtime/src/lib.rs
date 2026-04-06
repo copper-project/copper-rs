@@ -37,6 +37,8 @@ pub mod pool;
 pub mod reflect;
 #[cfg(feature = "remote-debug")]
 pub mod remote_debug;
+#[cfg(feature = "std")]
+pub mod replay;
 pub mod resource;
 #[cfg(feature = "std")]
 pub mod simulation;

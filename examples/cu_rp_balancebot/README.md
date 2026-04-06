@@ -50,10 +50,18 @@ This writes a relocatable static Trunk bundle into `dist/balancebot/` with hashe
 
 ```bash
 $ cd examples/cu_rp_balancebot
-$ cargo run --bin balancebot-resim --release
+$ cargo run --no-default-features --features sim-debug --bin balancebot-resim --release
 ```
 
-It will recreate the logs from only the inputs of the previous run in `logs/balancebot_resim*.copper`.
+This replay-only build enables Copper's debug API feature set without pulling the Bevy simulator.
+It will recreate the logs from only the inputs of the previous run in `logs/balanceresim*.copper`.
+
+To start the replay-backed remote debug server instead of a one-shot replay:
+
+```bash
+$ cd examples/cu_rp_balancebot
+$ just resim-debug
+```
 
 ## To run on the real robot
 

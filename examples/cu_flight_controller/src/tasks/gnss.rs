@@ -1,6 +1,6 @@
 use super::*;
-use cu_gnss_payloads::GnssFixSolution;
 use cu29::units::si::angle::degree;
+use cu_gnss_payloads::GnssFixSolution;
 
 #[cfg(feature = "firmware")]
 pub type GnssSource = cu_gnss_ublox::UbxSourceTask<cu_micoairh743::Uart3Port>;

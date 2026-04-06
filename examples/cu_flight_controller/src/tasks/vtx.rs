@@ -1,16 +1,20 @@
 use crate::messages::{BatteryVoltage, ControlInputs, FlightMode, GeographicHeading};
 use crate::tasks;
 use crate::tasks::{
-    BATTERY_CURRENT_METER_SOURCE_NONE, BATTERY_MAX_CELL_CENTIVOLTS_DEFAULT,
+    StatusLabel, BATTERY_CURRENT_METER_SOURCE_NONE, BATTERY_MAX_CELL_CENTIVOLTS_DEFAULT,
     BATTERY_MIN_CELL_CENTIVOLTS_DEFAULT, BATTERY_VBAT_RES_DIV_MULT_DEFAULT,
     BATTERY_VBAT_RES_DIV_VAL_DEFAULT, BATTERY_VBAT_SCALE_DEFAULT, BATTERY_VOLTAGE_METER_SOURCE_ADC,
     BATTERY_WARN_CELL_CENTIVOLTS_DEFAULT, MSP_API_PROTOCOL_VERSION, MSP_API_VERSION_MAJOR,
     MSP_API_VERSION_MINOR, MSP_ARMING_DISABLE_FLAGS_COUNT, MSP_FC_VERSION_MAJOR,
     MSP_FC_VERSION_MINOR, MSP_FC_VERSION_PATCH, MSP_VOLTAGE_METER_ADC_SUBFRAME_LEN,
-    MSP_VOLTAGE_METER_ID_BATTERY_1, MSP_VOLTAGE_METER_SENSOR_TYPE_ADC_RES_DIV, StatusLabel,
-    VTX_CELL_DIVISOR, VTX_DRAW_PERIOD_MS, VTX_HEARTBEAT_PERIOD_MS, VTX_WATERMARK_LINES,
+    MSP_VOLTAGE_METER_ID_BATTERY_1, MSP_VOLTAGE_METER_SENSOR_TYPE_ADC_RES_DIV, VTX_CELL_DIVISOR,
+    VTX_DRAW_PERIOD_MS, VTX_HEARTBEAT_PERIOD_MS, VTX_WATERMARK_LINES,
 };
 use alloc::vec::Vec;
+use cu29::prelude::*;
+use cu29::units::si::angle::degree;
+use cu29::units::si::electric_potential::volt;
+use cu29::units::si::velocity::meter_per_second;
 use cu_gnss_payloads::GnssFixSolution;
 use cu_msp_bridge::MspRequestBatch;
 use cu_msp_lib::structs::{
@@ -19,10 +23,6 @@ use cu_msp_lib::structs::{
     MspVoltageMeterConfig,
 };
 use cu_sensor_payloads::BarometerPayload;
-use cu29::prelude::*;
-use cu29::units::si::angle::degree;
-use cu29::units::si::electric_potential::volt;
-use cu29::units::si::velocity::meter_per_second;
 
 const VTX_SYM_VOLT: char = '\x06';
 const VTX_SYM_DEGREE: char = '\x08';

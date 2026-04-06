@@ -16,7 +16,6 @@ ignored = ["serde"]
 
 [dependencies]
 serde = { workspace = true }
-bevy_ecs = { version = "0.18.0", default-features = false }
 cu-ads7883-new = { path = "../../components/sources/cu_ads7883", version = "0.15.0" }
 cu-rp-sn754410-new = { path = "../../components/sinks/cu_rp_sn754410", version = "0.15.0" }
 cu-rp-encoder = { path = "../../components/sources/cu_rp_encoder", version = "0.15.0" }
@@ -107,14 +106,16 @@ bevy = { workspace = true, default-features = false, features = [
 default = ["logreader", "sim"]
 # generates an executable to read the logs
 logreader = ["dep:cu29-export"]
-# dependencies to build to matrix for copper
+sim_core = ["cu29/sysclock-perf"]
+# dependencies to run the Bevy-based balancebot sim
 sim = [
+  "sim_core",
   "dep:bevy",
   "dep:bevy_anti_alias",
   "dep:avian3d",
   "dep:cached-path",
-  "cu29/sysclock-perf",
-] # dependencies to run the Bevy-based balancebot sim
+]
+sim-debug = ["logreader", "cu29/reflect", "cu29/remote-debug"]
 bevymon = ["sim", "dep:cu-bevymon"]
 
 [[bin]]
@@ -139,4 +140,4 @@ required-features = ["sim"]
 [[bin]]
 name = "balancebot-resim"
 path = "src/resim.rs"
-required-features = ["sim", "logreader"]
+required-features = ["sim-debug"]

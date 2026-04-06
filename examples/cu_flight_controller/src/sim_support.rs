@@ -1,16 +1,16 @@
 #![cfg(any(feature = "sim", feature = "bevymon"))]
 
-use cu_gnss_payloads::{
-    GnssAccuracy, GnssCommandAck, GnssEpochTime, GnssFixSolution, GnssFixType, GnssInfoText,
-    GnssRawUbxFrame, GnssRfStatus, GnssSatelliteState, GnssSatsInView, GnssSignalState,
-};
-use cu_sensor_payloads::{BarometerPayload, ImuPayload, MagnetometerPayload};
 use cu29::prelude::*;
 use cu29::units::si::angle::degree;
 use cu29::units::si::f32::{Angle as Angle32, Length, Velocity};
 use cu29::units::si::f64::Angle as Angle64;
 use cu29::units::si::length::meter;
 use cu29::units::si::velocity::meter_per_second;
+use cu_gnss_payloads::{
+    GnssAccuracy, GnssCommandAck, GnssEpochTime, GnssFixSolution, GnssFixType, GnssInfoText,
+    GnssRawUbxFrame, GnssRfStatus, GnssSatelliteState, GnssSatsInView, GnssSignalState,
+};
+use cu_sensor_payloads::{BarometerPayload, ImuPayload, MagnetometerPayload};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 

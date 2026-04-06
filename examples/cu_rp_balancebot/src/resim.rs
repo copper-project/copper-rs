@@ -1,13 +1,33 @@
-mod motor_model;
 pub mod tasks;
+
+use cu29::prelude::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
 use cu29::prelude::*;
+use cu29::remote_debug::SessionOpenParams;
+use cu29::replay::{
+    ensure_log_family_exists, per_session_replay_log_base, remove_log_family, serve_remote_debug,
+    ReplayCli, ReplayDefaults,
+};
 use cu29_export::copperlists_reader;
 use cu29_export::keyframes_reader;
+use std::error::Error;
 use std::path::Path;
+
+const DEFAULT_LOG_BASE: &str = "logs/balance.copper";
+const DEFAULT_REPLAY_LOG_BASE: &str = "logs/balanceresim.copper";
+#[allow(clippy::identity_op)]
+const REPLAY_LOG_SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);
 
 // To enable resim, it is just your regular macro with sim_mode true
 #[copper_runtime(config = "copperconfig.ron", sim_mode = true)]
 struct BalanceBotReSim {}
+
+type ReplayCopperList = CopperList<default::CuStampedDataSet>;
+type ReplayBuildCallback =
+    for<'a> fn(
+        &'a ReplayCopperList,
+        RobotClock,
+    ) -> Box<dyn for<'z> FnMut(default::SimStep<'z>) -> SimOverride + 'a>;
+type ReplayTimeExtractor = fn(&ReplayCopperList) -> Option<CuTime>;
 
 fn default_callback(step: default::SimStep) -> SimOverride {
     match step {
@@ -115,31 +135,74 @@ fn run_one_copperlist(
     Ok(())
 }
 
-fn main() {
-    // Create the Copper App in simulation mode.
-    #[allow(clippy::identity_op)]
-    const LOG_SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);
-    let logger_path = "logs/balanceresim.copper";
-    let (robot_clock, mut robot_clock_mock) = RobotClock::mock();
-    let mut copper_app = BalanceBotReSim::builder()
-        .with_clock(robot_clock.clone())
-        .with_log_path(logger_path, LOG_SLAB_SIZE)
-        .expect("Failed to setup logger.")
-        .with_sim_callback(&mut default_callback)
-        .build()
-        .expect("Failed to create runtime.");
+fn build_callback<'a>(
+    copper_list: &'a ReplayCopperList,
+    _clock_for_callbacks: RobotClock,
+) -> Box<dyn for<'z> FnMut(default::SimStep<'z>) -> SimOverride + 'a> {
+    let msgs = &copper_list.msgs;
+    Box::new(move |step: default::SimStep<'_>| match step {
+        default::SimStep::Balpos(CuTaskCallbackState::Process(_, output)) => {
+            *output = msgs.get_balpos_output().clone();
+            SimOverride::ExecutedBySim
+        }
+        default::SimStep::Balpos(_) => SimOverride::ExecutedBySim,
+        default::SimStep::BalposPid(CuTaskCallbackState::Process(_, output)) => {
+            *output = msgs.get_balpos_pid_output().clone();
+            SimOverride::ExecutedBySim
+        }
+        default::SimStep::BalposPid(_) => SimOverride::ExecutedBySim,
+        default::SimStep::Railpos(CuTaskCallbackState::Process(_, output)) => {
+            *output = msgs.get_railpos_output().clone();
+            SimOverride::ExecutedBySim
+        }
+        default::SimStep::Railpos(_) => SimOverride::ExecutedBySim,
+        default::SimStep::RailposPid(CuTaskCallbackState::Process(_, output)) => {
+            *output = msgs.get_railpos_pid_output().clone();
+            SimOverride::ExecutedBySim
+        }
+        default::SimStep::RailposPid(_) => SimOverride::ExecutedBySim,
+        default::SimStep::MergePids(CuTaskCallbackState::Process(_, output)) => {
+            *output = msgs.get_merge_pids_output().clone();
+            SimOverride::ExecutedBySim
+        }
+        default::SimStep::MergePids(_) => SimOverride::ExecutedBySim,
+        default::SimStep::Motor(CuTaskCallbackState::Process(input, output)) => {
+            let _ = input;
+            *output = msgs.get_motor_output().clone();
+            SimOverride::ExecutedBySim
+        }
+        default::SimStep::Motor(_) => SimOverride::ExecutedBySim,
+        _ => SimOverride::ExecuteByRuntime,
+    })
+}
 
-    copper_app
-        .start_all_tasks(&mut default_callback)
-        .expect("Failed to start all tasks.");
+fn extract_time(copperlist: &ReplayCopperList) -> Option<CuTime> {
+    cu29::simulation::recorded_copperlist_timestamp(copperlist)
+}
+
+fn make_app(log_base: &Path) -> CuResult<(BalanceBotReSim, RobotClock, RobotClockMock)> {
+    let (robot_clock, robot_clock_mock) = RobotClock::mock();
+    let copper_app = BalanceBotReSim::builder()
+        .with_clock(robot_clock.clone())
+        .with_log_path(log_base, REPLAY_LOG_SLAB_SIZE)?
+        .with_sim_callback(&mut default_callback)
+        .build()?;
+    Ok((copper_app, robot_clock, robot_clock_mock))
+}
+
+fn run_one_shot(log_base: &Path, replay_log_base: &Path) -> CuResult<()> {
+    remove_log_family(replay_log_base)?;
+    let (mut copper_app, _robot_clock, mut robot_clock_mock) = make_app(replay_log_base)?;
+
+    copper_app.start_all_tasks(&mut default_callback)?;
 
     // Restore tasks from the first keyframe so sim starts from the recorded state.
     let UnifiedLogger::Read(dl_kf) = UnifiedLoggerBuilder::new()
-        .file_base_name(Path::new("logs/balance.copper"))
+        .file_base_name(log_base)
         .build()
-        .expect("Failed to create logger")
+        .map_err(|err| CuError::new_with_cause("failed to open log for keyframes", err))?
     else {
-        panic!("Failed to create logger");
+        return Err(CuError::from("expected read logger for keyframes"));
     };
     let mut keyframes_ioreader = UnifiedLoggerIOReader::new(dl_kf, UnifiedLogType::FrozenTasks);
     let mut kf_iter = keyframes_reader(&mut keyframes_ioreader).peekable();
@@ -155,17 +218,16 @@ fn main() {
 
     // Read back the logs from a previous run, applying keyframes exactly at their culistid.
     let UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
-        .file_base_name(Path::new("logs/balance.copper"))
+        .file_base_name(log_base)
         .build()
-        .expect("Failed to create logger")
+        .map_err(|err| CuError::new_with_cause("failed to open copperlist log", err))?
     else {
-        panic!("Failed to create logger");
+        return Err(CuError::from("expected read logger for copperlists"));
     };
     let mut reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
     let iter = copperlists_reader::<default::CuStampedDataSet>(&mut reader).peekable();
 
     for entry in iter {
-        // Apply keyframe that matches this CL id, if any.
         let pending_kf_ts = if let Some(kf) = kf_iter.peek() {
             if kf.culistid == entry.id {
                 let ts = kf.timestamp;
@@ -190,8 +252,58 @@ fn main() {
             break;
         }
     }
-    copper_app
-        .stop_all_tasks(&mut default_callback)
-        .expect("Failed to start all tasks.");
+
+    copper_app.stop_all_tasks(&mut default_callback)?;
     let _ = copper_app.log_shutdown_completed();
+    Ok(())
+}
+
+fn app_factory(
+    params: &SessionOpenParams,
+    replay_template: &Path,
+) -> CuResult<(BalanceBotReSim, RobotClock, RobotClockMock)> {
+    let replay_log_base = per_session_replay_log_base(
+        replay_template,
+        [params.role.as_deref().unwrap_or("session")],
+    );
+    remove_log_family(&replay_log_base)?;
+    make_app(&replay_log_base)
+}
+
+fn run_remote_debug_server(
+    debug_base: &str,
+    log_base: &Path,
+    replay_log_base: &Path,
+) -> CuResult<()> {
+    let replay_template = replay_log_base.to_path_buf();
+    serve_remote_debug::<
+        BalanceBotReSim,
+        default::CuStampedDataSet,
+        ReplayBuildCallback,
+        ReplayTimeExtractor,
+        MmapSectionStorage,
+        MmapUnifiedLoggerWrite,
+        _,
+    >(
+        debug_base,
+        log_base,
+        move |params| app_factory(params, &replay_template),
+        build_callback,
+        extract_time,
+    )
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let cli = ReplayCli::parse(ReplayDefaults::new(
+        DEFAULT_LOG_BASE,
+        DEFAULT_REPLAY_LOG_BASE,
+    ));
+
+    ensure_log_family_exists(&cli.log_base)?;
+    if let Some(debug_base) = cli.debug_base.as_deref() {
+        run_remote_debug_server(debug_base, &cli.log_base, &cli.replay_log_base)?;
+    } else {
+        run_one_shot(&cli.log_base, &cli.replay_log_base)?;
+    }
+    Ok(())
 }

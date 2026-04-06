@@ -9,7 +9,7 @@ This template bootstraps a Copper workspace with an app crate and a shared-compo
 - `components/bridges/cu_example_shared_bridge/`: shared bridge example crate.
 - `components/`: shared components by category (placeholders to extend).
 - `doc/`: design notes and project docs.
-- `justfile`: automation helpers like `just rcfg`, `just log`, and `just cl`.
+- `justfile`: automation helpers like `just rcfg`, `just log`, `just cl`, `just resim`, and `just resim-debug`.
 
 ## Quick start
 
@@ -24,4 +24,16 @@ To decode structured logs, use the logreader helpers:
 ```bash
 just log
 just cl
+```
+
+To replay a recorded log once:
+
+```bash
+just resim
+```
+
+To start the replay-backed remote debug server manually:
+
+```bash
+just resim-debug
 ```

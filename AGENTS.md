@@ -311,6 +311,14 @@ For replaying failures:
 - Keyframes matter here:
   - recorded task state can be restored
   - replay can resume from frozen task state rather than only from message streams
+- Single-process replay targets should expose a consistent CLI contract:
+  - `--debug-base <path>` switches the binary into replay-backed remote debug server mode
+  - `--log-base <path>` selects the recorded Copper log base
+  - `--replay-log-base <path>` selects the replay log output/template
+  - prefer `cu29::replay::ReplayCli` for plain replay binaries
+  - prefer `cu29::replay::ReplayArgs` with `#[command(flatten)]` when the binary has extra CLI like missions or scenarios
+  - prefer CLI args only; do not add parallel env-var fallbacks for the same launch contract
+  - when serving remote debug, write replay output to per-session log paths so controller/inspector sessions do not collide
 
 For deep log/session introspection:
 

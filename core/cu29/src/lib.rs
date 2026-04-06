@@ -86,6 +86,8 @@ pub use cu29_runtime::reflect;
 pub use cu29_runtime::reflect as bevy_reflect;
 #[cfg(feature = "remote-debug")]
 pub use cu29_runtime::remote_debug;
+#[cfg(feature = "std")]
+pub use cu29_runtime::replay;
 pub use cu29_runtime::resource;
 pub use cu29_runtime::rx_channels;
 #[cfg(feature = "std")]

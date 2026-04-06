@@ -24,6 +24,7 @@ path = "src/logreader.rs"
 [[bin]]
 name = "cu-caterpillar-resim"
 path = "src/resim.rs"
+required-features = ["sim-debug"]
 
 
 [dependencies]
@@ -39,6 +40,7 @@ cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio", version = "0.15.0" }
 [features]
 default = ["mock"]
 mock = ["cu-rp-gpio/mock"]
+sim-debug = ["mock", "cu29/reflect", "cu29/remote-debug"]
 rtsan = ["cu29/rtsan"]
 determinism_ci = []
 

@@ -14,9 +14,15 @@ name = "cu_example_app-logreader"
 path = "src/logreader.rs"
 required-features = ["logreader"]
 
+[[bin]]
+name = "cu_example_app-resim"
+path = "src/resim.rs"
+required-features = ["sim-debug"]
+
 [features]
 default = []
 logreader = ["dep:cu29-export"]
+sim-debug = ["logreader", "cu29/reflect", "cu29/remote-debug"]
 
 [dependencies]
 cu29 = { workspace = true }

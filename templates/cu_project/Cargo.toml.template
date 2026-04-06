@@ -19,9 +19,15 @@ name = "{{project-name|kebab_case}}-logreader"
 path = "src/logreader.rs"
 required-features = ["logreader"]
 
+[[bin]]
+name = "{{project-name|kebab_case}}-resim"
+path = "src/resim.rs"
+required-features = ["sim-debug"]
+
 [features]
 default = []
 logreader = ["dep:cu29-export"]
+sim-debug = ["logreader", "cu29/reflect", "cu29/remote-debug"]
 
 [dependencies]
 cu29 = { {%if copper_source == "crates.io" %} version = "*" {%elsif copper_source == "git" %} git = "https://github.com/copper-project/copper-rs.git" {%elsif copper_source == "local" %}path = "{{copper_root_path}}/core/cu29" {%endif %} }

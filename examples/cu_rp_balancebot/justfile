@@ -191,4 +191,22 @@ mcap:
 resim:
 	#!/usr/bin/env bash
 	set -euo pipefail
-	cargo run --bin balancebot-resim -r
+	cargo run --no-default-features --features sim-debug --bin balancebot-resim -r -- \
+		--log-base logs/balance.copper
+
+resim-debug debug_base="copper/examples/cu_rp_balancebot/debug/v1" log="logs/balance.copper" replay_log="logs/balanceresim.copper":
+	#!/usr/bin/env bash
+	set -euo pipefail
+	invocation_dir="{{invocation_directory()}}"
+	log="{{log}}"
+	replay_log="{{replay_log}}"
+	if [[ "$log" != /* ]]; then
+		log="${invocation_dir}/${log}"
+	fi
+	if [[ "$replay_log" != /* ]]; then
+		replay_log="${invocation_dir}/${replay_log}"
+	fi
+	cargo run --no-default-features --features sim-debug --bin balancebot-resim -r -- \
+		--debug-base "{{debug_base}}" \
+		--log-base "$log" \
+		--replay-log-base "$replay_log"

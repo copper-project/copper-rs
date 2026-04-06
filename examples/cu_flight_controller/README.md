@@ -85,6 +85,24 @@ just fsck log=logs/embedded.copper
 just textlogs log=logs/embedded.copper
 ```
 
+### Replay Debug Server
+
+To replay a recorded simulation log through the remote debug API:
+
+```bash
+cd examples/cu_flight_controller
+just resim
+```
+
+The replay target uses the standardized replay contract:
+
+- `--debug-base` selects the remote debug namespace
+- `--log-base` selects the recorded Copper log to inspect
+- `--replay-log-base` selects the per-session replay log template
+
+If you are building another replay target, follow the same pattern with
+`cu29::replay::{ReplayCli, ReplayDefaults, per_session_replay_log_base, serve_remote_debug}`.
+
 ### Python GNSS Extraction
 
 You can use the PyO3 bindings to iterate CopperLists directly from Python and
