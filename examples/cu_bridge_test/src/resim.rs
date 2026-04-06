@@ -7,8 +7,8 @@ use cu29::prelude::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
 use cu29::prelude::*;
 use cu29::remote_debug::SessionOpenParams;
 use cu29::replay::{
-    ensure_log_family_exists, per_session_replay_log_base, remove_log_family, serve_remote_debug,
-    ReplayArgs, ReplayDefaults,
+    ReplayArgs, ReplayDefaults, ensure_log_family_exists, per_session_replay_log_base,
+    remove_log_family, serve_remote_debug,
 };
 use cu29::simulation::CuTaskCallbackState;
 use cu29_export::copperlists_reader;
@@ -16,7 +16,7 @@ use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader
 use std::path::Path;
 
 // Bring the runtime modules generated in the library into scope for the macro below.
-use cu_bridge_test::{bridges, messages, tasks, MissionArg};
+use cu_bridge_test::{MissionArg, bridges, messages, tasks};
 
 const LOG_SLAB_SIZE: Option<usize> = Some(32 * 1024 * 1024);
 const INPUT_LOG: &str = "logs/cu_bridge_test.copper";
@@ -243,7 +243,7 @@ fn resim_source_to_bridge(
 fn make_source_to_bridge_cb(
     entry: &CopperList<SourceToBridge::CuStampedDataSet>,
 ) -> impl FnMut(SourceToBridge::SimStep<'_>) -> SimOverride {
-    let expected_output = entry.msgs.0 .0.clone();
+    let expected_output = entry.msgs.0.0.clone();
     move |step| match step {
         SourceToBridge::SimStep::SrcToBridge(CuTaskCallbackState::Process(_, output)) => {
             *output = expected_output.clone();
@@ -281,7 +281,7 @@ fn resim_bridge_to_sink(
 fn make_bridge_to_sink_cb(
     entry: &CopperList<BridgeToSink::CuStampedDataSet>,
 ) -> impl FnMut(BridgeToSink::SimStep<'_>) -> SimOverride {
-    let sink_output = entry.msgs.0 .1.clone();
+    let sink_output = entry.msgs.0.1.clone();
     move |step| match step {
         BridgeToSink::SimStep::SinkFromBridge(CuTaskCallbackState::Process(_, output)) => {
             *output = sink_output.clone();
@@ -319,7 +319,7 @@ fn resim_bridge_task_same(
 fn make_bridge_task_same_cb(
     entry: &CopperList<BridgeTaskSame::CuStampedDataSet>,
 ) -> impl FnMut(BridgeTaskSame::SimStep<'_>) -> SimOverride {
-    let passthrough_output = entry.msgs.0 .1.clone();
+    let passthrough_output = entry.msgs.0.1.clone();
     move |step| match step {
         BridgeTaskSame::SimStep::Passthrough(CuTaskCallbackState::Process(_, output)) => {
             *output = passthrough_output.clone();

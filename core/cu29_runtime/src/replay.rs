@@ -109,11 +109,11 @@ impl ReplayCli {
     {
         let mut argv: Vec<OsString> = args.into_iter().map(Into::into).collect();
 
-        if let Some(debug_base) = defaults.debug_base.as_ref() {
-            if !has_long_flag(&argv, "--debug-base") {
-                argv.push("--debug-base".into());
-                argv.push(debug_base.clone().into());
-            }
+        if let Some(debug_base) = defaults.debug_base.as_ref()
+            && !has_long_flag(&argv, "--debug-base")
+        {
+            argv.push("--debug-base".into());
+            argv.push(debug_base.clone().into());
         }
 
         if !has_long_flag(&argv, "--log-base") {

@@ -4,8 +4,8 @@ use cu29::prelude::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
 use cu29::prelude::*;
 use cu29::remote_debug::SessionOpenParams;
 use cu29::replay::{
-    ensure_log_family_exists, per_session_replay_log_base, remove_log_family, serve_remote_debug,
-    ReplayCli, ReplayDefaults,
+    ReplayCli, ReplayDefaults, ensure_log_family_exists, per_session_replay_log_base,
+    remove_log_family, serve_remote_debug,
 };
 use cu29_export::copperlists_reader;
 use cu29_export::keyframes_reader;
