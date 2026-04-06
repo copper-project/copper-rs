@@ -309,9 +309,13 @@ mod tests {
             Path::new("logs/example_resim.copper"),
             ["Controller Session", "role/a"],
         );
-        let rendered = path.to_string_lossy();
-        assert!(rendered.starts_with("logs/example_resim_controller_session_role_a_"));
-        assert!(rendered.ends_with(".copper"));
+        assert!(path.starts_with(Path::new("logs")));
+        let file_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .expect("UTF-8 replay log file name");
+        assert!(file_name.starts_with("example_resim_controller_session_role_a_"));
+        assert!(file_name.ends_with(".copper"));
     }
 
     #[test]
