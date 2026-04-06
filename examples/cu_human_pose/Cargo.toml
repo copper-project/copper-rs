@@ -27,7 +27,7 @@ cu-logmon = { path = "../../components/monitors/cu_logmon", version = "0.15.0" }
 
 # Candle ML framework
 candle-core = "0.9.2"
-candle-nn = "0.9.2"
+candle-nn = "0.10.2"
 # Visualization
 rerun = { workspace = true }
 
