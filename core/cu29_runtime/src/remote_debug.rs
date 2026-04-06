@@ -235,7 +235,7 @@ use cu29_traits::{CopperListTuple, CuError, CuMsgMetadataTrait, CuResult, Erased
 use cu29_unifiedlog::{SectionStorage, UnifiedLogWrite};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
@@ -251,6 +251,7 @@ const DEFAULT_SESSION_IDLE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const DEFAULT_MAX_ACTIVE_SESSIONS: usize = 64;
 const MAX_PAGE_LIMIT: u32 = 1000;
 const SERVER_RECV_POLL_TIMEOUT: Duration = Duration::from_millis(250);
+const REGISTRY_DIR_NAME: &str = "cu29_remote_debug_registry";
 
 type ZenohSubscriber =
     zenoh::pubsub::Subscriber<zenoh::handlers::FifoChannelHandler<zenoh::sample::Sample>>;
@@ -356,6 +357,34 @@ pub struct SessionOpenParams {
     pub role: Option<String>,
     #[serde(default)]
     pub codecs: Option<Vec<WireCodec>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoteDebugProcessInfo {
+    pub pid: u32,
+    pub debug_base: String,
+    pub executable_path: PathBuf,
+    pub working_dir: PathBuf,
+    pub argv: Vec<String>,
+    #[serde(default)]
+    pub restart_env: BTreeMap<String, String>,
+    #[serde(default)]
+    pub log_base: Option<PathBuf>,
+    pub registered_at_unix_ns: u64,
+}
+
+impl RemoteDebugProcessInfo {
+    pub fn display_name(&self) -> String {
+        self.executable_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("target")
+            .to_owned()
+    }
+
+    pub fn command_args(&self) -> &[String] {
+        self.argv.get(1..).unwrap_or(&[])
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -483,6 +512,10 @@ struct HealthPingParams {}
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[allow(dead_code)]
 struct HealthStatsParams {}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[allow(dead_code)]
+struct ProcessDescribeParams {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Page {
@@ -617,6 +650,186 @@ fn local_endpoint(base: &str) -> String {
     format!("unixsock-stream/{}", local_socket_path(base).display())
 }
 
+pub fn remote_debug_registry_dir() -> PathBuf {
+    std::env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+        .join(REGISTRY_DIR_NAME)
+}
+
+pub fn remove_remote_debug_registry_entry(debug_base: &str) -> std::io::Result<()> {
+    let path = remote_debug_registry_entry_path(debug_base);
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err),
+    }
+}
+
+pub fn load_remote_debug_registry_entries() -> CuResult<Vec<RemoteDebugProcessInfo>> {
+    let dir = remote_debug_registry_dir();
+    let entries = match fs::read_dir(&dir) {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(err) => {
+            return Err(CuError::from(format!(
+                "RemoteDebug: failed to read registry dir '{}': {err}",
+                dir.display()
+            )));
+        }
+    };
+
+    let mut processes = Vec::new();
+    for entry in entries {
+        let Ok(entry) = entry else {
+            continue;
+        };
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+            continue;
+        }
+        let Ok(contents) = fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(process) = serde_json::from_str::<RemoteDebugProcessInfo>(&contents) else {
+            continue;
+        };
+        processes.push(process);
+    }
+
+    Ok(processes)
+}
+
+fn remote_debug_registry_entry_path(debug_base: &str) -> PathBuf {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    debug_base.hash(&mut hasher);
+    let id = hasher.finish();
+    remote_debug_registry_dir().join(format!("{id:016x}.json"))
+}
+
+fn capture_current_process_info(default_debug_base: &str) -> RemoteDebugProcessInfo {
+    let argv = std::env::args_os()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    let executable_path = std::env::current_exe().unwrap_or_else(|_| {
+        argv.first()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("unknown"))
+    });
+    let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let debug_base =
+        extract_flag_value(&argv, "--debug-base").unwrap_or_else(|| default_debug_base.to_owned());
+    let log_base = extract_flag_value(&argv, "--log-base")
+        .map(PathBuf::from)
+        .map(|path| {
+            if path.is_absolute() {
+                path
+            } else {
+                working_dir.join(path)
+            }
+        })
+        .map(normalize_remote_debug_log_base_path);
+
+    RemoteDebugProcessInfo {
+        pid: std::process::id(),
+        debug_base,
+        executable_path,
+        working_dir,
+        argv,
+        restart_env: collect_restart_env(),
+        log_base,
+        registered_at_unix_ns: now_unix_ns(),
+    }
+}
+
+fn extract_flag_value(args: &[String], flag: &str) -> Option<String> {
+    for (idx, arg) in args.iter().enumerate() {
+        if arg == flag {
+            return args.get(idx + 1).cloned();
+        }
+        if let Some((prefix, value)) = arg.split_once('=')
+            && prefix == flag
+        {
+            return Some(value.to_owned());
+        }
+    }
+    None
+}
+
+fn normalize_remote_debug_log_base_path(path: PathBuf) -> PathBuf {
+    let Some(extension) = path.extension().and_then(|ext| ext.to_str()) else {
+        return path;
+    };
+    let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
+        return path;
+    };
+    let Some((base_stem, slab_suffix)) = stem.rsplit_once('_') else {
+        return path;
+    };
+
+    if slab_suffix.is_empty() || !slab_suffix.chars().all(|c| c.is_ascii_digit()) {
+        return path;
+    }
+
+    let normalized = path.with_file_name(format!("{base_stem}.{extension}"));
+    let Some(normalized_stem) = normalized.file_stem().and_then(|stem| stem.to_str()) else {
+        return path;
+    };
+    let Some(normalized_extension) = normalized.extension().and_then(|ext| ext.to_str()) else {
+        return path;
+    };
+    let slab_zero =
+        normalized.with_file_name(format!("{normalized_stem}_0.{normalized_extension}"));
+    if slab_zero.exists() { normalized } else { path }
+}
+
+fn collect_restart_env() -> BTreeMap<String, String> {
+    std::env::vars()
+        .filter(|(key, _)| should_capture_restart_env(key))
+        .collect()
+}
+
+fn should_capture_restart_env(key: &str) -> bool {
+    matches!(
+        key,
+        "DYLD_FALLBACK_LIBRARY_PATH"
+            | "DYLD_LIBRARY_PATH"
+            | "LD_LIBRARY_PATH"
+            | "PATH"
+            | "PYTHONPATH"
+            | "RUST_BACKTRACE"
+            | "RUST_LOG"
+    ) || key.starts_with("COPPER_")
+        || key.starts_with("ZENOH_")
+}
+
+struct RemoteDebugRegistryRegistration {
+    entry_path: PathBuf,
+}
+
+impl RemoteDebugRegistryRegistration {
+    fn register(process: &RemoteDebugProcessInfo) -> std::io::Result<Self> {
+        let entry_path = remote_debug_registry_entry_path(&process.debug_base);
+        if let Some(parent) = entry_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let temp_path = entry_path.with_extension("json.tmp");
+        let contents = serde_json::to_vec_pretty(process)
+            .map_err(|err| std::io::Error::other(err.to_string()))?;
+        fs::write(&temp_path, contents)?;
+        fs::rename(temp_path, &entry_path)?;
+
+        Ok(Self { entry_path })
+    }
+}
+
+impl Drop for RemoteDebugRegistryRegistration {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.entry_path);
+    }
+}
+
 fn set_config_json5(config: &mut ZenohConfig, key: &str, value: &str) -> CuResult<()> {
     config
         .insert_json5(key, value)
@@ -723,6 +936,8 @@ where
     stop_requested: bool,
     stack_schema: Value,
     session_lifecycle: SessionLifecycleLimits,
+    process_info: RemoteDebugProcessInfo,
+    _registry_registration: Option<RemoteDebugRegistryRegistration>,
 }
 
 impl<App, P, CB, TF, S, L, AF> RemoteDebugZenohServer<App, P, CB, TF, S, L, AF>
@@ -783,6 +998,14 @@ where
             )?;
 
         let stack_schema = build_stack_schema::<App, S, L>()?;
+        let process_info = capture_current_process_info(&paths.base);
+        let registry_registration = match RemoteDebugRegistryRegistration::register(&process_info) {
+            Ok(registration) => Some(registration),
+            Err(err) => {
+                eprintln!("RemoteDebug: failed to register process metadata: {err}");
+                None
+            }
+        };
 
         Ok(Self {
             paths,
@@ -804,6 +1027,8 @@ where
             stop_requested: false,
             stack_schema,
             session_lifecycle: SessionLifecycleLimits::default(),
+            process_info,
+            _registry_registration: registry_registration,
         })
     }
 
@@ -978,6 +1203,11 @@ where
             "health.stats" => {
                 self.handle_health_stats(request_id, request.session_id.as_deref(), &request.params)
             }
+            "process.describe" => self.handle_process_describe(
+                request_id,
+                request.session_id.as_deref(),
+                &request.params,
+            ),
             _ => err_response(
                 request_id,
                 "UnknownMethod",
@@ -2097,6 +2327,28 @@ where
             now.saturating_duration_since(state.last_touched_at) <= idle_timeout
         });
     }
+
+    fn handle_process_describe(
+        &mut self,
+        request_id: String,
+        session_id: Option<&str>,
+        _params: &Value,
+    ) -> DebugRpcResponse {
+        if let Some(sid) = session_id
+            && self.session_mut(Some(sid)).is_err()
+        {
+            return err_response(request_id, "SessionNotFound", "session not found");
+        }
+
+        match serde_json::to_value(&self.process_info) {
+            Ok(value) => ok_response(request_id, value, None, None),
+            Err(err) => err_response(
+                request_id,
+                "ProcessDescribeFailed",
+                &format!("failed encoding process metadata: {err}"),
+            ),
+        }
+    }
 }
 
 fn ok_response(
@@ -2298,7 +2550,8 @@ fn capabilities_json(session_lifecycle: SessionLifecycleLimits) -> Value {
             "state.watch.open",
             "state.watch.close",
             "health.ping",
-            "health.stats"
+            "health.stats",
+            "process.describe"
         ]
     })
 }
