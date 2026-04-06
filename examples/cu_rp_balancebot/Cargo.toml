@@ -16,6 +16,7 @@ ignored = ["serde"]
 
 [dependencies]
 serde = { workspace = true }
+bevy_ecs = { version = "0.18.0", default-features = false }
 cu-ads7883-new = { path = "../../components/sources/cu_ads7883", version = "0.15.0" }
 cu-rp-sn754410-new = { path = "../../components/sinks/cu_rp_sn754410", version = "0.15.0" }
 cu-rp-encoder = { path = "../../components/sources/cu_rp_encoder", version = "0.15.0" }
