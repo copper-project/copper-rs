@@ -246,7 +246,7 @@ tempfile = { version = "3.23", default-features = false }
 spin = { version = "0.10" } # should be removed when std is on, but cargo is bad at negative features
 
 # rerun
-rerun = { version = "0.30", default-features = false, features = [
+rerun = { version = "0.31", default-features = false, features = [
   "sdk",
   "server",
   "log",
