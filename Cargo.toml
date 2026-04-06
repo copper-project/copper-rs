@@ -271,7 +271,7 @@ arrayvec = { version = "0.7", default-features = false }
 avian3d = { version = "0.6.1", default-features = false }
 bevy = { version = "0.18.0", default-features = false }
 bevy_ratatui = { version = "0.11.1", default-features = false }
-buddy_system_allocator = { version = "0.12", default-features = false }
+buddy_system_allocator = { version = "0.13", default-features = false }
 bytemuck = "1.23.0"
 cached-path = { version = "0.10.0", default-features = false }
 cfg_aliases = "0.2.1"
