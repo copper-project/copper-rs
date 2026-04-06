@@ -1,0 +1,22 @@
+[package]
+name = "cu-ffv1-codec"
+description = "FFV1 log codec for Copper image payloads"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+bincode = { workspace = true }
+cu29 = { workspace = true }
+cu-sensor-payloads = { workspace = true }
+ffmpeg-next = { workspace = true, optional = true }
+serde = { workspace = true }
+
+[features]
+default = []
+ffmpeg = ["dep:ffmpeg-next"]

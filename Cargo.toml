@@ -22,6 +22,7 @@ members = [
   "components/bridges/cu_iceoryx2_bridge",
   "components/bridges/cu_zenoh_bridge",
   "components/bridges/cu_ros2_bridge",
+  "components/codecs/cu_ffv1_codec",
   "components/codecs/cu_png_codec",
   "components/libs/cu_msp_lib",
   "components/libs/cu_transform",
@@ -76,6 +77,7 @@ members = [
   "examples/cu_config_gen",
   "examples/cu_config_variation",
   "examples/cu_dorabench",
+  "examples/cu_image_codec_demo",
   "examples/cu_image_aligner",
   "examples/cu_instance_overrides_demo",
   "examples/cu_iceoryx2_bridge_demo",
@@ -172,6 +174,7 @@ cu29-unifiedlog = { path = "core/cu29_unifiedlog", default-features = false, fea
 ], version = "0.15.0" }
 cu29-units = { path = "core/cu29_units", version = "0.15.0" }
 cu29-value = { path = "core/cu29_value", default-features = false, version = "0.15.0" }
+cu-ffv1-codec = { path = "components/codecs/cu_ffv1_codec", version = "0.15.0" }
 cu-linux-resources = { path = "components/res/cu_linux_resources", version = "0.15.0" }
 cu-png-codec = { path = "components/codecs/cu_png_codec", version = "0.15.0" }
 
@@ -283,6 +286,10 @@ ctrlc = "3.5"
 defmt = { version = "1.0", default-features = false }
 defmt-rtt = "1.1"
 embedded-alloc = { version = "0.7", default-features = false }
+ffmpeg-next = { version = "8.1.0", default-features = false, features = [
+  "codec",
+  "format",
+] }
 gstreamer = { version = "0.25", default-features = false }
 image = { version = "0.25.6", default-features = false }
 png = "0.18.1"

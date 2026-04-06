@@ -1,21 +1,8 @@
 (
-    logging: (
-        codecs: [
-            (
-                id: "png",
-                type: "cu_png_codec::CuPngCodec",
-            ),
-        ],
-    ),
     tasks: [
         (
             id: "demo_src",
             type: "tasks::LogvizDemoSrc",
-            logging: (
-                codecs: {
-                    "cu_sensor_payloads::CuImage<Vec<u8>>": "png",
-                },
-            ),
         ),
         (
             id: "demo_sink",
