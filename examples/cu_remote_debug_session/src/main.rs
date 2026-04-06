@@ -489,12 +489,7 @@ fn run_remote_debug_session() -> CuResult<()> {
         json!({"type_path": first_type, "format": "jsonschema"}),
     )?;
 
-    let _ = call_step(
-        &client,
-        Some(&session_id),
-        "schema.get_payload_map",
-        json!({}),
-    )?;
+    let _ = call_step(&client, Some(&session_id), "schema.get_outputs", json!({}))?;
 
     let _ = call_step(
         &client,

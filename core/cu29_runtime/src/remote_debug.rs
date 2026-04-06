@@ -154,7 +154,7 @@
 //! | `schema.get_stack` | yes | `{}` | stack config schema JSON |
 //! | `schema.list_types` | yes | `{ filter? }` | `type_paths[]` |
 //! | `schema.get_type` | yes | `{ type_path, format? }` | schema/reflect dump |
-//! | `schema.get_payload_map` | yes | `{}` | output index -> task id map |
+//! | `schema.get_outputs` | yes | `{}` | output index -> task/message/payload field metadata |
 //!
 //! ### State
 //!
@@ -235,7 +235,7 @@ use cu29_traits::{CopperListTuple, CuError, CuMsgMetadataTrait, CuResult, Erased
 use cu29_unifiedlog::{SectionStorage, UnifiedLogWrite};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
@@ -1173,8 +1173,8 @@ where
                 request.session_id.as_deref(),
                 &request.params,
             ),
-            "schema.get_payload_map" => {
-                self.handle_schema_get_payload_map(request_id, request.session_id.as_deref())
+            "schema.get_outputs" => {
+                self.handle_schema_get_outputs(request_id, request.session_id.as_deref())
             }
             "state.inspect" => self.handle_state_inspect(
                 request_id,
@@ -1872,22 +1872,32 @@ where
         ok_response(request_id, json!({"schema": schema}), None, None)
     }
 
-    fn handle_schema_get_payload_map(
+    fn handle_schema_get_outputs(
         &mut self,
         request_id: String,
         session_id: Option<&str>,
     ) -> DebugRpcResponse {
-        if let Err(e) = self.session_mut(session_id) {
-            return err_response(request_id, "SessionNotFound", &e.to_string());
-        }
+        let state = match self.session_mut(session_id) {
+            Ok(v) => v,
+            Err(e) => return err_response(request_id, "SessionNotFound", &e.to_string()),
+        };
 
-        let outputs: Vec<Value> = P::get_all_task_ids()
+        let payload_catalogs = match collect_output_payload_field_catalogs(state) {
+            Ok(v) => v,
+            Err(e) => return err_response(request_id, "SchemaFailed", &e.to_string()),
+        };
+
+        let outputs: Vec<Value> = P::get_output_specs()
             .iter()
             .enumerate()
-            .map(|(index, task_id)| {
+            .map(|(index, spec)| {
+                let payload_fields = payload_catalogs.get(index).cloned().unwrap_or_default();
                 json!({
                     "index": index,
-                    "task_id": task_id,
+                    "task_id": spec.task_id,
+                    "message_type": spec.msg_type,
+                    "payload_type_path": spec.payload_type_path,
+                    "payload_fields": payload_fields,
                 })
             })
             .collect();
@@ -3345,6 +3355,146 @@ fn simple_jsonschema_for_type(info: &'static TypeInfo) -> Value {
         "description": format!("{}", info.type_path()),
         "reflect": format!("{info:#?}"),
     })
+}
+
+fn collect_output_payload_field_catalogs<App, P, CB, TF, S, L>(
+    state: &mut SessionState<App, P, CB, TF, S, L>,
+) -> CuResult<Vec<Vec<Value>>>
+where
+    App: CuSimApplication<S, L> + ReflectTaskIntrospection,
+    L: UnifiedLogWrite<S> + 'static,
+    S: SectionStorage,
+    P: CopperListTuple + 'static,
+    CB: for<'a> Fn(
+        &'a crate::copperlist::CopperList<P>,
+        RobotClock,
+    )
+        -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
+    TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
+{
+    let specs = P::get_output_specs();
+    let task_ids = P::get_all_task_ids();
+    let mut catalogs = vec![Vec::new(); specs.len()];
+    let mut seen = vec![BTreeSet::new(); specs.len()];
+    let mut index = 0usize;
+
+    loop {
+        let Some(cl) = state.session.cl_at(index)? else {
+            break;
+        };
+
+        for (output_index, msg) in cl.cumsgs().iter().enumerate() {
+            let Some(fields) = catalogs.get_mut(output_index) else {
+                continue;
+            };
+            let Some(observed) = seen.get_mut(output_index) else {
+                continue;
+            };
+            let Some(payload) = msg.payload() else {
+                continue;
+            };
+
+            let payload_json = erased_serialize_to_json(payload)?;
+            let binding_root = task_ids.get(output_index).copied().unwrap_or("<?>");
+            collect_payload_json_fields(&payload_json, "", binding_root, fields, observed);
+        }
+
+        index = index.saturating_add(1);
+    }
+
+    Ok(catalogs)
+}
+
+fn collect_payload_json_fields(
+    value: &Value,
+    display_path: &str,
+    binding_name: &str,
+    out: &mut Vec<Value>,
+    seen: &mut BTreeSet<String>,
+) {
+    match value {
+        Value::Null => {}
+        Value::Bool(_) | Value::Number(_) | Value::String(_) => push_payload_field_descriptor(
+            out,
+            seen,
+            display_path,
+            binding_name,
+            json_type_name(value),
+        ),
+        Value::Array(items) => {
+            if items.is_empty() {
+                push_payload_field_descriptor(out, seen, display_path, binding_name, "array");
+                return;
+            }
+            for (index, item) in items.iter().enumerate() {
+                let next_display = format!("{}[{index}]", path_or_value(display_path));
+                let next_binding = format!("{binding_name}[{index}]");
+                collect_payload_json_fields(item, &next_display, &next_binding, out, seen);
+            }
+        }
+        Value::Object(map) => {
+            if map.is_empty() {
+                push_payload_field_descriptor(out, seen, display_path, binding_name, "object");
+                return;
+            }
+            for (key, item) in map {
+                let next_display = join_field_path(display_path, key);
+                let next_binding = join_field_path(binding_name, key);
+                collect_payload_json_fields(item, &next_display, &next_binding, out, seen);
+            }
+        }
+    }
+}
+
+fn push_payload_field_descriptor(
+    out: &mut Vec<Value>,
+    seen: &mut BTreeSet<String>,
+    display_path: &str,
+    binding_name: &str,
+    field_type: &str,
+) {
+    if !seen.insert(binding_name.to_owned()) {
+        return;
+    }
+
+    out.push(json!({
+        "display_path": path_or_value(display_path),
+        "binding_name": binding_name,
+        "field_type": field_type,
+    }));
+}
+
+fn join_field_path(prefix: &str, field: &str) -> String {
+    if prefix.is_empty() {
+        field.to_string()
+    } else {
+        format!("{prefix}.{field}")
+    }
+}
+
+fn path_or_value(path: &str) -> String {
+    if path.is_empty() {
+        "value".to_string()
+    } else {
+        path.to_string()
+    }
+}
+
+fn json_type_name(value: &Value) -> &'static str {
+    match value {
+        Value::Null => "null",
+        Value::Bool(_) => "bool",
+        Value::Number(number) => {
+            if number.is_i64() || number.is_u64() {
+                "integer"
+            } else {
+                "number"
+            }
+        }
+        Value::String(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
+    }
 }
 
 #[cfg(feature = "reflect")]
