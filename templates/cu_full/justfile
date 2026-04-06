@@ -38,7 +38,7 @@ resim-debug debug_base="":
   set -euo pipefail
   APP_DIR="${APP_DIR:-cu_example_app}"
   APP_NAME="${APP_NAME:-${APP_DIR}}"
-  DEBUG_BASE="{{debug_base}}"
+  DEBUG_BASE="{% raw %}{{debug_base}}{% endraw %}"
   if [[ -z "$DEBUG_BASE" ]]; then
     DEBUG_BASE="copper/apps/${APP_NAME}/debug/v1"
   fi
