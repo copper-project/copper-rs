@@ -26,8 +26,8 @@ cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", ve
 cu-logmon = { path = "../../components/monitors/cu_logmon", version = "0.15.0" }
 
 # Candle ML framework
-candle-core = "0.9.2"
-candle-nn = "0.9.2"
+candle-core = "0.10.2"
+candle-nn = "0.10.2"
 # Visualization
 rerun = { workspace = true }
 
