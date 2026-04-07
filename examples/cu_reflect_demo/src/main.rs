@@ -134,7 +134,8 @@ fn run_reflect_debug_demo() -> CuResult<()> {
 
     fn build_cb<'a>(
         cl: &'a CopperList<default::CuStampedDataSet>,
-        _clock_for_cb: RobotClock,
+        _process_clock: RobotClock,
+        _clock_for_cb: RobotClockMock,
     ) -> Box<dyn for<'z> FnMut(default::SimStep<'z>) -> SimOverride + 'a> {
         let src_out = cl.msgs.get_src_output().clone();
         Box::new(move |step: default::SimStep<'_>| match step {

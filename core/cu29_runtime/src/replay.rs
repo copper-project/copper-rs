@@ -12,7 +12,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 #[cfg(feature = "remote-debug")]
-use crate::app::CuSimApplication;
+use crate::app::{CuSimApplication, CurrentRuntimeCopperList};
 #[cfg(feature = "remote-debug")]
 use crate::copperlist::CopperList;
 #[cfg(feature = "remote-debug")]
@@ -244,13 +244,14 @@ pub fn serve_remote_debug<App, P, CB, TF, S, L, AF>(
     time_of: TF,
 ) -> CuResult<()>
 where
-    App: CuSimApplication<S, L> + ReflectTaskIntrospection,
+    App: CuSimApplication<S, L> + ReflectTaskIntrospection + CurrentRuntimeCopperList<P>,
     L: UnifiedLogWrite<S> + 'static,
     S: SectionStorage,
     P: CopperListTuple + 'static,
     CB: for<'a> Fn(
             &'a CopperList<P>,
             RobotClock,
+            RobotClockMock,
         ) -> Box<dyn for<'z> FnMut(App::Step<'z>) -> SimOverride + 'a>
         + Clone,
     TF: Fn(&CopperList<P>) -> Option<CuTime> + Clone,

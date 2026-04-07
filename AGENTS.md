@@ -223,6 +223,11 @@ Implications:
 - Prefer preallocation, fixed capacity, and compile-time sizing where practical.
 - Avoid memory copies when a zero-copy or borrow-based design is available.
 - Changes that increase allocation count, heap pressure, or copy count need explicit justification.
+- Any copy, allocation, serialization pass, or latency regression added to the real-time path is a design-level regression.
+  - Do not add it silently.
+  - Do not trade runtime performance for debugger, tooling, observability, or convenience features by default.
+  - Require explicit user approval before accepting that tradeoff.
+  - If the cost only serves offline/debug flows, feature-gate it or move it out of the runtime hot path.
 
 ## Logging And Debugging Workflow
 

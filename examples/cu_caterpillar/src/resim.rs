@@ -27,6 +27,7 @@ type ReplayBuildCallback =
     for<'a> fn(
         &'a ReplayCopperList,
         RobotClock,
+        RobotClockMock,
     ) -> Box<dyn for<'z> FnMut(default::SimStep<'z>) -> SimOverride + 'a>;
 type ReplayTimeExtractor = fn(&ReplayCopperList) -> Option<CuTime>;
 
@@ -151,7 +152,8 @@ fn open_log_reader(log_path: &Path, log_type: UnifiedLogType) -> CuResult<Unifie
 
 fn build_callback<'a>(
     copper_list: &'a ReplayCopperList,
-    _clock_for_callbacks: RobotClock,
+    _process_clock: RobotClock,
+    _clock_for_callbacks: RobotClockMock,
 ) -> Box<dyn for<'z> FnMut(default::SimStep<'z>) -> SimOverride + 'a> {
     Box::new(move |step: default::SimStep<'_>| default::recorded_replay_step(step, copper_list))
 }

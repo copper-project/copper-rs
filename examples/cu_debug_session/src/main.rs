@@ -181,7 +181,8 @@ fn run_debug_session() -> CuResult<()> {
     // Build callbacks per copperlist: we let runtime execute tasks to update state.
     fn build_cb<'a>(
         cl: &'a CopperList<default::CuStampedDataSet>,
-        _clock_for_cb: RobotClock,
+        _process_clock: RobotClock,
+        _clock_for_cb: RobotClockMock,
     ) -> Box<dyn for<'z> FnMut(default::SimStep<'z>) -> SimOverride + 'a> {
         // Clone needed payloads out of the copperlist so the callback can move them.
         let src_out = cl.msgs.get_src_output().clone();
