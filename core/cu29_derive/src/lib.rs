@@ -1919,26 +1919,51 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             })
             .collect::<Vec<_>>();
 
+        let mut keyframe_task_restore_order = Vec::new();
+        for unit in &culist_plan.steps {
+            let CuExecutionUnit::Step(step) = unit else {
+                panic!("Execution loops are not supported in runtime generation");
+            };
+            let ExecutionEntityKind::Task { task_index } =
+                &culist_exec_entities[step.node_id as usize].kind
+            else {
+                continue;
+            };
+            if !keyframe_task_restore_order.contains(task_index) {
+                keyframe_task_restore_order.push(*task_index);
+            }
+        }
+        if keyframe_task_restore_order.len() != task_specs.task_types.len() {
+            return return_error(format!(
+                "Keyframe restore order covers {} task steps but mission declares {} tasks",
+                keyframe_task_restore_order.len(),
+                task_specs.task_types.len()
+            ));
+        }
+        let task_restore_code: Vec<proc_macro2::TokenStream> = keyframe_task_restore_order
+            .iter()
+            .map(|index| {
+                let task_tuple_index = syn::Index::from(*index);
+                quote! {
+                    tasks.#task_tuple_index.thaw(&mut decoder).map_err(|e| CuError::from("Failed to thaw").add_cause(&e.to_string()))?
+                }
+            })
+            .collect();
+
         // Generate the code to create instances of the nodes
         // It maps the types to their index
         let (
-            task_restore_code,
             task_start_calls,
             task_stop_calls,
             task_preprocess_calls,
             task_postprocess_calls,
-        ): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(
+        ): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(
             (0..task_specs.task_types.len())
             .map(|index| {
                 let task_index = int2sliceindex(index as u32);
-                let task_tuple_index = syn::Index::from(index);
                 let task_enum_name = config_id_to_enum(&task_specs.ids[index]);
                 let enum_name = Ident::new(&task_enum_name, Span::call_site());
                 (
-                    // Tasks keyframe restore code
-                    quote! {
-                        tasks.#task_tuple_index.thaw(&mut decoder).map_err(|e| CuError::from("Failed to thaw").add_cause(&e.to_string()))?
-                    },
                     {  // Start calls
                         let monitoring_action = quote! {
                             let decision = self.copper_runtime.monitor.process_error(cu29::monitoring::ComponentId::new(#index), CuComponentState::Start, &error);
