@@ -916,6 +916,7 @@ where
     CB: for<'a> Fn(
             &'a crate::copperlist::CopperList<P>,
             RobotClock,
+            RobotClockMock,
         )
             -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>
         + Clone,
@@ -949,6 +950,7 @@ where
     CB: for<'a> Fn(
             &'a crate::copperlist::CopperList<P>,
             RobotClock,
+            RobotClockMock,
         )
             -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>
         + Clone,
@@ -2633,6 +2635,7 @@ where
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
+        RobotClockMock,
     )
         -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
@@ -2654,6 +2657,7 @@ where
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
+        RobotClockMock,
     )
         -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
@@ -2682,6 +2686,7 @@ where
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
+        RobotClockMock,
     )
         -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
@@ -2717,6 +2722,7 @@ where
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
+        RobotClockMock,
     )
         -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
@@ -2746,6 +2752,7 @@ where
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
+        RobotClockMock,
     )
         -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
@@ -2951,6 +2958,7 @@ where
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
+        RobotClockMock,
     )
         -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
@@ -3012,6 +3020,7 @@ where
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
+        RobotClockMock,
     )
         -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
@@ -3388,6 +3397,7 @@ where
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
+        RobotClockMock,
     )
         -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,

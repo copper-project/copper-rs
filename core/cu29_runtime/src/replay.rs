@@ -251,6 +251,7 @@ where
     CB: for<'a> Fn(
             &'a CopperList<P>,
             RobotClock,
+            RobotClockMock,
         ) -> Box<dyn for<'z> FnMut(App::Step<'z>) -> SimOverride + 'a>
         + Clone,
     TF: Fn(&CopperList<P>) -> Option<CuTime> + Clone,

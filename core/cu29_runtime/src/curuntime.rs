@@ -353,12 +353,21 @@ pub enum ProcessStepOutcome {
 /// Result type used by generated process-step functions.
 pub type ProcessStepResult = CuResult<ProcessStepOutcome>;
 
+#[cfg(feature = "remote-debug")]
+fn encode_completed_copperlist_snapshot<P: CopperListTuple>(
+    cl: &CopperList<P>,
+) -> CuResult<Vec<u8>> {
+    bincode::encode_to_vec(cl, bincode::config::standard())
+        .map_err(|e| CuError::new_with_cause("Failed to encode completed CopperList snapshot", e))
+}
+
 /// Manages the lifecycle of the copper lists and logging on the synchronous path.
 pub struct SyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
     inner: CuListsManager<P, NBCL>,
     /// Logger for the copper lists (messages between tasks)
     logger: Option<Box<dyn WriteStream<CopperList<P>>>>,
-    /// Encoded snapshot of the most recently completed CopperList.
+    /// Remote-debug snapshot of the most recently completed CopperList.
+    #[cfg(feature = "remote-debug")]
     last_completed_encoded: Option<Vec<u8>>,
     /// Last encoded size returned by logger.log
     pub last_encoded_bytes: u64,
@@ -374,6 +383,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         Ok(Self {
             inner: CuListsManager::new(),
             logger,
+            #[cfg(feature = "remote-debug")]
             last_completed_encoded: None,
             last_encoded_bytes: 0,
             last_handle_bytes: 0,
@@ -392,8 +402,14 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         self.inner.peek()
     }
 
+    #[cfg(feature = "remote-debug")]
     pub fn last_completed_encoded(&self) -> Option<&[u8]> {
         self.last_completed_encoded.as_deref()
+    }
+
+    #[cfg(not(feature = "remote-debug"))]
+    pub fn last_completed_encoded(&self) -> Option<&[u8]> {
+        None
     }
 
     pub fn create(&mut self) -> CuResult<&mut CopperList<P>> {
@@ -406,14 +422,19 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         let mut is_top = true;
         let mut nb_done = 0;
         self.last_handle_bytes = 0;
+        #[cfg(feature = "remote-debug")]
+        let last_completed_encoded = &mut self.last_completed_encoded;
         for cl in self.inner.iter_mut() {
             if cl.id == culistid && cl.get_state() == CopperListState::Processing {
                 cl.change_state(CopperListState::DoneProcessing);
-                self.last_completed_encoded = Some(
-                    bincode::encode_to_vec(&*cl, bincode::config::standard()).map_err(|e| {
-                        CuError::new_with_cause("Failed to encode completed CopperList snapshot", e)
-                    })?,
-                );
+                match () {
+                    #[cfg(feature = "remote-debug")]
+                    () => {
+                        *last_completed_encoded = Some(encode_completed_copperlist_snapshot(cl)?);
+                    }
+                    #[cfg(not(feature = "remote-debug"))]
+                    () => {}
+                }
             }
             if is_top && cl.get_state() == CopperListState::DoneProcessing {
                 if let Some(logger) = &mut self.logger {
@@ -528,6 +549,7 @@ where
 pub struct AsyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
     free_pool: Vec<Box<CopperList<P>>>,
     current: Option<Box<CopperList<P>>>,
+    #[cfg(feature = "remote-debug")]
     last_completed_encoded: Option<Vec<u8>>,
     pending_count: usize,
     next_cl_id: u64,
@@ -595,6 +617,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         Ok(Self {
             free_pool,
             current: None,
+            #[cfg(feature = "remote-debug")]
             last_completed_encoded: None,
             pending_count: 0,
             next_cl_id: 0,
@@ -618,8 +641,14 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         self.current.as_deref()
     }
 
+    #[cfg(feature = "remote-debug")]
     pub fn last_completed_encoded(&self) -> Option<&[u8]> {
         self.last_completed_encoded.as_deref()
+    }
+
+    #[cfg(not(feature = "remote-debug"))]
+    pub fn last_completed_encoded(&self) -> Option<&[u8]> {
+        None
     }
 
     pub fn create(&mut self) -> CuResult<&mut CopperList<P>> {
@@ -650,6 +679,17 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         Ok(current.as_mut())
     }
 
+    #[cfg(feature = "remote-debug")]
+    fn capture_completed_snapshot(&mut self, cl: &CopperList<P>) -> CuResult<()> {
+        self.last_completed_encoded = Some(encode_completed_copperlist_snapshot(cl)?);
+        Ok(())
+    }
+
+    #[cfg(not(feature = "remote-debug"))]
+    fn capture_completed_snapshot(&mut self, _cl: &CopperList<P>) -> CuResult<()> {
+        Ok(())
+    }
+
     pub fn end_of_processing(&mut self, culistid: u64) -> CuResult<()> {
         self.reclaim_completed()?;
 
@@ -665,11 +705,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         }
 
         culist.change_state(CopperListState::DoneProcessing);
-        self.last_completed_encoded = Some(
-            bincode::encode_to_vec(&*culist, bincode::config::standard()).map_err(|e| {
-                CuError::new_with_cause("Failed to encode completed CopperList snapshot", e)
-            })?,
-        );
+        self.capture_completed_snapshot(&culist)?;
         self.last_encoded_bytes = 0;
         self.last_handle_bytes = 0;
 
@@ -713,11 +749,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
     ) -> CuResult<OwnedCopperListSubmission<P>> {
         self.reclaim_completed()?;
         culist.change_state(CopperListState::DoneProcessing);
-        self.last_completed_encoded = Some(
-            bincode::encode_to_vec(&*culist, bincode::config::standard()).map_err(|e| {
-                CuError::new_with_cause("Failed to encode completed CopperList snapshot", e)
-            })?,
-        );
+        self.capture_completed_snapshot(&culist)?;
         self.last_encoded_bytes = 0;
         self.last_handle_bytes = 0;
 

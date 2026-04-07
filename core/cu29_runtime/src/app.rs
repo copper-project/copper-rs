@@ -207,10 +207,11 @@ pub trait CuSimApplication<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> {
     fn restore_keyframe(&mut self, freezer: &KeyFrame) -> CuResult<()>;
 }
 
-/// Optional introspection hook exposing the latest runtime-generated CopperList.
+/// Optional introspection hook exposing the latest runtime-generated CopperList snapshot.
 ///
-/// Generated Copper applications implement this in `std` builds so debug tools can
-/// inspect replayed outputs instead of only the recorded timeline entries.
+/// This is remote-debug-only: debugger conveniences must not add unconditional
+/// runtime-path overhead to normal Copper builds. Non-`remote-debug` builds
+/// should implement this as a cheap `None`.
 pub trait CurrentRuntimeCopperList<P: CopperListTuple> {
     fn current_runtime_copperlist_bytes(&self) -> Option<&[u8]>;
 }

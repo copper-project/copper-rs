@@ -291,6 +291,8 @@ where
         Encode::encode(&self.pid.last_error, encoder)?;
         Encode::encode(&self.pid.elapsed, encoder)?;
         Encode::encode(&self.pid.last_output, encoder)?;
+        Encode::encode(&self.first_run, encoder)?;
+        Encode::encode(&self.last_tov, encoder)?;
         Ok(())
     }
 
@@ -299,6 +301,8 @@ where
         self.pid.last_error = Decode::decode(decoder)?;
         self.pid.elapsed = Decode::decode(decoder)?;
         self.pid.last_output = Decode::decode(decoder)?;
+        self.first_run = Decode::decode(decoder)?;
+        self.last_tov = Decode::decode(decoder)?;
         Ok(())
     }
 }
@@ -309,4 +313,89 @@ fn getcfg(config: &ComponentConfig, key: &str, default: f32) -> Result<f32, Conf
         .get::<f64>(key)?
         .map(|value| value as f32)
         .unwrap_or(default))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bincode::config::standard;
+    use bincode::de::DecoderImpl;
+    use bincode::de::read::SliceReader;
+    use bincode::encode_to_vec;
+
+    #[derive(Clone, Copy)]
+    struct TestInput;
+
+    impl From<&TestInput> for f32 {
+        fn from(_: &TestInput) -> Self {
+            0.0
+        }
+    }
+
+    fn sample_task() -> GenericPIDTask<TestInput> {
+        GenericPIDTask {
+            _marker: PhantomData,
+            pid: PIDController {
+                kp: 1.0,
+                ki: 2.0,
+                kd: 3.0,
+                setpoint: 4.0,
+                p_limit: 5.0,
+                i_limit: 6.0,
+                d_limit: 7.0,
+                output_limit: 8.0,
+                sampling: CuDuration::from(9),
+                integral: 10.0,
+                last_error: 11.0,
+                elapsed: CuDuration::from(12),
+                last_output: PIDControlOutputPayload {
+                    p: 13.0,
+                    i: 14.0,
+                    d: 15.0,
+                    output: 16.0,
+                },
+            },
+            first_run: false,
+            last_tov: CuTime::from(17_u64),
+            setpoint: 18.0,
+            cutoff: 19.0,
+        }
+    }
+
+    #[test]
+    fn freeze_thaw_restores_pid_timekeeping_state() {
+        let original = sample_task();
+        let bytes =
+            encode_to_vec(BincodeAdapter(&original), standard()).expect("encode pid task state");
+
+        let mut restored = sample_task();
+        restored.pid.integral = -1.0;
+        restored.pid.last_error = -2.0;
+        restored.pid.elapsed = CuDuration::from(999);
+        restored.pid.last_output = PIDControlOutputPayload {
+            p: -3.0,
+            i: -4.0,
+            d: -5.0,
+            output: -6.0,
+        };
+        restored.first_run = true;
+        restored.last_tov = CuTime::from(1_000_u64);
+
+        let reader = SliceReader::new(&bytes);
+        let mut decoder = DecoderImpl::new(reader, standard(), ());
+        restored.thaw(&mut decoder).expect("thaw pid task state");
+
+        assert_eq!(restored.pid.integral, original.pid.integral);
+        assert_eq!(restored.pid.last_error, original.pid.last_error);
+        assert_eq!(restored.pid.elapsed, original.pid.elapsed);
+        assert_eq!(restored.pid.last_output.p, original.pid.last_output.p);
+        assert_eq!(restored.pid.last_output.i, original.pid.last_output.i);
+        assert_eq!(restored.pid.last_output.d, original.pid.last_output.d);
+        assert_eq!(
+            restored.pid.last_output.output,
+            original.pid.last_output.output
+        );
+        assert_eq!(restored.first_run, original.first_run);
+        assert_eq!(restored.last_tov, original.last_tov);
+    }
 }

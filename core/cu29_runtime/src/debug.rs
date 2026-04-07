@@ -69,9 +69,9 @@ struct CachedSection<P: CopperListTuple> {
 /// A reusable debugging session that can time-travel within a recorded log.
 ///
 /// `CB` builds a simulation callback for a specific copperlist entry. This keeps the
-/// API generic: the caller can replay recorded outputs, poke clocks, or inject extra
-/// assertions inside the callback. `TF` extracts a timestamp from a copperlist to
-/// support time-based seeking.
+/// API generic: the caller can replay recorded outputs, drive the mock clock inside a
+/// CopperList, or inject extra assertions inside the callback. `TF` extracts a
+/// timestamp from a copperlist to support time-based seeking.
 const DEFAULT_SECTION_CACHE_CAP: usize = 8;
 pub struct CuDebugSession<App, P, CB, TF, S, L>
 where
@@ -110,6 +110,7 @@ where
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
+        RobotClockMock,
     ) -> Box<dyn for<'z> FnMut(App::Step<'z>) -> SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
 {
@@ -445,7 +446,8 @@ where
                 self.clock_mock.set_value(ts.as_nanos());
             }
             let clock_for_cb = self.robot_clock.clone();
-            let mut cb = (self.build_callback)(entry.as_ref(), clock_for_cb);
+            let clock_mock_for_cb = self.clock_mock.clone();
+            let mut cb = (self.build_callback)(entry.as_ref(), clock_for_cb, clock_mock_for_cb);
             self.app.run_one_iteration(&mut cb)?;
             replayed += 1;
             self.current_idx = Some(idx);
@@ -592,6 +594,7 @@ where
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
+        RobotClockMock,
     ) -> Box<dyn for<'z> FnMut(App::Step<'z>) -> SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
 {

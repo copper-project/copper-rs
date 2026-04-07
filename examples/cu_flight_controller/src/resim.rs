@@ -26,6 +26,7 @@ type ReplayBuildCallback =
     for<'a> fn(
         &'a ReplayCopperList,
         RobotClock,
+        RobotClockMock,
     ) -> Box<dyn for<'z> FnMut(gnss::SimStep<'z>) -> SimOverride + 'a>;
 type ReplayTimeExtractor = fn(&ReplayCopperList) -> Option<CuTime>;
 
@@ -78,7 +79,8 @@ fn app_factory(
 
 fn build_callback<'a>(
     copperlist: &'a ReplayCopperList,
-    _clock_for_cb: RobotClock,
+    _process_clock: RobotClock,
+    _clock_for_cb: RobotClockMock,
 ) -> Box<dyn for<'z> FnMut(gnss::SimStep<'z>) -> SimOverride + 'a> {
     Box::new(move |step: gnss::SimStep<'_>| gnss::recorded_replay_step(step, copperlist))
 }
