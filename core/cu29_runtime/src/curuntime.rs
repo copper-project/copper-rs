@@ -412,6 +412,14 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         None
     }
 
+    #[cfg(feature = "remote-debug")]
+    pub fn set_last_completed_encoded(&mut self, snapshot: Option<Vec<u8>>) {
+        self.last_completed_encoded = snapshot;
+    }
+
+    #[cfg(not(feature = "remote-debug"))]
+    pub fn set_last_completed_encoded(&mut self, _snapshot: Option<Vec<u8>>) {}
+
     pub fn create(&mut self) -> CuResult<&mut CopperList<P>> {
         self.inner
             .create()
@@ -650,6 +658,14 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
     pub fn last_completed_encoded(&self) -> Option<&[u8]> {
         None
     }
+
+    #[cfg(feature = "remote-debug")]
+    pub fn set_last_completed_encoded(&mut self, snapshot: Option<Vec<u8>>) {
+        self.last_completed_encoded = snapshot;
+    }
+
+    #[cfg(not(feature = "remote-debug"))]
+    pub fn set_last_completed_encoded(&mut self, _snapshot: Option<Vec<u8>>) {}
 
     pub fn create(&mut self) -> CuResult<&mut CopperList<P>> {
         if self.current.is_some() {

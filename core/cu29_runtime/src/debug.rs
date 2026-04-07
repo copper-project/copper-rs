@@ -7,7 +7,7 @@
 //!   with a tiny LRU cache for snappy stepping.
 //! - Reuse the public `CuSimApplication` API and user-provided sim callbacks.
 
-use crate::app::CuSimApplication;
+use crate::app::{CuSimApplication, CurrentRuntimeCopperList};
 use crate::curuntime::KeyFrame;
 use crate::reflect::{ReflectTaskIntrospection, TypeRegistry, dump_type_registry_schema};
 use crate::simulation::SimOverride;
@@ -254,6 +254,42 @@ where
         Ok(())
     }
 
+    fn clear_runtime_copperlist_snapshot(&mut self)
+    where
+        App: CurrentRuntimeCopperList<P>,
+    {
+        self.app.set_current_runtime_copperlist_bytes(None);
+    }
+
+    fn normalize_runtime_copperlist_snapshot(
+        &mut self,
+        recorded: &crate::copperlist::CopperList<P>,
+    ) -> CuResult<()>
+    where
+        App: CurrentRuntimeCopperList<P>,
+    {
+        let normalized = self
+            .app
+            .current_runtime_copperlist_bytes()
+            .map(|bytes| {
+                let (mut runtime_cl, _) = bincode::decode_from_slice::<
+                    crate::copperlist::CopperList<P>,
+                    _,
+                >(bytes, standard())
+                .map_err(|e| {
+                    CuError::new_with_cause("Failed to decode runtime CopperList snapshot", e)
+                })?;
+                runtime_cl.id = recorded.id;
+                runtime_cl.change_state(recorded.get_state());
+                bincode::encode_to_vec(&runtime_cl, standard()).map_err(|e| {
+                    CuError::new_with_cause("Failed to encode normalized CopperList snapshot", e)
+                })
+            })
+            .transpose()?;
+        self.app.set_current_runtime_copperlist_bytes(normalized);
+        Ok(())
+    }
+
     fn find_section_for_index(&self, idx: usize) -> Option<usize> {
         self.sections
             .binary_search_by(|s| {
@@ -438,7 +474,10 @@ where
         Err(CuError::from("Timestamp not found within section"))
     }
 
-    fn replay_range(&mut self, start: usize, end: usize) -> CuResult<usize> {
+    fn replay_range(&mut self, start: usize, end: usize) -> CuResult<usize>
+    where
+        App: CurrentRuntimeCopperList<P>,
+    {
         let mut replayed = 0usize;
         for idx in start..=end {
             let (entry, ts) = self.copperlist_at(idx)?;
@@ -449,13 +488,17 @@ where
             let clock_mock_for_cb = self.clock_mock.clone();
             let mut cb = (self.build_callback)(entry.as_ref(), clock_for_cb, clock_mock_for_cb);
             self.app.run_one_iteration(&mut cb)?;
+            self.normalize_runtime_copperlist_snapshot(entry.as_ref())?;
             replayed += 1;
             self.current_idx = Some(idx);
         }
         Ok(replayed)
     }
 
-    fn goto_index(&mut self, target_idx: usize) -> CuResult<JumpOutcome> {
+    fn goto_index(&mut self, target_idx: usize) -> CuResult<JumpOutcome>
+    where
+        App: CurrentRuntimeCopperList<P>,
+    {
         self.ensure_started()?;
         if target_idx >= self.total_entries {
             return Err(CuError::from("Target index outside log"));
@@ -485,6 +528,7 @@ where
                     return Err(CuError::from("No keyframe available to rewind"));
                 };
                 self.restore_keyframe(&kf)?;
+                self.clear_runtime_copperlist_snapshot();
                 keyframe_used = Some(kf.culistid);
                 replay_start = self.index_for_culistid(kf.culistid)?;
             }
@@ -494,6 +538,7 @@ where
                 return Err(CuError::from("No keyframe found in log"));
             };
             self.restore_keyframe(&kf)?;
+            self.clear_runtime_copperlist_snapshot();
             keyframe_used = Some(kf.culistid);
             replay_start = self.index_for_culistid(kf.culistid)?;
         }
@@ -514,19 +559,28 @@ where
     }
 
     /// Jump to a copperlist by id.
-    pub fn goto_cl(&mut self, culistid: u64) -> CuResult<JumpOutcome> {
+    pub fn goto_cl(&mut self, culistid: u64) -> CuResult<JumpOutcome>
+    where
+        App: CurrentRuntimeCopperList<P>,
+    {
         let idx = self.index_for_culistid(culistid)?;
         self.goto_index(idx)
     }
 
     /// Jump to the first copperlist at or after a timestamp.
-    pub fn goto_time(&mut self, ts: CuTime) -> CuResult<JumpOutcome> {
+    pub fn goto_time(&mut self, ts: CuTime) -> CuResult<JumpOutcome>
+    where
+        App: CurrentRuntimeCopperList<P>,
+    {
         let idx = self.index_for_time(ts)?;
         self.goto_index(idx)
     }
 
     /// Step relative to the current cursor. Negative values rewind via keyframe.
-    pub fn step(&mut self, delta: i32) -> CuResult<JumpOutcome> {
+    pub fn step(&mut self, delta: i32) -> CuResult<JumpOutcome>
+    where
+        App: CurrentRuntimeCopperList<P>,
+    {
         let current =
             self.current_idx
                 .ok_or_else(|| CuError::from("Cannot step before any jump"))? as i32;

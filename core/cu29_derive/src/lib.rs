@@ -4225,6 +4225,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 fn current_runtime_copperlist_bytes(&self) -> Option<&[u8]> {
                     self.copper_runtime.copperlists_manager.last_completed_encoded()
                 }
+
+                fn set_current_runtime_copperlist_bytes(
+                    &mut self,
+                    snapshot: Option<Vec<u8>>,
+                ) {
+                    self.copper_runtime
+                        .copperlists_manager
+                        .set_last_completed_encoded(snapshot);
+                }
             }
         };
 

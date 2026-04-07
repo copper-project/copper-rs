@@ -4,8 +4,12 @@ use cu29_traits::CopperListTuple;
 use cu29_traits::CuResult;
 use cu29_unifiedlog::{SectionStorage, UnifiedLogWrite};
 
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
 #[cfg(feature = "std")]
 use cu29_clock::RobotClockMock;
+#[cfg(feature = "std")]
+use std::vec::Vec;
 
 #[cfg(not(feature = "std"))]
 mod imp {
@@ -214,6 +218,10 @@ pub trait CuSimApplication<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> {
 /// should implement this as a cheap `None`.
 pub trait CurrentRuntimeCopperList<P: CopperListTuple> {
     fn current_runtime_copperlist_bytes(&self) -> Option<&[u8]>;
+
+    fn set_current_runtime_copperlist_bytes(&mut self, snapshot: Option<Vec<u8>>) {
+        let _ = snapshot;
+    }
 }
 
 /// Simulation-enabled applications that can replay a recorded CopperList verbatim.

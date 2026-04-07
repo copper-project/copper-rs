@@ -2628,7 +2628,7 @@ fn seek_to_index<App, P, CB, TF, S, L>(
     idx: usize,
 ) -> CuResult<JumpOutcome>
 where
-    App: CuSimApplication<S, L>,
+    App: CuSimApplication<S, L> + CurrentRuntimeCopperList<P>,
     L: UnifiedLogWrite<S> + 'static,
     S: SectionStorage,
     P: CopperListTuple + 'static,
@@ -2650,7 +2650,7 @@ fn replay_current_step<App, P, CB, TF, S, L>(
     session: &mut CuDebugSession<App, P, CB, TF, S, L>,
 ) -> CuResult<JumpOutcome>
 where
-    App: CuSimApplication<S, L>,
+    App: CuSimApplication<S, L> + CurrentRuntimeCopperList<P>,
     L: UnifiedLogWrite<S> + 'static,
     S: SectionStorage,
     P: CopperListTuple + 'static,
