@@ -210,3 +210,9 @@ resim-debug debug_base="copper/examples/cu_rp_balancebot/debug/v1" log="logs/bal
 		--debug-base "{{debug_base}}" \
 		--log-base "$log" \
 		--replay-log-base "$replay_log"
+
+# Recompile the resim-debug executable without launching it.
+resim-debug-build:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cargo build --no-default-features --features sim-debug --bin balancebot-resim -r
