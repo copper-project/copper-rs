@@ -4193,6 +4193,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
+        let app_runtime_copperlist_impl = quote! {
+            impl cu29::app::CurrentRuntimeCopperList<#mission_mod::CuStampedDataSet>
+                for #application_name
+            {
+                fn current_runtime_copperlist_bytes(&self) -> Option<&[u8]> {
+                    self.copper_runtime.copperlists_manager.last_completed_encoded()
+                }
+            }
+        };
+
         #[cfg(feature = "std")]
         #[cfg(feature = "macro_debug")]
         eprintln!("[build result]");
@@ -4866,6 +4876,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #app_builder_inherent_impl
                 #app_metadata_impl
                 #app_reflect_impl
+                #app_runtime_copperlist_impl
                 #application_impl
                 #recorded_replay_app_impl
                 #distributed_replay_app_impl

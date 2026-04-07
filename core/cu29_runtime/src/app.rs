@@ -1,13 +1,11 @@
+use crate::copperlist::CopperList;
 use crate::curuntime::KeyFrame;
+use cu29_traits::CopperListTuple;
 use cu29_traits::CuResult;
 use cu29_unifiedlog::{SectionStorage, UnifiedLogWrite};
 
 #[cfg(feature = "std")]
-use crate::copperlist::CopperList;
-#[cfg(feature = "std")]
 use cu29_clock::RobotClockMock;
-#[cfg(feature = "std")]
-use cu29_traits::CopperListTuple;
 
 #[cfg(not(feature = "std"))]
 mod imp {
@@ -207,6 +205,14 @@ pub trait CuSimApplication<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> {
 
     /// Restore all tasks from the given frozen state
     fn restore_keyframe(&mut self, freezer: &KeyFrame) -> CuResult<()>;
+}
+
+/// Optional introspection hook exposing the latest runtime-generated CopperList.
+///
+/// Generated Copper applications implement this in `std` builds so debug tools can
+/// inspect replayed outputs instead of only the recorded timeline entries.
+pub trait CurrentRuntimeCopperList<P: CopperListTuple> {
+    fn current_runtime_copperlist_bytes(&self) -> Option<&[u8]>;
 }
 
 /// Simulation-enabled applications that can replay a recorded CopperList verbatim.

@@ -358,6 +358,8 @@ pub struct SyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usiz
     inner: CuListsManager<P, NBCL>,
     /// Logger for the copper lists (messages between tasks)
     logger: Option<Box<dyn WriteStream<CopperList<P>>>>,
+    /// Encoded snapshot of the most recently completed CopperList.
+    last_completed_encoded: Option<Vec<u8>>,
     /// Last encoded size returned by logger.log
     pub last_encoded_bytes: u64,
     /// Last handle-backed payload bytes observed during logger.log
@@ -372,6 +374,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         Ok(Self {
             inner: CuListsManager::new(),
             logger,
+            last_completed_encoded: None,
             last_encoded_bytes: 0,
             last_handle_bytes: 0,
         })
@@ -383,6 +386,14 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
 
     pub fn last_cl_id(&self) -> u64 {
         self.inner.last_cl_id()
+    }
+
+    pub fn peek(&self) -> Option<&CopperList<P>> {
+        self.inner.peek()
+    }
+
+    pub fn last_completed_encoded(&self) -> Option<&[u8]> {
+        self.last_completed_encoded.as_deref()
     }
 
     pub fn create(&mut self) -> CuResult<&mut CopperList<P>> {
@@ -398,6 +409,11 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         for cl in self.inner.iter_mut() {
             if cl.id == culistid && cl.get_state() == CopperListState::Processing {
                 cl.change_state(CopperListState::DoneProcessing);
+                self.last_completed_encoded = Some(
+                    bincode::encode_to_vec(&*cl, bincode::config::standard()).map_err(|e| {
+                        CuError::new_with_cause("Failed to encode completed CopperList snapshot", e)
+                    })?,
+                );
             }
             if is_top && cl.get_state() == CopperListState::DoneProcessing {
                 if let Some(logger) = &mut self.logger {
@@ -512,6 +528,7 @@ where
 pub struct AsyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
     free_pool: Vec<Box<CopperList<P>>>,
     current: Option<Box<CopperList<P>>>,
+    last_completed_encoded: Option<Vec<u8>>,
     pending_count: usize,
     next_cl_id: u64,
     pending_sender: Option<SyncSender<Box<CopperList<P>>>>,
@@ -578,6 +595,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         Ok(Self {
             free_pool,
             current: None,
+            last_completed_encoded: None,
             pending_count: 0,
             next_cl_id: 0,
             pending_sender,
@@ -594,6 +612,14 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
 
     pub fn last_cl_id(&self) -> u64 {
         self.next_cl_id.saturating_sub(1)
+    }
+
+    pub fn peek(&self) -> Option<&CopperList<P>> {
+        self.current.as_deref()
+    }
+
+    pub fn last_completed_encoded(&self) -> Option<&[u8]> {
+        self.last_completed_encoded.as_deref()
     }
 
     pub fn create(&mut self) -> CuResult<&mut CopperList<P>> {
@@ -639,6 +665,11 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         }
 
         culist.change_state(CopperListState::DoneProcessing);
+        self.last_completed_encoded = Some(
+            bincode::encode_to_vec(&*culist, bincode::config::standard()).map_err(|e| {
+                CuError::new_with_cause("Failed to encode completed CopperList snapshot", e)
+            })?,
+        );
         self.last_encoded_bytes = 0;
         self.last_handle_bytes = 0;
 
@@ -682,6 +713,11 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
     ) -> CuResult<OwnedCopperListSubmission<P>> {
         self.reclaim_completed()?;
         culist.change_state(CopperListState::DoneProcessing);
+        self.last_completed_encoded = Some(
+            bincode::encode_to_vec(&*culist, bincode::config::standard()).map_err(|e| {
+                CuError::new_with_cause("Failed to encode completed CopperList snapshot", e)
+            })?,
+        );
         self.last_encoded_bytes = 0;
         self.last_handle_bytes = 0;
 

@@ -7,6 +7,7 @@ use cu29::replay::{
     ReplayCli, ReplayDefaults, ensure_log_family_exists, per_session_replay_log_base,
     remove_log_family, serve_remote_debug,
 };
+use cu29::units::si::ratio::ratio;
 use cu29_export::copperlists_reader;
 use cu29_export::keyframes_reader;
 use std::error::Error;
@@ -31,15 +32,25 @@ type ReplayTimeExtractor = fn(&ReplayCopperList) -> Option<CuTime>;
 
 fn default_callback(step: default::SimStep) -> SimOverride {
     match step {
-        // Don't let the real task execute process and override with our logic.
+        // Replay only injects recorded sensor inputs and emulates the motor sink.
+        // Controller tasks must execute live so code changes show up in replay.
         default::SimStep::Balpos(_) => SimOverride::ExecutedBySim,
-        default::SimStep::BalposPid(_) => SimOverride::ExecutedBySim,
         default::SimStep::Railpos(_) => SimOverride::ExecutedBySim,
-        default::SimStep::RailposPid(_) => SimOverride::ExecutedBySim,
-        default::SimStep::MergePids(_) => SimOverride::ExecutedBySim,
         default::SimStep::Motor(_) => SimOverride::ExecutedBySim,
         _ => SimOverride::ExecuteByRuntime,
     }
+}
+
+fn sync_clock_from_recorded<T: CuMsgPayload>(clock: &RobotClockMock, msg: &CuMsg<T>) {
+    if let Some(CuDuration(ts)) = Option::<CuTime>::from(msg.metadata.process_time.start) {
+        clock.set_value(ts);
+    }
+}
+
+fn set_process_timing<T: CuMsgPayload>(clock: &RobotClock, msg: &mut CuMsg<T>) {
+    let perf = cu29::curuntime::perf_now(clock);
+    msg.metadata.process_time.start = perf.into();
+    msg.metadata.process_time.end = perf.into();
 }
 
 fn run_one_copperlist(
@@ -63,68 +74,44 @@ fn run_one_copperlist(
         robot_clock.set_value(process_time);
     }
     let clock_for_callbacks = robot_clock.clone();
+    let process_clock = copper_app.clock();
 
     let mut sim_callback = move |step: default::SimStep| -> SimOverride {
         match step {
             default::SimStep::Balpos(CuTaskCallbackState::Process(_, output)) => {
                 *output = msgs.get_balpos_output().clone();
-                if let Some(CuDuration(ts)) =
-                    Option::<CuTime>::from(msgs.get_balpos_output().metadata.process_time.start)
-                {
-                    clock_for_callbacks.set_value(ts);
-                }
+                sync_clock_from_recorded(&clock_for_callbacks, msgs.get_balpos_output());
                 SimOverride::ExecutedBySim
             }
             default::SimStep::Balpos(_) => SimOverride::ExecutedBySim,
-            default::SimStep::BalposPid(CuTaskCallbackState::Process(_, output)) => {
-                *output = msgs.get_balpos_pid_output().clone();
-                if let Some(CuDuration(ts)) =
-                    Option::<CuTime>::from(msgs.get_balpos_pid_output().metadata.process_time.start)
-                {
-                    clock_for_callbacks.set_value(ts);
-                }
-                SimOverride::ExecutedBySim
+            default::SimStep::BalposPid(CuTaskCallbackState::Process(_, _)) => {
+                sync_clock_from_recorded(&clock_for_callbacks, msgs.get_balpos_pid_output());
+                SimOverride::ExecuteByRuntime
             }
-            default::SimStep::BalposPid(_) => SimOverride::ExecutedBySim,
             default::SimStep::Railpos(CuTaskCallbackState::Process(_, output)) => {
                 *output = msgs.get_railpos_output().clone();
-                if let Some(CuDuration(ts)) =
-                    Option::<CuTime>::from(msgs.get_railpos_output().metadata.process_time.start)
-                {
-                    clock_for_callbacks.set_value(ts);
-                }
+                sync_clock_from_recorded(&clock_for_callbacks, msgs.get_railpos_output());
                 SimOverride::ExecutedBySim
             }
             default::SimStep::Railpos(_) => SimOverride::ExecutedBySim,
-            default::SimStep::RailposPid(CuTaskCallbackState::Process(_, output)) => {
-                *output = msgs.get_railpos_pid_output().clone();
-                if let Some(CuDuration(ts)) = Option::<CuTime>::from(
-                    msgs.get_railpos_pid_output().metadata.process_time.start,
-                ) {
-                    clock_for_callbacks.set_value(ts);
-                }
-                SimOverride::ExecutedBySim
+            default::SimStep::RailposPid(CuTaskCallbackState::Process(_, _)) => {
+                sync_clock_from_recorded(&clock_for_callbacks, msgs.get_railpos_pid_output());
+                SimOverride::ExecuteByRuntime
             }
-            default::SimStep::RailposPid(_) => SimOverride::ExecutedBySim,
-            default::SimStep::MergePids(CuTaskCallbackState::Process(_, output)) => {
-                *output = msgs.get_merge_pids_output().clone();
-                if let Some(CuDuration(ts)) =
-                    Option::<CuTime>::from(msgs.get_merge_pids_output().metadata.process_time.start)
-                {
-                    clock_for_callbacks.set_value(ts);
-                }
-                SimOverride::ExecutedBySim
+            default::SimStep::MergePids(CuTaskCallbackState::Process(_, _)) => {
+                sync_clock_from_recorded(&clock_for_callbacks, msgs.get_merge_pids_output());
+                SimOverride::ExecuteByRuntime
             }
-            default::SimStep::MergePids(_) => SimOverride::ExecutedBySim,
             default::SimStep::Motor(CuTaskCallbackState::Process(input, output)) => {
-                // Replay the recorded motor output verbatim to keep logs bit-identical.
-                let _ = input; // input unused; we rely on recorded output
-                *output = msgs.get_motor_output().clone();
-                if let Some(CuDuration(ts)) =
-                    Option::<CuTime>::from(msgs.get_motor_output().metadata.process_time.start)
-                {
-                    clock_for_callbacks.set_value(ts);
+                if let Some(motor_actuation) = input.payload() {
+                    output.metadata.set_status(format!(
+                        "Replay power:{:.4}",
+                        motor_actuation.power.get::<ratio>()
+                    ));
+                } else {
+                    output.metadata.set_status("Safety Mode.");
                 }
+                set_process_timing(&process_clock, output);
                 SimOverride::ExecutedBySim
             }
             default::SimStep::Motor(_) => SimOverride::ExecutedBySim,
@@ -137,7 +124,7 @@ fn run_one_copperlist(
 
 fn build_callback<'a>(
     copper_list: &'a ReplayCopperList,
-    _clock_for_callbacks: RobotClock,
+    clock_for_callbacks: RobotClock,
 ) -> Box<dyn for<'z> FnMut(default::SimStep<'z>) -> SimOverride + 'a> {
     let msgs = &copper_list.msgs;
     Box::new(move |step: default::SimStep<'_>| match step {
@@ -146,29 +133,21 @@ fn build_callback<'a>(
             SimOverride::ExecutedBySim
         }
         default::SimStep::Balpos(_) => SimOverride::ExecutedBySim,
-        default::SimStep::BalposPid(CuTaskCallbackState::Process(_, output)) => {
-            *output = msgs.get_balpos_pid_output().clone();
-            SimOverride::ExecutedBySim
-        }
-        default::SimStep::BalposPid(_) => SimOverride::ExecutedBySim,
         default::SimStep::Railpos(CuTaskCallbackState::Process(_, output)) => {
             *output = msgs.get_railpos_output().clone();
             SimOverride::ExecutedBySim
         }
         default::SimStep::Railpos(_) => SimOverride::ExecutedBySim,
-        default::SimStep::RailposPid(CuTaskCallbackState::Process(_, output)) => {
-            *output = msgs.get_railpos_pid_output().clone();
-            SimOverride::ExecutedBySim
-        }
-        default::SimStep::RailposPid(_) => SimOverride::ExecutedBySim,
-        default::SimStep::MergePids(CuTaskCallbackState::Process(_, output)) => {
-            *output = msgs.get_merge_pids_output().clone();
-            SimOverride::ExecutedBySim
-        }
-        default::SimStep::MergePids(_) => SimOverride::ExecutedBySim,
         default::SimStep::Motor(CuTaskCallbackState::Process(input, output)) => {
-            let _ = input;
-            *output = msgs.get_motor_output().clone();
+            if let Some(motor_actuation) = input.payload() {
+                output.metadata.set_status(format!(
+                    "Replay power:{:.4}",
+                    motor_actuation.power.get::<ratio>()
+                ));
+            } else {
+                output.metadata.set_status("Safety Mode.");
+            }
+            set_process_timing(&clock_for_callbacks, output);
             SimOverride::ExecutedBySim
         }
         default::SimStep::Motor(_) => SimOverride::ExecutedBySim,
