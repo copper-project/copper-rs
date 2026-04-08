@@ -11,12 +11,16 @@ homepage.workspace = true
 repository.workspace = true
 build = "build.rs"
 
+[package.metadata.copper]
+kind = "monitor"
+domains = ["monitor/logging"]
+environments = ["host", "embedded"]
+
 [package.metadata.cargo-shear]
 ignored = ["serde"]
 
 [lib]
 path = "src/lib.rs"
-
 
 [dependencies]
 cu29 = { path = "../../../core/cu29", version = "0.15.0", default-features = false }
@@ -30,7 +34,6 @@ cu29 = { path = "../../../core/cu29", version = "0.15.0", default-features = fal
   "log-level-info",
 ] }
 serde = { workspace = true }
-
 
 [features]
 default = ["std", "color_log"]

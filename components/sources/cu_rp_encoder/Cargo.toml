@@ -10,6 +10,12 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[package.metadata.copper]
+kind = "source"
+domains = ["sensor/encoder"]
+environments = ["host"]
+host_os = ["linux"]
+
 [dependencies]
 cu29 = { path = "../../../core/cu29", version = "0.15.0", default-features = false, features = [
   "std",

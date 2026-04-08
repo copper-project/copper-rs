@@ -10,6 +10,11 @@ homepage.workspace = true
 repository.workspace = true
 description = "A coordinate frame transformation library for copper-rs, similar to tf2 in ROS2"
 
+[package.metadata.copper]
+kind = "lib"
+domains = ["math/transforms"]
+environments = ["host"]
+
 [dependencies]
 cu29 = { workspace = true }
 bincode = { workspace = true }

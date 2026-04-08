@@ -7,6 +7,12 @@ description = "Safe Rust wrapper for the Stereolabs ZED C API"
 readme = "README.md"
 repository = "https://github.com/copper-project/copper-rs"
 
+[package.metadata.copper]
+kind = "lib"
+domains = ["sdk/camera"]
+environments = ["host"]
+host_os = ["linux"]
+
 [lib]
 path = "src/lib.rs"
 

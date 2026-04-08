@@ -11,6 +11,11 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[package.metadata.copper]
+kind = "task"
+domains = ["algorithm/prototyping", "language/python"]
+environments = ["host"]
+
 [dependencies]
 cu29 = { workspace = true, features = ["reflect"] }
 cu29-value = { workspace = true, features = ["python"] }

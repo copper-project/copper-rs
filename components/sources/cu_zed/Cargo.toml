@@ -10,6 +10,12 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[package.metadata.copper]
+kind = "source"
+domains = ["sensor/camera", "sensor/depth"]
+environments = ["host"]
+host_os = ["linux"]
+
 [features]
 zed-rerun-demo = []
 

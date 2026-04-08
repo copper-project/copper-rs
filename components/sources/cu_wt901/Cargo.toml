@@ -11,6 +11,12 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[package.metadata.copper]
+kind = "source"
+domains = ["sensor/imu"]
+environments = ["host"]
+host_os = ["linux"]
+
 [dependencies]
 cu29 = { workspace = true }
 cu29-log-derive = { workspace = true }

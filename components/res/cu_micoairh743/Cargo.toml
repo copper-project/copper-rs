@@ -11,8 +11,10 @@ homepage.workspace = true
 repository.workspace = true
 
 [package.metadata.copper]
-embedded_only = true
-embedded_target = "thumbv7em-none-eabihf"
+kind = "resource"
+domains = ["board/flight-controller", "resource/board-bundle"]
+environments = ["embedded"]
+embedded_targets = ["thumbv7em-none-eabihf"]
 
 [features]
 default = ["defmt"]

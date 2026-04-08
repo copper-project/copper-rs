@@ -220,6 +220,11 @@ rtsan-smoke pkg="cu-caterpillar" bin="cu-caterpillar" args="" options="halt_on_e
 
 # Project-specific helpers now live in per-directory justfiles under examples/, components/, and support/.
 
+# Build the Copper component catalog from catalog/index.ron.
+catalog:
+	cargo +stable run --manifest-path support/cu_catalog/Cargo.toml -- \
+		generate --index catalog/index.ron --output-dir catalog/generated --local-root {{ROOT}}
+
 # Build and open the generated wiki + API docs locally.
 docs:
 	#!/usr/bin/env bash

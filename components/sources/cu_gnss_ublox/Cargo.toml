@@ -11,6 +11,11 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[package.metadata.copper]
+kind = "source"
+domains = ["sensor/gnss"]
+environments = ["host", "embedded"]
+
 [dependencies]
 cu29 = { path = "../../../core/cu29", version = "0.15.0", default-features = false }
 cu-linux-resources = { workspace = true, optional = true }

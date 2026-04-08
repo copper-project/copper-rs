@@ -6,6 +6,7 @@
 /target
 /build
 /cu29_export.so
+/catalog/generated
 
 *.copper
 *.mcap

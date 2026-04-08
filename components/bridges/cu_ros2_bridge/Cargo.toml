@@ -10,6 +10,12 @@ homepage.workspace = true
 repository.workspace = true
 description = "Copper bridge for ROS 2 messaging over Zenoh transport."
 
+[package.metadata.copper]
+kind = "bridge"
+domains = ["middleware/ros2", "middleware/zenoh"]
+environments = ["host"]
+host_os = ["linux"]
+
 [package.metadata.cargo-shear]
 ignored = ["serde"]
 

@@ -11,6 +11,11 @@ homepage.workspace = true
 repository.workspace = true
 build = "build.rs"
 
+[package.metadata.copper]
+kind = "monitor"
+domains = ["monitor/safety"]
+environments = ["host", "embedded"]
+
 [lib]
 path = "src/lib.rs"
 

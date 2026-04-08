@@ -10,6 +10,12 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[package.metadata.copper]
+kind = "sink"
+domains = ["actuator/gpio"]
+environments = ["host"]
+host_os = ["linux"]
+
 [dependencies]
 cu29 = { workspace = true }
 bincode = { workspace = true }

@@ -11,9 +11,10 @@ homepage.workspace = true
 repository.workspace = true
 
 [package.metadata.copper]
-embedded_only = true
-embedded_target = "thumbv8m.main-none-eabihf"
-embedded_features = "rp2350"
+kind = "bridge"
+domains = ["actuator/esc", "protocol/dshot"]
+environments = ["embedded"]
+embedded_targets = ["thumbv8m.main-none-eabihf"]
 
 [dependencies]
 cu29 = { path = "../../../core/cu29", version = "0.15.0", default-features = false }

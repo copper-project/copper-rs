@@ -11,6 +11,11 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[package.metadata.copper]
+kind = "source"
+domains = ["sensor/camera"]
+environments = ["host"]
+
 [dependencies]
 cu29 = { workspace = true }
 bincode = { workspace = true }

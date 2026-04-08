@@ -10,6 +10,11 @@ homepage.workspace = true
 repository.workspace = true
 description = "AprilTag detection and pose for Copper"
 
+[package.metadata.copper]
+kind = "task"
+domains = ["algorithm/perception", "vision/apriltag"]
+environments = ["host"]
+
 [dependencies]
 bincode = { workspace = true }
 cu29 = { workspace = true }

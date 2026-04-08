@@ -10,6 +10,11 @@ homepage.workspace = true
 repository.workspace = true
 description = "ROS2 Payloads that can be constructed from/to Copper Payloads for compatibility"
 
+[package.metadata.copper]
+kind = "payload"
+domains = ["payload/ros2"]
+environments = ["host"]
+
 [dependencies]
 compact_str = { workspace = true }
 serde = { workspace = true }

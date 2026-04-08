@@ -11,6 +11,11 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[package.metadata.copper]
+kind = "task"
+domains = ["algorithm/image-processing"]
+environments = ["host"]
+
 [dependencies]
 gstreamer = { workspace = true, default-features = false, optional = true }
 cu29 = { workspace = true }

@@ -10,6 +10,11 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[package.metadata.copper]
+kind = "lib"
+domains = ["storage/logging"]
+environments = ["embedded"]
+
 [dependencies]
 cu29 = { path = "../../../core/cu29", version = "0.15.0", default-features = false }
 # HALs we target (e.g. stm32h7xx-hal 0.16) still vendor embedded-sdmmc 0.5, so keep it aligned to avoid dual versions.

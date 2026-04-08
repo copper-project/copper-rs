@@ -11,6 +11,11 @@ homepage.workspace = true
 repository.workspace = true
 description = "Those are standardized payloads for the Copper sensors. Feel free to contribute your own."
 
+[package.metadata.copper]
+kind = "payload"
+domains = ["payload/sensor"]
+environments = ["host", "embedded"]
+
 [dependencies]
 bincode = { workspace = true }
 cu29-soa-derive = { workspace = true }

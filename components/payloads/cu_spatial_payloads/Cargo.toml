@@ -10,6 +10,11 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[package.metadata.copper]
+kind = "payload"
+domains = ["payload/spatial"]
+environments = ["host", "embedded"]
+
 [dependencies]
 bincode = { workspace = true }
 cu29 = { path = "../../../core/cu29", version = "0.15.0", default-features = false, features = [
