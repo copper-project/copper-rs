@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["Subsystem"],"trait":["CuApplication","CuDistributedReplayApplication","CuRecordedReplayApplication","CuSimApplication","CuStdApplication","CuSubsystemMetadata"]};
+window.SIDEBAR_ITEMS = {"struct":["Subsystem"],"trait":["CuApplication","CuDistributedReplayApplication","CuRecordedReplayApplication","CuSimApplication","CuStdApplication","CuSubsystemMetadata","CurrentRuntimeCopperList"]};
