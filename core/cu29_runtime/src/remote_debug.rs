@@ -3526,7 +3526,6 @@ fn json_type_name(value: &Value) -> &'static str {
         Value::Object(_) => "object",
     }
 }
-
 #[cfg(feature = "reflect")]
 fn reflect_value_to_json(value: &dyn crate::reflect::Reflect) -> Value {
     let mut registry = TypeRegistry::default();
