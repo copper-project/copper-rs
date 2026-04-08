@@ -18,6 +18,7 @@ Types that are supported are:
 - `std_msgs/String` <-> `String`
 - `sensor_msgs/Image` <-> `CuImage<Vec<u8>>`
 - `sensor_msgs/PointCloud2` <-> `PointCloudSoa<N>`
+- `sensor_msgs/PointCloud2` <-> `PointCloudSoaHandle<N>` (preferred for large clouds at the bridge boundary)
 - `sensor_msgs/Imu` <-> `ImuPayload` (accel/gyro mapped; temperature defaults to `0°C` when decoding from ROS)
 - `sensor_msgs/MagneticField` <-> `MagnetometerPayload`
 

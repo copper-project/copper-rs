@@ -1,3 +1,6 @@
+use crate::{CuHandlePayload, CuHandlePayloadInit, CuHandlePayloadMeta};
+use alloc::alloc::{Layout, alloc_zeroed, handle_alloc_error};
+use alloc::boxed::Box;
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
 use cu29::units::si::f32::{Length, Ratio};
@@ -58,7 +61,37 @@ impl PointCloud {
     }
 }
 
+pub struct PointCloudSoaHandleMeta;
+
+impl CuHandlePayloadMeta for PointCloudSoaHandleMeta {
+    const TYPE_PATH: &'static str = "cu_sensor_payloads::PointCloudSoaHandle";
+    const SHORT_TYPE_PATH: &'static str = "PointCloudSoaHandle";
+    const TYPE_IDENT: Option<&'static str> = Some("PointCloudSoaHandle");
+    const CRATE_NAME: Option<&'static str> = Some("cu_sensor_payloads");
+    const MODULE_PATH: Option<&'static str> = Some("cu_sensor_payloads");
+}
+
+/// Copper point-cloud payload stored behind a `CuHandle` so large clouds do not live inline on
+/// the thread stack.
+pub type PointCloudSoaHandle<const N: usize> =
+    CuHandlePayload<PointCloudSoa<N>, PointCloudSoaHandleMeta>;
+
 impl<const N: usize> PointCloudSoa<N> {
+    /// Allocate a zeroed point cloud directly on the heap.
+    ///
+    /// SAFETY: `PointCloudSoa<N>` is generated from `PointCloud`, whose fields are `usize`, `u8`,
+    /// `u64` (`CuTime`), and `uom::Quantity<f32>` wrappers. The quantity type is
+    /// `#[repr(transparent)]` over its scalar plus `PhantomData`, so an all-zero bit pattern is a
+    /// valid semantic zero for every field in the generated SoA storage.
+    pub fn boxed_zeroed() -> Box<Self> {
+        let layout = Layout::new::<Self>();
+        let ptr = unsafe { alloc_zeroed(layout) };
+        if ptr.is_null() {
+            handle_alloc_error(layout);
+        }
+        unsafe { Box::from_raw(ptr.cast()) }
+    }
+
     /// Sort in place the point cloud so it can be ready for merge sorts for example
     pub fn sort(&mut self) {
         self.quicksort(0, N - 1);
@@ -96,6 +129,12 @@ impl<const N: usize> PointCloudSoa<N> {
         self.y.swap(a, b);
         self.z.swap(a, b);
         self.i.swap(a, b);
+    }
+}
+
+impl<const N: usize> CuHandlePayloadInit for PointCloudSoa<N> {
+    fn boxed_init() -> Box<Self> {
+        Self::boxed_zeroed()
     }
 }
 
