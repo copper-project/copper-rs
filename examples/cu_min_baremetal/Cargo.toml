@@ -14,9 +14,9 @@ repository.workspace = true
 
 publish = false
 [package.metadata.copper]
-embedded_only = true
+environments = ["embedded"]
 embedded_config = "examples/cu_min_baremetal/.cargo/config-nostd.toml"
-embedded_target = "aarch64-unknown-none"
+embedded_targets = ["aarch64-unknown-none"]
 embedded_no_default_features = true
 
 [[bin]]

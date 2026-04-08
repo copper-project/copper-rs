@@ -45,7 +45,7 @@ Derived values:
 
 - `std` is shown when `host` is present
 - `no_std` is shown when `embedded` is present
-- `embedded_only` is just `environments = ["embedded"]`
+- an embedded-only crate is represented as `environments = ["embedded"]`
 
 ## Index Format
 
