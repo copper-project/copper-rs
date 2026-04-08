@@ -1,9 +1,10 @@
-use crate::copperlist::CopperList;
 use crate::curuntime::KeyFrame;
 use cu29_traits::CopperListTuple;
 use cu29_traits::CuResult;
 use cu29_unifiedlog::{SectionStorage, UnifiedLogWrite};
 
+#[cfg(feature = "std")]
+use crate::copperlist::CopperList;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 #[cfg(feature = "std")]
