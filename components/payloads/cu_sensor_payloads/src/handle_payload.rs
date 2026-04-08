@@ -20,7 +20,7 @@ pub trait CuHandlePayloadInit: Debug + Send + Sync + 'static {
     fn boxed_init() -> Box<Self>;
 }
 
-#[derive(Debug, Reflect)]
+#[derive(Reflect)]
 #[reflect(from_reflect = false, no_field_bounds, type_path = false)]
 pub struct CuHandlePayload<T, M>
 where
@@ -31,6 +31,18 @@ where
     pub handle: CuHandle<T>,
     #[reflect(ignore)]
     _meta: PhantomData<M>,
+}
+
+impl<T, M> Debug for CuHandlePayload<T, M>
+where
+    T: Debug + Send + Sync + 'static,
+    M: CuHandlePayloadMeta + 'static,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("CuHandlePayload")
+            .field("handle", &self.handle)
+            .finish()
+    }
 }
 
 impl<T, M> Clone for CuHandlePayload<T, M>
