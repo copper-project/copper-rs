@@ -7937,7 +7937,7 @@ mod tests {
             slot_origin_ids[*output_position] = Some(task_id);
         }
 
-        let flattened_ids = flatten_slot_origin_ids(&output_packs, slot_origin_ids);
+        let flattened_ids = flatten_slot_origin_ids(&output_packs, &slot_origin_ids);
 
         // src emits two messages (i32 + bool), both map to src.
         // sink contributes its own output slot (CuMsg<()>), mapped to sink.
