@@ -81,6 +81,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore = "local-only smoke test: downloads scene assets and is not suitable for CI"]
     fn test_balancebot_runs() {
         let mut world = make_world(true);
         world.update();

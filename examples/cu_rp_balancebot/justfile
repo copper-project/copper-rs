@@ -10,6 +10,13 @@ sim:
 	cd "{{ROOT}}"
 	cargo run -p cu-rp-balancebot --bin balancebot-sim
 
+# Run the local-only balancebot smoke test explicitly.
+test-sim-local:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cd "{{ROOT}}"
+	cargo test -p cu-rp-balancebot --bin balancebot-sim test_balancebot_runs -- --ignored --exact --nocapture
+
 # Run the balancebot sim with the monitor embedded in Bevy.
 bevy:
 	#!/usr/bin/env bash
