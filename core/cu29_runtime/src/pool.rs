@@ -443,14 +443,14 @@ impl<T> CuHandleInner<T>
 where
     T: Debug + Send + Sync,
 {
-    pub fn as_ref(&self) -> &T {
+    fn inner_ref(&self) -> &T {
         match self {
             CuHandleInner::Pooled(pooled) => pooled.deref().as_ref(),
             CuHandleInner::Detached(detached) => detached.deref(),
         }
     }
 
-    pub fn as_mut(&mut self) -> &mut T {
+    fn inner_mut(&mut self) -> &mut T {
         match self {
             CuHandleInner::Pooled(pooled) => pooled.deref_mut().as_mut(),
             CuHandleInner::Detached(detached) => detached.deref_mut(),
@@ -458,17 +458,35 @@ where
     }
 }
 
+impl<T> AsRef<T> for CuHandleInner<T>
+where
+    T: Debug + Send + Sync,
+{
+    fn as_ref(&self) -> &T {
+        self.inner_ref()
+    }
+}
+
+impl<T> AsMut<T> for CuHandleInner<T>
+where
+    T: Debug + Send + Sync,
+{
+    fn as_mut(&mut self) -> &mut T {
+        self.inner_mut()
+    }
+}
+
 impl<T: ArrayLike> Deref for CuHandleInner<T> {
     type Target = [T::Element];
 
     fn deref(&self) -> &Self::Target {
-        self.as_ref().deref()
+        self.inner_ref().deref()
     }
 }
 
 impl<T: ArrayLike> DerefMut for CuHandleInner<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.as_mut().deref_mut()
+        self.inner_mut().deref_mut()
     }
 }
 
@@ -522,7 +540,7 @@ where
 {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let inner = lock_unpoison(&self.0);
-        inner.as_ref().serialize(serializer)
+        inner.inner_ref().serialize(serializer)
     }
 }
 
@@ -541,7 +559,7 @@ where
 {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let inner = lock_unpoison(&self.0);
-        let buffer = inner.as_ref();
+        let buffer = inner.inner_ref();
 
         if shared_handle_serialization_enabled()
             && let Some(descriptor) = buffer.descriptor()
@@ -620,9 +638,9 @@ where
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         let inner = lock_unpoison(&self.0);
         crate::monitoring::record_payload_handle_bytes(
-            inner.as_ref().len() * size_of::<T::Element>(),
+            inner.inner_ref().len() * size_of::<T::Element>(),
         );
-        inner.as_ref().encode(encoder)
+        inner.inner_ref().encode(encoder)
     }
 }
 
@@ -731,7 +749,7 @@ impl<T: ArrayLike> CuPool<T> for CuHostMemoryPool<T> {
         {
             let from_lock = lock_unpoison(&from.0);
             let mut to_lock = lock_unpoison(&to_handle.0);
-            to_lock.as_mut().copy_from_slice(from_lock.as_ref());
+            to_lock.inner_mut().copy_from_slice(from_lock.inner_ref());
         }
         to_handle
     }
@@ -811,7 +829,7 @@ impl<E: ElementType> CuPool<CuSharedMemoryBuffer<E>> for CuSharedMemoryPool<E> {
         {
             let from_lock = lock_unpoison(&from.0);
             let mut to_lock = lock_unpoison(&to_handle.0);
-            to_lock.as_mut().copy_from_slice(from_lock.as_ref());
+            to_lock.inner_mut().copy_from_slice(from_lock.inner_ref());
         }
         to_handle
     }
@@ -929,7 +947,7 @@ mod cuda {
             handle_inner: &CuHandleInner<O>,
         ) -> HostSliceWrapper<'_, O> {
             HostSliceWrapper {
-                inner: handle_inner.as_ref(),
+                inner: handle_inner.inner_ref(),
             }
         }
 
@@ -938,7 +956,7 @@ mod cuda {
             handle_inner: &mut CuHandleInner<O>,
         ) -> HostSliceMutWrapper<'_, O> {
             HostSliceMutWrapper {
-                inner: handle_inner.as_mut(),
+                inner: handle_inner.inner_mut(),
             }
         }
     }
