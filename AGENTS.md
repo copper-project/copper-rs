@@ -200,6 +200,10 @@ Implications:
   - Prefer `just` itself to be the reasonable default action the user is likely asking for.
   - If a crate/example has a non-obvious `cargo run --example ...` or similar invocation, hide it behind `just`.
 - After each edit pass, run `just fmt` from the repo root before moving on.
+- Before pushing, run the narrowest appropriate root `just` verification target for the surfaces you changed.
+  - Default to `just pr-check`.
+  - If the change is primarily lint/build scoped, at minimum run `just lint`.
+  - If you touched shared/runtime code that can affect embedded or `no_std`, include `just nostd-ci` when practical.
 - When touching Rust code, avoid clippy-denied cleanup mistakes that keep recurring here:
   - do not keep redundant same-type casts such as `u64` to `u64`
   - prefer `.is_multiple_of(...)` over `% ... == 0` when checking divisibility
