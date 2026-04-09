@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90" role="img" aria-labelledby="title">
+  <title>Monitor fallback visual</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f2230"/>
+      <stop offset="100%" stop-color="#114960"/>
+    </linearGradient>
+  </defs>
+  <rect width="160" height="90" rx="18" fill="url(#bg)"/>
+  <rect x="24" y="18" width="80" height="50" rx="10" fill="#88e0ff" opacity="0.16" stroke="#88e0ff" stroke-opacity="0.4"/>
+  <path d="M36 53 52 39l10 8 20-19" fill="none" stroke="#88e0ff" stroke-linecap="round" stroke-linejoin="round" stroke-width="4"/>
+</svg>

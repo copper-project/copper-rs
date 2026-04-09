@@ -48,6 +48,23 @@ Derived values:
 - `no_std` is shown when `embedded` is present
 - an embedded-only crate is represented as `environments = ["embedded"]`
 
+## Visual Assets
+
+- `catalog/assets/components/<catalog_name>.<ext>`
+  - Crate-specific visuals used by the generated catalog
+- `catalog/assets/domains/<domain>.<ext>`
+  - Shared fallback, with `/` replaced by `-`
+  - Example: `sensor/camera` becomes `sensor-camera.svg`
+- `catalog/assets/kinds/<kind>.<ext>`
+  - Fallback for a Copper kind like `source`, `task`, or `bridge`
+
+The generated catalog resolves visuals in this order:
+
+1. component asset
+2. domain asset
+3. kind asset
+4. `unclassified` kind asset
+
 ## Index Format
 
 `index.ron` is a list of source entries. For the current branch experiment all
@@ -81,6 +98,17 @@ Supported sources:
 
 Overrides are optional and exist for third-party crates that do not publish
 Copper metadata yet.
+
+For external crates you want to preview before they add Copper metadata, set:
+
+```ron
+overrides: (
+  allow_missing_copper_metadata: true,
+)
+```
+
+Those entries still render in the catalog, but they are marked as needing
+metadata instead of being treated as classified Copper components.
 
 ## Generator
 

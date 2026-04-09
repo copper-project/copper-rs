@@ -81,6 +81,8 @@ struct CatalogOverrides {
     environments: Option<Vec<String>>,
     host_os: Option<Vec<String>>,
     embedded_targets: Option<Vec<String>>,
+    #[serde(default)]
+    allow_missing_copper_metadata: bool,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -124,7 +126,9 @@ struct ResolvedCatalogEntry {
     repository: Option<String>,
     homepage: Option<String>,
     license: Option<String>,
-    copper: CopperMetadataResolved,
+    copper: Option<CopperMetadataResolved>,
+    visual_url: Option<String>,
+    metadata_warnings: Vec<String>,
     source: ResolvedCatalogSource,
 }
 
@@ -172,6 +176,8 @@ struct Resolver<'a> {
     client: Client,
 }
 
+const ASSET_EXTENSIONS: [&str; 5] = ["svg", "webp", "png", "jpg", "jpeg"];
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
@@ -211,6 +217,13 @@ fn generate(args: GenerateArgs) -> Result<()> {
 
     fs::create_dir_all(&args.output_dir)
         .with_context(|| format!("failed to create output dir {}", args.output_dir.display()))?;
+
+    let assets_root = args
+        .index
+        .parent()
+        .map(|parent| parent.join("assets"))
+        .unwrap_or_else(|| PathBuf::from("assets"));
+    attach_visual_urls(&mut entries, &assets_root, &args.output_dir)?;
 
     let json_path = args.output_dir.join("catalog.json");
     let markdown_path = args.output_dir.join("catalog.md");
@@ -296,8 +309,9 @@ fn resolve_entry(
         .or(source_metadata.homepage);
     let license = entry.overrides.license.clone().or(source_metadata.license);
 
-    let copper = merge_copper_metadata(source_metadata.copper, &entry.overrides)
-        .with_context(|| format!("entry {} is missing Copper metadata", entry.name))?;
+    let (copper, metadata_warnings) =
+        resolve_catalog_copper(&source_metadata.copper, &entry.overrides)
+            .with_context(|| format!("entry {} is missing Copper metadata", entry.name))?;
 
     Ok(ResolvedCatalogEntry {
         catalog_name: entry.name.clone(),
@@ -309,6 +323,8 @@ fn resolve_entry(
         homepage,
         license,
         copper,
+        visual_url: None,
+        metadata_warnings,
         source: source_metadata.source,
     })
 }
@@ -328,13 +344,19 @@ fn resolve_github_source(
         .or_else(|| resolver.defaults.github_rev.clone())
         .ok_or_else(|| anyhow!("missing GitHub rev and no default github_rev configured"))?;
 
-    let crate_manifest = if let Some(local_root) = resolver.local_root {
-        fs::read_to_string(local_root.join(path).join("Cargo.toml")).with_context(|| {
-            format!(
-                "failed to read local manifest {}",
-                local_root.join(path).join("Cargo.toml").display()
-            )
-        })?
+    let local_manifest_path = resolver
+        .local_root
+        .map(|local_root| local_root.join(path).join("Cargo.toml"));
+    let use_local_checkout = local_manifest_path
+        .as_ref()
+        .is_some_and(|manifest_path| manifest_path.is_file());
+
+    let crate_manifest = if use_local_checkout {
+        let manifest_path = local_manifest_path
+            .as_ref()
+            .expect("local manifest path exists when use_local_checkout is true");
+        fs::read_to_string(manifest_path)
+            .with_context(|| format!("failed to read local manifest {}", manifest_path.display()))?
     } else {
         fetch_text(
             &resolver.client,
@@ -342,7 +364,10 @@ fn resolve_github_source(
         )?
     };
 
-    let root_manifest = if let Some(local_root) = resolver.local_root {
+    let root_manifest = if use_local_checkout {
+        let local_root = resolver
+            .local_root
+            .expect("local root exists when use_local_checkout is true");
         fs::read_to_string(local_root.join("Cargo.toml")).with_context(|| {
             format!(
                 "failed to read local workspace manifest {}",
@@ -368,8 +393,22 @@ fn resolve_github_source(
     let license = resolve_package_string(&manifest, Some(&workspace_manifest), "license");
     let copper = resolve_copper_metadata(&manifest)?;
 
-    let readme_path = resolve_package_string(&manifest, Some(&workspace_manifest), "readme")
-        .unwrap_or_else(|| "README.md".to_owned());
+    let readme_path = resolve_package_string(&manifest, Some(&workspace_manifest), "readme");
+    let readme_url = if let Some(readme_path) = readme_path {
+        Some(github_blob_url(
+            &repo,
+            &rev,
+            &format!("{path}/{readme_path}"),
+        ))
+    } else if use_local_checkout
+        && resolver
+            .local_root
+            .is_some_and(|local_root| local_root.join(path).join("README.md").is_file())
+    {
+        Some(github_blob_url(&repo, &rev, &format!("{path}/README.md")))
+    } else {
+        None
+    };
 
     Ok(SourceMetadata {
         package_name,
@@ -389,11 +428,7 @@ fn resolve_github_source(
             version: Some(rev.clone()),
             source_url: github_tree_url(&repo, &rev, path),
             manifest_url: Some(github_blob_url(&repo, &rev, &format!("{path}/Cargo.toml"))),
-            readme_url: Some(github_blob_url(
-                &repo,
-                &rev,
-                &format!("{path}/{readme_path}"),
-            )),
+            readme_url,
         },
     })
 }
@@ -542,19 +577,19 @@ fn resolve_copper_metadata(manifest: &Value) -> Result<CopperMetadataPartial> {
 }
 
 fn merge_copper_metadata(
-    source: CopperMetadataPartial,
+    source: &CopperMetadataPartial,
     overrides: &CatalogOverrides,
 ) -> Result<CopperMetadataResolved> {
     let kind = overrides
         .kind
         .clone()
-        .or(source.kind)
+        .or_else(|| source.kind.clone())
         .context("missing kind")?;
     let domains = normalize_string_vec(
         overrides
             .domains
             .clone()
-            .or(source.domains)
+            .or_else(|| source.domains.clone())
             .unwrap_or_default(),
     );
     if domains.is_empty() {
@@ -565,7 +600,7 @@ fn merge_copper_metadata(
         overrides
             .environments
             .clone()
-            .or(source.environments)
+            .or_else(|| source.environments.clone())
             .unwrap_or_default(),
     );
     if environments.is_empty() {
@@ -577,14 +612,14 @@ fn merge_copper_metadata(
         overrides
             .host_os
             .clone()
-            .or(source.host_os)
+            .or_else(|| source.host_os.clone())
             .unwrap_or_default(),
     );
     let embedded_targets = normalize_string_vec(
         overrides
             .embedded_targets
             .clone()
-            .or(source.embedded_targets)
+            .or_else(|| source.embedded_targets.clone())
             .unwrap_or_default(),
     );
 
@@ -604,6 +639,59 @@ fn merge_copper_metadata(
     })
 }
 
+fn resolve_catalog_copper(
+    source: &CopperMetadataPartial,
+    overrides: &CatalogOverrides,
+) -> Result<(Option<CopperMetadataResolved>, Vec<String>)> {
+    match merge_copper_metadata(source, overrides) {
+        Ok(copper) => Ok((Some(copper), Vec::new())),
+        Err(_err) if overrides.allow_missing_copper_metadata => Ok((
+            None,
+            vec![summarize_copper_metadata_issue(source, overrides)],
+        )),
+        Err(err) => Err(err),
+    }
+}
+
+fn summarize_copper_metadata_issue(
+    source: &CopperMetadataPartial,
+    overrides: &CatalogOverrides,
+) -> String {
+    let mut missing = Vec::new();
+
+    if overrides.kind.as_ref().or(source.kind.as_ref()).is_none() {
+        missing.push("kind");
+    }
+
+    let domains = normalize_string_vec(
+        overrides
+            .domains
+            .clone()
+            .or_else(|| source.domains.clone())
+            .unwrap_or_default(),
+    );
+    if domains.is_empty() {
+        missing.push("domains");
+    }
+
+    let environments = normalize_string_vec(
+        overrides
+            .environments
+            .clone()
+            .or_else(|| source.environments.clone())
+            .unwrap_or_default(),
+    );
+    if environments.is_empty() {
+        missing.push("environments");
+    }
+
+    if missing.is_empty() {
+        "Copper metadata incomplete".to_owned()
+    } else {
+        format!("Copper metadata missing: {}", missing.join(", "))
+    }
+}
+
 fn normalize_string_vec(values: Vec<String>) -> Vec<String> {
     values
         .into_iter()
@@ -614,10 +702,102 @@ fn normalize_string_vec(values: Vec<String>) -> Vec<String> {
         .collect()
 }
 
+fn attach_visual_urls(
+    entries: &mut [ResolvedCatalogEntry],
+    assets_root: &Path,
+    output_dir: &Path,
+) -> Result<()> {
+    let output_dir = fs::canonicalize(output_dir)
+        .with_context(|| format!("failed to canonicalize output dir {}", output_dir.display()))?;
+    let components_dir = assets_root.join("components");
+    let domains_dir = assets_root.join("domains");
+    let kinds_dir = assets_root.join("kinds");
+
+    for entry in entries {
+        entry.visual_url =
+            resolve_visual_url(entry, &components_dir, &domains_dir, &kinds_dir, &output_dir)?;
+    }
+
+    Ok(())
+}
+
+fn resolve_visual_url(
+    entry: &ResolvedCatalogEntry,
+    components_dir: &Path,
+    domains_dir: &Path,
+    kinds_dir: &Path,
+    output_dir: &Path,
+) -> Result<Option<String>> {
+    let Some(asset_path) = find_visual_asset(entry, components_dir, domains_dir, kinds_dir) else {
+        return Ok(None);
+    };
+
+    let asset_path = fs::canonicalize(&asset_path)
+        .with_context(|| format!("failed to canonicalize asset {}", asset_path.display()))?;
+    let relative = relative_path(output_dir, &asset_path);
+
+    Ok(Some(relative.to_string_lossy().replace('\\', "/")))
+}
+
+fn find_visual_asset(
+    entry: &ResolvedCatalogEntry,
+    components_dir: &Path,
+    domains_dir: &Path,
+    kinds_dir: &Path,
+) -> Option<PathBuf> {
+    find_asset_by_stem(components_dir, &entry.catalog_name)
+        .or_else(|| {
+            entry.copper.as_ref().and_then(|copper| {
+                copper.domains.iter().find_map(|domain| {
+                    let stem = domain.replace('/', "-");
+                    find_asset_by_stem(domains_dir, &stem)
+                })
+            })
+        })
+        .or_else(|| {
+            entry.copper
+                .as_ref()
+                .and_then(|copper| find_asset_by_stem(kinds_dir, &copper.kind))
+        })
+        .or_else(|| find_asset_by_stem(kinds_dir, "unclassified"))
+}
+
+fn find_asset_by_stem(dir: &Path, stem: &str) -> Option<PathBuf> {
+    ASSET_EXTENSIONS
+        .iter()
+        .map(|extension| dir.join(format!("{stem}.{extension}")))
+        .find(|candidate| candidate.is_file())
+}
+
+fn relative_path(from_dir: &Path, to_path: &Path) -> PathBuf {
+    let from_components: Vec<_> = from_dir.components().collect();
+    let to_components: Vec<_> = to_path.components().collect();
+    let common_len = from_components
+        .iter()
+        .zip(to_components.iter())
+        .take_while(|(left, right)| left == right)
+        .count();
+
+    let mut relative = PathBuf::new();
+    for _ in common_len..from_components.len() {
+        relative.push("..");
+    }
+    for component in &to_components[common_len..] {
+        relative.push(component.as_os_str());
+    }
+
+    relative
+}
+
 fn render_markdown(entries: &[ResolvedCatalogEntry]) -> String {
     let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
     for entry in entries {
-        *counts.entry(&entry.copper.kind).or_default() += 1;
+        let kind = entry
+            .copper
+            .as_ref()
+            .map(|copper| copper.kind.as_str())
+            .unwrap_or("unclassified");
+        *counts.entry(kind).or_default() += 1;
     }
 
     let mut out = String::new();
@@ -633,12 +813,25 @@ fn render_markdown(entries: &[ResolvedCatalogEntry]) -> String {
 
     for entry in entries {
         let crate_link = markdown_link(&entry.package_name, &entry.source.source_url);
-        let domains = entry.copper.domains.join(", ");
-        let environments = render_environment_summary(&entry.copper);
+        let kind = entry
+            .copper
+            .as_ref()
+            .map(|copper| copper.kind.as_str())
+            .unwrap_or("unclassified");
+        let domains = entry
+            .copper
+            .as_ref()
+            .map(|copper| copper.domains.join(", "))
+            .unwrap_or_else(|| entry.metadata_warnings.join("; "));
+        let environments = entry
+            .copper
+            .as_ref()
+            .map(render_environment_summary)
+            .unwrap_or_else(|| "metadata needed".to_owned());
         let description = escape_markdown_cell(&entry.description);
         out.push_str(&format!(
             "| {crate_link} | `{}` | {} | {} | {} |\n",
-            entry.copper.kind,
+            kind,
             escape_markdown_cell(&domains),
             escape_markdown_cell(&environments),
             description,
@@ -698,7 +891,7 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Copper Catalog</title>
+    <title>copper-rs component catalog</title>
     <style>
       :root {
         --bg: #171c27;
@@ -714,6 +907,9 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
         --accent-strong: #9ac8ff;
         --chip: rgba(115, 168, 255, 0.12);
         --chip-text: #dbe8ff;
+        --warn: #ffcc7a;
+        --warn-bg: rgba(255, 204, 122, 0.14);
+        --warn-line: rgba(255, 204, 122, 0.28);
         --shadow: 0 24px 72px rgba(4, 8, 17, 0.42);
       }
 
@@ -763,7 +959,18 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
       .hero-header {
         display: flex;
         align-items: center;
+      }
+
+      .hero-link {
+        display: flex;
+        align-items: center;
         gap: 14px;
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .hero-link:hover h1 {
+        color: var(--accent-strong);
       }
 
       .brand-logo {
@@ -776,18 +983,10 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
         background-size: contain;
       }
 
-      .hero::before {
-        content: "";
-        position: absolute;
-        inset: 0 0 auto 0;
-        height: 3px;
-        background: linear-gradient(90deg, rgba(154, 200, 255, 0.72), transparent 72%);
-      }
-
       h1 {
         margin: 0;
         max-width: none;
-        font-size: clamp(2rem, 3.2vw, 3.45rem);
+        font-size: clamp(1.45rem, 1.9vw, 2.15rem);
         line-height: 0.98;
         letter-spacing: -0.045em;
         font-weight: 740;
@@ -878,19 +1077,31 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
           background 140ms ease;
       }
 
-      .card::before {
-        content: "";
-        position: absolute;
-        inset: 0 0 auto 0;
-        height: 2px;
-        background: linear-gradient(90deg, rgba(154, 200, 255, 0.72), transparent 68%);
-        opacity: 0.5;
-      }
-
       .card:hover {
         transform: translateY(-2px);
         border-color: var(--line-strong);
         background: linear-gradient(180deg, rgba(39, 48, 66, 0.98), rgba(22, 28, 39, 0.94));
+      }
+
+      .card-media {
+        margin: -22px -22px 18px;
+        padding: 18px;
+        aspect-ratio: 16 / 9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        background:
+          radial-gradient(circle at top left, rgba(115, 168, 255, 0.18), transparent 42%),
+          linear-gradient(180deg, rgba(18, 24, 34, 0.98), rgba(10, 13, 19, 0.94));
+      }
+
+      .card-media img {
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: contain;
+        filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.32));
       }
 
       .card-header {
@@ -917,14 +1128,89 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
       }
 
       .kind {
+        --kind-border: rgba(115, 168, 255, 0.18);
+        --kind-bg: rgba(115, 168, 255, 0.14);
+        --kind-text: var(--accent-strong);
         padding: 6px 10px;
         border-radius: 999px;
-        border: 1px solid rgba(115, 168, 255, 0.18);
-        background: rgba(115, 168, 255, 0.14);
-        color: var(--accent-strong);
+        border: 1px solid var(--kind-border);
+        background: var(--kind-bg);
+        color: var(--kind-text);
         font-family: "JetBrains Mono", "Fira Code", "SFMono-Regular", monospace;
         font-size: 0.78rem;
         letter-spacing: 0.02em;
+      }
+
+      .kind-source {
+        --kind-border: rgba(132, 211, 255, 0.3);
+        --kind-bg: rgba(132, 211, 255, 0.12);
+        --kind-text: #8edcff;
+      }
+
+      .kind-sink {
+        --kind-border: rgba(255, 202, 147, 0.32);
+        --kind-bg: rgba(255, 202, 147, 0.12);
+        --kind-text: #ffd4a6;
+      }
+
+      .kind-bridge {
+        --kind-border: rgba(138, 240, 228, 0.3);
+        --kind-bg: rgba(138, 240, 228, 0.12);
+        --kind-text: #93f4e8;
+      }
+
+      .kind-task {
+        --kind-border: rgba(154, 239, 175, 0.3);
+        --kind-bg: rgba(154, 239, 175, 0.12);
+        --kind-text: #a8f5b9;
+      }
+
+      .kind-payload {
+        --kind-border: rgba(255, 179, 154, 0.3);
+        --kind-bg: rgba(255, 179, 154, 0.12);
+        --kind-text: #ffc0ab;
+      }
+
+      .kind-resource {
+        --kind-border: rgba(197, 229, 242, 0.3);
+        --kind-bg: rgba(197, 229, 242, 0.12);
+        --kind-text: #d7eff8;
+      }
+
+      .kind-monitor {
+        --kind-border: rgba(136, 224, 255, 0.3);
+        --kind-bg: rgba(136, 224, 255, 0.12);
+        --kind-text: #95e5ff;
+      }
+
+      .kind-codec {
+        --kind-border: rgba(255, 224, 139, 0.3);
+        --kind-bg: rgba(255, 224, 139, 0.12);
+        --kind-text: #ffe7a1;
+      }
+
+      .kind-lib {
+        --kind-border: rgba(214, 230, 255, 0.3);
+        --kind-bg: rgba(214, 230, 255, 0.12);
+        --kind-text: #e0ecff;
+      }
+
+      .kind-testing {
+        --kind-border: rgba(240, 176, 255, 0.3);
+        --kind-bg: rgba(240, 176, 255, 0.12);
+        --kind-text: #f3bcff;
+      }
+
+      .kind-unclassified {
+        --kind-border: rgba(217, 223, 236, 0.3);
+        --kind-bg: rgba(217, 223, 236, 0.12);
+        --kind-text: #edf1fb;
+      }
+
+      .kind-missing {
+        border-color: var(--warn-line);
+        background: var(--warn-bg);
+        color: var(--warn);
       }
 
       .description {
@@ -948,6 +1234,12 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
         color: var(--chip-text);
         border: 1px solid rgba(255, 255, 255, 0.06);
         font-size: 0.82rem;
+      }
+
+      .chip-warning {
+        background: var(--warn-bg);
+        color: #ffe2b2;
+        border-color: var(--warn-line);
       }
 
       .links {
@@ -1000,7 +1292,7 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
         width: 22px;
         height: 22px;
         flex: 0 0 auto;
-        color: var(--accent-strong);
+        color: var(--text);
       }
 
       .contribute-icon svg {
@@ -1047,7 +1339,7 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
         }
 
         h1 {
-          font-size: clamp(1.7rem, 8vw, 2.3rem);
+          font-size: clamp(1.25rem, 4.8vw, 1.7rem);
         }
       }
     </style>
@@ -1056,8 +1348,15 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
     <main>
       <section class="hero">
         <div class="hero-header">
-          <div class="brand-logo" aria-hidden="true"></div>
-          <h1>copper-rs online component catalog</h1>
+          <a
+            class="hero-link"
+            href="https://github.com/copper-project/copper-rs/blob/master/README.md"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <div class="brand-logo" aria-hidden="true"></div>
+            <h1>copper-rs component catalog</h1>
+          </a>
         </div>
         <div class="toolbar">
           <div class="field">
@@ -1100,13 +1399,13 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
               />
             </svg>
           </span>
-          You have a component to share? Open a PR and add yours to
+          <span>You have a component to share? Open a PR and add yours to</span>
           <a
             href="https://github.com/copper-project/copper-rs/blob/master/catalog/index.ron"
             target="_blank"
             rel="noreferrer"
             >catalog/index.ron</a
-          >.
+          ><span>.</span>
         </p>
       </section>
     </main>
@@ -1149,6 +1448,9 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
         if (entry.homepage) {
           links.push(`<a href="${entry.homepage}" target="_blank" rel="noreferrer">homepage</a>`);
         }
+        if (entry.source.manifest_url && !entry.source.readme_url) {
+          links.push(`<a href="${entry.source.manifest_url}" target="_blank" rel="noreferrer">manifest</a>`);
+        }
         if (entry.source.readme_url) {
           links.push(`<a href="${entry.source.readme_url}" target="_blank" rel="noreferrer">readme</a>`);
         }
@@ -1159,27 +1461,51 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
         return values.map((value) => `<span class="chip">${value}</span>`).join("");
       }
 
+      function renderWarningChips(values) {
+        return values.map((value) => `<span class="chip chip-warning">${value}</span>`).join("");
+      }
+
+      function renderVisual(entry) {
+        if (!entry.visual_url) {
+          return "";
+        }
+        return `
+          <div class="card-media">
+            <img src="${entry.visual_url}" alt="${entry.package_name} visual" loading="lazy" />
+          </div>
+        `;
+      }
+
       function renderEntries(entries) {
         grid.innerHTML = entries
           .map((entry) => {
-            const envChips = [
-              ...entry.copper.environments,
-              ...entry.copper.host_os.map((value) => `host:${value}`),
-              ...entry.copper.embedded_targets.map((value) => `target:${value}`),
-            ];
+            const copper = entry.copper;
+            const envChips = copper
+              ? [
+                  ...copper.environments,
+                  ...copper.host_os.map((value) => `host:${value}`),
+                  ...copper.embedded_targets.map((value) => `target:${value}`),
+                ]
+              : [];
+            const kindLabel = copper ? copper.kind : "needs metadata";
+            const kindClass = copper ? `kind kind-${copper.kind}` : "kind kind-missing";
+            const domainChips = copper ? renderChips(copper.domains) : "";
+            const warningChips = renderWarningChips(entry.metadata_warnings || []);
             return `
               <article class="card">
+                ${renderVisual(entry)}
                 <div class="card-header">
                   <div>
                     <h2>
                       <a class="crate-link" href="${entry.source.source_url}" target="_blank" rel="noreferrer">${entry.package_name}</a>
                     </h2>
                   </div>
-                  <span class="kind">${entry.copper.kind}</span>
+                  <span class="${kindClass}">${kindLabel}</span>
                 </div>
                 <p class="description">${entry.description || "No description provided."}</p>
-                <div class="chips">${renderChips(entry.copper.domains)}</div>
-                <div class="chips">${renderChips(envChips)}</div>
+                ${domainChips ? `<div class="chips">${domainChips}</div>` : ""}
+                ${envChips.length ? `<div class="chips">${renderChips(envChips)}</div>` : ""}
+                ${warningChips ? `<div class="chips">${warningChips}</div>` : ""}
                 <div class="links">${renderLinks(entry)}</div>
               </article>
             `;
@@ -1195,14 +1521,15 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
         const kind = kindSelect.value;
         const domain = domainSelect.value;
         const environment = environmentSelect.value;
+        const copper = entry.copper;
 
-        if (kind && entry.copper.kind !== kind) {
+        if (kind && copper?.kind !== kind) {
           return false;
         }
-        if (domain && !entry.copper.domains.includes(domain)) {
+        if (domain && !copper?.domains.includes(domain)) {
           return false;
         }
-        if (environment && !entry.copper.environments.includes(environment)) {
+        if (environment && !copper?.environments.includes(environment)) {
           return false;
         }
         if (!query) {
@@ -1213,9 +1540,10 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
           entry.package_name,
           entry.catalog_name,
           entry.description,
+          ...(entry.metadata_warnings || []),
           ...(entry.keywords || []),
           ...(entry.categories || []),
-          ...entry.copper.domains,
+          ...(copper?.domains || []),
         ]
           .join(" ")
           .toLowerCase();
@@ -1227,16 +1555,22 @@ const HTML_TEMPLATE: &str = r##"<!DOCTYPE html>
         renderEntries(CATALOG.filter(matches));
       }
 
-      fillSelect(kindSelect, "Kinds", uniqueValues(CATALOG.map((entry) => entry.copper.kind)));
+      fillSelect(
+        kindSelect,
+        "Kinds",
+        uniqueValues(CATALOG.flatMap((entry) => (entry.copper ? [entry.copper.kind] : [])))
+      );
       fillSelect(
         domainSelect,
         "Domains",
-        uniqueValues(CATALOG.flatMap((entry) => entry.copper.domains))
+        uniqueValues(CATALOG.flatMap((entry) => (entry.copper ? entry.copper.domains : [])))
       );
       fillSelect(
         environmentSelect,
         "Environments",
-        uniqueValues(CATALOG.flatMap((entry) => entry.copper.environments))
+        uniqueValues(
+          CATALOG.flatMap((entry) => (entry.copper ? entry.copper.environments : []))
+        )
       );
 
       [searchInput, kindSelect, domainSelect, environmentSelect].forEach((element) => {

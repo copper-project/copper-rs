@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90" role="img" aria-labelledby="title">
+  <title>Testing fallback visual</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#231329"/>
+      <stop offset="100%" stop-color="#5b2363"/>
+    </linearGradient>
+  </defs>
+  <rect width="160" height="90" rx="18" fill="url(#bg)"/>
+  <path d="M46 26h20m-10 0v14l12 20a7 7 0 0 1-6 10H50a7 7 0 0 1-6-10l12-20V26" fill="#f0b0ff" opacity="0.24" stroke="#f0b0ff" stroke-linejoin="round" stroke-width="3"/>
+  <path d="M46 54h24" fill="none" stroke="#f0b0ff" stroke-linecap="round" stroke-width="4"/>
+</svg>
