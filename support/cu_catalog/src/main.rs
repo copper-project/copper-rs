@@ -189,6 +189,8 @@ fn generate(args: GenerateArgs) -> Result<()> {
     if index.version != 1 {
         bail!("unsupported catalog index version {}", index.version);
     }
+    validate_sorted_entries(&index.entries)
+        .context("catalog index entries must be sorted alphabetically by name")?;
 
     let resolver = Resolver {
         defaults: &index.defaults,
@@ -205,12 +207,7 @@ fn generate(args: GenerateArgs) -> Result<()> {
         .map(|entry| resolve_entry(&resolver, entry))
         .collect::<Result<Vec<_>>>()?;
 
-    entries.sort_by(|left, right| {
-        left.copper
-            .kind
-            .cmp(&right.copper.kind)
-            .then_with(|| left.package_name.cmp(&right.package_name))
-    });
+    entries.sort_by(|left, right| left.catalog_name.cmp(&right.catalog_name));
 
     fs::create_dir_all(&args.output_dir)
         .with_context(|| format!("failed to create output dir {}", args.output_dir.display()))?;
@@ -229,6 +226,22 @@ fn generate(args: GenerateArgs) -> Result<()> {
     println!("wrote {}", json_path.display());
     println!("wrote {}", markdown_path.display());
     println!("wrote {}", html_path.display());
+
+    Ok(())
+}
+
+fn validate_sorted_entries(entries: &[CatalogIndexEntry]) -> Result<()> {
+    for pair in entries.windows(2) {
+        let left = &pair[0];
+        let right = &pair[1];
+        if left.name > right.name {
+            bail!(
+                "entry {} is out of order; it must come after {}",
+                left.name,
+                right.name
+            );
+        }
+    }
 
     Ok(())
 }

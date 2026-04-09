@@ -3,7 +3,8 @@
 This folder defines a contributor-friendly catalog for Copper components.
 
 The source of truth is `index.ron`. Each entry points at a crate source and the
-generator merges that source with Cargo package metadata.
+generator merges that source with Cargo package metadata. Keep `entries` sorted
+alphabetically by `name`.
 
 ## Metadata Model
 
