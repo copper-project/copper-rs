@@ -84,18 +84,6 @@
             ),
         ),
         (
-            name: "zed-sdk",
-            source: GitHub(
-                path: "components/libs/zed_sdk",
-            ),
-        ),
-        (
-            name: "zed-sdk-sys",
-            source: GitHub(
-                path: "components/libs/zed_sdk_sys",
-            ),
-        ),
-        (
             name: "cu-bevymon",
             source: GitHub(
                 path: "components/monitors/cu_bevymon",

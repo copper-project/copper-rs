@@ -8,12 +8,6 @@ repository = "https://github.com/copper-project/copper-rs"
 links = "sl_zed_c"
 build = "build.rs"
 
-[package.metadata.copper]
-kind = "lib"
-domains = ["sdk/ffi"]
-environments = ["host"]
-host_os = ["linux"]
-
 [lib]
 path = "src/lib.rs"
 
