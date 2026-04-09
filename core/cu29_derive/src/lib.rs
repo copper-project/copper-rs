@@ -1703,9 +1703,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 match task_type {
                     CuTaskType::Source => {
                         if *background {
-                            panic!("CuSrcTask {task_id} cannot be a background task, it should be a regular task.");
-                        }
-                        if *run_in_sim {
+                            if let Some(out_ty) = output_type {
+                                parse_quote!(CuAsyncSrcTask<#sim_type, #out_ty>)
+                            } else {
+                                panic!("{task_id}: If a source is background, it has to have an output");
+                            }
+                        } else if *run_in_sim {
                             sim_type.clone()
                         } else {
                             let msg_type = graph
@@ -1786,16 +1789,42 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let background = task_specs.background_flags[index];
                 let inner_task_type = &task_specs.sim_task_types[index];
                 match task_specs.cutypes[index] {
-                    CuTaskType::Source => quote! {
-                        {
-                            let resources = <<#ty as CuSrcTask>::Resources<'_> as ResourceBindings>::from_bindings(
-                                resources,
-                                #mapping_ref,
-                            ).map_err(|e| e.add_cause(#additional_error_info))?;
-                            <#ty as CuSrcTask>::new(all_instances_configs[#index], resources)
-                                .map_err(|e| e.add_cause(#additional_error_info))?
+                    CuTaskType::Source => {
+                        if background {
+                            let threadpool_bundle_index = threadpool_bundle_index
+                                .expect("threadpool bundle missing for background tasks");
+                            quote! {
+                                {
+                                    let inner_resources = <<#inner_task_type as CuSrcTask>::Resources<'_> as ResourceBindings>::from_bindings(
+                                        resources,
+                                        #mapping_ref,
+                                    ).map_err(|e| e.add_cause(#additional_error_info))?;
+                                    let threadpool_key = cu29::resource::ResourceKey::new(
+                                        cu29::resource::BundleIndex::new(#threadpool_bundle_index),
+                                        <cu29::resource::ThreadPoolBundle as cu29::resource::ResourceBundleDecl>::Id::BgThreads as usize,
+                                    );
+                                    let threadpool = resources.borrow_shared_arc(threadpool_key)?;
+                                    let resources = cu29::cuasynctask::CuAsyncSrcTaskResources {
+                                        inner: inner_resources,
+                                        threadpool,
+                                    };
+                                    <#ty as CuSrcTask>::new(all_instances_configs[#index], resources)
+                                        .map_err(|e| e.add_cause(#additional_error_info))?
+                                }
+                            }
+                        } else {
+                            quote! {
+                                {
+                                    let resources = <<#ty as CuSrcTask>::Resources<'_> as ResourceBindings>::from_bindings(
+                                        resources,
+                                        #mapping_ref,
+                                    ).map_err(|e| e.add_cause(#additional_error_info))?;
+                                    <#ty as CuSrcTask>::new(all_instances_configs[#index], resources)
+                                        .map_err(|e| e.add_cause(#additional_error_info))?
+                                }
+                            }
                         }
-                    },
+                    }
                     CuTaskType::Regular => {
                         if background {
                             let threadpool_bundle_index = threadpool_bundle_index
@@ -1859,16 +1888,42 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let mapping_ref = task_resource_mappings.refs[index].clone();
                 let inner_task_type = &task_specs.sim_task_types[index];
                 match task_specs.cutypes[index] {
-                    CuTaskType::Source => quote! {
-                        {
-                            let resources = <<#task_type as CuSrcTask>::Resources<'_> as ResourceBindings>::from_bindings(
-                                resources,
-                                #mapping_ref,
-                            ).map_err(|e| e.add_cause(#additional_error_info))?;
-                            <#task_type as CuSrcTask>::new(all_instances_configs[#index], resources)
-                                .map_err(|e| e.add_cause(#additional_error_info))?
+                    CuTaskType::Source => {
+                        if *background {
+                            let threadpool_bundle_index = threadpool_bundle_index
+                                .expect("threadpool bundle missing for background tasks");
+                            quote! {
+                                {
+                                    let inner_resources = <<#inner_task_type as CuSrcTask>::Resources<'_> as ResourceBindings>::from_bindings(
+                                        resources,
+                                        #mapping_ref,
+                                    ).map_err(|e| e.add_cause(#additional_error_info))?;
+                                    let threadpool_key = cu29::resource::ResourceKey::new(
+                                        cu29::resource::BundleIndex::new(#threadpool_bundle_index),
+                                        <cu29::resource::ThreadPoolBundle as cu29::resource::ResourceBundleDecl>::Id::BgThreads as usize,
+                                    );
+                                    let threadpool = resources.borrow_shared_arc(threadpool_key)?;
+                                    let resources = cu29::cuasynctask::CuAsyncSrcTaskResources {
+                                        inner: inner_resources,
+                                        threadpool,
+                                    };
+                                    <#task_type as CuSrcTask>::new(all_instances_configs[#index], resources)
+                                        .map_err(|e| e.add_cause(#additional_error_info))?
+                                }
+                            }
+                        } else {
+                            quote! {
+                                {
+                                    let resources = <<#task_type as CuSrcTask>::Resources<'_> as ResourceBindings>::from_bindings(
+                                        resources,
+                                        #mapping_ref,
+                                    ).map_err(|e| e.add_cause(#additional_error_info))?;
+                                    <#task_type as CuSrcTask>::new(all_instances_configs[#index], resources)
+                                        .map_err(|e| e.add_cause(#additional_error_info))?
+                                }
+                            }
                         }
-                    },
+                    }
                     CuTaskType::Regular => {
                         if *background {
                             let threadpool_bundle_index = threadpool_bundle_index
@@ -4771,6 +4826,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let imports = if std {
             quote! {
                 use cu29::rayon::ThreadPool;
+                use cu29::cuasynctask::CuAsyncSrcTask;
                 use cu29::cuasynctask::CuAsyncTask;
                 use cu29::resource::{ResourceBindings, ResourceManager};
                 use cu29::prelude::SectionStorage;
@@ -5152,7 +5208,7 @@ impl CuTaskSpecSet {
             .map(|(_, node)| node.get_id().to_string())
             .collect();
 
-        let cutypes = all_id_nodes
+        let cutypes: Vec<CuTaskType> = all_id_nodes
             .iter()
             .map(|(id, _)| find_task_type_for_id(graph, *id))
             .collect();
@@ -5176,15 +5232,26 @@ impl CuTaskSpecSet {
 
         let task_types = type_names
             .iter()
+            .zip(cutypes.iter())
             .zip(background_flags.iter())
             .zip(output_types.iter())
-            .map(|((name, &background), output_type)| {
+            .map(|(((name, cutype), &background), output_type)| {
                 let name_type = parse_str::<Type>(name).unwrap_or_else(|error| {
                     panic!("Could not transform {name} into a Task Rust type: {error}");
                 });
                 if background {
                     if let Some(output_type) = output_type {
-                        parse_quote!(CuAsyncTask<#name_type, #output_type>)
+                        match cutype {
+                            CuTaskType::Source => {
+                                parse_quote!(CuAsyncSrcTask<#name_type, #output_type>)
+                            }
+                            CuTaskType::Regular => {
+                                parse_quote!(CuAsyncTask<#name_type, #output_type>)
+                            }
+                            CuTaskType::Sink => {
+                                panic!("CuSinkTask {name} cannot be a background task, it should be a regular task.");
+                            }
+                        }
                     } else {
                         panic!("{name}: If a task is background, it has to have an output");
                     }
@@ -5196,15 +5263,26 @@ impl CuTaskSpecSet {
 
         let instantiation_types = type_names
             .iter()
+            .zip(cutypes.iter())
             .zip(background_flags.iter())
             .zip(output_types.iter())
-            .map(|((name, &background), output_type)| {
+            .map(|(((name, cutype), &background), output_type)| {
                 let name_type = parse_str::<Type>(name).unwrap_or_else(|error| {
                     panic!("Could not transform {name} into a Task Rust type: {error}");
                 });
                 if background {
                     if let Some(output_type) = output_type {
-                        parse_quote!(CuAsyncTask::<#name_type, #output_type>)
+                        match cutype {
+                            CuTaskType::Source => {
+                                parse_quote!(CuAsyncSrcTask::<#name_type, #output_type>)
+                            }
+                            CuTaskType::Regular => {
+                                parse_quote!(CuAsyncTask::<#name_type, #output_type>)
+                            }
+                            CuTaskType::Sink => {
+                                panic!("CuSinkTask {name} cannot be a background task, it should be a regular task.");
+                            }
+                        }
                     } else {
                         panic!("{name}: If a task is background, it has to have an output");
                     }
