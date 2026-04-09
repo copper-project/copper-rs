@@ -5,10 +5,11 @@
 
 /target
 /build
-/cu29_export.so
 /catalog/generated/catalog.json
 /catalog/generated/catalog.md
 /catalog/generated/index.html
+/cu29_export.so
+/support/cu_catalog/target/
 
 *.copper
 *.mcap

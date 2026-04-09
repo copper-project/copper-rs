@@ -88,12 +88,12 @@ The generator lives in `support/cu_catalog`.
 Local generation while iterating on this branch:
 
 ```bash
-just catalog
+just
 ```
 
 That resolves GitHub entries from the local checkout with `--local-root`, then
 renders:
 
-- `catalog/generated/catalog.json`
-- `catalog/generated/catalog.md`
-- `catalog/generated/index.html`
+- `generated/catalog.json`
+- `generated/catalog.md`
+- `generated/index.html`

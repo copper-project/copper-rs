@@ -1,0 +1,16 @@
+ROOT := `git rev-parse --show-toplevel`
+
+# Generate the Copper component catalog from index.ron.
+default: generate
+
+# Generate the Copper component catalog from this directory.
+generate:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cd "{{ROOT}}"
+	cargo +stable run --manifest-path support/cu_catalog/Cargo.toml -- \
+		generate --index catalog/index.ron --output-dir catalog/generated --local-root "{{ROOT}}"
+	xdg-open generated/index.html
+
+# Backwards-compatible alias.
+catalog: generate
