@@ -226,7 +226,7 @@
 //! - Event publishers are declared and helper methods exist, but core handlers are
 //!   currently request/reply oriented and do not emit continuous event streams yet.
 
-use crate::app::CuSimApplication;
+use crate::app::{CuSimApplication, CurrentRuntimeCopperList};
 use crate::config::{BridgeChannelConfigRepresentation, Flavor, read_configuration_str};
 use crate::debug::{CuDebugSession, JumpOutcome};
 use crate::reflect::{ReflectTaskIntrospection, TypeInfo, TypeRegistry};
@@ -909,13 +909,14 @@ struct EventPublishers {
 
 pub struct RemoteDebugZenohServer<App, P, CB, TF, S, L, AF>
 where
-    App: CuSimApplication<S, L> + ReflectTaskIntrospection,
+    App: CuSimApplication<S, L> + ReflectTaskIntrospection + CurrentRuntimeCopperList<P>,
     L: UnifiedLogWrite<S> + 'static,
     S: SectionStorage,
     P: CopperListTuple + 'static,
     CB: for<'a> Fn(
             &'a crate::copperlist::CopperList<P>,
             RobotClock,
+            RobotClockMock,
         )
             -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>
         + Clone,
@@ -942,13 +943,14 @@ where
 
 impl<App, P, CB, TF, S, L, AF> RemoteDebugZenohServer<App, P, CB, TF, S, L, AF>
 where
-    App: CuSimApplication<S, L> + ReflectTaskIntrospection,
+    App: CuSimApplication<S, L> + ReflectTaskIntrospection + CurrentRuntimeCopperList<P>,
     L: UnifiedLogWrite<S> + 'static,
     S: SectionStorage,
     P: CopperListTuple + 'static,
     CB: for<'a> Fn(
             &'a crate::copperlist::CopperList<P>,
             RobotClock,
+            RobotClockMock,
         )
             -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>
         + Clone,
@@ -2626,13 +2628,14 @@ fn seek_to_index<App, P, CB, TF, S, L>(
     idx: usize,
 ) -> CuResult<JumpOutcome>
 where
-    App: CuSimApplication<S, L>,
+    App: CuSimApplication<S, L> + CurrentRuntimeCopperList<P>,
     L: UnifiedLogWrite<S> + 'static,
     S: SectionStorage,
     P: CopperListTuple + 'static,
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
+        RobotClockMock,
     )
         -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
@@ -2647,13 +2650,14 @@ fn replay_current_step<App, P, CB, TF, S, L>(
     session: &mut CuDebugSession<App, P, CB, TF, S, L>,
 ) -> CuResult<JumpOutcome>
 where
-    App: CuSimApplication<S, L>,
+    App: CuSimApplication<S, L> + CurrentRuntimeCopperList<P>,
     L: UnifiedLogWrite<S> + 'static,
     S: SectionStorage,
     P: CopperListTuple + 'static,
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
+        RobotClockMock,
     )
         -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
@@ -2682,6 +2686,7 @@ where
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
+        RobotClockMock,
     )
         -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
@@ -2717,6 +2722,7 @@ where
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
+        RobotClockMock,
     )
         -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
@@ -2746,6 +2752,7 @@ where
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
+        RobotClockMock,
     )
         -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
@@ -2944,13 +2951,14 @@ fn build_state_root_json<App, P, CB, TF, S, L>(
     time_of: &TF,
 ) -> CuResult<Value>
 where
-    App: CuSimApplication<S, L> + ReflectTaskIntrospection,
+    App: CuSimApplication<S, L> + ReflectTaskIntrospection + CurrentRuntimeCopperList<P>,
     L: UnifiedLogWrite<S> + 'static,
     S: SectionStorage,
     P: CopperListTuple + 'static,
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
+        RobotClockMock,
     )
         -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
@@ -2968,6 +2976,25 @@ where
         None => Value::Null,
     };
 
+    let replayed_cl = state
+        .session
+        .with_app(|app| {
+            app.current_runtime_copperlist_bytes()
+                .map(|bytes| {
+                    bincode::decode_from_slice::<crate::copperlist::CopperList<P>, _>(
+                        bytes,
+                        bincode::config::standard(),
+                    )
+                    .map(|(cl, _)| cl)
+                    .map_err(|e| {
+                        CuError::new_with_cause("Failed to decode replayed CopperList snapshot", e)
+                    })
+                    .and_then(|cl| copperlist_snapshot::<P>(&cl, time_of, true, true, false))
+                })
+                .transpose()
+        })?
+        .unwrap_or(Value::Null);
+
     let cursor = cursor_snapshot(state, time_of)
         .map(|c| serde_json::to_value(c).unwrap_or(Value::Null))
         .unwrap_or(Value::Null);
@@ -2975,6 +3002,7 @@ where
     Ok(json!({
         "tasks": tasks,
         "current_cl": current_cl,
+        "replayed_cl": replayed_cl,
         "cursor": cursor,
     }))
 }
@@ -2985,13 +3013,14 @@ fn state_root_for_query<App, P, CB, TF, S, L>(
     time_of: &TF,
 ) -> CuResult<(Value, Option<ResolvedAt>)>
 where
-    App: CuSimApplication<S, L> + ReflectTaskIntrospection,
+    App: CuSimApplication<S, L> + ReflectTaskIntrospection + CurrentRuntimeCopperList<P>,
     L: UnifiedLogWrite<S> + 'static,
     S: SectionStorage,
     P: CopperListTuple + 'static,
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
+        RobotClockMock,
     )
         -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
@@ -3368,6 +3397,7 @@ where
     CB: for<'a> Fn(
         &'a crate::copperlist::CopperList<P>,
         RobotClock,
+        RobotClockMock,
     )
         -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
@@ -3496,7 +3526,6 @@ fn json_type_name(value: &Value) -> &'static str {
         Value::Object(_) => "object",
     }
 }
-
 #[cfg(feature = "reflect")]
 fn reflect_value_to_json(value: &dyn crate::reflect::Reflect) -> Value {
     let mut registry = TypeRegistry::default();

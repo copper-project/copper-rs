@@ -415,25 +415,64 @@ impl<E: ElementType + 'static> Decode<()> for CuSharedMemoryBuffer<E> {
     }
 }
 
-/// A Handle to a Buffer.
-/// For onboard usages, the buffer should be Pooled (ie, coming from a preallocated pool).
-/// The Detached version is for offline usages where we don't really need a pool to deserialize them.
-pub enum CuHandleInner<T: Debug> {
-    Pooled(ReusableOwned<T>),
-    Detached(T), // Should only be used in offline cases (e.g. deserialization)
+/// A handle to a pooled or detached object.
+///
+/// For onboard usages, large payloads should typically be pooled. The detached form exists for
+/// offline/deserialization flows and for payloads that are intentionally heap-backed instead of
+/// pool-backed.
+pub enum CuHandleInner<T: Debug + Send + Sync> {
+    Pooled(ReusableOwned<Box<T>>),
+    Detached(Box<T>), // Should only be used in offline cases (e.g. deserialization)
 }
 
 impl<T> Debug for CuHandleInner<T>
 where
-    T: Debug,
+    T: Debug + Send + Sync,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CuHandleInner::Pooled(r) => {
-                write!(f, "Pooled: {:?}", r.deref())
+                write!(f, "Pooled: {:?}", r.deref().deref())
             }
             CuHandleInner::Detached(r) => write!(f, "Detached: {r:?}"),
         }
+    }
+}
+
+impl<T> CuHandleInner<T>
+where
+    T: Debug + Send + Sync,
+{
+    fn inner_ref(&self) -> &T {
+        match self {
+            CuHandleInner::Pooled(pooled) => pooled.deref().as_ref(),
+            CuHandleInner::Detached(detached) => detached.deref(),
+        }
+    }
+
+    fn inner_mut(&mut self) -> &mut T {
+        match self {
+            CuHandleInner::Pooled(pooled) => pooled.deref_mut().as_mut(),
+            CuHandleInner::Detached(detached) => detached.deref_mut(),
+        }
+    }
+}
+
+impl<T> AsRef<T> for CuHandleInner<T>
+where
+    T: Debug + Send + Sync,
+{
+    fn as_ref(&self) -> &T {
+        self.inner_ref()
+    }
+}
+
+impl<T> AsMut<T> for CuHandleInner<T>
+where
+    T: Debug + Send + Sync,
+{
+    fn as_mut(&mut self) -> &mut T {
+        self.inner_mut()
     }
 }
 
@@ -441,33 +480,29 @@ impl<T: ArrayLike> Deref for CuHandleInner<T> {
     type Target = [T::Element];
 
     fn deref(&self) -> &Self::Target {
-        match self {
-            CuHandleInner::Pooled(pooled) => pooled,
-            CuHandleInner::Detached(detached) => detached,
-        }
+        self.inner_ref().deref()
     }
 }
 
 impl<T: ArrayLike> DerefMut for CuHandleInner<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        match self {
-            CuHandleInner::Pooled(pooled) => pooled.deref_mut(),
-            CuHandleInner::Detached(detached) => detached,
-        }
+        self.inner_mut().deref_mut()
     }
 }
 
-/// A shareable handle to an Array coming from a pool (either host or device).
+/// A shareable handle to a pooled or detached object.
+///
+/// When `T: ArrayLike`, the handle also participates in Copper's buffer pool APIs.
 #[derive(Debug)]
-pub struct CuHandle<T: ArrayLike>(Arc<Mutex<CuHandleInner<T>>>);
+pub struct CuHandle<T: Debug + Send + Sync>(Arc<Mutex<CuHandleInner<T>>>);
 
-impl<T: ArrayLike> Clone for CuHandle<T> {
+impl<T: Debug + Send + Sync> Clone for CuHandle<T> {
     fn clone(&self) -> Self {
         Self(self.0.clone())
     }
 }
 
-impl<T: ArrayLike> Deref for CuHandle<T> {
+impl<T: Debug + Send + Sync> Deref for CuHandle<T> {
     type Target = Arc<Mutex<CuHandleInner<T>>>;
 
     fn deref(&self) -> &Self::Target {
@@ -475,9 +510,14 @@ impl<T: ArrayLike> Deref for CuHandle<T> {
     }
 }
 
-impl<T: ArrayLike> CuHandle<T> {
+impl<T: Debug + Send + Sync> CuHandle<T> {
     /// Create a new CuHandle not part of a Pool (not for onboard usages, use pools instead)
     pub fn new_detached(inner: T) -> Self {
+        Self::new_detached_box(Box::new(inner))
+    }
+
+    /// Create a detached handle from an already heap-allocated object.
+    pub fn new_detached_box(inner: Box<T>) -> Self {
         CuHandle(Arc::new(Mutex::new(CuHandleInner::Detached(inner))))
     }
 
@@ -500,10 +540,7 @@ where
 {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let inner = lock_unpoison(&self.0);
-        match inner.deref() {
-            CuHandleInner::Pooled(pooled) => pooled.deref().serialize(serializer),
-            CuHandleInner::Detached(detached) => detached.serialize(serializer),
-        }
+        inner.inner_ref().serialize(serializer)
     }
 }
 
@@ -522,10 +559,7 @@ where
 {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let inner = lock_unpoison(&self.0);
-        let buffer = match inner.deref() {
-            CuHandleInner::Pooled(pooled) => pooled.deref(),
-            CuHandleInner::Detached(detached) => detached,
-        };
+        let buffer = inner.inner_ref();
 
         if shared_handle_serialization_enabled()
             && let Some(descriptor) = buffer.descriptor()
@@ -604,16 +638,13 @@ where
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         let inner = lock_unpoison(&self.0);
         crate::monitoring::record_payload_handle_bytes(
-            inner.deref().len() * size_of::<T::Element>(),
+            inner.inner_ref().len() * size_of::<T::Element>(),
         );
-        match inner.deref() {
-            CuHandleInner::Pooled(pooled) => pooled.deref().encode(encoder),
-            CuHandleInner::Detached(detached) => detached.encode(encoder),
-        }
+        inner.inner_ref().encode(encoder)
     }
 }
 
-impl<T: ArrayLike> Default for CuHandle<T> {
+impl<T: Debug + Send + Sync> Default for CuHandle<T> {
     fn default() -> Self {
         panic!("Cannot create a default CuHandle")
     }
@@ -622,16 +653,14 @@ impl<T: ArrayLike> Default for CuHandle<T> {
 impl<U: ElementType + Decode<()> + 'static> Decode<()> for CuHandle<Vec<U>> {
     fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let vec: Vec<U> = Vec::decode(decoder)?;
-        Ok(CuHandle(Arc::new(Mutex::new(CuHandleInner::Detached(vec)))))
+        Ok(CuHandle::new_detached(vec))
     }
 }
 
 impl<U: ElementType + Decode<()> + 'static> Decode<()> for CuHandle<CuSharedMemoryBuffer<U>> {
     fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let buffer = CuSharedMemoryBuffer::<U>::decode(decoder)?;
-        Ok(CuHandle(Arc::new(Mutex::new(CuHandleInner::Detached(
-            buffer,
-        )))))
+        Ok(CuHandle::new_detached(buffer))
     }
 }
 
@@ -665,7 +694,7 @@ pub struct CuHostMemoryPool<T> {
     /// Underlying pool of host buffers.
     // Being an Arc is a requirement of try_pull_owned() so buffers can refer back to the pool.
     id: PoolID,
-    pool: Arc<Pool<T>>,
+    pool: Arc<Pool<Box<T>>>,
     size: usize,
     buffer_size: usize,
 }
@@ -675,7 +704,7 @@ impl<T: ArrayLike + 'static> CuHostMemoryPool<T> {
     where
         F: Fn() -> T,
     {
-        let pool = Arc::new(Pool::new(size, buffer_initializer));
+        let pool = Arc::new(Pool::new(size, move || Box::new(buffer_initializer())));
         let buffer_size = pool.try_pull().unwrap().len() * size_of::<T::Element>();
 
         let og = Self {
@@ -717,24 +746,10 @@ impl<T: ArrayLike> CuPool<T> for CuHostMemoryPool<T> {
 
     fn copy_from<O: ArrayLike<Element = T::Element>>(&self, from: &mut CuHandle<O>) -> CuHandle<T> {
         let to_handle = self.acquire().expect("No available buffers in the pool");
-
-        match lock_unpoison(&from.0).deref() {
-            CuHandleInner::Detached(source) => match lock_unpoison(&to_handle.0).deref_mut() {
-                CuHandleInner::Detached(destination) => {
-                    destination.copy_from_slice(source);
-                }
-                CuHandleInner::Pooled(destination) => {
-                    destination.copy_from_slice(source);
-                }
-            },
-            CuHandleInner::Pooled(source) => match lock_unpoison(&to_handle.0).deref_mut() {
-                CuHandleInner::Detached(destination) => {
-                    destination.copy_from_slice(source);
-                }
-                CuHandleInner::Pooled(destination) => {
-                    destination.copy_from_slice(source);
-                }
-            },
+        {
+            let from_lock = lock_unpoison(&from.0);
+            let mut to_lock = lock_unpoison(&to_handle.0);
+            to_lock.inner_mut().copy_from_slice(from_lock.inner_ref());
         }
         to_handle
     }
@@ -744,7 +759,7 @@ impl<T: ArrayLike> CuPool<T> for CuHostMemoryPool<T> {
 /// process without copying the underlying bytes.
 pub struct CuSharedMemoryPool<E: ElementType> {
     id: PoolID,
-    pool: Arc<Pool<CuSharedMemoryBuffer<E>>>,
+    pool: Arc<Pool<Box<CuSharedMemoryBuffer<E>>>>,
     size: usize,
     buffer_size: usize,
 }
@@ -763,11 +778,11 @@ impl<E: ElementType + 'static> CuSharedMemoryPool<E> {
         let pool = Arc::new(Pool::new(size, move || {
             let slot = initializer_next_slot.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             assert!(slot < size, "shared memory pool slot index overflow");
-            CuSharedMemoryBuffer::from_region(
+            Box::new(CuSharedMemoryBuffer::from_region(
                 initializer_region.clone(),
                 slot * slot_stride,
                 elements_per_buffer,
-            )
+            ))
         }));
 
         let pool = Arc::new(Self {
@@ -811,24 +826,10 @@ impl<E: ElementType> CuPool<CuSharedMemoryBuffer<E>> for CuSharedMemoryPool<E> {
         O: ArrayLike<Element = E>,
     {
         let to_handle = self.acquire().expect("No available buffers in the pool");
-
-        match lock_unpoison(&from.0).deref() {
-            CuHandleInner::Detached(source) => match lock_unpoison(&to_handle.0).deref_mut() {
-                CuHandleInner::Detached(destination) => {
-                    destination.copy_from_slice(source);
-                }
-                CuHandleInner::Pooled(destination) => {
-                    destination.copy_from_slice(source);
-                }
-            },
-            CuHandleInner::Pooled(source) => match lock_unpoison(&to_handle.0).deref_mut() {
-                CuHandleInner::Detached(destination) => {
-                    destination.copy_from_slice(source);
-                }
-                CuHandleInner::Pooled(destination) => {
-                    destination.copy_from_slice(source);
-                }
-            },
+        {
+            let from_lock = lock_unpoison(&from.0);
+            let mut to_lock = lock_unpoison(&to_handle.0);
+            to_lock.inner_mut().copy_from_slice(from_lock.inner_ref());
         }
         to_handle
     }
@@ -945,9 +946,8 @@ mod cuda {
         fn get_host_slice_wrapper<O: ArrayLike<Element = E>>(
             handle_inner: &CuHandleInner<O>,
         ) -> HostSliceWrapper<'_, O> {
-            match handle_inner {
-                CuHandleInner::Pooled(pooled) => HostSliceWrapper { inner: pooled },
-                CuHandleInner::Detached(detached) => HostSliceWrapper { inner: detached },
+            HostSliceWrapper {
+                inner: handle_inner.inner_ref(),
             }
         }
 
@@ -955,9 +955,8 @@ mod cuda {
         fn get_host_slice_mut_wrapper<O: ArrayLike<Element = E>>(
             handle_inner: &mut CuHandleInner<O>,
         ) -> HostSliceMutWrapper<'_, O> {
-            match handle_inner {
-                CuHandleInner::Pooled(pooled) => HostSliceMutWrapper { inner: pooled },
-                CuHandleInner::Detached(detached) => HostSliceMutWrapper { inner: detached },
+            HostSliceMutWrapper {
+                inner: handle_inner.inner_mut(),
             }
         }
     }
@@ -968,7 +967,7 @@ mod cuda {
     {
         id: PoolID,
         stream: Arc<CudaStream>,
-        pool: Arc<Pool<CudaSliceWrapper<E>>>,
+        pool: Arc<Pool<Box<CudaSliceWrapper<E>>>>,
         nb_buffers: usize,
         nb_element_per_buffer: usize,
     }
@@ -987,6 +986,7 @@ mod cuda {
                     stream
                         .alloc_zeros(nb_element_per_buffer)
                         .map(CudaSliceWrapper)
+                        .map(Box::new)
                         .map_err(|_| "Failed to allocate device memory")
                 })
                 .collect::<Result<Vec<_>, _>>()?;
@@ -1043,16 +1043,16 @@ mod cuda {
                 let mut to_lock = lock_unpoison(&to_handle.0);
 
                 match &mut *to_lock {
-                    CuHandleInner::Detached(CudaSliceWrapper(to)) => {
+                    CuHandleInner::Detached(to) => {
                         let wrapper = Self::get_host_slice_wrapper(&*from_lock);
                         self.stream
-                            .memcpy_htod(&wrapper, to)
+                            .memcpy_htod(&wrapper, to.deref_mut().as_cuda_slice_mut())
                             .expect("Failed to copy data to device");
                     }
                     CuHandleInner::Pooled(to) => {
                         let wrapper = Self::get_host_slice_wrapper(&*from_lock);
                         self.stream
-                            .memcpy_htod(&wrapper, to.as_cuda_slice_mut())
+                            .memcpy_htod(&wrapper, to.deref_mut().as_mut().as_cuda_slice_mut())
                             .expect("Failed to copy data to device");
                     }
                 }
@@ -1081,8 +1081,8 @@ mod cuda {
                 CuError::from("Host handle mutex poisoned").add_cause(&e.to_string())
             })?;
             let src = match &*device_lock {
-                CuHandleInner::Pooled(source) => source.as_cuda_slice(),
-                CuHandleInner::Detached(source) => source.as_cuda_slice(),
+                CuHandleInner::Pooled(source) => source.deref().as_ref().as_cuda_slice(),
+                CuHandleInner::Detached(source) => source.deref().as_cuda_slice(),
             };
             let mut wrapper = Self::get_host_slice_mut_wrapper(&mut *host_lock);
             self.stream.memcpy_dtoh(src, &mut wrapper).map_err(|e| {

@@ -200,6 +200,10 @@ Implications:
   - Prefer `just` itself to be the reasonable default action the user is likely asking for.
   - If a crate/example has a non-obvious `cargo run --example ...` or similar invocation, hide it behind `just`.
 - After each edit pass, run `just fmt` from the repo root before moving on.
+- Before pushing, run the narrowest appropriate root `just` verification target for the surfaces you changed.
+  - Default to `just pr-check`.
+  - If the change is primarily lint/build scoped, at minimum run `just lint`.
+  - If you touched shared/runtime code that can affect embedded or `no_std`, include `just nostd-ci` when practical.
 - When touching Rust code, avoid clippy-denied cleanup mistakes that keep recurring here:
   - do not keep redundant same-type casts such as `u64` to `u64`
   - prefer `.is_multiple_of(...)` over `% ... == 0` when checking divisibility
@@ -223,6 +227,11 @@ Implications:
 - Prefer preallocation, fixed capacity, and compile-time sizing where practical.
 - Avoid memory copies when a zero-copy or borrow-based design is available.
 - Changes that increase allocation count, heap pressure, or copy count need explicit justification.
+- Any copy, allocation, serialization pass, or latency regression added to the real-time path is a design-level regression.
+  - Do not add it silently.
+  - Do not trade runtime performance for debugger, tooling, observability, or convenience features by default.
+  - Require explicit user approval before accepting that tradeoff.
+  - If the cost only serves offline/debug flows, feature-gate it or move it out of the runtime hot path.
 
 ## Logging And Debugging Workflow
 

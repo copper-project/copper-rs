@@ -61,6 +61,7 @@ compile_error!("feature `parallel-rt` requires `std`");
 extern crate alloc;
 
 pub use cu29_derive::{bundle_resources, resources};
+pub use cu29_runtime::app;
 pub use cu29_runtime::config;
 pub use cu29_runtime::context;
 pub use cu29_runtime::copperlist;

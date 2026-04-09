@@ -1,6 +1,7 @@
 use compact_str::CompactString;
 use cu_sensor_payloads::{
     CuImage, CuImageBufferFormat, ImuPayload, MagnetometerPayload, PointCloud, PointCloudSoa,
+    PointCloudSoaHandle,
 };
 use cu29::prelude::CuHandle;
 use cu29::units::si::acceleration::meter_per_second_squared;
@@ -99,6 +100,22 @@ pub struct Temperature {
 }
 
 impl<const N: usize> RosMsgAdapter<'static> for PointCloudSoa<N> {
+    type Output = PointCloud2;
+
+    fn namespace() -> &'static str {
+        "sensor_msgs"
+    }
+
+    fn type_name() -> &'static str {
+        "PointCloud2"
+    }
+
+    fn type_hash() -> &'static str {
+        "RIHS01_9198cabf7da3796ae6fe19c4cb3bdd3525492988c70522628af5daa124bae2b5"
+    }
+}
+
+impl<const N: usize> RosMsgAdapter<'static> for PointCloudSoaHandle<N> {
     type Output = PointCloud2;
 
     fn namespace() -> &'static str {
@@ -241,6 +258,12 @@ impl<const N: usize> From<&PointCloudSoa<N>> for PointCloud2 {
     }
 }
 
+impl<const N: usize> From<&PointCloudSoaHandle<N>> for PointCloud2 {
+    fn from(pointcloud: &PointCloudSoaHandle<N>) -> Self {
+        pointcloud.with_inner(|inner| PointCloud2::from(inner))
+    }
+}
+
 impl From<&CuImage<Vec<u8>>> for Image {
     fn from(image: &CuImage<Vec<u8>>) -> Self {
         let data = image.buffer_handle.with_inner(|inner| inner.to_vec());
@@ -308,52 +331,18 @@ impl<const N: usize> TryFrom<PointCloud2> for PointCloudSoa<N> {
     type Error = String;
 
     fn try_from(value: PointCloud2) -> Result<Self, Self::Error> {
-        let count = (value.width as usize)
-            .checked_mul(value.height as usize)
-            .ok_or_else(|| "PointCloud2: width*height overflow".to_string())?;
-        if count > N {
-            return Err(format!(
-                "PointCloud2: {} points exceed PointCloudSoa capacity {}",
-                count, N
-            ));
-        }
-
-        let point_step = value.point_step as usize;
-        if point_step < 24 {
-            return Err("PointCloud2: point_step too small for x/y/z/intensity/tov".to_string());
-        }
-
-        let offsets = field_offsets(&value.fields)?;
-
-        let required_bytes = count
-            .checked_mul(point_step)
-            .ok_or_else(|| "PointCloud2: point_step overflow".to_string())?;
-        if value.data.len() < required_bytes {
-            return Err(format!(
-                "PointCloud2: data length {} < expected {}",
-                value.data.len(),
-                required_bytes
-            ));
-        }
-
         let mut out = PointCloudSoa::<N>::default();
-        for idx in 0..count {
-            let base = idx * point_step;
-            let x = read_f32(&value.data, base + offsets.x)?;
-            let y = read_f32(&value.data, base + offsets.y)?;
-            let z = read_f32(&value.data, base + offsets.z)?;
-            let intensity = read_f32(&value.data, base + offsets.intensity)?;
-            let tov_sec = read_u32(&value.data, base + offsets.tov_sec)? as u64;
-            let tov_nsec = read_u32(&value.data, base + offsets.tov_nsec)? as u64;
+        decode_pointcloud2_into_soa(&mut out, &value)?;
+        Ok(out)
+    }
+}
 
-            let tov = tov_sec
-                .checked_mul(1_000_000_000)
-                .and_then(|s| s.checked_add(tov_nsec))
-                .ok_or_else(|| "PointCloud2: timestamp overflow".to_string())?;
-            let point = PointCloud::new(tov.into(), x, y, z, intensity, None);
-            out.push(point);
-        }
+impl<const N: usize> TryFrom<PointCloud2> for PointCloudSoaHandle<N> {
+    type Error = String;
 
+    fn try_from(value: PointCloud2) -> Result<Self, Self::Error> {
+        let mut out = PointCloudSoaHandle::<N>::default();
+        out.with_inner_mut(|inner| decode_pointcloud2_into_soa(inner, &value))?;
         Ok(out)
     }
 }
@@ -418,6 +407,93 @@ impl TryFrom<MagneticField> for MagnetometerPayload {
             (value.magnetic_field.z * TESLA_TO_UT) as f32,
         ]))
     }
+}
+
+fn validate_pointcloud2_buffer_len(
+    height: u32,
+    row_step: u32,
+    data_len: usize,
+) -> Result<(), String> {
+    let required_bytes = (height as usize)
+        .checked_mul(row_step as usize)
+        .ok_or_else(|| "PointCloud2: row_step*height overflow".to_string())?;
+    if data_len < required_bytes {
+        return Err(format!(
+            "PointCloud2: data length {} < expected {}",
+            data_len, required_bytes
+        ));
+    }
+    Ok(())
+}
+
+fn decode_pointcloud2_into_soa<const N: usize>(
+    out: &mut PointCloudSoa<N>,
+    value: &PointCloud2,
+) -> Result<(), String> {
+    let width_usize = value.width as usize;
+    let height_usize = value.height as usize;
+    let count = width_usize
+        .checked_mul(height_usize)
+        .ok_or_else(|| "PointCloud2: width*height overflow".to_string())?;
+    if count > N {
+        return Err(format!(
+            "PointCloud2: {} points exceed PointCloudSoa capacity {}",
+            count, N
+        ));
+    }
+
+    out.len = 0;
+    if count == 0 {
+        return Ok(());
+    }
+
+    let point_step = value.point_step as usize;
+    if point_step < 24 {
+        return Err("PointCloud2: point_step too small for x/y/z/intensity/tov".to_string());
+    }
+
+    let row_step = value.row_step as usize;
+    let min_row_step = width_usize
+        .checked_mul(point_step)
+        .ok_or_else(|| "PointCloud2: width*point_step overflow".to_string())?;
+    if row_step < min_row_step {
+        return Err(format!(
+            "PointCloud2: row_step {} < width*point_step {}",
+            row_step, min_row_step
+        ));
+    }
+
+    let offsets = field_offsets(&value.fields)?;
+    validate_pointcloud2_buffer_len(value.height, value.row_step, value.data.len())?;
+
+    for row in 0..height_usize {
+        let row_base = row
+            .checked_mul(row_step)
+            .ok_or_else(|| "PointCloud2: row offset overflow".to_string())?;
+        for col in 0..width_usize {
+            let base = row_base
+                .checked_add(
+                    col.checked_mul(point_step)
+                        .ok_or_else(|| "PointCloud2: point offset overflow".to_string())?,
+                )
+                .ok_or_else(|| "PointCloud2: point offset overflow".to_string())?;
+
+            let x = read_f32(&value.data, base + offsets.x)?;
+            let y = read_f32(&value.data, base + offsets.y)?;
+            let z = read_f32(&value.data, base + offsets.z)?;
+            let intensity = read_f32(&value.data, base + offsets.intensity)?;
+            let tov_sec = read_u32(&value.data, base + offsets.tov_sec)? as u64;
+            let tov_nsec = read_u32(&value.data, base + offsets.tov_nsec)? as u64;
+
+            let tov = tov_sec
+                .checked_mul(1_000_000_000)
+                .and_then(|s| s.checked_add(tov_nsec))
+                .ok_or_else(|| "PointCloud2: timestamp overflow".to_string())?;
+            out.push(PointCloud::new(tov.into(), x, y, z, intensity, None));
+        }
+    }
+
+    Ok(())
 }
 
 #[derive(Clone, Copy)]
@@ -545,8 +621,7 @@ mod tests {
     use super::*;
     use crate::RosBridgeAdapter;
 
-    #[test]
-    fn pointcloud_soa_roundtrip() {
+    fn sample_pointcloud() -> PointCloudSoa<4> {
         let mut cloud = PointCloudSoa::<4>::default();
         cloud.push(PointCloud::new(
             1_500_000_111u64.into(),
@@ -564,6 +639,23 @@ mod tests {
             8.0,
             None,
         ));
+        cloud
+    }
+
+    fn assert_same_points<const N: usize>(expected: &PointCloudSoa<N>, actual: &PointCloudSoa<N>) {
+        assert_eq!(expected.len, actual.len);
+        for i in 0..expected.len {
+            assert_eq!(expected.tov[i].as_nanos(), actual.tov[i].as_nanos());
+            assert!((expected.x[i].value - actual.x[i].value).abs() < 1e-6);
+            assert!((expected.y[i].value - actual.y[i].value).abs() < 1e-6);
+            assert!((expected.z[i].value - actual.z[i].value).abs() < 1e-6);
+            assert!((expected.i[i].value - actual.i[i].value).abs() < 1e-6);
+        }
+    }
+
+    #[test]
+    fn pointcloud_soa_roundtrip() {
+        let cloud = sample_pointcloud();
 
         let ros_value = cloud.to_ros_message();
         let bytes = cdr::serialize::<_, _, cdr::CdrBe>(&ros_value, cdr::Infinite)
@@ -573,14 +665,22 @@ mod tests {
         let recovered =
             PointCloudSoa::<4>::from_ros_message(decoded_ros).expect("adapter decode should work");
 
-        assert_eq!(cloud.len, recovered.len);
-        for i in 0..cloud.len {
-            assert_eq!(cloud.tov[i].as_nanos(), recovered.tov[i].as_nanos());
-            assert!((cloud.x[i].value - recovered.x[i].value).abs() < 1e-6);
-            assert!((cloud.y[i].value - recovered.y[i].value).abs() < 1e-6);
-            assert!((cloud.z[i].value - recovered.z[i].value).abs() < 1e-6);
-            assert!((cloud.i[i].value - recovered.i[i].value).abs() < 1e-6);
-        }
+        assert_same_points(&cloud, &recovered);
+    }
+
+    #[test]
+    fn pointcloud_soa_handle_roundtrip() {
+        let expected = sample_pointcloud();
+        let cloud = PointCloudSoaHandle::from_box(Box::new(sample_pointcloud()));
+        let ros_value = cloud.to_ros_message();
+        let bytes = cdr::serialize::<_, _, cdr::CdrBe>(&ros_value, cdr::Infinite)
+            .expect("cdr encode should succeed");
+        let decoded_ros: <PointCloudSoaHandle<4> as RosBridgeAdapter>::RosMessage =
+            cdr::deserialize(bytes.as_slice()).expect("cdr decode should succeed");
+        let recovered = PointCloudSoaHandle::<4>::from_ros_message(decoded_ros)
+            .expect("adapter decode should work");
+
+        recovered.with_inner(|actual| assert_same_points(&expected, actual));
     }
 
     #[test]
