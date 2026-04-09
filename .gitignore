@@ -6,7 +6,9 @@
 /target
 /build
 /cu29_export.so
-/catalog/generated
+/catalog/generated/catalog.json
+/catalog/generated/catalog.md
+/catalog/generated/index.html
 
 *.copper
 *.mcap
