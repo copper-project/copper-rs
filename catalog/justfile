@@ -10,7 +10,7 @@ generate:
 	cd "{{ROOT}}"
 	cargo +stable run --manifest-path support/cu_catalog/Cargo.toml -- \
 		generate --index catalog/index.ron --output-dir catalog/generated --local-root "{{ROOT}}"
-	xdg-open generated/index.html
+	xdg-open catalog/generated/index.html
 
 # Backwards-compatible alias.
 catalog: generate
