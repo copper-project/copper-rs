@@ -1,7 +1,5 @@
 (
-    runtime: (
-        rate_target_hz: 15,
-    ),
+    runtime: (rate_target_hz: 15),
     resources: [
         (
             id: "linux",

@@ -4,9 +4,7 @@
         slab_size_mib: 32,
         keyframe_interval: 16,
     ),
-    runtime: (
-        rate_target_hz: 15,
-    ),
+    runtime: (rate_target_hz: 15),
     resources: [
         (
             id: "linux",
