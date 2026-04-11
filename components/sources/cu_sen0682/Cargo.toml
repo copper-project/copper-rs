@@ -1,0 +1,37 @@
+[package]
+name = "cu-sen0682"
+description = "Copper source for the DFRobot SEN0682 / Wanyee WY6005 ToF lidar."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[package.metadata.copper]
+kind = "source"
+domains = ["sensor/lidar"]
+environments = ["host", "embedded"]
+
+[dependencies]
+cu29 = { path = "../../../core/cu29", version = "0.15.0", default-features = false }
+cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "0.15.0", default-features = false }
+cu-linux-resources = { workspace = true, optional = true }
+embedded-io = "0.7.1"
+
+[dev-dependencies]
+clap = { workspace = true }
+ctrlc = { workspace = true }
+cu29-logviz = { workspace = true }
+rerun = { workspace = true }
+serde = { workspace = true }
+tempfile = { workspace = true }
+
+[features]
+default = ["std"]
+std = ["cu29/std", "cu-sensor-payloads/std", "dep:cu-linux-resources"]
+defmt = ["cu29/defmt"]
+textlogs = ["cu29/textlogs", "cu-sensor-payloads/textlogs"]
+reflect = ["cu29/reflect"]

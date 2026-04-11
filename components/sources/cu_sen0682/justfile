@@ -1,0 +1,5 @@
+usb-probe *args:
+    cargo run -p cu-sen0682 --example usb_probe -- {{args}}
+
+usb-rerun *args:
+    cargo run -p cu-sen0682 --example usb_rerun -- {{args}}
