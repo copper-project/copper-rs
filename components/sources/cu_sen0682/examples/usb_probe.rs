@@ -1,3 +1,4 @@
+#[path = "common/usb_common.rs"]
 mod usb_common;
 
 use clap::Parser;
@@ -258,8 +259,7 @@ fn run() -> CuResult<()> {
 
     info!(
         "sen0682 usb probe started on {} for {}s",
-        port.display(),
-        args.duration_s
+        &port, args.duration_s
     );
 
     let deadline_ns = clock

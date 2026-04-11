@@ -1,3 +1,4 @@
+#[path = "common/usb_common.rs"]
 mod usb_common;
 
 use clap::Parser;
