@@ -68,7 +68,7 @@ RUN cargo install cargo-generate \
 RUN python3 -m pip install --no-cache-dir --upgrade pip mkdocs mkdocs-material
 
 # Set environment variables for build modes and features
-ENV FEATURES_FLAG="--features mock,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode"
+ENV FEATURES_FLAG="--features mock,cu-sensor-payloads/image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode"
 
 # Set up entry environment
 WORKDIR /home/copper-rs

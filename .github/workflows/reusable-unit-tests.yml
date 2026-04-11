@@ -26,7 +26,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: mock,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: ${{ matrix.os == 'windows-latest' && 'core' || 'workspace' }}
 
     strategy:
@@ -156,7 +156,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: mock,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: ${{ matrix.os == 'windows-latest' && 'core' || 'workspace' }}
 
     strategy:
@@ -267,7 +267,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: mock,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
     strategy:
