@@ -220,6 +220,12 @@ rtsan-smoke pkg="cu-caterpillar" bin="cu-caterpillar" args="" options="halt_on_e
 
 # Project-specific helpers now live in per-directory justfiles under examples/, components/, support/, and catalog/.
 
+# Install hidden desktop entries so Wayland can map sim app_ids to the Copper icon.
+install-sim-desktop-entries:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	bash support/linux/install_sim_desktop_entries.sh "{{ROOT}}"
+
 # Build and open the generated wiki + API docs locally.
 docs:
 	#!/usr/bin/env bash
