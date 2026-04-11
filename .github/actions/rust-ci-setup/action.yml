@@ -121,6 +121,19 @@ runs:
         sudo mkdir -p /mnt/cargo-home /mnt/cargo-target /mnt/tmp
         sudo chown -R "$USER:$USER" /mnt/cargo-home /mnt/cargo-target /mnt/tmp
 
+    - name: Disable rust-lld for Linux host links
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        # rust-lld started crashing with SIGBUS on some large workspace links under Rust 1.94.
+        rustflags="${CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS:-}"
+        if [[ -n "$rustflags" ]]; then
+          rustflags="$rustflags -C linker-features=-lld"
+        else
+          rustflags="-C linker-features=-lld"
+        fi
+        echo "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS=$rustflags" >> "$GITHUB_ENV"
+
     - name: Setup rust-cache
       uses: Swatinem/rust-cache@v2
       with:
