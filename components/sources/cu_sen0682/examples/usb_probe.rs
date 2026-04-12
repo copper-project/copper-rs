@@ -310,7 +310,7 @@ fn run() -> CuResult<()> {
     }
 
     let final_summary = probe::state::summary();
-    info!("[sen0682/final] {}", final_summary);
+    info!("[sen0682/final] {}", &final_summary);
     println!("{final_summary}");
 
     if let Some(expected_distance_m) = args.expected_distance_m {
