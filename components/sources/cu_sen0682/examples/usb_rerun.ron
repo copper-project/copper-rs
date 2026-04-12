@@ -1,0 +1,41 @@
+(
+    runtime: (rate_target_hz: 15),
+    resources: [
+        (
+            id: "linux",
+            provider: "cu_linux_resources::LinuxResources",
+            config: {
+                "serial0_dev": "/dev/ttyACM0",
+                "serial0_baudrate": 921600,
+                "serial0_timeout_ms": 20,
+            },
+        ),
+    ],
+    tasks: [
+        (
+            id: "sen0682",
+            type: "cu_sen0682::Sen0682SerialSource",
+            logging: (enabled: false),
+            resources: {"serial": "linux.serial0"},
+            config: {
+                "configure_device": true,
+                "row_id": 0,
+                "start_column": 1,
+                "end_column": 64,
+                "min_range_m": 0.05,
+            },
+        ),
+        (
+            id: "rerun",
+            type: "Sen0682RerunSink",
+            logging: (enabled: false),
+        ),
+    ],
+    cnx: [
+        (
+            src: "sen0682",
+            dst: "rerun",
+            msg: "cu_sensor_payloads::PointCloudSoa<512>",
+        ),
+    ],
+)

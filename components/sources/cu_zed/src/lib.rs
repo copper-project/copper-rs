@@ -3,10 +3,9 @@ mod payloads;
 pub use payloads::*;
 
 use cu_sensor_payloads::{
-    BarometerPayload, CuImage, CuImageBufferFormat, Distance, ImuPayload, MagnetometerPayload,
-    PointCloudSoa, Reflectivity,
+    BarometerPayload, CuImage, Distance, ImuPayload, MagnetometerPayload, PointCloudSoa,
+    Reflectivity,
 };
-use cu_transform::FrameTransform;
 use cu29::prelude::*;
 use cu29::units::si::length::meter;
 use cu29::units::si::ratio::percent;
@@ -258,6 +257,8 @@ pub use empty_impl::Zed;
 mod linux_impl {
     use super::*;
     use core::mem::size_of;
+    use cu_sensor_payloads::CuImageBufferFormat;
+    use cu_transform::FrameTransform;
     use std::path::PathBuf;
     use std::sync::Arc;
     use zed_sdk::{
