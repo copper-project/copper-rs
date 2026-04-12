@@ -10,7 +10,7 @@ pub use cu_tuimon::{
 use cu29::context::CuContext;
 use cu29::monitoring::{
     ComponentId, CopperListIoStats, CopperListView, CuComponentState, CuMonitor,
-    CuMonitoringMetadata, CuMonitoringRuntime, Decision,
+    CuMonitoringMetadata, CuMonitoringRuntime, Decision, PanicHookRegistration,
 };
 use cu29::{CuError, CuResult};
 use ratatui::backend::CrosstermBackend;
@@ -23,9 +23,7 @@ use ratatui::crossterm::terminal::{
 use ratatui::crossterm::tty::IsTty;
 use ratatui::crossterm::{event, execute};
 use ratatui::{Terminal, TerminalOptions, Viewport};
-use std::backtrace::Backtrace;
-use std::io::{Write, stdin, stdout};
-use std::process;
+use std::io::{stdin, stdout};
 #[cfg(feature = "debug_pane")]
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -39,6 +37,8 @@ pub struct CuConsoleMon {
     model: MonitorModel,
     ui_handle: Option<JoinHandle<()>>,
     quitting: Arc<AtomicBool>,
+    monitor_runtime: CuMonitoringRuntime,
+    panic_cleanup: Option<PanicHookRegistration>,
     #[cfg(feature = "debug_pane")]
     log_capture: Option<Mutex<MonitorLogCapture>>,
 }
@@ -52,6 +52,7 @@ impl CuConsoleMon {
 impl Drop for CuConsoleMon {
     fn drop(&mut self) {
         self.quitting.store(true, Ordering::SeqCst);
+        self.panic_cleanup = None;
         let _ = restore_terminal();
         if let Some(handle) = self.ui_handle.take() {
             let _ = handle.join();
@@ -221,11 +222,13 @@ impl UI {
 }
 
 impl CuMonitor for CuConsoleMon {
-    fn new(metadata: CuMonitoringMetadata, _runtime: CuMonitoringRuntime) -> CuResult<Self> {
+    fn new(metadata: CuMonitoringMetadata, runtime: CuMonitoringRuntime) -> CuResult<Self> {
         Ok(Self {
             model: MonitorModel::from_metadata(&metadata),
             ui_handle: None,
             quitting: Arc::new(AtomicBool::new(false)),
+            monitor_runtime: runtime,
+            panic_cleanup: None,
             #[cfg(feature = "debug_pane")]
             log_capture: None,
         })
@@ -248,6 +251,10 @@ impl CuMonitor for CuConsoleMon {
         if !should_start_ui() {
             return Ok(());
         }
+
+        self.panic_cleanup = Some(self.monitor_runtime.register_panic_cleanup(|_| {
+            let _ = restore_terminal();
+        }));
 
         let model = self.model.clone();
         let quitting = self.quitting.clone();
@@ -321,6 +328,7 @@ impl CuMonitor for CuConsoleMon {
 
     fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
         self.quitting.store(true, Ordering::SeqCst);
+        self.panic_cleanup = None;
         let _ = restore_terminal();
 
         if let Some(handle) = self.ui_handle.take() {
@@ -351,22 +359,13 @@ fn init_error_hooks() {
         return;
     }
 
-    let (_panic_hook, error) = HookBuilder::default().into_hooks();
+    let (_unused_panic_hook, error) = HookBuilder::default().into_hooks();
     let error = error.into_eyre_hook();
     color_eyre::eyre::set_hook(Box::new(move |err| {
         let _ = restore_terminal();
         error(err)
     }))
     .unwrap();
-
-    std::panic::set_hook(Box::new(move |info| {
-        let _ = restore_terminal();
-        let backtrace = Backtrace::force_capture();
-        println!("CuConsoleMon panic: {info}");
-        println!("Backtrace:\n{backtrace}");
-        let _ = stdout().flush();
-        process::exit(1);
-    }));
 
     let _ = ONCE.set(());
 }

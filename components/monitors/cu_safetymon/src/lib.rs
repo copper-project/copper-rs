@@ -9,7 +9,7 @@
 //!   is observed within `copperlist_deadline_ms`.
 //! - Consumes the runtime execution probe to report the last known
 //!   `(component_id, step, culistid)` when a lock is detected.
-//! - Installs a panic hook and turns panics into explicit process exit codes.
+//! - Registers with Copper's shared panic hook and turns panics into explicit process exit codes.
 //! - Latches runtime errors (`process_error`) as shutdown faults with their own exit code.
 //!   The `process_error` index is a monitored component index into
 //!   `CuMonitoringMetadata::components()`.
