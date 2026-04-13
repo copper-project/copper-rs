@@ -43,19 +43,25 @@ fn run_one_copperlist(
     copper_app: &mut CaterpillarReSim,
     robot_clock: &mut RobotClockMock,
     copper_list: CopperList<default::CuStampedDataSet>,
-    pending_kf_ts: Option<CuDuration>,
+    pending_kf_ts: Option<CuTime>,
 ) {
     // Sync the copper clock to the recorded physics clock and replay every task's output
     // byte-for-byte from the captured copperlist so we don't re-stamp metadata.
     let msgs = copper_list.msgs;
 
-    if let Some(CuDuration(ts)) = pending_kf_ts {
+    if let Some(ts) = pending_kf_ts {
         copper_app
             .copper_runtime_mut()
-            .set_forced_keyframe_timestamp(CuDuration(ts));
-        robot_clock.set_value(ts);
+            .set_forced_keyframe_timestamp(ts);
+        robot_clock.set_value(ts.as_nanos());
     } else {
-        let CuDuration(process_time) = msgs.get_src_output().metadata.process_time.start.unwrap();
+        let process_time = msgs
+            .get_src_output()
+            .metadata
+            .process_time
+            .start
+            .unwrap()
+            .as_nanos();
         robot_clock.set_value(process_time);
     }
 
@@ -186,8 +192,8 @@ fn run_one_shot(log_base: &Path, replay_log_base: &Path) -> CuResult<()> {
             &mut copper_app,
             first_kf,
         )?;
-        let CuDuration(ts) = first_kf.timestamp;
-        robot_clock_mock.set_value(ts);
+        let ts = first_kf.timestamp;
+        robot_clock_mock.set_value(ts.as_nanos());
     }
 
     let mut copperlists = open_log_reader(log_base, UnifiedLogType::CopperList)?;

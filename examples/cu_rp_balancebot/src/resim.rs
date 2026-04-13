@@ -43,8 +43,8 @@ fn default_callback(step: default::SimStep) -> SimOverride {
 }
 
 fn sync_clock_from_recorded<T: CuMsgPayload>(clock: &RobotClockMock, msg: &CuMsg<T>) {
-    if let Some(CuDuration(ts)) = Option::<CuTime>::from(msg.metadata.process_time.start) {
-        clock.set_value(ts);
+    if let Some(ts) = Option::<CuTime>::from(msg.metadata.process_time.start) {
+        clock.set_value(ts.as_nanos());
     }
 }
 
@@ -107,7 +107,7 @@ fn run_one_copperlist(
     copper_app: &mut BalanceBotReSim,
     robot_clock: &mut RobotClockMock,
     copper_list: CopperList<default::CuStampedDataSet>,
-    pending_kf_ts: Option<CuDuration>,
+    pending_kf_ts: Option<CuTime>,
 ) -> CuResult<()> {
     // Advance the mock clock to the recorded timestamp so any runtime bookkeeping stays aligned.
     let msgs = &copper_list.msgs;

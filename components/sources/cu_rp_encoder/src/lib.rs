@@ -75,7 +75,7 @@ impl<'r> ResourceBindings<'r> for EncoderResources {
 struct InterruptData {
     dat_pin: InputPin,
     ticks: i32,
-    tov: CuDuration,
+    tov: CuTime,
 }
 
 #[derive(Default, Clone, Debug, Encode, Decode, Serialize, Deserialize, Reflect)]
@@ -135,7 +135,7 @@ impl CuSrcTask for Encoder {
             data_from_interrupts: Arc::new(Mutex::new(InterruptData {
                 dat_pin,
                 ticks: 0,
-                tov: CuDuration::default(),
+                tov: CuTime::default(),
             })),
         })
     }

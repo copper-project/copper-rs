@@ -174,8 +174,8 @@ fn resim_one_copperlist(
     let msgs = &copper_list.msgs;
 
     // Sync clock to the recorded source output.
-    let CuDuration(ticks) = msgs.get_src_output().metadata.process_time.start.unwrap();
-    robot_clock_mock.set_value(ticks);
+    let ticks = msgs.get_src_output().metadata.process_time.start.unwrap();
+    robot_clock_mock.set_value(ticks.as_nanos());
 
     let mut cb = move |step: default::SimStep| -> SimOverride {
         match step {

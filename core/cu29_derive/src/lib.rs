@@ -1,5 +1,5 @@
 use proc_macro::TokenStream;
-use quote::{ToTokens, format_ident, quote};
+use quote::{format_ident, quote};
 use std::collections::{BTreeMap, HashMap};
 use std::fs::read_to_string;
 use std::path::Path;
@@ -672,15 +672,14 @@ fn gen_culist_support(
     let task_output_specs = flatten_task_output_specs(&output_packs, &slot_origin_ids);
     let task_output_spec_literals: Vec<proc_macro2::TokenStream> = task_output_specs
         .iter()
-        .map(|(task_id, msg_type, payload_type_path)| {
+        .map(|(task_id, msg_type, payload_type)| {
             let task_id = LitStr::new(task_id, Span::call_site());
             let msg_type = LitStr::new(msg_type, Span::call_site());
-            let payload_type_path = LitStr::new(payload_type_path, Span::call_site());
             quote! {
                 cu29::TaskOutputSpec {
                     task_id: #task_id,
                     msg_type: #msg_type,
-                    payload_type_path: #payload_type_path,
+                    payload_type_path_fn: <#payload_type as cu29::prelude::TypePath>::type_path,
                 }
             }
         })
@@ -5378,7 +5377,7 @@ fn flatten_slot_origin_ids(
 fn flatten_task_output_specs(
     output_packs: &[OutputPack],
     slot_origin_ids: &[Option<String>],
-) -> Vec<(String, String, String)> {
+) -> Vec<(String, String, Type)> {
     let mut specs = Vec::new();
     for (slot, pack) in output_packs.iter().enumerate() {
         if pack.msg_types.is_empty() {
@@ -5389,22 +5388,10 @@ fn flatten_task_output_specs(
             .and_then(|origin| origin.as_ref())
             .unwrap_or_else(|| panic!("Missing slot origin id for copperlist output slot {slot}"));
         for (msg_type, payload_type) in pack.msg_type_names.iter().zip(pack.msg_types.iter()) {
-            specs.push((
-                origin.clone(),
-                msg_type.clone(),
-                rust_type_path_literal(payload_type),
-            ));
+            specs.push((origin.clone(), msg_type.clone(), payload_type.clone()));
         }
     }
     specs
-}
-
-fn rust_type_path_literal(ty: &Type) -> String {
-    ty.to_token_stream()
-        .to_string()
-        .chars()
-        .filter(|ch| !ch.is_whitespace())
-        .collect()
 }
 
 fn extract_output_packs(runtime_plan: &CuExecutionLoop) -> Vec<OutputPack> {
