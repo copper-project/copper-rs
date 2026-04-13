@@ -48,6 +48,35 @@ pub trait TypePath {
 }
 
 #[cfg(not(feature = "reflect"))]
+macro_rules! impl_type_path_for_primitives {
+    ($($ty:ty),* $(,)?) => {
+        $(impl TypePath for $ty {})*
+    };
+}
+
+#[cfg(not(feature = "reflect"))]
+impl_type_path_for_primitives!(
+    (),
+    bool,
+    char,
+    str,
+    u8,
+    u16,
+    u32,
+    u64,
+    u128,
+    usize,
+    i8,
+    i16,
+    i32,
+    i64,
+    i128,
+    isize,
+    f32,
+    f64,
+);
+
+#[cfg(not(feature = "reflect"))]
 pub trait ReflectTypePath {}
 
 #[cfg(not(feature = "reflect"))]
@@ -115,4 +144,17 @@ pub fn dump_type_registry_schema(registry: &TypeRegistry) -> String {
 #[cfg(not(feature = "reflect"))]
 pub fn dump_type_registry_schema(_registry: &TypeRegistry) -> String {
     String::new()
+}
+
+#[cfg(all(test, not(feature = "reflect")))]
+mod tests {
+    use super::TypePath;
+
+    fn assert_type_path<T: TypePath + ?Sized>() {}
+
+    #[test]
+    fn unit_and_primitive_type_paths_exist_without_reflect() {
+        assert_type_path::<()>();
+        assert_type_path::<i8>();
+    }
 }

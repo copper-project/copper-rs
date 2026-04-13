@@ -21,7 +21,7 @@ required-features = ["std"]
 cu29-clock = { workspace = true }
 cu29-log = { workspace = true }
 cu29-log-derive = { workspace = true }
-cu29-log-runtime = { workspace = true } # needed
+cu29-log-runtime = { workspace = true }            # needed
 cu29-traits = { workspace = true }
 cu29-units = { workspace = true, optional = true }
 cu29-unifiedlog = { workspace = true }
