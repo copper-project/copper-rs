@@ -75,10 +75,6 @@ clippy-std:
 	set -euo pipefail
 
 	os="$(uname -s || true)"
-	if [[ "$os" == Linux* ]]; then
-		# Keep local CI aligned with GitHub runners where rust-lld can SIGBUS on large links.
-		export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS="${CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS:+$CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS }-C linker-features=-lld"
-	fi
 	features="{{BASE_FEATURES}}"
 	case "$os" in
 		Linux*) features="{{BASE_FEATURES}},python" ;;
@@ -111,10 +107,6 @@ test:
 	#!/usr/bin/env bash
 	set -euo pipefail
 
-	if [[ "$(uname -s || true)" == "Linux" ]]; then
-		export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS="${CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS:+$CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS }-C linker-features=-lld"
-	fi
-
 	cargo +stable nextest run --all-targets --workspace {{EMBEDDED_EXCLUDES}}
 	cargo +stable nextest run --no-default-features
 
@@ -145,9 +137,6 @@ std-ci mode="debug":
 	fi
 
 	os="$(uname -s || true)"
-	if [[ "$os" == Linux* ]]; then
-		export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS="${CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS:+$CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS }-C linker-features=-lld"
-	fi
 	features="{{BASE_FEATURES}}"
 	case "$os" in
 		Linux*) features="{{BASE_FEATURES}},python" ;;
