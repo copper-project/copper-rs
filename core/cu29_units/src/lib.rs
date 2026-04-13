@@ -541,12 +541,12 @@ macro_rules! impl_debug_scalar_units {
         impl_storage_debug_scalar_units!(f64, f64);
 
         pub fn debug_scalar_registrations() -> Vec<DebugScalarRegistration> {
-            let mut out = Vec::new();
-            $(
-                out.push(<si::f32::$quantity as DebugScalarType>::debug_scalar_registration());
-                out.push(<si::f64::$quantity as DebugScalarType>::debug_scalar_registration());
-            )+
-            out
+            vec![
+                $(
+                    <si::f32::$quantity as DebugScalarType>::debug_scalar_registration(),
+                    <si::f64::$quantity as DebugScalarType>::debug_scalar_registration(),
+                )+
+            ]
         }
     };
 }
