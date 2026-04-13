@@ -21,7 +21,7 @@ jobs:
 
       - name: Leave comment if PR is from master/main branch of fork
         if: ${{ github.event.pull_request.head.repo.fork && (github.event.pull_request.head.ref == 'master' || github.event.pull_request.head.ref == 'main') }}
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
