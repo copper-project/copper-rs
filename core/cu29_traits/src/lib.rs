@@ -34,6 +34,7 @@ use cu29_clock::{PartialCuTimeRange, Tov};
 use serde::de::{self, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 
+use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -558,7 +559,7 @@ where
     impl<'de> Visitor<'de> for BindingNameVisitor {
         type Value = Option<String>;
 
-        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fn expecting(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
             formatter.write_str("a string, null, or an empty sequence")
         }
 

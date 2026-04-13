@@ -673,7 +673,7 @@ pub struct ClockDebugScalarRegistration {
 }
 
 pub fn debug_scalar_registrations() -> Vec<ClockDebugScalarRegistration> {
-    vec![
+    alloc::vec![
         ClockDebugScalarRegistration {
             type_path: core::any::type_name::<CuDuration>(),
             field_type: "integer",

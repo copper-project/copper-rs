@@ -3860,8 +3860,8 @@ impl<'a> DebugFieldCatalogBuilder<'a> {
     }
 }
 
-fn resolve_type_info_by_path<'a>(
-    registry: &'a TypeRegistry,
+fn resolve_type_info_by_path(
+    registry: &TypeRegistry,
     type_path: &str,
 ) -> Option<&'static TypeInfo> {
     registry
