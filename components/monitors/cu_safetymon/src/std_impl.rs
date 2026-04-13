@@ -126,12 +126,12 @@ impl CuSafetyMon {
 
         self.watchdog = Some(thread::spawn(move || {
             loop {
-                if shared.stopping.load(Ordering::SeqCst) {
+                if shared.stopping.load(Ordering::SeqCst) || runtime_panic_hook_active() {
                     break;
                 }
                 thread::park_timeout(period);
 
-                if shared.stopping.load(Ordering::SeqCst) {
+                if shared.stopping.load(Ordering::SeqCst) || runtime_panic_hook_active() {
                     break;
                 }
 
@@ -144,6 +144,10 @@ impl CuSafetyMon {
                 };
 
                 if elapsed > deadline {
+                    if shared.stopping.load(Ordering::SeqCst) || runtime_panic_hook_active() {
+                        break;
+                    }
+
                     let marker = probe.marker();
                     let culist_info = format!("last_culist={last_culistid}");
                     let detail = if let Some(marker) = marker {
@@ -167,6 +171,10 @@ impl CuSafetyMon {
                             elapsed, culist_info
                         )
                     };
+
+                    if shared.stopping.load(Ordering::SeqCst) || runtime_panic_hook_active() {
+                        break;
+                    }
 
                     shared.request_exit(exit_code, detail.clone());
                     Self::emit_fault("cu_safetymon lock fault:", &detail);

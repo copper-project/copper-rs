@@ -891,6 +891,8 @@ static PANIC_HOOK_REGISTRY: OnceLock<PanicHookRegistry> = OnceLock::new();
 static PANIC_HOOK_INSTALL_ONCE: OnceLock<()> = OnceLock::new();
 #[cfg(feature = "std")]
 static PANIC_HOOK_REGISTRATION_ID: AtomicUsize = AtomicUsize::new(1);
+#[cfg(feature = "std")]
+static PANIC_HOOK_ACTIVE_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 #[cfg(feature = "std")]
 fn panic_hook_registry() -> &'static PanicHookRegistry {
@@ -901,6 +903,7 @@ fn panic_hook_registry() -> &'static PanicHookRegistry {
 fn ensure_runtime_panic_hook_installed() {
     let _ = PANIC_HOOK_INSTALL_ONCE.get_or_init(|| {
         std::panic::set_hook(Box::new(move |info| {
+            let _guard = PanicHookActiveGuard::new();
             let mut report = PanicReport::capture(info);
             run_panic_cleanup_callbacks(&report);
             report.crash_report_path = write_panic_report_to_file(&report);
@@ -911,6 +914,34 @@ fn ensure_runtime_panic_hook_installed() {
             }
         }));
     });
+}
+
+#[cfg(feature = "std")]
+struct PanicHookActiveGuard;
+
+#[cfg(feature = "std")]
+impl PanicHookActiveGuard {
+    fn new() -> Self {
+        PANIC_HOOK_ACTIVE_COUNT.fetch_add(1, Ordering::SeqCst);
+        Self
+    }
+}
+
+#[cfg(feature = "std")]
+impl Drop for PanicHookActiveGuard {
+    fn drop(&mut self) {
+        PANIC_HOOK_ACTIVE_COUNT.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+#[cfg(feature = "std")]
+pub fn runtime_panic_hook_active() -> bool {
+    PANIC_HOOK_ACTIVE_COUNT.load(Ordering::SeqCst) > 0
+}
+
+#[cfg(not(feature = "std"))]
+pub const fn runtime_panic_hook_active() -> bool {
+    false
 }
 
 #[cfg(feature = "std")]
