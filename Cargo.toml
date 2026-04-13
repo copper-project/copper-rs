@@ -267,7 +267,7 @@ rayon = "1.11"
 rtsan-standalone = { version = "0.3.0", default-features = false }
 
 # HashMap that is fast and has no std dependency
-hashbrown = { version = "0.16", features = ["serde"] }
+hashbrown = { version = "0.17", features = ["serde"] }
 
 # Shared external dependencies of workspace members.
 anyhow = { version = "1.0", default-features = false }
