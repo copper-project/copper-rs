@@ -142,8 +142,8 @@ impl CuSinkTask for FixSink {
 
             if fix_state_changed || self.seen <= 3 || self.seen.is_multiple_of(20) {
                 let fix_type = format!("{:?}", fix.fix_type);
-                let lat = format!("{:.7}", fix.latitude.get::<degree>());
-                let lon = format!("{:.7}", fix.longitude.get::<degree>());
+                let lat = format!("{:.7}", fix.position.latitude_degrees());
+                let lon = format!("{:.7}", fix.position.longitude_degrees());
                 let h_msl = format!("{:.2}", fix.height_msl.get::<meter>());
                 let speed = format!("{:.2}", fix.ground_speed.get::<meter_per_second>());
                 info!(

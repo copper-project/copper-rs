@@ -1,14 +1,14 @@
 #![cfg(any(feature = "sim", feature = "bevymon"))]
 
 use cu_gnss_payloads::{
-    GnssAccuracy, GnssCommandAck, GnssEpochTime, GnssFixSolution, GnssFixType, GnssInfoText,
-    GnssRawUbxFrame, GnssRfStatus, GnssSatelliteState, GnssSatsInView, GnssSignalState,
+    GeodeticPosition, GnssAccuracy, GnssCommandAck, GnssEpochTime, GnssFixSolution, GnssFixType,
+    GnssInfoText, GnssRawUbxFrame, GnssRfStatus, GnssSatelliteState, GnssSatsInView,
+    GnssSignalState,
 };
 use cu_sensor_payloads::{BarometerPayload, ImuPayload, MagnetometerPayload};
 use cu29::prelude::*;
 use cu29::units::si::angle::degree;
 use cu29::units::si::f32::{Angle as Angle32, Length, Velocity};
-use cu29::units::si::f64::Angle as Angle64;
 use cu29::units::si::length::meter;
 use cu29::units::si::velocity::meter_per_second;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
@@ -293,8 +293,7 @@ impl CuSrcTask for SimGnssSource {
             num_satellites_used: GNSS_FIXED_SAT_COUNT,
             ..GnssFixSolution::default()
         };
-        fix.latitude = Angle64::new::<degree>(lat_deg);
-        fix.longitude = Angle64::new::<degree>(lon_deg);
+        fix.position = GeodeticPosition::from_degrees(lat_deg, lon_deg);
         fix.height_ellipsoid = Length::new::<meter>(ellipsoid_alt_m);
         fix.height_msl = Length::new::<meter>(msl_alt_m);
         fix.velocity_north = Velocity::new::<meter_per_second>(velocity_north_mps);

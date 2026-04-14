@@ -1,10 +1,11 @@
+use alloc::vec::Vec;
 use core::fmt::Debug;
 
 use rerun::components::TransformMat3x3;
 use rerun::datatypes::Mat3x3;
-use rerun::{AsComponents, SerializedComponentBatch, Transform3D as RerunTransform3D};
+use rerun::{AsComponents, GeoPoints, SerializedComponentBatch, Transform3D as RerunTransform3D};
 
-use crate::Transform3D;
+use crate::{GeodeticPosition, Transform3D};
 
 fn transform_parts<T: Copy + Into<f64> + Debug + Default + 'static>(
     transform: &Transform3D<T>,
@@ -50,6 +51,16 @@ fn build_rerun_transform<T: Copy + Into<f64> + Debug + Default + 'static>(
         .with_mat3x3(TransformMat3x3::from(Mat3x3(mat_flat)))
 }
 
+fn build_rerun_geo_point(position: &GeodeticPosition) -> GeoPoints {
+    GeoPoints::from_lat_lon([(position.latitude_degrees(), position.longitude_degrees())])
+}
+
+impl AsComponents for GeodeticPosition {
+    fn as_serialized_batches(&self) -> Vec<SerializedComponentBatch> {
+        build_rerun_geo_point(self).as_serialized_batches()
+    }
+}
+
 impl AsComponents for Transform3D<f32> {
     fn as_serialized_batches(&self) -> Vec<SerializedComponentBatch> {
         build_rerun_transform(self).as_serialized_batches()
@@ -65,6 +76,7 @@ impl AsComponents for Transform3D<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::GeodeticPosition;
 
     #[test]
     fn transform_parts_uses_fourth_row_for_translation() {
@@ -89,5 +101,12 @@ mod tests {
         ]);
 
         assert!(!transform.as_serialized_batches().is_empty());
+    }
+
+    #[test]
+    fn geodetic_position_emits_rerun_components() {
+        let position = GeodeticPosition::from_degrees(59.319_221, 18.075_631);
+
+        assert!(!position.as_serialized_batches().is_empty());
     }
 }

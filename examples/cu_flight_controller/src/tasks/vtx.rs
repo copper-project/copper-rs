@@ -203,8 +203,8 @@ impl CuTask for VtxOsd {
         }
         if let Some(fix) = gnss_msg.payload() {
             if fix.gnss_fix_ok && !fix.invalid_llh {
-                let lat_deg = fix.latitude.get::<degree>();
-                let lon_deg = fix.longitude.get::<degree>();
+                let lat_deg = fix.position.latitude_degrees();
+                let lon_deg = fix.position.longitude_degrees();
                 let speed_mps = fix.ground_speed.get::<meter_per_second>();
                 self.last_lat_deg = if lat_deg.is_finite() {
                     Some(lat_deg.clamp(-90.0, 90.0))

@@ -1,7 +1,13 @@
+#![cfg_attr(not(test), no_std)]
+
+#[cfg(feature = "rerun")]
+extern crate alloc;
+
 use bincode::{Decode, Encode};
 use core::fmt::Debug;
 use core::ops::Mul;
 use cu29::prelude::*;
+use cu29::units::si::angle::degree;
 use cu29::units::si::angle::radian;
 use cu29::units::si::f32::Angle as Angle32;
 use cu29::units::si::f32::Length as Length32;
@@ -15,6 +21,42 @@ use glam::{Affine3A, DAffine3, DMat4, Mat4};
 
 #[cfg(feature = "rerun")]
 mod rerun_components;
+
+/// Geodetic position expressed in [EPSG:4326](https://epsg.io/4326) latitude and longitude.
+///
+/// Use this for absolute Earth-referenced positions such as GNSS fixes. Keep it distinct from
+/// local engineering coordinates like ENU/NED/cartesian meters.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect,
+)]
+pub struct GeodeticPosition {
+    pub latitude: Angle64,
+    pub longitude: Angle64,
+}
+
+impl GeodeticPosition {
+    pub fn new(latitude: Angle64, longitude: Angle64) -> Self {
+        Self {
+            latitude,
+            longitude,
+        }
+    }
+
+    pub fn from_degrees(latitude_deg: f64, longitude_deg: f64) -> Self {
+        Self {
+            latitude: Angle64::new::<degree>(latitude_deg),
+            longitude: Angle64::new::<degree>(longitude_deg),
+        }
+    }
+
+    pub fn latitude_degrees(&self) -> f64 {
+        self.latitude.get::<degree>()
+    }
+
+    pub fn longitude_degrees(&self) -> f64 {
+        self.longitude.get::<degree>()
+    }
+}
 
 /// Transform3D represents a 3D transformation (rotation + translation)
 /// When the glam feature is enabled, it uses glam's optimized types internally
@@ -32,7 +74,7 @@ pub struct Transform3D<T: Copy + Debug + 'static> {
 enum TransformInner<T: Copy + Debug + 'static> {
     F32(Affine3A),
     F64(DAffine3),
-    _Phantom(std::marker::PhantomData<T>),
+    _Phantom(core::marker::PhantomData<T>),
 }
 
 pub type Pose<T> = Transform3D<T>;
@@ -177,27 +219,27 @@ impl<T: Copy + Debug + Default + 'static> Transform3D<T> {
 #[cfg(feature = "glam")]
 impl<T: Copy + Debug + Default + 'static> TransformInner<T> {
     fn from_matrix(mat: [[T; 4]; 4]) -> Self {
-        use std::any::TypeId;
+        use core::any::TypeId;
 
         // This is a bit hacky but necessary for type safety
         // In practice, T will be f32 or f64
         if TypeId::of::<T>() == TypeId::of::<f32>() {
             // Convert to f32 matrix
             // SAFETY: We just verified T == f32, so the layouts match.
-            let mat_f32: [[f32; 4]; 4] = unsafe { std::mem::transmute_copy(&mat) };
+            let mat_f32: [[f32; 4]; 4] = unsafe { core::mem::transmute_copy(&mat) };
             let glam_mat = Mat4::from_cols_array_2d(&mat_f32);
             let affine = Affine3A::from_mat4(glam_mat);
             // SAFETY: We just verified T == f32, so this is the correct enum variant.
-            unsafe { std::mem::transmute_copy(&TransformInner::<T>::F32(affine)) }
+            unsafe { core::mem::transmute_copy(&TransformInner::<T>::F32(affine)) }
         } else if TypeId::of::<T>() == TypeId::of::<f64>() {
             // Convert to f64 matrix
             // SAFETY: We just verified T == f64, so the layouts match.
-            let mat_f64: [[f64; 4]; 4] = unsafe { std::mem::transmute_copy(&mat) };
+            let mat_f64: [[f64; 4]; 4] = unsafe { core::mem::transmute_copy(&mat) };
             // let m = mat_f64;
             let glam_mat = DMat4::from_cols_array_2d(&mat_f64);
             let affine = DAffine3::from_mat4(glam_mat);
             // SAFETY: We just verified T == f64, so this is the correct enum variant.
-            unsafe { std::mem::transmute_copy(&TransformInner::<T>::F64(affine)) }
+            unsafe { core::mem::transmute_copy(&TransformInner::<T>::F64(affine)) }
         } else {
             panic!("Transform3D only supports f32 and f64 types when using glam feature");
         }
@@ -209,13 +251,13 @@ impl<T: Copy + Debug + Default + 'static> TransformInner<T> {
                 let mat = Mat4::from(affine);
                 let mat_array = mat.to_cols_array_2d();
                 // SAFETY: We only reach this arm when T == f32.
-                unsafe { std::mem::transmute_copy(&mat_array) }
+                unsafe { core::mem::transmute_copy(&mat_array) }
             }
             TransformInner::F64(affine) => {
                 let mat = DMat4::from(affine);
                 let mat_array = mat.to_cols_array_2d();
                 // SAFETY: We only reach this arm when T == f64.
-                unsafe { std::mem::transmute_copy(&mat_array) }
+                unsafe { core::mem::transmute_copy(&mat_array) }
             }
             TransformInner::_Phantom(_) => unreachable!(),
         }
@@ -429,7 +471,7 @@ mod nalgebra_integration {
     impl From<&Transform3D<f64>> for Isometry3<f64> {
         fn from(pose: &Transform3D<f64>) -> Self {
             let mat_array = pose.to_matrix();
-            let flat_transform: [f64; 16] = std::array::from_fn(|i| mat_array[i / 4][i % 4]);
+            let flat_transform: [f64; 16] = core::array::from_fn(|i| mat_array[i / 4][i % 4]);
             let matrix = Matrix4::from_row_slice(&flat_transform);
 
             let rotation_matrix: Matrix3<f64> = matrix.fixed_view::<3, 3>(0, 0).into();
@@ -445,7 +487,7 @@ mod nalgebra_integration {
     impl From<Isometry3<f64>> for Transform3D<f64> {
         fn from(iso: Isometry3<f64>) -> Self {
             let matrix = iso.to_homogeneous();
-            let transform = std::array::from_fn(|r| std::array::from_fn(|c| matrix[(r, c)]));
+            let transform = core::array::from_fn(|r| core::array::from_fn(|c| matrix[(r, c)]));
             Transform3D::from_matrix(transform)
         }
     }
@@ -904,5 +946,15 @@ mod tests {
         assert_eq!(mat_transposed.w_axis.x, 5.0);
         assert_eq!(mat_transposed.w_axis.y, 6.0);
         assert_eq!(mat_transposed.w_axis.z, 7.0);
+    }
+
+    #[test]
+    fn geodetic_position_converts_to_and_from_degrees() {
+        let position = GeodeticPosition::from_degrees(59.319_221, 18.075_631);
+
+        assert_eq!(position.latitude.get::<degree>(), 59.319_221);
+        assert_eq!(position.longitude.get::<degree>(), 18.075_631);
+        assert_eq!(position.latitude_degrees(), 59.319_221);
+        assert_eq!(position.longitude_degrees(), 18.075_631);
     }
 }

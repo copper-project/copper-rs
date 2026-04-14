@@ -530,10 +530,25 @@ pub enum DebugFieldSemantics {
     Time,
     OptionalTime,
     Duration,
+    GeodeticPosition,
     Quantity {
         quantity_name: String,
         unit_symbol: String,
     },
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DebugFieldKind {
+    Scalar,
+    Struct,
+    TupleStruct,
+    Tuple,
+    List,
+    Array,
+    Map,
+    Set,
+    Enum,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -547,7 +562,12 @@ pub struct DebugFieldDescriptor {
     pub binding_name: Option<String>,
     pub field_type: String,
     pub value_type_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub semantics: Option<DebugFieldSemantics>,
     pub nullable: bool,
+    pub kind: DebugFieldKind,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<DebugFieldDescriptor>,
 }
 
 fn deserialize_debug_binding_name<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
@@ -898,7 +918,10 @@ mod std_tests {
             binding_name: None,
             field_type: "integer".to_owned(),
             value_type_path: "cu29_clock::CuTime".to_owned(),
+            semantics: Some(DebugFieldSemantics::Time),
             nullable: true,
+            kind: DebugFieldKind::Scalar,
+            children: Vec::new(),
         };
 
         let encoded = serde_json::to_value(&descriptor).unwrap();
@@ -912,10 +935,15 @@ mod std_tests {
             "binding_name": [],
             "field_type": "integer",
             "value_type_path": "cu29_clock::CuTime",
+            "semantics": "Time",
             "nullable": true,
+            "kind": "scalar",
         });
 
         let descriptor: DebugFieldDescriptor = serde_json::from_value(encoded).unwrap();
         assert_eq!(descriptor.binding_name, None);
+        assert_eq!(descriptor.semantics, Some(DebugFieldSemantics::Time));
+        assert_eq!(descriptor.kind, DebugFieldKind::Scalar);
+        assert!(descriptor.children.is_empty());
     }
 }

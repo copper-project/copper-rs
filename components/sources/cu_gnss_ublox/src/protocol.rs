@@ -2,13 +2,13 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use cu_gnss_payloads::{
-    GnssAccuracy, GnssAckKind, GnssCommandAck, GnssEpochTime, GnssEvent, GnssFixSolution,
-    GnssFixType, GnssInfoSeverity, GnssInfoText, GnssNavEpoch, GnssRawUbxFrame, GnssRfBlockStatus,
-    GnssRfStatus, GnssSatelliteInfo, GnssSatelliteState, GnssSignalInfo, GnssSignalState,
+    GeodeticPosition, GnssAccuracy, GnssAckKind, GnssCommandAck, GnssEpochTime, GnssEvent,
+    GnssFixSolution, GnssFixType, GnssInfoSeverity, GnssInfoText, GnssNavEpoch, GnssRawUbxFrame,
+    GnssRfBlockStatus, GnssRfStatus, GnssSatelliteInfo, GnssSatelliteState, GnssSignalInfo,
+    GnssSignalState,
 };
 use cu29::units::si::angle::degree;
 use cu29::units::si::f32::{Angle as Angle32, Length, Ratio, Time, Velocity};
-use cu29::units::si::f64::Angle as Angle64;
 use cu29::units::si::length::{decimeter, meter};
 use cu29::units::si::ratio::ratio;
 use cu29::units::si::time::second;
@@ -194,6 +194,8 @@ fn decode_nav_pvt(payload: &[u8]) -> Option<GnssNavEpoch> {
     let head_motion_deg = le_i32(payload, 64) as f32 * 1e-5;
     let head_vehicle_deg = le_i32(payload, 84) as f32 * 1e-5;
 
+    let lon_deg = le_i32(payload, 24) as f64 * 1e-7;
+    let lat_deg = le_i32(payload, 28) as f64 * 1e-7;
     let fix = GnssFixSolution {
         fix_type: GnssFixType::from(payload[20]),
         gnss_fix_ok: (flags & 0x01) != 0,
@@ -201,8 +203,7 @@ fn decode_nav_pvt(payload: &[u8]) -> Option<GnssNavEpoch> {
         carrier_solution: (flags >> 6) & 0x03,
         invalid_llh: (flags3 & 0x0001) != 0,
         num_satellites_used: payload[23],
-        longitude: Angle64::new::<degree>(le_i32(payload, 24) as f64 * 1e-7),
-        latitude: Angle64::new::<degree>(le_i32(payload, 28) as f64 * 1e-7),
+        position: GeodeticPosition::from_degrees(lat_deg, lon_deg),
         height_ellipsoid: Length::new::<meter>(le_i32(payload, 32) as f32 / 1000.0),
         height_msl: Length::new::<meter>(le_i32(payload, 36) as f32 / 1000.0),
         velocity_north: Velocity::new::<meter_per_second>(le_i32(payload, 48) as f32 / 1000.0),

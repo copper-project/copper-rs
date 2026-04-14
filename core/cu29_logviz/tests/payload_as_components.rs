@@ -1,5 +1,5 @@
 use cu_sensor_payloads::{CuImage, CuImageBufferFormat, PointCloud};
-use cu_spatial_payloads::Transform3D;
+use cu_spatial_payloads::{GeodeticPosition, Transform3D};
 use cu29::prelude::CuResult;
 use cu29_logviz::log_as_components;
 
@@ -36,4 +36,12 @@ fn log_as_components_accepts_payload_transform() -> CuResult<()> {
     let rec = rerun::RecordingStream::disabled();
 
     log_as_components(&rec, "transform", &transform)
+}
+
+#[test]
+fn log_as_components_accepts_geodetic_position() -> CuResult<()> {
+    let position = GeodeticPosition::from_degrees(59.319_221, 18.075_631);
+    let rec = rerun::RecordingStream::disabled();
+
+    log_as_components(&rec, "position", &position)
 }

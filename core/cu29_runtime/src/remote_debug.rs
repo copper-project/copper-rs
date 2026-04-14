@@ -230,12 +230,13 @@ use crate::app::{CuSimApplication, CurrentRuntimeCopperList};
 use crate::config::{BridgeChannelConfigRepresentation, Flavor, read_configuration_str};
 use crate::debug::{CuDebugSession, JumpOutcome};
 use crate::reflect::{
-    ArrayInfo, EnumInfo, ListInfo, ReflectTaskIntrospection, SetInfo, StructInfo, TupleInfo,
-    TupleStructInfo, Type, TypeInfo, TypeRegistry, VariantInfo, serde::SerializationData,
+    EnumInfo, ReflectTaskIntrospection, StructInfo, TupleInfo, TupleStructInfo, Type, TypeInfo,
+    TypeRegistry, VariantInfo, serde::SerializationData,
 };
 use cu29_clock::{CuTime, RobotClock, RobotClockMock, Tov};
 use cu29_traits::{
     CopperListTuple, CuError, CuMsgMetadataTrait, CuResult, DebugFieldDescriptor,
+    DebugFieldKind, DebugFieldSemantics,
     ErasedCuStampedDataSet,
 };
 use cu29_unifiedlog::{SectionStorage, UnifiedLogWrite};
@@ -3421,31 +3422,101 @@ where
 fn build_message_metadata_field_descriptors() -> Vec<DebugFieldDescriptor> {
     vec![
         debug_field_descriptor(
-            "meta.tov.kind",
+            "tov",
             None,
-            "string",
-            "alloc::string::String",
+            "object",
+            "message_metadata::Tov",
+            None,
             false,
+            DebugFieldKind::Struct,
+            vec![
+                debug_field_descriptor(
+                    "tov.kind",
+                    None,
+                    "string",
+                    "alloc::string::String",
+                    None,
+                    false,
+                    DebugFieldKind::Scalar,
+                    Vec::new(),
+                ),
+                debug_registered_scalar_field_descriptor::<CuTime>("tov.time_ns", None, false),
+                debug_registered_scalar_field_descriptor::<CuTime>("tov.start_ns", None, false),
+                debug_registered_scalar_field_descriptor::<CuTime>("tov.end_ns", None, false),
+            ],
         ),
-        debug_registered_scalar_field_descriptor::<CuTime>("meta.tov.time_ns", None, false),
-        debug_registered_scalar_field_descriptor::<CuTime>("meta.tov.start_ns", None, false),
-        debug_registered_scalar_field_descriptor::<CuTime>("meta.tov.end_ns", None, false),
-        debug_registered_scalar_field_descriptor::<CuTime>(
-            "meta.process_time.start_ns",
-            None,
-            true,
-        ),
-        debug_registered_scalar_field_descriptor::<CuTime>("meta.process_time.end_ns", None, true),
         debug_field_descriptor(
-            "meta.status_txt",
+            "process_time",
+            None,
+            "object",
+            "message_metadata::ProcessTime",
+            None,
+            false,
+            DebugFieldKind::Struct,
+            vec![
+                debug_registered_scalar_field_descriptor::<CuTime>(
+                    "process_time.start_ns",
+                    None,
+                    true,
+                ),
+                debug_registered_scalar_field_descriptor::<CuTime>(
+                    "process_time.end_ns",
+                    None,
+                    true,
+                ),
+            ],
+        ),
+        debug_field_descriptor(
+            "status_txt",
             None,
             "string",
             "alloc::string::String",
+            None,
             false,
+            DebugFieldKind::Scalar,
+            Vec::new(),
         ),
-        debug_field_descriptor("meta.origin.subsystem_code", None, "integer", "u16", false),
-        debug_field_descriptor("meta.origin.instance_id", None, "integer", "u32", false),
-        debug_field_descriptor("meta.origin.cl_id", None, "integer", "u64", false),
+        debug_field_descriptor(
+            "origin",
+            None,
+            "object",
+            "message_metadata::Origin",
+            None,
+            false,
+            DebugFieldKind::Struct,
+            vec![
+                debug_field_descriptor(
+                    "origin.subsystem_code",
+                    None,
+                    "integer",
+                    "u16",
+                    None,
+                    false,
+                    DebugFieldKind::Scalar,
+                    Vec::new(),
+                ),
+                debug_field_descriptor(
+                    "origin.instance_id",
+                    None,
+                    "integer",
+                    "u32",
+                    None,
+                    false,
+                    DebugFieldKind::Scalar,
+                    Vec::new(),
+                ),
+                debug_field_descriptor(
+                    "origin.cl_id",
+                    None,
+                    "integer",
+                    "u64",
+                    None,
+                    false,
+                    DebugFieldKind::Scalar,
+                    Vec::new(),
+                ),
+            ],
+        ),
     ]
 }
 
@@ -3461,7 +3532,10 @@ fn debug_registered_scalar_field_descriptor<T>(
         binding_name,
         field_type,
         value_type_path,
+        debug_scalar_semantics(value_type_path),
         nullable,
+        DebugFieldKind::Scalar,
+        Vec::new(),
     )
 }
 
@@ -3470,15 +3544,17 @@ fn build_field_catalog(
     type_info: &'static TypeInfo,
     binding_root: Option<&str>,
 ) -> Vec<DebugFieldDescriptor> {
-    let mut builder = DebugFieldCatalogBuilder::new(registry);
-    builder.visit_type(type_info, type_info.type_path(), "", binding_root, false);
-    builder.finish()
-}
-
-struct DebugFieldCatalogBuilder<'a> {
-    registry: &'a TypeRegistry,
-    seen: BTreeSet<String>,
-    out: Vec<DebugFieldDescriptor>,
+    match type_info {
+        TypeInfo::Struct(info) => struct_children(registry, info, "", binding_root, false),
+        _ => vec![build_type_node(
+            registry,
+            type_info,
+            type_info.type_path(),
+            "",
+            binding_root,
+            false,
+        )],
+    }
 }
 
 fn debug_scalar_field_types() -> &'static HashMap<&'static str, &'static str> {
@@ -3499,365 +3575,330 @@ fn debug_scalar_field_type(value_type_path: &str) -> Option<&'static str> {
     debug_scalar_field_types().get(value_type_path).copied()
 }
 
-impl<'a> DebugFieldCatalogBuilder<'a> {
-    fn new(registry: &'a TypeRegistry) -> Self {
-        Self {
-            registry,
-            seen: BTreeSet::new(),
-            out: Vec::new(),
-        }
-    }
-
-    fn finish(self) -> Vec<DebugFieldDescriptor> {
-        self.out
-    }
-
-    fn visit_type(
-        &mut self,
-        type_info: &'static TypeInfo,
-        value_type_path: &str,
-        display_path: &str,
-        binding_name: Option<&str>,
-        nullable: bool,
-    ) {
-        if let Some(field_type) = debug_scalar_field_type(value_type_path) {
-            self.push_leaf(
-                display_path,
-                binding_name,
-                field_type,
-                value_type_path,
-                nullable,
-            );
-            return;
-        }
-
-        match type_info {
-            TypeInfo::Struct(info) => self.visit_struct(info, display_path, binding_name, nullable),
-            TypeInfo::TupleStruct(info) => {
-                self.visit_tuple_struct(info, value_type_path, display_path, binding_name, nullable)
-            }
-            TypeInfo::Tuple(info) => self.visit_tuple(info, display_path, binding_name, nullable),
-            TypeInfo::List(info) => self.visit_list(info, display_path, binding_name, nullable),
-            TypeInfo::Array(info) => self.visit_array(info, display_path, binding_name, nullable),
-            TypeInfo::Map(_info) => self.push_leaf(
-                display_path,
-                binding_name,
-                "object",
-                value_type_path,
-                nullable,
-            ),
-            TypeInfo::Set(info) => self.visit_set(info, display_path, binding_name, nullable),
-            TypeInfo::Enum(info) => {
-                if let Some((inner_info, inner_type)) = option_inner_field(info) {
-                    if let Some(inner_info) = inner_info {
-                        self.visit_type(
-                            inner_info,
-                            inner_info.type_path(),
-                            display_path,
-                            binding_name,
-                            true,
-                        );
-                    } else {
-                        self.push_leaf(
-                            display_path,
-                            binding_name,
-                            primitive_field_type_name(inner_type.path()).unwrap_or("unknown"),
-                            inner_type.path(),
-                            true,
-                        );
-                    }
-                } else {
-                    self.visit_enum(info, value_type_path, display_path, binding_name, nullable);
-                }
-            }
-            TypeInfo::Opaque(info) => self.push_leaf(
-                display_path,
-                binding_name,
-                primitive_field_type_name(info.type_path()).unwrap_or("unknown"),
-                value_type_path,
-                nullable,
-            ),
-        }
-    }
-
-    fn visit_field(
-        &mut self,
-        type_info: Option<&'static TypeInfo>,
-        fallback_type: &Type,
-        display_path: &str,
-        binding_name: Option<&str>,
-        nullable: bool,
-    ) {
-        if let Some(type_info) = type_info {
-            self.visit_type(
-                type_info,
-                type_info.type_path(),
-                display_path,
-                binding_name,
-                nullable,
-            );
-        } else {
-            self.push_leaf(
-                display_path,
-                binding_name,
-                primitive_field_type_name(fallback_type.path()).unwrap_or("unknown"),
-                fallback_type.path(),
-                nullable,
-            );
-        }
-    }
-
-    fn visit_struct(
-        &mut self,
-        info: &StructInfo,
-        display_path: &str,
-        binding_name: Option<&str>,
-        nullable: bool,
-    ) {
-        let skipped = self.skipped_indices(info.type_id());
-        for (index, field) in info.iter().enumerate() {
-            if skipped.contains(&index) {
-                continue;
-            }
-            let next_display = join_field_path(display_path, field.name());
-            let next_binding = binding_name.map(|current| join_field_path(current, field.name()));
-            self.visit_field(
-                field.type_info(),
-                field.ty(),
-                &next_display,
-                next_binding.as_deref(),
-                nullable,
-            );
-        }
-    }
-
-    fn visit_tuple_struct(
-        &mut self,
-        info: &TupleStructInfo,
-        value_type_path: &str,
-        display_path: &str,
-        binding_name: Option<&str>,
-        nullable: bool,
-    ) {
-        let skipped = self.skipped_indices(info.type_id());
-        let has_serialization_data = self.serialization_data(info.type_id()).is_some();
-
-        if info.field_len() == 1 && !has_serialization_data && !skipped.contains(&0) {
-            if let Some(field) = info.field_at(0) {
-                if let Some(inner_info) = field.type_info() {
-                    self.visit_type(
-                        inner_info,
-                        value_type_path,
-                        display_path,
-                        binding_name,
-                        nullable,
-                    );
-                } else {
-                    self.push_leaf(
-                        display_path,
-                        binding_name,
-                        primitive_field_type_name(field.ty().path()).unwrap_or("unknown"),
-                        value_type_path,
-                        nullable,
-                    );
-                }
-            }
-            return;
-        }
-
-        for (index, field) in info.iter().enumerate() {
-            if skipped.contains(&index) {
-                continue;
-            }
-            let next_display = indexed_path(display_path, Some(index));
-            let next_binding = binding_name.map(|current| indexed_path(current, Some(index)));
-            self.visit_field(
-                field.type_info(),
-                field.ty(),
-                &next_display,
-                next_binding.as_deref(),
-                nullable,
-            );
-        }
-    }
-
-    fn visit_tuple(
-        &mut self,
-        info: &TupleInfo,
-        display_path: &str,
-        binding_name: Option<&str>,
-        nullable: bool,
-    ) {
-        for (index, field) in info.iter().enumerate() {
-            let next_display = indexed_path(display_path, Some(index));
-            let next_binding = binding_name.map(|current| indexed_path(current, Some(index)));
-            self.visit_field(
-                field.type_info(),
-                field.ty(),
-                &next_display,
-                next_binding.as_deref(),
-                nullable,
-            );
-        }
-    }
-
-    fn visit_list(
-        &mut self,
-        info: &ListInfo,
-        display_path: &str,
-        binding_name: Option<&str>,
-        nullable: bool,
-    ) {
-        let next_display = indexed_path(display_path, None);
-        let next_binding = binding_name.map(|current| indexed_path(current, None));
-        self.visit_field(
-            info.item_info(),
-            &info.item_ty(),
-            &next_display,
-            next_binding.as_deref(),
-            nullable,
-        );
-    }
-
-    fn visit_array(
-        &mut self,
-        info: &ArrayInfo,
-        display_path: &str,
-        binding_name: Option<&str>,
-        nullable: bool,
-    ) {
-        let next_display = indexed_path(display_path, None);
-        let next_binding = binding_name.map(|current| indexed_path(current, None));
-        self.visit_field(
-            info.item_info(),
-            &info.item_ty(),
-            &next_display,
-            next_binding.as_deref(),
-            nullable,
-        );
-    }
-
-    fn visit_set(
-        &mut self,
-        info: &SetInfo,
-        display_path: &str,
-        binding_name: Option<&str>,
-        nullable: bool,
-    ) {
-        let next_display = indexed_path(display_path, None);
-        let next_binding = binding_name.map(|current| indexed_path(current, None));
-        self.visit_field(
-            self.registry.get_type_info(info.value_ty().id()),
-            &info.value_ty(),
-            &next_display,
-            next_binding.as_deref(),
-            nullable,
-        );
-    }
-
-    fn visit_enum(
-        &mut self,
-        info: &EnumInfo,
-        value_type_path: &str,
-        display_path: &str,
-        binding_name: Option<&str>,
-        nullable: bool,
-    ) {
-        for variant in info.iter() {
-            match variant {
-                VariantInfo::Unit(_) => {
-                    self.push_leaf(
-                        display_path,
-                        binding_name,
-                        "string",
-                        value_type_path,
-                        nullable,
-                    );
-                }
-                VariantInfo::Tuple(tuple) => {
-                    let variant_display = join_field_path(display_path, tuple.name());
-                    let variant_binding =
-                        binding_name.map(|current| join_field_path(current, tuple.name()));
-                    if tuple.field_len() == 1 {
-                        if let Some(field) = tuple.field_at(0) {
-                            self.visit_field(
-                                field.type_info(),
-                                field.ty(),
-                                &variant_display,
-                                variant_binding.as_deref(),
-                                nullable,
-                            );
+fn debug_scalar_semantics(value_type_path: &str) -> Option<DebugFieldSemantics> {
+    static FIELD_SEMANTICS: OnceLock<HashMap<&'static str, DebugFieldSemantics>> = OnceLock::new();
+    FIELD_SEMANTICS
+        .get_or_init(|| {
+            let mut semantics = HashMap::new();
+            for registration in cu29_clock::debug_scalar_registrations() {
+                semantics.insert(
+                    registration.type_path,
+                    match registration.kind {
+                        cu29_clock::ClockDebugScalarKind::Time => DebugFieldSemantics::Time,
+                        cu29_clock::ClockDebugScalarKind::OptionalTime => {
+                            DebugFieldSemantics::OptionalTime
                         }
-                    } else {
-                        for (index, field) in tuple.iter().enumerate() {
-                            let next_display = indexed_path(&variant_display, Some(index));
-                            let next_binding = variant_binding
-                                .as_ref()
-                                .map(|current| indexed_path(current, Some(index)));
-                            self.visit_field(
-                                field.type_info(),
-                                field.ty(),
-                                &next_display,
-                                next_binding.as_deref(),
-                                nullable,
-                            );
+                        cu29_clock::ClockDebugScalarKind::Duration => {
+                            DebugFieldSemantics::Duration
                         }
-                    }
-                }
-                VariantInfo::Struct(struct_variant) => {
-                    let variant_display = join_field_path(display_path, struct_variant.name());
-                    let variant_binding =
-                        binding_name.map(|current| join_field_path(current, struct_variant.name()));
-                    for field in struct_variant.iter() {
-                        let next_display = join_field_path(&variant_display, field.name());
-                        let next_binding = variant_binding
-                            .as_ref()
-                            .map(|current| join_field_path(current, field.name()));
-                        self.visit_field(
-                            field.type_info(),
-                            field.ty(),
-                            &next_display,
-                            next_binding.as_deref(),
-                            nullable,
-                        );
-                    }
-                }
+                    },
+                );
             }
-        }
-    }
+            for registration in cu29_units::debug_scalar_registrations() {
+                semantics.insert(registration.type_path, registration.semantics);
+            }
+            semantics
+        })
+        .get(value_type_path)
+        .cloned()
+}
 
-    fn push_leaf(
-        &mut self,
-        display_path: &str,
-        binding_name: Option<&str>,
-        field_type: &str,
-        value_type_path: &str,
-        nullable: bool,
-    ) {
-        let display_path = path_or_value(display_path);
-        let identity = binding_name.unwrap_or(display_path.as_str()).to_owned();
-        if !self.seen.insert(identity) {
-            return;
-        }
+fn debug_structured_semantics(value_type_path: &str) -> Option<DebugFieldSemantics> {
+    matches!(
+        value_type_path,
+        "cu_spatial_payloads::GeodeticPosition"
+            | "cu_gnss_payloads::GeodeticPosition"
+            | "cu_sensor_payloads::GeodeticPosition"
+    )
+    .then_some(DebugFieldSemantics::GeodeticPosition)
+}
 
-        self.out.push(debug_field_descriptor(
-            display_path.as_str(),
+fn debug_type_semantics(value_type_path: &str) -> Option<DebugFieldSemantics> {
+    debug_scalar_semantics(value_type_path).or_else(|| debug_structured_semantics(value_type_path))
+}
+
+fn build_field_node(
+    registry: &TypeRegistry,
+    type_info: Option<&'static TypeInfo>,
+    fallback_type: &Type,
+    display_path: &str,
+    binding_name: Option<&str>,
+    nullable: bool,
+) -> DebugFieldDescriptor {
+    let Some(type_info) = type_info else {
+        let value_type_path = fallback_type.path();
+        return debug_field_descriptor(
+            display_path,
+            binding_name,
+            primitive_field_type_name(value_type_path).unwrap_or("unknown"),
+            value_type_path,
+            None,
+            nullable,
+            DebugFieldKind::Scalar,
+            Vec::new(),
+        );
+    };
+
+    build_type_node(
+        registry,
+        type_info,
+        type_info.type_path(),
+        display_path,
+        binding_name,
+        nullable,
+    )
+}
+
+fn build_type_node(
+    registry: &TypeRegistry,
+    type_info: &'static TypeInfo,
+    value_type_path: &str,
+    display_path: &str,
+    binding_name: Option<&str>,
+    nullable: bool,
+) -> DebugFieldDescriptor {
+    if let Some(field_type) = debug_scalar_field_type(value_type_path) {
+        return debug_field_descriptor(
+            display_path,
             binding_name,
             field_type,
             value_type_path,
+            debug_type_semantics(value_type_path),
             nullable,
-        ));
+            DebugFieldKind::Scalar,
+            Vec::new(),
+        );
     }
 
-    fn serialization_data(&self, type_id: core::any::TypeId) -> Option<&SerializationData> {
-        self.registry.get_type_data::<SerializationData>(type_id)
-    }
+    match type_info {
+        TypeInfo::Struct(info) => debug_field_descriptor(
+            display_path,
+            binding_name,
+            "object",
+            value_type_path,
+            debug_type_semantics(value_type_path),
+            nullable,
+            DebugFieldKind::Struct,
+            struct_children(registry, info, display_path, binding_name, nullable),
+        ),
+        TypeInfo::TupleStruct(info) => debug_field_descriptor(
+            display_path,
+            binding_name,
+            "tuple",
+            value_type_path,
+            debug_type_semantics(value_type_path),
+            nullable,
+            DebugFieldKind::TupleStruct,
+            tuple_struct_children(registry, info, display_path, binding_name, nullable),
+        ),
+        TypeInfo::Tuple(info) => debug_field_descriptor(
+            display_path,
+            binding_name,
+            "tuple",
+            value_type_path,
+            debug_type_semantics(value_type_path),
+            nullable,
+            DebugFieldKind::Tuple,
+            tuple_children(registry, info, display_path, binding_name, nullable),
+        ),
+        TypeInfo::List(info) => debug_field_descriptor(
+            display_path,
+            binding_name,
+            "array",
+            value_type_path,
+            debug_type_semantics(value_type_path),
+            nullable,
+            DebugFieldKind::List,
+            indexed_children(
+                registry,
+                info.item_info(),
+                &info.item_ty(),
+                display_path,
+                binding_name,
+                nullable,
+            ),
+        ),
+        TypeInfo::Array(info) => debug_field_descriptor(
+            display_path,
+            binding_name,
+            "array",
+            value_type_path,
+            debug_type_semantics(value_type_path),
+            nullable,
+            DebugFieldKind::Array,
+            indexed_children(
+                registry,
+                info.item_info(),
+                &info.item_ty(),
+                display_path,
+                binding_name,
+                nullable,
+            ),
+        ),
+        TypeInfo::Map(_) => debug_field_descriptor(
+            display_path,
+            binding_name,
+            "object",
+            value_type_path,
+            debug_type_semantics(value_type_path),
+            nullable,
+            DebugFieldKind::Map,
+            Vec::new(),
+        ),
+        TypeInfo::Set(info) => debug_field_descriptor(
+            display_path,
+            binding_name,
+            "array",
+            value_type_path,
+            debug_type_semantics(value_type_path),
+            nullable,
+            DebugFieldKind::Set,
+            indexed_children(
+                registry,
+                registry.get_type_info(info.value_ty().id()),
+                &info.value_ty(),
+                display_path,
+                binding_name,
+                nullable,
+            ),
+        ),
+        TypeInfo::Enum(info) => {
+            if let Some((inner_info, inner_type)) = option_inner_field(info) {
+                return build_field_node(
+                    registry,
+                    inner_info,
+                    inner_type,
+                    display_path,
+                    binding_name,
+                    true,
+                );
+            }
 
-    fn skipped_indices(&self, type_id: core::any::TypeId) -> BTreeSet<usize> {
-        self.serialization_data(type_id)
-            .map(|data| data.iter_skipped().map(|(index, _)| *index).collect())
-            .unwrap_or_default()
+            debug_field_descriptor(
+                display_path,
+                binding_name,
+                "enum",
+                value_type_path,
+                debug_type_semantics(value_type_path),
+                nullable,
+                DebugFieldKind::Enum,
+                Vec::new(),
+            )
+        }
+        TypeInfo::Opaque(info) => debug_field_descriptor(
+            display_path,
+            binding_name,
+            primitive_field_type_name(info.type_path()).unwrap_or("unknown"),
+            value_type_path,
+            debug_type_semantics(value_type_path),
+            nullable,
+            DebugFieldKind::Scalar,
+            Vec::new(),
+        ),
     }
+}
+
+fn struct_children(
+    registry: &TypeRegistry,
+    info: &StructInfo,
+    display_path: &str,
+    binding_name: Option<&str>,
+    nullable: bool,
+) -> Vec<DebugFieldDescriptor> {
+    let skipped = skipped_indices(registry, info.type_id());
+    info.iter()
+        .enumerate()
+        .filter(|(index, _)| !skipped.contains(index))
+        .map(|(_, field)| {
+            let next_display = join_field_path(display_path, field.name());
+            let next_binding = binding_name.map(|current| join_field_path(current, field.name()));
+            build_field_node(
+                registry,
+                field.type_info(),
+                field.ty(),
+                &next_display,
+                next_binding.as_deref(),
+                nullable,
+            )
+        })
+        .collect()
+}
+
+fn tuple_struct_children(
+    registry: &TypeRegistry,
+    info: &TupleStructInfo,
+    display_path: &str,
+    binding_name: Option<&str>,
+    nullable: bool,
+) -> Vec<DebugFieldDescriptor> {
+    let skipped = skipped_indices(registry, info.type_id());
+    info.iter()
+        .enumerate()
+        .filter(|(index, _)| !skipped.contains(index))
+        .map(|(index, field)| {
+            let next_display = indexed_path(display_path, Some(index));
+            let next_binding = binding_name.map(|current| indexed_path(current, Some(index)));
+            build_field_node(
+                registry,
+                field.type_info(),
+                field.ty(),
+                &next_display,
+                next_binding.as_deref(),
+                nullable,
+            )
+        })
+        .collect()
+}
+
+fn tuple_children(
+    registry: &TypeRegistry,
+    info: &TupleInfo,
+    display_path: &str,
+    binding_name: Option<&str>,
+    nullable: bool,
+) -> Vec<DebugFieldDescriptor> {
+    info.iter()
+        .enumerate()
+        .map(|(index, field)| {
+            let next_display = indexed_path(display_path, Some(index));
+            let next_binding = binding_name.map(|current| indexed_path(current, Some(index)));
+            build_field_node(
+                registry,
+                field.type_info(),
+                field.ty(),
+                &next_display,
+                next_binding.as_deref(),
+                nullable,
+            )
+        })
+        .collect()
+}
+
+fn indexed_children(
+    registry: &TypeRegistry,
+    item_info: Option<&'static TypeInfo>,
+    item_type: &Type,
+    display_path: &str,
+    binding_name: Option<&str>,
+    nullable: bool,
+) -> Vec<DebugFieldDescriptor> {
+    let next_display = indexed_path(display_path, None);
+    let next_binding = binding_name.map(|current| indexed_path(current, None));
+    vec![build_field_node(
+        registry,
+        item_info,
+        item_type,
+        &next_display,
+        next_binding.as_deref(),
+        nullable,
+    )]
+}
+
+fn skipped_indices(registry: &TypeRegistry, type_id: core::any::TypeId) -> BTreeSet<usize> {
+    registry
+        .get_type_data::<SerializationData>(type_id)
+        .map(|data| data.iter_skipped().map(|(index, _)| *index).collect())
+        .unwrap_or_default()
 }
 
 fn resolve_type_info_by_path(
@@ -3900,14 +3941,20 @@ fn debug_field_descriptor(
     binding_name: Option<&str>,
     field_type: &str,
     value_type_path: &str,
+    semantics: Option<DebugFieldSemantics>,
     nullable: bool,
+    kind: DebugFieldKind,
+    children: Vec<DebugFieldDescriptor>,
 ) -> DebugFieldDescriptor {
     DebugFieldDescriptor {
         display_path: display_path.to_owned(),
         binding_name: binding_name.map(str::to_owned),
         field_type: field_type.to_owned(),
         value_type_path: value_type_path.to_owned(),
+        semantics,
         nullable,
+        kind,
+        children,
     }
 }
 

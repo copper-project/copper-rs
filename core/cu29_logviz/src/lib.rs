@@ -1,6 +1,6 @@
 use clap::Parser;
 use cu_sensor_payloads::{CuImage, ImuPayload, PointCloud, PointCloudSoa};
-use cu_spatial_payloads::Transform3D as CuTransform3D;
+use cu_spatial_payloads::{GeodeticPosition as CuGeodeticPosition, Transform3D as CuTransform3D};
 use cu29::clock::Tov;
 use cu29::prelude::{
     CopperListTuple, CuError, CuResult, UnifiedLogType, UnifiedLogger, UnifiedLoggerBuilder,
@@ -69,6 +69,14 @@ where
     log_as_components(rec, path, transform)
 }
 
+pub fn log_geodetic_position(
+    rec: &RecordingStream,
+    path: &str,
+    position: &CuGeodeticPosition,
+) -> CuResult<()> {
+    log_as_components(rec, path, position)
+}
+
 pub fn log_imu(rec: &RecordingStream, base: &str, imu: &ImuPayload) -> CuResult<()> {
     log_scalar(rec, &format!("{}/accel_x", base), imu.accel_x.value as f64)?;
     log_scalar(rec, &format!("{}/accel_y", base), imu.accel_y.value as f64)?;
@@ -126,6 +134,13 @@ where
             .downcast_ref::<CuTransform3D<f64>>()
             .expect("downcast must match TypeId");
         return log_as_components(rec, path, transform);
+    }
+
+    if payload_id == TypeId::of::<CuGeodeticPosition>() {
+        let position = any_payload
+            .downcast_ref::<CuGeodeticPosition>()
+            .expect("downcast must match TypeId");
+        return log_geodetic_position(rec, path, position);
     }
 
     if payload_id == TypeId::of::<ImuPayload>() {
