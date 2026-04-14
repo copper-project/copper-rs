@@ -235,9 +235,8 @@ use crate::reflect::{
 };
 use cu29_clock::{CuTime, RobotClock, RobotClockMock, Tov};
 use cu29_traits::{
-    CopperListTuple, CuError, CuMsgMetadataTrait, CuResult, DebugFieldDescriptor,
-    DebugFieldKind, DebugFieldSemantics,
-    ErasedCuStampedDataSet,
+    CopperListTuple, CuError, CuMsgMetadataTrait, CuResult, DebugFieldDescriptor, DebugFieldKind,
+    DebugFieldSemantics, ErasedCuStampedDataSet,
 };
 use cu29_unifiedlog::{SectionStorage, UnifiedLogWrite};
 use serde::{Deserialize, Serialize};
@@ -3588,9 +3587,7 @@ fn debug_scalar_semantics(value_type_path: &str) -> Option<DebugFieldSemantics> 
                         cu29_clock::ClockDebugScalarKind::OptionalTime => {
                             DebugFieldSemantics::OptionalTime
                         }
-                        cu29_clock::ClockDebugScalarKind::Duration => {
-                            DebugFieldSemantics::Duration
-                        }
+                        cu29_clock::ClockDebugScalarKind::Duration => DebugFieldSemantics::Duration,
                     },
                 );
             }
