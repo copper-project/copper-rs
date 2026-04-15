@@ -519,6 +519,31 @@ pub enum Flavor {
     Bridge,
 }
 
+/// Declares which Copper task trait a task node implements.
+///
+/// This lets config express the runtime role explicitly instead of forcing the
+/// proc-macro to guess from graph shape alone.
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq)]
+pub enum TaskKind {
+    #[serde(rename = "source", alias = "src")]
+    Source,
+    #[serde(rename = "task", alias = "regular", alias = "cutask")]
+    Regular,
+    #[serde(rename = "sink", alias = "snk")]
+    Sink,
+}
+
+impl TaskKind {
+    #[allow(dead_code)]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TaskKind::Source => "source",
+            TaskKind::Regular => "task",
+            TaskKind::Sink => "sink",
+        }
+    }
+}
+
 /// A node in the configuration graph.
 /// A node represents a Task in the system Graph.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -529,6 +554,11 @@ pub struct Node {
     /// Task rust struct underlying type, e.g. "mymodule::Sensor", etc.
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     type_: Option<String>,
+
+    /// Declared Copper task role. When omitted, legacy configs still infer it
+    /// from graph shape when that is unambiguous.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    kind: Option<TaskKind>,
 
     /// Config passed to the task.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -575,6 +605,7 @@ impl Node {
         Node {
             id: id.to_string(),
             type_: Some(ptype.to_string()),
+            kind: None,
             config: None,
             resources: None,
             missions: None,
@@ -608,6 +639,16 @@ impl Node {
     pub fn set_type(mut self, name: Option<String>) -> Self {
         self.type_ = name;
         self
+    }
+
+    #[allow(dead_code)]
+    pub fn get_declared_task_kind(&self) -> Option<TaskKind> {
+        self.kind
+    }
+
+    #[allow(dead_code)]
+    pub fn set_task_kind(&mut self, kind: Option<TaskKind>) {
+        self.kind = kind;
     }
 
     #[allow(dead_code)]
@@ -1207,27 +1248,60 @@ impl CuGraph {
 
     #[allow(dead_code)]
     pub fn get_node_output_msg_type(&self, node_id: &str) -> Option<String> {
-        self.0.node_indices().find_map(|node_index| {
-            if let Some(node) = self.0.node_weight(node_index) {
-                if node.id != node_id {
-                    return None;
+        self.get_node_output_msg_types(node_id)
+            .and_then(|mut msgs| msgs.drain(..1).next())
+    }
+
+    #[allow(dead_code)]
+    pub fn get_node_output_msg_types(&self, node_id: &str) -> Option<Vec<String>> {
+        let node_id = self.get_node_id_by_name(node_id)?;
+        let msgs = self.get_node_output_msg_types_by_id(node_id).ok()?;
+        (!msgs.is_empty()).then_some(msgs)
+    }
+
+    #[allow(dead_code)]
+    pub fn get_node_output_msg_types_by_id(&self, node_id: NodeId) -> CuResult<Vec<String>> {
+        let mut edge_ids = self.get_src_edges(node_id)?;
+        edge_ids.sort();
+
+        let node = self
+            .get_node(node_id)
+            .ok_or_else(|| CuError::from(format!("Node id {node_id} not found")))?;
+
+        let mut msg_order: Vec<(usize, String)> = Vec::new();
+        let mut record_msg = |msg: String, order: usize| {
+            if let Some((existing_order, _)) = msg_order
+                .iter_mut()
+                .find(|(_, existing_msg)| *existing_msg == msg)
+            {
+                if order < *existing_order {
+                    *existing_order = order;
                 }
-                let edges: Vec<_> = self
-                    .0
-                    .edges_directed(node_index, Outgoing)
-                    .map(|edge| edge.id().index())
-                    .collect();
-                if edges.is_empty() {
-                    return None;
-                }
-                let cnx = self
-                    .0
-                    .edge_weight(EdgeIndex::new(edges[0]))
-                    .expect("Found an cnx id but could not retrieve it back");
-                return Some(cnx.msg.clone());
+                return;
             }
-            None
-        })
+            msg_order.push((order, msg));
+        };
+
+        for edge_id in edge_ids {
+            let Some(edge) = self.edge(edge_id) else {
+                continue;
+            };
+            let order = if edge.order == usize::MAX {
+                edge_id
+            } else {
+                edge.order
+            };
+            record_msg(edge.msg.clone(), order);
+        }
+
+        for (msg, order) in node.nc_outputs_with_order() {
+            record_msg(msg.clone(), order);
+        }
+
+        msg_order.sort_by(|(order_a, msg_a), (order_b, msg_b)| {
+            order_a.cmp(order_b).then_with(|| msg_a.cmp(msg_b))
+        });
+        Ok(msg_order.into_iter().map(|(_, msg)| msg).collect())
     }
 
     #[allow(dead_code)]
@@ -1250,6 +1324,8 @@ impl CuGraph {
                 if edges.is_empty() {
                     return None;
                 }
+                let mut edges = edges;
+                edges.sort();
                 let msgs = edges
                     .into_iter()
                     .map(|edge_id| {
@@ -1311,6 +1387,86 @@ impl CuGraph {
     pub fn connect(&mut self, source: NodeId, target: NodeId, msg_type: &str) -> CuResult<()> {
         self.connect_ext(source, target, msg_type, None, None, None)
     }
+}
+
+fn validate_task_kind(
+    node_id: &str,
+    kind: TaskKind,
+    has_inputs: bool,
+    has_outputs: bool,
+) -> CuResult<()> {
+    match kind {
+        TaskKind::Source if has_inputs => Err(CuError::from(format!(
+            "Task '{node_id}' is declared as kind 'source' but has incoming connections. Sources map to CuSrcTask and cannot consume inputs. Use kind: task instead."
+        ))),
+        TaskKind::Regular if !has_inputs => Err(CuError::from(format!(
+            "Task '{node_id}' is declared as kind 'task' but has no incoming connections. Regular tasks map to CuTask and need at least one input connection. Use kind: source if it is input-free."
+        ))),
+        TaskKind::Sink if has_outputs => Err(CuError::from(format!(
+            "Task '{node_id}' is declared as kind 'sink' but has outgoing or NC outputs. Sinks map to CuSinkTask and cannot produce outputs. Use kind: task instead."
+        ))),
+        TaskKind::Sink if !has_inputs => Err(CuError::from(format!(
+            "Task '{node_id}' is declared as kind 'sink' but has no incoming connections. Sinks need at least one input connection so Copper can determine their input message type."
+        ))),
+        _ => Ok(()),
+    }
+}
+
+#[allow(dead_code)]
+pub fn infer_task_kind_for_id(graph: &CuGraph, node_id: NodeId) -> Option<TaskKind> {
+    let node = graph.get_node(node_id)?;
+    if node.get_flavor() != Flavor::Task {
+        return None;
+    }
+
+    let has_inputs = !graph.get_dst_edges(node_id).ok()?.is_empty();
+    let has_outputs = !graph
+        .get_node_output_msg_types_by_id(node_id)
+        .ok()?
+        .is_empty();
+
+    match (has_inputs, has_outputs) {
+        (false, true) => Some(TaskKind::Source),
+        (true, true) => Some(TaskKind::Regular),
+        (true, false) => Some(TaskKind::Sink),
+        (false, false) => None,
+    }
+}
+
+#[allow(dead_code)]
+pub fn resolve_task_kind_for_id(graph: &CuGraph, node_id: NodeId) -> CuResult<TaskKind> {
+    let node = graph
+        .get_node(node_id)
+        .ok_or_else(|| CuError::from(format!("Task node id {node_id} not found")))?;
+    if node.get_flavor() != Flavor::Task {
+        return Err(CuError::from(format!(
+            "Node '{}' is not a task and does not have a task kind.",
+            node.id
+        )));
+    }
+
+    let has_inputs = !graph.get_dst_edges(node_id)?.is_empty();
+    let has_outputs = !graph.get_node_output_msg_types_by_id(node_id)?.is_empty();
+
+    if let Some(kind) = node.get_declared_task_kind() {
+        validate_task_kind(node.id.as_str(), kind, has_inputs, has_outputs)?;
+        return Ok(kind);
+    }
+
+    let inferred = match (has_inputs, has_outputs) {
+        (false, true) => TaskKind::Source,
+        (true, true) => TaskKind::Regular,
+        (true, false) => TaskKind::Sink,
+        (false, false) => {
+            return Err(CuError::from(format!(
+                "Task '{}' has no declared inputs or outputs, so Copper cannot infer whether it is a source, task, or sink. Add `kind: source|task|sink`; source/task nodes also need an output declaration via a connection or `dst: \"{NC_ENDPOINT}\"`.",
+                node.id
+            )));
+        }
+    };
+
+    validate_task_kind(node.id.as_str(), inferred, has_inputs, has_outputs)?;
+    Ok(inferred)
 }
 
 impl core::ops::Index<NodeIndex> for CuGraph {
@@ -2482,14 +2638,13 @@ impl CuConfig {
                 .get_node(node_idx)
                 .ok_or_else(|| CuError::from(format!("Node '{}' missing weight", node.id)))?;
 
-            let is_src = graph.get_dst_edges(node_idx).unwrap_or_default().is_empty();
-            let is_sink = graph.get_src_edges(node_idx).unwrap_or_default().is_empty();
-
             let fillcolor = match node.flavor {
                 Flavor::Bridge => "#faedcd",
-                Flavor::Task if is_src => "#ddefc7",
-                Flavor::Task if is_sink => "#cce0ff",
-                _ => "#f2f2f2",
+                Flavor::Task => match resolve_task_kind_for_id(graph, node_idx)? {
+                    TaskKind::Source => "#ddefc7",
+                    TaskKind::Sink => "#cce0ff",
+                    TaskKind::Regular => "#f2f2f2",
+                },
             };
 
             let port_base = format!("{}{}", node_prefix, sanitize_identifier(&node.id));
@@ -2592,7 +2747,7 @@ pub(crate) fn build_render_topology(graph: &CuGraph, bridges: &[BridgeConfig]) -
 
     let mut nodes: Vec<RenderNode> = Vec::new();
     let mut node_lookup: HashMap<String, usize> = HashMap::new();
-    for (_, node) in graph.get_all_nodes() {
+    for (node_idx, node) in graph.get_all_nodes() {
         let node_id = node.get_id();
         let mut inputs = Vec::new();
         let mut outputs = Vec::new();
@@ -2607,6 +2762,15 @@ pub(crate) fn build_render_topology(graph: &CuGraph, bridges: &[BridgeConfig]) -
                     BridgeChannelConfigRepresentation::Tx { id, .. } => inputs.push(id.clone()),
                 }
             }
+        } else if node.get_flavor() == Flavor::Task {
+            for (idx, msg) in graph
+                .get_node_output_msg_types_by_id(node_idx)
+                .unwrap_or_default()
+                .into_iter()
+                .enumerate()
+            {
+                outputs.push(format!("out{idx}: {msg}"));
+            }
         }
 
         node_lookup.insert(node_id.clone(), nodes.len());
@@ -2620,20 +2784,20 @@ pub(crate) fn build_render_topology(graph: &CuGraph, bridges: &[BridgeConfig]) -
     }
 
     let mut output_port_lookup: Vec<HashMap<String, String>> = vec![HashMap::new(); nodes.len()];
-    let mut output_edges: Vec<_> = graph.0.edge_references().collect();
-    output_edges.sort_by_key(|edge| edge.id().index());
-    for edge in output_edges {
-        let cnx = edge.weight();
-        if let Some(&idx) = node_lookup.get(&cnx.src)
-            && nodes[idx].flavor == Flavor::Task
-            && cnx.src_channel.is_none()
+    for (node_idx, node) in graph.get_all_nodes() {
+        let Some(&idx) = node_lookup.get(&node.get_id()) else {
+            continue;
+        };
+        if node.get_flavor() != Flavor::Task {
+            continue;
+        }
+        for (port_idx, msg) in graph
+            .get_node_output_msg_types_by_id(node_idx)
+            .unwrap_or_default()
+            .into_iter()
+            .enumerate()
         {
-            let port_map = &mut output_port_lookup[idx];
-            if !port_map.contains_key(&cnx.msg) {
-                let label = format!("out{}: {}", port_map.len(), cnx.msg);
-                port_map.insert(cnx.msg.clone(), label.clone());
-                nodes[idx].outputs.push(label);
-            }
+            output_port_lookup[idx].insert(msg.clone(), format!("out{port_idx}: {msg}"));
         }
     }
 
@@ -4590,6 +4754,136 @@ mod tests {
         let config = CuConfig::deserialize_ron(txt).unwrap();
         let logging_config = config.logging.unwrap();
         assert_eq!(logging_config.keyframe_interval.unwrap(), 100);
+    }
+
+    #[test]
+    fn test_task_kind_roundtrip_and_alias() {
+        let txt = r#"(
+            tasks: [
+                (id: "src", type: "a", kind: source),
+                (id: "regular", type: "b", kind: regular),
+                (id: "sink", type: "c", kind: sink),
+            ],
+            cnx: [
+                (src: "src", dst: "regular", msg: "msg::A"),
+                (src: "regular", dst: "sink", msg: "msg::B"),
+            ]
+        )"#;
+
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let graph = config.get_graph(None).unwrap();
+
+        assert_eq!(
+            graph
+                .get_node(graph.get_node_id_by_name("src").unwrap())
+                .unwrap()
+                .get_declared_task_kind(),
+            Some(TaskKind::Source)
+        );
+        assert_eq!(
+            graph
+                .get_node(graph.get_node_id_by_name("regular").unwrap())
+                .unwrap()
+                .get_declared_task_kind(),
+            Some(TaskKind::Regular)
+        );
+        assert_eq!(
+            graph
+                .get_node(graph.get_node_id_by_name("sink").unwrap())
+                .unwrap()
+                .get_declared_task_kind(),
+            Some(TaskKind::Sink)
+        );
+
+        let serialized = config.serialize_ron().unwrap();
+        assert!(serialized.contains("kind: source"));
+        assert!(serialized.contains("kind: task"));
+        assert!(serialized.contains("kind: sink"));
+    }
+
+    #[test]
+    fn test_resolve_task_kind_uses_nc_outputs_for_regular_tasks() {
+        let txt = r#"(
+            tasks: [
+                (id: "src", type: "a"),
+                (id: "regular", type: "b"),
+            ],
+            cnx: [
+                (src: "src", dst: "regular", msg: "msg::A"),
+                (src: "regular", dst: "__nc__", msg: "msg::B"),
+            ]
+        )"#;
+
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let graph = config.get_graph(None).unwrap();
+        let regular_id = graph.get_node_id_by_name("regular").unwrap();
+
+        assert_eq!(
+            resolve_task_kind_for_id(graph, regular_id).unwrap(),
+            TaskKind::Regular
+        );
+    }
+
+    #[test]
+    fn test_resolve_task_kind_rejects_isolated_task_without_kind() {
+        let txt = r#"(
+            tasks: [
+                (id: "lonely", type: "a"),
+            ],
+            cnx: []
+        )"#;
+
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let graph = config.get_graph(None).unwrap();
+        let lonely_id = graph.get_node_id_by_name("lonely").unwrap();
+
+        let err = resolve_task_kind_for_id(graph, lonely_id).expect_err("expected task kind error");
+        assert!(
+            err.to_string()
+                .contains("cannot infer whether it is a source, task, or sink"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_resolve_explicit_source_kind_allows_missing_declared_outputs() {
+        let txt = r#"(
+            tasks: [
+                (id: "src", type: "a", kind: source),
+            ],
+            cnx: []
+        )"#;
+
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let graph = config.get_graph(None).unwrap();
+        let src_id = graph.get_node_id_by_name("src").unwrap();
+
+        assert_eq!(
+            resolve_task_kind_for_id(graph, src_id).unwrap(),
+            TaskKind::Source
+        );
+    }
+
+    #[test]
+    fn test_resolve_explicit_regular_kind_allows_missing_declared_outputs() {
+        let txt = r#"(
+            tasks: [
+                (id: "src", type: "a"),
+                (id: "regular", type: "b", kind: task),
+            ],
+            cnx: [
+                (src: "src", dst: "regular", msg: "msg::A"),
+            ]
+        )"#;
+
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let graph = config.get_graph(None).unwrap();
+        let regular_id = graph.get_node_id_by_name("regular").unwrap();
+
+        assert_eq!(
+            resolve_task_kind_for_id(graph, regular_id).unwrap(),
+            TaskKind::Regular
+        );
     }
 
     #[test]

@@ -532,22 +532,15 @@ fn build_section_layout(
             .get_node(node_idx)
             .ok_or_else(|| CuError::from(format!("Node '{}' missing weight", node.id)))?;
 
-        let is_src = section
-            .graph
-            .get_dst_edges(node_idx)
-            .unwrap_or_default()
-            .is_empty();
-        let is_sink = section
-            .graph
-            .get_src_edges(node_idx)
-            .unwrap_or_default()
-            .is_empty();
-
         let header_fill = match node.flavor {
             config::Flavor::Bridge => BRIDGE_HEADER_BG,
-            config::Flavor::Task if is_src => SOURCE_HEADER_BG,
-            config::Flavor::Task if is_sink => SINK_HEADER_BG,
-            _ => TASK_HEADER_BG,
+            config::Flavor::Task => {
+                match config::resolve_task_kind_for_id(section.graph, node_idx)? {
+                    config::TaskKind::Source => SOURCE_HEADER_BG,
+                    config::TaskKind::Sink => SINK_HEADER_BG,
+                    config::TaskKind::Regular => TASK_HEADER_BG,
+                }
+            }
         };
 
         let (table, port_lookup) = build_node_table(node, node_weight, header_fill);
@@ -4443,12 +4436,20 @@ fn build_graph_signature(config: &config::CuConfig, mission: Option<&str>) -> Cu
 
     let mut nodes: Vec<_> = graph.get_all_nodes();
     nodes.sort_by_key(|a| a.1.get_id());
-    for (_, node) in nodes {
+    for (node_id, node) in nodes {
+        let flavor = match node.get_flavor() {
+            config::Flavor::Bridge => "bridge",
+            config::Flavor::Task => match config::resolve_task_kind_for_id(graph, node_id)? {
+                config::TaskKind::Source => "source",
+                config::TaskKind::Regular => "task",
+                config::TaskKind::Sink => "sink",
+            },
+        };
         parts.push(format!(
             "node|{}|{}|{}",
             node.get_id(),
             node.get_type(),
-            flavor_label(node.get_flavor())
+            flavor
         ));
     }
 
@@ -4474,13 +4475,6 @@ fn format_endpoint(node: &str, channel: Option<&str>) -> String {
     match channel {
         Some(ch) => format!("{node}/{ch}"),
         None => node.to_string(),
-    }
-}
-
-fn flavor_label(flavor: config::Flavor) -> &'static str {
-    match flavor {
-        config::Flavor::Task => "task",
-        config::Flavor::Bridge => "bridge",
     }
 }
 

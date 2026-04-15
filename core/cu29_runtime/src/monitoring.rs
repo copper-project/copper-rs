@@ -4,6 +4,7 @@
 use crate::config::CuConfig;
 use crate::config::{
     BridgeChannelConfigRepresentation, BridgeConfig, ComponentConfig, CuGraph, Flavor, NodeId,
+    TaskKind, resolve_task_kind_for_id,
 };
 use crate::context::CuContext;
 use crate::cutask::CuMsgMetadata;
@@ -1167,33 +1168,18 @@ where
     result
 }
 
-#[derive(Default, Debug, Clone, Copy)]
-struct NodeIoUsage {
-    has_incoming: bool,
-    has_outgoing: bool,
-}
-
 fn collect_output_ports(graph: &CuGraph, node_id: NodeId) -> Vec<(String, String)> {
-    let mut edge_ids = graph.get_src_edges(node_id).unwrap_or_default();
-    edge_ids.sort();
+    let Ok(msg_types) = graph.get_node_output_msg_types_by_id(node_id) else {
+        return Vec::new();
+    };
 
     let mut outputs = Vec::new();
-    let mut seen = Vec::new();
-    let mut port_idx = 0usize;
-    for edge_id in edge_ids {
-        let Some(edge) = graph.edge(edge_id) else {
-            continue;
-        };
-        if seen.iter().any(|msg| msg == &edge.msg) {
-            continue;
-        }
-        seen.push(edge.msg.clone());
+    for (port_idx, msg) in msg_types.into_iter().enumerate() {
         let mut port_label = String::from("out");
         port_label.push_str(&port_idx.to_string());
         port_label.push_str(": ");
-        port_label.push_str(edge.msg.as_str());
-        outputs.push((edge.msg.clone(), port_label));
-        port_idx += 1;
+        port_label.push_str(msg.as_str());
+        outputs.push((msg, port_label));
     }
     outputs
 }
@@ -1202,7 +1188,6 @@ fn collect_output_ports(graph: &CuGraph, node_id: NodeId) -> Vec<(String, String
 pub fn build_monitor_topology(config: &CuConfig, mission: &str) -> CuResult<MonitorTopology> {
     let graph = config.get_graph(Some(mission))?;
     let mut nodes: Map<String, MonitorNode> = Map::new();
-    let mut io_usage: Map<String, NodeIoUsage> = Map::new();
     let mut output_port_lookup: Map<String, Map<String, String>> = Map::new();
 
     let mut bridge_lookup: Map<&str, &BridgeConfig> = Map::new();
@@ -1210,24 +1195,20 @@ pub fn build_monitor_topology(config: &CuConfig, mission: &str) -> CuResult<Moni
         bridge_lookup.insert(bridge.id.as_str(), bridge);
     }
 
-    for cnx in graph.edges() {
-        io_usage.entry(cnx.src.clone()).or_default().has_outgoing = true;
-        io_usage.entry(cnx.dst.clone()).or_default().has_incoming = true;
-    }
-
-    for (_, node) in graph.get_all_nodes() {
+    for (node_idx, node) in graph.get_all_nodes() {
         let node_id = node.get_id();
-        let usage = io_usage.get(node_id.as_str()).cloned().unwrap_or_default();
-        let kind = match node.get_flavor() {
+        let task_kind = match node.get_flavor() {
             Flavor::Bridge => ComponentType::Bridge,
-            _ if !usage.has_incoming && usage.has_outgoing => ComponentType::Source,
-            _ if usage.has_incoming && !usage.has_outgoing => ComponentType::Sink,
-            _ => ComponentType::Task,
+            Flavor::Task => match resolve_task_kind_for_id(graph, node_idx)? {
+                TaskKind::Source => ComponentType::Source,
+                TaskKind::Regular => ComponentType::Task,
+                TaskKind::Sink => ComponentType::Sink,
+            },
         };
 
         let mut inputs = Vec::new();
         let mut outputs = Vec::new();
-        if kind == ComponentType::Bridge {
+        if task_kind == ComponentType::Bridge {
             if let Some(bridge) = bridge_lookup.get(node_id.as_str()) {
                 for ch in &bridge.channels {
                     match ch {
@@ -1239,11 +1220,8 @@ pub fn build_monitor_topology(config: &CuConfig, mission: &str) -> CuResult<Moni
                 }
             }
         } else {
-            if usage.has_incoming || !usage.has_outgoing {
-                inputs.push("in".to_string());
-            }
-            if usage.has_outgoing {
-                if let Some(node_idx) = graph.get_node_id_by_name(node_id.as_str()) {
+            match task_kind {
+                ComponentType::Source => {
                     let ports = collect_output_ports(graph, node_idx);
                     let mut port_map: Map<String, String> = Map::new();
                     for (msg_type, label) in ports {
@@ -1252,8 +1230,20 @@ pub fn build_monitor_topology(config: &CuConfig, mission: &str) -> CuResult<Moni
                     }
                     output_port_lookup.insert(node_id.clone(), port_map);
                 }
-            } else if !usage.has_incoming {
-                outputs.push("out".to_string());
+                ComponentType::Task => {
+                    inputs.push("in".to_string());
+                    let ports = collect_output_ports(graph, node_idx);
+                    let mut port_map: Map<String, String> = Map::new();
+                    for (msg_type, label) in ports {
+                        port_map.insert(msg_type, label.clone());
+                        outputs.push(label);
+                    }
+                    output_port_lookup.insert(node_id.clone(), port_map);
+                }
+                ComponentType::Sink => {
+                    inputs.push("in".to_string());
+                }
+                ComponentType::Bridge => unreachable!("handled above"),
             }
         }
 
@@ -1262,7 +1252,7 @@ pub fn build_monitor_topology(config: &CuConfig, mission: &str) -> CuResult<Moni
             MonitorNode {
                 id: node_id,
                 type_name: Some(node.get_type().to_string()),
-                kind,
+                kind: task_kind,
                 inputs,
                 outputs,
             },

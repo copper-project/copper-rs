@@ -140,6 +140,16 @@ macro_rules! output_msg {
     };
 }
 
+/// Helper trait used by codegen when Copper needs to treat a task output as a
+/// single message slot without relying on config-declared output edges.
+pub trait CuSingleOutputMsg {
+    type Payload: CuMsgPayload;
+}
+
+impl<T: CuMsgPayload> CuSingleOutputMsg for CuMsg<T> {
+    type Payload = T;
+}
+
 /// CuMsgMetadata is a structure that contains metadata common to all CuStampedDataSet.
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, Serialize, Deserialize, Reflect)]
 #[reflect(opaque, from_reflect = false, no_field_bounds)]

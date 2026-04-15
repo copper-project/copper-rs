@@ -1,0 +1,28 @@
+(
+    tasks: [
+        (
+            id: "src",
+            type: "IntSource",
+            kind: source,
+            run_in_sim: true,
+        ),
+        (
+            id: "regular",
+            type: "NcOnlyRegular",
+            kind: task,
+            run_in_sim: true,
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "regular",
+            msg: "i32",
+        ),
+        (
+            src: "regular",
+            dst: "__nc__",
+            msg: "bool",
+        ),
+    ],
+)

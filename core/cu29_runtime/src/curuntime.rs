@@ -3,8 +3,10 @@
 //!
 
 use crate::app::Subsystem;
-use crate::config::{ComponentConfig, CuDirection, DEFAULT_KEYFRAME_INTERVAL, Node};
-use crate::config::{CuConfig, CuGraph, MAX_RATE_TARGET_HZ, NodeId, RuntimeConfig};
+use crate::config::{ComponentConfig, CuDirection, DEFAULT_KEYFRAME_INTERVAL, Node, TaskKind};
+use crate::config::{
+    CuConfig, CuGraph, MAX_RATE_TARGET_HZ, NodeId, RuntimeConfig, resolve_task_kind_for_id,
+};
 use crate::copperlist::{CopperList, CopperListState, CuListZeroedInit, CuListsManager};
 use crate::cutask::{BincodeAdapter, Freezable};
 #[cfg(feature = "std")]
@@ -1500,6 +1502,16 @@ pub enum CuTaskType {
     Sink,
 }
 
+impl From<TaskKind> for CuTaskType {
+    fn from(value: TaskKind) -> Self {
+        match value {
+            TaskKind::Source => CuTaskType::Source,
+            TaskKind::Regular => CuTaskType::Regular,
+            TaskKind::Sink => CuTaskType::Sink,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct CuOutputPack {
     pub culist_index: u32,
@@ -1603,14 +1615,22 @@ fn find_output_pack_from_nodeid(
     None
 }
 
-pub fn find_task_type_for_id(graph: &CuGraph, node_id: NodeId) -> CuTaskType {
-    if graph.incoming_neighbor_count(node_id) == 0 {
-        CuTaskType::Source
-    } else if graph.outgoing_neighbor_count(node_id) == 0 {
-        CuTaskType::Sink
-    } else {
-        CuTaskType::Regular
+pub fn find_task_type_for_id(graph: &CuGraph, node_id: NodeId) -> CuResult<CuTaskType> {
+    let node = graph
+        .get_node(node_id)
+        .ok_or_else(|| CuError::from(format!("Node id {node_id} not found")))?;
+
+    if node.get_flavor() == crate::config::Flavor::Task {
+        return resolve_task_kind_for_id(graph, node_id).map(Into::into);
     }
+
+    let has_inputs = !graph.get_dst_edges(node_id)?.is_empty();
+    let has_outputs = !graph.get_src_edges(node_id)?.is_empty();
+    Ok(match (has_inputs, has_outputs) {
+        (false, true) => CuTaskType::Source,
+        (true, false) => CuTaskType::Sink,
+        _ => CuTaskType::Regular,
+    })
 }
 
 /// The connection id used here is the index of the config graph edge that equates to the wanted
@@ -1619,52 +1639,13 @@ fn sort_inputs_by_cnx_id(input_msg_indices_types: &mut [CuInputMsg]) {
     input_msg_indices_types.sort_by_key(|input| input.edge_id);
 }
 
-fn collect_output_msg_types(graph: &CuGraph, node_id: NodeId) -> Vec<String> {
-    let mut edge_ids = graph.get_src_edges(node_id).unwrap_or_default();
-    edge_ids.sort();
-
-    let mut msg_order: Vec<(usize, String)> = Vec::new();
-    let mut record_msg = |msg: String, order: usize| {
-        if let Some((existing_order, _)) = msg_order
-            .iter_mut()
-            .find(|(_, existing_msg)| *existing_msg == msg)
-        {
-            if order < *existing_order {
-                *existing_order = order;
-            }
-            return;
-        }
-        msg_order.push((order, msg));
-    };
-
-    for edge_id in edge_ids {
-        if let Some(edge) = graph.edge(edge_id) {
-            let order = if edge.order == usize::MAX {
-                edge_id
-            } else {
-                edge.order
-            };
-            record_msg(edge.msg.clone(), order);
-        }
-    }
-    if let Some(node) = graph.get_node(node_id) {
-        for (msg, order) in node.nc_outputs_with_order() {
-            record_msg(msg.clone(), order);
-        }
-    }
-
-    msg_order.sort_by(|(order_a, msg_a), (order_b, msg_b)| {
-        order_a.cmp(order_b).then_with(|| msg_a.cmp(msg_b))
-    });
-    msg_order.into_iter().map(|(_, msg)| msg).collect()
-}
 /// Explores a subbranch and build the partial plan out of it.
 fn plan_tasks_tree_branch(
     graph: &CuGraph,
     mut next_culist_output_index: u32,
     starting_point: NodeId,
     plan: &mut Vec<CuExecutionUnit>,
-) -> (u32, bool) {
+) -> CuResult<(u32, bool)> {
     #[cfg(all(feature = "std", feature = "macro_debug"))]
     eprintln!("-- starting branch from node {starting_point}");
 
@@ -1677,18 +1658,18 @@ fn plan_tasks_tree_branch(
 
         let mut input_msg_indices_types: Vec<CuInputMsg> = Vec::new();
         let output_msg_pack: Option<CuOutputPack>;
-        let task_type = find_task_type_for_id(graph, id);
+        let task_type = find_task_type_for_id(graph, id)?;
 
         match task_type {
             CuTaskType::Source => {
                 #[cfg(all(feature = "std", feature = "macro_debug"))]
                 eprintln!("    → Source node, assign output index {next_culist_output_index}");
-                let msg_types = collect_output_msg_types(graph, id);
+                let msg_types = graph.get_node_output_msg_types_by_id(id)?;
                 if msg_types.is_empty() {
-                    panic!(
-                        "Source node '{}' has no outgoing connections",
+                    return Err(CuError::from(format!(
+                        "Source node '{}' has no declared outputs",
                         node_ref.get_id()
-                    );
+                    )));
                 }
                 output_msg_pack = Some(CuOutputPack {
                     culist_index: next_culist_output_index,
@@ -1733,7 +1714,7 @@ fn plan_tasks_tree_branch(
                     } else {
                         #[cfg(all(feature = "std", feature = "macro_debug"))]
                         eprintln!("      ✗ Input from {pid} not ready, returning");
-                        return (next_culist_output_index, handled);
+                        return Ok((next_culist_output_index, handled));
                     }
                 }
                 output_msg_pack = Some(CuOutputPack {
@@ -1779,15 +1760,15 @@ fn plan_tasks_tree_branch(
                     } else {
                         #[cfg(all(feature = "std", feature = "macro_debug"))]
                         eprintln!("      ✗ Input from {pid} not ready, returning");
-                        return (next_culist_output_index, handled);
+                        return Ok((next_culist_output_index, handled));
                     }
                 }
-                let msg_types = collect_output_msg_types(graph, id);
+                let msg_types = graph.get_node_output_msg_types_by_id(id)?;
                 if msg_types.is_empty() {
-                    panic!(
-                        "Regular node '{}' has no outgoing connections",
+                    return Err(CuError::from(format!(
+                        "Regular node '{}' has no declared outputs",
                         node_ref.get_id()
-                    );
+                    )));
                 }
                 output_msg_pack = Some(CuOutputPack {
                     culist_index: next_culist_output_index,
@@ -1828,7 +1809,7 @@ fn plan_tasks_tree_branch(
 
     #[cfg(all(feature = "std", feature = "macro_debug"))]
     eprintln!("-- finished branch from node {starting_point} with handled={handled}");
-    (next_culist_output_index, handled)
+    Ok((next_culist_output_index, handled))
 }
 
 /// This is the main heuristics to compute an execution plan at compilation time.
@@ -1839,11 +1820,12 @@ pub fn compute_runtime_plan(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
     let mut plan = Vec::new();
     let mut next_culist_output_index = 0u32;
 
-    let mut queue: VecDeque<NodeId> = graph
-        .node_ids()
-        .into_iter()
-        .filter(|&node_id| find_task_type_for_id(graph, node_id) == CuTaskType::Source)
-        .collect();
+    let mut queue: VecDeque<NodeId> = VecDeque::new();
+    for node_id in graph.node_ids() {
+        if find_task_type_for_id(graph, node_id)? == CuTaskType::Source {
+            queue.push_back(node_id);
+        }
+    }
 
     #[cfg(all(feature = "std", feature = "macro_debug"))]
     eprintln!("Initial source nodes: {queue:?}");
@@ -1864,7 +1846,7 @@ pub fn compute_runtime_plan(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
             #[cfg(all(feature = "std", feature = "macro_debug"))]
             eprintln!("    Planning from node {node_id}");
             let (new_index, handled) =
-                plan_tasks_tree_branch(graph, next_culist_output_index, node_id, &mut plan);
+                plan_tasks_tree_branch(graph, next_culist_output_index, node_id, &mut plan)?;
             next_culist_output_index = new_index;
 
             if !handled {
@@ -2401,6 +2383,39 @@ mod tests {
         let output_pack = src_step.output_msg_pack.as_ref().unwrap();
         assert_eq!(output_pack.msg_types, vec!["msg::A", "msg::B"]);
         assert_eq!(dst_step.input_msg_indices_types[0].src_port, 0);
+    }
+
+    #[test]
+    fn test_runtime_plan_infers_regular_task_when_outputs_are_nc_only() {
+        let txt = r#"(
+            tasks: [
+                (id: "src", type: "a"),
+                (id: "regular", type: "b"),
+            ],
+            cnx: [
+                (src: "src", dst: "regular", msg: "msg::A"),
+                (src: "regular", dst: "__nc__", msg: "msg::B"),
+            ]
+        )"#;
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let graph = config.get_graph(None).unwrap();
+        let regular_id = graph.get_node_id_by_name("regular").unwrap();
+
+        let runtime = compute_runtime_plan(graph).unwrap();
+        let regular_step = runtime
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                CuExecutionUnit::Step(step) if step.node_id == regular_id => Some(step),
+                _ => None,
+            })
+            .unwrap();
+
+        assert_eq!(regular_step.task_type, CuTaskType::Regular);
+        assert_eq!(
+            regular_step.output_msg_pack.as_ref().unwrap().msg_types,
+            vec!["msg::B"]
+        );
     }
 
     #[test]
