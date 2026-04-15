@@ -34,9 +34,19 @@ extern crate alloc;
 #[cfg(feature = "std")]
 use core::cell::Cell;
 #[cfg(feature = "std")]
-use std::sync::Arc;
+use std::backtrace::Backtrace;
+#[cfg(feature = "std")]
+use std::fs::File;
+#[cfg(feature = "std")]
+use std::io::Write;
+#[cfg(feature = "std")]
+use std::panic::PanicHookInfo;
+#[cfg(feature = "std")]
+use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 #[cfg(feature = "std")]
 use std::thread_local;
+#[cfg(feature = "std")]
+use std::time::{SystemTime, UNIX_EPOCH};
 #[cfg(feature = "std")]
 use std::{collections::HashMap as Map, string::String, string::ToString, vec::Vec};
 
@@ -719,10 +729,23 @@ pub struct CuMonitoringRuntime {
 }
 
 impl CuMonitoringRuntime {
+    #[cfg(feature = "std")]
+    pub fn new(execution_probe: MonitorExecutionProbe) -> Self {
+        ensure_runtime_panic_hook_installed();
+        Self { execution_probe }
+    }
+
+    #[cfg(not(feature = "std"))]
     pub const fn new(execution_probe: MonitorExecutionProbe) -> Self {
         Self { execution_probe }
     }
 
+    #[cfg(feature = "std")]
+    pub fn unavailable() -> Self {
+        Self::new(MonitorExecutionProbe::unavailable())
+    }
+
+    #[cfg(not(feature = "std"))]
     pub const fn unavailable() -> Self {
         Self::new(MonitorExecutionProbe::unavailable())
     }
@@ -730,6 +753,342 @@ impl CuMonitoringRuntime {
     pub fn execution_probe(&self) -> &MonitorExecutionProbe {
         &self.execution_probe
     }
+
+    #[cfg(feature = "std")]
+    pub fn register_panic_cleanup<F>(&self, callback: F) -> PanicHookRegistration
+    where
+        F: Fn(&PanicReport) + Send + Sync + 'static,
+    {
+        ensure_runtime_panic_hook_installed();
+        register_panic_cleanup(callback)
+    }
+
+    #[cfg(feature = "std")]
+    pub fn register_panic_action<F>(&self, callback: F) -> PanicHookRegistration
+    where
+        F: Fn(&PanicReport) -> Option<i32> + Send + Sync + 'static,
+    {
+        ensure_runtime_panic_hook_installed();
+        register_panic_action(callback)
+    }
+}
+
+#[cfg(feature = "std")]
+type PanicCleanupCallback = Arc<dyn Fn(&PanicReport) + Send + Sync + 'static>;
+#[cfg(feature = "std")]
+type PanicActionCallback = Arc<dyn Fn(&PanicReport) -> Option<i32> + Send + Sync + 'static>;
+
+#[cfg(feature = "std")]
+#[derive(Debug, Clone)]
+pub struct PanicReport {
+    message: String,
+    location: Option<String>,
+    thread_name: Option<String>,
+    backtrace: String,
+    timestamp_unix_ms: u128,
+    crash_report_path: Option<String>,
+}
+
+#[cfg(feature = "std")]
+impl PanicReport {
+    fn capture(info: &PanicHookInfo<'_>) -> Self {
+        let location = info
+            .location()
+            .map(|loc| format!("{}:{}:{}", loc.file(), loc.line(), loc.column()));
+        let thread_name = std::thread::current().name().map(|name| name.to_string());
+        let timestamp_unix_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|dur| dur.as_millis())
+            .unwrap_or(0);
+
+        Self {
+            message: panic_hook_payload_to_string(info),
+            location,
+            thread_name,
+            backtrace: Backtrace::force_capture().to_string(),
+            timestamp_unix_ms,
+            crash_report_path: None,
+        }
+    }
+
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+
+    pub fn location(&self) -> Option<&str> {
+        self.location.as_deref()
+    }
+
+    pub fn thread_name(&self) -> Option<&str> {
+        self.thread_name.as_deref()
+    }
+
+    pub fn backtrace(&self) -> &str {
+        &self.backtrace
+    }
+
+    pub fn timestamp_unix_ms(&self) -> u128 {
+        self.timestamp_unix_ms
+    }
+
+    pub fn crash_report_path(&self) -> Option<&str> {
+        self.crash_report_path.as_deref()
+    }
+
+    pub fn summary(&self) -> String {
+        match self.location() {
+            Some(location) => format!("panic at {location}: {}", self.message()),
+            None => format!("panic: {}", self.message()),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PanicHookRegistrationKind {
+    Cleanup,
+    Action,
+}
+
+#[cfg(feature = "std")]
+#[derive(Clone)]
+struct RegisteredPanicCleanup {
+    id: usize,
+    callback: PanicCleanupCallback,
+}
+
+#[cfg(feature = "std")]
+#[derive(Clone)]
+struct RegisteredPanicAction {
+    id: usize,
+    callback: PanicActionCallback,
+}
+
+#[cfg(feature = "std")]
+#[derive(Default)]
+struct PanicHookRegistry {
+    cleanup_callbacks: StdMutex<Vec<RegisteredPanicCleanup>>,
+    action_callbacks: StdMutex<Vec<RegisteredPanicAction>>,
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug)]
+pub struct PanicHookRegistration {
+    id: usize,
+    kind: PanicHookRegistrationKind,
+}
+
+#[cfg(feature = "std")]
+impl Drop for PanicHookRegistration {
+    fn drop(&mut self) {
+        unregister_panic_hook(self.kind, self.id);
+    }
+}
+
+#[cfg(feature = "std")]
+static PANIC_HOOK_REGISTRY: OnceLock<PanicHookRegistry> = OnceLock::new();
+#[cfg(feature = "std")]
+static PANIC_HOOK_INSTALL_ONCE: OnceLock<()> = OnceLock::new();
+#[cfg(feature = "std")]
+static PANIC_HOOK_REGISTRATION_ID: AtomicUsize = AtomicUsize::new(1);
+#[cfg(feature = "std")]
+static PANIC_HOOK_ACTIVE_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(feature = "std")]
+fn panic_hook_registry() -> &'static PanicHookRegistry {
+    PANIC_HOOK_REGISTRY.get_or_init(PanicHookRegistry::default)
+}
+
+#[cfg(feature = "std")]
+fn ensure_runtime_panic_hook_installed() {
+    let _ = PANIC_HOOK_INSTALL_ONCE.get_or_init(|| {
+        std::panic::set_hook(Box::new(move |info| {
+            let _guard = PanicHookActiveGuard::new();
+            let mut report = PanicReport::capture(info);
+            run_panic_cleanup_callbacks(&report);
+            report.crash_report_path = write_panic_report_to_file(&report);
+            emit_panic_report(&report);
+
+            if let Some(exit_code) = run_panic_action_callbacks(&report) {
+                std::process::exit(exit_code);
+            }
+        }));
+    });
+}
+
+#[cfg(feature = "std")]
+struct PanicHookActiveGuard;
+
+#[cfg(feature = "std")]
+impl PanicHookActiveGuard {
+    fn new() -> Self {
+        PANIC_HOOK_ACTIVE_COUNT.fetch_add(1, Ordering::SeqCst);
+        Self
+    }
+}
+
+#[cfg(feature = "std")]
+impl Drop for PanicHookActiveGuard {
+    fn drop(&mut self) {
+        PANIC_HOOK_ACTIVE_COUNT.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+#[cfg(feature = "std")]
+pub fn runtime_panic_hook_active() -> bool {
+    PANIC_HOOK_ACTIVE_COUNT.load(Ordering::SeqCst) > 0
+}
+
+#[cfg(not(feature = "std"))]
+pub const fn runtime_panic_hook_active() -> bool {
+    false
+}
+
+#[cfg(feature = "std")]
+fn register_panic_cleanup<F>(callback: F) -> PanicHookRegistration
+where
+    F: Fn(&PanicReport) + Send + Sync + 'static,
+{
+    let id = PANIC_HOOK_REGISTRATION_ID.fetch_add(1, Ordering::Relaxed);
+    let callback = Arc::new(callback) as PanicCleanupCallback;
+    let mut callbacks = panic_hook_registry()
+        .cleanup_callbacks
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
+    callbacks.push(RegisteredPanicCleanup { id, callback });
+    PanicHookRegistration {
+        id,
+        kind: PanicHookRegistrationKind::Cleanup,
+    }
+}
+
+#[cfg(feature = "std")]
+fn register_panic_action<F>(callback: F) -> PanicHookRegistration
+where
+    F: Fn(&PanicReport) -> Option<i32> + Send + Sync + 'static,
+{
+    let id = PANIC_HOOK_REGISTRATION_ID.fetch_add(1, Ordering::Relaxed);
+    let callback = Arc::new(callback) as PanicActionCallback;
+    let mut callbacks = panic_hook_registry()
+        .action_callbacks
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
+    callbacks.push(RegisteredPanicAction { id, callback });
+    PanicHookRegistration {
+        id,
+        kind: PanicHookRegistrationKind::Action,
+    }
+}
+
+#[cfg(feature = "std")]
+fn unregister_panic_hook(kind: PanicHookRegistrationKind, id: usize) {
+    let registry = panic_hook_registry();
+    match kind {
+        PanicHookRegistrationKind::Cleanup => {
+            let mut callbacks = registry
+                .cleanup_callbacks
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
+            callbacks.retain(|entry| entry.id != id);
+        }
+        PanicHookRegistrationKind::Action => {
+            let mut callbacks = registry
+                .action_callbacks
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
+            callbacks.retain(|entry| entry.id != id);
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+fn run_panic_cleanup_callbacks(report: &PanicReport) {
+    let callbacks = panic_hook_registry()
+        .cleanup_callbacks
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
+        .clone();
+    for entry in callbacks {
+        (entry.callback)(report);
+    }
+}
+
+#[cfg(feature = "std")]
+fn run_panic_action_callbacks(report: &PanicReport) -> Option<i32> {
+    let callbacks = panic_hook_registry()
+        .action_callbacks
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
+        .clone();
+    let mut exit_code = None;
+    for entry in callbacks {
+        if exit_code.is_none() {
+            exit_code = (entry.callback)(report);
+        } else {
+            let _ = (entry.callback)(report);
+        }
+    }
+    exit_code
+}
+
+#[cfg(feature = "std")]
+fn panic_hook_payload_to_string(info: &PanicHookInfo<'_>) -> String {
+    if let Some(msg) = info.payload().downcast_ref::<&str>() {
+        (*msg).to_string()
+    } else if let Some(msg) = info.payload().downcast_ref::<String>() {
+        msg.clone()
+    } else {
+        "panic with non-string payload".to_string()
+    }
+}
+
+#[cfg(feature = "std")]
+fn render_panic_report(report: &PanicReport) -> String {
+    let mut rendered = String::from("Copper panic\n");
+    rendered.push_str(&format!("time_unix_ms: {}\n", report.timestamp_unix_ms()));
+    rendered.push_str(&format!(
+        "thread: {}\n",
+        report.thread_name().unwrap_or("<unnamed>")
+    ));
+    if let Some(location) = report.location() {
+        rendered.push_str(&format!("location: {location}\n"));
+    }
+    rendered.push_str(&format!("message: {}\n", report.message()));
+    if let Some(path) = report.crash_report_path() {
+        rendered.push_str(&format!("crash_report: {path}\n"));
+    }
+    rendered.push_str("\nBacktrace:\n");
+    rendered.push_str(report.backtrace());
+    if !report.backtrace().ends_with('\n') {
+        rendered.push('\n');
+    }
+    rendered
+}
+
+#[cfg(feature = "std")]
+fn emit_panic_report(report: &PanicReport) {
+    let mut stderr = std::io::stderr().lock();
+    let _ = stderr.write_all(render_panic_report(report).as_bytes());
+    let _ = stderr.flush();
+}
+
+#[cfg(feature = "std")]
+fn write_panic_report_to_file(report: &PanicReport) -> Option<String> {
+    let cwd = std::env::current_dir().ok()?;
+    let file_name = format!(
+        "copper-crash-{}-{}.txt",
+        report.timestamp_unix_ms(),
+        std::process::id()
+    );
+    let path = cwd.join(file_name);
+    let path_string = path.to_string_lossy().to_string();
+    let mut file = File::create(&path).ok()?;
+    let mut report_with_path = report.clone();
+    report_with_path.crash_report_path = Some(path_string.clone());
+    file.write_all(render_panic_report(&report_with_path).as_bytes())
+        .ok()?;
+    file.flush().ok()?;
+    Some(path_string)
 }
 
 /// Monitor decision to be taken when a component step errored out.

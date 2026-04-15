@@ -1,6 +1,6 @@
 # CI-aligned helpers mirroring .github/workflows/general.yml
-BASE_FEATURES := "mock,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug"
-WINDOWS_BASE_FEATURES := "mock,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode"
+BASE_FEATURES := "mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug"
+WINDOWS_BASE_FEATURES := "mock,cu-sensor-payloads/image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode"
 export ROOT := `git rev-parse --show-toplevel`
 EMBEDDED_EXCLUDES := shell('python3 $1/support/ci/embedded_crates.py excludes', ROOT)
 PREK_FMT_FIX_HOOKS := "trailing-whitespace mixed-line-ending"
@@ -104,6 +104,9 @@ clippy-nostd:
 
 # Run std and no_std unit tests.
 test:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
 	cargo +stable nextest run --all-targets --workspace {{EMBEDDED_EXCLUDES}}
 	cargo +stable nextest run --no-default-features
 
@@ -219,6 +222,12 @@ rtsan-smoke pkg="cu-caterpillar" bin="cu-caterpillar" args="" options="halt_on_e
 		cargo run --profile screaming -p "{{pkg}}" --features rtsan --bin "{{bin}}" -- {{args}}
 
 # Project-specific helpers now live in per-directory justfiles under examples/, components/, support/, and catalog/.
+
+# Install hidden desktop entries so Wayland can map sim app_ids to the Copper icon.
+install-sim-desktop-entries:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	bash support/linux/install_sim_desktop_entries.sh "{{ROOT}}"
 
 # Build and open the generated wiki + API docs locally.
 docs:

@@ -1,4 +1,5 @@
 pub mod tasks;
+mod windowing;
 
 use bevy::app::AppExit;
 use bevy::asset::RenderAssetUsages;
@@ -91,41 +92,43 @@ fn main() {
     let mut copper = build_copper_driver();
     let monitor_model = copper.copper_app.copper_runtime_mut().monitor.model();
 
-    App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(primary_window()),
-            ..default()
-        }))
-        .add_plugins(
-            CuBevyMonPlugin::new(monitor_model)
-                .with_initial_focus(CuBevyMonSurface::Sim)
-                .with_font_size(24)
-                .with_options(MonitorUiOptions {
-                    show_quit_hint: false,
-                }),
-        )
-        .insert_resource(ClearColor(Color::srgb(0.04, 0.05, 0.07)))
-        .insert_resource(copper)
-        .init_resource::<LayoutSpawned>()
-        .init_resource::<DemoCameraRig>()
-        .add_systems(
-            Startup,
-            (setup_scene, setup_ui_camera, start_copper_runtime),
-        )
-        .add_systems(
-            Update,
-            (
-                spawn_demo_layout,
-                drive_sim_controls,
-                handle_sim_zoom,
-                sync_demo_camera,
-                animate_scene,
-                update_demo_hud,
-                run_copper_iteration,
-            ),
-        )
-        .add_systems(PostUpdate, stop_copper_on_exit)
-        .run();
+    let mut app = App::new();
+    app.add_plugins(DefaultPlugins.set(WindowPlugin {
+        primary_window: Some(primary_window()),
+        ..default()
+    }));
+    #[cfg(not(target_arch = "wasm32"))]
+    app.add_systems(Update, windowing::set_copper_window_icon);
+    app.add_plugins(
+        CuBevyMonPlugin::new(monitor_model)
+            .with_initial_focus(CuBevyMonSurface::Sim)
+            .with_font_size(24)
+            .with_options(MonitorUiOptions {
+                show_quit_hint: false,
+            }),
+    )
+    .insert_resource(ClearColor(Color::srgb(0.04, 0.05, 0.07)))
+    .insert_resource(copper)
+    .init_resource::<LayoutSpawned>()
+    .init_resource::<DemoCameraRig>()
+    .add_systems(
+        Startup,
+        (setup_scene, setup_ui_camera, start_copper_runtime),
+    )
+    .add_systems(
+        Update,
+        (
+            spawn_demo_layout,
+            drive_sim_controls,
+            handle_sim_zoom,
+            sync_demo_camera,
+            animate_scene,
+            update_demo_hud,
+            run_copper_iteration,
+        ),
+    )
+    .add_systems(PostUpdate, stop_copper_on_exit);
+    app.run();
 }
 
 fn build_copper_driver() -> CopperDriver {
@@ -163,6 +166,7 @@ fn start_copper_runtime(mut copper: ResMut<CopperDriver>) {
 fn primary_window() -> Window {
     Window {
         title: "Copper BevyMon Demo".into(),
+        name: Some("io.github.copper-project.bevymon-demo".into()),
         resolution: (1600, 900).into(),
         ..default()
     }
