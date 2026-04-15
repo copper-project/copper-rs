@@ -43,6 +43,7 @@ use portable_atomic::{AtomicU64, Ordering};
 
 use alloc::format;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::fmt::{Display, Formatter};
 use core::ops::{AddAssign, Div, Mul, SubAssign};
 
@@ -330,8 +331,241 @@ impl Display for CuDuration {
     }
 }
 
-/// A robot time is just a duration from a fixed point in time.
-pub type CuTime = CuDuration;
+/// A robot time is a monotonic timestamp in nanoseconds from the robot clock epoch.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "reflect", derive(Reflect))]
+#[repr(transparent)]
+pub struct CuTime(pub u64);
+
+impl CuTime {
+    pub const MIN: CuTime = CuTime(0u64);
+    pub const MAX: CuTime = CuTime(NONE_VALUE - 1);
+
+    pub fn max(self, other: CuTime) -> CuTime {
+        let Self(lhs) = self;
+        let Self(rhs) = other;
+        CuTime(lhs.max(rhs))
+    }
+
+    pub fn min(self, other: CuTime) -> CuTime {
+        let Self(lhs) = self;
+        let Self(rhs) = other;
+        CuTime(lhs.min(rhs))
+    }
+
+    pub fn as_nanos(&self) -> u64 {
+        let Self(nanos) = self;
+        *nanos
+    }
+
+    pub fn as_micros(&self) -> u64 {
+        self.as_nanos() / 1_000
+    }
+
+    pub fn as_millis(&self) -> u64 {
+        self.as_nanos() / 1_000_000
+    }
+
+    pub fn as_secs(&self) -> u64 {
+        self.as_nanos() / 1_000_000_000
+    }
+
+    pub fn from_nanos(nanos: u64) -> Self {
+        CuTime(nanos)
+    }
+
+    pub fn from_micros(micros: u64) -> Self {
+        CuTime::from(CuDuration::from_micros(micros))
+    }
+
+    pub fn from_millis(millis: u64) -> Self {
+        CuTime::from(CuDuration::from_millis(millis))
+    }
+
+    pub fn from_secs(secs: u64) -> Self {
+        CuTime::from(CuDuration::from_secs(secs))
+    }
+}
+
+impl SaturatingSub for CuTime {
+    fn saturating_sub(self, other: Self) -> Self {
+        let Self(lhs) = self;
+        let Self(rhs) = other;
+        CuTime(lhs.saturating_sub(rhs))
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<std::time::Duration> for CuTime {
+    fn from(duration: std::time::Duration) -> Self {
+        CuTime::from(CuDuration::from(duration))
+    }
+}
+
+#[cfg(not(feature = "std"))]
+impl From<core::time::Duration> for CuTime {
+    fn from(duration: core::time::Duration) -> Self {
+        CuTime::from(CuDuration::from(duration))
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<CuTime> for std::time::Duration {
+    fn from(val: CuTime) -> Self {
+        std::time::Duration::from_nanos(val.as_nanos())
+    }
+}
+
+impl From<u64> for CuTime {
+    fn from(time: u64) -> Self {
+        CuTime(time)
+    }
+}
+
+impl From<CuTime> for u64 {
+    fn from(val: CuTime) -> Self {
+        let CuTime(nanos) = val;
+        nanos
+    }
+}
+
+impl From<CuDuration> for CuTime {
+    fn from(duration: CuDuration) -> Self {
+        CuTime(duration.as_nanos())
+    }
+}
+
+impl From<CuTime> for CuDuration {
+    fn from(time: CuTime) -> Self {
+        CuDuration(time.as_nanos())
+    }
+}
+
+impl Add for CuTime {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        CuTime(self.as_nanos().saturating_add(rhs.as_nanos()))
+    }
+}
+
+impl Add<CuDuration> for CuTime {
+    type Output = Self;
+
+    fn add(self, rhs: CuDuration) -> Self::Output {
+        CuTime(self.as_nanos().saturating_add(rhs.as_nanos()))
+    }
+}
+
+impl AddAssign<CuDuration> for CuTime {
+    fn add_assign(&mut self, rhs: CuDuration) {
+        *self = *self + rhs;
+    }
+}
+
+impl AddAssign for CuTime {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs;
+    }
+}
+
+impl Sub<CuDuration> for CuTime {
+    type Output = Self;
+
+    fn sub(self, rhs: CuDuration) -> Self::Output {
+        CuTime(self.as_nanos().saturating_sub(rhs.as_nanos()))
+    }
+}
+
+impl SubAssign<CuDuration> for CuTime {
+    fn sub_assign(&mut self, rhs: CuDuration) {
+        *self = *self - rhs;
+    }
+}
+
+impl SubAssign for CuTime {
+    fn sub_assign(&mut self, rhs: Self) {
+        *self = CuTime(self.as_nanos().saturating_sub(rhs.as_nanos()));
+    }
+}
+
+impl Sub for CuTime {
+    type Output = CuDuration;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        CuDuration(self.as_nanos().saturating_sub(rhs.as_nanos()))
+    }
+}
+
+impl<T> Div<T> for CuTime
+where
+    T: Into<u64>,
+{
+    type Output = Self;
+
+    fn div(self, rhs: T) -> Self::Output {
+        CuTime(self.as_nanos() / rhs.into())
+    }
+}
+
+impl<T> Mul<T> for CuTime
+where
+    T: Into<u64>,
+{
+    type Output = Self;
+
+    fn mul(self, rhs: T) -> Self::Output {
+        CuTime(self.as_nanos() * rhs.into())
+    }
+}
+
+impl Mul<CuTime> for u64 {
+    type Output = CuTime;
+
+    fn mul(self, rhs: CuTime) -> Self::Output {
+        CuTime(self * rhs.as_nanos())
+    }
+}
+
+impl Mul<CuTime> for u32 {
+    type Output = CuTime;
+
+    fn mul(self, rhs: CuTime) -> Self::Output {
+        CuTime(self as u64 * rhs.as_nanos())
+    }
+}
+
+impl Mul<CuTime> for i32 {
+    type Output = CuTime;
+
+    fn mul(self, rhs: CuTime) -> Self::Output {
+        CuTime(self as u64 * rhs.as_nanos())
+    }
+}
+
+impl Encode for CuTime {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        self.as_nanos().encode(encoder)
+    }
+}
+
+impl<Context> Decode<Context> for CuTime {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        Ok(CuTime(u64::decode(decoder)?))
+    }
+}
+
+impl<'de, Context> BorrowDecode<'de, Context> for CuTime {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        Ok(CuTime(u64::decode(decoder)?))
+    }
+}
+
+impl Display for CuTime {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        CuDuration(self.as_nanos()).fmt(f)
+    }
+}
 
 /// A busy looping function based on this clock for a duration.
 /// Mainly useful for embedded to spinlocking.
@@ -357,15 +591,17 @@ pub struct OptionCuTime(CuTime);
 const NONE_VALUE: u64 = 0xFFFFFFFFFFFFFFFF;
 
 impl OptionCuTime {
+    pub const NONE_SENTINEL_NANOS: u64 = NONE_VALUE;
+
     #[inline]
     pub fn is_none(&self) -> bool {
-        let Self(CuDuration(nanos)) = self;
+        let Self(CuTime(nanos)) = self;
         *nanos == NONE_VALUE
     }
 
     #[inline]
     pub const fn none() -> Self {
-        OptionCuTime(CuDuration(NONE_VALUE))
+        OptionCuTime(CuTime(NONE_VALUE))
     }
 
     #[inline]
@@ -398,7 +634,7 @@ impl From<Option<CuTime>> for OptionCuTime {
     fn from(duration: Option<CuTime>) -> Self {
         match duration {
             Some(duration) => OptionCuTime(duration),
-            None => OptionCuTime(CuDuration(NONE_VALUE)),
+            None => OptionCuTime(CuTime(NONE_VALUE)),
         }
     }
 }
@@ -406,11 +642,11 @@ impl From<Option<CuTime>> for OptionCuTime {
 impl From<OptionCuTime> for Option<CuTime> {
     #[inline]
     fn from(val: OptionCuTime) -> Self {
-        let OptionCuTime(CuDuration(nanos)) = val;
+        let OptionCuTime(CuTime(nanos)) = val;
         if nanos == NONE_VALUE {
             None
         } else {
-            Some(CuDuration(nanos))
+            Some(CuTime(nanos))
         }
     }
 }
@@ -420,6 +656,40 @@ impl From<CuTime> for OptionCuTime {
     fn from(val: CuTime) -> Self {
         Some(val).into()
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClockDebugScalarKind {
+    Time,
+    OptionalTime,
+    Duration,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClockDebugScalarRegistration {
+    pub type_path: &'static str,
+    pub field_type: &'static str,
+    pub kind: ClockDebugScalarKind,
+}
+
+pub fn debug_scalar_registrations() -> Vec<ClockDebugScalarRegistration> {
+    alloc::vec![
+        ClockDebugScalarRegistration {
+            type_path: core::any::type_name::<CuDuration>(),
+            field_type: "integer",
+            kind: ClockDebugScalarKind::Duration,
+        },
+        ClockDebugScalarRegistration {
+            type_path: core::any::type_name::<CuTime>(),
+            field_type: "integer",
+            kind: ClockDebugScalarKind::Time,
+        },
+        ClockDebugScalarRegistration {
+            type_path: core::any::type_name::<OptionCuTime>(),
+            field_type: "integer",
+            kind: ClockDebugScalarKind::OptionalTime,
+        },
+    ]
 }
 
 /// Represents a time range.
@@ -488,16 +758,25 @@ impl Display for Tov {
 
 impl From<Option<CuDuration>> for Tov {
     fn from(duration: Option<CuDuration>) -> Self {
-        match duration {
-            Some(duration) => Tov::Time(duration),
-            None => Tov::None,
-        }
+        duration.map(CuTime::from).map_or(Tov::None, Tov::Time)
+    }
+}
+
+impl From<Option<CuTime>> for Tov {
+    fn from(time: Option<CuTime>) -> Self {
+        time.map_or(Tov::None, Tov::Time)
     }
 }
 
 impl From<CuDuration> for Tov {
     fn from(duration: CuDuration) -> Self {
-        Tov::Time(duration)
+        Tov::Time(duration.into())
+    }
+}
+
+impl From<CuTime> for Tov {
+    fn from(time: CuTime) -> Self {
+        Tov::Time(time)
     }
 }
 
@@ -616,7 +895,7 @@ impl RobotClockMock {
     /// A convenient way to get the current time from the mocking side.
     pub fn now(&self) -> CuTime {
         let Self(mock_state) = self;
-        CuDuration(mock_state.load(Ordering::Relaxed))
+        CuTime(mock_state.load(Ordering::Relaxed))
     }
 
     /// Sets the absolute value of the time.
@@ -697,13 +976,13 @@ impl RobotClock {
     /// It is a monotonically increasing value.
     #[inline]
     pub fn now(&self) -> CuTime {
-        self.inner.now() - self.ref_time
+        CuTime::from_nanos((self.inner.now() - self.ref_time).as_nanos())
     }
 
     /// A less precise but quicker time
     #[inline]
     pub fn recent(&self) -> CuTime {
-        self.inner.recent() - self.ref_time
+        CuTime::from_nanos((self.inner.recent() - self.ref_time).as_nanos())
     }
 }
 
@@ -949,22 +1228,34 @@ mod tests {
         let (clock, mock) = RobotClock::mock();
 
         // Test initial state
-        assert_eq!(clock.now(), CuDuration(0));
+        assert_eq!(clock.now(), CuTime::from(0));
 
         // Test increment
         mock.increment(CuDuration::from_secs(10));
-        assert_eq!(clock.now(), CuDuration::from_secs(10));
+        assert_eq!(
+            clock.now(),
+            CuTime::from_nanos(CuDuration::from_secs(10).as_nanos())
+        );
 
         // Test decrement (unusual but supported)
         mock.decrement(CuDuration::from_secs(5));
-        assert_eq!(clock.now(), CuDuration::from_secs(5));
+        assert_eq!(
+            clock.now(),
+            CuTime::from_nanos(CuDuration::from_secs(5).as_nanos())
+        );
 
         // Test setting absolute value
         mock.set_value(30_000_000_000); // 30 seconds in ns
-        assert_eq!(clock.now(), CuDuration::from_secs(30));
+        assert_eq!(
+            clock.now(),
+            CuTime::from_nanos(CuDuration::from_secs(30).as_nanos())
+        );
 
         // Test that getting the time from the mock directly works
-        assert_eq!(mock.now(), CuDuration::from_secs(30));
+        assert_eq!(
+            mock.now(),
+            CuTime::from_nanos(CuDuration::from_secs(30).as_nanos())
+        );
         assert_eq!(mock.value(), 30_000_000_000);
     }
 
@@ -1010,10 +1301,13 @@ mod tests {
 
         // Test that provider returns a clock synchronized with the original
         let provider_clock = provider.get_clock();
-        assert_eq!(provider_clock.now(), CuDuration(0));
+        assert_eq!(provider_clock.now(), CuTime::from(0));
 
         // Advance the mock clock and check that the provider's clock also advances
         mock.increment(CuDuration::from_secs(5));
-        assert_eq!(provider_clock.now(), CuDuration::from_secs(5));
+        assert_eq!(
+            provider_clock.now(),
+            CuTime::from_nanos(CuDuration::from_secs(5).as_nanos())
+        );
     }
 }

@@ -372,7 +372,7 @@ fn extract_end_time_ns(meta: &dyn CuMsgMetadataTrait) -> Option<u64> {
 }
 
 fn option_time_ns(value: OptionCuTime) -> Option<u64> {
-    Option::<CuDuration>::from(value).map(|t| t.as_nanos())
+    Option::<cu29::clock::CuTime>::from(value).map(|t| t.as_nanos())
 }
 
 fn duration_stats_from(stats: &CuDurationStatistics) -> DurationStats {

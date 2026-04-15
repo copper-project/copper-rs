@@ -13,6 +13,7 @@ readme = "README.md"
 
 [dependencies]
 bincode = { workspace = true }
+cu29-traits = { workspace = true }
 serde = { workspace = true }
 uom = { workspace = true }
 bevy_reflect = { workspace = true, optional = true }

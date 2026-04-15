@@ -1732,7 +1732,7 @@ impl CuMonitor for NoMonitor {
                 .collect();
 
             if let Ok(msg) = format_message_only(format_str, params.as_slice(), &named) {
-                let ts = format_timestamp(entry.time);
+                let ts = format_timestamp(entry.time.into());
                 println!("{} [{:?}] {}", ts, entry.level, msg);
             }
         });

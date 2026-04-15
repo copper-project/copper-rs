@@ -74,11 +74,11 @@ def main() -> int:
         for msg in copperlist.messages:
             if msg.task_id not in {"gnss_ublox", "gnss_fix_sink"}:
                 continue
-            if msg.payload is None or not hasattr(msg.payload, "latitude"):
+            if msg.payload is None or not hasattr(msg.payload, "position"):
                 continue
 
-            lat, lat_unit = format_angle(msg.payload.latitude)
-            lon, lon_unit = format_angle(msg.payload.longitude)
+            lat, lat_unit = format_angle(msg.payload.position.latitude)
+            lon, lon_unit = format_angle(msg.payload.position.longitude)
             extras = []
             if hasattr(msg.payload, "num_satellites_used"):
                 extras.append(f"sats={msg.payload.num_satellites_used}")

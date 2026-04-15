@@ -92,6 +92,8 @@ To replay a recorded simulation log through the remote debug API:
 ```bash
 cd examples/cu_flight_controller
 just resim
+# or, for parity with other examples:
+just resim-debug
 ```
 
 The replay target uses the standardized replay contract:

@@ -229,6 +229,16 @@ where
         }
     }
 
+    #[inline]
+    pub fn app(&self) -> &App {
+        &self.app
+    }
+
+    #[inline]
+    pub fn app_mut(&mut self) -> &mut App {
+        &mut self.app
+    }
+
     fn ensure_started(&mut self) -> CuResult<()> {
         if self.started {
             return Ok(());

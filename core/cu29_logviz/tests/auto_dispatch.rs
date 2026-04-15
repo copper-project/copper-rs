@@ -1,5 +1,5 @@
 use cu_sensor_payloads::{CuImage, CuImageBufferFormat, Distance, PointCloud, PointCloudSoa};
-use cu_spatial_payloads::Transform3D;
+use cu_spatial_payloads::{GeodeticPosition, Transform3D};
 use cu29::prelude::CuResult;
 use cu29::units::si::length::meter;
 use rerun::RecordingStream;
@@ -28,6 +28,9 @@ fn auto_dispatch_logs_known_payload_types() -> CuResult<()> {
         [0.0, 0.0, 0.0, 1.0],
     ]);
     cu29_logviz::log_payload_auto(&rec, "transform", &transform)?;
+
+    let position = GeodeticPosition::from_degrees(59.319_221, 18.075_631);
+    cu29_logviz::log_payload_auto(&rec, "position", &position)?;
 
     Ok(())
 }

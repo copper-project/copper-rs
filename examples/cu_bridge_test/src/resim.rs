@@ -1,7 +1,6 @@
 #![allow(unused_lifetimes)]
 
 use clap::Parser;
-use cu29::clock::CuDuration;
 use cu29::cutask::CuMsgMetadata;
 use cu29::prelude::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
 use cu29::prelude::*;
@@ -137,7 +136,7 @@ fn sync_robot_clock<'m>(
     robot_clock: &RobotClockMock,
 ) {
     if let Some(start) = metadata.into_iter().find_map(|meta| {
-        let maybe_start: Option<CuDuration> = meta.process_time.start.into();
+        let maybe_start: Option<CuTime> = meta.process_time.start.into();
         maybe_start
     }) {
         robot_clock.set_value(start.as_nanos());
@@ -353,7 +352,8 @@ macro_rules! define_remote_debug_mission {
 
         fn $build_callback<'a>(
             copperlist: &'a CopperList<$module::CuStampedDataSet>,
-            _clock_for_callbacks: RobotClock,
+            _process_clock: RobotClock,
+            _clock_for_callbacks: RobotClockMock,
         ) -> Box<dyn for<'z> FnMut($module::SimStep<'z>) -> SimOverride + 'a> {
             Box::new(move |step: $module::SimStep<'_>| {
                 $module::recorded_replay_step(step, copperlist)

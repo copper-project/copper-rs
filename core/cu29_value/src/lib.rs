@@ -29,7 +29,7 @@ use alloc::vec::Vec;
 use core::cmp::Ordering;
 use core::fmt::{Display, Formatter};
 use core::hash::{Hash, Hasher};
-use cu29_clock::{CuDuration, CuTime};
+use cu29_clock::CuTime;
 use ordered_float::OrderedFloat;
 use serde::Deserialize;
 
@@ -163,10 +163,7 @@ impl Hash for Value {
             Value::Seq(ref v) => v.hash(hasher),
             Value::Map(ref v) => v.hash(hasher),
             Value::Bytes(ref v) => v.hash(hasher),
-            Value::CuTime(v) => {
-                let CuDuration(nanos) = v;
-                nanos.hash(hasher)
-            }
+            Value::CuTime(v) => v.as_nanos().hash(hasher),
         }
     }
 }
@@ -288,10 +285,7 @@ impl Value {
             Value::Seq(_) => serde::de::Unexpected::Seq,
             Value::Map(_) => serde::de::Unexpected::Map,
             Value::Bytes(ref b) => serde::de::Unexpected::Bytes(b),
-            Value::CuTime(n) => {
-                let CuDuration(nanos) = n;
-                serde::de::Unexpected::Unsigned(nanos)
-            }
+            Value::CuTime(n) => serde::de::Unexpected::Unsigned(n.as_nanos()),
         }
     }
 

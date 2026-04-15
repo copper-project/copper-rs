@@ -2,7 +2,6 @@ use crate::Value;
 use core::error::Error;
 use core::fmt;
 use core::marker::PhantomData;
-use cu29_clock::CuDuration;
 use serde::{de, forward_to_deserialize_any};
 
 use alloc::borrow::ToOwned;
@@ -392,10 +391,7 @@ where
                     |(k, v)| (ValueDeserializer::new(k), ValueDeserializer::new(v)),
                 ))),
             Value::Bytes(v) => visitor.visit_byte_buf(v),
-            Value::CuTime(v) => {
-                let CuDuration(nanos) = v;
-                visitor.visit_u64(nanos)
-            }
+            Value::CuTime(v) => visitor.visit_u64(v.as_nanos()),
         }
     }
 

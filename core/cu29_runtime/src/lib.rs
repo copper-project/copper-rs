@@ -5,6 +5,7 @@
 compile_error!("feature `parallel-rt` requires `std`");
 
 extern crate alloc;
+extern crate self as cu29;
 
 #[doc(hidden)]
 pub use paste::paste as __cu29_paste;

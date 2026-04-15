@@ -1,6 +1,5 @@
 use super::*;
 use cu_gnss_payloads::GnssFixSolution;
-use cu29::units::si::angle::degree;
 
 #[cfg(feature = "firmware")]
 pub type GnssSource = cu_gnss_ublox::UbxSourceTask<cu_micoairh743::Uart3Port>;
@@ -40,8 +39,8 @@ impl CuSinkTask for GnssFixSink {
             self.last_log = Some(now);
             info!(
                 "gnss lat={} lon={} sats={} fix_ok={}",
-                fix.latitude.get::<degree>(),
-                fix.longitude.get::<degree>(),
+                fix.position.latitude_degrees(),
+                fix.position.longitude_degrees(),
                 fix.num_satellites_used,
                 fix.gnss_fix_ok
             );

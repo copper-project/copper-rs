@@ -1,14 +1,14 @@
 #![cfg(any(feature = "sim", feature = "bevymon"))]
 
 use cu_gnss_payloads::{
-    GnssAccuracy, GnssCommandAck, GnssEpochTime, GnssFixSolution, GnssFixType, GnssInfoText,
-    GnssRawUbxFrame, GnssRfStatus, GnssSatelliteState, GnssSatsInView, GnssSignalState,
+    GeodeticPosition, GnssAccuracy, GnssCommandAck, GnssEpochTime, GnssFixSolution, GnssFixType,
+    GnssInfoText, GnssRawUbxFrame, GnssRfStatus, GnssSatelliteState, GnssSatsInView,
+    GnssSignalState,
 };
 use cu_sensor_payloads::{BarometerPayload, ImuPayload, MagnetometerPayload};
 use cu29::prelude::*;
 use cu29::units::si::angle::degree;
 use cu29::units::si::f32::{Angle as Angle32, Length, Velocity};
-use cu29::units::si::f64::Angle as Angle64;
 use cu29::units::si::length::meter;
 use cu29::units::si::velocity::meter_per_second;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
@@ -18,27 +18,26 @@ static SIM_ACTIVITY_LED_STATE: OnceLock<Arc<AtomicBool>> = OnceLock::new();
 static SIM_BATTERY_THROTTLE_BITS: OnceLock<Arc<AtomicU32>> = OnceLock::new();
 static SIM_BATTERY_ARMED_STATE: OnceLock<Arc<AtomicBool>> = OnceLock::new();
 static SIM_GNSS_STATE: OnceLock<Arc<SimGnssState>> = OnceLock::new();
-const GNSS_FIXED_LAT_DEG: f64 = 30.389861114639405;
-const GNSS_FIXED_LON_DEG: f64 = -97.69316827380047;
-const GNSS_FIXED_ELLIPSOID_ALT_M: f32 = 225.0;
-const GNSS_FIXED_MSL_ALT_M: f32 = 212.0;
+pub(crate) const GNSS_FIXED_LAT_DEG: f64 = 30.389861114639405;
+pub(crate) const GNSS_FIXED_LON_DEG: f64 = -97.69316827380047;
+pub(crate) const GNSS_FIXED_ELLIPSOID_ALT_M: f32 = 225.0;
+pub(crate) const GNSS_FIXED_MSL_ALT_M: f32 = 212.0;
 const GNSS_FIXED_SAT_COUNT: u8 = 14;
-const EARTH_METERS_PER_DEG_LAT: f64 = 111_320.0;
 
 #[derive(Default)]
-struct SimGnssState {
-    lat_deg_bits: AtomicU64,
-    lon_deg_bits: AtomicU64,
-    ellipsoid_alt_m_bits: AtomicU32,
-    msl_alt_m_bits: AtomicU32,
-    velocity_north_mps_bits: AtomicU32,
-    velocity_east_mps_bits: AtomicU32,
-    velocity_down_mps_bits: AtomicU32,
-    ground_speed_mps_bits: AtomicU32,
-    heading_motion_deg_bits: AtomicU32,
+pub(crate) struct SimGnssState {
+    pub(crate) lat_deg_bits: AtomicU64,
+    pub(crate) lon_deg_bits: AtomicU64,
+    pub(crate) ellipsoid_alt_m_bits: AtomicU32,
+    pub(crate) msl_alt_m_bits: AtomicU32,
+    pub(crate) velocity_north_mps_bits: AtomicU32,
+    pub(crate) velocity_east_mps_bits: AtomicU32,
+    pub(crate) velocity_down_mps_bits: AtomicU32,
+    pub(crate) ground_speed_mps_bits: AtomicU32,
+    pub(crate) heading_motion_deg_bits: AtomicU32,
 }
 
-fn sim_gnss_state() -> Arc<SimGnssState> {
+pub(crate) fn sim_gnss_state() -> Arc<SimGnssState> {
     SIM_GNSS_STATE
         .get_or_init(|| {
             Arc::new(SimGnssState {
@@ -56,19 +55,19 @@ fn sim_gnss_state() -> Arc<SimGnssState> {
         .clone()
 }
 
-fn sim_activity_led_state() -> Arc<AtomicBool> {
+pub(crate) fn sim_activity_led_state() -> Arc<AtomicBool> {
     SIM_ACTIVITY_LED_STATE
         .get_or_init(|| Arc::new(AtomicBool::new(false)))
         .clone()
 }
 
-fn sim_battery_throttle_state() -> Arc<AtomicU32> {
+pub(crate) fn sim_battery_throttle_state() -> Arc<AtomicU32> {
     SIM_BATTERY_THROTTLE_BITS
         .get_or_init(|| Arc::new(AtomicU32::new(0.0_f32.to_bits())))
         .clone()
 }
 
-fn sim_battery_armed_state() -> Arc<AtomicBool> {
+pub(crate) fn sim_battery_armed_state() -> Arc<AtomicBool> {
     SIM_BATTERY_ARMED_STATE
         .get_or_init(|| Arc::new(AtomicBool::new(false)))
         .clone()
@@ -91,19 +90,6 @@ pub fn sim_activity_led() -> SimActivityLed {
     }
 }
 
-pub fn sim_activity_led_is_on() -> bool {
-    sim_activity_led_state().load(Ordering::Relaxed)
-}
-
-pub fn sim_battery_set_throttle(throttle: f32) {
-    let clamped = throttle.clamp(0.0, 1.0);
-    sim_battery_throttle_state().store(clamped.to_bits(), Ordering::Relaxed);
-}
-
-pub fn sim_battery_set_armed(armed: bool) {
-    sim_battery_armed_state().store(armed, Ordering::Relaxed);
-}
-
 fn sim_battery_throttle() -> f32 {
     let bits = sim_battery_throttle_state().load(Ordering::Relaxed);
     f32::from_bits(bits).clamp(0.0, 1.0)
@@ -111,66 +97,6 @@ fn sim_battery_throttle() -> f32 {
 
 fn sim_battery_is_armed() -> bool {
     sim_battery_armed_state().load(Ordering::Relaxed)
-}
-
-pub fn sim_gnss_set_vehicle_state(position_xyz_m: [f32; 3], velocity_xyz_mps: [f32; 3]) {
-    // Scene/world alignment in this sim: +Z tracks geographic north and +X tracks geographic west.
-    // GNSS expects NED signs, so east is the opposite of world +X.
-    let north_m = position_xyz_m[2] as f64;
-    let east_m = -(position_xyz_m[0] as f64);
-    let up_m = position_xyz_m[1];
-
-    let meters_per_deg_lon =
-        (EARTH_METERS_PER_DEG_LAT * GNSS_FIXED_LAT_DEG.to_radians().cos().abs()).max(1.0);
-    let lat_deg = GNSS_FIXED_LAT_DEG + (north_m / EARTH_METERS_PER_DEG_LAT);
-    let lon_deg = GNSS_FIXED_LON_DEG + (east_m / meters_per_deg_lon);
-
-    let velocity_north_mps = velocity_xyz_mps[2];
-    let velocity_east_mps = -velocity_xyz_mps[0];
-    let velocity_down_mps = -velocity_xyz_mps[1];
-    let ground_speed_mps = libm::sqrtf(
-        velocity_north_mps * velocity_north_mps + velocity_east_mps * velocity_east_mps,
-    )
-    .max(0.0);
-    let heading_motion_deg = if ground_speed_mps > 1.0e-3 {
-        wrap_heading_deg(libm::atan2f(velocity_east_mps, velocity_north_mps).to_degrees())
-    } else {
-        0.0
-    };
-
-    let state = sim_gnss_state();
-    state
-        .lat_deg_bits
-        .store(lat_deg.to_bits(), Ordering::Relaxed);
-    state
-        .lon_deg_bits
-        .store(lon_deg.to_bits(), Ordering::Relaxed);
-    state.ellipsoid_alt_m_bits.store(
-        (GNSS_FIXED_ELLIPSOID_ALT_M + up_m).to_bits(),
-        Ordering::Relaxed,
-    );
-    state
-        .msl_alt_m_bits
-        .store((GNSS_FIXED_MSL_ALT_M + up_m).to_bits(), Ordering::Relaxed);
-    state
-        .velocity_north_mps_bits
-        .store(velocity_north_mps.to_bits(), Ordering::Relaxed);
-    state
-        .velocity_east_mps_bits
-        .store(velocity_east_mps.to_bits(), Ordering::Relaxed);
-    state
-        .velocity_down_mps_bits
-        .store(velocity_down_mps.to_bits(), Ordering::Relaxed);
-    state
-        .ground_speed_mps_bits
-        .store(ground_speed_mps.to_bits(), Ordering::Relaxed);
-    state
-        .heading_motion_deg_bits
-        .store(heading_motion_deg.to_bits(), Ordering::Relaxed);
-}
-
-fn wrap_heading_deg(value: f32) -> f32 {
-    value.rem_euclid(360.0)
 }
 
 #[derive(Clone, Reflect)]
@@ -367,8 +293,7 @@ impl CuSrcTask for SimGnssSource {
             num_satellites_used: GNSS_FIXED_SAT_COUNT,
             ..GnssFixSolution::default()
         };
-        fix.latitude = Angle64::new::<degree>(lat_deg);
-        fix.longitude = Angle64::new::<degree>(lon_deg);
+        fix.position = GeodeticPosition::from_degrees(lat_deg, lon_deg);
         fix.height_ellipsoid = Length::new::<meter>(ellipsoid_alt_m);
         fix.height_msl = Length::new::<meter>(msl_alt_m);
         fix.velocity_north = Velocity::new::<meter_per_second>(velocity_north_mps);
@@ -379,56 +304,5 @@ impl CuSrcTask for SimGnssSource {
 
         output.1.set_payload(fix);
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sim_gnss_east_is_negative_world_x() {
-        let state = sim_gnss_state();
-
-        sim_gnss_set_vehicle_state([0.0, 0.0, 0.0], [0.0, 0.0, 0.0]);
-        let lon0 = f64::from_bits(state.lon_deg_bits.load(Ordering::Relaxed));
-
-        // In this scene, moving east is -X in world.
-        sim_gnss_set_vehicle_state([-20.0, 0.0, 0.0], [0.0, 0.0, 0.0]);
-        let lon_east = f64::from_bits(state.lon_deg_bits.load(Ordering::Relaxed));
-        assert!(lon_east > lon0, "east movement should increase longitude");
-
-        sim_gnss_set_vehicle_state([20.0, 0.0, 0.0], [0.0, 0.0, 0.0]);
-        let lon_west = f64::from_bits(state.lon_deg_bits.load(Ordering::Relaxed));
-        assert!(lon_west < lon0, "west movement should decrease longitude");
-    }
-
-    #[test]
-    fn sim_gnss_populates_ne_down_velocity_and_heading() {
-        let state = sim_gnss_state();
-
-        // World velocity +X is west, +Z is north, +Y is up.
-        sim_gnss_set_vehicle_state([0.0, 0.0, 0.0], [-5.0, 2.0, 0.0]); // 5 m/s east, 2 m/s up
-
-        let vn = f32::from_bits(state.velocity_north_mps_bits.load(Ordering::Relaxed));
-        let ve = f32::from_bits(state.velocity_east_mps_bits.load(Ordering::Relaxed));
-        let vd = f32::from_bits(state.velocity_down_mps_bits.load(Ordering::Relaxed));
-        let gs = f32::from_bits(state.ground_speed_mps_bits.load(Ordering::Relaxed));
-        let hm = f32::from_bits(state.heading_motion_deg_bits.load(Ordering::Relaxed));
-
-        assert!(vn.abs() < 1.0e-6, "north velocity should be ~0");
-        assert!((ve - 5.0).abs() < 1.0e-6, "east velocity should be +5 m/s");
-        assert!(
-            (vd + 2.0).abs() < 1.0e-6,
-            "down velocity should be -2 m/s for upward motion"
-        );
-        assert!(
-            (gs - 5.0).abs() < 1.0e-6,
-            "ground speed should track horizontal speed"
-        );
-        assert!(
-            (hm - 90.0).abs() < 1.0e-6,
-            "eastward motion heading should be 90 deg"
-        );
     }
 }

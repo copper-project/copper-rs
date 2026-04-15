@@ -31,8 +31,10 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode as dDecode, Decode, Encode, Encode as dEncode};
 use compact_str::CompactString;
 use cu29_clock::{PartialCuTimeRange, Tov};
-use serde::{Deserialize, Serialize};
+use serde::de::{self, SeqAccess, Visitor};
+use serde::{Deserialize, Deserializer, Serialize};
 
+use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -509,11 +511,139 @@ pub trait CuPayloadRawBytes {
 ///
 /// The returned slice must be aligned with `ErasedCuStampedDataSet::cumsgs()`:
 /// index `i` maps to copperlist slot `i`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 pub struct TaskOutputSpec {
     pub task_id: &'static str,
     pub msg_type: &'static str,
-    pub payload_type_path: &'static str,
+    pub payload_type_path_fn: fn() -> &'static str,
+}
+
+impl TaskOutputSpec {
+    #[inline]
+    pub fn payload_type_path(&self) -> &'static str {
+        (self.payload_type_path_fn)()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum DebugFieldSemantics {
+    Time,
+    OptionalTime,
+    Duration,
+    GeodeticPosition,
+    Quantity {
+        quantity_name: String,
+        unit_symbol: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DebugFieldKind {
+    Scalar,
+    Struct,
+    TupleStruct,
+    Tuple,
+    List,
+    Array,
+    Map,
+    Set,
+    Enum,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DebugFieldDescriptor {
+    pub display_path: String,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_debug_binding_name"
+    )]
+    pub binding_name: Option<String>,
+    pub field_type: String,
+    pub value_type_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub semantics: Option<DebugFieldSemantics>,
+    pub nullable: bool,
+    pub kind: DebugFieldKind,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<DebugFieldDescriptor>,
+}
+
+fn deserialize_debug_binding_name<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct BindingNameVisitor;
+
+    impl<'de> Visitor<'de> for BindingNameVisitor {
+        type Value = Option<String>;
+
+        fn expecting(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            formatter.write_str("a string, null, or an empty sequence")
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_unit<E>(self) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            deserialize_debug_binding_name(deserializer)
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(value.to_owned()))
+        }
+
+        fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(value))
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: SeqAccess<'de>,
+        {
+            if seq.next_element::<de::IgnoredAny>()?.is_none() {
+                return Ok(None);
+            }
+            Err(de::Error::invalid_type(
+                de::Unexpected::Seq,
+                &"an empty sequence",
+            ))
+        }
+    }
+
+    deserializer.deserialize_any(BindingNameVisitor)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DebugScalarRegistration {
+    pub type_path: &'static str,
+    pub field_type: &'static str,
+    pub semantics: DebugFieldSemantics,
+}
+
+pub trait DebugScalarType: 'static {
+    fn debug_scalar_registration() -> DebugScalarRegistration;
 }
 
 pub trait MatchingTasks {
@@ -671,7 +801,8 @@ mod tests {
 // Tests that require std feature
 #[cfg(all(test, feature = "std"))]
 mod std_tests {
-    use crate::{CuError, with_cause};
+    use crate::{CuError, DebugFieldDescriptor, DebugFieldKind, DebugFieldSemantics, with_cause};
+    use serde_json::json;
 
     #[test]
     fn test_cuerror_from_str() {
@@ -778,5 +909,41 @@ mod std_tests {
         let debug = format!("{:?}", err);
         assert!(debug.contains("test error"));
         assert!(debug.contains("some context"));
+    }
+
+    #[test]
+    fn debug_field_descriptor_skips_missing_binding_name_on_serialize() {
+        let descriptor = DebugFieldDescriptor {
+            display_path: "meta.process_time.start_ns".to_owned(),
+            binding_name: None,
+            field_type: "integer".to_owned(),
+            value_type_path: "cu29_clock::CuTime".to_owned(),
+            semantics: Some(DebugFieldSemantics::Time),
+            nullable: true,
+            kind: DebugFieldKind::Scalar,
+            children: Vec::new(),
+        };
+
+        let encoded = serde_json::to_value(&descriptor).unwrap();
+        assert!(encoded.get("binding_name").is_none());
+    }
+
+    #[test]
+    fn debug_field_descriptor_accepts_empty_array_binding_name() {
+        let encoded = json!({
+            "display_path": "meta.process_time.start_ns",
+            "binding_name": [],
+            "field_type": "integer",
+            "value_type_path": "cu29_clock::CuTime",
+            "semantics": "Time",
+            "nullable": true,
+            "kind": "scalar",
+        });
+
+        let descriptor: DebugFieldDescriptor = serde_json::from_value(encoded).unwrap();
+        assert_eq!(descriptor.binding_name, None);
+        assert_eq!(descriptor.semantics, Some(DebugFieldSemantics::Time));
+        assert_eq!(descriptor.kind, DebugFieldKind::Scalar);
+        assert!(descriptor.children.is_empty());
     }
 }

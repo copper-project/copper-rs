@@ -2066,12 +2066,12 @@ mod tests {
     fn test_loop_rate_limiter_advances_to_next_period_when_on_time() {
         let (clock, mock) = RobotClock::mock();
         let mut limiter = LoopRateLimiter::from_rate_target_hz(100, &clock).unwrap();
-        assert_eq!(limiter.next_deadline(), CuDuration::from(10_000_000));
+        assert_eq!(limiter.next_deadline(), CuTime::from_nanos(10_000_000));
 
         mock.set_value(10_000_000);
         limiter.mark_tick(&clock);
 
-        assert_eq!(limiter.next_deadline(), CuDuration::from(20_000_000));
+        assert_eq!(limiter.next_deadline(), CuTime::from_nanos(20_000_000));
     }
 
     #[test]
@@ -2082,7 +2082,7 @@ mod tests {
         mock.set_value(35_000_000);
         limiter.mark_tick(&clock);
 
-        assert_eq!(limiter.next_deadline(), CuDuration::from(40_000_000));
+        assert_eq!(limiter.next_deadline(), CuTime::from_nanos(40_000_000));
     }
 
     #[cfg(all(feature = "std", feature = "high-precision-limiter"))]

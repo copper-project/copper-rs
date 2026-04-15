@@ -8,6 +8,8 @@
 //!
 #![cfg_attr(not(feature = "std"), no_std)]
 
+extern crate alloc;
+
 pub use uom;
 
 macro_rules! define_storage_wrappers {
@@ -503,6 +505,167 @@ pub mod si {
             (volumetric_power_density, VolumetricPowerDensity),
         ]
     }
+}
+
+use alloc::string::ToString;
+use alloc::vec::Vec;
+use cu29_traits::{DebugFieldSemantics, DebugScalarRegistration, DebugScalarType};
+
+macro_rules! impl_debug_scalar_units {
+    ($(($unit_mod:ident, $quantity:ident, $base_unit:ident),)+) => {
+        macro_rules! impl_storage_debug_scalar_units {
+            ($storage_mod:ident, $storage_ty:ty) => {
+                $(
+                    impl DebugScalarType for si::$storage_mod::$quantity {
+                        fn debug_scalar_registration() -> DebugScalarRegistration {
+                            DebugScalarRegistration {
+                                type_path: core::any::type_name::<Self>(),
+                                field_type: if stringify!($storage_ty).starts_with('f') {
+                                    "number"
+                                } else {
+                                    "integer"
+                                },
+                                semantics: DebugFieldSemantics::Quantity {
+                                    quantity_name: stringify!($quantity).to_string(),
+                                    unit_symbol: <uom::si::$unit_mod::$base_unit as uom::si::Unit>::abbreviation()
+                                        .to_string(),
+                                },
+                            }
+                        }
+                    }
+                )+
+            };
+        }
+
+        impl_storage_debug_scalar_units!(f32, f32);
+        impl_storage_debug_scalar_units!(f64, f64);
+
+        pub fn debug_scalar_registrations() -> Vec<DebugScalarRegistration> {
+            alloc::vec![
+                $(
+                    <si::f32::$quantity as DebugScalarType>::debug_scalar_registration(),
+                    <si::f64::$quantity as DebugScalarType>::debug_scalar_registration(),
+                )+
+            ]
+        }
+    };
+}
+
+impl_debug_scalar_units! {
+    (absement, Absement, meter_second),
+    (acceleration, Acceleration, meter_per_second_squared),
+    (action, Action, joule_second),
+    (amount_of_substance, AmountOfSubstance, mole),
+    (angle, Angle, radian),
+    (angular_absement, AngularAbsement, radian_second),
+    (angular_acceleration, AngularAcceleration, radian_per_second_squared),
+    (angular_jerk, AngularJerk, radian_per_second_cubed),
+    (angular_momentum, AngularMomentum, newton_meter_second),
+    (angular_velocity, AngularVelocity, radian_per_second),
+    (area, Area, square_meter),
+    (areal_density_of_states, ArealDensityOfStates, state_per_square_meter_joule),
+    (areal_heat_capacity, ArealHeatCapacity, joule_per_square_meter_kelvin),
+    (areal_mass_density, ArealMassDensity, kilogram_per_square_meter),
+    (areal_number_density, ArealNumberDensity, per_square_kilometer),
+    (areal_number_rate, ArealNumberRate, per_square_meter_second),
+    (available_energy, AvailableEnergy, joule_per_kilogram),
+    (capacitance, Capacitance, farad),
+    (catalytic_activity, CatalyticActivity, katal),
+    (catalytic_activity_concentration, CatalyticActivityConcentration, katal_per_cubic_meter),
+    (curvature, Curvature, radian_per_meter),
+    (diffusion_coefficient, DiffusionCoefficient, square_meter_per_second),
+    (dynamic_viscosity, DynamicViscosity, pascal_second),
+    (electric_charge, ElectricCharge, coulomb),
+    (electric_charge_areal_density, ElectricChargeArealDensity, coulomb_per_square_meter),
+    (electric_charge_linear_density, ElectricChargeLinearDensity, coulomb_per_meter),
+    (electric_charge_volumetric_density, ElectricChargeVolumetricDensity, coulomb_per_cubic_meter),
+    (electric_current, ElectricCurrent, ampere),
+    (electric_current_density, ElectricCurrentDensity, ampere_per_square_meter),
+    (electric_dipole_moment, ElectricDipoleMoment, coulomb_meter),
+    (electric_displacement_field, ElectricDisplacementField, coulomb_per_square_meter),
+    (electric_field, ElectricField, volt_per_meter),
+    (electric_flux, ElectricFlux, volt_meter),
+    (electric_permittivity, ElectricPermittivity, farad_per_meter),
+    (electric_potential, ElectricPotential, volt),
+    (electric_quadrupole_moment, ElectricQuadrupoleMoment, coulomb_square_meter),
+    (electrical_conductance, ElectricalConductance, siemens),
+    (electrical_conductivity, ElectricalConductivity, siemens_per_meter),
+    (electrical_mobility, ElectricalMobility, square_meter_per_volt_second),
+    (electrical_resistance, ElectricalResistance, ohm),
+    (electrical_resistivity, ElectricalResistivity, ohm_meter),
+    (energy, Energy, joule),
+    (force, Force, newton),
+    (frequency, Frequency, hertz),
+    (frequency_drift, FrequencyDrift, hertz_per_second),
+    (heat_capacity, HeatCapacity, gram_square_meter_per_second_squared_kelvin),
+    (heat_flux_density, HeatFluxDensity, watt_per_square_meter),
+    (heat_transfer, HeatTransfer, gram_per_second_cubed_kelvin),
+    (inductance, Inductance, henry),
+    (information, Information, bit),
+    (information_rate, InformationRate, bit_per_second),
+    (inverse_velocity, InverseVelocity, second_per_meter),
+    (jerk, Jerk, meter_per_second_cubed),
+    (kinematic_viscosity, KinematicViscosity, square_meter_per_second),
+    (length, Length, meter),
+    (linear_density_of_states, LinearDensityOfStates, state_per_meter_joule),
+    (linear_mass_density, LinearMassDensity, kilogram_per_meter),
+    (linear_number_density, LinearNumberDensity, per_kilometer),
+    (linear_number_rate, LinearNumberRate, per_kilometer_second),
+    (linear_power_density, LinearPowerDensity, watt_per_meter),
+    (luminance, Luminance, candela_per_square_meter),
+    (luminous_intensity, LuminousIntensity, candela),
+    (magnetic_field_strength, MagneticFieldStrength, ampere_per_meter),
+    (magnetic_flux, MagneticFlux, weber),
+    (magnetic_flux_density, MagneticFluxDensity, tesla),
+    (magnetic_moment, MagneticMoment, ampere_square_meter),
+    (magnetic_permeability, MagneticPermeability, henry_per_meter),
+    (mass, Mass, gram),
+    (mass_concentration, MassConcentration, gram_per_cubic_meter),
+    (mass_density, MassDensity, gram_per_cubic_meter),
+    (mass_flux, MassFlux, kilogram_per_square_meter_second),
+    (mass_per_energy, MassPerEnergy, gram_per_joule),
+    (mass_rate, MassRate, gram_per_second),
+    (molality, Molality, mole_per_kilogram),
+    (molar_concentration, MolarConcentration, mole_per_cubic_meter),
+    (molar_energy, MolarEnergy, joule_per_mole),
+    (molar_flux, MolarFlux, mole_per_square_meter_second),
+    (molar_heat_capacity, MolarHeatCapacity, joule_per_kelvin_mole),
+    (molar_mass, MolarMass, gram_per_mole),
+    (molar_radioactivity, MolarRadioactivity, becquerel_per_mole),
+    (molar_volume, MolarVolume, cubic_meter_per_mole),
+    (moment_of_inertia, MomentOfInertia, kilogram_square_meter),
+    (momentum, Momentum, gram_meter_per_second),
+    (power, Power, watt),
+    (power_rate, PowerRate, watt_per_second),
+    (pressure, Pressure, pascal),
+    (radiant_exposure, RadiantExposure, joule_per_square_meter),
+    (radioactivity, Radioactivity, becquerel),
+    (ratio, Ratio, ratio),
+    (reciprocal_length, ReciprocalLength, reciprocal_kilometer),
+    (solid_angle, SolidAngle, steradian),
+    (specific_area, SpecificArea, square_meter_per_kilogram),
+    (specific_heat_capacity, SpecificHeatCapacity, square_meter_per_second_squared_kelvin),
+    (specific_power, SpecificPower, watt_per_kilogram),
+    (specific_radioactivity, SpecificRadioactivity, becquerel_per_kilogram),
+    (surface_electric_current_density, SurfaceElectricCurrentDensity, ampere_per_meter),
+    (surface_tension, SurfaceTension, newton_per_meter),
+    (temperature_coefficient, TemperatureCoefficient, per_kelvin),
+    (temperature_gradient, TemperatureGradient, kelvin_per_kilometer),
+    (temperature_interval, TemperatureInterval, kelvin),
+    (thermal_conductance, ThermalConductance, gram_meter_squared_per_second_cubed_kelvin),
+    (thermal_conductivity, ThermalConductivity, gram_meter_per_second_cubed_kelvin),
+    (thermal_resistance, ThermalResistance, kelvin_per_yottawatt),
+    (thermodynamic_temperature, ThermodynamicTemperature, kelvin),
+    (time, Time, second),
+    (torque, Torque, newton_meter),
+    (velocity, Velocity, meter_per_second),
+    (volume, Volume, cubic_meter),
+    (volume_rate, VolumeRate, cubic_meter_per_second),
+    (volumetric_density_of_states, VolumetricDensityOfStates, state_per_cubic_meter_joule),
+    (volumetric_heat_capacity, VolumetricHeatCapacity, joule_per_cubic_meter_kelvin),
+    (volumetric_number_density, VolumetricNumberDensity, per_cubic_kilometer),
+    (volumetric_number_rate, VolumetricNumberRate, per_cubic_meter_second),
+    (volumetric_power_density, VolumetricPowerDensity, watt_per_cubic_meter),
 }
 
 #[cfg(all(test, feature = "reflect"))]
