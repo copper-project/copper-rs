@@ -148,7 +148,7 @@ mod tests {
             "expected {expected}, got {actual}, difference {diff} exceeds epsilon {epsilon}",
         );
     }
-    use cu29::clock::CuDuration;
+    use cu29::clock::CuTime;
 
     #[test]
     fn test_interpolate_transforms_f32() {
@@ -159,7 +159,7 @@ mod tests {
                 [0.0, 0.0, 1.0, 0.0],
                 [0.0, 0.0, 0.0, 1.0], // Translation: x=0
             ]),
-            stamp: CuDuration(1000),
+            stamp: CuTime::from_nanos(1000),
             parent_frame: frame_id!("world"),
             child_frame: frame_id!("robot"),
         };
@@ -171,24 +171,24 @@ mod tests {
                 [0.0, 0.0, 1.0, 0.0],
                 [10.0, 0.0, 0.0, 1.0], // Translation: x=10
             ]),
-            stamp: CuDuration(3000),
+            stamp: CuTime::from_nanos(3000),
             parent_frame: frame_id!("world"),
             child_frame: frame_id!("robot"),
         };
 
-        let result = interpolate_transforms(&before, &after, CuDuration(2000));
+        let result = interpolate_transforms(&before, &after, CuTime::from_nanos(2000));
         assert!(result.is_ok());
 
         let transform = result.unwrap();
         assert_approx_eq(transform.to_matrix()[3][0], 5.0, 1e-5);
 
-        let result = interpolate_transforms(&before, &after, CuDuration(1500));
+        let result = interpolate_transforms(&before, &after, CuTime::from_nanos(1500));
         assert!(result.is_ok());
 
         let transform = result.unwrap();
         assert_approx_eq(transform.to_matrix()[3][0], 2.5, 1e-5);
 
-        let result = interpolate_transforms(&before, &after, CuDuration(2500));
+        let result = interpolate_transforms(&before, &after, CuTime::from_nanos(2500));
         assert!(result.is_ok());
 
         let transform = result.unwrap();
@@ -204,7 +204,7 @@ mod tests {
                 [0.0, 0.0, 1.0, 0.0],
                 [0.0, 0.0, 0.0, 1.0], // Translation: x=0
             ]),
-            stamp: CuDuration(1000),
+            stamp: CuTime::from_nanos(1000),
             parent_frame: frame_id!("world"),
             child_frame: frame_id!("robot"),
         };
@@ -216,13 +216,13 @@ mod tests {
                 [0.0, 0.0, 1.0, 0.0],
                 [10.0, 0.0, 0.0, 1.0],
             ]),
-            stamp: CuDuration(3000),
+            stamp: CuTime::from_nanos(3000),
             parent_frame: frame_id!("world"),
             child_frame: frame_id!("robot"),
         };
 
         // Test at midpoint
-        let result = interpolate_transforms(&before, &after, CuDuration(2000));
+        let result = interpolate_transforms(&before, &after, CuTime::from_nanos(2000));
         assert!(result.is_ok());
         let transform = result.unwrap();
         assert_approx_eq(transform.to_matrix()[3][0], 5.0, 1e-5);
@@ -235,14 +235,14 @@ mod tests {
         // Test with i32
         let mut before: StampedTransform<i32> = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(1000),
+            stamp: CuTime::from_nanos(1000),
             parent_frame: frame_id!("world"),
             child_frame: frame_id!("robot"),
         };
 
         let mut after: StampedTransform<i32> = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(3000),
+            stamp: CuTime::from_nanos(3000),
             parent_frame: frame_id!("world"),
             child_frame: frame_id!("robot"),
         };
@@ -256,13 +256,13 @@ mod tests {
         after.transform = Transform3D::from_matrix(after_mat);
 
         // Test at midpoint
-        let result = interpolate_transforms(&before, &after, CuDuration(2000));
+        let result = interpolate_transforms(&before, &after, CuTime::from_nanos(2000));
         assert!(result.is_ok());
         let transform = result.unwrap();
         assert_eq!(transform.to_matrix()[0][3], 5);
 
         // Test with non-integer result (should round)
-        let result = interpolate_transforms(&before, &after, CuDuration(1500));
+        let result = interpolate_transforms(&before, &after, CuTime::from_nanos(1500));
         assert!(result.is_ok());
         let transform = result.unwrap();
         assert_eq!(transform.to_matrix()[0][3], 3); // 2.5 rounds to 3
@@ -275,14 +275,14 @@ mod tests {
         // Test with u64
         let mut before: StampedTransform<u64> = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(1000),
+            stamp: CuTime::from_nanos(1000),
             parent_frame: frame_id!("world"),
             child_frame: frame_id!("robot"),
         };
 
         let mut after: StampedTransform<u64> = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(3000),
+            stamp: CuTime::from_nanos(3000),
             parent_frame: frame_id!("world"),
             child_frame: frame_id!("robot"),
         };
@@ -297,7 +297,7 @@ mod tests {
         after.transform = Transform3D::from_matrix(after_mat);
 
         // Test at 75% point
-        let result = interpolate_transforms(&before, &after, CuDuration(2500));
+        let result = interpolate_transforms(&before, &after, CuTime::from_nanos(2500));
         assert!(result.is_ok());
         let transform = result.unwrap();
         assert_eq!(transform.to_matrix()[0][3], 1_750_000_000);
@@ -307,42 +307,42 @@ mod tests {
     fn test_interpolate_transforms_errors() {
         let before: StampedTransform<f32> = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(1000),
+            stamp: CuTime::from_nanos(1000),
             parent_frame: frame_id!("world"),
             child_frame: frame_id!("robot"),
         };
 
         let after: StampedTransform<f32> = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(3000),
+            stamp: CuTime::from_nanos(3000),
             parent_frame: frame_id!("different"),
             child_frame: frame_id!("robot"),
         };
 
-        let result = interpolate_transforms(&before, &after, CuDuration(2000));
+        let result = interpolate_transforms(&before, &after, CuTime::from_nanos(2000));
         assert!(result.is_err());
 
         let after: StampedTransform<f32> = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(3000),
+            stamp: CuTime::from_nanos(3000),
             parent_frame: frame_id!("world"),
             child_frame: frame_id!("different"),
         };
 
-        let result = interpolate_transforms(&before, &after, CuDuration(2000));
+        let result = interpolate_transforms(&before, &after, CuTime::from_nanos(2000));
         assert!(result.is_err());
 
         let after: StampedTransform<f32> = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(3000),
+            stamp: CuTime::from_nanos(3000),
             parent_frame: frame_id!("world"),
             child_frame: frame_id!("robot"),
         };
 
-        let result = interpolate_transforms(&before, &after, CuDuration(500));
+        let result = interpolate_transforms(&before, &after, CuTime::from_nanos(500));
         assert!(result.is_err());
 
-        let result = interpolate_transforms(&before, &after, CuDuration(3500));
+        let result = interpolate_transforms(&before, &after, CuTime::from_nanos(3500));
         assert!(result.is_err());
     }
 }

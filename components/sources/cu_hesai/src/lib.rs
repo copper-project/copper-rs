@@ -96,9 +96,9 @@ impl Decode<()> for LidarCuMsgPayload {
 // t6 + 1512ns * (i-1) + 280ns
 fn channel_time(t6: CuTime, i: u64) -> CuTime {
     if i == 0 {
-        CuDuration(t6.0 - 1512 + 280) // this is an underflow, so we just subtract the value
+        t6 - CuDuration(1512) + CuDuration(280)
     } else {
-        CuDuration(t6.0 + 1512 * (i - 1) + 280)
+        t6 + CuDuration(1512 * (i - 1) + 280)
     }
 }
 

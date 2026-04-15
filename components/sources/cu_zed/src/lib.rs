@@ -1208,7 +1208,7 @@ mod tests {
             },
             CuHandle::new_detached(values),
         )));
-        msg.tov = Tov::Time(CuDuration(42));
+        msg.tov = Tov::from(CuDuration(42));
         msg
     }
 

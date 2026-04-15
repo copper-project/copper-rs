@@ -131,7 +131,7 @@ mod tests {
 
             let mut left = CuStampedData::<String, CuMsgMetadata>::new(Some("left".to_string()));
             let mut right = CuStampedData::<String, CuMsgMetadata>::new(Some("right".to_string()));
-            let tov_time = CuDuration::from_millis(100);
+            let tov_time = CuTime::from_millis(100);
             left.tov = Tov::Time(tov_time);
             right.tov = Tov::Time(tov_time);
 

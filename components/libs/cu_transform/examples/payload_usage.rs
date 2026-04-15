@@ -1,7 +1,7 @@
 use cu_spatial_payloads::Transform3D;
 use cu_transform::transform_payload::StampedFrameTransform;
 use cu_transform::{FrameIdString, FrameTransform, TransformTree};
-use cu29::clock::{CuDuration, RobotClock, Tov};
+use cu29::clock::{CuTime, RobotClock, Tov};
 
 fn main() {
     println!("Cu Transform - CuMsg Pattern Demo");
@@ -29,7 +29,7 @@ fn main() {
         FrameIdString::from("base").expect("Frame name too long"),
     );
     let mut sft = StampedFrameTransform::new(Some(frame_transform));
-    sft.tov = Tov::Time(CuDuration(1_000_000_000)); // 1 second
+    sft.tov = Tov::Time(CuTime::from_nanos(1_000_000_000)); // 1 second
 
     // Add to tree using the new API
     tree.add_transform(&sft).expect("Failed to add transform");
@@ -49,7 +49,7 @@ fn main() {
         FrameIdString::from("arm").expect("Frame name too long"),
     );
     let mut sft = StampedFrameTransform::new(Some(msg2));
-    sft.tov = Tov::Time(CuDuration(1_000_000_000)); // 1 second
+    sft.tov = Tov::Time(CuTime::from_nanos(1_000_000_000)); // 1 second
 
     tree.add_transform(&sft).expect("Failed to add transform");
     println!("  Added base->arm transform at t=1s");
@@ -59,9 +59,9 @@ fn main() {
 
     // Create multiple transforms at different times
     let times = [
-        CuDuration(2_000_000_000), // 2 seconds
-        CuDuration(2_100_000_000), // 2.1 seconds
-        CuDuration(2_200_000_000),
+        CuTime::from_nanos(2_000_000_000), // 2 seconds
+        CuTime::from_nanos(2_100_000_000), // 2.1 seconds
+        CuTime::from_nanos(2_200_000_000),
     ];
 
     for (i, &time) in times.iter().enumerate() {
@@ -98,7 +98,7 @@ fn main() {
     // Query the tree
     println!("\nQuerying transforms...");
 
-    let result = tree.lookup_transform("world", "arm", CuDuration(1_000_000_000), &clock);
+    let result = tree.lookup_transform("world", "arm", CuTime::from_nanos(1_000_000_000), &clock);
     match result {
         Ok(transform) => {
             let mat = transform.to_matrix();
@@ -111,7 +111,7 @@ fn main() {
     }
 
     // Query velocity (requires transforms at multiple times)
-    let velocity = tree.lookup_velocity("world", "base", CuDuration(2_100_000_000), &clock);
+    let velocity = tree.lookup_velocity("world", "base", CuTime::from_nanos(2_100_000_000), &clock);
     match velocity {
         Ok(vel) => {
             println!(
