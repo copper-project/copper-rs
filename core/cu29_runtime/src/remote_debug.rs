@@ -230,13 +230,15 @@ use crate::app::{CuSimApplication, CurrentRuntimeCopperList};
 use crate::config::{BridgeChannelConfigRepresentation, Flavor, read_configuration_str};
 use crate::debug::{CuDebugSession, JumpOutcome};
 use crate::reflect::{
-    EnumInfo, ReflectTaskIntrospection, StructInfo, TupleInfo, TupleStructInfo, Type, TypeInfo,
-    TypeRegistry, VariantInfo, serde::SerializationData,
+    EnumInfo, Reflect, ReflectTaskIntrospection, StructInfo, TupleInfo, TupleStructInfo, Type,
+    TypeInfo, TypeRegistry, VariantInfo, serde::SerializationData,
 };
-use cu29_clock::{CuTime, RobotClock, RobotClockMock, Tov};
+use cu29_clock::{
+    CuTime, CuTimeRange, OptionCuTime, PartialCuTimeRange, RobotClock, RobotClockMock, Tov,
+};
 use cu29_traits::{
-    CopperListTuple, CuError, CuMsgMetadataTrait, CuResult, DebugFieldDescriptor, DebugFieldKind,
-    DebugFieldSemantics, ErasedCuStampedDataSet,
+    CopperListTuple, CuCompactString, CuError, CuMsgMetadataTrait, CuMsgOrigin, CuResult,
+    DebugFieldDescriptor, DebugFieldKind, DebugFieldSemantics, ErasedCuStampedDataSet,
 };
 use cu29_unifiedlog::{SectionStorage, UnifiedLogWrite};
 use serde::{Deserialize, Serialize};
@@ -258,6 +260,59 @@ const DEFAULT_SESSION_IDLE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const DEFAULT_MAX_ACTIVE_SESSIONS: usize = 64;
 const MAX_PAGE_LIMIT: u32 = 1000;
 const SERVER_RECV_POLL_TIMEOUT: Duration = Duration::from_millis(250);
+
+#[derive(Clone, Debug, Serialize, Reflect)]
+struct DebugMessageMetadataView {
+    tov: Tov,
+    process_time: PartialCuTimeRange,
+    status_txt: String,
+    origin: Option<CuMsgOrigin>,
+}
+
+fn register_debug_support_types(registry: &mut TypeRegistry) {
+    registry.register::<DebugMessageMetadataView>();
+    registry.register::<crate::cutask::CuMsgMetadata>();
+    registry.register::<Tov>();
+    registry.register::<CuTimeRange>();
+    registry.register::<PartialCuTimeRange>();
+    registry.register::<OptionCuTime>();
+    registry.register::<CuTime>();
+    registry.register::<CuMsgOrigin>();
+    registry.register::<Option<CuMsgOrigin>>();
+}
+
+fn populate_debug_type_registry<App>(registry: &mut TypeRegistry)
+where
+    App: ReflectTaskIntrospection,
+{
+    <App as ReflectTaskIntrospection>::register_reflect_types(registry);
+    register_debug_support_types(registry);
+}
+
+fn append_builtin_debug_type_paths(paths: &mut Vec<String>) {
+    let compact_string = core::any::type_name::<CuCompactString>().to_string();
+    if !paths.iter().any(|path| path == &compact_string) {
+        paths.push(compact_string);
+    }
+}
+
+fn builtin_debug_type_schema(type_path: &str, format: &str) -> Option<Value> {
+    (type_path == core::any::type_name::<CuCompactString>()).then(|| {
+        if format == "jsonschema" {
+            json!({
+                "$schema": "https://json-schema.org/draft-07/schema#",
+                "title": type_path,
+                "description": "Copper compact status string wrapper",
+                "type": "string",
+            })
+        } else {
+            json!({
+                "type_path": type_path,
+                "reflect_dump": "opaque scalar string wrapper",
+            })
+        }
+    })
+}
 const REGISTRY_DIR_NAME: &str = "cu29_remote_debug_registry";
 
 type ZenohSubscriber =
@@ -1825,12 +1880,13 @@ where
         };
 
         let mut registry = TypeRegistry::default();
-        <App as ReflectTaskIntrospection>::register_reflect_types(&mut registry);
+        populate_debug_type_registry::<App>(&mut registry);
 
         let mut paths: Vec<String> = registry
             .iter()
             .map(|registration| registration.type_info().type_path().to_string())
             .collect();
+        append_builtin_debug_type_paths(&mut paths);
         paths.sort();
         paths.dedup();
 
@@ -1857,7 +1913,11 @@ where
         };
 
         let mut registry = TypeRegistry::default();
-        <App as ReflectTaskIntrospection>::register_reflect_types(&mut registry);
+        populate_debug_type_registry::<App>(&mut registry);
+
+        if let Some(schema) = builtin_debug_type_schema(&parsed.type_path, &parsed.format) {
+            return ok_response(request_id, json!({ "schema": schema }), None, None);
+        }
 
         let info = match registry.get_with_type_path(&parsed.type_path) {
             Some(reg) => reg.type_info(),
@@ -1892,7 +1952,7 @@ where
         }
 
         let mut registry = TypeRegistry::default();
-        <App as ReflectTaskIntrospection>::register_reflect_types(&mut registry);
+        populate_debug_type_registry::<App>(&mut registry);
 
         match build_output_schema_entries::<P>(&registry) {
             Ok(outputs) => ok_response(request_id, json!({ "outputs": outputs }), None, None),
@@ -2895,37 +2955,15 @@ fn copperlist_snapshot<P: CopperListTuple + 'static>(
 }
 
 fn metadata_to_json(metadata: &dyn CuMsgMetadataTrait, tov: Tov) -> Value {
-    let process = metadata.process_time();
-    let start: Option<CuTime> = process.start.into();
-    let end: Option<CuTime> = process.end.into();
-    let origin = metadata.origin().map(|origin| {
-        json!({
-            "subsystem_code": origin.subsystem_code,
-            "instance_id": origin.instance_id,
-            "cl_id": origin.cl_id,
-        })
-    });
-    json!({
-        "tov": tov_to_json(tov),
-        "process_time": {
-            "start_ns": start.map(|t| t.as_nanos()),
-            "end_ns": end.map(|t| t.as_nanos()),
-        },
-        "status_txt": metadata.status_txt().0.to_string(),
-        "origin": origin,
-    })
-}
+    let view = DebugMessageMetadataView {
+        tov,
+        process_time: metadata.process_time(),
+        status_txt: metadata.status_txt().0.to_string(),
+        origin: metadata.origin().cloned(),
+    };
 
-fn tov_to_json(tov: Tov) -> Value {
-    match tov {
-        Tov::None => json!({"kind": "none"}),
-        Tov::Time(t) => json!({"kind": "time", "time_ns": t.as_nanos()}),
-        Tov::Range(r) => json!({
-            "kind": "range",
-            "start_ns": r.start.as_nanos(),
-            "end_ns": r.end.as_nanos(),
-        }),
-    }
+    serde_json::to_value(view)
+        .unwrap_or_else(|_| Value::String("metadata serialization failed".to_string()))
 }
 
 fn erased_serialize_to_json(value: &dyn erased_serde::Serialize) -> CuResult<Value> {
@@ -3296,7 +3334,7 @@ where
     let graph = config.get_graph(mission_id)?;
 
     let mut registry = TypeRegistry::default();
-    <App as ReflectTaskIntrospection>::register_reflect_types(&mut registry);
+    populate_debug_type_registry::<App>(&mut registry);
     let mut types: Vec<String> = registry
         .iter()
         .map(|registration| registration.type_info().type_path().to_string())
@@ -3391,7 +3429,7 @@ fn build_output_schema_entries<P>(registry: &TypeRegistry) -> CuResult<Vec<Value
 where
     P: CopperListTuple + 'static,
 {
-    let metadata_fields = build_message_metadata_field_descriptors();
+    let metadata_fields = build_message_metadata_field_descriptors(registry)?;
 
     P::get_output_specs()
         .iter()
@@ -3418,142 +3456,27 @@ where
         .collect()
 }
 
-fn build_message_metadata_field_descriptors() -> Vec<DebugFieldDescriptor> {
-    vec![
-        debug_field_descriptor(
-            "tov",
-            None,
-            "object",
-            "message_metadata::Tov",
-            DebugFieldShape {
-                semantics: None,
-                nullable: false,
-                kind: DebugFieldKind::Struct,
-            },
-            vec![
-                debug_field_descriptor(
-                    "tov.kind",
-                    None,
-                    "string",
-                    "alloc::string::String",
-                    DebugFieldShape {
-                        semantics: None,
-                        nullable: false,
-                        kind: DebugFieldKind::Scalar,
-                    },
-                    Vec::new(),
-                ),
-                debug_registered_scalar_field_descriptor::<CuTime>("tov.time_ns", None, false),
-                debug_registered_scalar_field_descriptor::<CuTime>("tov.start_ns", None, false),
-                debug_registered_scalar_field_descriptor::<CuTime>("tov.end_ns", None, false),
-            ],
-        ),
-        debug_field_descriptor(
-            "process_time",
-            None,
-            "object",
-            "message_metadata::ProcessTime",
-            DebugFieldShape {
-                semantics: None,
-                nullable: false,
-                kind: DebugFieldKind::Struct,
-            },
-            vec![
-                debug_registered_scalar_field_descriptor::<CuTime>(
-                    "process_time.start_ns",
-                    None,
-                    true,
-                ),
-                debug_registered_scalar_field_descriptor::<CuTime>(
-                    "process_time.end_ns",
-                    None,
-                    true,
-                ),
-            ],
-        ),
-        debug_field_descriptor(
-            "status_txt",
-            None,
-            "string",
-            "alloc::string::String",
-            DebugFieldShape {
-                semantics: None,
-                nullable: false,
-                kind: DebugFieldKind::Scalar,
-            },
-            Vec::new(),
-        ),
-        debug_field_descriptor(
-            "origin",
-            None,
-            "object",
-            "message_metadata::Origin",
-            DebugFieldShape {
-                semantics: None,
-                nullable: false,
-                kind: DebugFieldKind::Struct,
-            },
-            vec![
-                debug_field_descriptor(
-                    "origin.subsystem_code",
-                    None,
-                    "integer",
-                    "u16",
-                    DebugFieldShape {
-                        semantics: None,
-                        nullable: false,
-                        kind: DebugFieldKind::Scalar,
-                    },
-                    Vec::new(),
-                ),
-                debug_field_descriptor(
-                    "origin.instance_id",
-                    None,
-                    "integer",
-                    "u32",
-                    DebugFieldShape {
-                        semantics: None,
-                        nullable: false,
-                        kind: DebugFieldKind::Scalar,
-                    },
-                    Vec::new(),
-                ),
-                debug_field_descriptor(
-                    "origin.cl_id",
-                    None,
-                    "integer",
-                    "u64",
-                    DebugFieldShape {
-                        semantics: None,
-                        nullable: false,
-                        kind: DebugFieldKind::Scalar,
-                    },
-                    Vec::new(),
-                ),
-            ],
-        ),
-    ]
-}
+fn build_message_metadata_field_descriptors(
+    registry: &TypeRegistry,
+) -> CuResult<Vec<DebugFieldDescriptor>> {
+    let metadata_type_path = core::any::type_name::<DebugMessageMetadataView>();
+    let metadata_type =
+        resolve_type_info_by_path(registry, metadata_type_path).ok_or_else(|| {
+            CuError::from(format!(
+                "Message metadata type '{}' is not registered",
+                metadata_type_path
+            ))
+        })?;
 
-fn debug_registered_scalar_field_descriptor<T>(
-    display_path: &str,
-    binding_name: Option<&str>,
-    nullable: bool,
-) -> DebugFieldDescriptor {
-    let value_type_path = core::any::type_name::<T>();
-    let field_type = debug_scalar_field_type(value_type_path).unwrap_or("unknown");
-    debug_field_descriptor(
-        display_path,
-        binding_name,
-        field_type,
-        value_type_path,
-        DebugFieldShape {
-            semantics: debug_scalar_semantics(value_type_path),
-            nullable,
-            kind: DebugFieldKind::Scalar,
-        },
-        Vec::new(),
-    )
+    let mut fields = build_field_catalog(registry, metadata_type, None);
+    if let Some(status_txt) = fields
+        .iter_mut()
+        .find(|field| field.display_path == "status_txt")
+    {
+        status_txt.value_type_path = core::any::type_name::<CuCompactString>().to_owned();
+    }
+
+    Ok(fields)
 }
 
 fn build_field_catalog(
@@ -3584,6 +3507,7 @@ fn debug_scalar_field_types() -> &'static HashMap<&'static str, &'static str> {
         for registration in cu29_units::debug_scalar_registrations() {
             types.insert(registration.type_path, registration.field_type);
         }
+        types.insert(core::any::type_name::<CuCompactString>(), "string");
         types
     })
 }
@@ -4125,13 +4049,20 @@ fn hex_digit(n: u8) -> char {
 
 #[cfg(all(test, feature = "std"))]
 mod tests {
-    use super::{build_output_schema_entries, build_stack_schema};
+    use super::{
+        build_message_metadata_field_descriptors, build_output_schema_entries, build_stack_schema,
+        metadata_to_json, register_debug_support_types,
+    };
     use crate::app::CuSimApplication;
     use crate::curuntime::KeyFrame;
+    use crate::cutask::CuMsgMetadata;
     use crate::reflect::{Reflect, ReflectTaskIntrospection, TypePath, TypeRegistry};
     use crate::simulation::SimOverride;
+    use compact_str::CompactString;
+    use cu29_clock::{CuTime, CuTimeRange, OptionCuTime, PartialCuTimeRange, Tov};
     use cu29_traits::{
-        CuResult, ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks, TaskOutputSpec,
+        CuCompactString, CuMsgOrigin, CuResult, DebugFieldKind, ErasedCuStampedData,
+        ErasedCuStampedDataSet, MatchingTasks, TaskOutputSpec,
     };
     use cu29_unifiedlog::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
     use cu29_units::si::f32::Ratio;
@@ -4258,6 +4189,7 @@ mod tests {
     fn output_schema_resolves_alias_payload_types_via_canonical_type_path() -> CuResult<()> {
         let mut registry = TypeRegistry::default();
         registry.register::<PayloadAlias>();
+        register_debug_support_types(&mut registry);
 
         let outputs = build_output_schema_entries::<AliasPayloadCopperList>(&registry)?;
         assert_eq!(outputs.len(), 1);
@@ -4286,6 +4218,7 @@ mod tests {
         let mut registry = TypeRegistry::default();
         registry.register::<QuantityPayload>();
         registry.register::<Ratio>();
+        register_debug_support_types(&mut registry);
 
         let info = registry
             .get_with_type_path(<QuantityPayload as TypePath>::type_path())
@@ -4303,5 +4236,120 @@ mod tests {
                 .iter()
                 .any(|field| field.display_path == "power.value")
         );
+    }
+
+    #[test]
+    fn metadata_schema_uses_actual_type_paths() -> CuResult<()> {
+        let mut registry = TypeRegistry::default();
+        register_debug_support_types(&mut registry);
+
+        let fields = build_message_metadata_field_descriptors(&registry)?;
+        let tov = fields
+            .iter()
+            .find(|field| field.display_path == "tov")
+            .expect("tov field");
+        assert_eq!(tov.kind, DebugFieldKind::Enum);
+        assert_eq!(tov.value_type_path, core::any::type_name::<Tov>());
+
+        let process_time = fields
+            .iter()
+            .find(|field| field.display_path == "process_time")
+            .expect("process_time field");
+        assert_eq!(process_time.kind, DebugFieldKind::Struct);
+        assert_eq!(
+            process_time.value_type_path,
+            core::any::type_name::<PartialCuTimeRange>()
+        );
+        assert!(process_time.children.iter().any(|child| {
+            child.display_path == "process_time.start"
+                && child.value_type_path == core::any::type_name::<OptionCuTime>()
+        }));
+
+        let status_txt = fields
+            .iter()
+            .find(|field| field.display_path == "status_txt")
+            .expect("status_txt field");
+        assert_eq!(status_txt.kind, DebugFieldKind::Scalar);
+        assert_eq!(
+            status_txt.value_type_path,
+            core::any::type_name::<CuCompactString>()
+        );
+
+        let origin = fields
+            .iter()
+            .find(|field| field.display_path == "origin")
+            .expect("origin field");
+        assert_eq!(origin.kind, DebugFieldKind::Struct);
+        assert_eq!(
+            origin.value_type_path,
+            core::any::type_name::<CuMsgOrigin>()
+        );
+        assert!(origin.nullable);
+
+        Ok(())
+    }
+
+    #[test]
+    fn metadata_json_uses_actual_rust_shapes() {
+        let metadata = CuMsgMetadata {
+            process_time: PartialCuTimeRange {
+                start: OptionCuTime::from(Some(CuTime::from(10u64))),
+                end: OptionCuTime::none(),
+            },
+            status_txt: CuCompactString(CompactString::from("ready")),
+            origin: Some(CuMsgOrigin {
+                subsystem_code: 7,
+                instance_id: 11,
+                cl_id: 42,
+            }),
+        };
+
+        let value = metadata_to_json(
+            &metadata,
+            Tov::Range(CuTimeRange {
+                start: CuTime::from(100u64),
+                end: CuTime::from(200u64),
+            }),
+        );
+
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "tov": {
+                    "Range": {
+                        "start": 100u64,
+                        "end": 200u64,
+                    }
+                },
+                "process_time": {
+                    "start": 10u64,
+                    "end": OptionCuTime::NONE_SENTINEL_NANOS,
+                },
+                "status_txt": "ready",
+                "origin": {
+                    "subsystem_code": 7,
+                    "instance_id": 11,
+                    "cl_id": 42,
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn builtin_debug_schema_supports_compact_status_strings() {
+        let mut paths = Vec::new();
+        super::append_builtin_debug_type_paths(&mut paths);
+        assert!(
+            paths
+                .iter()
+                .any(|path| path == core::any::type_name::<CuCompactString>())
+        );
+
+        let schema = super::builtin_debug_type_schema(
+            core::any::type_name::<CuCompactString>(),
+            "jsonschema",
+        )
+        .expect("CuCompactString builtin schema");
+        assert_eq!(schema["type"], "string");
     }
 }
