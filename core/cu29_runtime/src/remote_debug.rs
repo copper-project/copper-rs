@@ -3308,7 +3308,7 @@ where
             Flavor::Task => "task",
             Flavor::Bridge => "bridge",
         };
-        let task_type = match crate::curuntime::find_task_type_for_id(graph, node_id) {
+        let task_type = match crate::curuntime::find_task_type_for_id(graph, node_id)? {
             crate::curuntime::CuTaskType::Source => "source",
             crate::curuntime::CuTaskType::Regular => "regular",
             crate::curuntime::CuTaskType::Sink => "sink",
