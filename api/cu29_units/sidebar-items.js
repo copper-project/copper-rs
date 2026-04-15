@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["si"]};
+window.SIDEBAR_ITEMS = {"fn":["debug_scalar_registrations"],"mod":["si"]};

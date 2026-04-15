@@ -372,7 +372,7 @@
 <a href=#372 id=372 data-nosnippet>372</a>}
 <a href=#373 id=373 data-nosnippet>373</a>
 <a href=#374 id=374 data-nosnippet>374</a><span class="kw">fn </span>option_time_ns(value: OptionCuTime) -&gt; <span class="prelude-ty">Option</span>&lt;u64&gt; {
-<a href=#375 id=375 data-nosnippet>375</a>    Option::&lt;CuDuration&gt;::from(value).map(|t| t.as_nanos())
+<a href=#375 id=375 data-nosnippet>375</a>    Option::&lt;cu29::clock::CuTime&gt;::from(value).map(|t| t.as_nanos())
 <a href=#376 id=376 data-nosnippet>376</a>}
 <a href=#377 id=377 data-nosnippet>377</a>
 <a href=#378 id=378 data-nosnippet>378</a><span class="kw">fn </span>duration_stats_from(stats: <span class="kw-2">&amp;</span>CuDurationStatistics) -&gt; DurationStats {

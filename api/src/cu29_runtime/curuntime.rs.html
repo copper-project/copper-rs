@@ -2084,12 +2084,12 @@
 <a href=#2084 id=2084 data-nosnippet>2084</a>    </span><span class="kw">fn </span>test_loop_rate_limiter_advances_to_next_period_when_on_time() {
 <a href=#2085 id=2085 data-nosnippet>2085</a>        <span class="kw">let </span>(clock, mock) = RobotClock::mock();
 <a href=#2086 id=2086 data-nosnippet>2086</a>        <span class="kw">let </span><span class="kw-2">mut </span>limiter = LoopRateLimiter::from_rate_target_hz(<span class="number">100</span>, <span class="kw-2">&amp;</span>clock).unwrap();
-<a href=#2087 id=2087 data-nosnippet>2087</a>        <span class="macro">assert_eq!</span>(limiter.next_deadline(), CuDuration::from(<span class="number">10_000_000</span>));
+<a href=#2087 id=2087 data-nosnippet>2087</a>        <span class="macro">assert_eq!</span>(limiter.next_deadline(), CuTime::from_nanos(<span class="number">10_000_000</span>));
 <a href=#2088 id=2088 data-nosnippet>2088</a>
 <a href=#2089 id=2089 data-nosnippet>2089</a>        mock.set_value(<span class="number">10_000_000</span>);
 <a href=#2090 id=2090 data-nosnippet>2090</a>        limiter.mark_tick(<span class="kw-2">&amp;</span>clock);
 <a href=#2091 id=2091 data-nosnippet>2091</a>
-<a href=#2092 id=2092 data-nosnippet>2092</a>        <span class="macro">assert_eq!</span>(limiter.next_deadline(), CuDuration::from(<span class="number">20_000_000</span>));
+<a href=#2092 id=2092 data-nosnippet>2092</a>        <span class="macro">assert_eq!</span>(limiter.next_deadline(), CuTime::from_nanos(<span class="number">20_000_000</span>));
 <a href=#2093 id=2093 data-nosnippet>2093</a>    }
 <a href=#2094 id=2094 data-nosnippet>2094</a>
 <a href=#2095 id=2095 data-nosnippet>2095</a>    <span class="attr">#[test]
@@ -2100,7 +2100,7 @@
 <a href=#2100 id=2100 data-nosnippet>2100</a>        mock.set_value(<span class="number">35_000_000</span>);
 <a href=#2101 id=2101 data-nosnippet>2101</a>        limiter.mark_tick(<span class="kw-2">&amp;</span>clock);
 <a href=#2102 id=2102 data-nosnippet>2102</a>
-<a href=#2103 id=2103 data-nosnippet>2103</a>        <span class="macro">assert_eq!</span>(limiter.next_deadline(), CuDuration::from(<span class="number">40_000_000</span>));
+<a href=#2103 id=2103 data-nosnippet>2103</a>        <span class="macro">assert_eq!</span>(limiter.next_deadline(), CuTime::from_nanos(<span class="number">40_000_000</span>));
 <a href=#2104 id=2104 data-nosnippet>2104</a>    }
 <a href=#2105 id=2105 data-nosnippet>2105</a>
 <a href=#2106 id=2106 data-nosnippet>2106</a>    <span class="attr">#[cfg(all(feature = <span class="string">"std"</span>, feature = <span class="string">"high-precision-limiter"</span>))]

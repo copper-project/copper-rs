@@ -1742,7 +1742,7 @@
 <a href=#1742 id=1742 data-nosnippet>1742</a>                .collect();
 <a href=#1743 id=1743 data-nosnippet>1743</a>
 <a href=#1744 id=1744 data-nosnippet>1744</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(msg) = format_message_only(format_str, params.as_slice(), <span class="kw-2">&amp;</span>named) {
-<a href=#1745 id=1745 data-nosnippet>1745</a>                <span class="kw">let </span>ts = format_timestamp(entry.time);
+<a href=#1745 id=1745 data-nosnippet>1745</a>                <span class="kw">let </span>ts = format_timestamp(entry.time.into());
 <a href=#1746 id=1746 data-nosnippet>1746</a>                <span class="macro">println!</span>(<span class="string">"{} [{:?}] {}"</span>, ts, entry.level, msg);
 <a href=#1747 id=1747 data-nosnippet>1747</a>            }
 <a href=#1748 id=1748 data-nosnippet>1748</a>        });
