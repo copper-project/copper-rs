@@ -34,6 +34,8 @@ bevy = { workspace = true, default-features = false, features = [
   "bevy_ui_render",
 ] }
 cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "0.15.0" }
+image = { workspace = true, default-features = false, features = ["png"] }
+winit = { version = "=0.30.12", default-features = false }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 bevy = { workspace = true, default-features = false, features = [

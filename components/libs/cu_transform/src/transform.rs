@@ -752,7 +752,7 @@ mod tests {
             "expected {expected}, got {actual}, difference {diff} exceeds epsilon {epsilon}",
         );
     }
-    use cu29::clock::CuDuration;
+    use cu29::clock::CuTime;
 
     #[test]
     fn test_add_transform() {
@@ -760,7 +760,7 @@ mod tests {
 
         let transform = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(1000),
+            stamp: CuTime::from_nanos(1000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
@@ -777,21 +777,21 @@ mod tests {
 
         let transform1 = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(2000),
+            stamp: CuTime::from_nanos(2000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform2 = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(1000),
+            stamp: CuTime::from_nanos(1000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform3 = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(3000),
+            stamp: CuTime::from_nanos(3000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
@@ -804,7 +804,8 @@ mod tests {
         assert_eq!(range.start.as_nanos(), 1000);
         assert_eq!(range.end.as_nanos(), 3000);
 
-        let transforms = buffer.get_transforms_in_range(CuDuration(1500), CuDuration(2500));
+        let transforms =
+            buffer.get_transforms_in_range(CuTime::from_nanos(1500), CuTime::from_nanos(2500));
         assert_eq!(transforms.len(), 1);
         assert_eq!(transforms[0].stamp.as_nanos(), 2000);
     }
@@ -815,21 +816,21 @@ mod tests {
 
         let transform1 = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(1000),
+            stamp: CuTime::from_nanos(1000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform2 = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(2000),
+            stamp: CuTime::from_nanos(2000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform3 = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(3000),
+            stamp: CuTime::from_nanos(3000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
@@ -849,14 +850,14 @@ mod tests {
 
         let transform1 = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(1000),
+            stamp: CuTime::from_nanos(1000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform2 = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(3000),
+            stamp: CuTime::from_nanos(3000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
@@ -864,23 +865,23 @@ mod tests {
         buffer.add_transform(transform1);
         buffer.add_transform(transform2);
 
-        let closest = buffer.get_closest_transform(CuDuration(1000));
+        let closest = buffer.get_closest_transform(CuTime::from_nanos(1000));
         assert!(closest.is_some());
         assert_eq!(closest.unwrap().stamp.as_nanos(), 1000);
 
-        let closest = buffer.get_closest_transform(CuDuration(500));
+        let closest = buffer.get_closest_transform(CuTime::from_nanos(500));
         assert!(closest.is_some());
         assert_eq!(closest.unwrap().stamp.as_nanos(), 1000);
 
-        let closest = buffer.get_closest_transform(CuDuration(4000));
+        let closest = buffer.get_closest_transform(CuTime::from_nanos(4000));
         assert!(closest.is_some());
         assert_eq!(closest.unwrap().stamp.as_nanos(), 3000);
 
-        let closest = buffer.get_closest_transform(CuDuration(1600));
+        let closest = buffer.get_closest_transform(CuTime::from_nanos(1600));
         assert!(closest.is_some());
         assert_eq!(closest.unwrap().stamp.as_nanos(), 1000);
 
-        let closest = buffer.get_closest_transform(CuDuration(2600));
+        let closest = buffer.get_closest_transform(CuTime::from_nanos(2600));
         assert!(closest.is_some());
         assert_eq!(closest.unwrap().stamp.as_nanos(), 3000);
     }
@@ -891,7 +892,7 @@ mod tests {
 
         let transform = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(1000),
+            stamp: CuTime::from_nanos(1000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
@@ -899,7 +900,7 @@ mod tests {
         store.add_transform(transform.clone());
 
         let buffer = store.get_buffer("world", "robot").unwrap();
-        let closest = buffer.get_closest_transform(CuDuration(1000));
+        let closest = buffer.get_closest_transform(CuTime::from_nanos(1000));
         assert!(closest.is_some());
 
         // Non-existent buffer
@@ -916,14 +917,14 @@ mod tests {
         // Create two transforms with a small time difference and known position difference
         let mut transform1 = StampedTransform {
             transform: Transform3D::<f32>::default(),
-            stamp: CuDuration(1_000_000_000), // 1 second in nanoseconds
+            stamp: CuTime::from_nanos(1_000_000_000), // 1 second in nanoseconds
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let mut transform2 = StampedTransform {
             transform: Transform3D::<f32>::default(),
-            stamp: CuDuration(2_000_000_000), // 2 seconds in nanoseconds
+            stamp: CuTime::from_nanos(2_000_000_000), // 2 seconds in nanoseconds
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
@@ -968,14 +969,14 @@ mod tests {
         // Test with different frames - should return None
         let transform1 = StampedTransform {
             transform: Transform3D::<f32>::default(),
-            stamp: CuDuration(1000),
+            stamp: CuTime::from_nanos(1000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform2 = StampedTransform {
             transform: Transform3D::<f32>::default(),
-            stamp: CuDuration(2000),
+            stamp: CuTime::from_nanos(2000),
             parent_frame: FrameIdString::from("different").unwrap(), // Different parent frame
             child_frame: FrameIdString::from("robot").unwrap(),
         };
@@ -986,14 +987,14 @@ mod tests {
         // Test with wrong time order - should return None
         let transform1 = StampedTransform {
             transform: Transform3D::<f32>::default(),
-            stamp: CuDuration(2000), // Later time
+            stamp: CuTime::from_nanos(2000), // Later time
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform2 = StampedTransform {
             transform: Transform3D::<f32>::default(),
-            stamp: CuDuration(1000), // Earlier time
+            stamp: CuTime::from_nanos(1000), // Earlier time
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
@@ -1009,21 +1010,21 @@ mod tests {
         // Add several transforms
         let transform1 = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(1000),
+            stamp: CuTime::from_nanos(1000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform2 = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(2000),
+            stamp: CuTime::from_nanos(2000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform3 = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(3000),
+            stamp: CuTime::from_nanos(3000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
@@ -1033,21 +1034,21 @@ mod tests {
         buffer.add_transform(transform3);
 
         // Test getting transforms around a time in the middle
-        let transforms = buffer.get_transforms_around(CuDuration(2500));
+        let transforms = buffer.get_transforms_around(CuTime::from_nanos(2500));
         assert!(transforms.is_some());
         let (t1, t2) = transforms.unwrap();
         assert_eq!(t1.stamp.as_nanos(), 2000); // Should be transform2
         assert_eq!(t2.stamp.as_nanos(), 3000); // Should be transform3
 
         // Test getting transforms around a time before first transform
-        let transforms = buffer.get_transforms_around(CuDuration(500));
+        let transforms = buffer.get_transforms_around(CuTime::from_nanos(500));
         assert!(transforms.is_some());
         let (t1, t2) = transforms.unwrap();
         assert_eq!(t1.stamp.as_nanos(), 1000); // Should be transform1
         assert_eq!(t2.stamp.as_nanos(), 2000); // Should be transform2
 
         // Test getting transforms around a time after last transform
-        let transforms = buffer.get_transforms_around(CuDuration(4000));
+        let transforms = buffer.get_transforms_around(CuTime::from_nanos(4000));
         assert!(transforms.is_some());
         let (t1, t2) = transforms.unwrap();
         assert_eq!(t1.stamp.as_nanos(), 2000); // Should be transform2
@@ -1061,14 +1062,14 @@ mod tests {
         // Add transforms with known positions to compute velocity
         let mut transform1 = StampedTransform {
             transform: Transform3D::<f32>::default(),
-            stamp: CuDuration(1_000_000_000), // 1 second in nanoseconds
+            stamp: CuTime::from_nanos(1_000_000_000), // 1 second in nanoseconds
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let mut transform2 = StampedTransform {
             transform: Transform3D::<f32>::default(),
-            stamp: CuDuration(2_000_000_000), // 2 seconds in nanoseconds
+            stamp: CuTime::from_nanos(2_000_000_000), // 2 seconds in nanoseconds
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
@@ -1093,7 +1094,7 @@ mod tests {
         buffer.add_transform(transform2);
 
         // Compute velocity at time between transforms
-        let velocity = buffer.compute_velocity_at_time(CuDuration(1_500_000_000)); // 1.5 seconds in nanoseconds
+        let velocity = buffer.compute_velocity_at_time(CuTime::from_nanos(1_500_000_000)); // 1.5 seconds in nanoseconds
         assert!(velocity.is_some());
 
         let vel = velocity.unwrap();
@@ -1110,7 +1111,7 @@ mod tests {
         // Create two transforms with a rotation around Z axis
         let mut transform1 = StampedTransform {
             transform: Transform3D::<f32>::default(),
-            stamp: CuDuration(1_000_000_000), // 1 second in nanoseconds
+            stamp: CuTime::from_nanos(1_000_000_000), // 1 second in nanoseconds
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
@@ -1125,7 +1126,7 @@ mod tests {
 
         let mut transform2 = StampedTransform {
             transform: Transform3D::<f32>::default(),
-            stamp: CuDuration(2_000_000_000), // 2 seconds in nanoseconds
+            stamp: CuTime::from_nanos(2_000_000_000), // 2 seconds in nanoseconds
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
@@ -1144,7 +1145,7 @@ mod tests {
         buffer.add_transform(transform2);
 
         // Compute velocity
-        let velocity = buffer.compute_velocity_at_time(CuDuration(1_500_000_000)); // 1.5 seconds in nanoseconds
+        let velocity = buffer.compute_velocity_at_time(CuTime::from_nanos(1_500_000_000)); // 1.5 seconds in nanoseconds
         assert!(velocity.is_some());
 
         let vel = velocity.unwrap();
@@ -1162,7 +1163,7 @@ mod tests {
 
         let transform = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(1000),
+            stamp: CuTime::from_nanos(1000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
@@ -1180,21 +1181,21 @@ mod tests {
 
         let transform1 = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(2000),
+            stamp: CuTime::from_nanos(2000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform2 = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(1000),
+            stamp: CuTime::from_nanos(1000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform3 = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(3000),
+            stamp: CuTime::from_nanos(3000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
@@ -1207,7 +1208,8 @@ mod tests {
         assert_eq!(range.start.as_nanos(), 1000);
         assert_eq!(range.end.as_nanos(), 3000);
 
-        let transforms = buffer.get_transforms_in_range(CuDuration(1500), CuDuration(2500));
+        let transforms =
+            buffer.get_transforms_in_range(CuTime::from_nanos(1500), CuTime::from_nanos(2500));
         assert_eq!(transforms.len(), 1);
         assert_eq!(transforms[0].stamp.as_nanos(), 2000);
     }
@@ -1218,21 +1220,21 @@ mod tests {
 
         let transform1 = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(1000),
+            stamp: CuTime::from_nanos(1000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform2 = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(2000),
+            stamp: CuTime::from_nanos(2000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform3 = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(3000),
+            stamp: CuTime::from_nanos(3000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
@@ -1246,7 +1248,7 @@ mod tests {
         assert!(latest.is_some());
 
         // Should be able to find closest transforms
-        let closest = buffer.get_closest_transform(CuDuration(2500));
+        let closest = buffer.get_closest_transform(CuTime::from_nanos(2500));
         assert!(closest.is_some());
     }
 
@@ -1256,14 +1258,14 @@ mod tests {
 
         let transform1 = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(1000),
+            stamp: CuTime::from_nanos(1000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform2 = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(3000),
+            stamp: CuTime::from_nanos(3000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
@@ -1271,23 +1273,23 @@ mod tests {
         buffer.add_transform(transform1);
         buffer.add_transform(transform2);
 
-        let closest = buffer.get_closest_transform(CuDuration(1000));
+        let closest = buffer.get_closest_transform(CuTime::from_nanos(1000));
         assert!(closest.is_some());
         assert_eq!(closest.unwrap().stamp.as_nanos(), 1000);
 
-        let closest = buffer.get_closest_transform(CuDuration(500));
+        let closest = buffer.get_closest_transform(CuTime::from_nanos(500));
         assert!(closest.is_some());
         assert_eq!(closest.unwrap().stamp.as_nanos(), 1000);
 
-        let closest = buffer.get_closest_transform(CuDuration(4000));
+        let closest = buffer.get_closest_transform(CuTime::from_nanos(4000));
         assert!(closest.is_some());
         assert_eq!(closest.unwrap().stamp.as_nanos(), 3000);
 
-        let closest = buffer.get_closest_transform(CuDuration(1900));
+        let closest = buffer.get_closest_transform(CuTime::from_nanos(1900));
         assert!(closest.is_some());
         assert_eq!(closest.unwrap().stamp.as_nanos(), 1000); // Closer to 1000 than 3000
 
-        let closest = buffer.get_closest_transform(CuDuration(2100));
+        let closest = buffer.get_closest_transform(CuTime::from_nanos(2100));
         assert!(closest.is_some());
         assert_eq!(closest.unwrap().stamp.as_nanos(), 3000); // Closer to 3000 than 1000
     }
@@ -1298,7 +1300,7 @@ mod tests {
 
         let transform = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(1000),
+            stamp: CuTime::from_nanos(1000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
@@ -1317,14 +1319,14 @@ mod tests {
         // Add transforms with known positions to compute velocity
         let mut transform1 = StampedTransform {
             transform: Transform3D::<f32>::default(),
-            stamp: CuDuration(1_000_000_000), // 1 second in nanoseconds
+            stamp: CuTime::from_nanos(1_000_000_000), // 1 second in nanoseconds
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let mut transform2 = StampedTransform {
             transform: Transform3D::<f32>::default(),
-            stamp: CuDuration(2_000_000_000), // 2 seconds in nanoseconds
+            stamp: CuTime::from_nanos(2_000_000_000), // 2 seconds in nanoseconds
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
@@ -1349,7 +1351,7 @@ mod tests {
         buffer.add_transform(transform2);
 
         // Compute velocity at time between transforms
-        let velocity = buffer.compute_velocity_at_time(CuDuration(1_500_000_000)); // 1.5 seconds in nanoseconds
+        let velocity = buffer.compute_velocity_at_time(CuTime::from_nanos(1_500_000_000)); // 1.5 seconds in nanoseconds
         assert!(velocity.is_some());
 
         let vel = velocity.unwrap();
@@ -1365,7 +1367,7 @@ mod tests {
 
         let transform = StampedTransform {
             transform: Transform3D::default(),
-            stamp: CuDuration(1000),
+            stamp: CuTime::from_nanos(1000),
             parent_frame: FrameIdString::from("world").unwrap(),
             child_frame: FrameIdString::from("robot").unwrap(),
         };
@@ -1373,7 +1375,7 @@ mod tests {
         store.add_transform(transform.clone());
 
         let buffer = store.get_buffer("world", "robot").unwrap();
-        let closest = buffer.get_closest_transform(CuDuration(1000));
+        let closest = buffer.get_closest_transform(CuTime::from_nanos(1000));
         assert!(closest.is_some());
 
         // Non-existent buffer

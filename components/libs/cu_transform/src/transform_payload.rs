@@ -26,7 +26,7 @@ pub type StampedFrameTransform<T> = CuStampedData<FrameTransform<T>, ()>;
 /// ```
 /// use cu_transform::{FrameTransform, Transform3D};
 /// use cu29::prelude::*;
-/// use cu29::clock::{CuDuration, Tov};
+/// use cu29::clock::{CuTime, Tov};
 /// use cu_transform::transform_payload::StampedFrameTransform;
 ///
 /// // Create a transform message
@@ -431,7 +431,7 @@ mod tests {
             "expected {expected}, got {actual}, difference {diff} exceeds epsilon {epsilon}",
         );
     }
-    use cu29::clock::CuDuration;
+    use cu29::clock::CuTime;
 
     type WorldToRobotFrameTransform = TypedTransform<f32, WorldFrame, RobotFrame>;
     type WorldToRobotBuffer = TypedTransformBuffer<f32, WorldFrame, RobotFrame, 10>;
@@ -439,7 +439,7 @@ mod tests {
     #[test]
     fn test_typed_transform_msg_creation() {
         let transform = Transform3D::<f32>::default();
-        let time = CuDuration(1000);
+        let time = CuTime::from_nanos(1000);
 
         let msg = WorldToRobotFrameTransform::new(transform, time);
 
@@ -455,10 +455,10 @@ mod tests {
         let mut buffer = WorldToRobotBuffer::new();
 
         let transform1 = Transform3D::<f32>::default();
-        let msg1 = WorldToRobotFrameTransform::new(transform1, CuDuration(1000));
+        let msg1 = WorldToRobotFrameTransform::new(transform1, CuTime::from_nanos(1000));
 
         let transform2 = Transform3D::<f32>::default();
-        let msg2 = WorldToRobotFrameTransform::new(transform2, CuDuration(2000));
+        let msg2 = WorldToRobotFrameTransform::new(transform2, CuTime::from_nanos(2000));
 
         buffer.add_transform(msg1);
         buffer.add_transform(msg2);
@@ -476,18 +476,18 @@ mod tests {
         let mut buffer = WorldToRobotBuffer::new();
 
         let transform1 = Transform3D::<f32>::default();
-        let msg1 = WorldToRobotFrameTransform::new(transform1, CuDuration(1000));
+        let msg1 = WorldToRobotFrameTransform::new(transform1, CuTime::from_nanos(1000));
 
         let transform2 = Transform3D::<f32>::default();
-        let msg2 = WorldToRobotFrameTransform::new(transform2, CuDuration(3000));
+        let msg2 = WorldToRobotFrameTransform::new(transform2, CuTime::from_nanos(3000));
 
         buffer.add_transform(msg1);
         buffer.add_transform(msg2);
 
-        let closest = buffer.get_closest_transform(CuDuration(1500));
+        let closest = buffer.get_closest_transform(CuTime::from_nanos(1500));
         assert_eq!(closest.unwrap().timestamp().unwrap().as_nanos(), 1000);
 
-        let closest = buffer.get_closest_transform(CuDuration(2500));
+        let closest = buffer.get_closest_transform(CuTime::from_nanos(2500));
         assert_eq!(closest.unwrap().timestamp().unwrap().as_nanos(), 3000);
     }
 
@@ -498,8 +498,8 @@ mod tests {
         let transform1 = translation_transform(0.0f32, 0.0, 0.0);
         let transform2 = translation_transform(1.0f32, 2.0, 0.0);
 
-        let msg1 = WorldToRobotFrameTransform::new(transform1, CuDuration(1_000_000_000)); // 1 second
-        let msg2 = WorldToRobotFrameTransform::new(transform2, CuDuration(2_000_000_000)); // 2 seconds
+        let msg1 = WorldToRobotFrameTransform::new(transform1, CuTime::from_nanos(1_000_000_000)); // 1 second
+        let msg2 = WorldToRobotFrameTransform::new(transform2, CuTime::from_nanos(2_000_000_000)); // 2 seconds
 
         let velocity = msg2.compute_velocity(&msg1).unwrap();
 

@@ -1,7 +1,7 @@
 use cu_spatial_payloads::Transform3D;
 use cu_transform::transform_payload::StampedFrameTransform;
 use cu_transform::{FrameTransform, TransformTree};
-use cu29::clock::{CuDuration, Tov};
+use cu29::clock::{CuTime, Tov};
 use cu29::prelude::RobotClock;
 use std::time::Instant;
 
@@ -38,7 +38,7 @@ fn main() {
 
         let ft = FrameTransform::new(transform, &parent_str, &child_str);
         let mut sft = StampedFrameTransform::new(Some(ft));
-        sft.tov = Tov::Time(CuDuration(1000));
+        sft.tov = Tov::Time(CuTime::from_nanos(1000));
 
         tree.add_transform(&sft).unwrap();
     }
@@ -53,7 +53,7 @@ fn main() {
             .lookup_transform(
                 "base",
                 &format!("frame{num_frames}"),
-                CuDuration(1000),
+                CuTime::from_nanos(1000),
                 &clock,
             )
             .unwrap();
@@ -67,7 +67,7 @@ fn main() {
             .lookup_transform(
                 "base",
                 &format!("frame{num_frames}"),
-                CuDuration(1000),
+                CuTime::from_nanos(1000),
                 &clock,
             )
             .unwrap();
@@ -103,7 +103,7 @@ fn main() {
                     .lookup_transform(
                         "base",
                         &format!("frame{frame_num}"),
-                        CuDuration(1000),
+                        CuTime::from_nanos(1000),
                         &clock_clone,
                     )
                     .unwrap();

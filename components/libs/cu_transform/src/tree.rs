@@ -706,7 +706,7 @@ mod tests {
     use super::*;
     use crate::test_utils::get_translation;
     use crate::{FrameTransform, frame_id};
-    use cu29::clock::{CuDuration, RobotClock};
+    use cu29::clock::{CuTime, RobotClock};
 
     // Helper function to replace assert_relative_eq
     fn assert_approx_eq(actual: f32, expected: f32, epsilon: f32, message: &str) {
@@ -720,7 +720,7 @@ mod tests {
     fn make_stamped(
         parent: &str,
         child: &str,
-        ts: CuDuration,
+        ts: CuTime,
         tf: Transform3D<f32>,
     ) -> StampedFrameTransform<f32> {
         let inner = FrameTransform {
@@ -745,7 +745,7 @@ mod tests {
             child_frame: frame_id!("robot"),
         };
         let mut stf = StampedFrameTransform::new(Some(inner));
-        stf.tov = CuDuration(1000).into();
+        stf.tov = CuTime::from_nanos(1000).into();
 
         assert!(tree.add_transform(&stf).is_ok());
     }
@@ -802,7 +802,7 @@ mod tests {
         let tf = make_stamped(
             "world",
             "robot",
-            CuDuration(1000),
+            CuTime::from_nanos(1000),
             Transform3D::from_matrix(matrix),
         );
 
@@ -811,14 +811,14 @@ mod tests {
         let clock = RobotClock::default();
 
         let forward = tree
-            .lookup_transform("world", "robot", CuDuration(1000), &clock)
+            .lookup_transform("world", "robot", CuTime::from_nanos(1000), &clock)
             .unwrap();
         assert_eq!(get_translation(&forward).0, 2.0);
         assert_eq!(get_translation(&forward).1, 3.0);
         assert_eq!(get_translation(&forward).2, 4.0);
 
         let inverse = tree
-            .lookup_transform("robot", "world", CuDuration(1000), &clock)
+            .lookup_transform("robot", "world", CuTime::from_nanos(1000), &clock)
             .unwrap();
         assert_eq!(get_translation(&inverse).0, -2.0);
         assert_eq!(get_translation(&inverse).1, -3.0);
@@ -828,7 +828,7 @@ mod tests {
     #[test]
     fn test_multi_step_transform_composition() {
         let mut tree = TransformTree::<f32>::new();
-        let ts = CuDuration(1000);
+        let ts = CuTime::from_nanos(1000);
 
         let world_to_base = make_stamped(
             "world",
@@ -926,7 +926,7 @@ mod tests {
     #[test]
     fn test_cache_invalidation() {
         let mut tree = TransformTree::<f32>::with_cache_settings(5, Duration::from_millis(50));
-        let ts = CuDuration(1000);
+        let ts = CuTime::from_nanos(1000);
 
         let tf = make_stamped(
             "a",
@@ -963,7 +963,7 @@ mod tests {
     #[test]
     fn test_multi_step_transform_with_inverse() {
         let mut tree = TransformTree::<f32>::new();
-        let ts = CuDuration(1000);
+        let ts = CuTime::from_nanos(1000);
 
         let world_to_robot = make_stamped(
             "world",
@@ -1033,7 +1033,7 @@ mod tests {
         let w2b_1 = make_stamped(
             "world",
             "base",
-            CuDuration(1_000_000_000),
+            CuTime::from_nanos(1_000_000_000),
             Transform3D::from_matrix([
                 [1.0, 0.0, 0.0, 0.0],
                 [0.0, 1.0, 0.0, 0.0],
@@ -1045,7 +1045,7 @@ mod tests {
         let w2b_2 = make_stamped(
             "world",
             "base",
-            CuDuration(2_000_000_000),
+            CuTime::from_nanos(2_000_000_000),
             Transform3D::from_matrix([
                 [1.0, 0.0, 0.0, 0.0],
                 [0.0, 1.0, 0.0, 0.0],
@@ -1057,7 +1057,7 @@ mod tests {
         let b2s_1 = make_stamped(
             "base",
             "sensor",
-            CuDuration(1_000_000_000),
+            CuTime::from_nanos(1_000_000_000),
             Transform3D::from_matrix([
                 [1.0, 0.0, 0.0, 0.0],
                 [0.0, 1.0, 0.0, 0.0],
@@ -1069,7 +1069,7 @@ mod tests {
         let b2s_2 = make_stamped(
             "base",
             "sensor",
-            CuDuration(2_000_000_000),
+            CuTime::from_nanos(2_000_000_000),
             Transform3D::from_matrix([
                 [1.0, 0.0, 0.0, 0.0],
                 [0.0, 1.0, 0.0, 0.0],
@@ -1084,7 +1084,8 @@ mod tests {
         tree.add_transform(&b2s_2).unwrap();
 
         let clock = RobotClock::default();
-        let velocity = tree.lookup_velocity("world", "sensor", CuDuration(1_500_000_000), &clock);
+        let velocity =
+            tree.lookup_velocity("world", "sensor", CuTime::from_nanos(1_500_000_000), &clock);
         assert!(velocity.is_ok());
 
         let vel = velocity.unwrap();
@@ -1098,8 +1099,8 @@ mod tests {
     fn test_velocity_with_rotation() {
         let mut tree = TransformTree::<f32>::new();
 
-        let ts1 = CuDuration(1_000_000_000);
-        let ts2 = CuDuration(2_000_000_000);
+        let ts1 = CuTime::from_nanos(1_000_000_000);
+        let ts2 = CuTime::from_nanos(2_000_000_000);
 
         let w2b_1 = make_stamped(
             "world",
@@ -1155,7 +1156,7 @@ mod tests {
         tree.add_transform(&b2s_2).unwrap();
 
         let clock = RobotClock::default();
-        let mid_ts = CuDuration(1_500_000_000);
+        let mid_ts = CuTime::from_nanos(1_500_000_000);
 
         let velocity = tree.lookup_velocity("world", "sensor", mid_ts, &clock);
         assert!(velocity.is_ok());
@@ -1176,8 +1177,8 @@ mod tests {
     #[test]
     fn test_velocity_with_angular_motion() {
         let mut tree = TransformTree::<f32>::new();
-        let ts1 = CuDuration(1_000_000_000);
-        let ts2 = CuDuration(2_000_000_000);
+        let ts1 = CuTime::from_nanos(1_000_000_000);
+        let ts2 = CuTime::from_nanos(2_000_000_000);
 
         let w2b_1 = make_stamped(
             "world",
@@ -1234,7 +1235,7 @@ mod tests {
 
         let clock = RobotClock::default();
         let vel = tree
-            .lookup_velocity("world", "sensor", CuDuration(1_500_000_000), &clock)
+            .lookup_velocity("world", "sensor", CuTime::from_nanos(1_500_000_000), &clock)
             .unwrap();
 
         let epsilon = 0.1;
@@ -1254,8 +1255,8 @@ mod tests {
     #[test]
     fn test_velocity_cache() {
         let mut tree = TransformTree::<f32>::new();
-        let ts1 = CuDuration(1_000_000_000);
-        let ts2 = CuDuration(2_000_000_000);
+        let ts1 = CuTime::from_nanos(1_000_000_000);
+        let ts2 = CuTime::from_nanos(2_000_000_000);
 
         let tf1 = make_stamped(
             "world",
@@ -1287,7 +1288,8 @@ mod tests {
         let clock = RobotClock::default();
 
         let start_time = std::time::Instant::now();
-        let velocity1 = tree.lookup_velocity("world", "robot", CuDuration(1_500_000_000), &clock);
+        let velocity1 =
+            tree.lookup_velocity("world", "robot", CuTime::from_nanos(1_500_000_000), &clock);
         let first_lookup_time = start_time.elapsed();
 
         assert!(velocity1.is_ok());
@@ -1295,7 +1297,8 @@ mod tests {
         assert_approx_eq(vel1.linear[0], 2.0, 0.01, "linear_velocity_0");
 
         let start_time = std::time::Instant::now();
-        let velocity2 = tree.lookup_velocity("world", "robot", CuDuration(1_500_000_000), &clock);
+        let velocity2 =
+            tree.lookup_velocity("world", "robot", CuTime::from_nanos(1_500_000_000), &clock);
         let second_lookup_time = start_time.elapsed();
 
         assert!(velocity2.is_ok());
@@ -1305,7 +1308,8 @@ mod tests {
         tree.clear_cache();
 
         let start_time = std::time::Instant::now();
-        let velocity3 = tree.lookup_velocity("world", "robot", CuDuration(1_500_000_000), &clock);
+        let velocity3 =
+            tree.lookup_velocity("world", "robot", CuTime::from_nanos(1_500_000_000), &clock);
         let third_lookup_time = start_time.elapsed();
 
         assert!(velocity3.is_ok());
@@ -1318,9 +1322,9 @@ mod tests {
     #[test]
     fn test_velocity_cache_invalidation() {
         let mut tree = TransformTree::<f32>::new();
-        let ts1 = CuDuration(1_000_000_000);
-        let ts2 = CuDuration(2_000_000_000);
-        let ts3 = CuDuration(3_000_000_000);
+        let ts1 = CuTime::from_nanos(1_000_000_000);
+        let ts2 = CuTime::from_nanos(2_000_000_000);
+        let ts3 = CuTime::from_nanos(3_000_000_000);
 
         let tf1 = make_stamped(
             "world",
@@ -1363,19 +1367,19 @@ mod tests {
 
         let clock = RobotClock::default();
         let velocity1 = tree
-            .lookup_velocity("world", "robot", CuDuration(1_500_000_000), &clock)
+            .lookup_velocity("world", "robot", CuTime::from_nanos(1_500_000_000), &clock)
             .unwrap();
         assert_approx_eq(velocity1.linear[0], 1.0, 0.01, "linear_velocity_0");
 
         tree.add_transform(&tf3).unwrap();
 
         let velocity2 = tree
-            .lookup_velocity("world", "robot", CuDuration(1_500_000_000), &clock)
+            .lookup_velocity("world", "robot", CuTime::from_nanos(1_500_000_000), &clock)
             .unwrap();
         assert_approx_eq(velocity2.linear[0], 1.0, 0.01, "linear_velocity_0");
 
         let velocity3 = tree
-            .lookup_velocity("world", "robot", CuDuration(2_500_000_000), &clock)
+            .lookup_velocity("world", "robot", CuTime::from_nanos(2_500_000_000), &clock)
             .unwrap();
         assert_approx_eq(velocity3.linear[0], 2.0, 0.01, "linear_velocity_0");
     }

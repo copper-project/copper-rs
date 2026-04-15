@@ -141,11 +141,11 @@ impl<const N: usize> CuHandlePayloadInit for PointCloudSoa<N> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cu29_clock::CuDuration;
+    use cu29_clock::CuTime;
 
     #[test]
     fn test_point_payload() {
-        let payload = PointCloud::new(CuDuration(1), 1.0, 2.0, 3.0, 0.0, None);
+        let payload = PointCloud::new(CuTime::from_nanos(1), 1.0, 2.0, 3.0, 0.0, None);
         assert_eq!(payload.x.value, 1.0);
         assert_eq!(payload.y.value, 2.0);
         assert_eq!(payload.z.value, 3.0);

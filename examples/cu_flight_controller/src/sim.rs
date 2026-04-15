@@ -10,6 +10,8 @@ mod rc_joystick;
 mod sim_support;
 #[cfg(feature = "sim")]
 mod tasks;
+#[cfg(not(target_arch = "wasm32"))]
+mod windowing;
 
 use avian3d::prelude::*;
 use bevy::app::AppExit;
@@ -1909,6 +1911,13 @@ fn asset_plugin() -> AssetPlugin {
 }
 
 fn primary_window(split_monitor: bool) -> Window {
+    #[cfg(not(target_arch = "wasm32"))]
+    let app_id = if split_monitor {
+        "io.github.copper-project.flight-controller-bevymon"
+    } else {
+        "io.github.copper-project.flight-controller-sim"
+    };
+
     let title = if split_monitor {
         "Copper Flight Controller BevyMon"
     } else {
@@ -1930,6 +1939,7 @@ fn primary_window(split_monitor: bool) -> Window {
     {
         Window {
             title: title.into(),
+            name: Some(app_id.into()),
             resolution: (1680, 960).into(),
             ..default()
         }
@@ -2043,47 +2053,49 @@ pub fn build_world(headless: bool, split_monitor: bool) -> App {
                 ..default()
             })
             .set(asset_plugin()),
-    )
-    .add_plugins(PhysicsPlugins::default())
-    .insert_resource(Gravity(Vec3::new(0.0, -9.81, 0.0)))
-    .insert_resource(Time::<Physics>::default())
-    .add_systems(
-        Startup,
-        (setup_world, setup_full_window_hud_root, setup_joystick),
-    )
-    .add_systems(
-        Update,
-        (
-            spawn_loading_overlay,
-            spawn_help_overlay,
-            spawn_osd_overlay,
-            sync_loading_overlay,
-        ),
-    )
-    .add_systems(
-        Update,
-        (
-            spawn_quadcopter_when_world_ready,
-            poll_joystick,
-            update_rc_input_keyboard,
-            adjust_keyboard_throttle,
-            reset_vehicle,
-        ),
-    )
-    .add_systems(
-        Update,
-        (
-            toggle_camera_view,
-            update_quadcopter_visibility,
-            camera_follow_quadcopter,
-            track_sim_led_state,
-            update_help_overlay,
-            prepare_osd_raster_source,
-            update_osd_overlay,
+    );
+    #[cfg(not(target_arch = "wasm32"))]
+    app.add_systems(Update, windowing::set_copper_window_icon);
+    app.add_plugins(PhysicsPlugins::default())
+        .insert_resource(Gravity(Vec3::new(0.0, -9.81, 0.0)))
+        .insert_resource(Time::<Physics>::default())
+        .add_systems(
+            Startup,
+            (setup_world, setup_full_window_hud_root, setup_joystick),
         )
-            .chain(),
-    )
-    .add_systems(FixedUpdate, sync_vehicle_state);
+        .add_systems(
+            Update,
+            (
+                spawn_loading_overlay,
+                spawn_help_overlay,
+                spawn_osd_overlay,
+                sync_loading_overlay,
+            ),
+        )
+        .add_systems(
+            Update,
+            (
+                spawn_quadcopter_when_world_ready,
+                poll_joystick,
+                update_rc_input_keyboard,
+                adjust_keyboard_throttle,
+                reset_vehicle,
+            ),
+        )
+        .add_systems(
+            Update,
+            (
+                toggle_camera_view,
+                update_quadcopter_visibility,
+                camera_follow_quadcopter,
+                track_sim_led_state,
+                update_help_overlay,
+                prepare_osd_raster_source,
+                update_osd_overlay,
+            )
+                .chain(),
+        )
+        .add_systems(FixedUpdate, sync_vehicle_state);
 
     register_scene_reflect_types(&mut app);
 

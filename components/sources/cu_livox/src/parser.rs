@@ -1,6 +1,6 @@
 use bytemuck::{Pod, Zeroable};
 use chrono::{DateTime, Utc};
-use cu29::prelude::{CuDuration, CuTime};
+use cu29::prelude::CuTime;
 use cu29::units::si::f32::{Length, Ratio};
 use cu29::units::si::length::millimeter;
 use cu29::units::si::ratio::ratio;
@@ -168,8 +168,8 @@ impl Debug for crate::parser::LidarHeader {
 }
 
 impl LidarHeader {
-    pub fn timestamp(&self) -> CuDuration {
-        CuDuration(u64_endianness(self.timestamp))
+    pub fn timestamp(&self) -> CuTime {
+        CuTime::from_nanos(u64_endianness(self.timestamp))
     }
 }
 

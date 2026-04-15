@@ -4,7 +4,7 @@ use cu_transform::{
     ConstTransformBuffer, FrameIdString, FrameTransform, RobotFrame, StampedTransform,
     TransformTree, TypedTransform, TypedTransformBuffer, WorldFrame,
 };
-use cu29::clock::{CuDuration, Tov};
+use cu29::clock::{CuTime, Tov};
 
 fn main() {
     // Example using the typed transform approach
@@ -23,7 +23,7 @@ fn main() {
         [0.0, 0.0, 0.0, 1.0],
     ]);
 
-    let world_to_robot_msg = TypedTransform::new(transform, CuDuration(1000));
+    let world_to_robot_msg = TypedTransform::new(transform, CuTime::from_nanos(1000));
 
     println!(
         "Created transform from {} to {}",
@@ -49,7 +49,7 @@ fn main() {
         [0.0, 0.0, 0.0, 1.0],
     ]);
 
-    let world_to_robot_msg2 = TypedTransform::new(transform2, CuDuration(2000));
+    let world_to_robot_msg2 = TypedTransform::new(transform2, CuTime::from_nanos(2000));
     world_to_robot_buffer.add_transform(world_to_robot_msg2);
 
     // Query the buffer
@@ -68,7 +68,7 @@ fn main() {
     }
 
     // Query closest to a specific time
-    if let Some(closest) = world_to_robot_buffer.get_closest_transform(CuDuration(1500)) {
+    if let Some(closest) = world_to_robot_buffer.get_closest_transform(CuTime::from_nanos(1500)) {
         println!("\nClosest transform to time 1500:");
         println!("  Actual time: {}", closest.timestamp().unwrap().as_nanos());
         if let Some(t) = closest.transform() {
@@ -91,7 +91,7 @@ fn main() {
 
     // Demonstrate velocity computation
     if let Some(latest) = world_to_robot_buffer.get_latest_transform()
-        && let Some(closest) = world_to_robot_buffer.get_closest_transform(CuDuration(1000))
+        && let Some(closest) = world_to_robot_buffer.get_closest_transform(CuTime::from_nanos(1000))
         && let Some(velocity) = latest.compute_velocity(closest)
     {
         println!("\nVelocity computation:");
@@ -110,7 +110,7 @@ fn main() {
     // Add some stamped transforms
     let stamped_transform = StampedTransform {
         transform,
-        stamp: CuDuration(1000),
+        stamp: CuTime::from_nanos(1000),
         parent_frame: "world".try_into().unwrap(),
         child_frame: "robot".try_into().unwrap(),
     };
@@ -147,7 +147,7 @@ fn main() {
     );
 
     let mut sft = StampedFrameTransform::new(Some(frame_transform));
-    sft.tov = Tov::Time(CuDuration(1_000_000_000)); // 1 second
+    sft.tov = Tov::Time(CuTime::from_nanos(1_000_000_000)); // 1 second
 
     // Add using the new API
     tree.add_transform(&sft).expect("Failed to add transform");
@@ -155,7 +155,12 @@ fn main() {
 
     // Query the transform
     let robot_clock = cu29::clock::RobotClock::default();
-    let result = tree.lookup_transform("world", "robot", CuDuration(1_000_000_000), &robot_clock);
+    let result = tree.lookup_transform(
+        "world",
+        "robot",
+        CuTime::from_nanos(1_000_000_000),
+        &robot_clock,
+    );
 
     match result {
         Ok(transform) => {

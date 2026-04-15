@@ -2,12 +2,9 @@ use alloc::format;
 use alloc::string::String;
 use core::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use cu29::prelude::*;
-use std::panic::PanicHookInfo;
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
-
-type PanicHook = Box<dyn Fn(&PanicHookInfo<'_>) + Send + Sync + 'static>;
 
 #[derive(Clone, Debug)]
 struct LastProgress {
@@ -103,7 +100,8 @@ pub struct CuSafetyMon {
     shared: Arc<SharedState>,
     cfg: SafetyCfg,
     watchdog: Option<JoinHandle<()>>,
-    previous_panic_hook: Option<PanicHook>,
+    monitor_runtime: CuMonitoringRuntime,
+    panic_action: Option<PanicHookRegistration>,
     execution_probe: MonitorExecutionProbe,
 }
 
@@ -128,12 +126,12 @@ impl CuSafetyMon {
 
         self.watchdog = Some(thread::spawn(move || {
             loop {
-                if shared.stopping.load(Ordering::SeqCst) {
+                if shared.stopping.load(Ordering::SeqCst) || runtime_panic_hook_active() {
                     break;
                 }
                 thread::park_timeout(period);
 
-                if shared.stopping.load(Ordering::SeqCst) {
+                if shared.stopping.load(Ordering::SeqCst) || runtime_panic_hook_active() {
                     break;
                 }
 
@@ -146,6 +144,10 @@ impl CuSafetyMon {
                 };
 
                 if elapsed > deadline {
+                    if shared.stopping.load(Ordering::SeqCst) || runtime_panic_hook_active() {
+                        break;
+                    }
+
                     let marker = probe.marker();
                     let culist_info = format!("last_culist={last_culistid}");
                     let detail = if let Some(marker) = marker {
@@ -170,6 +172,10 @@ impl CuSafetyMon {
                         )
                     };
 
+                    if shared.stopping.load(Ordering::SeqCst) || runtime_panic_hook_active() {
+                        break;
+                    }
+
                     shared.request_exit(exit_code, detail.clone());
                     Self::emit_fault("cu_safetymon lock fault:", &detail);
                     std::process::exit(exit_code);
@@ -178,27 +184,19 @@ impl CuSafetyMon {
         }));
     }
 
-    fn install_panic_hook(&mut self) {
+    fn panic_detail_from_report(report: &PanicReport) -> String {
+        match report.location() {
+            Some(location) => format!("panic at {}: {}", location, report.message()),
+            None => format!("panic: {}", report.message()),
+        }
+    }
+
+    fn install_panic_action(&mut self) {
+        let components = self.components;
         let shared = Arc::clone(&self.shared);
         let panic_code = self.cfg.exit_code_panic;
         let probe = self.execution_probe.clone();
-        let previous = std::panic::take_hook();
-        self.previous_panic_hook = Some(previous);
-
-        std::panic::set_hook(Box::new(move |info| {
-            let panic_message = if let Some(s) = info.payload().downcast_ref::<&str>() {
-                (*s).to_string()
-            } else if let Some(s) = info.payload().downcast_ref::<String>() {
-                s.clone()
-            } else {
-                "panic with non-string payload".to_string()
-            };
-
-            let location = info
-                .location()
-                .map(|loc| format!("{}:{}:{}", loc.file(), loc.line(), loc.column()))
-                .unwrap_or_else(|| "<unknown>".to_string());
-
+        self.panic_action = Some(self.monitor_runtime.register_panic_action(move |report| {
             let marker = probe.marker();
             let last_culistid = {
                 let guard = shared
@@ -209,24 +207,34 @@ impl CuSafetyMon {
             };
 
             let detail = if let Some(marker) = marker {
-                format!(
-                    "panic at {}: {}; last marker component={} step={:?}; last_culist={}",
-                    location,
-                    panic_message,
-                    marker.component_id.index(),
-                    marker.step,
-                    last_culistid
-                )
+                let component = components.get(marker.component_id.index()).map(|c| c.id());
+                match component {
+                    Some(component) => format!(
+                        "{}; last marker component='{}' step={:?}; last_culist={}",
+                        Self::panic_detail_from_report(report),
+                        component,
+                        marker.step,
+                        last_culistid
+                    ),
+                    None => format!(
+                        "{}; last marker component={} step={:?}; last_culist={}",
+                        Self::panic_detail_from_report(report),
+                        marker.component_id.index(),
+                        marker.step,
+                        last_culistid
+                    ),
+                }
             } else {
                 format!(
-                    "panic at {}: {}; last_culist={}",
-                    location, panic_message, last_culistid
+                    "{}; last_culist={}",
+                    Self::panic_detail_from_report(report),
+                    last_culistid
                 )
             };
 
             shared.request_exit(panic_code, detail.clone());
             Self::emit_fault("cu_safetymon panic fault:", &detail);
-            std::process::exit(panic_code);
+            Some(panic_code)
         }));
     }
 
@@ -250,19 +258,21 @@ impl CuSafetyMon {
 impl CuMonitor for CuSafetyMon {
     fn new(metadata: CuMonitoringMetadata, runtime: CuMonitoringRuntime) -> CuResult<Self> {
         let cfg = SafetyCfg::from_monitor_config(metadata.monitor_config())?;
+        let execution_probe = runtime.execution_probe().clone();
         Ok(Self {
             components: metadata.components(),
             shared: Arc::new(SharedState::new()),
             cfg,
             watchdog: None,
-            previous_panic_hook: None,
-            execution_probe: runtime.execution_probe().clone(),
+            monitor_runtime: runtime,
+            panic_action: None,
+            execution_probe,
         })
     }
 
     fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         self.shared.touch(0);
-        self.install_panic_hook();
+        self.install_panic_action();
         self.spawn_watchdog();
         info!(
             "cu_safetymon started: deadline={:?} period={:?} codes(shutdown={}, lock={}, panic={})",
@@ -305,14 +315,11 @@ impl CuMonitor for CuSafetyMon {
 
     fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
         self.shared.stopping.store(true, Ordering::SeqCst);
+        self.panic_action = None;
 
         if let Some(handle) = self.watchdog.take() {
             handle.thread().unpark();
             let _ = handle.join();
-        }
-
-        if let Some(previous_hook) = self.previous_panic_hook.take() {
-            std::panic::set_hook(previous_hook);
         }
 
         self.maybe_exit_with_latched_code();

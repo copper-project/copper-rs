@@ -21,23 +21,26 @@ The transform tree maintains a hierarchical relationship between coordinate fram
 
 ```rust
 use cu_transform::{StampedTransform, TransformTree, Transform3D};
-use cu29::clock::CuDuration;
+use cu29::clock::{CuTime, RobotClock};
 
 fn tree_lookup() {
     // Create a transform tree
     let mut tree = TransformTree::<f32>::new();
+    let clock = RobotClock::default();
 
     // Add a transform from "world" to "robot"
     let world_to_robot = StampedTransform {
         transform: Transform3D::default(), // Identity transform
-        stamp: CuDuration(1000),
+        stamp: CuTime::from_nanos(1000),
         parent_frame: "world".try_into().expect("invalid name"),
         child_frame: "robot".try_into().expect("invalid name"),
     };
     tree.add_transform(world_to_robot).unwrap();
 
     // Look up transform
-    let transform = tree.lookup_transform("world", "robot", CuDuration(1000)).unwrap();
+    let transform = tree
+        .lookup_transform("world", "robot", CuTime::from_nanos(1000), &clock)
+        .unwrap();
 }
 ```
 
@@ -47,16 +50,19 @@ The cu_transform library also supports calculating and transforming velocities:
 
 ```rust
 use cu_transform::{VelocityTransform, TransformTree};
-use cu29::clock::CuDuration;
+use cu29::clock::{CuTime, RobotClock};
 
 
 fn velocity_lookup() {
     // Create and set up a transform tree with moving frames
     // ...
+    let clock = RobotClock::default();
 
     // Look up velocity between frames at a specific time
     // This uses caching to speed up repeated lookups
-    let velocity = tree.lookup_velocity("world", "robot", CuDuration(1500)).unwrap();
+    let velocity = tree
+        .lookup_velocity("world", "robot", CuTime::from_nanos(1500), &clock)
+        .unwrap();
 
     // Access linear and angular components
     let linear_x = velocity.linear[0]; // Linear velocity in x direction (m/s)
@@ -140,9 +146,10 @@ fn caching_tree() {
         200,                   // Cache size (max number of entries)
         Duration::from_secs(5) // Cache entry lifetime
     );
+    let clock = RobotClock::default();
 
     // Lookup operations use the cache automatically
-    let velocity = tree.lookup_velocity("world", "robot", time);
+    let velocity = tree.lookup_velocity("world", "robot", time, &clock);
 
     // Cache is automatically invalidated when:
     // - New transforms are added to the tree

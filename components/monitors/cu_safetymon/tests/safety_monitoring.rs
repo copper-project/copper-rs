@@ -1,6 +1,8 @@
 use cu_logmon::CuLogMon;
 use cu_safetymon::CuSafetyMon;
 use cu29::prelude::*;
+use std::fs;
+use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::sync::Arc;
 use std::thread;
@@ -80,16 +82,25 @@ fn safetymon_test_config(exit_lock: i32, exit_panic: i32) -> CuConfig {
     safetymon_test_config_with_timing(40, 10, exit_lock, exit_panic)
 }
 
-fn spawn_current_test(test_name: &str, mode: &str) -> Output {
+fn spawn_current_test(test_name: &str, mode: &str) -> (Output, PathBuf) {
     let exe = std::env::current_exe().expect("unable to locate current test executable");
-    Command::new(exe)
+    let child_dir = std::env::temp_dir().join(format!(
+        "cu-safetymon-test-{}-{}-{}",
+        test_name,
+        mode,
+        std::process::id()
+    ));
+    fs::create_dir_all(&child_dir).expect("failed to create child test directory");
+    let output = Command::new(exe)
         .arg("--exact")
         .arg(test_name)
         .arg("--nocapture")
         .arg("--test-threads=1")
         .env(CHILD_MODE_ENV, mode)
+        .current_dir(&child_dir)
         .output()
-        .expect("failed to spawn child test process")
+        .expect("failed to spawn child test process");
+    (output, child_dir)
 }
 
 #[test]
@@ -169,7 +180,7 @@ fn panic_fault_exits_with_configured_code_and_marker_context() {
         panic!("panic path test");
     }
 
-    let output = spawn_current_test(
+    let (output, child_dir) = spawn_current_test(
         "panic_fault_exits_with_configured_code_and_marker_context",
         "panic",
     );
@@ -181,8 +192,24 @@ fn panic_fault_exits_with_configured_code_and_marker_context() {
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("cu_safetymon panic fault:"));
-    assert!(stderr.contains("component=1"));
+    assert!(stderr.contains("component='driver'"));
     assert!(stderr.contains("last_culist=33"));
+    let crash_reports: Vec<_> = fs::read_dir(&child_dir)
+        .expect("failed to read child test directory")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("copper-crash-") && name.ends_with(".txt"))
+        })
+        .collect();
+    assert_eq!(
+        crash_reports.len(),
+        1,
+        "expected one crash report in {child_dir:?}"
+    );
+    let _ = fs::remove_dir_all(&child_dir);
 }
 
 #[test]
@@ -211,7 +238,7 @@ fn lock_fault_exits_with_configured_code_and_last_marker() {
         std::process::exit(254);
     }
 
-    let output = spawn_current_test(
+    let (output, child_dir) = spawn_current_test(
         "lock_fault_exits_with_configured_code_and_last_marker",
         "lock",
     );
@@ -225,6 +252,7 @@ fn lock_fault_exits_with_configured_code_and_last_marker() {
     assert!(stderr.contains("cu_safetymon lock fault:"));
     assert!(stderr.contains("component='driver'"));
     assert!(stderr.contains("last_culist=9"));
+    let _ = fs::remove_dir_all(&child_dir);
 }
 
 #[test]
@@ -246,7 +274,7 @@ fn stop_does_not_trigger_lock_fault_after_shutdown_requested() {
     }
 
     let started = Instant::now();
-    let output = spawn_current_test(
+    let (output, child_dir) = spawn_current_test(
         "stop_does_not_trigger_lock_fault_after_shutdown_requested",
         "stop-race",
     );
@@ -258,6 +286,7 @@ fn stop_does_not_trigger_lock_fault_after_shutdown_requested() {
         output.status,
         String::from_utf8_lossy(&output.stderr)
     );
+    let _ = fs::remove_dir_all(&child_dir);
     assert!(
         elapsed < Duration::from_millis(STOP_RACE_MAX_CHILD_RUNTIME_MS),
         "stop-race child took {:?}; expected stop to wake a parked watchdog well before {}ms",
