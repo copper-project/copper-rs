@@ -404,6 +404,44 @@ impl From<Value> for f64 {
     }
 }
 
+//Basically just a copy of the From<Value> for f64.
+impl TryFrom<&Value> for f32 {
+    type Error = ConfigError;
+
+    fn try_from(value: &Value) -> Result<Self, Self::Error> {
+        if let Value(RonValue::Number(num)) = value {
+            let number = match num {
+                Number::I8(n) => *n as f32,
+                Number::I16(n) => *n as f32,
+                Number::I32(n) => *n as f32,
+                Number::I64(n) => *n as f32,
+                Number::U8(n) => *n as f32,
+                Number::U16(n) => *n as f32,
+                Number::U32(n) => *n as f32,
+                Number::U64(n) => *n as f32,
+                Number::F32(n) => n.0,
+                Number::F64(n) => n.0 as f32,
+                _ => {
+                    return Err(ConfigError::type_mismatch("number", value));
+                }
+            };
+            Ok(number)
+        } else {
+            Err(ConfigError::type_mismatch("number", value))
+        }
+    }
+}
+
+impl From<Value> for f32 {
+    fn from(value: Value) -> Self {
+        if let Value(RonValue::Number(num)) = value {
+            num.into_f64() as f32
+        } else {
+            panic!("Expected a Number variant but got {value:?}")
+        }
+    }
+}
+
 impl From<String> for Value {
     fn from(value: String) -> Self {
         Value(RonValue::String(value))
