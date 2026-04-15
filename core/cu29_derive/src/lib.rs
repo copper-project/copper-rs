@@ -1,5 +1,5 @@
 use proc_macro::TokenStream;
-use quote::{format_ident, quote};
+use quote::{ToTokens, format_ident, quote};
 use std::collections::{BTreeMap, HashMap};
 use std::fs::read_to_string;
 use std::path::Path;
