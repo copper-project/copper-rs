@@ -801,7 +801,7 @@ mod tests {
 // Tests that require std feature
 #[cfg(all(test, feature = "std"))]
 mod std_tests {
-    use crate::{CuError, DebugFieldDescriptor, with_cause};
+    use crate::{CuError, DebugFieldDescriptor, DebugFieldKind, DebugFieldSemantics, with_cause};
     use serde_json::json;
 
     #[test]

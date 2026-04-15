@@ -3425,18 +3425,22 @@ fn build_message_metadata_field_descriptors() -> Vec<DebugFieldDescriptor> {
             None,
             "object",
             "message_metadata::Tov",
-            None,
-            false,
-            DebugFieldKind::Struct,
+            DebugFieldShape {
+                semantics: None,
+                nullable: false,
+                kind: DebugFieldKind::Struct,
+            },
             vec![
                 debug_field_descriptor(
                     "tov.kind",
                     None,
                     "string",
                     "alloc::string::String",
-                    None,
-                    false,
-                    DebugFieldKind::Scalar,
+                    DebugFieldShape {
+                        semantics: None,
+                        nullable: false,
+                        kind: DebugFieldKind::Scalar,
+                    },
                     Vec::new(),
                 ),
                 debug_registered_scalar_field_descriptor::<CuTime>("tov.time_ns", None, false),
@@ -3449,9 +3453,11 @@ fn build_message_metadata_field_descriptors() -> Vec<DebugFieldDescriptor> {
             None,
             "object",
             "message_metadata::ProcessTime",
-            None,
-            false,
-            DebugFieldKind::Struct,
+            DebugFieldShape {
+                semantics: None,
+                nullable: false,
+                kind: DebugFieldKind::Struct,
+            },
             vec![
                 debug_registered_scalar_field_descriptor::<CuTime>(
                     "process_time.start_ns",
@@ -3470,9 +3476,11 @@ fn build_message_metadata_field_descriptors() -> Vec<DebugFieldDescriptor> {
             None,
             "string",
             "alloc::string::String",
-            None,
-            false,
-            DebugFieldKind::Scalar,
+            DebugFieldShape {
+                semantics: None,
+                nullable: false,
+                kind: DebugFieldKind::Scalar,
+            },
             Vec::new(),
         ),
         debug_field_descriptor(
@@ -3480,18 +3488,22 @@ fn build_message_metadata_field_descriptors() -> Vec<DebugFieldDescriptor> {
             None,
             "object",
             "message_metadata::Origin",
-            None,
-            false,
-            DebugFieldKind::Struct,
+            DebugFieldShape {
+                semantics: None,
+                nullable: false,
+                kind: DebugFieldKind::Struct,
+            },
             vec![
                 debug_field_descriptor(
                     "origin.subsystem_code",
                     None,
                     "integer",
                     "u16",
-                    None,
-                    false,
-                    DebugFieldKind::Scalar,
+                    DebugFieldShape {
+                        semantics: None,
+                        nullable: false,
+                        kind: DebugFieldKind::Scalar,
+                    },
                     Vec::new(),
                 ),
                 debug_field_descriptor(
@@ -3499,9 +3511,11 @@ fn build_message_metadata_field_descriptors() -> Vec<DebugFieldDescriptor> {
                     None,
                     "integer",
                     "u32",
-                    None,
-                    false,
-                    DebugFieldKind::Scalar,
+                    DebugFieldShape {
+                        semantics: None,
+                        nullable: false,
+                        kind: DebugFieldKind::Scalar,
+                    },
                     Vec::new(),
                 ),
                 debug_field_descriptor(
@@ -3509,9 +3523,11 @@ fn build_message_metadata_field_descriptors() -> Vec<DebugFieldDescriptor> {
                     None,
                     "integer",
                     "u64",
-                    None,
-                    false,
-                    DebugFieldKind::Scalar,
+                    DebugFieldShape {
+                        semantics: None,
+                        nullable: false,
+                        kind: DebugFieldKind::Scalar,
+                    },
                     Vec::new(),
                 ),
             ],
@@ -3531,9 +3547,11 @@ fn debug_registered_scalar_field_descriptor<T>(
         binding_name,
         field_type,
         value_type_path,
-        debug_scalar_semantics(value_type_path),
-        nullable,
-        DebugFieldKind::Scalar,
+        DebugFieldShape {
+            semantics: debug_scalar_semantics(value_type_path),
+            nullable,
+            kind: DebugFieldKind::Scalar,
+        },
         Vec::new(),
     )
 }
@@ -3629,9 +3647,11 @@ fn build_field_node(
             binding_name,
             primitive_field_type_name(value_type_path).unwrap_or("unknown"),
             value_type_path,
-            None,
-            nullable,
-            DebugFieldKind::Scalar,
+            DebugFieldShape {
+                semantics: None,
+                nullable,
+                kind: DebugFieldKind::Scalar,
+            },
             Vec::new(),
         );
     };
@@ -3660,9 +3680,11 @@ fn build_type_node(
             binding_name,
             field_type,
             value_type_path,
-            debug_type_semantics(value_type_path),
-            nullable,
-            DebugFieldKind::Scalar,
+            DebugFieldShape {
+                semantics: debug_type_semantics(value_type_path),
+                nullable,
+                kind: DebugFieldKind::Scalar,
+            },
             Vec::new(),
         );
     }
@@ -3673,9 +3695,11 @@ fn build_type_node(
             binding_name,
             "object",
             value_type_path,
-            debug_type_semantics(value_type_path),
-            nullable,
-            DebugFieldKind::Struct,
+            DebugFieldShape {
+                semantics: debug_type_semantics(value_type_path),
+                nullable,
+                kind: DebugFieldKind::Struct,
+            },
             struct_children(registry, info, display_path, binding_name, nullable),
         ),
         TypeInfo::TupleStruct(info) => debug_field_descriptor(
@@ -3683,9 +3707,11 @@ fn build_type_node(
             binding_name,
             "tuple",
             value_type_path,
-            debug_type_semantics(value_type_path),
-            nullable,
-            DebugFieldKind::TupleStruct,
+            DebugFieldShape {
+                semantics: debug_type_semantics(value_type_path),
+                nullable,
+                kind: DebugFieldKind::TupleStruct,
+            },
             tuple_struct_children(registry, info, display_path, binding_name, nullable),
         ),
         TypeInfo::Tuple(info) => debug_field_descriptor(
@@ -3693,9 +3719,11 @@ fn build_type_node(
             binding_name,
             "tuple",
             value_type_path,
-            debug_type_semantics(value_type_path),
-            nullable,
-            DebugFieldKind::Tuple,
+            DebugFieldShape {
+                semantics: debug_type_semantics(value_type_path),
+                nullable,
+                kind: DebugFieldKind::Tuple,
+            },
             tuple_children(registry, info, display_path, binding_name, nullable),
         ),
         TypeInfo::List(info) => debug_field_descriptor(
@@ -3703,9 +3731,11 @@ fn build_type_node(
             binding_name,
             "array",
             value_type_path,
-            debug_type_semantics(value_type_path),
-            nullable,
-            DebugFieldKind::List,
+            DebugFieldShape {
+                semantics: debug_type_semantics(value_type_path),
+                nullable,
+                kind: DebugFieldKind::List,
+            },
             indexed_children(
                 registry,
                 info.item_info(),
@@ -3720,9 +3750,11 @@ fn build_type_node(
             binding_name,
             "array",
             value_type_path,
-            debug_type_semantics(value_type_path),
-            nullable,
-            DebugFieldKind::Array,
+            DebugFieldShape {
+                semantics: debug_type_semantics(value_type_path),
+                nullable,
+                kind: DebugFieldKind::Array,
+            },
             indexed_children(
                 registry,
                 info.item_info(),
@@ -3737,9 +3769,11 @@ fn build_type_node(
             binding_name,
             "object",
             value_type_path,
-            debug_type_semantics(value_type_path),
-            nullable,
-            DebugFieldKind::Map,
+            DebugFieldShape {
+                semantics: debug_type_semantics(value_type_path),
+                nullable,
+                kind: DebugFieldKind::Map,
+            },
             Vec::new(),
         ),
         TypeInfo::Set(info) => debug_field_descriptor(
@@ -3747,9 +3781,11 @@ fn build_type_node(
             binding_name,
             "array",
             value_type_path,
-            debug_type_semantics(value_type_path),
-            nullable,
-            DebugFieldKind::Set,
+            DebugFieldShape {
+                semantics: debug_type_semantics(value_type_path),
+                nullable,
+                kind: DebugFieldKind::Set,
+            },
             indexed_children(
                 registry,
                 registry.get_type_info(info.value_ty().id()),
@@ -3776,9 +3812,11 @@ fn build_type_node(
                 binding_name,
                 "enum",
                 value_type_path,
-                debug_type_semantics(value_type_path),
-                nullable,
-                DebugFieldKind::Enum,
+                DebugFieldShape {
+                    semantics: debug_type_semantics(value_type_path),
+                    nullable,
+                    kind: DebugFieldKind::Enum,
+                },
                 Vec::new(),
             )
         }
@@ -3787,9 +3825,11 @@ fn build_type_node(
             binding_name,
             primitive_field_type_name(info.type_path()).unwrap_or("unknown"),
             value_type_path,
-            debug_type_semantics(value_type_path),
-            nullable,
-            DebugFieldKind::Scalar,
+            DebugFieldShape {
+                semantics: debug_type_semantics(value_type_path),
+                nullable,
+                kind: DebugFieldKind::Scalar,
+            },
             Vec::new(),
         ),
     }
@@ -3933,14 +3973,18 @@ fn option_inner_field(info: &EnumInfo) -> Option<(Option<&'static TypeInfo>, &Ty
     Some((field.type_info(), field.ty()))
 }
 
+struct DebugFieldShape {
+    semantics: Option<DebugFieldSemantics>,
+    nullable: bool,
+    kind: DebugFieldKind,
+}
+
 fn debug_field_descriptor(
     display_path: &str,
     binding_name: Option<&str>,
     field_type: &str,
     value_type_path: &str,
-    semantics: Option<DebugFieldSemantics>,
-    nullable: bool,
-    kind: DebugFieldKind,
+    shape: DebugFieldShape,
     children: Vec<DebugFieldDescriptor>,
 ) -> DebugFieldDescriptor {
     DebugFieldDescriptor {
@@ -3948,9 +3992,9 @@ fn debug_field_descriptor(
         binding_name: binding_name.map(str::to_owned),
         field_type: field_type.to_owned(),
         value_type_path: value_type_path.to_owned(),
-        semantics,
-        nullable,
-        kind,
+        semantics: shape.semantics,
+        nullable: shape.nullable,
+        kind: shape.kind,
         children,
     }
 }
