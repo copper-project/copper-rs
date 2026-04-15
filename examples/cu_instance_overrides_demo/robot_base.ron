@@ -8,15 +8,11 @@
                 "gyro_bias": [0.0, 0.0, 0.0],
             },
         ),
-        (
-            id: "collector",
-            type: "CalibrationSink",
-        ),
     ],
     cnx: [
         (
             src: "reporter",
-            dst: "collector",
+            dst: "__nc__",
             msg: "i64",
         ),
     ],

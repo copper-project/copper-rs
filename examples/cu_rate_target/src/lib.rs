@@ -222,27 +222,6 @@ pub mod tasks {
             Ok(())
         }
     }
-
-    #[derive(Reflect)]
-    pub struct ExampleSink;
-
-    impl Freezable for ExampleSink {}
-
-    impl CuSinkTask for ExampleSink {
-        type Resources<'r> = ();
-        type Input<'m> = input_msg!(i32);
-
-        fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
-        where
-            Self: Sized,
-        {
-            Ok(Self)
-        }
-
-        fn process(&mut self, _ctx: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
-            Ok(())
-        }
-    }
 }
 
 #[copper_runtime(config = "copperconfig.ron")]

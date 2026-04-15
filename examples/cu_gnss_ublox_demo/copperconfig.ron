@@ -47,14 +47,6 @@
             id: "info_text_sink",
             type: "tasks::InfoTextSink",
         ),
-        (
-            id: "drop_unused_a_sink",
-            type: "tasks::DropUnusedASink",
-        ),
-        (
-            id: "drop_unused_b_sink",
-            type: "tasks::DropUnusedBSink",
-        ),
     ],
     cnx: [
         (
@@ -84,12 +76,12 @@
         ),
         (
             src: "ublox",
-            dst: "drop_unused_a_sink",
+            dst: "__nc__",
             msg: "cu_gnss_payloads::GnssSignalState",
         ),
         (
             src: "ublox",
-            dst: "drop_unused_a_sink",
+            dst: "__nc__",
             msg: "cu_gnss_payloads::GnssRfStatus",
         ),
         (
@@ -99,12 +91,12 @@
         ),
         (
             src: "ublox",
-            dst: "drop_unused_b_sink",
+            dst: "__nc__",
             msg: "cu_gnss_payloads::GnssCommandAck",
         ),
         (
             src: "ublox",
-            dst: "drop_unused_b_sink",
+            dst: "__nc__",
             msg: "cu_gnss_payloads::GnssRawUbxFrame",
         ),
     ],

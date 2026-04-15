@@ -16,10 +16,6 @@
             background: true,
             config: {"sleep_duration_ms": 250},
         ),
-        (
-            id: "task3",
-            type: "tasks::ExampleSink",
-        ),
     ],
     cnx: [
         (
@@ -34,7 +30,7 @@
         ),
         (
             src: "task2",
-            dst: "task3",
+            dst: "__nc__",
             msg: "i32",
         ),
     ],

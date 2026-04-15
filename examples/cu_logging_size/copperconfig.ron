@@ -8,10 +8,6 @@
             id: "task1",
             type: "tasks::ExampleTask",
         ),
-        (
-            id: "task2",
-            type: "tasks::ExampleSink",
-        ),
     ],
     cnx: [
         (
@@ -21,7 +17,7 @@
         ),
         (
             src: "task1",
-            dst: "task2",
+            dst: "__nc__",
             msg: "i32",
         ),
     ],

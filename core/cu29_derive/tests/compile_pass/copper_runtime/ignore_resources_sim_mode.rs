@@ -21,24 +21,6 @@ impl CuSrcTask for Source {
 }
 
 #[derive(Reflect)]
-struct Sink;
-
-impl Freezable for Sink {}
-
-impl CuSinkTask for Sink {
-    type Resources<'r> = ();
-    type Input<'m> = input_msg!(i32);
-
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
-        Ok(Self)
-    }
-
-    fn process(&mut self, _ctx: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
-        Ok(())
-    }
-}
-
-#[derive(Reflect)]
 struct Proc;
 
 impl Freezable for Proc {}

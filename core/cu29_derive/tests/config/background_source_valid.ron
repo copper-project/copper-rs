@@ -12,12 +12,11 @@
             type: "BackgroundSrc",
             background: true,
         ),
-        (id: "sink", type: "Sink"),
     ],
     cnx: [
         (
             src: "src",
-            dst: "sink",
+            dst: "__nc__",
             msg: "u32",
         ),
     ],

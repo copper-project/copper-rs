@@ -51,27 +51,6 @@ impl CuSrcTask for CalibrationReporter {
     }
 }
 
-#[derive(Reflect)]
-struct CalibrationSink;
-
-impl Freezable for CalibrationSink {}
-
-impl CuSinkTask for CalibrationSink {
-    type Input<'m> = input_msg!(i64);
-    type Resources<'r> = ();
-
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
-    where
-        Self: Sized,
-    {
-        Ok(Self)
-    }
-
-    fn process(&mut self, _ctx: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
-        Ok(())
-    }
-}
-
 fn manifest_path(path: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join(path)
 }

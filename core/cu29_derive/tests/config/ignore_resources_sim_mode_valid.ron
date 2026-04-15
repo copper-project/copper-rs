@@ -10,11 +10,6 @@
             type: "Proc",
             run_in_sim: true,
         ),
-        (
-            id: "sink",
-            type: "Sink",
-            run_in_sim: true,
-        ),
     ],
     cnx: [
         (
@@ -24,7 +19,7 @@
         ),
         (
             src: "proc",
-            dst: "sink",
+            dst: "__nc__",
             msg: "i32",
         ),
     ],

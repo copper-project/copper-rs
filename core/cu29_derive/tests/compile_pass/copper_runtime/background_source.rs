@@ -20,24 +20,6 @@ impl CuSrcTask for BackgroundSrc {
     }
 }
 
-#[derive(Reflect)]
-struct Sink;
-
-impl Freezable for Sink {}
-
-impl CuSinkTask for Sink {
-    type Resources<'r> = ();
-    type Input<'m> = input_msg!(u32);
-
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
-        Ok(Self)
-    }
-
-    fn process(&mut self, _ctx: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
-        Ok(())
-    }
-}
-
 #[copper_runtime(config = "config/background_source_valid.ron")]
 struct App {}
 

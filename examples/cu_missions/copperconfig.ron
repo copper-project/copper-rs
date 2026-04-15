@@ -17,10 +17,6 @@
             config: {"label": "Mission B"},
             missions: ["B"],
         ),
-        (
-            id: "sink",
-            type: "tasks::ExampleSink",
-        ),
     ],
     cnx: [
         (
@@ -37,13 +33,13 @@
         ),
         (
             src: "taskA",
-            dst: "sink",
+            dst: "__nc__",
             msg: "i32",
             missions: ["A"],
         ),
         (
             src: "taskB",
-            dst: "sink",
+            dst: "__nc__",
             msg: "i32",
             missions: ["B"],
         ),
