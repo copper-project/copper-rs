@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["BincodeAdapter","CuMsgMetadata","CuStampedData"],"trait":["CuMsgPack","CuMsgPayload","CuSinkTask","CuSrcTask","CuTask","Freezable"],"type":["CuMsg"]};
+window.SIDEBAR_ITEMS = {"struct":["BincodeAdapter","CuMsgMetadata","CuStampedData"],"trait":["CuMsgPack","CuMsgPayload","CuSingleOutputMsg","CuSinkTask","CuSrcTask","CuTask","Freezable"],"type":["CuMsg"]};
