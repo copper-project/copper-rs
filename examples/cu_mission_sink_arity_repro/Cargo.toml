@@ -6,7 +6,10 @@ publish = false
 
 [dependencies]
 cu29 = { path = "../../core/cu29" }
-serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
+serde = { version = "1.0", default-features = false, features = [
+  "derive",
+  "alloc",
+] }
 
 [workspace]
 members = []
