@@ -526,4 +526,166 @@ mod tests {
             "cu_consolemon::CuConsoleMon"
         );
     }
+
+    #[test]
+    fn test_parameterized_include_with_mission_scoped_nodes_and_connections() {
+        let temp_dir = tempdir().unwrap();
+        let base_path = temp_dir.path();
+
+        let config_dir = base_path.join("config");
+        create_dir_all(&config_dir).unwrap();
+
+        let template_config = r#"(
+        tasks: [
+            (
+                id: "task{{index}}",
+                type: "tasks::ExampleTask",
+                config: {
+                    "label": "Mission B",
+                },
+                missions: ["B"],
+            ),
+        ],
+        cnx: [
+            (
+                src: "src",
+                dst: "task{{index}}",
+                msg: "i32",
+                missions: ["B"],
+            ),
+            (
+                src: "task{{index}}",
+                dst: "sink",
+                msg: "i32",
+                missions: ["B"],
+            ),
+        ],
+    )"#;
+
+        let template_path = config_dir.join("template_task.ron");
+        write(&template_path, template_config).unwrap();
+
+        let main_config = r#"(
+        missions: [(id: "A"), (id: "B")],
+        tasks: [
+            (
+                id: "src",
+                type: "tasks::ExampleSrc",
+            ),
+            (
+                id: "sink",
+                type: "tasks::ExampleSink",
+            ),
+            (
+                id: "taskA",
+                type: "tasks::ExampleTask",
+                config: {
+                    "label": "Mission A",
+                },
+                missions: ["A"],
+            ),
+        ],
+        cnx: [
+            (
+                src: "src",
+                dst: "taskA",
+                msg: "i32",
+                missions: ["A"],
+            ),
+            (
+                src: "taskA",
+                dst: "sink",
+                msg: "i32",
+                missions: ["A"],
+            ),
+        ],
+        includes: [
+            (
+                path: "template_task.ron",
+                params: {
+                    "index": 1,
+                },
+            ),
+        ],
+    )"#;
+
+        let main_path = config_dir.join("main.ron");
+        write(&main_path, main_config).unwrap();
+
+        let config = read_configuration(main_path.to_str().unwrap()).unwrap();
+
+        let mission_a = config.graphs.get_graph(Some("A")).unwrap();
+        let mission_b = config.graphs.get_graph(Some("B")).unwrap();
+
+        assert_eq!(mission_a.node_count(), 3);
+        assert_eq!(mission_b.node_count(), 3);
+        assert_eq!(mission_a.edge_count(), 2);
+        assert_eq!(mission_b.edge_count(), 2);
+
+        assert!(mission_a.get_node_id_by_name("src").is_some());
+        assert!(mission_a.get_node_id_by_name("sink").is_some());
+        assert!(mission_a.get_node_id_by_name("taskA").is_some());
+        assert!(mission_a.get_node_id_by_name("task1").is_none());
+
+        assert!(mission_b.get_node_id_by_name("src").is_some());
+        assert!(mission_b.get_node_id_by_name("sink").is_some());
+        assert!(mission_b.get_node_id_by_name("task1").is_some());
+        assert!(mission_b.get_node_id_by_name("taskA").is_none());
+
+        let task_a = mission_a
+            .get_all_nodes()
+            .iter()
+            .find(|(_, node)| node.get_id() == "taskA")
+            .map(|(_, node)| *node)
+            .unwrap();
+        let task_b = mission_b
+            .get_all_nodes()
+            .iter()
+            .find(|(_, node)| node.get_id() == "task1")
+            .map(|(_, node)| *node)
+            .unwrap();
+
+        assert_eq!(
+            task_a
+                .get_param::<String>("label")
+                .expect("taskA label lookup failed")
+                .as_deref(),
+            Some("Mission A")
+        );
+        assert_eq!(
+            task_b
+                .get_param::<String>("label")
+                .expect("task1 label lookup failed")
+                .as_deref(),
+            Some("Mission B")
+        );
+
+        let src_a = mission_a.get_node_id_by_name("src").unwrap();
+        let task_a_id = mission_a.get_node_id_by_name("taskA").unwrap();
+        let sink_a = mission_a.get_node_id_by_name("sink").unwrap();
+        assert_eq!(
+            mission_a.get_connection_msg_type(src_a, task_a_id).unwrap(),
+            "i32"
+        );
+        assert_eq!(
+            mission_a
+                .get_connection_msg_type(task_a_id, sink_a)
+                .unwrap(),
+            "i32"
+        );
+
+        let src_b = mission_b.get_node_id_by_name("src").unwrap();
+        let task_b_id = mission_b.get_node_id_by_name("task1").unwrap();
+        let sink_b = mission_b.get_node_id_by_name("sink").unwrap();
+        assert_eq!(
+            mission_b.get_connection_msg_type(src_b, task_b_id).unwrap(),
+            "i32"
+        );
+        assert_eq!(
+            mission_b
+                .get_connection_msg_type(task_b_id, sink_b)
+                .unwrap(),
+            "i32"
+        );
+    }
 }
