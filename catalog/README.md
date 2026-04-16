@@ -67,16 +67,16 @@ The generated catalog resolves visuals in this order:
 
 ## Index Format
 
-`index.ron` is a list of source entries. For the current branch experiment all
-entries point at GitHub on `gbin/catalog`, and the generator can resolve them
-locally before that branch is pushed.
+`index.ron` is a list of source entries. By default, entries point at the
+repository `master` branch on GitHub, and the generator can still resolve them
+locally when run against a checkout.
 
 ```ron
 (
   version: 1,
   defaults: (
     github_repo: "copper-project/copper-rs",
-    github_rev: "gbin/catalog",
+    github_rev: "master",
   ),
   entries: [
     (
@@ -114,7 +114,7 @@ metadata instead of being treated as classified Copper components.
 
 The generator lives in `support/cu_catalog`.
 
-Local generation while iterating on this branch:
+Local generation while iterating on the catalog:
 
 ```bash
 just

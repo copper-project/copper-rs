@@ -2,7 +2,7 @@
     version: 1,
     defaults: (
         github_repo: "copper-project/copper-rs",
-        github_rev: "gbin/catalog",
+        github_rev: "master",
     ),
     entries: [
         (
