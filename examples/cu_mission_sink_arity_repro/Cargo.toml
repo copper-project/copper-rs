@@ -1,0 +1,12 @@
+[package]
+name = "cu-mission-sink-arity-repro"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+cu29 = { path = "../../core/cu29" }
+serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
+
+[workspace]
+members = []

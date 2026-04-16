@@ -1,0 +1,31 @@
+(
+    missions: [(id: "A"), (id: "B")],
+    tasks: [
+        (
+            id: "src_int",
+            type: "tasks::IntSource",
+        ),
+        (
+            id: "src_bool",
+            type: "tasks::BoolSource",
+            missions: ["B"],
+        ),
+        (
+            id: "sink",
+            type: "tasks::CombinedSink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "src_int",
+            dst: "sink",
+            msg: "i32",
+        ),
+        (
+            src: "src_bool",
+            dst: "sink",
+            msg: "bool",
+            missions: ["B"],
+        ),
+    ],
+)
