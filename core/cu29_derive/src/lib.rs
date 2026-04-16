@@ -5714,14 +5714,14 @@ fn sorted_mission_graphs(copper_config: &CuConfig) -> Vec<(String, CuGraph)> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CanonicalTaskInputSlot {
-    connection_order: usize,
+    position: usize,
     msg_type: String,
 }
 
 fn collect_task_input_layouts(
     all_missions: &[(String, CuGraph)],
 ) -> CuResult<HashMap<String, Vec<CanonicalTaskInputSlot>>> {
-    let mut layouts: HashMap<String, BTreeMap<usize, String>> = HashMap::new();
+    let mut layouts: HashMap<String, Vec<String>> = HashMap::new();
 
     for (_, graph) in all_missions {
         for (node_id, node) in graph.get_all_nodes() {
@@ -5734,28 +5734,32 @@ fn collect_task_input_layouts(
             }
 
             let task_layout = layouts.entry(node.get_id().to_string()).or_default();
-            for edge_id in graph.get_dst_edges(node_id)? {
+            let mut edge_ids = graph.get_dst_edges(node_id)?;
+            edge_ids.sort_by_key(|edge_id| {
+                graph
+                    .edge(*edge_id)
+                    .map(|edge| edge.order)
+                    .unwrap_or(usize::MAX)
+            });
+            for (position, edge_id) in edge_ids.into_iter().enumerate() {
                 let edge = graph.edge(edge_id).ok_or_else(|| {
                     CuError::from(format!(
                         "Missing edge {edge_id} while collecting inputs for task '{}'",
                         node.get_id()
                     ))
                 })?;
-                match task_layout.entry(edge.order) {
-                    std::collections::btree_map::Entry::Vacant(entry) => {
-                        entry.insert(edge.msg.clone());
+                if let Some(existing_msg_type) = task_layout.get(position) {
+                    if existing_msg_type != &edge.msg {
+                        return Err(CuError::from(format!(
+                            "Task '{}' input position {} has incompatible message types '{}' and '{}' across missions",
+                            node.get_id(),
+                            position,
+                            existing_msg_type,
+                            edge.msg
+                        )));
                     }
-                    std::collections::btree_map::Entry::Occupied(entry) => {
-                        if entry.get() != &edge.msg {
-                            return Err(CuError::from(format!(
-                                "Task '{}' reuses connection order {} with incompatible message types '{}' and '{}'",
-                                node.get_id(),
-                                edge.order,
-                                entry.get(),
-                                edge.msg
-                            )));
-                        }
-                    }
+                } else {
+                    task_layout.push(edge.msg.clone());
                 }
             }
         }
@@ -5768,10 +5772,8 @@ fn collect_task_input_layouts(
                 task_id,
                 slots
                     .into_iter()
-                    .map(|(connection_order, msg_type)| CanonicalTaskInputSlot {
-                        connection_order,
-                        msg_type,
-                    })
+                    .enumerate()
+                    .map(|(position, msg_type)| CanonicalTaskInputSlot { position, msg_type })
                     .collect(),
             )
         })
@@ -5815,17 +5817,11 @@ fn generate_task_input_binding(
         .get(&task_id)
         .unwrap_or_else(|| panic!("Missing canonical input layout for task '{task_id}'"));
 
-    let mut actual_inputs: HashMap<usize, &cu29_runtime::curuntime::CuInputMsg> = step
-        .input_msg_indices_types
-        .iter()
-        .map(|input| (input.connection_order, input))
-        .collect();
-
     let mut setup = Vec::new();
     let mut refs = Vec::new();
 
     for (slot_index, slot) in layout.iter().enumerate() {
-        if let Some(input) = actual_inputs.remove(&slot.connection_order) {
+        if let Some(input) = step.input_msg_indices_types.get(slot.position) {
             refs.push(present_task_input_expr(input, output_pack_sizes));
             continue;
         }
@@ -5841,14 +5837,6 @@ fn generate_task_input_binding(
             let #empty_input_ident = cu29::cutask::CuMsg::<#input_ty>::new(None);
         });
         refs.push(quote! { &#empty_input_ident });
-    }
-
-    if !actual_inputs.is_empty() {
-        let unexpected_orders: Vec<_> = actual_inputs.keys().copied().collect();
-        panic!(
-            "Task '{}' has mission-local inputs {:?} missing from the canonical layout",
-            task_id, unexpected_orders
-        );
     }
 
     let expr = match refs.len() {

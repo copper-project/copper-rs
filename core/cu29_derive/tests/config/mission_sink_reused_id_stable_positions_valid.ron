@@ -1,0 +1,52 @@
+(
+    missions: [(id: "A"), (id: "B")],
+    tasks: [
+        (
+            id: "a_src_left",
+            type: "IntSource",
+            missions: ["A"],
+        ),
+        (
+            id: "a_src_right",
+            type: "IntSource",
+            missions: ["A"],
+        ),
+        (
+            id: "b_src_left",
+            type: "IntSource",
+            missions: ["B"],
+        ),
+        (
+            id: "b_src_right",
+            type: "IntSource",
+            missions: ["B"],
+        ),
+        (id: "sink", type: "PairSink"),
+    ],
+    cnx: [
+        (
+            src: "a_src_left",
+            dst: "sink",
+            msg: "i32",
+            missions: ["A"],
+        ),
+        (
+            src: "a_src_right",
+            dst: "sink",
+            msg: "i32",
+            missions: ["A"],
+        ),
+        (
+            src: "b_src_left",
+            dst: "sink",
+            msg: "i32",
+            missions: ["B"],
+        ),
+        (
+            src: "b_src_right",
+            dst: "sink",
+            msg: "i32",
+            missions: ["B"],
+        ),
+    ],
+)
