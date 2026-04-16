@@ -1,0 +1,40 @@
+(
+    missions: [(id: "A"), (id: "B")],
+    tasks: [
+        (
+            id: "src_float",
+            type: "FloatSource",
+            missions: ["B"],
+        ),
+        (
+            id: "src_int",
+            type: "IntSource",
+        ),
+        (
+            id: "src_bool",
+            type: "BoolSource",
+        ),
+        (
+            id: "sink",
+            type: "CombinedSink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "src_float",
+            dst: "sink",
+            msg: "f32",
+            missions: ["B"],
+        ),
+        (
+            src: "src_int",
+            dst: "sink",
+            msg: "i32",
+        ),
+        (
+            src: "src_bool",
+            dst: "sink",
+            msg: "bool",
+        ),
+    ],
+)

@@ -1,0 +1,8 @@
+error: Task 'sink' has ambiguous input alignment while merging mission 'B'. Existing canonical inputs [i32@0, bool@1] and mission inputs [i32@2, i32@3, bool@4] admit multiple equally valid alignments.
+          context:None
+  --> tests/compile_fail/copper_runtime/mission_sink_input_alignment_ambiguous.rs:63:1
+   |
+63 | #[copper_runtime(config = "config/mission_sink_input_alignment_ambiguous_invalid.ron")]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: this error originates in the attribute macro `copper_runtime` (in Nightly builds, run with -Z macro-backtrace for more info)
