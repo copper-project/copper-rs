@@ -1258,7 +1258,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     };
 
-    let all_missions = copper_config.graphs.get_all_missions_graphs();
+    let all_missions = sorted_mission_graphs(&copper_config);
+    let task_input_layouts = match collect_task_input_layouts(&all_missions) {
+        Ok(layouts) => layouts,
+        Err(e) => return return_error(e.to_string()),
+    };
     let mut all_missions_tokens = Vec::<proc_macro2::TokenStream>::new();
     for (mission, graph) in &all_missions {
         let git_commit_tokens = git_commit_tokens.clone();
@@ -2617,6 +2621,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             &task_specs,
                             StepGenerationContext::new(
                                 &output_pack_sizes,
+                                &task_input_layouts,
                                 sim_mode,
                                 &mission_mod,
                                 ParallelLifecyclePlacement::default(),
@@ -2638,6 +2643,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 *channel_index,
                                 StepGenerationContext::new(
                                     &output_pack_sizes,
+                                    &task_input_layouts,
                                     sim_mode,
                                     &mission_mod,
                                     ParallelLifecyclePlacement::default(),
@@ -2661,6 +2667,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 *channel_index,
                                 StepGenerationContext::new(
                                     &output_pack_sizes,
+                                    &task_input_layouts,
                                     sim_mode,
                                     &mission_mod,
                                     ParallelLifecyclePlacement::default(),
@@ -2709,6 +2716,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     &task_specs,
                                     StepGenerationContext::new(
                                         &output_pack_sizes,
+                                        &task_input_layouts,
                                         false,
                                         &mission_mod,
                                         parallel_lifecycle_placements
@@ -2734,6 +2742,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     *channel_index,
                                     StepGenerationContext::new(
                                         &output_pack_sizes,
+                                        &task_input_layouts,
                                         false,
                                         &mission_mod,
                                         parallel_lifecycle_placements
@@ -2760,6 +2769,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     *channel_index,
                                     StepGenerationContext::new(
                                         &output_pack_sizes,
+                                        &task_input_layouts,
                                         false,
                                         &mission_mod,
                                         parallel_lifecycle_placements
@@ -5014,7 +5024,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         all_missions_tokens.push(mission_mod_tokens);
     }
 
-    let default_application_tokens = if all_missions.contains_key("default") {
+    let default_application_tokens = if all_missions
+        .iter()
+        .any(|(mission_name, _)| mission_name == "default")
+    {
         let default_builder = quote! {
             #[allow(unused_imports)]
             use default::#builder_name;
@@ -5687,6 +5700,170 @@ fn collect_output_pack_sizes(runtime_plan: &CuExecutionLoop) -> Vec<usize> {
 
     sizes.sort_by_key(|(index, _)| *index);
     sizes.into_iter().map(|(_, size)| size).collect()
+}
+
+fn sorted_mission_graphs(copper_config: &CuConfig) -> Vec<(String, CuGraph)> {
+    let mut all_missions: Vec<_> = copper_config
+        .graphs
+        .get_all_missions_graphs()
+        .into_iter()
+        .collect();
+    all_missions.sort_by(|(left, _), (right, _)| left.cmp(right));
+    all_missions
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CanonicalTaskInputSlot {
+    connection_order: usize,
+    msg_type: String,
+}
+
+fn collect_task_input_layouts(
+    all_missions: &[(String, CuGraph)],
+) -> CuResult<HashMap<String, Vec<CanonicalTaskInputSlot>>> {
+    let mut layouts: HashMap<String, BTreeMap<usize, String>> = HashMap::new();
+
+    for (_, graph) in all_missions {
+        for (node_id, node) in graph.get_all_nodes() {
+            if node.get_flavor() != Flavor::Task {
+                continue;
+            }
+
+            if find_task_type_for_id(graph, node_id)? == CuTaskType::Source {
+                continue;
+            }
+
+            let task_layout = layouts.entry(node.get_id().to_string()).or_default();
+            for edge_id in graph.get_dst_edges(node_id)? {
+                let edge = graph.edge(edge_id).ok_or_else(|| {
+                    CuError::from(format!(
+                        "Missing edge {edge_id} while collecting inputs for task '{}'",
+                        node.get_id()
+                    ))
+                })?;
+                match task_layout.entry(edge.order) {
+                    std::collections::btree_map::Entry::Vacant(entry) => {
+                        entry.insert(edge.msg.clone());
+                    }
+                    std::collections::btree_map::Entry::Occupied(entry) => {
+                        if entry.get() != &edge.msg {
+                            return Err(CuError::from(format!(
+                                "Task '{}' reuses connection order {} with incompatible message types '{}' and '{}'",
+                                node.get_id(),
+                                edge.order,
+                                entry.get(),
+                                edge.msg
+                            )));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(layouts
+        .into_iter()
+        .map(|(task_id, slots)| {
+            (
+                task_id,
+                slots
+                    .into_iter()
+                    .map(|(connection_order, msg_type)| CanonicalTaskInputSlot {
+                        connection_order,
+                        msg_type,
+                    })
+                    .collect(),
+            )
+        })
+        .collect())
+}
+
+struct GeneratedTaskInput {
+    setup: proc_macro2::TokenStream,
+    expr: proc_macro2::TokenStream,
+}
+
+fn present_task_input_expr(
+    input: &cu29_runtime::curuntime::CuInputMsg,
+    output_pack_sizes: &[usize],
+) -> proc_macro2::TokenStream {
+    let input_index = int2sliceindex(input.culist_index);
+    let output_size = output_pack_sizes
+        .get(input.culist_index as usize)
+        .copied()
+        .unwrap_or_else(|| {
+            panic!(
+                "Missing output pack size for culist index {}",
+                input.culist_index
+            )
+        });
+    if output_size > 1 {
+        let port_index = syn::Index::from(input.src_port);
+        quote! { &msgs.#input_index.#port_index }
+    } else {
+        quote! { &msgs.#input_index }
+    }
+}
+
+fn generate_task_input_binding(
+    step: &CuExecutionStep,
+    output_pack_sizes: &[usize],
+    task_input_layouts: &HashMap<String, Vec<CanonicalTaskInputSlot>>,
+) -> GeneratedTaskInput {
+    let task_id = step.node.get_id().to_string();
+    let layout = task_input_layouts
+        .get(&task_id)
+        .unwrap_or_else(|| panic!("Missing canonical input layout for task '{task_id}'"));
+
+    let mut actual_inputs: HashMap<usize, &cu29_runtime::curuntime::CuInputMsg> = step
+        .input_msg_indices_types
+        .iter()
+        .map(|input| (input.connection_order, input))
+        .collect();
+
+    let mut setup = Vec::new();
+    let mut refs = Vec::new();
+
+    for (slot_index, slot) in layout.iter().enumerate() {
+        if let Some(input) = actual_inputs.remove(&slot.connection_order) {
+            refs.push(present_task_input_expr(input, output_pack_sizes));
+            continue;
+        }
+
+        let empty_input_ident = format_ident!("__cu_missing_input_{slot_index}");
+        let input_ty: Type = parse_str(slot.msg_type.as_str()).unwrap_or_else(|err| {
+            panic!(
+                "Could not parse canonical input message type '{}' for task '{}': {err}",
+                slot.msg_type, task_id
+            )
+        });
+        setup.push(quote! {
+            let #empty_input_ident = cu29::cutask::CuMsg::<#input_ty>::new(None);
+        });
+        refs.push(quote! { &#empty_input_ident });
+    }
+
+    if !actual_inputs.is_empty() {
+        let unexpected_orders: Vec<_> = actual_inputs.keys().copied().collect();
+        panic!(
+            "Task '{}' has mission-local inputs {:?} missing from the canonical layout",
+            task_id, unexpected_orders
+        );
+    }
+
+    let expr = match refs.len() {
+        0 => quote! { &() },
+        1 => refs
+            .into_iter()
+            .next()
+            .expect("single input expression missing"),
+        _ => quote! { &( #(#refs),* ) },
+    };
+
+    GeneratedTaskInput {
+        setup: quote! { #(#setup)* },
+        expr,
+    }
 }
 
 /// Builds the tuple of the CuList as a tuple off all the output slots.
@@ -7059,6 +7236,7 @@ fn parallel_bridge_lifecycle_tokens(
 #[derive(Clone, Copy)]
 struct StepGenerationContext<'a> {
     output_pack_sizes: &'a [usize],
+    task_input_layouts: &'a HashMap<String, Vec<CanonicalTaskInputSlot>>,
     sim_mode: bool,
     mission_mod: &'a Ident,
     lifecycle_placement: ParallelLifecyclePlacement,
@@ -7068,6 +7246,7 @@ struct StepGenerationContext<'a> {
 impl<'a> StepGenerationContext<'a> {
     fn new(
         output_pack_sizes: &'a [usize],
+        task_input_layouts: &'a HashMap<String, Vec<CanonicalTaskInputSlot>>,
         sim_mode: bool,
         mission_mod: &'a Ident,
         lifecycle_placement: ParallelLifecyclePlacement,
@@ -7075,6 +7254,7 @@ impl<'a> StepGenerationContext<'a> {
     ) -> Self {
         Self {
             output_pack_sizes,
+            task_input_layouts,
             sim_mode,
             mission_mod,
             lifecycle_placement,
@@ -7103,6 +7283,7 @@ fn generate_task_execution_tokens(
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let StepGenerationContext {
         output_pack_sizes,
+        task_input_layouts,
         sim_mode,
         mission_mod,
         lifecycle_placement,
@@ -7327,34 +7508,10 @@ fn generate_task_execution_tokens(
             )
         }
         CuTaskType::Sink => {
-            let input_exprs: Vec<proc_macro2::TokenStream> = step
-                .input_msg_indices_types
-                .iter()
-                .map(|input| {
-                    let input_index = int2sliceindex(input.culist_index);
-                    let output_size = output_pack_sizes
-                        .get(input.culist_index as usize)
-                        .copied()
-                        .unwrap_or_else(|| {
-                            panic!(
-                                "Missing output pack size for culist index {}",
-                                input.culist_index
-                            )
-                        });
-                    if output_size > 1 {
-                        let port_index = syn::Index::from(input.src_port);
-                        quote! { msgs.#input_index.#port_index }
-                    } else {
-                        quote! { msgs.#input_index }
-                    }
-                })
-                .collect();
-            let inputs_type = if input_exprs.len() == 1 {
-                let input = input_exprs.first().unwrap();
-                quote! { #input }
-            } else {
-                quote! { (#(&#input_exprs),*) }
-            };
+            let GeneratedTaskInput {
+                setup: task_input_setup,
+                expr: task_input_expr,
+            } = generate_task_input_binding(step, output_pack_sizes, task_input_layouts);
 
             let monitoring_action = quote! {
                 debug!("Component {}: Error during process: {}", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)), &error);
@@ -7382,7 +7539,7 @@ fn generate_task_execution_tokens(
             let call_sim_callback = if sim_mode {
                 quote! {
                     let doit = {
-                        let cumsg_input = &#inputs_type;
+                        let cumsg_input = #task_input_expr;
                         let cumsg_output = &mut msgs.#output_culist_index;
                         let state = CuTaskCallbackState::Process(cumsg_input, cumsg_output);
                         let ovr = sim_callback(SimStep::#enum_name(state));
@@ -7408,8 +7565,9 @@ fn generate_task_execution_tokens(
                         #parallel_task_preprocess
                         #comment_tokens
                         kf_manager.freeze_task(clid, &#task_instance)?;
+                        #task_input_setup
                         #call_sim_callback
-                        let cumsg_input = &#inputs_type;
+                        let cumsg_input = #task_input_expr;
                         let cumsg_output = &mut msgs.#output_culist_index;
                         let maybe_error = if doit {
                             execution_probe.record(cu29::monitoring::ExecutionMarker {
@@ -7438,34 +7596,10 @@ fn generate_task_execution_tokens(
             )
         }
         CuTaskType::Regular => {
-            let input_exprs: Vec<proc_macro2::TokenStream> = step
-                .input_msg_indices_types
-                .iter()
-                .map(|input| {
-                    let input_index = int2sliceindex(input.culist_index);
-                    let output_size = output_pack_sizes
-                        .get(input.culist_index as usize)
-                        .copied()
-                        .unwrap_or_else(|| {
-                            panic!(
-                                "Missing output pack size for culist index {}",
-                                input.culist_index
-                            )
-                        });
-                    if output_size > 1 {
-                        let port_index = syn::Index::from(input.src_port);
-                        quote! { msgs.#input_index.#port_index }
-                    } else {
-                        quote! { msgs.#input_index }
-                    }
-                })
-                .collect();
-            let inputs_type = if input_exprs.len() == 1 {
-                let input = input_exprs.first().unwrap();
-                quote! { #input }
-            } else {
-                quote! { (#(&#input_exprs),*) }
-            };
+            let GeneratedTaskInput {
+                setup: task_input_setup,
+                expr: task_input_expr,
+            } = generate_task_input_binding(step, output_pack_sizes, task_input_layouts);
 
             let monitoring_action = quote! {
                 debug!("Component {}: Error during process: {}", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)), &error);
@@ -7493,7 +7627,7 @@ fn generate_task_execution_tokens(
             let call_sim_callback = if sim_mode {
                 quote! {
                     let doit = {
-                        let cumsg_input = &#inputs_type;
+                        let cumsg_input = #task_input_expr;
                         let cumsg_output = &mut msgs.#output_culist_index;
                         let state = CuTaskCallbackState::Process(cumsg_input, cumsg_output);
                         let ovr = sim_callback(SimStep::#enum_name(state));
@@ -7564,8 +7698,9 @@ fn generate_task_execution_tokens(
                         #parallel_task_preprocess
                         #comment_tokens
                         kf_manager.freeze_task(clid, &#task_instance)?;
+                        #task_input_setup
                         #call_sim_callback
-                        let cumsg_input = &#inputs_type;
+                        let cumsg_input = #task_input_expr;
                         let cumsg_output = &mut msgs.#output_culist_index;
                         let maybe_error = if doit {
                             execution_probe.record(cu29::monitoring::ExecutionMarker {
@@ -7598,6 +7733,7 @@ fn generate_bridge_rx_execution_tokens(
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let StepGenerationContext {
         output_pack_sizes: _,
+        task_input_layouts: _,
         sim_mode,
         mission_mod,
         lifecycle_placement,
@@ -7741,6 +7877,7 @@ fn generate_bridge_tx_execution_tokens(
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let StepGenerationContext {
         output_pack_sizes,
+        task_input_layouts: _,
         sim_mode,
         mission_mod,
         lifecycle_placement,

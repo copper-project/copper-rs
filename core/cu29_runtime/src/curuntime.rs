@@ -1524,6 +1524,7 @@ pub struct CuInputMsg {
     pub msg_type: String,
     pub src_port: usize,
     pub edge_id: usize,
+    pub connection_order: usize,
 }
 
 /// This structure represents a step in the execution plan.
@@ -1633,10 +1634,12 @@ pub fn find_task_type_for_id(graph: &CuGraph, node_id: NodeId) -> CuResult<CuTas
     })
 }
 
-/// The connection id used here is the index of the config graph edge that equates to the wanted
-/// connection.
-fn sort_inputs_by_cnx_id(input_msg_indices_types: &mut [CuInputMsg]) {
-    input_msg_indices_types.sort_by_key(|input| input.edge_id);
+/// Preserve the original serialized connection order across missions.
+///
+/// Edge ids are assigned per mission graph, so they are not stable enough to describe a shared
+/// input layout when missions selectively include connections.
+fn sort_inputs_by_connection_order(input_msg_indices_types: &mut [CuInputMsg]) {
+    input_msg_indices_types.sort_by_key(|input| input.connection_order);
 }
 
 /// Explores a subbranch and build the partial plan out of it.
@@ -1710,6 +1713,7 @@ fn plan_tasks_tree_branch(
                             msg_type: msg_type.to_string(),
                             src_port,
                             edge_id,
+                            connection_order: edge.order,
                         });
                     } else {
                         #[cfg(all(feature = "std", feature = "macro_debug"))]
@@ -1756,6 +1760,7 @@ fn plan_tasks_tree_branch(
                             msg_type: msg_type.to_string(),
                             src_port,
                             edge_id,
+                            connection_order: edge.order,
                         });
                     } else {
                         #[cfg(all(feature = "std", feature = "macro_debug"))]
@@ -1778,7 +1783,7 @@ fn plan_tasks_tree_branch(
             }
         }
 
-        sort_inputs_by_cnx_id(&mut input_msg_indices_types);
+        sort_inputs_by_connection_order(&mut input_msg_indices_types);
 
         if let Some(pos) = plan
             .iter()
