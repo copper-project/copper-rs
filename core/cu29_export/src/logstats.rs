@@ -331,21 +331,20 @@ fn collect_output_packs_from_loop(
 ) -> CuResult<()> {
     for step in &loop_unit.steps {
         match step {
-            CuExecutionUnit::Step(step) => {
-                if let Some(output_pack) = &step.output_msg_pack {
-                    let node = graph
-                        .get_node(step.node_id)
-                        .ok_or_else(|| CuError::from("Missing node for output pack"))?;
-                    packs.push(OutputPackInfo {
-                        culist_index: output_pack.culist_index,
-                        src: node.get_id(),
-                        msg_types: output_pack.msg_types.clone(),
-                    });
-                }
+            CuExecutionUnit::Step(step) if let Some(output_pack) = &step.output_msg_pack => {
+                let node = graph
+                    .get_node(step.node_id)
+                    .ok_or_else(|| CuError::from("Missing node for output pack"))?;
+                packs.push(OutputPackInfo {
+                    culist_index: output_pack.culist_index,
+                    src: node.get_id(),
+                    msg_types: output_pack.msg_types.clone(),
+                });
             }
             CuExecutionUnit::Loop(inner) => {
                 collect_output_packs_from_loop(inner, graph, packs)?;
             }
+            CuExecutionUnit::Step(_) => {}
         }
     }
     Ok(())

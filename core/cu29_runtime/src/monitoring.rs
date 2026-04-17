@@ -1567,15 +1567,13 @@ pub fn build_monitor_topology(config: &CuConfig, mission: &str) -> CuResult<Moni
 
         let mut inputs = Vec::new();
         let mut outputs = Vec::new();
-        if task_kind == ComponentType::Bridge {
-            if let Some(bridge) = bridge_lookup.get(node_id.as_str()) {
-                for ch in &bridge.channels {
-                    match ch {
-                        BridgeChannelConfigRepresentation::Rx { id, .. } => {
-                            outputs.push(id.clone())
-                        }
-                        BridgeChannelConfigRepresentation::Tx { id, .. } => inputs.push(id.clone()),
-                    }
+        if task_kind == ComponentType::Bridge
+            && let Some(bridge) = bridge_lookup.get(node_id.as_str())
+        {
+            for ch in &bridge.channels {
+                match ch {
+                    BridgeChannelConfigRepresentation::Rx { id, .. } => outputs.push(id.clone()),
+                    BridgeChannelConfigRepresentation::Tx { id, .. } => inputs.push(id.clone()),
                 }
             }
         } else {

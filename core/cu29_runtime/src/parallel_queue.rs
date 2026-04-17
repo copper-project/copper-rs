@@ -84,19 +84,19 @@ impl StageQueueShared {
 
     #[inline]
     fn wake_sender(&self) {
-        if self.sender_waiting.swap(false, Ordering::AcqRel) {
-            if let Some(thread) = self.sender_thread.get() {
-                thread.unpark();
-            }
+        if self.sender_waiting.swap(false, Ordering::AcqRel)
+            && let Some(thread) = self.sender_thread.get()
+        {
+            thread.unpark();
         }
     }
 
     #[inline]
     fn wake_receiver(&self) {
-        if self.receiver_waiting.swap(false, Ordering::AcqRel) {
-            if let Some(thread) = self.receiver_thread.get() {
-                thread.unpark();
-            }
+        if self.receiver_waiting.swap(false, Ordering::AcqRel)
+            && let Some(thread) = self.receiver_thread.get()
+        {
+            thread.unpark();
         }
     }
 }

@@ -227,23 +227,20 @@ impl MonitorUi {
 
     pub fn handle_key(&mut self, key: MonitorUiKey) -> MonitorUiAction {
         match key {
-            MonitorUiKey::Char(key) => {
-                if let Some(screen) = screen_for_tab_key(key) {
-                    self.active_screen = screen;
-                } else {
-                    match key {
-                        'r' if self.active_screen == MonitorScreen::Latency => {
-                            self.model.reset_latency();
-                        }
-                        'j' => self.scroll(ScrollDirection::Down, 1),
-                        'k' => self.scroll(ScrollDirection::Up, 1),
-                        'h' => self.scroll(ScrollDirection::Left, 5),
-                        'l' => self.scroll(ScrollDirection::Right, 5),
-                        'q' if self.show_quit_hint => return MonitorUiAction::QuitRequested,
-                        _ => {}
-                    }
-                }
+            MonitorUiKey::Char(key) if let Some(screen) = screen_for_tab_key(key) => {
+                self.active_screen = screen;
             }
+            MonitorUiKey::Char('r') if self.active_screen == MonitorScreen::Latency => {
+                self.model.reset_latency();
+            }
+            MonitorUiKey::Char('j') => self.scroll(ScrollDirection::Down, 1),
+            MonitorUiKey::Char('k') => self.scroll(ScrollDirection::Up, 1),
+            MonitorUiKey::Char('h') => self.scroll(ScrollDirection::Left, 5),
+            MonitorUiKey::Char('l') => self.scroll(ScrollDirection::Right, 5),
+            MonitorUiKey::Char('q') if self.show_quit_hint => {
+                return MonitorUiAction::QuitRequested;
+            }
+            MonitorUiKey::Char(_) => {}
             MonitorUiKey::Left => self.scroll(ScrollDirection::Left, 5),
             MonitorUiKey::Right => self.scroll(ScrollDirection::Right, 5),
             MonitorUiKey::Up => self.scroll(ScrollDirection::Up, 1),

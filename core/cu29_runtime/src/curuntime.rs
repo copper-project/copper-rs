@@ -437,13 +437,9 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         for cl in self.inner.iter_mut() {
             if cl.id == culistid && cl.get_state() == CopperListState::Processing {
                 cl.change_state(CopperListState::DoneProcessing);
-                match () {
-                    #[cfg(feature = "remote-debug")]
-                    () => {
-                        *last_completed_encoded = Some(encode_completed_copperlist_snapshot(cl)?);
-                    }
-                    #[cfg(not(feature = "remote-debug"))]
-                    () => {}
+                #[cfg(feature = "remote-debug")]
+                {
+                    *last_completed_encoded = Some(encode_completed_copperlist_snapshot(cl)?);
                 }
             }
             if is_top && cl.get_state() == CopperListState::DoneProcessing {
@@ -1600,16 +1596,16 @@ fn find_output_pack_from_nodeid(
 ) -> Option<CuOutputPack> {
     for step in steps {
         match step {
-            CuExecutionUnit::Loop(loop_unit) => {
-                if let Some(output_pack) = find_output_pack_from_nodeid(node_id, &loop_unit.steps) {
-                    return Some(output_pack);
-                }
+            CuExecutionUnit::Loop(loop_unit)
+                if let Some(output_pack) =
+                    find_output_pack_from_nodeid(node_id, &loop_unit.steps) =>
+            {
+                return Some(output_pack);
             }
-            CuExecutionUnit::Step(step) => {
-                if step.node_id == node_id {
-                    return step.output_msg_pack.clone();
-                }
+            CuExecutionUnit::Step(step) if step.node_id == node_id => {
+                return step.output_msg_pack.clone();
             }
+            _ => {}
         }
     }
     None

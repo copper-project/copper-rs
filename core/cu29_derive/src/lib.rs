@@ -5484,30 +5484,27 @@ fn extract_output_packs(runtime_plan: &CuExecutionLoop) -> Vec<OutputPack> {
         .steps
         .iter()
         .filter_map(|unit| match unit {
-            CuExecutionUnit::Step(step) => {
-                if let Some(output_pack) = &step.output_msg_pack {
-                    let msg_types: Vec<Type> = output_pack
-                        .msg_types
-                        .iter()
-                        .map(|output_msg_type| {
-                            parse_str::<Type>(output_msg_type.as_str()).unwrap_or_else(|_| {
-                                panic!(
-                                    "Could not transform {output_msg_type} into a message Rust type."
-                                )
-                            })
+            CuExecutionUnit::Step(step) if let Some(output_pack) = &step.output_msg_pack => {
+                let msg_types: Vec<Type> = output_pack
+                    .msg_types
+                    .iter()
+                    .map(|output_msg_type| {
+                        parse_str::<Type>(output_msg_type.as_str()).unwrap_or_else(|_| {
+                            panic!(
+                                "Could not transform {output_msg_type} into a message Rust type."
+                            )
                         })
-                        .collect();
-                    Some((
-                        output_pack.culist_index,
-                        OutputPack {
-                            msg_types,
-                            msg_type_names: output_pack.msg_types.clone(),
-                        },
-                    ))
-                } else {
-                    None
-                }
+                    })
+                    .collect();
+                Some((
+                    output_pack.culist_index,
+                    OutputPack {
+                        msg_types,
+                        msg_type_names: output_pack.msg_types.clone(),
+                    },
+                ))
             }
+            CuExecutionUnit::Step(_) => None,
             CuExecutionUnit::Loop(_) => todo!("Needs to be implemented"),
         })
         .collect();
