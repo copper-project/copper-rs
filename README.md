@@ -78,6 +78,7 @@ Want to see more Copper in action? Watch the [community showcase video](https://
 ## Get Started
 
 - Start a new project from templates: [Project Templates](https://copper-project.github.io/copper-rs/Project-Templates)
+- Browse the live component catalog: [Copper Component Catalog](https://cdn.copper-robotics.com/catalog/index.html)
 - See a full task graph + runtime walkthrough: [Copper Application Overview](https://copper-project.github.io/copper-rs/Copper-Application-Overview)
 - Build and deploy an application: [Build and Deploy a Copper Application](https://copper-project.github.io/copper-rs/Build-and-Deploy-a-Copper-Application)
 - RON configuration reference: [Copper RON Configuration Reference](https://copper-project.github.io/copper-rs/Copper-RON-Configuration-Reference)
@@ -92,7 +93,7 @@ Want to see more Copper in action? Watch the [community showcase video](https://
 - Task automation: [Task Automation with just](https://copper-project.github.io/copper-rs/Task-Automation-with-Just)
 - Supported platforms: [Supported Platforms](https://copper-project.github.io/copper-rs/Supported-Platforms)
 - Bare-metal development: [Baremetal Development](https://copper-project.github.io/copper-rs/Baremetal-Development)
-- Available components: [Available Components](https://cdn.copper-robotics.com/catalog/index.html)
+- Component catalog: [Copper Component Catalog](https://cdn.copper-robotics.com/catalog/index.html)
 - FAQ: [FAQ](https://copper-project.github.io/copper-rs/FAQ)
 - Release notes: [Copper Release Notes](https://copper-project.github.io/copper-rs/Copper-Release-Notes)
 - Roadmap: [Roadmap](https://copper-project.github.io/copper-rs/Roadmap)
