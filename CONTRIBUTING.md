@@ -172,6 +172,18 @@ cargo nextest run --workspace --all-targets --features mock,image,kornia,python,
     ```
 7. **Create a Pull Request**: Open a pull request (PR) from your branch to the master branch of the main copper-rs repository. Provide a clear description of your changes in the PR.
 
+## Contributing Components
+
+Reusable Copper components are welcome, but they do not always need to live inside the main `copper-rs` repository.
+
+If you are building a driver, task, bridge, or other generally useful component, the preferred path is usually:
+
+1. Publish it as its own crate or repository so it can evolve on its own release cycle.
+2. Make sure it is documented clearly and works well as a standalone Copper component.
+3. Add it to the [Copper Component Catalog](https://cdn.copper-robotics.com/catalog/index.html) so users can discover it easily.
+
+This keeps the core repository focused while still growing the Copper ecosystem. If you are unsure whether a component belongs in the main workspace or should live as an external package, open an issue or start a discussion first.
+
 ## Dependency Management
 
 We keep our dependencies minimal and up-to-date.
