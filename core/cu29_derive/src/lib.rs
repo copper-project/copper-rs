@@ -5931,25 +5931,25 @@ fn align_task_inputs(
                 );
             }
 
-            if i < canonical_len && j < mission_len {
-                if let Some(match_score) =
+            if i < canonical_len
+                && j < mission_len
+                && let Some(match_score) =
                     task_input_match_score(&canonical_slots[i], &mission_inputs[j])
-                {
-                    update_alignment_cell(
-                        &mut table[i + 1][j + 1],
-                        cell.score + match_score,
-                        cell.paths,
-                        if cell.paths == 1 {
-                            Some(AlignmentBackpointer {
-                                prev_i: i,
-                                prev_j: j,
-                                transition: AlignmentTransition::Match,
-                            })
-                        } else {
-                            None
-                        },
-                    );
-                }
+            {
+                update_alignment_cell(
+                    &mut table[i + 1][j + 1],
+                    cell.score + match_score,
+                    cell.paths,
+                    if cell.paths == 1 {
+                        Some(AlignmentBackpointer {
+                            prev_i: i,
+                            prev_j: j,
+                            transition: AlignmentTransition::Match,
+                        })
+                    } else {
+                        None
+                    },
+                );
             }
         }
     }
