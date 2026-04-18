@@ -875,14 +875,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../Available-Components/" class="md-nav__link">
+      <a href="https://cdn.copper-robotics.com/catalog/index.html" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Available Components
+    Copper Component Catalog
   
 
     
@@ -2399,11 +2399,11 @@ Building a complex robot is the art of having not only low latency like this but
 <p><strong>Log parameter in RON</strong>: Added the section_size parameter in the RON file. It is useful to tune your logging throughput.</p>
 </li>
 <li>
-<p><strong>Builder pattern for the Copper Application</strong>: we made the CopperContext official and change the app init to be with a cool builder pattern like:</p>
+<p><strong>Builder pattern for the Copper Application</strong>: we moved app init to the generated builder, for example:</p>
 </li>
 </ul>
 <pre><code class="language-Rust">  let mut application = CaterpillarApplicationBuilder::new()
-        .with_context(&amp;copper_ctx)
+        .with_log_path(&quot;logs/my-app.copper&quot;, Some(10 * 1024 * 1024))?
         .build()
         .expect(&quot;Failed to create application.&quot;);
 </code></pre>

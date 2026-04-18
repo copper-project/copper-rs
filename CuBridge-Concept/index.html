@@ -975,14 +975,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../Available-Components/" class="md-nav__link">
+      <a href="https://cdn.copper-robotics.com/catalog/index.html" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Available Components
+    Copper Component Catalog
   
 
     
@@ -1368,6 +1368,10 @@
 <li>an optional default route/topic/path (used if the mission doesn’t override it).</li>
 </ul>
 </li>
+<li>Tx channels skip <code>send</code> by default when the upstream <code>CuMsg</code> has no payload.<ul>
+<li>Prefix a <code>tx_channels!</code> entry with <code>[publish_empty]</code> when metadata-only sends are part of that channel's contract.</li>
+</ul>
+</li>
 <li>Implement CuBridge:<ul>
 <li>Specify which channel sets are Tx/Rx.</li>
 <li>new receives bridge-level config plus per-channel configs (including any mission route overrides) so you can set baud, QoS, topic names, etc.</li>
@@ -1390,7 +1394,10 @@
 </li>
 <li>Per-iteration order:<ul>
 <li>Rx channels behave like sources: receive is called before any tasks that consume that channel’s output.</li>
-<li>Tx channels behave like sinks: send is called after the upstream task(s) that feed that channel have run.</li>
+<li>Tx channels behave like sinks: send is called after the upstream task(s) that feed that channel have run.<ul>
+<li>If the Tx input <code>CuMsg</code> is empty, the runtime skips <code>send</code> unless that channel was declared with <code>[publish_empty]</code>.</li>
+</ul>
+</li>
 <li>If a bridge has both Rx and Tx used in the same dataflow, the runtime linearizes them: Rx → tasks → Tx on that bridge, preserving dependencies.</li>
 </ul>
 </li>

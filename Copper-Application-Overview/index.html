@@ -946,14 +946,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../Available-Components/" class="md-nav__link">
+      <a href="https://cdn.copper-robotics.com/catalog/index.html" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Available Components
+    Copper Component Catalog
   
 
     
@@ -1349,20 +1349,16 @@ impl CuSrcTask for FlippingSource {
 
 fn main() {
     let logger_path = &quot;/tmp/mylogfile.copper&quot;;
-    let copper_ctx =
-        basic_copper_setup(&amp;PathBuf::from(logger_path), true).expect(&quot;Failed to setup logger.&quot;);
-
-    debug!(&quot;Logger created at {}.&quot;, logger_path);
-
-    let clock = copper_ctx.clock;
 
     debug!(&quot;Creating application... &quot;);
-    let mut application =
-        MyApplication::new(clock.clone(), copper_ctx.unified_logger.clone())
-            .expect(&quot;Failed to create runtime.&quot;);
-    debug!(&quot;Running... starting clock: {}.&quot;, clock.now());
+    let mut application = MyApplication::builder()
+        .with_log_path(logger_path, Some(10 * 1024 * 1024))
+        .expect(&quot;Failed to setup logger.&quot;)
+        .build()
+        .expect(&quot;Failed to create runtime.&quot;);
+    debug!(&quot;Running... starting clock: {}.&quot;, application.clock().now());
     application.run().expect(&quot;Failed to run application.&quot;);
-    debug!(&quot;End of program: {}.&quot;, clock.now());
+    debug!(&quot;End of program: {}.&quot;, application.clock().now());
 }
 </code></pre>
 <p>For a deeper explanation of task lifecycle hooks and scheduling, see <a href="../Task-Lifecycle/">Task Lifecycle</a>.</p>

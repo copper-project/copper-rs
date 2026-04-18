@@ -555,6 +555,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#multi-copper-instance-overrides" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-Copper Instance Overrides
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#example" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1034,14 +1045,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../Available-Components/" class="md-nav__link">
+      <a href="https://cdn.copper-robotics.com/catalog/index.html" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Available Components
+    Copper Component Catalog
   
 
     
@@ -1427,6 +1438,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#multi-copper-instance-overrides" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-Copper Instance Overrides
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#example" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1483,19 +1505,30 @@
 <ul>
 <li><code>id</code> – unique identifier of the task.</li>
 <li><code>type</code> – fully qualified Rust type of the task implementation.</li>
+<li><code>kind</code> <em>(optional but recommended)</em> – declares which Copper task trait the type implements:
+  <code>source</code>, <code>task</code>, or <code>sink</code>.</li>
 <li><code>config</code> <em>(optional)</em> – map of parameters passed to the task.</li>
 <li><code>missions</code> <em>(optional)</em> – list of mission ids in which this task is active.</li>
-<li><code>background</code> <em>(optional)</em> – when set to <code>true</code>, the task runs on a background thread.</li>
+<li><code>background</code> <em>(optional)</em> – background execution policy for single-output sources and regular single-input tasks with outputs.
+  <code>true</code> is kept for compatibility and is equivalent to <code>"next"</code>.
+  Valid values:
+  <code>true</code> / <code>"next"</code> – launch the current input once the previous background run is released.
+  <code>"previous"</code> – keep one pending untreated input while another run is in flight.
+  <code>"closest"</code> – like <code>"previous"</code>, but it may wait one cycle for a predicted fresher input.</li>
 <li><code>logging</code> <em>(optional)</em> – <code>{ enabled: bool }</code> to enable or disable message logging for this task.</li>
 </ul>
 <p>Example:</p>
 <pre><code class="language-ron">(
     id: &quot;task1&quot;,
     type: &quot;tasks::ExampleTask&quot;,
-    background: true,
+    kind: task,
+    background: &quot;previous&quot;,
     logging: (enabled: false),
 )
 </code></pre>
+<p><code>kind</code> avoids relying on DAG shape to distinguish <code>CuSrcTask</code>, <code>CuTask</code>, and
+<code>CuSinkTask</code>. Older configs still infer this when the graph is unambiguous, but explicit
+<code>kind</code> is the preferred form.</p>
 <h2 id="connections">Connections<a class="headerlink" href="#connections" title="Permanent link">&para;</a></h2>
 <p>Connections are declared under <code>cnx</code> as tuples describing edges between tasks:</p>
 <ul>
@@ -1504,6 +1537,9 @@
 <li><code>msg</code> – Rust type of the message carried.</li>
 <li><code>missions</code> <em>(optional)</em> – restrict the connection to specific missions.</li>
 </ul>
+<p>If a source or regular task intentionally produces an output that nobody consumes in the
+current mission, declare it explicitly with <code>dst: "__nc__"</code>. That keeps the output message
+type known to the runtime without adding a fake sink.</p>
 <p>Example:</p>
 <pre><code class="language-ron">(src: &quot;task0&quot;, dst: &quot;task1&quot;, msg: &quot;i32&quot;)
 </code></pre>
@@ -1536,6 +1572,9 @@
 )
 </code></pre>
 <p>This acts as a rate limiter for Copper list execution.</p>
+<p>On std targets, enabling the <code>high-precision-limiter</code> crate feature keeps the same
+configuration field but changes the implementation to a tighter hybrid sleep/spin limiter
+for higher-rate loops.</p>
 <h2 id="missions">Missions<a class="headerlink" href="#missions" title="Permanent link">&para;</a></h2>
 <p>Configurations may define multiple missions, each representing an alternative task graph:</p>
 <pre><code class="language-ron">missions: [ (id: &quot;A&quot;), (id: &quot;B&quot;) ]
@@ -1551,6 +1590,57 @@
 ]
 </code></pre>
 <p>Included files are processed recursively. Parameters are substituted in the included text using the <code>{{param}}</code> syntax. Merging behaviour and further details are described in <code>doc/modular_config.md</code>.</p>
+<h2 id="multi-copper-instance-overrides">Multi-Copper Instance Overrides<a class="headerlink" href="#multi-copper-instance-overrides" title="Permanent link">&para;</a></h2>
+<p>Multi-Copper umbrella configs may declare an optional <code>instance_overrides_root</code>:</p>
+<pre><code class="language-ron">(
+    subsystems: [
+        (id: &quot;robot&quot;, config: &quot;robot_base.ron&quot;),
+    ],
+    interconnects: [],
+    instance_overrides_root: &quot;instances&quot;,
+)
+</code></pre>
+<p>This enables a convention-based lookup for per-instance config overlays:</p>
+<pre><code class="language-text">instances/&lt;instance_id&gt;/&lt;subsystem_id&gt;.ron
+</code></pre>
+<p>For <code>instance_id = 17</code> and subsystem <code>robot</code>, Copper probes:</p>
+<pre><code class="language-text">instances/17/robot.ron
+</code></pre>
+<p>If the file exists, it is applied as an overlay on top of the subsystem's base config.</p>
+<p>Overlay files currently support a <code>set</code> array. Each entry targets one existing task, resource,
+or bridge config map:</p>
+<pre><code class="language-ron">(
+    set: [
+        (
+            path: &quot;tasks/imu/config&quot;,
+            value: {
+                &quot;gyro_bias&quot;: [0.012, -0.004, 0.008],
+            },
+        ),
+        (
+            path: &quot;resources/board/config&quot;,
+            value: {
+                &quot;imu_bus&quot;: &quot;/dev/robot17-imu&quot;,
+            },
+        ),
+        (
+            path: &quot;bridges/radio/config&quot;,
+            value: {
+                &quot;mtu&quot;: 64,
+            },
+        ),
+    ],
+)
+</code></pre>
+<p>Rules:</p>
+<ul>
+<li>Supported paths are only <code>tasks/&lt;id&gt;/config</code>, <code>resources/&lt;id&gt;/config</code>, and <code>bridges/&lt;id&gt;/config</code>.</li>
+<li><code>value</code> must be a config map.</li>
+<li>The overlay merges keys into the existing config map for that object.</li>
+<li>Unknown ids are rejected as configuration errors.</li>
+<li>Instance overlays do not change topology. They only mutate existing config blocks.</li>
+</ul>
+<p>See <code>examples/cu_instance_overrides_demo/</code> for a minimal working example.</p>
 <h2 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h2>
 <p>A more complete configuration demonstrating several features is provided in <code>examples/modular_config_example/main_config.ron</code>:</p>
 <pre><code class="language-ron">(

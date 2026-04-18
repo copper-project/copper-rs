@@ -656,6 +656,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#latched-state-updates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Latched state updates
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -948,14 +959,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../Available-Components/" class="md-nav__link">
+      <a href="https://cdn.copper-robotics.com/catalog/index.html" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Available Components
+    Copper Component Catalog
   
 
     
@@ -1278,6 +1289,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#latched-state-updates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Latched state updates
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1309,6 +1331,51 @@
 <li>The <strong>best effort part</strong> will try be scheduled by packing them to minimize the interference with the critical path (high throughput / high jitter).</li>
 </ul>
 <p>In the critical loop, no allocation should occur, messages are pre-allocated and reused.</p>
+<h2 id="latched-state-updates">Latched state updates<a class="headerlink" href="#latched-state-updates" title="Permanent link">&para;</a></h2>
+<p>For low-rate "sticky" state, do not keep re-sending the full value every cycle and do not assume Copper will implicitly remember the previous output. Instead, send a payload that explicitly describes how downstream state should evolve.</p>
+<p>Copper provides:</p>
+<ul>
+<li><code>CuLatchedStateUpdate&lt;T&gt;</code> with <code>NoChange</code>, <code>Set(T)</code>, and <code>Clear</code></li>
+<li><code>CuLatchedState&lt;T&gt;</code> as the consumer-side cache</li>
+</ul>
+<p>Semantics:</p>
+<ul>
+<li><code>NoChange</code> means "keep whatever value was already latched"</li>
+<li><code>Set(T)</code> means "replace the latched value with this one"</li>
+<li><code>Clear</code> means "the previously latched value is no longer valid"</li>
+</ul>
+<p>Typical producer pattern:</p>
+<ul>
+<li>emit <code>Set(...)</code> when calibration / transforms / metadata first become available</li>
+<li>emit <code>NoChange</code> on later cycles while the cached value stays valid</li>
+<li>emit <code>Clear</code> if the cached value must be invalidated</li>
+</ul>
+<p>Typical consumer pattern:</p>
+<ul>
+<li>store a <code>CuLatchedState&lt;T&gt;</code> inside the task struct</li>
+<li>when an update message arrives, call <code>state.update(update)</code></li>
+<li>read the cached value with <code>state.get()</code> and skip work until it exists</li>
+</ul>
+<pre><code class="language-rust">pub struct DepthProjector {
+    calibration: CuLatchedState&lt;Calibration&gt;,
+}
+
+fn process(&amp;mut self, _clock: &amp;RobotClock, input: &amp;Self::Input&lt;'_&gt;,
+           output: &amp;mut Self::Output&lt;'_&gt;) -&gt; CuResult&lt;()&gt; {
+    if let Some(update) = input.payload() {
+        self.calibration.update(update);
+    }
+
+    let Some(calibration) = self.calibration.get() else {
+        return Ok(());
+    };
+
+    // Use the cached calibration until a future Set(...) or Clear arrives.
+    output.set_payload(project_depth_with(calibration));
+    Ok(())
+}
+</code></pre>
+<p>This is useful for calibration bundles, static transforms, map updates, and other state that is usually unchanged but must still be deterministic in logs and replay. Because the updates are part of the message stream, replay and resimulation see the same state transitions as the live run.</p>
 <p>Note on freeze / thaw: A task internal state can be serialized to give the opportunity for the framework to "snapshot" the system, it would be at a low rate (ie. ~ a second). 
 You can think of it a little bit as a "key frame" in a video. It is useful at replay to be able to jump into a state without having to replay all the previous messages.</p>
 
