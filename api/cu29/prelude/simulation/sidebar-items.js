@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["CuBridgeLifecycleState","CuNoBridgeChannelId","CuTaskCallbackState","SimOverride"],"fn":["recorded_copperlist_timestamp"],"struct":["CuNoBridgeChannels","CuSimBridge","CuSimSinkTask","CuSimSrcTask"],"trait":["CuSimSinkInput"]};

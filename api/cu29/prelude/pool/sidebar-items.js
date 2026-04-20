@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["CuHandleInner","CuSharedMemoryElementType"],"fn":["enable_shared_handle_serialization","pools_statistics"],"struct":["AlignedBuffer","CuHandle","CuHostMemoryPool","CuSharedMemoryBuffer","CuSharedMemoryHandleDescriptor","CuSharedMemoryPool","SharedHandleSerializationGuard"],"trait":["ArrayLike","CuPool","DeviceCuPool","ElementType","PoolMonitor"]};

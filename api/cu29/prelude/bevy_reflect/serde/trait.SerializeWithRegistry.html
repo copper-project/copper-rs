@@ -8,7 +8,7 @@
        <span class="where">where S: <a class="trait" href="https://docs.rs/serde_core/1.0.228/serde_core/ser/trait.Serializer.html" title="trait serde_core::ser::Serializer">Serializer</a></span>;
 }</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Trait used to provide finer control when serializing a reflected type with one of
 the reflection serializers.</p>
-<p>This trait is the reflection equivalent of <code>serde</code>’s <a href="../../trait.Serialize.html" title="trait cu29::prelude::Serialize"><code>Serialize</code></a> trait.
+<p>This trait is the reflection equivalent of <code>serde</code>’s <a href="https://docs.rs/serde_core/1.0.228/serde_core/ser/trait.Serialize.html" title="trait serde_core::ser::Serialize"><code>Serialize</code></a> trait.
 The main difference is that this trait provides access to the <a href="../../struct.TypeRegistry.html" title="struct cu29::prelude::TypeRegistry"><code>TypeRegistry</code></a>,
 which means that we can use the registry and all its stored type information
 to serialize our type.</p>
@@ -20,7 +20,7 @@ to the standard reflection serializer for other parts.</p>
 <p>Without this trait and its associated <a href="../../reflect_serde/struct.ReflectSerializeWithRegistry.html" title="struct cu29::prelude::reflect_serde::ReflectSerializeWithRegistry">type data</a>, such a serializer would have to
 write out all of the serialization logic itself, possibly including
 unnecessary code duplication and trivial implementations.</p>
-<p>This is because a normal <a href="../../trait.Serialize.html" title="trait cu29::prelude::Serialize"><code>Serialize</code></a> implementation has no knowledge of the
+<p>This is because a normal <a href="https://docs.rs/serde_core/1.0.228/serde_core/ser/trait.Serialize.html" title="trait serde_core::ser::Serialize"><code>Serialize</code></a> implementation has no knowledge of the
 <a href="../../struct.TypeRegistry.html" title="struct cu29::prelude::TypeRegistry"><code>TypeRegistry</code></a> and therefore cannot create a reflection-based serializer for
 nested items.</p>
 <h2 id="implementors-1"><a class="doc-anchor" href="#implementors-1">§</a>Implementors</h2>

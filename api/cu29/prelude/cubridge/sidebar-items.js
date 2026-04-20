@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["TxEmptyPolicy"],"struct":["BridgeChannel","BridgeChannelConfig","BridgeChannelDescriptor"],"trait":["BridgeChannelInfo","BridgeChannelSet","CuBridge"]};
