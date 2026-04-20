@@ -17,21 +17,6 @@
             config: {"label": "Mission B"},
             missions: ["B"],
         ),
-        // (
-        //     id: "sink_1",
-        //     type: "tasks::ExampleSink",
-        //     config: {"label": "Multi sink"},
-        // ),
-        // (
-        //     id: "src_multi_1",
-        //     type: "tasks::ExampleMultiSrc",
-        //     config: {"label": "Multi src"},
-        // ),
-        // (
-        //     id: "multi_input_1",
-        //     type: "tasks::MultiInputTask",
-        //     config: {"label": "Multi input"},
-        // ),
     ],
     cnx: [
         (
@@ -58,32 +43,11 @@
             msg: "i32",
             missions: ["B"],
         ),
-        // This works when not used in `includes`
-        // (
-        //     src: "src_multi_1",
-        //     dst: "multi_input_1",
-        //     msg: "i32",
-        // ),
-        // (
-        //     src: "src_multi_1",
-        //     dst: "multi_input_1",
-        //     msg: "u32",
-        // ),
-        // (
-        //     src: "multi_input_1",
-        //     // dst: "__nc__",
-        //     dst: "sink_1",
-        //     msg: "i32",
-        // ),
-
     ],
     includes: [
-        // same code, w/ index param, results in errors
         (
             path: "template_task.ron",
-            params: {
-                "index": 0,
-            },
+            params: {"index": 0},
         ),
-    ]
+    ],
 )

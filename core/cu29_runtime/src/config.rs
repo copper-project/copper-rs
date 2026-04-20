@@ -3180,10 +3180,16 @@ fn process_includes(
                 } else {
                     let mut cnx = result.cnx.take().unwrap();
                     for included_c in included_cnx {
-                        if !cnx
-                            .iter()
-                            .any(|c| c.src == included_c.src && c.dst == included_c.dst)
-                        {
+                        if let Some(existing_cnx) = cnx.iter_mut().find(|c| {
+                            c.src == included_c.src
+                                && c.dst == included_c.dst
+                                && c.msg == included_c.msg
+                        }) {
+                            merge_connection_missions(
+                                &mut existing_cnx.missions,
+                                &included_c.missions,
+                            );
+                        } else {
                             cnx.push(included_c);
                         }
                     }

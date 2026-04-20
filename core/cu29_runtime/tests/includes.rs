@@ -346,6 +346,60 @@ mod tests {
     }
 
     #[test]
+    fn test_include_preserves_parallel_connections_with_different_messages() {
+        let temp_dir = tempdir().unwrap();
+        let base_path = temp_dir.path();
+
+        let config_dir = base_path.join("config");
+        create_dir_all(&config_dir).unwrap();
+
+        let included_config = r#"(
+        tasks: [
+            (
+                id: "multi_src",
+                type: "tasks::MultiSource",
+            ),
+            (
+                id: "multi_input",
+                type: "tasks::MultiInput",
+            ),
+        ],
+        cnx: [
+            (src: "multi_src", dst: "multi_input", msg: "i32"),
+            (src: "multi_src", dst: "multi_input", msg: "u32"),
+        ],
+    )"#;
+
+        let included_path = config_dir.join("included.ron");
+        write(&included_path, included_config).unwrap();
+
+        let main_config = r#"(
+            tasks: [],
+            cnx: [],
+            includes: [
+                (
+                    path: "included.ron",
+                    params: {},
+                ),
+            ],
+        )"#;
+
+        let main_path = config_dir.join("main.ron");
+        write(&main_path, main_config).unwrap();
+
+        let config = read_configuration(main_path.to_str().unwrap()).unwrap();
+        let graph = config.get_graph(None).unwrap();
+        let mut messages: Vec<_> = graph
+            .edges()
+            .filter(|edge| edge.src == "multi_src" && edge.dst == "multi_input")
+            .map(|edge| edge.msg.as_str())
+            .collect();
+        messages.sort();
+
+        assert_eq!(messages, ["i32", "u32"]);
+    }
+
+    #[test]
     fn test_multiple_parameterized_includes() {
         let temp_dir = tempdir().unwrap();
         let base_path = temp_dir.path();

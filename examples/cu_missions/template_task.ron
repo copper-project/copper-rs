@@ -4,13 +4,11 @@
             id: "src_multi_{{index}}",
             type: "tasks::ExampleMultiSrc",
             config: {"label": "Multi src"},
-
         ),
         (
             id: "multi_input_{{index}}",
             type: "tasks::MultiInputTask",
             config: {"label": "Multi input"},
-
         ),
         (
             id: "sink_{{index}}",
@@ -29,13 +27,8 @@
             dst: "multi_input_{{index}}",
             msg: "u32",
         ),
-        // causes: error[E0277]: the trait bound `CuStampedData<i32, ...>: __CuOutputSlotMustMatchTaskOutput__Task_src_multi_0__Add_dst___nc___connections_for_unused_outputs<...>` is not satisfied
-        //     = note: expected reference `&(&CuStampedData<i32, CuMsgMetadata>, &CuStampedData<u32, CuMsgMetadata>)`
-        //    found reference `&CuStampedData<i32, CuMsgMetadata>`
-        // for both __nc__ and sink_{{index}}
         (
             src: "multi_input_{{index}}",
-            // dst: "__nc__",
             dst: "sink_{{index}}",
             msg: "i32",
         ),
