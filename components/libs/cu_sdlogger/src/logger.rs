@@ -215,6 +215,7 @@ impl<BD: BlockDevice> EMMCLogger<BD> {
     pub fn new(bd: BD, start: BlockIdx, size: BlockCount) -> CuResult<Self> {
         let main_header = MainHeader {
             magic: MAIN_MAGIC,
+            format_version: UNIFIED_LOG_FORMAT_VERSION,
             first_section_offset: BLK as u16,
             page_size: BLK as u16,
         };

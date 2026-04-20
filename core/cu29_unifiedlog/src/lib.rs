@@ -42,12 +42,16 @@ pub const MAIN_MAGIC: [u8; 4] = [0xB4, 0xA5, 0x50, 0xFF]; // BRASS OFF
 /// ID to spot a section of Copper Log
 pub const SECTION_MAGIC: [u8; 2] = [0xFA, 0x57]; // FAST
 
+/// Version of the unified log file format.
+pub const UNIFIED_LOG_FORMAT_VERSION: u8 = 1;
+
 pub const SECTION_HEADER_COMPACT_SIZE: u16 = 512; // Usual minimum size for a disk sector.
 
 /// The main file header of the datalogger.
 #[derive(Encode, Decode, Debug)]
 pub struct MainHeader {
-    pub magic: [u8; 4],            // Magic number to identify the file.
+    pub magic: [u8; 4], // Magic number to identify the file.
+    pub format_version: u8,
     pub first_section_offset: u16, // This is to align with a page at write time.
     pub page_size: u16,
 }
@@ -59,6 +63,7 @@ impl Display for MainHeader {
             "  Magic -> {:2x}{:2x}{:2x}{:2x}",
             self.magic[0], self.magic[1], self.magic[2], self.magic[3]
         )?;
+        writeln!(f, "  format_version -> {}", self.format_version)?;
         writeln!(f, "  first_section_offset -> {}", self.first_section_offset)?;
         writeln!(f, "  page_size -> {}", self.page_size)
     }

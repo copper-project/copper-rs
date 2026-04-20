@@ -3,7 +3,7 @@
 
 use crate::{
     AllocatedSection, MAIN_MAGIC, MainHeader, SECTION_MAGIC, SectionHandle, SectionHeader,
-    SectionStorage, UnifiedLogRead, UnifiedLogStatus, UnifiedLogWrite,
+    SectionStorage, UNIFIED_LOG_FORMAT_VERSION, UnifiedLogRead, UnifiedLogStatus, UnifiedLogWrite,
 };
 
 use crate::SECTION_HEADER_COMPACT_SIZE;
@@ -716,6 +716,7 @@ impl MmapUnifiedLoggerWrite {
         // This is the first slab so add the main header.
         let main_header = MainHeader {
             magic: MAIN_MAGIC,
+            format_version: UNIFIED_LOG_FORMAT_VERSION,
             first_section_offset: page_size as u16,
             page_size: page_size as u16,
         };
@@ -817,6 +818,15 @@ fn open_slab_index(
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Invalid magic number in main header",
+            ));
+        }
+        if main_header.format_version != UNIFIED_LOG_FORMAT_VERSION {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "Unsupported unified log format version {} in main header; this reader supports version {}",
+                    main_header.format_version, UNIFIED_LOG_FORMAT_VERSION
+                ),
             ));
         }
         prolog = main_header.first_section_offset;
@@ -1089,6 +1099,7 @@ mod tests {
     use bincode::de::read::SliceReader;
     use bincode::{Decode, Encode, decode_from_reader, decode_from_slice};
     use cu29_traits::WriteStream;
+    use std::io::{Seek, SeekFrom, Write};
     use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
     use tempfile::TempDir;
@@ -1153,6 +1164,52 @@ mod tests {
         //    file.metadata().unwrap().len(),
         //    (used + size_of::<SectionHeader>()) as u64
         //);
+    }
+
+    #[test]
+    fn test_unsupported_main_header_format_version_is_rejected() {
+        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
+        let file_path = tmp_dir.path().join("test.bin");
+        {
+            let MmapUnifiedLogger::Write(_logger) = MmapUnifiedLoggerBuilder::new()
+                .write(true)
+                .create(true)
+                .file_base_name(&file_path)
+                .preallocated_size(100000)
+                .build()
+                .expect("Failed to create logger")
+            else {
+                panic!("Failed to create logger")
+            };
+        }
+
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(tmp_dir.path().join("test_0.bin"))
+            .expect("Could not reopen the slab");
+        let unsupported_version = UNIFIED_LOG_FORMAT_VERSION + 1;
+        file.seek(SeekFrom::Start(MAIN_MAGIC.len() as u64))
+            .expect("Could not seek to format version");
+        file.write_all(&[unsupported_version])
+            .expect("Could not write unsupported format version");
+        drop(file);
+
+        let err = match MmapUnifiedLoggerBuilder::new()
+            .file_base_name(&file_path)
+            .build()
+        {
+            Ok(_) => panic!("Reader accepted unsupported unified log format version"),
+            Err(err) => err,
+        };
+
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert_eq!(
+            err.to_string(),
+            format!(
+                "Unsupported unified log format version {unsupported_version} in main header; this reader supports version {UNIFIED_LOG_FORMAT_VERSION}"
+            )
+        );
     }
 
     #[test]
