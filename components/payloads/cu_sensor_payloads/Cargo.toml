@@ -29,6 +29,9 @@ image = { workspace = true, default-features = false, optional = true }
 kornia-image = { version = "0.1.10", optional = true }
 serde = { workspace = true }
 
+[dev-dependencies]
+serde_json = { workspace = true }
+
 [features]
 default = ["std"]
 std = ["cu29/std", "cu29-clock/std"]

@@ -1,6 +1,8 @@
 use crate::{CuHandlePayload, CuHandlePayloadInit, CuHandlePayloadMeta};
 use alloc::alloc::{Layout, alloc_zeroed, handle_alloc_error};
 use alloc::boxed::Box;
+use bincode::de::Decoder;
+use bincode::error::DecodeError;
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
 use cu29::units::si::f32::{Length, Ratio};
@@ -135,6 +137,41 @@ impl<const N: usize> PointCloudSoa<N> {
 impl<const N: usize> CuHandlePayloadInit for PointCloudSoa<N> {
     fn boxed_init() -> Box<Self> {
         Self::boxed_zeroed()
+    }
+
+    fn decode_boxed<D>(decoder: &mut D) -> Result<Box<Self>, DecodeError>
+    where
+        D: Decoder<Context = ()>,
+    {
+        let mut result = Self::boxed_zeroed();
+        result.len = Decode::decode(decoder)?;
+        if result.len > N {
+            return Err(DecodeError::ArrayLengthMismatch {
+                required: N,
+                found: result.len,
+            });
+        }
+
+        for idx in 0..result.len {
+            result.tov[idx] = Decode::decode(decoder)?;
+        }
+        for idx in 0..result.len {
+            result.x[idx] = Decode::decode(decoder)?;
+        }
+        for idx in 0..result.len {
+            result.y[idx] = Decode::decode(decoder)?;
+        }
+        for idx in 0..result.len {
+            result.z[idx] = Decode::decode(decoder)?;
+        }
+        for idx in 0..result.len {
+            result.i[idx] = Decode::decode(decoder)?;
+        }
+        for idx in 0..result.len {
+            result.return_order[idx] = Decode::decode(decoder)?;
+        }
+
+        Ok(result)
     }
 }
 
