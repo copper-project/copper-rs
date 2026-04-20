@@ -68,6 +68,25 @@ The `just std-ci` command remains CI-aligned for std paths, including:
 - Unit tests with cargo-nextest
 - Project generation tests (debug mode only)
 
+### Platform Support Tiers
+
+The public platform list lives in the [Supported Platforms](https://copper-project.github.io/copper-rs/Supported-Platforms) wiki page. For contribution and release purposes, platform support is tied to the validation we actually run. Do not promote a platform to a stronger support tier unless the matching CI or release validation exists.
+
+| Tier | Platform / target | Current validation scope |
+| --- | --- | --- |
+| Tier 1: CI-tested and release-blocking | Linux x86_64 | Full std workspace build/test/clippy, feature coverage, generated template builds, and the `cu-caterpillar` determinism regression. |
+| Tier 1: CI-tested and release-blocking | macOS GitHub runner | Std workspace build/test and generated template builds. CUDA is excluded, and clippy is not currently part of the macOS PR gate. |
+| Tier 1: CI-tested and release-blocking | Windows x86_64 | Core crates build/test only. The full workspace is not currently a Windows support guarantee. |
+| Tier 1: CI-tested and release-blocking | Core `no_std` | Core build/tests with default features disabled. |
+| Tier 1: CI-tested and release-blocking | Embedded crates and RP2350 skeleton | Embedded-only crate build/clippy plus RP2350 firmware/host skeleton cross-build and clippy coverage. This is compile-time validation, not hardware-in-the-loop validation. |
+| Tier 2: expected to work | Linux aarch64, SBCs, and Jetson-class targets | Documented deployment path and project intent, but not equivalent to the full PR CI matrix. |
+| Tier 2: expected to work | Other maintained embedded targets | Expected when using maintained embedded crates and supported HAL/resource patterns. Board-specific behavior depends on separate hardware validation. |
+| Tier 3: experimental | Android arm64 | Listed as a deployment target, but not currently covered by release-blocking CI. |
+| Tier 3: experimental | Linux armv7 and riscv64 | Listed as deployment targets, but not currently covered by release-blocking CI. |
+| Tier 3: experimental | Bare-metal boards beyond maintained examples | Experimental unless they have explicit CI, release-checklist, or hardware validation coverage. |
+
+When changing shared runtime, macro, trait, logging, replay, resource, or embedded-facing code, consider the Tier 1 surfaces affected by the change. In practice, this usually means running `just std-ci` for host/runtime changes and `just nostd-ci` for `no_std` or embedded-facing changes before requesting review.
+
 ### Prek hooks (Recommended)
 
 To mirror the CI lint steps locally, you can install prek hooks that run formatting and typos checks on each commit.
