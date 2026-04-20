@@ -144,6 +144,7 @@ soft_ratatui = { path = "vendor/soft_ratatui" }
 version = "0.15.0"
 authors = ["Guillaume Binet <gbin@gootz.net>"]
 edition = "2024"
+rust-version = "1.95"
 license = "Apache-2.0"
 keywords = ["robotics", "middleware", "copper", "real-time"]
 categories = ["science::robotics"]

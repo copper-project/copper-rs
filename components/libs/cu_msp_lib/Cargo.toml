@@ -4,6 +4,7 @@ description = "This is the library side of an MSP (Multiwii Serial Protocol) ori
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 keywords.workspace = true
 categories.workspace = true

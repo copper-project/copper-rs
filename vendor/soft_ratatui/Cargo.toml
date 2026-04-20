@@ -2,6 +2,7 @@
 name = "soft_ratatui"
 version = "0.2.0"
 edition = "2024"
+rust-version = "1.95"
 authors = ["gold-silver-copper"]
 
 include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]

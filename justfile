@@ -1,6 +1,7 @@
 # CI-aligned helpers mirroring .github/workflows/general.yml
 BASE_FEATURES := "mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug"
 WINDOWS_BASE_FEATURES := "mock,cu-sensor-payloads/image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode"
+MSRV := "1.95.0"
 export ROOT := `git rev-parse --show-toplevel`
 EMBEDDED_EXCLUDES := shell('python3 $1/support/ci/embedded_crates.py excludes', ROOT)
 PREK_FMT_FIX_HOOKS := "trailing-whitespace mixed-line-ending"
@@ -109,6 +110,14 @@ test:
 
 	cargo +stable nextest run --all-targets --workspace {{EMBEDDED_EXCLUDES}}
 	cargo +stable nextest run --no-default-features
+
+# Verify the declared minimum supported Rust version.
+msrv-check:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	cargo +{{MSRV}} check --workspace --all-targets {{EMBEDDED_EXCLUDES}}
+	cargo +{{MSRV}} check --no-default-features
 
 # Run the no_std/embedded CI flow locally.
 nostd-ci:

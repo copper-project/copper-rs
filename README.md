@@ -2,7 +2,7 @@
 
 [![copper](https://github.com/gbin/copper-project/actions/workflows/general.yml/badge.svg)](https://github.com/gbin/copper-project/actions/workflows/general.yml)
 ![GitHub last commit](https://img.shields.io/github/last-commit/copper-project/copper-rs)
-![](https://img.shields.io/badge/Rust-1.80+-orange.svg)
+![](https://img.shields.io/badge/Rust-1.95+-orange.svg)
 [![dependency status](https://deps.rs/repo/github/copper-project/copper-rs/status.svg)](https://deps.rs/repo/github/copper-project/copper-rs)
 [![Discord](https://img.shields.io/discord/1305916875741597826?logo=discord)](https://discord.gg/VkCG7Sb9Kw)
 [![Book](https://img.shields.io/badge/book-Docs-blue)](https://copper-project.github.io/copper-rs-book/)
@@ -77,6 +77,7 @@ Want to see more Copper in action? Watch the [community showcase video](https://
 
 ## Get Started
 
+- Requires Rust 1.95 or newer. The latest stable Rust toolchain is recommended.
 - Start a new project from templates: [Project Templates](https://copper-project.github.io/copper-rs/Project-Templates)
 - Browse the live component catalog: [Copper Component Catalog](https://cdn.copper-robotics.com/catalog/index.html)
   Community components are welcome there too; if you build a reusable Copper component, prefer publishing it as its own crate and adding it to the catalog.

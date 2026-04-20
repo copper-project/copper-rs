@@ -13,8 +13,34 @@ env:
   CARGO_PROFILE_DEV_CODEGEN_UNITS: "16"
   CARGO_PROFILE_TEST_CODEGEN_UNITS: "16"
   CARGO_INCREMENTAL: "0"
+  MSRV: "1.95.0"
 
 jobs:
+  msrv:
+    name: MSRV Check
+    runs-on: ubuntu-latest
+    env:
+      WORKSPACE_SCOPE: workspace
+    steps:
+      - uses: actions/checkout@v6
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: ${{ env.MSRV }}
+          linux_cargo_paths: true
+          cache_prefix: msrv
+          cache_shared_key: rust-ubuntu
+          install_nextest: "false"
+          sccache_key_suffix: msrv
+      - name: Detect embedded-only crates
+        run: |
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+      - name: Check workspace on MSRV
+        run: cargo +${{ env.MSRV }} check --workspace --all-targets $EMBEDDED_EXCLUDES
+      - name: Check no_std default members on MSRV
+        run: cargo +${{ env.MSRV }} check --no-default-features
+
   Unit-Tests:
     name: Unit Tests
     uses: ./.github/workflows/reusable-unit-tests.yml

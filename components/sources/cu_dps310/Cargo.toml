@@ -4,6 +4,7 @@ description = "Copper source driver for the DPS310 digital barometric pressure s
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 keywords.workspace = true
 categories.workspace = true

@@ -3,6 +3,7 @@ name = "cu-feetech-demo"
 description = "An example application demonstrating the cu_feetech bridge with a SO-100/SO-101 Feetech servo arm."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 keywords.workspace = true
 categories.workspace = true

@@ -4,6 +4,7 @@ description = "Rust library for controlling the SN754410 motor driver on the Ras
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 keywords.workspace = true
 categories.workspace = true

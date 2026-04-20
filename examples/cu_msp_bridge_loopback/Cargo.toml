@@ -3,6 +3,7 @@ name = "cu-msp-bridge-loopback"
 description = "An example application that demonstrates a loopback using the cu_msp_bridge component."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 keywords.workspace = true
 categories.workspace = true

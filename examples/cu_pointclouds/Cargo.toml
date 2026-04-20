@@ -4,6 +4,7 @@ description = "This is small sink example to display a Copper pointcloud in reru
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 keywords.workspace = true
 categories.workspace = true

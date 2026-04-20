@@ -4,6 +4,7 @@ description = "Copper source for the DFRobot SEN0682 / Wanyee WY6005 ToF lidar."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 keywords.workspace = true
 categories.workspace = true

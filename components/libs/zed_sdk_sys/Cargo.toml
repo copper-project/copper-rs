@@ -2,6 +2,7 @@
 name = "zed-sdk-sys"
 version = "0.15.0"
 edition = "2024"
+rust-version = "1.95"
 license = "Apache-2.0"
 description = "Raw Rust FFI bindings for the Stereolabs ZED C API"
 repository = "https://github.com/copper-project/copper-rs"

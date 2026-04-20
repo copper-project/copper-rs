@@ -5,6 +5,7 @@ description = "This is a driver for the WT901 IMU."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 keywords.workspace = true
 categories.workspace = true

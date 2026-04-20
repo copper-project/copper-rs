@@ -6,7 +6,7 @@ First off, thank you for considering contributing to Copper-rs! We welcome contr
 
 ### Prerequisites
 
-* **Rust:** Ensure you have a recent stable Rust toolchain installed. You can install it using [rustup](https://rustup.rs/).
+* **Rust:** Copper's minimum supported Rust version is 1.95. Install the latest stable Rust toolchain with [rustup](https://rustup.rs/).
     ```bash
     curl --proto '=https' --tlsv1.2 -sSf [https://sh.rustup.rs](https://sh.rustup.rs) | sh
     ```

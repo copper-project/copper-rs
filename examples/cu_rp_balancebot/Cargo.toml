@@ -4,6 +4,7 @@ description = "This is a full robot example for the Copper project. It runs on t
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 keywords.workspace = true
 categories.workspace = true

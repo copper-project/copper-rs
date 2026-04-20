@@ -4,6 +4,7 @@ description = "This is a fork of Value with custom types added for Copper like t
 
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 homepage.workspace = true
 repository.workspace = true
 

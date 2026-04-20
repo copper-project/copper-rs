@@ -4,6 +4,7 @@ description = "Example showing how to set a runtime rate target for the Copper a
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 keywords.workspace = true
 categories.workspace = true

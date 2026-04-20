@@ -4,6 +4,7 @@ description = "A monitoring TUI for Copper. See the main Copper repository for m
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 keywords.workspace = true
 categories.workspace = true

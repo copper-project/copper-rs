@@ -2,6 +2,7 @@
 name = "zed-sdk"
 version = "0.15.0"
 edition = "2024"
+rust-version = "1.95"
 license = "Apache-2.0"
 description = "Safe Rust wrapper for the Stereolabs ZED C API"
 readme = "README.md"

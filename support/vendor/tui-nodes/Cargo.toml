@@ -11,6 +11,7 @@
 
 [package]
 edition = "2024"
+rust-version = "1.95"
 name = "tui-nodes"
 version = "0.9.0"
 authors = ["jaxter184 <jaxter184@gmail.com>"]

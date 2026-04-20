@@ -4,6 +4,7 @@ description = "A simple UDP packet injector that takes a PCAP file and sends it 
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 keywords.workspace = true
 categories.workspace = true

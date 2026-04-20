@@ -4,6 +4,7 @@ description = "Copper source driver for the BMI088 6-axis IMU (accelerometer + g
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 keywords.workspace = true
 categories.workspace = true

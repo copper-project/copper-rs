@@ -2,6 +2,7 @@
 name = "cu-rp2350-skeleton"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.95"
 description = "A minimal example of using Copper on a RP2350 microcontroller"
 authors = ["Guillaume Binet <gbin@gootz.net>"]
 default-run = "main"

@@ -4,6 +4,7 @@ description = "This is a driver for the Raspberry Pi to decode a directional enc
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 keywords.workspace = true
 categories.workspace = true
