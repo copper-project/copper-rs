@@ -47,6 +47,30 @@ jobs:
     with:
       toolchain: stable
       linux_cargo_paths: true
+
+  api:
+    name: Public API Check
+    runs-on: ubuntu-latest
+    env:
+      PUBLIC_API_VERSION: "0.51.0"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: api-check
+          shared-key: rust-ubuntu
+          cache-targets: "false"
+          cache-bin: "true"
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+      - name: Install cargo-public-api
+        run: |
+          if ! cargo public-api --version 2>/dev/null | grep -qx "cargo-public-api ${PUBLIC_API_VERSION}"; then
+            cargo install --locked cargo-public-api --version "${PUBLIC_API_VERSION}" --force
+          fi
+      - name: Check public API snapshots
+        run: support/ci/check_public_api.sh
+
   fmt:
     name: Format Check
     runs-on: ubuntu-latest
