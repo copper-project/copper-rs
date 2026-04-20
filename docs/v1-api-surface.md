@@ -120,9 +120,7 @@ This file defines the Copper V1 public contract. Anything not listed as stable i
 
 ## Deprecated
 
-- `CuRuntime::new(...)`.
-- `CuRuntime::new_with_resources(...)`.
-- Old one-argument lifetime forms of `input_msg!` and `output_msg!`.
+- None.
 
 ## API Snapshots
 

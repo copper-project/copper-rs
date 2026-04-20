@@ -139,6 +139,8 @@ pub use bincode;
 pub use cu29_clock as clock;
 #[cfg(feature = "units")]
 pub use cu29_units as units;
+#[doc(hidden)]
+pub use serde;
 #[cfg(feature = "defmt")]
 pub mod defmt {
     pub use defmt::{debug, error, info, warn};
@@ -215,6 +217,8 @@ pub mod prelude {
     #[cfg(feature = "units")]
     pub use crate::units;
     pub use crate::{defmt_debug, defmt_error, defmt_info, defmt_warn};
+    #[cfg(feature = "reflect")]
+    pub use bevy_reflect_derive::Reflect;
     #[cfg(feature = "signal-handler")]
     pub use ctrlc;
     pub use cu29_clock::*;
@@ -222,6 +226,8 @@ pub mod prelude {
     pub use cu29_log::*;
     pub use cu29_log_derive::*;
     pub use cu29_log_runtime::*;
+    #[cfg(not(feature = "reflect"))]
+    pub use cu29_reflect_derive::Reflect;
     pub use cu29_runtime::app;
     pub use cu29_runtime::app::*;
     pub use cu29_runtime::config::*;
@@ -248,8 +254,8 @@ pub mod prelude {
         ReflectSerializer, SerializationData, TypedReflectSerializer,
     };
     pub use cu29_runtime::reflect::{
-        GetTypeRegistration, Reflect, ReflectTaskIntrospection, ReflectTypePath, TypeInfo,
-        TypePath, TypeRegistry, dump_type_registry_schema,
+        GetTypeRegistration, ReflectTaskIntrospection, ReflectTypePath, TypeInfo, TypePath,
+        TypeRegistry, dump_type_registry_schema,
     };
     pub use cu29_runtime::resource::*;
     pub use cu29_runtime::rx_channels;
@@ -269,5 +275,5 @@ pub mod prelude {
     pub use cu29_unifiedlog::*;
     pub use cu29_value::Value;
     pub use cu29_value::to_value;
-    pub use serde::{Deserialize, Serialize};
+    pub use serde_derive::{Deserialize, Serialize};
 }

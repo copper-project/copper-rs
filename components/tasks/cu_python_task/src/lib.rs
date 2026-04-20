@@ -44,6 +44,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
+use cu29::reflect::Reflect;
 use cu29_value::{Value as CuValue, py_to_value, to_value, value_to_py};
 use minicbor::data::{IanaTag, Int as CborInt, Type as CborType};
 use minicbor::{Decoder as CborDecoder, Encoder as CborEncoder};

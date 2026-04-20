@@ -115,9 +115,6 @@ macro_rules! input_msg {
     ($lt:lifetime, $first:ty, $($rest:ty),+) => {
         ( & $lt CuMsg<$first>, $( & $lt CuMsg<$rest> ),+ )
     };
-    ($lt:lifetime, $ty:ty) => {
-        CuMsg<$ty>   // This is for backward compatibility
-    };
     ($ty:ty) => {
         CuMsg<$ty>
     };
@@ -134,9 +131,6 @@ macro_rules! output_msg {
     };
     ($ty:ty) => {
         CuMsg<$ty>
-    };
-    ($lt:lifetime, $ty:ty) => {
-        CuMsg<$ty>  // This is for backward compatibility
     };
 }
 

@@ -273,6 +273,11 @@ pub trait CuSimSinkInput {
 }
 
 macro_rules! impl_sim_sink_input_tuple {
+    ($name:ident) => {
+        impl<$name: CuMsgPayload> CuSimSinkInput for ($name,) {
+            type With<'m> = CuMsg<$name> where Self: 'm;
+        }
+    };
     ($($name:ident),+) => {
         impl<$($name: CuMsgPayload),+> CuSimSinkInput for ($($name,)+) {
             type With<'m> = input_msg!('m, $($name),+) where Self: 'm;

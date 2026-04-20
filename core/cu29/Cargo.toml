@@ -18,6 +18,7 @@ cu29-derive = { workspace = true }
 cu29-log = { workspace = true }
 cu29-log-derive = { workspace = true }
 cu29-log-runtime = { workspace = true }
+cu29-reflect-derive = { workspace = true }
 cu29-runtime = { workspace = true }
 cu29-traits = { workspace = true }
 cu29-units = { path = "../cu29_units", version = "0.15.0", default-features = false, optional = true }
@@ -26,8 +27,10 @@ cu29-value = { workspace = true }
 defmt = { workspace = true, optional = true }
 rtsan-standalone = { workspace = true, optional = true }
 
+bevy_reflect_derive = { workspace = true, optional = true }
 bincode = { workspace = true }
 serde = { workspace = true }
+serde_derive = { workspace = true }
 
 # only std
 rayon = { workspace = true, optional = true }
@@ -55,6 +58,7 @@ log-level-warning = ["cu29-log-derive/log-level-warning"]
 log-level-error = ["cu29-log-derive/log-level-error"]
 log-level-critical = ["cu29-log-derive/log-level-critical"]
 reflect = [
+  "dep:bevy_reflect_derive",
   "cu29-clock/reflect",
   "cu29-runtime/reflect",
   "cu29-traits/reflect",

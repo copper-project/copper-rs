@@ -11,6 +11,7 @@ mod mock {
 
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
+use cu29::reflect::Reflect;
 use serde::{Deserialize, Serialize};
 
 #[cfg(hardware)]

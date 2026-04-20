@@ -213,7 +213,6 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
         use cu29::prelude::ErasedCuStampedData;
         use cu29::prelude::ErasedCuStampedDataSet;
         use cu29::prelude::MatchingTasks;
-        use cu29::prelude::Serialize;
         use cu29::prelude::CuMsg;
         use cu29::prelude::CuMsgMetadata;
         use cu29::prelude::CuListZeroedInit;
@@ -5865,12 +5864,12 @@ fn build_culist_tuple_serialize(slot_types: &[Type]) -> ItemImpl {
         .collect();
 
     parse_quote! {
-        impl Serialize for CuStampedDataSet {
+        impl cu29::serde::ser::Serialize for CuStampedDataSet {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
             where
-                S: serde::Serializer,
+                S: cu29::serde::Serializer,
             {
-                use serde::ser::SerializeTuple;
+                use cu29::serde::ser::SerializeTuple;
                 let mut tuple = serializer.serialize_tuple(#tuple_len)?;
                 #(tuple.serialize_element(#serialize_fields)?;)*
                 tuple.end()
