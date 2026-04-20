@@ -25,11 +25,6 @@
             missions: ["default", "loopback"],
         ),
         (
-            id: "both_sink",
-            type: "tasks::BothSink",
-            missions: ["both_inputs"],
-        ),
-        (
             id: "loopback",
             type: "tasks::LoopbackTask",
             missions: ["loopback"],
@@ -47,18 +42,6 @@
             dst: "bool_sink",
             msg: "bool",
             missions: ["default"],
-        ),
-        (
-            src: "src",
-            dst: "both_sink",
-            msg: "i32",
-            missions: ["both_inputs"],
-        ),
-        (
-            src: "src",
-            dst: "both_sink",
-            msg: "bool",
-            missions: ["both_inputs"],
         ),
         (
             src: "src",
@@ -89,6 +72,15 @@
             dst: "bool_sink",
             msg: "bool",
             missions: ["loopback"],
+        ),
+    ],
+    includes: [
+        (
+            path: "multi_input_sink.ron",
+            params: {
+                "id": "both_sink",
+                "mission": "both_inputs",
+            },
         ),
     ],
 )
