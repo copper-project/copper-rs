@@ -1,0 +1,5 @@
+pub mod cu29_derive
+pub proc macro cu29_derive::bundle_resources!()
+pub proc macro cu29_derive::#[copper_runtime]
+pub proc macro cu29_derive::gen_cumsgs!()
+pub proc macro cu29_derive::resources!()

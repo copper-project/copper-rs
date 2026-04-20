@@ -1187,11 +1187,14 @@ fn build_mission_app(
 }
 
 fn mode_label() -> &'static str {
-    std::cfg_select! {
-        all(feature = "async-cl-io", feature = "parallel-rt") => "async-io+parallel",
-        feature = "async-cl-io" => "async-io+serial",
-        feature = "parallel-rt" => "sync+parallel",
-        _ => "sync+serial",
+    if cfg!(all(feature = "async-cl-io", feature = "parallel-rt")) {
+        "async-io+parallel"
+    } else if cfg!(feature = "async-cl-io") {
+        "async-io+serial"
+    } else if cfg!(feature = "parallel-rt") {
+        "sync+parallel"
+    } else {
+        "sync+serial"
     }
 }
 

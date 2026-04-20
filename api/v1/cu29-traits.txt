@@ -1,0 +1,137 @@
+pub mod cu29_traits
+pub enum cu29_traits::DebugFieldKind
+pub cu29_traits::DebugFieldKind::Array
+pub cu29_traits::DebugFieldKind::Enum
+pub cu29_traits::DebugFieldKind::List
+pub cu29_traits::DebugFieldKind::Map
+pub cu29_traits::DebugFieldKind::Scalar
+pub cu29_traits::DebugFieldKind::Set
+pub cu29_traits::DebugFieldKind::Struct
+pub cu29_traits::DebugFieldKind::Tuple
+pub cu29_traits::DebugFieldKind::TupleStruct
+pub enum cu29_traits::DebugFieldSemantics
+pub cu29_traits::DebugFieldSemantics::Duration
+pub cu29_traits::DebugFieldSemantics::GeodeticPosition
+pub cu29_traits::DebugFieldSemantics::OptionalTime
+pub cu29_traits::DebugFieldSemantics::Quantity
+pub cu29_traits::DebugFieldSemantics::Quantity::quantity_name: alloc::string::String
+pub cu29_traits::DebugFieldSemantics::Quantity::unit_symbol: alloc::string::String
+pub cu29_traits::DebugFieldSemantics::Time
+pub enum cu29_traits::UnifiedLogType
+pub cu29_traits::UnifiedLogType::CopperList
+pub cu29_traits::UnifiedLogType::Empty
+pub cu29_traits::UnifiedLogType::FrozenTasks
+pub cu29_traits::UnifiedLogType::LastEntry
+pub cu29_traits::UnifiedLogType::RuntimeLifecycle
+pub cu29_traits::UnifiedLogType::StructuredLogLine
+impl cu_bincode::enc::Encode for cu29_traits::UnifiedLogType
+pub fn cu29_traits::UnifiedLogType::encode<__E: cu_bincode::enc::Encoder>(&self, encoder: &mut __E) -> core::result::Result<(), cu_bincode::error::EncodeError>
+impl<'__de, __Context> cu_bincode::de::BorrowDecode<'__de, __Context> for cu29_traits::UnifiedLogType
+pub fn cu29_traits::UnifiedLogType::borrow_decode<__D: cu_bincode::de::BorrowDecoder<'__de, Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+impl<__Context> cu_bincode::de::Decode<__Context> for cu29_traits::UnifiedLogType
+pub fn cu29_traits::UnifiedLogType::decode<__D: cu_bincode::de::Decoder<Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+pub struct cu29_traits::CuCompactString(pub compact_str::CompactString)
+impl core::fmt::Debug for cu29_traits::CuCompactString
+pub fn cu29_traits::CuCompactString::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl cu_bincode::enc::Encode for cu29_traits::CuCompactString
+pub fn cu29_traits::CuCompactString::encode<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
+impl<'de, Context> cu_bincode::de::BorrowDecode<'de, Context> for cu29_traits::CuCompactString
+pub fn cu29_traits::CuCompactString::borrow_decode<D: cu_bincode::de::BorrowDecoder<'de>>(decoder: &mut D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+impl<Context> cu_bincode::de::Decode<Context> for cu29_traits::CuCompactString
+pub fn cu29_traits::CuCompactString::decode<D: cu_bincode::de::Decoder>(decoder: &mut D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+pub struct cu29_traits::CuError
+impl cu29_traits::CuError
+pub fn cu29_traits::CuError::add_cause(self, context: &str) -> cu29_traits::CuError
+pub fn cu29_traits::CuError::cause(&self) -> core::option::Option<&(dyn core::error::Error + core::marker::Send + core::marker::Sync + 'static)>
+pub fn cu29_traits::CuError::message(&self) -> &str
+pub fn cu29_traits::CuError::new(message_index: usize) -> cu29_traits::CuError
+pub fn cu29_traits::CuError::new_with_cause<E>(message: &str, cause: E) -> cu29_traits::CuError where E: core::error::Error + core::marker::Send + core::marker::Sync + 'static
+pub fn cu29_traits::CuError::with_cause<E>(self, cause: E) -> cu29_traits::CuError where E: core::error::Error + core::marker::Send + core::marker::Sync + 'static
+impl core::clone::Clone for cu29_traits::CuError
+pub fn cu29_traits::CuError::clone(&self) -> Self
+impl core::convert::From<&str> for cu29_traits::CuError
+pub fn cu29_traits::CuError::from(s: &str) -> cu29_traits::CuError
+impl core::convert::From<alloc::string::String> for cu29_traits::CuError
+pub fn cu29_traits::CuError::from(s: alloc::string::String) -> cu29_traits::CuError
+impl core::error::Error for cu29_traits::CuError
+pub fn cu29_traits::CuError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for cu29_traits::CuError
+pub fn cu29_traits::CuError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for cu29_traits::CuError
+pub fn cu29_traits::CuError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for cu29_traits::CuError
+pub fn cu29_traits::CuError::serialize<S>(&self, serializer: S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for cu29_traits::CuError
+pub fn cu29_traits::CuError::deserialize<D>(deserializer: D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct cu29_traits::CuMsgOrigin
+pub cu29_traits::CuMsgOrigin::cl_id: u64
+pub cu29_traits::CuMsgOrigin::instance_id: u32
+pub cu29_traits::CuMsgOrigin::subsystem_code: u16
+impl cu_bincode::enc::Encode for cu29_traits::CuMsgOrigin
+pub fn cu29_traits::CuMsgOrigin::encode<__E: cu_bincode::enc::Encoder>(&self, encoder: &mut __E) -> core::result::Result<(), cu_bincode::error::EncodeError>
+impl<'__de, __Context> cu_bincode::de::BorrowDecode<'__de, __Context> for cu29_traits::CuMsgOrigin
+pub fn cu29_traits::CuMsgOrigin::borrow_decode<__D: cu_bincode::de::BorrowDecoder<'__de, Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+impl<__Context> cu_bincode::de::Decode<__Context> for cu29_traits::CuMsgOrigin
+pub fn cu29_traits::CuMsgOrigin::decode<__D: cu_bincode::de::Decoder<Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+pub struct cu29_traits::DebugFieldDescriptor
+pub cu29_traits::DebugFieldDescriptor::binding_name: core::option::Option<alloc::string::String>
+pub cu29_traits::DebugFieldDescriptor::children: alloc::vec::Vec<cu29_traits::DebugFieldDescriptor>
+pub cu29_traits::DebugFieldDescriptor::display_path: alloc::string::String
+pub cu29_traits::DebugFieldDescriptor::field_type: alloc::string::String
+pub cu29_traits::DebugFieldDescriptor::kind: cu29_traits::DebugFieldKind
+pub cu29_traits::DebugFieldDescriptor::nullable: bool
+pub cu29_traits::DebugFieldDescriptor::semantics: core::option::Option<cu29_traits::DebugFieldSemantics>
+pub cu29_traits::DebugFieldDescriptor::value_type_path: alloc::string::String
+pub struct cu29_traits::DebugScalarRegistration
+pub cu29_traits::DebugScalarRegistration::field_type: &'static str
+pub cu29_traits::DebugScalarRegistration::semantics: cu29_traits::DebugFieldSemantics
+pub cu29_traits::DebugScalarRegistration::type_path: &'static str
+pub struct cu29_traits::ObservedWriter<W>
+impl<W> cu29_traits::ObservedWriter<W>
+pub fn cu29_traits::ObservedWriter<W>::inner(&self) -> &W
+pub fn cu29_traits::ObservedWriter<W>::inner_mut(&mut self) -> &mut W
+pub fn cu29_traits::ObservedWriter<W>::into_inner(self) -> W
+pub const fn cu29_traits::ObservedWriter<W>::new(inner: W) -> Self
+impl<W: cu_bincode::enc::write::Writer> cu_bincode::enc::write::Writer for cu29_traits::ObservedWriter<W>
+pub fn cu29_traits::ObservedWriter<W>::write(&mut self, bytes: &[u8]) -> core::result::Result<(), cu_bincode::error::EncodeError>
+pub struct cu29_traits::TaskOutputSpec
+pub cu29_traits::TaskOutputSpec::msg_type: &'static str
+pub cu29_traits::TaskOutputSpec::payload_type_path_fn: fn() -> &'static str
+pub cu29_traits::TaskOutputSpec::task_id: &'static str
+impl cu29_traits::TaskOutputSpec
+pub fn cu29_traits::TaskOutputSpec::payload_type_path(&self) -> &'static str
+pub const cu29_traits::COMPACT_STRING_CAPACITY: usize
+pub trait cu29_traits::CopperListTuple: cu_bincode::enc::Encode + cu_bincode::de::Decode<()> + core::fmt::Debug + serde_core::ser::Serialize + cu29_traits::ErasedCuStampedDataSet + cu29_traits::MatchingTasks + core::default::Default
+impl<T> cu29_traits::CopperListTuple for T where T: cu_bincode::enc::Encode + cu_bincode::de::Decode<()> + core::fmt::Debug + serde_core::ser::Serialize + cu29_traits::ErasedCuStampedDataSet + cu29_traits::MatchingTasks + core::default::Default
+pub trait cu29_traits::CuMsgMetadataTrait
+pub fn cu29_traits::CuMsgMetadataTrait::origin(&self) -> core::option::Option<&cu29_traits::CuMsgOrigin>
+pub fn cu29_traits::CuMsgMetadataTrait::process_time(&self) -> cu29_clock::PartialCuTimeRange
+pub fn cu29_traits::CuMsgMetadataTrait::status_txt(&self) -> &cu29_traits::CuCompactString
+pub trait cu29_traits::CuPayloadRawBytes
+pub fn cu29_traits::CuPayloadRawBytes::payload_raw_bytes(&self) -> alloc::vec::Vec<core::option::Option<u64>>
+pub trait cu29_traits::DebugScalarType: 'static
+pub fn cu29_traits::DebugScalarType::debug_scalar_registration() -> cu29_traits::DebugScalarRegistration
+pub trait cu29_traits::ErasedCuStampedData
+pub fn cu29_traits::ErasedCuStampedData::metadata(&self) -> &dyn cu29_traits::CuMsgMetadataTrait
+pub fn cu29_traits::ErasedCuStampedData::payload(&self) -> core::option::Option<&dyn erased_serde::ser::Serialize>
+pub fn cu29_traits::ErasedCuStampedData::tov(&self) -> cu29_clock::Tov
+pub trait cu29_traits::ErasedCuStampedDataSet
+pub fn cu29_traits::ErasedCuStampedDataSet::cumsgs(&self) -> alloc::vec::Vec<&dyn cu29_traits::ErasedCuStampedData>
+pub trait cu29_traits::MatchingTasks
+pub fn cu29_traits::MatchingTasks::get_all_task_ids() -> &'static [&'static str]
+pub fn cu29_traits::MatchingTasks::get_output_specs() -> &'static [cu29_traits::TaskOutputSpec]
+pub trait cu29_traits::Metadata: core::default::Default + core::fmt::Debug + core::clone::Clone + cu_bincode::enc::Encode + cu_bincode::de::Decode<()> + serde_core::ser::Serialize
+impl cu29_traits::Metadata for ()
+pub trait cu29_traits::PayloadSchemas
+pub fn cu29_traits::PayloadSchemas::get_payload_schemas() -> alloc::vec::Vec<(&'static str, alloc::string::String)>
+pub trait cu29_traits::WriteStream<E: cu_bincode::enc::Encode>: core::fmt::Debug + core::marker::Send + core::marker::Sync
+pub fn cu29_traits::WriteStream::flush(&mut self) -> cu29_traits::CuResult<()>
+pub fn cu29_traits::WriteStream::last_log_bytes(&self) -> core::option::Option<usize>
+pub fn cu29_traits::WriteStream::log(&mut self, obj: &E) -> cu29_traits::CuResult<()>
+pub fn cu29_traits::abort_observed_encode()
+pub fn cu29_traits::begin_observed_encode()
+pub fn cu29_traits::finish_observed_encode() -> usize
+pub fn cu29_traits::observed_encode_bytes() -> usize
+pub fn cu29_traits::record_observed_encode_bytes(bytes: usize)
+pub fn cu29_traits::with_cause<E>(message: &str, cause: E) -> cu29_traits::CuError where E: core::error::Error + core::marker::Send + core::marker::Sync + 'static
+pub type cu29_traits::CuResult<T> = core::result::Result<T, cu29_traits::CuError>

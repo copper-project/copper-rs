@@ -1,0 +1,226 @@
+pub mod cu29_unifiedlog
+pub mod cu29_unifiedlog::memmap
+pub enum cu29_unifiedlog::memmap::MmapUnifiedLogger
+pub cu29_unifiedlog::memmap::MmapUnifiedLogger::Read(cu29_unifiedlog::memmap::MmapUnifiedLoggerRead)
+pub cu29_unifiedlog::memmap::MmapUnifiedLogger::Write(cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite)
+pub struct cu29_unifiedlog::memmap::LogPosition
+pub cu29_unifiedlog::memmap::LogPosition::offset: usize
+pub cu29_unifiedlog::memmap::LogPosition::slab_index: usize
+pub struct cu29_unifiedlog::memmap::MmapSectionStorage
+impl cu29_unifiedlog::memmap::MmapSectionStorage
+pub fn cu29_unifiedlog::memmap::MmapSectionStorage::buffer_ptr(&self) -> *const u8
+pub fn cu29_unifiedlog::memmap::MmapSectionStorage::new(buffer: &'static mut [u8], block_size: usize) -> Self
+impl cu29_unifiedlog::SectionStorage for cu29_unifiedlog::memmap::MmapSectionStorage
+pub fn cu29_unifiedlog::memmap::MmapSectionStorage::append<E: cu_bincode::enc::Encode>(&mut self, entry: &E) -> core::result::Result<usize, cu_bincode::error::EncodeError>
+pub fn cu29_unifiedlog::memmap::MmapSectionStorage::flush(&mut self) -> cu29_traits::CuResult<usize>
+pub fn cu29_unifiedlog::memmap::MmapSectionStorage::initialize<E: cu_bincode::enc::Encode>(&mut self, header: &E) -> core::result::Result<usize, cu_bincode::error::EncodeError>
+pub fn cu29_unifiedlog::memmap::MmapSectionStorage::post_update_header<E: cu_bincode::enc::Encode>(&mut self, header: &E) -> core::result::Result<usize, cu_bincode::error::EncodeError>
+impl cu29_unifiedlog::UnifiedLogWrite<cu29_unifiedlog::memmap::MmapSectionStorage> for cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite::add_section(&mut self, entry_type: cu29_traits::UnifiedLogType, requested_section_size: usize) -> cu29_traits::CuResult<cu29_unifiedlog::SectionHandle<cu29_unifiedlog::memmap::MmapSectionStorage>>
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite::flush_section(&mut self, section: &mut cu29_unifiedlog::SectionHandle<cu29_unifiedlog::memmap::MmapSectionStorage>)
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite::status(&self) -> cu29_unifiedlog::UnifiedLogStatus
+pub struct cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder
+impl cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::build(self) -> std::io::error::Result<cu29_unifiedlog::memmap::MmapUnifiedLogger>
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::create(self, create: bool) -> Self
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::file_base_name(self, file_path: &std::path::Path) -> Self
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::new() -> Self
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::preallocated_size(self, preallocated_size: usize) -> Self
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::write(self, write: bool) -> Self
+impl core::default::Default for cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::default() -> Self
+pub struct cu29_unifiedlog::memmap::MmapUnifiedLoggerRead
+impl cu29_unifiedlog::memmap::MmapUnifiedLoggerRead
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::new(base_file_path: &std::path::Path) -> std::io::error::Result<Self>
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::position(&self) -> cu29_unifiedlog::memmap::LogPosition
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::raw_main_header(&self) -> &cu29_unifiedlog::MainHeader
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::scan_section_bytes(&mut self, datalogtype: cu29_traits::UnifiedLogType) -> cu29_traits::CuResult<u64>
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::seek(&mut self, pos: cu29_unifiedlog::memmap::LogPosition) -> cu29_traits::CuResult<()>
+impl cu29_unifiedlog::UnifiedLogRead for cu29_unifiedlog::memmap::MmapUnifiedLoggerRead
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::raw_read_section(&mut self) -> cu29_traits::CuResult<(cu29_unifiedlog::SectionHeader, alloc::vec::Vec<u8>)>
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::read_next_section_type(&mut self, datalogtype: cu29_traits::UnifiedLogType) -> cu29_traits::CuResult<core::option::Option<alloc::vec::Vec<u8>>>
+pub struct cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite
+impl cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite::stats(&self) -> (usize, alloc::vec::Vec<usize>, usize)
+impl core::ops::drop::Drop for cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite::drop(&mut self)
+impl cu29_unifiedlog::UnifiedLogWrite<cu29_unifiedlog::memmap::MmapSectionStorage> for cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite::add_section(&mut self, entry_type: cu29_traits::UnifiedLogType, requested_section_size: usize) -> cu29_traits::CuResult<cu29_unifiedlog::SectionHandle<cu29_unifiedlog::memmap::MmapSectionStorage>>
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite::flush_section(&mut self, section: &mut cu29_unifiedlog::SectionHandle<cu29_unifiedlog::memmap::MmapSectionStorage>)
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite::status(&self) -> cu29_unifiedlog::UnifiedLogStatus
+pub struct cu29_unifiedlog::memmap::UnifiedLoggerIOReader
+impl cu29_unifiedlog::memmap::UnifiedLoggerIOReader
+pub fn cu29_unifiedlog::memmap::UnifiedLoggerIOReader::new(logger: cu29_unifiedlog::memmap::MmapUnifiedLoggerRead, log_type: cu29_traits::UnifiedLogType) -> Self
+impl std::io::Read for cu29_unifiedlog::memmap::UnifiedLoggerIOReader
+pub fn cu29_unifiedlog::memmap::UnifiedLoggerIOReader::read(&mut self, buf: &mut [u8]) -> std::io::error::Result<usize>
+pub mod cu29_unifiedlog::noop
+pub struct cu29_unifiedlog::noop::NoopLogger
+impl cu29_unifiedlog::noop::NoopLogger
+pub fn cu29_unifiedlog::noop::NoopLogger::new() -> Self
+impl cu29_unifiedlog::UnifiedLogWrite<cu29_unifiedlog::noop::NoopSectionStorage> for cu29_unifiedlog::noop::NoopLogger
+pub fn cu29_unifiedlog::noop::NoopLogger::add_section(&mut self, entry_type: cu29_traits::UnifiedLogType, requested_section_size: usize) -> cu29_traits::CuResult<cu29_unifiedlog::SectionHandle<cu29_unifiedlog::noop::NoopSectionStorage>>
+pub fn cu29_unifiedlog::noop::NoopLogger::flush_section(&mut self, section: &mut cu29_unifiedlog::SectionHandle<cu29_unifiedlog::noop::NoopSectionStorage>)
+pub fn cu29_unifiedlog::noop::NoopLogger::status(&self) -> cu29_unifiedlog::UnifiedLogStatus
+pub struct cu29_unifiedlog::noop::NoopSectionStorage
+impl cu29_unifiedlog::SectionStorage for cu29_unifiedlog::noop::NoopSectionStorage
+pub fn cu29_unifiedlog::noop::NoopSectionStorage::append<E: cu_bincode::enc::Encode>(&mut self, entry: &E) -> core::result::Result<usize, cu_bincode::error::EncodeError>
+pub fn cu29_unifiedlog::noop::NoopSectionStorage::flush(&mut self) -> cu29_traits::CuResult<usize>
+pub fn cu29_unifiedlog::noop::NoopSectionStorage::initialize<E: cu_bincode::enc::Encode>(&mut self, header: &E) -> core::result::Result<usize, cu_bincode::error::EncodeError>
+pub fn cu29_unifiedlog::noop::NoopSectionStorage::post_update_header<E: cu_bincode::enc::Encode>(&mut self, header: &E) -> core::result::Result<usize, cu_bincode::error::EncodeError>
+impl cu29_unifiedlog::UnifiedLogWrite<cu29_unifiedlog::noop::NoopSectionStorage> for cu29_unifiedlog::noop::NoopLogger
+pub fn cu29_unifiedlog::noop::NoopLogger::add_section(&mut self, entry_type: cu29_traits::UnifiedLogType, requested_section_size: usize) -> cu29_traits::CuResult<cu29_unifiedlog::SectionHandle<cu29_unifiedlog::noop::NoopSectionStorage>>
+pub fn cu29_unifiedlog::noop::NoopLogger::flush_section(&mut self, section: &mut cu29_unifiedlog::SectionHandle<cu29_unifiedlog::noop::NoopSectionStorage>)
+pub fn cu29_unifiedlog::noop::NoopLogger::status(&self) -> cu29_unifiedlog::UnifiedLogStatus
+pub enum cu29_unifiedlog::AllocatedSection<S: cu29_unifiedlog::SectionStorage>
+pub cu29_unifiedlog::AllocatedSection::NoMoreSpace
+pub cu29_unifiedlog::AllocatedSection::Section(cu29_unifiedlog::SectionHandle<S>)
+pub enum cu29_unifiedlog::UnifiedLogger
+pub cu29_unifiedlog::UnifiedLogger::Read(cu29_unifiedlog::memmap::MmapUnifiedLoggerRead)
+pub cu29_unifiedlog::UnifiedLogger::Write(cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite)
+pub struct cu29_unifiedlog::EndOfLogMarker
+pub cu29_unifiedlog::EndOfLogMarker::temporary: bool
+impl cu_bincode::enc::Encode for cu29_unifiedlog::EndOfLogMarker
+pub fn cu29_unifiedlog::EndOfLogMarker::encode<__E: cu_bincode::enc::Encoder>(&self, encoder: &mut __E) -> core::result::Result<(), cu_bincode::error::EncodeError>
+impl<'__de, __Context> cu_bincode::de::BorrowDecode<'__de, __Context> for cu29_unifiedlog::EndOfLogMarker
+pub fn cu29_unifiedlog::EndOfLogMarker::borrow_decode<__D: cu_bincode::de::BorrowDecoder<'__de, Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+impl<__Context> cu_bincode::de::Decode<__Context> for cu29_unifiedlog::EndOfLogMarker
+pub fn cu29_unifiedlog::EndOfLogMarker::decode<__D: cu_bincode::de::Decoder<Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+pub struct cu29_unifiedlog::LogPosition
+pub cu29_unifiedlog::LogPosition::offset: usize
+pub cu29_unifiedlog::LogPosition::slab_index: usize
+pub struct cu29_unifiedlog::LogStream<S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S>>
+impl<E: cu_bincode::enc::Encode, S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S>> cu29_traits::WriteStream<E> for cu29_unifiedlog::LogStream<S, L>
+pub fn cu29_unifiedlog::LogStream<S, L>::last_log_bytes(&self) -> core::option::Option<usize>
+pub fn cu29_unifiedlog::LogStream<S, L>::log(&mut self, obj: &E) -> cu29_traits::CuResult<()>
+impl<S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S>> core::fmt::Debug for cu29_unifiedlog::LogStream<S, L>
+pub fn cu29_unifiedlog::LogStream<S, L>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S>> core::ops::drop::Drop for cu29_unifiedlog::LogStream<S, L>
+pub fn cu29_unifiedlog::LogStream<S, L>::drop(&mut self)
+pub struct cu29_unifiedlog::MainHeader
+pub cu29_unifiedlog::MainHeader::first_section_offset: u16
+pub cu29_unifiedlog::MainHeader::magic: [u8; 4]
+pub cu29_unifiedlog::MainHeader::page_size: u16
+impl core::fmt::Display for cu29_unifiedlog::MainHeader
+pub fn cu29_unifiedlog::MainHeader::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl cu_bincode::enc::Encode for cu29_unifiedlog::MainHeader
+pub fn cu29_unifiedlog::MainHeader::encode<__E: cu_bincode::enc::Encoder>(&self, encoder: &mut __E) -> core::result::Result<(), cu_bincode::error::EncodeError>
+impl<'__de, __Context> cu_bincode::de::BorrowDecode<'__de, __Context> for cu29_unifiedlog::MainHeader
+pub fn cu29_unifiedlog::MainHeader::borrow_decode<__D: cu_bincode::de::BorrowDecoder<'__de, Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+impl<__Context> cu_bincode::de::Decode<__Context> for cu29_unifiedlog::MainHeader
+pub fn cu29_unifiedlog::MainHeader::decode<__D: cu_bincode::de::Decoder<Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+pub struct cu29_unifiedlog::NoopLogger
+impl cu29_unifiedlog::noop::NoopLogger
+pub fn cu29_unifiedlog::noop::NoopLogger::new() -> Self
+impl cu29_unifiedlog::UnifiedLogWrite<cu29_unifiedlog::noop::NoopSectionStorage> for cu29_unifiedlog::noop::NoopLogger
+pub fn cu29_unifiedlog::noop::NoopLogger::add_section(&mut self, entry_type: cu29_traits::UnifiedLogType, requested_section_size: usize) -> cu29_traits::CuResult<cu29_unifiedlog::SectionHandle<cu29_unifiedlog::noop::NoopSectionStorage>>
+pub fn cu29_unifiedlog::noop::NoopLogger::flush_section(&mut self, section: &mut cu29_unifiedlog::SectionHandle<cu29_unifiedlog::noop::NoopSectionStorage>)
+pub fn cu29_unifiedlog::noop::NoopLogger::status(&self) -> cu29_unifiedlog::UnifiedLogStatus
+pub struct cu29_unifiedlog::NoopSectionStorage
+impl cu29_unifiedlog::SectionStorage for cu29_unifiedlog::noop::NoopSectionStorage
+pub fn cu29_unifiedlog::noop::NoopSectionStorage::append<E: cu_bincode::enc::Encode>(&mut self, entry: &E) -> core::result::Result<usize, cu_bincode::error::EncodeError>
+pub fn cu29_unifiedlog::noop::NoopSectionStorage::flush(&mut self) -> cu29_traits::CuResult<usize>
+pub fn cu29_unifiedlog::noop::NoopSectionStorage::initialize<E: cu_bincode::enc::Encode>(&mut self, header: &E) -> core::result::Result<usize, cu_bincode::error::EncodeError>
+pub fn cu29_unifiedlog::noop::NoopSectionStorage::post_update_header<E: cu_bincode::enc::Encode>(&mut self, header: &E) -> core::result::Result<usize, cu_bincode::error::EncodeError>
+impl cu29_unifiedlog::UnifiedLogWrite<cu29_unifiedlog::noop::NoopSectionStorage> for cu29_unifiedlog::noop::NoopLogger
+pub fn cu29_unifiedlog::noop::NoopLogger::add_section(&mut self, entry_type: cu29_traits::UnifiedLogType, requested_section_size: usize) -> cu29_traits::CuResult<cu29_unifiedlog::SectionHandle<cu29_unifiedlog::noop::NoopSectionStorage>>
+pub fn cu29_unifiedlog::noop::NoopLogger::flush_section(&mut self, section: &mut cu29_unifiedlog::SectionHandle<cu29_unifiedlog::noop::NoopSectionStorage>)
+pub fn cu29_unifiedlog::noop::NoopLogger::status(&self) -> cu29_unifiedlog::UnifiedLogStatus
+pub struct cu29_unifiedlog::SectionHandle<S: cu29_unifiedlog::SectionStorage>
+impl<S: cu29_unifiedlog::SectionStorage> cu29_unifiedlog::SectionHandle<S>
+pub fn cu29_unifiedlog::SectionHandle<S>::append<E: cu_bincode::enc::Encode>(&mut self, entry: E) -> core::result::Result<usize, cu_bincode::error::EncodeError>
+pub fn cu29_unifiedlog::SectionHandle<S>::create(header: cu29_unifiedlog::SectionHeader, storage: S) -> cu29_traits::CuResult<Self>
+pub fn cu29_unifiedlog::SectionHandle<S>::get_storage(&self) -> &S
+pub fn cu29_unifiedlog::SectionHandle<S>::get_storage_mut(&mut self) -> &mut S
+pub fn cu29_unifiedlog::SectionHandle<S>::mark_closed(&mut self)
+pub fn cu29_unifiedlog::SectionHandle<S>::post_update_header(&mut self) -> core::result::Result<usize, cu_bincode::error::EncodeError>
+pub struct cu29_unifiedlog::SectionHeader
+pub cu29_unifiedlog::SectionHeader::block_size: u16
+pub cu29_unifiedlog::SectionHeader::entry_type: cu29_traits::UnifiedLogType
+pub cu29_unifiedlog::SectionHeader::is_open: bool
+pub cu29_unifiedlog::SectionHeader::magic: [u8; 2]
+pub cu29_unifiedlog::SectionHeader::offset_to_next_section: u32
+pub cu29_unifiedlog::SectionHeader::used: u32
+impl core::default::Default for cu29_unifiedlog::SectionHeader
+pub fn cu29_unifiedlog::SectionHeader::default() -> Self
+impl core::fmt::Display for cu29_unifiedlog::SectionHeader
+pub fn cu29_unifiedlog::SectionHeader::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl cu_bincode::enc::Encode for cu29_unifiedlog::SectionHeader
+pub fn cu29_unifiedlog::SectionHeader::encode<__E: cu_bincode::enc::Encoder>(&self, encoder: &mut __E) -> core::result::Result<(), cu_bincode::error::EncodeError>
+impl<'__de, __Context> cu_bincode::de::BorrowDecode<'__de, __Context> for cu29_unifiedlog::SectionHeader
+pub fn cu29_unifiedlog::SectionHeader::borrow_decode<__D: cu_bincode::de::BorrowDecoder<'__de, Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+impl<__Context> cu_bincode::de::Decode<__Context> for cu29_unifiedlog::SectionHeader
+pub fn cu29_unifiedlog::SectionHeader::decode<__D: cu_bincode::de::Decoder<Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+pub struct cu29_unifiedlog::UnifiedLogStatus
+pub cu29_unifiedlog::UnifiedLogStatus::total_allocated_space: usize
+pub cu29_unifiedlog::UnifiedLogStatus::total_used_space: usize
+pub struct cu29_unifiedlog::UnifiedLoggerBuilder
+impl cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::build(self) -> std::io::error::Result<cu29_unifiedlog::memmap::MmapUnifiedLogger>
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::create(self, create: bool) -> Self
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::file_base_name(self, file_path: &std::path::Path) -> Self
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::new() -> Self
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::preallocated_size(self, preallocated_size: usize) -> Self
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::write(self, write: bool) -> Self
+impl core::default::Default for cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::default() -> Self
+pub struct cu29_unifiedlog::UnifiedLoggerIOReader
+impl cu29_unifiedlog::memmap::UnifiedLoggerIOReader
+pub fn cu29_unifiedlog::memmap::UnifiedLoggerIOReader::new(logger: cu29_unifiedlog::memmap::MmapUnifiedLoggerRead, log_type: cu29_traits::UnifiedLogType) -> Self
+impl std::io::Read for cu29_unifiedlog::memmap::UnifiedLoggerIOReader
+pub fn cu29_unifiedlog::memmap::UnifiedLoggerIOReader::read(&mut self, buf: &mut [u8]) -> std::io::error::Result<usize>
+pub struct cu29_unifiedlog::UnifiedLoggerRead
+impl cu29_unifiedlog::memmap::MmapUnifiedLoggerRead
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::new(base_file_path: &std::path::Path) -> std::io::error::Result<Self>
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::position(&self) -> cu29_unifiedlog::memmap::LogPosition
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::raw_main_header(&self) -> &cu29_unifiedlog::MainHeader
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::scan_section_bytes(&mut self, datalogtype: cu29_traits::UnifiedLogType) -> cu29_traits::CuResult<u64>
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::seek(&mut self, pos: cu29_unifiedlog::memmap::LogPosition) -> cu29_traits::CuResult<()>
+impl cu29_unifiedlog::UnifiedLogRead for cu29_unifiedlog::memmap::MmapUnifiedLoggerRead
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::raw_read_section(&mut self) -> cu29_traits::CuResult<(cu29_unifiedlog::SectionHeader, alloc::vec::Vec<u8>)>
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::read_next_section_type(&mut self, datalogtype: cu29_traits::UnifiedLogType) -> cu29_traits::CuResult<core::option::Option<alloc::vec::Vec<u8>>>
+pub struct cu29_unifiedlog::UnifiedLoggerWrite
+impl cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite::stats(&self) -> (usize, alloc::vec::Vec<usize>, usize)
+impl core::ops::drop::Drop for cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite::drop(&mut self)
+impl cu29_unifiedlog::UnifiedLogWrite<cu29_unifiedlog::memmap::MmapSectionStorage> for cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite::add_section(&mut self, entry_type: cu29_traits::UnifiedLogType, requested_section_size: usize) -> cu29_traits::CuResult<cu29_unifiedlog::SectionHandle<cu29_unifiedlog::memmap::MmapSectionStorage>>
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite::flush_section(&mut self, section: &mut cu29_unifiedlog::SectionHandle<cu29_unifiedlog::memmap::MmapSectionStorage>)
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite::status(&self) -> cu29_unifiedlog::UnifiedLogStatus
+pub const cu29_unifiedlog::MAIN_MAGIC: [u8; 4]
+pub const cu29_unifiedlog::SECTION_HEADER_COMPACT_SIZE: u16
+pub const cu29_unifiedlog::SECTION_MAGIC: [u8; 2]
+pub trait cu29_unifiedlog::SectionStorage: core::marker::Send + core::marker::Sync
+pub fn cu29_unifiedlog::SectionStorage::append<E: cu_bincode::enc::Encode>(&mut self, entry: &E) -> core::result::Result<usize, cu_bincode::error::EncodeError>
+pub fn cu29_unifiedlog::SectionStorage::flush(&mut self) -> cu29_traits::CuResult<usize>
+pub fn cu29_unifiedlog::SectionStorage::initialize<E: cu_bincode::enc::Encode>(&mut self, header: &E) -> core::result::Result<usize, cu_bincode::error::EncodeError>
+pub fn cu29_unifiedlog::SectionStorage::post_update_header<E: cu_bincode::enc::Encode>(&mut self, header: &E) -> core::result::Result<usize, cu_bincode::error::EncodeError>
+impl cu29_unifiedlog::SectionStorage for cu29_unifiedlog::memmap::MmapSectionStorage
+pub fn cu29_unifiedlog::memmap::MmapSectionStorage::append<E: cu_bincode::enc::Encode>(&mut self, entry: &E) -> core::result::Result<usize, cu_bincode::error::EncodeError>
+pub fn cu29_unifiedlog::memmap::MmapSectionStorage::flush(&mut self) -> cu29_traits::CuResult<usize>
+pub fn cu29_unifiedlog::memmap::MmapSectionStorage::initialize<E: cu_bincode::enc::Encode>(&mut self, header: &E) -> core::result::Result<usize, cu_bincode::error::EncodeError>
+pub fn cu29_unifiedlog::memmap::MmapSectionStorage::post_update_header<E: cu_bincode::enc::Encode>(&mut self, header: &E) -> core::result::Result<usize, cu_bincode::error::EncodeError>
+impl cu29_unifiedlog::SectionStorage for cu29_unifiedlog::noop::NoopSectionStorage
+pub fn cu29_unifiedlog::noop::NoopSectionStorage::append<E: cu_bincode::enc::Encode>(&mut self, entry: &E) -> core::result::Result<usize, cu_bincode::error::EncodeError>
+pub fn cu29_unifiedlog::noop::NoopSectionStorage::flush(&mut self) -> cu29_traits::CuResult<usize>
+pub fn cu29_unifiedlog::noop::NoopSectionStorage::initialize<E: cu_bincode::enc::Encode>(&mut self, header: &E) -> core::result::Result<usize, cu_bincode::error::EncodeError>
+pub fn cu29_unifiedlog::noop::NoopSectionStorage::post_update_header<E: cu_bincode::enc::Encode>(&mut self, header: &E) -> core::result::Result<usize, cu_bincode::error::EncodeError>
+pub trait cu29_unifiedlog::UnifiedLogRead
+pub fn cu29_unifiedlog::UnifiedLogRead::raw_read_section(&mut self) -> cu29_traits::CuResult<(cu29_unifiedlog::SectionHeader, alloc::vec::Vec<u8>)>
+pub fn cu29_unifiedlog::UnifiedLogRead::read_next_section_type(&mut self, datalogtype: cu29_traits::UnifiedLogType) -> cu29_traits::CuResult<core::option::Option<alloc::vec::Vec<u8>>>
+impl cu29_unifiedlog::UnifiedLogRead for cu29_unifiedlog::memmap::MmapUnifiedLoggerRead
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::raw_read_section(&mut self) -> cu29_traits::CuResult<(cu29_unifiedlog::SectionHeader, alloc::vec::Vec<u8>)>
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::read_next_section_type(&mut self, datalogtype: cu29_traits::UnifiedLogType) -> cu29_traits::CuResult<core::option::Option<alloc::vec::Vec<u8>>>
+pub trait cu29_unifiedlog::UnifiedLogWrite<S: cu29_unifiedlog::SectionStorage>: core::marker::Send + core::marker::Sync
+pub fn cu29_unifiedlog::UnifiedLogWrite::add_section(&mut self, entry_type: cu29_traits::UnifiedLogType, requested_section_size: usize) -> cu29_traits::CuResult<cu29_unifiedlog::SectionHandle<S>>
+pub fn cu29_unifiedlog::UnifiedLogWrite::flush_section(&mut self, section: &mut cu29_unifiedlog::SectionHandle<S>)
+pub fn cu29_unifiedlog::UnifiedLogWrite::status(&self) -> cu29_unifiedlog::UnifiedLogStatus
+impl cu29_unifiedlog::UnifiedLogWrite<cu29_unifiedlog::memmap::MmapSectionStorage> for cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite::add_section(&mut self, entry_type: cu29_traits::UnifiedLogType, requested_section_size: usize) -> cu29_traits::CuResult<cu29_unifiedlog::SectionHandle<cu29_unifiedlog::memmap::MmapSectionStorage>>
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite::flush_section(&mut self, section: &mut cu29_unifiedlog::SectionHandle<cu29_unifiedlog::memmap::MmapSectionStorage>)
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite::status(&self) -> cu29_unifiedlog::UnifiedLogStatus
+impl cu29_unifiedlog::UnifiedLogWrite<cu29_unifiedlog::noop::NoopSectionStorage> for cu29_unifiedlog::noop::NoopLogger
+pub fn cu29_unifiedlog::noop::NoopLogger::add_section(&mut self, entry_type: cu29_traits::UnifiedLogType, requested_section_size: usize) -> cu29_traits::CuResult<cu29_unifiedlog::SectionHandle<cu29_unifiedlog::noop::NoopSectionStorage>>
+pub fn cu29_unifiedlog::noop::NoopLogger::flush_section(&mut self, section: &mut cu29_unifiedlog::SectionHandle<cu29_unifiedlog::noop::NoopSectionStorage>)
+pub fn cu29_unifiedlog::noop::NoopLogger::status(&self) -> cu29_unifiedlog::UnifiedLogStatus
+pub fn cu29_unifiedlog::stream_write<E: cu_bincode::enc::Encode, S: cu29_unifiedlog::SectionStorage>(logger: alloc::sync::Arc<std::sync::poison::mutex::Mutex<impl cu29_unifiedlog::UnifiedLogWrite<S>>>, entry_type: cu29_traits::UnifiedLogType, minimum_allocation_amount: usize) -> cu29_traits::CuResult<impl cu29_traits::WriteStream<E>>

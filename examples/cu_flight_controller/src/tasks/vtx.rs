@@ -608,12 +608,14 @@ impl VtxOsd {
 
     fn format_relative_altitude(&self) -> alloc::string::String {
         match (self.takeoff_pressure_pa, self.last_pressure_pa) {
-            (Some(reference_pa), Some(pressure_pa))
-                if let Some(altitude_m) = relative_altitude_m(reference_pa, pressure_pa) =>
-            {
-                let altitude_m = altitude_m.clamp(-999.9, 9999.9);
-                let value = format_altitude_field_no_spaces(altitude_m);
-                alloc::format!("{VTX_SYM_ALTITUDE}{value}{VTX_SYM_METER}")
+            (Some(reference_pa), Some(pressure_pa)) => {
+                if let Some(altitude_m) = relative_altitude_m(reference_pa, pressure_pa) {
+                    let altitude_m = altitude_m.clamp(-999.9, 9999.9);
+                    let value = format_altitude_field_no_spaces(altitude_m);
+                    alloc::format!("{VTX_SYM_ALTITUDE}{value}{VTX_SYM_METER}")
+                } else {
+                    alloc::format!("{VTX_SYM_ALTITUDE}{VTX_ALT_UNKNOWN}{VTX_SYM_METER}")
+                }
             }
             _ => alloc::format!("{VTX_SYM_ALTITUDE}{VTX_ALT_UNKNOWN}{VTX_SYM_METER}"),
         }

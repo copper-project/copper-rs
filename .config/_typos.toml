@@ -10,6 +10,7 @@ arange = "arange"
 mmaped = "mmaped"
 consts = "consts"
 Paeth = "Paeth"
+ser = "ser"
 
 [files]
 extend-exclude = [

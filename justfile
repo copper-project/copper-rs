@@ -14,6 +14,7 @@ default:
 pr-check:
 	just fmt
 	just lint
+	just api-check
 	just test
 
 # Formatting, typo, and clippy checks.
@@ -68,6 +69,24 @@ check-format-tools:
 # Typo check only
 typos:
 	typos -c .config/_typos.toml
+
+# Ensure public API snapshot tooling is available.
+check-public-api:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	if ! cargo +stable public-api --version >/dev/null 2>&1; then
+		echo "Missing cargo-public-api. Install with: cargo install --locked cargo-public-api"
+		exit 1
+	fi
+
+# Check the V1 public API snapshot baseline.
+api-check: check-public-api
+	@support/ci/check_public_api.sh
+
+# Refresh the V1 public API snapshot baseline after an intentional API change.
+api-update: check-public-api
+	@UPDATE_PUBLIC_API=1 support/ci/check_public_api.sh
 
 # Std clippy checks aligned with reusable unit-test workflow defaults.
 clippy-std:

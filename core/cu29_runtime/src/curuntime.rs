@@ -65,11 +65,15 @@ use std::sync::mpsc::{Receiver, SyncSender, TryRecvError, sync_channel};
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
 use std::thread::JoinHandle;
 
+#[doc(hidden)]
 pub type TasksInstantiator<CT> =
     for<'c> fn(Vec<Option<&'c ComponentConfig>>, &mut ResourceManager) -> CuResult<CT>;
+#[doc(hidden)]
 pub type BridgesInstantiator<CB> = fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>;
+#[doc(hidden)]
 pub type MonitorInstantiator<M> = fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M;
 
+#[doc(hidden)]
 pub struct CuRuntimeParts<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, MI> {
     pub tasks_instanciator: TI,
     pub monitored_components: &'static [MonitorComponentMetadata],
@@ -106,6 +110,7 @@ impl<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, MI>
     }
 }
 
+#[doc(hidden)]
 pub struct CuRuntimeBuilder<
     'cfg,
     CT,
@@ -347,12 +352,14 @@ impl<T> AsyncCopperListPayload for T {}
 /// down. The outer driver remains responsible for ordered cleanup and log
 /// handoff.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[doc(hidden)]
 pub enum ProcessStepOutcome {
     Continue,
     AbortCopperList,
 }
 
 /// Result type used by generated process-step functions.
+#[doc(hidden)]
 pub type ProcessStepResult = CuResult<ProcessStepOutcome>;
 
 #[cfg(feature = "remote-debug")]
@@ -364,6 +371,7 @@ fn encode_completed_copperlist_snapshot<P: CopperListTuple>(
 }
 
 /// Manages the lifecycle of the copper lists and logging on the synchronous path.
+#[doc(hidden)]
 pub struct SyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
     inner: CuListsManager<P, NBCL>,
     /// Logger for the copper lists (messages between tasks)
@@ -507,6 +515,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
 
 /// Result of handing an owned boxed CopperList to the runtime-side CL I/O path.
 #[cfg(feature = "std")]
+#[doc(hidden)]
 pub enum OwnedCopperListSubmission<P: CopperListTuple> {
     /// The CL has been fully handled and can be recycled immediately by the caller.
     Recycled(Box<CopperList<P>>),
@@ -552,6 +561,7 @@ where
 
 /// Manages the lifecycle of the copper lists and logging on the asynchronous path.
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
+#[doc(hidden)]
 pub struct AsyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
     free_pool: Vec<Box<CopperList<P>>>,
     current: Option<Box<CopperList<P>>>,
@@ -876,9 +886,11 @@ impl<P: CopperListTuple + Default, const NBCL: usize> Drop for AsyncCopperListsM
 }
 
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
+#[doc(hidden)]
 pub type CopperListsManager<P, const NBCL: usize> = AsyncCopperListsManager<P, NBCL>;
 
 #[cfg(not(all(feature = "std", feature = "async-cl-io")))]
+#[doc(hidden)]
 pub type CopperListsManager<P, const NBCL: usize> = SyncCopperListsManager<P, NBCL>;
 
 /// Manages the frozen tasks state and logging.
@@ -984,24 +996,29 @@ impl KeyFramesManager {
 /// CL is the type of the copper list, representing the input/output messages for all the tasks.
 pub struct CuRuntime<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize> {
     /// The base clock the runtime will be using to record time.
-    pub clock: RobotClock, // TODO: remove public at some point
+    clock: RobotClock,
 
     /// Compile-time subsystem identity for this Copper process.
     subsystem_code: u16,
 
     /// Deployment/runtime instance identity for this Copper process.
+    #[doc(hidden)]
     pub instance_id: u32,
 
     /// The tuple of all the tasks in order of execution.
+    #[doc(hidden)]
     pub tasks: CT,
 
     /// Tuple of all instantiated bridges.
+    #[doc(hidden)]
     pub bridges: CB,
 
     /// Resource registry kept alive for tasks borrowing shared handles.
+    #[doc(hidden)]
     pub resources: ResourceManager,
 
     /// The runtime monitoring.
+    #[doc(hidden)]
     pub monitor: M,
 
     /// Runtime-side execution progress probe for watchdog/diagnostic monitors.
@@ -1010,21 +1027,27 @@ pub struct CuRuntime<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize
     /// step. Monitors consume it asynchronously (typically from watchdog threads) to
     /// report the last known component/step/culist when the runtime appears stalled.
     #[cfg(feature = "std")]
+    #[doc(hidden)]
     pub execution_probe: ExecutionProbeHandle,
     #[cfg(not(feature = "std"))]
+    #[doc(hidden)]
     pub execution_probe: RuntimeExecutionProbe,
 
     /// The logger for the copper lists (messages between tasks)
+    #[doc(hidden)]
     pub copperlists_manager: CopperListsManager<P, NBCL>,
 
     /// The logger for the state of the tasks (frozen tasks)
+    #[doc(hidden)]
     pub keyframes_manager: KeyFramesManager,
 
     /// Feature-gated container for deterministic multi-CopperList execution.
     #[cfg(all(feature = "std", feature = "parallel-rt"))]
+    #[doc(hidden)]
     pub parallel_rt: ParallelRt<NBCL>,
 
     /// The runtime configuration controlling the behavior of the run loop
+    #[doc(hidden)]
     pub runtime_config: RuntimeConfig,
 }
 
@@ -1047,6 +1070,13 @@ impl<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize> CuRuntime<CT, 
     #[inline]
     pub fn clock(&self) -> RobotClock {
         self.clock.clone()
+    }
+
+    /// Returns the runtime clock by reference for generated runtime code.
+    #[doc(hidden)]
+    #[inline]
+    pub fn clock_ref(&self) -> &RobotClock {
+        &self.clock
     }
 
     /// Returns the compile-time subsystem code for this process.
@@ -1596,11 +1626,10 @@ fn find_output_pack_from_nodeid(
 ) -> Option<CuOutputPack> {
     for step in steps {
         match step {
-            CuExecutionUnit::Loop(loop_unit)
-                if let Some(output_pack) =
-                    find_output_pack_from_nodeid(node_id, &loop_unit.steps) =>
-            {
-                return Some(output_pack);
+            CuExecutionUnit::Loop(loop_unit) => {
+                if let Some(output_pack) = find_output_pack_from_nodeid(node_id, &loop_unit.steps) {
+                    return Some(output_pack);
+                }
             }
             CuExecutionUnit::Step(step) if step.node_id == node_id => {
                 return step.output_msg_pack.clone();

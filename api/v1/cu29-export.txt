@@ -1,0 +1,61 @@
+pub mod cu29_export
+pub mod cu29_export::logstats
+pub struct cu29_export::logstats::DurationStats
+pub cu29_export::logstats::DurationStats::max_ns: core::option::Option<u64>
+pub cu29_export::logstats::DurationStats::mean_ns: core::option::Option<f64>
+pub cu29_export::logstats::DurationStats::min_ns: core::option::Option<u64>
+pub cu29_export::logstats::DurationStats::stddev_ns: core::option::Option<f64>
+pub struct cu29_export::logstats::EdgeLogStats
+pub cu29_export::logstats::EdgeLogStats::avg_raw_bytes: core::option::Option<f64>
+pub cu29_export::logstats::EdgeLogStats::dst: alloc::string::String
+pub cu29_export::logstats::EdgeLogStats::dst_channel: core::option::Option<alloc::string::String>
+pub cu29_export::logstats::EdgeLogStats::msg: alloc::string::String
+pub cu29_export::logstats::EdgeLogStats::none_samples: u64
+pub cu29_export::logstats::EdgeLogStats::rate_hz: core::option::Option<f64>
+pub cu29_export::logstats::EdgeLogStats::samples: u64
+pub cu29_export::logstats::EdgeLogStats::src: alloc::string::String
+pub cu29_export::logstats::EdgeLogStats::src_channel: core::option::Option<alloc::string::String>
+pub cu29_export::logstats::EdgeLogStats::throughput_bytes_per_sec: core::option::Option<f64>
+pub cu29_export::logstats::EdgeLogStats::total_raw_bytes: u64
+pub cu29_export::logstats::EdgeLogStats::valid_time_samples: u64
+pub struct cu29_export::logstats::LogStats
+pub cu29_export::logstats::LogStats::config_signature: alloc::string::String
+pub cu29_export::logstats::LogStats::edges: alloc::vec::Vec<cu29_export::logstats::EdgeLogStats>
+pub cu29_export::logstats::LogStats::mission: core::option::Option<alloc::string::String>
+pub cu29_export::logstats::LogStats::perf: cu29_export::logstats::PerfStats
+pub cu29_export::logstats::LogStats::schema_version: u32
+pub struct cu29_export::logstats::PerfStats
+pub cu29_export::logstats::PerfStats::end_to_end: cu29_export::logstats::DurationStats
+pub cu29_export::logstats::PerfStats::jitter: cu29_export::logstats::DurationStats
+pub cu29_export::logstats::PerfStats::samples: u64
+pub cu29_export::logstats::PerfStats::valid_time_samples: u64
+pub fn cu29_export::logstats::compute_logstats<P>(reader: impl std::io::Read, config: &cu29_runtime::config::CuConfig, mission: core::option::Option<&str>) -> cu29_traits::CuResult<cu29_export::logstats::LogStats> where P: cu29_traits::CopperListTuple + cu29_traits::CuPayloadRawBytes
+pub fn cu29_export::logstats::write_logstats(stats: &cu29_export::logstats::LogStats, path: &std::path::Path) -> cu29_traits::CuResult<()>
+pub enum cu29_export::Command
+pub cu29_export::Command::ExtractCopperlists
+pub cu29_export::Command::ExtractCopperlists::export_format: cu29_export::ExportFormat
+pub cu29_export::Command::ExtractTextLog
+pub cu29_export::Command::ExtractTextLog::log_index: std::path::PathBuf
+pub cu29_export::Command::Fsck
+pub cu29_export::Command::Fsck::dump_runtime_lifecycle: bool
+pub cu29_export::Command::Fsck::verbose: u8
+pub cu29_export::Command::LogStats
+pub cu29_export::Command::LogStats::config: std::path::PathBuf
+pub cu29_export::Command::LogStats::mission: core::option::Option<alloc::string::String>
+pub cu29_export::Command::LogStats::output: std::path::PathBuf
+pub enum cu29_export::ExportFormat
+pub cu29_export::ExportFormat::Csv
+pub cu29_export::ExportFormat::Json
+impl core::fmt::Display for cu29_export::ExportFormat
+pub fn cu29_export::ExportFormat::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct cu29_export::LogReaderCli
+pub cu29_export::LogReaderCli::command: cu29_export::Command
+pub cu29_export::LogReaderCli::unifiedlog_base: std::path::PathBuf
+pub fn cu29_export::assert_unified_log_mission(unifiedlog_base: &std::path::Path, expected_mission: &str) -> cu29_traits::CuResult<()>
+pub fn cu29_export::copperlists_reader<P: cu29_traits::CopperListTuple>(src: impl std::io::Read) -> impl core::iter::traits::iterator::Iterator<Item = cu29_runtime::copperlist::CopperList<P>>
+pub fn cu29_export::keyframes_reader(src: impl std::io::Read) -> impl core::iter::traits::iterator::Iterator<Item = cu29_runtime::curuntime::KeyFrame>
+pub fn cu29_export::run_cli<P>() -> cu29_traits::CuResult<()> where P: cu29_traits::CopperListTuple + cu29_traits::CuPayloadRawBytes + 'static
+pub fn cu29_export::runtime_lifecycle_reader(src: impl std::io::Read) -> impl core::iter::traits::iterator::Iterator<Item = cu29_runtime::curuntime::RuntimeLifecycleRecord>
+pub fn cu29_export::structlog_reader(src: impl std::io::Read) -> impl core::iter::traits::iterator::Iterator<Item = cu29_traits::CuResult<cu29_log::CuLogEntry>>
+pub fn cu29_export::textlog_dump(src: impl std::io::Read, index: &std::path::Path) -> cu29_traits::CuResult<()>
+pub fn cu29_export::unified_log_mission(unifiedlog_base: &std::path::Path) -> cu29_traits::CuResult<core::option::Option<alloc::string::String>>

@@ -5,7 +5,7 @@ use cu29::monitoring::{
     ComponentId, CopperListInfo, CopperListIoStats, CopperListView, CuDurationStatistics,
     CuMonitoringMetadata, MonitorComponentMetadata, MonitorTopology,
 };
-use cu29::prelude::{CuCompactString, CuTime, pool};
+use cu29::prelude::{CuCompactString, CuTime, pools_statistics};
 use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "log_pane")]
@@ -221,7 +221,7 @@ impl MonitorModel {
     }
 
     pub fn refresh_pool_stats_from_runtime(&self) {
-        let pool_stats_data = pool::pools_statistics();
+        let pool_stats_data = pools_statistics();
         for (id, space_left, total_size, buffer_size) in pool_stats_data {
             self.upsert_pool_stat(id.to_string(), space_left, total_size, buffer_size);
         }
