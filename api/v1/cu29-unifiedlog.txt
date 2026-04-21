@@ -98,6 +98,7 @@ impl<S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S>>
 pub fn cu29_unifiedlog::LogStream<S, L>::drop(&mut self)
 pub struct cu29_unifiedlog::MainHeader
 pub cu29_unifiedlog::MainHeader::first_section_offset: u16
+pub cu29_unifiedlog::MainHeader::format_version: u8
 pub cu29_unifiedlog::MainHeader::magic: [u8; 4]
 pub cu29_unifiedlog::MainHeader::page_size: u16
 impl core::fmt::Display for cu29_unifiedlog::MainHeader
@@ -190,6 +191,7 @@ pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite::status(&self) -> cu29_un
 pub const cu29_unifiedlog::MAIN_MAGIC: [u8; 4]
 pub const cu29_unifiedlog::SECTION_HEADER_COMPACT_SIZE: u16
 pub const cu29_unifiedlog::SECTION_MAGIC: [u8; 2]
+pub const cu29_unifiedlog::UNIFIED_LOG_FORMAT_VERSION: u8
 pub trait cu29_unifiedlog::SectionStorage: core::marker::Send + core::marker::Sync
 pub fn cu29_unifiedlog::SectionStorage::append<E: cu_bincode::enc::Encode>(&mut self, entry: &E) -> core::result::Result<usize, cu_bincode::error::EncodeError>
 pub fn cu29_unifiedlog::SectionStorage::flush(&mut self) -> cu29_traits::CuResult<usize>

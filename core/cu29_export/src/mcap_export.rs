@@ -666,7 +666,10 @@ pub fn mcap_info(mcap_path: &Path, show_schemas: bool, sample_messages: usize) -
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bincode::de::Decoder;
+    use bincode::error::DecodeError;
     use bincode::{Decode, Encode, config::standard, encode_into_slice};
+    use cu_sensor_payloads::PointCloudSoaHandle;
     use cu29::prelude::{
         CopperList, CuMsgMetadata, CuStampedData, ErasedCuStampedData, ErasedCuStampedDataSet,
         MatchingTasks, Reflect,
@@ -674,6 +677,8 @@ mod tests {
     use cu29_clock::OptionCuTime;
     use serde::{Deserialize, Serialize};
     use std::io::Cursor;
+    use std::process::Command;
+    use std::thread;
     use tempfile::tempdir;
 
     // Test payload types
@@ -696,6 +701,13 @@ mod tests {
         CuStampedData<TestPayloadB, CuMsgMetadata>,
     );
 
+    const HELPER_ENV: &str = "CU29_EXPORT_POINTCLOUD_STACK_HELPER";
+    const LARGE_POINTS: usize = 100_000;
+    const SMALL_STACK_BYTES: usize = 256 * 1024;
+
+    #[derive(Debug, Default, Encode, Serialize, Deserialize)]
+    struct LargePointCloudMsgs(CuStampedData<PointCloudSoaHandle<LARGE_POINTS>, CuMsgMetadata>);
+
     impl ErasedCuStampedDataSet for TestMsgs {
         fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
             vec![&self.0, &self.1]
@@ -705,6 +717,24 @@ mod tests {
     impl MatchingTasks for TestMsgs {
         fn get_all_task_ids() -> &'static [&'static str] {
             &["task_a", "task_b"]
+        }
+    }
+
+    impl ErasedCuStampedDataSet for LargePointCloudMsgs {
+        fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
+            vec![&self.0]
+        }
+    }
+
+    impl MatchingTasks for LargePointCloudMsgs {
+        fn get_all_task_ids() -> &'static [&'static str] {
+            &["points"]
+        }
+    }
+
+    impl Decode<()> for LargePointCloudMsgs {
+        fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
+            Ok(Self(Decode::decode(decoder)?))
         }
     }
 
@@ -724,6 +754,61 @@ mod tests {
         }
     }
 
+    impl PayloadSchemas for LargePointCloudMsgs {
+        fn get_payload_schemas() -> Vec<(&'static str, String)> {
+            vec![("points", "{}".to_string())]
+        }
+    }
+
+    fn encoded_pointcloud_copperlist() -> Vec<u8> {
+        let mut payload = PointCloudSoaHandle::<LARGE_POINTS>::default();
+        payload.with_inner_mut(|cloud| {
+            cloud.len = LARGE_POINTS;
+            cloud.return_order[0] = 1;
+            cloud.return_order[LARGE_POINTS - 1] = 2;
+        });
+
+        let mut msgs = LargePointCloudMsgs::default();
+        msgs.0.set_payload(payload);
+        let cl = CopperList::new(42, msgs);
+
+        bincode::encode_to_vec(cl, standard()).expect("encode CopperList")
+    }
+
+    fn run_mcap_export_on_small_stack() {
+        let encoded = encoded_pointcloud_copperlist();
+        let dir = tempdir().expect("create temp dir");
+        let mcap_path = dir.path().join("pointcloud.mcap");
+
+        thread::Builder::new()
+            .stack_size(SMALL_STACK_BYTES)
+            .spawn({
+                let mcap_path = mcap_path.clone();
+                move || {
+                    let stats =
+                        export_to_mcap::<LargePointCloudMsgs, _>(Cursor::new(encoded), &mcap_path)
+                            .expect("export MCAP");
+
+                    assert_eq!(stats.copperlists_read, 1);
+                    assert_eq!(stats.messages_written, 1);
+                }
+            })
+            .expect("thread spawn should succeed")
+            .join()
+            .expect("MCAP export thread should not panic");
+
+        assert!(mcap_path.exists());
+    }
+
+    fn run_self(test_name: &str, helper_mode: &str) -> std::process::ExitStatus {
+        Command::new(std::env::current_exe().expect("current_exe should succeed"))
+            .arg("--exact")
+            .arg(test_name)
+            .env(HELPER_ENV, helper_mode)
+            .status()
+            .expect("child test process should launch")
+    }
+
     #[test]
     fn test_tov_to_nanos() {
         assert_eq!(tov_to_nanos(&Tov::None), 0);
@@ -739,6 +824,21 @@ mod tests {
 
         let some_time = OptionCuTime::from(CuTime::from(500_000_000u64));
         assert_eq!(option_cutime_to_nanos(&some_time), 500_000_000);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn mcap_export_pointcloud_handle_survives_small_stack() {
+        if std::env::var(HELPER_ENV).ok().as_deref() == Some("mcap") {
+            run_mcap_export_on_small_stack();
+            return;
+        }
+
+        let status = run_self("mcap_export_pointcloud_handle_survives_small_stack", "mcap");
+        assert!(
+            status.success(),
+            "MCAP export child should succeed, got {status:?}"
+        );
     }
 
     #[test]

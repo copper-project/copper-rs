@@ -631,6 +631,7 @@ pub cu29_runtime::curuntime::CuExecutionStep::task_type: cu29_runtime::curuntime
 impl core::fmt::Debug for cu29_runtime::curuntime::CuExecutionStep
 pub fn cu29_runtime::curuntime::CuExecutionStep::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct cu29_runtime::curuntime::CuInputMsg
+pub cu29_runtime::curuntime::CuInputMsg::connection_order: usize
 pub cu29_runtime::curuntime::CuInputMsg::culist_index: u32
 pub cu29_runtime::curuntime::CuInputMsg::edge_id: usize
 pub cu29_runtime::curuntime::CuInputMsg::msg_type: alloc::string::String
