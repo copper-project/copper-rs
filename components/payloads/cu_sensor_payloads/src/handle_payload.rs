@@ -18,6 +18,15 @@ pub trait CuHandlePayloadMeta {
 
 pub trait CuHandlePayloadInit: Debug + Send + Sync + 'static {
     fn boxed_init() -> Box<Self>;
+
+    fn decode_boxed<D>(decoder: &mut D) -> Result<Box<Self>, DecodeError>
+    where
+        Self: Decode<()>,
+        D: Decoder<Context = ()>,
+    {
+        let inner = Self::decode(decoder)?;
+        Ok(Box::new(inner))
+    }
 }
 
 #[derive(Reflect)]
@@ -156,11 +165,11 @@ where
 
 impl<T, M> Decode<()> for CuHandlePayload<T, M>
 where
-    T: Debug + Send + Sync + Decode<()> + 'static,
+    T: CuHandlePayloadInit + Decode<()>,
     M: CuHandlePayloadMeta + 'static,
 {
     fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let inner = Box::<T>::decode(decoder)?;
+        let inner = T::decode_boxed(decoder)?;
         Ok(Self::from_box(inner))
     }
 }
