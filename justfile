@@ -2,6 +2,8 @@
 BASE_FEATURES := "mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug"
 WINDOWS_BASE_FEATURES := "mock,cu-sensor-payloads/image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode"
 MSRV := "1.95.0"
+PUBLIC_API_VERSION := "0.51.0"
+PUBLIC_API_TOOLCHAIN := "nightly"
 export ROOT := `git rev-parse --show-toplevel`
 EMBEDDED_EXCLUDES := shell('python3 $1/support/ci/embedded_crates.py excludes', ROOT)
 PREK_FMT_FIX_HOOKS := "trailing-whitespace mixed-line-ending"
@@ -76,8 +78,13 @@ check-public-api:
 	#!/usr/bin/env bash
 	set -euo pipefail
 
-	if ! cargo +stable public-api --version >/dev/null 2>&1; then
-		echo "Missing cargo-public-api. Install with: cargo install --locked cargo-public-api"
+	if ! rustup run {{PUBLIC_API_TOOLCHAIN}} rustc --version >/dev/null 2>&1; then
+		echo "Missing Rust {{PUBLIC_API_TOOLCHAIN}} toolchain required by cargo-public-api. Install with: rustup toolchain install {{PUBLIC_API_TOOLCHAIN}} --profile minimal"
+		exit 1
+	fi
+
+	if ! cargo +stable public-api --version 2>/dev/null | grep -qx "cargo-public-api {{PUBLIC_API_VERSION}}"; then
+		echo "Missing cargo-public-api {{PUBLIC_API_VERSION}}. Install with: cargo install --locked cargo-public-api --version {{PUBLIC_API_VERSION}}"
 		exit 1
 	fi
 
