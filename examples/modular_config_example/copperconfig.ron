@@ -5,8 +5,8 @@
         type: "cu_consolemon::CuConsoleMon",
     ),
     logging: (
-        file: "robot.copper",
-        level: "debug",
+        enable_task_logging: true,
+        keyframe_interval: 100,
     ),
     includes: [
         (path: "base.ron", params: {}),

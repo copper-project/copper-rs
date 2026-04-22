@@ -6,7 +6,7 @@ This directory contains a simple example demonstrating how to use Copper's modul
 
 - **base.ron**: Contains the basic configuration with a source task
 - **motors.ron**: A template for motor tasks with parameters for ID, pin, and direction
-- **main_config.ron**: The main configuration that includes the other files with specific parameters
+- **copperconfig.ron**: The main configuration that includes the other files with specific parameters
 
 ## How It Works
 
@@ -16,7 +16,7 @@ This directory contains a simple example demonstrating how to use Copper's modul
    - `{{pin}}` for the GPIO pin
    - `{{direction}}` for the motor direction
 
-3. **main_config.ron** includes these files with specific parameters:
+3. **copperconfig.ron** includes these files with specific parameters:
    - `base.ron` with no parameters
    - `motors.ron` twice with different parameters for left and right motors
 
@@ -34,7 +34,7 @@ The final configuration will have:
 To use this configuration, reference the main configuration file in your Copper application:
 
 ```rust
-#[copper_runtime(config = "examples/modular_config_example/main_config.ron")]
+#[copper_runtime(config = "examples/modular_config_example/copperconfig.ron")]
 struct MyRobot {}
 ```
 

@@ -49,7 +49,7 @@ mod tests {
         let motors_path = config_dir.join("motors.ron");
         write(&motors_path, motors_config).unwrap();
 
-        // Create main_config.ron that includes the others with params
+        // Create main.ron that includes the others with params
         let main_config = r#"(
         tasks: [],
         cnx: [],
@@ -57,8 +57,8 @@ mod tests {
             type: "tasks::ConsoleMon",
         )],
         logging: (
-            file: "test.copper",
-            level: "debug",
+            enable_task_logging: true,
+            keyframe_interval: 100,
         ),
         includes: [
             (
@@ -240,7 +240,7 @@ mod tests {
         let subsystem_path = config_dir.join("subsystem.ron");
         write(&subsystem_path, subsystem_config).unwrap();
 
-        // Create main_config.ron that includes multiple subsystems
+        // Create main.ron that includes multiple subsystems
         let main_config = r#"(
         tasks: [
             (
@@ -428,7 +428,7 @@ mod tests {
         let base_path = config_dir.join("base.ron");
         write(&base_path, base_config).unwrap();
 
-        // Create main_config.ron that includes base but overrides some settings
+        // Create main.ron that includes base but overrides some settings
         let main_config = r#"(
         tasks: [
             (
