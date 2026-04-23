@@ -284,6 +284,9 @@
         (
             name: "cu-zed",
             source: GitHub(
+                repo: Some(
+                    "copper-project/zed",
+                ),
                 path: "components/sources/cu_zed",
             ),
         ),
