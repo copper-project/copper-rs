@@ -489,6 +489,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resources
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bridges" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bridges
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#connections" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1372,6 +1394,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resources
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bridges" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bridges
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#connections" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1491,9 +1535,9 @@
 
 
 <h1 id="copper-ron-configuration-reference">Copper RON Configuration Reference<a class="headerlink" href="#copper-ron-configuration-reference" title="Permanent link">&para;</a></h1>
-<p>This guide explains how to configure a Copper application using RON files. It summarises the available sections and options based on the source code and example configurations.</p>
+<p>This guide explains how to configure a Copper application using RON files. It summarises the top-level sections and options supported by the current runtime configuration schema.</p>
 <h2 id="basic-structure">Basic Structure<a class="headerlink" href="#basic-structure" title="Permanent link">&para;</a></h2>
-<p>A Copper configuration is a RON file containing tasks, connections and optional sections such as monitoring, logging or runtime settings. The minimal form looks like:</p>
+<p>A Copper configuration is a RON file containing tasks, connections and optional sections such as resources, bridges, monitoring, logging, missions, includes, or runtime settings. The minimal form looks like:</p>
 <pre><code class="language-ron">(
     tasks: [],
     cnx: [],
@@ -1508,55 +1552,113 @@
 <li><code>kind</code> <em>(optional but recommended)</em> – declares which Copper task trait the type implements:
   <code>source</code>, <code>task</code>, or <code>sink</code>.</li>
 <li><code>config</code> <em>(optional)</em> – map of parameters passed to the task.</li>
+<li><code>resources</code> <em>(optional)</em> – map of task-local resource bindings to <code>bundle.resource</code> references.</li>
 <li><code>missions</code> <em>(optional)</em> – list of mission ids in which this task is active.</li>
-<li><code>background</code> <em>(optional)</em> – background execution policy for single-output sources and regular single-input tasks with outputs.
-  <code>true</code> is kept for compatibility and is equivalent to <code>"next"</code>.
-  Valid values:
-  <code>true</code> / <code>"next"</code> – launch the current input once the previous background run is released.
-  <code>"previous"</code> – keep one pending untreated input while another run is in flight.
-  <code>"closest"</code> – like <code>"previous"</code>, but it may wait one cycle for a predicted fresher input.</li>
-<li><code>logging</code> <em>(optional)</em> – <code>{ enabled: bool }</code> to enable or disable message logging for this task.</li>
+<li><code>background</code> <em>(optional)</em> – boolean. <code>true</code> runs an eligible source or regular task on the background thread pool. Omit it or set <code>false</code> for foreground execution.</li>
+<li><code>run_in_sim</code> <em>(optional)</em> – boolean controlling whether a source or sink uses the real implementation in simulation mode instead of a generated stub. It is ignored for regular tasks.</li>
+<li><code>logging</code> <em>(optional)</em> – per-task message logging settings:</li>
+<li><code>enabled</code> – boolean, defaults to <code>true</code>.</li>
+<li><code>codec</code> – default logging codec id for this task's outputs.</li>
+<li><code>codecs</code> – map from message type to logging codec id.</li>
 </ul>
 <p>Example:</p>
 <pre><code class="language-ron">(
     id: &quot;task1&quot;,
     type: &quot;tasks::ExampleTask&quot;,
     kind: task,
-    background: &quot;previous&quot;,
+    background: true,
+    resources: { &quot;i2c&quot;: &quot;board.i2c0&quot; },
     logging: (enabled: false),
 )
 </code></pre>
 <p><code>kind</code> avoids relying on DAG shape to distinguish <code>CuSrcTask</code>, <code>CuTask</code>, and
 <code>CuSinkTask</code>. Older configs still infer this when the graph is unambiguous, but explicit
 <code>kind</code> is the preferred form.</p>
+<h2 id="resources">Resources<a class="headerlink" href="#resources" title="Permanent link">&para;</a></h2>
+<p>Top-level <code>resources</code> declare resource bundles that tasks and bridges can bind to:</p>
+<pre><code class="language-ron">resources: [
+    (
+        id: &quot;board&quot;,
+        provider: &quot;cu_linux_resources::LinuxResources&quot;,
+        config: { &quot;serial_device&quot;: &quot;/dev/ttyUSB0&quot; },
+    ),
+]
+</code></pre>
+<p>Each resource bundle entry supports:</p>
+<ul>
+<li><code>id</code> – bundle id used by task and bridge <code>resources</code> maps.</li>
+<li><code>provider</code> – Rust type that provides the bundle.</li>
+<li><code>config</code> <em>(optional)</em> – provider-specific configuration map.</li>
+<li><code>missions</code> <em>(optional)</em> – mission ids in which the bundle is available.</li>
+</ul>
+<p>Tasks and bridges refer to bundle slots with <code>bundle.resource</code> strings:</p>
+<pre><code class="language-ron">resources: { &quot;serial&quot;: &quot;board.serial0&quot; }
+</code></pre>
+<h2 id="bridges">Bridges<a class="headerlink" href="#bridges" title="Permanent link">&para;</a></h2>
+<p>Top-level <code>bridges</code> declare bridge components and their graph-facing channels:</p>
+<pre><code class="language-ron">bridges: [
+    (
+        id: &quot;radio&quot;,
+        type: &quot;bridges::RadioBridge&quot;,
+        resources: { &quot;serial&quot;: &quot;board.serial0&quot; },
+        channels: [
+            Rx(id: &quot;telemetry_in&quot;, route: &quot;robot/telemetry&quot;),
+            Tx(id: &quot;commands_out&quot;, route: &quot;robot/commands&quot;),
+        ],
+    ),
+]
+</code></pre>
+<p>Each bridge supports:</p>
+<ul>
+<li><code>id</code> – bridge id.</li>
+<li><code>type</code> – Rust bridge type.</li>
+<li><code>config</code> <em>(optional)</em> – bridge-specific configuration map.</li>
+<li><code>resources</code> <em>(optional)</em> – bridge-local resource bindings to <code>bundle.resource</code> references.</li>
+<li><code>missions</code> <em>(optional)</em> – mission ids in which the bridge is active.</li>
+<li><code>run_in_sim</code> <em>(optional)</em> – boolean. Bridges run as their real implementation in simulation by default.</li>
+<li><code>channels</code> – list of <code>Rx(...)</code> and <code>Tx(...)</code> channel declarations.</li>
+</ul>
+<p>Each <code>Rx</code> or <code>Tx</code> channel has an <code>id</code>, plus optional <code>route</code> and <code>config</code> fields. <code>Rx</code> channels produce messages into the Copper graph and can be used as connection sources. <code>Tx</code> channels consume messages from the graph and can be used as connection destinations.</p>
 <h2 id="connections">Connections<a class="headerlink" href="#connections" title="Permanent link">&para;</a></h2>
-<p>Connections are declared under <code>cnx</code> as tuples describing edges between tasks:</p>
+<p>Connections are declared under <code>cnx</code> as tuples describing edges between tasks and bridge channels:</p>
 <ul>
 <li><code>src</code> – id of the source task.</li>
 <li><code>dst</code> – id of the destination task.</li>
 <li><code>msg</code> – Rust type of the message carried.</li>
 <li><code>missions</code> <em>(optional)</em> – restrict the connection to specific missions.</li>
 </ul>
+<p>Bridge channel endpoints use <code>bridge_id/channel_id</code> syntax. A bridge <code>Rx</code> channel can appear as <code>src</code>; a bridge <code>Tx</code> channel can appear as <code>dst</code>.</p>
 <p>If a source or regular task intentionally produces an output that nobody consumes in the
 current mission, declare it explicitly with <code>dst: "__nc__"</code>. That keeps the output message
 type known to the runtime without adding a fake sink.</p>
 <p>Example:</p>
 <pre><code class="language-ron">(src: &quot;task0&quot;, dst: &quot;task1&quot;, msg: &quot;i32&quot;)
+(src: &quot;radio/telemetry_in&quot;, dst: &quot;task1&quot;, msg: &quot;messages::Telemetry&quot;)
+(src: &quot;task1&quot;, dst: &quot;radio/commands_out&quot;, msg: &quot;messages::Command&quot;)
 </code></pre>
 <h2 id="monitoring">Monitoring<a class="headerlink" href="#monitoring" title="Permanent link">&para;</a></h2>
-<p>The optional <code>monitor</code> section selects a monitoring component and its parameters:</p>
+<p>The optional <code>monitor</code> section selects one monitoring component and its parameters. The <code>monitors</code> spelling accepts a list:</p>
 <pre><code class="language-ron">monitor: (
     type: &quot;cu_consolemon::CuConsoleMon&quot;,
     config: { &quot;verbosity&quot;: 2 },
 )
+
+monitors: [
+    (
+        type: &quot;cu_consolemon::CuConsoleMon&quot;,
+        config: { &quot;verbosity&quot;: 2 },
+    ),
+]
 </code></pre>
 <h2 id="logging">Logging<a class="headerlink" href="#logging" title="Permanent link">&para;</a></h2>
 <p>The <code>logging</code> section tunes Copper’s structured log. Options mirror the fields of <code>LoggingConfig</code> defined in <code>core/cu29_runtime/src/config.rs</code>:</p>
 <ul>
 <li><code>enable_task_logging</code> – controls per-task logging (defaults to <code>true</code>).</li>
+<li><code>copperlist_count</code> – number of preallocated CopperLists compiled into the runtime. If set, it must be at least <code>1</code>.</li>
 <li><code>slab_size_mib</code> – size of each memory mapped slab in MiB.</li>
 <li><code>section_size_mib</code> – pre‑allocated size per log section in MiB.</li>
 <li><code>keyframe_interval</code> – number of copperlists between two keyframes (default <code>100</code>).</li>
+<li><code>codecs</code> – named logging codec specs reusable by per-task <code>logging.codec</code> and <code>logging.codecs</code>.</li>
 </ul>
 <p>Example from <code>examples/cu_logging_size</code>:</p>
 <pre><code class="language-ron">logging: (
@@ -1564,14 +1666,40 @@ type known to the runtime without adding a fake sink.</p>
     section_size_mib: 100,
 )
 </code></pre>
-<p>The library validates that <code>section_size_mib</code> does not exceed <code>slab_size_mib</code>.</p>
+<p>Example with codecs:</p>
+<pre><code class="language-ron">(
+    logging: (
+        slab_size_mib: 64,
+        section_size_mib: 8,
+        codecs: [
+            (
+                id: &quot;png&quot;,
+                type: &quot;cu_png_codec::CuPngCodec&quot;,
+            ),
+        ],
+    ),
+    tasks: [
+        (
+            id: &quot;image_task&quot;,
+            type: &quot;tasks::ImagePassThrough&quot;,
+            logging: (
+                codecs: {
+                    &quot;cu_sensor_payloads::CuImage&lt;Vec&lt;u8&gt;&gt;&quot;: &quot;png&quot;,
+                },
+            ),
+        ),
+    ],
+    cnx: [],
+)
+</code></pre>
+<p>The library validates that <code>section_size_mib</code> does not exceed <code>slab_size_mib</code>. Log file paths are supplied by the generated app builder, typically with <code>with_log_path(...)</code>; <code>file</code> and <code>level</code> are not <code>logging</code> RON fields.</p>
 <h2 id="runtime-settings">Runtime Settings<a class="headerlink" href="#runtime-settings" title="Permanent link">&para;</a></h2>
 <p>Runtime behaviour can be adjusted with the <code>runtime</code> section. Currently only <code>rate_target_hz</code> is available:</p>
 <pre><code class="language-ron">runtime: (
     rate_target_hz: 2,
 )
 </code></pre>
-<p>This acts as a rate limiter for Copper list execution.</p>
+<p>This acts as a rate limiter for Copper list execution. <code>rate_target_hz</code> must be between <code>1</code> and <code>1_000_000_000</code> when set.</p>
 <p>On std targets, enabling the <code>high-precision-limiter</code> crate feature keeps the same
 configuration field but changes the implementation to a tighter hybrid sleep/spin limiter
 for higher-rate loops.</p>
@@ -1579,7 +1707,7 @@ for higher-rate loops.</p>
 <p>Configurations may define multiple missions, each representing an alternative task graph:</p>
 <pre><code class="language-ron">missions: [ (id: &quot;A&quot;), (id: &quot;B&quot;) ]
 </code></pre>
-<p>Tasks and connections can specify a <code>missions</code> array to belong only to selected missions. See <code>examples/cu_missions/copperconfig.ron</code> for a complete example.</p>
+<p>Tasks, resources, bridges and connections can specify a <code>missions</code> array to belong only to selected missions. See <code>examples/cu_missions/copperconfig.ron</code> for a complete example.</p>
 <h2 id="modular-configuration">Modular Configuration<a class="headerlink" href="#modular-configuration" title="Permanent link">&para;</a></h2>
 <p>Copper supports composition of configurations using the <code>includes</code> section. Each include specifies a path and optional parameter substitutions:</p>
 <pre><code class="language-ron">includes: [
@@ -1589,7 +1717,7 @@ for higher-rate loops.</p>
     ),
 ]
 </code></pre>
-<p>Included files are processed recursively. Parameters are substituted in the included text using the <code>{{param}}</code> syntax. Merging behaviour and further details are described in <code>doc/modular_config.md</code>.</p>
+<p>Included files are processed recursively. Parameters are substituted in the included text using the <code>{{param}}</code> syntax. Merging behaviour and further details are described in the <a href="../Modular-Configuration/">Modular Configuration guide</a>.</p>
 <h2 id="multi-copper-instance-overrides">Multi-Copper Instance Overrides<a class="headerlink" href="#multi-copper-instance-overrides" title="Permanent link">&para;</a></h2>
 <p>Multi-Copper umbrella configs may declare an optional <code>instance_overrides_root</code>:</p>
 <pre><code class="language-ron">(
@@ -1642,12 +1770,12 @@ or bridge config map:</p>
 </ul>
 <p>See <code>examples/cu_instance_overrides_demo/</code> for a minimal working example.</p>
 <h2 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h2>
-<p>A more complete configuration demonstrating several features is provided in <code>examples/modular_config_example/main_config.ron</code>:</p>
+<p>A more complete configuration demonstrating several features is provided in <code>examples/modular_config_example/copperconfig.ron</code>:</p>
 <pre><code class="language-ron">(
     tasks: [],
     cnx: [],
     monitor: ( type: &quot;cu_consolemon::CuConsoleMon&quot; ),
-    logging: ( file: &quot;robot.copper&quot;, level: &quot;debug&quot; ),
+    logging: ( enable_task_logging: true, keyframe_interval: 100 ),
     includes: [
         ( path: &quot;base.ron&quot;, params: {} ),
         ( path: &quot;motors.ron&quot;, params: { &quot;id&quot;: &quot;left&quot;,  &quot;pin&quot;: 4, &quot;direction&quot;: &quot;forward&quot; } ),

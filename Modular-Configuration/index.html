@@ -1704,25 +1704,33 @@
 <h2 id="merging-rules">Merging Rules<a class="headerlink" href="#merging-rules" title="Permanent link">&para;</a></h2>
 <p>When merging included configurations with the main configuration, Copper follows these rules:</p>
 <ol>
-<li><strong>Tasks</strong>:</li>
-<li>Tasks from included files are added to the main configuration</li>
-<li>If a task with the same ID already exists in the main configuration, the main configuration's task takes precedence</li>
+<li><strong>Tasks, resources, bridges, and missions</strong>:</li>
+<li>Entries from included files are added to the main configuration</li>
+<li>If an entry with the same ID already exists, the existing entry takes precedence</li>
+<li>The main file is processed first, so main-file entries win over included entries</li>
 <li>
-<p>Tasks from later includes override tasks from earlier includes with the same ID</p>
+<p>Among includes, the first definition of an ID wins; later duplicate IDs are ignored</p>
 </li>
 <li>
 <p><strong>Connections</strong>:</p>
 </li>
 <li>Connections from included files are added to the main configuration</li>
-<li>If a connection with the same source and destination already exists, the main configuration's connection takes precedence</li>
+<li>Connections are considered duplicates only when <code>src</code>, <code>dst</code>, and <code>msg</code> all match</li>
 <li>
-<p>Connections from later includes override connections from earlier includes with the same source and destination</p>
+<p>Duplicate connections merge their <code>missions</code> filters instead of replacing one another</p>
 </li>
 <li>
-<p><strong>Monitor and Logging</strong>:</p>
+<p><strong>Monitors</strong>:</p>
 </li>
-<li>If a monitor or logging configuration is defined in the main file, it takes precedence over included configurations</li>
-<li>If the main file doesn't define a monitor or logging configuration, the first included file with such configurations is used</li>
+<li>Monitors from included files are added when their <code>type</code> is not already present</li>
+<li>
+<p>If the main file defines a monitor of the same <code>type</code>, the main monitor takes precedence</p>
+</li>
+<li>
+<p><strong>Logging and runtime settings</strong>:</p>
+</li>
+<li>If <code>logging</code> or <code>runtime</code> is defined in the main file, it takes precedence</li>
+<li>If the main file omits one of these sections, the first included file that defines it supplies it</li>
 </ol>
 <h2 id="nested-includes">Nested Includes<a class="headerlink" href="#nested-includes" title="Permanent link">&para;</a></h2>
 <p>Configuration files can include other configuration files, allowing for hierarchical composition:</p>
@@ -1833,7 +1841,7 @@
 )
 </code></pre>
 <p>Choose the appropriate environment in your main configuration:</p>
-<pre><code class="language-ron">// main_config.ron
+<pre><code class="language-ron">// robot_config.ron
 (
     tasks: [
         // Common tasks
@@ -1926,13 +1934,16 @@
 <h2 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h2>
 <ol>
 <li>
-<p><strong>Order Dependency</strong>: The order of includes matters, as later includes can override earlier ones.</p>
+<p><strong>Order Dependency</strong>: The order of includes matters. For duplicate IDs, the first definition wins; later duplicates are ignored.</p>
 </li>
 <li>
 <p><strong>Parameter Scope</strong>: Parameters are only applied to the specific include where they're defined. If you want to use the same parameter across multiple includes, you need to specify it for each include.</p>
 </li>
 <li>
 <p><strong>Error Handling</strong>: If an included file cannot be found, Copper will return an error. Make sure all included files are available at the specified paths.</p>
+</li>
+<li>
+<p><strong>Circular Includes</strong>: Avoid include cycles. Copper processes includes recursively and does not rely on circular-include resolution as part of normal configuration loading.</p>
 </li>
 </ol>
 <h2 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h2>
