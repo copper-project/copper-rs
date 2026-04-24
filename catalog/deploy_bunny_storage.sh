@@ -11,6 +11,9 @@ LOCAL_DIR="${1:-$ROOT/catalog/generated}"
 REMOTE_PREFIX="${2:-catalog}"
 DRY_RUN="${BUNNY_DRY_RUN:-false}"
 SOURCE_DIR=""
+BUNNY_STORAGE_ZONE="copper"
+BUNNY_STORAGE_ENDPOINT="ny.storage.bunnycdn.com"
+CATALOG_PUBLIC_URL="https://cdn.copper-robotics.com/catalog/"
 
 if [[ "$LOCAL_DIR" != /* ]]; then
     LOCAL_DIR="$ROOT/$LOCAL_DIR"
@@ -36,18 +39,13 @@ if [[ ! -f "$SOURCE_DIR/index.html" ]]; then
     exit 1
 fi
 
-BUNNY_STORAGE_ENDPOINT="${BUNNY_STORAGE_ENDPOINT:-storage.bunnycdn.com}"
-CATALOG_PUBLIC_URL="${CATALOG_PUBLIC_URL:-https://cdn.copper-robotics.com/catalog/}"
 CATALOG_PUBLIC_URL="${CATALOG_PUBLIC_URL%/}/"
 
 if [[ "$DRY_RUN" != "true" && "$DRY_RUN" != "1" ]]; then
-    : "${BUNNY_STORAGE_ZONE:?set BUNNY_STORAGE_ZONE to your Bunny storage zone name}"
     : "${BUNNY_STORAGE_PASSWORD:?set BUNNY_STORAGE_PASSWORD to your Bunny storage zone password}"
     if [[ "${BUNNY_SKIP_PURGE:-false}" != "true" && "${BUNNY_SKIP_PURGE:-false}" != "1" ]]; then
         : "${BUNNY_API_KEY:?set BUNNY_API_KEY to your bunny.net account API key or export BUNNY_SKIP_PURGE=1}"
     fi
-else
-    BUNNY_STORAGE_ZONE="${BUNNY_STORAGE_ZONE:-example-zone}"
 fi
 
 BASE_URL="https://${BUNNY_STORAGE_ENDPOINT}"

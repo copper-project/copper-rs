@@ -157,20 +157,18 @@ cd catalog && just deploy-dry-run
 
 Local deploy expects:
 
-- `BUNNY_STORAGE_ZONE`
 - `BUNNY_STORAGE_PASSWORD`
-- `BUNNY_STORAGE_ENDPOINT`
-  - defaults to `storage.bunnycdn.com`, but set this to your zone's actual region endpoint
 - `BUNNY_API_KEY`
   - required unless you export `BUNNY_SKIP_PURGE=1`
-- `CATALOG_PUBLIC_URL`
-  - defaults to `https://cdn.copper-robotics.com/catalog/`
+
+The deploy script currently hardcodes:
+
+- storage zone name: `copper`
+- storage endpoint host: `ny.storage.bunnycdn.com`
+- public catalog URL: `https://cdn.copper-robotics.com/catalog/`
 
 The GitHub Actions deploy job uses the same script and expects a protected
 environment named `catalog-production` with:
 
 - secret `BUNNY_STORAGE_PASSWORD`
 - secret `BUNNY_API_KEY`
-- variable `BUNNY_STORAGE_ZONE`
-- variable `BUNNY_STORAGE_ENDPOINT`
-- variable `CATALOG_PUBLIC_URL`
