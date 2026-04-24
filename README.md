@@ -65,10 +65,10 @@ cargo install cu-flight-controller
 quad-sim
 ```
 
-The source code for these published demo crates lives in [`copper-project/extra-examples`](https://github.com/copper-project/extra-examples).
-you can find our comparative benchmarks with other frameworks here
-
-- [`copper-project/benchmarks`](https://github.com/copper-project/benchmarks).
+The source for the published demo crates above lives in
+[`copper-project/extra-examples`](https://github.com/copper-project/extra-examples).
+Cross-framework comparison benchmarks live in
+[`copper-project/benchmarks`](https://github.com/copper-project/benchmarks).
 
 Want to see more Copper in action? Watch the [community showcase video](https://youtu.be/weV_JYaUsmo).
 
@@ -84,11 +84,6 @@ Want to see more Copper in action? Watch the [community showcase video](https://
 - Start a new project from templates: [Project Templates](https://copper-project.github.io/copper-rs/Project-Templates)
 - Browse the live component catalog: [Copper Component Catalog](https://cdn.copper-robotics.com/catalog/index.html)
   Community components are welcome there too; if you build a reusable Copper component, prefer publishing it as its own crate and adding it to the catalog.
-- Looking for full applications or comparison benchmarks?
-  [`copper-project/extra-examples`](https://github.com/copper-project/extra-examples)
-  and
-  [`copper-project/benchmarks`](https://github.com/copper-project/benchmarks)
-  collect the source trees that now live outside the main `copper-rs` workspace.
 - See a full task graph + runtime walkthrough: [Copper Application Overview](https://copper-project.github.io/copper-rs/Copper-Application-Overview)
 - Build and deploy an application: [Build and Deploy a Copper Application](https://copper-project.github.io/copper-rs/Build-and-Deploy-a-Copper-Application)
 - RON configuration reference: [Copper RON Configuration Reference](https://copper-project.github.io/copper-rs/Copper-RON-Configuration-Reference)
@@ -112,9 +107,9 @@ Want to see more Copper in action? Watch the [community showcase video](https://
 
 Copper has two very different Python stories:
 
-- Offline Python log analysis: use `cu29-export` and app-specific PyO3 modules such as
-  [`copper-project/extra-examples/examples/cu_flight_controller`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_flight_controller). This is a reasonable
-  workflow because Python stays off the runtime hot path.
+- Offline Python log analysis: use `cu29-export` and app-specific PyO3 modules in
+  the application crates that expose them. This is a reasonable workflow because
+  Python stays off the runtime hot path.
 - Runtime Python task prototyping: use
   [components/tasks/cu_python_task](components/tasks/cu_python_task) and
   [examples/cu_python_task_demo](examples/cu_python_task_demo). This is for
