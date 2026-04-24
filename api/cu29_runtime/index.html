@@ -38,13 +38,16 @@
     </td>
   </tr>
 </table>
-<p>Prefer a native app instead of the browser? Install the published demos directly:</p>
-<div class="example-wrap"><pre class="language-bash"><code>$ cargo install cu-rp-balancebot
-$ balancebot-sim
+<p>Prefer a native app instead of the browser? Install the published demo crates from crates.io:</p>
+<div class="example-wrap"><pre class="language-bash"><code>cargo install cu-rp-balancebot
+balancebot-sim
 
-$ cargo install cu-flight-controller
-$ quad-sim</code></pre></div>
-<p>The source code for these demos lives in <a href="examples/cu_rp_balancebot">examples/cu_rp_balancebot</a> and <a href="examples/cu_flight_controller">examples/cu_flight_controller</a>.</p>
+cargo install cu-flight-controller
+quad-sim</code></pre></div>
+<p>The source for the published demo crates above lives in
+<a href="https://github.com/copper-project/extra-examples"><code>copper-project/extra-examples</code></a>.
+Cross-framework comparison benchmarks live in
+<a href="https://github.com/copper-project/benchmarks"><code>copper-project/benchmarks</code></a>.</p>
 <p>Want to see more Copper in action? Watch the <a href="https://youtu.be/weV_JYaUsmo">community showcase video</a>.</p>
 <p align="center">
   <a href="https://youtu.be/weV_JYaUsmo">
@@ -78,9 +81,9 @@ Community components are welcome there too; if you build a reusable Copper compo
 <h3 id="python-support"><a class="doc-anchor" href="#python-support">§</a>Python Support</h3>
 <p>Copper has two very different Python stories:</p>
 <ul>
-<li>Offline Python log analysis: use <code>cu29-export</code> and app-specific PyO3 modules such as
-<a href="examples/cu_flight_controller">examples/cu_flight_controller</a>. This is a reasonable
-workflow because Python stays off the runtime hot path.</li>
+<li>Offline Python log analysis: use <code>cu29-export</code> and app-specific PyO3 modules in
+the application crates that expose them. This is a reasonable workflow because
+Python stays off the runtime hot path.</li>
 <li>Runtime Python task prototyping: use
 <a href="components/tasks/cu_python_task">components/tasks/cu_python_task</a> and
 <a href="examples/cu_python_task_demo">examples/cu_python_task_demo</a>. This is for
