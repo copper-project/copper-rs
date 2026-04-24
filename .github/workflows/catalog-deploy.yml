@@ -2,14 +2,14 @@ name: Catalog
 
 on:
   push:
-    #branches: ["master"]
+    branches: ["master"]
     paths:
       - "catalog/**"
       - "support/cu_catalog/**"
       - "Cargo.toml"
       - "components/**/Cargo.toml"
   pull_request:
-    #branches: ["master"]
+    branches: ["master"]
     paths:
       - "catalog/**"
       - "support/cu_catalog/**"
