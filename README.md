@@ -55,17 +55,17 @@ These are not mockups: BalanceBot is the exact same application that runs on a R
   </tr>
 </table>
 
-Prefer a native app instead of the browser? Install the demo apps directly from the satellite repo:
+Prefer a native app instead of the browser? Install the published demo crates from crates.io:
 
 ```bash
-$ cargo install --git https://github.com/copper-project/extra-examples --branch master cu-rp-balancebot
+$ cargo install cu-rp-balancebot
 $ balancebot-sim
 
-$ cargo install --git https://github.com/copper-project/extra-examples --branch master cu-flight-controller
+$ cargo install cu-flight-controller
 $ quad-sim
 ```
 
-The source code for these demos lives in
+The source code for these published demo crates lives in
 [`copper-project/extra-examples`](https://github.com/copper-project/extra-examples),
 under
 [`examples/cu_rp_balancebot`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_rp_balancebot)
@@ -113,7 +113,7 @@ Want to see more Copper in action? Watch the [community showcase video](https://
   [`copper-project/extra-examples`](https://github.com/copper-project/extra-examples)
   and
   [`copper-project/benchmarks`](https://github.com/copper-project/benchmarks)
-  collect the repos that were moved out of the main workspace.
+  collect the source trees that now live outside the main `copper-rs` workspace.
 - See a full task graph + runtime walkthrough: [Copper Application Overview](https://copper-project.github.io/copper-rs/Copper-Application-Overview)
 - Build and deploy an application: [Build and Deploy a Copper Application](https://copper-project.github.io/copper-rs/Build-and-Deploy-a-Copper-Application)
 - RON configuration reference: [Copper RON Configuration Reference](https://copper-project.github.io/copper-rs/Copper-RON-Configuration-Reference)
