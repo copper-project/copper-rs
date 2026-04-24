@@ -1,2 +1,0 @@
-SUBSYSTEM=="gpiomem", KERNEL=="gpiomem", GROUP="wheel", MODE="0660"
-

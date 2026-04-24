@@ -48,17 +48,20 @@ These are not mockups: BalanceBot is the exact same application that runs on a R
   </tr>
 </table>
 
-Prefer a native app instead of the browser? Install the published demos directly:
+Prefer a native app instead of the browser? Install the published demo crates from crates.io:
 
 ```bash
-$ cargo install cu-rp-balancebot
-$ balancebot-sim
+cargo install cu-rp-balancebot
+balancebot-sim
 
-$ cargo install cu-flight-controller
-$ quad-sim
+cargo install cu-flight-controller
+quad-sim
 ```
 
-The source code for these demos lives in [examples/cu_rp_balancebot](examples/cu_rp_balancebot) and [examples/cu_flight_controller](examples/cu_flight_controller).
+The source for the published demo crates above lives in
+[`copper-project/extra-examples`](https://github.com/copper-project/extra-examples).
+Cross-framework comparison benchmarks live in
+[`copper-project/benchmarks`](https://github.com/copper-project/benchmarks).
 
 Want to see more Copper in action? Watch the [community showcase video](https://youtu.be/weV_JYaUsmo).
 
@@ -97,9 +100,9 @@ Want to see more Copper in action? Watch the [community showcase video](https://
 
 Copper has two very different Python stories:
 
-- Offline Python log analysis: use `cu29-export` and app-specific PyO3 modules such as
-  [examples/cu_flight_controller](examples/cu_flight_controller). This is a reasonable
-  workflow because Python stays off the runtime hot path.
+- Offline Python log analysis: use `cu29-export` and app-specific PyO3 modules in
+  the application crates that expose them. This is a reasonable workflow because
+  Python stays off the runtime hot path.
 - Runtime Python task prototyping: use
   [components/tasks/cu_python_task](components/tasks/cu_python_task) and
   [examples/cu_python_task_demo](examples/cu_python_task_demo). This is for
@@ -110,7 +113,6 @@ Putting Python inside a Copper task defeats the performance model Copper is buil
 for: it adds allocations, latency, jitter, and middleware overhead, and it ruins
 the realtime characteristics of the stack. The intended use is to sketch one task
 in Python, get the behavior right, then rewrite it in Rust.
-
 
 ## Citation
 
