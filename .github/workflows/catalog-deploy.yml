@@ -1,0 +1,69 @@
+name: Catalog
+
+on:
+  push:
+    branches: ["master"]
+    paths:
+      - "catalog/**"
+      - "support/cu_catalog/**"
+      - "Cargo.toml"
+      - "components/**/Cargo.toml"
+  pull_request:
+    branches: ["master"]
+    paths:
+      - "catalog/**"
+      - "support/cu_catalog/**"
+      - "Cargo.toml"
+      - "components/**/Cargo.toml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catalog-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Catalog
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: catalog
+          shared-key: rust-ubuntu
+          cache-targets: "false"
+          cache-bin: "true"
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+      - name: Build deployable catalog tree
+        run: catalog/build_generated.sh
+
+  deploy:
+    name: Deploy Catalog
+    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: catalog-production
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: catalog
+          shared-key: rust-ubuntu
+          cache-targets: "false"
+          cache-bin: "true"
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+      - name: Build deployable catalog tree
+        run: catalog/build_generated.sh
+      - name: Publish catalog to Bunny
+        env:
+          BUNNY_STORAGE_ZONE: ${{ vars.BUNNY_STORAGE_ZONE }}
+          BUNNY_STORAGE_ENDPOINT: ${{ vars.BUNNY_STORAGE_ENDPOINT }}
+          BUNNY_STORAGE_PASSWORD: ${{ secrets.BUNNY_STORAGE_PASSWORD }}
+          BUNNY_API_KEY: ${{ secrets.BUNNY_API_KEY }}
+          CATALOG_PUBLIC_URL: ${{ vars.CATALOG_PUBLIC_URL }}
+        run: catalog/deploy_bunny_storage.sh catalog/generated catalog
