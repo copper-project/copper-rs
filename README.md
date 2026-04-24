@@ -58,42 +58,17 @@ These are not mockups: BalanceBot is the exact same application that runs on a R
 Prefer a native app instead of the browser? Install the published demo crates from crates.io:
 
 ```bash
-$ cargo install cu-rp-balancebot
-$ balancebot-sim
+cargo install cu-rp-balancebot
+balancebot-sim
 
-$ cargo install cu-flight-controller
-$ quad-sim
+cargo install cu-flight-controller
+quad-sim
 ```
 
-The source code for these published demo crates lives in
-[`copper-project/extra-examples`](https://github.com/copper-project/extra-examples),
-under
-[`examples/cu_rp_balancebot`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_rp_balancebot)
-and
-[`examples/cu_flight_controller`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_flight_controller).
+The source code for these published demo crates lives in [`copper-project/extra-examples`](https://github.com/copper-project/extra-examples).
+you can find our comparative benchmarks with other frameworks here
 
-`copper-rs` now keeps the framework, the core components, and the canonical
-examples that document the runtime itself. The heavier application demos and the
-cross-framework comparison workloads live in satellite repos:
-
-- [`copper-project/extra-examples`](https://github.com/copper-project/extra-examples):
-  end-to-end Copper apps such as
-  [`cu_rp_balancebot`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_rp_balancebot),
-  [`cu_flight_controller`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_flight_controller),
-  [`cu_human_pose`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_human_pose),
-  [`cu_feetech_demo`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_feetech_demo),
-  and more.
-- [`copper-project/benchmarks`](https://github.com/copper-project/benchmarks):
-  comparison benchmarks and reference workloads such as
-  [`cu_dorabench`](https://github.com/copper-project/benchmarks/tree/master/examples/cu_dorabench),
-  [`dora_caterpillar`](https://github.com/copper-project/benchmarks/tree/master/examples/dora_caterpillar),
-  [`horus_caterpillar`](https://github.com/copper-project/benchmarks/tree/master/examples/horus_caterpillar),
-  and
-  [`ros_zenoh_caterpillar`](https://github.com/copper-project/benchmarks/tree/master/examples/ros_zenoh_caterpillar).
-
-If you came here looking for the BalanceBot or Flight Controller code shown
-above, they are both in
-[`copper-project/extra-examples`](https://github.com/copper-project/extra-examples).
+- [`copper-project/benchmarks`](https://github.com/copper-project/benchmarks).
 
 Want to see more Copper in action? Watch the [community showcase video](https://youtu.be/weV_JYaUsmo).
 
@@ -150,7 +125,6 @@ Putting Python inside a Copper task defeats the performance model Copper is buil
 for: it adds allocations, latency, jitter, and middleware overhead, and it ruins
 the realtime characteristics of the stack. The intended use is to sketch one task
 in Python, get the behavior right, then rewrite it in Rust.
-
 
 ## Citation
 
