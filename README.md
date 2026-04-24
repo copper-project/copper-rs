@@ -55,17 +55,45 @@ These are not mockups: BalanceBot is the exact same application that runs on a R
   </tr>
 </table>
 
-Prefer a native app instead of the browser? Install the published demos directly:
+Prefer a native app instead of the browser? Install the demo apps directly from the satellite repo:
 
 ```bash
-$ cargo install cu-rp-balancebot
+$ cargo install --git https://github.com/copper-project/extra-examples --branch master cu-rp-balancebot
 $ balancebot-sim
 
-$ cargo install cu-flight-controller
+$ cargo install --git https://github.com/copper-project/extra-examples --branch master cu-flight-controller
 $ quad-sim
 ```
 
-The source code for these demos lives in [examples/cu_rp_balancebot](examples/cu_rp_balancebot) and [examples/cu_flight_controller](examples/cu_flight_controller).
+The source code for these demos lives in
+[`copper-project/extra-examples`](https://github.com/copper-project/extra-examples),
+under
+[`examples/cu_rp_balancebot`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_rp_balancebot)
+and
+[`examples/cu_flight_controller`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_flight_controller).
+
+`copper-rs` now keeps the framework, the core components, and the canonical
+examples that document the runtime itself. The heavier application demos and the
+cross-framework comparison workloads live in satellite repos:
+
+- [`copper-project/extra-examples`](https://github.com/copper-project/extra-examples):
+  end-to-end Copper apps such as
+  [`cu_rp_balancebot`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_rp_balancebot),
+  [`cu_flight_controller`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_flight_controller),
+  [`cu_human_pose`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_human_pose),
+  [`cu_feetech_demo`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_feetech_demo),
+  and more.
+- [`copper-project/benchmarks`](https://github.com/copper-project/benchmarks):
+  comparison benchmarks and reference workloads such as
+  [`cu_dorabench`](https://github.com/copper-project/benchmarks/tree/master/examples/cu_dorabench),
+  [`dora_caterpillar`](https://github.com/copper-project/benchmarks/tree/master/examples/dora_caterpillar),
+  [`horus_caterpillar`](https://github.com/copper-project/benchmarks/tree/master/examples/horus_caterpillar),
+  and
+  [`ros_zenoh_caterpillar`](https://github.com/copper-project/benchmarks/tree/master/examples/ros_zenoh_caterpillar).
+
+If you came here looking for the BalanceBot or Flight Controller code shown
+above, they are both in
+[`copper-project/extra-examples`](https://github.com/copper-project/extra-examples).
 
 Want to see more Copper in action? Watch the [community showcase video](https://youtu.be/weV_JYaUsmo).
 
@@ -81,6 +109,11 @@ Want to see more Copper in action? Watch the [community showcase video](https://
 - Start a new project from templates: [Project Templates](https://copper-project.github.io/copper-rs/Project-Templates)
 - Browse the live component catalog: [Copper Component Catalog](https://cdn.copper-robotics.com/catalog/index.html)
   Community components are welcome there too; if you build a reusable Copper component, prefer publishing it as its own crate and adding it to the catalog.
+- Looking for full applications or comparison benchmarks?
+  [`copper-project/extra-examples`](https://github.com/copper-project/extra-examples)
+  and
+  [`copper-project/benchmarks`](https://github.com/copper-project/benchmarks)
+  collect the repos that were moved out of the main workspace.
 - See a full task graph + runtime walkthrough: [Copper Application Overview](https://copper-project.github.io/copper-rs/Copper-Application-Overview)
 - Build and deploy an application: [Build and Deploy a Copper Application](https://copper-project.github.io/copper-rs/Build-and-Deploy-a-Copper-Application)
 - RON configuration reference: [Copper RON Configuration Reference](https://copper-project.github.io/copper-rs/Copper-RON-Configuration-Reference)
@@ -105,7 +138,7 @@ Want to see more Copper in action? Watch the [community showcase video](https://
 Copper has two very different Python stories:
 
 - Offline Python log analysis: use `cu29-export` and app-specific PyO3 modules such as
-  [examples/cu_flight_controller](examples/cu_flight_controller). This is a reasonable
+  [`copper-project/extra-examples/examples/cu_flight_controller`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_flight_controller). This is a reasonable
   workflow because Python stays off the runtime hot path.
 - Runtime Python task prototyping: use
   [components/tasks/cu_python_task](components/tasks/cu_python_task) and
