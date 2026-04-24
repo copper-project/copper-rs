@@ -121,8 +121,54 @@ just
 ```
 
 That resolves GitHub entries from the local checkout with `--local-root`, then
-renders:
+builds the publish tree under `generated/`, with `generated/` representing the
+CDN root:
 
-- `generated/catalog.json`
-- `generated/catalog.md`
-- `generated/index.html`
+- `generated/catalog/catalog.json`
+- `generated/catalog/catalog.md`
+- `generated/catalog/index.html`
+- `generated/catalog/assets/...`
+
+## Deploying To Bunny
+
+`catalog/generated` is the local mirror of what gets published. Build it with:
+
+```bash
+cd catalog && just build-generated
+```
+
+Preview the built catalog locally at:
+
+```bash
+xdg-open catalog/generated/catalog/index.html
+```
+
+Publish that exact generated tree with the same path CI uses:
+
+```bash
+cd catalog && just deploy
+```
+
+Preview the upload plan without touching Bunny:
+
+```bash
+cd catalog && just deploy-dry-run
+```
+
+Local deploy expects:
+
+- `BUNNY_STORAGE_PASSWORD`
+- `BUNNY_API_KEY`
+  - required unless you export `BUNNY_SKIP_PURGE=1`
+
+The deploy script currently hardcodes:
+
+- storage zone name: `copper`
+- storage endpoint host: `ny.storage.bunnycdn.com`
+- public catalog URL: `https://cdn.copper-robotics.com/catalog/`
+
+The GitHub Actions deploy job uses the same script and expects a protected
+environment named `catalog-production` with:
+
+- secret `BUNNY_STORAGE_PASSWORD`
+- secret `BUNNY_API_KEY`
