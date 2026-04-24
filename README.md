@@ -8,13 +8,6 @@
 [![Book](https://img.shields.io/badge/book-Docs-blue)](https://copper-project.github.io/copper-rs-book/)
 [![Documentation](https://img.shields.io/badge/docs-available-brightgreen)](https://copper-project.github.io/copper-rs)
 
-<blockquote>
-🤖&nbsp&nbsp&nbsp&nbsp
-  <em style="font-size: 1.2em;">
-    Copper is to robots what a game engine is to games - build, run, and replay your entire robot deterministically.
-  </em>
-</blockquote>
-
 ### Why Copper
 
 <p><strong style="color: #b87333;">Rust-first</strong> – ergonomic & safe
