@@ -21,19 +21,19 @@ jobs:
       fail-fast: false
       matrix:
         repo: [zed, extra-examples, benchmarks]
+    env:
+      DISPATCH_TOKEN: ${{ secrets.COPPER_PROJECT_REPO_DISPATCH_TOKEN }}
+      TARGET_REPO: ${{ matrix.repo }}
+      SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.workflow_run.head_sha }}
+      SOURCE_RUN_ID: ${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event.workflow_run.id }}
     steps:
-      - name: Skip when dispatch token is not configured
-        if: ${{ secrets.COPPER_PROJECT_REPO_DISPATCH_TOKEN == '' }}
-        run: echo "COPPER_PROJECT_REPO_DISPATCH_TOKEN is not configured; skipping repository dispatch."
-
       - name: Dispatch repository event
-        if: ${{ secrets.COPPER_PROJECT_REPO_DISPATCH_TOKEN != '' }}
-        env:
-          DISPATCH_TOKEN: ${{ secrets.COPPER_PROJECT_REPO_DISPATCH_TOKEN }}
-          TARGET_REPO: ${{ matrix.repo }}
-          SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.workflow_run.head_sha }}
-          SOURCE_RUN_ID: ${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event.workflow_run.id }}
         run: |
+          if [[ -z "${DISPATCH_TOKEN}" ]]; then
+            echo "::notice::COPPER_PROJECT_REPO_DISPATCH_TOKEN is not configured; skipping repository dispatch."
+            exit 0
+          fi
+
           curl --fail-with-body \
             -X POST \
             -H "Accept: application/vnd.github+json" \
@@ -44,6 +44,7 @@ jobs:
             "event_type": "copper-rs-master",
             "client_payload": {
               "source_repo": "${GITHUB_REPOSITORY}",
+              "source_repository": "${GITHUB_REPOSITORY}",
               "source_sha": "${SOURCE_SHA}",
               "source_run_id": "${SOURCE_RUN_ID}"
             }
