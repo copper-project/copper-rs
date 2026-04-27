@@ -1,4 +1,4 @@
-name: Pull Request Labels
+name: Pull Request Guardrails
 
 on:
   pull_request_target:
@@ -14,7 +14,7 @@ permissions:
   pull-requests: read
 
 jobs:
-  label:
+  do-not-merge:
     runs-on: ubuntu-latest
     steps:
       - name: Check for a "do-not-merge" label
@@ -23,10 +23,3 @@ jobs:
           mode: exactly
           count: 0
           labels: "do-not-merge"
-
-      - name: Require label "include in changelog" or "exclude from changelog"
-        uses: mheap/github-action-required-labels@v5
-        with:
-          mode: minimum
-          count: 1
-          labels: "exclude from changelog, include in changelog"
