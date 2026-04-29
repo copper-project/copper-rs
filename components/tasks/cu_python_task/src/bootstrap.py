@@ -20,6 +20,7 @@ import mmap
 import struct
 import sys
 import traceback
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 
@@ -52,7 +53,7 @@ _SHM_NUMPY_DTYPES = {
 
 
 def _is_shm_handle_descriptor(value):
-    return isinstance(value, dict) and value.get("__cu_shm_handle__") is True
+    return isinstance(value, Mapping) and value.get("__cu_shm_handle__") is True
 
 
 class SharedMemoryHandle:
@@ -357,7 +358,7 @@ def _wrap(value, on_mutate=None, output_mode=False):
         return value
     if _is_shm_handle_descriptor(value):
         return SharedMemoryHandle(value)
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         if output_mode and (
             "__cu_payload_present__" in value or "__cu_payload_template__" in value
         ):
@@ -403,7 +404,7 @@ def _unwrap(value):
 def _wrap_context(value):
     if isinstance(value, ContextSnapshot):
         return value
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         return ContextSnapshot.from_mapping(value)
     return value
 
@@ -444,7 +445,7 @@ class StateResultResponse:
 
     @classmethod
     def from_state_result(cls, value):
-        if not isinstance(value, dict):
+        if not isinstance(value, Mapping):
             raise TypeError(f"Unsupported state result type: {type(value).__name__}")
         try:
             return cls(state=value["state"])
@@ -459,7 +460,7 @@ class ProcessResultResponse:
 
     @classmethod
     def from_process_result(cls, value):
-        if not isinstance(value, dict):
+        if not isinstance(value, Mapping):
             raise TypeError(f"Unsupported process result type: {type(value).__name__}")
         try:
             return cls(state=value["state"], output=value["output"])
@@ -473,7 +474,7 @@ class ErrorResponse:
 
 
 def _decode_request(value):
-    if not isinstance(value, dict):
+    if not isinstance(value, Mapping):
         raise RuntimeError(f"Expected request mapping, got {type(value).__name__}")
 
     kind = value.get("kind")
@@ -504,7 +505,7 @@ def _encode_response(value):
 def _coerce_state_request(value, request_type):
     if isinstance(value, request_type):
         return value
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         try:
             return request_type(
                 ctx=value["ctx"],
@@ -518,7 +519,7 @@ def _coerce_state_request(value, request_type):
 def _coerce_process_request(value):
     if isinstance(value, ProcessRequest):
         return value
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         try:
             return ProcessRequest(
                 ctx=value["ctx"],
