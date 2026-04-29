@@ -81,6 +81,7 @@ fn run_handle_decode_on_small_stack() {
         .expect("handle decode thread should not panic");
 }
 
+#[cfg(target_os = "linux")]
 fn run_soa_decode_on_small_stack() {
     let ros = large_pointcloud2();
     thread::Builder::new()
