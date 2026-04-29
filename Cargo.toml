@@ -9,7 +9,6 @@ members = [
   "core/cu29_helpers",
   "core/cu29_intern_strs",
   "core/cu29_log",
-  "core/cu29_logviz",
   "core/cu29_log_derive",
   "core/cu29_log_runtime",
   "core/cu29_runtime",
@@ -78,7 +77,6 @@ members = [
   "examples/cu_instance_overrides_demo",
   "examples/cu_iceoryx2_bridge_demo",
   "examples/cu_logging_size",
-  "examples/cu_logviz_demo",
   "examples/cu_msp_bridge_loopback",
   "examples/cu_monitoring",
   "examples/cu_min_baremetal",
@@ -111,7 +109,6 @@ default-members = [
   "core/cu29_export",
   "core/cu29_intern_strs",
   "core/cu29_log",
-  "core/cu29_logviz",
   "core/cu29_log_derive",
   "core/cu29_log_runtime",
   "core/cu29_runtime",
@@ -156,7 +153,6 @@ cu29-intern-strs = { path = "core/cu29_intern_strs", version = "0.15.0" } # std 
 cu29-log = { path = "core/cu29_log", default-features = false, version = "0.15.0" }
 cu29-log-derive = { path = "core/cu29_log_derive", default-features = false, version = "0.15.0" }
 cu29-log-runtime = { path = "core/cu29_log_runtime", default-features = false, version = "0.15.0" }
-cu29-logviz = { path = "core/cu29_logviz", version = "0.15.0" }
 cu29-runtime = { path = "core/cu29_runtime", default-features = false, version = "0.15.0" }
 cu29-soa-derive = { path = "core/cu29_soa_derive", default-features = false, version = "0.15.0" }
 cu29-traits = { path = "core/cu29_traits", default-features = false, version = "0.15.0" }
