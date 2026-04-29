@@ -49,7 +49,6 @@ defmt = [
 textlogs = ["cu29-log-derive/textlogs"]
 units = ["dep:cu29-units"]
 macro_debug = ["cu29-derive/macro_debug", "cu29-log-derive/macro_debug"]
-logviz = ["cu29-derive/logviz"]
 signal-handler = ["dep:ctrlc", "cu29-derive/signal-handler"]
 sysclock-perf = ["std", "cu29-runtime/sysclock-perf"]
 high-precision-limiter = ["std", "cu29-runtime/high-precision-limiter"]

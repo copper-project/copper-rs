@@ -38,7 +38,6 @@ serde = { workspace = true } # needed for compile_fail tests
 default = ["std", "signal-handler"]
 # enables a more verbose build log showing the code generation.
 macro_debug = ["cu29-runtime/macro_debug"]
-logviz = []
 std = ["cu29-traits/std", "cu29-unifiedlog/std"]
 async-cl-io = ["cu29-runtime/async-cl-io"]
 parallel-rt = ["cu29-runtime/parallel-rt"]

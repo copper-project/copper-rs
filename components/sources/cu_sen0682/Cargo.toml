@@ -25,7 +25,6 @@ embedded-io = "0.7.1"
 [dev-dependencies]
 clap = { workspace = true }
 ctrlc = { workspace = true }
-cu29-logviz = { workspace = true }
 rerun = { workspace = true }
 serde = { workspace = true }
 tempfile = { workspace = true }

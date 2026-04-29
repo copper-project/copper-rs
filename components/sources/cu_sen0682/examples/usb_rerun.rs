@@ -4,8 +4,7 @@ mod usb_common;
 use clap::Parser;
 use cu_sensor_payloads::PointCloudSoa;
 use cu29::prelude::*;
-use cu29_logviz::{apply_tov, log_pointcloud};
-use rerun::{Arrows3D, RecordingStream, RecordingStreamBuilder};
+use rerun::{Arrows3D, Points3D, RecordingStream, RecordingStreamBuilder};
 use std::path::PathBuf;
 use std::sync::{
     Arc,
@@ -63,6 +62,34 @@ impl CuSinkTask for Sen0682RerunSink {
         apply_tov(&self.rec, &input.tov);
         log_pointcloud(&self.rec, "sen0682/pointcloud", cloud)
     }
+}
+
+fn apply_tov(rec: &RecordingStream, tov: &Tov) {
+    match tov {
+        Tov::Time(t) => rec.set_duration_secs("tov", t.0 as f64 / 1_000_000_000.0),
+        Tov::Range(r) => rec.set_duration_secs("tov", r.start.0 as f64 / 1_000_000_000.0),
+        Tov::None => rec.reset_time(),
+    }
+}
+
+fn log_pointcloud<const N: usize>(
+    rec: &RecordingStream,
+    path: &str,
+    pointcloud: &PointCloudSoa<N>,
+) -> CuResult<()> {
+    let len = pointcloud.len.min(N);
+    let points = (0..len)
+        .map(|i| {
+            [
+                pointcloud.x[i].value,
+                pointcloud.y[i].value,
+                pointcloud.z[i].value,
+            ]
+        })
+        .collect::<Vec<_>>();
+
+    rec.log(path, &Points3D::new(points))
+        .map_err(|e| CuError::new_with_cause("Failed to log point cloud", e))
 }
 
 fn log_axes(rec: &RecordingStream, path: &str, axis_len: f32) -> CuResult<()> {
