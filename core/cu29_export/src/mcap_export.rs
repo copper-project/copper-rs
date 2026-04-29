@@ -677,7 +677,9 @@ mod tests {
     use cu29_clock::OptionCuTime;
     use serde::{Deserialize, Serialize};
     use std::io::Cursor;
+    #[cfg(target_os = "linux")]
     use std::process::Command;
+    #[cfg(target_os = "linux")]
     use std::thread;
     use tempfile::tempdir;
 
@@ -701,10 +703,14 @@ mod tests {
         CuStampedData<TestPayloadB, CuMsgMetadata>,
     );
 
+    #[cfg(target_os = "linux")]
     const HELPER_ENV: &str = "CU29_EXPORT_POINTCLOUD_STACK_HELPER";
+    #[cfg(target_os = "linux")]
     const LARGE_POINTS: usize = 100_000;
+    #[cfg(target_os = "linux")]
     const SMALL_STACK_BYTES: usize = 256 * 1024;
 
+    #[cfg(target_os = "linux")]
     #[derive(Debug, Default, Encode, Serialize, Deserialize)]
     struct LargePointCloudMsgs(CuStampedData<PointCloudSoaHandle<LARGE_POINTS>, CuMsgMetadata>);
 
@@ -720,18 +726,21 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "linux")]
     impl ErasedCuStampedDataSet for LargePointCloudMsgs {
         fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
             vec![&self.0]
         }
     }
 
+    #[cfg(target_os = "linux")]
     impl MatchingTasks for LargePointCloudMsgs {
         fn get_all_task_ids() -> &'static [&'static str] {
             &["points"]
         }
     }
 
+    #[cfg(target_os = "linux")]
     impl Decode<()> for LargePointCloudMsgs {
         fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
             Ok(Self(Decode::decode(decoder)?))
@@ -754,12 +763,14 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "linux")]
     impl PayloadSchemas for LargePointCloudMsgs {
         fn get_payload_schemas() -> Vec<(&'static str, String)> {
             vec![("points", "{}".to_string())]
         }
     }
 
+    #[cfg(target_os = "linux")]
     fn encoded_pointcloud_copperlist() -> Vec<u8> {
         let mut payload = PointCloudSoaHandle::<LARGE_POINTS>::default();
         payload.with_inner_mut(|cloud| {
@@ -775,6 +786,7 @@ mod tests {
         bincode::encode_to_vec(cl, standard()).expect("encode CopperList")
     }
 
+    #[cfg(target_os = "linux")]
     fn run_mcap_export_on_small_stack() {
         let encoded = encoded_pointcloud_copperlist();
         let dir = tempdir().expect("create temp dir");
@@ -800,6 +812,7 @@ mod tests {
         assert!(mcap_path.exists());
     }
 
+    #[cfg(target_os = "linux")]
     fn run_self(test_name: &str, helper_mode: &str) -> std::process::ExitStatus {
         Command::new(std::env::current_exe().expect("current_exe should succeed"))
             .arg("--exact")
