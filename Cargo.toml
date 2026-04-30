@@ -2,6 +2,7 @@
 
 members = [
   "core/cu29",
+  "core/cu29_base_derive",
   "core/cu29_reflect_derive",
   "core/cu29_clock",
   "core/cu29_derive",
@@ -15,6 +16,7 @@ members = [
   "core/cu29_soa_derive",
   "core/cu29_traits",
   "core/cu29_unifiedlog",
+  "core/cu29_value",
   "components/bridges/cu_crsf",
   "components/bridges/cu_feetech",
   "components/bridges/cu_msp_bridge",

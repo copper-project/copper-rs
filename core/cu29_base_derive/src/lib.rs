@@ -1,7 +1,7 @@
 use cu29_intern_strs::intern_string;
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, LitStr};
+use syn::{LitStr, parse_macro_input};
 
 /// A procedural macro that generates a `CuError` interning the given string.
 ///
