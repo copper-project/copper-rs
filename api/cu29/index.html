@@ -2,12 +2,12 @@
 <p>Think of Copper as a robotics game engine: define a task graph, compile once,
 and get deterministic execution, unified logging, and sub-microsecond
 latency from Linux workstations all the way down to bare-metal MPU builds.</p>
-<h3 id="quick-start"><a class="doc-anchor" href="#quick-start">§</a>Quick start</h3><div class="example-wrap"><pre class="language-bash"><code>cargo install cargo-generate
-git clone https://github.com/copper-project/copper-rs
-cd copper-rs/templates
-cargo cunew /path/to/my_robot   # scaffolds a full Copper project</code></pre></div>
-<p>It will generate a minimal Copper robot project at <code>/path/to/my_robot</code>. <code>cargo build</code> should
-compile it out of the box.</p>
+<h3 id="quick-start"><a class="doc-anchor" href="#quick-start">§</a>Quick start</h3><div class="example-wrap"><pre class="language-bash"><code>cargo install cargo-cunew
+cargo cunew /path/to/my_robot
+cd /path/to/my_robot
+cargo run</code></pre></div>
+<p>It will generate a minimal Copper robot project at <code>/path/to/my_robot</code> using the latest
+stable Copper crates from crates.io by default.</p>
 <h3 id="feature-flags"><a class="doc-anchor" href="#feature-flags">§</a>Feature flags</h3>
 <ul>
 <li><code>default</code> = <code>["std", "signal-handler", "textlogs", "units"]</code></li>

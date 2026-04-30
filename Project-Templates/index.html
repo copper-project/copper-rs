@@ -405,30 +405,24 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#generate-from-a-local-checkout" class="md-nav__link">
+  <a href="#preferred-path-cargo-cunew" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Generate from a local checkout
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Generate from a local checkout">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#template-variables" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Template variables
+        Preferred path: cargo-cunew
       
     </span>
   </a>
   
 </li>
-        
-      </ul>
-    </nav>
+      
+        <li class="md-nav__item">
+  <a href="#direct-template-path-for-development" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Direct template path for development
+      
+    </span>
+  </a>
   
 </li>
       
@@ -1312,30 +1306,24 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#generate-from-a-local-checkout" class="md-nav__link">
+  <a href="#preferred-path-cargo-cunew" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Generate from a local checkout
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Generate from a local checkout">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#template-variables" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Template variables
+        Preferred path: cargo-cunew
       
     </span>
   </a>
   
 </li>
-        
-      </ul>
-    </nav>
+      
+        <li class="md-nav__item">
+  <a href="#direct-template-path-for-development" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Direct template path for development
+      
+    </span>
+  </a>
   
 </li>
       
@@ -1375,7 +1363,8 @@
 <h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Rust 1.95 or newer (rustup with the latest stable toolchain is recommended)</li>
-<li><code>cargo-generate</code>: <code>cargo install cargo-generate</code></li>
+<li><code>cargo-cunew</code>: <code>cargo install cargo-cunew</code></li>
+<li>Optional for template development: <code>cargo-generate</code>: <code>cargo install cargo-generate</code></li>
 <li>Optional: <code>just</code> for helper commands (see <a href="../Task-Automation-with-Just/">Task Automation with just</a>)</li>
 </ul>
 <h2 id="choose-a-template">Choose a template<a class="headerlink" href="#choose-a-template" title="Permanent link">&para;</a></h2>
@@ -1388,61 +1377,56 @@
 </thead>
 <tbody>
 <tr>
-<td><code>cu_project</code></td>
+<td><code>project</code> / <code>cu_project</code></td>
 <td>Single-crate project for quick experiments.</td>
 </tr>
 <tr>
-<td><code>cu_full</code></td>
+<td><code>workspace</code> / <code>cu_full</code></td>
 <td>Multi-crate workspace with <code>apps/</code> and <code>components/</code>.</td>
 </tr>
 </tbody>
 </table>
-<h2 id="generate-from-a-local-checkout">Generate from a local checkout<a class="headerlink" href="#generate-from-a-local-checkout" title="Permanent link">&para;</a></h2>
-<ol>
-<li>Clone the repo and move into the templates directory:</li>
-</ol>
-<pre><code class="language-bash">git clone https://github.com/copper-project/copper-rs
-cd copper-rs/templates
+<h2 id="preferred-path-cargo-cunew">Preferred path: cargo-cunew<a class="headerlink" href="#preferred-path-cargo-cunew" title="Permanent link">&para;</a></h2>
+<p>Generate a single-crate project:</p>
+<pre><code class="language-bash">cargo cunew my_project
+cd my_project
+cargo run
 </code></pre>
-<ol>
-<li>Generate a workspace or single-crate project:</li>
-</ol>
-<pre><code class="language-bash"># Workspace template
-cargo +stable generate \
-    --path cu_full \
-    --name my_workspace \
-    --destination . \
-    --define copper_source=local \
-    --define copper_root_path=../..
-
-# Single-crate template
-cargo +stable generate \
-    --path cu_project \
+<p>Generate a workspace:</p>
+<pre><code class="language-bash">cargo cunew --template workspace my_workspace
+cd my_workspace
+cargo run -p cu_example_app
+</code></pre>
+<p>Choose a dependency source:</p>
+<ul>
+<li>default <code>--source crates.io</code>: resolves the latest stable Copper crate versions from crates.io</li>
+<li><code>--source git</code>: uses the Copper git repo, plus optional <code>--git-branch</code>, <code>--git-tag</code>, or <code>--git-rev</code></li>
+<li><code>--source local --copper-root /path/to/copper-rs</code>: points generated manifests at a local checkout</li>
+</ul>
+<h2 id="direct-template-path-for-development">Direct template path for development<a class="headerlink" href="#direct-template-path-for-development" title="Permanent link">&para;</a></h2>
+<p>The template source of truth now lives under:</p>
+<pre><code class="language-text">support/cargo_cunew/templates/
+</code></pre>
+<p>You can still use it directly with <code>cargo-generate</code> from a repo checkout:</p>
+<pre><code class="language-bash">cargo +stable generate \
+    --path support/cargo_cunew/templates/cu_project \
     --name my_project \
     --destination . \
     --define copper_source=local \
-    --define copper_root_path=../..
+    --define copper_root_path=/absolute/path/to/copper-rs
 </code></pre>
-<ol>
-<li>Move into the generated project and run it:</li>
-</ol>
-<pre><code class="language-bash">cd ../my_workspace
-cargo run -p my-workspace
-
-# or for the single-crate project
-cd ../my_project
-cargo run
+<p>Or for the workspace template:</p>
+<pre><code class="language-bash">cargo +stable generate \
+    --path support/cargo_cunew/templates/cu_full \
+    --name my_workspace \
+    --destination . \
+    --define copper_source=local \
+    --define copper_root_path=/absolute/path/to/copper-rs
 </code></pre>
-<h3 id="template-variables">Template variables<a class="headerlink" href="#template-variables" title="Permanent link">&para;</a></h3>
-<ul>
-<li><code>copper_source=local</code>: use the local <code>copper-rs</code> checkout.</li>
-<li><code>copper_root_path=../..</code>: path from the generated project back to the Copper repo root. Adjust if your layout differs.</li>
-</ul>
-<p>If you omit <code>--name</code> or <code>--define</code>, <code>cargo-generate</code> will prompt you interactively.</p>
 <h2 id="shortcuts">Shortcuts<a class="headerlink" href="#shortcuts" title="Permanent link">&para;</a></h2>
 <ul>
-<li><code>cargo cunew</code> is an alias for <code>cargo generate</code>.</li>
-<li>The <code>templates/justfile</code> includes <code>just gen-workspace</code> and <code>just gen-project</code> for standard names.</li>
+<li><code>cd support/cargo_cunew/templates &amp;&amp; just gen-project</code></li>
+<li><code>cd support/cargo_cunew/templates &amp;&amp; just gen-workspace</code></li>
 </ul>
 
 
