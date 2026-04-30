@@ -15,8 +15,6 @@ use syn::{LitStr, parse_macro_input};
 /// // If you want to add a cause to the error (any core::error::Error), you can do so like this:
 /// let my_error_with_cause = cu_error!("This is an error message").with_cause(my_cause);
 ///  ```
-///
-
 #[proc_macro]
 pub fn cu_error(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as LitStr);
