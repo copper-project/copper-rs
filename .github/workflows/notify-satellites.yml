@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        repo: [zed, extra-examples, benchmarks]
+        repo: [zed, extra-examples, benchmarks, cu-timetraveler]
     env:
       DISPATCH_TOKEN: ${{ secrets.COPPER_PROJECT_REPO_DISPATCH_TOKEN }}
       TARGET_REPO: ${{ matrix.repo }}
