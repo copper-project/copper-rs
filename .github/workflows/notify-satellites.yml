@@ -20,12 +20,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        repo: [zed, extra-examples, benchmarks, cu-timetraveler]
+        include:
+          - repo: zed
+            ref: master
+          - repo: extra-examples
+            ref: master
+          - repo: benchmarks
+            ref: master
+          - repo: cu-timetraveler
+            ref: main
     env:
       DISPATCH_TOKEN: ${{ secrets.COPPER_PROJECT_REPO_DISPATCH_TOKEN }}
       TARGET_REPO: ${{ matrix.repo }}
       TARGET_WORKFLOW: ci.yml
-      TARGET_REF: master
+      TARGET_REF: ${{ matrix.ref }}
     steps:
       - name: Trigger target CI workflow
         run: |
