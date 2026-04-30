@@ -1,0 +1,2 @@
+[alias]
+cunew = "run -p cargo-cunew --"

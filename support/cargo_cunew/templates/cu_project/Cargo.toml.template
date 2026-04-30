@@ -1,7 +1,7 @@
 [package]
 name = "{{project-name}}"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 default-run = "{{project-name|kebab_case}}"
 
 {% if copper_source == "local" %}
@@ -30,7 +30,7 @@ logreader = ["dep:cu29-export"]
 sim-debug = ["logreader", "cu29/reflect", "cu29/remote-debug"]
 
 [dependencies]
-cu29 = { {%if copper_source == "crates.io" %} version = "*" {%elsif copper_source == "git" %} git = "https://github.com/copper-project/copper-rs.git" {%elsif copper_source == "local" %}path = "{{copper_root_path}}/core/cu29" {%endif %} }
+cu29 = { {%if copper_source == "crates.io" %} version = "{{copper_version}}" {%elsif copper_source == "git" %} git = "{{copper_git_url}}"{{copper_git_ref_snippet}} {%elsif copper_source == "local" %} path = "{{copper_root_path}}/core/cu29" {%endif %} }
 bincode = { package = "cu-bincode", version = "2.0", default-features = false, features = ["derive", "alloc"] }
-serde = { version = "*", features = ["derive"] }
-cu29-export = { {%if copper_source == "crates.io" %}version = "*" {%elsif copper_source == "git" %} git = "https://github.com/copper-project/copper-rs.git" {%elsif copper_source == "local" %}path = "{{copper_root_path}}/core/cu29_export" {%endif %}, optional = true }
+serde = { version = "1.0", features = ["derive"] }
+cu29-export = { {%if copper_source == "crates.io" %} version = "{{copper_export_version}}" {%elsif copper_source == "git" %} git = "{{copper_git_url}}"{{copper_git_ref_snippet}} {%elsif copper_source == "local" %} path = "{{copper_root_path}}/core/cu29_export" {%endif %}, optional = true }

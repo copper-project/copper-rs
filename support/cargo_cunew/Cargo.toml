@@ -1,0 +1,31 @@
+[package]
+name = "cargo-cunew"
+description = "Bootstrap Copper projects from bundled templates."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+readme = "README.md"
+include = ["README.md", "src/**", "templates/**"]
+
+[dependencies]
+anyhow = { workspace = true, features = ["std"] }
+cargo-generate = "0.23.8"
+clap = { workspace = true }
+include_dir = "0.7.4"
+pathdiff = "0.2.3"
+reqwest = { version = "0.12", default-features = false, features = [
+  "blocking",
+  "json",
+  "rustls-tls",
+] }
+serde = { workspace = true, features = ["std"] }
+tempfile = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

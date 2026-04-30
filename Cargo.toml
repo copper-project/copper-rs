@@ -99,6 +99,7 @@ members = [
   "examples/cu_runtime_matrix",
   "examples/cu_parallel_mandelbrot",
   "examples/cu_remote_debug_session",
+  "support/cargo_cunew",
 ]
 
 # put only the core crates here that are not platform specific
