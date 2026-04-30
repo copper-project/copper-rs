@@ -27,7 +27,7 @@ Notes:
     - Drop `basic_copper_setup(...)`.
     - Drop `App::new(...)` / `App::new_with_resources(...)` in favor of `App::builder()`.
     - The app now owns logging setup.
-    - See `templates/cu_project/src/main.rs` or `examples/cu_caterpillar/src/main.rs`.
+    - See `support/cargo_cunew/templates/cu_project/src/main.rs` or `examples/cu_caterpillar/src/main.rs`.
 "#
         );
     }

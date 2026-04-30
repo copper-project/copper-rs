@@ -1,0 +1,24 @@
+# Template generation helpers for local testing.
+
+# Generate the single-project template into support/cargo_cunew/templates/test_project.
+gen-project:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  rm -rf test_project
+  cargo +stable run -p cargo-cunew -- test_project --template project --source local --copper-root ../../..
+
+# Generate the workspace template into support/cargo_cunew/templates/test_workspace.
+gen-workspace:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  rm -rf test_workspace
+  cargo +stable run -p cargo-cunew -- test_workspace --template workspace --source local --copper-root ../../..
+
+# Generate both template variants.
+gen-all:
+  just gen-project
+  just gen-workspace
+
+# Remove generated template outputs.
+clean-generated:
+  rm -rf test_project test_workspace

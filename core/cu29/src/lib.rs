@@ -7,14 +7,14 @@
 //! ## Quick start
 //!
 //! ```bash
-//! cargo install cargo-generate
-//! git clone https://github.com/copper-project/copper-rs
-//! cd copper-rs/templates
-//! cargo cunew /path/to/my_robot   # scaffolds a full Copper project
+//! cargo install cargo-cunew
+//! cargo cunew /path/to/my_robot
+//! cd /path/to/my_robot
+//! cargo run
 //! ```
 //!
-//! It will generate a minimal Copper robot project at `/path/to/my_robot`. `cargo build` should
-//! compile it out of the box.
+//! It will generate a minimal Copper robot project at `/path/to/my_robot` using the latest
+//! stable Copper crates from crates.io by default.
 //!
 //! ## Feature flags
 //!

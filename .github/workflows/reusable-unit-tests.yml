@@ -296,15 +296,19 @@ jobs:
 
       - name: Generate new templates on (${{ matrix.os }} | debug)
         run: |
-          cd templates
-          rm -rf test_project test_workspace
-          cargo +${{ inputs.toolchain }} generate -p cu_project --name test_project --destination . -d copper_source=local -d copper_root_path=../.. --silent
-          cargo +${{ inputs.toolchain }} generate -p cu_full --name test_workspace --destination . -d copper_source=local -d copper_root_path=../.. --silent
+          rm -rf support/cargo_cunew/templates/test_project support/cargo_cunew/templates/test_workspace
+          cargo +${{ inputs.toolchain }} run -p cargo-cunew -- support/cargo_cunew/templates/test_project --template project --source local --copper-root .
+          cargo +${{ inputs.toolchain }} run -p cargo-cunew -- support/cargo_cunew/templates/test_workspace --template workspace --source local --copper-root .
+          tmpdir="$(mktemp -d)"
+          cargo +${{ inputs.toolchain }} generate --path support/cargo_cunew/templates/cu_project --name cargo_generate_project --destination "$tmpdir" -d copper_source=local -d copper_root_path="$PWD" --silent
+          echo "CARGO_GENERATE_PROJECT=$tmpdir/cargo_generate_project" >> $GITHUB_ENV
       - name: Build generated templates on (${{ matrix.os }} | debug)
         run: |
-          cd templates/test_project
+          cd support/cargo_cunew/templates/test_project
           cargo +${{ inputs.toolchain }} build
           cd ../test_workspace
+          cargo +${{ inputs.toolchain }} build
+          cd "$CARGO_GENERATE_PROJECT"
           cargo +${{ inputs.toolchain }} build
 
       - name: Save sccache

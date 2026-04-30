@@ -39,4 +39,9 @@ resim-debug debug_base="copper/projects/{{project-name|snake_case}}/debug/v1" lo
 rcfg:
   #!/usr/bin/env bash
   set -euo pipefail
+  {% if copper_source == "local" %}
   {{copper_root_path}}/target/debug/cu29-rendercfg copperconfig.ron --open
+  {% else %}
+  echo "cu29-rendercfg currently requires a local Copper checkout. Re-run cargo cunew with --source local to enable just rcfg." >&2
+  exit 1
+  {% endif %}

@@ -201,21 +201,15 @@ std-ci mode="debug":
 		-- determinism_record_and_resim --test-threads=1
 
 	if [[ "$mode" == "debug" ]]; then
-		if ! cargo +stable generate --version >/dev/null 2>&1; then
-			cargo +stable install cargo-generate
-		fi
+		rm -rf support/cargo_cunew/templates/test_project support/cargo_cunew/templates/test_workspace
+		cargo +stable run -p cargo-cunew -- support/cargo_cunew/templates/test_project --template project --source local --copper-root .
+		cargo +stable run -p cargo-cunew -- support/cargo_cunew/templates/test_workspace --template workspace --source local --copper-root .
 		(
-			cd templates
-			rm -rf test_project test_workspace
-			cargo +stable generate -p cu_project --name test_project --destination . -d copper_source=local -d copper_root_path=../.. --silent
-			cargo +stable generate -p cu_full --name test_workspace --destination . -d copper_source=local -d copper_root_path=../.. --silent
-		)
-		(
-			cd templates/test_project
+			cd support/cargo_cunew/templates/test_project
 			cargo +stable build
 		)
 		(
-			cd templates/test_workspace
+			cd support/cargo_cunew/templates/test_workspace
 			cargo +stable build
 		)
 	fi
