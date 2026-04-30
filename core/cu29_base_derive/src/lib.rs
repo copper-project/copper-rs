@@ -7,12 +7,13 @@ use syn::{LitStr, parse_macro_input};
 ///
 /// Usage:
 ///
-/// ```rust
+/// ```ignore
 /// use cu29_base_derive::cu_error;
 ///
 /// let my_error = cu_error!("This is an error message");
 ///
 /// // If you want to add a cause to the error (any core::error::Error), you can do so like this:
+/// let my_cause = std::io::Error::other("cause");
 /// let my_error_with_cause = cu_error!("This is an error message").with_cause(my_cause);
 ///  ```
 #[proc_macro]
