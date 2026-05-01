@@ -163,6 +163,7 @@ runs:
         sudo apt-get install -y \
           python3-cbor2 \
           pkg-config \
+          libapriltag-dev \
           libasound2-dev \
           libudev-dev \
           libpcap-dev \
