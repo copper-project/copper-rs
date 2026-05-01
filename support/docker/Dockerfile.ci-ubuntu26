@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     git \
     curl \
+    sudo \
     python3 \
     python3-pip \
     python3-cbor2 \
