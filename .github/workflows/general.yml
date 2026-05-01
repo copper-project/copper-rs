@@ -29,18 +29,36 @@ jobs:
     outputs:
       image: ${{ steps.image_ref.outputs.image }}
     steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - id: image_ref
         shell: bash
         run: |
           stable_image="ghcr.io/copper-project/copper-rs-ci:ubuntu-26.04"
-          if docker manifest inspect "$stable_image" >/dev/null 2>&1; then
-            echo "image=$stable_image" >> "$GITHUB_OUTPUT"
-            echo "should_build=false" >> "$GITHUB_OUTPUT"
-            exit 0
+          force_rebuild=false
+          relevant_image_paths='^(support/docker/|\.github/actions/rust-ci-setup/action\.yml$|\.github/workflows/general\.yml$|\.github/workflows/build-ci-images\.yml$)'
+
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            if [[ "${{ github.event.pull_request.head.repo.full_name }}" != "$GITHUB_REPOSITORY" ]]; then
+              echo "image=" >> "$GITHUB_OUTPUT"
+              echo "should_build=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            changed_files="$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "$GITHUB_SHA")"
+            if grep -Eq "$relevant_image_paths" <<<"$changed_files"; then
+              force_rebuild=true
+            fi
+          elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            changed_files="$(git diff --name-only "${{ github.event.before }}" "$GITHUB_SHA" || true)"
+            if grep -Eq "$relevant_image_paths" <<<"$changed_files"; then
+              force_rebuild=true
+            fi
           fi
 
-          if [[ "$GITHUB_EVENT_NAME" == "pull_request" && "${{ github.event.pull_request.head.repo.full_name }}" != "$GITHUB_REPOSITORY" ]]; then
-            echo "image=" >> "$GITHUB_OUTPUT"
+          if [[ "$force_rebuild" != "true" ]] && docker manifest inspect "$stable_image" >/dev/null 2>&1; then
+            echo "image=$stable_image" >> "$GITHUB_OUTPUT"
             echo "should_build=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -56,8 +74,6 @@ jobs:
             fi
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v6
-        if: steps.image_ref.outputs.should_build == 'true'
       - name: Log in to GHCR
         if: steps.image_ref.outputs.should_build == 'true'
         uses: docker/login-action@v3

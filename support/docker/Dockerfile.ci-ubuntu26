@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     sudo \
     python3 \
+    python3-dev \
     python3-pip \
     python3-cbor2 \
     build-essential \
