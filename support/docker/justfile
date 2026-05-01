@@ -12,6 +12,12 @@ docker-build-cuda-env:
 	set -euo pipefail
 	docker build -f Dockerfile.ubuntu-cuda -t copper-rs-cuda-env .
 
+# Build the Ubuntu 26.04 CI image used by GitHub Actions Linux jobs.
+docker-build-ci-ubuntu26:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	docker build -f Dockerfile.ci-ubuntu26 -t copper-rs-ci:ubuntu-26.04 .
+
 # Run the base devcontainer image with the repo mounted.
 docker-run-env:
 	#!/usr/bin/env bash

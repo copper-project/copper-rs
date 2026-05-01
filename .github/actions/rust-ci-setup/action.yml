@@ -12,6 +12,10 @@ inputs:
     description: Use Linux-only cargo paths.
     required: false
     default: "false"
+  prebaked_linux_image:
+    description: Skip Linux host setup because system dependencies are baked into the job container image.
+    required: false
+    default: "false"
   cache_prefix:
     description: Rust cache prefix key.
     required: true
@@ -97,7 +101,7 @@ runs:
       uses: Cyberboss/install-winget@v1
 
     - name: Free Disk Space (Ubuntu)
-      if: runner.os == 'Linux'
+      if: runner.os == 'Linux' && inputs.prebaked_linux_image != 'true'
       uses: jlumbroso/free-disk-space@main
       with:
         # this might remove tools that are actually needed,
@@ -112,7 +116,7 @@ runs:
         swap-storage: true
 
     - name: Linux-only Cargo paths
-      if: runner.os == 'Linux' && inputs.linux_cargo_paths == 'true'
+      if: runner.os == 'Linux' && inputs.linux_cargo_paths == 'true' && inputs.prebaked_linux_image != 'true'
       shell: bash
       run: |
         echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> "$GITHUB_ENV"
@@ -152,7 +156,7 @@ runs:
         echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
     - name: Install dependencies (Linux)
-      if: runner.os == 'Linux'
+      if: runner.os == 'Linux' && inputs.prebaked_linux_image != 'true'
       shell: bash
       run: |
         sudo apt-get update

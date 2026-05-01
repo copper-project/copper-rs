@@ -1,0 +1,52 @@
+name: Build CI Images
+
+on:
+  push:
+    branches: [ "master" ]
+    paths:
+      - "support/docker/**"
+      - ".github/workflows/build-ci-images.yml"
+  pull_request:
+    branches: [ "master" ]
+    paths:
+      - "support/docker/**"
+      - ".github/workflows/build-ci-images.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  linux-ci-image:
+    name: Linux CI Image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - id: image_refs
+        shell: bash
+        run: |
+          image="ghcr.io/copper-project/copper-rs-ci"
+          {
+            echo "tags<<EOF"
+            echo "${image}:ubuntu-26.04"
+            echo "${image}:ubuntu-26.04-${GITHUB_SHA}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Log in to GHCR
+        if: github.ref == 'refs/heads/master'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Linux CI image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./support/docker
+          file: ./support/docker/Dockerfile.ci-ubuntu26
+          pull: true
+          push: ${{ github.ref == 'refs/heads/master' }}
+          tags: ${{ steps.image_refs.outputs.tags }}
+          cache-from: type=gha,scope=linux-ci-image-ubuntu26
+          cache-to: type=gha,mode=max,scope=linux-ci-image-ubuntu26
