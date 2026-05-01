@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#v0150-2026-03-31" class="md-skip">
+        <a href="#v100-rc1-2026-05-01" class="md-skip">
           Skip to content
         </a>
       
@@ -1400,21 +1400,122 @@
   
 
 
-<h1 id="v0150-2026-03-31">v0.15.0 - 2026-03-31<a class="headerlink" href="#v0150-2026-03-31" title="Permanent link">&para;</a></h1>
+<h1 id="v100-rc1-2026-05-01">v1.0.0-rc1 - 2026-05-01<a class="headerlink" href="#v100-rc1-2026-05-01" title="Permanent link">&para;</a></h1>
 <h2 id="high-level">High Level<a class="headerlink" href="#high-level" title="Permanent link">&para;</a></h2>
+<p>The <code>0.x</code> line is where Copper explored the runtime design space we did not want to lock down too early: deterministic replay, bridges, missions/subsystems, distributed replay, optional parallel execution, structured logging, and remote debugging. <code>v1.0.0-rc1</code> uses that experience to define the first stable application-facing contract and to begin specifying, more clearly, the responsibilities of Copper-the-compiler/codegen and Copper-the-runtime.</p>
+<p>A second theme of the release is typed logging codecs. Copper can now choose a log compression strategy based on payload semantics instead of forcing every robotics workload through one generic representation. The first shipped examples are lossless image codecs, but the mechanism is meant for a wider class of robotics data such as floating-point matrices, skinny matrices, point clouds, and other structured payloads.</p>
+<h2 id="breaking-api-changes">Breaking API Changes<a class="headerlink" href="#breaking-api-changes" title="Permanent link">&para;</a></h2>
+<ul>
+<li>
+<p><strong>V1 compatibility guarantees now apply only to the documented stable surface</strong><br />
+  Copper now ships an explicit V1 API contract in <code>docs/v1-api-surface.md</code>, backed by checked-in public API snapshots under <code>api/v1/</code>. The canonical application surface is now the documented one: <code>cu29::prelude</code>, <code>#[copper_runtime(...)]</code>, generated builders, the config model, task/bridge authoring traits, and the replay/export/logging APIs listed there. Lower-level modules that stayed public for proc-macro, generated-code, or rustdoc reasons are now clearly labeled <code>experimental</code> or <code>internal</code>, so downstream crates should not assume every public path is part of the semver promise. (<a href="https://github.com/copper-project/copper-rs/pull/1048">#1048</a>)</p>
+</li>
+<li>
+<p><strong>Bootstrap/template paths changed around <code>cargo-cunew</code></strong><br />
+  Project scaffolding now centers on <code>cargo-cunew</code>, with templates living under <code>support/cargo_cunew/templates/</code> rather than the old top-level <code>templates/</code> layout. If you have internal docs or automation that referenced the old template paths directly, update them to the new tool/workflow. (<a href="https://github.com/copper-project/copper-rs/pull/1064">#1064</a>)</p>
+</li>
+<li>
+<p><strong>The core repo surface is slimmer: visualization and heavy integrations moved out</strong><br />
+<code>cu29_logviz</code> and the in-tree Rerun demo path were removed from the core repo, Zed support moved to <code>copper-project/zed</code>, and several heavy examples/benchmarks moved to satellite repositories. This reduces compile/CI weight for the core, but it also means path-based references into those old in-tree crates need to be updated. (<a href="https://github.com/copper-project/copper-rs/pull/1051">#1051</a>, <a href="https://github.com/copper-project/copper-rs/pull/1053">#1053</a>, <a href="https://github.com/copper-project/copper-rs/pull/1060">#1060</a>)</p>
+</li>
+</ul>
+<h2 id="new-features">New Features<a class="headerlink" href="#new-features" title="Permanent link">&para;</a></h2>
+<ul>
+<li>
+<p><strong>Typed log codecs: compression can now follow payload semantics</strong><br />
+  Copper can now bind logging codecs by task output type through RON config, so structured robotics data no longer needs a one-size-fits-all log encoding. The mechanism is general enough to support future workload-specific codecs for floating-point matrices, skinny matrices, point clouds, or other payload families where domain structure matters for compression. (<a href="https://github.com/copper-project/copper-rs/pull/1008">#1008</a>)</p>
+</li>
+<li>
+<p><strong>First concrete codecs: lossless image compression with PNG and FFV1</strong><br />
+  The first shipped codecs are <code>cu_png_codec</code> and <code>cu_ffv1_codec</code>, demonstrated by <code>cu_image_codec_demo</code>. Together they show that Copper can compress image streams losslessly inside the unified logging pipeline while keeping codec selection declarative and type-aware. (<a href="https://github.com/copper-project/copper-rs/pull/1008">#1008</a>, <a href="https://github.com/copper-project/copper-rs/pull/1009">#1009</a>)</p>
+</li>
+<li>
+<p><strong><code>CuImage</code> now has first-class multiplane image support</strong><br />
+<code>CuImage</code> can now represent multiplane layouts directly, which is a much better fit for real camera/video formats and part of what makes the new lossless image codec path practical. It also lays groundwork for cleaner interop with ROS/media-oriented payloads. (<a href="https://github.com/copper-project/copper-rs/pull/1007">#1007</a>)</p>
+</li>
+<li>
+<p><strong>Replay and remote-debug are becoming real tool interfaces</strong><br />
+  Copper now has a shared replay CLI contract, remote-debug autodiscovery, replayed CopperList snapshot access, and richer debug schema/field metadata. This makes replay/debug sessions easier to automate and a much better base for higher-level tooling. (<a href="https://github.com/copper-project/copper-rs/pull/1015">#1015</a>, <a href="https://github.com/copper-project/copper-rs/pull/1016">#1016</a>, <a href="https://github.com/copper-project/copper-rs/pull/1018">#1018</a>, <a href="https://github.com/copper-project/copper-rs/pull/1019">#1019</a>, <a href="https://github.com/copper-project/copper-rs/pull/1033">#1033</a>)</p>
+</li>
+<li>
+<p><strong>New sensor support: SEN0682 / WY6005 ToF lidar</strong><br />
+  Added a Copper source for the DFRobot SEN0682 / Wanyee WY6005 ToF lidar, including probe/debug examples and host/embedded-oriented metadata for the component catalog. (<a href="https://github.com/copper-project/copper-rs/pull/1027">#1027</a>)</p>
+</li>
+</ul>
+<h2 id="configapi-updates">Config/API Updates<a class="headerlink" href="#configapi-updates" title="Permanent link">&para;</a></h2>
+<ul>
+<li>
+<p><strong>The V1 public contract is now checked and versioned</strong><br />
+  Added checked-in public API baselines under <code>api/v1/</code> and CI-aligned <code>just api-check</code> / <code>just api-update</code> workflows. This is the practical mechanism behind the new backward-compatibility promise: changes to the documented stable surface now have to be intentional and reviewable. (<a href="https://github.com/copper-project/copper-rs/pull/1048">#1048</a>)</p>
+</li>
+<li>
+<p><strong>Task roles are now expressible directly in config</strong><br />
+  Tasks can explicitly declare <code>kind: source|task|sink</code> in RON. This removes ambiguity for graph shapes that used to rely on inference and is a key step toward a clearer contract between Copper-the-compiler/codegen and Copper-the-runtime. (<a href="https://github.com/copper-project/copper-rs/pull/1037">#1037</a>)</p>
+</li>
+<li>
+<p><strong>Background execution now includes source tasks</strong><br />
+  Background work is no longer limited to regular tasks; input-free source tasks can now run as background producers as well. This broadens the runtime model without inventing a separate abstraction for "background sources". (<a href="https://github.com/copper-project/copper-rs/pull/1024">#1024</a>)</p>
+</li>
+<li>
+<p><strong>Unified log files now carry a general format version</strong><br />
+  The unified log header now tags the overall log format version explicitly, which gives future tooling and compatibility work a firmer base. (<a href="https://github.com/copper-project/copper-rs/pull/1046">#1046</a>)</p>
+</li>
+</ul>
+<h2 id="enhancements">Enhancements<a class="headerlink" href="#enhancements" title="Permanent link">&para;</a></h2>
+<ul>
+<li>
+<p><strong><code>cargo-cunew</code> becomes the preferred onboarding path</strong><br />
+  Copper now ships a dedicated <code>cargo-cunew</code> bootstrap tool for single-crate and workspace scaffolds, instead of expecting users to piece together <code>cargo-generate</code> flows manually. This makes the "start a Copper project" path much closer to the V1 UX we want to support long-term. (<a href="https://github.com/copper-project/copper-rs/pull/1064">#1064</a>)</p>
+</li>
+<li>
+<p><strong>A live component catalog now exists</strong><br />
+  The repo now includes the metadata model and generator for a contributor-friendly Copper component catalog, making it easier to discover reusable components and publish ecosystem crates without forcing everything into the main workspace. (<a href="https://github.com/copper-project/copper-rs/pull/1022">#1022</a>)</p>
+</li>
+<li>
+<p><strong>Platform support expectations are now explicit</strong><br />
+  The contributing docs now define support tiers and validation scope, making it much clearer what Copper treats as release-blocking host, <code>no_std</code>, and embedded surfaces. (<a href="https://github.com/copper-project/copper-rs/pull/1047">#1047</a>)</p>
+</li>
+<li>
+<p><strong>Core compile weight was reduced by moving faster-moving tooling out</strong><br />
+  Rerun/logviz was removed from the core repo, benchmarks/heavy demos moved out, and Zed support was split into its own repo. This is partly cleanup, but also part of the V1 strategy: keep the compatibility surface smaller and let satellite tooling move faster. (<a href="https://github.com/copper-project/copper-rs/pull/1051">#1051</a>, <a href="https://github.com/copper-project/copper-rs/pull/1053">#1053</a>, <a href="https://github.com/copper-project/copper-rs/pull/1060">#1060</a>)</p>
+</li>
+</ul>
+<h2 id="bug-fixes">Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h2>
+<ul>
+<li>
+<p><strong>Replay correctness around keyframes and task state</strong><br />
+  Fixed replay restoration so keyframes and <code>cu_pid</code> state restore correctly, which is essential now that replay/debug is treated as a first-class workflow rather than just an example convenience. (<a href="https://github.com/copper-project/copper-rs/pull/1020">#1020</a>)</p>
+</li>
+<li>
+<p><strong>Mission-generated input shapes are now stable</strong><br />
+  Fixed variable input-shape issues caused by missions so sinks/tasks see the union of possible inputs when missions diverge. This closes an important edge case in generated runtime behavior. (<a href="https://github.com/copper-project/copper-rs/pull/1039">#1039</a>)</p>
+</li>
+<li>
+<p><strong>Runtime/logging robustness fixes</strong><br />
+  Fixed stack overflows in handle decode, accepted newer/non-exhaustive RON number variants, and filtered default bridge TX publication for null payloads unless explicitly requested. These are small individually, but they tighten several correctness edges in core runtime behavior. (<a href="https://github.com/copper-project/copper-rs/pull/993">#993</a>, <a href="https://github.com/copper-project/copper-rs/pull/995">#995</a>, <a href="https://github.com/copper-project/copper-rs/pull/1050">#1050</a>)</p>
+</li>
+</ul>
+<h2 id="dependency-updates">Dependency Updates<a class="headerlink" href="#dependency-updates" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Rust MSRV is now <code>1.95</code>, and the workspace/CI was updated accordingly. (<a href="https://github.com/copper-project/copper-rs/pull/1040">#1040</a>, <a href="https://github.com/copper-project/copper-rs/pull/1045">#1045</a>)</li>
+<li>General dependency cleanup continued across the slimmer V1 core, including <code>hashbrown</code> <code>0.17</code>, <code>jsonschema</code> <code>0.46</code>, <code>winit</code> <code>0.30.13</code>, and related maintenance bumps. (<a href="https://github.com/copper-project/copper-rs/pull/1031">#1031</a>, <a href="https://github.com/copper-project/copper-rs/pull/1032">#1032</a>, <a href="https://github.com/copper-project/copper-rs/pull/1055">#1055</a>)</li>
+</ul>
+<!-- v1.0.0-rc1 PR links -->
+<h1 id="v0150-2026-03-31">v0.15.0 - 2026-03-31<a class="headerlink" href="#v0150-2026-03-31" title="Permanent link">&para;</a></h1>
+<h2 id="high-level_1">High Level<a class="headerlink" href="#high-level_1" title="Permanent link">&para;</a></h2>
 <p>This release pushes Copper from "deterministic robot runtime" toward "deterministic distributed runtime". The big theme is distributed Copper: not only as a multi-subsystem configuration (sub components of one robot) but also we can now describe a whole swarm-style deployment by stamping out many robot instances with per-instance overrides, and replay the resulting distributed logs deterministically.</p>
 <p>On the runtime side, CopperList I/O can now move off the main loop, an optional parallel execution path keeps multiple CopperLists in flight boosting the general throughput while preserving ordered commit/logging, and host-side cadence control got a tighter high-precision limiter if you need to controlled minimum tick generation.</p>
-<h2 id="breaking-api-changes">Breaking API Changes<a class="headerlink" href="#breaking-api-changes" title="Permanent link">&para;</a></h2>
+<h2 id="breaking-api-changes_1">Breaking API Changes<a class="headerlink" href="#breaking-api-changes_1" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong><code>cu29-helpers</code> is retired; generated app builders are now the migration path</strong><br />
 <code>cu29-helpers</code> now exists only as a compatibility stub that points downstream users to the generated builder API. If you previously relied on helper-based setup, migrate to the generated app builder and configure log path, clock, logger, config override, resources, and <code>instance_id</code> there. (<a href="https://github.com/copper-project/copper-rs/pull/975">#975</a>)<br />
-  New style:
-  <code>rust
+  New style:</li>
+</ul>
+<p><code>rust
   let mut app = MyApp::builder()
       .with_log_path(log_path, slab_size)?
-      .build()?;</code></li>
-</ul>
-<h2 id="new-features">New Features<a class="headerlink" href="#new-features" title="Permanent link">&para;</a></h2>
+      .build()?;</code></p>
+<h2 id="new-features_1">New Features<a class="headerlink" href="#new-features_1" title="Permanent link">&para;</a></h2>
 <ul>
 <li>
 <p><strong>Distributed Copper for multi-robot and swarm-style deployments</strong><br />
@@ -1433,12 +1534,12 @@
 <code>runtime.rate_target_hz</code> now has an optional <code>high-precision-limiter</code> mode that uses a hybrid sleep/spin loop for tighter host-side cadence. This is aimed at applications that want a bounded execution rate without the looser timing of a pure sleep-based limiter. (<a href="https://github.com/copper-project/copper-rs/pull/988">#988</a>)</p>
 </li>
 </ul>
-<h2 id="configapi-updates">Config/API Updates<a class="headerlink" href="#configapi-updates" title="Permanent link">&para;</a></h2>
+<h2 id="configapi-updates_1">Config/API Updates<a class="headerlink" href="#configapi-updates_1" title="Permanent link">&para;</a></h2>
 <ul>
-<li>
-<p><strong>Per-instance config overlays make fleets practical to manage</strong><br />
-  A multi-Copper config can now declare an <code>instance_overrides_root</code>, letting each robot instance keep a small overlay file instead of copying and forking an entire subsystem graph. Example:
-  <code>ron
+<li><strong>Per-instance config overlays make fleets practical to manage</strong><br />
+  A multi-Copper config can now declare an <code>instance_overrides_root</code>, letting each robot instance keep a small overlay file instead of copying and forking an entire subsystem graph. Example:</li>
+</ul>
+<p><code>ron
   (
       subsystems: [
           (
@@ -1448,9 +1549,9 @@
       ],
       interconnects: [],
       instance_overrides_root: "instances",
-  )</code>
-  Then <code>instances/17/robot.ron</code> can override only the fields that differ:
-  <code>ron
+  )</code></p>
+<p>Then <code>instances/17/robot.ron</code> can override only the fields that differ:</p>
+<p><code>ron
   (
       set: [
           (
@@ -1461,9 +1562,9 @@
               },
           ),
       ],
-  )</code>
-  In practice, that means one static robot graph can be deployed as robot <code>17</code>, <code>42</code>, or <code>500</code> with different calibration or identity, while the generated code and topology stay identical. (<a href="https://github.com/copper-project/copper-rs/pull/976">#976</a>)</p>
-</li>
+  )</code></p>
+<p>In practice, that means one static robot graph can be deployed as robot <code>17</code>, <code>42</code>, or <code>500</code> with different calibration or identity, while the generated code and topology stay identical. (<a href="https://github.com/copper-project/copper-rs/pull/976">#976</a>)</p>
+<ul>
 <li>
 <p><strong>Subsystem-aware generated apps and builders</strong><br />
 <code>#[copper_runtime(...)]</code> now accepts <code>subsystem = "..."</code> for multi-Copper configs, builders carry <code>instance_id</code>, and the generated runtime preserves subsystem identity in lifecycle/debug/replay metadata. That makes subsystem-specific logs, replay registration, and per-instance app construction type-safe instead of stringly runtime glue. (<a href="https://github.com/copper-project/copper-rs/pull/958">#958</a>, <a href="https://github.com/copper-project/copper-rs/pull/964">#964</a>, <a href="https://github.com/copper-project/copper-rs/pull/974">#974</a>)</p>
@@ -1477,7 +1578,7 @@
   The runtime construction refactor consolidates generated application setup around the builder API, and the old direct <code>CuRuntime::new(...)</code> family is now clearly secondary/deprecated. This is the same migration path used to replace <code>cu29-helpers</code>. (<a href="https://github.com/copper-project/copper-rs/pull/974">#974</a>, <a href="https://github.com/copper-project/copper-rs/pull/975">#975</a>)</p>
 </li>
 </ul>
-<h2 id="enhancements">Enhancements<a class="headerlink" href="#enhancements" title="Permanent link">&para;</a></h2>
+<h2 id="enhancements_1">Enhancements<a class="headerlink" href="#enhancements_1" title="Permanent link">&para;</a></h2>
 <ul>
 <li>
 <p><strong>Distributed graph tooling and examples got much stronger</strong><br />
@@ -1492,7 +1593,7 @@
   Python integration now has shared-memory-backed <code>CuHandle</code> support and Python-side bindings/bootstrap support for those buffers, which reduces extra copies for the subset of payloads already represented as shared-memory handles. That keeps the "prototype in Python, move to Rust later" workflow more practical for image-like payloads. (<a href="https://github.com/copper-project/copper-rs/pull/954">#954</a>)</p>
 </li>
 </ul>
-<h2 id="bug-fixes">Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h2>
+<h2 id="bug-fixes_1">Bug Fixes<a class="headerlink" href="#bug-fixes_1" title="Permanent link">&para;</a></h2>
 <ul>
 <li>
 <p><strong>Config resolution and runtime statistics correctness</strong><br />
@@ -1507,7 +1608,7 @@
   Fixed TUI feature breakage and removed a vestigial ALSA dependency from the Bevy/TUI path. (<a href="https://github.com/copper-project/copper-rs/pull/981">#981</a>, <a href="https://github.com/copper-project/copper-rs/pull/982">#982</a>)</p>
 </li>
 </ul>
-<h2 id="dependency-updates">Dependency Updates<a class="headerlink" href="#dependency-updates" title="Permanent link">&para;</a></h2>
+<h2 id="dependency-updates_1">Dependency Updates<a class="headerlink" href="#dependency-updates_1" title="Permanent link">&para;</a></h2>
 <ul>
 <li><code>avian3d</code> 0.5.0 -&gt; 0.6.1 (<a href="https://github.com/copper-project/copper-rs/pull/949">#949</a>)</li>
 <li><code>soft-ratatui</code> 0.2 updates/backports (<a href="https://github.com/copper-project/copper-rs/pull/984">#984</a>)</li>
@@ -1515,41 +1616,39 @@
 </ul>
 <!-- v0.15.0 PR links -->
 <h1 id="v0140-2026-03-19">v0.14.0 - 2026-03-19<a class="headerlink" href="#v0140-2026-03-19" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_1">High Level<a class="headerlink" href="#high-level_1" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_2">High Level<a class="headerlink" href="#high-level_2" title="Permanent link">&para;</a></h2>
 <p>This release makes Copper much easier to explore and debug without relaxing its realtime design center. The headline feature is Python: Copper now has a Python task bridge for rapidly prototyping one task (and a smooth path towards a Rust migration).
 Monitoring also gets a v1 redesign with multi-monitor composition and a dedicated safety monitor, while the web assembly (runtime in browser) demo path, ROS2 bridge support, and reference components all moved forward.</p>
-<h2 id="breaking-api-changes_1">Breaking API Changes<a class="headerlink" href="#breaking-api-changes_1" title="Permanent link">&para;</a></h2>
+<h2 id="breaking-api-changes_2">Breaking API Changes<a class="headerlink" href="#breaking-api-changes_2" title="Permanent link">&para;</a></h2>
 <ul>
-<li>
-<p><strong>Task and bridge lifecycle callbacks now receive <code>&amp;CuContext</code> instead of <code>&amp;RobotClock</code></strong><br />
+<li><strong>Task and bridge lifecycle callbacks now receive <code>&amp;CuContext</code> instead of <code>&amp;RobotClock</code></strong><br />
   Why: callbacks now get the runtime clock <em>and</em> execution metadata such as the current CopperList id and task identity. That context is also the common shape used by simulation, monitoring, and Python integration. Update lifecycle methods on <code>CuSrcTask</code>, <code>CuTask</code>, <code>CuSinkTask</code>, and <code>CuBridge</code>. (<a href="https://github.com/copper-project/copper-rs/pull/857">#857</a>)<br />
-  Before:
-  <code>rust
-  fn process(&amp;mut self, clock: &amp;RobotClock, input: &amp;Self::Input&lt;'_&gt;, output: &amp;mut Self::Output&lt;'_&gt;) -&gt; CuResult&lt;()&gt;</code>
-  After:
-  <code>rust
+  Before:</li>
+</ul>
+<p><code>rust
+  fn process(&amp;mut self, clock: &amp;RobotClock, input: &amp;Self::Input&lt;'_&gt;, output: &amp;mut Self::Output&lt;'_&gt;) -&gt; CuResult&lt;()&gt;</code></p>
+<p>After:</p>
+<p><code>rust
   fn process(&amp;mut self, ctx: &amp;CuContext, input: &amp;Self::Input&lt;'_&gt;, output: &amp;mut Self::Output&lt;'_&gt;) -&gt; CuResult&lt;()&gt;</code></p>
-</li>
-<li>
-<p><strong>Custom monitor implementations must port to Monitoring v1</strong><br />
+<ul>
+<li><strong>Custom monitor implementations must port to Monitoring v1</strong><br />
   Why: the monitor API is now explicit and typed instead of being assembled through late setters. <code>CuMonitor::new</code> now receives <code>CuMonitoringMetadata</code> and <code>CuMonitoringRuntime</code>, <code>process_copperlist</code> receives a <code>CopperListView</code>, and <code>process_error</code> now uses <code>ComponentId</code> plus <code>CuComponentState</code>. Old <code>set_topology(...)</code> and <code>set_copperlist_info(...)</code> hooks are gone because that data is part of the construction metadata. This is what enables multi-monitor composition and the dedicated safety-monitor path. (<a href="https://github.com/copper-project/copper-rs/pull/860">#860</a>, <a href="https://github.com/copper-project/copper-rs/pull/868">#868</a>, <a href="https://github.com/copper-project/copper-rs/pull/877">#877</a>)<br />
-  Old signatures:
-  <code>rust
+  Old signatures:</li>
+</ul>
+<p><code>rust
   fn new(config: &amp;CuConfig, taskids: &amp;'static [&amp;'static str]) -&gt; CuResult&lt;Self&gt;;
   fn process_copperlist(&amp;self, msgs: &amp;[&amp;CuMsgMetadata]) -&gt; CuResult&lt;()&gt;;
-  fn process_error(&amp;self, taskid: usize, step: CuTaskState, error: &amp;CuError) -&gt; Decision;</code>
-  New signatures:
-  <code>rust
+  fn process_error(&amp;self, taskid: usize, step: CuTaskState, error: &amp;CuError) -&gt; Decision;</code></p>
+<p>New signatures:</p>
+<p><code>rust
   fn new(metadata: CuMonitoringMetadata, runtime: CuMonitoringRuntime) -&gt; CuResult&lt;Self&gt;;
   fn process_copperlist(&amp;self, ctx: &amp;CuContext, view: CopperListView&lt;'_&gt;) -&gt; CuResult&lt;()&gt;;
   fn process_error(&amp;self, component_id: ComponentId, step: CuComponentState, error: &amp;CuError) -&gt; Decision;</code></p>
-</li>
-<li>
-<p><strong>If you build with <code>reflect</code>, payload types now need proper reflection metadata</strong><br />
-  Why: schema/debug/export/Python flows rely more directly on reflected payloads. Under the <code>reflect</code> feature, <code>CuMsgPayload</code> now requires <code>Reflect</code> and <code>TypePath</code>. In practice that usually means deriving <code>Reflect</code> on your message payloads and checking any wrappers/generic payload types still satisfy the bound. (<a href="https://github.com/copper-project/copper-rs/pull/893">#893</a>, <a href="https://github.com/copper-project/copper-rs/pull/894">#894</a>)</p>
-</li>
+<ul>
+<li><strong>If you build with <code>reflect</code>, payload types now need proper reflection metadata</strong><br />
+  Why: schema/debug/export/Python flows rely more directly on reflected payloads. Under the <code>reflect</code> feature, <code>CuMsgPayload</code> now requires <code>Reflect</code> and <code>TypePath</code>. In practice that usually means deriving <code>Reflect</code> on your message payloads and checking any wrappers/generic payload types still satisfy the bound. (<a href="https://github.com/copper-project/copper-rs/pull/893">#893</a>, <a href="https://github.com/copper-project/copper-rs/pull/894">#894</a>)</li>
 </ul>
-<h2 id="new-features_1">New Features<a class="headerlink" href="#new-features_1" title="Permanent link">&para;</a></h2>
+<h2 id="new-features_2">New Features<a class="headerlink" href="#new-features_2" title="Permanent link">&para;</a></h2>
 <ul>
 <li>
 <p><strong>Python support for tasks</strong><br />
@@ -1572,21 +1671,21 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
   Added <code>cu_dps310</code> (barometer/thermometer), <code>cu_ist8310</code> (magnetometer), and <code>cu_feetech</code> (Feetech servo bus for STS3215/SO101). GNSS is now wired through the flight-controller reference path as well, which makes the main example stack more representative of a real robot application. (<a href="https://github.com/copper-project/copper-rs/pull/844">#844</a>, <a href="https://github.com/copper-project/copper-rs/pull/845">#845</a>, <a href="https://github.com/copper-project/copper-rs/pull/846">#846</a>, <a href="https://github.com/copper-project/copper-rs/pull/882">#882</a>)</p>
 </li>
 </ul>
-<h2 id="configapi-updates_1">Config/API Updates<a class="headerlink" href="#configapi-updates_1" title="Permanent link">&para;</a></h2>
+<h2 id="configapi-updates_2">Config/API Updates<a class="headerlink" href="#configapi-updates_2" title="Permanent link">&para;</a></h2>
 <ul>
-<li>
-<p><strong>Single-monitor configs use <code>monitor</code>, multi-monitor fan-out uses <code>monitors</code></strong><br />
-  For one monitor, prefer:
-  <code>ron
-  monitor: (type: "your_monitor::Type")</code>
-  For fan-out, use:
-  <code>ron
+<li><strong>Single-monitor configs use <code>monitor</code>, multi-monitor fan-out uses <code>monitors</code></strong><br />
+  For one monitor, prefer:</li>
+</ul>
+<p><code>ron
+  monitor: (type: "your_monitor::Type")</code></p>
+<p>For fan-out, use:</p>
+<p><code>ron
   monitors: [
       (type: "monitor_a::Type"),
       (type: "monitor_b::Type"),
-  ]</code>
-  Config deserialization accepts both forms, so existing configurations continue to load. (<a href="https://github.com/copper-project/copper-rs/pull/868">#868</a>, <a href="https://github.com/copper-project/copper-rs/pull/877">#877</a>)</p>
-</li>
+  ]</code></p>
+<p>Config deserialization accepts both forms, so existing configurations continue to load. (<a href="https://github.com/copper-project/copper-rs/pull/868">#868</a>, <a href="https://github.com/copper-project/copper-rs/pull/877">#877</a>)</p>
+<ul>
 <li>
 <p><strong>Bridges now support <code>run_in_sim</code></strong><br />
   Bridges can now opt in or out of running their real implementation in simulation mode, just like sources and sinks already could. The bridge default is <code>true</code> to preserve historical behavior. This is useful for middleware-style bridges that should stay live during simulation. (<a href="https://github.com/copper-project/copper-rs/pull/862">#862</a>)</p>
@@ -1600,7 +1699,7 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
   The generic tuple support for task inputs was extended from 5 to 12, which removes a lot of unnecessary merger tasks in larger graphs. (<a href="https://github.com/copper-project/copper-rs/pull/880">#880</a>)</p>
 </li>
 </ul>
-<h2 id="enhancements_1">Enhancements<a class="headerlink" href="#enhancements_1" title="Permanent link">&para;</a></h2>
+<h2 id="enhancements_2">Enhancements<a class="headerlink" href="#enhancements_2" title="Permanent link">&para;</a></h2>
 <ul>
 <li>
 <p><strong>Runtime/debug/export plumbing got deeper</strong><br />
@@ -1615,7 +1714,7 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
   The flight controller and BalanceBot examples now share the same optional Bevy monitor pattern, browser demo path, and much better overlays/UI. That makes them stronger examples for new users evaluating Copper. (<a href="https://github.com/copper-project/copper-rs/pull/863">#863</a>, <a href="https://github.com/copper-project/copper-rs/pull/865">#865</a>, <a href="https://github.com/copper-project/copper-rs/pull/871">#871</a>, <a href="https://github.com/copper-project/copper-rs/pull/919">#919</a>, <a href="https://github.com/copper-project/copper-rs/pull/920">#920</a>)</p>
 </li>
 </ul>
-<h2 id="bug-fixes_1">Bug Fixes<a class="headerlink" href="#bug-fixes_1" title="Permanent link">&para;</a></h2>
+<h2 id="bug-fixes_2">Bug Fixes<a class="headerlink" href="#bug-fixes_2" title="Permanent link">&para;</a></h2>
 <ul>
 <li>
 <p><strong>Background task logging correctness</strong><br />
@@ -1634,7 +1733,7 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
   Fixed ROS2 Humble type-hash handling and Zenoh attachment formatting issues. (<a href="https://github.com/copper-project/copper-rs/pull/838">#838</a>, <a href="https://github.com/copper-project/copper-rs/pull/839">#839</a>)</p>
 </li>
 </ul>
-<h2 id="dependency-updates_1">Dependency Updates<a class="headerlink" href="#dependency-updates_1" title="Permanent link">&para;</a></h2>
+<h2 id="dependency-updates_2">Dependency Updates<a class="headerlink" href="#dependency-updates_2" title="Permanent link">&para;</a></h2>
 <ul>
 <li><code>jsonschema</code> 0.42 -&gt; 0.45 (<a href="https://github.com/copper-project/copper-rs/pull/837">#837</a>, <a href="https://github.com/copper-project/copper-rs/pull/878">#878</a>, <a href="https://github.com/copper-project/copper-rs/pull/916">#916</a>)</li>
 <li><code>rerun</code> 0.30 (<a href="https://github.com/copper-project/copper-rs/pull/879">#879</a>)</li>
@@ -1644,9 +1743,9 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
 </ul>
 <!-- v0.14.0 PR links -->
 <h1 id="v0130-2026-02-13">v0.13.0 - 2026-02-13<a class="headerlink" href="#v0130-2026-02-13" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_2">High Level<a class="headerlink" href="#high-level_2" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_3">High Level<a class="headerlink" href="#high-level_3" title="Permanent link">&para;</a></h2>
 <p>This release focuses on developer experience and runtime observability: Reflection/Schema support, remote and time-travel debugging APIs, richer MCAP exports, and a new Rerun-based visualization path. On the runtime side, Linux/std resource wiring is now centralized, the units stack is standardized through <code>cu29-units</code>, and simulation/determinism tooling has been strengthened.</p>
-<h2 id="breaking-api-changes_2">Breaking API Changes<a class="headerlink" href="#breaking-api-changes_2" title="Permanent link">&para;</a></h2>
+<h2 id="breaking-api-changes_3">Breaking API Changes<a class="headerlink" href="#breaking-api-changes_3" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Config getters now propagate conversion errors</strong><br />
 <code>ComponentConfig::get&lt;T&gt;()</code> and <code>Node::get_param&lt;T&gt;()</code> now return <code>Result&lt;Option&lt;T&gt;, ConfigError&gt;</code> (instead of <code>Option&lt;T&gt;</code>), and <code>CuConfig::serialize_ron()</code> / <code>deserialize_ron()</code> now return <code>CuResult</code> instead of panicking. (<a href="https://github.com/copper-project/copper-rs/pull/682">#682</a>)</li>
@@ -1655,7 +1754,7 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
 <li><strong>Units migrated to <code>cu29-units</code></strong><br />
   Repository-wide refactor removes direct <code>uom</code> usage in favor of <code>cu29::units</code>; update imports and type paths accordingly. (<a href="https://github.com/copper-project/copper-rs/pull/815">#815</a>, <a href="https://github.com/copper-project/copper-rs/pull/824">#824</a>, <a href="https://github.com/copper-project/copper-rs/pull/827">#827</a>)</li>
 </ul>
-<h2 id="new-features_2">New Features<a class="headerlink" href="#new-features_2" title="Permanent link">&para;</a></h2>
+<h2 id="new-features_3">New Features<a class="headerlink" href="#new-features_3" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Reflection/Schema + debugger APIs</strong><br />
   Added Reflection &amp; Schema support with debug-session integration, plus remote debug and time-travel debugger APIs. (<a href="https://github.com/copper-project/copper-rs/pull/793">#793</a>, <a href="https://github.com/copper-project/copper-rs/pull/798">#798</a>, <a href="https://github.com/copper-project/copper-rs/pull/744">#744</a>, <a href="https://github.com/copper-project/copper-rs/pull/792">#792</a>)</li>
@@ -1672,14 +1771,14 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
 <li><strong>Console monitoring upgrades</strong><br />
   Added DAG log stats, DAG layout caching, bandwidth/disk stats, mouse + clipboard support, and headless-mode fallback logging. (<a href="https://github.com/copper-project/copper-rs/pull/691">#691</a>, <a href="https://github.com/copper-project/copper-rs/pull/699">#699</a>, <a href="https://github.com/copper-project/copper-rs/pull/667">#667</a>, <a href="https://github.com/copper-project/copper-rs/pull/672">#672</a>, <a href="https://github.com/copper-project/copper-rs/pull/723">#723</a>, <a href="https://github.com/copper-project/copper-rs/pull/741">#741</a>)</li>
 </ul>
-<h2 id="enhancements_2">Enhancements<a class="headerlink" href="#enhancements_2" title="Permanent link">&para;</a></h2>
+<h2 id="enhancements_3">Enhancements<a class="headerlink" href="#enhancements_3" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Determinism and CI confidence</strong><br />
   Added determinism record/resim CI coverage in <code>cu-caterpillar</code>, plus faster/cleaner embedded CI with cache improvements and expanded CodeQL coverage. (<a href="https://github.com/copper-project/copper-rs/pull/774">#774</a>, <a href="https://github.com/copper-project/copper-rs/pull/761">#761</a>, <a href="https://github.com/copper-project/copper-rs/pull/754">#754</a>, <a href="https://github.com/copper-project/copper-rs/pull/757">#757</a>)</li>
 <li><strong>Developer workflow</strong><br />
   Switched from pre-commit to <code>prek</code> and improved project-level lint/check automation. (<a href="https://github.com/copper-project/copper-rs/pull/783">#783</a>, <a href="https://github.com/copper-project/copper-rs/pull/787">#787</a>, <a href="https://github.com/copper-project/copper-rs/pull/718">#718</a>)</li>
 </ul>
-<h2 id="bug-fixes_2">Bug Fixes<a class="headerlink" href="#bug-fixes_2" title="Permanent link">&para;</a></h2>
+<h2 id="bug-fixes_3">Bug Fixes<a class="headerlink" href="#bug-fixes_3" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Determinism/runtime correctness</strong><br />
   Fixed multiple determinism issues and a runtime iteration early-return bug. (<a href="https://github.com/copper-project/copper-rs/pull/727">#727</a>, <a href="https://github.com/copper-project/copper-rs/pull/789">#789</a>)</li>
@@ -1688,7 +1787,7 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
 <li><strong>Monitoring and logging stability</strong><br />
   Fixed monitoring indirection issues and made stderr capture failures non-fatal in console monitoring flows. (<a href="https://github.com/copper-project/copper-rs/pull/735">#735</a>, <a href="https://github.com/copper-project/copper-rs/pull/734">#734</a>, <a href="https://github.com/copper-project/copper-rs/pull/724">#724</a>)</li>
 </ul>
-<h2 id="dependency-updates_2">Dependency Updates<a class="headerlink" href="#dependency-updates_2" title="Permanent link">&para;</a></h2>
+<h2 id="dependency-updates_3">Dependency Updates<a class="headerlink" href="#dependency-updates_3" title="Permanent link">&para;</a></h2>
 <ul>
 <li><code>bevy</code> 0.18 (<a href="https://github.com/copper-project/copper-rs/pull/664">#664</a>)</li>
 <li><code>rerun</code> 0.29 (<a href="https://github.com/copper-project/copper-rs/pull/770">#770</a>)</li>
@@ -1701,38 +1800,39 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
 </ul>
 <!-- v0.13.0 PR links -->
 <h1 id="v0120-2026-01-15">v0.12.0 - 2026-01-15<a class="headerlink" href="#v0120-2026-01-15" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_3">High Level<a class="headerlink" href="#high-level_3" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_4">High Level<a class="headerlink" href="#high-level_4" title="Permanent link">&para;</a></h2>
 <p>Resources are now first-class in Copper: you can describe hardware endpoints and shared system services in config, then bind them to tasks/bridges without rewriting code. Multi-output tasks land, mission/DAG rendering is clearer, and the flight controller stack is now a solid base for autonomous flying machines on off-the-shelf hardware.</p>
-<h2 id="breaking-api-changes_3">Breaking API Changes<a class="headerlink" href="#breaking-api-changes_3" title="Permanent link">&para;</a></h2>
+<h2 id="breaking-api-changes_4">Breaking API Changes<a class="headerlink" href="#breaking-api-changes_4" title="Permanent link">&para;</a></h2>
 <ul>
-<li>
-<p><strong>Resources are now explicit in task/bridge constructors</strong><br />
+<li><strong>Resources are now explicit in task/bridge constructors</strong><br />
   Why: resources are now configured in <code>copperconfig.ron</code> just like config, so ownership/sharing and board wiring live in the mission config instead of task code. This keeps tasks portable across missions/boards and makes resource lifetimes consistent.<br />
-  Before (v0.11: no resources parameter):
-  <code>rust
+  Before (v0.11: no resources parameter):</li>
+</ul>
+<p><code>rust
   impl CuTask for TelemetryTask {
       fn new(cfg: Option&lt;&amp;ComponentConfig&gt;) -&gt; CuResult&lt;Self&gt; {
           let port: String = cfg.and_then(|c| c.get("serial_port")).unwrap();
           let serial = SerialPort::open(port)?;
           Ok(Self { serial })
       }
-  }</code>
-  After (v0.12: no resources needed, use <code>()</code> and ignore <code>_res</code>):
-  ```rust
+  }</code></p>
+<p>After (v0.12: no resources needed, use <code>()</code> and ignore <code>_res</code>):</p>
+<p>```rust
   impl CuTask for TelemetryTask {
       type Resources&lt;'r&gt; = ();</p>
-<p>fn new(cfg: Option&lt;&amp;ComponentConfig&gt;, _res: ()) -&gt; CuResult<Self> {
+<pre><code>  fn new(cfg: Option&lt;&amp;ComponentConfig&gt;, _res: ()) -&gt; CuResult&lt;Self&gt; {
       let port: String = cfg.and_then(|c| c.get("serial_port")).unwrap();
       let serial = SerialPort::open(port)?;
       Ok(Self { serial })
   }
-  }
-  <code>After (v0.12: with resources):</code>rust
+</code></pre>
+<p>}
+  ```</p>
+<p>After (v0.12: with resources):</p>
+<p>```rust
   pub struct TelemetryResources&lt;'r&gt; {
-  pub serial: Owned<SerialPort>,
+      pub serial: Owned<SerialPort>,
   }</p>
-</li>
-</ul>
 <p>impl&lt;'r&gt; ResourceBindings&lt;'r&gt; for TelemetryResources&lt;'r&gt; {
       type Binding = TelemetryBinding;</p>
 <pre><code>  fn from_bindings(
@@ -1757,7 +1857,7 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
 <li><strong>Messages must implement <code>Deserialize</code></strong><br />
   Why: every Copper message now round-trips through serde so comm systems (Zenoh bridges, Copper-to-Copper, Copper-to-foreign) stay compatible across transports with the flexibility of serde. <code>CuMsgPayload</code> now requires <code>DeserializeOwned</code>. (<a href="https://github.com/copper-project/copper-rs/pull/648">#648</a>)</li>
 </ul>
-<h2 id="new-features_3">New Features<a class="headerlink" href="#new-features_3" title="Permanent link">&para;</a></h2>
+<h2 id="new-features_4">New Features<a class="headerlink" href="#new-features_4" title="Permanent link">&para;</a></h2>
 <ul>
 <li>
 <p><strong>Resources system (bundles + two-phase init + exports)</strong><br />
@@ -1800,14 +1900,14 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
   The <code>flow</code> mission is the base FC graph plus the optical flow sensor and its logging, so you can toggle it without rewriting the baseline mission. (<a href="https://github.com/copper-project/copper-rs/pull/647">#647</a>)</p>
 </li>
 </ul>
-<h2 id="enhancements_3">Enhancements<a class="headerlink" href="#enhancements_3" title="Permanent link">&para;</a></h2>
+<h2 id="enhancements_4">Enhancements<a class="headerlink" href="#enhancements_4" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>CuError cause chaining</strong> for clearer error context. (<a href="https://github.com/copper-project/copper-rs/pull/608">#608</a>)</li>
 <li><strong>Default double-buffering for Copperlists</strong>. (<a href="https://github.com/copper-project/copper-rs/pull/578">#578</a>)</li>
 <li><strong>Cu-bincode fork</strong> to stabilize embedded serialization. (<a href="https://github.com/copper-project/copper-rs/pull/576">#576</a>)</li>
 <li><strong>Worktree and justfile polish</strong> for dev workflows. (<a href="https://github.com/copper-project/copper-rs/pull/597">#597</a>, <a href="https://github.com/copper-project/copper-rs/pull/605">#605</a>, <a href="https://github.com/copper-project/copper-rs/pull/606">#606</a>, <a href="https://github.com/copper-project/copper-rs/pull/607">#607</a>)</li>
 </ul>
-<h2 id="bug-fixes_3">Bug Fixes<a class="headerlink" href="#bug-fixes_3" title="Permanent link">&para;</a></h2>
+<h2 id="bug-fixes_4">Bug Fixes<a class="headerlink" href="#bug-fixes_4" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Multi-input routing bug fixed. (<a href="https://github.com/copper-project/copper-rs/pull/604">#604</a>)</li>
 <li>Background task determinism restored. (<a href="https://github.com/copper-project/copper-rs/pull/533">#533</a>)</li>
@@ -1815,7 +1915,7 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
 <li><code>no_std</code> logmon compile fix. (<a href="https://github.com/copper-project/copper-rs/pull/550">#550</a>)</li>
 <li>Compile test now emits distinct errors per channel. (<a href="https://github.com/copper-project/copper-rs/pull/570">#570</a>)</li>
 </ul>
-<h2 id="dependency-updates_3">Dependency Updates<a class="headerlink" href="#dependency-updates_3" title="Permanent link">&para;</a></h2>
+<h2 id="dependency-updates_4">Dependency Updates<a class="headerlink" href="#dependency-updates_4" title="Permanent link">&para;</a></h2>
 <ul>
 <li><code>defmt</code> 1.0 (<a href="https://github.com/copper-project/copper-rs/pull/634">#634</a>)</li>
 <li><code>buddy_system_allocator</code> 0.12 (<a href="https://github.com/copper-project/copper-rs/pull/636">#636</a>)</li>
@@ -1835,22 +1935,22 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
 <!-- v0.12.0 PR links -->
 <hr />
 <h1 id="v0110-2025-11-26">v0.11.0 - 2025-11-26<a class="headerlink" href="#v0110-2025-11-26" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_4">High Level<a class="headerlink" href="#high-level_4" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_5">High Level<a class="headerlink" href="#high-level_5" title="Permanent link">&para;</a></h2>
 <p>In this release we are introducing a new type of tasks: Bridges to help users implement multi-channel transports (serial, CAN, ELRS radios, ESC buses…). Technically they are like a set of our existing sources and sinks bundled into one logical component, it makes it easier to manage state from external systems and Copper.</p>
-<p>This release also delivers the minimum viable set of crates to build a Copper-native flight controller! </p>
-<p>MSP messaging, PID control, ELRS/CRSF radio links, and bidirectional DSHOT ESCs all run in <code>no_std</code>. </p>
+<p>This release also delivers the minimum viable set of crates to build a Copper-native flight controller!</p>
+<p>MSP messaging, PID control, ELRS/CRSF radio links, and bidirectional DSHOT ESCs all run in <code>no_std</code>.</p>
 <p>Flight controllers are only the first vertical we are bootstrapping but we will rotate through specialties (driving, etc...) to continue to give some basic components to get you started quickly with Copper.</p>
-<h2 id="new-features_4">New Features<a class="headerlink" href="#new-features_4" title="Permanent link">&para;</a></h2>
+<h2 id="new-features_5">New Features<a class="headerlink" href="#new-features_5" title="Permanent link">&para;</a></h2>
 <ul>
 <li>
 <p><strong>CuBridge Runtime + docs</strong><br />
-  Bridge landed end-to-end: config parsing (<a href="https://github.com/copper-project/copper-rs/pull/490">#490</a>), runtime scheduling (<a href="https://github.com/copper-project/copper-rs/pull/495">#495</a>), and graph APIs (<a href="https://github.com/copper-project/copper-rs/pull/491">#491</a>, <a href="https://github.com/copper-project/copper-rs/pull/500">#500</a>) now understand multi-channel transports with typed payloads and shared resources. 
-  The new <a href="../CuBridge-Concept/">CuBridge Concept</a> page explains how to declare Tx/Rx channel sets, map them in missions, and extend bridge lifecycles. A <code>cu_bridge_test</code> example (<a href="https://github.com/copper-project/copper-rs/pull/509">#509</a>) pairs with the monitoring tooling 
+  Bridge landed end-to-end: config parsing (<a href="https://github.com/copper-project/copper-rs/pull/490">#490</a>), runtime scheduling (<a href="https://github.com/copper-project/copper-rs/pull/495">#495</a>), and graph APIs (<a href="https://github.com/copper-project/copper-rs/pull/491">#491</a>, <a href="https://github.com/copper-project/copper-rs/pull/500">#500</a>) now understand multi-channel transports with typed payloads and shared resources.
+  The new <a href="../CuBridge-Concept/">CuBridge Concept</a> page explains how to declare Tx/Rx channel sets, map them in missions, and extend bridge lifecycles. A <code>cu_bridge_test</code> example (<a href="https://github.com/copper-project/copper-rs/pull/509">#509</a>) pairs with the monitoring tooling
   so you can dry-run bridges locally before flashing firmware.</p>
 </li>
 <li>
 <p><strong>Bridge-aware monitoring &amp; graphing</strong><br />
-<code>cu_consolemon</code> renders bridges directly in the TUI DAG (<a href="https://github.com/copper-project/copper-rs/pull/510">#510</a>, <a href="https://github.com/copper-project/copper-rs/pull/511">#511</a>) and the live graph now matches the DOT export down to the shared transport connectors (<a href="https://github.com/copper-project/copper-rs/pull/512">#512</a>, <a href="https://github.com/copper-project/copper-rs/pull/513">#513</a>). </p>
+<code>cu_consolemon</code> renders bridges directly in the TUI DAG (<a href="https://github.com/copper-project/copper-rs/pull/510">#510</a>, <a href="https://github.com/copper-project/copper-rs/pull/511">#511</a>) and the live graph now matches the DOT export down to the shared transport connectors (<a href="https://github.com/copper-project/copper-rs/pull/512">#512</a>, <a href="https://github.com/copper-project/copper-rs/pull/513">#513</a>).</p>
 </li>
 </ul>
 <p><img alt="CuBridge monitoring" src="https://github.com/user-attachments/assets/e15e334a-ed44-4bf0-8fe4-bbf6304e0bfe" /></p>
@@ -1871,7 +1971,7 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
 <h2 id="remote-ops-telemetry">Remote Ops &amp; Telemetry<a class="headerlink" href="#remote-ops-telemetry" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>ELRS/CRSF remote operation stack</strong><br />
-<code>cu_crsf</code> gained the same <code>std</code>/<code>no_std</code> duality as the rest of the bridge family, so the exact radio link you use to operate a Copper robot over ExpressLRS works both on host testbeds and MCUs (<a href="https://github.com/copper-project/copper-rs/pull/498">#498</a>, bda362600). 
+<code>cu_crsf</code> gained the same <code>std</code>/<code>no_std</code> duality as the rest of the bridge family, so the exact radio link you use to operate a Copper robot over ExpressLRS works both on host testbeds and MCUs (<a href="https://github.com/copper-project/copper-rs/pull/498">#498</a>, bda362600).
   The bridge speaks CRSF for RC commands and streams link quality, battery, and failsafe telemetry down the same radio pipe, and the new <code>cu_elrs_bdshot_demo</code> shows it driving ESCs from a handheld radio out of the box.</li>
 </ul>
 <p><img width="400" alt="ELRS receiver" src="imgs/elrs-receiver.png"></p>
@@ -1880,11 +1980,11 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
 <code>cu_bdshot</code> encapsulates the RP2350 PIO/DMA programming needed to control four bidirectional DSHOT ESCs and collect their telemetry ([#497]). Combined with the ELRS bridge you can run a remote pilot loop—commands in, ESC telemetry out—entirely in Copper.</li>
 </ul>
 <p><img alt="ELRS + DSHOT demo" src="https://github.com/user-attachments/assets/7aa72c5c-b2d1-480a-b24b-5a5e1abae427" /></p>
-<h2 id="bug-fixes_4">Bug Fixes<a class="headerlink" href="#bug-fixes_4" title="Permanent link">&para;</a></h2>
+<h2 id="bug-fixes_5">Bug Fixes<a class="headerlink" href="#bug-fixes_5" title="Permanent link">&para;</a></h2>
 <ul>
 <li>The simulation generation was not able to generate a Sink proxy (replacing your actual task and callbacking the sim) if you were listening to 2 other tasks as input. This is fixed with (<a href="https://github.com/copper-project/copper-rs/pull/512">#512</a>). Thank @matthewashton-k for your patience on this one.</li>
 </ul>
-<h2 id="enhancements_4">Enhancements<a class="headerlink" href="#enhancements_4" title="Permanent link">&para;</a></h2>
+<h2 id="enhancements_5">Enhancements<a class="headerlink" href="#enhancements_5" title="Permanent link">&para;</a></h2>
 <ul>
 <li>
 <p>We made some monitoring TUI visual improvements (more compact, nicer icons and merging connectors)
@@ -1896,9 +1996,10 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
 <li><strong>Vendored TUI nodes</strong>: we now ship a patched <code>tui-nodes</code> copy tailored for bridge rendering inside <code>cu_consolemon</code>.</li>
 <li><strong>Weekly CI</strong>: embedded-crate detection got smarter so ARM-only components stay exercised automatically (<a href="https://github.com/copper-project/copper-rs/pull/507">#507</a>).</li>
 <li><strong>Dependency refresh</strong>: <code>ron 0.12</code> (<a href="https://github.com/copper-project/copper-rs/pull/503">#503</a>), <code>cudarc 0.18</code> (<a href="https://github.com/copper-project/copper-rs/pull/504">#504</a>), and <code>rerun 0.27</code> (<a href="https://github.com/copper-project/copper-rs/pull/506">#506</a>) keep the desktop toolchain current.</li>
-<li><strong>no more rkv</strong>: After a discussion with Mozilla it was clear that they won't support the lmdb backend we used for storing our string indexes for our structured logging. We swapped the implementation to a very dumb lock + bincode dump. At some point we will improve that with a system similar to what defmt uses (that is scalable per compiled crate). </li>
-<li><strong>no more console corruption</strong>: there was ways the system could quit from cu-consolemon without restoring properly the console, we fixed them (<a href="https://github.com/copper-project/copper-rs/pull/526">#526</a>).</li>
-<li></li>
+<li><strong>no more rkv</strong>: After a discussion with Mozilla it was clear that they won't support the lmdb backend we used for storing our string indexes for our structured logging. We swapped the implementation to a very dumb lock + bincode dump. At some point we will improve that with a system similar to what defmt uses (that is scalable per compiled crate).</li>
+<li>
+<h2 id="no-more-console-corruption-there-was-ways-the-system-could-quit-from-cu-consolemon-without-restoring-properly-the-console-we-fixed-them-526"><strong>no more console corruption</strong>: there was ways the system could quit from cu-consolemon without restoring properly the console, we fixed them (<a href="https://github.com/copper-project/copper-rs/pull/526">#526</a>).<a class="headerlink" href="#no-more-console-corruption-there-was-ways-the-system-could-quit-from-cu-consolemon-without-restoring-properly-the-console-we-fixed-them-526" title="Permanent link">&para;</a></h2>
+</li>
 </ul>
 <h2 id="special-thanks_1">Special thanks<a class="headerlink" href="#special-thanks_1" title="Permanent link">&para;</a></h2>
 <ul>
@@ -1907,9 +2008,9 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
 <!-- v0.11.0 PR/issue links -->
 <hr />
 <h1 id="v0100-2025-10-19">v0.10.0 - 2025-10-19<a class="headerlink" href="#v0100-2025-10-19" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_5">High Level<a class="headerlink" href="#high-level_5" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_6">High Level<a class="headerlink" href="#high-level_6" title="Permanent link">&para;</a></h2>
 <p>Major milestone: <strong>baremetal</strong> support lands across the stack, SD/eMMC logging backends, CMSIS-DAP probe workflow. RP2350 is the reference platform; examples and scripts are included.</p>
-<h2 id="new-features_5">New Features<a class="headerlink" href="#new-features_5" title="Permanent link">&para;</a></h2>
+<h2 id="new-features_6">New Features<a class="headerlink" href="#new-features_6" title="Permanent link">&para;</a></h2>
 <ul>
 <li>
 <p><strong>Baremetal (no_std) end-to-end</strong><br />
@@ -1940,7 +2041,7 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
   No longer panics on unclosed logs; returns an error instead. (<a href="https://github.com/copper-project/copper-rs/pull/477">#477</a>)</p>
 </li>
 </ul>
-<h2 id="enhancements_5">Enhancements<a class="headerlink" href="#enhancements_5" title="Permanent link">&para;</a></h2>
+<h2 id="enhancements_6">Enhancements<a class="headerlink" href="#enhancements_6" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Stabilized std/no_std/sim combos</strong> and removed legacy <code>host</code> feature in favor of explicit <code>std</code> flags where applicable. (<a href="https://github.com/copper-project/copper-rs/pull/462">#462</a>)  </li>
 <li><strong>Config &amp; runtime refactors</strong> for embedded storage backends in <code>CuApplication</code>. (<a href="https://github.com/copper-project/copper-rs/pull/472">#472</a>)  </li>
@@ -1948,9 +2049,9 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
 <!-- v0.10.0 PR/issue links -->
 <hr />
 <h1 id="v091-2025-09-12">v0.9.1 - 2025-09-12<a class="headerlink" href="#v091-2025-09-12" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_6">High Level<a class="headerlink" href="#high-level_6" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_7">High Level<a class="headerlink" href="#high-level_7" title="Permanent link">&para;</a></h2>
 <p>Point release improving simulation control, fixing task indexing bugs, and refreshing several dependencies for long-term maintenance.</p>
-<h2 id="new-features_6">New Features<a class="headerlink" href="#new-features_6" title="Permanent link">&para;</a></h2>
+<h2 id="new-features_7">New Features<a class="headerlink" href="#new-features_7" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong><code>run_in_sim</code> for Sources &amp; Sinks</strong> (<a href="https://github.com/copper-project/copper-rs/pull/431">#431</a>)<br />
   Override Copper’s default sim stubbing for hardware endpoints. Useful when your sim must keep talking to external middleware (ROS bridge, Zenoh, etc.).</li>
@@ -1965,7 +2066,7 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
           ),
       ]
   )</code></p>
-<h2 id="bug-fixes_5">Bug Fixes<a class="headerlink" href="#bug-fixes_5" title="Permanent link">&para;</a></h2>
+<h2 id="bug-fixes_6">Bug Fixes<a class="headerlink" href="#bug-fixes_6" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Task output index calculation</strong> fixed to select the correct output slot. (<a href="https://github.com/copper-project/copper-rs/pull/426">#426</a>)</li>
 <li><strong>Index into output arrays</strong> now uses <code>node_id</code> rather than <code>output_position</code>. (<a href="https://github.com/copper-project/copper-rs/pull/430">#430</a>)</li>
@@ -1974,7 +2075,7 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
 <li><strong>Crates.io metadata</strong> corrected for publication. (<a href="https://github.com/copper-project/copper-rs/pull/414">#414</a>)</li>
 <li><strong>CI</strong>: disabled Windows CUDA runner until upstream action is fixed. (<a href="https://github.com/copper-project/copper-rs/pull/424">#424</a>)</li>
 </ul>
-<h2 id="dependency-updates_4">Dependency Updates<a class="headerlink" href="#dependency-updates_4" title="Permanent link">&para;</a></h2>
+<h2 id="dependency-updates_5">Dependency Updates<a class="headerlink" href="#dependency-updates_5" title="Permanent link">&para;</a></h2>
 <ul>
 <li><code>ron</code> → <strong>0.11.0</strong> (API changes adapted). (<a href="https://github.com/copper-project/copper-rs/pull/427">#427</a>)</li>
 <li><code>pyo3</code> → <strong>0.26.0</strong> (ported to new API). (<a href="https://github.com/copper-project/copper-rs/pull/429">#429</a>)</li>
@@ -1987,7 +2088,7 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
 <!-- v0.9.1 PR/issue links -->
 <hr />
 <h1 id="v090-2025-07-31">v0.9.0 - 2025-07-31<a class="headerlink" href="#v090-2025-07-31" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_7">High Level<a class="headerlink" href="#high-level_7" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_8">High Level<a class="headerlink" href="#high-level_8" title="Permanent link">&para;</a></h2>
 <p>This release is primarily driven by user requests. It introduces a full transform library (à la tf2 for ROS), new keyframes in the logs, background tasks, a log checker, and a set of runtime and logging tuning parameters to better adapt to constrained environments.</p>
 <h2 id="api-change">API Change<a class="headerlink" href="#api-change" title="Permanent link">&para;</a></h2>
 <p>The task API now uses finer-grained lifetimes for input and output types. This provides greater flexibility when testing tasks and was necessary to support the implementation of background tasks:</p>
@@ -2067,7 +2168,7 @@ impl CuSrcTask for FlippingSource {
     let angular = velocity.angular_velocity();
 </code></pre>
 <p>This component is ideal for real-time robotic applications needing fast, correct spatial and motion reasoning across dynamic coordinate frames.</p>
-<h2 id="new-features_7">New Features<a class="headerlink" href="#new-features_7" title="Permanent link">&para;</a></h2>
+<h2 id="new-features_8">New Features<a class="headerlink" href="#new-features_8" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>background tasks</strong>: we now have a best effort asynchronous task type. Be careful to use memory handles if you feed them a large amount of data has the input and output need to be copied to allow the asynchronism to work.
 How to use it? just add background: true to <em>any</em> CuTask (not Src nor Sink).</li>
@@ -2142,7 +2243,7 @@ It will keep the metadata of the output though (Time of Validity, Status string 
 <li><strong>force Serialize implementation on CuMsg</strong>: This guarantees that the log reader can at least reexport the messages to all the SerDe backends.</li>
 <li><strong>cu-dorabench</strong>: a new benchmark more geared toward bandwith more than just latency.</li>
 </ul>
-<h2 id="enhancements_6">Enhancements<a class="headerlink" href="#enhancements_6" title="Permanent link">&para;</a></h2>
+<h2 id="enhancements_7">Enhancements<a class="headerlink" href="#enhancements_7" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>CuStampData</strong>: a lot of robotics data needs to be timestamped and this is also true for the CuMsg between tasks. We have generalized this concept so you can use a contained with a time of validity and arbitrary metadata for your own internal use in your tasks and libraries.</li>
 </ul>
@@ -2163,7 +2264,7 @@ type MyTemporalData = CuStampData&lt;f64, ()&gt;;
 <li><strong>cargo cubuild</strong> (<a href="https://github.com/copper-project/copper-rs/pull/365">#365</a>): helps you debug when a change causes a code compilation error in the generated code. Just use that instead of <code>build</code> and it will insert the generated code at the macros spot and compile it.</li>
 <li><strong>CuCompactString</strong>: Better log and debug output showing the string nicely.</li>
 </ul>
-<h2 id="bug-fixes_6">Bug fixes<a class="headerlink" href="#bug-fixes_6" title="Permanent link">&para;</a></h2>
+<h2 id="bug-fixes_7">Bug fixes<a class="headerlink" href="#bug-fixes_7" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Unified Logger Poisoned lock (<a href="https://github.com/copper-project/copper-rs/pull/390">#390</a>): We had a cascading error when the main thread would panic and drop the logger.</li>
 <li>Task DAG in the Monitoring UI is slow (<a href="https://github.com/copper-project/copper-rs/pull/391">#391</a>): Thanks to Matthew Ashton-Knochel from working with tui-nodes folks to optimise the direct rendering mode of it.</li>
@@ -2171,7 +2272,7 @@ type MyTemporalData = CuStampData&lt;f64, ()&gt;;
 <li>Unconditionally install ctrl-c handler (<a href="https://github.com/copper-project/copper-rs/pull/375">#375</a>): instead of relying on user's code to handle that as it can cause easy log corruption.</li>
 <li>Fix CuCompactString initialization CuListsManager (<a href="https://github.com/copper-project/copper-rs/pull/409">#409</a>): a zero init of the copper list created status strings that are all 24x <code>\\0</code>. This fixes it with a correct initialzation that set them at length 0 instead. It was wasting a bunch of log space for no reason.</li>
 </ul>
-<h2 id="dependency-updates_5">Dependency updates<a class="headerlink" href="#dependency-updates_5" title="Permanent link">&para;</a></h2>
+<h2 id="dependency-updates_6">Dependency updates<a class="headerlink" href="#dependency-updates_6" title="Permanent link">&para;</a></h2>
 <ul>
 <li>socket2 -&gt; 0.6.0</li>
 <li>cuda-toolkit -&gt; 0.2.26</li>
@@ -2183,9 +2284,9 @@ type MyTemporalData = CuStampData&lt;f64, ()&gt;;
 <!-- v0.9.0 PR/issue links -->
 <hr />
 <h1 id="v080-2025-05-26">v0.8.0 - 2025-05-26<a class="headerlink" href="#v080-2025-05-26" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_8">High level<a class="headerlink" href="#high-level_8" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_9">High level<a class="headerlink" href="#high-level_9" title="Permanent link">&para;</a></h2>
 <p>This release has been focused on Zenoh and ROS2 interoperability, modular configuration for larger robots with a new support for the notion of "mission" (aka mode like autonomy mode, datacollect mode etc..)</p>
-<h2 id="new-features_8">New Features<a class="headerlink" href="#new-features_8" title="Permanent link">&para;</a></h2>
+<h2 id="new-features_9">New Features<a class="headerlink" href="#new-features_9" title="Permanent link">&para;</a></h2>
 <ul>
 <li>
 <p><strong>Copper to ROS2 Integration</strong>: We now support streaming Copper data directly to ROS2 (rwm_zenoh). This includes a working example bridging Copper tasks to ROS2 nodes and a translation layer for Copper message representations.
@@ -2220,7 +2321,7 @@ type MyTemporalData = CuStampData&lt;f64, ()&gt;;
 <p><strong>Nix Setup</strong>: Introduced Nix setup for Linux, supporting CUDA / non-CUDA environment. Thanks to <a href="https://github.com/makeecat">@makeecat</a>! (<a href="https://github.com/copper-project/copper-rs/pull/332">#332</a>)</p>
 </li>
 </ul>
-<h2 id="enhancements_7">Enhancements<a class="headerlink" href="#enhancements_7" title="Permanent link">&para;</a></h2>
+<h2 id="enhancements_8">Enhancements<a class="headerlink" href="#enhancements_8" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Compile-time log-level macro</strong>: Copper now supports compile-time log filtering for logs. This feature lets you fully disable logging macros at compile time by enabling only the relevant features in <code>Cargo.toml</code>. It introduces a <code>log-level</code> field in <code>CuLogEntry</code>, and updates serialization, formatting, and documentation accordingly. Thanks to <a href="https://github.com/makeecat">@makeecat</a>! (<a href="https://github.com/copper-project/copper-rs/pull/318">#318</a>) Example usage:</li>
 </ul>
@@ -2252,16 +2353,17 @@ cu29 = { version = &quot;0.7.0&quot;, features = [&quot;log-level-debug&quot;] }
 <li><strong>Other crates</strong>: <code>cached-path</code>, <code>iyes_perf_ui</code>, <code>faer</code>, <code>ron</code>, <code>petgraph</code>, <code>nix</code>, etc. updated to support Bevy 0.16 and latest Rust editions.</li>
 </ul>
 <!-- v0.8.0 PR/issue links -->
+
 <hr />
 <h1 id="v070-2025-03-14">v0.7.0 - 2025-03-14<a class="headerlink" href="#v070-2025-03-14" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_9">High level<a class="headerlink" href="#high-level_9" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_10">High level<a class="headerlink" href="#high-level_10" title="Permanent link">&para;</a></h2>
 <p>This release added a set of feature useful to develop autonomy algorithms on Drone (MSP).
 We also have a solid set of quality of life improvements derived from real usage.</p>
 <h2 id="notable-regression">Notable regression<a class="headerlink" href="#notable-regression" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>bincode</strong> after 4 years stuck at the 2.0.0-rc3 decided to release the 2.0.0 and it broke the API. This release updates all our API calls. The good news is that decoding in memory pools are now supported, it will be useful.</li>
 </ul>
-<h2 id="new-features_9">New Features<a class="headerlink" href="#new-features_9" title="Permanent link">&para;</a></h2>
+<h2 id="new-features_10">New Features<a class="headerlink" href="#new-features_10" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>gstreamer support</strong></li>
 </ul>
@@ -2328,7 +2430,7 @@ We also have a solid set of quality of life improvements derived from real usage
 <!-- v0.7.0 PR/issue links -->
 <hr />
 <h1 id="v060-2025-01-20">v0.6.0 - 2025-01-20<a class="headerlink" href="#v060-2025-01-20" title="Permanent link">&para;</a></h1>
-<h2 id="new-features_10">New Features<a class="headerlink" href="#new-features_10" title="Permanent link">&para;</a></h2>
+<h2 id="new-features_11">New Features<a class="headerlink" href="#new-features_11" title="Permanent link">&para;</a></h2>
 <ul>
 <li>
 <p><strong>Images support</strong>: We added the API to make a pool instance and bind is as a [u8] for an image buffer, see below about Memory Pools.</p>
@@ -2348,7 +2450,7 @@ The component is named <code>cu_v4l</code> here are an example of parameters to 
       &quot;timeout_ms&quot;: 500, // time before giving up on trying to get a frame
   }
 </code></pre>
-<p>https://github.com/user-attachments/assets/0858026d-bf92-418f-9525-3df5d5de9b70</p>
+<p><a href="https://github.com/user-attachments/assets/0858026d-bf92-418f-9525-3df5d5de9b70">https://github.com/user-attachments/assets/0858026d-bf92-418f-9525-3df5d5de9b70</a></p>
 <ul>
 <li>
 <p><strong>Computer Vision: Kornia API support</strong>: Kornia is an awesome Computer Vision set of algorithms. The 2 projects cooperated to we can map Copper images to Kornia and Kornia can accept them with 0 copy! Check out the <a href="https://github.com/kornia/kornia-rs">Kornia-rs project</a>. Big thanks to the creator of this project <a href="https://www.linkedin.com/in/edgarriba/overlay/about-this-profile/">Edgar Riba</a> for his support!
@@ -2360,13 +2462,15 @@ The component is named <code>cu_v4l</code> here are an example of parameters to 
 </ul>
 <p>Before this release anything the tasks would touch (as input or output) would have been needed to be copied in the CopperList ie. the backing structure that makes Copper so fast and low latency with no synchronization etc.
 Building a complex robot is the art of having not only low latency like this but also large throughput: this is the large throughput side of Copper for modern computer architectures!</p>
-<p>You can create large memory buffers pools either in main host memory or on a "device" for example a GPU (this is what heterogeneous memory means) and Copper will give you memory handles that you can use to:
-   - pass the memory to another task
-   - pass the memory to the accelerator that can use it (for example CUDA kernels see below)
-   - pass the memory to a DMA backed driver (see the new V4L driver below)</p>
+<p>You can create large memory buffers pools either in main host memory or on a "device" for example a GPU (this is what heterogeneous memory means) and Copper will give you memory handles that you can use to:</p>
+<ul>
+<li>pass the memory to another task</li>
+<li>pass the memory to the accelerator that can use it (for example CUDA kernels see below)</li>
+<li>pass the memory to a DMA backed driver (see the new V4L driver below)</li>
+</ul>
 <p>For you developer, it means that you can safely stream multi-megabytes structures (Images, Matrices, PointClouds etc..) at no cost and you also buffer them in tasks if you need to keep them for a few cycle more (for temporal alignment for example).</p>
 <ul>
-<li><strong>New Basic Livox Lidar Tele15 Driver</strong>: 
+<li><strong>New Basic Livox Lidar Tele15 Driver</strong>:
 <img alt="image" src="https://github.com/user-attachments/assets/65e26510-ed78-4fc1-812b-731bab17e98c" /></li>
 </ul>
 <p>Thanks to <a href="https://github.com/luc-k1">@luc-k1</a> from Konboi One.</p>
@@ -2383,7 +2487,7 @@ Building a complex robot is the art of having not only low latency like this but
 </ul>
 <p><img alt="lidar_fusion" src="https://github.com/user-attachments/assets/db56904c-bfd0-48c3-aeff-98ef80a357de" /></p>
 <p>2 lidar sources getting merged.</p>
-<h2 id="enhancements_8">Enhancements<a class="headerlink" href="#enhancements_8" title="Permanent link">&para;</a></h2>
+<h2 id="enhancements_9">Enhancements<a class="headerlink" href="#enhancements_9" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Prelude</strong>: we drastically simplified the imports for Copper, now you just need to do:</li>
 </ul>
@@ -2431,7 +2535,7 @@ Building a complex robot is the art of having not only low latency like this but
 <p><strong>ScopedAllocCounter</strong>: we improved their use by exposing a sane public API so you can check if you or one of your dependency is allocating in a given scope. Thanks to <a href="https://github.com/Zac8668">Zac8668</a></p>
 </li>
 </ul>
-<h2 id="bug-fixes_7">Bug Fixes<a class="headerlink" href="#bug-fixes_7" title="Permanent link">&para;</a></h2>
+<h2 id="bug-fixes_8">Bug Fixes<a class="headerlink" href="#bug-fixes_8" title="Permanent link">&para;</a></h2>
 <ul>
 <li>
 <p><strong>X11 support for Bevy on Linux</strong>: Apparently some people have not migrated to Wayland yet :P. Thanks <a href="https://github.com/paulotten">@Paulotten</a></p>
@@ -2442,7 +2546,7 @@ Building a complex robot is the art of having not only low latency like this but
 </ul>
 <hr />
 <h1 id="v051-2024-12-05">v0.5.1 - 2024-12-05<a class="headerlink" href="#v051-2024-12-05" title="Permanent link">&para;</a></h1>
-<h3 id="new-features_11">New Features<a class="headerlink" href="#new-features_11" title="Permanent link">&para;</a></h3>
+<h3 id="new-features_12">New Features<a class="headerlink" href="#new-features_12" title="Permanent link">&para;</a></h3>
 <ul>
 <li>
 <p><strong>Microsoft Windows Compatibility is finally complete <a href="https://github.com/copper-project/copper-rs/pull/129">#129</a>:</strong> So many thanks to @Lishen_ for the unwaivering bruteforce port.</p>
@@ -2451,7 +2555,7 @@ Building a complex robot is the art of having not only low latency like this but
 <p><strong>Rerun visualization for pointclouds <a href="https://github.com/copper-project/copper-rs/pull/131">#131</a>:</strong> Added an example to start and feed rerun visualization with our standard pointcloud</p>
 </li>
 </ul>
-<h3 id="enhancements_9">Enhancements<a class="headerlink" href="#enhancements_9" title="Permanent link">&para;</a></h3>
+<h3 id="enhancements_10">Enhancements<a class="headerlink" href="#enhancements_10" title="Permanent link">&para;</a></h3>
 <ul>
 <li>
 <p><strong>BalanceBot Simulation perf overlay <a href="https://github.com/copper-project/copper-rs/pull/137">#137</a>:</strong> Now you can activate the <code>perf-ui</code> feature to see if the bevy side of the simulation is working well in a diag overlay.</p>
@@ -2460,7 +2564,7 @@ Building a complex robot is the art of having not only low latency like this but
 <p><strong>Iterators For SOAs (Struct of arrays) <a href="https://github.com/copper-project/copper-rs/pull/134">#134</a>:</strong> SOAs can generate an iterator for a quick SOA to AOS transform and natural API.</p>
 </li>
 </ul>
-<h3 id="bug-fixes_8">Bug Fixes<a class="headerlink" href="#bug-fixes_8" title="Permanent link">&para;</a></h3>
+<h3 id="bug-fixes_9">Bug Fixes<a class="headerlink" href="#bug-fixes_9" title="Permanent link">&para;</a></h3>
 <ul>
 <li>
 <p><strong>BalanceBot Simulation Issues <a href="https://github.com/copper-project/copper-rs/pull/137">#137</a>:</strong> Resolved a waste of resources on <code>balancebot-sim</code> (the bevy entities were created over and over). Thanks to @Nashenas88 for spotting the issure and the initial fix.</p>
@@ -2474,19 +2578,19 @@ Building a complex robot is the art of having not only low latency like this but
 </ul>
 <hr />
 <h1 id="v050-2024-12-02">v0.5.0 - 2024-12-02<a class="headerlink" href="#v050-2024-12-02" title="Permanent link">&para;</a></h1>
-<h3 id="new-features_12">New Features<a class="headerlink" href="#new-features_12" title="Permanent link">&para;</a></h3>
+<h3 id="new-features_13">New Features<a class="headerlink" href="#new-features_13" title="Permanent link">&para;</a></h3>
 <ul>
 <li>
-<p><strong>Deterministic Log Replay</strong>: Copper can now replay a log through your code in a deterministic fashion ie. if your tasks are deterministic, it will always output the same output from the same input! See the balancebot-resim for example. </p>
+<p><strong>Deterministic Log Replay</strong>: Copper can now replay a log through your code in a deterministic fashion ie. if your tasks are deterministic, it will always output the same output from the same input! See the balancebot-resim for example.</p>
 </li>
 <li>
-<p><strong>Aligner Task <a href="https://github.com/copper-project/copper-rs/pull/114">#114</a>:</strong> Added an aligner task that synchronizes multiple inputs by aligning matching time windows, facilitating coordinated data processing. This is particularly useful for sensor fusion. </p>
+<p><strong>Aligner Task <a href="https://github.com/copper-project/copper-rs/pull/114">#114</a>:</strong> Added an aligner task that synchronizes multiple inputs by aligning matching time windows, facilitating coordinated data processing. This is particularly useful for sensor fusion.</p>
 </li>
 <li>
-<p>:exclamation: <strong>Lifecycle Trait Removal <a href="https://github.com/copper-project/copper-rs/pull/115">#115</a>:</strong> Removed the lifecycle trait to simplify task implementation and decouple passed types, streamlining the codebase. To build a minimum task a user needed to implement one method from the CuTaskLifecycle trait (new) and at least the process method from they flavor of tasks. This was forcing the implementation of 2 mandatory traits which is not necessary or useful for the user. Now we moved all the lifecycle methods in the tasks trait to only have to implement 2 traits (the task and Freezable, the serialization of its state) </p>
+<p>:exclamation: <strong>Lifecycle Trait Removal <a href="https://github.com/copper-project/copper-rs/pull/115">#115</a>:</strong> Removed the lifecycle trait to simplify task implementation and decouple passed types, streamlining the codebase. To build a minimum task a user needed to implement one method from the CuTaskLifecycle trait (new) and at least the process method from they flavor of tasks. This was forcing the implementation of 2 mandatory traits which is not necessary or useful for the user. Now we moved all the lifecycle methods in the tasks trait to only have to implement 2 traits (the task and Freezable, the serialization of its state)</p>
 </li>
 </ul>
-<h3 id="enhancements_10">Enhancements<a class="headerlink" href="#enhancements_10" title="Permanent link">&para;</a></h3>
+<h3 id="enhancements_11">Enhancements<a class="headerlink" href="#enhancements_11" title="Permanent link">&para;</a></h3>
 <ul>
 <li>
 <p><strong>Named Output Mapping on CopperLists <a href="https://github.com/copper-project/copper-rs/pull/121">#121</a>:</strong> Implemented mapping of Copperlist indices to named outputs from tasks, allowing users to access task outputs symbolically without relying on execution order.</p>
@@ -2507,7 +2611,7 @@ Building a complex robot is the art of having not only low latency like this but
 <p><strong>f32 shortcut for dimensions and reflectivity for Lidars</strong>: simple from f32 makes it easier to not deal too much with the units.</p>
 </li>
 </ul>
-<h3 id="bug-fixes_9">Bug Fixes<a class="headerlink" href="#bug-fixes_9" title="Permanent link">&para;</a></h3>
+<h3 id="bug-fixes_10">Bug Fixes<a class="headerlink" href="#bug-fixes_10" title="Permanent link">&para;</a></h3>
 <ul>
 <li>
 <p><strong>BalanceBot Simulation Stability <a href="https://github.com/copper-project/copper-rs/pull/118">#118</a>:</strong> Resolved a core dump issue on exit for <code>balancebot-sim</code> by enforcing specific graphics backends, ensuring clean termination.</p>
@@ -2527,35 +2631,35 @@ Building a complex robot is the art of having not only low latency like this but
 </ul>
 <hr />
 <h1 id="v041-2024-11-15">v0.4.1 - 2024-11-15<a class="headerlink" href="#v041-2024-11-15" title="Permanent link">&para;</a></h1>
-<h3 id="new-features_13">New Features<a class="headerlink" href="#new-features_13" title="Permanent link">&para;</a></h3>
+<h3 id="new-features_14">New Features<a class="headerlink" href="#new-features_14" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>Iceoryx2 Support <a href="https://github.com/copper-project/copper-rs/pull/87">#87</a>:</strong> Introduced Iceoryx2 support. Iceoryx2 is the successor to Iceoryx in pure Rust. The Copper support included a source component to receive messages, a sink component to send messages.</li>
 <li><strong>Hesai XT32 Support <a href="https://github.com/copper-project/copper-rs/pull/101">#101</a>:</strong> Added the preliminary support for the Hesai XT32. If you have the actual HW handy, feel free to provide us the feedback!</li>
 <li><strong>First standard Lidar Message Design <a href="https://github.com/copper-project/copper-rs/pull/99">#99</a>:</strong> For now in SOA out or the lidar sensors it allows SIMD optimizations for the first operations that are usually a frame transform.</li>
 </ul>
-<h3 id="enhancements_11">Enhancements<a class="headerlink" href="#enhancements_11" title="Permanent link">&para;</a></h3>
+<h3 id="enhancements_12">Enhancements<a class="headerlink" href="#enhancements_12" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>Variable-Length SoAs <a href="https://github.com/copper-project/copper-rs/pull/100">#100</a>:</strong> Improved <code>SoA</code> (Structure of Arrays) to support variable lengths on top of their fixed size in the Copper List.</li>
 <li><strong>CI Improvements <a href="https://github.com/copper-project/copper-rs/pull/98">#98</a>:</strong> Integrated clippy warnings into CI, thanks to <a href="https://github.com/makeecat">makeecat</a></li>
 </ul>
-<h3 id="bug-fixes_10">Bug Fixes<a class="headerlink" href="#bug-fixes_10" title="Permanent link">&para;</a></h3>
+<h3 id="bug-fixes_11">Bug Fixes<a class="headerlink" href="#bug-fixes_11" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>BalanceBot Simulation Reset <a href="https://github.com/copper-project/copper-rs/pull/86">#86</a>:</strong> Improved the <code>reset_sim</code> functionality for the balance bot. Thanks to <a href="https://github.com/makeecat">makeecat</a>.</li>
 <li><strong>Publishing Fixes <a href="https://github.com/copper-project/copper-rs/pull/103">#103</a>:</strong> Resolved various publishing issues and added dry-run validations to avoid disruptions.</li>
 </ul>
 <hr />
 <h1 id="v040-2024-10-29">v0.4.0 - 2024-10-29<a class="headerlink" href="#v040-2024-10-29" title="Permanent link">&para;</a></h1>
-<h4 id="new-features_14">New Features<a class="headerlink" href="#new-features_14" title="Permanent link">&para;</a></h4>
+<h4 id="new-features_15">New Features<a class="headerlink" href="#new-features_15" title="Permanent link">&para;</a></h4>
 <ul>
 <li><strong>Simulation API Support</strong>: With sim-mode=true in the main Copper macro, Copper will generate for you all the callbacks at all the tasks states it is going through (Start, Preprocess, Process, etc...). Combined with the already mockable Clock it allows a very easy integration with a virtual environment.</li>
 <li><strong>BalanceBot Simulation <a href="https://github.com/copper-project/copper-rs/pull/69">#69</a>:</strong>  Built on that and leveraging Bevy and Avian3D for realistic motion dynamics, we made a little demo of our little real world demonstrator. The real world code and the sim code are 100% identical.</li>
 <li><strong>Config Embedding <a href="https://github.com/copper-project/copper-rs/pull/78">#78</a>:</strong> Embedded the default <code>copperconfig.ron</code> directly into the Copper executable, simplifying deployment for the main case (just one executable to copy and that's it!!). If the file is present, it will take precedence over the embedded version. We also do log the actual config used in the logs so you can come back to it in doubt.</li>
 </ul>
-<h4 id="enhancements_12">Enhancements<a class="headerlink" href="#enhancements_12" title="Permanent link">&para;</a></h4>
+<h4 id="enhancements_13">Enhancements<a class="headerlink" href="#enhancements_13" title="Permanent link">&para;</a></h4>
 <ul>
 <li><strong>Cross-Platform Compatibility for Mocking <a href="https://github.com/copper-project/copper-rs/pull/75">#75</a>:</strong> Enhanced feature flags to better support various platforms, particularly macOS, enabling testing with mocked hardware dependencies. The full repo now compile under CI/CD on MacOS and Linux (previously it we could only compile and test the Core)</li>
 </ul>
-<h4 id="bug-fixes_11">Bug Fixes<a class="headerlink" href="#bug-fixes_11" title="Permanent link">&para;</a></h4>
+<h4 id="bug-fixes_12">Bug Fixes<a class="headerlink" href="#bug-fixes_12" title="Permanent link">&para;</a></h4>
 <ul>
 <li><strong>Terminal Restoration <a href="https://github.com/copper-project/copper-rs/pull/73">#73</a>:</strong> Fixed issues with terminal states not restoring properly upon exit, preventing corruption and enhancing the overall stability of simulator sessions.</li>
 <li><strong>Print Output Cleanup <a href="https://github.com/copper-project/copper-rs/pull/80">#80</a>:</strong> Streamlined console logging to minimize redundant or unnecessary print statements, making debugging output more manageable.</li>
@@ -2592,7 +2696,7 @@ Building a complex robot is the art of having not only low latency like this but
 <li><strong>Tree Reorganization</strong>:</li>
 <li>Major reorganization of the repository structure for improved clarity and maintainability.</li>
 </ul>
-<h2 id="bug-fixes_12">Bug Fixes<a class="headerlink" href="#bug-fixes_12" title="Permanent link">&para;</a></h2>
+<h2 id="bug-fixes_13">Bug Fixes<a class="headerlink" href="#bug-fixes_13" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Logging Fixes</strong>:</li>
 <li>Resolved an issue where <code>OnceLock</code> was not releasing the unified logger, preventing a clean shutdown of the logger.</li>
@@ -2719,7 +2823,7 @@ impl CuMonitor for ExampleMonitor {
 }
 </code></pre>
 <h2 id="other-notable-changes">Other Notable Changes<a class="headerlink" href="#other-notable-changes" title="Permanent link">&para;</a></h2>
-<h3 id="new-features_15">New Features<a class="headerlink" href="#new-features_15" title="Permanent link">&para;</a></h3>
+<h3 id="new-features_16">New Features<a class="headerlink" href="#new-features_16" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Real-time cumulative stats for <code>CuDurations</code>. See cu29/monitoring.rs we built an histogramming feature for timings this is super useful for monitoring components. Here is the list of everything you get it is not only pretty comprehensive but it is fixed size on memory so it should be pretty swift for any real time monitoring needs or UIs.</li>
 </ul>
@@ -2737,9 +2841,9 @@ impl CuMonitor for ExampleMonitor {
 </code></pre>
 <h3 id="fixes">Fixes<a class="headerlink" href="#fixes" title="Permanent link">&para;</a></h3>
 <ul>
-<li><strong>Serialization / Deserialization Bug on Value</strong> (#42). A code reformat shuffled the serialization IDs Oo. </li>
+<li><strong>Serialization / Deserialization Bug on Value</strong> (#42). A code reformat shuffled the serialization IDs Oo.</li>
 </ul>
-<h3 id="enhancements_13">Enhancements<a class="headerlink" href="#enhancements_13" title="Permanent link">&para;</a></h3>
+<h3 id="enhancements_14">Enhancements<a class="headerlink" href="#enhancements_14" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>Virtual Output for Sinks</strong> (#53):</li>
 <li>
@@ -2757,19 +2861,19 @@ impl CuMonitor for ExampleMonitor {
 <hr />
 <h1 id="copper-v023-2024-09-11">Copper - v0.2.3 - 2024-09-11<a class="headerlink" href="#copper-v023-2024-09-11" title="Permanent link">&para;</a></h1>
 <p>We are pleased to announce the release of Copper v0.2.3, which includes several new features, enhancements, and bug fixes. Below is a summary of the key changes in this release:</p>
-<h4 id="new-features_16">New Features<a class="headerlink" href="#new-features_16" title="Permanent link">&para;</a></h4>
+<h4 id="new-features_17">New Features<a class="headerlink" href="#new-features_17" title="Permanent link">&para;</a></h4>
 <ul>
 <li><strong>SN754410 Driver Support <a href="https://github.com/copper-project/copper-rs/pull/40">#40</a>:</strong> Added a new driver for the SN754410 motor driver. This driver allows easy integration with motor control applications, providing robust support for H-bridge motor control on a wide range of systems. <em>This driver is fully compatible with the BalanceHAT.</em></li>
 <li><strong>ADS7883 Driver <a href="https://github.com/copper-project/copper-rs/pull/39">#39</a>:</strong> Introduced a driver for the ADS7883, a 12-bit SPI ADC. This addition includes comprehensive documentation in the README to facilitate setup and integration. <em>The ADS7883 driver is also compatible with the BalanceHAT.</em></li>
 </ul>
-<h4 id="enhancements_14">Enhancements<a class="headerlink" href="#enhancements_14" title="Permanent link">&para;</a></h4>
+<h4 id="enhancements_15">Enhancements<a class="headerlink" href="#enhancements_15" title="Permanent link">&para;</a></h4>
 <ul>
 <li><strong>macOS Development Support <a href="https://github.com/copper-project/copper-rs/pull/25">#25</a>:</strong> Copper can now be developed on macOS! The CI/CD pipeline has been updated to support macOS, ensuring cross-platform compatibility for all users.</li>
 <li><strong>cu29_clock Enhancements <a href="https://github.com/copper-project/copper-rs/pull/32">#32</a>:</strong> Added a division feature to the cu29_clock, allowing more granular time management and synchronization within the Copper runtime.</li>
-<li><strong>Structured Log Index File in Debug Mode <a href="https://github.com/copper-project/copper-rs/pull/30">#30</a>:</strong> Removed the requirement for an index file in debug mode within struct_log, simplifying the debugging process ie. only the config and the executable needs to be deployed for the debug build and you get a standard debug text logging. </li>
-<li><strong>Logging Slabs Addition <a href="https://github.com/copper-project/copper-rs/pull/24">#24</a>:</strong> The current unified logger works with big memory mapped files. Initially we thought we could rely on the mmap resize feature of the kernel api but it just doesn't work. We are reverting into building "slabs", ie dividing the data logger into large files. Those files can be concatenated and read or directly read from the log exporter. </li>
+<li><strong>Structured Log Index File in Debug Mode <a href="https://github.com/copper-project/copper-rs/pull/30">#30</a>:</strong> Removed the requirement for an index file in debug mode within struct_log, simplifying the debugging process ie. only the config and the executable needs to be deployed for the debug build and you get a standard debug text logging.</li>
+<li><strong>Logging Slabs Addition <a href="https://github.com/copper-project/copper-rs/pull/24">#24</a>:</strong> The current unified logger works with big memory mapped files. Initially we thought we could rely on the mmap resize feature of the kernel api but it just doesn't work. We are reverting into building "slabs", ie dividing the data logger into large files. Those files can be concatenated and read or directly read from the log exporter.</li>
 </ul>
-<h4 id="bug-fixes_13">Bug Fixes<a class="headerlink" href="#bug-fixes_13" title="Permanent link">&para;</a></h4>
+<h4 id="bug-fixes_14">Bug Fixes<a class="headerlink" href="#bug-fixes_14" title="Permanent link">&para;</a></h4>
 <ul>
 <li><strong>Compilation Feedback Adjustments <a href="https://github.com/copper-project/copper-rs/pull/33">#33</a>:</strong> Moved compilation feedback from standard output to standard error to better align with conventional logging practices.</li>
 <li><strong>Flush and Core Dump Fixes <a href="https://github.com/copper-project/copper-rs/pull/29">#29</a>:</strong> Resolved issues where changes after a section flush could cause a core dump, improving the stability of the logging system.</li>
