@@ -96,6 +96,19 @@ runs:
           echo "WORKSPACE_FLAG=" >> "$GITHUB_ENV"
         fi
 
+    - name: Override apriltag source (Linux)
+      if: runner.os == 'Linux' && env.WORKSPACE_SCOPE == 'workspace'
+      shell: bash
+      run: |
+        APRILTAG_DIR="${RUNNER_TEMP}/apriltag"
+        rm -rf "$APRILTAG_DIR"
+        git init "$APRILTAG_DIR"
+        git -C "$APRILTAG_DIR" remote add origin https://github.com/AprilRobotics/apriltag.git
+        git -C "$APRILTAG_DIR" fetch --depth 1 origin 22b44c13c6f0b68d7eaa1504cec0b8a20850122e
+        git -C "$APRILTAG_DIR" checkout FETCH_HEAD
+        echo "APRILTAG_SYS_METHOD=raw,static" >> "$GITHUB_ENV"
+        echo "APRILTAG_SRC=$APRILTAG_DIR" >> "$GITHUB_ENV"
+
     - name: Install winget
       if: runner.os == 'Windows' && env.WORKSPACE_SCOPE == 'workspace'
       uses: Cyberboss/install-winget@v1
@@ -164,7 +177,6 @@ runs:
           python3-cbor2 \
           python3-dev \
           pkg-config \
-          libapriltag-dev \
           libasound2-dev \
           libudev-dev \
           libpcap-dev \
