@@ -125,7 +125,7 @@ If you use Copper-rs in your research, please cite it as:
   year         = {2026},
   howpublished = {GitHub repository},
   url          = {https://github.com/copper-project/copper-rs},
-  note         = {Version v0.13 or latest}
+  note         = {Version v1.0.0-rc1 or latest}
 }
 ```
 
