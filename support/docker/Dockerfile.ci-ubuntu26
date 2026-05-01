@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-cbor2 \
     build-essential \
     pkg-config \
+    libxml2-16 \
     libasound2-dev \
     libudev-dev \
     libpcap-dev \
@@ -40,6 +41,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gstreamer1.0-gtk3 \
     gstreamer1.0-qt5 \
     gstreamer1.0-pulseaudio \
+    && xml2_path="$(ldconfig -p | awk '/libxml2\.so\.16 \(/{print $NF; exit}')" \
+    && if [ -n "$xml2_path" ]; then ln -sf "$(basename "$xml2_path")" "$(dirname "$xml2_path")/libxml2.so.2"; fi \
     && ln -fs /usr/share/zoneinfo/$TZ /etc/localtime \
     && dpkg-reconfigure -f noninteractive tzdata \
     && apt-get clean \

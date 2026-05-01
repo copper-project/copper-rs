@@ -173,10 +173,15 @@ runs:
       shell: bash
       run: |
         sudo apt-get update
+        xml2_pkg=libxml2
+        if apt-cache show libxml2-16 >/dev/null 2>&1; then
+          xml2_pkg=libxml2-16
+        fi
         sudo apt-get install -y \
           python3-cbor2 \
           python3-dev \
           pkg-config \
+          "$xml2_pkg" \
           libasound2-dev \
           libudev-dev \
           libpcap-dev \
@@ -198,6 +203,10 @@ runs:
           gstreamer1.0-gtk3 \
           gstreamer1.0-qt5 \
           gstreamer1.0-pulseaudio
+        xml2_path="$(ldconfig -p | awk '/libxml2\.so\.16 \(/{print $NF; exit}')"
+        if [[ -n "$xml2_path" ]]; then
+          sudo ln -sf "$(basename "$xml2_path")" "$(dirname "$xml2_path")/libxml2.so.2"
+        fi
 
     - name: Install GStreamer (macOS, cached)
       if: runner.os == 'macOS'
