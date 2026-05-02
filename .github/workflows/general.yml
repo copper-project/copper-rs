@@ -200,7 +200,7 @@ jobs:
           toolchain: ${{ env.MSRV }}
           linux_cargo_paths: true
           prebaked_linux_image: "true"
-          cache_prefix: msrv
+          cache_prefix: msrv-ubuntu26-container
           cache_shared_key: rust-ubuntu
           install_nextest: "false"
           sccache_key_suffix: msrv
@@ -227,7 +227,7 @@ jobs:
         with:
           toolchain: ${{ env.MSRV }}
           linux_cargo_paths: true
-          cache_prefix: msrv
+          cache_prefix: msrv-ubuntu-host
           cache_shared_key: rust-ubuntu
           install_nextest: "false"
           sccache_key_suffix: msrv

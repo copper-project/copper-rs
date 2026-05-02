@@ -57,7 +57,7 @@ jobs:
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
           prebaked_linux_image: "true"
-          cache_prefix: debug
+          cache_prefix: debug-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
           install_nextest: ${{ matrix.task == 'test' }}
           sccache_key_suffix: unit-${{ matrix.task }}
@@ -123,7 +123,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
-          cache_prefix: debug
+          cache_prefix: debug-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: ${{ matrix.task == 'test' }}
           sccache_key_suffix: unit-${{ matrix.task }}
@@ -189,7 +189,7 @@ jobs:
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
           prebaked_linux_image: "true"
-          cache_prefix: debug
+          cache_prefix: debug-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
           sccache_key_suffix: doctests
@@ -230,7 +230,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
-          cache_prefix: debug
+          cache_prefix: debug-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
           sccache_key_suffix: doctests
@@ -278,7 +278,7 @@ jobs:
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
           prebaked_linux_image: "true"
-          cache_prefix: cuda-debug
+          cache_prefix: cuda-debug-ubuntu24-container
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
           sccache_key_suffix: unit-clippy
@@ -415,7 +415,7 @@ jobs:
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
           prebaked_linux_image: "true"
-          cache_prefix: debug
+          cache_prefix: debug-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "true"
           sccache_key_suffix: tests-features
@@ -460,7 +460,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
-          cache_prefix: debug
+          cache_prefix: debug-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "true"
           sccache_key_suffix: tests-features
@@ -511,7 +511,7 @@ jobs:
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
           prebaked_linux_image: "true"
-          cache_prefix: cuda-debug
+          cache_prefix: cuda-debug-ubuntu24-container
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "true"
           sccache_key_suffix: tests-features
@@ -642,7 +642,7 @@ jobs:
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
           prebaked_linux_image: "true"
-          cache_prefix: debug
+          cache_prefix: debug-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
           sccache_key_suffix: templates
@@ -699,7 +699,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
-          cache_prefix: debug
+          cache_prefix: debug-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
           sccache_key_suffix: templates
