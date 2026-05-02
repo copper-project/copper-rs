@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ "master" ]
 
+permissions:
+  contents: read
+  packages: read
+
 env:
   CARGO_TERM_COLOR: always
   CARGO_PROFILE_DEV_DEBUG: "0"
@@ -16,8 +20,203 @@ env:
   MSRV: "1.95.0"
 
 jobs:
-  msrv:
+  linux-ci-image:
+    name: Linux CI Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image_ref.outputs.image }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: image_ref
+        shell: bash
+        run: |
+          stable_image="ghcr.io/copper-project/copper-rs-ci:ubuntu-26.04"
+          force_rebuild=false
+          relevant_image_paths='^(support/docker/|\.github/actions/rust-ci-setup/action\.yml$|\.github/workflows/general\.yml$|\.github/workflows/build-ci-images\.yml$)'
+
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            if [[ "${{ github.event.pull_request.head.repo.full_name }}" != "$GITHUB_REPOSITORY" ]]; then
+              echo "image=" >> "$GITHUB_OUTPUT"
+              echo "should_build=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            changed_files="$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "$GITHUB_SHA")"
+            if grep -Eq "$relevant_image_paths" <<<"$changed_files"; then
+              force_rebuild=true
+            fi
+          elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            changed_files="$(git diff --name-only "${{ github.event.before }}" "$GITHUB_SHA" || true)"
+            if grep -Eq "$relevant_image_paths" <<<"$changed_files"; then
+              force_rebuild=true
+            fi
+          fi
+
+          if [[ "$force_rebuild" != "true" ]] && docker manifest inspect "$stable_image" >/dev/null 2>&1; then
+            echo "image=$stable_image" >> "$GITHUB_OUTPUT"
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          run_image="ghcr.io/copper-project/copper-rs-ci:run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          {
+            echo "image=$run_image"
+            echo "should_build=true"
+            echo "tags<<EOF"
+            echo "$run_image"
+            if [[ "$GITHUB_REF" == "refs/heads/master" ]]; then
+              echo "$stable_image"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Log in to GHCR
+        if: steps.image_ref.outputs.should_build == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Docker Buildx
+        if: steps.image_ref.outputs.should_build == 'true'
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+      - name: Build and push Linux CI image
+        if: steps.image_ref.outputs.should_build == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: ./support/docker
+          file: ./support/docker/Dockerfile.ci-ubuntu26
+          pull: true
+          push: true
+          tags: ${{ steps.image_ref.outputs.tags }}
+          cache-from: type=gha,scope=linux-ci-image-ubuntu26
+          cache-to: type=gha,mode=max,scope=linux-ci-image-ubuntu26
+
+  linux-cuda-ci-image:
+    name: Linux CUDA CI Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image_ref.outputs.image }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: image_ref
+        shell: bash
+        run: |
+          stable_image="ghcr.io/copper-project/copper-rs-ci:cuda-12.6.1-ubuntu-24.04"
+          force_rebuild=false
+          relevant_image_paths='^(support/docker/|\.github/actions/rust-ci-setup/action\.yml$|\.github/workflows/general\.yml$|\.github/workflows/build-ci-images\.yml$)'
+
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            if [[ "${{ github.event.pull_request.head.repo.full_name }}" != "$GITHUB_REPOSITORY" ]]; then
+              echo "image=" >> "$GITHUB_OUTPUT"
+              echo "should_build=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            changed_files="$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "$GITHUB_SHA")"
+            if grep -Eq "$relevant_image_paths" <<<"$changed_files"; then
+              force_rebuild=true
+            fi
+          elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            changed_files="$(git diff --name-only "${{ github.event.before }}" "$GITHUB_SHA" || true)"
+            if grep -Eq "$relevant_image_paths" <<<"$changed_files"; then
+              force_rebuild=true
+            fi
+          fi
+
+          if [[ "$force_rebuild" != "true" ]] && docker manifest inspect "$stable_image" >/dev/null 2>&1; then
+            echo "image=$stable_image" >> "$GITHUB_OUTPUT"
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          run_image="ghcr.io/copper-project/copper-rs-ci:cuda-run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          {
+            echo "image=$run_image"
+            echo "should_build=true"
+            echo "tags<<EOF"
+            echo "$run_image"
+            if [[ "$GITHUB_REF" == "refs/heads/master" ]]; then
+              echo "$stable_image"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Log in to GHCR
+        if: steps.image_ref.outputs.should_build == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Docker Buildx
+        if: steps.image_ref.outputs.should_build == 'true'
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+      - name: Build and push Linux CUDA CI image
+        if: steps.image_ref.outputs.should_build == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: ./support/docker
+          file: ./support/docker/Dockerfile.ci-cuda-ubuntu24
+          pull: true
+          push: true
+          tags: ${{ steps.image_ref.outputs.tags }}
+          cache-from: type=gha,scope=linux-cuda-ci-image-ubuntu24
+          cache-to: type=gha,mode=max,scope=linux-cuda-ci-image-ubuntu24
+
+  msrv-container:
     name: MSRV Check
+    if: needs.linux-ci-image.outputs.image != ''
+    needs: linux-ci-image
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.linux-ci-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      WORKSPACE_SCOPE: workspace
+    steps:
+      - uses: actions/checkout@v6
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: ${{ env.MSRV }}
+          linux_cargo_paths: true
+          prebaked_linux_image: "true"
+          cache_prefix: msrv-ubuntu26-container
+          cache_shared_key: rust-ubuntu
+          install_nextest: "false"
+          sccache_key_suffix: msrv
+      - name: Detect embedded-only crates
+        run: |
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+      - name: Check workspace on MSRV
+        run: cargo +${{ env.MSRV }} check --workspace --all-targets $EMBEDDED_EXCLUDES
+      - name: Check no_std default members on MSRV
+        run: cargo +${{ env.MSRV }} check --no-default-features
+
+  msrv-host:
+    name: MSRV Check
+    if: needs.linux-ci-image.outputs.image == ''
+    needs: linux-ci-image
     runs-on: ubuntu-latest
     env:
       WORKSPACE_SCOPE: workspace
@@ -28,7 +227,7 @@ jobs:
         with:
           toolchain: ${{ env.MSRV }}
           linux_cargo_paths: true
-          cache_prefix: msrv
+          cache_prefix: msrv-ubuntu-host
           cache_shared_key: rust-ubuntu
           install_nextest: "false"
           sccache_key_suffix: msrv
@@ -43,10 +242,14 @@ jobs:
 
   Unit-Tests:
     name: Unit Tests
+    needs: [linux-ci-image, linux-cuda-ci-image]
     uses: ./.github/workflows/reusable-unit-tests.yml
+    secrets: inherit
     with:
       toolchain: stable
       linux_cargo_paths: true
+      linux_ci_image: ${{ needs.linux-ci-image.outputs.image }}
+      linux_cuda_ci_image: ${{ needs.linux-cuda-ci-image.outputs.image }}
 
   api:
     name: Public API Check

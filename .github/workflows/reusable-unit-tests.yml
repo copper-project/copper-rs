@@ -14,252 +14,25 @@ on:
         required: false
         type: boolean
         default: false
+      linux_ci_image:
+        required: false
+        type: string
+        default: ""
+      linux_cuda_ci_image:
+        required: false
+        type: string
+        default: ""
 
 jobs:
-  unit:
-    name: Unit Checks / ${{ matrix.task }} (${{ matrix.os }}, ${{ matrix.mode }})
-    runs-on: ${{ matrix.os }}
-
-    defaults:
-      run:
-        shell: bash
-
-    env:
-      CARGO_TERM_COLOR: always
-      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
-      WORKSPACE_SCOPE: ${{ matrix.os == 'windows-latest' && 'core' || 'workspace' }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ ubuntu-latest, macos-latest, windows-latest ]
-        mode: [ debug, cuda-debug ]
-        task: [ clippy, build, test ]
-        exclude:
-          - os: macos-latest
-            mode: cuda-debug
-          - os: windows-latest
-            mode: cuda-debug
-          - os: macos-latest
-            task: clippy
-          - os: windows-latest
-            task: clippy
-
-    steps:
-      - uses: actions/checkout@v6
-      - id: rust_ci_setup
-        uses: ./.github/actions/rust-ci-setup
-        with:
-          toolchain: ${{ inputs.toolchain }}
-          cargo_target_dir: ${{ inputs.cargo_target_dir }}
-          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
-          cache_prefix: ${{ matrix.mode }}
-          cache_shared_key: rust-${{ matrix.os }}
-          install_nextest: ${{ matrix.task == 'test' }}
-          sccache_key_suffix: unit-${{ matrix.task }}
-      - name: Set up Python (macOS)
-        if: runner.os == 'macOS'
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.x"
-      - name: Install Python task dependency (macOS)
-        if: runner.os == 'macOS'
-        run: python -m pip install --upgrade pip cbor2
-
-      - name: Install CUDA
-        uses: Jimver/cuda-toolkit@v0.2.35
-        if: runner.os != 'macOS' && matrix.mode == 'cuda-debug'
-        with:
-          cuda: 12.6.1
-          log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-${{ matrix.task }}-cuda.txt'
-          use-github-cache: false
-          use-local-cache: false
-      - name: Set CUDA compute capability (CI)
-        if: runner.os == 'Linux' && matrix.mode == 'cuda-debug'
-        shell: bash
-        run: |
-          if command -v nvcc >/dev/null 2>&1; then
-            CAP=$(nvcc --list-gpu-code | awk -F_ '/sm_/ {print $2}' | sort -n | tail -1)
-            if [[ -n "$CAP" ]]; then
-              echo "CUDA_COMPUTE_CAP=$CAP" >> $GITHUB_ENV
-            else
-              echo "CUDA_COMPUTE_CAP=86" >> $GITHUB_ENV
-            fi
-          else
-            echo "CUDA_COMPUTE_CAP=86" >> $GITHUB_ENV
-          fi
-
-      - name: Set features (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          if [[ '${{ matrix.mode }}' == 'cuda-debug' ]]; then
-            echo "FEATURES_FLAG=--features $BASE_FEATURES,python,cuda" >> $GITHUB_ENV
-          else
-            echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
-          fi
-
-      - name: Set features (MacOS)
-        if: runner.os == 'macOS'
-        run: |
-          echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
-
-      - name: Set features (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          echo "FEATURES_FLAG=" >> $GITHUB_ENV
-
-      - name: Detect embedded-only crates
-        if: env.WORKSPACE_SCOPE == 'workspace'
-        run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
-          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
-
-      - name: Run clippy on (${{ matrix.os }} | ${{ matrix.mode }})
-        if: matrix.task == 'clippy'
-        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $EMBEDDED_EXCLUDES -- --deny warnings
-      - name: Run clippy with all features on (${{ matrix.os }} | ${{ matrix.mode }})
-        if: matrix.task == 'clippy'
-        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES -- --deny warnings
-      - name: Run build with all features on (${{ matrix.os }} | ${{ matrix.mode }})
-        if: matrix.task == 'build'
-        run: cargo +${{ inputs.toolchain }} build $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES
-      - name: Run doctests on (${{ matrix.os }} | debug)
-        if: matrix.task == 'test' && matrix.mode == 'debug' && runner.os == 'Linux'
-        run: cargo +${{ inputs.toolchain }} test --doc $WORKSPACE_FLAG $EMBEDDED_EXCLUDES --quiet
-      - name: Run Unit Tests on (${{ matrix.os }} | ${{ matrix.mode }})
-        if: matrix.task == 'test'
-        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $EMBEDDED_EXCLUDES
-      - name: Run cu-caterpillar determinism test (determinism_ci)
-        if: matrix.task == 'test' && matrix.mode == 'debug' && env.WORKSPACE_SCOPE == 'workspace'
-        env:
-          RAYON_NUM_THREADS: "1"
-          COPPER_DETERMINISM_ITERS: "256"
-          COPPER_DETERMINISM_DT_TICKS: "1000"
-        run: >
-          cargo +${{ inputs.toolchain }} test -p cu-caterpillar --features determinism_ci
-          -- determinism_record_and_resim --test-threads=1
-
-      - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
-
-  tests-features:
-    name: Unit Tests (all features)
-    runs-on: ${{ matrix.os }}
-
-    defaults:
-      run:
-        shell: bash
-
-    env:
-      CARGO_TERM_COLOR: always
-      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
-      WORKSPACE_SCOPE: ${{ matrix.os == 'windows-latest' && 'core' || 'workspace' }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ ubuntu-latest, macos-latest, windows-latest ]
-        mode: [ debug, cuda-debug ]
-        exclude:
-          - os: macos-latest
-            mode: cuda-debug
-          - os: windows-latest
-            mode: cuda-debug
-
-    steps:
-      - uses: actions/checkout@v6
-      - id: rust_ci_setup
-        uses: ./.github/actions/rust-ci-setup
-        with:
-          toolchain: ${{ inputs.toolchain }}
-          cargo_target_dir: ${{ inputs.cargo_target_dir }}
-          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
-          cache_prefix: ${{ matrix.mode }}
-          cache_shared_key: rust-${{ matrix.os }}
-          install_nextest: "true"
-          sccache_key_suffix: tests-features
-      - name: Set up Python (macOS)
-        if: runner.os == 'macOS'
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.x"
-      - name: Install Python task dependency (macOS)
-        if: runner.os == 'macOS'
-        run: python -m pip install --upgrade pip cbor2
-
-      - name: Install CUDA
-        uses: Jimver/cuda-toolkit@v0.2.35
-        if: runner.os != 'macOS' && matrix.mode == 'cuda-debug'
-        with:
-          cuda: 12.6.1
-          log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-tests-features-cuda.txt'
-          use-github-cache: false
-          use-local-cache: false
-      - name: Set CUDA compute capability (CI)
-        if: runner.os == 'Linux' && matrix.mode == 'cuda-debug'
-        shell: bash
-        run: |
-          if command -v nvcc >/dev/null 2>&1; then
-            CAP=$(nvcc --list-gpu-code | awk -F_ '/sm_/ {print $2}' | sort -n | tail -1)
-            if [[ -n "$CAP" ]]; then
-              echo "CUDA_COMPUTE_CAP=$CAP" >> $GITHUB_ENV
-            else
-              echo "CUDA_COMPUTE_CAP=86" >> $GITHUB_ENV
-            fi
-          else
-            echo "CUDA_COMPUTE_CAP=86" >> $GITHUB_ENV
-          fi
-
-      - name: Set features (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          if [[ '${{ matrix.mode }}' == 'cuda-debug' ]]; then
-            echo "FEATURES_FLAG=--features $BASE_FEATURES,python,cuda" >> $GITHUB_ENV
-          else
-            echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
-          fi
-
-      - name: Set features (MacOS)
-        if: runner.os == 'macOS'
-        run: |
-          echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
-
-      - name: Set features (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          echo "FEATURES_FLAG=" >> $GITHUB_ENV
-
-      - name: Detect embedded-only crates
-        if: env.WORKSPACE_SCOPE == 'workspace'
-        run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
-          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
-
-      - name: Run Unit Tests with all features on (${{ matrix.os }} | ${{ matrix.mode }})
-        run: |
-          if [[ '${{ matrix.mode }}' == 'cuda-debug' && '${{ runner.os }}' == 'Linux' ]]; then
-            if ! ldconfig -p 2>/dev/null | grep -q 'libcuda\.so\.1'; then
-              echo "libcuda.so.1 not found; compiling all-feature tests without executing them."
-              cargo +${{ inputs.toolchain }} test --no-run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
-              exit 0
-            fi
-          fi
-          cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
-
-      - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
-
-  templates:
-    name: Templates (debug)
-    runs-on: ${{ matrix.os }}
+  unit-linux-container:
+    if: inputs.linux_ci_image != ''
+    name: Unit Checks / ${{ matrix.task }} (ubuntu-26.04, debug)
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ inputs.linux_ci_image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     defaults:
       run:
@@ -273,8 +46,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, macos-latest ]
-        mode: [ debug ]
+        task: [ clippy, test ]
 
     steps:
       - uses: actions/checkout@v6
@@ -284,25 +56,611 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
-          cache_prefix: ${{ matrix.mode }}
+          prebaked_linux_image: "true"
+          cache_prefix: debug-ubuntu26-container
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: ${{ matrix.task == 'test' }}
+          sccache_key_suffix: unit-${{ matrix.task }}
+      - name: Set features (Linux)
+        run: |
+          echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
+      - name: Detect embedded-only crates
+        run: |
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+      - name: Run clippy on (ubuntu-26.04 | debug)
+        if: matrix.task == 'clippy'
+        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $EMBEDDED_EXCLUDES -- --deny warnings
+      - name: Run clippy with all features on (ubuntu-26.04 | debug)
+        if: matrix.task == 'clippy'
+        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES -- --deny warnings
+      - name: Run Unit Tests on (ubuntu-26.04 | debug)
+        if: matrix.task == 'test'
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $EMBEDDED_EXCLUDES
+      - name: Run cu-caterpillar determinism test (determinism_ci)
+        if: matrix.task == 'test'
+        env:
+          RAYON_NUM_THREADS: "1"
+          COPPER_DETERMINISM_ITERS: "256"
+          COPPER_DETERMINISM_DT_TICKS: "1000"
+        run: >
+          cargo +${{ inputs.toolchain }} test -p cu-caterpillar --features determinism_ci
+          -- determinism_record_and_resim --test-threads=1
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
+
+  unit-linux-host:
+    if: inputs.linux_ci_image == ''
+    name: Unit Checks / ${{ matrix.task }} (ubuntu-latest, debug)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      CARGO_TERM_COLOR: always
+      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      WORKSPACE_SCOPE: workspace
+
+    strategy:
+      fail-fast: false
+      matrix:
+        task: [ clippy, test ]
+
+    steps:
+      - uses: actions/checkout@v6
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          cache_prefix: debug-ubuntu-host
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: ${{ matrix.task == 'test' }}
+          sccache_key_suffix: unit-${{ matrix.task }}
+      - name: Set features (Linux)
+        run: |
+          echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
+      - name: Detect embedded-only crates
+        run: |
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+      - name: Run clippy on (ubuntu-latest | debug)
+        if: matrix.task == 'clippy'
+        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $EMBEDDED_EXCLUDES -- --deny warnings
+      - name: Run clippy with all features on (ubuntu-latest | debug)
+        if: matrix.task == 'clippy'
+        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES -- --deny warnings
+      - name: Run Unit Tests on (ubuntu-latest | debug)
+        if: matrix.task == 'test'
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $EMBEDDED_EXCLUDES
+      - name: Run cu-caterpillar determinism test (determinism_ci)
+        if: matrix.task == 'test'
+        env:
+          RAYON_NUM_THREADS: "1"
+          COPPER_DETERMINISM_ITERS: "256"
+          COPPER_DETERMINISM_DT_TICKS: "1000"
+        run: >
+          cargo +${{ inputs.toolchain }} test -p cu-caterpillar --features determinism_ci
+          -- determinism_record_and_resim --test-threads=1
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
+
+  doctests-linux-container:
+    if: inputs.linux_ci_image != ''
+    name: Doctests (ubuntu-26.04, debug)
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ inputs.linux_ci_image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      CARGO_TERM_COLOR: always
+      WORKSPACE_SCOPE: workspace
+
+    steps:
+      - uses: actions/checkout@v6
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          prebaked_linux_image: "true"
+          cache_prefix: debug-ubuntu26-container
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: "false"
+          sccache_key_suffix: doctests
+      - name: Detect embedded-only crates
+        run: |
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+      - name: Run doctests on (ubuntu-26.04 | debug)
+        run: cargo +${{ inputs.toolchain }} test --doc $WORKSPACE_FLAG $EMBEDDED_EXCLUDES --quiet
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
+
+  doctests-linux-host:
+    if: inputs.linux_ci_image == ''
+    name: Doctests (ubuntu-latest, debug)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      CARGO_TERM_COLOR: always
+      WORKSPACE_SCOPE: workspace
+
+    steps:
+      - uses: actions/checkout@v6
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          cache_prefix: debug-ubuntu-host
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: "false"
+          sccache_key_suffix: doctests
+      - name: Detect embedded-only crates
+        run: |
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+      - name: Run doctests on (ubuntu-latest | debug)
+        run: cargo +${{ inputs.toolchain }} test --doc $WORKSPACE_FLAG $EMBEDDED_EXCLUDES --quiet
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
+
+  unit-linux-cuda-container:
+    if: inputs.linux_cuda_ci_image != ''
+    name: Unit Checks / clippy (cuda-ubuntu-24.04, cuda-debug)
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ inputs.linux_cuda_ci_image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      CARGO_TERM_COLOR: always
+      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      WORKSPACE_SCOPE: workspace
+
+    steps:
+      - uses: actions/checkout@v6
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          prebaked_linux_image: "true"
+          cache_prefix: cuda-debug-ubuntu24-container
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: "false"
+          sccache_key_suffix: unit-clippy
+      - name: Set CUDA compute capability (CI)
+        run: |
+          if command -v nvcc >/dev/null 2>&1; then
+            CAP=$(nvcc --list-gpu-code | awk -F_ '/sm_/ {print $2}' | sort -n | tail -1)
+            if [[ -n "$CAP" ]]; then
+              echo "CUDA_COMPUTE_CAP=$CAP" >> $GITHUB_ENV
+            else
+              echo "CUDA_COMPUTE_CAP=86" >> $GITHUB_ENV
+            fi
+          else
+            echo "CUDA_COMPUTE_CAP=86" >> $GITHUB_ENV
+          fi
+      - name: Set features (Linux)
+        run: |
+          echo "FEATURES_FLAG=--features $BASE_FEATURES,python,cuda" >> $GITHUB_ENV
+      - name: Detect embedded-only crates
+        run: |
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+      - name: Run clippy with all features on (cuda-ubuntu-24.04 | cuda-debug)
+        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES -- --deny warnings
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
+
+  unit-other:
+    name: Unit Checks / ${{ matrix.task }} (${{ matrix.os }}, debug)
+    runs-on: ${{ matrix.os }}
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      CARGO_TERM_COLOR: always
+      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      WORKSPACE_SCOPE: ${{ matrix.os == 'windows-latest' && 'core' || 'workspace' }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ macos-latest, windows-latest ]
+        task: [ test ]
+
+    steps:
+      - uses: actions/checkout@v6
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          cache_prefix: debug
           cache_shared_key: rust-${{ matrix.os }}
+          install_nextest: ${{ matrix.task == 'test' }}
+          sccache_key_suffix: unit-${{ matrix.task }}
+      - name: Set up Python (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      - name: Install Python task dependency (macOS)
+        if: runner.os == 'macOS'
+        run: python -m pip install --upgrade pip cbor2
+      - name: Set features (MacOS)
+        if: runner.os == 'macOS'
+        run: |
+          echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
+      - name: Set features (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          echo "FEATURES_FLAG=" >> $GITHUB_ENV
+      - name: Detect embedded-only crates
+        if: env.WORKSPACE_SCOPE == 'workspace'
+        run: |
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+      - name: Run Unit Tests on (${{ matrix.os }} | debug)
+        if: matrix.task == 'test'
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $EMBEDDED_EXCLUDES
+      - name: Run cu-caterpillar determinism test (determinism_ci)
+        if: matrix.task == 'test' && matrix.os == 'macos-latest'
+        env:
+          RAYON_NUM_THREADS: "1"
+          COPPER_DETERMINISM_ITERS: "256"
+          COPPER_DETERMINISM_DT_TICKS: "1000"
+        run: >
+          cargo +${{ inputs.toolchain }} test -p cu-caterpillar --features determinism_ci
+          -- determinism_record_and_resim --test-threads=1
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
+
+  tests-features-linux-container:
+    if: inputs.linux_ci_image != ''
+    name: Unit Tests (all features) (ubuntu-26.04, debug)
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ inputs.linux_ci_image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      CARGO_TERM_COLOR: always
+      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      WORKSPACE_SCOPE: workspace
+
+    steps:
+      - uses: actions/checkout@v6
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          prebaked_linux_image: "true"
+          cache_prefix: debug-ubuntu26-container
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: "true"
+          sccache_key_suffix: tests-features
+      - name: Set features (Linux)
+        run: |
+          echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
+      - name: Detect embedded-only crates
+        run: |
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+      - name: Run Unit Tests with all features on (ubuntu-26.04 | debug)
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
+
+  tests-features-linux-host:
+    if: inputs.linux_ci_image == ''
+    name: Unit Tests (all features) (ubuntu-latest, debug)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      CARGO_TERM_COLOR: always
+      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      WORKSPACE_SCOPE: workspace
+
+    steps:
+      - uses: actions/checkout@v6
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          cache_prefix: debug-ubuntu-host
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: "true"
+          sccache_key_suffix: tests-features
+      - name: Set features (Linux)
+        run: |
+          echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
+      - name: Detect embedded-only crates
+        run: |
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+      - name: Run Unit Tests with all features on (ubuntu-latest | debug)
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
+
+  tests-features-linux-cuda-container:
+    if: inputs.linux_cuda_ci_image != ''
+    name: Unit Tests (all features) (cuda-ubuntu-24.04, cuda-debug)
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ inputs.linux_cuda_ci_image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      CARGO_TERM_COLOR: always
+      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      WORKSPACE_SCOPE: workspace
+
+    steps:
+      - uses: actions/checkout@v6
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          prebaked_linux_image: "true"
+          cache_prefix: cuda-debug-ubuntu24-container
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: "true"
+          sccache_key_suffix: tests-features
+      - name: Set CUDA compute capability (CI)
+        run: |
+          if command -v nvcc >/dev/null 2>&1; then
+            CAP=$(nvcc --list-gpu-code | awk -F_ '/sm_/ {print $2}' | sort -n | tail -1)
+            if [[ -n "$CAP" ]]; then
+              echo "CUDA_COMPUTE_CAP=$CAP" >> $GITHUB_ENV
+            else
+              echo "CUDA_COMPUTE_CAP=86" >> $GITHUB_ENV
+            fi
+          else
+            echo "CUDA_COMPUTE_CAP=86" >> $GITHUB_ENV
+          fi
+      - name: Set features (Linux)
+        run: |
+          echo "FEATURES_FLAG=--features $BASE_FEATURES,python,cuda" >> $GITHUB_ENV
+      - name: Detect embedded-only crates
+        run: |
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+      - name: Run Unit Tests with all features on (cuda-ubuntu-24.04 | cuda-debug)
+        run: |
+          if ! ldconfig -p 2>/dev/null | grep -q 'libcuda\.so\.1'; then
+            echo "libcuda.so.1 not found; compiling all-feature tests without executing them."
+            cargo +${{ inputs.toolchain }} test --no-run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
+            exit 0
+          fi
+          cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
+
+  tests-features-other:
+    name: Unit Tests (all features) (${{ matrix.os }}, debug)
+    runs-on: ${{ matrix.os }}
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      CARGO_TERM_COLOR: always
+      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      WORKSPACE_SCOPE: ${{ matrix.os == 'windows-latest' && 'core' || 'workspace' }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ macos-latest, windows-latest ]
+
+    steps:
+      - uses: actions/checkout@v6
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          cache_prefix: debug
+          cache_shared_key: rust-${{ matrix.os }}
+          install_nextest: "true"
+          sccache_key_suffix: tests-features
+      - name: Set up Python (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      - name: Install Python task dependency (macOS)
+        if: runner.os == 'macOS'
+        run: python -m pip install --upgrade pip cbor2
+      - name: Set features (MacOS)
+        if: runner.os == 'macOS'
+        run: |
+          echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
+      - name: Set features (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          echo "FEATURES_FLAG=" >> $GITHUB_ENV
+      - name: Detect embedded-only crates
+        if: env.WORKSPACE_SCOPE == 'workspace'
+        run: |
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+      - name: Run Unit Tests with all features on (${{ matrix.os }} | debug)
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
+
+  templates-linux-container:
+    if: inputs.linux_ci_image != ''
+    name: Templates (debug) (ubuntu-latest, debug)
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ inputs.linux_ci_image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      CARGO_TERM_COLOR: always
+      WORKSPACE_SCOPE: workspace
+
+    steps:
+      - uses: actions/checkout@v6
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          prebaked_linux_image: "true"
+          cache_prefix: debug-ubuntu26-container
+          cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
           sccache_key_suffix: templates
-
-      - name: Install cargo-generate on (${{ matrix.os }} | debug)
+      - name: Install cargo-generate on (ubuntu-latest | debug)
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-generate
-
-      - name: Generate new templates on (${{ matrix.os }} | debug)
+      - name: Generate new templates on (ubuntu-latest | debug)
         run: |
+          export USER="${USER:-${GITHUB_ACTOR:-ci}}"
+          export USERNAME="${USERNAME:-$USER}"
           rm -rf support/cargo_cunew/templates/test_project support/cargo_cunew/templates/test_workspace
           cargo +${{ inputs.toolchain }} run -p cargo-cunew -- support/cargo_cunew/templates/test_project --template project --source local --copper-root .
           cargo +${{ inputs.toolchain }} run -p cargo-cunew -- support/cargo_cunew/templates/test_workspace --template workspace --source local --copper-root .
           tmpdir="$(mktemp -d)"
           cargo +${{ inputs.toolchain }} generate --path support/cargo_cunew/templates/cu_project --name cargo_generate_project --destination "$tmpdir" -d copper_source=local -d copper_root_path="$PWD" --silent
           echo "CARGO_GENERATE_PROJECT=$tmpdir/cargo_generate_project" >> $GITHUB_ENV
-      - name: Build generated templates on (${{ matrix.os }} | debug)
+      - name: Build generated templates on (ubuntu-latest | debug)
         run: |
           cd support/cargo_cunew/templates/test_project
           cargo +${{ inputs.toolchain }} build
@@ -310,7 +668,122 @@ jobs:
           cargo +${{ inputs.toolchain }} build
           cd "$CARGO_GENERATE_PROJECT"
           cargo +${{ inputs.toolchain }} build
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
 
+  templates-linux-host:
+    if: inputs.linux_ci_image == ''
+    name: Templates (debug) (ubuntu-latest, debug)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      CARGO_TERM_COLOR: always
+      WORKSPACE_SCOPE: workspace
+
+    steps:
+      - uses: actions/checkout@v6
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          cache_prefix: debug-ubuntu-host
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: "false"
+          sccache_key_suffix: templates
+      - name: Install cargo-generate on (ubuntu-latest | debug)
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-generate
+      - name: Generate new templates on (ubuntu-latest | debug)
+        run: |
+          export USER="${USER:-${GITHUB_ACTOR:-ci}}"
+          export USERNAME="${USERNAME:-$USER}"
+          rm -rf support/cargo_cunew/templates/test_project support/cargo_cunew/templates/test_workspace
+          cargo +${{ inputs.toolchain }} run -p cargo-cunew -- support/cargo_cunew/templates/test_project --template project --source local --copper-root .
+          cargo +${{ inputs.toolchain }} run -p cargo-cunew -- support/cargo_cunew/templates/test_workspace --template workspace --source local --copper-root .
+          tmpdir="$(mktemp -d)"
+          cargo +${{ inputs.toolchain }} generate --path support/cargo_cunew/templates/cu_project --name cargo_generate_project --destination "$tmpdir" -d copper_source=local -d copper_root_path="$PWD" --silent
+          echo "CARGO_GENERATE_PROJECT=$tmpdir/cargo_generate_project" >> $GITHUB_ENV
+      - name: Build generated templates on (ubuntu-latest | debug)
+        run: |
+          cd support/cargo_cunew/templates/test_project
+          cargo +${{ inputs.toolchain }} build
+          cd ../test_workspace
+          cargo +${{ inputs.toolchain }} build
+          cd "$CARGO_GENERATE_PROJECT"
+          cargo +${{ inputs.toolchain }} build
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
+
+  templates-macos:
+    name: Templates (debug) (macos-latest, debug)
+    runs-on: macos-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      CARGO_TERM_COLOR: always
+      WORKSPACE_SCOPE: workspace
+
+    steps:
+      - uses: actions/checkout@v6
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          cache_prefix: debug
+          cache_shared_key: rust-macos-latest
+          install_nextest: "false"
+          sccache_key_suffix: templates
+      - name: Install cargo-generate on (macos-latest | debug)
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-generate
+      - name: Generate new templates on (macos-latest | debug)
+        run: |
+          export USER="${USER:-${GITHUB_ACTOR:-ci}}"
+          export USERNAME="${USERNAME:-$USER}"
+          rm -rf support/cargo_cunew/templates/test_project support/cargo_cunew/templates/test_workspace
+          cargo +${{ inputs.toolchain }} run -p cargo-cunew -- support/cargo_cunew/templates/test_project --template project --source local --copper-root .
+          cargo +${{ inputs.toolchain }} run -p cargo-cunew -- support/cargo_cunew/templates/test_workspace --template workspace --source local --copper-root .
+          tmpdir="$(mktemp -d)"
+          cargo +${{ inputs.toolchain }} generate --path support/cargo_cunew/templates/cu_project --name cargo_generate_project --destination "$tmpdir" -d copper_source=local -d copper_root_path="$PWD" --silent
+          echo "CARGO_GENERATE_PROJECT=$tmpdir/cargo_generate_project" >> $GITHUB_ENV
+      - name: Build generated templates on (macos-latest | debug)
+        run: |
+          cd support/cargo_cunew/templates/test_project
+          cargo +${{ inputs.toolchain }} build
+          cd ../test_workspace
+          cargo +${{ inputs.toolchain }} build
+          cd "$CARGO_GENERATE_PROJECT"
+          cargo +${{ inputs.toolchain }} build
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
       - name: Save sccache
         if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5

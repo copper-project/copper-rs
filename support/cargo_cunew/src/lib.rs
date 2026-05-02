@@ -123,6 +123,7 @@ pub fn run(cli: Cli) -> Result<PathBuf> {
 
 fn run_with_versions(cli: Cli, versions_override: Option<CopperVersions>) -> Result<PathBuf> {
     validate_git_options(&cli)?;
+    ensure_generator_identity_env()?;
 
     let resolved = resolve_options(&cli, versions_override)?;
     let bundled = materialize_bundled_templates()?;
@@ -150,6 +151,68 @@ fn run_with_versions(cli: Cli, versions_override: Option<CopperVersions>) -> Res
     };
 
     generate(args).context("failed to generate Copper project")
+}
+
+fn ensure_generator_identity_env() -> Result<()> {
+    let user = env::var("USER")
+        .ok()
+        .filter(|value| !value.trim().is_empty());
+    let username = env::var("USERNAME")
+        .ok()
+        .filter(|value| !value.trim().is_empty());
+
+    let identity = user
+        .clone()
+        .or(username.clone())
+        .or(detect_current_username()?);
+
+    let Some(identity) = identity else {
+        return Ok(());
+    };
+
+    // cargo-generate reads process environment to synthesize its built-in
+    // `authors`/`username` variables. Set the missing variables once up front.
+    unsafe {
+        if user.is_none() {
+            env::set_var("USER", &identity);
+        }
+        if username.is_none() {
+            env::set_var("USERNAME", &identity);
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn detect_current_username() -> Result<Option<String>> {
+    use std::ffi::CStr;
+
+    // This runs before cargo-generate starts and before we spawn worker
+    // threads, so using the libc account lookup here is acceptable.
+    unsafe {
+        let passwd = libc::getpwuid(libc::geteuid());
+        if passwd.is_null() || (*passwd).pw_name.is_null() {
+            return Ok(None);
+        }
+
+        let username = CStr::from_ptr((*passwd).pw_name)
+            .to_str()
+            .context("current username is not valid UTF-8")?
+            .trim()
+            .to_owned();
+
+        if username.is_empty() {
+            return Ok(None);
+        }
+
+        Ok(Some(username))
+    }
+}
+
+#[cfg(not(unix))]
+fn detect_current_username() -> Result<Option<String>> {
+    Ok(None)
 }
 
 fn resolve_options(

@@ -27,9 +27,12 @@ outputs:
   sccache_cache_hit:
     description: Whether sccache restore matched the primary key.
     value: ${{ steps.restore_sccache.outputs.cache-hit }}
+  sccache_cache_matched_key:
+    description: Cache key that was restored, if any.
+    value: ${{ steps.restore_sccache.outputs.cache-matched-key }}
   sccache_cache_primary_key:
     description: Primary sccache key for this job.
-    value: ${{ steps.restore_sccache.outputs.cache-primary-key }}
+    value: ${{ steps.sccache_key.outputs.primary }}
 runs:
   using: composite
   steps:
@@ -54,17 +57,51 @@ runs:
         mkdir -p "$SCCACHE_DIR"
         echo "SCCACHE_DIR=$SCCACHE_DIR" >> "$GITHUB_ENV"
         echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+    - name: Compute sccache keys
+      if: inputs.sccache_restore == 'true'
+      id: sccache_key
+      shell: bash
+      run: |
+        primary="sccache-${{ runner.os }}-${{ runner.arch }}-${{ inputs.toolchain }}-embedded-${{ inputs.sccache_key_suffix }}-${{ github.sha }}"
+        echo "primary=$primary" >> "$GITHUB_OUTPUT"
+        {
+          echo "restore_keys<<EOF"
+          echo "sccache-${{ runner.os }}-${{ runner.arch }}-${{ inputs.toolchain }}-embedded-${{ inputs.sccache_key_suffix }}-"
+          echo "sccache-${{ runner.os }}-${{ runner.arch }}-${{ inputs.toolchain }}-embedded-"
+          echo "sccache-${{ runner.os }}-${{ runner.arch }}-${{ inputs.toolchain }}-"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
     - name: Restore sccache
       if: inputs.sccache_restore == 'true'
       id: restore_sccache
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.SCCACHE_DIR }}
-        key: sccache-${{ runner.os }}-${{ inputs.toolchain }}-embedded-${{ inputs.sccache_key_suffix }}-${{ github.sha }}
-        restore-keys: |
-          sccache-${{ runner.os }}-${{ inputs.toolchain }}-embedded-${{ inputs.sccache_key_suffix }}-
-          sccache-${{ runner.os }}-${{ inputs.toolchain }}-embedded-
-          sccache-${{ runner.os }}-${{ inputs.toolchain }}-
+        key: ${{ steps.sccache_key.outputs.primary }}
+        restore-keys: ${{ steps.sccache_key.outputs.restore_keys }}
+    - name: Report sccache restore
+      if: inputs.sccache_restore == 'true'
+      shell: bash
+      env:
+        SCCACHE_REQUESTED_KEY: ${{ steps.sccache_key.outputs.primary }}
+        SCCACHE_MATCHED_KEY: ${{ steps.restore_sccache.outputs.cache-matched-key }}
+        SCCACHE_CACHE_HIT: ${{ steps.restore_sccache.outputs.cache-hit }}
+      run: |
+        status="miss"
+        if [[ -n "$SCCACHE_MATCHED_KEY" ]]; then
+          status="partial-hit"
+          if [[ "$SCCACHE_CACHE_HIT" == "true" ]]; then
+            status="exact-hit"
+          fi
+        fi
+        echo "sccache requested key: $SCCACHE_REQUESTED_KEY"
+        echo "sccache matched key: ${SCCACHE_MATCHED_KEY:-<none>}"
+        echo "sccache restore status: $status"
+        echo "sccache directory: $SCCACHE_DIR"
+        if [[ -d "$SCCACHE_DIR" ]]; then
+          du -sh "$SCCACHE_DIR" || true
+          find "$SCCACHE_DIR" -mindepth 1 -maxdepth 1 | wc -l | awk '{print "sccache top-level entries: " $1}'
+        fi
     - name: Install latest nextest
       if: inputs.install_nextest == 'true'
       uses: taiki-e/install-action@nextest
