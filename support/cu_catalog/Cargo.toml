@@ -1,6 +1,7 @@
 [package]
 name = "cu-catalog"
 description = "Generate the Copper component catalog from RON source entries."
+publish = false
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.95"

@@ -34,8 +34,8 @@ cu29-export = { workspace = true, features = ["python", "mcap"] }
 serde = { workspace = true }
 cu29-unifiedlog = { workspace = true }
 
-cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.15.0" } # needed
-cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio", version = "0.15.0" }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "1.0.0-rc1" } # needed
+cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio", version = "1.0.0-rc1" }
 
 
 [features]
