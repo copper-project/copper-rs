@@ -570,6 +570,8 @@ jobs:
           tool: cargo-generate
       - name: Generate new templates on (ubuntu-latest | debug)
         run: |
+          export USER="${USER:-${GITHUB_ACTOR:-ci}}"
+          export USERNAME="${USERNAME:-$USER}"
           rm -rf support/cargo_cunew/templates/test_project support/cargo_cunew/templates/test_workspace
           cargo +${{ inputs.toolchain }} run -p cargo-cunew -- support/cargo_cunew/templates/test_project --template project --source local --copper-root .
           cargo +${{ inputs.toolchain }} run -p cargo-cunew -- support/cargo_cunew/templates/test_workspace --template workspace --source local --copper-root .
@@ -622,6 +624,8 @@ jobs:
           tool: cargo-generate
       - name: Generate new templates on (ubuntu-latest | debug)
         run: |
+          export USER="${USER:-${GITHUB_ACTOR:-ci}}"
+          export USERNAME="${USERNAME:-$USER}"
           rm -rf support/cargo_cunew/templates/test_project support/cargo_cunew/templates/test_workspace
           cargo +${{ inputs.toolchain }} run -p cargo-cunew -- support/cargo_cunew/templates/test_project --template project --source local --copper-root .
           cargo +${{ inputs.toolchain }} run -p cargo-cunew -- support/cargo_cunew/templates/test_workspace --template workspace --source local --copper-root .
@@ -673,6 +677,8 @@ jobs:
           tool: cargo-generate
       - name: Generate new templates on (macos-latest | debug)
         run: |
+          export USER="${USER:-${GITHUB_ACTOR:-ci}}"
+          export USERNAME="${USERNAME:-$USER}"
           rm -rf support/cargo_cunew/templates/test_project support/cargo_cunew/templates/test_workspace
           cargo +${{ inputs.toolchain }} run -p cargo-cunew -- support/cargo_cunew/templates/test_project --template project --source local --copper-root .
           cargo +${{ inputs.toolchain }} run -p cargo-cunew -- support/cargo_cunew/templates/test_workspace --template workspace --source local --copper-root .
