@@ -46,7 +46,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        task: [ clippy, build, test ]
+        task: [ clippy, test ]
 
     steps:
       - uses: actions/checkout@v6
@@ -74,12 +74,6 @@ jobs:
       - name: Run clippy with all features on (ubuntu-26.04 | debug)
         if: matrix.task == 'clippy'
         run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES -- --deny warnings
-      - name: Run build with all features on (ubuntu-26.04 | debug)
-        if: matrix.task == 'build'
-        run: cargo +${{ inputs.toolchain }} build $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES
-      - name: Run doctests on (ubuntu-26.04 | debug)
-        if: matrix.task == 'test'
-        run: cargo +${{ inputs.toolchain }} test --doc $WORKSPACE_FLAG $EMBEDDED_EXCLUDES --quiet
       - name: Run Unit Tests on (ubuntu-26.04 | debug)
         if: matrix.task == 'test'
         run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $EMBEDDED_EXCLUDES
@@ -92,6 +86,9 @@ jobs:
         run: >
           cargo +${{ inputs.toolchain }} test -p cu-caterpillar --features determinism_ci
           -- determinism_record_and_resim --test-threads=1
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
       - name: Save sccache
         if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
@@ -116,7 +113,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        task: [ clippy, build, test ]
+        task: [ clippy, test ]
 
     steps:
       - uses: actions/checkout@v6
@@ -143,12 +140,6 @@ jobs:
       - name: Run clippy with all features on (ubuntu-latest | debug)
         if: matrix.task == 'clippy'
         run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES -- --deny warnings
-      - name: Run build with all features on (ubuntu-latest | debug)
-        if: matrix.task == 'build'
-        run: cargo +${{ inputs.toolchain }} build $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES
-      - name: Run doctests on (ubuntu-latest | debug)
-        if: matrix.task == 'test'
-        run: cargo +${{ inputs.toolchain }} test --doc $WORKSPACE_FLAG $EMBEDDED_EXCLUDES --quiet
       - name: Run Unit Tests on (ubuntu-latest | debug)
         if: matrix.task == 'test'
         run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $EMBEDDED_EXCLUDES
@@ -161,6 +152,97 @@ jobs:
         run: >
           cargo +${{ inputs.toolchain }} test -p cu-caterpillar --features determinism_ci
           -- determinism_record_and_resim --test-threads=1
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
+
+  doctests-linux-container:
+    if: inputs.linux_ci_image != ''
+    name: Doctests (ubuntu-26.04, debug)
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ inputs.linux_ci_image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      CARGO_TERM_COLOR: always
+      WORKSPACE_SCOPE: workspace
+
+    steps:
+      - uses: actions/checkout@v6
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          prebaked_linux_image: "true"
+          cache_prefix: debug
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: "false"
+          sccache_key_suffix: doctests
+      - name: Detect embedded-only crates
+        run: |
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+      - name: Run doctests on (ubuntu-26.04 | debug)
+        run: cargo +${{ inputs.toolchain }} test --doc $WORKSPACE_FLAG $EMBEDDED_EXCLUDES --quiet
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
+
+  doctests-linux-host:
+    if: inputs.linux_ci_image == ''
+    name: Doctests (ubuntu-latest, debug)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      CARGO_TERM_COLOR: always
+      WORKSPACE_SCOPE: workspace
+
+    steps:
+      - uses: actions/checkout@v6
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          cache_prefix: debug
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: "false"
+          sccache_key_suffix: doctests
+      - name: Detect embedded-only crates
+        run: |
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+      - name: Run doctests on (ubuntu-latest | debug)
+        run: cargo +${{ inputs.toolchain }} test --doc $WORKSPACE_FLAG $EMBEDDED_EXCLUDES --quiet
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
       - name: Save sccache
         if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
@@ -170,7 +252,7 @@ jobs:
 
   unit-linux-cuda-container:
     if: inputs.linux_cuda_ci_image != ''
-    name: Unit Checks / ${{ matrix.task }} (cuda-ubuntu-24.04, cuda-debug)
+    name: Unit Checks / clippy (cuda-ubuntu-24.04, cuda-debug)
     runs-on: ubuntu-latest
     container:
       image: ${{ inputs.linux_cuda_ci_image }}
@@ -187,11 +269,6 @@ jobs:
       BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
-    strategy:
-      fail-fast: false
-      matrix:
-        task: [ clippy, build, test ]
-
     steps:
       - uses: actions/checkout@v6
       - id: rust_ci_setup
@@ -203,8 +280,8 @@ jobs:
           prebaked_linux_image: "true"
           cache_prefix: cuda-debug
           cache_shared_key: rust-ubuntu-latest
-          install_nextest: ${{ matrix.task == 'test' }}
-          sccache_key_suffix: unit-${{ matrix.task }}
+          install_nextest: "false"
+          sccache_key_suffix: unit-clippy
       - name: Set CUDA compute capability (CI)
         run: |
           if command -v nvcc >/dev/null 2>&1; then
@@ -224,18 +301,11 @@ jobs:
         run: |
           EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
-      - name: Run clippy on (cuda-ubuntu-24.04 | cuda-debug)
-        if: matrix.task == 'clippy'
-        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $EMBEDDED_EXCLUDES -- --deny warnings
       - name: Run clippy with all features on (cuda-ubuntu-24.04 | cuda-debug)
-        if: matrix.task == 'clippy'
         run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES -- --deny warnings
-      - name: Run build with all features on (cuda-ubuntu-24.04 | cuda-debug)
-        if: matrix.task == 'build'
-        run: cargo +${{ inputs.toolchain }} build $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES
-      - name: Run Unit Tests on (cuda-ubuntu-24.04 | cuda-debug)
-        if: matrix.task == 'test'
-        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $EMBEDDED_EXCLUDES
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
       - name: Save sccache
         if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
@@ -260,7 +330,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ macos-latest, windows-latest ]
-        task: [ build, test ]
+        task: [ test ]
 
     steps:
       - uses: actions/checkout@v6
@@ -295,9 +365,6 @@ jobs:
         run: |
           EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
-      - name: Run build with all features on (${{ matrix.os }} | debug)
-        if: matrix.task == 'build'
-        run: cargo +${{ inputs.toolchain }} build $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES
       - name: Run Unit Tests on (${{ matrix.os }} | debug)
         if: matrix.task == 'test'
         run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $EMBEDDED_EXCLUDES
@@ -310,6 +377,9 @@ jobs:
         run: >
           cargo +${{ inputs.toolchain }} test -p cu-caterpillar --features determinism_ci
           -- determinism_record_and_resim --test-threads=1
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
       - name: Save sccache
         if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
@@ -358,6 +428,9 @@ jobs:
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run Unit Tests with all features on (ubuntu-26.04 | debug)
         run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
       - name: Save sccache
         if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
@@ -400,6 +473,9 @@ jobs:
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run Unit Tests with all features on (ubuntu-latest | debug)
         run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
       - name: Save sccache
         if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
@@ -466,6 +542,9 @@ jobs:
             exit 0
           fi
           cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
       - name: Save sccache
         if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
@@ -526,6 +605,9 @@ jobs:
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run Unit Tests with all features on (${{ matrix.os }} | debug)
         run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
       - name: Save sccache
         if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
@@ -586,6 +668,9 @@ jobs:
           cargo +${{ inputs.toolchain }} build
           cd "$CARGO_GENERATE_PROJECT"
           cargo +${{ inputs.toolchain }} build
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
       - name: Save sccache
         if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
@@ -640,6 +725,9 @@ jobs:
           cargo +${{ inputs.toolchain }} build
           cd "$CARGO_GENERATE_PROJECT"
           cargo +${{ inputs.toolchain }} build
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
       - name: Save sccache
         if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
@@ -693,6 +781,9 @@ jobs:
           cargo +${{ inputs.toolchain }} build
           cd "$CARGO_GENERATE_PROJECT"
           cargo +${{ inputs.toolchain }} build
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
       - name: Save sccache
         if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
