@@ -97,8 +97,6 @@ jobs:
           pull: true
           push: true
           tags: ${{ steps.image_ref.outputs.tags }}
-          cache-from: type=gha,scope=linux-ci-image-ubuntu26
-          cache-to: type=gha,mode=max,scope=linux-ci-image-ubuntu26
 
   linux-cuda-ci-image:
     name: Linux CUDA CI Image
@@ -177,8 +175,6 @@ jobs:
           pull: true
           push: true
           tags: ${{ steps.image_ref.outputs.tags }}
-          cache-from: type=gha,scope=linux-cuda-ci-image-ubuntu24
-          cache-to: type=gha,mode=max,scope=linux-cuda-ci-image-ubuntu24
 
   msrv-container:
     name: MSRV Check
