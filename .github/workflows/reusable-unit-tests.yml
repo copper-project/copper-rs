@@ -18,11 +18,15 @@ on:
         required: false
         type: string
         default: ""
+      linux_cuda_ci_image:
+        required: false
+        type: string
+        default: ""
 
 jobs:
   unit-linux-container:
     if: inputs.linux_ci_image != ''
-    name: Unit Checks / ${{ matrix.task }} (ubuntu-latest, ${{ matrix.mode }})
+    name: Unit Checks / ${{ matrix.task }} (ubuntu-26.04, debug)
     runs-on: ubuntu-latest
     container:
       image: ${{ inputs.linux_ci_image }}
@@ -42,7 +46,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [ debug, cuda-debug ]
         task: [ clippy, build, test ]
 
     steps:
@@ -54,59 +57,34 @@ jobs:
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
           prebaked_linux_image: "true"
-          cache_prefix: ${{ matrix.mode }}
+          cache_prefix: debug
           cache_shared_key: rust-ubuntu-latest
           install_nextest: ${{ matrix.task == 'test' }}
           sccache_key_suffix: unit-${{ matrix.task }}
-      - name: Install CUDA
-        if: matrix.mode == 'cuda-debug'
-        uses: Jimver/cuda-toolkit@v0.2.35
-        with:
-          cuda: 12.6.1
-          log-file-suffix: 'ubuntu-latest-${{ matrix.mode }}-${{ matrix.task }}-cuda.txt'
-          use-github-cache: false
-          use-local-cache: false
-      - name: Set CUDA compute capability (CI)
-        if: matrix.mode == 'cuda-debug'
-        run: |
-          if command -v nvcc >/dev/null 2>&1; then
-            CAP=$(nvcc --list-gpu-code | awk -F_ '/sm_/ {print $2}' | sort -n | tail -1)
-            if [[ -n "$CAP" ]]; then
-              echo "CUDA_COMPUTE_CAP=$CAP" >> $GITHUB_ENV
-            else
-              echo "CUDA_COMPUTE_CAP=86" >> $GITHUB_ENV
-            fi
-          else
-            echo "CUDA_COMPUTE_CAP=86" >> $GITHUB_ENV
-          fi
       - name: Set features (Linux)
         run: |
-          if [[ '${{ matrix.mode }}' == 'cuda-debug' ]]; then
-            echo "FEATURES_FLAG=--features $BASE_FEATURES,python,cuda" >> $GITHUB_ENV
-          else
-            echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
-          fi
+          echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
       - name: Detect embedded-only crates
         run: |
           EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
-      - name: Run clippy on (ubuntu-latest | ${{ matrix.mode }})
+      - name: Run clippy on (ubuntu-26.04 | debug)
         if: matrix.task == 'clippy'
         run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $EMBEDDED_EXCLUDES -- --deny warnings
-      - name: Run clippy with all features on (ubuntu-latest | ${{ matrix.mode }})
+      - name: Run clippy with all features on (ubuntu-26.04 | debug)
         if: matrix.task == 'clippy'
         run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES -- --deny warnings
-      - name: Run build with all features on (ubuntu-latest | ${{ matrix.mode }})
+      - name: Run build with all features on (ubuntu-26.04 | debug)
         if: matrix.task == 'build'
         run: cargo +${{ inputs.toolchain }} build $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES
-      - name: Run doctests on (ubuntu-latest | debug)
-        if: matrix.task == 'test' && matrix.mode == 'debug'
+      - name: Run doctests on (ubuntu-26.04 | debug)
+        if: matrix.task == 'test'
         run: cargo +${{ inputs.toolchain }} test --doc $WORKSPACE_FLAG $EMBEDDED_EXCLUDES --quiet
-      - name: Run Unit Tests on (ubuntu-latest | ${{ matrix.mode }})
+      - name: Run Unit Tests on (ubuntu-26.04 | debug)
         if: matrix.task == 'test'
         run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $EMBEDDED_EXCLUDES
       - name: Run cu-caterpillar determinism test (determinism_ci)
-        if: matrix.task == 'test' && matrix.mode == 'debug'
+        if: matrix.task == 'test'
         env:
           RAYON_NUM_THREADS: "1"
           COPPER_DETERMINISM_ITERS: "256"
@@ -123,7 +101,7 @@ jobs:
 
   unit-linux-host:
     if: inputs.linux_ci_image == ''
-    name: Unit Checks / ${{ matrix.task }} (ubuntu-latest, ${{ matrix.mode }})
+    name: Unit Checks / ${{ matrix.task }} (ubuntu-latest, debug)
     runs-on: ubuntu-latest
 
     defaults:
@@ -138,7 +116,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [ debug, cuda-debug ]
         task: [ clippy, build, test ]
 
     steps:
@@ -149,20 +126,86 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
-          cache_prefix: ${{ matrix.mode }}
+          cache_prefix: debug
           cache_shared_key: rust-ubuntu-latest
           install_nextest: ${{ matrix.task == 'test' }}
           sccache_key_suffix: unit-${{ matrix.task }}
-      - name: Install CUDA
-        if: matrix.mode == 'cuda-debug'
-        uses: Jimver/cuda-toolkit@v0.2.35
+      - name: Set features (Linux)
+        run: |
+          echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
+      - name: Detect embedded-only crates
+        run: |
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+      - name: Run clippy on (ubuntu-latest | debug)
+        if: matrix.task == 'clippy'
+        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $EMBEDDED_EXCLUDES -- --deny warnings
+      - name: Run clippy with all features on (ubuntu-latest | debug)
+        if: matrix.task == 'clippy'
+        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES -- --deny warnings
+      - name: Run build with all features on (ubuntu-latest | debug)
+        if: matrix.task == 'build'
+        run: cargo +${{ inputs.toolchain }} build $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES
+      - name: Run doctests on (ubuntu-latest | debug)
+        if: matrix.task == 'test'
+        run: cargo +${{ inputs.toolchain }} test --doc $WORKSPACE_FLAG $EMBEDDED_EXCLUDES --quiet
+      - name: Run Unit Tests on (ubuntu-latest | debug)
+        if: matrix.task == 'test'
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $EMBEDDED_EXCLUDES
+      - name: Run cu-caterpillar determinism test (determinism_ci)
+        if: matrix.task == 'test'
+        env:
+          RAYON_NUM_THREADS: "1"
+          COPPER_DETERMINISM_ITERS: "256"
+          COPPER_DETERMINISM_DT_TICKS: "1000"
+        run: >
+          cargo +${{ inputs.toolchain }} test -p cu-caterpillar --features determinism_ci
+          -- determinism_record_and_resim --test-threads=1
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v5
         with:
-          cuda: 12.6.1
-          log-file-suffix: 'ubuntu-latest-${{ matrix.mode }}-${{ matrix.task }}-cuda.txt'
-          use-github-cache: false
-          use-local-cache: false
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
+
+  unit-linux-cuda-container:
+    if: inputs.linux_cuda_ci_image != ''
+    name: Unit Checks / ${{ matrix.task }} (cuda-ubuntu-24.04, cuda-debug)
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ inputs.linux_cuda_ci_image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      CARGO_TERM_COLOR: always
+      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      WORKSPACE_SCOPE: workspace
+
+    strategy:
+      fail-fast: false
+      matrix:
+        task: [ clippy, build, test ]
+
+    steps:
+      - uses: actions/checkout@v6
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          prebaked_linux_image: "true"
+          cache_prefix: cuda-debug
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: ${{ matrix.task == 'test' }}
+          sccache_key_suffix: unit-${{ matrix.task }}
       - name: Set CUDA compute capability (CI)
-        if: matrix.mode == 'cuda-debug'
         run: |
           if command -v nvcc >/dev/null 2>&1; then
             CAP=$(nvcc --list-gpu-code | awk -F_ '/sm_/ {print $2}' | sort -n | tail -1)
@@ -176,39 +219,23 @@ jobs:
           fi
       - name: Set features (Linux)
         run: |
-          if [[ '${{ matrix.mode }}' == 'cuda-debug' ]]; then
-            echo "FEATURES_FLAG=--features $BASE_FEATURES,python,cuda" >> $GITHUB_ENV
-          else
-            echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
-          fi
+          echo "FEATURES_FLAG=--features $BASE_FEATURES,python,cuda" >> $GITHUB_ENV
       - name: Detect embedded-only crates
         run: |
           EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
-      - name: Run clippy on (ubuntu-latest | ${{ matrix.mode }})
+      - name: Run clippy on (cuda-ubuntu-24.04 | cuda-debug)
         if: matrix.task == 'clippy'
         run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $EMBEDDED_EXCLUDES -- --deny warnings
-      - name: Run clippy with all features on (ubuntu-latest | ${{ matrix.mode }})
+      - name: Run clippy with all features on (cuda-ubuntu-24.04 | cuda-debug)
         if: matrix.task == 'clippy'
         run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES -- --deny warnings
-      - name: Run build with all features on (ubuntu-latest | ${{ matrix.mode }})
+      - name: Run build with all features on (cuda-ubuntu-24.04 | cuda-debug)
         if: matrix.task == 'build'
         run: cargo +${{ inputs.toolchain }} build $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES
-      - name: Run doctests on (ubuntu-latest | debug)
-        if: matrix.task == 'test' && matrix.mode == 'debug'
-        run: cargo +${{ inputs.toolchain }} test --doc $WORKSPACE_FLAG $EMBEDDED_EXCLUDES --quiet
-      - name: Run Unit Tests on (ubuntu-latest | ${{ matrix.mode }})
+      - name: Run Unit Tests on (cuda-ubuntu-24.04 | cuda-debug)
         if: matrix.task == 'test'
         run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $EMBEDDED_EXCLUDES
-      - name: Run cu-caterpillar determinism test (determinism_ci)
-        if: matrix.task == 'test' && matrix.mode == 'debug'
-        env:
-          RAYON_NUM_THREADS: "1"
-          COPPER_DETERMINISM_ITERS: "256"
-          COPPER_DETERMINISM_DT_TICKS: "1000"
-        run: >
-          cargo +${{ inputs.toolchain }} test -p cu-caterpillar --features determinism_ci
-          -- determinism_record_and_resim --test-threads=1
       - name: Save sccache
         if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
@@ -292,7 +319,7 @@ jobs:
 
   tests-features-linux-container:
     if: inputs.linux_ci_image != ''
-    name: Unit Tests (all features) (ubuntu-latest, ${{ matrix.mode }})
+    name: Unit Tests (all features) (ubuntu-26.04, debug)
     runs-on: ubuntu-latest
     container:
       image: ${{ inputs.linux_ci_image }}
@@ -309,11 +336,6 @@ jobs:
       BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
-    strategy:
-      fail-fast: false
-      matrix:
-        mode: [ debug, cuda-debug ]
-
     steps:
       - uses: actions/checkout@v6
       - id: rust_ci_setup
@@ -323,52 +345,19 @@ jobs:
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
           prebaked_linux_image: "true"
-          cache_prefix: ${{ matrix.mode }}
+          cache_prefix: debug
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "true"
           sccache_key_suffix: tests-features
-      - name: Install CUDA
-        if: matrix.mode == 'cuda-debug'
-        uses: Jimver/cuda-toolkit@v0.2.35
-        with:
-          cuda: 12.6.1
-          log-file-suffix: 'ubuntu-latest-${{ matrix.mode }}-tests-features-cuda.txt'
-          use-github-cache: false
-          use-local-cache: false
-      - name: Set CUDA compute capability (CI)
-        if: matrix.mode == 'cuda-debug'
-        run: |
-          if command -v nvcc >/dev/null 2>&1; then
-            CAP=$(nvcc --list-gpu-code | awk -F_ '/sm_/ {print $2}' | sort -n | tail -1)
-            if [[ -n "$CAP" ]]; then
-              echo "CUDA_COMPUTE_CAP=$CAP" >> $GITHUB_ENV
-            else
-              echo "CUDA_COMPUTE_CAP=86" >> $GITHUB_ENV
-            fi
-          else
-            echo "CUDA_COMPUTE_CAP=86" >> $GITHUB_ENV
-          fi
       - name: Set features (Linux)
         run: |
-          if [[ '${{ matrix.mode }}' == 'cuda-debug' ]]; then
-            echo "FEATURES_FLAG=--features $BASE_FEATURES,python,cuda" >> $GITHUB_ENV
-          else
-            echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
-          fi
+          echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
       - name: Detect embedded-only crates
         run: |
           EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
-      - name: Run Unit Tests with all features on (ubuntu-latest | ${{ matrix.mode }})
-        run: |
-          if [[ '${{ matrix.mode }}' == 'cuda-debug' ]]; then
-            if ! ldconfig -p 2>/dev/null | grep -q 'libcuda\.so\.1'; then
-              echo "libcuda.so.1 not found; compiling all-feature tests without executing them."
-              cargo +${{ inputs.toolchain }} test --no-run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
-              exit 0
-            fi
-          fi
-          cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
+      - name: Run Unit Tests with all features on (ubuntu-26.04 | debug)
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
       - name: Save sccache
         if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
@@ -378,7 +367,7 @@ jobs:
 
   tests-features-linux-host:
     if: inputs.linux_ci_image == ''
-    name: Unit Tests (all features) (ubuntu-latest, ${{ matrix.mode }})
+    name: Unit Tests (all features) (ubuntu-latest, debug)
     runs-on: ubuntu-latest
 
     defaults:
@@ -390,10 +379,52 @@ jobs:
       BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
-    strategy:
-      fail-fast: false
-      matrix:
-        mode: [ debug, cuda-debug ]
+    steps:
+      - uses: actions/checkout@v6
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          cache_prefix: debug
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: "true"
+          sccache_key_suffix: tests-features
+      - name: Set features (Linux)
+        run: |
+          echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
+      - name: Detect embedded-only crates
+        run: |
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+      - name: Run Unit Tests with all features on (ubuntu-latest | debug)
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
+
+  tests-features-linux-cuda-container:
+    if: inputs.linux_cuda_ci_image != ''
+    name: Unit Tests (all features) (cuda-ubuntu-24.04, cuda-debug)
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ inputs.linux_cuda_ci_image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      CARGO_TERM_COLOR: always
+      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      WORKSPACE_SCOPE: workspace
 
     steps:
       - uses: actions/checkout@v6
@@ -403,20 +434,12 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
-          cache_prefix: ${{ matrix.mode }}
+          prebaked_linux_image: "true"
+          cache_prefix: cuda-debug
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "true"
           sccache_key_suffix: tests-features
-      - name: Install CUDA
-        if: matrix.mode == 'cuda-debug'
-        uses: Jimver/cuda-toolkit@v0.2.35
-        with:
-          cuda: 12.6.1
-          log-file-suffix: 'ubuntu-latest-${{ matrix.mode }}-tests-features-cuda.txt'
-          use-github-cache: false
-          use-local-cache: false
       - name: Set CUDA compute capability (CI)
-        if: matrix.mode == 'cuda-debug'
         run: |
           if command -v nvcc >/dev/null 2>&1; then
             CAP=$(nvcc --list-gpu-code | awk -F_ '/sm_/ {print $2}' | sort -n | tail -1)
@@ -430,23 +453,17 @@ jobs:
           fi
       - name: Set features (Linux)
         run: |
-          if [[ '${{ matrix.mode }}' == 'cuda-debug' ]]; then
-            echo "FEATURES_FLAG=--features $BASE_FEATURES,python,cuda" >> $GITHUB_ENV
-          else
-            echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
-          fi
+          echo "FEATURES_FLAG=--features $BASE_FEATURES,python,cuda" >> $GITHUB_ENV
       - name: Detect embedded-only crates
         run: |
           EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
-      - name: Run Unit Tests with all features on (ubuntu-latest | ${{ matrix.mode }})
+      - name: Run Unit Tests with all features on (cuda-ubuntu-24.04 | cuda-debug)
         run: |
-          if [[ '${{ matrix.mode }}' == 'cuda-debug' ]]; then
-            if ! ldconfig -p 2>/dev/null | grep -q 'libcuda\.so\.1'; then
-              echo "libcuda.so.1 not found; compiling all-feature tests without executing them."
-              cargo +${{ inputs.toolchain }} test --no-run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
-              exit 0
-            fi
+          if ! ldconfig -p 2>/dev/null | grep -q 'libcuda\.so\.1'; then
+            echo "libcuda.so.1 not found; compiling all-feature tests without executing them."
+            cargo +${{ inputs.toolchain }} test --no-run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
+            exit 0
           fi
           cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
       - name: Save sccache
