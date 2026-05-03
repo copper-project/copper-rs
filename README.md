@@ -74,6 +74,24 @@ Want to see more Copper in action? Watch the [community showcase video](https://
 ## Get Started
 
 - Requires Rust 1.95 or newer. The latest stable Rust toolchain is recommended.
+
+### Zero To Your First Copper App In 30 Seconds
+
+```bash
+cargo install cargo-cunew
+cargo cunew hello_copper
+cd hello_copper
+cargo run
+```
+
+`cargo cunew` is the primary Copper bootstrap path. It generates a minimal
+source -> task -> sink application. `cargo run` starts the app, prints the
+first messages (`Received message: 42`, then `Sink Received message: 43`), and
+records to `logs/hello-copper.copper`; stop it with `Ctrl-C` when you've seen
+enough. If you have `just` installed, the generated project also includes
+helpers like `just log`, `just cl`, and `just resim`. If you want a multi-crate
+workspace instead, use `cargo cunew --template workspace my_workspace`.
+
 - Start a new project from templates: [Project Templates](https://copper-project.github.io/copper-rs/Project-Templates)
 - Browse the live component catalog: [Copper Component Catalog](https://cdn.copper-robotics.com/catalog/index.html)
   Community components are welcome there too; if you build a reusable Copper component, prefer publishing it as its own crate and adding it to the catalog.
