@@ -19,7 +19,7 @@
 
 Already showing up in: ✈️ Flying | 🚗 Driving | 🌊 Swimming | 🚀 Spacefaring | 🤖 Humanoids
 
-### Try Copper In 30 Seconds
+### Try Copper In One Click In Your Browser
 
 No setup required. Open one of the live demos in your browser: the simulator runs on the left and the live Copper monitor runs on the right.
 
@@ -75,7 +75,7 @@ Want to see more Copper in action? Watch the [community showcase video](https://
 
 - Requires Rust 1.95 or newer. The latest stable Rust toolchain is recommended.
 
-### Zero To Your First Copper App In 30 Seconds
+### Zero To Your First Copper App 30 Seconds
 
 ```bash
 cargo install cargo-cunew
