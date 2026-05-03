@@ -75,7 +75,7 @@ Want to see more Copper in action? Watch the [community showcase video](https://
 
 - Requires Rust 1.95 or newer. The latest stable Rust toolchain is recommended.
 
-### Zero To Your First Copper App 30 Seconds
+### Zero To Your First Copper App in 30 Seconds
 
 ```bash
 cargo install cargo-cunew
