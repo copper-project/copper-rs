@@ -9,7 +9,7 @@ This template bootstraps a single-crate Copper project for quick experiments.
 - `src/resim.rs`: replay binary with one-shot replay and remote-debug server modes.
 - `src/tasks.rs`: sample tasks.
 - `copperconfig.ron`: runtime configuration.
-- `justfile`: automation helpers like `just log`, `just cl`, `just resim`, `just resim-debug`, and `just rcfg`.
+- `justfile`: automation helpers like `just log`, `just cl`, `just resim`, `just resim-debug`, and `just dag` (`just rcfg` remains as a compatibility alias).
 
 ## Quick start
 

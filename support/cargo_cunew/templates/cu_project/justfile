@@ -36,12 +36,29 @@ resim-debug debug_base="copper/projects/{{project-name|snake_case}}/debug/v1" lo
     --replay-log-base "$replay_log"
 
 # Render the execution DAG from the app config.
-rcfg:
+dag:
   #!/usr/bin/env bash
   set -euo pipefail
   {% if copper_source == "local" %}
-  {{copper_root_path}}/target/debug/cu29-rendercfg copperconfig.ron --open
+  cargo run --manifest-path "{{copper_root_path}}/Cargo.toml" -p cu29-runtime --bin cu29-rendercfg -- \
+    copperconfig.ron --open
   {% else %}
-  echo "cu29-rendercfg currently requires a local Copper checkout. Re-run cargo cunew with --source local to enable just rcfg." >&2
-  exit 1
+  renderer="$(command -v cu29-rendercfg || true)"
+  if [[ -z "$renderer" ]]; then
+    echo "cu29-rendercfg not found on PATH; installing it now..." >&2
+    {% if copper_source == "crates.io" %}
+    cargo install --locked cu29-runtime --version "{{copper_version}}" --bin cu29-rendercfg
+    {% elsif copper_source == "git" %}
+    cargo install --locked --git "{{copper_git_url}}" {% if copper_git_branch != "__none__" %}--branch "{{copper_git_branch}}" {% elsif copper_git_tag != "__none__" %}--tag "{{copper_git_tag}}" {% elsif copper_git_rev != "__none__" %}--rev "{{copper_git_rev}}" {% endif %} --bin cu29-rendercfg cu29-runtime
+    {% endif %}
+    renderer="$(command -v cu29-rendercfg || true)"
+    if [[ -z "$renderer" ]]; then
+      renderer="${CARGO_HOME:-$HOME/.cargo}/bin/cu29-rendercfg"
+    fi
+  fi
+  [[ -x "$renderer" ]] || { echo "Failed to find cu29-rendercfg after installation." >&2; exit 1; }
+  "$renderer" copperconfig.ron --open
   {% endif %}
+
+# Compatibility alias for older template docs.
+rcfg: dag
