@@ -16,6 +16,7 @@ static BUNDLED_TEMPLATES: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates"
 const DEFAULT_GIT_URL: &str = "https://github.com/copper-project/copper-rs.git";
 const DEFAULT_COPPER_VERSION: &str = env!("CARGO_PKG_VERSION");
 const CRATES_IO_API: &str = "https://crates.io/api/v1/crates";
+const NO_TEMPLATE_GIT_REF: &str = "__none__";
 
 #[derive(Debug, Clone, Parser)]
 #[command(
@@ -300,6 +301,18 @@ fn build_defines(
         format!("copper_version={}", versions.cu29),
         format!("copper_export_version={}", versions.cu29_export),
         format!("copper_git_url={}", cli.git_url),
+        format!(
+            "copper_git_branch={}",
+            cli.git_branch.as_deref().unwrap_or(NO_TEMPLATE_GIT_REF)
+        ),
+        format!(
+            "copper_git_tag={}",
+            cli.git_tag.as_deref().unwrap_or(NO_TEMPLATE_GIT_REF)
+        ),
+        format!(
+            "copper_git_rev={}",
+            cli.git_rev.as_deref().unwrap_or(NO_TEMPLATE_GIT_REF)
+        ),
         format!(
             "copper_git_ref_snippet={}",
             format_git_ref_snippet(
@@ -591,7 +604,8 @@ mod tests {
         assert!(manifest.contains("version = \"9.9.8\""));
         assert!(manifest.contains("cu29-export"));
         assert!(!manifest.contains("\n[workspace]\n"));
-        assert!(justfile.contains("Re-run cargo cunew with --source local"));
+        assert!(justfile.contains("cargo install --locked cu29-runtime --version \"9.9.9\""));
+        assert!(justfile.contains("dag:"));
     }
 
     #[test]
@@ -631,5 +645,41 @@ mod tests {
         assert!(app_manifest.contains("edition = \"2024\""));
         assert!(justfile.contains("cu29-rendercfg"));
         assert!(!project.join(".git").exists());
+    }
+
+    #[test]
+    fn generates_project_template_for_git_source() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let project = tempdir.path().join("hello-git");
+        let cli = Cli {
+            path: project.clone(),
+            template: TemplateKind::Project,
+            source: SourceKind::Git,
+            name: None,
+            copper_root: None,
+            git_url: DEFAULT_GIT_URL.to_owned(),
+            git_branch: Some("main".to_owned()),
+            git_tag: None,
+            git_rev: None,
+            no_vcs: true,
+            verbose: false,
+        };
+
+        run_with_versions(
+            cli,
+            Some(CopperVersions {
+                cu29: "1.2.3".to_owned(),
+                cu29_export: "1.2.4".to_owned(),
+            }),
+        )
+        .expect("generation should succeed");
+
+        let manifest = fs::read_to_string(project.join("Cargo.toml")).expect("manifest");
+        let justfile = fs::read_to_string(project.join("justfile")).expect("justfile");
+
+        assert!(manifest.contains("git = \"https://github.com/copper-project/copper-rs.git\""));
+        assert!(manifest.contains("branch = \"main\""));
+        assert!(justfile.contains("cargo install --locked --git"));
+        assert!(justfile.contains("--branch \"main\""));
     }
 }
