@@ -89,8 +89,8 @@ source -> task -> sink application. `cargo run` starts the app, prints the
 first messages (`Received message: 42`, then `Sink Received message: 43`), and
 records to `logs/hello-copper.copper`; stop it with `Ctrl-C` when you've seen
 enough. If you have `just` installed, the generated project also includes
-helpers like `just log`, `just cl`, and `just resim`. If you want a multi-crate
-workspace instead, use `cargo cunew --template workspace my_workspace`.
+helpers like `just log`, `just cl`, and `just resim`. To get situated, open
+`copperconfig.ron`, `src/main.rs`, `src/tasks.rs`, and `justfile`.
 
 - Start a new project from templates: [Project Templates](https://copper-project.github.io/copper-rs/Project-Templates)
 - Browse the live component catalog: [Copper Component Catalog](https://cdn.copper-robotics.com/catalog/index.html)
