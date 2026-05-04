@@ -89,7 +89,7 @@ jobs:
           driver: docker-container
       - name: Build and push Linux CI image
         if: steps.image_ref.outputs.should_build == 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: ./support/docker
@@ -167,7 +167,7 @@ jobs:
           driver: docker-container
       - name: Build and push Linux CUDA CI image
         if: steps.image_ref.outputs.should_build == 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: ./support/docker
