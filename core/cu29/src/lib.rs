@@ -66,7 +66,7 @@ compile_error!("feature `parallel-rt` requires `std`");
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-pub use cu29_derive::{bundle_resources, resources};
+pub use cu29_derive::{bundle_resources, resources, safety_case};
 pub use cu29_runtime::app;
 pub use cu29_runtime::config;
 pub use cu29_runtime::context;
@@ -100,6 +100,8 @@ pub use cu29_runtime::rx_channels;
 #[cfg(feature = "std")]
 pub use cu29_runtime::simulation;
 pub use cu29_runtime::tx_channels;
+#[cfg(feature = "safety-ids")]
+pub mod safety;
 
 #[cfg(feature = "rtsan")]
 pub mod rtsan {
@@ -207,6 +209,20 @@ macro_rules! defmt_error {
     ($($tt:tt)*) => {{}};
 }
 
+#[macro_export]
+macro_rules! safety_check {
+    ($check_id:literal, $requirement_id:literal, $description:literal, $condition:expr $(,)?) => {
+        assert!($condition, "{}", $description);
+    };
+}
+
+#[macro_export]
+macro_rules! safety_check_eq {
+    ($check_id:literal, $requirement_id:literal, $description:literal, $left:expr, $right:expr $(,)?) => {
+        assert_eq!($left, $right, "{}", $description);
+    };
+}
+
 /// Canonical imports for Copper applications.
 ///
 /// This module intentionally re-exports each stable application-facing group once.
@@ -217,6 +233,7 @@ pub mod prelude {
     #[cfg(feature = "units")]
     pub use crate::units;
     pub use crate::{defmt_debug, defmt_error, defmt_info, defmt_warn};
+    pub use crate::{safety_case, safety_check, safety_check_eq};
     #[cfg(feature = "reflect")]
     pub use bevy_reflect_derive::Reflect;
     #[cfg(feature = "signal-handler")]
