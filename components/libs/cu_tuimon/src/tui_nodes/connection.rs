@@ -261,6 +261,9 @@ impl ConnectionsLayout {
         if is_input {
             return;
         }
+        if coord.0 >= self.width || coord.1 >= self.height {
+            return;
+        }
         self.edge_field[(coord, Direction::North).into()] = Edge::Blocked;
         self.edge_field[(coord, Direction::South).into()] = Edge::Blocked;
     }
