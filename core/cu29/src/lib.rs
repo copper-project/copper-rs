@@ -29,6 +29,7 @@
 //! - `high-precision-limiter`: std-only hybrid sleep/spin loop limiter for tighter `rate_target_hz` cadence
 //! - `async-cl-io`: offload CopperList serialization/logging to a dedicated std thread
 //! - `parallel-rt`: prepare the runtime for a future multi-threaded deterministic executor
+//! - `safety-ids`: std-only safety-case metadata collection and JSON export helpers
 //!
 //! ## Concepts behind Copper
 //!
@@ -52,7 +53,7 @@
 //!
 //! ## V1 API status
 //!
-//! The V1 public contract is defined in `docs/v1-api-surface.md`. The prelude is the
+//! The V1 public contract is defined in `doc/v1-api-surface.md`. The prelude is the
 //! canonical application import surface; lower-level modules remain addressable by
 //! module path when needed, but are not implicitly part of the prelude contract.
 //!
