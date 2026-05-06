@@ -52,4 +52,4 @@ Declare the bridge and wire tasks to it:
 )
 ```
 
-See `examples/cu_elrs_bdshot_demo` for a full mission wiring CRSF RC input into BDShot ESCs on the RP2350 reference board.
+See [`examples/cu_elrs_bdshot_demo`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_elrs_bdshot_demo) for a full mission wiring CRSF RC input into BDShot ESCs on the RP2350 reference board.
