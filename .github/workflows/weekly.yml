@@ -40,9 +40,12 @@ jobs:
     with:
       toolchain: beta
       linux_cargo_paths: true
+      linux_runner_label: ubuntu-latest
+      windows_runner_label: windows-latest
 
   embedded:
     name: CI for embedded targets
     uses: ./.github/workflows/reusable-embedded.yml
     with:
       toolchain: beta
+      linux_runner_label: ubuntu-latest

@@ -2,9 +2,9 @@ name: "CI/CD"
 
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master"]
   pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
 
 permissions:
   contents: read
@@ -22,7 +22,7 @@ env:
 jobs:
   linux-ci-image:
     name: Linux CI Image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-m
     permissions:
       contents: read
       packages: write
@@ -100,7 +100,7 @@ jobs:
 
   linux-cuda-ci-image:
     name: Linux CUDA CI Image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-m
     permissions:
       contents: read
       packages: write
@@ -180,7 +180,7 @@ jobs:
     name: MSRV Check
     if: needs.linux-ci-image.outputs.image != ''
     needs: linux-ci-image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-m
     container:
       image: ${{ needs.linux-ci-image.outputs.image }}
       credentials:
@@ -213,7 +213,7 @@ jobs:
     name: MSRV Check
     if: needs.linux-ci-image.outputs.image == ''
     needs: linux-ci-image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-m
     env:
       WORKSPACE_SCOPE: workspace
     steps:
@@ -246,6 +246,8 @@ jobs:
       linux_cargo_paths: true
       linux_ci_image: ${{ needs.linux-ci-image.outputs.image }}
       linux_cuda_ci_image: ${{ needs.linux-cuda-ci-image.outputs.image }}
+      linux_runner_label: ubuntu-latest-m
+      windows_runner_label: windows-latest-m
 
   api:
     name: Public API Check
@@ -309,3 +311,4 @@ jobs:
     uses: ./.github/workflows/reusable-embedded.yml
     with:
       toolchain: stable
+      linux_runner_label: ubuntu-latest-m
