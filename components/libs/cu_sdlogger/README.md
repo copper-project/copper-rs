@@ -36,4 +36,4 @@ Notes:
 - `append` and `flush_section` use bincode encoding and update the section header to keep usage counters accurate.
 - `ForceSyncSend` does not provide locking; use it only with single-threaded or
   externally synchronized access.
-- See `examples/cu_rp2350_skeleton` and `examples/cu_elrs_bdshot_demo` for full RP2350 setups that hand the logger to a `CuApplication`.
+- See `examples/cu_rp2350_skeleton` and [`examples/cu_elrs_bdshot_demo`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_elrs_bdshot_demo) for full RP2350 setups that hand the logger to a `CuApplication`.

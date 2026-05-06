@@ -1,6 +1,6 @@
 ### This is a Generic PID Controller
 
-Check out cu_rp_balancebot for a full example of how to use it.
+Check out [`cu_rp_balancebot`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_rp_balancebot) for a full example of how to use it.
 
 ### Compatibility
 

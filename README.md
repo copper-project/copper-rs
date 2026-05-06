@@ -35,6 +35,8 @@ These are not mockups: BalanceBot is the exact same application that runs on a R
       <strong><a href="https://cdn.copper-robotics.com/demo/balancebot/index.html">BalanceBot</a></strong>
       <br />
       Self-balancing robot sim with a live Copper DAG and latency monitor.
+      <br />
+      <a href="https://github.com/copper-project/extra-examples/tree/master/examples/cu_rp_balancebot">Source code</a>
     </td>
     <td width="50%" valign="top">
       <a href="https://cdn.copper-robotics.com/demo/flight-controller/index.html">
@@ -44,6 +46,8 @@ These are not mockups: BalanceBot is the exact same application that runs on a R
       <strong><a href="https://cdn.copper-robotics.com/demo/flight-controller/index.html">Flight Controller</a></strong>
       <br />
       Quadcopter flight sim with the same live Copper monitor.
+      <br />
+      <a href="https://github.com/copper-project/extra-examples/tree/master/examples/cu_flight_controller">Source code</a>
     </td>
   </tr>
 </table>

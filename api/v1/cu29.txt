@@ -27,6 +27,7 @@ pub use cu29::replay
 pub use cu29::resource
 pub use cu29::resources
 pub use cu29::rx_channels
+pub use cu29::safety_case
 pub use cu29::simulation
 pub use cu29::tx_channels
 pub use cu29::units
@@ -100,6 +101,7 @@ pub use cu29::prelude::observed_encode_bytes
 pub use cu29::prelude::output_msg
 pub use cu29::prelude::record_observed_encode_bytes
 pub use cu29::prelude::rx_channels
+pub use cu29::prelude::safety_case
 pub use cu29::prelude::to_value
 pub use cu29::prelude::tx_channels
 pub use cu29::prelude::units
@@ -108,6 +110,8 @@ pub macro cu29::prelude::defmt_debug!
 pub macro cu29::prelude::defmt_error!
 pub macro cu29::prelude::defmt_info!
 pub macro cu29::prelude::defmt_warn!
+pub macro cu29::prelude::safety_check!
+pub macro cu29::prelude::safety_check_eq!
 pub mod cu29::rtsan
 pub struct cu29::rtsan::ScopedDisabler
 pub struct cu29::rtsan::ScopedSanitizeRealtime
@@ -121,3 +125,5 @@ pub macro cu29::defmt_debug!
 pub macro cu29::defmt_error!
 pub macro cu29::defmt_info!
 pub macro cu29::defmt_warn!
+pub macro cu29::safety_check!
+pub macro cu29::safety_check_eq!

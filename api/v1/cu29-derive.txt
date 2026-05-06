@@ -3,3 +3,4 @@ pub proc macro cu29_derive::bundle_resources!()
 pub proc macro cu29_derive::#[copper_runtime]
 pub proc macro cu29_derive::gen_cumsgs!()
 pub proc macro cu29_derive::resources!()
+pub proc macro cu29_derive::#[safety_case]

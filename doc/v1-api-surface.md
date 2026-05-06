@@ -41,6 +41,10 @@ This file defines the Copper V1 public contract. Anything not listed as stable i
   - `output_msg!`
   - `BridgeChannel`
   - `BridgeChannelSet`
+- Safety case authoring APIs:
+  - `#[safety_case("...")]`
+  - `safety_check!`
+  - `safety_check_eq!`
 - Resource APIs:
   - `resources!`
   - `bundle_resources!`
@@ -95,6 +99,7 @@ This file defines the Copper V1 public contract. Anything not listed as stable i
 - `remote-debug` feature and `cu29::remote_debug`.
 - `parallel-rt` feature and parallel executor APIs.
 - `async-cl-io` feature and async CopperList I/O internals.
+- `safety-ids` feature and `cu29::safety` metadata collection/export APIs.
 - Runtime performance knobs:
   - `sysclock-perf`
   - `high-precision-limiter`

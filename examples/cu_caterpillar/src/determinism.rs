@@ -1,39 +1,21 @@
-//! Determinism contract unit test.
-//!
-//! Contract:
-//!   1) record A copperlists == record B copperlists
-//!   2) record A keyframes == record B keyframes
-//!   3) record A copperlists == resim(A) copperlists
-//!   4) record A keyframes == resim(A) keyframes
-
+use crate::tasks;
 use cu_rp_gpio::RPGpioPayload;
 use cu29::bincode;
 use cu29::prelude::*;
 use cu29_export::{copperlists_reader, keyframes_reader};
-
-use crate::tasks;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-/// Serialize this test even if the harness runs test threads > 1.
 static DET_LOCK: Mutex<()> = Mutex::new(());
-
-/// Ensure unique output dirs even across multiple determinism tests in the same process.
 static RUN_ID: AtomicUsize = AtomicUsize::new(0);
-
-// Keep the log slab big enough to satisfy the config's copperlist section size.
 const DET_LOG_SLAB_SIZE: Option<usize> = Some(256 * 1024 * 1024);
 
-// Put the runtime in sim_mode so we can drive a fixed number of iterations deterministically.
-// IMPORTANT: define this inside the module to avoid name collisions with the "real" app in main.rs.
 #[copper_runtime(config = "config/copperconfig_determinism.ron", sim_mode = true)]
 struct CaterpillarDeterminismApp {}
 
 fn out_root_dir() -> PathBuf {
-    // Prefer a stable repo-local path so CI can upload artifacts on failure.
-    // If you set CARGO_TARGET_DIR in CI, you can switch to that.
     let base = std::env::var_os("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target"));
@@ -57,7 +39,6 @@ fn record_run(log_base: &Path, iterations: usize, dt_ticks: u64) -> CuResult<()>
     }
 
     let (clock, clock_mock) = RobotClock::mock();
-
     let slab_size = DET_LOG_SLAB_SIZE;
 
     let mut sim_state = true;
@@ -172,21 +153,16 @@ fn resim_one_copperlist(
     use default::SimStep::*;
 
     let msgs = &copper_list.msgs;
-
-    // Sync clock to the recorded source output.
     let ticks = msgs.get_src_output().metadata.process_time.start.unwrap();
     robot_clock_mock.set_value(ticks.as_nanos());
 
     let mut cb = move |step: default::SimStep| -> SimOverride {
         match step {
-            // Stub source: inject recorded src output.
             Src(CuTaskCallbackState::Process(_, output)) => {
                 *output = msgs.get_src_output().clone();
                 SimOverride::ExecutedBySim
             }
             Src(_) => SimOverride::ExecutedBySim,
-
-            // Stub sinks: keep metadata deterministic without touching hardware.
             Gpio0(CuTaskCallbackState::Process(input, output))
             | Gpio1(CuTaskCallbackState::Process(input, output))
             | Gpio2(CuTaskCallbackState::Process(input, output))
@@ -206,8 +182,6 @@ fn resim_one_copperlist(
             }
             Gpio0(_) | Gpio1(_) | Gpio2(_) | Gpio3(_) | Gpio4(_) | Gpio5(_) | Gpio6(_)
             | Gpio7(_) => SimOverride::ExecutedBySim,
-
-            // Everything else: runtime executes.
             _ => SimOverride::ExecuteByRuntime,
         }
     };
@@ -237,7 +211,6 @@ fn resim_run(input_log_base: &Path, output_log_base: &Path) -> CuResult<()> {
     app.start_all_tasks(&mut init_cb)
         .expect("failed to start tasks (resim)");
 
-    // Read recorded copperlists and replay them.
     let UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
         .file_base_name(input_log_base)
         .build()
@@ -259,40 +232,15 @@ fn resim_run(input_log_base: &Path, output_log_base: &Path) -> CuResult<()> {
     Ok(())
 }
 
-fn assert_streams_equal(label_a: &str, a: &[Vec<u8>], label_b: &str, b: &[Vec<u8>]) {
-    assert_eq!(
-        a.len(),
-        b.len(),
-        "determinism failure: stream length differs ({}={}, {}={})",
-        label_a,
-        a.len(),
-        label_b,
-        b.len()
-    );
-
-    for (i, (item_a, item_b)) in a.iter().zip(b.iter()).enumerate() {
-        if item_a != item_b {
-            panic!(
-                "determinism failure: mismatch at copperlist index {} ({} vs {})",
-                i, label_a, label_b
-            );
-        }
-    }
-}
-
-#[test]
-fn determinism_record_and_resim() {
-    // Ensure this test is serialized (important if other tests exist).
+#[cfg_attr(all(test, feature = "determinism_ci"), test)]
+#[safety_case("DET-TEST-001")]
+pub fn determinism_record_and_resim() {
     let _guard = DET_LOCK.lock().unwrap();
 
-    // Allow overriding iteration count from CI without code changes.
     let iterations: usize = std::env::var("COPPER_DETERMINISM_ITERS")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or_else(|| {
-            // Keep it light for local debug builds.
-            if cfg!(debug_assertions) { 256 } else { 1024 }
-        });
+        .unwrap_or_else(|| if cfg!(debug_assertions) { 256 } else { 1024 });
 
     let dt_ticks: u64 = std::env::var("COPPER_DETERMINISM_DT_TICKS")
         .ok()
@@ -304,7 +252,6 @@ fn determinism_record_and_resim() {
     let b_base = case_dir.join("record_b.copper");
     let r_base = case_dir.join("resim_a.copper");
 
-    // 1) record A and B
     record_run(&a_base, iterations, dt_ticks).expect("record A failed");
     record_run(&b_base, iterations, dt_ticks).expect("record B failed");
 
@@ -313,23 +260,50 @@ fn determinism_record_and_resim() {
     let a_keyframes = read_keyframe_stream_encoded(&a_base).expect("read A keyframes failed");
     let b_keyframes = read_keyframe_stream_encoded(&b_base).expect("read B keyframes failed");
 
-    // 2) A == B (copperlists + keyframes)
-    assert_streams_equal("record_a", &a_stream, "record_b", &b_stream);
-    assert!(
-        !a_keyframes.is_empty(),
-        "determinism precondition failure: expected keyframes to be emitted"
+    safety_check_eq!(
+        "DET-TEST-001-C1",
+        "DET-REQ-001",
+        "record A copperlists equal record B copperlists",
+        &a_stream,
+        &b_stream,
     );
-    assert_streams_equal("record_a_kf", &a_keyframes, "record_b_kf", &b_keyframes);
+    safety_check!(
+        "DET-TEST-001-C2",
+        "DET-REQ-002",
+        "record A emits at least one keyframe",
+        !a_keyframes.is_empty(),
+    );
+    safety_check_eq!(
+        "DET-TEST-001-C3",
+        "DET-REQ-002",
+        "record A keyframes equal record B keyframes",
+        &a_keyframes,
+        &b_keyframes,
+    );
 
-    // 3) resim(A)
     resim_run(&a_base, &r_base).expect("resim(A) failed");
     let r_stream = read_copperlist_stream_encoded(&r_base).expect("read resim failed");
     let r_keyframes = read_keyframe_stream_encoded(&r_base).expect("read resim keyframes failed");
 
-    // 4) A == resim(A) (copperlists + keyframes)
-    assert_streams_equal("record_a", &a_stream, "resim_a", &r_stream);
-    assert_streams_equal("record_a_kf", &a_keyframes, "resim_a_kf", &r_keyframes);
+    safety_check_eq!(
+        "DET-TEST-001-C4",
+        "DET-REQ-003",
+        "replay A copperlists equal record A copperlists",
+        &a_stream,
+        &r_stream,
+    );
+    safety_check_eq!(
+        "DET-TEST-001-C5",
+        "DET-REQ-004",
+        "replay A keyframes equal record A keyframes",
+        &a_keyframes,
+        &r_keyframes,
+    );
 
-    // If you want to keep artifacts even on success, comment this out.
     let _ = fs::remove_dir_all(case_dir);
+}
+
+#[cfg(feature = "safety-ids")]
+pub fn link_safety_ids() {
+    let _ = determinism_record_and_resim as fn();
 }
