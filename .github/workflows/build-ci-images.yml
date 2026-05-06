@@ -46,7 +46,7 @@ jobs:
         with:
           driver: docker-container
       - name: Build Linux CI image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: ./support/docker
@@ -85,7 +85,7 @@ jobs:
         with:
           driver: docker-container
       - name: Build Linux CUDA CI image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: ./support/docker
