@@ -14,6 +14,10 @@ on:
         required: false
         type: boolean
         default: false
+      linux_disk_workarounds:
+        required: false
+        type: boolean
+        default: true
       linux_ci_image:
         required: false
         type: string
@@ -64,6 +68,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           prebaked_linux_image: "true"
           cache_prefix: debug-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
@@ -131,6 +136,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           cache_prefix: debug-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: ${{ matrix.task == 'test' }}
@@ -196,6 +202,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           prebaked_linux_image: "true"
           cache_prefix: debug-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
@@ -238,6 +245,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           cache_prefix: debug-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
@@ -285,6 +293,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           prebaked_linux_image: "true"
           cache_prefix: cuda-debug-ubuntu24-container
           cache_shared_key: rust-ubuntu-latest
@@ -348,6 +357,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           cache_prefix: debug
           cache_shared_key: rust-${{ matrix.target_os }}
           install_nextest: ${{ matrix.task == 'test' }}
@@ -422,6 +432,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           prebaked_linux_image: "true"
           cache_prefix: debug-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
@@ -468,6 +479,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           cache_prefix: debug-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "true"
@@ -518,6 +530,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           prebaked_linux_image: "true"
           cache_prefix: cuda-debug-ubuntu24-container
           cache_shared_key: rust-ubuntu-latest
@@ -586,6 +599,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           cache_prefix: debug
           cache_shared_key: rust-${{ matrix.target_os }}
           install_nextest: "true"
@@ -649,6 +663,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           prebaked_linux_image: "true"
           cache_prefix: debug-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
@@ -707,6 +722,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           cache_prefix: debug-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
@@ -763,6 +779,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           cache_prefix: debug
           cache_shared_key: rust-macos-latest
           install_nextest: "false"

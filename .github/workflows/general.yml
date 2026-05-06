@@ -223,6 +223,7 @@ jobs:
         with:
           toolchain: ${{ env.MSRV }}
           linux_cargo_paths: true
+          linux_disk_workarounds: "false"
           cache_prefix: msrv-ubuntu-host
           cache_shared_key: rust-ubuntu
           install_nextest: "false"
@@ -244,6 +245,7 @@ jobs:
     with:
       toolchain: stable
       linux_cargo_paths: true
+      linux_disk_workarounds: false
       linux_ci_image: ${{ needs.linux-ci-image.outputs.image }}
       linux_cuda_ci_image: ${{ needs.linux-cuda-ci-image.outputs.image }}
       linux_runner_label: ubuntu-latest-m
@@ -263,7 +265,6 @@ jobs:
         with:
           prefix-key: api-check
           shared-key: rust-ubuntu
-          cache-targets: "false"
           cache-bin: "true"
           save-if: ${{ github.ref == 'refs/heads/master' }}
       - name: Install cargo-public-api

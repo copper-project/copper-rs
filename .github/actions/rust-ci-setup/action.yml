@@ -12,6 +12,10 @@ inputs:
     description: Use Linux-only cargo paths.
     required: false
     default: "false"
+  linux_disk_workarounds:
+    description: Enable legacy Linux disk-space and cargo-path workarounds.
+    required: false
+    default: "true"
   prebaked_linux_image:
     description: Skip Linux host setup because system dependencies are baked into the job container image.
     required: false
@@ -151,7 +155,7 @@ runs:
       uses: Cyberboss/install-winget@v1
 
     - name: Free Disk Space (Ubuntu)
-      if: runner.os == 'Linux' && inputs.prebaked_linux_image != 'true'
+      if: runner.os == 'Linux' && inputs.prebaked_linux_image != 'true' && inputs.linux_disk_workarounds == 'true'
       uses: jlumbroso/free-disk-space@main
       with:
         # this might remove tools that are actually needed,
@@ -166,7 +170,7 @@ runs:
         swap-storage: true
 
     - name: Linux-only Cargo paths
-      if: runner.os == 'Linux' && inputs.linux_cargo_paths == 'true' && inputs.prebaked_linux_image != 'true'
+      if: runner.os == 'Linux' && inputs.linux_cargo_paths == 'true' && inputs.prebaked_linux_image != 'true' && inputs.linux_disk_workarounds == 'true'
       shell: bash
       run: |
         echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> "$GITHUB_ENV"
