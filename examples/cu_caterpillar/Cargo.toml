@@ -27,6 +27,11 @@ name = "cu-caterpillar-resim"
 path = "src/resim.rs"
 required-features = ["sim-debug"]
 
+[[test]]
+name = "safety_ids"
+path = "tests/safety_ids.rs"
+harness = false
+required-features = ["safety-ids"]
 
 [dependencies]
 cu29 = { workspace = true }
@@ -44,6 +49,7 @@ mock = ["cu-rp-gpio/mock"]
 sim-debug = ["mock", "cu29/reflect", "cu29/remote-debug"]
 rtsan = ["cu29/rtsan"]
 determinism_ci = []
+safety-ids = ["determinism_ci", "cu29/safety-ids"]
 
 [package.metadata.cargo-shear]
 ignored = ["serde"]
