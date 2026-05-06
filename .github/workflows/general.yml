@@ -76,7 +76,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
       - name: Log in to GHCR
         if: steps.image_ref.outputs.should_build == 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -154,7 +154,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
       - name: Log in to GHCR
         if: steps.image_ref.outputs.should_build == 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
