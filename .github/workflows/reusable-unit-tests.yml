@@ -14,6 +14,10 @@ on:
         required: false
         type: boolean
         default: false
+      linux_disk_workarounds:
+        required: false
+        type: boolean
+        default: true
       linux_ci_image:
         required: false
         type: string
@@ -22,12 +26,20 @@ on:
         required: false
         type: string
         default: ""
+      linux_runner_label:
+        required: false
+        type: string
+        default: "ubuntu-latest-m"
+      windows_runner_label:
+        required: false
+        type: string
+        default: "windows-latest-l"
 
 jobs:
   unit-linux-container:
     if: inputs.linux_ci_image != ''
     name: Unit Checks / ${{ matrix.task }} (ubuntu-26.04, debug)
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.linux_runner_label }}
     container:
       image: ${{ inputs.linux_ci_image }}
       credentials:
@@ -46,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        task: [ clippy, test ]
+        task: [clippy, test]
 
     steps:
       - uses: actions/checkout@v6
@@ -56,6 +68,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           prebaked_linux_image: "true"
           cache_prefix: debug-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
@@ -98,8 +111,8 @@ jobs:
 
   unit-linux-host:
     if: inputs.linux_ci_image == ''
-    name: Unit Checks / ${{ matrix.task }} (ubuntu-latest, debug)
-    runs-on: ubuntu-latest
+    name: Unit Checks / ${{ matrix.task }} (${{ inputs.linux_runner_label }}, debug)
+    runs-on: ${{ inputs.linux_runner_label }}
 
     defaults:
       run:
@@ -113,7 +126,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        task: [ clippy, test ]
+        task: [clippy, test]
 
     steps:
       - uses: actions/checkout@v6
@@ -123,6 +136,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           cache_prefix: debug-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: ${{ matrix.task == 'test' }}
@@ -134,13 +148,13 @@ jobs:
         run: |
           EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
-      - name: Run clippy on (ubuntu-latest | debug)
+      - name: Run clippy on (${{ inputs.linux_runner_label }} | debug)
         if: matrix.task == 'clippy'
         run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $EMBEDDED_EXCLUDES -- --deny warnings
-      - name: Run clippy with all features on (ubuntu-latest | debug)
+      - name: Run clippy with all features on (${{ inputs.linux_runner_label }} | debug)
         if: matrix.task == 'clippy'
         run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES -- --deny warnings
-      - name: Run Unit Tests on (ubuntu-latest | debug)
+      - name: Run Unit Tests on (${{ inputs.linux_runner_label }} | debug)
         if: matrix.task == 'test'
         run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $EMBEDDED_EXCLUDES
       - name: Run cu-caterpillar determinism test (determinism_ci)
@@ -165,7 +179,7 @@ jobs:
   doctests-linux-container:
     if: inputs.linux_ci_image != ''
     name: Doctests (ubuntu-26.04, debug)
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.linux_runner_label }}
     container:
       image: ${{ inputs.linux_ci_image }}
       credentials:
@@ -188,6 +202,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           prebaked_linux_image: "true"
           cache_prefix: debug-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
@@ -211,8 +226,8 @@ jobs:
 
   doctests-linux-host:
     if: inputs.linux_ci_image == ''
-    name: Doctests (ubuntu-latest, debug)
-    runs-on: ubuntu-latest
+    name: Doctests (${{ inputs.linux_runner_label }}, debug)
+    runs-on: ${{ inputs.linux_runner_label }}
 
     defaults:
       run:
@@ -230,6 +245,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           cache_prefix: debug-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
@@ -238,7 +254,7 @@ jobs:
         run: |
           EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
-      - name: Run doctests on (ubuntu-latest | debug)
+      - name: Run doctests on (${{ inputs.linux_runner_label }} | debug)
         run: cargo +${{ inputs.toolchain }} test --doc $WORKSPACE_FLAG $EMBEDDED_EXCLUDES --quiet
       - name: Show sccache stats
         if: always()
@@ -253,7 +269,7 @@ jobs:
   unit-linux-cuda-container:
     if: inputs.linux_cuda_ci_image != ''
     name: Unit Checks / clippy (cuda-ubuntu-24.04, cuda-debug)
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.linux_runner_label }}
     container:
       image: ${{ inputs.linux_cuda_ci_image }}
       credentials:
@@ -277,6 +293,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           prebaked_linux_image: "true"
           cache_prefix: cuda-debug-ubuntu24-container
           cache_shared_key: rust-ubuntu-latest
@@ -314,8 +331,8 @@ jobs:
           key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
 
   unit-other:
-    name: Unit Checks / ${{ matrix.task }} (${{ matrix.os }}, debug)
-    runs-on: ${{ matrix.os }}
+    name: Unit Checks / ${{ matrix.task }} (${{ matrix.target_os == 'windows' && inputs.windows_runner_label || 'macos-latest' }}, debug)
+    runs-on: ${{ matrix.target_os == 'windows' && inputs.windows_runner_label || 'macos-latest' }}
 
     defaults:
       run:
@@ -324,13 +341,13 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
-      WORKSPACE_SCOPE: ${{ matrix.os == 'windows-latest' && 'core' || 'workspace' }}
+      WORKSPACE_SCOPE: ${{ matrix.target_os == 'windows' && 'core' || 'workspace' }}
 
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-latest, windows-latest ]
-        task: [ test ]
+        target_os: [macos, windows]
+        task: [test]
 
     steps:
       - uses: actions/checkout@v6
@@ -340,8 +357,9 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           cache_prefix: debug
-          cache_shared_key: rust-${{ matrix.os }}
+          cache_shared_key: rust-${{ matrix.target_os }}
           install_nextest: ${{ matrix.task == 'test' }}
           sccache_key_suffix: unit-${{ matrix.task }}
       - name: Set up Python (macOS)
@@ -365,11 +383,11 @@ jobs:
         run: |
           EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
-      - name: Run Unit Tests on (${{ matrix.os }} | debug)
+      - name: Run Unit Tests on (${{ matrix.target_os == 'windows' && inputs.windows_runner_label || 'macos-latest' }} | debug)
         if: matrix.task == 'test'
         run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $EMBEDDED_EXCLUDES
       - name: Run cu-caterpillar determinism test (determinism_ci)
-        if: matrix.task == 'test' && matrix.os == 'macos-latest'
+        if: matrix.task == 'test' && matrix.target_os == 'macos'
         env:
           RAYON_NUM_THREADS: "1"
           COPPER_DETERMINISM_ITERS: "256"
@@ -390,7 +408,7 @@ jobs:
   tests-features-linux-container:
     if: inputs.linux_ci_image != ''
     name: Unit Tests (all features) (ubuntu-26.04, debug)
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.linux_runner_label }}
     container:
       image: ${{ inputs.linux_ci_image }}
       credentials:
@@ -414,6 +432,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           prebaked_linux_image: "true"
           cache_prefix: debug-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
@@ -440,8 +459,8 @@ jobs:
 
   tests-features-linux-host:
     if: inputs.linux_ci_image == ''
-    name: Unit Tests (all features) (ubuntu-latest, debug)
-    runs-on: ubuntu-latest
+    name: Unit Tests (all features) (${{ inputs.linux_runner_label }}, debug)
+    runs-on: ${{ inputs.linux_runner_label }}
 
     defaults:
       run:
@@ -460,6 +479,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           cache_prefix: debug-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "true"
@@ -471,7 +491,7 @@ jobs:
         run: |
           EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
-      - name: Run Unit Tests with all features on (ubuntu-latest | debug)
+      - name: Run Unit Tests with all features on (${{ inputs.linux_runner_label }} | debug)
         run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
       - name: Show sccache stats
         if: always()
@@ -486,7 +506,7 @@ jobs:
   tests-features-linux-cuda-container:
     if: inputs.linux_cuda_ci_image != ''
     name: Unit Tests (all features) (cuda-ubuntu-24.04, cuda-debug)
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.linux_runner_label }}
     container:
       image: ${{ inputs.linux_cuda_ci_image }}
       credentials:
@@ -510,6 +530,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           prebaked_linux_image: "true"
           cache_prefix: cuda-debug-ubuntu24-container
           cache_shared_key: rust-ubuntu-latest
@@ -553,8 +574,8 @@ jobs:
           key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
 
   tests-features-other:
-    name: Unit Tests (all features) (${{ matrix.os }}, debug)
-    runs-on: ${{ matrix.os }}
+    name: Unit Tests (all features) (${{ matrix.target_os == 'windows' && inputs.windows_runner_label || 'macos-latest' }}, debug)
+    runs-on: ${{ matrix.target_os == 'windows' && inputs.windows_runner_label || 'macos-latest' }}
 
     defaults:
       run:
@@ -563,12 +584,12 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
-      WORKSPACE_SCOPE: ${{ matrix.os == 'windows-latest' && 'core' || 'workspace' }}
+      WORKSPACE_SCOPE: ${{ matrix.target_os == 'windows' && 'core' || 'workspace' }}
 
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-latest, windows-latest ]
+        target_os: [macos, windows]
 
     steps:
       - uses: actions/checkout@v6
@@ -578,8 +599,9 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           cache_prefix: debug
-          cache_shared_key: rust-${{ matrix.os }}
+          cache_shared_key: rust-${{ matrix.target_os }}
           install_nextest: "true"
           sccache_key_suffix: tests-features
       - name: Set up Python (macOS)
@@ -603,7 +625,7 @@ jobs:
         run: |
           EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
-      - name: Run Unit Tests with all features on (${{ matrix.os }} | debug)
+      - name: Run Unit Tests with all features on (${{ matrix.target_os == 'windows' && inputs.windows_runner_label || 'macos-latest' }} | debug)
         run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
       - name: Show sccache stats
         if: always()
@@ -617,8 +639,8 @@ jobs:
 
   templates-linux-container:
     if: inputs.linux_ci_image != ''
-    name: Templates (debug) (ubuntu-latest, debug)
-    runs-on: ubuntu-latest
+    name: Templates (debug) (${{ inputs.linux_runner_label }}, debug)
+    runs-on: ${{ inputs.linux_runner_label }}
     container:
       image: ${{ inputs.linux_ci_image }}
       credentials:
@@ -641,16 +663,17 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           prebaked_linux_image: "true"
           cache_prefix: debug-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
           sccache_key_suffix: templates
-      - name: Install cargo-generate on (ubuntu-latest | debug)
+      - name: Install cargo-generate on (${{ inputs.linux_runner_label }} | debug)
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-generate
-      - name: Generate new templates on (ubuntu-latest | debug)
+      - name: Generate new templates on (${{ inputs.linux_runner_label }} | debug)
         run: |
           export USER="${USER:-${GITHUB_ACTOR:-ci}}"
           export USERNAME="${USERNAME:-$USER}"
@@ -660,7 +683,7 @@ jobs:
           tmpdir="$(mktemp -d)"
           cargo +${{ inputs.toolchain }} generate --path support/cargo_cunew/templates/cu_project --name cargo_generate_project --destination "$tmpdir" -d copper_source=local -d copper_root_path="$PWD" --silent
           echo "CARGO_GENERATE_PROJECT=$tmpdir/cargo_generate_project" >> $GITHUB_ENV
-      - name: Build generated templates on (ubuntu-latest | debug)
+      - name: Build generated templates on (${{ inputs.linux_runner_label }} | debug)
         run: |
           cd support/cargo_cunew/templates/test_project
           cargo +${{ inputs.toolchain }} build
@@ -680,8 +703,8 @@ jobs:
 
   templates-linux-host:
     if: inputs.linux_ci_image == ''
-    name: Templates (debug) (ubuntu-latest, debug)
-    runs-on: ubuntu-latest
+    name: Templates (debug) (${{ inputs.linux_runner_label }}, debug)
+    runs-on: ${{ inputs.linux_runner_label }}
 
     defaults:
       run:
@@ -699,15 +722,16 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           cache_prefix: debug-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
           sccache_key_suffix: templates
-      - name: Install cargo-generate on (ubuntu-latest | debug)
+      - name: Install cargo-generate on (${{ inputs.linux_runner_label }} | debug)
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-generate
-      - name: Generate new templates on (ubuntu-latest | debug)
+      - name: Generate new templates on (${{ inputs.linux_runner_label }} | debug)
         run: |
           export USER="${USER:-${GITHUB_ACTOR:-ci}}"
           export USERNAME="${USERNAME:-$USER}"
@@ -717,7 +741,7 @@ jobs:
           tmpdir="$(mktemp -d)"
           cargo +${{ inputs.toolchain }} generate --path support/cargo_cunew/templates/cu_project --name cargo_generate_project --destination "$tmpdir" -d copper_source=local -d copper_root_path="$PWD" --silent
           echo "CARGO_GENERATE_PROJECT=$tmpdir/cargo_generate_project" >> $GITHUB_ENV
-      - name: Build generated templates on (ubuntu-latest | debug)
+      - name: Build generated templates on (${{ inputs.linux_runner_label }} | debug)
         run: |
           cd support/cargo_cunew/templates/test_project
           cargo +${{ inputs.toolchain }} build
@@ -755,6 +779,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
           cache_prefix: debug
           cache_shared_key: rust-macos-latest
           install_nextest: "false"
