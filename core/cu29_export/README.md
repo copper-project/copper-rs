@@ -50,9 +50,9 @@ The intended pattern is:
 3. call `copperlist_iterator_unified_typed_py::<YourGeneratedType>(...)`
 
 See
-[`examples/cu_flight_controller/src/python_module.rs`](/home/gbin/projects/copper/copper-rs.python/examples/cu_flight_controller/src/python_module.rs)
+[`examples/cu_flight_controller/src/python_module.rs`](https://github.com/copper-project/extra-examples/blob/master/examples/cu_flight_controller/src/python_module.rs)
 and
-[`examples/cu_flight_controller/python/print_gnss_from_log.py`](/home/gbin/projects/copper/copper-rs.python/examples/cu_flight_controller/python/print_gnss_from_log.py)
+[`examples/cu_flight_controller/python/print_gnss_from_log.py`](https://github.com/copper-project/extra-examples/blob/master/examples/cu_flight_controller/python/print_gnss_from_log.py)
 for the reference implementation.
 
 ## Feature Flags

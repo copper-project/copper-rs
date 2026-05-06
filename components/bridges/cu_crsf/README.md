@@ -39,7 +39,7 @@ bridges: [
 
 Provide your own bundle that moves a UART into the `ResourceManager` (as an owned resource). If your UART type is not `Sync`, wrap it once at bundle registration time with `cu_linux_resources::Exclusive<T>`.
 
-The `resources` module in `examples/cu_elrs_bdshot_demo` shows a complete pattern:
+The `resources` module in [`examples/cu_elrs_bdshot_demo`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_elrs_bdshot_demo) shows a complete pattern:
 
 ```ron
 resources: [
@@ -55,4 +55,4 @@ bridges: [
 ],
 ```
 
-See `examples/cu_elrs_bdshot_demo` for a full wiring that feeds CRSF RC channels into a BDShot bridge on the RP2350 reference board.
+See [`examples/cu_elrs_bdshot_demo`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_elrs_bdshot_demo) for a full wiring that feeds CRSF RC channels into a BDShot bridge on the RP2350 reference board.

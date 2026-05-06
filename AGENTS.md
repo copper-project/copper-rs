@@ -129,10 +129,10 @@ Use these as the quickest way to regain context:
 - `examples/cu_caterpillar/`
   - Minimal but realistic Copper app.
   - Good reference for `#[copper_runtime]`, logger setup, determinism, resim, and justfile helpers.
-- `examples/cu_flight_controller/`
+- [`examples/cu_flight_controller/`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_flight_controller)
   - Canonical higher-complexity integration example.
   - Good reference for resources, simulation mode, and real application structure.
-- `examples/cu_rp_balancebot/`
+- [`examples/cu_rp_balancebot/`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_rp_balancebot)
   - Canonical simulation/demo app.
   - Good reference when validating the "try Copper without hardware" workflow.
 - `examples/cu_resources_test/`
@@ -144,8 +144,8 @@ Use these as the quickest way to regain context:
 Default canonical example set for orientation and regression thinking:
 
 - `examples/cu_caterpillar/`
-- `examples/cu_flight_controller/`
-- `examples/cu_rp_balancebot/`
+- [`examples/cu_flight_controller/`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_flight_controller)
+- [`examples/cu_rp_balancebot/`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_rp_balancebot)
 
 ## Commands That Match CI
 
@@ -288,7 +288,7 @@ This is how you selectively keep or suppress message logging at node level.
 
 Good references:
 
-- `examples/cu_flight_controller/copperconfig.ron`
+- [`examples/cu_flight_controller/copperconfig.ron`](https://github.com/copper-project/extra-examples/blob/master/examples/cu_flight_controller/copperconfig.ron)
   - selective `logging: (enabled: true|false)` on tasks and bridges
   - root logging block with `slab_size_mib`, `section_size_mib`, `enable_task_logging`
 - `examples/cu_caterpillar/copperconfig.ron`
@@ -313,7 +313,7 @@ For replaying failures:
 - This is a first-class debugging path for robot/algorithm failures.
 - Good references:
   - `examples/cu_caterpillar/src/resim.rs`
-  - `examples/cu_rp_balancebot/src/resim.rs`
+  - [`examples/cu_rp_balancebot/src/resim.rs`](https://github.com/copper-project/extra-examples/blob/master/examples/cu_rp_balancebot/src/resim.rs)
   - `examples/cu_bridge_test/src/resim.rs`
 - In practice, resim is done with the normal runtime macro in simulation mode:
   - `#[copper_runtime(config = "...", sim_mode = true)]`

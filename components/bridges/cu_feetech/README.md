@@ -20,4 +20,4 @@ cargo run -p cu-feetech --bin feetech-calibrate -- /dev/ttyACM0 1 2 3 4 5 6 cali
 
 ## Example
 
-See the [cu-feetech-demo](../../examples/cu_feetech_demo) example for a minimal app that reads and logs positions.
+See the [cu-feetech-demo](https://github.com/copper-project/extra-examples/tree/master/examples/cu_feetech_demo) example for a minimal app that reads and logs positions.
