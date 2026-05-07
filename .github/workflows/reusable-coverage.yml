@@ -1,0 +1,135 @@
+name: Reusable Coverage
+
+on:
+  workflow_call:
+    inputs:
+      toolchain:
+        required: true
+        type: string
+      cargo_target_dir:
+        required: false
+        type: string
+        default: ""
+      linux_cargo_paths:
+        required: false
+        type: boolean
+        default: false
+      linux_disk_workarounds:
+        required: false
+        type: boolean
+        default: true
+      linux_ci_image:
+        required: false
+        type: string
+        default: ""
+      linux_runner_label:
+        required: false
+        type: string
+        default: "ubuntu-latest-m"
+
+jobs:
+  coverage-linux-container:
+    if: inputs.linux_ci_image != ''
+    name: Coverage (ubuntu-26.04, debug)
+    runs-on: ${{ inputs.linux_runner_label }}
+    container:
+      image: ${{ inputs.linux_ci_image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      CARGO_TERM_COLOR: always
+      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      COVERAGE_TOOLCHAIN: ${{ inputs.toolchain }}
+      WORKSPACE_SCOPE: workspace
+
+    steps:
+      - uses: actions/checkout@v6
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
+          prebaked_linux_image: "true"
+          cache_prefix: coverage-ubuntu26-container
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: "true"
+          sccache_restore: "false"
+          sccache_key_suffix: coverage
+      - name: Install llvm-tools-preview
+        run: rustup component add llvm-tools-preview --toolchain ${{ inputs.toolchain }}
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - name: Generate coverage report
+        run: support/ci/run_coverage.sh
+      - name: Append coverage summary
+        run: cat target/llvm-cov/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          if-no-files-found: error
+          path: |
+            target/llvm-cov/html/
+            target/llvm-cov/lcov.info
+            target/llvm-cov/summary.json
+            target/llvm-cov/summary.md
+
+  coverage-linux-host:
+    if: inputs.linux_ci_image == ''
+    name: Coverage (${{ inputs.linux_runner_label }}, debug)
+    runs-on: ${{ inputs.linux_runner_label }}
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      CARGO_TERM_COLOR: always
+      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      COVERAGE_TOOLCHAIN: ${{ inputs.toolchain }}
+      WORKSPACE_SCOPE: workspace
+
+    steps:
+      - uses: actions/checkout@v6
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
+          cache_prefix: coverage-ubuntu-host
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: "true"
+          sccache_restore: "false"
+          sccache_key_suffix: coverage
+      - name: Install llvm-tools-preview
+        run: rustup component add llvm-tools-preview --toolchain ${{ inputs.toolchain }}
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - name: Generate coverage report
+        run: support/ci/run_coverage.sh
+      - name: Append coverage summary
+        run: cat target/llvm-cov/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          if-no-files-found: error
+          path: |
+            target/llvm-cov/html/
+            target/llvm-cov/lcov.info
+            target/llvm-cov/summary.json
+            target/llvm-cov/summary.md

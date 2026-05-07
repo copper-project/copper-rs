@@ -111,6 +111,7 @@ helpers like `just log`, `just cl`, and `just resim`. To get situated, open
 - Task lifecycle: [Task Lifecycle](https://copper-project.github.io/copper-rs/Task-Lifecycle)
 - Modular configuration: [Modular Configuration](https://copper-project.github.io/copper-rs/Modular-Configuration)
 - Task automation: [Task Automation with just](https://copper-project.github.io/copper-rs/Task-Automation-with-Just)
+- Coverage report: [Coverage Report](https://copper-project.github.io/copper-rs/coverage/)
 - Supported platforms: [Supported Platforms](https://copper-project.github.io/copper-rs/Supported-Platforms)
 - Bare-metal development: [Baremetal Development](https://copper-project.github.io/copper-rs/Baremetal-Development)
 - Component catalog: [Copper Component Catalog](https://cdn.copper-robotics.com/catalog/index.html)
