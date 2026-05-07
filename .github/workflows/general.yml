@@ -22,7 +22,7 @@ env:
 jobs:
   linux-ci-image:
     name: Linux CI Image
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest-l
     permissions:
       contents: read
       packages: write
