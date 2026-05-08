@@ -924,7 +924,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> Drop for AsyncCopperListsM
     }
 }
 
-#[cfg(debug_assertions)]
+#[cfg(all(feature = "std", debug_assertions))]
 fn debug_assert_processing_completion_state<P: CopperListTuple>(
     culist: &CopperList<P>,
     context: &str,

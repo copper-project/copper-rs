@@ -66,6 +66,7 @@
 compile_error!("feature `parallel-rt` requires `std`");
 #[cfg(not(feature = "std"))]
 extern crate alloc;
+extern crate self as cu29;
 
 pub use cu29_derive::{bundle_resources, resources, safety_case};
 pub use cu29_runtime::app;
@@ -103,6 +104,14 @@ pub use cu29_runtime::simulation;
 pub use cu29_runtime::tx_channels;
 #[cfg(feature = "safety-ids")]
 pub mod safety;
+#[cfg(all(feature = "std", any(test, feature = "safety-ids")))]
+mod safety_runtime_cases;
+
+#[cfg(feature = "safety-ids")]
+#[doc(hidden)]
+pub fn link_safety_ids() {
+    safety_runtime_cases::link_safety_ids();
+}
 
 #[cfg(feature = "rtsan")]
 pub mod rtsan {
