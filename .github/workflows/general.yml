@@ -251,6 +251,19 @@ jobs:
       linux_runner_label: ubuntu-latest-m
       windows_runner_label: windows-latest-l
 
+  coverage:
+    if: github.event_name == 'pull_request'
+    name: Coverage
+    needs: [linux-ci-image]
+    uses: ./.github/workflows/reusable-coverage.yml
+    secrets: inherit
+    with:
+      toolchain: stable
+      linux_cargo_paths: true
+      linux_disk_workarounds: false
+      linux_ci_image: ${{ needs.linux-ci-image.outputs.image }}
+      linux_runner_label: ubuntu-latest-m
+
   api:
     name: Public API Check
     runs-on: ubuntu-latest

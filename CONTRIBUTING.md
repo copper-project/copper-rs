@@ -18,6 +18,11 @@ First off, thank you for considering contributing to Copper-rs! We welcome contr
     ```bash
     cargo install cargo-nextest
     ```
+* **cargo-llvm-cov:** For generating the same coverage report that CI publishes.
+    ```bash
+    cargo install cargo-llvm-cov
+    rustup component add llvm-tools-preview --toolchain stable
+    ```
 * **typos:** For spell checking.
     ```bash
     cargo install typos-cli
@@ -41,6 +46,9 @@ just lint
 
 # Run unit tests (std + no_std)
 just test
+
+# Generate the Linux std coverage report
+just coverage
 
 # Run CI-aligned std checks (build/tests/templates)
 just std-ci
@@ -67,6 +75,9 @@ The `just std-ci` command remains CI-aligned for std paths, including:
 - Build with all features
 - Unit tests with cargo-nextest
 - Project generation tests (debug mode only)
+
+The `just coverage` command runs the Linux std coverage surface used by CI and
+generates HTML output under `target/llvm-cov/html`.
 
 ### Platform Support Tiers
 
