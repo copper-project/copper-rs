@@ -22,7 +22,7 @@ env:
 jobs:
   linux-ci-image:
     name: Linux CI Image
-    runs-on: ubuntu-latest-l
+    runs-on: ubuntu-latest-m
     permissions:
       contents: read
       packages: write
@@ -249,7 +249,7 @@ jobs:
       linux_ci_image: ${{ needs.linux-ci-image.outputs.image }}
       linux_cuda_ci_image: ${{ needs.linux-cuda-ci-image.outputs.image }}
       linux_runner_label: ubuntu-latest-m
-      windows_runner_label: windows-latest-m
+      windows_runner_label: windows-latest-l
 
   coverage:
     if: github.event_name == 'pull_request'
