@@ -3892,8 +3892,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         .pop()
                                         .expect("parallel CopperList pool unexpectedly empty");
                                     let clid = next_clid;
-                                    culist.id = clid;
-                                    culist.change_state(cu29::copperlist::CopperListState::Initialized);
+                                    culist.reset_for_runtime_use(clid);
                                     {
                                         let _keyframe_lock =
                                             kf_lock.lock().expect("parallel keyframe lock poisoned");
@@ -3904,7 +3903,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         }
                                     }
                                     culist.change_state(cu29::copperlist::CopperListState::Processing);
-                                    culist.msgs.init_zeroed();
                                     entry_stage_tx
                                         .send(#mission_mod::ParallelWorkerJob {
                                             clid,
@@ -4170,7 +4168,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 debug_assert_eq!(clid, iteration_clid);
                 kf_manager.reset(clid, clock); // beginning of processing, we empty the serialized frozen states of the tasks.
                 culist.change_state(cu29::copperlist::CopperListState::Processing);
-                culist.msgs.init_zeroed();
                 let mut ctx = cu29::context::CuContext::from_runtime_metadata(
                     clock.clone(),
                     iteration_clid,

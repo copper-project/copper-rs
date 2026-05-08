@@ -430,15 +430,22 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     #[cfg(not(feature = "remote-debug"))]
     pub fn set_last_completed_encoded(&mut self, _snapshot: Option<Vec<u8>>) {}
 
-    pub fn create(&mut self) -> CuResult<&mut CopperList<P>> {
+    pub fn create(&mut self) -> CuResult<&mut CopperList<P>>
+    where
+        P: CuListZeroedInit,
+    {
         self.inner
             .create()
             .ok_or_else(|| CuError::from("Ran out of space for copper lists"))
     }
 
     pub fn end_of_processing(&mut self, culistid: u64) -> CuResult<()> {
+        #[cfg(debug_assertions)]
+        self.debug_assert_end_of_processing_target(culistid);
+
         let mut is_top = true;
         let mut nb_done = 0;
+        self.last_encoded_bytes = 0;
         self.last_handle_bytes = 0;
         #[cfg(feature = "remote-debug")]
         let last_completed_encoded = &mut self.last_completed_encoded;
@@ -482,6 +489,9 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         &mut self,
         mut culist: Box<CopperList<P>>,
     ) -> CuResult<OwnedCopperListSubmission<P>> {
+        #[cfg(debug_assertions)]
+        debug_assert_processing_completion_state(culist.as_ref(), "sync boxed end_of_processing");
+
         culist.change_state(CopperListState::DoneProcessing);
         self.last_encoded_bytes = 0;
         self.last_handle_bytes = 0;
@@ -510,6 +520,29 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
     #[cfg(feature = "std")]
     pub fn finish_pending_boxed(&mut self) -> CuResult<Vec<Box<CopperList<P>>>> {
         Ok(Vec::new())
+    }
+
+    #[cfg(debug_assertions)]
+    fn debug_assert_end_of_processing_target(&self, culistid: u64) {
+        let mut matches = 0usize;
+        let mut state = None;
+        for cl in self.inner.iter() {
+            if cl.id == culistid {
+                matches += 1;
+                state = Some(cl.get_state());
+            }
+        }
+
+        assert_eq!(
+            matches, 1,
+            "sync end_of_processing expected exactly one active CopperList #{culistid}, found {matches}"
+        );
+        assert_eq!(
+            state,
+            Some(CopperListState::Processing),
+            "sync end_of_processing expected CopperList #{culistid} to be Processing, found {:?}",
+            state
+        );
     }
 }
 
@@ -675,7 +708,10 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
     #[cfg(not(feature = "remote-debug"))]
     pub fn set_last_completed_encoded(&mut self, _snapshot: Option<Vec<u8>>) {}
 
-    pub fn create(&mut self) -> CuResult<&mut CopperList<P>> {
+    pub fn create(&mut self) -> CuResult<&mut CopperList<P>>
+    where
+        P: CuListZeroedInit,
+    {
         if self.current.is_some() {
             return Err(CuError::from(
                 "Attempted to create a CopperList while another one is still active",
@@ -697,8 +733,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
             .current
             .as_mut()
             .expect("current CopperList is missing");
-        current.id = self.next_cl_id;
-        current.change_state(CopperListState::Initialized);
+        current.reset_for_runtime_use(self.next_cl_id);
         self.next_cl_id += 1;
         Ok(current.as_mut())
     }
@@ -727,6 +762,8 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
                 culist.id
             )));
         }
+        #[cfg(debug_assertions)]
+        debug_assert_processing_completion_state(culist.as_ref(), "async end_of_processing");
 
         culist.change_state(CopperListState::DoneProcessing);
         self.capture_completed_snapshot(&culist)?;
@@ -772,6 +809,8 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         mut culist: Box<CopperList<P>>,
     ) -> CuResult<OwnedCopperListSubmission<P>> {
         self.reclaim_completed()?;
+        #[cfg(debug_assertions)]
+        debug_assert_processing_completion_state(culist.as_ref(), "async boxed end_of_processing");
         culist.change_state(CopperListState::DoneProcessing);
         self.capture_completed_snapshot(&culist)?;
         self.last_encoded_bytes = 0;
@@ -883,6 +922,20 @@ impl<P: CopperListTuple + Default, const NBCL: usize> Drop for AsyncCopperListsM
     fn drop(&mut self) {
         let _ = self.shutdown_worker();
     }
+}
+
+#[cfg(debug_assertions)]
+fn debug_assert_processing_completion_state<P: CopperListTuple>(
+    culist: &CopperList<P>,
+    context: &str,
+) {
+    assert_eq!(
+        culist.get_state(),
+        CopperListState::Processing,
+        "{context} expected CopperList #{} to be Processing, found {}",
+        culist.id,
+        culist.get_state()
+    );
 }
 
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
@@ -1771,6 +1824,8 @@ mod tests {
     use bincode::Encode;
     use cu29_traits::{ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks};
     use serde_derive::{Deserialize, Serialize};
+    #[cfg(feature = "std")]
+    use std::sync::{Arc, Mutex};
 
     #[derive(Reflect)]
     pub struct TestSource {}
@@ -1837,6 +1892,25 @@ mod tests {
         fn init_zeroed(&mut self) {}
     }
 
+    #[derive(Debug, Encode, Decode, Serialize, Deserialize, Default)]
+    struct IntMsgs(i32);
+
+    impl ErasedCuStampedDataSet for IntMsgs {
+        fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
+            Vec::new()
+        }
+    }
+
+    impl MatchingTasks for IntMsgs {
+        fn get_all_task_ids() -> &'static [&'static str] {
+            &[]
+        }
+    }
+
+    impl CuListZeroedInit for IntMsgs {
+        fn init_zeroed(&mut self) {}
+    }
+
     #[cfg(feature = "std")]
     fn tasks_instanciator(
         all_instances_configs: Vec<Option<&ComponentConfig>>,
@@ -1881,6 +1955,32 @@ mod tests {
     impl<E: Encode> WriteStream<E> for FakeWriter {
         fn log(&mut self, _obj: &E) -> CuResult<()> {
             Ok(())
+        }
+    }
+
+    #[cfg(not(feature = "async-cl-io"))]
+    #[derive(Debug)]
+    struct RecordingSyncWriter {
+        ids: Arc<Mutex<Vec<u64>>>,
+        last_log_bytes: usize,
+        fail_on: Option<u64>,
+    }
+
+    #[cfg(not(feature = "async-cl-io"))]
+    impl WriteStream<CopperList<IntMsgs>> for RecordingSyncWriter {
+        fn log(&mut self, culist: &CopperList<IntMsgs>) -> CuResult<()> {
+            self.ids.lock().unwrap().push(culist.id);
+            if self.fail_on == Some(culist.id) {
+                return Err(CuError::from(format!(
+                    "logger failed for CopperList #{}",
+                    culist.id
+                )));
+            }
+            Ok(())
+        }
+
+        fn last_log_bytes(&self) -> Option<usize> {
+            Some(self.last_log_bytes)
         }
     }
 
@@ -2043,6 +2143,197 @@ mod tests {
         }
     }
 
+    #[cfg(not(feature = "async-cl-io"))]
+    #[test]
+    fn test_sync_copperlists_accessors_passthrough_to_inner_manager() {
+        let mut copperlists = SyncCopperListsManager::<IntMsgs, 2>::new(None).unwrap();
+
+        assert_eq!(copperlists.next_cl_id(), 0);
+        assert_eq!(copperlists.last_cl_id(), 0);
+        assert!(copperlists.peek().is_none());
+
+        {
+            let culist = copperlists.create().unwrap();
+            culist.msgs.0 = 11;
+            assert_eq!(culist.id, 0);
+            assert_eq!(culist.get_state(), CopperListState::Initialized);
+        }
+
+        assert_eq!(copperlists.next_cl_id(), 1);
+        assert_eq!(copperlists.last_cl_id(), 0);
+        let peeked = copperlists.peek().unwrap();
+        assert_eq!(peeked.id, 0);
+        assert_eq!(peeked.msgs.0, 11);
+        assert_eq!(peeked.get_state(), CopperListState::Initialized);
+    }
+
+    #[cfg(not(feature = "async-cl-io"))]
+    #[test]
+    fn test_sync_reclaimed_slot_reuse_reinitializes_state_but_preserves_payload_storage() {
+        let mut copperlists = SyncCopperListsManager::<IntMsgs, 1>::new(None).unwrap();
+
+        {
+            let culist = copperlists.create().unwrap();
+            culist.msgs.0 = 41;
+            culist.change_state(CopperListState::Processing);
+            assert_eq!(culist.id, 0);
+        }
+
+        copperlists.end_of_processing(0).unwrap();
+        assert_eq!(copperlists.available_copper_lists().unwrap(), 1);
+
+        let reused = copperlists.create().unwrap();
+        assert_eq!(reused.id, 1);
+        assert_eq!(reused.get_state(), CopperListState::Initialized);
+        assert_eq!(reused.msgs.0, 41);
+    }
+
+    #[cfg(all(not(feature = "async-cl-io"), debug_assertions))]
+    #[test]
+    #[should_panic(expected = "sync end_of_processing expected exactly one active CopperList #99")]
+    fn test_sync_end_of_processing_unknown_id_panics_in_debug() {
+        let mut copperlists = SyncCopperListsManager::<IntMsgs, 2>::new(None).unwrap();
+
+        {
+            let culist = copperlists.create().unwrap();
+            culist.msgs.0 = 10;
+            culist.change_state(CopperListState::Processing);
+        }
+        {
+            let culist = copperlists.create().unwrap();
+            culist.msgs.0 = 20;
+            culist.change_state(CopperListState::Processing);
+        }
+
+        let _ = copperlists.end_of_processing(99);
+    }
+
+    #[cfg(all(not(feature = "async-cl-io"), debug_assertions))]
+    #[test]
+    #[should_panic(expected = "sync end_of_processing expected CopperList #0 to be Processing")]
+    fn test_sync_end_of_processing_wrong_state_panics_in_debug() {
+        let mut copperlists = SyncCopperListsManager::<IntMsgs, 1>::new(None).unwrap();
+
+        {
+            let culist = copperlists.create().unwrap();
+            culist.msgs.0 = 10;
+            assert_eq!(culist.get_state(), CopperListState::Initialized);
+        }
+
+        let _ = copperlists.end_of_processing(0);
+    }
+
+    #[cfg(not(feature = "async-cl-io"))]
+    #[test]
+    fn test_sync_end_of_processing_serializes_done_suffix_from_newest_to_oldest() {
+        let ids = Arc::new(Mutex::new(Vec::new()));
+        let mut copperlists =
+            SyncCopperListsManager::<IntMsgs, 2>::new(Some(Box::new(RecordingSyncWriter {
+                ids: ids.clone(),
+                last_log_bytes: 17,
+                fail_on: None,
+            })))
+            .unwrap();
+
+        {
+            let culist = copperlists.create().unwrap();
+            culist.msgs.0 = 10;
+            culist.change_state(CopperListState::Processing);
+        }
+        {
+            let culist = copperlists.create().unwrap();
+            culist.msgs.0 = 20;
+            culist.change_state(CopperListState::Processing);
+        }
+
+        copperlists.end_of_processing(0).unwrap();
+        assert!(ids.lock().unwrap().is_empty());
+        assert_eq!(copperlists.available_copper_lists().unwrap(), 0);
+
+        copperlists.end_of_processing(1).unwrap();
+
+        assert_eq!(*ids.lock().unwrap(), vec![1, 0]);
+        assert_eq!(copperlists.available_copper_lists().unwrap(), 2);
+    }
+
+    #[cfg(not(feature = "async-cl-io"))]
+    #[test]
+    fn test_sync_end_of_processing_updates_logger_counters_on_success() {
+        let ids = Arc::new(Mutex::new(Vec::new()));
+        let mut copperlists =
+            SyncCopperListsManager::<IntMsgs, 1>::new(Some(Box::new(RecordingSyncWriter {
+                ids: ids.clone(),
+                last_log_bytes: 17,
+                fail_on: None,
+            })))
+            .unwrap();
+        let io_cache = crate::monitoring::CuMsgIoCache::<1>::default();
+
+        {
+            let culist = copperlists.create().unwrap();
+            culist.msgs.0 = 10;
+            culist.change_state(CopperListState::Processing);
+        }
+
+        {
+            let capture = crate::monitoring::start_copperlist_io_capture(&io_cache);
+            capture.select_slot(0);
+            crate::monitoring::record_payload_handle_bytes(32);
+        }
+
+        copperlists.end_of_processing(0).unwrap();
+
+        assert_eq!(*ids.lock().unwrap(), vec![0]);
+        assert_eq!(copperlists.last_encoded_bytes, 17);
+        assert_eq!(copperlists.last_handle_bytes, 32);
+        assert_eq!(copperlists.available_copper_lists().unwrap(), 1);
+    }
+
+    #[cfg(not(feature = "async-cl-io"))]
+    #[test]
+    fn test_sync_end_of_processing_preserves_slot_on_logger_error() {
+        let ids = Arc::new(Mutex::new(Vec::new()));
+        let mut copperlists =
+            SyncCopperListsManager::<IntMsgs, 1>::new(Some(Box::new(RecordingSyncWriter {
+                ids: ids.clone(),
+                last_log_bytes: 17,
+                fail_on: Some(0),
+            })))
+            .unwrap();
+
+        {
+            let culist = copperlists.create().unwrap();
+            culist.change_state(CopperListState::Processing);
+        }
+
+        let err = copperlists.end_of_processing(0).unwrap_err();
+
+        assert!(
+            err.to_string().contains("logger failed for CopperList #0"),
+            "unexpected error: {err}"
+        );
+        assert_eq!(*ids.lock().unwrap(), vec![0]);
+        assert_eq!(copperlists.available_copper_lists().unwrap(), 0);
+        assert_eq!(copperlists.last_encoded_bytes, 0);
+        assert_eq!(copperlists.last_handle_bytes, 0);
+
+        let peeked = copperlists.peek().unwrap();
+        assert_eq!(peeked.id, 0);
+        assert_eq!(peeked.get_state(), CopperListState::BeingSerialized);
+    }
+
+    #[cfg(all(not(feature = "async-cl-io"), feature = "std", debug_assertions))]
+    #[test]
+    #[should_panic(
+        expected = "sync boxed end_of_processing expected CopperList #7 to be Processing"
+    )]
+    fn test_sync_end_of_processing_boxed_wrong_state_panics_in_debug() {
+        let mut copperlists = SyncCopperListsManager::<IntMsgs, 1>::new(None).unwrap();
+        let culist = Box::new(CopperList::new(7, IntMsgs::default()));
+
+        let _ = copperlists.end_of_processing_boxed(culist);
+    }
+
     #[cfg(all(feature = "std", feature = "async-cl-io"))]
     #[derive(Debug, Default)]
     struct RecordingWriter {
@@ -2077,6 +2368,41 @@ mod tests {
         copperlists.finish_pending().unwrap();
         assert_eq!(copperlists.available_copper_lists().unwrap(), 4);
         assert_eq!(*ids.lock().unwrap(), vec![0, 1, 2, 3]);
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    #[test]
+    fn test_async_create_reinitializes_reclaimed_slot_state_but_preserves_payload_storage() {
+        let mut copperlists = CopperListsManager::<IntMsgs, 1>::new(None).unwrap();
+
+        {
+            let culist = copperlists.create().unwrap();
+            assert_eq!(culist.id, 0);
+            assert_eq!(culist.get_state(), CopperListState::Initialized);
+            culist.msgs.0 = 41;
+            culist.change_state(CopperListState::Processing);
+        }
+
+        copperlists.end_of_processing(0).unwrap();
+        assert_eq!(copperlists.available_copper_lists().unwrap(), 1);
+
+        let reused = copperlists.create().unwrap();
+        assert_eq!(reused.id, 1);
+        assert_eq!(reused.get_state(), CopperListState::Initialized);
+        assert_eq!(reused.msgs.0, 41);
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io", debug_assertions))]
+    #[test]
+    #[should_panic(expected = "async end_of_processing expected CopperList #0 to be Processing")]
+    fn test_async_end_of_processing_wrong_state_panics_in_debug() {
+        let mut copperlists = CopperListsManager::<IntMsgs, 1>::new(None).unwrap();
+
+        let culist = copperlists.create().unwrap();
+        assert_eq!(culist.id, 0);
+        assert_eq!(culist.get_state(), CopperListState::Initialized);
+
+        let _ = copperlists.end_of_processing(0);
     }
 
     #[test]
