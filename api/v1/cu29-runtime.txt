@@ -434,7 +434,7 @@ impl<P: cu29_traits::CopperListTuple, const N: usize> cu29_runtime::copperlist::
 pub fn cu29_runtime::copperlist::CuListsManager<P, N>::asc_iter(&self) -> cu29_runtime::copperlist::AscIter<'_, cu29_runtime::copperlist::CopperList<P>>
 pub fn cu29_runtime::copperlist::CuListsManager<P, N>::asc_iter_mut(&mut self) -> cu29_runtime::copperlist::AscIterMut<'_, cu29_runtime::copperlist::CopperList<P>>
 pub fn cu29_runtime::copperlist::CuListsManager<P, N>::clear(&mut self)
-pub fn cu29_runtime::copperlist::CuListsManager<P, N>::create(&mut self) -> core::option::Option<&mut cu29_runtime::copperlist::CopperList<P>>
+pub fn cu29_runtime::copperlist::CuListsManager<P, N>::create(&mut self) -> core::option::Option<&mut cu29_runtime::copperlist::CopperList<P>> where P: cu29_runtime::copperlist::CuListZeroedInit
 pub fn cu29_runtime::copperlist::CuListsManager<P, N>::is_empty(&self) -> bool
 pub fn cu29_runtime::copperlist::CuListsManager<P, N>::is_full(&self) -> bool
 pub fn cu29_runtime::copperlist::CuListsManager<P, N>::iter(&self) -> cu29_runtime::copperlist::Iter<'_, cu29_runtime::copperlist::CopperList<P>>
