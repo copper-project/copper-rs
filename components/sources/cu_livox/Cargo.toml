@@ -27,7 +27,7 @@ serde = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-cu-udp-inject = { path = "../../testing/cu_udp_inject", version = "1.0.0-rc1" }
+cu-udp-inject = { path = "../../testing/cu_udp_inject", version = "1.0.0-rc2" }
 serde = { workspace = true }
 
 [features]

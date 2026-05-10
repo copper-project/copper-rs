@@ -20,8 +20,8 @@ environments = ["host"]
 bincode = { workspace = true }
 cu29 = { workspace = true }
 serde = { workspace = true }
-cu-spatial-payloads = { path = "../../payloads/cu_spatial_payloads", version = "1.0.0-rc1" }
-cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "1.0.0-rc1" }
+cu-spatial-payloads = { path = "../../payloads/cu_spatial_payloads", version = "1.0.0-rc2" }
+cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "1.0.0-rc2" }
 
 [target.'cfg(unix)'.dependencies]
 apriltag = { version = "0.4.0" }
