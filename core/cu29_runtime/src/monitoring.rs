@@ -1346,7 +1346,6 @@ fn current_payload_io_measurement() -> usize {
 ///
 /// This is called automatically by handle encoders such as `CuHandle::encode()`.
 /// Custom log codecs report equivalent bytes via `CuLogCodec::source_payload_handle_bytes()`.
-#[cfg(feature = "std")]
 pub(crate) fn record_payload_handle_bytes(bytes: usize) {
     #[cfg(feature = "std")]
     PAYLOAD_HANDLE_BYTES.with(|total| {
