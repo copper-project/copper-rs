@@ -1293,6 +1293,7 @@ pub fn (M0, M1)::stop(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29
 pub fn cu29_runtime::monitoring::build_monitor_topology(config: &cu29_runtime::config::CuConfig, mission: &str) -> cu29_traits::CuResult<cu29_runtime::monitoring::MonitorTopology>
 pub fn cu29_runtime::monitoring::panic_payload_to_string(payload: &(dyn core::any::Any + core::marker::Send)) -> alloc::string::String
 pub fn cu29_runtime::monitoring::payload_io_stats<T>(payload: &T) -> cu29_traits::CuResult<cu29_runtime::monitoring::PayloadIoStats> where T: cu_bincode::enc::Encode
+pub fn cu29_runtime::monitoring::record_payload_handle_bytes(bytes: usize)
 pub fn cu29_runtime::monitoring::runtime_panic_hook_active() -> bool
 pub fn cu29_runtime::monitoring::start_copperlist_io_capture<const N: usize>(cache: &cu29_runtime::monitoring::CuMsgIoCache<N>) -> cu29_runtime::monitoring::CuMsgIoCaptureGuard
 pub fn cu29_runtime::monitoring::take_last_completed_handle_bytes() -> u64
