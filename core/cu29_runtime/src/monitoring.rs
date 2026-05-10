@@ -1342,8 +1342,14 @@ fn current_payload_io_measurement() -> usize {
     }
 }
 
+/// Records handle-backed payload bytes for the active CopperList IO capture.
+///
+/// This is called automatically by handle encoders such as `CuHandle::encode()`.
+/// Custom log codecs that read handle-backed buffers directly must call it
+/// explicitly so runtime monitoring can still account for the source payload
+/// residency even when the normal payload `Encode` path is bypassed.
 #[cfg(feature = "std")]
-pub(crate) fn record_payload_handle_bytes(bytes: usize) {
+pub fn record_payload_handle_bytes(bytes: usize) {
     #[cfg(feature = "std")]
     PAYLOAD_HANDLE_BYTES.with(|total| {
         if let Some(current) = total.get() {

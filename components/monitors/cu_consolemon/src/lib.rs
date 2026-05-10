@@ -1,6 +1,5 @@
 #[cfg(feature = "debug_pane")]
 use arboard::Clipboard;
-use color_eyre::config::HookBuilder;
 #[cfg(feature = "debug_pane")]
 use cu_tuimon::MonitorLogCapture;
 pub use cu_tuimon::{
@@ -24,10 +23,10 @@ use ratatui::crossterm::tty::IsTty;
 use ratatui::crossterm::{event, execute};
 use ratatui::{Terminal, TerminalOptions, Viewport};
 use std::io::{stdin, stdout};
+use std::sync::Arc;
 #[cfg(feature = "debug_pane")]
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock};
 use std::thread::JoinHandle;
 use std::time::Duration;
 use std::{io, thread};
@@ -69,7 +68,6 @@ struct UI {
 
 impl UI {
     fn new(model: MonitorModel, quitting: Arc<AtomicBool>) -> Self {
-        init_error_hooks();
         Self {
             monitor_ui: MonitorUi::new(
                 model,
@@ -351,23 +349,6 @@ impl Drop for TerminalRestoreGuard {
     fn drop(&mut self) {
         let _ = restore_terminal();
     }
-}
-
-fn init_error_hooks() {
-    static ONCE: OnceLock<()> = OnceLock::new();
-    if ONCE.get().is_some() {
-        return;
-    }
-
-    let (_unused_panic_hook, error) = HookBuilder::default().into_hooks();
-    let error = error.into_eyre_hook();
-    color_eyre::eyre::set_hook(Box::new(move |err| {
-        let _ = restore_terminal();
-        error(err)
-    }))
-    .unwrap();
-
-    let _ = ONCE.set(());
 }
 
 fn setup_terminal() -> io::Result<()> {
