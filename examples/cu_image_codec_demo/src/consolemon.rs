@@ -29,9 +29,6 @@ pub fn main() {
         .expect("Failed to setup Copper log")
         .build()
         .expect("Failed to create application");
-    application
-        .start_all_tasks()
-        .expect("Failed to start tasks");
 
     if let Err(err) = application.run() {
         if err.message() != "Exiting..." {
@@ -44,7 +41,4 @@ pub fn main() {
         "Inspect with: cargo run -p cu-image-codec-demo --features logreader --bin cu-image-codec-demo-logreader -- {} fsck",
         log_path.display()
     );
-    application
-        .stop_all_tasks()
-        .expect("Failed to stop application.");
 }
