@@ -190,8 +190,7 @@ where
     P: CopperListTuple + CuListZeroedInit,
 {
     pub fn new(clid: u64, mut culist: Box<CopperList<P>>) -> Self {
-        culist.id = clid;
-        culist.msgs.init_zeroed();
+        culist.reset_for_runtime_use(clid);
         Self {
             clid,
             culist,

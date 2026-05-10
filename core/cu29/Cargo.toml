@@ -13,6 +13,15 @@ homepage.workspace = true
 repository.workspace = true
 readme = "README.md"
 
+[[test]]
+name = "safety_ids"
+path = "tests/safety_ids.rs"
+harness = false
+required-features = ["safety-ids"]
+
+[package.metadata.copper-safety]
+scope = "bare-metal-no-std"
+
 [dependencies]
 cu29-clock = { workspace = true }
 cu29-derive = { workspace = true }
