@@ -19,7 +19,7 @@
 
 Already showing up in: ✈️ Flying | 🚗 Driving | 🌊 Swimming | 🚀 Spacefaring | 🤖 Humanoids
 
-### Try Copper In 30 Seconds
+### Try Copper In One Click In Your Browser
 
 No setup required. Open one of the live demos in your browser: the simulator runs on the left and the live Copper monitor runs on the right.
 
@@ -35,6 +35,8 @@ These are not mockups: BalanceBot is the exact same application that runs on a R
       <strong><a href="https://cdn.copper-robotics.com/demo/balancebot/index.html">BalanceBot</a></strong>
       <br />
       Self-balancing robot sim with a live Copper DAG and latency monitor.
+      <br />
+      <a href="https://github.com/copper-project/extra-examples/tree/master/examples/cu_rp_balancebot">Source code</a>
     </td>
     <td width="50%" valign="top">
       <a href="https://cdn.copper-robotics.com/demo/flight-controller/index.html">
@@ -44,6 +46,8 @@ These are not mockups: BalanceBot is the exact same application that runs on a R
       <strong><a href="https://cdn.copper-robotics.com/demo/flight-controller/index.html">Flight Controller</a></strong>
       <br />
       Quadcopter flight sim with the same live Copper monitor.
+      <br />
+      <a href="https://github.com/copper-project/extra-examples/tree/master/examples/cu_flight_controller">Source code</a>
     </td>
   </tr>
 </table>
@@ -74,6 +78,24 @@ Want to see more Copper in action? Watch the [community showcase video](https://
 ## Get Started
 
 - Requires Rust 1.95 or newer. The latest stable Rust toolchain is recommended.
+
+### Zero To Your First Copper App in 30 Seconds
+
+```bash
+cargo install cargo-cunew
+cargo cunew hello_copper
+cd hello_copper
+cargo run
+```
+
+`cargo cunew` is the primary Copper bootstrap path. It generates a minimal
+source -> task -> sink application. `cargo run` starts the app, prints the
+first messages (`Received message: 42`, then `Sink Received message: 43`), and
+records to `logs/hello-copper.copper`; stop it with `Ctrl-C` when you've seen
+enough. If you have `just` installed, the generated project also includes
+helpers like `just log`, `just cl`, and `just resim`. To get situated, open
+`copperconfig.ron`, `src/main.rs`, `src/tasks.rs`, and `justfile`.
+
 - Start a new project from templates: [Project Templates](https://copper-project.github.io/copper-rs/Project-Templates)
 - Browse the live component catalog: [Copper Component Catalog](https://cdn.copper-robotics.com/catalog/index.html)
   Community components are welcome there too; if you build a reusable Copper component, prefer publishing it as its own crate and adding it to the catalog.
@@ -89,6 +111,7 @@ Want to see more Copper in action? Watch the [community showcase video](https://
 - Task lifecycle: [Task Lifecycle](https://copper-project.github.io/copper-rs/Task-Lifecycle)
 - Modular configuration: [Modular Configuration](https://copper-project.github.io/copper-rs/Modular-Configuration)
 - Task automation: [Task Automation with just](https://copper-project.github.io/copper-rs/Task-Automation-with-Just)
+- Coverage report: [Coverage Report](https://copper-project.github.io/copper-rs/coverage/)
 - Supported platforms: [Supported Platforms](https://copper-project.github.io/copper-rs/Supported-Platforms)
 - Bare-metal development: [Baremetal Development](https://copper-project.github.io/copper-rs/Baremetal-Development)
 - Component catalog: [Copper Component Catalog](https://cdn.copper-robotics.com/catalog/index.html)

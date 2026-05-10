@@ -29,7 +29,6 @@ compact_str = { workspace = true }
 ratatui = "0.30"
 ansi-to-tui = { version = "8.0.0", default-features = false }
 tui-widgets = "0.7.0"
-color-eyre = { version = "0.6.4", default-features = false }
 gag = "1.0.0"
 arboard = { version = "3.6.1", optional = true, default-features = false }
 

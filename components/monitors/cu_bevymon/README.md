@@ -18,7 +18,7 @@ Design intent:
 
 - reuse the same Ratatui rendering as `cu_consolemon`
 - reuse the same shared `LOG` pane, including Copper live logs and optional `stderr` capture
-- integrate into existing Bevy sims like `cu_rp_balancebot` and `cu_flight_controller`
+- integrate into existing Bevy sims like [`cu_rp_balancebot`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_rp_balancebot) and [`cu_flight_controller`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_flight_controller)
 - keep the rendering/backend split clean enough for later browser / wasm work
 
 Recommended app structure:
@@ -83,7 +83,7 @@ commands.entity(layout.sim_panel).with_children(|panel| {
 });
 ```
 
-The `cu_bevymon_demo`, `cu_rp_balancebot`, and `cu_flight_controller` examples all use that shared split shell now. The main app-specific choice is how the left-side scene camera is produced.
+The `cu_bevymon_demo`, [`cu_rp_balancebot`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_rp_balancebot), and [`cu_flight_controller`](https://github.com/copper-project/extra-examples/tree/master/examples/cu_flight_controller) examples all use that shared split shell now. The main app-specific choice is how the left-side scene camera is produced.
 
 Render strategy guidance:
 

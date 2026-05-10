@@ -29,6 +29,7 @@
 //! - `high-precision-limiter`: std-only hybrid sleep/spin loop limiter for tighter `rate_target_hz` cadence
 //! - `async-cl-io`: offload CopperList serialization/logging to a dedicated std thread
 //! - `parallel-rt`: prepare the runtime for a future multi-threaded deterministic executor
+//! - `safety-ids`: std-only safety-case metadata collection and JSON export helpers
 //!
 //! ## Concepts behind Copper
 //!
@@ -52,7 +53,7 @@
 //!
 //! ## V1 API status
 //!
-//! The V1 public contract is defined in `docs/v1-api-surface.md`. The prelude is the
+//! The V1 public contract is defined in `doc/v1-api-surface.md`. The prelude is the
 //! canonical application import surface; lower-level modules remain addressable by
 //! module path when needed, but are not implicitly part of the prelude contract.
 //!
@@ -65,8 +66,9 @@
 compile_error!("feature `parallel-rt` requires `std`");
 #[cfg(not(feature = "std"))]
 extern crate alloc;
+extern crate self as cu29;
 
-pub use cu29_derive::{bundle_resources, resources};
+pub use cu29_derive::{bundle_resources, resources, safety_case};
 pub use cu29_runtime::app;
 pub use cu29_runtime::config;
 pub use cu29_runtime::context;
@@ -100,6 +102,16 @@ pub use cu29_runtime::rx_channels;
 #[cfg(feature = "std")]
 pub use cu29_runtime::simulation;
 pub use cu29_runtime::tx_channels;
+#[cfg(feature = "safety-ids")]
+pub mod safety;
+#[cfg(all(feature = "std", any(test, feature = "safety-ids")))]
+mod safety_runtime_cases;
+
+#[cfg(feature = "safety-ids")]
+#[doc(hidden)]
+pub fn link_safety_ids() {
+    safety_runtime_cases::link_safety_ids();
+}
 
 #[cfg(feature = "rtsan")]
 pub mod rtsan {
@@ -207,6 +219,20 @@ macro_rules! defmt_error {
     ($($tt:tt)*) => {{}};
 }
 
+#[macro_export]
+macro_rules! safety_check {
+    ($check_id:literal, $requirement_id:literal, $description:literal, $condition:expr $(,)?) => {
+        assert!($condition, "{}", $description);
+    };
+}
+
+#[macro_export]
+macro_rules! safety_check_eq {
+    ($check_id:literal, $requirement_id:literal, $description:literal, $left:expr, $right:expr $(,)?) => {
+        assert_eq!($left, $right, "{}", $description);
+    };
+}
+
 /// Canonical imports for Copper applications.
 ///
 /// This module intentionally re-exports each stable application-facing group once.
@@ -217,6 +243,7 @@ pub mod prelude {
     #[cfg(feature = "units")]
     pub use crate::units;
     pub use crate::{defmt_debug, defmt_error, defmt_info, defmt_warn};
+    pub use crate::{safety_case, safety_check, safety_check_eq};
     #[cfg(feature = "reflect")]
     pub use bevy_reflect_derive::Reflect;
     #[cfg(feature = "signal-handler")]

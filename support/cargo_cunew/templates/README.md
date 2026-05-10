@@ -89,7 +89,7 @@ The generated project includes helper commands in its `justfile`:
 * `just cl`: Extract CopperLists (sequences of operations) from the application's log output.
 * `just resim`: Replay the recorded log once into a fresh replay log.
 * `just resim-debug`: Start the replay-backed remote debug server manually.
-* `just rcfg`: Generate a `.dot` file representing the application's execution Directed Acyclic Graph (DAG). This currently requires `--source local`. You can use tools like Graphviz to visualize the output (for example, `dot -Tpng graph.dot -o graph.png`).
+* `just dag`: Render the application's execution Directed Acyclic Graph (DAG). Local-checkout templates run the tool from the Copper repo; crates.io and git templates use `cu29-rendercfg` from `PATH` or install the matching `cu29-runtime` on demand. `just rcfg` remains as a compatibility alias.
 
 Set `APP_NAME=test-workspace-demo APP_DIR=test_workspace-demo` to target the demo app (for example, `APP_NAME=test-workspace-demo APP_DIR=test_workspace-demo just log`).
 

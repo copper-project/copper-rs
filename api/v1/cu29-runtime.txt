@@ -434,7 +434,7 @@ impl<P: cu29_traits::CopperListTuple, const N: usize> cu29_runtime::copperlist::
 pub fn cu29_runtime::copperlist::CuListsManager<P, N>::asc_iter(&self) -> cu29_runtime::copperlist::AscIter<'_, cu29_runtime::copperlist::CopperList<P>>
 pub fn cu29_runtime::copperlist::CuListsManager<P, N>::asc_iter_mut(&mut self) -> cu29_runtime::copperlist::AscIterMut<'_, cu29_runtime::copperlist::CopperList<P>>
 pub fn cu29_runtime::copperlist::CuListsManager<P, N>::clear(&mut self)
-pub fn cu29_runtime::copperlist::CuListsManager<P, N>::create(&mut self) -> core::option::Option<&mut cu29_runtime::copperlist::CopperList<P>>
+pub fn cu29_runtime::copperlist::CuListsManager<P, N>::create(&mut self) -> core::option::Option<&mut cu29_runtime::copperlist::CopperList<P>> where P: cu29_runtime::copperlist::CuListZeroedInit
 pub fn cu29_runtime::copperlist::CuListsManager<P, N>::is_empty(&self) -> bool
 pub fn cu29_runtime::copperlist::CuListsManager<P, N>::is_full(&self) -> bool
 pub fn cu29_runtime::copperlist::CuListsManager<P, N>::iter(&self) -> cu29_runtime::copperlist::Iter<'_, cu29_runtime::copperlist::CopperList<P>>
@@ -1003,6 +1003,7 @@ pub type cu29_runtime::logcodec::CuLogCodec::Config: serde_core::de::Deserialize
 pub fn cu29_runtime::logcodec::CuLogCodec::decode_payload<D: cu_bincode::de::Decoder<Context = ()>>(&mut self, decoder: &mut D) -> core::result::Result<P, cu_bincode::error::DecodeError>
 pub fn cu29_runtime::logcodec::CuLogCodec::encode_payload<E: cu_bincode::enc::Encoder>(&mut self, payload: &P, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 pub fn cu29_runtime::logcodec::CuLogCodec::new(config: Self::Config) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
+pub fn cu29_runtime::logcodec::CuLogCodec::source_payload_handle_bytes(&self, payload: &P) -> usize
 pub fn cu29_runtime::logcodec::decode_msg_with_codec<T, C, D>(decoder: &mut D, codec: &mut C) -> core::result::Result<cu29_runtime::cutask::CuMsg<T>, cu_bincode::error::DecodeError> where T: cu29_runtime::cutask::CuMsgPayload, C: cu29_runtime::logcodec::CuLogCodec<T>, D: cu_bincode::de::Decoder<Context = ()>
 pub fn cu29_runtime::logcodec::deserialize_codec_config<C, P>(config: core::option::Option<&cu29_runtime::config::ComponentConfig>) -> cu29_traits::CuResult<<C as cu29_runtime::logcodec::CuLogCodec>::Config> where C: cu29_runtime::logcodec::CuLogCodec<P>, P: cu29_runtime::cutask::CuMsgPayload
 pub fn cu29_runtime::logcodec::effective_config_entry<T: 'static>(default_ron: &str) -> &'static cu29_runtime::logcodec::EffectiveConfigEntry

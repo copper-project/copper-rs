@@ -13,6 +13,15 @@ homepage.workspace = true
 repository.workspace = true
 readme = "README.md"
 
+[[test]]
+name = "safety_ids"
+path = "tests/safety_ids.rs"
+harness = false
+required-features = ["safety-ids"]
+
+[package.metadata.copper-safety]
+scope = "bare-metal-no-std"
+
 [dependencies]
 cu29-clock = { workspace = true }
 cu29-derive = { workspace = true }
@@ -32,6 +41,8 @@ bevy_reflect_derive = { workspace = true, optional = true }
 bincode = { workspace = true }
 serde = { workspace = true }
 serde_derive = { workspace = true }
+inventory = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true, default-features = true }
 
 # only std
 rayon = { workspace = true, optional = true }
@@ -82,3 +93,4 @@ std = [
   "cu29-value/std",
 ]
 rtsan = ["dep:rtsan-standalone", "cu29-derive/rtsan"]
+safety-ids = ["std", "dep:inventory", "dep:serde_json"]

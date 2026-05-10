@@ -137,6 +137,32 @@ test:
 	cargo +stable nextest run --all-targets --workspace {{EMBEDDED_EXCLUDES}}
 	cargo +stable nextest run --no-default-features
 
+# Ensure the tools needed by coverage are installed.
+check-coverage-tools:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	missing=0
+	if ! cargo +stable llvm-cov --version >/dev/null 2>&1; then
+		echo "Missing cargo-llvm-cov. Install with: cargo install --locked cargo-llvm-cov"
+		missing=1
+	fi
+	if ! cargo +stable nextest --version >/dev/null 2>&1; then
+		echo "Missing cargo-nextest. Install with: cargo install --locked cargo-nextest"
+		missing=1
+	fi
+	if ! rustup component list --toolchain stable | grep -Eq '^llvm-tools(-preview|-.*-unknown-.*)? .*installed'; then
+		echo "Missing llvm-tools-preview for stable. Install with: rustup component add llvm-tools-preview --toolchain stable"
+		missing=1
+	fi
+	if [[ "$missing" -ne 0 ]]; then
+		exit 1
+	fi
+
+# Generate the Linux std coverage report used by CI.
+coverage: check-coverage-tools
+	support/ci/run_coverage.sh
+
 # Verify the declared minimum supported Rust version.
 msrv-check:
 	#!/usr/bin/env bash

@@ -16,6 +16,7 @@ static BUNDLED_TEMPLATES: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates"
 const DEFAULT_GIT_URL: &str = "https://github.com/copper-project/copper-rs.git";
 const DEFAULT_COPPER_VERSION: &str = env!("CARGO_PKG_VERSION");
 const CRATES_IO_API: &str = "https://crates.io/api/v1/crates";
+const NO_TEMPLATE_GIT_REF: &str = "__none__";
 
 #[derive(Debug, Clone, Parser)]
 #[command(
@@ -123,6 +124,7 @@ pub fn run(cli: Cli) -> Result<PathBuf> {
 
 fn run_with_versions(cli: Cli, versions_override: Option<CopperVersions>) -> Result<PathBuf> {
     validate_git_options(&cli)?;
+    ensure_generator_identity_env()?;
 
     let resolved = resolve_options(&cli, versions_override)?;
     let bundled = materialize_bundled_templates()?;
@@ -150,6 +152,68 @@ fn run_with_versions(cli: Cli, versions_override: Option<CopperVersions>) -> Res
     };
 
     generate(args).context("failed to generate Copper project")
+}
+
+fn ensure_generator_identity_env() -> Result<()> {
+    let user = env::var("USER")
+        .ok()
+        .filter(|value| !value.trim().is_empty());
+    let username = env::var("USERNAME")
+        .ok()
+        .filter(|value| !value.trim().is_empty());
+
+    let identity = user
+        .clone()
+        .or(username.clone())
+        .or(detect_current_username()?);
+
+    let Some(identity) = identity else {
+        return Ok(());
+    };
+
+    // cargo-generate reads process environment to synthesize its built-in
+    // `authors`/`username` variables. Set the missing variables once up front.
+    unsafe {
+        if user.is_none() {
+            env::set_var("USER", &identity);
+        }
+        if username.is_none() {
+            env::set_var("USERNAME", &identity);
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn detect_current_username() -> Result<Option<String>> {
+    use std::ffi::CStr;
+
+    // This runs before cargo-generate starts and before we spawn worker
+    // threads, so using the libc account lookup here is acceptable.
+    unsafe {
+        let passwd = libc::getpwuid(libc::geteuid());
+        if passwd.is_null() || (*passwd).pw_name.is_null() {
+            return Ok(None);
+        }
+
+        let username = CStr::from_ptr((*passwd).pw_name)
+            .to_str()
+            .context("current username is not valid UTF-8")?
+            .trim()
+            .to_owned();
+
+        if username.is_empty() {
+            return Ok(None);
+        }
+
+        Ok(Some(username))
+    }
+}
+
+#[cfg(not(unix))]
+fn detect_current_username() -> Result<Option<String>> {
+    Ok(None)
 }
 
 fn resolve_options(
@@ -237,6 +301,18 @@ fn build_defines(
         format!("copper_version={}", versions.cu29),
         format!("copper_export_version={}", versions.cu29_export),
         format!("copper_git_url={}", cli.git_url),
+        format!(
+            "copper_git_branch={}",
+            cli.git_branch.as_deref().unwrap_or(NO_TEMPLATE_GIT_REF)
+        ),
+        format!(
+            "copper_git_tag={}",
+            cli.git_tag.as_deref().unwrap_or(NO_TEMPLATE_GIT_REF)
+        ),
+        format!(
+            "copper_git_rev={}",
+            cli.git_rev.as_deref().unwrap_or(NO_TEMPLATE_GIT_REF)
+        ),
         format!(
             "copper_git_ref_snippet={}",
             format_git_ref_snippet(
@@ -528,7 +604,8 @@ mod tests {
         assert!(manifest.contains("version = \"9.9.8\""));
         assert!(manifest.contains("cu29-export"));
         assert!(!manifest.contains("\n[workspace]\n"));
-        assert!(justfile.contains("Re-run cargo cunew with --source local"));
+        assert!(justfile.contains("cargo install --locked cu29-runtime --version \"9.9.9\""));
+        assert!(justfile.contains("dag:"));
     }
 
     #[test]
@@ -568,5 +645,41 @@ mod tests {
         assert!(app_manifest.contains("edition = \"2024\""));
         assert!(justfile.contains("cu29-rendercfg"));
         assert!(!project.join(".git").exists());
+    }
+
+    #[test]
+    fn generates_project_template_for_git_source() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let project = tempdir.path().join("hello-git");
+        let cli = Cli {
+            path: project.clone(),
+            template: TemplateKind::Project,
+            source: SourceKind::Git,
+            name: None,
+            copper_root: None,
+            git_url: DEFAULT_GIT_URL.to_owned(),
+            git_branch: Some("main".to_owned()),
+            git_tag: None,
+            git_rev: None,
+            no_vcs: true,
+            verbose: false,
+        };
+
+        run_with_versions(
+            cli,
+            Some(CopperVersions {
+                cu29: "1.2.3".to_owned(),
+                cu29_export: "1.2.4".to_owned(),
+            }),
+        )
+        .expect("generation should succeed");
+
+        let manifest = fs::read_to_string(project.join("Cargo.toml")).expect("manifest");
+        let justfile = fs::read_to_string(project.join("justfile")).expect("justfile");
+
+        assert!(manifest.contains("git = \"https://github.com/copper-project/copper-rs.git\""));
+        assert!(manifest.contains("branch = \"main\""));
+        assert!(justfile.contains("cargo install --locked --git"));
+        assert!(justfile.contains("--branch \"main\""));
     }
 }

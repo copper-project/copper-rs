@@ -4,20 +4,31 @@ on:
   push:
     branches: [ "master" ]
 
+permissions:
+  contents: write
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  coverage:
+    name: Coverage
+    uses: ./.github/workflows/reusable-coverage.yml
+    secrets: inherit
+    with:
+      toolchain: stable
+      linux_cargo_paths: true
+      linux_disk_workarounds: false
+      linux_runner_label: ubuntu-latest-m
+
   build:
+    needs: coverage
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v6
       - name: Set up Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          profile: minimal
+        uses: dtolnay/rust-toolchain@nightly
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
       - name: Build API docs
@@ -38,8 +49,23 @@ jobs:
         run: |
           mkdir -p build/wiki/site/api
           cp -R target/doc/* build/wiki/site/api/
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+          path: build/coverage-report
+      - name: Stage coverage report
+        run: |
+          mkdir -p build/wiki/site/coverage
+          cp -R build/coverage-report/html/. build/wiki/site/coverage/
       - name: Deploy wiki to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./build/wiki/site
+      - name: Summarize published site
+        run: |
+          {
+            echo "Published docs: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
+            echo "Published coverage: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/coverage/"
+          } >> "$GITHUB_STEP_SUMMARY"

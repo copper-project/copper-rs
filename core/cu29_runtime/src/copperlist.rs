@@ -85,6 +85,19 @@ impl<P: CopperListTuple> CopperList<P> {
     pub fn get_state(&self) -> CopperListState {
         self.state
     }
+
+    /// Restores the lifecycle state expected at allocation time and reruns
+    /// zero-memory fixups for payload containers that cannot remain valid after
+    /// raw zeroing. This does not imply a full `P::default()` payload reset.
+    #[doc(hidden)]
+    pub fn reset_for_runtime_use(&mut self, id: u64)
+    where
+        P: CuListZeroedInit,
+    {
+        self.id = id;
+        self.state = CopperListState::Initialized;
+        self.msgs.init_zeroed();
+    }
 }
 
 impl<P: CopperListTuple> ErasedCuStampedDataSet for CopperList<P> {
@@ -191,16 +204,20 @@ impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
     }
 
     #[inline]
-    pub fn create(&mut self) -> Option<&mut CopperList<P>> {
+    pub fn create(&mut self) -> Option<&mut CopperList<P>>
+    where
+        P: CuListZeroedInit,
+    {
         if self.is_full() {
             return None;
         }
+        let next_id = self.current_cl_id;
         let result = &mut self.data[self.insertion_index];
         self.insertion_index = (self.insertion_index + 1) % N;
         self.length += 1;
 
         // We assign a unique id to each CopperList to be able to track them across their lifetime.
-        result.id = self.current_cl_id;
+        result.reset_for_runtime_use(next_id);
         self.current_cl_id += 1;
 
         Some(result)
@@ -278,7 +295,7 @@ impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
     ///
     #[inline]
     pub fn iter_mut(&mut self) -> IterMut<'_, CopperList<P>> {
-        let (a, b) = self.data.split_at_mut(self.insertion_index);
+        let (a, b) = self.data[0..self.length].split_at_mut(self.insertion_index);
         a.iter_mut().rev().chain(b.iter_mut().rev())
     }
 
@@ -288,7 +305,7 @@ impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
     ///
     #[inline]
     pub fn asc_iter(&self) -> AscIter<'_, CopperList<P>> {
-        let (a, b) = self.data.split_at(self.insertion_index);
+        let (a, b) = self.data[0..self.length].split_at(self.insertion_index);
         b.iter().chain(a.iter())
     }
 
@@ -298,7 +315,7 @@ impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
     ///
     #[inline]
     pub fn asc_iter_mut(&mut self) -> AscIterMut<'_, CopperList<P>> {
-        let (a, b) = self.data.split_at_mut(self.insertion_index);
+        let (a, b) = self.data[0..self.length].split_at_mut(self.insertion_index);
         b.iter_mut().chain(a.iter_mut())
     }
 }
@@ -334,6 +351,8 @@ mod tests {
 
         assert!(q.is_empty());
         assert!(q.iter().next().is_none());
+        assert!(q.asc_iter().next().is_none());
+        assert!(q.peek().is_none());
     }
 
     #[test]
@@ -406,6 +425,41 @@ mod tests {
     }
 
     #[test]
+    fn create_fresh_slot_starts_initialized_with_zeroed_payload() {
+        let mut q = CuListsManager::<CuStampedDataSet, 5>::new();
+
+        let cl = q.create().unwrap();
+        assert_eq!(cl.id, 0);
+        assert_eq!(cl.get_state(), CopperListState::Initialized);
+        assert_eq!(cl.msgs.0, 0);
+        assert_eq!(q.next_cl_id(), 1);
+        assert_eq!(q.last_cl_id(), 0);
+    }
+
+    #[test]
+    fn create_reused_slot_reinitializes_state_but_preserves_payload_storage() {
+        let mut q = CuListsManager::<CuStampedDataSet, 5>::new();
+
+        {
+            let cl = q.create().unwrap();
+            cl.msgs.0 = 41;
+            cl.change_state(CopperListState::Processing);
+        }
+
+        let popped = q.pop().unwrap();
+        assert_eq!(popped.id, 0);
+        assert_eq!(popped.get_state(), CopperListState::Processing);
+        assert_eq!(popped.msgs.0, 41);
+
+        let reused = q.create().unwrap();
+        assert_eq!(reused.id, 1);
+        assert_eq!(reused.get_state(), CopperListState::Initialized);
+        assert_eq!(reused.msgs.0, 41);
+        assert_eq!(q.next_cl_id(), 2);
+        assert_eq!(q.last_cl_id(), 1);
+    }
+
+    #[test]
     fn mutable_iterator() {
         let mut q = CuListsManager::<CuStampedDataSet, 5>::new();
         q.create().unwrap().msgs.0 = 1;
@@ -423,6 +477,24 @@ mod tests {
     }
 
     #[test]
+    fn mutable_iterator_non_wrapped_only_visits_active_slots() {
+        let mut q = CuListsManager::<CuStampedDataSet, 5>::new();
+        q.create().unwrap().msgs.0 = 1;
+        q.create().unwrap().msgs.0 = 2;
+        q.create().unwrap().msgs.0 = 3;
+
+        let mut visited = Vec::new();
+        for cl in q.iter_mut() {
+            visited.push(cl.id);
+            cl.msgs.0 *= 10;
+        }
+
+        assert_eq!(visited, vec![2, 1, 0]);
+        let res: Vec<_> = q.iter().map(|x| x.msgs.0).collect();
+        assert_eq!(res, [30, 20, 10]);
+    }
+
+    #[test]
     fn test_drop_last() {
         let mut q = CuListsManager::<CuStampedDataSet, 5>::new();
         q.create().unwrap().msgs.0 = 1;
@@ -437,6 +509,32 @@ mod tests {
 
         let res: Vec<_> = q.iter().map(|x| x.msgs.0).collect();
         assert_eq!(res, [4, 3, 2, 1]);
+    }
+
+    #[test]
+    fn drop_last_on_empty_queue_is_a_noop() {
+        let mut q = CuListsManager::<CuStampedDataSet, 5>::new();
+
+        q.drop_last();
+
+        assert!(q.is_empty());
+        assert!(q.peek().is_none());
+        assert!(q.pop().is_none());
+    }
+
+    #[test]
+    fn drop_last_on_non_wrapped_queue_removes_most_recent_slot() {
+        let mut q = CuListsManager::<CuStampedDataSet, 5>::new();
+        q.create().unwrap().msgs.0 = 1;
+        q.create().unwrap().msgs.0 = 2;
+        q.create().unwrap().msgs.0 = 3;
+
+        q.drop_last();
+
+        assert_eq!(q.len(), 2);
+        assert_eq!(q.peek().unwrap().msgs.0, 2);
+        let res: Vec<_> = q.iter().map(|x| x.msgs.0).collect();
+        assert_eq!(res, [2, 1]);
     }
 
     #[test]
@@ -458,6 +556,14 @@ mod tests {
     }
 
     #[test]
+    fn pop_on_empty_queue_returns_none() {
+        let mut q = CuListsManager::<CuStampedDataSet, 5>::new();
+
+        assert!(q.pop().is_none());
+        assert!(q.is_empty());
+    }
+
+    #[test]
     fn test_peek() {
         let mut q = CuListsManager::<CuStampedDataSet, 5>::new();
         q.create().unwrap().msgs.0 = 1;
@@ -473,6 +579,13 @@ mod tests {
 
         let res: Vec<_> = q.iter().map(|x| x.msgs.0).collect();
         assert_eq!(res, [5, 4, 3, 2, 1]);
+    }
+
+    #[test]
+    fn peek_on_empty_queue_returns_none() {
+        let q = CuListsManager::<CuStampedDataSet, 5>::new();
+
+        assert!(q.peek().is_none());
     }
 
     #[test]
@@ -492,6 +605,81 @@ mod tests {
         assert_eq!(cl1.id, 1);
         assert_eq!(q.next_cl_id(), 2);
         assert_eq!(q.last_cl_id(), 1);
+
+        let _ = q.pop().unwrap();
+        let cl2 = q.create().unwrap();
+        assert_eq!(cl2.id, 2);
+        assert_eq!(q.next_cl_id(), 3);
+        assert_eq!(q.last_cl_id(), 2);
+    }
+
+    #[test]
+    fn asc_iter_non_wrapped_returns_oldest_to_newest_without_free_slots() {
+        let mut q = CuListsManager::<CuStampedDataSet, 5>::new();
+        q.create().unwrap().msgs.0 = 10;
+        q.create().unwrap().msgs.0 = 20;
+        q.create().unwrap().msgs.0 = 30;
+
+        let res: Vec<_> = q.asc_iter().map(|x| x.msgs.0).collect();
+        assert_eq!(res, [10, 20, 30]);
+    }
+
+    #[test]
+    fn asc_iter_mut_non_wrapped_only_visits_active_slots_in_oldest_first_order() {
+        let mut q = CuListsManager::<CuStampedDataSet, 5>::new();
+        q.create().unwrap().msgs.0 = 10;
+        q.create().unwrap().msgs.0 = 20;
+        q.create().unwrap().msgs.0 = 30;
+
+        let mut visited = Vec::new();
+        for (offset, cl) in q.asc_iter_mut().enumerate() {
+            visited.push(cl.id);
+            cl.msgs.0 += offset as i32;
+        }
+
+        assert_eq!(visited, vec![0, 1, 2]);
+        let res: Vec<_> = q.asc_iter().map(|x| x.msgs.0).collect();
+        assert_eq!(res, [10, 21, 32]);
+    }
+
+    #[test]
+    fn asc_iter_wrapped_layout_tracks_reused_slots_in_ascending_order() {
+        let mut q = CuListsManager::<CuStampedDataSet, 5>::new();
+        for value in 1..=5 {
+            q.create().unwrap().msgs.0 = value;
+        }
+        assert_eq!(q.pop().unwrap().msgs.0, 5);
+        assert_eq!(q.pop().unwrap().msgs.0, 4);
+        q.create().unwrap().msgs.0 = 6;
+        q.create().unwrap().msgs.0 = 7;
+
+        let desc: Vec<_> = q.iter().map(|x| x.msgs.0).collect();
+        assert_eq!(desc, [7, 6, 3, 2, 1]);
+
+        let asc: Vec<_> = q.asc_iter().map(|x| x.msgs.0).collect();
+        assert_eq!(asc, [1, 2, 3, 6, 7]);
+    }
+
+    #[test]
+    fn asc_iter_mut_wrapped_layout_updates_oldest_to_newest_order() {
+        let mut q = CuListsManager::<CuStampedDataSet, 5>::new();
+        for value in 1..=5 {
+            q.create().unwrap().msgs.0 = value;
+        }
+        let _ = q.pop().unwrap();
+        let _ = q.pop().unwrap();
+        q.create().unwrap().msgs.0 = 6;
+        q.create().unwrap().msgs.0 = 7;
+
+        let mut visited = Vec::new();
+        for (offset, cl) in q.asc_iter_mut().enumerate() {
+            visited.push(cl.id);
+            cl.msgs.0 += offset as i32;
+        }
+
+        assert_eq!(visited, vec![0, 1, 2, 5, 6]);
+        let asc: Vec<_> = q.asc_iter().map(|x| x.msgs.0).collect();
+        assert_eq!(asc, [1, 3, 5, 9, 11]);
     }
 
     #[derive(Decode, Encode, Debug, PartialEq, Clone, Copy)]

@@ -1183,6 +1183,25 @@ mod tests {
     }
 
     #[test]
+    fn disconnected_pipelines_initial_graph_size_covers_graph_bounds() {
+        let state = NodesScrollableWidgetState::new(parallel_pipelines_monitor_model(8));
+        let area = Rect::new(0, 0, 80, 20);
+        let initial_size = state.estimate_initial_graph_size(area);
+        let graph = state.build_graph(initial_size);
+
+        assert!(graph.content_bounds().height <= initial_size.height);
+    }
+
+    #[test]
+    fn disconnected_pipelines_render_without_alias_fallback() {
+        let mut state = NodesScrollableWidgetState::new(parallel_pipelines_monitor_model(8));
+
+        state.ensure_graph_cache(Rect::new(0, 0, 80, 20));
+
+        assert!(state.graph().conn_layout.alias_connections.is_empty());
+    }
+
+    #[test]
     fn footer_badges_render_identity_in_requested_order() {
         let badges = footer_badges(
             MonitorFooterIdentity {
@@ -1337,6 +1356,56 @@ mod tests {
         let topology = MonitorTopology { nodes, connections };
 
         MonitorModel::from_parts(&COMPONENTS, CopperListInfo::new(0, 0), topology)
+    }
+
+    fn parallel_pipelines_monitor_model(pipeline_count: usize) -> MonitorModel {
+        let mut components = Vec::with_capacity(pipeline_count * 2);
+        let mut nodes = Vec::with_capacity(pipeline_count * 2);
+        let mut connections = Vec::with_capacity(pipeline_count);
+
+        for idx in 0..pipeline_count {
+            let source_id = format!("source_{idx}");
+            let sink_id = format!("sink_{idx}");
+
+            components.push(MonitorComponentMetadata::new(
+                Box::leak(source_id.clone().into_boxed_str()),
+                ComponentType::Source,
+                Some("Source"),
+            ));
+            components.push(MonitorComponentMetadata::new(
+                Box::leak(sink_id.clone().into_boxed_str()),
+                ComponentType::Sink,
+                Some("Sink"),
+            ));
+
+            nodes.push(MonitorNode {
+                id: source_id.clone(),
+                type_name: Some("Source".to_string()),
+                kind: ComponentType::Source,
+                inputs: Vec::new(),
+                outputs: vec!["out".to_string()],
+            });
+            nodes.push(MonitorNode {
+                id: sink_id.clone(),
+                type_name: Some("Sink".to_string()),
+                kind: ComponentType::Sink,
+                inputs: vec!["in".to_string()],
+                outputs: Vec::new(),
+            });
+            connections.push(MonitorConnection {
+                src: source_id,
+                src_port: Some("out".to_string()),
+                dst: sink_id,
+                dst_port: Some("in".to_string()),
+                msg: "msg".to_string(),
+            });
+        }
+
+        let components: &'static [MonitorComponentMetadata] =
+            Box::leak(components.into_boxed_slice());
+        let topology = MonitorTopology { nodes, connections };
+
+        MonitorModel::from_parts(components, CopperListInfo::new(0, 0), topology)
     }
 }
 
@@ -1704,6 +1773,30 @@ impl NodesScrollableWidgetState {
         }
     }
 
+    fn estimate_initial_graph_size(&self, area: Rect) -> Size {
+        if self.display_nodes.is_empty() {
+            return Size::new(area.width.max(NODE_WIDTH), area.height.max(NODE_HEIGHT));
+        }
+
+        let node_layouts = self.build_node_layouts();
+        let content_width = (node_layouts.len() as u16)
+            .saturating_mul(NODE_WIDTH + 20)
+            .max(NODE_WIDTH);
+        // Disconnected subgraphs stack vertically, so the sum of node heights is a safe
+        // upper bound for the initial routing grid.
+        let stacked_height = node_layouts
+            .iter()
+            .fold(0u16, |height, node| height.saturating_add(node.size.1));
+        let max_ports = self
+            .display_nodes
+            .iter()
+            .map(|node| node.inputs.len().max(node.outputs.len()))
+            .max()
+            .unwrap_or_default();
+        let min_height = (((max_ports + NODE_PORT_ROW_OFFSET) as u16) * 12).max(NODE_HEIGHT * 6);
+        Size::new(content_width, stacked_height.max(min_height))
+    }
+
     fn build_graph(&self, content_size: Size) -> NodeGraph<'static> {
         let mut graph = NodeGraph::new(
             self.build_node_layouts(),
@@ -1717,23 +1810,9 @@ impl NodesScrollableWidgetState {
 
     fn rebuild_graph_cache(&mut self, area: Rect, key: GraphCacheKey) {
         let content_size = if self.display_nodes.is_empty() {
-            Size::new(area.width.max(NODE_WIDTH), area.height.max(NODE_HEIGHT))
+            self.estimate_initial_graph_size(area)
         } else {
-            let node_count = self.display_nodes.len();
-            let content_width = (node_count as u16)
-                .saturating_mul(NODE_WIDTH + 20)
-                .max(NODE_WIDTH);
-            let max_ports = self
-                .display_nodes
-                .iter()
-                .map(|node| node.inputs.len().max(node.outputs.len()))
-                .max()
-                .unwrap_or_default();
-            let content_height =
-                (((max_ports + NODE_PORT_ROW_OFFSET) as u16) * 12).max(NODE_HEIGHT * 6);
-
-            let initial_size = Size::new(content_width, content_height);
-            let graph = self.build_graph(initial_size);
+            let graph = self.build_graph(self.estimate_initial_graph_size(area));
             let bounds = graph.content_bounds();
             let desired_width = bounds
                 .width

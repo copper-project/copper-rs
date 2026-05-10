@@ -12,6 +12,14 @@ inputs:
     description: Use Linux-only cargo paths.
     required: false
     default: "false"
+  linux_disk_workarounds:
+    description: Enable legacy Linux disk-space and cargo-path workarounds.
+    required: false
+    default: "true"
+  prebaked_linux_image:
+    description: Skip Linux host setup because system dependencies are baked into the job container image.
+    required: false
+    default: "false"
   cache_prefix:
     description: Rust cache prefix key.
     required: true
@@ -41,9 +49,12 @@ outputs:
   sccache_cache_hit:
     description: Whether sccache restore matched the primary key.
     value: ${{ steps.restore_sccache.outputs.cache-hit }}
+  sccache_cache_matched_key:
+    description: Cache key that was restored, if any.
+    value: ${{ steps.restore_sccache.outputs.cache-matched-key }}
   sccache_cache_primary_key:
     description: Primary sccache key for this job.
-    value: ${{ steps.restore_sccache.outputs.cache-primary-key }}
+    value: ${{ steps.sccache_key.outputs.primary }}
 runs:
   using: composite
   steps:
@@ -67,17 +78,51 @@ runs:
         mkdir -p "$SCCACHE_DIR"
         echo "SCCACHE_DIR=$SCCACHE_DIR" >> "$GITHUB_ENV"
         echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+    - name: Compute sccache keys
+      if: inputs.sccache_restore == 'true'
+      id: sccache_key
+      shell: bash
+      run: |
+        primary="sccache-${{ runner.os }}-${{ runner.arch }}-${{ inputs.toolchain }}-${{ inputs.cache_prefix }}-${{ inputs.sccache_key_suffix }}-${{ github.sha }}"
+        echo "primary=$primary" >> "$GITHUB_OUTPUT"
+        {
+          echo "restore_keys<<EOF"
+          echo "sccache-${{ runner.os }}-${{ runner.arch }}-${{ inputs.toolchain }}-${{ inputs.cache_prefix }}-${{ inputs.sccache_key_suffix }}-"
+          echo "sccache-${{ runner.os }}-${{ runner.arch }}-${{ inputs.toolchain }}-${{ inputs.cache_prefix }}-"
+          echo "sccache-${{ runner.os }}-${{ runner.arch }}-${{ inputs.toolchain }}-"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
     - name: Restore sccache
       if: inputs.sccache_restore == 'true'
       id: restore_sccache
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.SCCACHE_DIR }}
-        key: sccache-${{ runner.os }}-${{ inputs.toolchain }}-${{ inputs.cache_prefix }}-${{ inputs.sccache_key_suffix }}-${{ github.sha }}
-        restore-keys: |
-          sccache-${{ runner.os }}-${{ inputs.toolchain }}-${{ inputs.cache_prefix }}-${{ inputs.sccache_key_suffix }}-
-          sccache-${{ runner.os }}-${{ inputs.toolchain }}-${{ inputs.cache_prefix }}-
-          sccache-${{ runner.os }}-${{ inputs.toolchain }}-
+        key: ${{ steps.sccache_key.outputs.primary }}
+        restore-keys: ${{ steps.sccache_key.outputs.restore_keys }}
+    - name: Report sccache restore
+      if: inputs.sccache_restore == 'true'
+      shell: bash
+      env:
+        SCCACHE_REQUESTED_KEY: ${{ steps.sccache_key.outputs.primary }}
+        SCCACHE_MATCHED_KEY: ${{ steps.restore_sccache.outputs.cache-matched-key }}
+        SCCACHE_CACHE_HIT: ${{ steps.restore_sccache.outputs.cache-hit }}
+      run: |
+        status="miss"
+        if [[ -n "$SCCACHE_MATCHED_KEY" ]]; then
+          status="partial-hit"
+          if [[ "$SCCACHE_CACHE_HIT" == "true" ]]; then
+            status="exact-hit"
+          fi
+        fi
+        echo "sccache requested key: $SCCACHE_REQUESTED_KEY"
+        echo "sccache matched key: ${SCCACHE_MATCHED_KEY:-<none>}"
+        echo "sccache restore status: $status"
+        echo "sccache directory: $SCCACHE_DIR"
+        if [[ -d "$SCCACHE_DIR" ]]; then
+          du -sh "$SCCACHE_DIR" || true
+          find "$SCCACHE_DIR" -mindepth 1 -maxdepth 1 | wc -l | awk '{print "sccache top-level entries: " $1}'
+        fi
     - name: Install latest nextest
       if: inputs.install_nextest == 'true'
       uses: taiki-e/install-action@nextest
@@ -92,12 +137,25 @@ runs:
           echo "WORKSPACE_FLAG=" >> "$GITHUB_ENV"
         fi
 
+    - name: Override apriltag source (Linux)
+      if: runner.os == 'Linux' && env.WORKSPACE_SCOPE == 'workspace'
+      shell: bash
+      run: |
+        APRILTAG_DIR="${RUNNER_TEMP}/apriltag"
+        rm -rf "$APRILTAG_DIR"
+        git init "$APRILTAG_DIR"
+        git -C "$APRILTAG_DIR" remote add origin https://github.com/AprilRobotics/apriltag.git
+        git -C "$APRILTAG_DIR" fetch --depth 1 origin 22b44c13c6f0b68d7eaa1504cec0b8a20850122e
+        git -C "$APRILTAG_DIR" checkout FETCH_HEAD
+        echo "APRILTAG_SYS_METHOD=raw,static" >> "$GITHUB_ENV"
+        echo "APRILTAG_SRC=$APRILTAG_DIR" >> "$GITHUB_ENV"
+
     - name: Install winget
       if: runner.os == 'Windows' && env.WORKSPACE_SCOPE == 'workspace'
       uses: Cyberboss/install-winget@v1
 
     - name: Free Disk Space (Ubuntu)
-      if: runner.os == 'Linux'
+      if: runner.os == 'Linux' && inputs.prebaked_linux_image != 'true' && inputs.linux_disk_workarounds == 'true'
       uses: jlumbroso/free-disk-space@main
       with:
         # this might remove tools that are actually needed,
@@ -112,7 +170,7 @@ runs:
         swap-storage: true
 
     - name: Linux-only Cargo paths
-      if: runner.os == 'Linux' && inputs.linux_cargo_paths == 'true'
+      if: runner.os == 'Linux' && inputs.linux_cargo_paths == 'true' && inputs.prebaked_linux_image != 'true' && inputs.linux_disk_workarounds == 'true'
       shell: bash
       run: |
         echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> "$GITHUB_ENV"
@@ -152,13 +210,19 @@ runs:
         echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
     - name: Install dependencies (Linux)
-      if: runner.os == 'Linux'
+      if: runner.os == 'Linux' && inputs.prebaked_linux_image != 'true'
       shell: bash
       run: |
         sudo apt-get update
+        xml2_pkg=libxml2
+        if apt-cache show libxml2-16 >/dev/null 2>&1; then
+          xml2_pkg=libxml2-16
+        fi
         sudo apt-get install -y \
           python3-cbor2 \
+          python3-dev \
           pkg-config \
+          "$xml2_pkg" \
           libasound2-dev \
           libudev-dev \
           libpcap-dev \
@@ -180,6 +244,10 @@ runs:
           gstreamer1.0-gtk3 \
           gstreamer1.0-qt5 \
           gstreamer1.0-pulseaudio
+        xml2_path="$(ldconfig -p | awk '/libxml2\.so\.16 \(/{print $NF; exit}')"
+        if [[ -n "$xml2_path" ]]; then
+          sudo ln -sf "$(basename "$xml2_path")" "$(dirname "$xml2_path")/libxml2.so.2"
+        fi
 
     - name: Install GStreamer (macOS, cached)
       if: runner.os == 'macOS'

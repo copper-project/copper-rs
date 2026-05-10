@@ -4,7 +4,6 @@ on:
   workflow_run:
     workflows: ["CI/CD"]
     types: [completed]
-    branches: [master]
   workflow_dispatch:
 
 permissions:
@@ -15,23 +14,61 @@ jobs:
     name: Trigger satellite CI
     if: |
       github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+      (github.event.workflow_run.conclusion == 'success' && (
+        github.event.workflow_run.event == 'pull_request' ||
+        (github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'master')
+      ))
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        repo: [zed, extra-examples, benchmarks, cu-timetraveler]
+        include:
+          - repo: zed
+            ref: master
+            notify_on_pr: false
+          - repo: extra-examples
+            ref: master
+            notify_on_pr: false
+          - repo: benchmarks
+            ref: master
+            notify_on_pr: false
+          - repo: cu-timetraveler
+            ref: main
+            notify_on_pr: true
     env:
       DISPATCH_TOKEN: ${{ secrets.COPPER_PROJECT_REPO_DISPATCH_TOKEN }}
       TARGET_REPO: ${{ matrix.repo }}
       TARGET_WORKFLOW: ci.yml
-      TARGET_REF: master
+      TARGET_REF: ${{ matrix.ref }}
+      WORKFLOW_EVENT: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.event || '' }}
+      COPPER_REPOSITORY: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_repository.full_name || '' }}
+      COPPER_REF: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || '' }}
+      COPPER_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
     steps:
       - name: Trigger target CI workflow
+        if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.event != 'pull_request' || matrix.notify_on_pr }}
         run: |
           if [[ -z "${DISPATCH_TOKEN}" ]]; then
             echo "::notice::COPPER_PROJECT_REPO_DISPATCH_TOKEN is not configured; skipping workflow dispatch."
             exit 0
+          fi
+
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_run" && "$WORKFLOW_EVENT" == "pull_request" ]]; then
+            payload="$(jq -n \
+              --arg ref "${TARGET_REF}" \
+              --arg copper_repository "${COPPER_REPOSITORY}" \
+              --arg copper_ref "${COPPER_REF}" \
+              --arg copper_sha "${COPPER_SHA}" \
+              '{
+                ref: $ref,
+                inputs: {
+                  copper_repository: $copper_repository,
+                  copper_ref: $copper_ref,
+                  copper_sha: $copper_sha
+                }
+              }')"
+          else
+            payload="$(jq -n --arg ref "${TARGET_REF}" '{ref: $ref}')"
           fi
 
           curl --fail-with-body \
@@ -40,8 +77,4 @@ jobs:
             -H "Authorization: Bearer ${DISPATCH_TOKEN}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/copper-project/${TARGET_REPO}/actions/workflows/${TARGET_WORKFLOW}/dispatches \
-            -d @- <<JSON
-          {
-            "ref": "${TARGET_REF}"
-          }
-          JSON
+            -d "${payload}"

@@ -16,3 +16,18 @@ just run
 just fsck
 just log-stats
 ```
+
+## ConsoleMon variant
+
+This variant wires in `cu_consolemon::CuConsoleMon` and keeps the runtime
+running until the monitor exits so you can inspect the codec pipeline
+interactively.
+
+Run it from an interactive terminal. The binary exits early when stdin or
+stdout is not a TTY so it does not hang headless.
+
+```bash
+just run-consolemon
+just fsck-consolemon
+just log-stats-consolemon
+```

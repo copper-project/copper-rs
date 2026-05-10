@@ -222,6 +222,10 @@ impl CuLogCodec<CuImage<Vec<u8>>> for CuFfv1Codec {
         }
     }
 
+    fn source_payload_handle_bytes(&self, payload: &CuImage<Vec<u8>>) -> usize {
+        payload.format.byte_size()
+    }
+
     fn encode_payload<E: Encoder>(
         &mut self,
         payload: &CuImage<Vec<u8>>,
@@ -1212,6 +1216,31 @@ mod tests {
                 bytes.to_vec()
             });
             assert_eq!(decoded_bytes, original_bytes);
+        }
+
+        #[test]
+        fn ffv1_codec_reports_handle_backed_source_bytes_to_monitoring() {
+            let image = sample_rgb3_padded();
+            let cache = cu29::monitoring::CuMsgIoCache::<1>::default();
+
+            {
+                let capture = cu29::monitoring::start_copperlist_io_capture(&cache);
+                capture.select_slot(0);
+                let _ = encode_to_vec(
+                    EncodedWithCodec {
+                        image: &image,
+                        codec: std::cell::RefCell::new(
+                            CuFfv1Codec::new(CuFfv1CodecConfig::default()).expect("codec"),
+                        ),
+                    },
+                    standard(),
+                )
+                .expect("encode");
+            }
+
+            let io = cache.get(0);
+            assert!(io.present);
+            assert_eq!(io.handle_bytes, image.format.byte_size() as u64);
         }
     }
 }
