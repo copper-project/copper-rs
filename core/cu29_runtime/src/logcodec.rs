@@ -59,6 +59,14 @@ pub trait CuLogCodec<P: CuMsgPayload>: 'static {
     where
         Self: Sized;
 
+    /// Returns handle-backed source bytes read directly by the codec.
+    ///
+    /// This reports only extra handle-backed residency beyond the payload's
+    /// fixed `size_of::<P>()` footprint already accounted by runtime
+    /// monitoring. Codecs must implement this explicitly so they opt into the
+    /// correct accounting model for their payload type.
+    fn source_payload_handle_bytes(&self, payload: &P) -> usize;
+
     fn encode_payload<E: Encoder>(
         &mut self,
         payload: &P,
@@ -294,6 +302,10 @@ where
             1u8.encode(encoder)?;
             let encoded_start = observed_encode_bytes();
             let handle_start = crate::monitoring::current_payload_handle_bytes();
+            let source_handle_bytes = codec.source_payload_handle_bytes(payload);
+            if source_handle_bytes > 0 {
+                crate::monitoring::record_payload_handle_bytes(source_handle_bytes);
+            }
             codec.encode_payload(payload, encoder)?;
             let encoded_bytes = observed_encode_bytes().saturating_sub(encoded_start);
             let handle_bytes =
