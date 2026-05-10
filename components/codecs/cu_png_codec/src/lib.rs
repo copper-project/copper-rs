@@ -272,6 +272,10 @@ impl CuLogCodec<CuImage<Vec<u8>>> for CuPngCodec {
         })
     }
 
+    fn source_payload_handle_bytes(&self, payload: &CuImage<Vec<u8>>) -> usize {
+        payload.format.byte_size()
+    }
+
     fn encode_payload<E: Encoder>(
         &mut self,
         payload: &CuImage<Vec<u8>>,
@@ -294,7 +298,6 @@ impl CuLogCodec<CuImage<Vec<u8>>> for CuPngCodec {
 
         let byte_size = payload.format.byte_size();
         payload.seq.encode(encoder)?;
-        cu29::monitoring::record_payload_handle_bytes(byte_size);
         payload.buffer_handle.with_inner(|inner| {
             let image_bytes: &[u8] = inner;
             if image_bytes.len() < byte_size {

@@ -1003,6 +1003,7 @@ pub type cu29_runtime::logcodec::CuLogCodec::Config: serde_core::de::Deserialize
 pub fn cu29_runtime::logcodec::CuLogCodec::decode_payload<D: cu_bincode::de::Decoder<Context = ()>>(&mut self, decoder: &mut D) -> core::result::Result<P, cu_bincode::error::DecodeError>
 pub fn cu29_runtime::logcodec::CuLogCodec::encode_payload<E: cu_bincode::enc::Encoder>(&mut self, payload: &P, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 pub fn cu29_runtime::logcodec::CuLogCodec::new(config: Self::Config) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
+pub fn cu29_runtime::logcodec::CuLogCodec::source_payload_handle_bytes(&self, _payload: &P) -> usize
 pub fn cu29_runtime::logcodec::decode_msg_with_codec<T, C, D>(decoder: &mut D, codec: &mut C) -> core::result::Result<cu29_runtime::cutask::CuMsg<T>, cu_bincode::error::DecodeError> where T: cu29_runtime::cutask::CuMsgPayload, C: cu29_runtime::logcodec::CuLogCodec<T>, D: cu_bincode::de::Decoder<Context = ()>
 pub fn cu29_runtime::logcodec::deserialize_codec_config<C, P>(config: core::option::Option<&cu29_runtime::config::ComponentConfig>) -> cu29_traits::CuResult<<C as cu29_runtime::logcodec::CuLogCodec>::Config> where C: cu29_runtime::logcodec::CuLogCodec<P>, P: cu29_runtime::cutask::CuMsgPayload
 pub fn cu29_runtime::logcodec::effective_config_entry<T: 'static>(default_ron: &str) -> &'static cu29_runtime::logcodec::EffectiveConfigEntry
@@ -1293,7 +1294,6 @@ pub fn (M0, M1)::stop(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29
 pub fn cu29_runtime::monitoring::build_monitor_topology(config: &cu29_runtime::config::CuConfig, mission: &str) -> cu29_traits::CuResult<cu29_runtime::monitoring::MonitorTopology>
 pub fn cu29_runtime::monitoring::panic_payload_to_string(payload: &(dyn core::any::Any + core::marker::Send)) -> alloc::string::String
 pub fn cu29_runtime::monitoring::payload_io_stats<T>(payload: &T) -> cu29_traits::CuResult<cu29_runtime::monitoring::PayloadIoStats> where T: cu_bincode::enc::Encode
-pub fn cu29_runtime::monitoring::record_payload_handle_bytes(bytes: usize)
 pub fn cu29_runtime::monitoring::runtime_panic_hook_active() -> bool
 pub fn cu29_runtime::monitoring::start_copperlist_io_capture<const N: usize>(cache: &cu29_runtime::monitoring::CuMsgIoCache<N>) -> cu29_runtime::monitoring::CuMsgIoCaptureGuard
 pub fn cu29_runtime::monitoring::take_last_completed_handle_bytes() -> u64

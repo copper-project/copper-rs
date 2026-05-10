@@ -222,6 +222,10 @@ impl CuLogCodec<CuImage<Vec<u8>>> for CuFfv1Codec {
         }
     }
 
+    fn source_payload_handle_bytes(&self, payload: &CuImage<Vec<u8>>) -> usize {
+        payload.format.byte_size()
+    }
+
     fn encode_payload<E: Encoder>(
         &mut self,
         payload: &CuImage<Vec<u8>>,
@@ -268,7 +272,6 @@ impl CuFfv1Codec {
         payload: &CuImage<Vec<u8>>,
         encoder: &mut E,
     ) -> Result<(), EncodeError> {
-        cu29::monitoring::record_payload_handle_bytes(payload.format.byte_size());
         let wire = encoded_frame_from_payload(payload, &self.config, &mut self.encoder)
             .map_err(|err| Self::encode_error(err.to_string()))?;
 
