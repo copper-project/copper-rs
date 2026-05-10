@@ -130,7 +130,7 @@ debug = 2
 soft_ratatui = { path = "vendor/soft_ratatui" }
 
 [workspace.package]
-version = "1.0.0-rc1"
+version = "1.0.0-rc2"
 authors = ["Guillaume Binet <gbin@gootz.net>"]
 edition = "2024"
 rust-version = "1.95"
