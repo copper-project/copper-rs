@@ -18,6 +18,11 @@ name = "cu-image-codec-demo"
 path = "src/main.rs"
 
 [[bin]]
+name = "cu-image-codec-demo-consolemon"
+path = "src/consolemon.rs"
+required-features = ["consolemon"]
+
+[[bin]]
 name = "cu-image-codec-demo-logreader"
 path = "src/logreader.rs"
 required-features = ["logreader"]
@@ -25,10 +30,12 @@ required-features = ["logreader"]
 [features]
 default = []
 ffv1 = ["dep:cu-ffv1-codec", "dep:cu-png-codec"]
+consolemon = ["ffv1", "dep:cu-consolemon", "cu29/log-level-debug"]
 logreader = ["ffv1", "dep:cu29-export"]
 
 [dependencies]
 cu-ffv1-codec = { workspace = true, optional = true, features = ["ffmpeg"] }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "1.0.0-rc1", optional = true }
 cu-png-codec = { workspace = true, optional = true }
 cu-sensor-payloads = { workspace = true }
 cu29 = { workspace = true }
