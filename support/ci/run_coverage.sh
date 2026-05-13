@@ -7,7 +7,7 @@ cd "$ROOT"
 TOOLCHAIN="${COVERAGE_TOOLCHAIN:-stable}"
 BASE_FEATURES="${BASE_FEATURES:-mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug}"
 FEATURES_FLAG="--features ${BASE_FEATURES},python"
-EMBEDDED_EXCLUDES="$(python3 support/ci/embedded_crates.py excludes)"
+EMBEDDED_EXCLUDES="$(python3 support/ci/embedded_crates.py excludes --toolchain "$TOOLCHAIN")"
 
 source <(cargo +"$TOOLCHAIN" llvm-cov show-env --sh)
 cargo +"$TOOLCHAIN" llvm-cov clean --workspace

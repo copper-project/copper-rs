@@ -79,7 +79,7 @@ jobs:
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
       - name: Detect embedded-only crates
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ inputs.toolchain }})
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run clippy on (ubuntu-26.04 | debug)
         if: matrix.task == 'clippy'
@@ -146,7 +146,7 @@ jobs:
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
       - name: Detect embedded-only crates
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ inputs.toolchain }})
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run clippy on (${{ inputs.linux_runner_label }} | debug)
         if: matrix.task == 'clippy'
@@ -210,7 +210,7 @@ jobs:
           sccache_key_suffix: doctests
       - name: Detect embedded-only crates
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ inputs.toolchain }})
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run doctests on (ubuntu-26.04 | debug)
         run: cargo +${{ inputs.toolchain }} test --doc $WORKSPACE_FLAG $EMBEDDED_EXCLUDES --quiet
@@ -252,7 +252,7 @@ jobs:
           sccache_key_suffix: doctests
       - name: Detect embedded-only crates
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ inputs.toolchain }})
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run doctests on (${{ inputs.linux_runner_label }} | debug)
         run: cargo +${{ inputs.toolchain }} test --doc $WORKSPACE_FLAG $EMBEDDED_EXCLUDES --quiet
@@ -316,7 +316,7 @@ jobs:
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python,cuda" >> $GITHUB_ENV
       - name: Detect embedded-only crates
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ inputs.toolchain }})
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run clippy with all features on (cuda-ubuntu-24.04 | cuda-debug)
         run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES -- --deny warnings
@@ -381,7 +381,7 @@ jobs:
       - name: Detect embedded-only crates
         if: env.WORKSPACE_SCOPE == 'workspace'
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ inputs.toolchain }})
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run Unit Tests on (${{ matrix.target_os == 'windows' && inputs.windows_runner_label || 'macos-latest' }} | debug)
         if: matrix.task == 'test'
@@ -443,7 +443,7 @@ jobs:
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
       - name: Detect embedded-only crates
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ inputs.toolchain }})
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run Unit Tests with all features on (ubuntu-26.04 | debug)
         run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
@@ -489,7 +489,7 @@ jobs:
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
       - name: Detect embedded-only crates
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ inputs.toolchain }})
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run Unit Tests with all features on (${{ inputs.linux_runner_label }} | debug)
         run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
@@ -553,7 +553,7 @@ jobs:
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python,cuda" >> $GITHUB_ENV
       - name: Detect embedded-only crates
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ inputs.toolchain }})
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run Unit Tests with all features on (cuda-ubuntu-24.04 | cuda-debug)
         run: |
@@ -623,7 +623,7 @@ jobs:
       - name: Detect embedded-only crates
         if: env.WORKSPACE_SCOPE == 'workspace'
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ inputs.toolchain }})
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run Unit Tests with all features on (${{ matrix.target_os == 'windows' && inputs.windows_runner_label || 'macos-latest' }} | debug)
         run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
