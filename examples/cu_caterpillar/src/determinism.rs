@@ -260,45 +260,16 @@ pub fn determinism_record_and_resim() {
     let a_keyframes = read_keyframe_stream_encoded(&a_base).expect("read A keyframes failed");
     let b_keyframes = read_keyframe_stream_encoded(&b_base).expect("read B keyframes failed");
 
-    safety_check_eq!(
-        "DET-TEST-001-C1",
-        "DET-REQ-001",
-        "record A copperlists equal record B copperlists",
-        &a_stream,
-        &b_stream,
-    );
-    safety_check!(
-        "DET-TEST-001-C2",
-        "DET-REQ-002",
-        "record A emits at least one keyframe",
-        !a_keyframes.is_empty(),
-    );
-    safety_check_eq!(
-        "DET-TEST-001-C3",
-        "DET-REQ-002",
-        "record A keyframes equal record B keyframes",
-        &a_keyframes,
-        &b_keyframes,
-    );
+    safety_check_eq!("DET-TEST-001-C1", "DET-REQ-001", &a_stream, &b_stream,);
+    safety_check!("DET-TEST-001-C2", "DET-REQ-002", !a_keyframes.is_empty(),);
+    safety_check_eq!("DET-TEST-001-C3", "DET-REQ-002", &a_keyframes, &b_keyframes,);
 
     resim_run(&a_base, &r_base).expect("resim(A) failed");
     let r_stream = read_copperlist_stream_encoded(&r_base).expect("read resim failed");
     let r_keyframes = read_keyframe_stream_encoded(&r_base).expect("read resim keyframes failed");
 
-    safety_check_eq!(
-        "DET-TEST-001-C4",
-        "DET-REQ-003",
-        "replay A copperlists equal record A copperlists",
-        &a_stream,
-        &r_stream,
-    );
-    safety_check_eq!(
-        "DET-TEST-001-C5",
-        "DET-REQ-004",
-        "replay A keyframes equal record A keyframes",
-        &a_keyframes,
-        &r_keyframes,
-    );
+    safety_check_eq!("DET-TEST-001-C4", "DET-REQ-003", &a_stream, &r_stream,);
+    safety_check_eq!("DET-TEST-001-C5", "DET-REQ-004", &a_keyframes, &r_keyframes,);
 
     let _ = fs::remove_dir_all(case_dir);
 }

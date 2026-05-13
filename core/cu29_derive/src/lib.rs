@@ -168,7 +168,6 @@ pub fn bundle_resources(input: TokenStream) -> TokenStream {
 struct ParsedSafetyCheck {
     check_id: String,
     requirement_id: String,
-    description: String,
     kind: &'static str,
 }
 
@@ -198,13 +197,11 @@ pub fn safety_case(args: TokenStream, input: TokenStream) -> TokenStream {
     let checks_tokens = checks.iter().map(|check| {
         let check_id = &check.check_id;
         let requirement_id = &check.requirement_id;
-        let description = &check.description;
         let kind = check.kind;
         quote! {
             ::cu29::safety::SafetyCheckRef {
                 check_id: #check_id,
                 requirement_id: #requirement_id,
-                description: #description,
                 kind: #kind,
             }
         }
@@ -408,12 +405,12 @@ fn parse_safety_check_macro(mac: &syn::Macro) -> Result<Option<ParsedSafetyCheck
     };
 
     let args = Punctuated::<Expr, Token![,]>::parse_terminated.parse2(mac.tokens.clone())?;
-    let min_args = if kind == "assert_eq" { 5 } else { 4 };
+    let min_args = if kind == "assert_eq" { 4 } else { 3 };
     if args.len() < min_args {
         return Err(syn::Error::new_spanned(
             mac,
             format!(
-                "{}! expects at least {} arguments: check ID, requirement ID, description, and assertion inputs",
+                "{}! expects at least {} arguments: check ID, requirement ID, and assertion inputs",
                 segment.ident, min_args
             ),
         ));
@@ -421,12 +418,10 @@ fn parse_safety_check_macro(mac: &syn::Macro) -> Result<Option<ParsedSafetyCheck
 
     let check_id = string_literal_from_expr(&args[0], "safety check ID")?;
     let requirement_id = string_literal_from_expr(&args[1], "requirement ID")?;
-    let description = string_literal_from_expr(&args[2], "description")?;
 
     Ok(Some(ParsedSafetyCheck {
         check_id,
         requirement_id,
-        description,
         kind,
     }))
 }

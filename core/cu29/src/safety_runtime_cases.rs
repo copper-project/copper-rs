@@ -62,12 +62,7 @@ fn copperlist_capacity_is_bounded() {
     let _ = q.create().unwrap();
     let _ = q.create().unwrap();
 
-    safety_check!(
-        "CLM-TEST-001-C1",
-        "CLM-REQ-001",
-        "CuListsManager create returns None once every slot is active",
-        q.create().is_none(),
-    );
+    safety_check!("CLM-TEST-001-C1", "CLM-REQ-001", q.create().is_none(),);
 
     let mut sync = SyncCopperListsManager::<IntMsgs, 1>::new(None).unwrap();
     let _ = sync.create().unwrap();
@@ -76,7 +71,6 @@ fn copperlist_capacity_is_bounded() {
     safety_check!(
         "CLM-TEST-001-C2",
         "CLM-REQ-001",
-        "SyncCopperListsManager create returns an explicit exhaustion error",
         exhausted
             .to_string()
             .contains("Ran out of space for copper lists"),
@@ -98,7 +92,6 @@ fn copperlist_ids_are_monotonic_across_reuse() {
     safety_check_eq!(
         "CLM-TEST-002-C1",
         "CLM-REQ-002",
-        "CopperList ids and next/last tracking stay monotonic across slot reuse",
         (before, after),
         ((0, 0), (0, 1, 2, 3, 2)),
     );
@@ -115,7 +108,6 @@ fn copperlist_accessors_preserve_active_slot_ordering() {
     safety_check!(
         "CLM-TEST-003-C1",
         "CLM-REQ-003",
-        "Empty peek/pop/ascending iteration expose no active CopperLists",
         empty_peek && empty_pop && empty_asc,
     );
 
@@ -133,7 +125,6 @@ fn copperlist_accessors_preserve_active_slot_ordering() {
     safety_check_eq!(
         "CLM-TEST-003-C2",
         "CLM-REQ-003",
-        "Descending mutable iteration visits only active slots from newest to oldest",
         (visited_desc, desc_values(&desc)),
         (vec![2, 1, 0], vec![30, 20, 10]),
     );
@@ -152,7 +143,6 @@ fn copperlist_accessors_preserve_active_slot_ordering() {
     safety_check_eq!(
         "CLM-TEST-003-C3",
         "CLM-REQ-003",
-        "Ascending mutable iteration visits active slots from oldest to newest",
         (visited_asc, asc_values(&asc_nonwrapped)),
         (vec![0, 1, 2], vec![10, 21, 32]),
     );
@@ -169,7 +159,6 @@ fn copperlist_accessors_preserve_active_slot_ordering() {
     safety_check_eq!(
         "CLM-TEST-003-C4",
         "CLM-REQ-003",
-        "Wrapped access preserves descending and ascending order across slot reuse",
         (desc_values(&wrapped), asc_values(&wrapped)),
         (vec![7, 6, 3, 2, 1], vec![1, 2, 3, 6, 7]),
     );
@@ -188,7 +177,6 @@ fn copperlist_allocation_resets_runtime_state() {
     safety_check_eq!(
         "CLM-TEST-004-C1",
         "CLM-REQ-004",
-        "Fresh allocation starts initialized with a fixed-up payload",
         (fresh, fresh_ids),
         ((0, CopperListState::Initialized, 0), (1, 0)),
     );
@@ -214,7 +202,6 @@ fn copperlist_allocation_resets_runtime_state() {
     safety_check_eq!(
         "CLM-TEST-004-C2",
         "CLM-REQ-004",
-        "Reused CuListsManager slots restore Initialized and retain payload storage",
         (reused, reused_ids),
         ((1, CopperListState::Initialized, 41), (2, 1)),
     );
@@ -234,7 +221,6 @@ fn copperlist_allocation_resets_runtime_state() {
     safety_check_eq!(
         "CLM-TEST-004-C3",
         "CLM-REQ-004",
-        "Synchronous runtime slot reuse restores Initialized and retains payload storage",
         sync_reused,
         (1, CopperListState::Initialized, 41),
     );
@@ -271,7 +257,6 @@ fn sync_runtime_reclaims_only_the_completed_top_suffix() {
     safety_check_eq!(
         "CLM-TEST-005-C1",
         "CLM-REQ-005",
-        "The synchronous runtime reclaims only the completed top suffix in newest-first order",
         ((pre_ids, pre_available), (post_ids, post_available)),
         ((Vec::<u64>::new(), 0usize), (vec![1, 0], 2usize)),
     );

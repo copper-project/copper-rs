@@ -221,15 +221,23 @@ macro_rules! defmt_error {
 
 #[macro_export]
 macro_rules! safety_check {
-    ($check_id:literal, $requirement_id:literal, $description:literal, $condition:expr $(,)?) => {
-        assert!($condition, "{}", $description);
+    ($check_id:literal, $requirement_id:literal, $condition:expr $(,)?) => {
+        assert!(
+            $condition,
+            "safety check {} for requirement {} failed",
+            $check_id, $requirement_id
+        );
     };
 }
 
 #[macro_export]
 macro_rules! safety_check_eq {
-    ($check_id:literal, $requirement_id:literal, $description:literal, $left:expr, $right:expr $(,)?) => {
-        assert_eq!($left, $right, "{}", $description);
+    ($check_id:literal, $requirement_id:literal, $left:expr, $right:expr $(,)?) => {
+        assert_eq!(
+            $left, $right,
+            "safety check {} for requirement {} failed",
+            $check_id, $requirement_id
+        );
     };
 }
 
