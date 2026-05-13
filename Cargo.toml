@@ -130,7 +130,7 @@ debug = 2
 soft_ratatui = { path = "vendor/soft_ratatui" }
 
 [workspace.package]
-version = "1.0.0-rc1"
+version = "1.0.0-rc2"
 authors = ["Guillaume Binet <gbin@gootz.net>"]
 edition = "2024"
 rust-version = "1.95"
@@ -146,34 +146,34 @@ no_individual_tags = true
 [workspace.dependencies]
 
 # Copper Core
-cu29 = { path = "core/cu29", version = "1.0.0-rc1" } # default std
-cu29-reflect-derive = { path = "core/cu29_reflect_derive", version = "1.0.0-rc1" }
-cu29-clock = { path = "core/cu29_clock", default-features = false, version = "1.0.0-rc1" }
-cu29-derive = { path = "core/cu29_derive", default-features = false, version = "1.0.0-rc1" }
-cu29-export = { path = "core/cu29_export", version = "1.0.0-rc1" } # std only
-cu29-helpers = { path = "core/cu29_helpers", version = "1.0.0-rc1" } # compatibility stub
-cu29-intern-strs = { path = "core/cu29_intern_strs", version = "1.0.0-rc1" } # std only
-cu29-log = { path = "core/cu29_log", default-features = false, version = "1.0.0-rc1" }
-cu29-log-derive = { path = "core/cu29_log_derive", default-features = false, version = "1.0.0-rc1" }
-cu29-log-runtime = { path = "core/cu29_log_runtime", default-features = false, version = "1.0.0-rc1" }
-cu29-runtime = { path = "core/cu29_runtime", default-features = false, version = "1.0.0-rc1" }
-cu29-soa-derive = { path = "core/cu29_soa_derive", default-features = false, version = "1.0.0-rc1" }
-cu29-traits = { path = "core/cu29_traits", default-features = false, version = "1.0.0-rc1" }
+cu29 = { path = "core/cu29", version = "1.0.0-rc2" } # default std
+cu29-reflect-derive = { path = "core/cu29_reflect_derive", version = "1.0.0-rc2" }
+cu29-clock = { path = "core/cu29_clock", default-features = false, version = "1.0.0-rc2" }
+cu29-derive = { path = "core/cu29_derive", default-features = false, version = "1.0.0-rc2" }
+cu29-export = { path = "core/cu29_export", version = "1.0.0-rc2" } # std only
+cu29-helpers = { path = "core/cu29_helpers", version = "1.0.0-rc2" } # compatibility stub
+cu29-intern-strs = { path = "core/cu29_intern_strs", version = "1.0.0-rc2" } # std only
+cu29-log = { path = "core/cu29_log", default-features = false, version = "1.0.0-rc2" }
+cu29-log-derive = { path = "core/cu29_log_derive", default-features = false, version = "1.0.0-rc2" }
+cu29-log-runtime = { path = "core/cu29_log_runtime", default-features = false, version = "1.0.0-rc2" }
+cu29-runtime = { path = "core/cu29_runtime", default-features = false, version = "1.0.0-rc2" }
+cu29-soa-derive = { path = "core/cu29_soa_derive", default-features = false, version = "1.0.0-rc2" }
+cu29-traits = { path = "core/cu29_traits", default-features = false, version = "1.0.0-rc2" }
 cu29-unifiedlog = { path = "core/cu29_unifiedlog", default-features = false, features = [
   "compact",
-], version = "1.0.0-rc1" }
-cu29-units = { path = "core/cu29_units", version = "1.0.0-rc1" }
-cu29-value = { path = "core/cu29_value", default-features = false, version = "1.0.0-rc1" }
-cu-ffv1-codec = { path = "components/codecs/cu_ffv1_codec", version = "1.0.0-rc1" }
-cu-linux-resources = { path = "components/res/cu_linux_resources", version = "1.0.0-rc1" }
-cu-png-codec = { path = "components/codecs/cu_png_codec", version = "1.0.0-rc1" }
+], version = "1.0.0-rc2" }
+cu29-units = { path = "core/cu29_units", version = "1.0.0-rc2" }
+cu29-value = { path = "core/cu29_value", default-features = false, version = "1.0.0-rc2" }
+cu-ffv1-codec = { path = "components/codecs/cu_ffv1_codec", version = "1.0.0-rc2" }
+cu-linux-resources = { path = "components/res/cu_linux_resources", version = "1.0.0-rc2" }
+cu-png-codec = { path = "components/codecs/cu_png_codec", version = "1.0.0-rc2" }
 
 # Payload definitions
-cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version = "1.0.0-rc1" }
-cu-gnss-payloads = { path = "components/payloads/cu_gnss_payloads", version = "1.0.0-rc1" }
-cu-spatial-payloads = { path = "components/payloads/cu_spatial_payloads", version = "1.0.0-rc1" }
-cu-ros2-payloads = { path = "components/payloads/cu_ros2_payloads", version = "1.0.0-rc1" }
-cu-pid = { path = "components/tasks/cu_pid", version = "1.0.0-rc1" }
+cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version = "1.0.0-rc2" }
+cu-gnss-payloads = { path = "components/payloads/cu_gnss_payloads", version = "1.0.0-rc2" }
+cu-spatial-payloads = { path = "components/payloads/cu_spatial_payloads", version = "1.0.0-rc2" }
+cu-ros2-payloads = { path = "components/payloads/cu_ros2_payloads", version = "1.0.0-rc2" }
+cu-pid = { path = "components/tasks/cu_pid", version = "1.0.0-rc2" }
 
 # External serialization
 bincode = { package = "cu-bincode", version = "2.0", default-features = false, features = [

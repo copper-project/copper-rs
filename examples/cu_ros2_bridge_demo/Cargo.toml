@@ -15,7 +15,7 @@ publish = false
 
 [dependencies]
 cu29 = { workspace = true }
-cu-ros2-bridge = { path = "../../components/bridges/cu_ros2_bridge", version = "1.0.0-rc1" }
+cu-ros2-bridge = { path = "../../components/bridges/cu_ros2_bridge", version = "1.0.0-rc2" }
 tempfile = { workspace = true }
 serde = { workspace = true }
 

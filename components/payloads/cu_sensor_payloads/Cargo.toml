@@ -20,8 +20,8 @@ environments = ["host", "embedded"]
 [dependencies]
 bincode = { workspace = true }
 cu29-soa-derive = { workspace = true }
-cu29-clock = { path = "../../../core/cu29_clock", version = "1.0.0-rc1", default-features = false }
-cu29 = { path = "../../../core/cu29", version = "1.0.0-rc1", default-features = false, features = [
+cu29-clock = { path = "../../../core/cu29_clock", version = "1.0.0-rc2", default-features = false }
+cu29 = { path = "../../../core/cu29", version = "1.0.0-rc2", default-features = false, features = [
   "units",
 ] }
 rerun = { workspace = true, optional = true }
