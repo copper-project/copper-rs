@@ -221,87 +221,95 @@
 <a href=#221 id=221 data-nosnippet>221</a>
 <a href=#222 id=222 data-nosnippet>222</a><span class="attr">#[macro_export]
 <a href=#223 id=223 data-nosnippet>223</a></span><span class="macro">macro_rules!</span> safety_check {
-<a href=#224 id=224 data-nosnippet>224</a>    (<span class="macro-nonterminal">$check_id</span>:literal, <span class="macro-nonterminal">$requirement_id</span>:literal, <span class="macro-nonterminal">$description</span>:literal, <span class="macro-nonterminal">$condition</span>:expr $(,)<span class="question-mark">?</span>) =&gt; {
-<a href=#225 id=225 data-nosnippet>225</a>        <span class="macro">assert!</span>(<span class="macro-nonterminal">$condition</span>, <span class="string">"{}"</span>, <span class="macro-nonterminal">$description</span>);
-<a href=#226 id=226 data-nosnippet>226</a>    };
-<a href=#227 id=227 data-nosnippet>227</a>}
-<a href=#228 id=228 data-nosnippet>228</a>
-<a href=#229 id=229 data-nosnippet>229</a><span class="attr">#[macro_export]
-<a href=#230 id=230 data-nosnippet>230</a></span><span class="macro">macro_rules!</span> safety_check_eq {
-<a href=#231 id=231 data-nosnippet>231</a>    (<span class="macro-nonterminal">$check_id</span>:literal, <span class="macro-nonterminal">$requirement_id</span>:literal, <span class="macro-nonterminal">$description</span>:literal, <span class="macro-nonterminal">$left</span>:expr, <span class="macro-nonterminal">$right</span>:expr $(,)<span class="question-mark">?</span>) =&gt; {
-<a href=#232 id=232 data-nosnippet>232</a>        <span class="macro">assert_eq!</span>(<span class="macro-nonterminal">$left</span>, <span class="macro-nonterminal">$right</span>, <span class="string">"{}"</span>, <span class="macro-nonterminal">$description</span>);
-<a href=#233 id=233 data-nosnippet>233</a>    };
-<a href=#234 id=234 data-nosnippet>234</a>}
-<a href=#235 id=235 data-nosnippet>235</a>
-<a href=#236 id=236 data-nosnippet>236</a><span class="doccomment">/// Canonical imports for Copper applications.
-<a href=#237 id=237 data-nosnippet>237</a>///
-<a href=#238 id=238 data-nosnippet>238</a>/// This module intentionally re-exports each stable application-facing group once.
-<a href=#239 id=239 data-nosnippet>239</a>/// Runtime internals, remote-debug plumbing, and experimental executor APIs should
-<a href=#240 id=240 data-nosnippet>240</a>/// be imported from their explicit module paths instead of from the prelude.
-<a href=#241 id=241 data-nosnippet>241</a></span><span class="kw">pub mod </span>prelude {
-<a href=#242 id=242 data-nosnippet>242</a>    <span class="kw">pub use </span><span class="kw">crate</span>::bevy_reflect;
-<a href=#243 id=243 data-nosnippet>243</a>    <span class="attr">#[cfg(feature = <span class="string">"units"</span>)]
-<a href=#244 id=244 data-nosnippet>244</a>    </span><span class="kw">pub use </span><span class="kw">crate</span>::units;
-<a href=#245 id=245 data-nosnippet>245</a>    <span class="kw">pub use </span>crate::{defmt_debug, defmt_error, defmt_info, defmt_warn};
-<a href=#246 id=246 data-nosnippet>246</a>    <span class="kw">pub use </span>crate::{safety_case, safety_check, safety_check_eq};
-<a href=#247 id=247 data-nosnippet>247</a>    <span class="attr">#[cfg(feature = <span class="string">"reflect"</span>)]
-<a href=#248 id=248 data-nosnippet>248</a>    </span><span class="kw">pub use </span>bevy_reflect_derive::Reflect;
-<a href=#249 id=249 data-nosnippet>249</a>    <span class="attr">#[cfg(feature = <span class="string">"signal-handler"</span>)]
-<a href=#250 id=250 data-nosnippet>250</a>    </span><span class="kw">pub use </span>ctrlc;
-<a href=#251 id=251 data-nosnippet>251</a>    <span class="kw">pub use </span>cu29_clock::<span class="kw-2">*</span>;
-<a href=#252 id=252 data-nosnippet>252</a>    <span class="kw">pub use </span>cu29_derive::<span class="kw-2">*</span>;
-<a href=#253 id=253 data-nosnippet>253</a>    <span class="kw">pub use </span>cu29_log::<span class="kw-2">*</span>;
-<a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">pub use </span>cu29_log_derive::<span class="kw-2">*</span>;
-<a href=#255 id=255 data-nosnippet>255</a>    <span class="kw">pub use </span>cu29_log_runtime::<span class="kw-2">*</span>;
-<a href=#256 id=256 data-nosnippet>256</a>    <span class="attr">#[cfg(not(feature = <span class="string">"reflect"</span>))]
-<a href=#257 id=257 data-nosnippet>257</a>    </span><span class="kw">pub use </span>cu29_reflect_derive::Reflect;
-<a href=#258 id=258 data-nosnippet>258</a>    <span class="kw">pub use </span>cu29_runtime::app;
-<a href=#259 id=259 data-nosnippet>259</a>    <span class="kw">pub use </span>cu29_runtime::app::<span class="kw-2">*</span>;
-<a href=#260 id=260 data-nosnippet>260</a>    <span class="kw">pub use </span>cu29_runtime::config::<span class="kw-2">*</span>;
-<a href=#261 id=261 data-nosnippet>261</a>    <span class="kw">pub use </span>cu29_runtime::context::<span class="kw-2">*</span>;
-<a href=#262 id=262 data-nosnippet>262</a>    <span class="kw">pub use </span>cu29_runtime::copperlist::<span class="kw-2">*</span>;
-<a href=#263 id=263 data-nosnippet>263</a>    <span class="kw">pub use </span>cu29_runtime::cubridge::<span class="kw-2">*</span>;
-<a href=#264 id=264 data-nosnippet>264</a>    <span class="kw">pub use </span>cu29_runtime::curuntime::{
-<a href=#265 id=265 data-nosnippet>265</a>        CuRuntime, KeyFrame, RuntimeLifecycleConfigSource, RuntimeLifecycleEvent,
-<a href=#266 id=266 data-nosnippet>266</a>        RuntimeLifecycleRecord, RuntimeLifecycleStackInfo,
-<a href=#267 id=267 data-nosnippet>267</a>    };
-<a href=#268 id=268 data-nosnippet>268</a>    <span class="kw">pub use </span>cu29_runtime::cutask::<span class="kw-2">*</span>;
-<a href=#269 id=269 data-nosnippet>269</a>    <span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
-<a href=#270 id=270 data-nosnippet>270</a>    </span><span class="kw">pub use </span>cu29_runtime::debug::<span class="kw-2">*</span>;
-<a href=#271 id=271 data-nosnippet>271</a>    <span class="kw">pub use </span>cu29_runtime::input_msg;
-<a href=#272 id=272 data-nosnippet>272</a>    <span class="kw">pub use </span>cu29_runtime::monitoring::<span class="kw-2">*</span>;
-<a href=#273 id=273 data-nosnippet>273</a>    <span class="kw">pub use </span>cu29_runtime::output_msg;
-<a href=#274 id=274 data-nosnippet>274</a>    <span class="kw">pub use </span>cu29_runtime::payload::<span class="kw-2">*</span>;
-<a href=#275 id=275 data-nosnippet>275</a>    <span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
-<a href=#276 id=276 data-nosnippet>276</a>    </span><span class="kw">pub use </span>cu29_runtime::pool::<span class="kw-2">*</span>;
-<a href=#277 id=277 data-nosnippet>277</a>    <span class="attr">#[cfg(feature = <span class="string">"reflect"</span>)]
-<a href=#278 id=278 data-nosnippet>278</a>    </span><span class="kw">pub use </span>cu29_runtime::reflect::serde <span class="kw">as </span>reflect_serde;
-<a href=#279 id=279 data-nosnippet>279</a>    <span class="attr">#[cfg(feature = <span class="string">"reflect"</span>)]
-<a href=#280 id=280 data-nosnippet>280</a>    </span><span class="kw">pub use </span>cu29_runtime::reflect::serde::{
-<a href=#281 id=281 data-nosnippet>281</a>        ReflectSerializer, SerializationData, TypedReflectSerializer,
-<a href=#282 id=282 data-nosnippet>282</a>    };
-<a href=#283 id=283 data-nosnippet>283</a>    <span class="kw">pub use </span>cu29_runtime::reflect::{
-<a href=#284 id=284 data-nosnippet>284</a>        GetTypeRegistration, ReflectTaskIntrospection, ReflectTypePath, TypeInfo, TypePath,
-<a href=#285 id=285 data-nosnippet>285</a>        TypeRegistry, dump_type_registry_schema,
-<a href=#286 id=286 data-nosnippet>286</a>    };
-<a href=#287 id=287 data-nosnippet>287</a>    <span class="kw">pub use </span>cu29_runtime::resource::<span class="kw-2">*</span>;
-<a href=#288 id=288 data-nosnippet>288</a>    <span class="kw">pub use </span>cu29_runtime::rx_channels;
-<a href=#289 id=289 data-nosnippet>289</a>    <span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
-<a href=#290 id=290 data-nosnippet>290</a>    </span><span class="kw">pub use </span>cu29_runtime::simulation::<span class="kw-2">*</span>;
-<a href=#291 id=291 data-nosnippet>291</a>    <span class="kw">pub use </span>cu29_runtime::tx_channels;
-<a href=#292 id=292 data-nosnippet>292</a>    <span class="kw">pub use </span>cu29_traits::{
-<a href=#293 id=293 data-nosnippet>293</a>        COMPACT_STRING_CAPACITY, CopperListTuple, CuCompactString, CuError, CuMsgMetadataTrait,
-<a href=#294 id=294 data-nosnippet>294</a>        CuMsgOrigin, CuPayloadRawBytes, CuResult, DebugFieldDescriptor, DebugFieldKind,
-<a href=#295 id=295 data-nosnippet>295</a>        DebugFieldSemantics, DebugScalarRegistration, DebugScalarType, ErasedCuStampedData,
-<a href=#296 id=296 data-nosnippet>296</a>        ErasedCuStampedDataSet, MatchingTasks, Metadata, ObservedWriter, PayloadSchemas,
-<a href=#297 id=297 data-nosnippet>297</a>        TaskOutputSpec, UnifiedLogType, WriteStream, abort_observed_encode, begin_observed_encode,
-<a href=#298 id=298 data-nosnippet>298</a>        finish_observed_encode, observed_encode_bytes, record_observed_encode_bytes, with_cause,
-<a href=#299 id=299 data-nosnippet>299</a>    };
-<a href=#300 id=300 data-nosnippet>300</a>    <span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
-<a href=#301 id=301 data-nosnippet>301</a>    </span><span class="kw">pub use </span>cu29_unifiedlog::memmap;
-<a href=#302 id=302 data-nosnippet>302</a>    <span class="kw">pub use </span>cu29_unifiedlog::<span class="kw-2">*</span>;
-<a href=#303 id=303 data-nosnippet>303</a>    <span class="kw">pub use </span>cu29_value::Value;
-<a href=#304 id=304 data-nosnippet>304</a>    <span class="kw">pub use </span>cu29_value::to_value;
-<a href=#305 id=305 data-nosnippet>305</a>    <span class="kw">pub use </span>serde_derive::{Deserialize, Serialize};
-<a href=#306 id=306 data-nosnippet>306</a>}
+<a href=#224 id=224 data-nosnippet>224</a>    (<span class="macro-nonterminal">$check_id</span>:literal, <span class="macro-nonterminal">$requirement_id</span>:literal, <span class="macro-nonterminal">$condition</span>:expr $(,)<span class="question-mark">?</span>) =&gt; {
+<a href=#225 id=225 data-nosnippet>225</a>        <span class="macro">assert!</span>(
+<a href=#226 id=226 data-nosnippet>226</a>            <span class="macro-nonterminal">$condition</span>,
+<a href=#227 id=227 data-nosnippet>227</a>            <span class="string">"safety check {} for requirement {} failed"</span>,
+<a href=#228 id=228 data-nosnippet>228</a>            <span class="macro-nonterminal">$check_id</span>, <span class="macro-nonterminal">$requirement_id
+<a href=#229 id=229 data-nosnippet>229</a>        </span>);
+<a href=#230 id=230 data-nosnippet>230</a>    };
+<a href=#231 id=231 data-nosnippet>231</a>}
+<a href=#232 id=232 data-nosnippet>232</a>
+<a href=#233 id=233 data-nosnippet>233</a><span class="attr">#[macro_export]
+<a href=#234 id=234 data-nosnippet>234</a></span><span class="macro">macro_rules!</span> safety_check_eq {
+<a href=#235 id=235 data-nosnippet>235</a>    (<span class="macro-nonterminal">$check_id</span>:literal, <span class="macro-nonterminal">$requirement_id</span>:literal, <span class="macro-nonterminal">$left</span>:expr, <span class="macro-nonterminal">$right</span>:expr $(,)<span class="question-mark">?</span>) =&gt; {
+<a href=#236 id=236 data-nosnippet>236</a>        <span class="macro">assert_eq!</span>(
+<a href=#237 id=237 data-nosnippet>237</a>            <span class="macro-nonterminal">$left</span>, <span class="macro-nonterminal">$right</span>,
+<a href=#238 id=238 data-nosnippet>238</a>            <span class="string">"safety check {} for requirement {} failed"</span>,
+<a href=#239 id=239 data-nosnippet>239</a>            <span class="macro-nonterminal">$check_id</span>, <span class="macro-nonterminal">$requirement_id
+<a href=#240 id=240 data-nosnippet>240</a>        </span>);
+<a href=#241 id=241 data-nosnippet>241</a>    };
+<a href=#242 id=242 data-nosnippet>242</a>}
+<a href=#243 id=243 data-nosnippet>243</a>
+<a href=#244 id=244 data-nosnippet>244</a><span class="doccomment">/// Canonical imports for Copper applications.
+<a href=#245 id=245 data-nosnippet>245</a>///
+<a href=#246 id=246 data-nosnippet>246</a>/// This module intentionally re-exports each stable application-facing group once.
+<a href=#247 id=247 data-nosnippet>247</a>/// Runtime internals, remote-debug plumbing, and experimental executor APIs should
+<a href=#248 id=248 data-nosnippet>248</a>/// be imported from their explicit module paths instead of from the prelude.
+<a href=#249 id=249 data-nosnippet>249</a></span><span class="kw">pub mod </span>prelude {
+<a href=#250 id=250 data-nosnippet>250</a>    <span class="kw">pub use </span><span class="kw">crate</span>::bevy_reflect;
+<a href=#251 id=251 data-nosnippet>251</a>    <span class="attr">#[cfg(feature = <span class="string">"units"</span>)]
+<a href=#252 id=252 data-nosnippet>252</a>    </span><span class="kw">pub use </span><span class="kw">crate</span>::units;
+<a href=#253 id=253 data-nosnippet>253</a>    <span class="kw">pub use </span>crate::{defmt_debug, defmt_error, defmt_info, defmt_warn};
+<a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">pub use </span>crate::{safety_case, safety_check, safety_check_eq};
+<a href=#255 id=255 data-nosnippet>255</a>    <span class="attr">#[cfg(feature = <span class="string">"reflect"</span>)]
+<a href=#256 id=256 data-nosnippet>256</a>    </span><span class="kw">pub use </span>bevy_reflect_derive::Reflect;
+<a href=#257 id=257 data-nosnippet>257</a>    <span class="attr">#[cfg(feature = <span class="string">"signal-handler"</span>)]
+<a href=#258 id=258 data-nosnippet>258</a>    </span><span class="kw">pub use </span>ctrlc;
+<a href=#259 id=259 data-nosnippet>259</a>    <span class="kw">pub use </span>cu29_clock::<span class="kw-2">*</span>;
+<a href=#260 id=260 data-nosnippet>260</a>    <span class="kw">pub use </span>cu29_derive::<span class="kw-2">*</span>;
+<a href=#261 id=261 data-nosnippet>261</a>    <span class="kw">pub use </span>cu29_log::<span class="kw-2">*</span>;
+<a href=#262 id=262 data-nosnippet>262</a>    <span class="kw">pub use </span>cu29_log_derive::<span class="kw-2">*</span>;
+<a href=#263 id=263 data-nosnippet>263</a>    <span class="kw">pub use </span>cu29_log_runtime::<span class="kw-2">*</span>;
+<a href=#264 id=264 data-nosnippet>264</a>    <span class="attr">#[cfg(not(feature = <span class="string">"reflect"</span>))]
+<a href=#265 id=265 data-nosnippet>265</a>    </span><span class="kw">pub use </span>cu29_reflect_derive::Reflect;
+<a href=#266 id=266 data-nosnippet>266</a>    <span class="kw">pub use </span>cu29_runtime::app;
+<a href=#267 id=267 data-nosnippet>267</a>    <span class="kw">pub use </span>cu29_runtime::app::<span class="kw-2">*</span>;
+<a href=#268 id=268 data-nosnippet>268</a>    <span class="kw">pub use </span>cu29_runtime::config::<span class="kw-2">*</span>;
+<a href=#269 id=269 data-nosnippet>269</a>    <span class="kw">pub use </span>cu29_runtime::context::<span class="kw-2">*</span>;
+<a href=#270 id=270 data-nosnippet>270</a>    <span class="kw">pub use </span>cu29_runtime::copperlist::<span class="kw-2">*</span>;
+<a href=#271 id=271 data-nosnippet>271</a>    <span class="kw">pub use </span>cu29_runtime::cubridge::<span class="kw-2">*</span>;
+<a href=#272 id=272 data-nosnippet>272</a>    <span class="kw">pub use </span>cu29_runtime::curuntime::{
+<a href=#273 id=273 data-nosnippet>273</a>        CuRuntime, KeyFrame, RuntimeLifecycleConfigSource, RuntimeLifecycleEvent,
+<a href=#274 id=274 data-nosnippet>274</a>        RuntimeLifecycleRecord, RuntimeLifecycleStackInfo,
+<a href=#275 id=275 data-nosnippet>275</a>    };
+<a href=#276 id=276 data-nosnippet>276</a>    <span class="kw">pub use </span>cu29_runtime::cutask::<span class="kw-2">*</span>;
+<a href=#277 id=277 data-nosnippet>277</a>    <span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
+<a href=#278 id=278 data-nosnippet>278</a>    </span><span class="kw">pub use </span>cu29_runtime::debug::<span class="kw-2">*</span>;
+<a href=#279 id=279 data-nosnippet>279</a>    <span class="kw">pub use </span>cu29_runtime::input_msg;
+<a href=#280 id=280 data-nosnippet>280</a>    <span class="kw">pub use </span>cu29_runtime::monitoring::<span class="kw-2">*</span>;
+<a href=#281 id=281 data-nosnippet>281</a>    <span class="kw">pub use </span>cu29_runtime::output_msg;
+<a href=#282 id=282 data-nosnippet>282</a>    <span class="kw">pub use </span>cu29_runtime::payload::<span class="kw-2">*</span>;
+<a href=#283 id=283 data-nosnippet>283</a>    <span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
+<a href=#284 id=284 data-nosnippet>284</a>    </span><span class="kw">pub use </span>cu29_runtime::pool::<span class="kw-2">*</span>;
+<a href=#285 id=285 data-nosnippet>285</a>    <span class="attr">#[cfg(feature = <span class="string">"reflect"</span>)]
+<a href=#286 id=286 data-nosnippet>286</a>    </span><span class="kw">pub use </span>cu29_runtime::reflect::serde <span class="kw">as </span>reflect_serde;
+<a href=#287 id=287 data-nosnippet>287</a>    <span class="attr">#[cfg(feature = <span class="string">"reflect"</span>)]
+<a href=#288 id=288 data-nosnippet>288</a>    </span><span class="kw">pub use </span>cu29_runtime::reflect::serde::{
+<a href=#289 id=289 data-nosnippet>289</a>        ReflectSerializer, SerializationData, TypedReflectSerializer,
+<a href=#290 id=290 data-nosnippet>290</a>    };
+<a href=#291 id=291 data-nosnippet>291</a>    <span class="kw">pub use </span>cu29_runtime::reflect::{
+<a href=#292 id=292 data-nosnippet>292</a>        GetTypeRegistration, ReflectTaskIntrospection, ReflectTypePath, TypeInfo, TypePath,
+<a href=#293 id=293 data-nosnippet>293</a>        TypeRegistry, dump_type_registry_schema,
+<a href=#294 id=294 data-nosnippet>294</a>    };
+<a href=#295 id=295 data-nosnippet>295</a>    <span class="kw">pub use </span>cu29_runtime::resource::<span class="kw-2">*</span>;
+<a href=#296 id=296 data-nosnippet>296</a>    <span class="kw">pub use </span>cu29_runtime::rx_channels;
+<a href=#297 id=297 data-nosnippet>297</a>    <span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
+<a href=#298 id=298 data-nosnippet>298</a>    </span><span class="kw">pub use </span>cu29_runtime::simulation::<span class="kw-2">*</span>;
+<a href=#299 id=299 data-nosnippet>299</a>    <span class="kw">pub use </span>cu29_runtime::tx_channels;
+<a href=#300 id=300 data-nosnippet>300</a>    <span class="kw">pub use </span>cu29_traits::{
+<a href=#301 id=301 data-nosnippet>301</a>        COMPACT_STRING_CAPACITY, CopperListTuple, CuCompactString, CuError, CuMsgMetadataTrait,
+<a href=#302 id=302 data-nosnippet>302</a>        CuMsgOrigin, CuPayloadRawBytes, CuResult, DebugFieldDescriptor, DebugFieldKind,
+<a href=#303 id=303 data-nosnippet>303</a>        DebugFieldSemantics, DebugScalarRegistration, DebugScalarType, ErasedCuStampedData,
+<a href=#304 id=304 data-nosnippet>304</a>        ErasedCuStampedDataSet, MatchingTasks, Metadata, ObservedWriter, PayloadSchemas,
+<a href=#305 id=305 data-nosnippet>305</a>        TaskOutputSpec, UnifiedLogType, WriteStream, abort_observed_encode, begin_observed_encode,
+<a href=#306 id=306 data-nosnippet>306</a>        finish_observed_encode, observed_encode_bytes, record_observed_encode_bytes, with_cause,
+<a href=#307 id=307 data-nosnippet>307</a>    };
+<a href=#308 id=308 data-nosnippet>308</a>    <span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
+<a href=#309 id=309 data-nosnippet>309</a>    </span><span class="kw">pub use </span>cu29_unifiedlog::memmap;
+<a href=#310 id=310 data-nosnippet>310</a>    <span class="kw">pub use </span>cu29_unifiedlog::<span class="kw-2">*</span>;
+<a href=#311 id=311 data-nosnippet>311</a>    <span class="kw">pub use </span>cu29_value::Value;
+<a href=#312 id=312 data-nosnippet>312</a>    <span class="kw">pub use </span>cu29_value::to_value;
+<a href=#313 id=313 data-nosnippet>313</a>    <span class="kw">pub use </span>serde_derive::{Deserialize, Serialize};
+<a href=#314 id=314 data-nosnippet>314</a>}
 </code></pre></div></section></main></body></html>
