@@ -202,7 +202,7 @@ jobs:
           sccache_key_suffix: msrv
       - name: Detect embedded-only crates
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ env.MSRV }})
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Check workspace on MSRV
         run: cargo +${{ env.MSRV }} check --workspace --all-targets $EMBEDDED_EXCLUDES
@@ -230,7 +230,7 @@ jobs:
           sccache_key_suffix: msrv
       - name: Detect embedded-only crates
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ env.MSRV }})
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Check workspace on MSRV
         run: cargo +${{ env.MSRV }} check --workspace --all-targets $EMBEDDED_EXCLUDES

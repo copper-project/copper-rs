@@ -5,7 +5,7 @@ MSRV := "1.95.0"
 PUBLIC_API_VERSION := "0.51.0"
 PUBLIC_API_TOOLCHAIN := "nightly"
 export ROOT := `git rev-parse --show-toplevel`
-EMBEDDED_EXCLUDES := shell('python3 $1/support/ci/embedded_crates.py excludes', ROOT)
+EMBEDDED_EXCLUDES := shell('python3 $1/support/ci/embedded_crates.py excludes --toolchain stable', ROOT)
 PREK_FMT_FIX_HOOKS := "trailing-whitespace mixed-line-ending"
 PREK_FMT_CHECK_HOOKS := "trailing-whitespace check-merge-conflict detect-private-key check-case-conflict check-added-large-files check-yaml check-json check-xml check-symlinks mixed-line-ending"
 
@@ -125,7 +125,7 @@ host_target := `rustc +stable -vV | sed -n 's/host: //p'`
 # no_std/embedded clippy checks mirroring the embedded workflow.
 clippy-nostd:
 	cargo +stable clippy --no-default-features
-	python3 support/ci/embedded_crates.py run --action clippy
+	python3 support/ci/embedded_crates.py run --action clippy --toolchain stable
 	cd examples/cu_rp2350_skeleton && cargo +stable clippy --target thumbv8m.main-none-eabihf --bin cu-blinky --features firmware
 	cd examples/cu_rp2350_skeleton && cargo +stable clippy --no-default-features --features host --bins --target={{host_target}}
 
@@ -177,8 +177,8 @@ nostd-ci:
 	just typos
 	cargo +stable build --no-default-features
 	cargo +stable nextest run --no-default-features
-	python3 support/ci/embedded_crates.py run --action clippy
-	python3 support/ci/embedded_crates.py run --action build
+	python3 support/ci/embedded_crates.py run --action clippy --toolchain stable
+	python3 support/ci/embedded_crates.py run --action build --toolchain stable
 	cd examples/cu_rp2350_skeleton && cargo +stable clippy --target thumbv8m.main-none-eabihf --bin cu-blinky --features firmware
 	cd examples/cu_rp2350_skeleton && cargo +stable clippy --no-default-features --features host --bins --target={{host_target}}
 	cd examples/cu_rp2350_skeleton && cargo +stable build-arm
