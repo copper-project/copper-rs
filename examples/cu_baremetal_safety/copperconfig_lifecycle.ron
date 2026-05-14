@@ -1,12 +1,29 @@
 (
     logging: (enable_task_logging: false),
     tasks: [
-        (id: "source", type: "crate::harness::lifecycle_tasks::LifecycleSource"),
-        (id: "task", type: "crate::harness::lifecycle_tasks::LifecycleTask"),
-        (id: "sink", type: "crate::harness::lifecycle_tasks::LifecycleSink"),
+        (
+            id: "source",
+            type: "crate::harness::lifecycle_tasks::LifecycleSource",
+        ),
+        (
+            id: "task",
+            type: "crate::harness::lifecycle_tasks::LifecycleTask",
+        ),
+        (
+            id: "sink",
+            type: "crate::harness::lifecycle_tasks::LifecycleSink",
+        ),
     ],
     cnx: [
-        (src: "source", dst: "task", msg: "u32"),
-        (src: "task", dst: "sink", msg: "u32"),
+        (
+            src: "source",
+            dst: "task",
+            msg: "u32",
+        ),
+        (
+            src: "task",
+            dst: "sink",
+            msg: "u32",
+        ),
     ],
 )

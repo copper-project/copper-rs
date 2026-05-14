@@ -11,7 +11,10 @@
         ),
     ],
     tasks: [
-        (id: "tick", type: "crate::harness::resource_tasks::TickSource"),
+        (
+            id: "tick",
+            type: "crate::harness::resource_tasks::TickSource",
+        ),
         (
             id: "probe",
             type: "crate::harness::resource_tasks::ResourceProbeTask",
@@ -20,15 +23,16 @@
                 "tag": "board.tag",
             },
         ),
-        (id: "capture", type: "crate::harness::resource_tasks::IntSink"),
+        (
+            id: "capture",
+            type: "crate::harness::resource_tasks::IntSink",
+        ),
     ],
     bridges: [
         (
             id: "tap",
             type: "crate::harness::resource_bridges::ResourceBridge",
-            resources: {
-                "tag": "board.tag",
-            },
+            resources: {"tag": "board.tag"},
             channels: [
                 Rx(id: "probe_rx"),
                 Tx(id: "probe_tx"),
@@ -36,8 +40,20 @@
         ),
     ],
     cnx: [
-        (src: "tick", dst: "probe", msg: "i32"),
-        (src: "probe", dst: "tap/probe_tx", msg: "i32"),
-        (src: "tap/probe_rx", dst: "capture", msg: "i32"),
+        (
+            src: "tick",
+            dst: "probe",
+            msg: "i32",
+        ),
+        (
+            src: "probe",
+            dst: "tap/probe_tx",
+            msg: "i32",
+        ),
+        (
+            src: "tap/probe_rx",
+            dst: "capture",
+            msg: "i32",
+        ),
     ],
 )
