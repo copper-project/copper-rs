@@ -31,8 +31,7 @@ lint:
 fmt-check: check-format-tools
 	@cargo +stable fmt --all -- --check
 	@git ls-files -z '*.toml' | xargs -0 -r env RUST_LOG=warn taplo format --check
-	@bash -lc 'set -euo pipefail; changed=(); while IFS= read -r -d "" f; do tmp=$(mktemp); cp "$f" "$tmp"; fmtron --input "$tmp" >/dev/null; if ! cmp -s "$f" "$tmp"; then changed+=("$f"); fi; rm -f "$tmp"; done < <(git ls-files -z "*.ron" ":!examples/modular_config_example/motors.ron"); if ((${#changed[@]})); then printf "RON formatting check failed:\n"; printf "%s\n" "${changed[@]}"; exit 1; fi'
-	@rg --files -g '*.ron.bak' | xargs rm -f
+	@bash support/ci/check_ron_format.sh
 	@prek run --all-files {{PREK_FMT_CHECK_HOOKS}}
 
 # Apply formatting plus auto-fixable CI hygiene hooks
@@ -40,7 +39,7 @@ fmt: check-format-tools
 	@cargo +stable fmt --all
 	@git ls-files -z '*.toml' | xargs -0 -r env RUST_LOG=warn taplo format >/dev/null
 	@git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' | xargs -0 -r -n 1 fmtron --input>/dev/null
-	@rg --files -g '*.ron.bak' | xargs rm -f
+	@find . -type f -name '*.ron.bak' -delete
 	@bash -lc 'set -euo pipefail; prek run --all-files {{PREK_FMT_FIX_HOOKS}} || prek run --all-files {{PREK_FMT_FIX_HOOKS}}'
 
 # Ensure the tools needed by fmt/fmt-check are installed.
@@ -59,10 +58,6 @@ check-format-tools:
 	fi
 	if ! command -v prek >/dev/null 2>&1; then
 		echo "Missing prek. Install with: cargo install --locked prek"
-		missing=1
-	fi
-	if ! command -v rg > /dev/null 2>&1; then
-		echo "Missing rg. Install with: cargo install --locked rg"
 		missing=1
 	fi
 	if [[ "$missing" -ne 0 ]]; then
