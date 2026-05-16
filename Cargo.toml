@@ -68,6 +68,7 @@ members = [
   "components/tasks/cu_ratelimit",
   "components/testing/cu_udp_inject",
   "examples/cu_background_task",
+  "examples/cu_baremetal_safety",
   "examples/cu_bridge_test",
   "examples/cu_bevymon_demo",
   "examples/cu_caterpillar",
