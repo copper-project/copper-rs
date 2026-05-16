@@ -83,25 +83,25 @@ fn parse_log_args<'a>(
 fn reference_unused_variables(input: TokenStream) -> TokenStream {
     // Attempt to parse the expressions to "use" them.
     // This ensures variables passed to the macro are considered used by the compiler.
-    if let Ok(exprs) = parse_log_exprs(input.clone()) {
-        if let Ok(parsed) = parse_log_args(&exprs) {
-            let mut var_usages = Vec::new();
-            if let Some(context_expr) = parsed.context_expr {
-                var_usages.push(quote::quote! { let _ = &#context_expr; });
-            }
-            for expr in parsed.param_exprs {
-                match expr {
-                    syn::Expr::Assign(assign_expr) => {
-                        let value_expr = &assign_expr.right;
-                        var_usages.push(quote::quote! { let _ = &#value_expr; });
-                    }
-                    _ => {
-                        var_usages.push(quote::quote! { let _ = &#expr; });
-                    }
+    if let Ok(exprs) = parse_log_exprs(input.clone())
+        && let Ok(parsed) = parse_log_args(&exprs)
+    {
+        let mut var_usages = Vec::new();
+        if let Some(context_expr) = parsed.context_expr {
+            var_usages.push(quote::quote! { let _ = &#context_expr; });
+        }
+        for expr in parsed.param_exprs {
+            match expr {
+                syn::Expr::Assign(assign_expr) => {
+                    let value_expr = &assign_expr.right;
+                    var_usages.push(quote::quote! { let _ = &#value_expr; });
+                }
+                _ => {
+                    var_usages.push(quote::quote! { let _ = &#expr; });
                 }
             }
-            return quote::quote! { { #(#var_usages;)* } }.into();
         }
+        return quote::quote! { { #(#var_usages;)* } }.into();
     }
 
     if let Ok(exprs) = parse_log_exprs(input.clone()) {
