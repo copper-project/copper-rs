@@ -22,8 +22,8 @@ impl CuSrcTask for TriggerTask {
         Ok(Self)
     }
 
-    fn process<'o>(&mut self, _ctx: &CuContext, output: &mut Self::Output<'o>) -> CuResult<()> {
-        info!("[trigger] tick");
+    fn process<'o>(&mut self, ctx: &CuContext, output: &mut Self::Output<'o>) -> CuResult<()> {
+        info!(ctx, "[trigger] tick");
         output.set_payload(Tick);
         Ok(())
     }
@@ -65,13 +65,14 @@ impl CuTask for SensorTask {
 
     fn process<'i, 'o>(
         &mut self,
-        _ctx: &CuContext,
+        ctx: &CuContext,
         _input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
         let value = self.counter.0.next();
         self.bus.set(value);
         record(
+            ctx,
             &self.global,
             format!("sensor {} ({}) -> {}", self.tag, self.bus.label(), value),
         );
@@ -108,9 +109,10 @@ impl CuSinkTask for InspectorTask {
         })
     }
 
-    fn process<'i>(&mut self, _ctx: &CuContext, input: &Self::Input<'i>) -> CuResult<()> {
+    fn process<'i>(&mut self, ctx: &CuContext, input: &Self::Input<'i>) -> CuResult<()> {
         if let Some(reading) = input.payload() {
             record(
+                ctx,
                 &self.global,
                 format!(
                     "inspector got {} from {} (note {})",
@@ -120,6 +122,7 @@ impl CuSinkTask for InspectorTask {
         } else {
             let current = self.bus.get();
             record(
+                ctx,
                 &self.global,
                 format!("inspector polled {} (note {})", current, self.note),
             );
@@ -128,10 +131,10 @@ impl CuSinkTask for InspectorTask {
     }
 }
 
-fn record(global: &GlobalLog, message: impl Into<String>) {
+fn record(ctx: &CuContext, global: &GlobalLog, message: impl Into<String>) {
     let msg = message.into();
     global.push(msg.clone());
-    info!("{msg}");
+    info!(ctx, "{msg}");
 }
 
 mod sensor_resources {

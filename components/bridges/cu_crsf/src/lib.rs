@@ -71,7 +71,7 @@ where
     }
 
     // decode from the serial buffer and update to the last received values
-    fn update(&mut self) -> CuResult<()> {
+    fn update(&mut self, ctx: &CuContext) -> CuResult<()> {
         let mut buf = [0; READ_BUFFER_SIZE];
         match self.serial_port.read(buf.as_mut_slice()) {
             Ok(n) => {
@@ -81,6 +81,7 @@ where
                         match packet {
                             Packet::LinkStatistics(link_statistics) => {
                                 debug!(
+                                    ctx,
                                     "LinkStatistics: Download LQ:{}",
                                     link_statistics.downlink_link_quality
                                 );
@@ -89,18 +90,18 @@ where
                             Packet::RcChannels(channels) => {
                                 self.last_rc = Some(channels);
                                 for (i, value) in self.last_rc.iter().enumerate() {
-                                    debug!("RC Channel {}: {}", i, value.as_ref());
+                                    debug!(ctx, "RC Channel {}: {}", i, value.as_ref());
                                 }
                             }
                             _ => {
-                                info!("CRSF: Received other packet");
+                                info!(ctx, "CRSF: Received other packet");
                             }
                         }
                     }
                 }
             }
             _ => {
-                error!("CRSF: Serial port read error");
+                error!(ctx, "CRSF: Serial port read error");
             }
         }
         Ok(())
@@ -168,7 +169,7 @@ where
 
     fn send<'a, Payload>(
         &mut self,
-        _ctx: &CuContext,
+        ctx: &CuContext,
         channel: &'static BridgeChannel<<Self::Tx as BridgeChannelSet>::Id, Payload>,
         msg: &CuMsg<Payload>,
     ) -> CuResult<()>
@@ -180,8 +181,8 @@ where
                 let lsi: &CuMsg<LinkStatisticsPayload> = msg.downcast_ref()?;
                 if let Some(lq) = lsi.payload() {
                     debug!(
-                        "CRSF: Sent LinkStatistics: Downlink LQ:{}",
-                        lq.0.downlink_link_quality
+                        ctx,
+                        "CRSF: Sent LinkStatistics: Downlink LQ:{}", lq.0.downlink_link_quality
                     );
                     self.write_packet(Packet::LinkStatistics(lq.0.clone()))?;
                 }
@@ -190,7 +191,7 @@ where
                 let rccs: &CuMsg<RcChannelsPayload> = msg.downcast_ref()?;
                 if let Some(rc) = rccs.payload() {
                     for (i, value) in rc.0.iter().enumerate() {
-                        debug!("Sending RC Channel {}: {}", i, value);
+                        debug!(ctx, "Sending RC Channel {}: {}", i, value);
                     }
                     self.write_packet(Packet::RcChannels(rc.0.clone()))?;
                 }
@@ -208,7 +209,7 @@ where
     where
         Payload: CuMsgPayload + 'a,
     {
-        self.update()?;
+        self.update(ctx)?;
         msg.tov = Tov::Time(ctx.now());
         match channel.id() {
             RxId::LqRx => {

@@ -38,7 +38,7 @@ pub struct MotorPayload {
 #[cfg(hardware)]
 impl SN754410 {
     #[inline]
-    fn forward(&mut self, pwm: f64) -> CuResult<()> {
+    fn forward(&mut self, _ctx: &CuContext, pwm: f64) -> CuResult<()> {
         self.pwm0
             .set_duty_cycle(pwm)
             .map_err(|e| CuError::new_with_cause("Failed to set PWM0 duty cycle", e))?;
@@ -49,7 +49,7 @@ impl SN754410 {
     }
 
     #[inline]
-    fn reverse(&mut self, pwm: f64) -> CuResult<()> {
+    fn reverse(&mut self, _ctx: &CuContext, pwm: f64) -> CuResult<()> {
         self.pwm0
             .set_duty_cycle(0.0)
             .map_err(|e| CuError::new_with_cause("Failed to set PWM0 duty cycle", e))?;
@@ -60,7 +60,7 @@ impl SN754410 {
     }
 
     #[inline]
-    fn stop(&mut self) -> CuResult<()> {
+    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
         self.pwm0
             .set_duty_cycle(0.0)
             .map_err(|e| CuError::new_with_cause("Failed to set PWM0 duty cycle", e))?;
@@ -71,7 +71,7 @@ impl SN754410 {
     }
 
     #[inline]
-    fn enable_pwms(&mut self) -> CuResult<()> {
+    fn enable_pwms(&mut self, _ctx: &CuContext) -> CuResult<()> {
         self.pwm0
             .enable()
             .map_err(|e| CuError::new_with_cause("Failed to enable PWM0", e))?;
@@ -82,7 +82,7 @@ impl SN754410 {
     }
 
     #[inline]
-    fn disable_pwms(&mut self) -> CuResult<()> {
+    fn disable_pwms(&mut self, _ctx: &CuContext) -> CuResult<()> {
         self.pwm0
             .disable()
             .map_err(|e| CuError::new_with_cause("Failed to disable PWM0", e))?;
@@ -96,32 +96,32 @@ impl SN754410 {
 #[cfg(mock)]
 impl SN754410 {
     #[inline]
-    fn forward(&mut self, pwm: f64) -> CuResult<()> {
-        debug!("Forwarding with power {}", pwm);
+    fn forward(&mut self, ctx: &CuContext, pwm: f64) -> CuResult<()> {
+        debug!(ctx, "Forwarding with power {}", pwm);
         Ok(())
     }
 
     #[inline]
-    fn reverse(&mut self, pwm: f64) -> CuResult<()> {
-        debug!("Reversing with power {}", pwm);
+    fn reverse(&mut self, ctx: &CuContext, pwm: f64) -> CuResult<()> {
+        debug!(ctx, "Reversing with power {}", pwm);
         Ok(())
     }
 
     #[inline]
-    fn stop(&mut self) -> CuResult<()> {
-        debug!("Stopping.");
+    fn stop(&mut self, ctx: &CuContext) -> CuResult<()> {
+        debug!(ctx, "Stopping.");
         Ok(())
     }
 
     #[inline]
-    fn enable_pwms(&mut self) -> CuResult<()> {
-        debug!("Enabling.");
+    fn enable_pwms(&mut self, ctx: &CuContext) -> CuResult<()> {
+        debug!(ctx, "Enabling.");
         Ok(())
     }
 
     #[inline]
-    fn disable_pwms(&mut self) -> CuResult<()> {
-        debug!("Disabling.");
+    fn disable_pwms(&mut self, ctx: &CuContext) -> CuResult<()> {
+        debug!(ctx, "Disabling.");
         Ok(())
     }
 }
@@ -171,23 +171,24 @@ impl CuSinkTask for SN754410 {
             dryrun,
         })
     }
-    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
-        debug!("Enabling SN754410.");
-        self.enable_pwms()
+    fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
+        debug!(ctx, "Enabling SN754410.");
+        self.enable_pwms(ctx)
     }
     fn process(&mut self, ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         let Some(power) = input.payload() else {
-            debug!("No payload in the message, stopping for safety.");
-            self.stop()?;
+            debug!(ctx, "No payload in the message, stopping for safety.");
+            self.stop(ctx)?;
             return Err("Safety Mode.".into());
         };
 
         if self.dryrun {
             debug!(
+                ctx,
                 "In Dryrun mode ignore any command: power would have been {}.",
                 power.power.get::<ratio>()
             );
-            self.stop()?;
+            self.stop(ctx)?;
             return Ok(());
         }
 
@@ -205,25 +206,25 @@ impl CuSinkTask for SN754410 {
         };
 
         if deadzone_compensated == self.current_power {
-            debug!("Power is the same {}, skipping.", deadzone_compensated);
+            debug!(ctx, "Power is the same {}, skipping.", deadzone_compensated);
             return Ok(());
         }
 
         self.current_power = deadzone_compensated;
         if deadzone_compensated > 0.0 {
-            self.forward(self.current_power as f64)?;
+            self.forward(ctx, self.current_power as f64)?;
         } else if self.current_power < 0.0 {
-            self.reverse(-self.current_power as f64)?;
+            self.reverse(ctx, -self.current_power as f64)?;
         } else {
-            self.stop()?;
+            self.stop(ctx)?;
         }
         self.last_update = ctx.now();
         Ok(())
     }
 
-    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
-        debug!("Disabling SN754410.");
-        self.disable_pwms()
+    fn stop(&mut self, ctx: &CuContext) -> CuResult<()> {
+        debug!(ctx, "Disabling SN754410.");
+        self.disable_pwms(ctx)
     }
 }
 

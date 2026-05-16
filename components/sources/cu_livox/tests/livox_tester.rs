@@ -23,10 +23,10 @@ impl CuSinkTask for LivoxTestSink {
         Ok(Self {})
     }
 
-    fn process(&mut self, _ctx: &CuContext, new_msg: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, ctx: &CuContext, new_msg: &Self::Input<'_>) -> CuResult<()> {
         match &new_msg.payload() {
             None => {
-                debug!("Received Nothing.");
+                debug!(ctx, "Received Nothing.");
                 Err(CuError::from("Received Nothing."))
             }
             Some(payload_value) => {
@@ -39,10 +39,17 @@ impl CuSinkTask for LivoxTestSink {
                 let middle_index = payload_value.len() / 2;
                 let last_index = payload_value.len() - 1;
                 debug!(
+                    ctx,
                     "Received: first time: {} pt({},{},{}) i({}) return: {})",
-                    t[0].0, x[0].value, y[1].value, z[0].value, i[0].value, r[0]
+                    t[0].0,
+                    x[0].value,
+                    y[1].value,
+                    z[0].value,
+                    i[0].value,
+                    r[0]
                 );
                 debug!(
+                    ctx,
                     "Received: middle time: {} pt({},{},{}) i({}) return: {})",
                     t[middle_index].0,
                     x[middle_index].value,
@@ -52,6 +59,7 @@ impl CuSinkTask for LivoxTestSink {
                     r[middle_index]
                 );
                 debug!(
+                    ctx,
                     "Received: last time: {} pt({},{},{}) i({}) return: {})",
                     t[last_index].0,
                     x[last_index].value,

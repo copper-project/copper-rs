@@ -238,7 +238,7 @@ mod linux_impl {
                 .map_err(|e| CuError::new_with_cause("could not start stream", e))
         }
 
-        fn process(&mut self, _ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+        fn process(&mut self, ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
             let (handle, meta) = self
                 .stream
                 .next()
@@ -249,7 +249,7 @@ mod linux_impl {
                 new_msg.set_payload(image);
                 new_msg.tov = Tov::Time(cutime);
             } else {
-                debug!("Empty frame received");
+                debug!(ctx, "Empty frame received");
             }
             Ok(())
         }

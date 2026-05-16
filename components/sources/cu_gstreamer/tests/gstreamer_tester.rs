@@ -29,9 +29,9 @@ mod tests {
             Ok(Self { rec })
         }
 
-        fn process(&mut self, _ctx: &CuContext, msg: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, ctx: &CuContext, msg: &Self::Input<'_>) -> CuResult<()> {
             if msg.payload().is_none() {
-                debug!("Skipped");
+                debug!(ctx, "Skipped");
                 return Ok(());
             }
             // Get the buffer's memory (zero-copy access)

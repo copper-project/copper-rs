@@ -252,8 +252,8 @@ where
         })
     }
 
-    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
-        debug!("ist8310: source started");
+    fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
+        debug!(ctx, "ist8310: source started");
         Ok(())
     }
 
@@ -313,6 +313,7 @@ where
         {
             self.last_log_ns = Some(now_ns);
             info!(
+                ctx,
                 "ist8310: mag_x_ut={} mag_y_ut={} mag_z_ut={} rate_hz={}",
                 payload.mag_x.get::<microtesla>(),
                 payload.mag_y.get::<microtesla>(),

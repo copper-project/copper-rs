@@ -19,8 +19,8 @@ impl CuSinkTask for ADS78883TestSink {
         Ok(Self)
     }
 
-    fn process(&mut self, _ctx: &CuContext, new_msg: &Self::Input<'_>) -> CuResult<()> {
-        debug!("Received: {}", &new_msg.payload());
+    fn process(&mut self, ctx: &CuContext, new_msg: &Self::Input<'_>) -> CuResult<()> {
+        debug!(ctx, "Received: {}", &new_msg.payload());
         Ok(())
     }
 }
