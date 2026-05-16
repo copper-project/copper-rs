@@ -22,6 +22,7 @@ type ReplayBuildCallback =
     for<'a> fn(
         &'a ReplayCopperList,
         RobotClock,
+        RobotClockMock,
     ) -> Box<dyn for<'z> FnMut(default::SimStep<'z>) -> SimOverride + 'a>;
 type ReplayTimeExtractor = fn(&ReplayCopperList) -> Option<CuTime>;
 
@@ -43,7 +44,8 @@ fn default_callback(_step: default::SimStep<'_>) -> SimOverride {
 
 fn build_callback<'a>(
     copperlist: &'a ReplayCopperList,
-    _clock_for_callbacks: RobotClock,
+    _process_clock: RobotClock,
+    _clock_for_callbacks: RobotClockMock,
 ) -> Box<dyn for<'z> FnMut(default::SimStep<'z>) -> SimOverride + 'a> {
     Box::new(move |step: default::SimStep<'_>| default::recorded_replay_step(step, copperlist))
 }
@@ -114,7 +116,7 @@ fn run_one_shot(log_base: &Path, replay_log_base: &Path) -> CuResult<()> {
             clock_mock.set_value(ts.as_nanos());
         }
 
-        let mut sim_callback = build_callback(&entry, clock.clone());
+        let mut sim_callback = build_callback(&entry, clock.clone(), clock_mock.clone());
         app.run_one_iteration(&mut sim_callback)?;
     }
 
