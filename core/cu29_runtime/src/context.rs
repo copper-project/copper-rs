@@ -10,6 +10,7 @@ use cu29_clock::{RobotClock, RobotClockMock};
 /// - current execution sequence id via `cl_id()`
 /// - process instance metadata via `instance_id()`
 /// - compile-time subsystem identity via `subsystem_code()`
+/// - current component metadata via `current_component_id()`
 /// - current task metadata via `task_id()` / `task_index()`
 ///
 /// The execution sequence id matches the copper-list id of the iteration being
@@ -18,7 +19,7 @@ use cu29_clock::{RobotClock, RobotClockMock};
 /// `process` callbacks it must not be treated as a live copper-list handle.
 ///
 /// The runtime creates one context per execution loop and updates transient
-/// fields such as the currently executing task before each callback.
+/// fields such as the currently executing component/task before each callback.
 #[derive(Clone, Debug)]
 pub struct CuContext {
     /// Runtime clock. Kept as a field for direct access (`context.clock.now()`).
@@ -27,6 +28,7 @@ pub struct CuContext {
     instance_id: u32,
     subsystem_code: u16,
     task_ids: &'static [&'static str],
+    current_component_index: Option<usize>,
     current_task_index: Option<usize>,
 }
 
@@ -83,6 +85,7 @@ impl CuContext {
             instance_id,
             subsystem_code,
             task_ids,
+            current_component_index: None,
             current_task_index: None,
         }
     }
@@ -99,8 +102,19 @@ impl CuContext {
         Self::new(clock, clid, instance_id, subsystem_code, task_ids)
     }
 
+    /// Sets the currently executing component index.
+    pub fn set_current_component(&mut self, component_index: usize) {
+        self.current_component_index = Some(component_index);
+    }
+
+    /// Clears the currently executing component.
+    pub fn clear_current_component(&mut self) {
+        self.current_component_index = None;
+    }
+
     /// Sets the currently executing task index.
     pub fn set_current_task(&mut self, task_index: usize) {
+        self.current_component_index = Some(task_index);
         self.current_task_index = Some(task_index);
     }
 
@@ -126,6 +140,11 @@ impl CuContext {
     /// Returns the compile-time subsystem code for this Copper process.
     pub fn subsystem_code(&self) -> u16 {
         self.subsystem_code
+    }
+
+    /// Returns the current component index, if any.
+    pub fn current_component_id(&self) -> Option<usize> {
+        self.current_component_index
     }
 
     /// Returns the current task index, if any.
@@ -218,5 +237,28 @@ mod tests {
         assert_eq!(ctx.cl_id(), 9);
         assert_eq!(ctx.instance_id(), 42);
         assert_eq!(ctx.subsystem_code(), 7);
+        assert_eq!(ctx.current_component_id(), None);
+        assert_eq!(ctx.task_index(), None);
+    }
+
+    #[test]
+    fn task_scope_updates_component_scope() {
+        let mut ctx = CuContext::builder(RobotClock::default())
+            .task_ids(&["task-0"])
+            .build();
+        ctx.set_current_task(0);
+        assert_eq!(ctx.current_component_id(), Some(0));
+        assert_eq!(ctx.task_index(), Some(0));
+        assert_eq!(ctx.task_id(), Some("task-0"));
+    }
+
+    #[test]
+    fn component_scope_can_exist_without_task_scope() {
+        let mut ctx = CuContext::from_clock(RobotClock::default());
+        ctx.set_current_component(7);
+        ctx.clear_current_task();
+        assert_eq!(ctx.current_component_id(), Some(7));
+        assert_eq!(ctx.task_index(), None);
+        assert_eq!(ctx.task_id(), None);
     }
 }

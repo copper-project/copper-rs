@@ -2619,6 +2619,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 culistid: None,
                             }
                         );
+                        ctx.set_current_component(#monitor_index);
                         ctx.clear_current_task();
                         let bridge = &mut self.copper_runtime.bridges.#bridge_index;
                         if let Err(error) = bridge.start(&ctx) {
@@ -2686,6 +2687,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 culistid: None,
                             }
                         );
+                        ctx.set_current_component(#monitor_index);
                         ctx.clear_current_task();
                         let bridge = &mut self.copper_runtime.bridges.#bridge_index;
                         if let Err(error) = bridge.stop(&ctx) {
@@ -2746,6 +2748,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     {
                         #call_sim
                         if doit {
+                            ctx.set_current_component(#monitor_index);
                             ctx.clear_current_task();
                             let bridge = &mut __cu_bridges.#bridge_index;
                             execution_probe.record(cu29::monitoring::ExecutionMarker {
@@ -2816,6 +2819,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     {
                         #call_sim
                         if doit {
+                            ctx.set_current_component(#monitor_index);
                             ctx.clear_current_task();
                             let bridge = &mut __cu_bridges.#bridge_index;
                             kf_manager.freeze_any(clid, bridge)?;
@@ -4008,6 +4012,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             subsystem_code,
                                             #mission_mod::TASK_IDS,
                                         );
+                                        commit_ctx.clear_current_component();
                                         commit_ctx.clear_current_task();
                                         let monitor_result = monitor.process_copperlist(
                                             &commit_ctx,
@@ -4033,6 +4038,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             subsystem_code,
                                             #mission_mod::TASK_IDS,
                                         );
+                                        commit_ctx.clear_current_component();
                                         commit_ctx.clear_current_task();
                                         let monitor_result = monitor.process_copperlist(
                                             &commit_ctx,
@@ -4177,12 +4183,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
                 } // drop(msgs);
                 if __cu_abort_copperlist {
+                    ctx.clear_current_component();
                     ctx.clear_current_task();
                     let monitor_result = monitor.process_copperlist(&ctx, #mission_mod::MONITOR_LAYOUT.view(&#mission_mod::collect_metadata(&culist)));
                     cl_manager.end_of_processing(clid)?;
                     monitor_result?;
                     return Ok(());
                 }
+                ctx.clear_current_component();
                 ctx.clear_current_task();
                 let monitor_result = monitor.process_copperlist(&ctx, #mission_mod::MONITOR_LAYOUT.view(&#mission_mod::collect_metadata(&culist)));
 
@@ -4234,6 +4242,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #mission_mod::TASK_IDS,
                 );
                 #(#start_calls)*
+                ctx.clear_current_component();
                 ctx.clear_current_task();
                 self.copper_runtime.monitor.start(&ctx)?;
                 Ok(())
@@ -4249,6 +4258,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #mission_mod::TASK_IDS,
                 );
                 #(#stop_calls)*
+                ctx.clear_current_component();
                 ctx.clear_current_task();
                 self.copper_runtime.monitor.stop(&ctx)?;
                 self.copper_runtime.copperlists_manager.finish_pending()?;
@@ -7752,6 +7762,7 @@ fn parallel_bridge_lifecycle_tokens(
                 step: CuComponentState::Preprocess,
                 culistid: Some(clid),
             });
+            ctx.set_current_component(#component_index);
             ctx.clear_current_task();
             let maybe_error = {
                 #rt_guard
@@ -7803,6 +7814,7 @@ fn parallel_bridge_lifecycle_tokens(
                 step: CuComponentState::Postprocess,
                 culistid: Some(clid),
             });
+            ctx.set_current_component(#component_index);
             ctx.clear_current_task();
             let maybe_error = {
                 #rt_guard
@@ -8464,6 +8476,7 @@ fn generate_bridge_rx_execution_tokens(
                     cumsg_output.metadata.process_time.start = cu29::curuntime::perf_now(clock).into();
                     let maybe_error = {
                         #rt_guard
+                        ctx.set_current_component(#monitor_index);
                         ctx.clear_current_task();
                         bridge.receive(
                             &ctx,
@@ -8624,6 +8637,7 @@ fn generate_bridge_tx_execution_tokens(
                     let maybe_error = if bridge_channel.should_send(cumsg_input.payload().is_some()) {
                         {
                             #rt_guard
+                            ctx.set_current_component(#monitor_index);
                             ctx.clear_current_task();
                             bridge.send(
                                 &ctx,

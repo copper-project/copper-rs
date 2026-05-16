@@ -865,6 +865,21 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
             self.inner.msg_index
         }
 
+        /// Return the CopperList id captured for this log entry, if any.
+        pub fn culistid(&self) -> Option<u64> {
+            self.inner.origin.culistid
+        }
+
+        /// Return the runtime component id captured for this log entry, if any.
+        pub fn component_id(&self) -> Option<u32> {
+            self.inner.origin.component_id
+        }
+
+        /// Return the task index captured for this log entry, if any.
+        pub fn task_index(&self) -> Option<u32> {
+            self.inner.origin.task_index
+        }
+
         /// Return the indexes of the parameter names in the interned string table.
         pub fn paramname_indexes(&self) -> Vec<u32> {
             self.inner.paramname_indexes.iter().copied().collect()

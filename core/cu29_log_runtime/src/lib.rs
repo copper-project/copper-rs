@@ -418,7 +418,7 @@ impl WriteStream<CuLogEntry> for SimpleFileWriter {
 mod tests {
     use crate::CuLogEntry;
     use bincode::config::standard;
-    use cu29_log::CuLogLevel;
+    use cu29_log::{CuLogLevel, CuLogOrigin};
     use cu29_value::Value;
     use smallvec::smallvec;
 
@@ -430,6 +430,7 @@ mod tests {
         let log_entry = CuLogEntry {
             time: 0.into(),
             level: CuLogLevel::Info,
+            origin: CuLogOrigin::default(),
             msg_index: 1,
             paramname_indexes: smallvec![2, 3],
             params: smallvec![Value::String("test".to_string())],
