@@ -52,6 +52,42 @@ fn reference_unused_variables(input: TokenStream) -> TokenStream {
     TokenStream::new()
 }
 
+/// Returns `true` if `s` is a valid Rust identifier (used to tell an implicit
+/// capture like `{hash}` apart from a positional `{}` / `{0}` placeholder).
+fn is_ident(s: &str) -> bool {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(c) if c == '_' || c.is_alphabetic() => {}
+        _ => return false,
+    }
+    chars.all(|c| c == '_' || c.is_alphanumeric())
+}
+
+/// Extract identifiers implicitly captured by inline format placeholders,
+/// mirroring std `format!` capture (Rust 1.58+): `{ident}` (or `{ident:spec}`)
+/// captures `ident` from the caller's scope. Returns names in order of first
+/// appearance. Escaped braces (`{{`, `}}`) and positional placeholders
+/// (`{}`, `{0}`) are ignored.
+fn extract_captured_idents(fmt: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    let mut rest = fmt;
+    while let Some(open) = rest.find('{') {
+        if rest[open + 1..].starts_with('{') {
+            rest = &rest[open + 2..]; // escaped "{{"
+            continue;
+        }
+        let after = &rest[open + 1..];
+        let Some(close) = after.find('}') else { break };
+        // Only the part before a `:` format spec is the identifier.
+        let name = after[..close].split(':').next().unwrap_or("").trim();
+        if is_ident(name) && !names.iter().any(|n| n == name) {
+            names.push(name.to_string());
+        }
+        rest = &after[close + 1..];
+    }
+    names
+}
+
 /// Create a log entry at the specified log level.
 ///
 /// This is the internal macro implementation used by all the logging macros.
@@ -115,6 +151,14 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
         CuLogLevel::Critical => quote! { Critical },
     };
 
+    // Implicit inline capture (std `format!` style, Rust 1.58+): `{ident}` in the
+    // message captures `ident` from the caller's scope as a named param. Declared
+    // before `named_params` so the owned exprs outlive the borrows below.
+    let captured_exprs: Vec<Expr> = extract_captured_idents(&msg_str)
+        .iter()
+        .filter_map(|name| syn::parse_str::<Expr>(name).ok())
+        .collect();
+
     // Partition unnamed vs named args (a = b treated as named)
     let mut unnamed_params = Vec::<&Expr>::new();
     let mut named_params = Vec::<(&Expr, &Expr)>::new();
@@ -124,6 +168,18 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
             named_params.push((left, right));
         } else {
             unnamed_params.push(expr);
+        }
+    }
+
+    // Append implicitly-captured idents as named params. An explicit `name = value`
+    // for the same name wins and suppresses the capture (no duplicate param).
+    for expr in &captured_exprs {
+        let name = quote!(#expr).to_string();
+        let already_named = named_params
+            .iter()
+            .any(|(n, _)| quote!(#n).to_string() == name);
+        if !already_named {
+            named_params.push((expr, expr));
         }
     }
 
@@ -444,4 +500,44 @@ pub fn intern(input: TokenStream) -> TokenStream {
         .into();
     };
     quote! { #index }.into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{extract_captured_idents, is_ident};
+
+    #[test]
+    fn captures_simple_named_placeholder() {
+        assert_eq!(extract_captured_idents("Hash: {hash}"), vec!["hash"]);
+    }
+
+    #[test]
+    fn captures_identifier_before_format_spec() {
+        assert_eq!(
+            extract_captured_idents("{hash:?} {size:>5}"),
+            vec!["hash", "size"]
+        );
+    }
+
+    #[test]
+    fn ignores_positional_and_escaped_braces() {
+        assert!(extract_captured_idents("{} {0} {{not_a_capture}}").is_empty());
+    }
+
+    #[test]
+    fn mixes_positional_and_named_and_dedupes() {
+        assert_eq!(
+            extract_captured_idents("{} {hash} and again {hash}"),
+            vec!["hash"]
+        );
+    }
+
+    #[test]
+    fn is_ident_rejects_non_identifiers() {
+        assert!(is_ident("hash"));
+        assert!(is_ident("_x1"));
+        assert!(!is_ident("0"));
+        assert!(!is_ident(""));
+        assert!(!is_ident(":?"));
+    }
 }
