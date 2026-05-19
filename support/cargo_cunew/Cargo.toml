@@ -15,13 +15,8 @@ include = ["README.md", "src/**", "templates/**"]
 
 [dependencies]
 anyhow = { workspace = true, features = ["std"] }
-# Keep auth-git2 on git2 0.20.x until its version range is tightened upstream.
-cargo-generate = "=0.23.8"
+cargo-generate = "0.23.8"
 clap = { workspace = true }
-git2 = { version = "=0.20.4", default-features = false, features = [
-  "ssh",
-  "https",
-] }
 include_dir = "0.7.4"
 libc = { workspace = true }
 pathdiff = "0.2.3"
