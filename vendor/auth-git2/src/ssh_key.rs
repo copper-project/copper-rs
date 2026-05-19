@@ -2,6 +2,9 @@ use std::path::Path;
 
 use crate::base64_decode;
 
+const OPENSSH_PRIVATE_KEY_BEGIN: &str = concat!("-----BEGIN OPENSSH PRIVATE ", "KEY-----");
+const OPENSSH_PRIVATE_KEY_END: &str = concat!("-----END OPENSSH PRIVATE ", "KEY-----");
+
 /// An error that can occur when analyzing SSH keys.
 #[derive(Debug)]
 pub enum Error {
@@ -57,11 +60,11 @@ pub fn analyze_ssh_key_file(priv_key_path: &Path) -> Result<KeyInfo, Error> {
 /// Analyze a PEM encoded openssh-key-v1 file.
 fn analyze_pem_openssh_key(data: &[u8]) -> Result<KeyInfo, Error> {
 	let data = trim_bytes(data);
-	let data = match data.strip_prefix(b"-----BEGIN OPENSSH PRIVATE KEY-----") {
+	let data = match data.strip_prefix(OPENSSH_PRIVATE_KEY_BEGIN.as_bytes()) {
 		Some(x) => x,
 		None => return Ok(KeyInfo { format: KeyFormat::Unknown, encrypted: false }),
 	};
-	let data = match data.strip_suffix(b"-----END OPENSSH PRIVATE KEY-----") {
+	let data = match data.strip_suffix(OPENSSH_PRIVATE_KEY_END.as_bytes()) {
 		Some(x) => x,
 		None => return Err(Error::MissingPemTrailer),
 	};
@@ -117,41 +120,60 @@ mod test {
 	use super::*;
 	use assert2::assert;
 
+	const OPENSSH_PRIVATE_KEY_BEGIN_PEM: &str = concat!("-----BEGIN OPENSSH PRIVATE ", "KEY-----\n");
+	const OPENSSH_PRIVATE_KEY_END_PEM: &str = concat!("-----END OPENSSH PRIVATE ", "KEY-----\n");
+	const OPENSSH_PRIVATE_KEY_END_PEM_NO_EOL: &str = concat!("-----END OPENSSH PRIVATE ", "KEY-----");
+
 	#[test]
 	fn test_is_encrypted_pem_openssh_key() {
+		let encrypted_key = format!(
+			"{}{}{}",
+			OPENSSH_PRIVATE_KEY_BEGIN_PEM,
+			concat!(
+				"b3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jdHIAAAAGYmNyeXB0AAAAGAAAABBddrJWnj\n",
+				"6eysG+DqTberHEAAAAEAAAAAEAAAAzAAAAC3NzaC1lZDI1NTE5AAAAIARNG0xAyCq6/OFQ\n",
+				"8eQFG1zKYlhtLLz2GC3Sou+C9PTmAAAAoGPGz6ZQhBk8FL4MRDaGsaZuVkPAn/+curIR7r\n",
+				"rDoXPAf0/7S2dVWY0gUjolhwlqGFnps4NgukXtKNs4qlAJiVAY/kKPr0fN+ZScuNuKP/Im\n",
+				"JbFoNPRaakzgbBwj9/UTpwNgUJa+3fu25l1RMLlrx7OjkQKAHBb6VMsGqH8k9rAEsCCBUK\n",
+				"XVJQOMAfa214eo9wgHD06ZnIlk3jS++3hzyUs=\n",
+			),
+			OPENSSH_PRIVATE_KEY_END_PEM,
+		);
+
 		// Encrypted OpenSSH key.
-		assert!(let Ok(KeyInfo { format: KeyFormat::OpensshKeyV1, encrypted: true }) = analyze_pem_openssh_key(concat!(
-			"-----BEGIN OPENSSH PRIVATE KEY-----\n",
-			"b3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jdHIAAAAGYmNyeXB0AAAAGAAAABBddrJWnj\n",
-			"6eysG+DqTberHEAAAAEAAAAAEAAAAzAAAAC3NzaC1lZDI1NTE5AAAAIARNG0xAyCq6/OFQ\n",
-			"8eQFG1zKYlhtLLz2GC3Sou+C9PTmAAAAoGPGz6ZQhBk8FL4MRDaGsaZuVkPAn/+curIR7r\n",
-			"rDoXPAf0/7S2dVWY0gUjolhwlqGFnps4NgukXtKNs4qlAJiVAY/kKPr0fN+ZScuNuKP/Im\n",
-			"JbFoNPRaakzgbBwj9/UTpwNgUJa+3fu25l1RMLlrx7OjkQKAHBb6VMsGqH8k9rAEsCCBUK\n",
-			"XVJQOMAfa214eo9wgHD06ZnIlk3jS++3hzyUs=\n",
-			"-----END OPENSSH PRIVATE KEY-----\n",
-		).as_bytes()));
+		assert!(let Ok(KeyInfo { format: KeyFormat::OpensshKeyV1, encrypted: true }) = analyze_pem_openssh_key(encrypted_key.as_bytes()));
+
+		let encrypted_key_with_whitespace = format!(
+			"   \n\t\r{}{}{}",
+			OPENSSH_PRIVATE_KEY_BEGIN_PEM,
+			concat!(
+				"b3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jdHIAAAAGYmNyeXB0AAAAGAAAABBddrJWnj\n",
+				"6eysG+DqTberHEAAAAEAAAAAEAAAAzAAAAC3NzaC1lZDI1NTE5AAAAIARNG0xAyCq6/OFQ\n  \r",
+				"8eQFG1zKYlhtLLz2GC3Sou+ C9PTmAAAAoGPGz6ZQhBk8FL4MRDaGsaZuVkPAn/+curIR7r\n",
+				"rDoXPAf0/7S2dVWY0gUjolhwlqGFnps4NgukXtKNs4qlAJiVAY/kKPr0fN+ZScuNuKP/Im\n",
+				"JbFoNPRaakzgbBwj9/UTpwNgUJa+3fu25l1RMLlrx7OjkQKAHBb6VMsGqH8k9rAEsCCBUK\n",
+				"XVJQOMAfa214eo9wgHD06ZnIlk3jS++3hzyUs=\n",
+			),
+			OPENSSH_PRIVATE_KEY_END_PEM_NO_EOL,
+		);
 
 		// Encrypted OpenSSH key with extra random whitespace.
-		assert!(let Ok(KeyInfo { format: KeyFormat::OpensshKeyV1, encrypted: true }) = analyze_pem_openssh_key(concat!(
-			"   \n\t\r-----BEGIN OPENSSH PRIVATE KEY-----\n",
-			"b3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jdHIAAAAGYmNyeXB0AAAAGAAAABBddrJWnj\n",
-			"6eysG+DqTberHEAAAAEAAAAAEAAAAzAAAAC3NzaC1lZDI1NTE5AAAAIARNG0xAyCq6/OFQ\n  \r",
-			"8eQFG1zKYlhtLLz2GC3Sou+ C9PTmAAAAoGPGz6ZQhBk8FL4MRDaGsaZuVkPAn/+curIR7r\n",
-			"rDoXPAf0/7S2dVWY0gUjolhwlqGFnps4NgukXtKNs4qlAJiVAY/kKPr0fN+ZScuNuKP/Im\n",
-			"JbFoNPRaakzgbBwj9/UTpwNgUJa+3fu25l1RMLlrx7OjkQKAHBb6VMsGqH8k9rAEsCCBUK\n",
-			"XVJQOMAfa214eo9wgHD06ZnIlk3jS++3hzyUs=\n",
-			"-----END OPENSSH PRIVATE KEY-----",
-		).as_bytes()));
+		assert!(let Ok(KeyInfo { format: KeyFormat::OpensshKeyV1, encrypted: true }) = analyze_pem_openssh_key(encrypted_key_with_whitespace.as_bytes()));
+
+		let unencrypted_key = format!(
+			"{}{}{}",
+			OPENSSH_PRIVATE_KEY_BEGIN_PEM,
+			concat!(
+				"b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\n",
+				"QyNTUxOQAAACDTKM0+RYzELoLewv5n5UoEPhmCpwkrtXM4GpWUVF+w3AAAAJhSNRa9UjUW\n",
+				"vQAAAAtzc2gtZWQyNTUxOQAAACDTKM0+RYzELoLewv5n5UoEPhmCpwkrtXM4GpWUVF+w3A\n",
+				"AAAECZObXz1xTSvl4vpLsMVTuhjroyDteKlW+Uun0yIMl7edMozT5FjMQugt7C/mflSgQ+\n",
+				"GYKnCSu1czgalZRUX7DcAAAAEW1hYXJ0ZW5AbWFnbmV0cm9uAQIDBA==\n",
+			),
+			OPENSSH_PRIVATE_KEY_END_PEM,
+		);
 
 		// Unencrypted OpenSSH key.
-		assert!(let Ok(KeyInfo { format: KeyFormat::OpensshKeyV1, encrypted: false }) = analyze_pem_openssh_key(concat!(
-			"-----BEGIN OPENSSH PRIVATE KEY-----\n",
-			"b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\n",
-			"QyNTUxOQAAACDTKM0+RYzELoLewv5n5UoEPhmCpwkrtXM4GpWUVF+w3AAAAJhSNRa9UjUW\n",
-			"vQAAAAtzc2gtZWQyNTUxOQAAACDTKM0+RYzELoLewv5n5UoEPhmCpwkrtXM4GpWUVF+w3A\n",
-			"AAAECZObXz1xTSvl4vpLsMVTuhjroyDteKlW+Uun0yIMl7edMozT5FjMQugt7C/mflSgQ+\n",
-			"GYKnCSu1czgalZRUX7DcAAAAEW1hYXJ0ZW5AbWFnbmV0cm9uAQIDBA==\n",
-			"-----END OPENSSH PRIVATE KEY-----\n",
-		).as_bytes()));
+		assert!(let Ok(KeyInfo { format: KeyFormat::OpensshKeyV1, encrypted: false }) = analyze_pem_openssh_key(unencrypted_key.as_bytes()));
 	}
 }

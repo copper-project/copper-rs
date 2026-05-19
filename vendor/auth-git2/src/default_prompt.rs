@@ -43,7 +43,7 @@ pub enum Error {
 	/// Failed to run the askpass command.
 	AskpassCommand(std::io::Error),
 
-	/// Askpass command exitted with a non-zero error code.
+	/// Askpass command exited with a non-zero error code.
 	AskpassExitStatus(AskpassExitStatusError),
 
 	/// Password contains invalid UTF-8.
@@ -178,6 +178,6 @@ impl std::fmt::Display for Error {
 
 impl std::fmt::Display for AskpassExitStatusError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "Program exitted with {}", self.status)
+		write!(f, "Program exited with {}", self.status)
 	}
 }

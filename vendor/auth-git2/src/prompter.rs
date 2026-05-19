@@ -20,7 +20,7 @@ pub trait Prompter: Send {
 	fn prompt_ssh_key_passphrase(&mut self, private_key_path: &Path, git_config: &git2::Config) -> Option<String>;
 }
 
-/// Wrap a clonable [`Prompter`] in a `Box<dyn MakePrompter>`.
+/// Wrap a cloneable [`Prompter`] in a `Box<dyn MakePrompter>`.
 pub(crate) fn wrap_prompter<P>(prompter: P) -> Box<dyn ClonePrompter>
 where
 	P: Prompter + Clone + 'static,
@@ -37,7 +37,7 @@ pub(crate) trait ClonePrompter: Prompter {
 	fn as_prompter_mut(&mut self) -> &mut dyn Prompter;
 }
 
-/// Implement `ClonePrompter` for clonable Prompters.
+/// Implement `ClonePrompter` for cloneable Prompters.
 impl<P> ClonePrompter for P
 where
 	P: Prompter + Clone + 'static,
