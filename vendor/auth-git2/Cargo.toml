@@ -24,13 +24,7 @@ autobenches = false
 description = "Authentication for `git2`"
 documentation = "https://docs.rs/auth-git2"
 readme = "README.md"
-keywords = [
-    "git",
-    "auth",
-    "credentials",
-    "git2",
-    "authentication",
-]
+keywords = ["git", "auth", "credentials", "git2", "authentication"]
 categories = ["authentication"]
 license = "BSD-2-Clause"
 repository = "https://github.com/de-vri-es/auth-git2-rs"
