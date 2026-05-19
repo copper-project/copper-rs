@@ -8,6 +8,7 @@ export ROOT := `git rev-parse --show-toplevel`
 EMBEDDED_EXCLUDES := shell('python3 $1/support/ci/embedded_crates.py excludes --toolchain stable', ROOT)
 PREK_FMT_FIX_HOOKS := "trailing-whitespace mixed-line-ending"
 PREK_FMT_CHECK_HOOKS := "trailing-whitespace check-merge-conflict detect-private-key check-case-conflict check-added-large-files check-yaml check-json check-xml check-symlinks mixed-line-ending"
+PREK_FMT_CI_HOOKS := "trailing-whitespace check-merge-conflict detect-private-key check-case-conflict check-added-large-files check-yaml check-json check-xml check-symlinks mixed-line-ending typos check-rust check-ron check-toml"
 
 # Default to the local PR-check workflow.
 default:
@@ -34,13 +35,14 @@ fmt-check: check-format-tools
 	@bash support/ci/check_ron_format.sh
 	@prek run --all-files {{PREK_FMT_CHECK_HOOKS}}
 
-# Apply formatting plus auto-fixable CI hygiene hooks
+# Apply formatting plus auto-fixable CI hygiene hooks, then verify the full CI fmt gate.
 fmt: check-format-tools
 	@cargo +stable fmt --all
 	@git ls-files -z '*.toml' | xargs -0 -r env RUST_LOG=warn taplo format >/dev/null
 	@git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' | xargs -0 -r -n 1 fmtron --input>/dev/null
 	@find . -type f -name '*.ron.bak' -delete
 	@bash -lc 'set -euo pipefail; prek run --all-files {{PREK_FMT_FIX_HOOKS}} || prek run --all-files {{PREK_FMT_FIX_HOOKS}}'
+	@prek run --all-files {{PREK_FMT_CI_HOOKS}}
 
 # Ensure the tools needed by fmt/fmt-check are installed.
 check-format-tools:
