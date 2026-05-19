@@ -73,14 +73,14 @@ pub fn format_message_only(
             }
             formatted = formatted.replacen("{}", param, 1);
         }
-        if formatted.contains("{}") && !named_params.is_empty() {
+        if !named_params.is_empty() {
             let mut named = named_params.iter().collect::<Vec<_>>();
             named.sort_by(|a, b| a.0.cmp(b.0));
-            for (_, value) in named {
-                if !formatted.contains("{}") {
-                    break;
+            for (name, value) in named {
+                if formatted.contains("{}") {
+                    formatted = formatted.replacen("{}", value, 1);
                 }
-                formatted = formatted.replacen("{}", value, 1);
+                formatted = formatted.replace(&format!("{{{name}}}"), value);
             }
         }
         return Ok(formatted);
@@ -172,11 +172,16 @@ impl LoggerRuntime {
             register_live_log_listener(move |entry, format_str, param_names| {
                 // Build a text line from structured data—no parsing.
                 let params: Vec<String> = entry.params.iter().map(|v| v.to_string()).collect();
-                let named_params: HashMap<String, String> = param_names
-                    .iter()
-                    .zip(params.iter())
-                    .map(|(name, value)| (name.to_string(), value.clone()))
-                    .collect();
+                let mut named_params = HashMap::new();
+                let mut param_names_iter = param_names.iter();
+                for (name_index, value) in entry.paramname_indexes.iter().zip(params.iter()) {
+                    if *name_index != cu29_log::ANONYMOUS {
+                        let Some(name) = param_names_iter.next() else {
+                            continue;
+                        };
+                        named_params.insert(name.to_string(), value.clone());
+                    }
+                }
                 if let Ok(line) = format_message_only(format_str, params.as_slice(), &named_params)
                 {
                     logger.log(
@@ -439,5 +444,26 @@ mod tests {
         let decoded_tuple: (CuLogEntry, usize) =
             bincode::decode_from_slice(&encoded, standard()).unwrap();
         assert_eq!(log_entry, decoded_tuple.0);
+    }
+
+    #[cfg(all(feature = "std", debug_assertions))]
+    #[test]
+    fn test_format_message_only_mixes_named_and_positional_placeholders() {
+        let params = vec!["event payload".to_string()];
+        let mut named_params = std::collections::HashMap::new();
+        named_params.insert("hash".to_string(), "0x000000000".to_string());
+        named_params.insert("size".to_string(), "420".to_string());
+
+        let formatted = crate::format_message_only(
+            "File closed after hash was calculated Hash: {hash}, size: {size};\n{}",
+            &params,
+            &named_params,
+        )
+        .unwrap();
+
+        assert_eq!(
+            formatted,
+            "File closed after hash was calculated Hash: 0x000000000, size: 420;\nevent payload"
+        );
     }
 }

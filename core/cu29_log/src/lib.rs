@@ -230,14 +230,14 @@ pub fn format_logline(
             }
             formatted = formatted.replacen("{}", param, 1);
         }
-        if formatted.contains("{}") && !named_params.is_empty() {
+        if !named_params.is_empty() {
             let mut named = named_params.iter().collect::<Vec<_>>();
             named.sort_by(|a, b| a.0.cmp(b.0));
-            for (_, value) in named {
-                if !formatted.contains("{}") {
-                    break;
+            for (name, value) in named {
+                if formatted.contains("{}") {
+                    formatted = formatted.replacen("{}", value, 1);
                 }
-                formatted = formatted.replacen("{}", value, 1);
+                formatted = formatted.replace(&format!("{{{name}}}"), value);
             }
         }
         return Ok(format!("{time} [{level:?}]: {formatted}"));
@@ -441,5 +441,26 @@ mod tests {
         assert_eq!(entry.level, CuLogLevel::Warning);
         assert_eq!(entry.origin, CuLogOrigin::default());
         assert_eq!(entry.msg_index, 42);
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_rebuild_logline_mixes_named_and_positional_placeholders() {
+        let all_interned_strings = vec![
+            "File closed after hash was calculated Hash: {hash}, size: {size};\n{}".to_string(),
+            "hash".to_string(),
+            "size".to_string(),
+        ];
+        let mut entry = CuLogEntry::new(0, CuLogLevel::Debug);
+        entry.add_param(ANONYMOUS, Value::String("event payload".to_string()));
+        entry.add_param(1, Value::String("0x000000000".to_string()));
+        entry.add_param(2, Value::U64(420));
+
+        let line = rebuild_logline(&all_interned_strings, &entry).unwrap();
+
+        assert_eq!(
+            line,
+            "0 ns [Debug]: File closed after hash was calculated Hash: 0x000000000, size: 420;\nevent payload"
+        );
     }
 }
