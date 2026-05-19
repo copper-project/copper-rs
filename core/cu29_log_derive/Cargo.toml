@@ -40,3 +40,10 @@ log-level-info = []
 log-level-warning = []
 log-level-error = []
 log-level-critical = []
+
+[dev-dependencies]
+cu29-log = { workspace = true, features = ["std"] }
+cu29-log-runtime = { workspace = true, features = ["std"] }
+cu29-clock = { workspace = true, features = ["std"] }
+cu29-traits = { workspace = true, features = ["std"] }
+cu29-value = { workspace = true, features = ["std"] }
