@@ -1,0 +1,63 @@
+# Version 0.5.8 - 2025-05-23
+- [fix][minor] Fix loading of default ECDSA key.
+- [add][patch] Log a warning when processing a private key in unknown format.
+
+# Version 0.5.7 - 2025-02-13
+- [change][patch] Update internal dependencies.
+
+# Version 0.5.6 - 2025-02-13
+- [add][minor] Add support for `git2` version `0.20`.
+
+# Version 0.5.5 - 2024-09-15
+- [add][minor] Add support for `git2` version `0.19`.
+
+# Version 0.5.4 - 2024-03-15
+- [add][minor] Add the `GitAuthenticator::download()` convenience function.
+
+# Version 0.5.3 - 2023-10-08
+- [add][minor] Add support for customizing user prompts with `GitAuthenticator::set_prompter()`.
+
+# Version 0.5.2 - 2023-09-09
+- [change][patch] Fix typo and formatting of nested list in documentation.
+
+# Version 0.5.1 - 2023-09-09
+- [change][patch] Improve library level documentation and README.
+
+# Version 0.5.0 - 2023-09-06
+- [change][major] Rename `GitAuthenticator::clone()` to `clone_repo()` to avoid conflict with the `Clone` trait.
+
+# Version 0.4.1 - 2023-09-06
+- [add][minor] Add support for `git2` version `0.18`.
+
+# Version 0.4.0 - 2023-08-09
+- [change][major] Accept any `impl Into<PathBuf>` in `GitAuthenticator::add_ssh_key_from_file()`.
+
+# Version 0.3.3 - 2023-08-09
+- [add][minor] Support `git2` versions `0.14`, `0.15`, `0.16` and `0.17`.
+
+# Version 0.3.2 - 2023-08-09
+- [change][patch] Document that the `askpass` helper will be used for prompts, if available.
+
+# Version 0.3.1 - 2023-08-09
+- [add][minor] Add support for `askpass` helpers.
+
+# Version 0.3.0 - 2023-08-09
+- [change][major] Add optional password parameter to `GitAuthenticator::add_ssh_key_file()`.
+- [add][minor] Add option to prompt for the password of encrypted SSH key files.
+
+# Version 0.2.0 - 2023-08-08
+- [remove][major] Remove `GitAuthenticator::run_operation()`.
+- [change][major] Support only one username per domain name.
+- [change][major] Support only one set of plaintext credentials per domain name.
+- [add][minor] Add `GitAuthenticator::credentials()` to get the credentials callback.
+- [add][minor] Add `GitAuthenticator::clone()`.
+- [add][minor] Add `GitAuthenticator::fetch()`.
+- [add][minor] Add `GitAuthenticator::push()`.
+- [add][minor] Add optional support for the `log` crate.
+- [fix][patch] Bump minimum `terminal-prompt` version to `0.2.2`.
+
+# Version 0.1.1 - 2023-08-07
+- [patch][change] Fix examples and `README.md` for updated crate name.
+
+# Version 0.1.0 - 2023-08-07
+- [minor][add] Add `GitAuthenticator` struct for authentication with `git2`.

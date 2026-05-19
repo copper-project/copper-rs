@@ -129,10 +129,9 @@ debug = 2
 
 [patch.crates-io]
 soft_ratatui = { path = "vendor/soft_ratatui" }
-# Upstream auth-git2 0.5.8 admits git2 0.21.0 but does not enable the new
-# `cred` feature required for credential-helper support. Patch to the upstream
-# PR commit that adds git2 0.21 compatibility until a crates.io release lands.
-auth-git2 = { git = "https://github.com/GideonBear/auth-git2-rs.git", rev = "3ccf7b142ef42cf5eec82ab86893ad9fbe18dfb2" }
+# auth-git2 0.5.8 incorrectly allows git2 0.21.x, which breaks cargo-generate
+# 0.23.8 by splitting the graph across git2 0.20 and 0.21.
+auth-git2 = { path = "vendor/auth-git2" }
 
 [workspace.package]
 version = "1.0.0-rc2"
