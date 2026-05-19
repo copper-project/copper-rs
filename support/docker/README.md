@@ -12,7 +12,9 @@ Build and run the Copper development container images.
 - `just docker-run-cuda-env` — run the CUDA image, binding the repo into `/home/copper-rs`.
 
 The Linux CI image is published to `ghcr.io/copper-project/copper-rs-ci:ubuntu-26.04`
-by `.github/workflows/build-ci-images.yml`.
+by `.github/workflows/build-ci-images.yml`, which refreshes it nightly and on
+changes under `support/docker/`.
 The CUDA Linux CI image is published to
 `ghcr.io/copper-project/copper-rs-ci:cuda-12.6.1-ubuntu-24.04`
-by `.github/workflows/build-ci-images.yml`.
+by `.github/workflows/build-ci-images.yml`, which refreshes it nightly and on
+changes under `support/docker/`.
