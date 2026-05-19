@@ -240,7 +240,7 @@ bevy_reflect_derive = "0.18.0"
 # used across testing
 tempfile = { version = "3.23", default-features = false }
 
-spin = { version = "0.10" } # should be removed when std is on, but cargo is bad at negative features
+spin = { version = "0.11" } # should be removed when std is on, but cargo is bad at negative features
 
 # rerun
 rerun = { version = "0.32", default-features = false, features = [
