@@ -19,6 +19,12 @@ gen-all:
   just gen-project
   just gen-workspace
 
+# Build the generated templates and compile the feature-gated replay/logreader binaries.
+smoke-generated toolchain="stable":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  ./smoke_generated.sh "{{toolchain}}" test_project test_workspace
+
 # Remove generated template outputs.
 clean-generated:
   rm -rf test_project test_workspace

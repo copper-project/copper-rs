@@ -685,12 +685,11 @@ jobs:
           echo "CARGO_GENERATE_PROJECT=$tmpdir/cargo_generate_project" >> $GITHUB_ENV
       - name: Build generated templates on (${{ inputs.linux_runner_label }} | debug)
         run: |
-          cd support/cargo_cunew/templates/test_project
-          cargo +${{ inputs.toolchain }} build
-          cd ../test_workspace
-          cargo +${{ inputs.toolchain }} build
-          cd "$CARGO_GENERATE_PROJECT"
-          cargo +${{ inputs.toolchain }} build
+          bash support/cargo_cunew/templates/smoke_generated.sh \
+            "${{ inputs.toolchain }}" \
+            support/cargo_cunew/templates/test_project \
+            support/cargo_cunew/templates/test_workspace \
+            "$CARGO_GENERATE_PROJECT"
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
@@ -743,12 +742,11 @@ jobs:
           echo "CARGO_GENERATE_PROJECT=$tmpdir/cargo_generate_project" >> $GITHUB_ENV
       - name: Build generated templates on (${{ inputs.linux_runner_label }} | debug)
         run: |
-          cd support/cargo_cunew/templates/test_project
-          cargo +${{ inputs.toolchain }} build
-          cd ../test_workspace
-          cargo +${{ inputs.toolchain }} build
-          cd "$CARGO_GENERATE_PROJECT"
-          cargo +${{ inputs.toolchain }} build
+          bash support/cargo_cunew/templates/smoke_generated.sh \
+            "${{ inputs.toolchain }}" \
+            support/cargo_cunew/templates/test_project \
+            support/cargo_cunew/templates/test_workspace \
+            "$CARGO_GENERATE_PROJECT"
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
@@ -800,12 +798,11 @@ jobs:
           echo "CARGO_GENERATE_PROJECT=$tmpdir/cargo_generate_project" >> $GITHUB_ENV
       - name: Build generated templates on (macos-latest | debug)
         run: |
-          cd support/cargo_cunew/templates/test_project
-          cargo +${{ inputs.toolchain }} build
-          cd ../test_workspace
-          cargo +${{ inputs.toolchain }} build
-          cd "$CARGO_GENERATE_PROJECT"
-          cargo +${{ inputs.toolchain }} build
+          bash support/cargo_cunew/templates/smoke_generated.sh \
+            "${{ inputs.toolchain }}" \
+            support/cargo_cunew/templates/test_project \
+            support/cargo_cunew/templates/test_workspace \
+            "$CARGO_GENERATE_PROJECT"
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
