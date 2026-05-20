@@ -72,8 +72,6 @@ object-pool = { version = "0.6", optional = true } # used for large object pooli
 rtrb = { version = "0.3.3", optional = true }
 memmap2 = { version = "0.9", optional = true }
 
-# no std only dependencies
-spin = { workspace = true }                          # should be removed when std is on, but cargo is bad at negative features
 libm = { version = "0.2", default-features = false } # f64 math for 32 bit platforms
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]

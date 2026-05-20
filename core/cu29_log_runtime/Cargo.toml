@@ -18,7 +18,6 @@ cu29-traits = { workspace = true }
 cu29-clock = { workspace = true }
 bincode = { workspace = true }
 smallvec = { workspace = true }
-spin = { workspace = true }
 log = { workspace = true, default-features = false }
 strfmt = { workspace = true, optional = true }
 

@@ -36,7 +36,6 @@ cu29 = { path = "../../core/cu29", default-features = false, version = "1.0.0-rc
   "textlogs",
 ] } # default-features = false -> enables no-std for all cu29 dependencies
 serde = { workspace = true }
-spin = { workspace = true }
 embedded-alloc = { workspace = true, features = ["llff"] }
 critical-section = "1"
 

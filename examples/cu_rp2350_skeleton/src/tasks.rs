@@ -6,8 +6,8 @@ use cu29::prelude::*;
 #[cfg(feature = "firmware")]
 mod imp {
     pub use alloc::boxed::Box;
+    pub use cu29::sync::Mutex;
     pub use embedded_hal::digital::OutputPin;
-    pub use spin::{Mutex, Once};
 
     pub trait LedPin: Send {
         fn set(&mut self, on: bool);
@@ -25,19 +25,21 @@ mod imp {
         }
     }
 
-    pub static LED: Once<Mutex<Box<dyn LedPin>>> = Once::new();
+    pub static LED: Mutex<Option<Box<dyn LedPin>>> = Mutex::new(None);
     pub fn register_led<P>(p: P)
     where
         P: OutputPin + Send + 'static,
     {
-        LED.call_once(|| Mutex::new(Box::new(LedWrap(p))));
+        let mut led = LED.lock();
+        if led.is_none() {
+            *led = Some(Box::new(LedWrap(p)));
+        }
     }
 
     pub fn set_led(on: bool) {
-        if let Some(m) = LED.get() {
-            // info!("LED on: {}", on);
-            let mut g = m.lock();
-            g.set(on);
+        let mut led = LED.lock();
+        if let Some(led) = led.as_mut() {
+            led.set(on);
         }
     }
 }

@@ -102,6 +102,7 @@ pub use cu29_runtime::rx_channels;
 #[cfg(feature = "std")]
 pub use cu29_runtime::simulation;
 pub use cu29_runtime::tx_channels;
+pub use cu29_traits::sync;
 #[cfg(feature = "safety-ids")]
 pub mod safety;
 #[cfg(all(feature = "std", any(test, feature = "safety-ids")))]

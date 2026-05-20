@@ -20,6 +20,10 @@ use cu29_log::CuLogLevel;
 use cu29_log_runtime::{
     format_message_only, register_live_log_listener, unregister_live_log_listener,
 };
+#[cfg(any(not(feature = "std"), not(target_has_atomic = "64")))]
+use cu29_traits::sync::Mutex as SyncMutex;
+#[cfg(not(target_has_atomic = "64"))]
+use cu29_traits::sync::MutexGuard as SyncMutexGuard;
 use cu29_traits::{
     CuError, CuResult, ObservedWriter, abort_observed_encode, begin_observed_encode,
     finish_observed_encode,
@@ -53,10 +57,6 @@ use std::{collections::HashMap as Map, string::String, string::ToString, vec::Ve
 
 #[cfg(not(feature = "std"))]
 use alloc::{collections::BTreeMap as Map, string::String, string::ToString, vec::Vec};
-#[cfg(not(target_has_atomic = "64"))]
-use spin::Mutex;
-#[cfg(not(feature = "std"))]
-use spin::Mutex as SpinMutex;
 
 #[cfg(not(feature = "std"))]
 mod imp {
@@ -83,6 +83,19 @@ mod imp {
 }
 
 use imp::*;
+
+#[cfg(not(target_has_atomic = "64"))]
+fn lock_sync_mutex<T>(mutex: &SyncMutex<T>) -> SyncMutexGuard<'_, T> {
+    #[cfg(feature = "std")]
+    {
+        mutex.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    #[cfg(not(feature = "std"))]
+    {
+        mutex.lock()
+    }
+}
 
 #[cfg(all(feature = "std", debug_assertions))]
 fn format_timestamp(time: CuDuration) -> String {
@@ -324,7 +337,7 @@ pub struct RuntimeExecutionProbe {
     #[cfg(target_has_atomic = "64")]
     culistid_present: AtomicUsize,
     #[cfg(not(target_has_atomic = "64"))]
-    culistid: Mutex<Option<u64>>,
+    culistid: SyncMutex<Option<u64>>,
     sequence: AtomicUsize,
 }
 
@@ -338,7 +351,7 @@ impl Default for RuntimeExecutionProbe {
             #[cfg(target_has_atomic = "64")]
             culistid_present: AtomicUsize::new(0),
             #[cfg(not(target_has_atomic = "64"))]
-            culistid: Mutex::new(None),
+            culistid: SyncMutex::new(None),
             sequence: AtomicUsize::new(0),
         }
     }
@@ -363,7 +376,7 @@ impl RuntimeExecutionProbe {
         }
         #[cfg(not(target_has_atomic = "64"))]
         {
-            *self.culistid.lock() = marker.culistid;
+            *lock_sync_mutex(&self.culistid) = marker.culistid;
         }
         self.sequence.fetch_add(1, Ordering::Release);
     }
@@ -386,7 +399,7 @@ impl RuntimeExecutionProbe {
             #[cfg(target_has_atomic = "64")]
             let culistid_value = self.culistid.load(Ordering::Relaxed);
             #[cfg(not(target_has_atomic = "64"))]
-            let culistid = *self.culistid.lock();
+            let culistid = *lock_sync_mutex(&self.culistid);
             let seq_after = self.sequence.load(Ordering::Acquire);
             if seq_before == seq_after {
                 if component_id == ComponentId::INVALID.index() {
@@ -1281,11 +1294,11 @@ thread_local! {
 }
 
 #[cfg(not(feature = "std"))]
-static PAYLOAD_HANDLE_BYTES: SpinMutex<Option<usize>> = SpinMutex::new(None);
+static PAYLOAD_HANDLE_BYTES: SyncMutex<Option<usize>> = SyncMutex::new(None);
 #[cfg(not(feature = "std"))]
-static ACTIVE_COPPERLIST_CAPTURE: SpinMutex<Option<ActiveCuMsgIoCapture>> = SpinMutex::new(None);
+static ACTIVE_COPPERLIST_CAPTURE: SyncMutex<Option<ActiveCuMsgIoCapture>> = SyncMutex::new(None);
 #[cfg(not(feature = "std"))]
-static LAST_COMPLETED_HANDLE_BYTES: SpinMutex<u64> = SpinMutex::new(0);
+static LAST_COMPLETED_HANDLE_BYTES: SyncMutex<u64> = SyncMutex::new(0);
 
 fn begin_payload_io_measurement() {
     #[cfg(feature = "std")]

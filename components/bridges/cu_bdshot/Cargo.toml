@@ -29,7 +29,6 @@ stm32h7xx-hal = { workspace = true, default-features = false, features = [
 cortex-m = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 bincode = { workspace = true, features = ["alloc"] }
-spin = { workspace = true }
 
 [features]
 default = ["messages-only"]

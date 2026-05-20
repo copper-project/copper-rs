@@ -15,6 +15,7 @@ use bincode::enc::{Encode, Encoder};
 use bincode::error::{DecodeError, EncodeError};
 use core::any::TypeId;
 use cu29_clock::Tov;
+use cu29_traits::sync::{Mutex, MutexGuard, OnceLock};
 use cu29_traits::{CuError, CuResult, observed_encode_bytes};
 use hashbrown::HashMap;
 use portable_atomic::{AtomicU64, Ordering};
@@ -24,31 +25,18 @@ use std::io::Read;
 #[cfg(feature = "std")]
 use std::path::Path;
 
-#[cfg(not(feature = "std"))]
-mod imp {
-    pub use spin::Mutex;
-    pub use spin::once::Once as OnceLock;
-}
-
-#[cfg(feature = "std")]
-mod imp {
-    pub use std::sync::{Mutex, OnceLock};
-}
-
-use imp::*;
-
 #[cfg(feature = "std")]
 use crate::curuntime::{RuntimeLifecycleEvent, RuntimeLifecycleRecord};
 #[cfg(feature = "std")]
 use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
 
 #[cfg(feature = "std")]
-fn lock_mutex<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+fn lock_mutex<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 #[cfg(not(feature = "std"))]
-fn lock_mutex<T>(m: &Mutex<T>) -> spin::MutexGuard<'_, T> {
+fn lock_mutex<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock()
 }
 

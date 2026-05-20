@@ -28,7 +28,6 @@ rp2350-demo = [
   "buddy_system_allocator",
   "embedded-hal",
   "rp235x-hal",
-  "spin",
   "dep:cu-mpu9250",
 ]
 std = ["cu29/std", "cu-sensor-payloads/std", "bincode/std", "serde/std"]
@@ -64,7 +63,6 @@ rp235x-hal = { workspace = true, features = [
   "critical-section-impl",
   "defmt",
 ], optional = true }
-spin = { workspace = true, optional = true }
 cu-mpu9250 = { path = "../../sources/cu_mpu9250", version = "1.0.0-rc2", default-features = false, optional = true }
 
 [[example]]

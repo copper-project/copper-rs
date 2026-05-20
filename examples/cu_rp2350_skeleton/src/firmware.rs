@@ -15,6 +15,7 @@ use cu_sdlogger::sdmmc::SdCard;
 use cu_sdlogger::{find_copper_partition, EMMCLogger, EMMCSectionStorage, ForceSyncSend};
 use buddy_system_allocator::LockedHeap as Heap;
 use cu29::prelude::*;
+use cu29::sync::Mutex;
 use defmt_rtt as _;
 use embedded_hal::spi::MODE_0;
 use embedded_hal_bus::spi::ExclusiveDevice;
@@ -29,7 +30,6 @@ use rp235x_hal::spi::{Enabled, FrameFormat};
 use rp235x_hal::timer::{CopyableTimer0, CopyableTimer1};
 use rp235x_hal::Clock;
 use rp235x_hal::{Spi, Timer};
-use spin::Mutex;
 
 // --- Copper runtime
 pub mod tasks;
