@@ -256,7 +256,7 @@ pub trait CuBridge: Freezable + Reflect {
         Ok(())
     }
 
-    /// Notifies the bridge that no more I/O will happen until a subsequent [`start`].
+    /// Notifies the bridge that no more I/O will happen until a subsequent [`Self::start`].
     fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
         Ok(())
     }
