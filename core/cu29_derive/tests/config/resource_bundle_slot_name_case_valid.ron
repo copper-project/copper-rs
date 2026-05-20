@@ -6,16 +6,11 @@
         ),
     ],
     tasks: [
-        (
-            id: "src",
-            type: "NoopSource",
-        ),
+        (id: "src", type: "NoopSource"),
         (
             id: "sink",
             type: "UsesI2cSink",
-            resources: {
-                "bus": "linux.i2c1",
-            },
+            resources: {"bus": "linux.i2c1"},
         ),
     ],
     cnx: [
