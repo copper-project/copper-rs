@@ -14,11 +14,11 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt::Write as _;
 use cu29::prelude::*;
+use cu29::sync::Mutex;
 #[cfg(all(feature = "std", debug_assertions))]
 use cu29_log_runtime::{
     format_message_only, register_live_log_listener, unregister_live_log_listener,
 };
-use spin::Mutex;
 #[cfg(all(feature = "std", debug_assertions))]
 use std::collections::HashMap;
 

@@ -51,7 +51,6 @@ portable-atomic = { version = "1.11", optional = true, default-features = false,
   "float",
   "fallback",
 ] } # required
-spin = { version = "0.10", optional = true }
 embedded-sdmmc = { version = "0.9", optional = true, features = [
   "defmt-log",
 ], default-features = false }
@@ -96,7 +95,6 @@ firmware = [
   "dep:panic-probe",
   "dep:rp235x-hal",
   "dep:portable-atomic",
-  "dep:spin",
   "dep:embedded-sdmmc",
   "dep:cu-sdlogger",
 ]

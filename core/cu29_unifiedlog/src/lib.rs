@@ -23,17 +23,15 @@ pub use compat::*;
 pub use noop::{NoopLogger, NoopSectionStorage};
 
 use alloc::string::ToString;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Display, Formatter, Result as FmtResult};
-#[cfg(not(feature = "std"))]
-use spin::Mutex;
-#[cfg(feature = "std")]
-use std::sync::Mutex;
 
 use bincode::error::EncodeError;
 use bincode::{Decode, Encode};
-use cu29_traits::{CuError, CuResult, UnifiedLogType, WriteStream};
+use cu29_traits::{
+    CuError, CuResult, UnifiedLogType, WriteStream,
+    sync::{Arc, Mutex},
+};
 
 /// ID to spot the beginning of a Copper Log
 #[allow(dead_code)]

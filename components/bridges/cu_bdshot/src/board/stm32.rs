@@ -5,7 +5,7 @@ use crate::messages::{DShotTelemetry, EscCommand};
 use cortex_m::peripheral::DWT;
 use cu29::CuResult;
 use cu29::prelude::CuError;
-use spin::Mutex;
+use cu29::sync::Mutex;
 use stm32h7xx_hal as hal;
 
 use hal::gpio::{Analog, Output, Pin, PushPull};

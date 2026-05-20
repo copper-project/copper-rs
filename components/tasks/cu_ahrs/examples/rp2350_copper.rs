@@ -112,7 +112,7 @@ mod firmware {
 
     pub mod resources {
         use super::*;
-        use spin::Mutex;
+        use cu29::sync::Mutex;
 
         type Mosi =
             hal::gpio::Pin<hal::gpio::bank0::Gpio11, hal::gpio::FunctionSpi, hal::gpio::PullDown>;

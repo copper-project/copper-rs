@@ -122,6 +122,7 @@ This file defines the Copper V1 public contract. Anything not listed as stable i
 - `OwnedCopperListSubmission`.
 - Generated mission modules and generated helper functions.
 - Direct task tuple and bridge tuple access through `copper_runtime_mut()`.
+- `cu29::sync` and `cu29_traits::sync` compatibility re-exports for cross-target `Arc`/`Mutex` paths.
 
 ## Deprecated
 
