@@ -7113,16 +7113,17 @@ fn build_task_resource_mappings(
             <<#binding_task_type as #binding_trait>::Resources<'_> as ResourceBindings>::Binding
         };
         let entry_tokens = entries.iter().map(|spec| {
-            let binding_ident =
-                Ident::new(&config_id_to_enum(spec.binding_name.as_str()), Span::call_site());
-            let resource_ident =
-                Ident::new(&config_id_to_enum(spec.resource_name.as_str()), Span::call_site());
+            let binding_ident = Ident::new(
+                &config_id_to_enum(spec.binding_name.as_str()),
+                Span::call_site(),
+            );
+            let resource_name = LitStr::new(spec.resource_name.as_str(), Span::call_site());
             let bundle_index = spec.bundle_index;
             let provider_path = &spec.provider_path;
             quote! {
                 (#binding_type::#binding_ident, cu29::resource::ResourceKey::new(
                     cu29::resource::BundleIndex::new(#bundle_index),
-                    <#provider_path as cu29::resource::ResourceBundleDecl>::Id::#resource_ident as usize,
+                    cu29::resource::resource_index_by_name::<#provider_path>(#resource_name),
                 ))
             }
         });
@@ -7174,16 +7175,17 @@ fn build_bridge_resource_mappings(
         let entries_ident = format_ident!("BRIDGE{}_RES_ENTRIES", idx);
         let map_ident = format_ident!("BRIDGE{}_RES_MAPPING", idx);
         let entry_tokens = entries.iter().map(|spec| {
-            let binding_ident =
-                Ident::new(&config_id_to_enum(spec.binding_name.as_str()), Span::call_site());
-            let resource_ident =
-                Ident::new(&config_id_to_enum(spec.resource_name.as_str()), Span::call_site());
+            let binding_ident = Ident::new(
+                &config_id_to_enum(spec.binding_name.as_str()),
+                Span::call_site(),
+            );
+            let resource_name = LitStr::new(spec.resource_name.as_str(), Span::call_site());
             let bundle_index = spec.bundle_index;
             let provider_path = &spec.provider_path;
             quote! {
                 (#binding_type::#binding_ident, cu29::resource::ResourceKey::new(
                     cu29::resource::BundleIndex::new(#bundle_index),
-                    <#provider_path as cu29::resource::ResourceBundleDecl>::Id::#resource_ident as usize,
+                    cu29::resource::resource_index_by_name::<#provider_path>(#resource_name),
                 ))
             }
         });

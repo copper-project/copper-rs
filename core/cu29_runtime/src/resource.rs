@@ -158,6 +158,49 @@ pub trait ResourceBundleDecl {
     type Id: ResourceId;
 }
 
+/// Optional name metadata for resource bundles.
+///
+/// Bundles created via `bundle_resources!` implement this automatically. The
+/// derive macro uses these canonical slot names to resolve `bundle.resource`
+/// bindings without guessing enum variant casing from config strings.
+pub trait NamedResourceBundleDecl: ResourceBundleDecl {
+    const NAMES: &'static [&'static str];
+}
+
+const fn str_eq(left: &str, right: &str) -> bool {
+    let left = left.as_bytes();
+    let right = right.as_bytes();
+    if left.len() != right.len() {
+        return false;
+    }
+
+    let mut idx = 0;
+    while idx < left.len() {
+        if left[idx] != right[idx] {
+            return false;
+        }
+        idx += 1;
+    }
+
+    true
+}
+
+/// Resolve a bundle slot name to its resource index.
+///
+/// This is a `const fn` so generated resource binding tables can stay static.
+#[doc(hidden)]
+pub const fn resource_index_by_name<B: NamedResourceBundleDecl>(name: &str) -> usize {
+    let mut idx = 0;
+    while idx < B::NAMES.len() {
+        if str_eq(B::NAMES[idx], name) {
+            return idx;
+        }
+        idx += 1;
+    }
+
+    panic!("resource slot name not declared by bundle");
+}
+
 /// Static mapping between user-defined binding ids and resource keys.
 #[derive(Clone, Copy)]
 pub struct ResourceBindingMap<B: Copy + Eq + 'static> {
@@ -409,6 +452,11 @@ impl ResourceBundleDecl for ThreadPoolBundle {
 }
 
 #[cfg(feature = "std")]
+impl NamedResourceBundleDecl for ThreadPoolBundle {
+    const NAMES: &'static [&'static str] = &["bg_threads"];
+}
+
+#[cfg(feature = "std")]
 impl ResourceBundle for ThreadPoolBundle {
     fn build(
         bundle: BundleContext<Self>,
@@ -434,5 +482,43 @@ impl ResourceBundle for ThreadPoolBundle {
         let key = bundle.key::<rayon::ThreadPool>(ThreadPoolId::BgThreads);
         manager.add_shared(key, Arc::new(pool))?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Copy, Clone, Eq, PartialEq)]
+    #[repr(usize)]
+    enum DummyBundleId {
+        Uart0,
+        I2c1,
+    }
+
+    impl ResourceId for DummyBundleId {
+        const COUNT: usize = 2;
+
+        fn index(self) -> usize {
+            self as usize
+        }
+    }
+
+    struct DummyBundle;
+
+    impl ResourceBundleDecl for DummyBundle {
+        type Id = DummyBundleId;
+    }
+
+    impl NamedResourceBundleDecl for DummyBundle {
+        const NAMES: &'static [&'static str] = &["uart0", "i2c1"];
+    }
+
+    #[test]
+    fn resource_index_by_name_matches_declared_slot_name() {
+        assert_eq!(DummyBundleId::Uart0.index(), 0);
+        assert_eq!(DummyBundleId::I2c1.index(), 1);
+        assert_eq!(resource_index_by_name::<DummyBundle>("uart0"), 0);
+        assert_eq!(resource_index_by_name::<DummyBundle>("i2c1"), 1);
     }
 }
