@@ -50,7 +50,7 @@ impl CuSrcTask for ClockSource {
         })
     }
 
-    fn process(&mut self, _ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
         self.tick = self.tick.wrapping_add(1);
         let phase = self.tick as f32 * self.phase_step;
 
@@ -62,8 +62,8 @@ impl CuSrcTask for ClockSource {
 
         if self.tick.is_multiple_of(12) {
             debug!(
-                "clock source emitted synthetic tick={} phase={phase:.2}",
-                self.tick
+                ctx,
+                "clock source emitted synthetic tick={} phase={phase:.2}", self.tick
             );
         }
 
@@ -93,7 +93,7 @@ impl CuTask for PlannerTask {
 
     fn process(
         &mut self,
-        _ctx: &CuContext,
+        ctx: &CuContext,
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
@@ -119,6 +119,7 @@ impl CuTask for PlannerTask {
 
         if tick.tick.is_multiple_of(18) {
             info!(
+                ctx,
                 "planner retargeted synthetic path: x={target_x:+.2} z={target_z:+.2} h={height:.2}"
             );
         }
@@ -151,7 +152,7 @@ impl CuTask for ControllerTask {
 
     fn process(
         &mut self,
-        _ctx: &CuContext,
+        ctx: &CuContext,
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
@@ -190,11 +191,12 @@ impl CuTask for ControllerTask {
         });
 
         if plan.tick.is_multiple_of(24) && clamped_torque.abs() > self.warn_torque {
-            warning!("controller torque nearing clamp: {clamped_torque:+.2}");
+            warning!(ctx, "controller torque nearing clamp: {clamped_torque:+.2}");
         }
 
         if plan.tick.is_multiple_of(45) {
             error!(
+                ctx,
                 "controller synthetic estimator glitch at tick {}; continuing in degraded mode",
                 plan.tick
             );
@@ -221,13 +223,14 @@ impl CuSinkTask for VizSink {
         })
     }
 
-    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         let Some(viz) = input.payload() else {
             return Ok(());
         };
 
         if viz.tick.is_multiple_of(30) {
             debug!(
+                ctx,
                 "viz sink refreshed '{}' with phase={:.2} energy={:.2}",
                 self.overlay_label.as_str(),
                 viz.phase,
@@ -256,26 +259,28 @@ impl CuSinkTask for ActuatorSink {
         })
     }
 
-    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         let Some(cmd) = input.payload() else {
             return Ok(());
         };
 
         if cmd.tick.is_multiple_of(20) {
             info!(
-                "actuator frame accepted: armed={} torque={:+.2}",
-                cmd.armed, cmd.torque
+                ctx,
+                "actuator frame accepted: armed={} torque={:+.2}", cmd.armed, cmd.torque
             );
         }
 
         if !cmd.armed {
-            warning!("actuator hold requested at tick {}", cmd.tick);
+            warning!(ctx, "actuator hold requested at tick {}", cmd.tick);
         }
 
         if cmd.tick.is_multiple_of(60) || cmd.torque.abs() > self.hard_limit {
             error!(
+                ctx,
                 "actuator telemetry timeout simulated at tick {}; last torque={:+.2}",
-                cmd.tick, cmd.torque
+                cmd.tick,
+                cmd.torque
             );
         }
 

@@ -138,7 +138,7 @@ where
         })
     }
 
-    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
+    fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
         let idle_frame = encode_frame(EscCommand::disarm());
 
         let mut ready = true;
@@ -148,7 +148,7 @@ where
                 if !self.active_channels[idx] {
                     continue;
                 }
-                debug!("Sending disarm frames {}", idx);
+                debug!(ctx, "Sending disarm frames {}", idx);
                 let sample = {
                     let mut board = self.board.lock();
                     board.delay(200);
@@ -165,11 +165,11 @@ where
             if ready {
                 break;
             }
-            debug!("Waiting for ESCs startup {}...", i);
+            debug!(ctx, "Waiting for ESCs startup {}...", i);
         }
 
         if !ready {
-            error!("Timeout waiting for ESC to start up");
+            error!(ctx, "Timeout waiting for ESC to start up");
             return Err(CuError::from("Timeout waiting for ESC to start up"));
         }
 

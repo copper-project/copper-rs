@@ -226,9 +226,10 @@ pub mod tasks {
             Ok(Self { label })
         }
 
-        fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
             if let Some(pong) = input.payload() {
                 debug!(
+                    ctx,
                     "{}: got pong seq={} reply={}",
                     self.label.as_str(),
                     pong.seq,

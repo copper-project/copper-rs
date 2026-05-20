@@ -40,6 +40,7 @@ impl CuSrcTask for CalibrationReporter {
             self.gyro_bias
         );
         info!(
+            ctx,
             "instance_id={} label={} gyro_bias={:?}",
             ctx.instance_id(),
             self.label.as_str(),

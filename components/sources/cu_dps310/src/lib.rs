@@ -543,8 +543,8 @@ where
         })
     }
 
-    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
-        debug!("dps310: source started");
+    fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
+        debug!(ctx, "dps310: source started");
         Ok(())
     }
 
@@ -569,8 +569,11 @@ where
         {
             self.last_log_ns = Some(now_ns);
             info!(
+                ctx,
                 "dps310: pressure_pa={} temp_c={} rate_hz={}",
-                payload.pressure.value, payload.temperature.value, OUTPUT_RATE_HZ
+                payload.pressure.value,
+                payload.temperature.value,
+                OUTPUT_RATE_HZ
             );
         }
 

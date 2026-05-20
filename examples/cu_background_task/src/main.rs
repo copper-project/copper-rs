@@ -54,7 +54,7 @@ pub mod tasks {
 
         fn process(
             &mut self,
-            _ctx: &CuContext,
+            ctx: &CuContext,
             input: &Self::Input<'_>,
             output: &mut Self::Output<'_>,
         ) -> CuResult<()> {
@@ -65,11 +65,11 @@ pub mod tasks {
                 .expect("sleep_duration comes from u64 milliseconds");
             // Emulate a long-running task
             debug!(
-                "Task is tasking a {}ms time to process input: {}",
-                sleep_duration_ms, &payload
+                ctx,
+                "Task is tasking a {}ms time to process input: {}", sleep_duration_ms, &payload
             );
             sleep(self.sleep_duration);
-            debug!("Task ({}ms) done.", sleep_duration_ms);
+            debug!(ctx, "Task ({}ms) done.", sleep_duration_ms);
             output.set_payload(payload + 1);
             Ok(())
         }

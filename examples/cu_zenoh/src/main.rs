@@ -26,9 +26,9 @@ pub mod tasks {
             Ok(Self)
         }
 
-        fn process(&mut self, _ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+        fn process(&mut self, ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
             std::thread::sleep(Duration::from_secs(1));
-            debug!("Sending value");
+            debug!(ctx, "Sending value");
             new_msg.set_payload(42);
             Ok(())
         }

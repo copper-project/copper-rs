@@ -270,11 +270,12 @@ impl CuMonitor for CuSafetyMon {
         })
     }
 
-    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
+    fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
         self.shared.touch(0);
         self.install_panic_action();
         self.spawn_watchdog();
         info!(
+            ctx,
             "cu_safetymon started: deadline={:?} period={:?} codes(shutdown={}, lock={}, panic={})",
             self.cfg.copperlist_deadline,
             self.cfg.watchdog_period,

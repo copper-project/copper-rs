@@ -28,11 +28,11 @@ impl CuTask for MyTask {
 
     fn process(
         &mut self,
-        _ctx: &CuContext,
+        ctx: &CuContext,
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
-        debug!("Received message: {}", input.payload().unwrap().value);
+        debug!(ctx, "Received message: {}", input.payload().unwrap().value);
         output.set_payload(MyPayload { value: 43 });
         Ok(()) // outputs another message for downstream
     }

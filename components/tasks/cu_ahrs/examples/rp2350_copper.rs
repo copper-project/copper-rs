@@ -96,9 +96,10 @@ mod firmware {
                 Ok(Self)
             }
 
-            fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+            fn process(&mut self, ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
                 if let Some(pose) = input.payload() {
                     info!(
+                        ctx,
                         "AHRS RPY [rad]: roll={} pitch={} yaw={}",
                         pose.roll.get::<radian>(),
                         pose.pitch.get::<radian>(),

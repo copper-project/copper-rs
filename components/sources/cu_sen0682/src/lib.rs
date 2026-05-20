@@ -163,8 +163,12 @@ where
 
         if stats.frame_idx == 0 {
             debug!(
+                ctx,
                 "sen0682: first frame width={} height={} points={} device_index={}",
-                stats.width, stats.height, stats.valid_points, stats.device_index
+                stats.width,
+                stats.height,
+                stats.valid_points,
+                stats.device_index
             );
         }
 

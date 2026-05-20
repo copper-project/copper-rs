@@ -405,14 +405,14 @@ impl FeetechBridge {
     /// On a read failure for any individual servo the previously cached value
     /// is kept and a debug message is logged — the bus continues with the
     /// remaining servos.
-    fn read_all_positions(&mut self) -> CuResult<()> {
+    fn read_all_positions(&mut self, ctx: &CuContext) -> CuResult<()> {
         for i in 0..self.num_servos as usize {
             match self.read_present_position(self.ids[i]) {
                 Ok(raw) => self.cached_positions[i] = raw,
                 Err(e) => {
                     debug!(
-                        "Feetech: failed to read servo {} (ID {}): {}",
-                        i, self.ids[i], e
+                        ctx,
+                        "Feetech: failed to read servo {} (ID {}): {}", i, self.ids[i], e
                     );
                 }
             }
@@ -619,17 +619,17 @@ impl CuBridge for FeetechBridge {
     ///
     /// Enables torque only when writers are connected (commander mode).
     /// In follower mode torque stays off so the arm moves freely.
-    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
+    fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
         if self.has_writers {
             self.enable_all_torque()?;
             debug!(
-                "FeetechBridge: enabled torque on {} servos",
-                self.num_servos
+                ctx,
+                "FeetechBridge: enabled torque on {} servos", self.num_servos
             );
         } else {
             debug!(
-                "FeetechBridge: read-only mode, torque left disabled on {} servos",
-                self.num_servos
+                ctx,
+                "FeetechBridge: read-only mode, torque left disabled on {} servos", self.num_servos
             );
         }
         Ok(())
@@ -672,7 +672,7 @@ impl CuBridge for FeetechBridge {
         Payload: CuMsgPayload + 'a,
     {
         // Poll all servos and update the cache.
-        self.read_all_positions()?;
+        self.read_all_positions(ctx)?;
 
         // Stamp the message with the current robot time.
         msg.tov = Tov::Time(ctx.now());
@@ -702,10 +702,11 @@ impl CuBridge for FeetechBridge {
     ///
     /// Disables torque on every servo for safety (prevents the arm from
     /// holding position with power applied after the application exits).
-    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
+    fn stop(&mut self, ctx: &CuContext) -> CuResult<()> {
         for i in 0..self.num_servos as usize {
             if let Err(e) = self.set_torque(self.ids[i], false) {
                 debug!(
+                    ctx,
                     "FeetechBridge: failed to disable torque on servo {}: {}",
                     self.ids[i],
                     e.to_string()
@@ -713,8 +714,8 @@ impl CuBridge for FeetechBridge {
             }
         }
         debug!(
-            "FeetechBridge: disabled torque on {} servos",
-            self.num_servos
+            ctx,
+            "FeetechBridge: disabled torque on {} servos", self.num_servos
         );
         Ok(())
     }

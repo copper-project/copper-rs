@@ -148,12 +148,12 @@ impl CuTask for DynThreshold {
 
     fn process(
         &mut self,
-        _ctx: &CuContext,
+        ctx: &CuContext,
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
         let Some(buffer_hold) = input.payload() else {
-            debug!("DynThreshold: No payload in input message, skipping.");
+            debug!(ctx, "DynThreshold: No payload in input message, skipping.");
             return Ok(());
         };
         let buffer_hold = buffer_hold

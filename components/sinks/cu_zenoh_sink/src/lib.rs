@@ -102,14 +102,14 @@ where
         })
     }
 
-    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
+    fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
         let session = zenoh::Wait::wait(zenoh::open(self.config.config.clone()))
             .map_err(cu_error_map("ZenohSink: Failed to open session"))?;
 
         let key_expr = KeyExpr::<'static>::new(self.config.topic.clone())
             .map_err(cu_error_map("ZenohSink: Invalid topic string"))?;
 
-        debug!("Zenoh session open");
+        debug!(ctx, "Zenoh session open");
         let publisher = zenoh::Wait::wait(session.declare_publisher(key_expr))
             .map_err(cu_error_map("ZenohSink: Failed to create publisher"))?;
 
@@ -130,14 +130,14 @@ where
         Ok(())
     }
 
-    fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
+    fn stop(&mut self, ctx: &CuContext) -> CuResult<()> {
         if let Some(ZenohContext { session, publisher }) = self.ctx.take() {
             zenoh::Wait::wait(publisher.undeclare())
                 .map_err(cu_error_map("ZenohSink: Failed to undeclare publisher"))?;
             zenoh::Wait::wait(session.close())
                 .map_err(cu_error_map("ZenohSink: Failed to close session"))?;
         }
-        debug!("ZenohSink: Stopped");
+        debug!(ctx, "ZenohSink: Stopped");
         Ok(())
     }
 }

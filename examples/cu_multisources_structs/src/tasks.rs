@@ -61,11 +61,11 @@ impl CuTask for MyTask {
 
     fn process(
         &mut self,
-        _ctx: &CuContext,
+        ctx: &CuContext,
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
-        debug!("Received message: {}", input.payload().unwrap().value);
+        debug!(ctx, "Received message: {}", input.payload().unwrap().value);
         output.set_payload(MyPayload { value: 43 });
         Ok(()) // outputs another message for downstream
     }
@@ -90,12 +90,14 @@ impl CuSinkTask for MySink {
     }
     // don't forget the other lifecycle methods if you need them: start, stop, preprocess, postprocess
 
-    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         debug!(
+            ctx,
             "Sink Received message 0: {}",
             input.0.payload().unwrap().value
         );
         debug!(
+            ctx,
             "Sink Received message 1: {}",
             input.1.payload().unwrap().value
         );
