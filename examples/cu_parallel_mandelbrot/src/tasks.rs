@@ -844,8 +844,8 @@ impl CuTask for FrameAssembler {
                 .set_status(emitted_status(payload.frame_index, self.frames));
 
             info!(
-                "mandelbrot frame complete: frame={} digest=0x{:016x}",
-                payload.frame_index, digest
+                ctx,
+                "mandelbrot frame complete: frame={} digest=0x{:016x}", payload.frame_index, digest
             );
         }
 
@@ -993,7 +993,7 @@ impl CuSinkTask for ViewerFrameSink {
         })
     }
 
-    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         let Some(payload) = input.payload() else {
             return Ok(());
         };
@@ -1066,8 +1066,10 @@ impl CuSinkTask for ViewerFrameSink {
             self.write_buffer_index = (self.write_buffer_index + 1) % VIEWER_BUFFER_COUNT;
 
             info!(
+                ctx,
                 "mandelbrot frame complete: frame={} digest=0x{:016x}",
-                payload.frame_index, self.frame_digest
+                payload.frame_index,
+                self.frame_digest
             );
 
             if !self.viewer_open.load(Ordering::Acquire) {

@@ -152,7 +152,7 @@ pub mod probe {
             })
         }
 
-        fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
             let Some(cloud) = input.payload() else {
                 return Ok(());
             };
@@ -205,7 +205,7 @@ pub mod probe {
             );
 
             if self.frame_index <= 3 || self.frame_index.is_multiple_of(10) {
-                info!("[sen0682/probe] {}", state::summary());
+                info!(ctx, "[sen0682/probe] {}", state::summary());
             }
 
             Ok(())

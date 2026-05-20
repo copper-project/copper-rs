@@ -71,15 +71,16 @@ impl CuMonitor for ExampleMonitor {
     }
 
     fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
-        debug!("Monitoring: started: {}", ctx.now());
+        debug!(ctx, "Monitoring: started: {}", ctx.now());
         Ok(())
     }
 
-    fn process_copperlist(&self, _ctx: &CuContext, view: CopperListView<'_>) -> CuResult<()> {
-        debug!("Monitoring: Processing copperlist...");
+    fn process_copperlist(&self, ctx: &CuContext, view: CopperListView<'_>) -> CuResult<()> {
+        debug!(ctx, "Monitoring: Processing copperlist...");
         for entry in view.entries() {
             let component_name = self.components[entry.component_id.index()].id();
             debug!(
+                ctx,
                 "Component: {} (slot {}) -> {}",
                 component_name,
                 entry.culist_slot.index(),
@@ -104,7 +105,7 @@ impl CuMonitor for ExampleMonitor {
     }
 
     fn stop(&mut self, ctx: &CuContext) -> CuResult<()> {
-        debug!("Monitoring: stopped: {}", ctx.now());
+        debug!(ctx, "Monitoring: stopped: {}", ctx.now());
         Ok(())
     }
 }

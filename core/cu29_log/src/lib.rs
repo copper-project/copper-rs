@@ -65,6 +65,17 @@ pub const ANONYMOUS: u32 = 0;
 
 pub const MAX_LOG_PARAMS_ON_STACK: usize = 10;
 
+/// Runtime origin metadata attached to a structured log entry when available.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Encode, Decode)]
+pub struct CuLogOrigin {
+    /// CopperList id of the callback that emitted this log line.
+    pub culistid: Option<u64>,
+    /// Runtime component id recorded for the active callback.
+    pub component_id: Option<u32>,
+    /// Current task index when the emitting callback belongs to a task.
+    pub task_index: Option<u32>,
+}
+
 /// This is the basic structure for a log entry in Copper.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CuLogEntry {
@@ -73,6 +84,9 @@ pub struct CuLogEntry {
 
     // Log level of this entry
     pub level: CuLogLevel,
+
+    // Runtime origin metadata when the log was emitted from a Copper callback.
+    pub origin: CuLogOrigin,
 
     // interned index of the message
     pub msg_index: u32,
@@ -91,6 +105,7 @@ impl Encode for CuLogEntry {
     ) -> Result<(), bincode::error::EncodeError> {
         self.time.encode(encoder)?;
         (self.level as u8).encode(encoder)?;
+        self.origin.encode(encoder)?;
         self.msg_index.encode(encoder)?;
 
         (self.paramname_indexes.len() as u64).encode(encoder)?;
@@ -119,8 +134,9 @@ impl<Context> Decode<Context> for CuLogEntry {
             2 => CuLogLevel::Warning,
             3 => CuLogLevel::Error,
             4 => CuLogLevel::Critical,
-            _ => CuLogLevel::Debug, // Default to Debug for compatibility with older logs
+            _ => CuLogLevel::Debug, // Fallback for malformed data
         };
+        let origin = CuLogOrigin::decode(decoder)?;
         let msg_index = u32::decode(decoder)?;
 
         let paramname_len = u64::decode(decoder)? as usize;
@@ -138,6 +154,7 @@ impl<Context> Decode<Context> for CuLogEntry {
         Ok(CuLogEntry {
             time,
             level,
+            origin,
             msg_index,
             paramname_indexes,
             params,
@@ -150,8 +167,8 @@ impl Display for CuLogEntry {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(
             f,
-            "CuLogEntry {{ level: {:?}, msg_index: {}, paramname_indexes: {:?}, params: {:?} }}",
-            self.level, self.msg_index, self.paramname_indexes, self.params
+            "CuLogEntry {{ level: {:?}, origin: {:?}, msg_index: {}, paramname_indexes: {:?}, params: {:?} }}",
+            self.level, self.origin, self.msg_index, self.paramname_indexes, self.params
         )
     }
 }
@@ -163,10 +180,25 @@ impl CuLogEntry {
             time: 0.into(), // We have no clock at that point it is called from random places
             // the clock will be set at actual log time from clock source provided
             level,
+            origin: CuLogOrigin::default(),
             msg_index,
             paramname_indexes: SmallVec::new(),
             params: SmallVec::new(),
         }
+    }
+
+    /// Attach runtime origin metadata to this log entry.
+    pub fn set_origin(
+        &mut self,
+        culistid: Option<u64>,
+        component_id: Option<u32>,
+        task_index: Option<u32>,
+    ) {
+        self.origin = CuLogOrigin {
+            culistid,
+            component_id,
+            task_index,
+        };
     }
 
     /// Add a parameter to the log entry.
@@ -407,6 +439,7 @@ mod tests {
     fn test_cu_log_entry_with_level() {
         let entry = CuLogEntry::new(42, CuLogLevel::Warning);
         assert_eq!(entry.level, CuLogLevel::Warning);
+        assert_eq!(entry.origin, CuLogOrigin::default());
         assert_eq!(entry.msg_index, 42);
     }
 

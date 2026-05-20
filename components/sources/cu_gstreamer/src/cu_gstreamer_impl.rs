@@ -168,13 +168,13 @@ impl<const N: usize> CuSrcTask for CuGStreamer<N> {
         Ok(s)
     }
 
-    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
-        debug!("Gstreamer: Starting pipeline.");
+    fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
+        debug!(ctx, "Gstreamer: Starting pipeline.");
         self.circular_buffer.lock().unwrap().clear();
         self.pipeline
             .set_state(gstreamer::State::Playing)
             .map_err(|e| CuError::new_with_cause("Failed to start the gstreamer pipeline.", e))?;
-        debug!("Gstreamer: Starting pipeline OK.");
+        debug!(ctx, "Gstreamer: Starting pipeline OK.");
         Ok(())
     }
 
@@ -185,7 +185,7 @@ impl<const N: usize> CuSrcTask for CuGStreamer<N> {
             new_msg.tov = ctx.now().into();
             new_msg.set_payload(buffer);
         } else {
-            debug!("Gstreamer: Empty circular buffer, sending no payload.");
+            debug!(ctx, "Gstreamer: Empty circular buffer, sending no payload.");
             new_msg.clear_payload();
         }
         Ok(())

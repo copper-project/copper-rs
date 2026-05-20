@@ -83,11 +83,11 @@ impl CuSinkTask for LEDSink {
     fn new(_: Option<&ComponentConfig>, _: Self::Resources<'_>) -> CuResult<Self> {
         Ok(Self)
     }
-    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         if let Some(&v) = input.payload().as_ref() {
             set_led(*v);
         }
-        info!("LEDSink got: {:?}", input.payload());
+        info!(ctx, "LEDSink got: {:?}", input.payload());
         Ok(())
     }
 }

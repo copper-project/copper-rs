@@ -2341,17 +2341,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             let decision = self.copper_runtime.monitor.process_error(cu29::monitoring::ComponentId::new(#index), CuComponentState::Start, &error);
                             match decision {
                                 Decision::Abort => {
-                                    debug!("Start: ABORT decision from monitoring. Component '{}' errored out \
+                                    debug!(ctx, "Start: ABORT decision from monitoring. Component '{}' errored out \
                                 during start. Aborting all the other starts.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#index)));
                                     return Ok(());
 
                                 }
                                 Decision::Ignore => {
-                                    debug!("Start: IGNORE decision from monitoring. Component '{}' errored out \
+                                    debug!(ctx, "Start: IGNORE decision from monitoring. Component '{}' errored out \
                                 during start. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#index)));
                                 }
                                 Decision::Shutdown => {
-                                    debug!("Start: SHUTDOWN decision from monitoring. Component '{}' errored out \
+                                    debug!(ctx, "Start: SHUTDOWN decision from monitoring. Component '{}' errored out \
                                 during start. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#index)));
                                     return Err(CuError::new_with_cause("Component errored out during start.", error));
                                 }
@@ -2402,17 +2402,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     let decision = self.copper_runtime.monitor.process_error(cu29::monitoring::ComponentId::new(#index), CuComponentState::Stop, &error);
                                     match decision {
                                         Decision::Abort => {
-                                            debug!("Stop: ABORT decision from monitoring. Component '{}' errored out \
+                                            debug!(ctx, "Stop: ABORT decision from monitoring. Component '{}' errored out \
                                     during stop. Aborting all the other starts.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#index)));
                                             return Ok(());
 
                                         }
                                         Decision::Ignore => {
-                                            debug!("Stop: IGNORE decision from monitoring. Component '{}' errored out \
+                                            debug!(ctx, "Stop: IGNORE decision from monitoring. Component '{}' errored out \
                                     during stop. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#index)));
                                         }
                                         Decision::Shutdown => {
-                                            debug!("Stop: SHUTDOWN decision from monitoring. Component '{}' errored out \
+                                            debug!(ctx, "Stop: SHUTDOWN decision from monitoring. Component '{}' errored out \
                                     during stop. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#index)));
                                             return Err(CuError::new_with_cause("Component errored out during stop.", error));
                                         }
@@ -2460,17 +2460,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#index), CuComponentState::Preprocess, &error);
                             match decision {
                                 Decision::Abort => {
-                                    debug!("Preprocess: ABORT decision from monitoring. Component '{}' errored out \
+                                    debug!(ctx, "Preprocess: ABORT decision from monitoring. Component '{}' errored out \
                                 during preprocess. Aborting all the other starts.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#index)));
                                     return Ok(());
 
                                 }
                                 Decision::Ignore => {
-                                    debug!("Preprocess: IGNORE decision from monitoring. Component '{}' errored out \
+                                    debug!(ctx, "Preprocess: IGNORE decision from monitoring. Component '{}' errored out \
                                 during preprocess. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#index)));
                                 }
                                 Decision::Shutdown => {
-                                    debug!("Preprocess: SHUTDOWN decision from monitoring. Component '{}' errored out \
+                                    debug!(ctx, "Preprocess: SHUTDOWN decision from monitoring. Component '{}' errored out \
                                 during preprocess. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#index)));
                                     return Err(CuError::new_with_cause("Component errored out during preprocess.", error));
                                 }
@@ -2518,17 +2518,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#index), CuComponentState::Postprocess, &error);
                             match decision {
                                 Decision::Abort => {
-                                    debug!("Postprocess: ABORT decision from monitoring. Component '{}' errored out \
+                                    debug!(ctx, "Postprocess: ABORT decision from monitoring. Component '{}' errored out \
                                 during postprocess. Aborting all the other starts.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#index)));
                                     return Ok(());
 
                                 }
                                 Decision::Ignore => {
-                                    debug!("Postprocess: IGNORE decision from monitoring. Component '{}' errored out \
+                                    debug!(ctx, "Postprocess: IGNORE decision from monitoring. Component '{}' errored out \
                                 during postprocess. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#index)));
                                 }
                                 Decision::Shutdown => {
-                                    debug!("Postprocess: SHUTDOWN decision from monitoring. Component '{}' errored out \
+                                    debug!(ctx, "Postprocess: SHUTDOWN decision from monitoring. Component '{}' errored out \
                                 during postprocess. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#index)));
                                     return Err(CuError::new_with_cause("Component errored out during postprocess.", error));
                                 }
@@ -2596,9 +2596,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let error: CuError = reason.into();
                                 let decision = self.copper_runtime.monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Start, &error);
                                 match decision {
-                                    Decision::Abort => { debug!("Start: ABORT decision from monitoring. Component '{}' errored out during start. Aborting all the other starts.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); return Ok(()); }
-                                    Decision::Ignore => { debug!("Start: IGNORE decision from monitoring. Component '{}' errored out during start. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); false }
-                                    Decision::Shutdown => { debug!("Start: SHUTDOWN decision from monitoring. Component '{}' errored out during start. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); return Err(CuError::new_with_cause("Component errored out during start.", error)); }
+                                    Decision::Abort => { debug!(ctx, "Start: ABORT decision from monitoring. Component '{}' errored out during start. Aborting all the other starts.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); return Ok(()); }
+                                    Decision::Ignore => { debug!(ctx, "Start: IGNORE decision from monitoring. Component '{}' errored out during start. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); false }
+                                    Decision::Shutdown => { debug!(ctx, "Start: SHUTDOWN decision from monitoring. Component '{}' errored out during start. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); return Err(CuError::new_with_cause("Component errored out during start.", error)); }
                                 }
                             } else {
                                 ovr == SimOverride::ExecuteByRuntime
@@ -2619,20 +2619,21 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 culistid: None,
                             }
                         );
+                        ctx.set_current_component(#monitor_index);
                         ctx.clear_current_task();
                         let bridge = &mut self.copper_runtime.bridges.#bridge_index;
                         if let Err(error) = bridge.start(&ctx) {
                             let decision = self.copper_runtime.monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Start, &error);
                             match decision {
                                 Decision::Abort => {
-                                    debug!("Start: ABORT decision from monitoring. Component '{}' errored out during start. Aborting all the other starts.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                    debug!(ctx, "Start: ABORT decision from monitoring. Component '{}' errored out during start. Aborting all the other starts.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
                                     return Ok(());
                                 }
                                 Decision::Ignore => {
-                                    debug!("Start: IGNORE decision from monitoring. Component '{}' errored out during start. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                    debug!(ctx, "Start: IGNORE decision from monitoring. Component '{}' errored out during start. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
                                 }
                                 Decision::Shutdown => {
-                                    debug!("Start: SHUTDOWN decision from monitoring. Component '{}' errored out during start. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                    debug!(ctx, "Start: SHUTDOWN decision from monitoring. Component '{}' errored out during start. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
                                     return Err(CuError::new_with_cause("Component errored out during start.", error));
                                 }
                             }
@@ -2663,9 +2664,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let error: CuError = reason.into();
                                 let decision = self.copper_runtime.monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Stop, &error);
                                 match decision {
-                                    Decision::Abort => { debug!("Stop: ABORT decision from monitoring. Component '{}' errored out during stop. Aborting all the other stops.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); return Ok(()); }
-                                    Decision::Ignore => { debug!("Stop: IGNORE decision from monitoring. Component '{}' errored out during stop. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); false }
-                                    Decision::Shutdown => { debug!("Stop: SHUTDOWN decision from monitoring. Component '{}' errored out during stop. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); return Err(CuError::new_with_cause("Component errored out during stop.", error)); }
+                                    Decision::Abort => { debug!(ctx, "Stop: ABORT decision from monitoring. Component '{}' errored out during stop. Aborting all the other stops.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); return Ok(()); }
+                                    Decision::Ignore => { debug!(ctx, "Stop: IGNORE decision from monitoring. Component '{}' errored out during stop. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); false }
+                                    Decision::Shutdown => { debug!(ctx, "Stop: SHUTDOWN decision from monitoring. Component '{}' errored out during stop. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); return Err(CuError::new_with_cause("Component errored out during stop.", error)); }
                                 }
                             } else {
                                 ovr == SimOverride::ExecuteByRuntime
@@ -2686,20 +2687,21 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 culistid: None,
                             }
                         );
+                        ctx.set_current_component(#monitor_index);
                         ctx.clear_current_task();
                         let bridge = &mut self.copper_runtime.bridges.#bridge_index;
                         if let Err(error) = bridge.stop(&ctx) {
                             let decision = self.copper_runtime.monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Stop, &error);
                             match decision {
                                 Decision::Abort => {
-                                    debug!("Stop: ABORT decision from monitoring. Component '{}' errored out during stop. Aborting all the other stops.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                    debug!(ctx, "Stop: ABORT decision from monitoring. Component '{}' errored out during stop. Aborting all the other stops.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
                                     return Ok(());
                                 }
                                 Decision::Ignore => {
-                                    debug!("Stop: IGNORE decision from monitoring. Component '{}' errored out during stop. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                    debug!(ctx, "Stop: IGNORE decision from monitoring. Component '{}' errored out during stop. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
                                 }
                                 Decision::Shutdown => {
-                                    debug!("Stop: SHUTDOWN decision from monitoring. Component '{}' errored out during stop. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                    debug!(ctx, "Stop: SHUTDOWN decision from monitoring. Component '{}' errored out during stop. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
                                     return Err(CuError::new_with_cause("Component errored out during stop.", error));
                                 }
                             }
@@ -2730,9 +2732,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let error: CuError = reason.into();
                                 let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Preprocess, &error);
                                 match decision {
-                                    Decision::Abort => { debug!("Preprocess: ABORT decision from monitoring. Component '{}' errored out during preprocess. Aborting all the other starts.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); return Ok(()); }
-                                    Decision::Ignore => { debug!("Preprocess: IGNORE decision from monitoring. Component '{}' errored out during preprocess. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); false }
-                                    Decision::Shutdown => { debug!("Preprocess: SHUTDOWN decision from monitoring. Component '{}' errored out during preprocess. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); return Err(CuError::new_with_cause("Component errored out during preprocess.", error)); }
+                                    Decision::Abort => { debug!(ctx, "Preprocess: ABORT decision from monitoring. Component '{}' errored out during preprocess. Aborting all the other starts.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); return Ok(()); }
+                                    Decision::Ignore => { debug!(ctx, "Preprocess: IGNORE decision from monitoring. Component '{}' errored out during preprocess. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); false }
+                                    Decision::Shutdown => { debug!(ctx, "Preprocess: SHUTDOWN decision from monitoring. Component '{}' errored out during preprocess. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); return Err(CuError::new_with_cause("Component errored out during preprocess.", error)); }
                                 }
                             } else {
                                 ovr == SimOverride::ExecuteByRuntime
@@ -2746,6 +2748,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     {
                         #call_sim
                         if doit {
+                            ctx.set_current_component(#monitor_index);
                             ctx.clear_current_task();
                             let bridge = &mut __cu_bridges.#bridge_index;
                             execution_probe.record(cu29::monitoring::ExecutionMarker {
@@ -2761,14 +2764,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Preprocess, &error);
                                 match decision {
                                     Decision::Abort => {
-                                        debug!("Preprocess: ABORT decision from monitoring. Component '{}' errored out during preprocess. Aborting all the other starts.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                        debug!(ctx, "Preprocess: ABORT decision from monitoring. Component '{}' errored out during preprocess. Aborting all the other starts.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
                                         return Ok(());
                                     }
                                     Decision::Ignore => {
-                                        debug!("Preprocess: IGNORE decision from monitoring. Component '{}' errored out during preprocess. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                        debug!(ctx, "Preprocess: IGNORE decision from monitoring. Component '{}' errored out during preprocess. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
                                     }
                                     Decision::Shutdown => {
-                                        debug!("Preprocess: SHUTDOWN decision from monitoring. Component '{}' errored out during preprocess. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                        debug!(ctx, "Preprocess: SHUTDOWN decision from monitoring. Component '{}' errored out during preprocess. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
                                         return Err(CuError::new_with_cause("Component errored out during preprocess.", error));
                                     }
                                 }
@@ -2800,9 +2803,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let error: CuError = reason.into();
                                 let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Postprocess, &error);
                                 match decision {
-                                    Decision::Abort => { debug!("Postprocess: ABORT decision from monitoring. Component '{}' errored out during postprocess. Aborting all the other starts.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); return Ok(()); }
-                                    Decision::Ignore => { debug!("Postprocess: IGNORE decision from monitoring. Component '{}' errored out during postprocess. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); false }
-                                    Decision::Shutdown => { debug!("Postprocess: SHUTDOWN decision from monitoring. Component '{}' errored out during postprocess. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); return Err(CuError::new_with_cause("Component errored out during postprocess.", error)); }
+                                    Decision::Abort => { debug!(ctx, "Postprocess: ABORT decision from monitoring. Component '{}' errored out during postprocess. Aborting all the other starts.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); return Ok(()); }
+                                    Decision::Ignore => { debug!(ctx, "Postprocess: IGNORE decision from monitoring. Component '{}' errored out during postprocess. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); false }
+                                    Decision::Shutdown => { debug!(ctx, "Postprocess: SHUTDOWN decision from monitoring. Component '{}' errored out during postprocess. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index))); return Err(CuError::new_with_cause("Component errored out during postprocess.", error)); }
                                 }
                             } else {
                                 ovr == SimOverride::ExecuteByRuntime
@@ -2816,6 +2819,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     {
                         #call_sim
                         if doit {
+                            ctx.set_current_component(#monitor_index);
                             ctx.clear_current_task();
                             let bridge = &mut __cu_bridges.#bridge_index;
                             kf_manager.freeze_any(clid, bridge)?;
@@ -2832,14 +2836,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Postprocess, &error);
                                 match decision {
                                     Decision::Abort => {
-                                        debug!("Postprocess: ABORT decision from monitoring. Component '{}' errored out during postprocess. Aborting all the other starts.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                        debug!(ctx, "Postprocess: ABORT decision from monitoring. Component '{}' errored out during postprocess. Aborting all the other starts.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
                                         return Ok(());
                                     }
                                     Decision::Ignore => {
-                                        debug!("Postprocess: IGNORE decision from monitoring. Component '{}' errored out during postprocess. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                        debug!(ctx, "Postprocess: IGNORE decision from monitoring. Component '{}' errored out during postprocess. The runtime will continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
                                     }
                                     Decision::Shutdown => {
-                                        debug!("Postprocess: SHUTDOWN decision from monitoring. Component '{}' errored out during postprocess. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                        debug!(ctx, "Postprocess: SHUTDOWN decision from monitoring. Component '{}' errored out during postprocess. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
                                         return Err(CuError::new_with_cause("Component errored out during postprocess.", error));
                                     }
                                 }
@@ -4008,6 +4012,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             subsystem_code,
                                             #mission_mod::TASK_IDS,
                                         );
+                                        commit_ctx.clear_current_component();
                                         commit_ctx.clear_current_task();
                                         let monitor_result = monitor.process_copperlist(
                                             &commit_ctx,
@@ -4033,6 +4038,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             subsystem_code,
                                             #mission_mod::TASK_IDS,
                                         );
+                                        commit_ctx.clear_current_component();
                                         commit_ctx.clear_current_task();
                                         let monitor_result = monitor.process_copperlist(
                                             &commit_ctx,
@@ -4177,12 +4183,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
                 } // drop(msgs);
                 if __cu_abort_copperlist {
+                    ctx.clear_current_component();
                     ctx.clear_current_task();
                     let monitor_result = monitor.process_copperlist(&ctx, #mission_mod::MONITOR_LAYOUT.view(&#mission_mod::collect_metadata(&culist)));
                     cl_manager.end_of_processing(clid)?;
                     monitor_result?;
                     return Ok(());
                 }
+                ctx.clear_current_component();
                 ctx.clear_current_task();
                 let monitor_result = monitor.process_copperlist(&ctx, #mission_mod::MONITOR_LAYOUT.view(&#mission_mod::collect_metadata(&culist)));
 
@@ -4234,6 +4242,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #mission_mod::TASK_IDS,
                 );
                 #(#start_calls)*
+                ctx.clear_current_component();
                 ctx.clear_current_task();
                 self.copper_runtime.monitor.start(&ctx)?;
                 Ok(())
@@ -4249,6 +4258,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #mission_mod::TASK_IDS,
                 );
                 #(#stop_calls)*
+                ctx.clear_current_component();
                 ctx.clear_current_task();
                 self.copper_runtime.monitor.stop(&ctx)?;
                 self.copper_runtime.copperlists_manager.finish_pending()?;
@@ -7655,7 +7665,7 @@ fn parallel_task_lifecycle_tokens(
                 );
                 match decision {
                     Decision::Abort => {
-                        debug!(
+                        debug!(ctx,
                             "Preprocess: ABORT decision from monitoring. Component '{}' errored out during preprocess. Aborting CopperList {}.",
                             #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#component_index)),
                             clid
@@ -7663,13 +7673,13 @@ fn parallel_task_lifecycle_tokens(
                         #abort_process_step
                     }
                     Decision::Ignore => {
-                        debug!(
+                        debug!(ctx,
                             "Preprocess: IGNORE decision from monitoring. Component '{}' errored out during preprocess. The runtime will continue.",
                             #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#component_index))
                         );
                     }
                     Decision::Shutdown => {
-                        debug!(
+                        debug!(ctx,
                             "Preprocess: SHUTDOWN decision from monitoring. Component '{}' errored out during preprocess. The runtime cannot continue.",
                             #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#component_index))
                         );
@@ -7705,19 +7715,19 @@ fn parallel_task_lifecycle_tokens(
                 );
                 match decision {
                     Decision::Abort => {
-                        debug!(
+                        debug!(ctx,
                             "Postprocess: ABORT decision from monitoring. Component '{}' errored out during postprocess. Continuing with the completed CopperList.",
                             #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#component_index))
                         );
                     }
                     Decision::Ignore => {
-                        debug!(
+                        debug!(ctx,
                             "Postprocess: IGNORE decision from monitoring. Component '{}' errored out during postprocess. The runtime will continue.",
                             #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#component_index))
                         );
                     }
                     Decision::Shutdown => {
-                        debug!(
+                        debug!(ctx,
                             "Postprocess: SHUTDOWN decision from monitoring. Component '{}' errored out during postprocess. The runtime cannot continue.",
                             #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#component_index))
                         );
@@ -7752,6 +7762,7 @@ fn parallel_bridge_lifecycle_tokens(
                 step: CuComponentState::Preprocess,
                 culistid: Some(clid),
             });
+            ctx.set_current_component(#component_index);
             ctx.clear_current_task();
             let maybe_error = {
                 #rt_guard
@@ -7765,7 +7776,7 @@ fn parallel_bridge_lifecycle_tokens(
                 );
                 match decision {
                     Decision::Abort => {
-                        debug!(
+                        debug!(ctx,
                             "Preprocess: ABORT decision from monitoring. Component '{}' errored out during preprocess. Aborting CopperList {}.",
                             #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#component_index)),
                             clid
@@ -7773,13 +7784,13 @@ fn parallel_bridge_lifecycle_tokens(
                         #abort_process_step
                     }
                     Decision::Ignore => {
-                        debug!(
+                        debug!(ctx,
                             "Preprocess: IGNORE decision from monitoring. Component '{}' errored out during preprocess. The runtime will continue.",
                             #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#component_index))
                         );
                     }
                     Decision::Shutdown => {
-                        debug!(
+                        debug!(ctx,
                             "Preprocess: SHUTDOWN decision from monitoring. Component '{}' errored out during preprocess. The runtime cannot continue.",
                             #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#component_index))
                         );
@@ -7803,6 +7814,7 @@ fn parallel_bridge_lifecycle_tokens(
                 step: CuComponentState::Postprocess,
                 culistid: Some(clid),
             });
+            ctx.set_current_component(#component_index);
             ctx.clear_current_task();
             let maybe_error = {
                 #rt_guard
@@ -7816,19 +7828,19 @@ fn parallel_bridge_lifecycle_tokens(
                 );
                 match decision {
                     Decision::Abort => {
-                        debug!(
+                        debug!(ctx,
                             "Postprocess: ABORT decision from monitoring. Component '{}' errored out during postprocess. Continuing with the completed CopperList.",
                             #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#component_index))
                         );
                     }
                     Decision::Ignore => {
-                        debug!(
+                        debug!(ctx,
                             "Postprocess: IGNORE decision from monitoring. Component '{}' errored out during postprocess. The runtime will continue.",
                             #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#component_index))
                         );
                     }
                     Decision::Shutdown => {
-                        debug!(
+                        debug!(ctx,
                             "Postprocess: SHUTDOWN decision from monitoring. Component '{}' errored out during postprocess. The runtime cannot continue.",
                             #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#component_index))
                         );
@@ -8009,22 +8021,22 @@ fn generate_task_execution_tokens(
     match step.task_type {
         CuTaskType::Source => {
             let monitoring_action = quote! {
-                debug!("Component {}: Error during process: {}", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)), &error);
+                debug!(ctx, "Component {}: Error during process: {}", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)), &error);
                 let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#tid), CuComponentState::Process, &error);
                 match decision {
                     Decision::Abort => {
-                        debug!("Process: ABORT decision from monitoring. Component '{}' errored out \
+                        debug!(ctx, "Process: ABORT decision from monitoring. Component '{}' errored out \
                                 during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)), clid);
                         #abort_process_step
                     }
                     Decision::Ignore => {
-                        debug!("Process: IGNORE decision from monitoring. Component '{}' errored out \
+                        debug!(ctx, "Process: IGNORE decision from monitoring. Component '{}' errored out \
                                 during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)));
                         let cumsg_output = &mut msgs.#output_culist_index;
                         #output_clear_payload
                     }
                     Decision::Shutdown => {
-                        debug!("Process: SHUTDOWN decision from monitoring. Component '{}' errored out \
+                        debug!(ctx, "Process: SHUTDOWN decision from monitoring. Component '{}' errored out \
                                 during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)));
                         return Err(CuError::new_with_cause("Component errored out during process.", error));
                     }
@@ -8137,22 +8149,22 @@ fn generate_task_execution_tokens(
             );
 
             let monitoring_action = quote! {
-                debug!("Component {}: Error during process: {}", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)), &error);
+                debug!(ctx, "Component {}: Error during process: {}", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)), &error);
                 let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#tid), CuComponentState::Process, &error);
                 match decision {
                     Decision::Abort => {
-                        debug!("Process: ABORT decision from monitoring. Component '{}' errored out \
+                        debug!(ctx, "Process: ABORT decision from monitoring. Component '{}' errored out \
                                 during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)), clid);
                         #abort_process_step
                     }
                     Decision::Ignore => {
-                        debug!("Process: IGNORE decision from monitoring. Component '{}' errored out \
+                        debug!(ctx, "Process: IGNORE decision from monitoring. Component '{}' errored out \
                                 during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)));
                         let cumsg_output = &mut msgs.#output_culist_index;
                         #output_clear_payload
                     }
                     Decision::Shutdown => {
-                        debug!("Process: SHUTDOWN decision from monitoring. Component '{}' errored out \
+                        debug!(ctx, "Process: SHUTDOWN decision from monitoring. Component '{}' errored out \
                                 during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)));
                         return Err(CuError::new_with_cause("Component errored out during process.", error));
                     }
@@ -8230,22 +8242,22 @@ fn generate_task_execution_tokens(
             );
 
             let monitoring_action = quote! {
-                debug!("Component {}: Error during process: {}", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)), &error);
+                debug!(ctx, "Component {}: Error during process: {}", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)), &error);
                 let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#tid), CuComponentState::Process, &error);
                 match decision {
                     Decision::Abort => {
-                        debug!("Process: ABORT decision from monitoring. Component '{}' errored out \
+                        debug!(ctx, "Process: ABORT decision from monitoring. Component '{}' errored out \
                                 during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)), clid);
                         #abort_process_step
                     }
                     Decision::Ignore => {
-                        debug!("Process: IGNORE decision from monitoring. Component '{}' errored out \
+                        debug!(ctx, "Process: IGNORE decision from monitoring. Component '{}' errored out \
                                 during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)));
                         let cumsg_output = &mut msgs.#output_culist_index;
                         #output_clear_payload
                     }
                     Decision::Shutdown => {
-                        debug!("Process: SHUTDOWN decision from monitoring. Component '{}' errored out \
+                        debug!(ctx, "Process: SHUTDOWN decision from monitoring. Component '{}' errored out \
                                 during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)));
                         return Err(CuError::new_with_cause("Component errored out during process.", error));
                     }
@@ -8426,16 +8438,16 @@ fn generate_bridge_rx_execution_tokens(
                     let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Process, &error);
                     match decision {
                         Decision::Abort => {
-                            debug!("Process: ABORT decision from monitoring. Component '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)), clid);
+                            debug!(ctx, "Process: ABORT decision from monitoring. Component '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)), clid);
                             #abort_process_step
                         }
                         Decision::Ignore => {
-                            debug!("Process: IGNORE decision from monitoring. Component '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                            debug!(ctx, "Process: IGNORE decision from monitoring. Component '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
                             cumsg_output.clear_payload();
                             false
                         }
                         Decision::Shutdown => {
-                            debug!("Process: SHUTDOWN decision from monitoring. Component '{}' errored out during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                            debug!(ctx, "Process: SHUTDOWN decision from monitoring. Component '{}' errored out during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
                             return Err(CuError::new_with_cause("Component errored out during process.", error));
                         }
                     }
@@ -8464,6 +8476,7 @@ fn generate_bridge_rx_execution_tokens(
                     cumsg_output.metadata.process_time.start = cu29::curuntime::perf_now(clock).into();
                     let maybe_error = {
                         #rt_guard
+                        ctx.set_current_component(#monitor_index);
                         ctx.clear_current_task();
                         bridge.receive(
                             &ctx,
@@ -8476,15 +8489,15 @@ fn generate_bridge_rx_execution_tokens(
                         let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Process, &error);
                         match decision {
                             Decision::Abort => {
-                                debug!("Process: ABORT decision from monitoring. Component '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)), clid);
+                                debug!(ctx, "Process: ABORT decision from monitoring. Component '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)), clid);
                                 #abort_process_step
                             }
                             Decision::Ignore => {
-                                debug!("Process: IGNORE decision from monitoring. Component '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                debug!(ctx, "Process: IGNORE decision from monitoring. Component '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
                                 cumsg_output.clear_payload();
                             }
                             Decision::Shutdown => {
-                                debug!("Process: SHUTDOWN decision from monitoring. Component '{}' errored out during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                debug!(ctx, "Process: SHUTDOWN decision from monitoring. Component '{}' errored out during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
                                 return Err(CuError::new_with_cause("Component errored out during process.", error));
                             }
                         }
@@ -8584,15 +8597,15 @@ fn generate_bridge_tx_execution_tokens(
                     let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Process, &error);
                     match decision {
                         Decision::Abort => {
-                            debug!("Process: ABORT decision from monitoring. Component '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)), clid);
+                            debug!(ctx, "Process: ABORT decision from monitoring. Component '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)), clid);
                             #abort_process_step
                         }
                         Decision::Ignore => {
-                            debug!("Process: IGNORE decision from monitoring. Component '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                            debug!(ctx, "Process: IGNORE decision from monitoring. Component '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
                             false
                         }
                         Decision::Shutdown => {
-                            debug!("Process: SHUTDOWN decision from monitoring. Component '{}' errored out during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                            debug!(ctx, "Process: SHUTDOWN decision from monitoring. Component '{}' errored out during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
                             return Err(CuError::new_with_cause("Component errored out during process.", error));
                         }
                     }
@@ -8624,6 +8637,7 @@ fn generate_bridge_tx_execution_tokens(
                     let maybe_error = if bridge_channel.should_send(cumsg_input.payload().is_some()) {
                         {
                             #rt_guard
+                            ctx.set_current_component(#monitor_index);
                             ctx.clear_current_task();
                             bridge.send(
                                 &ctx,
@@ -8638,14 +8652,14 @@ fn generate_bridge_tx_execution_tokens(
                         let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Process, &error);
                         match decision {
                             Decision::Abort => {
-                                debug!("Process: ABORT decision from monitoring. Component '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)), clid);
+                                debug!(ctx, "Process: ABORT decision from monitoring. Component '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)), clid);
                                 #abort_process_step
                             }
                             Decision::Ignore => {
-                                debug!("Process: IGNORE decision from monitoring. Component '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                debug!(ctx, "Process: IGNORE decision from monitoring. Component '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
                             }
                             Decision::Shutdown => {
-                                debug!("Process: SHUTDOWN decision from monitoring. Component '{}' errored out during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
+                                debug!(ctx, "Process: SHUTDOWN decision from monitoring. Component '{}' errored out during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#monitor_index)));
                                 return Err(CuError::new_with_cause("Component errored out during process.", error));
                             }
                         }

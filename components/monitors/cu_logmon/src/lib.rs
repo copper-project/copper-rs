@@ -247,7 +247,10 @@ impl CuMonitor for CuLogMon {
     fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
         let mut window = self.window.lock();
         window.last_report_at = Some(ctx.recent());
-        info!("cu_logmon started ({} components)", self.component_count);
+        info!(
+            ctx,
+            "cu_logmon started ({} components)", self.component_count
+        );
 
         // Also listen to structured logs and print them with color.
         #[cfg(all(feature = "std", debug_assertions))]
@@ -368,9 +371,9 @@ impl CuMonitor for CuLogMon {
                     top4 = snapshot.top4,
                     overhead = snapshot.overhead_us,
                 );
-                info!("{}", &colored);
+                info!(ctx, "{}", &colored);
             } else {
-                info!("{}", &base);
+                info!(ctx, "{}", &base);
             }
             let log_end = ctx.recent();
             self.window.lock().last_log_duration = log_end - log_start;

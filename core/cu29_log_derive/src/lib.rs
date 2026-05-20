@@ -16,18 +16,97 @@ use syn::parse::Parser;
 use syn::spanned::Spanned;
 use syn::{Expr, ExprLit, Lit};
 
+struct ParsedLogArgs<'a> {
+    context_expr: Option<&'a Expr>,
+    msg_expr: &'a Expr,
+    param_exprs: Vec<&'a Expr>,
+}
+
+fn parse_log_exprs(
+    input: TokenStream,
+) -> syn::Result<syn::punctuated::Punctuated<Expr, syn::Token![,]>> {
+    let parser = syn::punctuated::Punctuated::<Expr, syn::Token![,]>::parse_terminated;
+    parser.parse(input)
+}
+
+fn parse_log_args<'a>(
+    exprs: &'a syn::punctuated::Punctuated<Expr, syn::Token![,]>,
+) -> syn::Result<ParsedLogArgs<'a>> {
+    let Some(first_expr) = exprs.first() else {
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "Expected at least one expression",
+        ));
+    };
+
+    let (context_expr, msg_expr, msg_index) = if matches!(
+        first_expr,
+        Expr::Lit(ExprLit {
+            lit: Lit::Str(_),
+            ..
+        })
+    ) {
+        (None, first_expr, 0)
+    } else {
+        let Some(second_expr) = exprs.iter().nth(1) else {
+            return Err(syn::Error::new_spanned(
+                first_expr,
+                "Expected a string literal as the first argument, or as the second argument after a CuContext expression.",
+            ));
+        };
+        if matches!(
+            second_expr,
+            Expr::Lit(ExprLit {
+                lit: Lit::Str(_),
+                ..
+            })
+        ) {
+            (Some(first_expr), second_expr, 1)
+        } else {
+            return Err(syn::Error::new_spanned(
+                second_expr,
+                "Expected a string literal as the first argument, or as the second argument after a CuContext expression.",
+            ));
+        }
+    };
+
+    Ok(ParsedLogArgs {
+        context_expr,
+        msg_expr,
+        param_exprs: exprs.iter().skip(msg_index + 1).collect(),
+    })
+}
+
 /// Create reference of unused_variables to avoid warnings
 /// ex: let _ = &tmp;
 #[allow(unused)]
 fn reference_unused_variables(input: TokenStream) -> TokenStream {
     // Attempt to parse the expressions to "use" them.
     // This ensures variables passed to the macro are considered used by the compiler.
-    let parser = syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated;
-    if let Ok(exprs) = parser.parse(input.clone()) {
+    if let Ok(exprs) = parse_log_exprs(input.clone())
+        && let Ok(parsed) = parse_log_args(&exprs)
+    {
         let mut var_usages = Vec::new();
-        // Skip the first expression, which is assumed to be the format string literal.
-        // We only care about "using" the subsequent variable arguments.
-        for expr in exprs.iter().skip(1) {
+        if let Some(context_expr) = parsed.context_expr {
+            var_usages.push(quote::quote! { let _ = &#context_expr; });
+        }
+        for expr in parsed.param_exprs {
+            match expr {
+                syn::Expr::Assign(assign_expr) => {
+                    let value_expr = &assign_expr.right;
+                    var_usages.push(quote::quote! { let _ = &#value_expr; });
+                }
+                _ => {
+                    var_usages.push(quote::quote! { let _ = &#expr; });
+                }
+            }
+        }
+        return quote::quote! { { #(#var_usages;)* } }.into();
+    }
+
+    if let Ok(exprs) = parse_log_exprs(input.clone()) {
+        let mut var_usages = Vec::new();
+        for expr in exprs.iter() {
             match expr {
                 // If the argument is an assignment (e.g., `foo = bar`),
                 // we need to ensure `bar` (the right-hand side) is "used".
@@ -97,29 +176,21 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
     use quote::quote;
     use syn::{Expr, ExprAssign, ExprLit, Lit, Token};
 
-    let parser = syn::punctuated::Punctuated::<Expr, Token![,]>::parse_terminated;
-    let exprs = match parser.parse(input) {
+    let exprs = match parse_log_exprs(input) {
         Ok(exprs) => exprs,
         Err(err) => return err.to_compile_error().into(),
     };
-    let mut exprs_iter = exprs.iter();
+    let parsed = match parse_log_args(&exprs) {
+        Ok(parsed) => parsed,
+        Err(err) => return err.to_compile_error().into(),
+    };
 
     #[cfg(not(feature = "std"))]
     const STD: bool = false;
     #[cfg(feature = "std")]
     const STD: bool = true;
 
-    let msg_expr = match exprs_iter.next() {
-        Some(expr) => expr,
-        None => {
-            return syn::Error::new(
-                proc_macro2::Span::call_site(),
-                "Expected at least one expression",
-            )
-            .to_compile_error()
-            .into();
-        }
-    };
+    let msg_expr = parsed.msg_expr;
     let (index, msg_str) = if let Expr::Lit(ExprLit {
         lit: Lit::Str(msg), ..
     }) = msg_expr
@@ -163,7 +234,7 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
     let mut unnamed_params = Vec::<&Expr>::new();
     let mut named_params = Vec::<(&Expr, &Expr)>::new();
 
-    for expr in exprs_iter {
+    for expr in parsed.param_exprs {
         if let Expr::Assign(ExprAssign { left, right, .. }) = expr {
             named_params.push((left, right));
         } else {
@@ -315,9 +386,23 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
     #[cfg(not(feature = "textlogs"))]
     let maybe_inject_defmt: Option<TokenStream2> = None; // defmt emission disabled
 
+    let maybe_inject_origin: Option<TokenStream2> = parsed.context_expr.map(|ctx_expr| {
+        quote! {
+            let __cu29_log_ctx = &#ctx_expr;
+            log_entry.set_origin(
+                Some(__cu29_log_ctx.cl_id()),
+                __cu29_log_ctx
+                    .current_component_id()
+                    .map(|component_id| component_id as u32),
+                __cu29_log_ctx.task_index().map(|task_index| task_index as u32),
+            );
+        }
+    });
+
     // Emit both: defmt (conditionally) + Copper structured logging
     quote! {{
         let mut log_entry = CuLogEntry::new(#index, CuLogLevel::#level_ident);
+        #maybe_inject_origin
         #(#unnamed_prints)*
         #(#named_prints)*
 
@@ -329,19 +414,31 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
     .into()
 }
 
-/// This macro is used to log a debug message with parameters.
-/// The first parameter is a string literal that represents the message to be logged.
-/// Only `{}` is supported as a placeholder for parameters.
-/// The rest of the parameters are the values to be logged.
-/// The parameters can be named or unnamed.
-/// Named parameters are specified as `name = value`.
-/// Unnamed parameters are specified as `value`.
+/// Log a debug message as a Copper structured log entry.
+///
+/// Accepted forms:
+/// - `debug!("message {}", value)`
+/// - `debug!(ctx, "message {}", value)`
+///
+/// When a `CuContext` is passed as the first argument, the
+/// emitted structured log entry also captures the current Copper callback origin:
+/// - `culistid`
+/// - `component_id`
+/// - `task_index` when the callback is running inside a task
+///
+/// The message argument must be a string literal. Only `{}` placeholders are supported.
+/// Remaining arguments can be unnamed expressions or named fields written as `name = value`.
+///
 /// # Example
 /// ```ignore
 /// use cu29_log_derive::debug;
 /// let a = 1;
 /// let b = 2;
 /// debug!("a = {}, b = {}", my_value = a, b); // named and unnamed parameters
+///
+/// # fn run(ctx: &cu29::context::CuContext) {
+/// debug!(ctx, "processing {}", b); // same log plus runtime origin metadata
+/// # }
 /// ```
 ///
 /// You can retrieve this data using the log_reader generated with your project and giving it the
@@ -357,38 +454,63 @@ pub fn debug(input: TokenStream) -> TokenStream {
     create_log_entry(input, CuLogLevel::Debug)
 }
 
-/// This macro is used to log an info message with parameters.
-/// The first parameter is a string literal that represents the message to be logged.
-/// Only `{}` is supported as a placeholder for parameters.
-/// The rest of the parameters are the values to be logged.
+/// Log an info message as a Copper structured log entry.
+///
+/// Accepted forms:
+/// - `info!("message {}", value)`
+/// - `info!(ctx, "message {}", value)`
+///
+/// Passing a `CuContext` as the first argument records the
+/// current `culistid`, `component_id`, and `task_index` (when present) on the structured log
+/// entry. The message argument must be a string literal, and remaining arguments may be unnamed
+/// expressions or named fields written as `name = value`.
 ///
 /// This macro will be compiled out if the max log level is set to a level higher than Info.
-#[cfg(any(feature = "log-level-debug", feature = "log-level-info",))]
+#[cfg(any(
+    feature = "log-level-debug",
+    feature = "log-level-info",
+    cu29_default_log_level_debug,
+    cu29_default_log_level_info,
+))]
 #[proc_macro]
 pub fn info(input: TokenStream) -> TokenStream {
     create_log_entry(input, CuLogLevel::Info)
 }
 
-/// This macro is used to log a warning message with parameters.
-/// The first parameter is a string literal that represents the message to be logged.
-/// Only `{}` is supported as a placeholder for parameters.
-/// The rest of the parameters are the values to be logged.
+/// Log a warning message as a Copper structured log entry.
+///
+/// Accepted forms:
+/// - `warning!("message {}", value)`
+/// - `warning!(ctx, "message {}", value)`
+///
+/// Passing a `CuContext` as the first argument records the
+/// current `culistid`, `component_id`, and `task_index` (when present) on the structured log
+/// entry. The message argument must be a string literal, and remaining arguments may be unnamed
+/// expressions or named fields written as `name = value`.
 ///
 /// This macro will be compiled out if the max log level is set to a level higher than Warning.
 #[cfg(any(
     feature = "log-level-debug",
     feature = "log-level-info",
     feature = "log-level-warning",
+    cu29_default_log_level_debug,
+    cu29_default_log_level_info,
 ))]
 #[proc_macro]
 pub fn warning(input: TokenStream) -> TokenStream {
     create_log_entry(input, CuLogLevel::Warning)
 }
 
-/// This macro is used to log an error message with parameters.
-/// The first parameter is a string literal that represents the message to be logged.
-/// Only `{}` is supported as a placeholder for parameters.
-/// The rest of the parameters are the values to be logged.
+/// Log an error message as a Copper structured log entry.
+///
+/// Accepted forms:
+/// - `error!("message {}", value)`
+/// - `error!(ctx, "message {}", value)`
+///
+/// Passing a `CuContext` as the first argument records the
+/// current `culistid`, `component_id`, and `task_index` (when present) on the structured log
+/// entry. The message argument must be a string literal, and remaining arguments may be unnamed
+/// expressions or named fields written as `name = value`.
 ///
 /// This macro will be compiled out if the max log level is set to a level higher than Error.
 #[cfg(any(
@@ -396,16 +518,24 @@ pub fn warning(input: TokenStream) -> TokenStream {
     feature = "log-level-info",
     feature = "log-level-warning",
     feature = "log-level-error",
+    cu29_default_log_level_debug,
+    cu29_default_log_level_info,
 ))]
 #[proc_macro]
 pub fn error(input: TokenStream) -> TokenStream {
     create_log_entry(input, CuLogLevel::Error)
 }
 
-/// This macro is used to log a critical message with parameters.
-/// The first parameter is a string literal that represents the message to be logged.
-/// Only `{}` is supported as a placeholder for parameters.
-/// The rest of the parameters are the values to be logged.
+/// Log a critical message as a Copper structured log entry.
+///
+/// Accepted forms:
+/// - `critical!("message {}", value)`
+/// - `critical!(ctx, "message {}", value)`
+///
+/// Passing a `CuContext` as the first argument records the
+/// current `culistid`, `component_id`, and `task_index` (when present) on the structured log
+/// entry. The message argument must be a string literal, and remaining arguments may be unnamed
+/// expressions or named fields written as `name = value`.
 ///
 /// This macro is always compiled in, regardless of the max log level setting.
 #[cfg(any(
@@ -414,6 +544,8 @@ pub fn error(input: TokenStream) -> TokenStream {
     feature = "log-level-warning",
     feature = "log-level-error",
     feature = "log-level-critical",
+    cu29_default_log_level_debug,
+    cu29_default_log_level_info,
 ))]
 #[proc_macro]
 pub fn critical(input: TokenStream) -> TokenStream {
@@ -427,7 +559,12 @@ pub fn debug(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     reference_unused_variables(input)
 }
 
-#[cfg(not(any(feature = "log-level-debug", feature = "log-level-info",)))]
+#[cfg(not(any(
+    feature = "log-level-debug",
+    feature = "log-level-info",
+    cu29_default_log_level_debug,
+    cu29_default_log_level_info,
+)))]
 #[proc_macro]
 pub fn info(input: TokenStream) -> TokenStream {
     reference_unused_variables(input)
@@ -437,6 +574,8 @@ pub fn info(input: TokenStream) -> TokenStream {
     feature = "log-level-debug",
     feature = "log-level-info",
     feature = "log-level-warning",
+    cu29_default_log_level_debug,
+    cu29_default_log_level_info,
 )))]
 #[proc_macro]
 pub fn warning(input: TokenStream) -> TokenStream {
@@ -448,6 +587,8 @@ pub fn warning(input: TokenStream) -> TokenStream {
     feature = "log-level-info",
     feature = "log-level-warning",
     feature = "log-level-error",
+    cu29_default_log_level_debug,
+    cu29_default_log_level_info,
 )))]
 #[proc_macro]
 pub fn error(input: TokenStream) -> TokenStream {
@@ -460,6 +601,8 @@ pub fn error(input: TokenStream) -> TokenStream {
     feature = "log-level-warning",
     feature = "log-level-error",
     feature = "log-level-critical",
+    cu29_default_log_level_debug,
+    cu29_default_log_level_info,
 )))]
 #[proc_macro]
 pub fn critical(input: TokenStream) -> TokenStream {

@@ -371,11 +371,14 @@ pub cu29_runtime::context::CuContext::clock: cu29_clock::RobotClock
 impl cu29_runtime::context::CuContext
 pub fn cu29_runtime::context::CuContext::builder(clock: cu29_clock::RobotClock) -> cu29_runtime::context::CuContextBuilder
 pub fn cu29_runtime::context::CuContext::cl_id(&self) -> u64
+pub fn cu29_runtime::context::CuContext::clear_current_component(&mut self)
 pub fn cu29_runtime::context::CuContext::clear_current_task(&mut self)
+pub fn cu29_runtime::context::CuContext::current_component_id(&self) -> core::option::Option<usize>
 pub fn cu29_runtime::context::CuContext::from_clock(clock: cu29_clock::RobotClock) -> Self
 pub fn cu29_runtime::context::CuContext::instance_id(&self) -> u32
 pub fn cu29_runtime::context::CuContext::new_mock_clock() -> (Self, cu29_clock::RobotClockMock)
 pub fn cu29_runtime::context::CuContext::new_with_clock() -> Self
+pub fn cu29_runtime::context::CuContext::set_current_component(&mut self, component_index: usize)
 pub fn cu29_runtime::context::CuContext::set_current_task(&mut self, task_index: usize)
 pub fn cu29_runtime::context::CuContext::subsystem_code(&self) -> u16
 pub fn cu29_runtime::context::CuContext::task_id(&self) -> core::option::Option<&'static str>

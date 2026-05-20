@@ -202,12 +202,13 @@ pub mod sinks {
 
         fn process(
             &mut self,
-            _ctx: &CuContext,
+            ctx: &CuContext,
             input: &Self::Input<'_>,
             output: &mut Self::Output<'_>,
         ) -> CuResult<()> {
             if let Some(pose) = input.payload() {
                 info!(
+                    ctx,
                     "AHRS RPY [rad]: roll={} pitch={} yaw={}",
                     pose.roll.get::<radian>(),
                     pose.pitch.get::<radian>(),

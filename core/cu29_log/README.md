@@ -105,6 +105,7 @@ Each log entry contains:
 
 - A timestamp (`CuTime`)
 - Log level (`CuLogLevel`)
+- Optional runtime origin metadata (`culistid`, `component_id`, `task_index`)
 - Message index (interned string reference)
 - Parameter names and values (stored efficiently using `SmallVec`)
 
