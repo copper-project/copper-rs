@@ -2,14 +2,16 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+mod sync_compat;
+
 use core::sync::atomic::{AtomicUsize, Ordering};
 use cu29_clock::RobotClock;
 use cu29_log::CuLogEntry;
 #[allow(unused_imports)]
 use cu29_log::CuLogLevel;
-use cu29_traits::sync::{Mutex, MutexGuard, OnceLock};
 use cu29_traits::{CuResult, WriteStream};
 use log::Log;
+use sync_compat::{Mutex, OnceLock, init_once, lock as lock_mutex};
 
 #[cfg(not(feature = "std"))]
 mod imp {
@@ -52,11 +54,6 @@ type LogWriter = Box<dyn WriteStream<CuLogEntry> + Send + 'static>;
 /// Callback signature: receives the structured entry plus its format string and param names.
 pub type LiveLogListener = Box<dyn Fn(&CuLogEntry, &str, &[&str]) + Send + Sync + 'static>;
 
-#[cfg(feature = "std")]
-fn lock_mutex<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(|e| e.into_inner())
-}
-
 #[cfg(all(feature = "std", debug_assertions))]
 pub fn format_message_only(
     format_str: &str,
@@ -96,11 +93,6 @@ pub fn format_message_only(
     })
 }
 
-#[cfg(not(feature = "std"))]
-fn lock_mutex<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    m.lock()
-}
-
 /// Shared logging state reachable from the macro-generated calls.
 struct LoggerState {
     writer: Mutex<LogWriter>,
@@ -119,14 +111,8 @@ impl core::fmt::Debug for LoggerState {
 static LOGGER_STATE: OnceLock<LoggerState> = OnceLock::new();
 static STRUCTURED_LOG_BYTES: AtomicUsize = AtomicUsize::new(0);
 
-#[cfg(feature = "std")]
 fn init_logger_state(state: LoggerState) {
-    LOGGER_STATE.set(state).unwrap();
-}
-
-#[cfg(not(feature = "std"))]
-fn init_logger_state(state: LoggerState) {
-    LOGGER_STATE.call_once(|| state);
+    init_once(&LOGGER_STATE, state);
 }
 
 pub struct NullLog;

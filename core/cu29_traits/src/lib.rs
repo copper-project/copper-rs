@@ -22,26 +22,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
-/// Cross-target synchronization re-exports used by Copper's public and
-/// generated APIs.
-///
-/// These are compatibility type re-exports, not a normalized synchronization
-/// API: `Mutex::lock()` and `OnceLock` still follow the platform-specific
-/// semantics of `std::sync` on `std` and `spin` on `no_std`.
-pub mod sync {
-    #[cfg(not(feature = "std"))]
-    pub use alloc::sync::Arc;
-    #[cfg(feature = "std")]
-    pub use std::sync::Arc;
-
-    #[cfg(not(feature = "std"))]
-    pub use spin::once::Once as OnceLock;
-    #[cfg(not(feature = "std"))]
-    pub use spin::{Mutex, MutexGuard};
-    #[cfg(feature = "std")]
-    pub use std::sync::{Mutex, MutexGuard, OnceLock};
-}
-
 #[cfg(feature = "reflect")]
 pub use bevy_reflect::Reflect;
 use bincode::de::{BorrowDecoder, Decoder};
@@ -68,7 +48,7 @@ use core::fmt::{Debug, Display, Formatter};
 use std::error::Error;
 
 #[cfg(not(feature = "std"))]
-use sync::Mutex as SyncMutex;
+use spin::Mutex as SyncMutex;
 
 // Type alias for the boxed error type to simplify conditional compilation
 #[cfg(feature = "std")]

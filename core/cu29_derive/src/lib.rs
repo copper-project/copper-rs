@@ -5171,7 +5171,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::prelude::SectionStorage;
                 use cu29::prelude::UnifiedLoggerWrite;
                 use cu29::prelude::memmap::MmapSectionStorage;
-                use cu29::sync::{Arc, Mutex};
+                use cu29::__private::sync::{Arc, Mutex};
                 use std::fmt::{Debug, Formatter};
                 use std::fmt::Result as FmtResult;
                 use std::mem::size_of;
@@ -5183,7 +5183,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use alloc::boxed::Box;
                 use alloc::string::String;
                 use alloc::string::ToString;
-                use cu29::sync::{Arc, Mutex};
+                use cu29::__private::sync::{Arc, Mutex};
                 use core::sync::atomic::{AtomicBool, Ordering};
                 use core::fmt::{Debug, Formatter};
                 use core::fmt::Result as FmtResult;

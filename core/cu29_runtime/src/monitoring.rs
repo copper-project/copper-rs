@@ -21,9 +21,9 @@ use cu29_log_runtime::{
     format_message_only, register_live_log_listener, unregister_live_log_listener,
 };
 #[cfg(any(not(feature = "std"), not(target_has_atomic = "64")))]
-use cu29_traits::sync::Mutex as SyncMutex;
+use crate::sync_compat::Mutex as SyncMutex;
 #[cfg(not(target_has_atomic = "64"))]
-use cu29_traits::sync::MutexGuard as SyncMutexGuard;
+use crate::sync_compat::MutexGuard as SyncMutexGuard;
 use cu29_traits::{
     CuError, CuResult, ObservedWriter, abort_observed_encode, begin_observed_encode,
     finish_observed_encode,
@@ -86,15 +86,7 @@ use imp::*;
 
 #[cfg(not(target_has_atomic = "64"))]
 fn lock_sync_mutex<T>(mutex: &SyncMutex<T>) -> SyncMutexGuard<'_, T> {
-    #[cfg(feature = "std")]
-    {
-        mutex.lock().unwrap_or_else(|e| e.into_inner())
-    }
-
-    #[cfg(not(feature = "std"))]
-    {
-        mutex.lock()
-    }
+    crate::sync_compat::lock(mutex)
 }
 
 #[cfg(all(feature = "std", debug_assertions))]

@@ -43,6 +43,7 @@ serde = { workspace = true }
 serde_derive = { workspace = true }
 inventory = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true, default-features = true }
+spin = { workspace = true }
 
 # only std
 rayon = { workspace = true, optional = true }

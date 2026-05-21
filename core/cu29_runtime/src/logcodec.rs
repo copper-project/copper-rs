@@ -15,7 +15,7 @@ use bincode::enc::{Encode, Encoder};
 use bincode::error::{DecodeError, EncodeError};
 use core::any::TypeId;
 use cu29_clock::Tov;
-use cu29_traits::sync::{Mutex, MutexGuard, OnceLock};
+use crate::sync_compat::{Mutex, OnceLock, lock as lock_mutex, once_get_or_init};
 use cu29_traits::{CuError, CuResult, observed_encode_bytes};
 use hashbrown::HashMap;
 use portable_atomic::{AtomicU64, Ordering};
@@ -29,16 +29,6 @@ use std::path::Path;
 use crate::curuntime::{RuntimeLifecycleEvent, RuntimeLifecycleRecord};
 #[cfg(feature = "std")]
 use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
-
-#[cfg(feature = "std")]
-fn lock_mutex<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(|e| e.into_inner())
-}
-
-#[cfg(not(feature = "std"))]
-fn lock_mutex<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    m.lock()
-}
 
 pub trait CuLogCodec<P: CuMsgPayload>: 'static {
     type Config: DeserializeOwned + Default;
@@ -116,14 +106,8 @@ type EffectiveConfigRegistry = HashMap<TypeId, &'static EffectiveConfigEntry>;
 
 static EFFECTIVE_CONFIGS: OnceLock<Mutex<EffectiveConfigRegistry>> = OnceLock::new();
 
-#[cfg(feature = "std")]
 fn effective_config_registry() -> &'static Mutex<EffectiveConfigRegistry> {
-    EFFECTIVE_CONFIGS.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-#[cfg(not(feature = "std"))]
-fn effective_config_registry() -> &'static Mutex<EffectiveConfigRegistry> {
-    EFFECTIVE_CONFIGS.call_once(|| Mutex::new(HashMap::new()))
+    once_get_or_init(&EFFECTIVE_CONFIGS, || Mutex::new(HashMap::new()))
 }
 
 pub fn effective_config_entry<T: 'static>(default_ron: &str) -> &'static EffectiveConfigEntry {

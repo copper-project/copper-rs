@@ -102,7 +102,6 @@ pub use cu29_runtime::rx_channels;
 #[cfg(feature = "std")]
 pub use cu29_runtime::simulation;
 pub use cu29_runtime::tx_channels;
-pub use cu29_traits::sync;
 #[cfg(feature = "safety-ids")]
 pub mod safety;
 #[cfg(all(feature = "std", any(test, feature = "safety-ids")))]
@@ -166,6 +165,19 @@ pub use cu29_traits::*;
 
 #[cfg(feature = "std")]
 pub use rayon;
+
+#[doc(hidden)]
+pub mod __private {
+    #[doc(hidden)]
+    pub mod sync {
+        #[cfg(not(feature = "std"))]
+        pub use alloc::sync::Arc;
+        #[cfg(not(feature = "std"))]
+        pub use spin::Mutex;
+        #[cfg(feature = "std")]
+        pub use std::sync::{Arc, Mutex};
+    }
+}
 
 // defmt shims re-exported for proc-macro call sites
 #[cfg(all(feature = "defmt", not(feature = "std")))]
