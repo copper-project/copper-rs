@@ -1,9 +1,4 @@
 pub mod cu29_traits
-pub mod cu29_traits::sync
-pub use cu29_traits::sync::Arc
-pub use cu29_traits::sync::Mutex
-pub use cu29_traits::sync::MutexGuard
-pub use cu29_traits::sync::OnceLock
 pub enum cu29_traits::DebugFieldKind
 pub cu29_traits::DebugFieldKind::Array
 pub cu29_traits::DebugFieldKind::Enum
