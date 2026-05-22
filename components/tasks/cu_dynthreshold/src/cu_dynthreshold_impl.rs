@@ -156,10 +156,7 @@ impl CuTask for DynThreshold {
             debug!(ctx, "DynThreshold: No payload in input message, skipping.");
             return Ok(());
         };
-        let buffer_hold = buffer_hold
-            .as_ref()
-            .map_readable()
-            .map_err(|e| CuError::new_with_cause("Could not map the gstreamer buffer", e))?;
+        let buffer_hold = buffer_hold.map_readable()?;
         let src = buffer_hold.as_slice();
 
         let expected_len = (self.width * self.height) as usize;
@@ -242,7 +239,7 @@ mod tests {
 
         // Create a new GStreamer buffer and fill it with input data
         let gstreamer_buffer = Buffer::from_mut_slice(input_data.clone());
-        let cu_gst_buffer = CuGstBuffer(gstreamer_buffer);
+        let cu_gst_buffer = CuGstBuffer::from(gstreamer_buffer);
         let input_msg = CuMsg::new(Some(cu_gst_buffer));
         let mut output: <DynThreshold as CuTask>::Output<'_> = CuMsg::<CuImage<Vec<u8>>>::default();
 
