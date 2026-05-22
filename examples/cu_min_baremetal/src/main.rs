@@ -13,7 +13,7 @@ mod imp {
     pub use alloc::sync::Arc;
     pub use alloc::vec;
     pub use core::ptr::addr_of_mut;
-    pub use cu29::sync::Mutex;
+    pub use spin::Mutex;
 }
 
 #[cfg(not(feature = "std"))]

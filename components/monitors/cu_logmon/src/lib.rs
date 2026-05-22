@@ -14,13 +14,16 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt::Write as _;
 use cu29::prelude::*;
-use cu29::sync::{Mutex, MutexGuard};
 #[cfg(all(feature = "std", debug_assertions))]
 use cu29_log_runtime::{
     format_message_only, register_live_log_listener, unregister_live_log_listener,
 };
+#[cfg(not(feature = "std"))]
+use spin::{Mutex, MutexGuard};
 #[cfg(all(feature = "std", debug_assertions))]
 use std::collections::HashMap;
+#[cfg(feature = "std")]
+use std::sync::{Mutex, MutexGuard};
 
 const REPORT_INTERVAL_SECS: u64 = 1;
 const MAX_LATENCY_SECS: u64 = 5;

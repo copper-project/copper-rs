@@ -11,13 +11,13 @@ use cu_dps310::Dps310Bus;
 use cu_ist8310::Ist8310Bus;
 use cu_sdlogger::{EMMCLogger, EMMCSectionStorage, ForceSyncSend, find_copper_partition};
 use cu29::resource::{ResourceBundle, ResourceManager};
-use cu29::sync::Mutex;
 use cu29::{CuError, CuResult, bundle_resources};
 use embedded_hal::adc::OneShot;
 use embedded_hal::blocking::delay::DelayMs;
 use embedded_hal::blocking::i2c::{Read as I2cRead, Write as I2cWrite, WriteRead as I2cWriteRead};
 use embedded_hal::blocking::spi::Transfer;
 use embedded_hal::digital::v2::OutputPin;
+use spin::Mutex;
 use stm32h7xx_hal::{
     adc,
     delay::Delay,

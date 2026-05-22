@@ -1,5 +1,5 @@
 use cu29::prelude::*;
-use cu29::sync::Mutex;
+use spin::Mutex;
 
 use crate::board::{BdshotBoard, encode_frame};
 #[cfg(feature = "messages-only")]

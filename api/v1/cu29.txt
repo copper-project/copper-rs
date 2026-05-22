@@ -29,7 +29,6 @@ pub use cu29::resources
 pub use cu29::rx_channels
 pub use cu29::safety_case
 pub use cu29::simulation
-pub use cu29::sync
 pub use cu29::tx_channels
 pub use cu29::units
 pub mod cu29::prelude

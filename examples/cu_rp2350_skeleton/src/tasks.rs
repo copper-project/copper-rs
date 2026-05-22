@@ -6,8 +6,8 @@ use cu29::prelude::*;
 #[cfg(feature = "firmware")]
 mod imp {
     pub use alloc::boxed::Box;
-    pub use cu29::sync::Mutex;
     pub use embedded_hal::digital::OutputPin;
+    pub use spin::Mutex;
 
     pub trait LedPin: Send {
         fn set(&mut self, on: bool);

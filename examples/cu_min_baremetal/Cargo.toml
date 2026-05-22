@@ -38,6 +38,7 @@ cu29 = { path = "../../core/cu29", default-features = false, version = "1.0.0-rc
 serde = { workspace = true }
 embedded-alloc = { workspace = true, features = ["llff"] }
 critical-section = "1"
+spin = { workspace = true }
 
 # host only
 cu29-export = { workspace = true, features = [

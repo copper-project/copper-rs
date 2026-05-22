@@ -4,12 +4,12 @@ use crate::messages::{DShotTelemetry, EscCommand};
 use cortex_m::asm;
 use cu29::CuResult;
 use cu29::prelude::CuError;
-use cu29::sync::Mutex;
 use hal::dma::Word;
 use hal::pac;
 use hal::pio::{PIOBuilder, StateMachineIndex, ValidStateMachine};
 use pio::pio_file;
 use rp235x_hal as hal;
+use spin::Mutex;
 
 use super::BdshotBoard;
 use crate::bridge::BdshotBoardProvider;
