@@ -7,7 +7,12 @@ use std::string::String;
 
 pub struct TestBundle;
 
-bundle_resources!(TestBundle: I2c1 = "i2c1");
+bundle_resources!(
+    TestBundle:
+        Serial3 = "serial3",
+        Gpio0 = "gpio0",
+        I2c1 = "i2c1"
+);
 
 impl ResourceBundle for TestBundle {
     fn build(
@@ -15,6 +20,8 @@ impl ResourceBundle for TestBundle {
         _config: Option<&ComponentConfig>,
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
+        manager.add_owned(bundle.key(TestBundleId::Serial3), String::from("serial"))?;
+        manager.add_owned(bundle.key(TestBundleId::Gpio0), String::from("pin"))?;
         manager.add_owned(bundle.key(TestBundleId::I2c1), String::from("bus"))?;
         Ok(())
     }
@@ -43,6 +50,8 @@ mod sink_resources {
     use super::*;
 
     resources!({
+        serial => Owned<String>,
+        pin => Owned<String>,
         bus => Owned<String>,
     });
 }
@@ -50,15 +59,17 @@ mod sink_resources {
 type SinkResources = sink_resources::Resources;
 
 #[derive(Reflect)]
-struct UsesI2cSink;
+struct UsesNamedResourcesSink;
 
-impl Freezable for UsesI2cSink {}
+impl Freezable for UsesNamedResourcesSink {}
 
-impl CuSinkTask for UsesI2cSink {
+impl CuSinkTask for UsesNamedResourcesSink {
     type Resources<'r> = SinkResources;
     type Input<'m> = input_msg!(u32);
 
     fn new(_config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self> {
+        let _serial = resources.serial.0;
+        let _pin = resources.pin.0;
         let _bus = resources.bus.0;
         Ok(Self)
     }

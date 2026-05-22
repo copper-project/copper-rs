@@ -313,21 +313,21 @@ pub struct LinuxResources;
 
 bundle_resources!(
     LinuxResources:
-        Serial0,
-        Serial1,
-        Serial2,
-        Serial3,
-        Serial4,
-        Serial5,
+        Serial0 = "serial0",
+        Serial1 = "serial1",
+        Serial2 = "serial2",
+        Serial3 = "serial3",
+        Serial4 = "serial4",
+        Serial5 = "serial5",
         I2c0 = "i2c0",
         I2c1 = "i2c1",
         I2c2 = "i2c2",
-        Gpio0,
-        Gpio1,
-        Gpio2,
-        Gpio3,
-        Gpio4,
-        Gpio5
+        Gpio0 = "gpio0",
+        Gpio1 = "gpio1",
+        Gpio2 = "gpio2",
+        Gpio3 = "gpio3",
+        Gpio4 = "gpio4",
+        Gpio5 = "gpio5"
 );
 
 const LINUX_RESOURCE_SLOT_NAMES: &[&str] = &[
@@ -862,6 +862,17 @@ fn get_u64(config: Option<&ComponentConfig>, key: &str) -> CuResult<Option<u64>>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cu29::resource::{NamedResourceBundleDecl, resource_index_by_name};
+
+    #[test]
+    fn named_resource_bundle_decl_matches_public_linux_slot_names() {
+        let declared = <LinuxResources as NamedResourceBundleDecl>::NAMES;
+        assert_eq!(declared, LINUX_RESOURCE_SLOT_NAMES);
+
+        for (idx, name) in declared.iter().enumerate() {
+            assert_eq!(resource_index_by_name::<LinuxResources>(name), idx);
+        }
+    }
 
     #[test]
     fn parse_serial_parity_value_accepts_expected_inputs() {
