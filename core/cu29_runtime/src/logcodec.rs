@@ -3,6 +3,7 @@ extern crate alloc;
 
 use crate::config::{ComponentConfig, CuConfig, LoggingCodecSpec};
 use crate::cutask::{CuMsg, CuMsgMetadata, CuMsgPayload};
+use crate::sync_compat::{Mutex, OnceLock, lock as lock_mutex, once_get_or_init};
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -15,7 +16,6 @@ use bincode::enc::{Encode, Encoder};
 use bincode::error::{DecodeError, EncodeError};
 use core::any::TypeId;
 use cu29_clock::Tov;
-use crate::sync_compat::{Mutex, OnceLock, lock as lock_mutex, once_get_or_init};
 use cu29_traits::{CuError, CuResult, observed_encode_bytes};
 use hashbrown::HashMap;
 use portable_atomic::{AtomicU64, Ordering};

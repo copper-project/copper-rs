@@ -8,6 +8,10 @@ use crate::config::{
 };
 use crate::context::CuContext;
 use crate::cutask::CuMsgMetadata;
+#[cfg(any(not(feature = "std"), not(target_has_atomic = "64")))]
+use crate::sync_compat::Mutex as SyncMutex;
+#[cfg(not(target_has_atomic = "64"))]
+use crate::sync_compat::MutexGuard as SyncMutexGuard;
 use bincode::Encode;
 use bincode::config::standard;
 use bincode::enc::EncoderImpl;
@@ -20,10 +24,6 @@ use cu29_log::CuLogLevel;
 use cu29_log_runtime::{
     format_message_only, register_live_log_listener, unregister_live_log_listener,
 };
-#[cfg(any(not(feature = "std"), not(target_has_atomic = "64")))]
-use crate::sync_compat::Mutex as SyncMutex;
-#[cfg(not(target_has_atomic = "64"))]
-use crate::sync_compat::MutexGuard as SyncMutexGuard;
 use cu29_traits::{
     CuError, CuResult, ObservedWriter, abort_observed_encode, begin_observed_encode,
     finish_observed_encode,
