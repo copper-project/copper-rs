@@ -10,6 +10,7 @@ mod image;
 mod imu;
 #[cfg(feature = "std")]
 mod pointcloud;
+mod ranging;
 #[cfg(feature = "rerun")]
 mod rerun_components;
 
@@ -22,3 +23,4 @@ pub use image::*;
 pub use imu::*;
 #[cfg(feature = "std")]
 pub use pointcloud::*;
+pub use ranging::*;

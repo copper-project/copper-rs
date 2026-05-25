@@ -1,0 +1,30 @@
+[package]
+name = "cu-ryuw122"
+description = "Copper anchor-side ranging source for the REYAX RYUW122 UWB modem"
+readme = "README.md"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[package.metadata.copper]
+kind = "source"
+domains = ["sensor/uwb", "sensor/ranging"]
+environments = ["host", "embedded"]
+
+[dependencies]
+cu29 = { path = "../../../core/cu29", version = "1.0.0-rc2", default-features = false }
+cu-linux-resources = { workspace = true, optional = true }
+cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "1.0.0-rc2", default-features = false }
+embedded-io = "0.7.1"
+
+[features]
+default = ["std"]
+std = ["cu29/std", "cu-sensor-payloads/std", "dep:cu-linux-resources"]
+textlogs = ["cu29/textlogs", "cu-sensor-payloads/textlogs"]
+reflect = ["cu29/reflect", "cu-sensor-payloads/reflect"]
