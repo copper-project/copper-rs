@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_soa_derive/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_soa_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (e50aa6fba 2026-05-19)" data-channel="nightly" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">cu29_soa_derive/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>proc_macro::TokenStream;
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_soa_derive/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_soa_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.98.0-nightly (423e3d252 2026-05-24)" data-channel="nightly" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">cu29_soa_derive/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>proc_macro::TokenStream;
 <a href=#2 id=2 data-nosnippet>2</a><span class="kw">use </span>quote::{ToTokens, format_ident, quote};
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>syn::{Attribute, Data, DeriveInput, Fields, Path, PathArguments, Type, parse_macro_input};
 <a href=#4 id=4 data-nosnippet>4</a>
@@ -136,7 +136,7 @@
 <a href=#136 id=136 data-nosnippet>136</a>        .any(|attr| attr.path().is_ident(<span class="string">"reflect"</span>));
 <a href=#137 id=137 data-nosnippet>137</a>    <span class="kw">let </span>reflect_import = <span class="kw">if </span>derive_reflect {
 <a href=#138 id=138 data-nosnippet>138</a>        <span class="macro">quote!</span>(
-<a href=#139 id=139 data-nosnippet>139</a>            <span class="kw">use </span>super::{bevy_reflect, Reflect};
+<a href=#139 id=139 data-nosnippet>139</a>            <span class="kw">use super</span>::{bevy_reflect, Reflect};
 <a href=#140 id=140 data-nosnippet>140</a>        )
 <a href=#141 id=141 data-nosnippet>141</a>    } <span class="kw">else </span>{
 <a href=#142 id=142 data-nosnippet>142</a>        <span class="macro">quote!</span>()
@@ -245,7 +245,7 @@
 <a href=#245 id=245 data-nosnippet>245</a>                <span class="kw">return </span>path.clone();
 <a href=#246 id=246 data-nosnippet>246</a>            }
 <a href=#247 id=247 data-nosnippet>247</a>        }
-<a href=#248 id=248 data-nosnippet>248</a>        <span class="macro">syn::parse_quote!</span>(super::#path)
+<a href=#248 id=248 data-nosnippet>248</a>        <span class="macro">syn::parse_quote!</span>(<span class="kw">super</span>::#path)
 <a href=#249 id=249 data-nosnippet>249</a>    }
 <a href=#250 id=250 data-nosnippet>250</a>
 <a href=#251 id=251 data-nosnippet>251</a>    <span class="kw">fn </span>storage_paths(field_type: <span class="kw-2">&amp;</span>Type) -&gt; <span class="prelude-ty">Result</span>&lt;(Path, Path), syn::Error&gt; {
@@ -355,7 +355,7 @@
 <a href=#355 id=355 data-nosnippet>355</a>        }
 <a href=#356 id=356 data-nosnippet>356</a>
 <a href=#357 id=357 data-nosnippet>357</a>        <span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, <span class="kw">const </span>N: usize&gt; Iterator <span class="kw">for </span>#soa_struct_name_iterator&lt;<span class="lifetime">'a</span>, N&gt; {
-<a href=#358 id=358 data-nosnippet>358</a>            <span class="kw">type </span>Item = super::#name;
+<a href=#358 id=358 data-nosnippet>358</a>            <span class="kw">type </span>Item = <span class="kw">super</span>::#name;
 <a href=#359 id=359 data-nosnippet>359</a>
 <a href=#360 id=360 data-nosnippet>360</a>            <span class="kw">fn </span>next(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Item&gt; {
 <a href=#361 id=361 data-nosnippet>361</a>                <span class="kw">if </span><span class="self">self</span>.current &lt; <span class="self">self</span>.soa_struct.len {
@@ -614,7 +614,7 @@
 <a href=#614 id=614 data-nosnippet>614</a>            <span class="kw">use </span>serde::Serializer;
 <a href=#615 id=615 data-nosnippet>615</a>            <span class="kw">use </span>serde::ser::SerializeStruct;
 <a href=#616 id=616 data-nosnippet>616</a>            <span class="kw">use </span>std::ops::{Index, IndexMut};
-<a href=#617 id=617 data-nosnippet>617</a>            #( <span class="kw">use </span>super::#unique_imports; )*
+<a href=#617 id=617 data-nosnippet>617</a>            #( <span class="kw">use super</span>::#unique_imports; )*
 <a href=#618 id=618 data-nosnippet>618</a>            #reflect_import
 <a href=#619 id=619 data-nosnippet>619</a>            <span class="kw">use </span>core::array::from_fn;
 <a href=#620 id=620 data-nosnippet>620</a>
@@ -636,20 +636,20 @@
 <a href=#636 id=636 data-nosnippet>636</a>            }
 <a href=#637 id=637 data-nosnippet>637</a>
 <a href=#638 id=638 data-nosnippet>638</a>            <span class="kw">impl</span>&lt;<span class="kw">const </span>N: usize&gt; #soa_storage_name&lt;N&gt; {
-<a href=#639 id=639 data-nosnippet>639</a>                <span class="kw">pub fn </span>new(default: super::#name) -&gt; <span class="self">Self </span>{
+<a href=#639 id=639 data-nosnippet>639</a>                <span class="kw">pub fn </span>new(default: <span class="kw">super</span>::#name) -&gt; <span class="self">Self </span>{
 <a href=#640 id=640 data-nosnippet>640</a>                    <span class="self">Self </span>{
 <a href=#641 id=641 data-nosnippet>641</a>                        #(#new_inits,)*
 <a href=#642 id=642 data-nosnippet>642</a>                    }
 <a href=#643 id=643 data-nosnippet>643</a>                }
 <a href=#644 id=644 data-nosnippet>644</a>
-<a href=#645 id=645 data-nosnippet>645</a>                <span class="kw">pub fn </span>set(<span class="kw-2">&amp;mut </span><span class="self">self</span>, index: usize, value: super::#name) {
+<a href=#645 id=645 data-nosnippet>645</a>                <span class="kw">pub fn </span>set(<span class="kw-2">&amp;mut </span><span class="self">self</span>, index: usize, value: <span class="kw">super</span>::#name) {
 <a href=#646 id=646 data-nosnippet>646</a>                    <span class="macro">assert!</span>(index &lt; N, <span class="string">"Index out of bounds"</span>);
 <a href=#647 id=647 data-nosnippet>647</a>                    #(#set_fields)*
 <a href=#648 id=648 data-nosnippet>648</a>                }
 <a href=#649 id=649 data-nosnippet>649</a>
-<a href=#650 id=650 data-nosnippet>650</a>                <span class="kw">pub fn </span>get(<span class="kw-2">&amp;</span><span class="self">self</span>, index: usize) -&gt; super::#name {
+<a href=#650 id=650 data-nosnippet>650</a>                <span class="kw">pub fn </span>get(<span class="kw-2">&amp;</span><span class="self">self</span>, index: usize) -&gt; <span class="kw">super</span>::#name {
 <a href=#651 id=651 data-nosnippet>651</a>                    <span class="macro">assert!</span>(index &lt; N, <span class="string">"Index out of bounds"</span>);
-<a href=#652 id=652 data-nosnippet>652</a>                    super::#name {
+<a href=#652 id=652 data-nosnippet>652</a>                    <span class="kw">super</span>::#name {
 <a href=#653 id=653 data-nosnippet>653</a>                        #(#get_fields)*
 <a href=#654 id=654 data-nosnippet>654</a>                    }
 <a href=#655 id=655 data-nosnippet>655</a>                }
@@ -742,7 +742,7 @@
 <a href=#742 id=742 data-nosnippet>742</a>            }
 <a href=#743 id=743 data-nosnippet>743</a>
 <a href=#744 id=744 data-nosnippet>744</a>            <span class="kw">impl</span>&lt;<span class="kw">const </span>N: usize&gt; #soa_struct_name&lt;N&gt; {
-<a href=#745 id=745 data-nosnippet>745</a>                <span class="kw">pub fn </span>new(default: super::#name) -&gt; <span class="self">Self </span>{
+<a href=#745 id=745 data-nosnippet>745</a>                <span class="kw">pub fn </span>new(default: <span class="kw">super</span>::#name) -&gt; <span class="self">Self </span>{
 <a href=#746 id=746 data-nosnippet>746</a>                    <span class="self">Self </span>{
 <a href=#747 id=747 data-nosnippet>747</a>                        #(#new_inits,)*
 <a href=#748 id=748 data-nosnippet>748</a>                        len: <span class="number">0</span>,
@@ -757,7 +757,7 @@
 <a href=#757 id=757 data-nosnippet>757</a>                    <span class="self">self</span>.len == <span class="number">0
 <a href=#758 id=758 data-nosnippet>758</a>                </span>}
 <a href=#759 id=759 data-nosnippet>759</a>
-<a href=#760 id=760 data-nosnippet>760</a>                <span class="kw">pub fn </span>push(<span class="kw-2">&amp;mut </span><span class="self">self</span>, value: super::#name) {
+<a href=#760 id=760 data-nosnippet>760</a>                <span class="kw">pub fn </span>push(<span class="kw-2">&amp;mut </span><span class="self">self</span>, value: <span class="kw">super</span>::#name) {
 <a href=#761 id=761 data-nosnippet>761</a>                    <span class="kw">if </span><span class="self">self</span>.len &lt; N {
 <a href=#762 id=762 data-nosnippet>762</a>                        #(#soa_push_fields)*
 <a href=#763 id=763 data-nosnippet>763</a>                        <span class="self">self</span>.len += <span class="number">1</span>;
@@ -766,25 +766,25 @@
 <a href=#766 id=766 data-nosnippet>766</a>                    }
 <a href=#767 id=767 data-nosnippet>767</a>                }
 <a href=#768 id=768 data-nosnippet>768</a>
-<a href=#769 id=769 data-nosnippet>769</a>                <span class="kw">pub fn </span>pop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;super::#name&gt; {
+<a href=#769 id=769 data-nosnippet>769</a>                <span class="kw">pub fn </span>pop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw">super</span>::#name&gt; {
 <a href=#770 id=770 data-nosnippet>770</a>                    <span class="kw">if </span><span class="self">self</span>.len == <span class="number">0 </span>{
 <a href=#771 id=771 data-nosnippet>771</a>                        <span class="prelude-val">None
 <a href=#772 id=772 data-nosnippet>772</a>                    </span>} <span class="kw">else </span>{
 <a href=#773 id=773 data-nosnippet>773</a>                        <span class="self">self</span>.len -= <span class="number">1</span>;
-<a href=#774 id=774 data-nosnippet>774</a>                        <span class="prelude-val">Some</span>(super::#name {
+<a href=#774 id=774 data-nosnippet>774</a>                        <span class="prelude-val">Some</span>(<span class="kw">super</span>::#name {
 <a href=#775 id=775 data-nosnippet>775</a>                            #(#soa_pop_fields)*
 <a href=#776 id=776 data-nosnippet>776</a>                        })
 <a href=#777 id=777 data-nosnippet>777</a>                    }
 <a href=#778 id=778 data-nosnippet>778</a>                }
 <a href=#779 id=779 data-nosnippet>779</a>
-<a href=#780 id=780 data-nosnippet>780</a>                <span class="kw">pub fn </span>set(<span class="kw-2">&amp;mut </span><span class="self">self</span>, index: usize, value: super::#name) {
+<a href=#780 id=780 data-nosnippet>780</a>                <span class="kw">pub fn </span>set(<span class="kw-2">&amp;mut </span><span class="self">self</span>, index: usize, value: <span class="kw">super</span>::#name) {
 <a href=#781 id=781 data-nosnippet>781</a>                    <span class="macro">assert!</span>(index &lt; <span class="self">self</span>.len, <span class="string">"Index out of bounds"</span>);
 <a href=#782 id=782 data-nosnippet>782</a>                    #(#set_fields)*
 <a href=#783 id=783 data-nosnippet>783</a>                }
 <a href=#784 id=784 data-nosnippet>784</a>
-<a href=#785 id=785 data-nosnippet>785</a>                <span class="kw">pub fn </span>get(<span class="kw-2">&amp;</span><span class="self">self</span>, index: usize) -&gt; super::#name {
+<a href=#785 id=785 data-nosnippet>785</a>                <span class="kw">pub fn </span>get(<span class="kw-2">&amp;</span><span class="self">self</span>, index: usize) -&gt; <span class="kw">super</span>::#name {
 <a href=#786 id=786 data-nosnippet>786</a>                    <span class="macro">assert!</span>(index &lt; <span class="self">self</span>.len, <span class="string">"Index out of bounds"</span>);
-<a href=#787 id=787 data-nosnippet>787</a>                    super::#name {
+<a href=#787 id=787 data-nosnippet>787</a>                    <span class="kw">super</span>::#name {
 <a href=#788 id=788 data-nosnippet>788</a>                        #(#get_fields)*
 <a href=#789 id=789 data-nosnippet>789</a>                    }
 <a href=#790 id=790 data-nosnippet>790</a>                }
