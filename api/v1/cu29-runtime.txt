@@ -1790,10 +1790,16 @@ pub fn cu29_runtime::resource::ResourceManager::borrow_shared_arc<T: 'static + c
 pub fn cu29_runtime::resource::ResourceManager::new(bundle_sizes: &[usize]) -> Self
 pub fn cu29_runtime::resource::ResourceManager::take<T: 'static + core::marker::Send + core::marker::Sync>(&mut self, key: cu29_runtime::resource::ResourceKey<T>) -> cu29_traits::CuResult<cu29_runtime::resource::Owned<T>>
 pub struct cu29_runtime::resource::ThreadPoolBundle
+impl cu29_runtime::resource::NamedResourceBundleDecl for cu29_runtime::resource::ThreadPoolBundle
+pub const cu29_runtime::resource::ThreadPoolBundle::NAMES: &'static [&'static str]
 impl cu29_runtime::resource::ResourceBundle for cu29_runtime::resource::ThreadPoolBundle
 pub fn cu29_runtime::resource::ThreadPoolBundle::build(bundle: cu29_runtime::resource::BundleContext<Self>, config: core::option::Option<&cu29_runtime::config::ComponentConfig>, manager: &mut cu29_runtime::resource::ResourceManager) -> cu29_traits::CuResult<()>
 impl cu29_runtime::resource::ResourceBundleDecl for cu29_runtime::resource::ThreadPoolBundle
 pub type cu29_runtime::resource::ThreadPoolBundle::Id = cu29_runtime::resource::ThreadPoolId
+pub trait cu29_runtime::resource::NamedResourceBundleDecl: cu29_runtime::resource::ResourceBundleDecl
+pub const cu29_runtime::resource::NamedResourceBundleDecl::NAMES: &'static [&'static str]
+impl cu29_runtime::resource::NamedResourceBundleDecl for cu29_runtime::resource::ThreadPoolBundle
+pub const cu29_runtime::resource::ThreadPoolBundle::NAMES: &'static [&'static str]
 pub trait cu29_runtime::resource::ResourceBindings<'r>: core::marker::Sized
 pub type cu29_runtime::resource::ResourceBindings::Binding: core::marker::Copy + core::cmp::Eq + 'static
 pub fn cu29_runtime::resource::ResourceBindings::from_bindings(manager: &'r mut cu29_runtime::resource::ResourceManager, mapping: core::option::Option<&cu29_runtime::resource::ResourceBindingMap<Self::Binding>>) -> cu29_traits::CuResult<Self>
