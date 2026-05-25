@@ -18,7 +18,7 @@ use std::marker::PhantomData;
 use std::mem::{align_of, size_of};
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 use memmap2::{MmapMut, MmapOptions};
@@ -491,28 +491,21 @@ impl<T: ArrayLike> DerefMut for CuHandleInner<T> {
     }
 }
 
-/// Logging policy for a handle's payload content.
-///
-/// Set by the source that produces the handle (typically driven by config) and propagated
-/// through clones. The unified-log encoder reads this to decide whether to write the payload
-/// bytes or just a metadata-only record for this frame.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum HandleContent {
-    /// Always log the full payload (current default).
-    #[default]
-    All,
-    /// Log the payload only if a downstream consumer called [`CuHandle::mark_touched`].
-    TouchedOnly,
-    /// Never log the payload; keep only the surrounding metadata (timestamps, status).
-    None,
-}
+// `HandleContent` is defined in `config.rs` so it lives in both the library and the
+// `cu29-rendercfg` bin (which includes config.rs standalone). Re-export it here for
+// pool consumers that don't otherwise reach for the config module.
+pub use crate::config::HandleContent;
 
 /// Backing storage for a [`CuHandle`]: the payload mutex plus the per-handle touched flag
 /// and logging mode. Shared across handle clones via [`Arc`].
+///
+/// `mode` is stored as an [`AtomicU8`] so the runtime can override it once after the
+/// source's `process()` returns (when the configured `handle_content` policy is known
+/// but the source itself didn't construct the handle with that policy in mind).
 #[derive(Debug)]
 struct CuHandleCell<T: Debug + Send + Sync> {
     touched: AtomicBool,
-    mode: HandleContent,
+    mode: AtomicU8,
     inner: Mutex<CuHandleInner<T>>,
 }
 
@@ -541,7 +534,7 @@ impl<T: Debug + Send + Sync> CuHandle<T> {
     fn from_inner(inner: CuHandleInner<T>, mode: HandleContent) -> Self {
         CuHandle(Arc::new(CuHandleCell {
             touched: AtomicBool::new(false),
-            mode,
+            mode: AtomicU8::new(mode as u8),
             inner: Mutex::new(inner),
         }))
     }
@@ -591,9 +584,19 @@ impl<T: Debug + Send + Sync> CuHandle<T> {
         self.0.touched.load(Ordering::Relaxed)
     }
 
-    /// Logging mode set by the source that produced this handle.
+    /// Logging mode currently in effect for this handle.
     pub fn logging_mode(&self) -> HandleContent {
-        self.0.mode
+        HandleContent::from_u8(self.0.mode.load(Ordering::Relaxed))
+    }
+
+    /// Replace this handle's logging mode. Visible to every clone (shared cell).
+    ///
+    /// Intended for the runtime to apply the source's configured
+    /// [`HandleContent`](crate::pool::HandleContent) policy immediately after the source
+    /// produces a message — *before* downstream tasks see it. Calling this later is
+    /// allowed but rarely makes sense.
+    pub fn set_logging_mode(&self, mode: HandleContent) {
+        self.0.mode.store(mode as u8, Ordering::Relaxed);
     }
 
     /// Convenience: [`with_inner`](Self::with_inner) plus [`mark_touched`](Self::mark_touched)
@@ -617,6 +620,14 @@ impl<T: Debug + Send + Sync> CuHandle<T> {
             HandleContent::TouchedOnly => self.was_touched(),
         }
     }
+
+    /// Apply a source's configured [`HandleContent`] policy to this handle. Inherent
+    /// "specific" arm of the autoref-specialization pattern used by the runtime to
+    /// propagate `NodeLogging.handle_content` into source-produced messages without
+    /// every source having to thread the value through itself.
+    pub fn apply_handle_content_policy(&self, mode: HandleContent) {
+        self.set_logging_mode(mode);
+    }
 }
 
 /// Default arm of the autoref-specialization pattern used by the unified-log encoder.
@@ -633,6 +644,16 @@ pub trait PayloadDefaultLoggingPolicy {
 }
 
 impl<T: ?Sized> PayloadDefaultLoggingPolicy for T {}
+
+/// Default arm of the autoref-specialization pattern used by the runtime to push a
+/// source's configured [`HandleContent`] policy into the [`CuHandle`]s that live inside
+/// a payload. Default is a no-op; [`CuHandle`] and composite payloads provide inherent
+/// overrides that propagate the mode.
+pub trait PayloadDefaultHandlePolicyApply {
+    fn apply_handle_content_policy(&self, _mode: HandleContent) {}
+}
+
+impl<T: ?Sized> PayloadDefaultHandlePolicyApply for T {}
 
 impl<U> Serialize for CuHandle<Vec<U>>
 where
@@ -1332,6 +1353,35 @@ mod tests {
         // its own inherent payload_should_log. A plain integer is a fine stand-in.
         let v: u64 = 42;
         assert!(v.payload_should_log());
+    }
+
+    #[test]
+    fn test_apply_handle_content_policy_overrides_mode() {
+        // Handle minted with the default All policy; runtime hook flips it to
+        // TouchedOnly before downstream consumers see it. Encoder decision tracks.
+        let h: CuHandle<Vec<u8>> = CuHandle::new_detached(vec![1, 2, 3]);
+        assert_eq!(h.logging_mode(), HandleContent::All);
+        assert!(h.payload_should_log());
+
+        h.apply_handle_content_policy(HandleContent::TouchedOnly);
+        assert_eq!(h.logging_mode(), HandleContent::TouchedOnly);
+        assert!(
+            !h.payload_should_log(),
+            "after switch to TouchedOnly an untouched handle must skip"
+        );
+
+        h.mark_touched();
+        assert!(h.payload_should_log(), "touched + TouchedOnly => log");
+    }
+
+    #[test]
+    fn test_default_apply_policy_is_noop_for_non_handle_types() {
+        use crate::pool::PayloadDefaultHandlePolicyApply as _;
+        // No-op for any payload that doesn't wrap a handle — compile-time check that
+        // codegen can call this on every slot without knowing the payload shape.
+        let v: u64 = 42;
+        v.apply_handle_content_policy(HandleContent::TouchedOnly);
+        // No observable change; the test just proves the call compiles and returns.
     }
 
     #[test]

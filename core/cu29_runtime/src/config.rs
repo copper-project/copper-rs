@@ -502,6 +502,43 @@ impl Display for Value {
     }
 }
 
+/// Logging policy for a `CuHandle`'s payload content.
+///
+/// Set by the source that produces the handle (typically via this enum's slot under
+/// `NodeLogging`) and propagated through clones. The unified-log encoder reads this to
+/// decide whether to write the payload bytes or just a metadata-only record for the
+/// frame. See `cu29_runtime::pool::CuHandle` for the runtime side.
+///
+/// Defined here (instead of in `pool.rs`) so the type is reachable from both the
+/// library and the `cu29-rendercfg` binary, which compiles `config.rs` standalone.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(u8)]
+pub enum HandleContent {
+    /// Always log the full payload (current default).
+    #[serde(rename = "all", alias = "All")]
+    #[default]
+    All = 0,
+    /// Log the payload only if a downstream consumer called `CuHandle::mark_touched`.
+    #[serde(rename = "touched_only", alias = "TouchedOnly")]
+    TouchedOnly = 1,
+    /// Never log the payload; keep only the surrounding metadata (timestamps, status).
+    #[serde(rename = "none", alias = "None")]
+    None = 2,
+}
+
+impl HandleContent {
+    /// Reconstruct a [`HandleContent`] from its `AtomicU8` representation. Unknown
+    /// values fall back to `All` so corrupt state never silently drops payload bytes.
+    #[allow(dead_code)] // Only the lib's pool module calls this; the rendercfg bin doesn't.
+    pub fn from_u8(v: u8) -> Self {
+        match v {
+            1 => HandleContent::TouchedOnly,
+            2 => HandleContent::None,
+            _ => HandleContent::All,
+        }
+    }
+}
+
 /// Configuration for logging in the node.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NodeLogging {
@@ -511,6 +548,14 @@ pub struct NodeLogging {
     codec: Option<String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     codecs: HashMap<String, String>,
+    /// Logging policy applied to the source's pool-acquired `CuHandle`s. Surfaced
+    /// in user RON config as e.g. `logging: ( handle_content: "touched_only" )`.
+    #[serde(default, skip_serializing_if = "is_default_handle_content")]
+    handle_content: HandleContent,
+}
+
+fn is_default_handle_content(c: &HandleContent) -> bool {
+    *c == HandleContent::default()
 }
 
 impl NodeLogging {
@@ -536,6 +581,12 @@ impl NodeLogging {
             .map(String::as_str)
             .or(self.codec.as_deref())
     }
+
+    /// Logging policy applied to handles minted by this node's pool. Defaults to
+    /// `HandleContent::All` — i.e. existing behavior.
+    pub fn handle_content(&self) -> HandleContent {
+        self.handle_content
+    }
 }
 
 impl Default for NodeLogging {
@@ -544,6 +595,7 @@ impl Default for NodeLogging {
             enabled: true,
             codec: None,
             codecs: HashMap::new(),
+            handle_content: HandleContent::default(),
         }
     }
 }
@@ -726,6 +778,17 @@ impl Node {
         } else {
             true
         }
+    }
+
+    /// Convenience wrapper around [`NodeLogging::handle_content`]: returns the per-handle
+    /// logging policy for this node, defaulting to [`HandleContent::All`] when no
+    /// `logging` block is configured.
+    #[allow(dead_code)]
+    pub fn handle_content_policy(&self) -> HandleContent {
+        self.logging
+            .as_ref()
+            .map(NodeLogging::handle_content)
+            .unwrap_or_default()
     }
 
     #[allow(dead_code)]
@@ -4201,6 +4264,56 @@ mod tests {
         assert_eq!(logging_config.slab_size_mib.unwrap(), 1024);
         assert_eq!(logging_config.section_size_mib.unwrap(), 100);
         assert!(logging_config.enable_task_logging);
+    }
+
+    #[test]
+    fn test_node_logging_handle_content_round_trips() {
+        // RON enum variants use bare identifiers — same convention as `kind: source`.
+        let txt = r#"(
+            tasks: [
+                (id: "cam", type: "pkg::Cam", kind: source, logging: (handle_content: touched_only)),
+                (id: "noop", type: "pkg::Noop", kind: sink),
+            ],
+            cnx: [
+                (src: "cam", dst: "noop", msg: "pkg::Frame"),
+            ],
+        )"#;
+
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let cam = config.find_task_node(None, "cam").unwrap();
+        assert_eq!(cam.handle_content_policy(), HandleContent::TouchedOnly);
+
+        // A node without an explicit `logging` block falls back to `All`.
+        let noop = config.find_task_node(None, "noop").unwrap();
+        assert_eq!(noop.handle_content_policy(), HandleContent::All);
+
+        // Round-trip preserves the policy.
+        let reserialized = config.serialize_ron().unwrap();
+        let reparsed = CuConfig::deserialize_ron(&reserialized).unwrap();
+        let cam2 = reparsed.find_task_node(None, "cam").unwrap();
+        assert_eq!(cam2.handle_content_policy(), HandleContent::TouchedOnly);
+    }
+
+    #[test]
+    fn test_node_logging_handle_content_all_variants_parse() {
+        for (value, expected) in [
+            ("all", HandleContent::All),
+            ("touched_only", HandleContent::TouchedOnly),
+            ("none", HandleContent::None),
+        ] {
+            let txt = format!(
+                r#"(
+                    tasks: [(id: "s", type: "pkg::T", kind: source, logging: (handle_content: {value}))],
+                    cnx: [(src: "s", dst: "__nc__", msg: "pkg::M")],
+                )"#
+            );
+            let config = CuConfig::deserialize_ron(&txt).unwrap();
+            assert_eq!(
+                config.find_task_node(None, "s").unwrap().handle_content_policy(),
+                expected,
+                "policy mismatch for `{value}`"
+            );
+        }
     }
 
     #[test]
