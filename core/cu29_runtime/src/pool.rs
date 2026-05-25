@@ -18,6 +18,7 @@ use std::marker::PhantomData;
 use std::mem::{align_of, size_of};
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 use memmap2::{MmapMut, MmapOptions};
@@ -490,11 +491,36 @@ impl<T: ArrayLike> DerefMut for CuHandleInner<T> {
     }
 }
 
+/// Logging policy for a handle's payload content.
+///
+/// Set by the source that produces the handle (typically driven by config) and propagated
+/// through clones. The unified-log encoder reads this to decide whether to write the payload
+/// bytes or just a metadata-only record for this frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HandleContent {
+    /// Always log the full payload (current default).
+    #[default]
+    All,
+    /// Log the payload only if a downstream consumer called [`CuHandle::mark_touched`].
+    TouchedOnly,
+    /// Never log the payload; keep only the surrounding metadata (timestamps, status).
+    None,
+}
+
+/// Backing storage for a [`CuHandle`]: the payload mutex plus the per-handle touched flag
+/// and logging mode. Shared across handle clones via [`Arc`].
+#[derive(Debug)]
+struct CuHandleCell<T: Debug + Send + Sync> {
+    touched: AtomicBool,
+    mode: HandleContent,
+    inner: Mutex<CuHandleInner<T>>,
+}
+
 /// A shareable handle to a pooled or detached object.
 ///
 /// When `T: ArrayLike`, the handle also participates in Copper's buffer pool APIs.
 #[derive(Debug)]
-pub struct CuHandle<T: Debug + Send + Sync>(Arc<Mutex<CuHandleInner<T>>>);
+pub struct CuHandle<T: Debug + Send + Sync>(Arc<CuHandleCell<T>>);
 
 impl<T: Debug + Send + Sync> Clone for CuHandle<T> {
     fn clone(&self) -> Self {
@@ -503,14 +529,23 @@ impl<T: Debug + Send + Sync> Clone for CuHandle<T> {
 }
 
 impl<T: Debug + Send + Sync> Deref for CuHandle<T> {
-    type Target = Arc<Mutex<CuHandleInner<T>>>;
+    type Target = Mutex<CuHandleInner<T>>;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.0.inner
     }
 }
 
 impl<T: Debug + Send + Sync> CuHandle<T> {
+    /// Wrap a raw [`CuHandleInner`] into a fresh handle with the given logging mode.
+    fn from_inner(inner: CuHandleInner<T>, mode: HandleContent) -> Self {
+        CuHandle(Arc::new(CuHandleCell {
+            touched: AtomicBool::new(false),
+            mode,
+            inner: Mutex::new(inner),
+        }))
+    }
+
     /// Create a new CuHandle not part of a Pool (not for onboard usages, use pools instead)
     pub fn new_detached(inner: T) -> Self {
         Self::new_detached_box(Box::new(inner))
@@ -518,19 +553,46 @@ impl<T: Debug + Send + Sync> CuHandle<T> {
 
     /// Create a detached handle from an already heap-allocated object.
     pub fn new_detached_box(inner: Box<T>) -> Self {
-        CuHandle(Arc::new(Mutex::new(CuHandleInner::Detached(inner))))
+        Self::from_inner(CuHandleInner::Detached(inner), HandleContent::default())
     }
 
     /// Safely access the inner value, applying a closure to it.
     pub fn with_inner<R>(&self, f: impl FnOnce(&CuHandleInner<T>) -> R) -> R {
-        let lock = lock_unpoison(&self.0);
+        let lock = lock_unpoison(&self.0.inner);
         f(&*lock)
     }
 
     /// Mutably access the inner value, applying a closure to it.
     pub fn with_inner_mut<R>(&self, f: impl FnOnce(&mut CuHandleInner<T>) -> R) -> R {
-        let mut lock = lock_unpoison(&self.0);
+        let mut lock = lock_unpoison(&self.0.inner);
         f(&mut *lock)
+    }
+
+    /// Mark this handle as read by a downstream consumer.
+    ///
+    /// When the source is configured with [`HandleContent::TouchedOnly`], the unified-log
+    /// encoder will only write the payload bytes if at least one consumer called this.
+    /// Cheap (one relaxed atomic store); safe to call multiple times.
+    pub fn mark_touched(&self) {
+        self.0.touched.store(true, Ordering::Relaxed);
+    }
+
+    /// Returns true if [`mark_touched`](Self::mark_touched) has ever been called on this
+    /// handle (or any clone of it).
+    pub fn was_touched(&self) -> bool {
+        self.0.touched.load(Ordering::Relaxed)
+    }
+
+    /// Logging mode set by the source that produced this handle.
+    pub fn logging_mode(&self) -> HandleContent {
+        self.0.mode
+    }
+
+    /// Convenience: [`with_inner`](Self::with_inner) plus [`mark_touched`](Self::mark_touched)
+    /// in one call, for the common consumer-side access pattern.
+    pub fn with_touched_inner<R>(&self, f: impl FnOnce(&CuHandleInner<T>) -> R) -> R {
+        self.mark_touched();
+        self.with_inner(f)
     }
 }
 
@@ -539,7 +601,7 @@ where
     U: ElementType + Serialize + 'static,
 {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let inner = lock_unpoison(&self.0);
+        let inner = lock_unpoison(&self.0.inner);
         inner.inner_ref().serialize(serializer)
     }
 }
@@ -558,7 +620,7 @@ where
     U: ElementType + Serialize + 'static,
 {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let inner = lock_unpoison(&self.0);
+        let inner = lock_unpoison(&self.0.inner);
         let buffer = inner.inner_ref();
 
         if shared_handle_serialization_enabled()
@@ -636,7 +698,7 @@ where
     <T as ArrayLike>::Element: 'static,
 {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let inner = lock_unpoison(&self.0);
+        let inner = lock_unpoison(&self.0.inner);
         crate::monitoring::record_payload_handle_bytes(
             inner.inner_ref().len() * size_of::<T::Element>(),
         );
@@ -741,14 +803,16 @@ impl<T: ArrayLike> CuPool<T> for CuHostMemoryPool<T> {
     fn acquire(&self) -> Option<CuHandle<T>> {
         let owned_object = self.pool.try_pull_owned(); // Use the owned version
 
-        owned_object.map(|reusable| CuHandle(Arc::new(Mutex::new(CuHandleInner::Pooled(reusable)))))
+        owned_object.map(|reusable| {
+            CuHandle::from_inner(CuHandleInner::Pooled(reusable), HandleContent::default())
+        })
     }
 
     fn copy_from<O: ArrayLike<Element = T::Element>>(&self, from: &mut CuHandle<O>) -> CuHandle<T> {
         let to_handle = self.acquire().expect("No available buffers in the pool");
         {
-            let from_lock = lock_unpoison(&from.0);
-            let mut to_lock = lock_unpoison(&to_handle.0);
+            let from_lock = lock_unpoison(&from.0.inner);
+            let mut to_lock = lock_unpoison(&to_handle.0.inner);
             to_lock.inner_mut().copy_from_slice(from_lock.inner_ref());
         }
         to_handle
@@ -816,9 +880,9 @@ impl<E: ElementType> PoolMonitor for CuSharedMemoryPool<E> {
 
 impl<E: ElementType> CuPool<CuSharedMemoryBuffer<E>> for CuSharedMemoryPool<E> {
     fn acquire(&self) -> Option<CuHandle<CuSharedMemoryBuffer<E>>> {
-        self.pool
-            .try_pull_owned()
-            .map(|reusable| CuHandle(Arc::new(Mutex::new(CuHandleInner::Pooled(reusable)))))
+        self.pool.try_pull_owned().map(|reusable| {
+            CuHandle::from_inner(CuHandleInner::Pooled(reusable), HandleContent::default())
+        })
     }
 
     fn copy_from<O>(&self, from: &mut CuHandle<O>) -> CuHandle<CuSharedMemoryBuffer<E>>
@@ -827,8 +891,8 @@ impl<E: ElementType> CuPool<CuSharedMemoryBuffer<E>> for CuSharedMemoryPool<E> {
     {
         let to_handle = self.acquire().expect("No available buffers in the pool");
         {
-            let from_lock = lock_unpoison(&from.0);
-            let mut to_lock = lock_unpoison(&to_handle.0);
+            let from_lock = lock_unpoison(&from.0.inner);
+            let mut to_lock = lock_unpoison(&to_handle.0.inner);
             to_lock.inner_mut().copy_from_slice(from_lock.inner_ref());
         }
         to_handle
@@ -1027,9 +1091,9 @@ mod cuda {
         E: DeviceRepr + ElementType + ValidAsZeroBits,
     {
         fn acquire(&self) -> Option<CuHandle<CudaSliceWrapper<E>>> {
-            self.pool
-                .try_pull_owned()
-                .map(|x| CuHandle(Arc::new(Mutex::new(CuHandleInner::Pooled(x)))))
+            self.pool.try_pull_owned().map(|x| {
+                CuHandle::from_inner(CuHandleInner::Pooled(x), HandleContent::default())
+            })
         }
 
         fn copy_from<O>(&self, from_handle: &mut CuHandle<O>) -> CuHandle<CudaSliceWrapper<E>>
@@ -1039,8 +1103,8 @@ mod cuda {
             let to_handle = self.acquire().expect("No available buffers in the pool");
 
             {
-                let from_lock = lock_unpoison(&from_handle.0);
-                let mut to_lock = lock_unpoison(&to_handle.0);
+                let from_lock = lock_unpoison(&from_handle.0.inner);
+                let mut to_lock = lock_unpoison(&to_handle.0.inner);
 
                 match &mut *to_lock {
                     CuHandleInner::Detached(to) => {
@@ -1157,6 +1221,41 @@ impl<E: ElementType> Drop for AlignedBuffer<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_handle_touched_flag_defaults_false() {
+        let h: CuHandle<Vec<u8>> = CuHandle::new_detached(vec![1, 2, 3]);
+        assert!(!h.was_touched());
+        assert_eq!(h.logging_mode(), HandleContent::All);
+    }
+
+    #[test]
+    fn test_handle_mark_touched_propagates_across_clones() {
+        let h: CuHandle<Vec<u8>> = CuHandle::new_detached(vec![1, 2, 3]);
+        let clone = h.clone();
+        assert!(!h.was_touched());
+        assert!(!clone.was_touched());
+
+        clone.mark_touched();
+        // Shared Arc<CuHandleCell>: any clone sees the flag flip.
+        assert!(h.was_touched());
+        assert!(clone.was_touched());
+    }
+
+    #[test]
+    fn test_with_touched_inner_marks_and_reads() {
+        let h: CuHandle<Vec<u8>> = CuHandle::new_detached(vec![10, 20]);
+        let first = h.with_touched_inner(|inner| inner.as_ref()[0]);
+        assert_eq!(first, 10);
+        assert!(h.was_touched());
+    }
+
+    #[test]
+    fn test_with_inner_does_not_mark_touched() {
+        let h: CuHandle<Vec<u8>> = CuHandle::new_detached(vec![10, 20]);
+        let _ = h.with_inner(|inner| inner.as_ref()[0]);
+        assert!(!h.was_touched(), "with_inner must not flip the touched flag");
+    }
 
     #[test]
     fn test_pool() {
