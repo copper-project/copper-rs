@@ -3,6 +3,7 @@ extern crate alloc;
 
 use crate::config::{ComponentConfig, CuConfig, LoggingCodecSpec};
 use crate::cutask::{CuMsg, CuMsgMetadata, CuMsgPayload};
+use crate::sync_compat::{Mutex, OnceLock, lock as lock_mutex, once_get_or_init};
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -24,33 +25,10 @@ use std::io::Read;
 #[cfg(feature = "std")]
 use std::path::Path;
 
-#[cfg(not(feature = "std"))]
-mod imp {
-    pub use spin::Mutex;
-    pub use spin::once::Once as OnceLock;
-}
-
-#[cfg(feature = "std")]
-mod imp {
-    pub use std::sync::{Mutex, OnceLock};
-}
-
-use imp::*;
-
 #[cfg(feature = "std")]
 use crate::curuntime::{RuntimeLifecycleEvent, RuntimeLifecycleRecord};
 #[cfg(feature = "std")]
 use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
-
-#[cfg(feature = "std")]
-fn lock_mutex<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(|e| e.into_inner())
-}
-
-#[cfg(not(feature = "std"))]
-fn lock_mutex<T>(m: &Mutex<T>) -> spin::MutexGuard<'_, T> {
-    m.lock()
-}
 
 pub trait CuLogCodec<P: CuMsgPayload>: 'static {
     type Config: DeserializeOwned + Default;
@@ -128,14 +106,8 @@ type EffectiveConfigRegistry = HashMap<TypeId, &'static EffectiveConfigEntry>;
 
 static EFFECTIVE_CONFIGS: OnceLock<Mutex<EffectiveConfigRegistry>> = OnceLock::new();
 
-#[cfg(feature = "std")]
 fn effective_config_registry() -> &'static Mutex<EffectiveConfigRegistry> {
-    EFFECTIVE_CONFIGS.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-#[cfg(not(feature = "std"))]
-fn effective_config_registry() -> &'static Mutex<EffectiveConfigRegistry> {
-    EFFECTIVE_CONFIGS.call_once(|| Mutex::new(HashMap::new()))
+    once_get_or_init(&EFFECTIVE_CONFIGS, || Mutex::new(HashMap::new()))
 }
 
 pub fn effective_config_entry<T: 'static>(default_ron: &str) -> &'static EffectiveConfigEntry {
