@@ -343,11 +343,11 @@ where
             observation: RangeObservation::from_centimeters(peer_id, distance_cm, rssi_dbm),
         });
 
-        if let Some(in_flight) = self.in_flight {
-            if self.peer_ids[in_flight.peer_index] == peer_id {
-                self.next_peer_index = (in_flight.peer_index + 1) % self.peer_ids.len();
-                self.in_flight = None;
-            }
+        if let Some(in_flight) = self.in_flight
+            && self.peer_ids[in_flight.peer_index] == peer_id
+        {
+            self.next_peer_index = (in_flight.peer_index + 1) % self.peer_ids.len();
+            self.in_flight = None;
         }
     }
 
