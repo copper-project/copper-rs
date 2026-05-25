@@ -10,12 +10,12 @@
 
 ### Why Copper
 
-<p><strong style="color: #b87333;">Rust-first</strong> – ergonomic & safe
-<p><strong style="color: #b87333;">Sub-microsecond latency</strong> – zero-alloc, data-oriented runtime
-<p><strong style="color: #b87333;">Deterministic replay</strong> – every run, bit-for-bit identical
-<p><strong style="color: #b87333;">Interoperable with ROS2</strong> – bridges via Zenoh opening the path for a progressive migration.
-<p><strong style="color: #b87333;">Runs anywhere</strong> – from Linux servers, workstations, SBC to bare-metal MPUs
-<p><strong style="color: #b87333;">Built to ship</strong> – one stack from simulation to production
+<p><strong style="color: #b87333;">Rust-first</strong> – ergonomic & safe</p>
+<p><strong style="color: #b87333;">Sub-microsecond latency</strong> – zero-alloc, data-oriented runtime</p>
+<p><strong style="color: #b87333;">Deterministic replay</strong> – every run, bit-for-bit identical</p>
+<p><strong style="color: #b87333;">Interoperable with ROS2</strong> – bridges via Zenoh opening the path for a progressive migration.</p>
+<p><strong style="color: #b87333;">Runs anywhere</strong> – from Linux servers, workstations, SBC to bare-metal MPUs</p>
+<p><strong style="color: #b87333;">Built to ship</strong> – one stack from simulation to production</p>
 
 Already showing up in: ✈️ Flying | 🚗 Driving | 🌊 Swimming | 🚀 Spacefaring | 🤖 Humanoids
 
