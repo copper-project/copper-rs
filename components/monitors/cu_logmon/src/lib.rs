@@ -18,9 +18,12 @@ use cu29::prelude::*;
 use cu29_log_runtime::{
     format_message_only, register_live_log_listener, unregister_live_log_listener,
 };
-use spin::Mutex;
+#[cfg(not(feature = "std"))]
+use spin::{Mutex, MutexGuard};
 #[cfg(all(feature = "std", debug_assertions))]
 use std::collections::HashMap;
+#[cfg(feature = "std")]
+use std::sync::{Mutex, MutexGuard};
 
 const REPORT_INTERVAL_SECS: u64 = 1;
 const MAX_LATENCY_SECS: u64 = 5;
@@ -79,6 +82,18 @@ impl WindowState {
         for stat in &mut self.per_component {
             stat.reset();
         }
+    }
+}
+
+fn lock_window(window: &Mutex<WindowState>) -> MutexGuard<'_, WindowState> {
+    #[cfg(feature = "std")]
+    {
+        window.lock().unwrap_or_else(|poison| poison.into_inner())
+    }
+
+    #[cfg(not(feature = "std"))]
+    {
+        window.lock()
     }
 }
 
@@ -245,7 +260,7 @@ impl CuMonitor for CuLogMon {
     }
 
     fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
-        let mut window = self.window.lock();
+        let mut window = lock_window(&self.window);
         window.last_report_at = Some(ctx.recent());
         info!(
             ctx,
@@ -299,7 +314,7 @@ impl CuMonitor for CuLogMon {
         let call_start = ctx.recent();
 
         let snapshot = {
-            let mut window = self.window.lock();
+            let mut window = lock_window(&self.window);
             window.last_report_at.get_or_insert(call_start);
 
             window.total_copperlists = window.total_copperlists.saturating_add(1);
@@ -376,7 +391,7 @@ impl CuMonitor for CuLogMon {
                 info!(ctx, "{}", &base);
             }
             let log_end = ctx.recent();
-            self.window.lock().last_log_duration = log_end - log_start;
+            lock_window(&self.window).last_log_duration = log_end - log_start;
         }
 
         Ok(())

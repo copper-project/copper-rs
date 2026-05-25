@@ -1,32 +1,95 @@
 use cu29::prelude::*;
 use gstreamer::prelude::*;
 
-use bincode::de::Decoder;
+use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
-use bincode::{Decode, Encode};
+use bincode::{BorrowDecode, Decode, Encode};
 use circular_buffer::CircularBuffer;
+use gstreamer::buffer::{BufferMap, Readable};
 use gstreamer::{Buffer, BufferRef, Caps, FlowSuccess, Pipeline, parse};
 use gstreamer_app::{AppSink, AppSinkCallbacks};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
-#[derive(Debug, Clone, Default, Reflect)]
-#[reflect(opaque, from_reflect = false)]
-pub struct CuGstBuffer(pub Buffer);
+#[derive(Debug, Clone, Reflect)]
+#[reflect(opaque, from_reflect = false, no_field_bounds)]
+pub enum CuGstBuffer {
+    Live(Buffer),
+    Replay(Arc<[u8]>),
+}
+
+pub enum CuGstBufferRead<'a> {
+    Live(BufferMap<'a, Readable>),
+    Replay(&'a [u8]),
+}
+
+impl<'a> CuGstBufferRead<'a> {
+    pub fn as_slice(&self) -> &[u8] {
+        match self {
+            Self::Live(buffer) => buffer.as_slice(),
+            Self::Replay(bytes) => bytes,
+        }
+    }
+}
+
+impl AsRef<[u8]> for CuGstBufferRead<'_> {
+    fn as_ref(&self) -> &[u8] {
+        self.as_slice()
+    }
+}
+
+impl Deref for CuGstBufferRead<'_> {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.as_slice()
+    }
+}
+
+impl Default for CuGstBuffer {
+    fn default() -> Self {
+        Self::Replay(Vec::<u8>::new().into())
+    }
+}
+
+impl From<Buffer> for CuGstBuffer {
+    fn from(buffer: Buffer) -> Self {
+        Self::Live(buffer)
+    }
+}
+
+impl CuGstBuffer {
+    pub fn map_readable(&self) -> CuResult<CuGstBufferRead<'_>> {
+        match self {
+            Self::Live(buffer) => buffer
+                .as_ref()
+                .map_readable()
+                .map(CuGstBufferRead::Live)
+                .map_err(|e| CuError::new_with_cause("Could not map the gstreamer buffer", e)),
+            Self::Replay(bytes) => Ok(CuGstBufferRead::Replay(bytes)),
+        }
+    }
+
+    pub fn as_live(&self) -> Option<&Buffer> {
+        match self {
+            Self::Live(buffer) => Some(buffer),
+            Self::Replay(_) => None,
+        }
+    }
+}
 
 impl Serialize for CuGstBuffer {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        let Self(r) = self;
-        r.as_ref()
-            .map_readable()
-            .map_err(|_| serde::ser::Error::custom("Could not map readable"))?
+        self.map_readable()
+            .map_err(serde::ser::Error::custom)?
+            .as_slice()
             .serialize(serializer)
     }
 }
@@ -37,40 +100,30 @@ impl<'de> Deserialize<'de> for CuGstBuffer {
         D: serde::Deserializer<'de>,
     {
         let data = Vec::<u8>::deserialize(deserializer)?;
-        Ok(CuGstBuffer(Buffer::from_slice(data)))
+        Ok(CuGstBuffer::Replay(data.into()))
     }
 }
 
-impl Deref for CuGstBuffer {
-    type Target = Buffer;
-
-    fn deref(&self) -> &Self::Target {
-        let Self(r) = self;
-        r
-    }
-}
-
-impl DerefMut for CuGstBuffer {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        let Self(r) = self;
-        r
-    }
-}
-
-impl Decode<()> for CuGstBuffer {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+impl<Context> Decode<Context> for CuGstBuffer {
+    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let vec: Vec<u8> = Vec::decode(decoder)?;
-        let buffer = Buffer::from_slice(vec);
-        Ok(CuGstBuffer(buffer))
+        Ok(CuGstBuffer::Replay(vec.into()))
+    }
+}
+
+impl<'de, Context> BorrowDecode<'de, Context> for CuGstBuffer {
+    fn borrow_decode<D: BorrowDecoder<'de, Context = Context>>(
+        decoder: &mut D,
+    ) -> Result<Self, DecodeError> {
+        CuGstBuffer::decode(decoder)
     }
 }
 
 impl Encode for CuGstBuffer {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let Self(r) = self;
-        r.as_ref()
-            .map_readable()
-            .map_err(|_| EncodeError::Other("Could not map readable"))?
+        self.map_readable()
+            .map_err(|e| EncodeError::OtherString(e.to_string()))?
+            .as_slice()
             .encode(encoder)
     }
 }
@@ -153,7 +206,7 @@ impl<const N: usize> CuSrcTask for CuGStreamer<N> {
                         circular_buffer
                             .lock()
                             .unwrap()
-                            .push_back(CuGstBuffer(buffer.to_owned()));
+                            .push_back(CuGstBuffer::Live(buffer.to_owned()));
                         Ok(FlowSuccess::Ok)
                     }
                 })

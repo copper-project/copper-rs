@@ -1,4 +1,5 @@
 use cu29::prelude::*;
+use spin::Mutex;
 
 use crate::board::{BdshotBoard, encode_frame};
 #[cfg(feature = "messages-only")]
@@ -51,7 +52,7 @@ where
     P::Board: Send + 'static,
 {
     #[reflect(ignore)]
-    board: spin::Mutex<P::Board>,
+    board: Mutex<P::Board>,
     #[reflect(ignore)]
     telemetry_cache: [Option<EscTelemetry>; MAX_ESC_CHANNELS],
     active_channels: [bool; MAX_ESC_CHANNELS],
@@ -130,7 +131,7 @@ where
             None
         };
         Ok(Self {
-            board: spin::Mutex::new(board),
+            board: Mutex::new(board),
             telemetry_cache: Default::default(),
             active_channels: active,
             send_interval,
