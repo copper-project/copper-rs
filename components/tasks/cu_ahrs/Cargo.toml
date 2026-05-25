@@ -28,7 +28,7 @@ rp2350-demo = [
   "buddy_system_allocator",
   "embedded-hal",
   "rp235x-hal",
-  "spin",
+  "dep:spin",
   "dep:cu-mpu9250",
 ]
 std = ["cu29/std", "cu-sensor-payloads/std", "bincode/std", "serde/std"]
