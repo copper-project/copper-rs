@@ -226,11 +226,12 @@ where
     M: Metadata,
 {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        // Bring the default fallback into scope so autoref-specialization resolves to
+        // `PayloadDefaultLoggingPolicy::payload_should_log` (true) for any payload type
+        // that doesn't have its own inherent override (e.g. CuHandle, CuImage).
+        use crate::pool::PayloadDefaultLoggingPolicy as _;
         match &self.payload {
-            None => {
-                0u8.encode(encoder)?;
-            }
-            Some(payload) => {
+            Some(payload) if payload.payload_should_log() => {
                 1u8.encode(encoder)?;
                 let encoded_start = cu29_traits::observed_encode_bytes();
                 let handle_start = crate::monitoring::current_payload_handle_bytes();
@@ -244,6 +245,11 @@ where
                     encoded_bytes,
                     handle_bytes,
                 );
+            }
+            _ => {
+                // Either the payload is absent or its logging policy says skip the bytes
+                // for this tick. Either way we keep the surrounding metadata frame.
+                0u8.encode(encoder)?;
             }
         }
         self.tov.encode(encoder)?;
@@ -555,5 +561,101 @@ mod tests {
         let (decoded, _): (CuCompactString, usize) =
             decode_from_slice(&encoded, config).expect("Decoding failed");
         assert_eq!(cstr.0, decoded.0);
+    }
+
+    /// Test wrapper proving that a composite payload can forward `payload_should_log`
+    /// to an inner [`CuHandle`] via an inherent method — exactly the pattern real
+    /// composite payloads like `CuImage` will use.
+    ///
+    /// Gated on the default (non-bevy_reflect) feature configuration where
+    /// `Reflect` is auto-impl'd for any `'static`, so the wrapper satisfies
+    /// `CuMsgPayload` without needing `#[derive(Reflect)]`.
+    #[cfg(not(feature = "reflect"))]
+    #[derive(Debug, Clone, bincode::Encode, bincode::Decode, Serialize, Deserialize)]
+    struct TestHandlePayload {
+        handle: crate::pool::CuHandle<Vec<u8>>,
+    }
+
+    #[cfg(not(feature = "reflect"))]
+    impl Default for TestHandlePayload {
+        fn default() -> Self {
+            Self {
+                handle: crate::pool::CuHandle::new_detached(Vec::new()),
+            }
+        }
+    }
+
+    #[cfg(not(feature = "reflect"))]
+    impl TestHandlePayload {
+        // Inherent specialization arm: real composite payloads (e.g. CuImage) provide
+        // an identical method that forwards to their inner CuHandle.
+        fn payload_should_log(&self) -> bool {
+            self.handle.payload_should_log()
+        }
+    }
+
+    /// Encoding a CuMsg whose payload wraps a CuHandle in `TouchedOnly` mode must:
+    /// * skip the payload bytes when no consumer marked the handle touched, and
+    /// * include them once `mark_touched` was called.
+    /// The wire shape stays compatible with the existing `Option<T>` decode path
+    /// (presence tag is 0u8 for skip, 1u8 + payload otherwise).
+    #[cfg(not(feature = "reflect"))]
+    #[test]
+    fn test_encode_skips_payload_for_untouched_handle() {
+        use crate::pool::{CuHandle, HandleContent};
+        let cfg = config::standard();
+
+        let untouched = TestHandlePayload {
+            handle: CuHandle::new_detached_with_mode(
+                vec![0xAA, 0xBB, 0xCC, 0xDD],
+                HandleContent::TouchedOnly,
+            ),
+        };
+        let msg_skip: CuMsg<TestHandlePayload> = CuMsg::new(Some(untouched));
+        let skip_bytes = encode_to_vec(&msg_skip, cfg).expect("encode");
+
+        let touched_payload = TestHandlePayload {
+            handle: CuHandle::new_detached_with_mode(
+                vec![0xAA, 0xBB, 0xCC, 0xDD],
+                HandleContent::TouchedOnly,
+            ),
+        };
+        touched_payload.handle.mark_touched();
+        let msg_keep: CuMsg<TestHandlePayload> = CuMsg::new(Some(touched_payload));
+        let keep_bytes = encode_to_vec(&msg_keep, cfg).expect("encode");
+
+        assert_eq!(
+            skip_bytes[0], 0u8,
+            "first byte must be the no-payload presence tag for an untouched TouchedOnly handle"
+        );
+        assert_eq!(
+            keep_bytes[0], 1u8,
+            "first byte must be the payload-present tag once the handle was touched"
+        );
+        assert!(
+            keep_bytes.len() > skip_bytes.len(),
+            "touched encoding ({} bytes) must include payload content; skip is {} bytes",
+            keep_bytes.len(),
+            skip_bytes.len()
+        );
+    }
+
+    /// `HandleContent::All` (the default for every existing source) must never drop
+    /// payload bytes — regardless of whether the handle was touched.
+    #[cfg(not(feature = "reflect"))]
+    #[test]
+    fn test_encode_keeps_payload_for_default_mode() {
+        use crate::pool::{CuHandle, HandleContent};
+        let cfg = config::standard();
+
+        let payload = TestHandlePayload {
+            handle: CuHandle::new_detached_with_mode(vec![1, 2, 3], HandleContent::All),
+        };
+        let msg: CuMsg<TestHandlePayload> = CuMsg::new(Some(payload));
+        let bytes = encode_to_vec(&msg, cfg).expect("encode");
+        assert_eq!(
+            bytes[0], 1u8,
+            "default (HandleContent::All) must keep emitting the payload"
+        );
     }
 }

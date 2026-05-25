@@ -294,11 +294,10 @@ where
     C: CuLogCodec<T>,
     E: Encoder,
 {
+    // Same autoref-specialization dispatch as the codec-less encode path in cutask.rs.
+    use crate::pool::PayloadDefaultLoggingPolicy as _;
     match msg.payload() {
-        None => {
-            0u8.encode(encoder)?;
-        }
-        Some(payload) => {
+        Some(payload) if payload.payload_should_log() => {
             1u8.encode(encoder)?;
             let encoded_start = observed_encode_bytes();
             let handle_start = crate::monitoring::current_payload_handle_bytes();
@@ -315,6 +314,9 @@ where
                 encoded_bytes,
                 handle_bytes,
             );
+        }
+        _ => {
+            0u8.encode(encoder)?;
         }
     }
     msg.tov.encode(encoder)?;

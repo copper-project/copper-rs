@@ -556,6 +556,14 @@ impl<T: Debug + Send + Sync> CuHandle<T> {
         Self::from_inner(CuHandleInner::Detached(inner), HandleContent::default())
     }
 
+    /// Create a detached handle with a non-default logging mode.
+    ///
+    /// Mostly useful for tests and for sources that want to mint detached handles
+    /// (instead of pool-acquired ones) under a specific [`HandleContent`] policy.
+    pub fn new_detached_with_mode(inner: T, mode: HandleContent) -> Self {
+        Self::from_inner(CuHandleInner::Detached(Box::new(inner)), mode)
+    }
+
     /// Safely access the inner value, applying a closure to it.
     pub fn with_inner<R>(&self, f: impl FnOnce(&CuHandleInner<T>) -> R) -> R {
         let lock = lock_unpoison(&self.0.inner);
@@ -594,7 +602,37 @@ impl<T: Debug + Send + Sync> CuHandle<T> {
         self.mark_touched();
         self.with_inner(f)
     }
+
+    /// Decides whether the unified-log encoder should write this handle's payload bytes
+    /// for the current frame.
+    ///
+    /// This is the inherent "specific" arm of the autoref-specialization pattern; the
+    /// encoder resolves to this method for handle payloads (or composite payloads that
+    /// forward to it) and to [`PayloadDefaultLoggingPolicy::payload_should_log`] for
+    /// every other payload type.
+    pub fn payload_should_log(&self) -> bool {
+        match self.logging_mode() {
+            HandleContent::All => true,
+            HandleContent::None => false,
+            HandleContent::TouchedOnly => self.was_touched(),
+        }
+    }
 }
+
+/// Default arm of the autoref-specialization pattern used by the unified-log encoder.
+///
+/// Blanket-impl'd for every type, so any payload that doesn't define its own inherent
+/// `payload_should_log` method inherits this default-true implementation. Types like
+/// [`CuHandle`] (and composite payloads wrapping one) provide an inherent method with
+/// the same name, which wins method resolution because inherent methods are tried
+/// before trait methods at the same candidate self-type.
+pub trait PayloadDefaultLoggingPolicy {
+    fn payload_should_log(&self) -> bool {
+        true
+    }
+}
+
+impl<T: ?Sized> PayloadDefaultLoggingPolicy for T {}
 
 impl<U> Serialize for CuHandle<Vec<U>>
 where
@@ -1255,6 +1293,45 @@ mod tests {
         let h: CuHandle<Vec<u8>> = CuHandle::new_detached(vec![10, 20]);
         let _ = h.with_inner(|inner| inner.as_ref()[0]);
         assert!(!h.was_touched(), "with_inner must not flip the touched flag");
+    }
+
+    #[test]
+    fn test_payload_should_log_mode_all() {
+        let h: CuHandle<Vec<u8>> =
+            CuHandle::new_detached_with_mode(vec![1], HandleContent::All);
+        assert!(h.payload_should_log());
+        h.mark_touched();
+        assert!(h.payload_should_log());
+    }
+
+    #[test]
+    fn test_payload_should_log_mode_none() {
+        let h: CuHandle<Vec<u8>> =
+            CuHandle::new_detached_with_mode(vec![1], HandleContent::None);
+        assert!(!h.payload_should_log());
+        h.mark_touched();
+        assert!(
+            !h.payload_should_log(),
+            "HandleContent::None must never log payload, even when touched"
+        );
+    }
+
+    #[test]
+    fn test_payload_should_log_mode_touched_only() {
+        let h: CuHandle<Vec<u8>> =
+            CuHandle::new_detached_with_mode(vec![1], HandleContent::TouchedOnly);
+        assert!(!h.payload_should_log(), "untouched + TouchedOnly => skip");
+        h.mark_touched();
+        assert!(h.payload_should_log(), "touched + TouchedOnly => log");
+    }
+
+    #[test]
+    fn test_default_policy_returns_true_for_non_handle_types() {
+        use crate::pool::PayloadDefaultLoggingPolicy as _;
+        // The autoref-specialization fallback applies to any type that doesn't define
+        // its own inherent payload_should_log. A plain integer is a fine stand-in.
+        let v: u64 = 42;
+        assert!(v.payload_should_log());
     }
 
     #[test]
