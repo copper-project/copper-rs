@@ -23,13 +23,14 @@ pub use compat::*;
 pub use noop::{NoopLogger, NoopSectionStorage};
 
 use alloc::string::ToString;
+#[cfg(not(feature = "std"))]
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Display, Formatter, Result as FmtResult};
 #[cfg(not(feature = "std"))]
 use spin::Mutex;
 #[cfg(feature = "std")]
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use bincode::error::EncodeError;
 use bincode::{Decode, Encode};

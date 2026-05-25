@@ -48,7 +48,7 @@ use core::fmt::{Debug, Display, Formatter};
 use std::error::Error;
 
 #[cfg(not(feature = "std"))]
-use spin::Mutex as SpinMutex;
+use spin::Mutex as SyncMutex;
 
 // Type alias for the boxed error type to simplify conditional compilation
 #[cfg(feature = "std")]
@@ -323,7 +323,7 @@ thread_local! {
 }
 
 #[cfg(not(feature = "std"))]
-static OBSERVED_ENCODE_BYTES: SpinMutex<Option<usize>> = SpinMutex::new(None);
+static OBSERVED_ENCODE_BYTES: SyncMutex<Option<usize>> = SyncMutex::new(None);
 
 /// Starts observed byte counting for the current encode pass.
 pub fn begin_observed_encode() {
