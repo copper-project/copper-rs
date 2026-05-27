@@ -5,9 +5,7 @@
             type: "FrameSource",
             kind: source,
             run_in_sim: true,
-            logging: (
-                handle_content: touched_only,
-            ),
+            logging: (handle_content: touched_only),
         ),
         (
             id: "sink",
@@ -17,10 +15,6 @@
         ),
     ],
     cnx: [
-        (
-            src: "cam",
-            dst: "sink",
-            msg: "i32",
-        ),
+        (src: "cam", dst: "sink", msg: "i32"),
     ],
 )
