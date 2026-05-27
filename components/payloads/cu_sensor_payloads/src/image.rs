@@ -285,6 +285,29 @@ impl<A> CuImage<A>
 where
     A: ArrayLike<Element = u8> + Send + Sync + 'static,
 {
+    /// Forward of [`CuHandle::payload_should_log`]. The unified-log encoder resolves
+    /// to this inherent method (via autoref-specialization) when the payload type is
+    /// `CuImage<A>`, so the configured `HandleContent` policy on the inner handle
+    /// drives whether the image bytes are written to the log.
+    pub fn payload_should_log(&self) -> bool {
+        self.buffer_handle.payload_should_log()
+    }
+
+    /// Forward of [`CuHandle::apply_handle_content_policy`]. The runtime calls this
+    /// (via autoref-specialization) on every source-produced `CuImage` payload to
+    /// stamp it with the source's configured `NodeLogging.handle_content` mode
+    /// before downstream consumers see it.
+    pub fn apply_handle_content_policy(&self, mode: cu29::pool::HandleContent) {
+        self.buffer_handle.apply_handle_content_policy(mode);
+    }
+
+    /// Consumer-side convenience: mark the underlying buffer as read. The unified-log
+    /// encoder records the full payload for this frame (when the source uses
+    /// `HandleContent::TouchedOnly`); without this call the payload is skipped.
+    pub fn mark_touched(&self) {
+        self.buffer_handle.mark_touched();
+    }
+
     pub fn with_plane_bytes<R>(
         &self,
         plane_index: usize,
@@ -504,5 +527,155 @@ mod tests {
         };
 
         assert_eq!(format.byte_size(), 460_800);
+    }
+
+    // ---- only-log-what-you-use: end-to-end encode behavior on CuImage ----
+    //
+    // These tests stand in for the codegen-emitted per-slot encode block. They run
+    // the same logic the cu29-derive macro emits at each output slot:
+    //
+    //   1. Stamp the source's configured policy on the payload's CuHandle(s) via
+    //      `apply_handle_content_policy(mode)`.
+    //   2. Ask the (now-policy-aware) payload whether to log via `payload_should_log()`.
+    //   3. Either call the normal encoder (full payload) or `encode_metadata_only`
+    //      (presence tag 0u8 + tov + metadata, no payload bytes).
+    //
+    // Both step 1 and step 2 require concrete-type method dispatch (autoref
+    // specialization). The codegen-emitted block has concrete types; the generic
+    // `Encode for CuStampedData` impl does not, which is exactly why the policy
+    // check lives in codegen and not in the generic encoder.
+    //
+    // Running these tests against the real `encode_metadata_only` helper proves the
+    // full chain end-to-end without needing to spin up a `copper_runtime!` graph.
+    mod only_log_what_you_use {
+        use crate::CuImage;
+        use bincode::config;
+        use cu29::config::HandleContent;
+        use cu29::cutask::{CuMsg, encode_metadata_only};
+        use cu29::pool::CuHandle;
+        // Bring the autoref-specialization fallback traits into scope so method
+        // resolution at the concrete-type call site below picks CuImage's inherent
+        // overrides (apply_handle_content_policy, payload_should_log) when present
+        // and falls back to the default-true / no-op trait methods otherwise.
+        use cu29::pool::PayloadDefaultHandlePolicyApply as _;
+        use cu29::pool::PayloadDefaultLoggingPolicy as _;
+
+        const FORMAT: super::super::CuImageBufferFormat = super::super::CuImageBufferFormat {
+            width: 2,
+            height: 2,
+            stride: 2,
+            pixel_format: *b"GRAY",
+        };
+
+        fn make_image() -> CuImage<Vec<u8>> {
+            // Source-side default: handles are minted with HandleContent::All — only
+            // the codegen-emitted prelude flips them to the configured policy.
+            let handle = CuHandle::new_detached(vec![0xDE, 0xAD, 0xBE, 0xEF]);
+            CuImage::new(FORMAT, handle)
+        }
+
+        /// Mirrors `build_per_slot_encode_block`: stamp the policy, ask the payload,
+        /// either run the normal Encode or the metadata-only helper. Returns the
+        /// serialized byte stream — exactly what codegen would write for this slot.
+        ///
+        /// The `PayloadDefault*` trait imports at the top of this module bring the
+        /// autoref-specialization fallbacks into scope so method resolution picks
+        /// `CuImage`'s inherent overrides at this concrete-type call site (the same
+        /// trick codegen uses inside `build_per_slot_encode_block`).
+        fn encode_with_policy(
+            msg: &CuMsg<CuImage<Vec<u8>>>,
+            mode: HandleContent,
+        ) -> Vec<u8> {
+            let should_log = match msg.payload() {
+                Some(p) => {
+                    p.apply_handle_content_policy(mode);
+                    p.payload_should_log()
+                }
+                None => false,
+            };
+
+            // Use an in-memory writer that grows on demand.
+            use bincode::enc::write::Writer;
+            struct VecWriter(Vec<u8>);
+            impl Writer for VecWriter {
+                fn write(&mut self, bytes: &[u8]) -> Result<(), bincode::error::EncodeError> {
+                    self.0.extend_from_slice(bytes);
+                    Ok(())
+                }
+            }
+            let mut encoder = bincode::enc::EncoderImpl::new(VecWriter(Vec::new()), config::standard());
+            use bincode::enc::Encode as _;
+            if should_log {
+                msg.encode(&mut encoder).expect("encode");
+            } else {
+                encode_metadata_only(msg, &mut encoder).expect("encode metadata-only");
+            }
+            encoder.into_writer().0
+        }
+
+        /// Untouched + TouchedOnly → encoder writes the no-payload tag.
+        #[test]
+        fn touched_only_untouched_skips_payload() {
+            let image = make_image();
+            let msg: CuMsg<CuImage<Vec<u8>>> = CuMsg::new(Some(image));
+            let bytes = encode_with_policy(&msg, HandleContent::TouchedOnly);
+            assert_eq!(
+                bytes.first().copied(),
+                Some(0u8),
+                "untouched TouchedOnly must emit no-payload tag"
+            );
+        }
+
+        /// Touched + TouchedOnly → encoder writes the full payload.
+        #[test]
+        fn touched_only_touched_keeps_payload() {
+            let image = make_image();
+            image.mark_touched();
+            let msg: CuMsg<CuImage<Vec<u8>>> = CuMsg::new(Some(image));
+            let bytes = encode_with_policy(&msg, HandleContent::TouchedOnly);
+            assert_eq!(bytes.first().copied(), Some(1u8));
+            assert!(bytes.len() > 8, "payload bytes must follow the present tag");
+        }
+
+        /// `HandleContent::None` strips the payload regardless of touch state.
+        #[test]
+        fn none_always_skips_payload() {
+            let image = make_image();
+            image.mark_touched();
+            let msg: CuMsg<CuImage<Vec<u8>>> = CuMsg::new(Some(image));
+            let bytes = encode_with_policy(&msg, HandleContent::None);
+            assert_eq!(bytes.first().copied(), Some(0u8));
+        }
+
+        /// `HandleContent::All` always keeps the payload — codegen's zero-cost path
+        /// for the common case (it emits no prelude at all, but the result is the
+        /// same as calling apply_handle_content_policy(All)).
+        #[test]
+        fn all_mode_keeps_payload_with_or_without_touch() {
+            for touched in [false, true] {
+                let image = make_image();
+                if touched {
+                    image.mark_touched();
+                }
+                let msg: CuMsg<CuImage<Vec<u8>>> = CuMsg::new(Some(image));
+                let bytes = encode_with_policy(&msg, HandleContent::All);
+                assert_eq!(
+                    bytes.first().copied(),
+                    Some(1u8),
+                    "All mode must keep payload (touched={touched})"
+                );
+            }
+        }
+
+        /// A consumer that holds a cloned handle and marks it touched is observed by
+        /// the encoder, which reads the original. This is the multi-task case.
+        #[test]
+        fn touched_flag_is_shared_across_clones() {
+            let image = make_image();
+            image.apply_handle_content_policy(HandleContent::TouchedOnly);
+            let consumer_view = image.buffer_handle.clone();
+            let _ = consumer_view.with_touched_inner(|inner| inner.as_ref()[0]);
+            assert!(image.payload_should_log());
+        }
     }
 }

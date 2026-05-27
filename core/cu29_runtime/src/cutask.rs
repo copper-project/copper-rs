@@ -226,12 +226,18 @@ where
     M: Metadata,
 {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        // Bring the default fallback into scope so autoref-specialization resolves to
-        // `PayloadDefaultLoggingPolicy::payload_should_log` (true) for any payload type
-        // that doesn't have its own inherent override (e.g. CuHandle, CuImage).
-        use crate::pool::PayloadDefaultLoggingPolicy as _;
+        // NOTE: the `HandleContent` policy decision (TouchedOnly / None) is NOT made
+        // here. It can't be: this impl is generic over `T`, so method resolution at
+        // the `payload_should_log()` call site would always pick the trait blanket
+        // default (true) — autoref-specialization only works at concrete-type sites.
+        // The codegen-emitted per-slot encoder in cu29_derive consults the policy at
+        // the concrete payload type and routes to `encode_metadata_only` when the
+        // bytes should be skipped. This generic impl just writes the full payload.
         match &self.payload {
-            Some(payload) if payload.payload_should_log() => {
+            None => {
+                0u8.encode(encoder)?;
+            }
+            Some(payload) => {
                 1u8.encode(encoder)?;
                 let encoded_start = cu29_traits::observed_encode_bytes();
                 let handle_start = crate::monitoring::current_payload_handle_bytes();
@@ -246,16 +252,33 @@ where
                     handle_bytes,
                 );
             }
-            _ => {
-                // Either the payload is absent or its logging policy says skip the bytes
-                // for this tick. Either way we keep the surrounding metadata frame.
-                0u8.encode(encoder)?;
-            }
         }
         self.tov.encode(encoder)?;
         self.metadata.encode(encoder)?;
         Ok(())
     }
+}
+
+/// Write a metadata-only record for a stamped message: presence tag = 0u8 (no payload),
+/// followed by `tov` and `metadata`. Wire-compatible with the existing decode path —
+/// a reader sees `payload: None` for the frame, same as if the source had been
+/// disabled entirely, but the surrounding timestamp/status are preserved.
+///
+/// Codegen emits a call to this helper when a slot's producing task is configured with
+/// `HandleContent::None` or `HandleContent::TouchedOnly` and the handle wasn't touched.
+pub fn encode_metadata_only<T, M, E>(
+    msg: &CuStampedData<T, M>,
+    encoder: &mut E,
+) -> Result<(), EncodeError>
+where
+    T: CuMsgPayload,
+    M: Metadata,
+    E: Encoder,
+{
+    0u8.encode(encoder)?;
+    msg.tov.encode(encoder)?;
+    msg.metadata.encode(encoder)?;
+    Ok(())
 }
 
 impl Default for CuMsgMetadata {
