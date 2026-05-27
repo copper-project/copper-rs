@@ -4309,7 +4309,10 @@ mod tests {
             );
             let config = CuConfig::deserialize_ron(&txt).unwrap();
             assert_eq!(
-                config.find_task_node(None, "s").unwrap().handle_content_policy(),
+                config
+                    .find_task_node(None, "s")
+                    .unwrap()
+                    .handle_content_policy(),
                 expected,
                 "policy mismatch for `{value}`"
             );

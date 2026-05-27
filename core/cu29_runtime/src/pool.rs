@@ -1150,9 +1150,9 @@ mod cuda {
         E: DeviceRepr + ElementType + ValidAsZeroBits,
     {
         fn acquire(&self) -> Option<CuHandle<CudaSliceWrapper<E>>> {
-            self.pool.try_pull_owned().map(|x| {
-                CuHandle::from_inner(CuHandleInner::Pooled(x), HandleContent::default())
-            })
+            self.pool
+                .try_pull_owned()
+                .map(|x| CuHandle::from_inner(CuHandleInner::Pooled(x), HandleContent::default()))
         }
 
         fn copy_from<O>(&self, from_handle: &mut CuHandle<O>) -> CuHandle<CudaSliceWrapper<E>>
@@ -1313,13 +1313,15 @@ mod tests {
     fn test_with_inner_does_not_mark_touched() {
         let h: CuHandle<Vec<u8>> = CuHandle::new_detached(vec![10, 20]);
         let _ = h.with_inner(|inner| inner.as_ref()[0]);
-        assert!(!h.was_touched(), "with_inner must not flip the touched flag");
+        assert!(
+            !h.was_touched(),
+            "with_inner must not flip the touched flag"
+        );
     }
 
     #[test]
     fn test_payload_should_log_mode_all() {
-        let h: CuHandle<Vec<u8>> =
-            CuHandle::new_detached_with_mode(vec![1], HandleContent::All);
+        let h: CuHandle<Vec<u8>> = CuHandle::new_detached_with_mode(vec![1], HandleContent::All);
         assert!(h.payload_should_log());
         h.mark_touched();
         assert!(h.payload_should_log());
@@ -1327,8 +1329,7 @@ mod tests {
 
     #[test]
     fn test_payload_should_log_mode_none() {
-        let h: CuHandle<Vec<u8>> =
-            CuHandle::new_detached_with_mode(vec![1], HandleContent::None);
+        let h: CuHandle<Vec<u8>> = CuHandle::new_detached_with_mode(vec![1], HandleContent::None);
         assert!(!h.payload_should_log());
         h.mark_touched();
         assert!(

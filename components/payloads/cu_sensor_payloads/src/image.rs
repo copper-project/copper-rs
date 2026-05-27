@@ -553,12 +553,11 @@ mod tests {
         use cu29::config::HandleContent;
         use cu29::cutask::{CuMsg, encode_metadata_only};
         use cu29::pool::CuHandle;
-        // Bring the autoref-specialization fallback traits into scope so method
-        // resolution at the concrete-type call site below picks CuImage's inherent
-        // overrides (apply_handle_content_policy, payload_should_log) when present
-        // and falls back to the default-true / no-op trait methods otherwise.
-        use cu29::pool::PayloadDefaultHandlePolicyApply as _;
-        use cu29::pool::PayloadDefaultLoggingPolicy as _;
+        // No trait import needed here: `CuImage` defines inherent
+        // `apply_handle_content_policy` and `payload_should_log` methods that win
+        // method resolution. Codegen brings the fallback traits into scope because
+        // it doesn't know the payload's concrete type up front — for these tests
+        // the type is `CuImage<Vec<u8>>` so the inherent path always resolves.
 
         const FORMAT: super::super::CuImageBufferFormat = super::super::CuImageBufferFormat {
             width: 2,
@@ -582,10 +581,7 @@ mod tests {
         /// autoref-specialization fallbacks into scope so method resolution picks
         /// `CuImage`'s inherent overrides at this concrete-type call site (the same
         /// trick codegen uses inside `build_per_slot_encode_block`).
-        fn encode_with_policy(
-            msg: &CuMsg<CuImage<Vec<u8>>>,
-            mode: HandleContent,
-        ) -> Vec<u8> {
+        fn encode_with_policy(msg: &CuMsg<CuImage<Vec<u8>>>, mode: HandleContent) -> Vec<u8> {
             let should_log = match msg.payload() {
                 Some(p) => {
                     p.apply_handle_content_policy(mode);
@@ -603,7 +599,8 @@ mod tests {
                     Ok(())
                 }
             }
-            let mut encoder = bincode::enc::EncoderImpl::new(VecWriter(Vec::new()), config::standard());
+            let mut encoder =
+                bincode::enc::EncoderImpl::new(VecWriter(Vec::new()), config::standard());
             use bincode::enc::Encode as _;
             if should_log {
                 msg.encode(&mut encoder).expect("encode");
