@@ -1,20 +1,11 @@
-//! Confirms `logging: (handle_content: touched_only)` is accepted by the runtime
-//! macro when the source's payload type opts into the policy via
-//! `HandleContentAware`. The codegen-emitted per-slot block contains a compile-time
-//! `HandleContentAware` bound check, so this test failing to compile would mean the
-//! gate falsely rejects a well-formed payload. Behavioral verification of the
-//! encode path lives in the cu_sensor_payloads end-to-end tests; the matching
-//! compile_fail test in this directory pins the other side (unmarked payload =>
-//! clear compile error).
+//! Marker-present path of the HandleContentAware gate. Behavioral verification of
+//! the encode path lives in the cu_sensor_payloads end-to-end tests.
 
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
 
-// Minimal HandleContentAware payload. The marker is the *gate* — the type also
-// needs inherent `apply_handle_content_policy` / `payload_should_log` methods (or
-// to wrap a CuHandle) for the policy to fire at runtime; a real payload like
-// CuImage provides them. For this compile-only test the marker alone is enough
-// to exercise the codegen gate.
+// Marker-only payload — enough to exercise the codegen gate. Real payloads (e.g.
+// CuImage) also forward the inherent methods to an inner CuHandle.
 #[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
 struct AwareFrame {
     seq: u32,

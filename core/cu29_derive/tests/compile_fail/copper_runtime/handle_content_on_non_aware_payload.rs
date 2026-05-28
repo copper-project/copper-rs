@@ -1,7 +1,4 @@
-//! Pins the silent-no-op gate: setting `handle_content: touched_only` on a source
-//! whose payload type doesn't impl `HandleContentAware` must be a compile error,
-//! not a runtime no-op. The companion compile_pass test exercises the
-//! marker-present path; this one exercises the marker-absent path.
+//! Marker-absent path of the HandleContentAware gate: must fail to compile.
 
 use cu29::prelude::*;
 

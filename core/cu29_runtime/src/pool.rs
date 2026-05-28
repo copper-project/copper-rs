@@ -612,40 +612,25 @@ impl<T: Debug + Send + Sync> CuHandle<T> {
     }
 
     /// Apply a source's configured [`HandleContent`] policy to this handle. Inherent
-    /// "specific" arm of the autoref-specialization pattern used by the runtime to
-    /// propagate `NodeLogging.handle_content` into source-produced messages without
-    /// every source having to thread the value through itself.
-    ///
-    /// Visible to every clone (shared cell). Intended to be called by the runtime once,
-    /// immediately after the source produces a message — *before* downstream tasks see
-    /// it. Synchronization piggy-backs on the copperlist handoff between source thread
-    /// and consumer/encoder threads, so `Relaxed` is sufficient here.
+    /// "specific" arm of the autoref-specialization pattern; visible to every clone.
+    /// `Relaxed` is sufficient — synchronization piggy-backs on the copperlist handoff.
     pub fn apply_handle_content_policy(&self, mode: HandleContent) {
         self.0.mode.store(mode as u8, Ordering::Relaxed);
     }
 }
 
-/// Opt-in marker for payload types that propagate a [`HandleContent`] policy to an
-/// inner [`CuHandle`].
+/// Opt-in marker required when `NodeLogging.handle_content` is non-default. Codegen
+/// emits a compile-time bound check against this trait, so an unmarked payload
+/// surfaces as a clear compile error instead of a silent runtime no-op.
 ///
-/// Configuring `NodeLogging.handle_content` to anything other than
-/// [`HandleContent::All`] only takes effect if the produced payload type implements
-/// this trait — codegen emits a compile-time check that fails with a clear
-/// "trait bound … not satisfied" error otherwise. This prevents the silent no-op
-/// where a `TouchedOnly` / `None` policy is set on a source whose payload doesn't
-/// actually carry a handle (the trait-default `payload_should_log` would return
-/// `true` and the policy would be ignored at runtime).
-///
-/// Implementing it is a one-line opt-in:
 /// ```ignore
 /// impl cu29::pool::HandleContentAware for MyPayload {}
 /// ```
-/// The impl is the *gate*. For the policy to actually fire, the payload also needs
-/// to forward [`apply_handle_content_policy`](CuHandle::apply_handle_content_policy)
-/// and [`payload_should_log`](CuHandle::payload_should_log) to its inner handle
-/// (see `CuImage` for the canonical pattern). [`CuHandle`] itself implements both
-/// the marker and the forwards, so any payload that *is* a `CuHandle<T>` works
-/// without further code.
+///
+/// The impl is the gate; for the policy to actually fire, the payload must also
+/// forward [`apply_handle_content_policy`](CuHandle::apply_handle_content_policy)
+/// and [`payload_should_log`](CuHandle::payload_should_log) to an inner [`CuHandle`]
+/// (see `CuImage`). [`CuHandle`] itself satisfies both halves.
 pub trait HandleContentAware {}
 
 impl<T: Debug + Send + Sync> HandleContentAware for CuHandle<T> {}

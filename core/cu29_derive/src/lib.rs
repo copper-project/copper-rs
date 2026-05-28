@@ -6596,20 +6596,10 @@ fn build_culist_tuple_encode(
     }
 }
 
-/// Build the per-slot encode block. For slots whose producing task is configured with
-/// the default [`HandleContent::All`] (the common case), this is just the existing
-/// encode call — zero codegen change. For `TouchedOnly` / `None`, the codegen emits:
-///   1. A compile-time `HandleContentAware` bound check on the payload type. If the
-///      payload doesn't impl the marker, the error names the trait — surfacing the
-///      "silent no-op" footgun at compile time rather than at runtime.
-///   2. A concrete-type policy check (`apply_handle_content_policy` +
-///      `payload_should_log`) that routes between the normal encode and the
-///      metadata-only encode helper.
-///
-/// The two `use ... as _;` imports bring the autoref-specialization fallback traits
-/// into scope so method resolution at this concrete-type call site picks each payload
-/// type's inherent override (e.g. `CuImage::payload_should_log`) when present and
-/// silently falls back to the trait default otherwise.
+/// Build the per-slot encode block. Mode `All` returns the existing encode call
+/// (zero codegen change). Non-default modes wrap it with a `HandleContentAware`
+/// bound check on the payload type and an autoref-specialized policy check that
+/// routes to `encode_metadata_only` when the payload says skip.
 fn build_per_slot_encode_block(
     mode: Option<HandleContent>,
     payload_ty: &Type,
@@ -6623,11 +6613,8 @@ fn build_per_slot_encode_block(
     let mode_u8 = mode as u8;
     quote! {
         {
-            // Compile-time gate: setting handle_content to non-default on a payload
-            // that doesn't carry handle-content semantics would otherwise silently
-            // log everything (the trait-default `payload_should_log` returns true).
-            // The bound below fails compilation with a clear error pointing the user
-            // at the `HandleContentAware` marker they need to add.
+            // Catches the silent-no-op footgun: non-default handle_content on an
+            // unmarked payload fails here with `HandleContentAware not satisfied`.
             const _: fn() = || {
                 fn assert_aware<__T: ::cu29::pool::HandleContentAware + ?::core::marker::Sized>() {}
                 assert_aware::<#payload_ty>();
