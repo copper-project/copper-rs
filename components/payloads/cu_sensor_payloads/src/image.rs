@@ -281,6 +281,14 @@ where
     }
 }
 
+// Opt-in marker for the codegen gate: confirms `CuImage<A>` propagates the
+// `HandleContent` policy to its inner `CuHandle`. The inherent forwards immediately
+// below this impl are what makes the policy actually fire at runtime.
+impl<A> cu29::pool::HandleContentAware for CuImage<A> where
+    A: ArrayLike<Element = u8> + Send + Sync + 'static
+{
+}
+
 impl<A> CuImage<A>
 where
     A: ArrayLike<Element = u8> + Send + Sync + 'static,

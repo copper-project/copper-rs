@@ -1,0 +1,25 @@
+error[E0277]: the trait bound `i32: HandleContentAware` is not satisfied
+  --> tests/compile_fail/copper_runtime/handle_content_on_non_aware_payload.rs:45:1
+   |
+45 | / #[copper_runtime(
+46 | |     config = "config/handle_content_on_non_aware_payload.ron",
+47 | |     sim_mode = true,
+48 | |     ignore_resources = true
+49 | | )]
+   | |__^ the trait `HandleContentAware` is not implemented for `i32`
+   |
+help: the trait `HandleContentAware` is implemented for `CuHandle<T>`
+  --> $WORKSPACE/core/cu29_runtime/src/pool.rs
+   |
+   | impl<T: Debug + Send + Sync> HandleContentAware for CuHandle<T> {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required by a bound in `assert_aware`
+  --> tests/compile_fail/copper_runtime/handle_content_on_non_aware_payload.rs:45:1
+   |
+45 | / #[copper_runtime(
+46 | |     config = "config/handle_content_on_non_aware_payload.ron",
+47 | |     sim_mode = true,
+48 | |     ignore_resources = true
+49 | | )]
+   | |__^ required by this bound in `assert_aware`
+   = note: this error originates in the attribute macro `copper_runtime` (in Nightly builds, run with -Z macro-backtrace for more info)

@@ -1455,6 +1455,7 @@ pub fn cu29_runtime::pool::CuHandle<T>::default() -> Self
 impl<T: core::fmt::Debug + core::marker::Send + core::marker::Sync> core::ops::deref::Deref for cu29_runtime::pool::CuHandle<T>
 pub type cu29_runtime::pool::CuHandle<T>::Target = std::sync::poison::mutex::Mutex<cu29_runtime::pool::CuHandleInner<T>>
 pub fn cu29_runtime::pool::CuHandle<T>::deref(&self) -> &Self::Target
+impl<T: core::fmt::Debug + core::marker::Send + core::marker::Sync> cu29_runtime::pool::HandleContentAware for cu29_runtime::pool::CuHandle<T>
 impl<T: cu29_runtime::pool::ArrayLike + cu_bincode::enc::Encode> cu_bincode::enc::Encode for cu29_runtime::pool::CuHandle<T> where <T as cu29_runtime::pool::ArrayLike>::Element: 'static
 pub fn cu29_runtime::pool::CuHandle<T>::encode<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 impl<U: cu29_runtime::pool::ElementType + cu_bincode::de::Decode<()> + 'static> cu_bincode::de::Decode<()> for cu29_runtime::pool::CuHandle<alloc::vec::Vec<U>>
@@ -1538,6 +1539,8 @@ pub fn cu29_runtime::pool::ElementType::encode<E: cu_bincode::enc::Encoder>(&sel
 impl<T> cu29_runtime::pool::ElementType for T where T: core::default::Default + core::marker::Sized + core::marker::Copy + core::fmt::Debug + core::marker::Unpin + core::marker::Send + core::marker::Sync + cu_bincode::enc::Encode + cu_bincode::de::Decode<()>
 pub fn T::decode<D: cu_bincode::de::Decoder<Context = ()>>(decoder: &mut D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
 pub fn T::encode<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
+pub trait cu29_runtime::pool::HandleContentAware
+impl<T: core::fmt::Debug + core::marker::Send + core::marker::Sync> cu29_runtime::pool::HandleContentAware for cu29_runtime::pool::CuHandle<T>
 pub trait cu29_runtime::pool::PayloadDefaultHandlePolicyApply
 pub fn cu29_runtime::pool::PayloadDefaultHandlePolicyApply::apply_handle_content_policy(&self, _mode: cu29_runtime::config::HandleContent)
 impl<T: ?core::marker::Sized> cu29_runtime::pool::PayloadDefaultHandlePolicyApply for T

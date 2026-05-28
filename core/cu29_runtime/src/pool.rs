@@ -625,6 +625,31 @@ impl<T: Debug + Send + Sync> CuHandle<T> {
     }
 }
 
+/// Opt-in marker for payload types that propagate a [`HandleContent`] policy to an
+/// inner [`CuHandle`].
+///
+/// Configuring `NodeLogging.handle_content` to anything other than
+/// [`HandleContent::All`] only takes effect if the produced payload type implements
+/// this trait — codegen emits a compile-time check that fails with a clear
+/// "trait bound … not satisfied" error otherwise. This prevents the silent no-op
+/// where a `TouchedOnly` / `None` policy is set on a source whose payload doesn't
+/// actually carry a handle (the trait-default `payload_should_log` would return
+/// `true` and the policy would be ignored at runtime).
+///
+/// Implementing it is a one-line opt-in:
+/// ```ignore
+/// impl cu29::pool::HandleContentAware for MyPayload {}
+/// ```
+/// The impl is the *gate*. For the policy to actually fire, the payload also needs
+/// to forward [`apply_handle_content_policy`](CuHandle::apply_handle_content_policy)
+/// and [`payload_should_log`](CuHandle::payload_should_log) to its inner handle
+/// (see `CuImage` for the canonical pattern). [`CuHandle`] itself implements both
+/// the marker and the forwards, so any payload that *is* a `CuHandle<T>` works
+/// without further code.
+pub trait HandleContentAware {}
+
+impl<T: Debug + Send + Sync> HandleContentAware for CuHandle<T> {}
+
 /// Default arm of the autoref-specialization pattern used by the unified-log encoder.
 ///
 /// Blanket-impl'd for every type, so any payload that doesn't define its own inherent
