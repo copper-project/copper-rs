@@ -589,16 +589,6 @@ impl<T: Debug + Send + Sync> CuHandle<T> {
         HandleContent::from_u8(self.0.mode.load(Ordering::Relaxed))
     }
 
-    /// Replace this handle's logging mode. Visible to every clone (shared cell).
-    ///
-    /// Intended for the runtime to apply the source's configured
-    /// [`HandleContent`](crate::pool::HandleContent) policy immediately after the source
-    /// produces a message — *before* downstream tasks see it. Calling this later is
-    /// allowed but rarely makes sense.
-    pub fn set_logging_mode(&self, mode: HandleContent) {
-        self.0.mode.store(mode as u8, Ordering::Relaxed);
-    }
-
     /// Convenience: [`with_inner`](Self::with_inner) plus [`mark_touched`](Self::mark_touched)
     /// in one call, for the common consumer-side access pattern.
     pub fn with_touched_inner<R>(&self, f: impl FnOnce(&CuHandleInner<T>) -> R) -> R {
@@ -625,8 +615,13 @@ impl<T: Debug + Send + Sync> CuHandle<T> {
     /// "specific" arm of the autoref-specialization pattern used by the runtime to
     /// propagate `NodeLogging.handle_content` into source-produced messages without
     /// every source having to thread the value through itself.
+    ///
+    /// Visible to every clone (shared cell). Intended to be called by the runtime once,
+    /// immediately after the source produces a message — *before* downstream tasks see
+    /// it. Synchronization piggy-backs on the copperlist handoff between source thread
+    /// and consumer/encoder threads, so `Relaxed` is sufficient here.
     pub fn apply_handle_content_policy(&self, mode: HandleContent) {
-        self.set_logging_mode(mode);
+        self.0.mode.store(mode as u8, Ordering::Relaxed);
     }
 }
 

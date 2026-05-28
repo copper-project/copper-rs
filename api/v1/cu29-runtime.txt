@@ -1440,7 +1440,6 @@ pub fn cu29_runtime::pool::CuHandle<T>::new_detached(inner: T) -> Self
 pub fn cu29_runtime::pool::CuHandle<T>::new_detached_box(inner: alloc::boxed::Box<T>) -> Self
 pub fn cu29_runtime::pool::CuHandle<T>::new_detached_with_mode(inner: T, mode: cu29_runtime::config::HandleContent) -> Self
 pub fn cu29_runtime::pool::CuHandle<T>::payload_should_log(&self) -> bool
-pub fn cu29_runtime::pool::CuHandle<T>::set_logging_mode(&self, mode: cu29_runtime::config::HandleContent)
 pub fn cu29_runtime::pool::CuHandle<T>::was_touched(&self) -> bool
 pub fn cu29_runtime::pool::CuHandle<T>::with_inner<R>(&self, f: impl core::ops::function::FnOnce(&cu29_runtime::pool::CuHandleInner<T>) -> R) -> R
 pub fn cu29_runtime::pool::CuHandle<T>::with_inner_mut<R>(&self, f: impl core::ops::function::FnOnce(&mut cu29_runtime::pool::CuHandleInner<T>) -> R) -> R
