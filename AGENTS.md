@@ -111,7 +111,7 @@ If the task is about `cu_ryuw122` / UWB ranging:
 
 `cu_ryuw122` guidance:
 
-- Treat it as an anchor-side ranging source, not as a localization solver.
+- Treat it as an initiator-side ranging source that usually lives on the moving robot and polls fixed anchors, not as a localization solver.
 - Its output boundary is `cu_sensor_payloads::RangeObservation`.
 - Safety logic, range accumulation, and multilateration belong in downstream tasks.
 - Preserve the one-in-flight non-blocking poll cycle:

@@ -1,9 +1,9 @@
 use core::fmt;
 
-const ANCHOR_RCV_PREFIX: &str = "+ANCHOR_RCV=";
+const RANGE_RESPONSE_PREFIX: &str = "+ANCHOR_RCV=";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct AnchorReceiveEvent<'a> {
+pub struct RangeResponseEvent<'a> {
     pub peer_id: &'a str,
     pub distance_cm: u32,
     pub rssi_dbm: Option<i16>,
@@ -11,7 +11,7 @@ pub struct AnchorReceiveEvent<'a> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ModemEvent<'a> {
-    AnchorReceive(AnchorReceiveEvent<'a>),
+    RangeResponse(RangeResponseEvent<'a>),
     CommandOk,
     Ready,
     Reset,
@@ -34,10 +34,10 @@ impl fmt::Display for ParseError {
         match self {
             Self::MissingComma => write!(f, "missing comma in modem line"),
             Self::InvalidUtf8 => write!(f, "modem line is not valid UTF-8"),
-            Self::InvalidPayloadLength => write!(f, "invalid anchor payload length"),
-            Self::InvalidPayloadBytes => write!(f, "anchor payload bytes do not match length"),
-            Self::InvalidDistance => write!(f, "invalid anchor distance field"),
-            Self::InvalidRssi => write!(f, "invalid anchor RSSI field"),
+            Self::InvalidPayloadLength => write!(f, "invalid modem payload length"),
+            Self::InvalidPayloadBytes => write!(f, "modem payload bytes do not match length"),
+            Self::InvalidDistance => write!(f, "invalid modem distance field"),
+            Self::InvalidRssi => write!(f, "invalid modem RSSI field"),
         }
     }
 }
@@ -62,14 +62,14 @@ pub fn parse_line(line: &str) -> Result<ModemEvent<'_>, ParseError> {
     if line.starts_with("+ERR") {
         return Ok(ModemEvent::Error);
     }
-    if let Some(rest) = line.strip_prefix(ANCHOR_RCV_PREFIX) {
-        return parse_anchor_receive(rest).map(ModemEvent::AnchorReceive);
+    if let Some(rest) = line.strip_prefix(RANGE_RESPONSE_PREFIX) {
+        return parse_range_response(rest).map(ModemEvent::RangeResponse);
     }
 
     Ok(ModemEvent::Other(line))
 }
 
-fn parse_anchor_receive(rest: &str) -> Result<AnchorReceiveEvent<'_>, ParseError> {
+fn parse_range_response(rest: &str) -> Result<RangeResponseEvent<'_>, ParseError> {
     let first_comma = rest.find(',').ok_or(ParseError::MissingComma)?;
     let peer_id = &rest[..first_comma];
 
@@ -101,7 +101,7 @@ fn parse_anchor_receive(rest: &str) -> Result<AnchorReceiveEvent<'_>, ParseError
     let distance_cm = parse_distance_cm(distance_field)?;
     let rssi_dbm = rssi_field.map(parse_rssi_dbm).transpose()?;
 
-    Ok(AnchorReceiveEvent {
+    Ok(RangeResponseEvent {
         peer_id: peer_id.trim(),
         distance_cm,
         rssi_dbm,
@@ -128,11 +128,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_anchor_receive_without_rssi() {
+    fn parses_range_response_without_rssi() {
         let event = parse_line("+ANCHOR_RCV=DAVID123,5,HELLO,40 cm").unwrap();
         assert_eq!(
             event,
-            ModemEvent::AnchorReceive(AnchorReceiveEvent {
+            ModemEvent::RangeResponse(RangeResponseEvent {
                 peer_id: "DAVID123",
                 distance_cm: 40,
                 rssi_dbm: None,
@@ -141,11 +141,11 @@ mod tests {
     }
 
     #[test]
-    fn parses_anchor_receive_with_rssi_and_comma_payload() {
+    fn parses_range_response_with_rssi_and_comma_payload() {
         let event = parse_line("+ANCHOR_RCV=DAVID123,5,HE,LO,40 cm,-71 dBm").unwrap();
         assert_eq!(
             event,
-            ModemEvent::AnchorReceive(AnchorReceiveEvent {
+            ModemEvent::RangeResponse(RangeResponseEvent {
                 peer_id: "DAVID123",
                 distance_cm: 40,
                 rssi_dbm: Some(-71),

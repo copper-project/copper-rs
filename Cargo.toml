@@ -103,6 +103,7 @@ members = [
   "examples/cu_runtime_matrix",
   "examples/cu_parallel_mandelbrot",
   "examples/cu_remote_debug_session",
+  "examples/cu_ryuw122_probe",
   "support/cargo_cunew",
 ]
 

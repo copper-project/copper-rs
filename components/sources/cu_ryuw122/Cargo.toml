@@ -1,6 +1,6 @@
 [package]
 name = "cu-ryuw122"
-description = "Copper anchor-side ranging source for the REYAX RYUW122 UWB modem"
+description = "Copper initiator-side ranging source for the REYAX RYUW122 UWB modem"
 readme = "README.md"
 version.workspace = true
 authors.workspace = true

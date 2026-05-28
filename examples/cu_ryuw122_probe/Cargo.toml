@@ -1,0 +1,28 @@
+[package]
+name = "cu-ryuw122-probe"
+description = "Small robot-side probe for the REYAX RYUW122 Copper source"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+default-run = "cu-ryuw122-probe"
+
+publish = false
+
+[[bin]]
+name = "cu-ryuw122-probe"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true }
+ctrlc = { workspace = true }
+cu-linux-resources = { workspace = true }
+cu-ryuw122 = { path = "../../components/sources/cu_ryuw122", version = "1.0.0-rc2" }
+cu-sensor-payloads = { workspace = true }
+cu29 = { workspace = true }
+serialport = { workspace = true }

@@ -1,0 +1,44 @@
+(
+    logging: (
+        enable_task_logging: true,
+        slab_size_mib: 16,
+        section_size_mib: 4,
+        keyframe_interval: 3,
+    ),
+    resources: [
+        (
+            id: "linux",
+            provider: "cu_linux_resources::LinuxResources",
+            config: {
+                "serial0_dev": "/dev/ttyACM0",
+                "serial0_baudrate": 115200,
+                "serial0_timeout_ms": 20,
+            },
+        ),
+    ],
+    tasks: [
+        (
+            id: "ranges",
+            type: "cu_ryuw122::Ryuw122InitiatorSource",
+            resources: {"serial": "linux.serial0"},
+            config: {
+                "anchor_ids": ["ANCH0001"],
+                "poll_payload": "PING",
+                "response_timeout_ms": 250,
+                "read_buffer_bytes": 512,
+                "max_pending_observations": 32,
+            },
+        ),
+        (
+            id: "sink",
+            type: "tasks::RangeCaptureSink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "ranges",
+            dst: "sink",
+            msg: "cu_sensor_payloads::RangeObservation",
+        ),
+    ],
+)

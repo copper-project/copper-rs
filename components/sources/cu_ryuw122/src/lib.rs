@@ -47,11 +47,11 @@ impl<'r, S: 'static + Send + Sync> ResourceBindings<'r> for Ryuw122ResourcesT<S>
         mapping: Option<&ResourceBindingMap<Self::Binding>>,
     ) -> CuResult<Self> {
         let mapping = mapping.ok_or_else(|| {
-            CuError::from("Ryuw122AnchorSourceTask requires a `serial` resource mapping")
+            CuError::from("Ryuw122InitiatorSourceTask requires a `serial` resource mapping")
         })?;
         let path = mapping.get(Binding::Serial).ok_or_else(|| {
             CuError::from(
-                "Ryuw122AnchorSourceTask resources must include `serial: <bundle.resource>`",
+                "Ryuw122InitiatorSourceTask resources must include `serial: <bundle.resource>`",
             )
         })?;
 
@@ -64,8 +64,8 @@ impl<'r, S: 'static + Send + Sync> ResourceBindings<'r> for Ryuw122ResourcesT<S>
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct InFlightPoll {
-    peer_index: usize,
+struct InFlightRequest {
+    anchor_index: usize,
     sent_at_ns: u64,
 }
 
@@ -78,7 +78,7 @@ struct PendingObservation {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DecodedLine {
     Observation {
-        peer_id: RangePeerId,
+        anchor_id: RangePeerId,
         distance_cm: u32,
         rssi_dbm: Option<i16>,
     },
@@ -88,7 +88,7 @@ enum DecodedLine {
 
 #[derive(Reflect)]
 #[reflect(no_field_bounds, from_reflect = false, type_path = false)]
-pub struct Ryuw122AnchorSourceTask<S> {
+pub struct Ryuw122InitiatorSourceTask<S> {
     #[reflect(ignore)]
     serial: S,
     #[reflect(ignore)]
@@ -99,30 +99,30 @@ pub struct Ryuw122AnchorSourceTask<S> {
     pending_observations: VecDeque<PendingObservation>,
     max_pending_observations: usize,
     #[reflect(ignore)]
-    peer_ids: Vec<RangePeerId>,
+    anchor_ids: Vec<RangePeerId>,
     #[reflect(ignore)]
-    peer_commands: Vec<Vec<u8>>,
+    anchor_commands: Vec<Vec<u8>>,
     poll_payload: String,
     response_timeout_ns: u64,
-    next_peer_index: usize,
+    next_anchor_index: usize,
     #[reflect(ignore)]
-    in_flight: Option<InFlightPoll>,
+    in_flight: Option<InFlightRequest>,
 }
 
 #[cfg(feature = "std")]
-pub type Ryuw122AnchorSource = Ryuw122AnchorSourceTask<LinuxSerialPort>;
+pub type Ryuw122InitiatorSource = Ryuw122InitiatorSourceTask<LinuxSerialPort>;
 
-impl<S: 'static> TypePath for Ryuw122AnchorSourceTask<S> {
+impl<S: 'static> TypePath for Ryuw122InitiatorSourceTask<S> {
     fn type_path() -> &'static str {
-        "cu_ryuw122::Ryuw122AnchorSourceTask"
+        "cu_ryuw122::Ryuw122InitiatorSourceTask"
     }
 
     fn short_type_path() -> &'static str {
-        "Ryuw122AnchorSourceTask"
+        "Ryuw122InitiatorSourceTask"
     }
 
     fn type_ident() -> Option<&'static str> {
-        Some("Ryuw122AnchorSourceTask")
+        Some("Ryuw122InitiatorSourceTask")
     }
 
     fn crate_name() -> Option<&'static str> {
@@ -134,22 +134,22 @@ impl<S: 'static> TypePath for Ryuw122AnchorSourceTask<S> {
     }
 }
 
-impl<S> fmt::Debug for Ryuw122AnchorSourceTask<S> {
+impl<S> fmt::Debug for Ryuw122InitiatorSourceTask<S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Ryuw122AnchorSourceTask")
-            .field("peer_count", &self.peer_ids.len())
+        f.debug_struct("Ryuw122InitiatorSourceTask")
+            .field("anchor_count", &self.anchor_ids.len())
             .field("poll_payload", &self.poll_payload)
             .field("response_timeout_ns", &self.response_timeout_ns)
             .field("max_pending_observations", &self.max_pending_observations)
-            .field("next_peer_index", &self.next_peer_index)
+            .field("next_anchor_index", &self.next_anchor_index)
             .field("in_flight", &self.in_flight)
             .finish()
     }
 }
 
-impl<S> Freezable for Ryuw122AnchorSourceTask<S> {}
+impl<S> Freezable for Ryuw122InitiatorSourceTask<S> {}
 
-impl<S> CuSrcTask for Ryuw122AnchorSourceTask<S>
+impl<S> CuSrcTask for Ryuw122InitiatorSourceTask<S>
 where
     S: Read + Write + ErrorType + Send + Sync + 'static,
     <S as ErrorType>::Error: embedded_io::Error + fmt::Debug + 'static,
@@ -161,7 +161,7 @@ where
     where
         Self: Sized,
     {
-        let peer_ids = config_peer_ids(config)?;
+        let anchor_ids = config_anchor_ids(config)?;
         let poll_payload = config_string(config, "poll_payload", DEFAULT_POLL_PAYLOAD)?;
         validate_poll_payload(&poll_payload)?;
 
@@ -184,11 +184,11 @@ where
             line_buffer: Vec::with_capacity(read_buffer_bytes.max(DEFAULT_LINE_BUFFER_BYTES)),
             pending_observations: VecDeque::with_capacity(max_pending_observations.max(1)),
             max_pending_observations: max_pending_observations.max(1),
-            peer_commands: build_poll_commands(&peer_ids, &poll_payload),
-            peer_ids,
+            anchor_commands: build_anchor_commands(&anchor_ids, &poll_payload),
+            anchor_ids,
             poll_payload,
             response_timeout_ns: response_timeout_ms.max(1).saturating_mul(1_000_000),
-            next_peer_index: 0,
+            next_anchor_index: 0,
             in_flight: None,
         })
     }
@@ -196,15 +196,15 @@ where
     fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
         self.line_buffer.clear();
         self.pending_observations.clear();
-        self.next_peer_index = 0;
+        self.next_anchor_index = 0;
         self.in_flight = None;
-        self.drive_poll_cycle(ctx.now().as_nanos())
+        self.drive_request_cycle(ctx.now().as_nanos())
     }
 
     fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
         let observed_at = ctx.now();
         self.read_and_decode(observed_at)?;
-        self.drive_poll_cycle(observed_at.as_nanos())?;
+        self.drive_request_cycle(observed_at.as_nanos())?;
 
         if let Some(pending) = self.pending_observations.pop_front() {
             output.tov = Tov::Time(pending.observed_at);
@@ -222,13 +222,13 @@ where
     }
 }
 
-impl<S> Ryuw122AnchorSourceTask<S>
+impl<S> Ryuw122InitiatorSourceTask<S>
 where
     S: Read + Write + ErrorType + Send + Sync + 'static,
     <S as ErrorType>::Error: embedded_io::Error + fmt::Debug + 'static,
 {
-    fn drive_poll_cycle(&mut self, now_ns: u64) -> CuResult<()> {
-        if self.peer_ids.is_empty() {
+    fn drive_request_cycle(&mut self, now_ns: u64) -> CuResult<()> {
+        if self.anchor_ids.is_empty() {
             return Ok(());
         }
 
@@ -236,22 +236,22 @@ where
             if now_ns.saturating_sub(in_flight.sent_at_ns) < self.response_timeout_ns {
                 return Ok(());
             }
-            self.next_peer_index = (in_flight.peer_index + 1) % self.peer_ids.len();
+            self.next_anchor_index = (in_flight.anchor_index + 1) % self.anchor_ids.len();
             self.in_flight = None;
         }
 
-        self.send_poll(self.next_peer_index, now_ns)
+        self.send_request(self.next_anchor_index, now_ns)
     }
 
-    fn send_poll(&mut self, peer_index: usize, now_ns: u64) -> CuResult<()> {
+    fn send_request(&mut self, anchor_index: usize, now_ns: u64) -> CuResult<()> {
         let serial = &mut self.serial;
-        let command = &self.peer_commands[peer_index];
+        let command = &self.anchor_commands[anchor_index];
         write_all(serial, command)?;
         serial
             .flush()
             .map_err(|e| CuError::from(format!("RYUW122 flush failed: {e:?}")))?;
-        self.in_flight = Some(InFlightPoll {
-            peer_index,
+        self.in_flight = Some(InFlightRequest {
+            anchor_index,
             sent_at_ns: now_ns,
         });
         Ok(())
@@ -298,10 +298,10 @@ where
                 };
 
                 match parse_line(line) {
-                    Ok(ModemEvent::AnchorReceive(event)) => {
+                    Ok(ModemEvent::RangeResponse(event)) => {
                         match RangePeerId::try_from(event.peer_id) {
-                            Ok(peer_id) => DecodedLine::Observation {
-                                peer_id,
+                            Ok(anchor_id) => DecodedLine::Observation {
+                                anchor_id,
                                 distance_cm: event.distance_cm,
                                 rssi_dbm: event.rssi_dbm,
                             },
@@ -317,13 +317,14 @@ where
 
             match decoded {
                 DecodedLine::Observation {
-                    peer_id,
+                    anchor_id,
                     distance_cm,
                     rssi_dbm,
-                } => self.handle_anchor_receive(observed_at, peer_id, distance_cm, rssi_dbm),
+                } => self.handle_range_response(observed_at, anchor_id, distance_cm, rssi_dbm),
                 DecodedLine::Error => {
                     if let Some(in_flight) = self.in_flight.take() {
-                        self.next_peer_index = (in_flight.peer_index + 1) % self.peer_ids.len();
+                        self.next_anchor_index =
+                            (in_flight.anchor_index + 1) % self.anchor_ids.len();
                     }
                 }
                 DecodedLine::Ignore => {}
@@ -331,22 +332,22 @@ where
         }
     }
 
-    fn handle_anchor_receive(
+    fn handle_range_response(
         &mut self,
         observed_at: CuTime,
-        peer_id: RangePeerId,
+        anchor_id: RangePeerId,
         distance_cm: u32,
         rssi_dbm: Option<i16>,
     ) {
         self.push_pending_observation(PendingObservation {
             observed_at,
-            observation: RangeObservation::from_centimeters(peer_id, distance_cm, rssi_dbm),
+            observation: RangeObservation::from_centimeters(anchor_id, distance_cm, rssi_dbm),
         });
 
         if let Some(in_flight) = self.in_flight
-            && self.peer_ids[in_flight.peer_index] == peer_id
+            && self.anchor_ids[in_flight.anchor_index] == anchor_id
         {
-            self.next_peer_index = (in_flight.peer_index + 1) % self.peer_ids.len();
+            self.next_anchor_index = (in_flight.anchor_index + 1) % self.anchor_ids.len();
             self.in_flight = None;
         }
     }
@@ -385,39 +386,40 @@ fn config_string(config: Option<&ComponentConfig>, key: &str, default: &str) -> 
     }
 }
 
-fn config_peer_ids(config: Option<&ComponentConfig>) -> CuResult<Vec<RangePeerId>> {
+fn config_anchor_ids(config: Option<&ComponentConfig>) -> CuResult<Vec<RangePeerId>> {
     let config = config.ok_or_else(|| {
-        CuError::from("Ryuw122AnchorSourceTask requires a config with non-empty `peer_ids`")
+        CuError::from("Ryuw122InitiatorSourceTask requires a config with non-empty `anchor_ids`")
     })?;
 
-    let raw_peer_ids: Vec<String> = config
-        .get_value("peer_ids")?
-        .ok_or_else(|| CuError::from("Ryuw122AnchorSourceTask config must include `peer_ids`"))?;
+    let raw_anchor_ids: Vec<String> = config.get_value("anchor_ids")?.ok_or_else(|| {
+        CuError::from("Ryuw122InitiatorSourceTask config must include `anchor_ids`")
+    })?;
 
-    if raw_peer_ids.is_empty() {
+    if raw_anchor_ids.is_empty() {
         return Err(CuError::from(
-            "Ryuw122AnchorSourceTask config must include at least one peer id",
+            "Ryuw122InitiatorSourceTask config must include at least one anchor id",
         ));
     }
 
-    raw_peer_ids
+    raw_anchor_ids
         .into_iter()
-        .map(|peer_id| {
-            validate_modem_peer_id(&peer_id)?;
-            RangePeerId::try_from(peer_id.as_str())
-                .map_err(|err| CuError::from(format!("peer id `{peer_id}` is not valid: {err}")))
+        .map(|anchor_id| {
+            validate_anchor_id(&anchor_id)?;
+            RangePeerId::try_from(anchor_id.as_str()).map_err(|err| {
+                CuError::from(format!("anchor id `{anchor_id}` is not valid: {err}"))
+            })
         })
         .collect()
 }
 
-fn build_poll_commands(peer_ids: &[RangePeerId], payload: &str) -> Vec<Vec<u8>> {
+fn build_anchor_commands(anchor_ids: &[RangePeerId], payload: &str) -> Vec<Vec<u8>> {
     let payload_len = payload.len();
-    peer_ids
+    anchor_ids
         .iter()
-        .map(|peer_id| {
+        .map(|anchor_id| {
             format!(
                 "AT+ANCHOR_SEND={},{},{}\r\n",
-                peer_id.as_str(),
+                anchor_id.as_str(),
                 payload_len,
                 payload
             )
@@ -453,16 +455,16 @@ where
     Ok(())
 }
 
-fn validate_modem_peer_id(peer_id: &str) -> CuResult<()> {
-    if peer_id.is_empty() {
-        return Err(CuError::from("RYUW122 peer ids must not be empty"));
+fn validate_anchor_id(anchor_id: &str) -> CuResult<()> {
+    if anchor_id.is_empty() {
+        return Err(CuError::from("RYUW122 anchor ids must not be empty"));
     }
-    if !peer_id.is_ascii() {
-        return Err(CuError::from("RYUW122 peer ids must be ASCII"));
+    if !anchor_id.is_ascii() {
+        return Err(CuError::from("RYUW122 anchor ids must be ASCII"));
     }
-    if peer_id.len() > MODEM_ADDRESS_MAX_BYTES {
+    if anchor_id.len() > MODEM_ADDRESS_MAX_BYTES {
         return Err(CuError::from(format!(
-            "RYUW122 peer id `{peer_id}` exceeds {MODEM_ADDRESS_MAX_BYTES} bytes"
+            "RYUW122 anchor id `{anchor_id}` exceeds {MODEM_ADDRESS_MAX_BYTES} bytes"
         )));
     }
     Ok(())
@@ -539,30 +541,30 @@ mod tests {
         }
     }
 
-    fn build_task(serial: FakeSerial) -> Ryuw122AnchorSourceTask<FakeSerial> {
-        Ryuw122AnchorSourceTask {
+    fn build_task(serial: FakeSerial) -> Ryuw122InitiatorSourceTask<FakeSerial> {
+        Ryuw122InitiatorSourceTask {
             serial,
             read_buffer: alloc::vec![0_u8; 64],
             line_buffer: Vec::with_capacity(64),
             pending_observations: VecDeque::new(),
             max_pending_observations: 8,
-            peer_ids: alloc::vec![
-                RangePeerId::new("DAVID123").unwrap(),
-                RangePeerId::new("ALICE456").unwrap(),
+            anchor_ids: alloc::vec![
+                RangePeerId::new("ANCH0001").unwrap(),
+                RangePeerId::new("ANCH0002").unwrap(),
             ],
-            peer_commands: alloc::vec![
-                b"AT+ANCHOR_SEND=DAVID123,4,PING\r\n".to_vec(),
-                b"AT+ANCHOR_SEND=ALICE456,4,PING\r\n".to_vec(),
+            anchor_commands: alloc::vec![
+                b"AT+ANCHOR_SEND=ANCH0001,4,PING\r\n".to_vec(),
+                b"AT+ANCHOR_SEND=ANCH0002,4,PING\r\n".to_vec(),
             ],
             poll_payload: "PING".to_string(),
             response_timeout_ns: 50_000_000,
-            next_peer_index: 0,
+            next_anchor_index: 0,
             in_flight: None,
         }
     }
 
     #[test]
-    fn start_sends_first_poll_immediately() {
+    fn start_sends_first_request_immediately() {
         let mut task = build_task(FakeSerial::default());
         let (ctx, _mock) = CuContext::new_mock_clock();
 
@@ -570,42 +572,42 @@ mod tests {
 
         assert_eq!(
             task.serial.writes_as_strings(),
-            alloc::vec!["AT+ANCHOR_SEND=DAVID123,4,PING\r\n".to_string()]
+            alloc::vec!["AT+ANCHOR_SEND=ANCH0001,4,PING\r\n".to_string()]
         );
     }
 
     #[test]
-    fn advances_to_next_peer_after_timeout() {
+    fn advances_to_next_anchor_after_timeout() {
         let mut task = build_task(FakeSerial::default());
         let (ctx, mock) = CuContext::new_mock_clock();
 
         task.start(&ctx).unwrap();
         mock.increment(CuDuration::from_millis(60));
 
-        let mut output = <Ryuw122AnchorSourceTask<FakeSerial> as CuSrcTask>::Output::default();
+        let mut output = <Ryuw122InitiatorSourceTask<FakeSerial> as CuSrcTask>::Output::default();
         task.process(&ctx, &mut output).unwrap();
 
         assert_eq!(
             task.serial.writes_as_strings(),
             alloc::vec![
-                "AT+ANCHOR_SEND=DAVID123,4,PING\r\n".to_string(),
-                "AT+ANCHOR_SEND=ALICE456,4,PING\r\n".to_string()
+                "AT+ANCHOR_SEND=ANCH0001,4,PING\r\n".to_string(),
+                "AT+ANCHOR_SEND=ANCH0002,4,PING\r\n".to_string()
             ]
         );
     }
 
     #[test]
-    fn response_emits_observation_and_immediately_sends_next_poll() {
-        let response = b"+ANCHOR_RCV=DAVID123,5,HELLO,40 cm,-71 dBm\r\n".to_vec();
+    fn response_emits_observation_and_immediately_sends_next_request() {
+        let response = b"+ANCHOR_RCV=ANCH0001,5,HELLO,40 cm,-71 dBm\r\n".to_vec();
         let mut task = build_task(FakeSerial::with_reads([Ok(response)]));
         let (ctx, _mock) = CuContext::new_mock_clock();
 
         task.start(&ctx).unwrap();
-        let mut output = <Ryuw122AnchorSourceTask<FakeSerial> as CuSrcTask>::Output::default();
+        let mut output = <Ryuw122InitiatorSourceTask<FakeSerial> as CuSrcTask>::Output::default();
         task.process(&ctx, &mut output).unwrap();
 
         let payload = output.payload().expect("observation payload");
-        assert_eq!(payload.peer_id.as_str(), "DAVID123");
+        assert_eq!(payload.peer_id.as_str(), "ANCH0001");
         assert_eq!(
             payload.distance.get::<cu29::units::si::length::meter>(),
             0.4
@@ -614,8 +616,8 @@ mod tests {
         assert_eq!(
             task.serial.writes_as_strings(),
             alloc::vec![
-                "AT+ANCHOR_SEND=DAVID123,4,PING\r\n".to_string(),
-                "AT+ANCHOR_SEND=ALICE456,4,PING\r\n".to_string()
+                "AT+ANCHOR_SEND=ANCH0001,4,PING\r\n".to_string(),
+                "AT+ANCHOR_SEND=ANCH0002,4,PING\r\n".to_string()
             ]
         );
     }
