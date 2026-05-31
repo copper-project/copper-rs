@@ -16,7 +16,7 @@ use syn::{
 use crate::utils::{config_id_to_bridge_const, config_id_to_enum, config_id_to_struct_member};
 use cu29_runtime::config::CuConfig;
 use cu29_runtime::config::{
-    BridgeChannelConfigRepresentation, ConfigGraphs, CuGraph, Flavor, Node, NodeId,
+    BridgeChannelConfigRepresentation, ConfigGraphs, CuGraph, Flavor, HandleContent, Node, NodeId,
     ResourceBundleConfig, read_configuration,
 };
 use cu29_runtime::curuntime::{
@@ -729,7 +729,15 @@ fn gen_culist_support(
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[build the copperlist tuple bincode support]");
-    let msgs_types_tuple_encode = build_culist_tuple_encode(&output_packs, &encode_helper_names);
+    let slot_handle_modes = build_slot_handle_modes(
+        cuconfig,
+        mission_label,
+        &output_packs,
+        node_output_positions,
+        task_names,
+    );
+    let msgs_types_tuple_encode =
+        build_culist_tuple_encode(&output_packs, &encode_helper_names, &slot_handle_modes);
     let msgs_types_tuple_decode = build_culist_tuple_decode(
         &output_packs,
         &slot_types,
@@ -5786,6 +5794,29 @@ fn flatten_task_output_specs(
     specs
 }
 
+/// Compute the per-slot [`HandleContent`] policy, reading each slot's producing task's
+/// `NodeLogging.handle_content` from the config. Slots produced by bridges (or whose
+/// producing task can't be located in the config) default to [`HandleContent::All`] —
+/// matches the existing, payload-preserving behavior.
+fn build_slot_handle_modes(
+    cuconfig: &CuConfig,
+    mission_label: Option<&str>,
+    output_packs: &[OutputPack],
+    node_output_positions: &HashMap<NodeId, usize>,
+    task_names: &[(NodeId, String, String)],
+) -> Vec<HandleContent> {
+    let mut slot_modes: Vec<HandleContent> = vec![HandleContent::default(); output_packs.len()];
+    for (node_id, task_id, _member) in task_names {
+        let Some(pos) = node_output_positions.get(node_id) else {
+            continue;
+        };
+        if let Some(node) = cuconfig.find_task_node(mission_label, task_id) {
+            slot_modes[*pos] = node.handle_content_policy();
+        }
+    }
+    slot_modes
+}
+
 fn extract_output_packs(runtime_plan: &CuExecutionLoop) -> Vec<OutputPack> {
     let mut packs: Vec<(u32, OutputPack)> = runtime_plan
         .steps
@@ -6501,45 +6532,54 @@ fn build_culist_tuple(slot_types: &[Type]) -> TypeTuple {
 fn build_culist_tuple_encode(
     output_packs: &[OutputPack],
     encode_helper_names: &[Option<Ident>],
+    slot_handle_modes: &[HandleContent],
 ) -> ItemImpl {
     let mut flat_idx = 0usize;
     let mut encode_fields = Vec::new();
 
     for (slot_idx, pack) in output_packs.iter().enumerate() {
         let slot_index = syn::Index::from(slot_idx);
+        let mode = slot_handle_modes.get(slot_idx).copied();
+
         if pack.is_multi() {
-            for port_idx in 0..pack.msg_types.len() {
+            for (port_idx, payload_ty) in pack.msg_types.iter().enumerate() {
                 let port_index = syn::Index::from(port_idx);
                 let cache_index = flat_idx;
                 let encode_helper = encode_helper_names[flat_idx].clone();
                 flat_idx += 1;
-                if let Some(encode_helper) = encode_helper {
-                    encode_fields.push(quote! {
-                        __cu_capture.select_slot(#cache_index);
-                        #encode_helper(&self.0.#slot_index.#port_index, encoder)?;
-                    });
+                let normal_encode = if let Some(helper) = encode_helper {
+                    quote! { #helper(&self.0.#slot_index.#port_index, encoder)?; }
                 } else {
-                    encode_fields.push(quote! {
-                        __cu_capture.select_slot(#cache_index);
-                        self.0.#slot_index.#port_index.encode(encoder)?;
-                    });
-                }
+                    quote! { self.0.#slot_index.#port_index.encode(encoder)?; }
+                };
+                let slot_access = quote! { self.0.#slot_index.#port_index };
+                let slot_block =
+                    build_per_slot_encode_block(mode, payload_ty, &slot_access, &normal_encode);
+                encode_fields.push(quote! {
+                    __cu_capture.select_slot(#cache_index);
+                    #slot_block
+                });
             }
         } else {
             let cache_index = flat_idx;
             let encode_helper = encode_helper_names[flat_idx].clone();
             flat_idx += 1;
-            if let Some(encode_helper) = encode_helper {
-                encode_fields.push(quote! {
-                    __cu_capture.select_slot(#cache_index);
-                    #encode_helper(&self.0.#slot_index, encoder)?;
-                });
+            let normal_encode = if let Some(helper) = encode_helper {
+                quote! { #helper(&self.0.#slot_index, encoder)?; }
             } else {
-                encode_fields.push(quote! {
-                    __cu_capture.select_slot(#cache_index);
-                    self.0.#slot_index.encode(encoder)?;
-                });
-            }
+                quote! { self.0.#slot_index.encode(encoder)?; }
+            };
+            let slot_access = quote! { self.0.#slot_index };
+            let payload_ty = pack
+                .msg_types
+                .first()
+                .expect("single-port pack must have a payload type");
+            let slot_block =
+                build_per_slot_encode_block(mode, payload_ty, &slot_access, &normal_encode);
+            encode_fields.push(quote! {
+                __cu_capture.select_slot(#cache_index);
+                #slot_block
+            });
         }
     }
 
@@ -6549,6 +6589,51 @@ fn build_culist_tuple_encode(
                 let __cu_capture = cu29::monitoring::start_copperlist_io_capture(&self.1);
                 #(#encode_fields)*
                 Ok(())
+            }
+        }
+    }
+}
+
+/// Build the per-slot encode block. Mode `All` returns the existing encode call
+/// (zero codegen change). Non-default modes wrap it with a `HandleContentAware`
+/// bound check on the payload type and an autoref-specialized policy check that
+/// routes to `encode_metadata_only` when the payload says skip.
+fn build_per_slot_encode_block(
+    mode: Option<HandleContent>,
+    payload_ty: &Type,
+    slot_access: &proc_macro2::TokenStream,
+    normal_encode: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    let mode = match mode {
+        Some(m) if m != HandleContent::default() => m,
+        _ => return normal_encode.clone(),
+    };
+    let mode_u8 = mode as u8;
+    quote! {
+        {
+            // Catches the silent-no-op footgun: non-default handle_content on an
+            // unmarked payload fails here with `HandleContentAware not satisfied`.
+            const _: fn() = || {
+                fn assert_aware<__T: ::cu29::pool::HandleContentAware + ?::core::marker::Sized>() {}
+                assert_aware::<#payload_ty>();
+            };
+            use ::cu29::pool::PayloadDefaultHandlePolicyApply as _;
+            use ::cu29::pool::PayloadDefaultLoggingPolicy as _;
+            // Stamp the source's configured policy on whatever handles live in the
+            // payload, then ask the (now-policy-aware) payload whether to log.
+            let __cu_should_log = match #slot_access.payload() {
+                Some(__cu_p) => {
+                    __cu_p.apply_handle_content_policy(
+                        ::cu29::config::HandleContent::from_u8(#mode_u8),
+                    );
+                    __cu_p.payload_should_log()
+                }
+                None => false,
+            };
+            if __cu_should_log {
+                #normal_encode
+            } else {
+                ::cu29::cutask::encode_metadata_only(&#slot_access, encoder)?;
             }
         }
     }

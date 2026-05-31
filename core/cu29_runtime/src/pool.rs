@@ -18,6 +18,7 @@ use std::marker::PhantomData;
 use std::mem::{align_of, size_of};
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 use memmap2::{MmapMut, MmapOptions};
@@ -490,11 +491,29 @@ impl<T: ArrayLike> DerefMut for CuHandleInner<T> {
     }
 }
 
+// `HandleContent` is defined in `config.rs` so it lives in both the library and the
+// `cu29-rendercfg` bin (which includes config.rs standalone). Re-export it here for
+// pool consumers that don't otherwise reach for the config module.
+pub use crate::config::HandleContent;
+
+/// Backing storage for a [`CuHandle`]: the payload mutex plus the per-handle touched flag
+/// and logging mode. Shared across handle clones via [`Arc`].
+///
+/// `mode` is stored as an [`AtomicU8`] so the runtime can override it once after the
+/// source's `process()` returns (when the configured `handle_content` policy is known
+/// but the source itself didn't construct the handle with that policy in mind).
+#[derive(Debug)]
+struct CuHandleCell<T: Debug + Send + Sync> {
+    touched: AtomicBool,
+    mode: AtomicU8,
+    inner: Mutex<CuHandleInner<T>>,
+}
+
 /// A shareable handle to a pooled or detached object.
 ///
 /// When `T: ArrayLike`, the handle also participates in Copper's buffer pool APIs.
 #[derive(Debug)]
-pub struct CuHandle<T: Debug + Send + Sync>(Arc<Mutex<CuHandleInner<T>>>);
+pub struct CuHandle<T: Debug + Send + Sync>(Arc<CuHandleCell<T>>);
 
 impl<T: Debug + Send + Sync> Clone for CuHandle<T> {
     fn clone(&self) -> Self {
@@ -503,14 +522,23 @@ impl<T: Debug + Send + Sync> Clone for CuHandle<T> {
 }
 
 impl<T: Debug + Send + Sync> Deref for CuHandle<T> {
-    type Target = Arc<Mutex<CuHandleInner<T>>>;
+    type Target = Mutex<CuHandleInner<T>>;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.0.inner
     }
 }
 
 impl<T: Debug + Send + Sync> CuHandle<T> {
+    /// Wrap a raw [`CuHandleInner`] into a fresh handle with the given logging mode.
+    fn from_inner(inner: CuHandleInner<T>, mode: HandleContent) -> Self {
+        CuHandle(Arc::new(CuHandleCell {
+            touched: AtomicBool::new(false),
+            mode: AtomicU8::new(mode as u8),
+            inner: Mutex::new(inner),
+        }))
+    }
+
     /// Create a new CuHandle not part of a Pool (not for onboard usages, use pools instead)
     pub fn new_detached(inner: T) -> Self {
         Self::new_detached_box(Box::new(inner))
@@ -518,28 +546,126 @@ impl<T: Debug + Send + Sync> CuHandle<T> {
 
     /// Create a detached handle from an already heap-allocated object.
     pub fn new_detached_box(inner: Box<T>) -> Self {
-        CuHandle(Arc::new(Mutex::new(CuHandleInner::Detached(inner))))
+        Self::from_inner(CuHandleInner::Detached(inner), HandleContent::default())
+    }
+
+    /// Create a detached handle with a non-default logging mode.
+    ///
+    /// Mostly useful for tests and for sources that want to mint detached handles
+    /// (instead of pool-acquired ones) under a specific [`HandleContent`] policy.
+    pub fn new_detached_with_mode(inner: T, mode: HandleContent) -> Self {
+        Self::from_inner(CuHandleInner::Detached(Box::new(inner)), mode)
     }
 
     /// Safely access the inner value, applying a closure to it.
     pub fn with_inner<R>(&self, f: impl FnOnce(&CuHandleInner<T>) -> R) -> R {
-        let lock = lock_unpoison(&self.0);
+        let lock = lock_unpoison(&self.0.inner);
         f(&*lock)
     }
 
     /// Mutably access the inner value, applying a closure to it.
     pub fn with_inner_mut<R>(&self, f: impl FnOnce(&mut CuHandleInner<T>) -> R) -> R {
-        let mut lock = lock_unpoison(&self.0);
+        let mut lock = lock_unpoison(&self.0.inner);
         f(&mut *lock)
     }
+
+    /// Mark this handle as read by a downstream consumer.
+    ///
+    /// When the source is configured with [`HandleContent::TouchedOnly`], the unified-log
+    /// encoder will only write the payload bytes if at least one consumer called this.
+    /// Cheap (one relaxed atomic store); safe to call multiple times.
+    pub fn mark_touched(&self) {
+        self.0.touched.store(true, Ordering::Relaxed);
+    }
+
+    /// Returns true if [`mark_touched`](Self::mark_touched) has ever been called on this
+    /// handle (or any clone of it).
+    pub fn was_touched(&self) -> bool {
+        self.0.touched.load(Ordering::Relaxed)
+    }
+
+    /// Logging mode currently in effect for this handle.
+    pub fn logging_mode(&self) -> HandleContent {
+        HandleContent::from_u8(self.0.mode.load(Ordering::Relaxed))
+    }
+
+    /// Convenience: [`with_inner`](Self::with_inner) plus [`mark_touched`](Self::mark_touched)
+    /// in one call, for the common consumer-side access pattern.
+    pub fn with_touched_inner<R>(&self, f: impl FnOnce(&CuHandleInner<T>) -> R) -> R {
+        self.mark_touched();
+        self.with_inner(f)
+    }
+
+    /// Decides whether the unified-log encoder should write this handle's payload bytes
+    /// for the current frame.
+    ///
+    /// This is the inherent "specific" arm of the autoref-specialization pattern; the
+    /// encoder resolves to this method for handle payloads (or composite payloads that
+    /// forward to it) and to [`PayloadDefaultLoggingPolicy::payload_should_log`] for
+    /// every other payload type.
+    pub fn payload_should_log(&self) -> bool {
+        match self.logging_mode() {
+            HandleContent::All => true,
+            HandleContent::None => false,
+            HandleContent::TouchedOnly => self.was_touched(),
+        }
+    }
+
+    /// Apply a source's configured [`HandleContent`] policy to this handle. Inherent
+    /// "specific" arm of the autoref-specialization pattern; visible to every clone.
+    /// `Relaxed` is sufficient — synchronization piggy-backs on the copperlist handoff.
+    pub fn apply_handle_content_policy(&self, mode: HandleContent) {
+        self.0.mode.store(mode as u8, Ordering::Relaxed);
+    }
 }
+
+/// Opt-in marker required when `NodeLogging.handle_content` is non-default. Codegen
+/// emits a compile-time bound check against this trait, so an unmarked payload
+/// surfaces as a clear compile error instead of a silent runtime no-op.
+///
+/// ```ignore
+/// impl cu29::pool::HandleContentAware for MyPayload {}
+/// ```
+///
+/// The impl is the gate; for the policy to actually fire, the payload must also
+/// forward [`apply_handle_content_policy`](CuHandle::apply_handle_content_policy)
+/// and [`payload_should_log`](CuHandle::payload_should_log) to an inner [`CuHandle`]
+/// (see `CuImage`). [`CuHandle`] itself satisfies both halves.
+pub trait HandleContentAware {}
+
+impl<T: Debug + Send + Sync> HandleContentAware for CuHandle<T> {}
+
+/// Default arm of the autoref-specialization pattern used by the unified-log encoder.
+///
+/// Blanket-impl'd for every type, so any payload that doesn't define its own inherent
+/// `payload_should_log` method inherits this default-true implementation. Types like
+/// [`CuHandle`] (and composite payloads wrapping one) provide an inherent method with
+/// the same name, which wins method resolution because inherent methods are tried
+/// before trait methods at the same candidate self-type.
+pub trait PayloadDefaultLoggingPolicy {
+    fn payload_should_log(&self) -> bool {
+        true
+    }
+}
+
+impl<T: ?Sized> PayloadDefaultLoggingPolicy for T {}
+
+/// Default arm of the autoref-specialization pattern used by the runtime to push a
+/// source's configured [`HandleContent`] policy into the [`CuHandle`]s that live inside
+/// a payload. Default is a no-op; [`CuHandle`] and composite payloads provide inherent
+/// overrides that propagate the mode.
+pub trait PayloadDefaultHandlePolicyApply {
+    fn apply_handle_content_policy(&self, _mode: HandleContent) {}
+}
+
+impl<T: ?Sized> PayloadDefaultHandlePolicyApply for T {}
 
 impl<U> Serialize for CuHandle<Vec<U>>
 where
     U: ElementType + Serialize + 'static,
 {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let inner = lock_unpoison(&self.0);
+        let inner = lock_unpoison(&self.0.inner);
         inner.inner_ref().serialize(serializer)
     }
 }
@@ -558,7 +684,7 @@ where
     U: ElementType + Serialize + 'static,
 {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let inner = lock_unpoison(&self.0);
+        let inner = lock_unpoison(&self.0.inner);
         let buffer = inner.inner_ref();
 
         if shared_handle_serialization_enabled()
@@ -636,7 +762,7 @@ where
     <T as ArrayLike>::Element: 'static,
 {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let inner = lock_unpoison(&self.0);
+        let inner = lock_unpoison(&self.0.inner);
         crate::monitoring::record_payload_handle_bytes(
             inner.inner_ref().len() * size_of::<T::Element>(),
         );
@@ -741,14 +867,16 @@ impl<T: ArrayLike> CuPool<T> for CuHostMemoryPool<T> {
     fn acquire(&self) -> Option<CuHandle<T>> {
         let owned_object = self.pool.try_pull_owned(); // Use the owned version
 
-        owned_object.map(|reusable| CuHandle(Arc::new(Mutex::new(CuHandleInner::Pooled(reusable)))))
+        owned_object.map(|reusable| {
+            CuHandle::from_inner(CuHandleInner::Pooled(reusable), HandleContent::default())
+        })
     }
 
     fn copy_from<O: ArrayLike<Element = T::Element>>(&self, from: &mut CuHandle<O>) -> CuHandle<T> {
         let to_handle = self.acquire().expect("No available buffers in the pool");
         {
-            let from_lock = lock_unpoison(&from.0);
-            let mut to_lock = lock_unpoison(&to_handle.0);
+            let from_lock = lock_unpoison(&from.0.inner);
+            let mut to_lock = lock_unpoison(&to_handle.0.inner);
             to_lock.inner_mut().copy_from_slice(from_lock.inner_ref());
         }
         to_handle
@@ -816,9 +944,9 @@ impl<E: ElementType> PoolMonitor for CuSharedMemoryPool<E> {
 
 impl<E: ElementType> CuPool<CuSharedMemoryBuffer<E>> for CuSharedMemoryPool<E> {
     fn acquire(&self) -> Option<CuHandle<CuSharedMemoryBuffer<E>>> {
-        self.pool
-            .try_pull_owned()
-            .map(|reusable| CuHandle(Arc::new(Mutex::new(CuHandleInner::Pooled(reusable)))))
+        self.pool.try_pull_owned().map(|reusable| {
+            CuHandle::from_inner(CuHandleInner::Pooled(reusable), HandleContent::default())
+        })
     }
 
     fn copy_from<O>(&self, from: &mut CuHandle<O>) -> CuHandle<CuSharedMemoryBuffer<E>>
@@ -827,8 +955,8 @@ impl<E: ElementType> CuPool<CuSharedMemoryBuffer<E>> for CuSharedMemoryPool<E> {
     {
         let to_handle = self.acquire().expect("No available buffers in the pool");
         {
-            let from_lock = lock_unpoison(&from.0);
-            let mut to_lock = lock_unpoison(&to_handle.0);
+            let from_lock = lock_unpoison(&from.0.inner);
+            let mut to_lock = lock_unpoison(&to_handle.0.inner);
             to_lock.inner_mut().copy_from_slice(from_lock.inner_ref());
         }
         to_handle
@@ -1029,7 +1157,7 @@ mod cuda {
         fn acquire(&self) -> Option<CuHandle<CudaSliceWrapper<E>>> {
             self.pool
                 .try_pull_owned()
-                .map(|x| CuHandle(Arc::new(Mutex::new(CuHandleInner::Pooled(x)))))
+                .map(|x| CuHandle::from_inner(CuHandleInner::Pooled(x), HandleContent::default()))
         }
 
         fn copy_from<O>(&self, from_handle: &mut CuHandle<O>) -> CuHandle<CudaSliceWrapper<E>>
@@ -1039,8 +1167,8 @@ mod cuda {
             let to_handle = self.acquire().expect("No available buffers in the pool");
 
             {
-                let from_lock = lock_unpoison(&from_handle.0);
-                let mut to_lock = lock_unpoison(&to_handle.0);
+                let from_lock = lock_unpoison(&from_handle.0.inner);
+                let mut to_lock = lock_unpoison(&to_handle.0.inner);
 
                 match &mut *to_lock {
                     CuHandleInner::Detached(to) => {
@@ -1157,6 +1285,110 @@ impl<E: ElementType> Drop for AlignedBuffer<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_handle_touched_flag_defaults_false() {
+        let h: CuHandle<Vec<u8>> = CuHandle::new_detached(vec![1, 2, 3]);
+        assert!(!h.was_touched());
+        assert_eq!(h.logging_mode(), HandleContent::All);
+    }
+
+    #[test]
+    fn test_handle_mark_touched_propagates_across_clones() {
+        let h: CuHandle<Vec<u8>> = CuHandle::new_detached(vec![1, 2, 3]);
+        let clone = h.clone();
+        assert!(!h.was_touched());
+        assert!(!clone.was_touched());
+
+        clone.mark_touched();
+        // Shared Arc<CuHandleCell>: any clone sees the flag flip.
+        assert!(h.was_touched());
+        assert!(clone.was_touched());
+    }
+
+    #[test]
+    fn test_with_touched_inner_marks_and_reads() {
+        let h: CuHandle<Vec<u8>> = CuHandle::new_detached(vec![10, 20]);
+        let first = h.with_touched_inner(|inner| inner.as_ref()[0]);
+        assert_eq!(first, 10);
+        assert!(h.was_touched());
+    }
+
+    #[test]
+    fn test_with_inner_does_not_mark_touched() {
+        let h: CuHandle<Vec<u8>> = CuHandle::new_detached(vec![10, 20]);
+        let _ = h.with_inner(|inner| inner.as_ref()[0]);
+        assert!(
+            !h.was_touched(),
+            "with_inner must not flip the touched flag"
+        );
+    }
+
+    #[test]
+    fn test_payload_should_log_mode_all() {
+        let h: CuHandle<Vec<u8>> = CuHandle::new_detached_with_mode(vec![1], HandleContent::All);
+        assert!(h.payload_should_log());
+        h.mark_touched();
+        assert!(h.payload_should_log());
+    }
+
+    #[test]
+    fn test_payload_should_log_mode_none() {
+        let h: CuHandle<Vec<u8>> = CuHandle::new_detached_with_mode(vec![1], HandleContent::None);
+        assert!(!h.payload_should_log());
+        h.mark_touched();
+        assert!(
+            !h.payload_should_log(),
+            "HandleContent::None must never log payload, even when touched"
+        );
+    }
+
+    #[test]
+    fn test_payload_should_log_mode_touched_only() {
+        let h: CuHandle<Vec<u8>> =
+            CuHandle::new_detached_with_mode(vec![1], HandleContent::TouchedOnly);
+        assert!(!h.payload_should_log(), "untouched + TouchedOnly => skip");
+        h.mark_touched();
+        assert!(h.payload_should_log(), "touched + TouchedOnly => log");
+    }
+
+    #[test]
+    fn test_default_policy_returns_true_for_non_handle_types() {
+        use crate::pool::PayloadDefaultLoggingPolicy as _;
+        // The autoref-specialization fallback applies to any type that doesn't define
+        // its own inherent payload_should_log. A plain integer is a fine stand-in.
+        let v: u64 = 42;
+        assert!(v.payload_should_log());
+    }
+
+    #[test]
+    fn test_apply_handle_content_policy_overrides_mode() {
+        // Handle minted with the default All policy; runtime hook flips it to
+        // TouchedOnly before downstream consumers see it. Encoder decision tracks.
+        let h: CuHandle<Vec<u8>> = CuHandle::new_detached(vec![1, 2, 3]);
+        assert_eq!(h.logging_mode(), HandleContent::All);
+        assert!(h.payload_should_log());
+
+        h.apply_handle_content_policy(HandleContent::TouchedOnly);
+        assert_eq!(h.logging_mode(), HandleContent::TouchedOnly);
+        assert!(
+            !h.payload_should_log(),
+            "after switch to TouchedOnly an untouched handle must skip"
+        );
+
+        h.mark_touched();
+        assert!(h.payload_should_log(), "touched + TouchedOnly => log");
+    }
+
+    #[test]
+    fn test_default_apply_policy_is_noop_for_non_handle_types() {
+        use crate::pool::PayloadDefaultHandlePolicyApply as _;
+        // No-op for any payload that doesn't wrap a handle — compile-time check that
+        // codegen can call this on every slot without knowing the payload shape.
+        let v: u64 = 42;
+        v.apply_handle_content_policy(HandleContent::TouchedOnly);
+        // No observable change; the test just proves the call compiles and returns.
+    }
 
     #[test]
     fn test_pool() {

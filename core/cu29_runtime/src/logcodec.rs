@@ -266,6 +266,10 @@ where
     C: CuLogCodec<T>,
     E: Encoder,
 {
+    // NOTE: like `Encode for CuStampedData` in cutask.rs, this is generic over the
+    // payload type, so it cannot itself consult `HandleContent` policy via the
+    // autoref-specialization pattern. The codegen-emitted per-slot encoder calls
+    // `cu29::cutask::encode_metadata_only` instead when bytes should be skipped.
     match msg.payload() {
         None => {
             0u8.encode(encoder)?;
