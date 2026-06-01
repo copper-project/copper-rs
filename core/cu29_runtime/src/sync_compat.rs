@@ -2,9 +2,11 @@
 pub(crate) use std::sync::{Mutex, MutexGuard, OnceLock};
 
 #[cfg(not(feature = "std"))]
+pub(crate) use spin::Mutex;
+#[cfg(not(feature = "std"))]
 pub(crate) use spin::once::Once as OnceLock;
 #[cfg(not(feature = "std"))]
-pub(crate) use spin::{Mutex, MutexGuard};
+pub(crate) type MutexGuard<'a, T> = spin::MutexGuard<'a, T, spin::relax::Spin>;
 
 #[inline]
 pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
