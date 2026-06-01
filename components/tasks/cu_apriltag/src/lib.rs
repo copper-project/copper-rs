@@ -270,6 +270,11 @@ impl CuTask for AprilTags {
     ) -> CuResult<()> {
         let mut result = AprilTagDetections::new();
         if let Some(payload) = input.payload() {
+            // Tell the unified-log encoder this frame's pixels were actually read.
+            // No-op when the source uses HandleContent::All (the default); essential
+            // when the source uses HandleContent::TouchedOnly so the logger writes
+            // the full image bytes for this frame instead of a metadata-only record.
+            payload.mark_touched();
             let image = image_from_cuimage(payload);
             let detections = self.detector.0.detect(&image);
             for detection in detections {

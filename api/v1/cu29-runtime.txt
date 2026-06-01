@@ -65,6 +65,12 @@ pub fn petgraph::Direction::from(dir: cu29_runtime::config::CuDirection) -> Self
 pub enum cu29_runtime::config::Flavor
 pub cu29_runtime::config::Flavor::Bridge
 pub cu29_runtime::config::Flavor::Task
+#[repr(u8)] pub enum cu29_runtime::config::HandleContent
+pub cu29_runtime::config::HandleContent::All = 0
+pub cu29_runtime::config::HandleContent::None = 2
+pub cu29_runtime::config::HandleContent::TouchedOnly = 1
+impl cu29_runtime::config::HandleContent
+pub fn cu29_runtime::config::HandleContent::from_u8(v: u8) -> Self
 pub enum cu29_runtime::config::TaskKind
 pub cu29_runtime::config::TaskKind::Regular
 pub cu29_runtime::config::TaskKind::Sink
@@ -240,6 +246,7 @@ pub fn cu29_runtime::config::Node::get_logging(&self) -> core::option::Option<&c
 pub fn cu29_runtime::config::Node::get_param<T>(&self, key: &str) -> core::result::Result<core::option::Option<T>, cu29_runtime::config::ConfigError> where T: for<'a> core::convert::TryFrom<&'a cu29_runtime::config::Value, Error = cu29_runtime::config::ConfigError>
 pub fn cu29_runtime::config::Node::get_resources(&self) -> core::option::Option<&hashbrown::map::HashMap<alloc::string::String, alloc::string::String>>
 pub fn cu29_runtime::config::Node::get_type(&self) -> &str
+pub fn cu29_runtime::config::Node::handle_content_policy(&self) -> cu29_runtime::config::HandleContent
 pub fn cu29_runtime::config::Node::is_background(&self) -> bool
 pub fn cu29_runtime::config::Node::is_logging_enabled(&self) -> bool
 pub fn cu29_runtime::config::Node::is_run_in_sim(&self) -> bool
@@ -258,6 +265,7 @@ pub fn cu29_runtime::config::NodeLogging::codec(&self) -> core::option::Option<&
 pub fn cu29_runtime::config::NodeLogging::codec_for_msg_type(&self, msg_type: &str) -> core::option::Option<&str>
 pub fn cu29_runtime::config::NodeLogging::codecs(&self) -> &hashbrown::map::HashMap<alloc::string::String, alloc::string::String>
 pub fn cu29_runtime::config::NodeLogging::enabled(&self) -> bool
+pub fn cu29_runtime::config::NodeLogging::handle_content(&self) -> cu29_runtime::config::HandleContent
 impl core::default::Default for cu29_runtime::config::NodeLogging
 pub fn cu29_runtime::config::NodeLogging::default() -> Self
 pub struct cu29_runtime::config::ResourceBundleConfig
@@ -880,6 +888,7 @@ pub fn cu29_runtime::simulation::CuSimSrcTask<T>::thaw<D: cu_bincode::de::Decode
 impl<Tx: cu29_runtime::cubridge::BridgeChannelSet + 'static, Rx: cu29_runtime::cubridge::BridgeChannelSet + 'static> cu29_runtime::cutask::Freezable for cu29_runtime::simulation::CuSimBridge<Tx, Rx>
 pub fn cu29_runtime::simulation::CuSimBridge<Tx, Rx>::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 pub fn cu29_runtime::simulation::CuSimBridge<Tx, Rx>::thaw<D: cu_bincode::de::Decoder>(&mut self, _decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
+pub fn cu29_runtime::cutask::encode_metadata_only<T, M, E>(msg: &cu29_runtime::cutask::CuStampedData<T, M>, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError> where T: cu29_runtime::cutask::CuMsgPayload, M: cu29_traits::Metadata, E: cu_bincode::enc::Encoder
 pub type cu29_runtime::cutask::CuMsg<T> = cu29_runtime::cutask::CuStampedData<T, cu29_runtime::cutask::CuMsgMetadata>
 pub mod cu29_runtime::debug
 pub struct cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L> where P: cu29_traits::CopperListTuple, S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static
@@ -1406,6 +1415,12 @@ pub cu29_runtime::pool::CuSharedMemoryElementType::U64
 pub cu29_runtime::pool::CuSharedMemoryElementType::U8
 impl cu29_runtime::pool::CuSharedMemoryElementType
 pub fn cu29_runtime::pool::CuSharedMemoryElementType::of<E: cu29_runtime::pool::ElementType + 'static>() -> core::option::Option<Self>
+#[repr(u8)] pub enum cu29_runtime::pool::HandleContent
+pub cu29_runtime::pool::HandleContent::All = 0
+pub cu29_runtime::pool::HandleContent::None = 2
+pub cu29_runtime::pool::HandleContent::TouchedOnly = 1
+impl cu29_runtime::config::HandleContent
+pub fn cu29_runtime::config::HandleContent::from_u8(v: u8) -> Self
 pub struct cu29_runtime::pool::AlignedBuffer<E: cu29_runtime::pool::ElementType>
 impl<E: cu29_runtime::pool::ElementType> cu29_runtime::pool::AlignedBuffer<E>
 pub fn cu29_runtime::pool::AlignedBuffer<E>::new(num_elements: usize, alignment: usize) -> Self
@@ -1418,10 +1433,17 @@ impl<E: cu29_runtime::pool::ElementType> core::ops::drop::Drop for cu29_runtime:
 pub fn cu29_runtime::pool::AlignedBuffer<E>::drop(&mut self)
 pub struct cu29_runtime::pool::CuHandle<T: core::fmt::Debug + core::marker::Send + core::marker::Sync>(_)
 impl<T: core::fmt::Debug + core::marker::Send + core::marker::Sync> cu29_runtime::pool::CuHandle<T>
+pub fn cu29_runtime::pool::CuHandle<T>::apply_handle_content_policy(&self, mode: cu29_runtime::config::HandleContent)
+pub fn cu29_runtime::pool::CuHandle<T>::logging_mode(&self) -> cu29_runtime::config::HandleContent
+pub fn cu29_runtime::pool::CuHandle<T>::mark_touched(&self)
 pub fn cu29_runtime::pool::CuHandle<T>::new_detached(inner: T) -> Self
 pub fn cu29_runtime::pool::CuHandle<T>::new_detached_box(inner: alloc::boxed::Box<T>) -> Self
+pub fn cu29_runtime::pool::CuHandle<T>::new_detached_with_mode(inner: T, mode: cu29_runtime::config::HandleContent) -> Self
+pub fn cu29_runtime::pool::CuHandle<T>::payload_should_log(&self) -> bool
+pub fn cu29_runtime::pool::CuHandle<T>::was_touched(&self) -> bool
 pub fn cu29_runtime::pool::CuHandle<T>::with_inner<R>(&self, f: impl core::ops::function::FnOnce(&cu29_runtime::pool::CuHandleInner<T>) -> R) -> R
 pub fn cu29_runtime::pool::CuHandle<T>::with_inner_mut<R>(&self, f: impl core::ops::function::FnOnce(&mut cu29_runtime::pool::CuHandleInner<T>) -> R) -> R
+pub fn cu29_runtime::pool::CuHandle<T>::with_touched_inner<R>(&self, f: impl core::ops::function::FnOnce(&cu29_runtime::pool::CuHandleInner<T>) -> R) -> R
 impl<'de, U> serde_core::de::Deserialize<'de> for cu29_runtime::pool::CuHandle<alloc::vec::Vec<U>> where U: cu29_runtime::pool::ElementType + serde_core::de::Deserialize<'de> + 'static
 pub fn cu29_runtime::pool::CuHandle<alloc::vec::Vec<U>>::deserialize<D: serde_core::de::Deserializer<'de>>(deserializer: D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 impl<'de, U> serde_core::de::Deserialize<'de> for cu29_runtime::pool::CuHandle<cu29_runtime::pool::CuSharedMemoryBuffer<U>> where U: cu29_runtime::pool::ElementType + serde_core::de::Deserialize<'de> + 'static
@@ -1431,8 +1453,9 @@ pub fn cu29_runtime::pool::CuHandle<T>::clone(&self) -> Self
 impl<T: core::fmt::Debug + core::marker::Send + core::marker::Sync> core::default::Default for cu29_runtime::pool::CuHandle<T>
 pub fn cu29_runtime::pool::CuHandle<T>::default() -> Self
 impl<T: core::fmt::Debug + core::marker::Send + core::marker::Sync> core::ops::deref::Deref for cu29_runtime::pool::CuHandle<T>
-pub type cu29_runtime::pool::CuHandle<T>::Target = alloc::sync::Arc<std::sync::poison::mutex::Mutex<cu29_runtime::pool::CuHandleInner<T>>>
+pub type cu29_runtime::pool::CuHandle<T>::Target = std::sync::poison::mutex::Mutex<cu29_runtime::pool::CuHandleInner<T>>
 pub fn cu29_runtime::pool::CuHandle<T>::deref(&self) -> &Self::Target
+impl<T: core::fmt::Debug + core::marker::Send + core::marker::Sync> cu29_runtime::pool::HandleContentAware for cu29_runtime::pool::CuHandle<T>
 impl<T: cu29_runtime::pool::ArrayLike + cu_bincode::enc::Encode> cu_bincode::enc::Encode for cu29_runtime::pool::CuHandle<T> where <T as cu29_runtime::pool::ArrayLike>::Element: 'static
 pub fn cu29_runtime::pool::CuHandle<T>::encode<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 impl<U: cu29_runtime::pool::ElementType + cu_bincode::de::Decode<()> + 'static> cu_bincode::de::Decode<()> for cu29_runtime::pool::CuHandle<alloc::vec::Vec<U>>
@@ -1516,6 +1539,16 @@ pub fn cu29_runtime::pool::ElementType::encode<E: cu_bincode::enc::Encoder>(&sel
 impl<T> cu29_runtime::pool::ElementType for T where T: core::default::Default + core::marker::Sized + core::marker::Copy + core::fmt::Debug + core::marker::Unpin + core::marker::Send + core::marker::Sync + cu_bincode::enc::Encode + cu_bincode::de::Decode<()>
 pub fn T::decode<D: cu_bincode::de::Decoder<Context = ()>>(decoder: &mut D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
 pub fn T::encode<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
+pub trait cu29_runtime::pool::HandleContentAware
+impl<T: core::fmt::Debug + core::marker::Send + core::marker::Sync> cu29_runtime::pool::HandleContentAware for cu29_runtime::pool::CuHandle<T>
+pub trait cu29_runtime::pool::PayloadDefaultHandlePolicyApply
+pub fn cu29_runtime::pool::PayloadDefaultHandlePolicyApply::apply_handle_content_policy(&self, _mode: cu29_runtime::config::HandleContent)
+impl<T: ?core::marker::Sized> cu29_runtime::pool::PayloadDefaultHandlePolicyApply for T
+pub fn T::apply_handle_content_policy(&self, _mode: cu29_runtime::config::HandleContent)
+pub trait cu29_runtime::pool::PayloadDefaultLoggingPolicy
+pub fn cu29_runtime::pool::PayloadDefaultLoggingPolicy::payload_should_log(&self) -> bool
+impl<T: ?core::marker::Sized> cu29_runtime::pool::PayloadDefaultLoggingPolicy for T
+pub fn T::payload_should_log(&self) -> bool
 pub trait cu29_runtime::pool::PoolMonitor: core::marker::Send + core::marker::Sync
 pub fn cu29_runtime::pool::PoolMonitor::buffer_size(&self) -> usize
 pub fn cu29_runtime::pool::PoolMonitor::id(&self) -> arrayvec::array_string::ArrayString<64>
@@ -1790,10 +1823,16 @@ pub fn cu29_runtime::resource::ResourceManager::borrow_shared_arc<T: 'static + c
 pub fn cu29_runtime::resource::ResourceManager::new(bundle_sizes: &[usize]) -> Self
 pub fn cu29_runtime::resource::ResourceManager::take<T: 'static + core::marker::Send + core::marker::Sync>(&mut self, key: cu29_runtime::resource::ResourceKey<T>) -> cu29_traits::CuResult<cu29_runtime::resource::Owned<T>>
 pub struct cu29_runtime::resource::ThreadPoolBundle
+impl cu29_runtime::resource::NamedResourceBundleDecl for cu29_runtime::resource::ThreadPoolBundle
+pub const cu29_runtime::resource::ThreadPoolBundle::NAMES: &'static [&'static str]
 impl cu29_runtime::resource::ResourceBundle for cu29_runtime::resource::ThreadPoolBundle
 pub fn cu29_runtime::resource::ThreadPoolBundle::build(bundle: cu29_runtime::resource::BundleContext<Self>, config: core::option::Option<&cu29_runtime::config::ComponentConfig>, manager: &mut cu29_runtime::resource::ResourceManager) -> cu29_traits::CuResult<()>
 impl cu29_runtime::resource::ResourceBundleDecl for cu29_runtime::resource::ThreadPoolBundle
 pub type cu29_runtime::resource::ThreadPoolBundle::Id = cu29_runtime::resource::ThreadPoolId
+pub trait cu29_runtime::resource::NamedResourceBundleDecl: cu29_runtime::resource::ResourceBundleDecl
+pub const cu29_runtime::resource::NamedResourceBundleDecl::NAMES: &'static [&'static str]
+impl cu29_runtime::resource::NamedResourceBundleDecl for cu29_runtime::resource::ThreadPoolBundle
+pub const cu29_runtime::resource::ThreadPoolBundle::NAMES: &'static [&'static str]
 pub trait cu29_runtime::resource::ResourceBindings<'r>: core::marker::Sized
 pub type cu29_runtime::resource::ResourceBindings::Binding: core::marker::Copy + core::cmp::Eq + 'static
 pub fn cu29_runtime::resource::ResourceBindings::from_bindings(manager: &'r mut cu29_runtime::resource::ResourceManager, mapping: core::option::Option<&cu29_runtime::resource::ResourceBindingMap<Self::Binding>>) -> cu29_traits::CuResult<Self>

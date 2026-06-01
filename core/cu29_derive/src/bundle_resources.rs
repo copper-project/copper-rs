@@ -24,10 +24,12 @@ pub fn bundle_resources(input: TokenStream) -> TokenStream {
         .unwrap_or_else(|| Ident::new("Bundle", proc_macro2::Span::call_site()));
     let enum_ident = format_ident!("{}Id", bundle_ident);
     let count = ids.len();
-    let variants = ids.iter();
-    let names = ids.iter().map(|ident| {
-        let name = ident.to_string().to_case(Case::Snake);
-        syn::LitStr::new(&name, ident.span())
+    let variants = ids.iter().map(|entry| &entry.ident);
+    let names = ids.iter().map(|entry| {
+        entry.name.clone().unwrap_or_else(|| {
+            let name = entry.ident.to_string().to_case(Case::Snake);
+            syn::LitStr::new(&name, entry.ident.span())
+        })
     });
     let names_ident_str = format!("{}_NAMES", enum_ident.to_string().to_case(Case::UpperSnake));
     let names_ident = format_ident!("{}", names_ident_str);
@@ -51,6 +53,10 @@ pub fn bundle_resources(input: TokenStream) -> TokenStream {
             type Id = #enum_ident;
         }
 
+        impl ::cu29::resource::NamedResourceBundleDecl for #bundle {
+            const NAMES: &'static [&'static str] = #names_ident;
+        }
+
         #[allow(dead_code)]
         pub const #names_ident: &[&str] = &[#(#names),*];
     };
@@ -60,17 +66,36 @@ pub fn bundle_resources(input: TokenStream) -> TokenStream {
 
 struct BundleResourcesMacro {
     bundle: Path,
-    ids: Vec<Ident>,
+    ids: Vec<BundleResourceEntry>,
+}
+
+struct BundleResourceEntry {
+    ident: Ident,
+    name: Option<syn::LitStr>,
 }
 
 impl Parse for BundleResourcesMacro {
     fn parse(input: ParseStream<'_>) -> syn::Result<Self> {
         let bundle: Path = input.parse()?;
         input.parse::<Token![:]>()?;
-        let ids: Punctuated<Ident, Token![,]> = input.parse_terminated(Ident::parse, Token![,])?;
+        let ids: Punctuated<BundleResourceEntry, Token![,]> =
+            input.parse_terminated(BundleResourceEntry::parse, Token![,])?;
         Ok(BundleResourcesMacro {
             bundle,
             ids: ids.into_iter().collect(),
         })
+    }
+}
+
+impl Parse for BundleResourceEntry {
+    fn parse(input: ParseStream<'_>) -> syn::Result<Self> {
+        let ident: Ident = input.parse()?;
+        let name = if input.peek(Token![=]) {
+            input.parse::<Token![=]>()?;
+            Some(input.parse()?)
+        } else {
+            None
+        };
+        Ok(Self { ident, name })
     }
 }
