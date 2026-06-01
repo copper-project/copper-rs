@@ -569,6 +569,16 @@ impl<T: Debug + Send + Sync> CuHandle<T> {
         f(&mut *lock)
     }
 
+    /// Returns the number of handles sharing this payload storage.
+    pub fn strong_count(&self) -> usize {
+        Arc::strong_count(&self.0)
+    }
+
+    /// Returns true when this is the only handle to this payload storage.
+    pub fn is_unique(&self) -> bool {
+        self.strong_count() == 1
+    }
+
     /// Mark this handle as read by a downstream consumer.
     ///
     /// When the source is configured with [`HandleContent::TouchedOnly`], the unified-log
@@ -1304,6 +1314,23 @@ mod tests {
         // Shared Arc<CuHandleCell>: any clone sees the flag flip.
         assert!(h.was_touched());
         assert!(clone.was_touched());
+    }
+
+    #[test]
+    fn test_handle_strong_count_tracks_clones() {
+        let h: CuHandle<Vec<u8>> = CuHandle::new_detached(vec![1, 2, 3]);
+        assert_eq!(h.strong_count(), 1);
+        assert!(h.is_unique());
+
+        let clone = h.clone();
+        assert_eq!(h.strong_count(), 2);
+        assert_eq!(clone.strong_count(), 2);
+        assert!(!h.is_unique());
+        assert!(!clone.is_unique());
+
+        drop(clone);
+        assert_eq!(h.strong_count(), 1);
+        assert!(h.is_unique());
     }
 
     #[test]
