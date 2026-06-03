@@ -1,0 +1,72 @@
+(
+    tasks: [
+        (
+            id: "ranges",
+            type: "RangeScenarioSource",
+            run_in_sim: true,
+        ),
+        (
+            id: "snapshot",
+            type: "cu_peer_range_accumulator::PeerRangeAccumulatorTask<4>",
+            config: {
+                "min_samples": 4,
+                "max_sample_age_ms": 50,
+            },
+        ),
+        (
+            id: "triangulate",
+            type: "cu_peer_triangulation::PeerTriangulation3dTask<4, 4>",
+            config: {
+                "anchors": [
+                    (
+                        peer_id: "A",
+                        x_m: 0.0,
+                        y_m: 0.0,
+                        z_m: 0.0,
+                    ),
+                    (
+                        peer_id: "B",
+                        x_m: 4.0,
+                        y_m: 0.0,
+                        z_m: 0.0,
+                    ),
+                    (
+                        peer_id: "C",
+                        x_m: 0.0,
+                        y_m: 3.0,
+                        z_m: 0.0,
+                    ),
+                    (
+                        peer_id: "D",
+                        x_m: 0.0,
+                        y_m: 0.0,
+                        z_m: 4.0,
+                    ),
+                ],
+                "max_rms_residual_m": 0.02,
+            },
+        ),
+        (
+            id: "sink",
+            type: "PositionSink",
+            run_in_sim: true,
+        ),
+    ],
+    cnx: [
+        (
+            src: "ranges",
+            dst: "snapshot",
+            msg: "cu_sensor_payloads::PeerRangeObservation",
+        ),
+        (
+            src: "snapshot",
+            dst: "triangulate",
+            msg: "cu_sensor_payloads::PeerRangeSnapshot<4>",
+        ),
+        (
+            src: "triangulate",
+            dst: "sink",
+            msg: "cu_peer_triangulation::LocalPosition3d",
+        ),
+    ],
+)

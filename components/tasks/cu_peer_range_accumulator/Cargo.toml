@@ -1,0 +1,26 @@
+[package]
+name = "cu-peer-range-accumulator"
+description = "Copper task that snapshots the latest range samples by peer."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[package.metadata.copper]
+kind = "task"
+domains = ["algorithm/ranging"]
+environments = ["host", "embedded"]
+
+[dependencies]
+cu29 = { path = "../../../core/cu29", version = "1.0.0-rc2", default-features = false }
+cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "1.0.0-rc2", default-features = false }
+
+[features]
+default = ["std"]
+std = ["cu29/std", "cu-sensor-payloads/std"]
+reflect = ["cu29/reflect", "cu-sensor-payloads/reflect"]
