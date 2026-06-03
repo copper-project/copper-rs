@@ -1,6 +1,6 @@
 use clap::{Args, Parser, Subcommand};
 use cu_linux_resources::{SERIAL0_BAUDRATE_KEY, SERIAL0_DEV_KEY, SERIAL0_TIMEOUT_MS_KEY};
-use cu_sensor_payloads::RangeObservation;
+use cu_sensor_payloads::PeerRangeObservation;
 use cu29::prelude::*;
 use cu29::units::si::length::meter;
 use serialport::SerialPort;
@@ -26,7 +26,7 @@ const LOG_SLAB_SIZE: Option<usize> = Some(16 * 1024 * 1024);
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct ProbeSnapshot {
     pub count: u64,
-    pub last: Option<RangeObservation>,
+    pub last: Option<PeerRangeObservation>,
 }
 
 static SNAPSHOT: LazyLock<Mutex<ProbeSnapshot>> =
@@ -50,7 +50,7 @@ pub mod tasks {
 
     impl CuSinkTask for RangeCaptureSink {
         type Resources<'r> = ();
-        type Input<'m> = input_msg!(RangeObservation);
+        type Input<'m> = input_msg!(PeerRangeObservation);
 
         fn new(
             _config: Option<&ComponentConfig>,
@@ -429,7 +429,7 @@ fn override_serial_resource(config: &mut CuConfig, port: &Path, baudrate: u32, t
     bundle_config.set(SERIAL0_TIMEOUT_MS_KEY, timeout_ms);
 }
 
-fn format_observation(observation: RangeObservation) -> String {
+fn format_observation(observation: PeerRangeObservation) -> String {
     let distance_m = observation.distance.get::<meter>();
     let rssi = observation
         .rssi_dbm

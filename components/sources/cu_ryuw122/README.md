@@ -25,7 +25,7 @@ The source runs one outstanding initiator request at a time:
 
 - send `AT+ANCHOR_SEND` for the current anchor
 - watch later runtime cycles for the matching `+ANCHOR_RCV`
-- emit a `RangeObservation` when a response arrives
+- emit a `PeerRangeObservation` when a response arrives
 - immediately move on to the next anchor
 - if an anchor stays silent, advance on timeout and continue polling
 
@@ -41,7 +41,7 @@ This keeps the driver non-blocking and suitable for regular Copper source execut
 
 The source emits:
 
-- `cu_sensor_payloads::RangeObservation`
+- `cu_sensor_payloads::PeerRangeObservation`
 
 Each observation contains:
 

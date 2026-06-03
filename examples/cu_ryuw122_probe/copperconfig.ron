@@ -38,7 +38,7 @@
         (
             src: "ranges",
             dst: "sink",
-            msg: "cu_sensor_payloads::RangeObservation",
+            msg: "cu_sensor_payloads::PeerRangeObservation",
         ),
     ],
 )

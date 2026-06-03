@@ -101,31 +101,6 @@ If the task is about resources / HAL wiring:
 - `examples/cu_resources_test/`
 - `../copper-rs.wiki/Resources.md`
 
-If the task is about `cu_ryuw122` / UWB ranging:
-
-- `components/sources/cu_ryuw122/README.md`
-- `components/sources/cu_ryuw122/src/lib.rs`
-- `components/sources/cu_ryuw122/src/protocol.rs`
-- `components/payloads/cu_sensor_payloads/src/ranging.rs`
-- `components/res/cu_linux_resources/README.md`
-
-`cu_ryuw122` guidance:
-
-- Treat it as an initiator-side ranging source that usually lives on the moving robot and polls fixed anchors, not as a localization solver.
-- Its output boundary is `cu_sensor_payloads::RangeObservation`.
-- Safety logic, range accumulation, and multilateration belong in downstream tasks.
-- Preserve the one-in-flight non-blocking poll cycle:
-  - send one `AT+ANCHOR_SEND`
-  - observe later cycles for `+ANCHOR_RCV`
-  - advance immediately on response
-  - advance on timeout when a peer is silent
-- Do not add blocking waits or "poll until reply" loops in `process`.
-- Preserve the no-allocation nominal runtime path:
-  - prebuild repeated command buffers at startup
-  - parse receive lines in place
-  - avoid adding new heap work to the steady-state poll/receive loop
-- Keep the README focused on what the source is, what it emits, and how to wire it in `copperconfig.ron`, not as a statement of work.
-
 If the task is about logging / export / replay:
 
 - `core/cu29_export/`

@@ -6,12 +6,12 @@ mod protocol;
 
 use alloc::collections::VecDeque;
 use alloc::format;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::fmt;
 #[cfg(feature = "std")]
 use cu_linux_resources::LinuxSerialPort;
-use cu_sensor_payloads::{RangeObservation, RangePeerId};
+use cu_sensor_payloads::{PeerRangeObservation, RangePeerId};
 use cu29::clock::{CuTime, Tov};
 use cu29::prelude::*;
 use cu29::resource::{Owned, ResourceBindingMap, ResourceBindings, ResourceManager};
@@ -72,7 +72,7 @@ struct InFlightRequest {
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct PendingObservation {
     observed_at: CuTime,
-    observation: RangeObservation,
+    observation: PeerRangeObservation,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -155,7 +155,7 @@ where
     <S as ErrorType>::Error: embedded_io::Error + fmt::Debug + 'static,
 {
     type Resources<'r> = Ryuw122ResourcesT<S>;
-    type Output<'m> = output_msg!(RangeObservation);
+    type Output<'m> = output_msg!(PeerRangeObservation);
 
     fn new(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
     where
@@ -341,7 +341,7 @@ where
     ) {
         self.push_pending_observation(PendingObservation {
             observed_at,
-            observation: RangeObservation::from_centimeters(anchor_id, distance_cm, rssi_dbm),
+            observation: PeerRangeObservation::from_centimeters(anchor_id, distance_cm, rssi_dbm),
         });
 
         if let Some(in_flight) = self.in_flight
