@@ -3,22 +3,52 @@
 use cu_sensor_payloads::{PeerRangeObservation, PeerRangeSample, PeerRangeSnapshot};
 use cu29::clock::{CuDuration, CuTime};
 use cu29::prelude::*;
+use serde::Deserialize;
+
+const DEFAULT_MAX_SAMPLE_AGE_MS: u64 = 1000;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Reflect)]
+pub enum SampleRetention {
+    MaxAge(CuDuration),
+    Forever,
+}
+
+impl Default for SampleRetention {
+    fn default() -> Self {
+        Self::MaxAge(CuDuration::from_millis(DEFAULT_MAX_SAMPLE_AGE_MS))
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+enum SampleRetentionConfig {
+    MaxAgeMs(u32),
+    Forever,
+}
+
+impl SampleRetentionConfig {
+    fn into_policy(self) -> SampleRetention {
+        match self {
+            Self::MaxAgeMs(ms) => SampleRetention::MaxAge(CuDuration::from_millis(ms as u64)),
+            Self::Forever => SampleRetention::Forever,
+        }
+    }
+}
 
 #[derive(Reflect)]
 pub struct PeerRangeAccumulatorTask<const N: usize> {
     samples: [Option<PeerRangeSample>; N],
     min_samples: usize,
-    max_sample_age: Option<CuDuration>,
+    sample_retention: SampleRetention,
 }
 
 impl<const N: usize> Freezable for PeerRangeAccumulatorTask<N> {}
 
 impl<const N: usize> PeerRangeAccumulatorTask<N> {
-    pub fn new_with_limits(min_samples: usize, max_sample_age: Option<CuDuration>) -> Self {
+    pub fn new_with_limits(min_samples: usize, sample_retention: SampleRetention) -> Self {
         Self {
             samples: [None; N],
             min_samples: min_samples.clamp(1, N),
-            max_sample_age,
+            sample_retention,
         }
     }
 
@@ -47,7 +77,7 @@ impl<const N: usize> PeerRangeAccumulatorTask<N> {
     }
 
     pub fn snapshot_at(&mut self, now: CuTime) -> Option<PeerRangeSnapshot<N>> {
-        if let Some(max_sample_age) = self.max_sample_age {
+        if let SampleRetention::MaxAge(max_sample_age) = self.sample_retention {
             for slot in &mut self.samples {
                 let Some(sample) = slot else {
                     continue;
@@ -84,13 +114,13 @@ impl<const N: usize> CuTask for PeerRangeAccumulatorTask<N> {
             .flatten()
             .map_or(N, |value| value as usize);
 
-        let max_sample_age = config
-            .map(|config| config.get::<u32>("max_sample_age_ms"))
+        let sample_retention = config
+            .map(|config| config.get_value::<SampleRetentionConfig>("sample_retention"))
             .transpose()?
             .flatten()
-            .map(|value| CuDuration::from_millis(value as u64));
+            .map_or_else(SampleRetention::default, SampleRetentionConfig::into_policy);
 
-        Ok(Self::new_with_limits(min_samples, max_sample_age))
+        Ok(Self::new_with_limits(min_samples, sample_retention))
     }
 
     fn process(
@@ -151,7 +181,8 @@ mod tests {
 
     #[test]
     fn replaces_latest_sample_for_same_peer() {
-        let mut accumulator = PeerRangeAccumulatorTask::<3>::new_with_limits(1, None);
+        let mut accumulator =
+            PeerRangeAccumulatorTask::<3>::new_with_limits(1, SampleRetention::default());
         accumulator
             .update(PeerRangeSample::new(
                 CuTime::from_nanos(10),
@@ -177,7 +208,8 @@ mod tests {
 
     #[test]
     fn rejects_new_peer_when_capacity_is_full() {
-        let mut accumulator = PeerRangeAccumulatorTask::<1>::new_with_limits(1, None);
+        let mut accumulator =
+            PeerRangeAccumulatorTask::<1>::new_with_limits(1, SampleRetention::Forever);
         accumulator
             .update(PeerRangeSample::new(
                 CuTime::from_nanos(10),
@@ -196,8 +228,10 @@ mod tests {
 
     #[test]
     fn evicts_stale_samples_before_snapshot() {
-        let mut accumulator =
-            PeerRangeAccumulatorTask::<3>::new_with_limits(2, Some(CuDuration::from_millis(5)));
+        let mut accumulator = PeerRangeAccumulatorTask::<3>::new_with_limits(
+            2,
+            SampleRetention::MaxAge(CuDuration::from_millis(5)),
+        );
         accumulator
             .update(PeerRangeSample::new(
                 CuTime::from_millis(10),
@@ -217,8 +251,31 @@ mod tests {
     }
 
     #[test]
+    fn forever_retention_keeps_old_samples() {
+        let mut accumulator =
+            PeerRangeAccumulatorTask::<3>::new_with_limits(2, SampleRetention::Forever);
+        accumulator
+            .update(PeerRangeSample::new(
+                CuTime::from_millis(10),
+                observation("A", 1.0),
+            ))
+            .unwrap();
+
+        let snapshot = accumulator
+            .update(PeerRangeSample::new(
+                CuTime::from_millis(2000),
+                observation("B", 2.0),
+            ))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(snapshot.len, 2);
+    }
+
+    #[test]
     fn task_emits_snapshot_with_range_tov_after_min_samples() {
-        let mut accumulator = PeerRangeAccumulatorTask::<3>::new_with_limits(2, None);
+        let mut accumulator =
+            PeerRangeAccumulatorTask::<3>::new_with_limits(2, SampleRetention::default());
         let ctx = CuContext::new_with_clock();
         let mut input = CuMsg::new(Some(observation("A", 1.0)));
         input.tov = Tov::Time(CuTime::from_nanos(10));
