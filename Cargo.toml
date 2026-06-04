@@ -58,6 +58,7 @@ members = [
   "components/sources/cu_vlp16",
   "components/sources/cu_wt901",
   "components/sources/cu_rp_encoder",
+  "components/sources/cu_ryuw122",
   "components/sources/cu_sen0682",
   "components/tasks/cu_aligner",
   "components/tasks/cu_ahrs",
@@ -102,6 +103,7 @@ members = [
   "examples/cu_runtime_matrix",
   "examples/cu_parallel_mandelbrot",
   "examples/cu_remote_debug_session",
+  "examples/cu_ryuw122_probe",
   "support/cargo_cunew",
 ]
 

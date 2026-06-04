@@ -1,0 +1,26 @@
+import "../../justfile"
+
+# Configure the robot-side modem. This uses the REYAX vendor initiator role.
+robot port="/dev/ttyACM0":
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cd "{{ROOT}}"
+	cargo run -p cu-ryuw122-probe -- robot "{{port}}"
+
+# Configure a fixed localization anchor. This uses the REYAX vendor responder role.
+anchor port="/dev/ttyACM1":
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cd "{{ROOT}}"
+	cargo run -p cu-ryuw122-probe -- anchor "{{port}}"
+
+# Run the Copper source against the robot serial port.
+probe port="/dev/ttyACM0" duration_s="":
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cd "{{ROOT}}"
+	if [[ -n "{{duration_s}}" ]]; then
+		cargo run -p cu-ryuw122-probe -- probe "{{port}}" --duration-s "{{duration_s}}"
+	else
+		cargo run -p cu-ryuw122-probe -- probe "{{port}}"
+	fi
