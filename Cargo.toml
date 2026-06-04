@@ -244,10 +244,10 @@ bevy_reflect_derive = "0.18.0"
 # used across testing
 tempfile = { version = "3.23", default-features = false }
 
-spin = { version = "0.11" } # should be removed when std is on, but cargo is bad at negative features
+spin = { version = "0.12" } # should be removed when std is on, but cargo is bad at negative features
 
 # rerun
-rerun = { version = "0.32", default-features = false, features = [
+rerun = { version = "0.33", default-features = false, features = [
   "sdk",
   "server",
   "log",
@@ -295,7 +295,7 @@ libc = { version = "0.2", default-features = false }
 linux-embedded-hal = "0.4.0"
 log = { version = "0.4", default-features = false }
 minicbor = { version = "2.2.1", default-features = false }
-minicbor-serde = { version = "0.6.2", default-features = false }
+minicbor-serde = { version = "0.7.0", default-features = false }
 nix = { version = "0.31", default-features = false }
 panic-probe = "1.0"
 petgraph = { version = "0.8", default-features = false }

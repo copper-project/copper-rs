@@ -16,6 +16,8 @@ include = ["README.md", "src/**", "templates/**"]
 [dependencies]
 anyhow = { workspace = true, features = ["std"] }
 cargo-generate = "0.23.9"
+# Constrain Rhai's proc-macro dependency until upstream narrows its semver range.
+rhai_codegen = "=3.2.0"
 clap = { workspace = true }
 include_dir = "0.7.4"
 libc = { workspace = true }

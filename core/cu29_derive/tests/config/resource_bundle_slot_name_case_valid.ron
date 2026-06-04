@@ -1,0 +1,27 @@
+(
+    resources: [
+        (
+            id: "linux",
+            provider: "TestBundle",
+        ),
+    ],
+    tasks: [
+        (id: "src", type: "NoopSource"),
+        (
+            id: "sink",
+            type: "UsesNamedResourcesSink",
+            resources: {
+                "serial": "linux.serial3",
+                "pin": "linux.gpio0",
+                "bus": "linux.i2c1",
+            },
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "sink",
+            msg: "u32",
+        ),
+    ],
+)

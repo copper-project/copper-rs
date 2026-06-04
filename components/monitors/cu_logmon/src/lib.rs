@@ -19,7 +19,9 @@ use cu29_log_runtime::{
     format_message_only, register_live_log_listener, unregister_live_log_listener,
 };
 #[cfg(not(feature = "std"))]
-use spin::{Mutex, MutexGuard};
+use spin::Mutex;
+#[cfg(not(feature = "std"))]
+type MutexGuard<'a, T> = spin::MutexGuard<'a, T, spin::relax::Spin>;
 #[cfg(all(feature = "std", debug_assertions))]
 use std::collections::HashMap;
 #[cfg(feature = "std")]
