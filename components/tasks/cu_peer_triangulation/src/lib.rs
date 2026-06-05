@@ -221,6 +221,11 @@ impl<const SNAPSHOT_N: usize, const ANCHOR_N: usize> CuTask
             .ok_or("peer triangulation task requires anchors")?;
         let mut parsed = [PeerAnchor3d::default(); ANCHOR_N];
         let anchor_len = anchors.len();
+        if anchor_len < 4 {
+            return Err(CuError::from(
+                "peer triangulation config must define at least 4 anchors",
+            ));
+        }
         if anchor_len > ANCHOR_N {
             return Err(CuError::from(
                 "peer triangulation config has too many anchors",
