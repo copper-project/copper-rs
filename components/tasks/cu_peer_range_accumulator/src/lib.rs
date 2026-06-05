@@ -129,6 +129,7 @@ impl<const N: usize> CuTask for PeerRangeAccumulatorTask<N> {
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
+        output.tov = input.tov;
         let Some(observation) = input.payload().copied() else {
             output.clear_payload();
             return Ok(());
