@@ -348,18 +348,13 @@ pub(crate) struct MonitorFooterIdentity {
 
 #[cfg(native)]
 fn cached_system_name() -> CompactString {
-    let mut buf = [0u8; 256];
-    let result = unsafe { libc::gethostname(buf.as_mut_ptr().cast(), buf.len()) };
-    if result == 0 {
-        let end = buf.iter().position(|byte| *byte == 0).unwrap_or(buf.len());
-        if let Ok(hostname) = core::str::from_utf8(&buf[..end]) {
-            let hostname = hostname.trim();
-            if !hostname.is_empty() {
-                return CompactString::from(hostname);
-            }
-        }
-    }
-    CompactString::from("unknown-host")
+    hostname::get()
+        .ok()
+        .and_then(|hostname| hostname.into_string().ok())
+        .map(|hostname| hostname.trim().to_string())
+        .filter(|hostname| !hostname.is_empty())
+        .map(CompactString::from)
+        .unwrap_or_else(|| CompactString::from("unknown-host"))
 }
 
 #[cfg(browser)]
