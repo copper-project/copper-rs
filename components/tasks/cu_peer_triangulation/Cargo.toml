@@ -27,5 +27,5 @@ serde = { workspace = true }
 
 [features]
 default = ["std"]
-std = ["cu29/std", "cu-sensor-payloads/std"]
+std = ["cu29/std", "cu-sensor-payloads/std", "bincode/std", "serde/std"]
 reflect = ["cu29/reflect", "cu-sensor-payloads/reflect"]
