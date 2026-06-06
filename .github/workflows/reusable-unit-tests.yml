@@ -405,6 +405,59 @@ jobs:
           path: ${{ env.SCCACHE_DIR }}
           key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
 
+  windows-component-smoke:
+    name: Component Smoke (Windows, debug)
+    runs-on: ${{ inputs.windows_runner_label }}
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      CARGO_TERM_COLOR: always
+      WORKSPACE_SCOPE: core
+
+    steps:
+      - uses: actions/checkout@v6
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
+          linux_disk_workarounds: ${{ inputs.linux_disk_workarounds }}
+          cache_prefix: debug
+          cache_shared_key: rust-windows
+          install_nextest: "false"
+          sccache_key_suffix: windows-component-smoke
+      - name: Check selected Windows components
+        run: >
+          cargo +${{ inputs.toolchain }} check --all-targets
+          -p cu-consolemon
+          -p cu-tuimon
+          -p cu-logmon
+          -p cu-safetymon
+          -p cu-sensor-payloads
+          -p cu-spatial-payloads
+          -p cu-gnss-payloads
+          -p cu-transform
+          -p cu-pid
+          -p cu-ahrs
+          -p cu-ratelimit
+          -p cu-caterpillar
+          -p cu-bridge-test
+          -p cu-resources-test
+          -p cu-monitoring
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
+
   tests-features-linux-container:
     if: inputs.linux_ci_image != ''
     name: Unit Tests (all features) (ubuntu-26.04, debug)
