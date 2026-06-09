@@ -20,6 +20,7 @@ required-features = ["std"]
 
 [dependencies]
 cu29-clock = { workspace = true }
+cu29-intern-strs = { workspace = true, optional = true }
 cu29-log = { workspace = true }
 cu29-log-derive = { workspace = true }
 cu29-log-runtime = { workspace = true }            # needed
@@ -105,6 +106,7 @@ mmap-fsync = ["std", "cu29-unifiedlog/mmap-fsync"]
 remote-debug = [
   "std",
   "reflect",
+  "dep:cu29-intern-strs",
   "dep:cu29-units",
   "dep:serde_json",
   "dep:zenoh",
