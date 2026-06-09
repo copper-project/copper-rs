@@ -1,0 +1,31 @@
+[package]
+name = "cu-peer-triangulation"
+description = "Copper task that estimates a local 3D position from peer range snapshots."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[package.metadata.copper]
+kind = "task"
+domains = ["algorithm/ranging", "algorithm/localization"]
+environments = ["host", "embedded"]
+
+[dependencies]
+bincode = { workspace = true }
+cu29 = { path = "../../../core/cu29", version = "1.0.0-rc2", default-features = false, features = [
+  "units",
+] }
+cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "1.0.0-rc2", default-features = false }
+libm = { version = "0.2", default-features = false }
+serde = { workspace = true }
+
+[features]
+default = ["std"]
+std = ["cu29/std", "cu-sensor-payloads/std", "bincode/std", "serde/std"]
+reflect = ["cu29/reflect", "cu-sensor-payloads/reflect"]
