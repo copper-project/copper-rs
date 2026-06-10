@@ -36,8 +36,20 @@ Recommended (from this directory):
 
 ```bash
 cd examples/cu_remote_debug_session
-cargo run
+just
+just resim-debug
 ```
+
+`just` records the deterministic baseline log under `logs/`.
+`just resim-debug` records a fresh baseline and starts the remote debug server for a client such as TimeTraveler.
+
+The self-contained remote API smoke test is also available:
+
+```bash
+just smoke
+```
+
+`just demo` is an alias for the smoke flow.
 
 If successful, output ends with:
 
