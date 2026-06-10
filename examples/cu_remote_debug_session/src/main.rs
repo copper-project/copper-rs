@@ -420,7 +420,7 @@ fn run_remote_debug_session(debug_base: &str) -> CuResult<()> {
         .get("entries")
         .and_then(Value::as_array)
         .map_or(0, Vec::len);
-    println!("[session] logs.list returned {log_count} structured log entrie(s)");
+    println!("[session] logs.list returned {log_count} structured log entries");
 
     let ts_list = call_step(
         &client,
