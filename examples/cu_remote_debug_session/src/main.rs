@@ -87,7 +87,8 @@ impl CuTask for Accumulator {
     ) -> CuResult<()> {
         if let Some(msg) = input.payload() {
             self.sum += msg.value;
-            debug!(ctx, "accumulator updated sum={sum}", sum = self.sum);
+            let variable = &self.sum / 2;
+            debug!(ctx, "Internal debug variable = {variable}");
             output.set_payload(AccumMsg { sum: self.sum });
         } else {
             output.clear_payload();
@@ -121,7 +122,7 @@ impl CuSinkTask for SpySink {
     fn process(&mut self, ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         self.last = input.payload().map(|p| p.sum);
         if let Some(last) = self.last {
-            debug!(ctx, "spy sink observed last={last}", last = last);
+            debug!(ctx, "spy sink observed last={last}");
         }
         Ok(())
     }
