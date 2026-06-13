@@ -29,6 +29,8 @@ extern crate alloc;
 
 #[cfg(not(feature = "std"))]
 mod nostd_impl;
+#[cfg(all(feature = "std", any(test, feature = "safety-ids")))]
+mod safety_cases;
 #[cfg(feature = "std")]
 mod std_impl;
 
@@ -36,3 +38,9 @@ mod std_impl;
 pub use nostd_impl::CuSafetyMon;
 #[cfg(feature = "std")]
 pub use std_impl::CuSafetyMon;
+
+#[cfg(all(feature = "std", feature = "safety-ids"))]
+#[doc(hidden)]
+pub fn link_safety_ids() {
+    safety_cases::link_safety_ids();
+}

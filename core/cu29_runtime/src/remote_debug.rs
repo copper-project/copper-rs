@@ -147,6 +147,13 @@
 //! | `timeline.get_cl` | yes | `{ at?, include_payloads?, include_metadata?, include_raw? }` | `cl_snapshot`, `query_cursor` (+ optional resolution) |
 //! | `timeline.list` | yes | `{ from, to, page? }` | list of `{ idx, cl, ts_ns }` + `next_offset` |
 //!
+//! ### Logs
+//!
+//! | Method | Session required | Params | Result |
+//! | --- | --- | --- | --- |
+//! | `logs.strings` | yes | `{}` | interned string table and resolved index path |
+//! | `logs.list` | yes | `{ offset?, limit? }` | structured log entries + `next_offset` |
+//!
 //! ### Schema
 //!
 //! | Method | Session required | Params | Result |
@@ -233,20 +240,28 @@ use crate::reflect::{
     EnumInfo, Reflect, ReflectTaskIntrospection, StructInfo, TupleInfo, TupleStructInfo, Type,
     TypeInfo, TypeRegistry, VariantInfo, serde::SerializationData,
 };
+use bincode::config::standard;
+use bincode::decode_from_std_read;
+use bincode::error::DecodeError;
 use cu29_clock::{
     CuTime, CuTimeRange, OptionCuTime, PartialCuTimeRange, RobotClock, RobotClockMock, Tov,
 };
+use cu29_log::{CuLogEntry, rebuild_logline};
 use cu29_traits::{
     CopperListTuple, CuCompactString, CuError, CuMsgMetadataTrait, CuMsgOrigin, CuResult,
     DebugFieldDescriptor, DebugFieldKind, DebugFieldSemantics, ErasedCuStampedDataSet,
+    UnifiedLogType,
 };
-use cu29_unifiedlog::{SectionStorage, UnifiedLogWrite};
+use cu29_unifiedlog::{
+    SectionStorage, UnifiedLogWrite, UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
+use std::io;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -259,6 +274,7 @@ const LOCAL_SHM_MESSAGE_THRESHOLD_BYTES: u64 = 1;
 const DEFAULT_SESSION_IDLE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const DEFAULT_MAX_ACTIVE_SESSIONS: usize = 64;
 const MAX_PAGE_LIMIT: u32 = 1000;
+const MAX_LOG_PAGE_LIMIT: usize = 5000;
 const SERVER_RECV_POLL_TIMEOUT: Duration = Duration::from_millis(250);
 
 #[derive(Clone, Debug, Serialize, Reflect)]
@@ -419,6 +435,14 @@ pub struct SessionOpenParams {
     pub role: Option<String>,
     #[serde(default)]
     pub codecs: Option<Vec<WireCodec>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct LogsListParams {
+    #[serde(default)]
+    offset: usize,
+    #[serde(default)]
+    limit: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -641,6 +665,9 @@ where
     L: UnifiedLogWrite<S> + 'static,
 {
     session: CuDebugSession<App, P, CB, TF, S, L>,
+    log_base: PathBuf,
+    log_index_path: Option<PathBuf>,
+    interned_strings: Option<Vec<String>>,
     opened_at: Instant,
     last_touched_at: Instant,
     cursor_rev: u64,
@@ -859,6 +886,7 @@ fn should_capture_restart_env(key: &str) -> bool {
             | "LD_LIBRARY_PATH"
             | "PATH"
             | "PYTHONPATH"
+            | "LOG_INDEX_DIR"
             | "RUST_BACKTRACE"
             | "RUST_LOG"
     ) || key.starts_with("COPPER_")
@@ -1221,6 +1249,10 @@ where
                 request.session_id.as_deref(),
                 &request.params,
             ),
+            "logs.strings" => self.handle_logs_strings(request_id, request.session_id.as_deref()),
+            "logs.list" => {
+                self.handle_logs_list(request_id, request.session_id.as_deref(), &request.params)
+            }
             "schema.get_stack" => {
                 self.handle_schema_get_stack(request_id, request.session_id.as_deref())
             }
@@ -1333,6 +1365,9 @@ where
             session_id.clone(),
             SessionState {
                 session,
+                log_base: path,
+                log_index_path: None,
+                interned_strings: None,
                 opened_at: Instant::now(),
                 last_touched_at: Instant::now(),
                 cursor_rev: 0,
@@ -1843,6 +1878,100 @@ where
             json!({
                 "items": items,
                 "next_offset": next_offset,
+            }),
+            Some(state.cursor_rev),
+            None,
+        )
+    }
+
+    fn handle_logs_strings(
+        &mut self,
+        request_id: String,
+        session_id: Option<&str>,
+    ) -> DebugRpcResponse {
+        let process_info = self.process_info.clone();
+        let state = match self.session_mut(session_id) {
+            Ok(v) => v,
+            Err(e) => return err_response(request_id, "SessionNotFound", &e.to_string()),
+        };
+
+        match ensure_session_interned_strings(state, &process_info) {
+            Ok(strings) => ok_response(
+                request_id,
+                json!({
+                    "strings": strings,
+                    "index_path": state.log_index_path.as_ref().map(|path| path.display().to_string()),
+                }),
+                Some(state.cursor_rev),
+                None,
+            ),
+            Err(err) => err_response(request_id, "StructuredLogStringsFailed", &err.to_string()),
+        }
+    }
+
+    fn handle_logs_list(
+        &mut self,
+        request_id: String,
+        session_id: Option<&str>,
+        params: &Value,
+    ) -> DebugRpcResponse {
+        let parsed: LogsListParams = match from_params(params) {
+            Ok(v) => v,
+            Err(err) => return param_err_response(request_id, err),
+        };
+        let process_info = self.process_info.clone();
+        let state = match self.session_mut(session_id) {
+            Ok(v) => v,
+            Err(e) => return err_response(request_id, "SessionNotFound", &e.to_string()),
+        };
+
+        let strings = match ensure_session_interned_strings(state, &process_info) {
+            Ok(strings) => strings.to_vec(),
+            Err(err) => {
+                return err_response(request_id, "StructuredLogStringsFailed", &err.to_string());
+            }
+        };
+        let mut reader = match open_structured_log_reader(&state.log_base) {
+            Ok(reader) => reader,
+            Err(err) => {
+                return err_response(request_id, "StructuredLogOpenFailed", &err.to_string());
+            }
+        };
+
+        let limit = parsed
+            .limit
+            .unwrap_or(MAX_LOG_PAGE_LIMIT)
+            .min(MAX_LOG_PAGE_LIMIT);
+        let mut entries = Vec::new();
+        let mut decoded_index = 0usize;
+        let mut emitted = 0usize;
+        let mut reached_end = false;
+
+        while emitted < limit {
+            let entry = match read_next_structured_log_entry(&mut reader) {
+                Ok(Some(entry)) => entry,
+                Ok(None) => {
+                    reached_end = true;
+                    break;
+                }
+                Err(err) => {
+                    return err_response(request_id, "StructuredLogReadFailed", &err.to_string());
+                }
+            };
+
+            if decoded_index >= parsed.offset {
+                entries.push(structured_log_entry_json(decoded_index, &strings, &entry));
+                emitted += 1;
+            }
+            decoded_index = decoded_index.saturating_add(1);
+        }
+
+        ok_response(
+            request_id,
+            json!({
+                "entries": entries,
+                "next_offset": (!reached_end).then_some(parsed.offset.saturating_add(emitted)),
+                "index_path": state.log_index_path.as_ref().map(|path| path.display().to_string()),
             }),
             Some(state.cursor_rev),
             None,
@@ -2605,6 +2734,8 @@ fn capabilities_json(session_lifecycle: SessionLifecycleLimits) -> Value {
             "timeline.get_cursor",
             "timeline.get_cl",
             "timeline.list",
+            "logs.strings",
+            "logs.list",
             "schema.get_stack",
             "schema.list_types",
             "schema.get_type",
@@ -2674,6 +2805,186 @@ fn update_after_jump<App, P, CB, TF, S, L>(
     state.last_keyframe = jump.keyframe_culistid;
     state.last_replayed = jump.replayed;
     state.bump_rev();
+}
+
+fn ensure_session_interned_strings<'a, App, P, CB, TF, S, L>(
+    state: &'a mut SessionState<App, P, CB, TF, S, L>,
+    process_info: &RemoteDebugProcessInfo,
+) -> CuResult<&'a [String]>
+where
+    P: CopperListTuple + 'static,
+    S: SectionStorage,
+    L: UnifiedLogWrite<S> + 'static,
+{
+    if state.interned_strings.is_none() {
+        let index_path =
+            find_structured_log_index(&state.log_base, process_info).ok_or_else(|| {
+                CuError::from("structured log string index not found on debug server")
+            })?;
+        let strings = cu29_intern_strs::read_interned_strings(&index_path).map_err(|err| {
+            CuError::new_with_cause(
+                "failed reading structured log string index",
+                io::Error::other(err.to_string()),
+            )
+        })?;
+        state.log_index_path = Some(index_path);
+        state.interned_strings = Some(strings);
+    }
+    Ok(state.interned_strings.as_deref().unwrap_or(&[]))
+}
+
+fn find_structured_log_index(
+    log_base: &Path,
+    process_info: &RemoteDebugProcessInfo,
+) -> Option<PathBuf> {
+    let mut candidates = Vec::<PathBuf>::new();
+    if let Ok(path) = std::env::var("LOG_INDEX_DIR") {
+        push_log_index_candidate(&mut candidates, PathBuf::from(path));
+    }
+    if let Some(path) = process_info.restart_env.get("LOG_INDEX_DIR") {
+        push_log_index_candidate(&mut candidates, PathBuf::from(path));
+    }
+
+    push_log_index_candidates_from_base(&mut candidates, &process_info.working_dir);
+    if let Some(parent) = process_info.executable_path.parent() {
+        push_log_index_candidates_from_base(&mut candidates, parent);
+        for ancestor in parent.ancestors().take(8) {
+            push_log_index_candidates_from_base(&mut candidates, ancestor);
+        }
+    }
+    if let Some(parent) = log_base.parent() {
+        push_log_index_candidates_from_base(&mut candidates, parent);
+        if let Some(grandparent) = parent.parent() {
+            push_log_index_candidates_from_base(&mut candidates, grandparent);
+        }
+    }
+
+    candidates
+        .into_iter()
+        .find(|path| path.is_file() || path.join("strings.bin").is_file())
+}
+
+fn push_log_index_candidates_from_base(candidates: &mut Vec<PathBuf>, base: &Path) {
+    for candidate in [
+        base.join("cu29_log_index"),
+        base.join("target").join("cu29_log_index"),
+        base.join("target").join("debug").join("cu29_log_index"),
+        base.join("target").join("release").join("cu29_log_index"),
+    ] {
+        push_log_index_candidate(candidates, candidate);
+    }
+
+    if let Ok(entries) = fs::read_dir(base.join("target")) {
+        for entry in entries.flatten() {
+            push_log_index_candidate(candidates, entry.path().join("cu29_log_index"));
+        }
+    }
+}
+
+fn push_log_index_candidate(candidates: &mut Vec<PathBuf>, candidate: PathBuf) {
+    if !candidates.iter().any(|existing| existing == &candidate) {
+        candidates.push(candidate);
+    }
+}
+
+fn open_structured_log_reader(log_base: &Path) -> CuResult<UnifiedLoggerIOReader> {
+    let logger = UnifiedLoggerBuilder::new()
+        .file_base_name(log_base)
+        .build()
+        .map_err(|err| CuError::new_with_cause("failed opening unified log", err))?;
+    match logger {
+        UnifiedLogger::Read(read_logger) => Ok(UnifiedLoggerIOReader::new(
+            read_logger,
+            UnifiedLogType::StructuredLogLine,
+        )),
+        UnifiedLogger::Write(_) => Err(CuError::from(
+            "expected read-only unified logger for structured log",
+        )),
+    }
+}
+
+fn read_next_structured_log_entry(
+    reader: &mut UnifiedLoggerIOReader,
+) -> CuResult<Option<CuLogEntry>> {
+    loop {
+        return match decode_from_std_read::<CuLogEntry, _, _>(reader, standard()) {
+            Ok(entry) if entry.msg_index == 0 => continue,
+            Ok(entry) => Ok(Some(entry)),
+            Err(DecodeError::UnexpectedEnd { .. }) => Ok(None),
+            Err(DecodeError::Io { inner, .. })
+                if inner.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                Ok(None)
+            }
+            Err(err) => Err(CuError::new_with_cause("error reading structured log", err)),
+        };
+    }
+}
+
+fn structured_log_entry_json(index: usize, strings: &[String], entry: &CuLogEntry) -> Value {
+    let params = entry
+        .params
+        .iter()
+        .enumerate()
+        .map(|(param_index, value)| {
+            let name_index = entry
+                .paramname_indexes
+                .get(param_index)
+                .copied()
+                .unwrap_or(0);
+            let label = if name_index == 0 {
+                format!("${param_index}")
+            } else {
+                strings
+                    .get(name_index as usize)
+                    .cloned()
+                    .unwrap_or_else(|| format!("param#{name_index}"))
+            };
+            json!({
+                "label": label,
+                "name_index": name_index,
+                "value": value.to_string(),
+                "json_value": serde_json::to_value(value).unwrap_or(Value::Null),
+                "numeric_value": numeric_structured_log_value(value),
+            })
+        })
+        .collect::<Vec<_>>();
+
+    json!({
+        "index": index,
+        "time_ns": entry.time.as_nanos(),
+        "level": format!("{:?}", entry.level),
+        "msg_index": entry.msg_index,
+        "message_template": strings.get(entry.msg_index as usize).cloned(),
+        "rendered": rebuild_logline(strings, entry).ok(),
+        "culistid": entry.origin.culistid,
+        "component_id": entry.origin.component_id,
+        "task_index": entry.origin.task_index,
+        "paramname_indexes": entry.paramname_indexes.iter().copied().collect::<Vec<_>>(),
+        "params": params,
+    })
+}
+
+fn numeric_structured_log_value(value: &cu29_value::Value) -> Option<f64> {
+    match value {
+        cu29_value::Value::U8(value) => Some(f64::from(*value)),
+        cu29_value::Value::U16(value) => Some(f64::from(*value)),
+        cu29_value::Value::U32(value) => Some(f64::from(*value)),
+        cu29_value::Value::U64(value) => Some(*value as f64),
+        cu29_value::Value::U128(value) => Some(*value as f64),
+        cu29_value::Value::I8(value) => Some(f64::from(*value)),
+        cu29_value::Value::I16(value) => Some(f64::from(*value)),
+        cu29_value::Value::I32(value) => Some(f64::from(*value)),
+        cu29_value::Value::I64(value) => Some(*value as f64),
+        cu29_value::Value::I128(value) => Some(*value as f64),
+        cu29_value::Value::F32(value) => Some(f64::from(*value)),
+        cu29_value::Value::F64(value) => Some(*value),
+        cu29_value::Value::CuTime(value) => Some(value.as_nanos() as f64),
+        cu29_value::Value::Newtype(value) | cu29_value::Value::Option(Some(value)) => {
+            numeric_structured_log_value(value)
+        }
+        _ => None,
+    }
 }
 
 fn seek_to_index<App, P, CB, TF, S, L>(

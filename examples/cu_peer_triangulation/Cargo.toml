@@ -1,0 +1,24 @@
+[package]
+name = "cu-peer-triangulation-example"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Small Copper example for peer range accumulation and 3D triangulation."
+default-run = "cu-peer-triangulation-example"
+publish = false
+
+[[bin]]
+name = "cu-peer-triangulation-example"
+path = "src/main.rs"
+
+[dependencies]
+cu29 = { workspace = true }
+cu-peer-range-accumulator = { path = "../../components/tasks/cu_peer_range_accumulator" }
+cu-peer-triangulation = { path = "../../components/tasks/cu_peer_triangulation" }
+cu-sensor-payloads = { workspace = true }

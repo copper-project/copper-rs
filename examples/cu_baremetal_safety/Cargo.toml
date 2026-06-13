@@ -13,6 +13,9 @@ repository.workspace = true
 
 publish = false
 
+[package.metadata.copper-safety]
+scope = "bare-metal-no-std"
+
 [[test]]
 name = "safety_ids"
 path = "tests/safety_ids.rs"

@@ -17,6 +17,15 @@ kind = "monitor"
 domains = ["monitor/safety"]
 environments = ["host", "embedded"]
 
+[package.metadata.copper-safety]
+scope = "monitor/safety"
+
+[[test]]
+name = "safety_ids"
+path = "tests/safety_ids.rs"
+harness = false
+required-features = ["safety-ids"]
+
 [lib]
 path = "src/lib.rs"
 
@@ -31,3 +40,4 @@ cu-logmon = { path = "../cu_logmon", version = "1.0.0-rc2", default-features = f
 [features]
 default = ["std"]
 std = ["cu29/std"]
+safety-ids = ["std", "cu29/safety-ids"]
