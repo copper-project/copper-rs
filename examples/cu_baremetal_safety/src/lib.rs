@@ -126,7 +126,7 @@ pub mod harness {
             });
         }
 
-        type ResourceProbeResources<'r> = probe_resources::Resources<'r>;
+        type ResourceProbeResources = probe_resources::Resources;
 
         #[derive(Reflect)]
         #[reflect(from_reflect = false)]
@@ -139,7 +139,7 @@ pub mod harness {
         impl Freezable for ResourceProbeTask {}
 
         impl CuTask for ResourceProbeTask {
-            type Resources<'r> = ResourceProbeResources<'r>;
+            type Resources<'r> = ResourceProbeResources;
             type Input<'m> = CuMsg<i32>;
             type Output<'m> = CuMsg<i32>;
 
@@ -149,7 +149,7 @@ pub mod harness {
             ) -> CuResult<Self> {
                 let probe_resources::Resources { counter, tag } = resources;
                 let initial = counter.0.peek();
-                let tag_value = tag.0.to_string();
+                let tag_value = tag.to_string();
                 events::record(format!("task:new:{tag_value}:{initial}"));
                 Ok(Self {
                     counter: counter.0,
@@ -216,7 +216,7 @@ pub mod harness {
             });
         }
 
-        type ResourceBridgeResources<'r> = bridge_resources::Resources<'r>;
+        type ResourceBridgeResources = bridge_resources::Resources;
 
         #[derive(Reflect)]
         pub struct ResourceBridge {
@@ -228,7 +228,7 @@ pub mod harness {
         impl CuBridge for ResourceBridge {
             type Tx = TxChannels;
             type Rx = RxChannels;
-            type Resources<'r> = ResourceBridgeResources<'r>;
+            type Resources<'r> = ResourceBridgeResources;
 
             fn new(
                 _config: Option<&ComponentConfig>,
@@ -240,7 +240,7 @@ pub mod harness {
                 Self: Sized,
             {
                 let bridge_resources::Resources { tag } = resources;
-                let tag_value = tag.0.to_string();
+                let tag_value = tag.to_string();
                 events::record(format!("bridge:new:{tag_value}"));
                 Ok(Self { tag: tag_value })
             }

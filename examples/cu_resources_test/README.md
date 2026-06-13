@@ -33,12 +33,12 @@ Implementations live in `src/resources.rs`:
    Each bundle uses its `bundle_resources!` ids to insert the right keys into the `ResourceManager`.
 
 3) **Tasks/bridges pull resources**
-Resource binding structs implement `ResourceBindings` manually:
-   - `SensorTask` grabs an owned counter, shared bus/tag, and shared global log. It increments the counter, updates the bus, logs, and emits `BusReading`.
-   - `InspectorTask` borrows bus + note + global log; it logs any incoming `BusReading` (or polls the bus if empty).
-   - `StatsBridge` borrows bus/tag/global and drives its `stats_tx` channel with the current bus value, also logging usage.
+Resource binding structs are generated with the `resources!` macro:
+   - `SensorTask` grabs an owned counter and cloned shared bus/tag/global handles. It increments the counter, updates the bus, logs, and emits `BusReading`.
+   - `InspectorTask` grabs cloned shared bus/note/global handles; it logs any incoming `BusReading` (or polls the bus if empty).
+   - `StatsBridge` grabs cloned shared bus/tag/global handles and drives its `stats_tx` channel with the current bus value, also logging usage.
 
-   Owned resources move into the task; shared resources stay managed and are borrowed per tick.
+   Owned resources move into the task; shared resources stay managed and each consumer receives its own `Arc` handle.
 
 4) **Missions exercise variations**
 Mission A uses `board_a` (offset +10) and bridge `stats_a`. Mission B uses `board_b` (offset -3) plus an extra note from `extras_b` and bridge `stats_b`. The same code runs in both missions; the config drives which concrete resources are wired in.
