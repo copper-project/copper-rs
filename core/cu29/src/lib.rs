@@ -103,6 +103,8 @@ pub use cu29_runtime::resource;
 pub use cu29_runtime::rx_channels;
 #[cfg(feature = "std")]
 pub use cu29_runtime::simulation;
+#[cfg(feature = "std")]
+pub use cu29_runtime::thread_pool;
 pub use cu29_runtime::tx_channels;
 #[cfg(feature = "safety-ids")]
 pub mod safety;

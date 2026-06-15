@@ -1,4 +1,15 @@
 (
+    runtime: (
+        // Thread pools for background tasks. Each pool can also carry a CPU
+        // `affinity: [..]` (workers pinned Spread, one per listed core) and a
+        // `scheduler:` policy (Other / Nice(n) / Fifo(priority: p) /
+        // RoundRobin(priority: p)), applied when the `rt-scheduling` feature is
+        // enabled. `background: true` tasks use the "background" pool.
+        thread_pools: [
+            ( id: "background", threads: 1 ),
+            ( id: "slow",       threads: 1 ),
+        ],
+    ),
     tasks: [
         (
             id: "task0",
@@ -13,7 +24,7 @@
         (
             id: "task2",
             type: "tasks::ExampleTask",
-            background: true,
+            background: (pool: "slow"),
             config: {"sleep_duration_ms": 250},
         ),
     ],

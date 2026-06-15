@@ -1640,7 +1640,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             let threadpool_bundle_index = if task_specs.background_flags.iter().any(|&flag| flag) {
                 match bundle_specs
                     .iter()
-                    .position(|bundle| bundle.id == "threadpool")
+                    .position(|bundle| bundle.id == THREAD_POOL_BUNDLE_ID)
                 {
                     Some(index) => Some(index),
                     None => {
@@ -2102,6 +2102,43 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[gen instances]");
+
+        // Resolve each background task's thread pool name to its index in
+        // `runtime.thread_pools` (the order pools are built into the registry
+        // bundle). Non-background tasks get a placeholder index that is never used.
+        let thread_pool_indices: std::collections::HashMap<&str, usize> = copper_config
+            .runtime
+            .as_ref()
+            .map(|runtime| {
+                runtime
+                    .thread_pools
+                    .iter()
+                    .enumerate()
+                    .map(|(index, pool)| (pool.id.as_str(), index))
+                    .collect()
+            })
+            .unwrap_or_default();
+        for (task_index, pool_name) in task_specs.background_pools.iter().enumerate() {
+            if task_specs.background_flags[task_index]
+                && !thread_pool_indices.contains_key(pool_name.as_str())
+            {
+                return return_error(format!(
+                    "Background task '{}' references undefined thread pool '{}'. Define it under runtime.thread_pools.",
+                    task_specs.ids[task_index], pool_name
+                ));
+            }
+        }
+        let task_pool_indices: Vec<usize> = task_specs
+            .background_pools
+            .iter()
+            .map(|pool_name| {
+                thread_pool_indices
+                    .get(pool_name.as_str())
+                    .copied()
+                    .unwrap_or(0)
+            })
+            .collect();
+
         let task_sim_instances_init_code = all_sim_tasks_types
             .iter()
             .enumerate()
@@ -2118,6 +2155,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         if background {
                             let threadpool_bundle_index = threadpool_bundle_index
                                 .expect("threadpool bundle missing for background tasks");
+                            let pool_index = task_pool_indices[index];
                             quote! {
                                 {
                                     let inner_resources = <<#inner_task_type as CuSrcTask>::Resources<'_> as ResourceBindings>::from_bindings(
@@ -2126,7 +2164,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     ).map_err(|e| e.add_cause(#additional_error_info))?;
                                     let threadpool_key = cu29::resource::ResourceKey::new(
                                         cu29::resource::BundleIndex::new(#threadpool_bundle_index),
-                                        <cu29::resource::ThreadPoolBundle as cu29::resource::ResourceBundleDecl>::Id::BgThreads as usize,
+                                        #pool_index,
                                     );
                                     let threadpool = resources.borrow_shared_arc(threadpool_key)?;
                                     let resources = cu29::cuasynctask::CuAsyncSrcTaskResources {
@@ -2154,6 +2192,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         if background {
                             let threadpool_bundle_index = threadpool_bundle_index
                                 .expect("threadpool bundle missing for background tasks");
+                            let pool_index = task_pool_indices[index];
                             quote! {
                                 {
                                     let inner_resources = <<#inner_task_type as CuTask>::Resources<'_> as ResourceBindings>::from_bindings(
@@ -2162,7 +2201,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     ).map_err(|e| e.add_cause(#additional_error_info))?;
                                     let threadpool_key = cu29::resource::ResourceKey::new(
                                         cu29::resource::BundleIndex::new(#threadpool_bundle_index),
-                                        <cu29::resource::ThreadPoolBundle as cu29::resource::ResourceBundleDecl>::Id::BgThreads as usize,
+                                        #pool_index,
                                     );
                                     let threadpool = resources.borrow_shared_arc(threadpool_key)?;
                                     let resources = cu29::cuasynctask::CuAsyncTaskResources {
@@ -2217,6 +2256,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         if *background {
                             let threadpool_bundle_index = threadpool_bundle_index
                                 .expect("threadpool bundle missing for background tasks");
+                            let pool_index = task_pool_indices[index];
                             quote! {
                                 {
                                     let inner_resources = <<#inner_task_type as CuSrcTask>::Resources<'_> as ResourceBindings>::from_bindings(
@@ -2225,7 +2265,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     ).map_err(|e| e.add_cause(#additional_error_info))?;
                                     let threadpool_key = cu29::resource::ResourceKey::new(
                                         cu29::resource::BundleIndex::new(#threadpool_bundle_index),
-                                        <cu29::resource::ThreadPoolBundle as cu29::resource::ResourceBundleDecl>::Id::BgThreads as usize,
+                                        #pool_index,
                                     );
                                     let threadpool = resources.borrow_shared_arc(threadpool_key)?;
                                     let resources = cu29::cuasynctask::CuAsyncSrcTaskResources {
@@ -2253,6 +2293,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         if *background {
                             let threadpool_bundle_index = threadpool_bundle_index
                                 .expect("threadpool bundle missing for background tasks");
+                            let pool_index = task_pool_indices[index];
                             quote! {
                                 {
                                     let inner_resources = <<#inner_task_type as CuTask>::Resources<'_> as ResourceBindings>::from_bindings(
@@ -2261,7 +2302,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     ).map_err(|e| e.add_cause(#additional_error_info))?;
                                     let threadpool_key = cu29::resource::ResourceKey::new(
                                         cu29::resource::BundleIndex::new(#threadpool_bundle_index),
-                                        <cu29::resource::ThreadPoolBundle as cu29::resource::ResourceBundleDecl>::Id::BgThreads as usize,
+                                        #pool_index,
                                     );
                                     let threadpool = resources.borrow_shared_arc(threadpool_key)?;
                                     let resources = cu29::cuasynctask::CuAsyncTaskResources {
@@ -5558,6 +5599,9 @@ struct CuTaskSpecSet {
     pub ids: Vec<String>,
     pub cutypes: Vec<CuTaskType>,
     pub background_flags: Vec<bool>,
+    /// Thread pool name each task runs on when backgrounded (defaults to the
+    /// `"background"` pool). Only meaningful where `background_flags` is true.
+    pub background_pools: Vec<String>,
     pub logging_enabled: Vec<bool>,
     pub type_names: Vec<String>,
     pub task_types: Vec<Type>,
@@ -5591,6 +5635,11 @@ impl CuTaskSpecSet {
         let background_flags: Vec<bool> = all_id_nodes
             .iter()
             .map(|(_, node)| node.is_background())
+            .collect();
+
+        let background_pools: Vec<String> = all_id_nodes
+            .iter()
+            .map(|(_, node)| node.background_pool().to_string())
             .collect();
 
         let logging_enabled: Vec<bool> = all_id_nodes
@@ -5714,6 +5763,7 @@ impl CuTaskSpecSet {
             ids,
             cutypes,
             background_flags,
+            background_pools,
             logging_enabled,
             type_names,
             task_types,
@@ -7078,6 +7128,10 @@ fn build_bundle_specs(config: &CuConfig, mission: &str) -> CuResult<Vec<BundleSp
         .collect()
 }
 
+/// Id of the synthetic resource bundle that holds the thread-pool registry.
+/// Kept in sync with `ensure_threadpool_bundle` in `cu29_runtime::config`.
+const THREAD_POOL_BUNDLE_ID: &str = "threadpool";
+
 fn build_resources_module(
     bundle_specs: &[BundleSpec],
 ) -> CuResult<(proc_macro2::TokenStream, proc_macro2::TokenStream)> {
@@ -7102,14 +7156,44 @@ fn build_resources_module(
     };
 
     let bundle_counts = bundle_specs.iter().map(|bundle| {
-        let provider_path = &bundle.provider_path;
-        quote! { <#provider_path as cu29::resource::ResourceBundleDecl>::Id::COUNT }
+        if bundle.id == THREAD_POOL_BUNDLE_ID {
+            // The thread-pool registry holds one entry per declared pool.
+            quote! {
+                config
+                    .runtime
+                    .as_ref()
+                    .map(|runtime| runtime.thread_pools.len())
+                    .unwrap_or(0)
+            }
+        } else {
+            let provider_path = &bundle.provider_path;
+            quote! { <#provider_path as cu29::resource::ResourceBundleDecl>::Id::COUNT }
+        }
     });
 
     let bundle_inits = bundle_specs
         .iter()
         .enumerate()
         .map(|(index, bundle)| {
+            if bundle.id == THREAD_POOL_BUNDLE_ID {
+                // Build every declared thread pool and register it in the
+                // registry bundle, indexed by its position in
+                // `runtime.thread_pools` (matching the index the task wiring
+                // resolved pool names to).
+                return quote! {
+                    if let Some(runtime) = config.runtime.as_ref() {
+                        for (pool_index, pool_spec) in runtime.thread_pools.iter().enumerate() {
+                            let pool = cu29::thread_pool::build_pool(pool_spec)?;
+                            let pool_key = cu29::resource::ResourceKey::<()>::new(
+                                cu29::resource::BundleIndex::new(#index),
+                                pool_index,
+                            )
+                            .typed();
+                            manager.add_shared(pool_key, ::std::sync::Arc::new(pool))?;
+                        }
+                    }
+                };
+            }
             let bundle_id = LitStr::new(bundle.id.as_str(), Span::call_site());
             let provider_path = &bundle.provider_path;
             quote! {

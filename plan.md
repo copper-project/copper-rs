@@ -91,16 +91,24 @@ earlier ones. Stop for review at each phase boundary.
   invalid affinity, valid-core pinning succeeds. Builds + clippy clean with and without
   `rt-scheduling`; `cu29` gains a passthrough `rt-scheduling` feature.
 
-### Phase 3 — Background pool registry (behavior change, semantics preserved)
+### Phase 3 — Background pool registry (behavior change, semantics preserved) — DONE
 
-- Build all declared pools at startup into a registry; auto-inject a default `"background"`
-  pool when absent (mirrors today's `ensure_threadpool_bundle`).
-- `cuasynctask` + macro wiring: resolve pool by `background_pool()` name instead of the
-  single `ThreadPoolBundle` slot. `background: true` → `"background"` (unchanged behavior).
-- Deprecate `ThreadPoolBundle`-as-resource: keep working as an alias to the `"background"`
-  pool for one release, with a deprecation note.
-- Migrate `examples/cu_background_task`.
-- **Verify:** example runs; existing background tests pass.
+- All declared `runtime.thread_pools` are built at startup (in the generated
+  `resources_instanciator`, which has the runtime `CuConfig`) via
+  `thread_pool::build_pool` and registered in the `ResourceManager` under a synthetic
+  `"threadpool"` registry bundle, indexed by their position in `thread_pools`.
+- `ensure_threadpool_bundle` now (a) injects a default `"background"` pool when background
+  tasks exist, (b) migrates a legacy `ThreadPoolBundle` resource's `{threads: N}` into that
+  pool's thread count, and (c) keeps a marker `"threadpool"` resource bundle for indexing.
+- Macro wiring: `CuTaskSpecSet` carries `background_pools`; each background task resolves its
+  pool name → registry index (validated; unknown pool ⇒ compile error) and borrows that pool
+  instead of the old fixed `BgThreads` slot. `background: true` → `"background"` (unchanged).
+- `ThreadPoolBundle` provider kept as a documented legacy alias (no longer built directly).
+- `examples/cu_background_task` migrated to `runtime.thread_pools` and shows both the
+  `background: true` and `background: (pool: "slow")` forms.
+- **Verify:** example runs on both forms; `cu_runtime_matrix` (legacy form) still builds;
+  all `cu29-derive` (11) and `cu29-runtime` (152) tests pass; clippy clean. New config tests
+  cover default-pool injection and legacy migration.
 
 ### Phase 4 — parallel-rt execution pool
 
