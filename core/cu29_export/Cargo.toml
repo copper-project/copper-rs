@@ -34,7 +34,7 @@ pyo3 = { version = "0.28", optional = true, default-features = false, features =
 
 serde_json = { version = "1.0", default-features = false }
 
-mcap = { version = "0.24", optional = true, default-features = false }
+mcap = { version = "0.25", optional = true, default-features = false }
 erased-serde = { version = "0.4", optional = true, default-features = false }
 
 
