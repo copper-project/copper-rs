@@ -1,10 +1,11 @@
 (
     runtime: (
-        // Pools for background tasks; each can also carry a CPU `affinity:` and a
-        // `scheduler:` policy. `background: true` tasks use the "background" pool.
         thread_pools: [
-            ( id: "background", threads: 1 ),
-            ( id: "slow",       threads: 1 ),
+            (
+                id: "background",
+                threads: 1,
+            ),
+            (id: "slow", threads: 1),
         ],
     ),
     tasks: [

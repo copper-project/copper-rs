@@ -18,13 +18,11 @@
     ),
     runtime: (
         thread_pools: [
-            // Pool for `background: true` tasks.
-            ( id: "background", threads: 2 ),
-            // Pool driving the parallel-rt stage workers. Add `affinity: [..]`
-            // (workers pinned Spread, one per listed core) and a `scheduler:`
-            // (e.g. Fifo(priority: 80)) here to pin/prioritize the RT pipeline;
-            // applied when the `rt-scheduling` feature is enabled.
-            ( id: "rt", threads: 1 ),
+            (
+                id: "background",
+                threads: 2,
+            ),
+            (id: "rt", threads: 1),
         ],
     ),
     tasks: [
