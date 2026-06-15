@@ -174,7 +174,9 @@ fn set_affinity(core: usize) -> CuResult<()> {
     if core_affinity::set_for_current(core_affinity::CoreId { id: core }) {
         Ok(())
     } else {
-        Err(CuError::from(format!("failed to pin worker to CPU core {core}")))
+        Err(CuError::from(format!(
+            "failed to pin worker to CPU core {core}"
+        )))
     }
 }
 

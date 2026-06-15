@@ -36,6 +36,10 @@ pub fn cu29_runtime::app::CurrentRuntimeCopperList::set_current_runtime_copperli
 pub mod cu29_runtime::config
 pub use cu29_runtime::config::Incoming
 pub use cu29_runtime::config::Outgoing
+pub enum cu29_runtime::config::BackgroundConfig
+pub cu29_runtime::config::BackgroundConfig::Flag(bool)
+pub cu29_runtime::config::BackgroundConfig::Pool
+pub cu29_runtime::config::BackgroundConfig::Pool::pool: alloc::string::String
 pub enum cu29_runtime::config::BridgeChannelConfigRepresentation
 pub cu29_runtime::config::BridgeChannelConfigRepresentation::Rx
 pub cu29_runtime::config::BridgeChannelConfigRepresentation::Rx::config: core::option::Option<cu29_runtime::config::ComponentConfig>
@@ -71,6 +75,16 @@ pub cu29_runtime::config::HandleContent::None = 2
 pub cu29_runtime::config::HandleContent::TouchedOnly = 1
 impl cu29_runtime::config::HandleContent
 pub fn cu29_runtime::config::HandleContent::from_u8(v: u8) -> Self
+pub enum cu29_runtime::config::OnError
+pub cu29_runtime::config::OnError::Strict
+pub cu29_runtime::config::OnError::Warn
+pub enum cu29_runtime::config::Scheduler
+pub cu29_runtime::config::Scheduler::Fifo
+pub cu29_runtime::config::Scheduler::Fifo::priority: u8
+pub cu29_runtime::config::Scheduler::Nice(i8)
+pub cu29_runtime::config::Scheduler::Other
+pub cu29_runtime::config::Scheduler::RoundRobin
+pub cu29_runtime::config::Scheduler::RoundRobin::priority: u8
 pub enum cu29_runtime::config::TaskKind
 pub cu29_runtime::config::TaskKind::Regular
 pub cu29_runtime::config::TaskKind::Sink
@@ -238,6 +252,7 @@ pub cu29_runtime::config::MultiCopperSubsystemConfig::id: alloc::string::String
 pub struct cu29_runtime::config::Node
 impl cu29_runtime::config::Node
 pub fn cu29_runtime::config::Node::add_nc_output(&mut self, msg_type: &str, order: usize)
+pub fn cu29_runtime::config::Node::background_pool(&self) -> &str
 pub fn cu29_runtime::config::Node::get_declared_task_kind(&self) -> core::option::Option<cu29_runtime::config::TaskKind>
 pub fn cu29_runtime::config::Node::get_flavor(&self) -> cu29_runtime::config::Flavor
 pub fn cu29_runtime::config::Node::get_id(&self) -> alloc::string::String
@@ -275,8 +290,15 @@ pub cu29_runtime::config::ResourceBundleConfig::missions: core::option::Option<a
 pub cu29_runtime::config::ResourceBundleConfig::provider: alloc::string::String
 pub struct cu29_runtime::config::RuntimeConfig
 pub cu29_runtime::config::RuntimeConfig::rate_target_hz: core::option::Option<u64>
+pub cu29_runtime::config::RuntimeConfig::thread_pools: alloc::vec::Vec<cu29_runtime::config::ThreadPoolConfig>
 impl cu29_runtime::config::RuntimeConfig
 pub fn cu29_runtime::config::RuntimeConfig::validate(&self) -> cu29_traits::CuResult<()>
+pub struct cu29_runtime::config::ThreadPoolConfig
+pub cu29_runtime::config::ThreadPoolConfig::affinity: core::option::Option<alloc::vec::Vec<usize>>
+pub cu29_runtime::config::ThreadPoolConfig::id: alloc::string::String
+pub cu29_runtime::config::ThreadPoolConfig::on_error: cu29_runtime::config::OnError
+pub cu29_runtime::config::ThreadPoolConfig::scheduler: cu29_runtime::config::Scheduler
+pub cu29_runtime::config::ThreadPoolConfig::threads: usize
 pub struct cu29_runtime::config::Value(_)
 impl core::convert::From<alloc::string::String> for cu29_runtime::config::Value
 pub fn cu29_runtime::config::Value::from(value: alloc::string::String) -> Self
@@ -362,10 +384,16 @@ pub type u8::Error = cu29_runtime::config::ConfigError
 pub fn u8::try_from(value: &cu29_runtime::config::Value) -> core::result::Result<Self, Self::Error>
 impl core::fmt::Display for cu29_runtime::config::Value
 pub fn cu29_runtime::config::Value::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const cu29_runtime::config::DEFAULT_BACKGROUND_POOL: &str
 pub const cu29_runtime::config::DEFAULT_KEYFRAME_INTERVAL: u32
 pub const cu29_runtime::config::DEFAULT_MISSION_ID: &str
+pub const cu29_runtime::config::MAX_NICE: i8
 pub const cu29_runtime::config::MAX_RATE_TARGET_HZ: u64
+pub const cu29_runtime::config::MAX_RT_PRIORITY: u8
+pub const cu29_runtime::config::MIN_NICE: i8
+pub const cu29_runtime::config::MIN_RT_PRIORITY: u8
 pub const cu29_runtime::config::NC_ENDPOINT: &str
+pub const cu29_runtime::config::RT_POOL: &str
 pub fn cu29_runtime::config::infer_task_kind_for_id(graph: &cu29_runtime::config::CuGraph, node_id: cu29_runtime::config::NodeId) -> core::option::Option<cu29_runtime::config::TaskKind>
 pub fn cu29_runtime::config::read_configuration(config_filename: &str) -> cu29_traits::CuResult<cu29_runtime::config::CuConfig>
 pub fn cu29_runtime::config::read_configuration_str(config_content: alloc::string::String, file_path: core::option::Option<&str>) -> cu29_traits::CuResult<cu29_runtime::config::CuConfig>
@@ -1966,6 +1994,9 @@ pub type (T1, T2)::With<'m> where Self: 'm = (&'m cu29_runtime::cutask::CuStampe
 impl<T1: cu29_runtime::cutask::CuMsgPayload> cu29_runtime::simulation::CuSimSinkInput for (T1)
 pub type (T1)::With<'m> where Self: 'm = cu29_runtime::cutask::CuStampedData<T1, cu29_runtime::cutask::CuMsgMetadata>
 pub fn cu29_runtime::simulation::recorded_copperlist_timestamp<P: cu29_traits::CopperListTuple>(copperlist: &cu29_runtime::copperlist::CopperList<P>) -> core::option::Option<cu29_clock::CuTime>
+pub mod cu29_runtime::thread_pool
+pub fn cu29_runtime::thread_pool::apply_current_thread_scheduling(spec: &cu29_runtime::config::ThreadPoolConfig, _index: usize) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::thread_pool::build_pool(spec: &cu29_runtime::config::ThreadPoolConfig) -> cu29_traits::CuResult<rayon_core::thread_pool::ThreadPool>
 pub macro cu29_runtime::input_msg!
 pub macro cu29_runtime::output_msg!
 pub macro cu29_runtime::rx_channels!

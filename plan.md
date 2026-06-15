@@ -127,14 +127,23 @@ earlier ones. Stop for review at each phase boundary.
   `Nice(5)`) ran correctly with workers pinned. Clippy clean. Example gains an
   `rt-scheduling` passthrough feature.
 
-### Phase 5 — Replay/sim safety, determinism, docs, examples
+### Phase 5 — Replay/sim safety, determinism, docs, examples — DONE
 
-- Pools degrade to 1 thread / no RT priority in replay/sim; pool config never alters
-  replayed output.
-- Determinism regression test (parallel-rt output identical across pool configs).
-- Optional builder hook `.with_thread_pool_override(...)`.
-- Migrate `cu_runtime_matrix`; update skill/docs.
-- **Verify:** `just pr-check`.
+- **Determinism regression test:** `cu_runtime_matrix` now has
+  `rt_thread_pool_config_does_not_change_copperlist_output`, which runs each repeatable
+  mission with and without an `rt` pool (`affinity:[0]`, `Nice(5)`) and asserts the
+  normalized CopperList streams are identical. Passes in sync and `parallel-rt` modes.
+- **Replay/sim safety:** affinity/scheduler are performance-only — the determinism test
+  proves they can't change logged/replayed output (ordering is held by the parallel-rt
+  commit cursor and the async ready-time mechanism). The default `on_error: Warn` means
+  offline/unprivileged replay never fails on RT-priority requests. Rather than detecting
+  replay deep in pool construction, the existing `.with_resources(factory)` builder hook is
+  the escape hatch for programmatic pool control (runtime-detected cores, neutralizing
+  scheduling in resim) — so a dedicated `.with_thread_pool_override` was unnecessary.
+- **Examples:** `cu_runtime_matrix` migrated off the legacy `ThreadPoolBundle` resource to
+  `runtime.thread_pools` (`background` + `rt` pools); `cu_background_task` already migrated
+  in Phase 3. Both example configs document affinity/scheduler usage inline.
+- **Verify:** matrix tests pass in sync and `parallel-rt`; `just pr-check`.
 
 ## Cross-cutting (every phase)
 

@@ -1757,7 +1757,11 @@ impl CuConfig {
         // The pools are stored in the ResourceManager under a synthetic
         // "threadpool" bundle so background tasks can borrow their pool. Inject
         // a marker resource bundle (used only for bundle indexing) if absent.
-        if !self.resources.iter().any(|bundle| bundle.id == "threadpool") {
+        if !self
+            .resources
+            .iter()
+            .any(|bundle| bundle.id == "threadpool")
+        {
             self.resources.push(ResourceBundleConfig {
                 id: "threadpool".to_string(),
                 provider: "cu29::resource::ThreadPoolBundle".to_string(),

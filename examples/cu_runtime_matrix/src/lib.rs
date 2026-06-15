@@ -1841,6 +1841,13 @@ mod tests {
     fn run_mission_trace_and_logs(
         mission: MissionArg,
     ) -> CuResult<(Vec<TraceEntry>, Vec<NormalizedCopperList>)> {
+        run_mission_trace_and_logs_with(mission, |_| {})
+    }
+
+    fn run_mission_trace_and_logs_with(
+        mission: MissionArg,
+        mutate_config: impl FnOnce(&mut cu29::config::CuConfig),
+    ) -> CuResult<(Vec<TraceEntry>, Vec<NormalizedCopperList>)> {
         let tmp_dir = tempfile::TempDir::new()
             .map_err(|err| CuError::new_with_cause("failed to create temp test dir", err))?;
         let log_path = tmp_dir.path().join(format!("{}.copper", mission.as_str()));
@@ -1854,6 +1861,7 @@ mod tests {
             TEST_COMPUTE_ROUNDS,
             true,
         )?;
+        mutate_config(&mut config);
         clear_trace();
 
         let mut app = build_mission_app(mission, clock.clone(), &log_path, 0, config)?;
@@ -1912,6 +1920,42 @@ mod tests {
             assert_eq!(
                 first, second,
                 "normalized copperlist stream is not repeatable across two live runs for foreground mission {:?}",
+                mission
+            );
+        }
+    }
+
+    /// Thread pool affinity/scheduler are performance-only knobs: changing them
+    /// must not change the logged CopperList output. Most relevant under
+    /// `parallel-rt`, where the `"rt"` pool reconfigures the stage workers.
+    #[test]
+    fn rt_thread_pool_config_does_not_change_copperlist_output() {
+        use cu29::config::{OnError, RuntimeConfig, Scheduler, ThreadPoolConfig};
+
+        let _guard = TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        for mission in MissionArg::all()
+            .iter()
+            .copied()
+            .filter(|mission| mission.has_repeatable_live_copperlists())
+        {
+            let (_, baseline) =
+                run_mission_trace_and_logs_with(mission, |_| {}).expect("baseline run");
+            let (_, scheduled) = run_mission_trace_and_logs_with(mission, |config| {
+                let runtime = config.runtime.get_or_insert_with(RuntimeConfig::default);
+                runtime.thread_pools.push(ThreadPoolConfig {
+                    id: "rt".to_string(),
+                    threads: 1,
+                    affinity: Some(vec![0]),
+                    scheduler: Scheduler::Nice(5),
+                    on_error: OnError::Warn,
+                });
+            })
+            .expect("scheduled run");
+            assert_eq!(
+                baseline, scheduled,
+                "rt thread pool config changed CopperList output for mission {:?}",
                 mission
             );
         }
