@@ -429,13 +429,10 @@ impl<B: ResourceBundleDecl> BundleContext<B> {
 
 /// Legacy marker for the background thread pool resource bundle.
 ///
-/// Thread pools are now declared under `runtime.thread_pools` and built by
-/// [`crate::thread_pool::build_pool`] into the registry bundle; this provider is
-/// kept only so existing configs that still write
-/// `resources: [(id: "threadpool", provider: "cu29::resource::ThreadPoolBundle",
-/// config: {"threads": N})]` keep working. Such a declaration is migrated to a
-/// `"background"` pool with `threads: N`. Prefer declaring `runtime.thread_pools`
-/// directly; this provider will be removed in a future release.
+/// Thread pools are now declared under `runtime.thread_pools`. This provider is kept
+/// only so existing `threadpool` resource configs keep working (migrated to a
+/// `"background"` pool); prefer `runtime.thread_pools` directly. Will be removed in a
+/// future release.
 #[cfg(feature = "std")]
 pub struct ThreadPoolBundle;
 
