@@ -260,6 +260,9 @@ heapless = { version = "0.9", default-features = false, features = ["serde"] }
 # rayon for thread pools and such.
 rayon = "1.11"
 
+# CPU affinity for real-time thread pools (std/native only).
+core_affinity = "0.8"
+
 # Realtime sanitizer (standalone)
 rtsan-standalone = { version = "0.3.0", default-features = false }
 

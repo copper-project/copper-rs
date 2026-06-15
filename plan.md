@@ -77,13 +77,19 @@ earlier ones. Stop for review at each phase boundary.
 
 ### Phase 2 — Pool builder + scheduling primitives (std-only, behind feature)
 
-- New std-only feature `rt-scheduling`; add `core_affinity` + `thread-priority` as optional
-  deps, **not** pulled on wasm.
-- `thread_pool.rs`: `build_pool(spec) -> CuResult<rayon::ThreadPool>` using rayon
-  `spawn_handler`/`start_handler` to pin affinity (Spread) and set policy/priority once per
-  worker. `Warn` logs and continues; `Strict` errors.
-- **Verify:** unit test thread count + names; affinity/priority asserted best-effort
-  (skipped when unprivileged). Build with and without `rt-scheduling`.
+- New std-only feature `rt-scheduling`; add `core_affinity` + `libc` as optional deps,
+  **not** pulled on wasm. (Deviation from original sketch: dropped `thread-priority` in
+  favor of `libc` — niceness must be set per-thread via `setpriority(tid)` which
+  `thread-priority` does not expose, so using `libc` directly for both niceness and
+  `SCHED_FIFO`/`SCHED_RR` keeps the impl consistent and unsafe-surface small. Real-time
+  policies are Linux-only; CPU affinity is cross-platform via `core_affinity`.)
+- `thread_pool.rs`: `build_pool(spec) -> CuResult<rayon::ThreadPool>`. Affinity/scheduler
+  are applied once per worker via `ThreadPool::broadcast` (runs on each worker thread,
+  waits, returns ordered results) before any job runs. `Warn` logs and continues; `Strict`
+  errors. Feature off ⇒ requested affinity/scheduler ignored with a warning.
+- **DONE.** Unit tests: thread count, Warn tolerates unappliable requests, Strict fails on
+  invalid affinity, valid-core pinning succeeds. Builds + clippy clean with and without
+  `rt-scheduling`; `cu29` gains a passthrough `rt-scheduling` feature.
 
 ### Phase 3 — Background pool registry (behavior change, semantics preserved)
 

@@ -74,6 +74,11 @@ object-pool = { version = "0.6", optional = true } # used for large object pooli
 rtrb = { version = "0.3.3", optional = true }
 memmap2 = { version = "0.9", optional = true }
 
+# Real-time thread-pool scheduling (CPU affinity + scheduler policy/priority).
+# Native/std only; never pulled on wasm or no_std.
+core_affinity = { workspace = true, optional = true }
+libc = { workspace = true, optional = true }
+
 libm = { version = "0.2", default-features = false } # f64 math for 32 bit platforms
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
@@ -102,6 +107,8 @@ sysclock-perf = ["std"]
 high-precision-limiter = ["std"]
 async-cl-io = ["std"]
 parallel-rt = ["std", "dep:rtrb"]
+# CPU affinity + real-time scheduler policy/priority for thread pools.
+rt-scheduling = ["std", "dep:core_affinity", "dep:libc"]
 mmap-fsync = ["std", "cu29-unifiedlog/mmap-fsync"]
 remote-debug = [
   "std",
