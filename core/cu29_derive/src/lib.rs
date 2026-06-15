@@ -17,7 +17,7 @@ use crate::utils::{config_id_to_bridge_const, config_id_to_enum, config_id_to_st
 use cu29_runtime::config::CuConfig;
 use cu29_runtime::config::{
     BridgeChannelConfigRepresentation, ConfigGraphs, CuGraph, Flavor, HandleContent, Node, NodeId,
-    ResourceBundleConfig, read_configuration,
+    RT_POOL, ResourceBundleConfig, read_configuration,
 };
 use cu29_runtime::curuntime::{
     CuExecutionLoop, CuExecutionStep, CuExecutionUnit, CuTaskType, compute_runtime_plan,
@@ -2106,7 +2106,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         // Resolve each background task's thread pool name to its index in
         // `runtime.thread_pools` (the order pools are built into the registry
         // bundle). Non-background tasks get a placeholder index that is never used.
-        let thread_pool_indices: std::collections::HashMap<&str, usize> = copper_config
+        let thread_pool_indices: HashMap<&str, usize> = copper_config
             .runtime
             .as_ref()
             .map(|runtime| {
@@ -2119,9 +2119,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             })
             .unwrap_or_default();
         for (task_index, pool_name) in task_specs.background_pools.iter().enumerate() {
-            if task_specs.background_flags[task_index]
-                && !thread_pool_indices.contains_key(pool_name.as_str())
-            {
+            if !task_specs.background_flags[task_index] {
+                continue;
+            }
+            // "rt" is reserved for the parallel-rt engine and is never task-bound.
+            if pool_name == RT_POOL {
+                return return_error(format!(
+                    "Background task '{}' may not use the reserved '{RT_POOL}' thread pool; it is dedicated to the parallel-rt execution engine.",
+                    task_specs.ids[task_index]
+                ));
+            }
+            if !thread_pool_indices.contains_key(pool_name.as_str()) {
                 return return_error(format!(
                     "Background task '{}' references undefined thread pool '{}'. Define it under runtime.thread_pools.",
                     task_specs.ids[task_index], pool_name
@@ -7207,13 +7215,20 @@ fn build_resources_module(
                 return quote! {
                     if let Some(runtime) = config.runtime.as_ref() {
                         for (pool_index, pool_spec) in runtime.thread_pools.iter().enumerate() {
+                            // The reserved "rt" pool is applied to the parallel-rt
+                            // stage workers directly, not borrowed as a rayon pool;
+                            // skip it so we don't spawn idle workers. Its slot stays
+                            // unfilled and is never looked up.
+                            if pool_spec.id == cu29::config::RT_POOL {
+                                continue;
+                            }
                             let pool = cu29::thread_pool::build_pool(pool_spec)?;
                             let pool_key = cu29::resource::ResourceKey::<()>::new(
                                 cu29::resource::BundleIndex::new(#index),
                                 pool_index,
                             )
                             .typed();
-                            manager.add_shared(pool_key, ::std::sync::Arc::new(pool))?;
+                            manager.add_shared(pool_key, std::sync::Arc::new(pool))?;
                         }
                     }
                 };

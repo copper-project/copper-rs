@@ -637,8 +637,9 @@ impl TaskKind {
 /// Default thread pool name used by `background: true` tasks.
 pub const DEFAULT_BACKGROUND_POOL: &str = "background";
 
-/// Reserved thread pool name driving the `parallel-rt` execution engine.
-#[allow(dead_code)] // consumed by the parallel-rt executor wiring (later phase)
+/// Reserved thread pool name driving the `parallel-rt` execution engine. Applied
+/// to each stage worker at startup; never task-bound nor built as a rayon pool.
+#[allow(dead_code)] // consumed by cu29_derive; unused in some binary targets
 pub const RT_POOL: &str = "rt";
 
 /// How a task is backgrounded.
