@@ -97,6 +97,63 @@ fn apply_scheduling(_pool: &ThreadPool, spec: &ThreadPoolConfig) -> CuResult<()>
     Ok(())
 }
 
+/// Applies a pool's CPU affinity and scheduler policy to the **current** thread,
+/// as worker `index` (Spread: pinned to `affinity[index % affinity.len()]`).
+///
+/// This is for worker threads that are not part of a rayon pool — notably the
+/// `parallel-rt` stage workers, which are plain `std::thread::scope` threads.
+/// Behavior mirrors [`build_pool`]: [`OnError::Warn`] logs and returns `Ok`,
+/// [`OnError::Strict`] returns `Err`. When the `rt-scheduling` feature is off the
+/// request is ignored (with a warning).
+#[cfg(feature = "rt-scheduling")]
+pub fn apply_current_thread_scheduling(spec: &ThreadPoolConfig, index: usize) -> CuResult<()> {
+    if spec.affinity.is_none() && spec.scheduler == Scheduler::Other {
+        return Ok(());
+    }
+    match apply_to_current_thread(spec.affinity.as_deref(), spec.scheduler, index) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            let pool_id = spec.id.as_str();
+            let reason = e.to_string();
+            match spec.on_error {
+                OnError::Strict => {
+                    error!(
+                        "Thread pool {} worker {} could not apply scheduling: {}",
+                        pool_id,
+                        index,
+                        reason.as_str()
+                    );
+                    Err(CuError::from(format!(
+                        "Thread pool '{}' worker {index} could not apply scheduling: {reason}",
+                        spec.id
+                    )))
+                }
+                OnError::Warn => {
+                    warning!(
+                        "Thread pool {} worker {} could not apply scheduling ({}); using default scheduling",
+                        pool_id,
+                        index,
+                        reason.as_str()
+                    );
+                    Ok(())
+                }
+            }
+        }
+    }
+}
+
+#[cfg(not(feature = "rt-scheduling"))]
+pub fn apply_current_thread_scheduling(spec: &ThreadPoolConfig, _index: usize) -> CuResult<()> {
+    if spec.affinity.is_some() || spec.scheduler != Scheduler::Other {
+        let pool_id = spec.id.as_str();
+        warning!(
+            "Thread pool {} requests CPU affinity/scheduling but the 'rt-scheduling' feature is disabled; using default scheduling",
+            pool_id
+        );
+    }
+    Ok(())
+}
+
 #[cfg(feature = "rt-scheduling")]
 fn apply_to_current_thread(
     affinity: Option<&[usize]>,

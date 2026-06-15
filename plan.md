@@ -110,14 +110,22 @@ earlier ones. Stop for review at each phase boundary.
   all `cu29-derive` (11) and `cu29-runtime` (152) tests pass; clippy clean. New config tests
   cover default-pool injection and legacy migration.
 
-### Phase 4 — parallel-rt execution pool
+### Phase 4 — parallel-rt execution pool — DONE
 
-- Confirm the executor's current threading reality; hand the built `"rt"` pool to the
-  worker threads it spawns, applying affinity/priority there.
-- ⚠️ Risk/scope: if the stage-affine executor isn't actually spawning worker threads yet,
-  finishing that is a larger sub-effort. Re-scope after a Phase-4 spike and check in before
-  expanding.
-- **Verify:** `cu_runtime_matrix` parallel-rt missions produce unchanged output.
+- Spike result: the parallel-rt executor **is** implemented (in the macro codegen) — it
+  spawns one `std::thread::scope` worker per process stage. No rayon pool involved, so the
+  `"rt"` pool's affinity/scheduler are applied per worker thread, not via `build_pool`.
+- Added `thread_pool::apply_current_thread_scheduling(spec, index)` (public, both feature
+  states) that pins/sets policy on the *current* thread (Spread by stage index), mirroring
+  `build_pool`'s Warn/Strict semantics.
+- The generated run loop reads the `"rt"` pool from `runtime.runtime_config.thread_pools`
+  and each stage worker applies it at startup. On a Strict pool a failure sets the shutdown
+  flag and the worker returns, which cleanly aborts the pipeline (existing disconnect/send
+  error handling surfaces the failure).
+- **Verify:** `cu_runtime_matrix` builds and runs under `parallel-rt` and under
+  `parallel-rt,rt-scheduling`; a parallel mission with an `rt` pool (`affinity:[0,1]`,
+  `Nice(5)`) ran correctly with workers pinned. Clippy clean. Example gains an
+  `rt-scheduling` passthrough feature.
 
 ### Phase 5 — Replay/sim safety, determinism, docs, examples
 
