@@ -634,6 +634,27 @@ impl TaskKind {
     }
 }
 
+/// Default thread pool name used by `background: true` tasks.
+pub const DEFAULT_BACKGROUND_POOL: &str = "background";
+
+/// Reserved thread pool name driving the `parallel-rt` execution engine.
+#[allow(dead_code)] // consumed by the parallel-rt executor wiring (later phase)
+pub const RT_POOL: &str = "rt";
+
+/// How a task is backgrounded.
+///
+/// Either a simple on/off flag (`background: true`), which runs the task on the
+/// default [`DEFAULT_BACKGROUND_POOL`] pool, or an explicit pool selection
+/// (`background: (pool: "vision")`).
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum BackgroundConfig {
+    /// `background: true` / `background: false`.
+    Flag(bool),
+    /// `background: (pool: "vision")`.
+    Pool { pool: String },
+}
+
 /// A node in the configuration graph.
 /// A node represents a Task in the system Graph.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -663,8 +684,12 @@ pub struct Node {
 
     /// Run this task in the background:
     /// ie. Will be set to run on a background thread and until it is finished `CuTask::process` will return None.
+    ///
+    /// Accepts either a simple flag (`background: true`, which uses the default
+    /// [`DEFAULT_BACKGROUND_POOL`] pool) or an explicit pool selection
+    /// (`background: (pool: "vision")`).
     #[serde(skip_serializing_if = "Option::is_none")]
-    background: Option<bool>,
+    background: Option<BackgroundConfig>,
 
     /// Option to include/exclude stubbing for simulation.
     /// By default, sources and sinks are replaces (stubbed) by the runtime to avoid trying to compile hardware specific code for sensing or actuation.
@@ -751,7 +776,21 @@ impl Node {
 
     #[allow(dead_code)]
     pub fn is_background(&self) -> bool {
-        self.background.unwrap_or(false)
+        match &self.background {
+            Some(BackgroundConfig::Flag(flag)) => *flag,
+            Some(BackgroundConfig::Pool { .. }) => true,
+            None => false,
+        }
+    }
+
+    /// Name of the thread pool this task should run on when backgrounded.
+    /// Defaults to [`DEFAULT_BACKGROUND_POOL`] when no explicit pool is set.
+    #[allow(dead_code)]
+    pub fn background_pool(&self) -> &str {
+        match &self.background {
+            Some(BackgroundConfig::Pool { pool }) => pool.as_str(),
+            _ => DEFAULT_BACKGROUND_POOL,
+        }
     }
 
     #[allow(dead_code)]
@@ -1812,6 +1851,139 @@ pub struct RuntimeConfig {
     /// The main usecase is to not waste cycles when the system doesn't need an unbounded execution rate.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rate_target_hz: Option<u64>,
+
+    /// Declarative thread pool definitions used by the background-task pools and
+    /// the `parallel-rt` execution engine. Each pool carries an optional CPU
+    /// affinity and a scheduler policy/priority.
+    ///
+    /// This is a `std`-only concept; on `no_std`/embedded targets there are no
+    /// threads and this section is ignored.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub thread_pools: Vec<ThreadPoolConfig>,
+}
+
+/// Smallest valid real-time priority for [`Scheduler::Fifo`]/[`Scheduler::RoundRobin`].
+pub const MIN_RT_PRIORITY: u8 = 1;
+/// Largest valid real-time priority for [`Scheduler::Fifo`]/[`Scheduler::RoundRobin`].
+pub const MAX_RT_PRIORITY: u8 = 99;
+/// Lowest valid niceness for [`Scheduler::Nice`] (most favorable).
+pub const MIN_NICE: i8 = -20;
+/// Highest valid niceness for [`Scheduler::Nice`] (least favorable).
+pub const MAX_NICE: i8 = 19;
+
+/// Scheduler policy applied to every worker thread of a [`ThreadPoolConfig`].
+///
+/// On Linux these map directly onto the POSIX scheduling policies. On other
+/// platforms they are applied best-effort (see the per-pool
+/// [`ThreadPoolConfig::on_error`] behavior).
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Scheduler {
+    /// Default OS scheduler (CFS on Linux) with default niceness.
+    #[default]
+    Other,
+    /// Default OS scheduler with explicit niceness (`-20..=19`, lower is more favorable).
+    Nice(i8),
+    /// `SCHED_FIFO` real-time policy, priority `1..=99`.
+    Fifo { priority: u8 },
+    /// `SCHED_RR` real-time policy, priority `1..=99`.
+    RoundRobin { priority: u8 },
+}
+
+/// What to do when a pool's affinity or scheduler request cannot be applied
+/// (for example, setting a real-time priority without `CAP_SYS_NICE`).
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum OnError {
+    /// Log a warning and fall back to default scheduling. This keeps unprivileged
+    /// dev/laptop runs working out of the box.
+    #[default]
+    Warn,
+    /// Hard-fail at startup if the requested affinity/scheduler cannot be applied.
+    /// Use this for deployed real-time robots that must fail loudly.
+    Strict,
+}
+
+/// Declarative definition of a single thread pool.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct ThreadPoolConfig {
+    /// Unique pool id. Reserved ids: [`RT_POOL`] (the `parallel-rt` execution
+    /// engine) and [`DEFAULT_BACKGROUND_POOL`] (the default background pool).
+    pub id: String,
+    /// Number of worker threads in the pool.
+    pub threads: usize,
+    /// Optional set of logical CPU cores the pool may use. When set, worker `i`
+    /// is pinned to `affinity[i % affinity.len()]` (Spread): `threads ==
+    /// affinity.len()` yields one worker pinned per dedicated core.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub affinity: Option<Vec<usize>>,
+    /// Scheduler policy/priority applied to each worker thread.
+    #[serde(default)]
+    pub scheduler: Scheduler,
+    /// What to do if affinity/scheduler cannot be applied.
+    #[serde(default)]
+    pub on_error: OnError,
+}
+
+/// Validates the declarative thread pool definitions of a runtime config.
+///
+/// Checks ids are non-empty and unique, thread counts are non-zero, real-time
+/// priorities and niceness values are in range, and affinity lists are non-empty
+/// when present. This is purely a config-level check; pools are built later.
+fn validate_thread_pools<E>(runtime: &Option<RuntimeConfig>) -> Result<(), E>
+where
+    E: From<String>,
+{
+    let Some(runtime) = runtime else {
+        return Ok(());
+    };
+
+    let mut seen: Vec<&str> = Vec::new();
+    for pool in &runtime.thread_pools {
+        if pool.id.is_empty() {
+            return Err(E::from("Thread pool id cannot be empty".to_string()));
+        }
+        if seen.contains(&pool.id.as_str()) {
+            return Err(E::from(format!("Duplicate thread pool id '{}'", pool.id)));
+        }
+        seen.push(pool.id.as_str());
+
+        if pool.threads == 0 {
+            return Err(E::from(format!(
+                "Thread pool '{}' must have at least 1 thread",
+                pool.id
+            )));
+        }
+
+        match pool.scheduler {
+            Scheduler::Fifo { priority } | Scheduler::RoundRobin { priority } => {
+                if !(MIN_RT_PRIORITY..=MAX_RT_PRIORITY).contains(&priority) {
+                    return Err(E::from(format!(
+                        "Thread pool '{}' real-time priority {priority} is out of range ({MIN_RT_PRIORITY}..={MAX_RT_PRIORITY})",
+                        pool.id
+                    )));
+                }
+            }
+            Scheduler::Nice(nice) => {
+                if !(MIN_NICE..=MAX_NICE).contains(&nice) {
+                    return Err(E::from(format!(
+                        "Thread pool '{}' niceness {nice} is out of range ({MIN_NICE}..={MAX_NICE})",
+                        pool.id
+                    )));
+                }
+            }
+            Scheduler::Other => {}
+        }
+
+        if let Some(affinity) = &pool.affinity
+            && affinity.is_empty()
+        {
+            return Err(E::from(format!(
+                "Thread pool '{}' has an empty affinity list; omit `affinity` for no pinning",
+                pool.id
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 /// Maximum representable Copper runtime rate target in whole Hertz.
@@ -2229,6 +2401,8 @@ where
     cuconfig.runtime = representation.runtime.clone();
     cuconfig.resources = representation.resources.clone().unwrap_or_default();
     cuconfig.bridges = representation.bridges.clone().unwrap_or_default();
+
+    validate_thread_pools::<E>(&cuconfig.runtime)?;
 
     Ok(cuconfig)
 }
@@ -5507,5 +5681,104 @@ mod tests {
             err.to_string().contains("targets unknown task 'missing'"),
             "unexpected error: {err}"
         );
+    }
+
+    #[test]
+    fn test_thread_pools_parse_and_round_trip() {
+        let txt = r#"(
+            runtime: (
+                rate_target_hz: 1000,
+                thread_pools: [
+                    ( id: "rt",         threads: 4, affinity: [2, 3, 4, 5], scheduler: Fifo(priority: 80) ),
+                    ( id: "background", threads: 2, affinity: [0, 1] ),
+                    ( id: "vision",     threads: 2, scheduler: Nice(10), on_error: Strict ),
+                ],
+            ),
+            tasks: [ ( id: "t", type: "tasks::Foo" ) ],
+        )"#;
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let runtime = config.runtime.as_ref().expect("runtime config");
+        assert_eq!(runtime.thread_pools.len(), 3);
+
+        let rt = &runtime.thread_pools[0];
+        assert_eq!(rt.id, "rt");
+        assert_eq!(rt.threads, 4);
+        assert_eq!(rt.affinity.as_deref(), Some([2, 3, 4, 5].as_slice()));
+        assert_eq!(rt.scheduler, Scheduler::Fifo { priority: 80 });
+        assert_eq!(rt.on_error, OnError::Warn);
+
+        let bg = &runtime.thread_pools[1];
+        assert_eq!(bg.id, "background");
+        assert_eq!(bg.scheduler, Scheduler::Other);
+
+        let vision = &runtime.thread_pools[2];
+        assert_eq!(vision.scheduler, Scheduler::Nice(10));
+        assert_eq!(vision.affinity, None);
+        assert_eq!(vision.on_error, OnError::Strict);
+
+        // Round-trips through serialization.
+        let serialized = config.serialize_ron().unwrap();
+        let reparsed = CuConfig::deserialize_ron(&serialized).unwrap();
+        assert_eq!(
+            reparsed.runtime.as_ref().unwrap().thread_pools,
+            runtime.thread_pools
+        );
+    }
+
+    #[test]
+    fn test_background_flag_and_pool_forms() {
+        let txt = r#"(
+            tasks: [
+                ( id: "a", type: "tasks::Foo", background: true ),
+                ( id: "b", type: "tasks::Foo", background: (pool: "vision") ),
+                ( id: "c", type: "tasks::Foo" ),
+            ],
+            cnx: [],
+        )"#;
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let graph = config.get_graph(None).unwrap();
+
+        let a = graph.get_node(0).unwrap();
+        assert!(a.is_background());
+        assert_eq!(a.background_pool(), DEFAULT_BACKGROUND_POOL);
+
+        let b = graph.get_node(1).unwrap();
+        assert!(b.is_background());
+        assert_eq!(b.background_pool(), "vision");
+
+        let c = graph.get_node(2).unwrap();
+        assert!(!c.is_background());
+        assert_eq!(c.background_pool(), DEFAULT_BACKGROUND_POOL);
+    }
+
+    #[test]
+    fn test_thread_pool_validation_rejects_bad_configs() {
+        let cases = [
+            (
+                r#"( runtime: ( thread_pools: [ ( id: "rt", threads: 0 ) ] ), tasks: [] )"#,
+                "at least 1 thread",
+            ),
+            (
+                r#"( runtime: ( thread_pools: [ ( id: "a", threads: 1 ), ( id: "a", threads: 1 ) ] ), tasks: [] )"#,
+                "Duplicate thread pool id",
+            ),
+            (
+                r#"( runtime: ( thread_pools: [ ( id: "rt", threads: 1, scheduler: Fifo(priority: 200) ) ] ), tasks: [] )"#,
+                "out of range",
+            ),
+            (
+                r#"( runtime: ( thread_pools: [ ( id: "rt", threads: 1, affinity: [] ) ] ), tasks: [] )"#,
+                "empty affinity",
+            ),
+        ];
+
+        for (txt, expected) in cases {
+            let err = CuConfig::deserialize_ron(txt)
+                .expect_err("expected thread pool validation to fail");
+            assert!(
+                err.to_string().contains(expected),
+                "error '{err}' did not contain '{expected}'"
+            );
+        }
     }
 }
