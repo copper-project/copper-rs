@@ -1750,7 +1750,7 @@ impl CuConfig {
                 id: DEFAULT_BACKGROUND_POOL.to_string(),
                 threads: legacy_threads.unwrap_or(DEFAULT_BACKGROUND_THREADS),
                 affinity: None,
-                scheduler: Scheduler::Other,
+                policy: SchedulingPolicy::Fair,
                 on_error: OnError::Warn,
             });
         }
@@ -1886,7 +1886,7 @@ pub struct RuntimeConfig {
 
     /// Declarative thread pool definitions used by the background-task pools and
     /// the `parallel-rt` execution engine. Each pool carries an optional CPU
-    /// affinity and a scheduler policy/priority.
+    /// affinity and a scheduling policy/priority.
     ///
     /// This is a `std`-only concept; on `no_std`/embedded targets there are no
     /// threads and this section is ignored.
@@ -1894,34 +1894,53 @@ pub struct RuntimeConfig {
     pub thread_pools: Vec<ThreadPoolConfig>,
 }
 
-/// Smallest valid real-time priority for [`Scheduler::Fifo`]/[`Scheduler::RoundRobin`].
+/// Smallest valid real-time priority for [`SchedulingPolicy::Fifo`]/[`SchedulingPolicy::RoundRobin`].
 pub const MIN_RT_PRIORITY: u8 = 1;
-/// Largest valid real-time priority for [`Scheduler::Fifo`]/[`Scheduler::RoundRobin`].
+/// Largest valid real-time priority for [`SchedulingPolicy::Fifo`]/[`SchedulingPolicy::RoundRobin`].
 pub const MAX_RT_PRIORITY: u8 = 99;
-/// Lowest valid niceness for [`Scheduler::Nice`] (most favorable).
+/// Lowest valid niceness for [`SchedulingPolicy::Nice`] (most favorable).
 pub const MIN_NICE: i8 = -20;
-/// Highest valid niceness for [`Scheduler::Nice`] (least favorable).
+/// Highest valid niceness for [`SchedulingPolicy::Nice`] (least favorable).
 pub const MAX_NICE: i8 = 19;
 
-/// Scheduler policy applied to every worker thread of a [`ThreadPoolConfig`].
+/// Scheduling policy applied to every worker thread of a [`ThreadPoolConfig`].
 ///
 /// On Linux these map directly onto the POSIX scheduling policies. On other
 /// platforms they are applied best-effort (see the per-pool
 /// [`ThreadPoolConfig::on_error`] behavior).
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Scheduler {
-    /// Default OS scheduler (CFS on Linux) with default niceness.
+pub enum SchedulingPolicy {
+    /// Normal fair time-sharing scheduler (`SCHED_OTHER`/CFS on Linux) with default
+    /// niceness. The OS shares the CPU fairly across threads and no thread starves.
+    ///
+    /// Use for everything that isn't latency-critical. This is the default.
     #[default]
-    Other,
-    /// Default OS scheduler with explicit niceness (`-20..=19`, lower is more favorable).
+    Fair,
+    /// Fair scheduler with an explicit niceness (`-20..=19`, lower is more favorable).
+    ///
+    /// A soft priority hint, not a guarantee: a higher (nicer) value yields the CPU
+    /// more readily. Use to bias a pool below or above normal work without leaving
+    /// the fair scheduler — e.g. `Nice(10)` for heavy background work that should
+    /// step aside for the control loop.
     Nice(i8),
-    /// `SCHED_FIFO` real-time policy, priority `1..=99`.
+    /// `SCHED_FIFO` real-time policy, priority `1..=99` (higher wins).
+    ///
+    /// Hard real-time: a FIFO thread runs ahead of every fair thread and is not
+    /// time-sliced — it runs until it blocks or a higher-priority RT thread preempts
+    /// it. Use for the latency-critical pipeline, and pin it with `affinity` so a
+    /// busy worker cannot starve other work on the same core. Linux-only; typically
+    /// needs `CAP_SYS_NICE`.
     Fifo { priority: u8 },
-    /// `SCHED_RR` real-time policy, priority `1..=99`.
+    /// `SCHED_RR` real-time policy, priority `1..=99` (higher wins).
+    ///
+    /// Same real-time semantics as [`Fifo`](Self::Fifo), except threads at the same
+    /// priority are round-robin time-sliced rather than run-to-block. Use when
+    /// several RT workers share a priority and should interleave fairly. Linux-only;
+    /// typically needs `CAP_SYS_NICE`.
     RoundRobin { priority: u8 },
 }
 
-/// What to do when a pool's affinity or scheduler request cannot be applied
+/// What to do when a pool's affinity or scheduling request cannot be applied
 /// (for example, setting a real-time priority without `CAP_SYS_NICE`).
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OnError {
@@ -1947,10 +1966,10 @@ pub struct ThreadPoolConfig {
     /// affinity.len()` yields one worker pinned per dedicated core.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub affinity: Option<Vec<usize>>,
-    /// Scheduler policy/priority applied to each worker thread.
+    /// Scheduling policy/priority applied to each worker thread.
     #[serde(default)]
-    pub scheduler: Scheduler,
-    /// What to do if affinity/scheduler cannot be applied.
+    pub policy: SchedulingPolicy,
+    /// What to do if affinity/scheduling cannot be applied.
     #[serde(default)]
     pub on_error: OnError,
 }
@@ -1985,8 +2004,8 @@ where
             )));
         }
 
-        match pool.scheduler {
-            Scheduler::Fifo { priority } | Scheduler::RoundRobin { priority } => {
+        match pool.policy {
+            SchedulingPolicy::Fifo { priority } | SchedulingPolicy::RoundRobin { priority } => {
                 if !(MIN_RT_PRIORITY..=MAX_RT_PRIORITY).contains(&priority) {
                     return Err(E::from(format!(
                         "Thread pool '{}' real-time priority {priority} is out of range ({MIN_RT_PRIORITY}..={MAX_RT_PRIORITY})",
@@ -1994,7 +2013,7 @@ where
                     )));
                 }
             }
-            Scheduler::Nice(nice) => {
+            SchedulingPolicy::Nice(nice) => {
                 if !(MIN_NICE..=MAX_NICE).contains(&nice) {
                     return Err(E::from(format!(
                         "Thread pool '{}' niceness {nice} is out of range ({MIN_NICE}..={MAX_NICE})",
@@ -2002,7 +2021,7 @@ where
                     )));
                 }
             }
-            Scheduler::Other => {}
+            SchedulingPolicy::Fair => {}
         }
 
         if let Some(affinity) = &pool.affinity
@@ -5721,9 +5740,9 @@ mod tests {
             runtime: (
                 rate_target_hz: 1000,
                 thread_pools: [
-                    ( id: "rt",         threads: 4, affinity: [2, 3, 4, 5], scheduler: Fifo(priority: 80) ),
+                    ( id: "rt",         threads: 4, affinity: [2, 3, 4, 5], policy: Fifo(priority: 80) ),
                     ( id: "background", threads: 2, affinity: [0, 1] ),
-                    ( id: "vision",     threads: 2, scheduler: Nice(10), on_error: Strict ),
+                    ( id: "vision",     threads: 2, policy: Nice(10), on_error: Strict ),
                 ],
             ),
             tasks: [ ( id: "t", type: "tasks::Foo" ) ],
@@ -5736,15 +5755,15 @@ mod tests {
         assert_eq!(rt.id, "rt");
         assert_eq!(rt.threads, 4);
         assert_eq!(rt.affinity.as_deref(), Some([2, 3, 4, 5].as_slice()));
-        assert_eq!(rt.scheduler, Scheduler::Fifo { priority: 80 });
+        assert_eq!(rt.policy, SchedulingPolicy::Fifo { priority: 80 });
         assert_eq!(rt.on_error, OnError::Warn);
 
         let bg = &runtime.thread_pools[1];
         assert_eq!(bg.id, "background");
-        assert_eq!(bg.scheduler, Scheduler::Other);
+        assert_eq!(bg.policy, SchedulingPolicy::Fair);
 
         let vision = &runtime.thread_pools[2];
-        assert_eq!(vision.scheduler, Scheduler::Nice(10));
+        assert_eq!(vision.policy, SchedulingPolicy::Nice(10));
         assert_eq!(vision.affinity, None);
         assert_eq!(vision.on_error, OnError::Strict);
 
@@ -5795,7 +5814,7 @@ mod tests {
                 "Duplicate thread pool id",
             ),
             (
-                r#"( runtime: ( thread_pools: [ ( id: "rt", threads: 1, scheduler: Fifo(priority: 200) ) ] ), tasks: [] )"#,
+                r#"( runtime: ( thread_pools: [ ( id: "rt", threads: 1, policy: Fifo(priority: 200) ) ] ), tasks: [] )"#,
                 "out of range",
             ),
             (

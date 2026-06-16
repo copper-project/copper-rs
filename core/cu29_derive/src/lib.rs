@@ -3321,8 +3321,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let kf_lock = std::sync::Arc::clone(&kf_lock);
                                 let rt_pool = std::sync::Arc::clone(&rt_pool);
                                 scope.spawn(move || {
-                                    // Apply the "rt" pool's CPU affinity / scheduler to this
-                                    // stage worker (Spread by stage index). On a Strict pool
+                                    // Apply the "rt" pool's CPU affinity / scheduling policy to
+                                    // this stage worker (Spread by stage index). On a Strict pool
                                     // this fails the worker, which aborts the pipeline.
                                     if let Some(rt_pool) = rt_pool.as_ref()
                                         && cu29::thread_pool::apply_current_thread_scheduling(
@@ -3914,7 +3914,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         .next()
                         .expect("parallel stage pipeline has no entry queue");
                     let mut stage_receivers = stage_receivers.into_iter();
-                    // Optional "rt" thread pool spec: its CPU affinity / scheduler
+                    // Optional "rt" thread pool spec: its CPU affinity / scheduling
                     // policy is applied to each stage worker at startup.
                     let rt_pool = std::sync::Arc::new(
                         runtime

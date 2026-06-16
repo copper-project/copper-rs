@@ -1925,12 +1925,12 @@ mod tests {
         }
     }
 
-    /// Thread pool affinity/scheduler are performance-only knobs: changing them
+    /// Thread pool affinity/policy are performance-only knobs: changing them
     /// must not change the logged CopperList output. Most relevant under
     /// `parallel-rt`, where the `"rt"` pool reconfigures the stage workers.
     #[test]
     fn rt_thread_pool_config_does_not_change_copperlist_output() {
-        use cu29::config::{OnError, RuntimeConfig, Scheduler, ThreadPoolConfig};
+        use cu29::config::{OnError, RuntimeConfig, SchedulingPolicy, ThreadPoolConfig};
 
         let _guard = TEST_MUTEX
             .lock()
@@ -1948,7 +1948,7 @@ mod tests {
                     id: "rt".to_string(),
                     threads: 1,
                     affinity: Some(vec![0]),
-                    scheduler: Scheduler::Nice(5),
+                    policy: SchedulingPolicy::Nice(5),
                     on_error: OnError::Warn,
                 });
             })

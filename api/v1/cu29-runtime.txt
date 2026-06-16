@@ -78,13 +78,13 @@ pub fn cu29_runtime::config::HandleContent::from_u8(v: u8) -> Self
 pub enum cu29_runtime::config::OnError
 pub cu29_runtime::config::OnError::Strict
 pub cu29_runtime::config::OnError::Warn
-pub enum cu29_runtime::config::Scheduler
-pub cu29_runtime::config::Scheduler::Fifo
-pub cu29_runtime::config::Scheduler::Fifo::priority: u8
-pub cu29_runtime::config::Scheduler::Nice(i8)
-pub cu29_runtime::config::Scheduler::Other
-pub cu29_runtime::config::Scheduler::RoundRobin
-pub cu29_runtime::config::Scheduler::RoundRobin::priority: u8
+pub enum cu29_runtime::config::SchedulingPolicy
+pub cu29_runtime::config::SchedulingPolicy::Fair
+pub cu29_runtime::config::SchedulingPolicy::Fifo
+pub cu29_runtime::config::SchedulingPolicy::Fifo::priority: u8
+pub cu29_runtime::config::SchedulingPolicy::Nice(i8)
+pub cu29_runtime::config::SchedulingPolicy::RoundRobin
+pub cu29_runtime::config::SchedulingPolicy::RoundRobin::priority: u8
 pub enum cu29_runtime::config::TaskKind
 pub cu29_runtime::config::TaskKind::Regular
 pub cu29_runtime::config::TaskKind::Sink
@@ -297,7 +297,7 @@ pub struct cu29_runtime::config::ThreadPoolConfig
 pub cu29_runtime::config::ThreadPoolConfig::affinity: core::option::Option<alloc::vec::Vec<usize>>
 pub cu29_runtime::config::ThreadPoolConfig::id: alloc::string::String
 pub cu29_runtime::config::ThreadPoolConfig::on_error: cu29_runtime::config::OnError
-pub cu29_runtime::config::ThreadPoolConfig::scheduler: cu29_runtime::config::Scheduler
+pub cu29_runtime::config::ThreadPoolConfig::policy: cu29_runtime::config::SchedulingPolicy
 pub cu29_runtime::config::ThreadPoolConfig::threads: usize
 pub struct cu29_runtime::config::Value(_)
 impl core::convert::From<alloc::string::String> for cu29_runtime::config::Value

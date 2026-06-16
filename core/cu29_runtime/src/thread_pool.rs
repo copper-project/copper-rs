@@ -5,13 +5,13 @@
 //! - a fixed CPU affinity, applied **Spread**: worker `i` is pinned to
 //!   `affinity[i % affinity.len()]`, so `threads == affinity.len()` yields one
 //!   worker pinned per dedicated core; and
-//! - a scheduler policy/priority (normal/niceness or `SCHED_FIFO`/`SCHED_RR`).
+//! - a scheduling policy/priority (normal/niceness or `SCHED_FIFO`/`SCHED_RR`).
 //!
 //! Affinity and scheduling are applied **once per worker thread at startup**
 //! (never on the per-CopperList hot path), and only when the `rt-scheduling`
 //! feature is enabled on a supported platform (Linux for real-time policies; CPU
 //! affinity is cross-platform). When the feature is off, the requested affinity
-//! and scheduler are ignored and a warning is emitted.
+//! and policy are ignored and a warning is emitted.
 //!
 //! Per-pool [`OnError`] controls what happens when a request cannot be applied
 //! (for example, setting a real-time priority without `CAP_SYS_NICE`):
@@ -20,14 +20,14 @@
 
 #[cfg(feature = "rt-scheduling")]
 use crate::config::OnError;
-use crate::config::{Scheduler, ThreadPoolConfig};
+use crate::config::{SchedulingPolicy, ThreadPoolConfig};
 #[allow(unused_imports)] // pulls the `warning!` macro and its support symbols into scope
 use crate::log::*;
 use cu29_traits::{CuError, CuResult};
 use rayon::ThreadPool;
 
 /// Builds a rayon thread pool from a declarative [`ThreadPoolConfig`], applying
-/// the configured CPU affinity and scheduler policy/priority to each worker.
+/// the configured CPU affinity and scheduling policy/priority to each worker.
 pub fn build_pool(spec: &ThreadPoolConfig) -> CuResult<ThreadPool> {
     let id = spec.id.clone();
     let pool = rayon::ThreadPoolBuilder::new()
@@ -46,18 +46,18 @@ pub fn build_pool(spec: &ThreadPoolConfig) -> CuResult<ThreadPool> {
 #[cfg(feature = "rt-scheduling")]
 fn apply_scheduling(pool: &ThreadPool, spec: &ThreadPoolConfig) -> CuResult<()> {
     // Nothing to pin or reschedule: leave workers on the OS default.
-    if spec.affinity.is_none() && spec.scheduler == Scheduler::Other {
+    if spec.affinity.is_none() && spec.policy == SchedulingPolicy::Fair {
         return Ok(());
     }
 
     let affinity = spec.affinity.as_deref();
-    let scheduler = spec.scheduler;
+    let policy = spec.policy;
 
     // `broadcast` runs the closure on every worker thread and waits, so each
     // setting is applied from within the thread it targets, with deterministic,
     // ordered results. The pool has no jobs in flight yet at this point.
     let results: Vec<CuResult<()>> =
-        pool.broadcast(|ctx| apply_to_current_thread(affinity, scheduler, ctx.index()));
+        pool.broadcast(|ctx| apply_to_current_thread(affinity, policy, ctx.index()));
 
     for (worker, result) in results.into_iter().enumerate() {
         if let Err(e) = result {
@@ -87,7 +87,7 @@ fn apply_scheduling(pool: &ThreadPool, spec: &ThreadPoolConfig) -> CuResult<()> 
 
 #[cfg(not(feature = "rt-scheduling"))]
 fn apply_scheduling(_pool: &ThreadPool, spec: &ThreadPoolConfig) -> CuResult<()> {
-    if spec.affinity.is_some() || spec.scheduler != Scheduler::Other {
+    if spec.affinity.is_some() || spec.policy != SchedulingPolicy::Fair {
         let pool_id = spec.id.as_str();
         warning!(
             "Thread pool {} requests CPU affinity/scheduling but the 'rt-scheduling' feature is disabled; using default scheduling",
@@ -97,7 +97,7 @@ fn apply_scheduling(_pool: &ThreadPool, spec: &ThreadPoolConfig) -> CuResult<()>
     Ok(())
 }
 
-/// Applies a pool's CPU affinity and scheduler policy to the **current** thread,
+/// Applies a pool's CPU affinity and scheduling policy to the **current** thread,
 /// as worker `index` (Spread: pinned to `affinity[index % affinity.len()]`).
 ///
 /// This is for worker threads that are not part of a rayon pool — notably the
@@ -107,10 +107,10 @@ fn apply_scheduling(_pool: &ThreadPool, spec: &ThreadPoolConfig) -> CuResult<()>
 /// request is ignored (with a warning).
 #[cfg(feature = "rt-scheduling")]
 pub fn apply_current_thread_scheduling(spec: &ThreadPoolConfig, index: usize) -> CuResult<()> {
-    if spec.affinity.is_none() && spec.scheduler == Scheduler::Other {
+    if spec.affinity.is_none() && spec.policy == SchedulingPolicy::Fair {
         return Ok(());
     }
-    match apply_to_current_thread(spec.affinity.as_deref(), spec.scheduler, index) {
+    match apply_to_current_thread(spec.affinity.as_deref(), spec.policy, index) {
         Ok(()) => Ok(()),
         Err(e) => {
             let pool_id = spec.id.as_str();
@@ -144,7 +144,7 @@ pub fn apply_current_thread_scheduling(spec: &ThreadPoolConfig, index: usize) ->
 
 #[cfg(not(feature = "rt-scheduling"))]
 pub fn apply_current_thread_scheduling(spec: &ThreadPoolConfig, _index: usize) -> CuResult<()> {
-    if spec.affinity.is_some() || spec.scheduler != Scheduler::Other {
+    if spec.affinity.is_some() || spec.policy != SchedulingPolicy::Fair {
         let pool_id = spec.id.as_str();
         warning!(
             "Thread pool {} requests CPU affinity/scheduling but the 'rt-scheduling' feature is disabled; using default scheduling",
@@ -157,7 +157,7 @@ pub fn apply_current_thread_scheduling(spec: &ThreadPoolConfig, _index: usize) -
 #[cfg(feature = "rt-scheduling")]
 fn apply_to_current_thread(
     affinity: Option<&[usize]>,
-    scheduler: Scheduler,
+    policy: SchedulingPolicy,
     index: usize,
 ) -> CuResult<()> {
     if let Some(cores) = affinity
@@ -166,7 +166,7 @@ fn apply_to_current_thread(
         let core = cores[index % cores.len()];
         set_affinity(core)?;
     }
-    set_scheduler(scheduler)
+    set_policy(policy)
 }
 
 #[cfg(feature = "rt-scheduling")]
@@ -181,21 +181,21 @@ fn set_affinity(core: usize) -> CuResult<()> {
 }
 
 #[cfg(all(feature = "rt-scheduling", target_os = "linux"))]
-fn set_scheduler(scheduler: Scheduler) -> CuResult<()> {
-    match scheduler {
-        Scheduler::Other => Ok(()),
-        Scheduler::Nice(nice) => set_nice(nice),
-        Scheduler::Fifo { priority } => set_rt_policy(libc::SCHED_FIFO, priority),
-        Scheduler::RoundRobin { priority } => set_rt_policy(libc::SCHED_RR, priority),
+fn set_policy(policy: SchedulingPolicy) -> CuResult<()> {
+    match policy {
+        SchedulingPolicy::Fair => Ok(()),
+        SchedulingPolicy::Nice(nice) => set_nice(nice),
+        SchedulingPolicy::Fifo { priority } => set_rt_policy(libc::SCHED_FIFO, priority),
+        SchedulingPolicy::RoundRobin { priority } => set_rt_policy(libc::SCHED_RR, priority),
     }
 }
 
 #[cfg(all(feature = "rt-scheduling", not(target_os = "linux")))]
-fn set_scheduler(scheduler: Scheduler) -> CuResult<()> {
-    match scheduler {
-        Scheduler::Other => Ok(()),
+fn set_policy(policy: SchedulingPolicy) -> CuResult<()> {
+    match policy {
+        SchedulingPolicy::Fair => Ok(()),
         _ => Err(CuError::from(
-            "real-time scheduler policies are only supported on Linux",
+            "real-time scheduling policies are only supported on Linux",
         )),
     }
 }
@@ -242,14 +242,14 @@ fn set_nice(nice: i8) -> CuResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{OnError, Scheduler, ThreadPoolConfig};
+    use crate::config::{OnError, SchedulingPolicy, ThreadPoolConfig};
 
     fn spec(id: &str, threads: usize) -> ThreadPoolConfig {
         ThreadPoolConfig {
             id: id.to_string(),
             threads,
             affinity: None,
-            scheduler: Scheduler::Other,
+            policy: SchedulingPolicy::Fair,
             on_error: OnError::Warn,
         }
     }
@@ -265,7 +265,7 @@ mod tests {
         // A real-time priority request that may or may not succeed depending on
         // platform/privilege; Warn mode must build the pool regardless.
         let mut s = spec("warn", 2);
-        s.scheduler = Scheduler::Fifo { priority: 50 };
+        s.policy = SchedulingPolicy::Fifo { priority: 50 };
         let pool = build_pool(&s).unwrap();
         assert_eq!(pool.current_num_threads(), 2);
     }
