@@ -140,3 +140,20 @@ impl ResourceBundle for GlobalBundle {
         Ok(())
     }
 }
+
+pub struct RuntimeBundle;
+
+bundle_resources!(RuntimeBundle: SomeResource);
+
+impl ResourceBundle for RuntimeBundle {
+    fn build(
+        bundle: BundleContext<Self>,
+        _config: Option<&ComponentConfig>,
+        manager: &mut ResourceManager,
+    ) -> CuResult<()> {
+        // let some_resource_key = bundle.key(RuntimeBundleId::SomeResource);
+        // let some_resource = Arc::new(SomeResource::default());
+        // manager.add_shared(some_resource_key, some_resource.clone())?;
+        Ok(())
+    }
+}

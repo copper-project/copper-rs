@@ -1,7 +1,7 @@
 use clap::{Parser, ValueEnum};
 use cu29::prelude::*;
 use cu29_unifiedlog::{UnifiedLoggerWrite, memmap::MmapSectionStorage};
-use std::{fs, path::PathBuf};
+use std::{fs, path::PathBuf, sync::Arc};
 
 mod bridges;
 mod resources;
@@ -12,6 +12,8 @@ struct App {}
 // Mission-specific builders emitted by the macro.
 use A::App as MissionAApp;
 use B::App as MissionBApp;
+
+use crate::resources::RuntimeBundleId;
 
 #[derive(Parser)]
 #[command(author, version, about = "Resource coverage demo", long_about = None)]
@@ -65,6 +67,22 @@ fn drive() -> CuResult<()> {
         MissionArg::A => {
             let mut app = MissionAApp::builder()
                 .with_log_path(&logger_path, SLAB_SIZE)?
+                .with_resources(|config| {
+                    let mut a_resources = MissionAApp::prepare_resources(Some(config.clone()))?;
+
+                    let some_resource_key =
+                        A::resources::bundles::RUNTIME.key::<_, _>(RuntimeBundleId::SomeResource);
+
+                    a_resources.resources.add_bundle_prebuilt(move |manager| {
+                        // We use shared resources for the file event channels
+                        // because we need them for multiple tasks
+                        manager.add_shared(some_resource_key, Arc::new(true))?;
+
+                        Ok(())
+                    })?;
+
+                    Ok(a_resources.resources)
+                })
                 .build()?;
             run_once(&mut app)?;
         }

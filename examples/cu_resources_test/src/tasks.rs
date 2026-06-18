@@ -158,5 +158,35 @@ mod inspector_resources {
     });
 }
 
+mod inspector_task_runtime_resources {
+    use super::*;
+
+    resources!({
+        some_resource => Shared<bool>,
+    });
+}
+
 type SensorResources<'r> = sensor_resources::Resources<'r>;
 type InspectorResources<'r> = inspector_resources::Resources<'r>;
+type InspectorTaskRuntimeResources<'r> = inspector_task_runtime_resources::Resources<'r>;
+
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
+pub struct InspectorTaskRuntime {}
+
+impl Freezable for InspectorTaskRuntime {}
+
+impl CuSrcTask for InspectorTaskRuntime {
+    type Output<'o> = CuMsg<bool>;
+    type Resources<'r> = InspectorTaskRuntimeResources<'r>;
+
+    fn new(_config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self> {
+        let InspectorTaskRuntimeResources { some_resource } = resources;
+        println!("Some resource: {}", some_resource.0);
+        Ok(Self {})
+    }
+
+    fn process<'i>(&mut self, _ctx: &CuContext, output: &mut Self::Output<'i>) -> CuResult<()> {
+        Ok(())
+    }
+}
