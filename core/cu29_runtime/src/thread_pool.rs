@@ -271,12 +271,18 @@ mod tests {
     }
 
     // Pinning to a non-existent (but in-range) CPU reliably fails regardless of
-    // privilege, so Strict mode must surface the error.
+    // privilege, so Strict mode must surface the error. Derive the bogus core id
+    // from the host's actual core count so the test stays valid on very large
+    // machines and unusual cpuset configurations.
     #[cfg(all(feature = "rt-scheduling", target_os = "linux"))]
     #[test]
     fn strict_mode_fails_on_invalid_affinity() {
+        let Some(cores) = core_affinity::get_core_ids() else {
+            return; // affinity unsupported on this platform; nothing to assert
+        };
+        let invalid_core = cores.iter().map(|c| c.id).max().unwrap_or(0) + 1;
         let mut s = spec("strict", 1);
-        s.affinity = Some(vec![1000]); // below CPU_SETSIZE, above any real core count
+        s.affinity = Some(vec![invalid_core]);
         s.on_error = OnError::Strict;
         assert!(build_pool(&s).is_err());
     }
