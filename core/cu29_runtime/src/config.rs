@@ -1718,28 +1718,19 @@ pub struct CuConfig {
 }
 
 impl CuConfig {
+    /// Guarantees that a default `"background"` thread pool entry exists in
+    /// `runtime.thread_pools` whenever the graph has any `background: true`
+    /// task that didn't explicitly select a pool. Thread pools are otherwise
+    /// constructed straight from `runtime.thread_pools` by the runtime — they
+    /// are not stored in `ResourceManager`.
     #[cfg(feature = "std")]
-    fn ensure_threadpool_bundle(&mut self) {
+    fn ensure_default_background_pool(&mut self) {
         if !self.has_background_tasks() {
             return;
         }
 
         const DEFAULT_BACKGROUND_THREADS: usize = 2;
 
-        // Legacy migration: a `ThreadPoolBundle` resource declared with
-        // `config: {"threads": N}` maps onto the default background pool's
-        // thread count. The `provider`/`config` of that resource are otherwise
-        // ignored now that pools are built from `runtime.thread_pools`.
-        let legacy_threads = self
-            .resources
-            .iter()
-            .find(|bundle| bundle.id == "threadpool")
-            .and_then(|bundle| bundle.config.as_ref())
-            .and_then(|config| config.get::<u64>("threads").ok().flatten())
-            .map(|threads| threads as usize);
-
-        // Ensure the default background pool exists in runtime.thread_pools so
-        // `background: true` tasks have a pool to run on.
         let runtime = self.runtime.get_or_insert_with(RuntimeConfig::default);
         if !runtime
             .thread_pools
@@ -1748,26 +1739,10 @@ impl CuConfig {
         {
             runtime.thread_pools.push(ThreadPoolConfig {
                 id: DEFAULT_BACKGROUND_POOL.to_string(),
-                threads: legacy_threads.unwrap_or(DEFAULT_BACKGROUND_THREADS),
+                threads: DEFAULT_BACKGROUND_THREADS,
                 affinity: None,
                 policy: SchedulingPolicy::Fair,
                 on_error: OnError::Warn,
-            });
-        }
-
-        // The pools are stored in the ResourceManager under a synthetic
-        // "threadpool" bundle so background tasks can borrow their pool. Inject
-        // a marker resource bundle (used only for bundle indexing) if absent.
-        if !self
-            .resources
-            .iter()
-            .any(|bundle| bundle.id == "threadpool")
-        {
-            self.resources.push(ResourceBundleConfig {
-                id: "threadpool".to_string(),
-                provider: "cu29::resource::ThreadPoolBundle".to_string(),
-                config: None,
-                missions: None,
             });
         }
     }
@@ -4135,7 +4110,7 @@ fn config_representation_to_config(representation: CuConfigRepresentation) -> Cu
         .map_err(|e| CuError::from(format!("Error deserializing configuration: {e}")))?;
 
     #[cfg(feature = "std")]
-    cuconfig.ensure_threadpool_bundle();
+    cuconfig.ensure_default_background_pool();
 
     cuconfig.validate_logging_config()?;
     cuconfig.validate_runtime_config()?;
@@ -5854,32 +5829,8 @@ mod tests {
             .collect();
         assert_eq!(background.len(), 1);
         assert_eq!(background[0].threads, 2);
-        // The synthetic registry bundle is present for ResourceManager indexing.
-        assert!(config.resources.iter().any(|b| b.id == "threadpool"));
-    }
-
-    #[cfg(feature = "std")]
-    #[test]
-    fn test_legacy_threadpool_resource_migrates_to_background_pool() {
-        let txt = r#"(
-            resources: [
-                ( id: "threadpool", provider: "cu29::resource::ThreadPoolBundle", config: {"threads": 5} ),
-            ],
-            tasks: [
-                ( id: "src", type: "tasks::Src" ),
-                ( id: "bg",  type: "tasks::Task", background: true ),
-            ],
-            cnx: [
-                ( src: "src", dst: "bg", msg: "i32" ),
-                ( src: "bg", dst: "__nc__", msg: "i32" ),
-            ],
-        )"#;
-        let config = read_configuration_str(txt.to_string(), None).unwrap();
-        let pools = &config.runtime.as_ref().unwrap().thread_pools;
-        let background = pools
-            .iter()
-            .find(|p| p.id == DEFAULT_BACKGROUND_POOL)
-            .expect("background pool should be migrated from legacy resource");
-        assert_eq!(background.threads, 5);
+        // Thread pools are owned by the runtime, not the resource manager — no
+        // synthetic "threadpool" bundle should be injected.
+        assert!(!config.resources.iter().any(|b| b.id == "threadpool"));
     }
 }

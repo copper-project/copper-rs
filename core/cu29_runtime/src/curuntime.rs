@@ -21,6 +21,10 @@ use crate::monitoring::{
 #[cfg(all(feature = "std", feature = "parallel-rt"))]
 use crate::parallel_rt::{ParallelRt, ParallelRtMetadata};
 use crate::resource::ResourceManager;
+#[cfg(feature = "std")]
+use alloc::sync::Arc;
+#[cfg(feature = "std")]
+use rayon::ThreadPool;
 use compact_str::CompactString;
 use cu29_clock::{ClockProvider, CuDuration, CuTime, RobotClock};
 use cu29_traits::CuResult;
@@ -65,11 +69,28 @@ use std::sync::mpsc::{Receiver, SyncSender, TryRecvError, sync_channel};
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
 use std::thread::JoinHandle;
 
+#[cfg(feature = "std")]
+#[doc(hidden)]
+pub type TasksInstantiator<CT> = for<'c> fn(
+    Vec<Option<&'c ComponentConfig>>,
+    &mut ResourceManager,
+    &[Option<Arc<ThreadPool>>],
+) -> CuResult<CT>;
+#[cfg(not(feature = "std"))]
 #[doc(hidden)]
 pub type TasksInstantiator<CT> =
     for<'c> fn(Vec<Option<&'c ComponentConfig>>, &mut ResourceManager) -> CuResult<CT>;
 #[doc(hidden)]
 pub type BridgesInstantiator<CB> = fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>;
+/// Instantiates the rayon thread pools described by `runtime.thread_pools`.
+///
+/// Returned vector is indexed positionally to `runtime.thread_pools`; reserved
+/// pool ids (such as [`crate::config::RT_POOL`]) leave a `None` slot since they
+/// are applied directly to runtime-owned worker threads rather than borrowed as
+/// a rayon pool.
+#[cfg(feature = "std")]
+#[doc(hidden)]
+pub type ThreadPoolsInstantiator = fn(&CuConfig) -> CuResult<Vec<Option<Arc<ThreadPool>>>>;
 #[doc(hidden)]
 pub type MonitorInstantiator<M> = fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M;
 
@@ -130,6 +151,8 @@ pub struct CuRuntimeBuilder<
     subsystem: Subsystem,
     instance_id: u32,
     resources: Option<ResourceManager>,
+    #[cfg(feature = "std")]
+    thread_pools: Option<Vec<Option<Arc<ThreadPool>>>>,
     parts: CuRuntimeParts<CT, CB, P, M, NBCL, TI, BI, MI>,
     copperlists_logger: CLW,
     keyframes_logger: KFW,
@@ -153,6 +176,8 @@ impl<'cfg, CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, 
             subsystem: Subsystem::new(None, 0),
             instance_id: 0,
             resources: None,
+            #[cfg(feature = "std")]
+            thread_pools: None,
             parts,
             copperlists_logger,
             keyframes_logger,
@@ -179,6 +204,27 @@ impl<'cfg, CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, 
         resources_instantiator: impl FnOnce(&CuConfig) -> CuResult<ResourceManager>,
     ) -> CuResult<Self> {
         self.resources = Some(resources_instantiator(self.config)?);
+        Ok(self)
+    }
+
+    /// Provides pre-built thread pools; positions in the slice must match
+    /// `runtime.thread_pools` indices. Reserved pool ids (e.g. `"rt"`) belong
+    /// to runtime-owned worker threads and stay as `None` slots.
+    #[cfg(feature = "std")]
+    pub fn with_thread_pools(mut self, pools: Vec<Option<Arc<ThreadPool>>>) -> Self {
+        self.thread_pools = Some(pools);
+        self
+    }
+
+    #[cfg(feature = "std")]
+    pub fn try_with_thread_pools_instantiator(
+        mut self,
+        thread_pools_instantiator: impl FnOnce(
+            &CuConfig,
+        )
+            -> CuResult<Vec<Option<Arc<ThreadPool>>>>,
+    ) -> CuResult<Self> {
+        self.thread_pools = Some(thread_pools_instantiator(self.config)?);
         Ok(self)
     }
 }
@@ -1070,6 +1116,12 @@ pub struct CuRuntime<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize
     #[doc(hidden)]
     pub resources: ResourceManager,
 
+    /// Rayon thread pools owned by the runtime, indexed positionally to
+    /// `runtime.thread_pools`. Reserved pools (e.g. `"rt"`) leave `None` slots.
+    #[cfg(feature = "std")]
+    #[doc(hidden)]
+    pub thread_pools: Vec<Option<Arc<ThreadPool>>>,
+
     /// The runtime monitoring.
     #[doc(hidden)]
     pub monitor: M,
@@ -1145,6 +1197,7 @@ impl<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize> CuRuntime<CT, 
     }
 }
 
+#[cfg(feature = "std")]
 impl<
     'cfg,
     CT,
@@ -1159,7 +1212,11 @@ impl<
     KFW,
 > CuRuntimeBuilder<'cfg, CT, CB, P, M, NBCL, TI, BI, MI, CLW, KFW>
 where
-    TI: for<'c> Fn(Vec<Option<&'c ComponentConfig>>, &mut ResourceManager) -> CuResult<CT>,
+    TI: for<'c> Fn(
+        Vec<Option<&'c ComponentConfig>>,
+        &mut ResourceManager,
+        &[Option<Arc<ThreadPool>>],
+    ) -> CuResult<CT>,
     BI: Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
     MI: Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
     CLW: WriteStream<CopperList<P>> + 'static,
@@ -1173,12 +1230,14 @@ where
             subsystem,
             instance_id,
             resources,
+            thread_pools,
             parts,
             copperlists_logger,
             keyframes_logger,
         } = self;
         let mut resources =
             resources.ok_or_else(|| CuError::from("Resources missing from CuRuntimeBuilder"))?;
+        let thread_pools = thread_pools.unwrap_or_default();
 
         let graph = config.get_graph(Some(mission))?;
         let all_instances_configs: Vec<Option<&ComponentConfig>> = graph
@@ -1187,7 +1246,8 @@ where
             .map(|(_, node)| node.get_instance_config())
             .collect();
 
-        let tasks = (parts.tasks_instanciator)(all_instances_configs, &mut resources)?;
+        let tasks =
+            (parts.tasks_instanciator)(all_instances_configs, &mut resources, &thread_pools)?;
 
         #[cfg(feature = "std")]
         let execution_probe = std::sync::Arc::new(RuntimeExecutionProbe::default());
@@ -1256,6 +1316,7 @@ where
             tasks,
             bridges,
             resources,
+            thread_pools,
             monitor,
             execution_probe,
             clock,
@@ -1263,6 +1324,119 @@ where
             keyframes_manager,
             #[cfg(all(feature = "std", feature = "parallel-rt"))]
             parallel_rt,
+            runtime_config,
+        })
+    }
+}
+
+#[cfg(not(feature = "std"))]
+impl<
+    'cfg,
+    CT,
+    CB,
+    P: CopperListTuple + CuListZeroedInit + Default + AsyncCopperListPayload + 'static,
+    M: CuMonitor,
+    const NBCL: usize,
+    TI,
+    BI,
+    MI,
+    CLW,
+    KFW,
+> CuRuntimeBuilder<'cfg, CT, CB, P, M, NBCL, TI, BI, MI, CLW, KFW>
+where
+    TI: for<'c> Fn(Vec<Option<&'c ComponentConfig>>, &mut ResourceManager) -> CuResult<CT>,
+    BI: Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
+    MI: Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
+    CLW: WriteStream<CopperList<P>> + 'static,
+    KFW: WriteStream<KeyFrame> + 'static,
+{
+    pub fn build(self) -> CuResult<CuRuntime<CT, CB, P, M, NBCL>> {
+        let Self {
+            clock,
+            config,
+            mission,
+            subsystem,
+            instance_id,
+            resources,
+            parts,
+            copperlists_logger,
+            keyframes_logger,
+        } = self;
+        let mut resources =
+            resources.ok_or_else(|| CuError::from("Resources missing from CuRuntimeBuilder"))?;
+
+        let graph = config.get_graph(Some(mission))?;
+        let all_instances_configs: Vec<Option<&ComponentConfig>> = graph
+            .get_all_nodes()
+            .iter()
+            .map(|(_, node)| node.get_instance_config())
+            .collect();
+
+        let tasks = (parts.tasks_instanciator)(all_instances_configs, &mut resources)?;
+
+        let execution_probe = RuntimeExecutionProbe::default();
+        let monitor_metadata = CuMonitoringMetadata::new(
+            CompactString::from(mission),
+            parts.monitored_components,
+            parts.culist_component_mapping,
+            CopperListInfo::new(core::mem::size_of::<CopperList<P>>(), NBCL),
+            build_monitor_topology(config, mission)?,
+            None,
+        )?
+        .with_subsystem_id(subsystem.id())
+        .with_instance_id(instance_id);
+        let monitor_runtime = CuMonitoringRuntime::unavailable();
+        let monitor = (parts.monitor_instanciator)(config, monitor_metadata, monitor_runtime);
+        let bridges = (parts.bridges_instanciator)(config, &mut resources)?;
+
+        let (copperlists_logger, keyframes_logger, keyframe_interval) = match &config.logging {
+            Some(logging_config) if logging_config.enable_task_logging => (
+                Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
+                Some(Box::new(keyframes_logger) as Box<dyn WriteStream<KeyFrame>>),
+                logging_config.keyframe_interval.unwrap(),
+            ),
+            Some(_) => (None, None, 0),
+            None => (
+                Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
+                Some(Box::new(keyframes_logger) as Box<dyn WriteStream<KeyFrame>>),
+                DEFAULT_KEYFRAME_INTERVAL,
+            ),
+        };
+
+        let copperlists_manager = CopperListsManager::new(copperlists_logger)?;
+        #[cfg(target_os = "none")]
+        {
+            let cl_size = core::mem::size_of::<CopperList<P>>();
+            let total_bytes = cl_size.saturating_mul(NBCL);
+            info!(
+                "CuRuntimeBuilder: copperlists count={} cl_size={} total_bytes={}",
+                NBCL, cl_size, total_bytes
+            );
+        }
+
+        let keyframes_manager = KeyFramesManager {
+            inner: KeyFrame::new(),
+            logger: keyframes_logger,
+            keyframe_interval,
+            last_encoded_bytes: 0,
+            forced_timestamp: None,
+            locked: false,
+        };
+
+        let runtime_config = config.runtime.clone().unwrap_or_default();
+        runtime_config.validate()?;
+
+        Ok(CuRuntime {
+            subsystem_code: subsystem.code(),
+            instance_id,
+            tasks,
+            bridges,
+            resources,
+            monitor,
+            execution_probe,
+            clock,
+            copperlists_manager,
+            keyframes_manager,
             runtime_config,
         })
     }
@@ -1915,6 +2089,7 @@ mod tests {
     fn tasks_instanciator(
         all_instances_configs: Vec<Option<&ComponentConfig>>,
         _resources: &mut ResourceManager,
+        _thread_pools: &[Option<Arc<rayon::ThreadPool>>],
     ) -> CuResult<Tasks> {
         Ok((
             TestSource::new(all_instances_configs[0], ())?,
