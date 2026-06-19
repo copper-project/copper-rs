@@ -1700,6 +1700,26 @@ pub trait CuMonitor: Sized {
     /// Called when runtime finishes CopperList serialization/IO accounting.
     fn observe_copperlist_io(&self, _stats: CopperListIoStats) {}
 
+    /// Called after each monitored component step with the heap allocation delta
+    /// observed by the runtime around the call.
+    ///
+    /// `allocated_bytes` / `deallocated_bytes` are computed from the global
+    /// `CountingAlloc` counters when the runtime is built with
+    /// `feature = "memory_monitoring"`. Without that feature the runtime still
+    /// invokes this hook but always reports `0` — implementations can treat
+    /// that as "monitoring disabled at link time" and degrade gracefully (e.g.
+    /// log a one-shot warning).
+    ///
+    /// `component_id` is an index into [`CuMonitoringMetadata::components`].
+    fn observe_alloc(
+        &self,
+        _component_id: ComponentId,
+        _step: CuComponentState,
+        _allocated_bytes: usize,
+        _deallocated_bytes: usize,
+    ) {
+    }
+
     /// Called when a monitored component step fails; must return an immediate runtime decision.
     ///
     /// `component_id` is an index into [`CuMonitoringMetadata::components`].
@@ -1789,6 +1809,16 @@ macro_rules! impl_monitor_tuple {
 
             fn observe_copperlist_io(&self, stats: CopperListIoStats) {
                 $(self.$idx.observe_copperlist_io(stats);)+
+            }
+
+            fn observe_alloc(
+                &self,
+                component_id: ComponentId,
+                step: CuComponentState,
+                allocated_bytes: usize,
+                deallocated_bytes: usize,
+            ) {
+                $(self.$idx.observe_alloc(component_id, step, allocated_bytes, deallocated_bytes);)+
             }
 
             fn process_error(
@@ -1881,73 +1911,114 @@ unsafe impl<A: GlobalAlloc> GlobalAlloc for CountingAlloc<A> {
     }
 }
 
-/// A simple struct that counts the number of bytes allocated and deallocated in a scope.
-#[cfg(feature = "memory_monitoring")]
+/// Total bytes ever allocated through the `CountingAlloc` global allocator.
+///
+/// Returns `None` when the runtime was not built with `feature = "memory_monitoring"`
+/// (no counting allocator installed). Returns `Some(_)` otherwise.
+///
+/// Counters are monotonic and saturate at `usize::MAX`; subtract two snapshots
+/// to get a delta over a window.
+#[inline]
+pub fn global_allocated_bytes() -> Option<usize> {
+    #[cfg(all(feature = "std", feature = "memory_monitoring"))]
+    {
+        Some(GLOBAL.allocated())
+    }
+    #[cfg(not(all(feature = "std", feature = "memory_monitoring")))]
+    {
+        None
+    }
+}
+
+/// Total bytes ever returned to the `CountingAlloc` global allocator.
+///
+/// See [`global_allocated_bytes`] for availability semantics.
+#[inline]
+pub fn global_deallocated_bytes() -> Option<usize> {
+    #[cfg(all(feature = "std", feature = "memory_monitoring"))]
+    {
+        Some(GLOBAL.deallocated())
+    }
+    #[cfg(not(all(feature = "std", feature = "memory_monitoring")))]
+    {
+        None
+    }
+}
+
+/// Scoped helper that captures the global allocation counters on construction
+/// and exposes the delta accumulated by the time you query it.
+///
+/// When the runtime is built without `feature = "memory_monitoring"`, this
+/// becomes a zero-sized no-op: `allocated()`/`deallocated()` return `0`, the
+/// constructor performs no atomic load, and the type is fully eliminated by the
+/// optimizer. This lets the runtime macro emit the same code in both builds.
+///
+/// # Example
+/// ```
+/// use cu29_runtime::monitoring::ScopedAllocCounter;
+///
+/// let counter = ScopedAllocCounter::new();
+/// let _vec = vec![0u8; 1024];
+/// // With `memory_monitoring`: `counter.allocated() >= 1024`.
+/// // Without: `counter.allocated() == 0`.
+/// let _ = counter.allocated();
+/// ```
+#[must_use]
 pub struct ScopedAllocCounter {
+    #[cfg(all(feature = "std", feature = "memory_monitoring"))]
     bf_allocated: usize,
+    #[cfg(all(feature = "std", feature = "memory_monitoring"))]
     bf_deallocated: usize,
 }
 
-#[cfg(feature = "memory_monitoring")]
 impl Default for ScopedAllocCounter {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(feature = "memory_monitoring")]
 impl ScopedAllocCounter {
+    #[inline]
     pub fn new() -> Self {
-        ScopedAllocCounter {
-            bf_allocated: GLOBAL.allocated(),
-            bf_deallocated: GLOBAL.deallocated(),
+        #[cfg(all(feature = "std", feature = "memory_monitoring"))]
+        {
+            ScopedAllocCounter {
+                bf_allocated: GLOBAL.allocated(),
+                bf_deallocated: GLOBAL.deallocated(),
+            }
+        }
+        #[cfg(not(all(feature = "std", feature = "memory_monitoring")))]
+        {
+            ScopedAllocCounter {}
         }
     }
 
-    /// Returns the total number of bytes allocated in the current scope
-    /// since the creation of this `ScopedAllocCounter`.
-    ///
-    /// # Example
-    /// ```
-    /// use cu29_runtime::monitoring::ScopedAllocCounter;
-    ///
-    /// let counter = ScopedAllocCounter::new();
-    /// let _vec = vec![0u8; 1024];
-    /// println!("Bytes allocated: {}", counter.get_allocated());
-    /// ```
+    /// Bytes allocated since this counter was created.
+    /// Always `0` when `memory_monitoring` is not enabled.
+    #[inline]
     pub fn allocated(&self) -> usize {
-        GLOBAL.allocated() - self.bf_allocated
+        #[cfg(all(feature = "std", feature = "memory_monitoring"))]
+        {
+            GLOBAL.allocated().wrapping_sub(self.bf_allocated)
+        }
+        #[cfg(not(all(feature = "std", feature = "memory_monitoring")))]
+        {
+            0
+        }
     }
 
-    /// Returns the total number of bytes deallocated in the current scope
-    /// since the creation of this `ScopedAllocCounter`.
-    ///
-    /// # Example
-    /// ```
-    /// use cu29_runtime::monitoring::ScopedAllocCounter;
-    ///
-    /// let counter = ScopedAllocCounter::new();
-    /// let _vec = vec![0u8; 1024];
-    /// drop(_vec);
-    /// println!("Bytes deallocated: {}", counter.get_deallocated());
-    /// ```
+    /// Bytes deallocated since this counter was created.
+    /// Always `0` when `memory_monitoring` is not enabled.
+    #[inline]
     pub fn deallocated(&self) -> usize {
-        GLOBAL.deallocated() - self.bf_deallocated
-    }
-}
-
-/// Build a difference between the number of bytes allocated and deallocated in the scope at drop time.
-#[cfg(feature = "memory_monitoring")]
-impl Drop for ScopedAllocCounter {
-    fn drop(&mut self) {
-        let _allocated = GLOBAL.allocated() - self.bf_allocated;
-        let _deallocated = GLOBAL.deallocated() - self.bf_deallocated;
-        // TODO(gbin): Fix this when the logger is ready.
-        // debug!(
-        //     "Allocations: +{}B -{}B",
-        //     allocated = allocated,
-        //     deallocated = deallocated,
-        // );
+        #[cfg(all(feature = "std", feature = "memory_monitoring"))]
+        {
+            GLOBAL.deallocated().wrapping_sub(self.bf_deallocated)
+        }
+        #[cfg(not(all(feature = "std", feature = "memory_monitoring")))]
+        {
+            0
+        }
     }
 }
 
@@ -2228,6 +2299,9 @@ mod tests {
         decision: TestDecision,
         copperlist_calls: AtomicUsize,
         panic_calls: AtomicUsize,
+        alloc_calls: AtomicUsize,
+        last_alloc_bytes: AtomicUsize,
+        last_dealloc_bytes: AtomicUsize,
     }
 
     impl TestMonitor {
@@ -2236,6 +2310,9 @@ mod tests {
                 decision,
                 copperlist_calls: AtomicUsize::new(0),
                 panic_calls: AtomicUsize::new(0),
+                alloc_calls: AtomicUsize::new(0),
+                last_alloc_bytes: AtomicUsize::new(0),
+                last_dealloc_bytes: AtomicUsize::new(0),
             }
         }
     }
@@ -2284,6 +2361,20 @@ mod tests {
 
         fn process_panic(&self, _panic_message: &str) {
             self.panic_calls.fetch_add(1, Ordering::SeqCst);
+        }
+
+        fn observe_alloc(
+            &self,
+            _component_id: ComponentId,
+            _step: CuComponentState,
+            allocated_bytes: usize,
+            deallocated_bytes: usize,
+        ) {
+            self.alloc_calls.fetch_add(1, Ordering::SeqCst);
+            self.last_alloc_bytes
+                .store(allocated_bytes, Ordering::SeqCst);
+            self.last_dealloc_bytes
+                .store(deallocated_bytes, Ordering::SeqCst);
         }
     }
 
@@ -2367,6 +2458,48 @@ mod tests {
             two.process_error(ComponentId::new(0), CuComponentState::Process, &err),
             Decision::Abort
         ));
+    }
+
+    #[test]
+    fn scoped_alloc_counter_reports_zero_when_feature_off_and_nonzero_when_on() {
+        // We can't change link-time feature flags from a test, so we exercise
+        // both halves of the API contract regardless of feature state:
+        //
+        // * `global_allocated_bytes()` returns `Some` iff the feature is on.
+        // * `ScopedAllocCounter::allocated()` returns a sensible value either way
+        //   (0 when off, monotonically non-decreasing across a Vec alloc when on).
+        let availability_matches = match global_allocated_bytes() {
+            Some(_) => cfg!(all(feature = "std", feature = "memory_monitoring")),
+            None => !cfg!(all(feature = "std", feature = "memory_monitoring")),
+        };
+        assert!(availability_matches, "feature-gate cfg mismatch");
+
+        let counter = ScopedAllocCounter::new();
+        let _v = vec![0u8; 4096];
+        let allocated = counter.allocated();
+        if cfg!(all(feature = "std", feature = "memory_monitoring")) {
+            assert!(
+                allocated >= 4096,
+                "expected at least 4096 B allocated, got {allocated}"
+            );
+        } else {
+            assert_eq!(allocated, 0, "feature off must report 0");
+        }
+    }
+
+    #[test]
+    fn tuple_monitor_fans_out_observe_alloc() {
+        let monitors = <(TestMonitor, TestMonitor) as CuMonitor>::new(
+            test_metadata(),
+            CuMonitoringRuntime::unavailable(),
+        )
+        .expect("tuple new");
+        monitors.observe_alloc(ComponentId::new(0), CuComponentState::Process, 128, 64);
+
+        assert_eq!(monitors.0.alloc_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(monitors.1.alloc_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(monitors.0.last_alloc_bytes.load(Ordering::SeqCst), 128);
+        assert_eq!(monitors.1.last_dealloc_bytes.load(Ordering::SeqCst), 64);
     }
 
     #[test]
