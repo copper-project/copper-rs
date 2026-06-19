@@ -280,7 +280,8 @@ mod tests {
         let Some(cores) = core_affinity::get_core_ids() else {
             return; // affinity unsupported on this platform; nothing to assert
         };
-        let invalid_core = cores.iter().map(|c| c.id).max().unwrap_or(0) + 1;
+        let max_core = cores.iter().map(|c| c.id).max().unwrap_or(0);
+        let invalid_core = max_core.saturating_add(1);
         let mut s = spec("strict", 1);
         s.affinity = Some(vec![invalid_core]);
         s.on_error = OnError::Strict;
