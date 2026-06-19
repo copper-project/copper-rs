@@ -23,13 +23,13 @@ use crate::parallel_rt::{ParallelRt, ParallelRtMetadata};
 use crate::resource::ResourceManager;
 #[cfg(feature = "std")]
 use alloc::sync::Arc;
-#[cfg(feature = "std")]
-use rayon::ThreadPool;
 use compact_str::CompactString;
 use cu29_clock::{ClockProvider, CuDuration, CuTime, RobotClock};
 use cu29_traits::CuResult;
 use cu29_traits::WriteStream;
 use cu29_traits::{CopperListTuple, CuError};
+#[cfg(feature = "std")]
+use rayon::ThreadPool;
 
 #[cfg(target_os = "none")]
 #[allow(unused_imports)]
@@ -219,10 +219,7 @@ impl<'cfg, CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, 
     #[cfg(feature = "std")]
     pub fn try_with_thread_pools_instantiator(
         mut self,
-        thread_pools_instantiator: impl FnOnce(
-            &CuConfig,
-        )
-            -> CuResult<Vec<Option<Arc<ThreadPool>>>>,
+        thread_pools_instantiator: impl FnOnce(&CuConfig) -> CuResult<Vec<Option<Arc<ThreadPool>>>>,
     ) -> CuResult<Self> {
         self.thread_pools = Some(thread_pools_instantiator(self.config)?);
         Ok(self)

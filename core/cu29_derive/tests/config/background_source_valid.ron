@@ -1,8 +1,6 @@
 (
     runtime: (
-        thread_pools: [
-            (id: "background", threads: 1),
-        ],
+        thread_pools: [(id: "background", threads: 1)],
     ),
     tasks: [
         (
