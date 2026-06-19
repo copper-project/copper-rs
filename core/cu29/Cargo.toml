@@ -82,11 +82,15 @@ parallel-rt = ["std", "cu29-derive/parallel-rt", "cu29-runtime/parallel-rt"]
 rt-scheduling = ["std", "cu29-runtime/rt-scheduling"]
 mmap-fsync = ["std", "cu29-runtime/mmap-fsync", "cu29-unifiedlog/mmap-fsync"]
 # Install a heap-allocation-counting global allocator (cu29-runtime side) and
-# enable the cu29-runtime side of the per-task allocation observation pipeline.
-# Without this feature, `monitor.observe_alloc(...)` is still called by the
-# generated runtime code but always reports zero, so a monitor like `cu_memmon`
-# can detect and report "memory monitoring not compiled in".
-memory_monitoring = ["std", "cu29-runtime/memory_monitoring"]
+# emit per-task allocation scopes around every lifecycle step (cu29-derive
+# side). With this feature off, `cu29-derive` skips the scope codegen entirely,
+# so a monitor never sees the hook fire — there's zero runtime cost. With it
+# on, monitors receive observe_alloc(...) deltas around every step.
+memory_monitoring = [
+  "std",
+  "cu29-runtime/memory_monitoring",
+  "cu29-derive/memory_monitoring",
+]
 std = [
   "rayon",
   "cu29-clock/std",
