@@ -24,7 +24,14 @@
     ],
     monitor: (
         type: "cu_memmon::CuMemMon",
-        config: { "realtime_strict": false },
+        config: {
+            // Set to true to abort the run on any non-zero allocation in
+            // preprocess/process/postprocess. Default is false: keep running
+            // and accumulate per-task totals reported at shutdown.
+            "realtime_strict": false,
+            // Emit a "[mem] task ..." summary every N copperlists. 0 disables.
+            "summary_every": 20,
+        },
     ),
     logging: (
         slab_size_mib: 16,
