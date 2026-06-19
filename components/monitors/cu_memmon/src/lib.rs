@@ -268,9 +268,7 @@ impl CuMonitor for CuMemMon {
                 // copperlist are rare and a single trip-wire suffices.
                 let (component_id, viol) = drained[0];
                 let name = self.component_name(component_id);
-                let msg = format_rt_violation_message(name, viol);
-                error!(ctx, "{}", msg.as_str());
-                return Err(CuError::from(msg.as_str()));
+                return report_rt_violation(ctx, name, viol);
             }
         }
 
@@ -279,7 +277,7 @@ impl CuMonitor for CuMemMon {
             return Ok(());
         }
         let n = self.cl_counter.fetch_add(1, Ordering::Relaxed) + 1;
-        if n % self.summary_every != 0 {
+        if !n.is_multiple_of(self.summary_every) {
             return Ok(());
         }
         // Snapshot under the lock; format without holding it.
@@ -430,9 +428,7 @@ impl CuMonitor for CuMemMon {
     }
 }
 
-fn drain_rt_violations(
-    pending: &mut [Option<RtViolation>],
-) -> Vec<(ComponentId, RtViolation)> {
+fn drain_rt_violations(pending: &mut [Option<RtViolation>]) -> Vec<(ComponentId, RtViolation)> {
     let mut out = Vec::new();
     for (idx, slot) in pending.iter_mut().enumerate() {
         if let Some(v) = slot.take() {
@@ -453,13 +449,24 @@ fn format_rt_violation_message(name: &str, viol: RtViolation) -> String {
     )
 }
 
+#[cfg(feature = "std")]
+fn report_rt_violation(ctx: &CuContext, name: &str, viol: RtViolation) -> CuResult<()> {
+    let msg = format_rt_violation_message(name, viol);
+    error!(ctx, "{}", msg.as_str());
+    Err(CuError::from(msg.as_str()))
+}
+
 #[cfg(not(feature = "std"))]
-fn format_rt_violation_message(name: &str, viol: RtViolation) -> &'static str {
-    // In no_std builds we don't allocate the message; emit a fixed sentinel
-    // so the user still sees *that* a violation happened. The kind/component
-    // is already reported via error!(...) immediately before this is sent.
-    let _ = (name, viol);
-    "cu_memmon: realtime allocation violation"
+fn report_rt_violation(ctx: &CuContext, name: &str, viol: RtViolation) -> CuResult<()> {
+    error!(
+        ctx,
+        "cu_memmon: realtime violation: component {} allocated {} B (deallocated {} B) during {}",
+        name,
+        viol.allocated,
+        viol.deallocated,
+        step_label(viol.step),
+    );
+    Err(CuError::from("cu_memmon: realtime allocation violation"))
 }
 
 #[cfg(all(feature = "std", debug_assertions))]
@@ -527,19 +534,24 @@ mod tests {
 
         assert_eq!(c.lifetime_alloc(), 1024 + 256);
         assert_eq!(c.lifetime_dealloc(), 256 + 1024);
-        assert_eq!(
-            c.lifetime_alloc().saturating_sub(c.lifetime_dealloc()),
-            0
-        );
+        assert_eq!(c.lifetime_alloc().saturating_sub(c.lifetime_dealloc()), 0);
     }
 
     #[test]
     fn drain_rt_violations_takes_pending_only() {
         let mut pending = alloc::vec![
             None,
-            Some(RtViolation { step: CuComponentState::Process, allocated: 128, deallocated: 0 }),
+            Some(RtViolation {
+                step: CuComponentState::Process,
+                allocated: 128,
+                deallocated: 0
+            }),
             None,
-            Some(RtViolation { step: CuComponentState::Preprocess, allocated: 32, deallocated: 0 }),
+            Some(RtViolation {
+                step: CuComponentState::Preprocess,
+                allocated: 32,
+                deallocated: 0
+            }),
         ];
         let drained = drain_rt_violations(&mut pending);
         assert_eq!(drained.len(), 2);
