@@ -2419,7 +2419,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 );
                                 let task = &mut self.copper_runtime.tasks.#task_index;
                                 ctx.set_current_task(#index);
-                                if let Err(error) = task.start(&ctx) {
+                                let __cu_alloc_scope = cu29::monitoring::ScopedAllocCounter::new();
+                                let __cu_step_result = task.start(&ctx);
+                                self.copper_runtime.monitor.observe_alloc(
+                                    cu29::monitoring::ComponentId::new(#index),
+                                    CuComponentState::Start,
+                                    __cu_alloc_scope.allocated(),
+                                    __cu_alloc_scope.deallocated(),
+                                );
+                                drop(__cu_alloc_scope);
+                                if let Err(error) = __cu_step_result {
                                     #monitoring_action
                                 }
                             }
@@ -2477,7 +2486,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 );
                                 let task = &mut self.copper_runtime.tasks.#task_index;
                                 ctx.set_current_task(#index);
-                                if let Err(error) = task.stop(&ctx) {
+                                let __cu_alloc_scope = cu29::monitoring::ScopedAllocCounter::new();
+                                let __cu_step_result = task.stop(&ctx);
+                                self.copper_runtime.monitor.observe_alloc(
+                                    cu29::monitoring::ComponentId::new(#index),
+                                    CuComponentState::Stop,
+                                    __cu_alloc_scope.allocated(),
+                                    __cu_alloc_scope.deallocated(),
+                                );
+                                drop(__cu_alloc_scope);
+                                if let Err(error) = __cu_step_result {
                                     #monitoring_action
                                 }
                             }
@@ -2531,10 +2549,18 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     culistid: None,
                                 });
                                 ctx.set_current_task(#index);
+                                let __cu_alloc_scope = cu29::monitoring::ScopedAllocCounter::new();
                                 let maybe_error = {
                                     #rt_guard
                                     tasks.#task_index.preprocess(&ctx)
                                 };
+                                monitor.observe_alloc(
+                                    cu29::monitoring::ComponentId::new(#index),
+                                    CuComponentState::Preprocess,
+                                    __cu_alloc_scope.allocated(),
+                                    __cu_alloc_scope.deallocated(),
+                                );
+                                drop(__cu_alloc_scope);
                                 if let Err(error) = maybe_error {
                                     #monitoring_action
                                 }
@@ -2589,10 +2615,18 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     culistid: None,
                                 });
                                 ctx.set_current_task(#index);
+                                let __cu_alloc_scope = cu29::monitoring::ScopedAllocCounter::new();
                                 let maybe_error = {
                                     #rt_guard
                                     tasks.#task_index.postprocess(&ctx)
                                 };
+                                monitor.observe_alloc(
+                                    cu29::monitoring::ComponentId::new(#index),
+                                    CuComponentState::Postprocess,
+                                    __cu_alloc_scope.allocated(),
+                                    __cu_alloc_scope.deallocated(),
+                                );
+                                drop(__cu_alloc_scope);
                                 if let Err(error) = maybe_error {
                                     #monitoring_action
                                 }
@@ -8348,6 +8382,7 @@ fn generate_task_execution_tokens(
                 }
 
                 #output_start_time
+                let __cu_alloc_scope = cu29::monitoring::ScopedAllocCounter::new();
                 let result = {
                     let cumsg_output = #source_slot_match_fn_ident::<
                         _,
@@ -8358,6 +8393,13 @@ fn generate_task_execution_tokens(
                     #task_instance.process(&ctx, cumsg_output)
                 };
                 #output_end_time
+                monitor.observe_alloc(
+                    cu29::monitoring::ComponentId::new(#tid),
+                    CuComponentState::Process,
+                    __cu_alloc_scope.allocated(),
+                    __cu_alloc_scope.deallocated(),
+                );
+                drop(__cu_alloc_scope);
                 result
             };
 
@@ -8465,12 +8507,20 @@ fn generate_task_execution_tokens(
                                 culistid: Some(clid),
                             });
                             #output_start_time
+                            let __cu_alloc_scope = cu29::monitoring::ScopedAllocCounter::new();
                             let result = {
                                 #rt_guard
                                 ctx.set_current_task(#tid);
                                 #task_instance.process(&ctx, cumsg_input)
                             };
                             #output_end_time
+                            monitor.observe_alloc(
+                                cu29::monitoring::ComponentId::new(#tid),
+                                CuComponentState::Process,
+                                __cu_alloc_scope.allocated(),
+                                __cu_alloc_scope.deallocated(),
+                            );
+                            drop(__cu_alloc_scope);
                             result
                         } else {
                             Ok(())
@@ -8571,6 +8621,7 @@ fn generate_task_execution_tokens(
                 }
 
                 #output_start_time
+                let __cu_alloc_scope = cu29::monitoring::ScopedAllocCounter::new();
                 let result = {
                     let cumsg_output = #regular_slot_match_fn_ident::<
                         _,
@@ -8581,6 +8632,13 @@ fn generate_task_execution_tokens(
                     #task_instance.process(&ctx, cumsg_input, cumsg_output)
                 };
                 #output_end_time
+                monitor.observe_alloc(
+                    cu29::monitoring::ComponentId::new(#tid),
+                    CuComponentState::Process,
+                    __cu_alloc_scope.allocated(),
+                    __cu_alloc_scope.deallocated(),
+                );
+                drop(__cu_alloc_scope);
                 result
             };
 
