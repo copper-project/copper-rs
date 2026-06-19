@@ -2097,7 +2097,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             if !task_specs.background_flags[task_index] {
                 continue;
             }
-            // "rt" is reserved for the parallel-rt engine and is never task-bound.
+            // "rt" is the default pool applied to every task running under the
+            // parallel-rt engine; a task only deviates from it by setting
+            // `background: true` and picking a different pool here. The "rt"
+            // pool itself is dedicated to the parallel-rt stage workers, so it
+            // is rejected as a per-task override.
             if pool_name == RT_POOL {
                 return return_error(format!(
                     "Background task '{}' may not use the reserved '{RT_POOL}' thread pool; it is dedicated to the parallel-rt execution engine.",
