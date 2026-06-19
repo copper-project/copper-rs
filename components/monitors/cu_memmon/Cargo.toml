@@ -25,6 +25,7 @@ path = "src/lib.rs"
 
 [dependencies]
 cu29 = { path = "../../../core/cu29", version = "1.0.0-rc2", default-features = false }
+spin = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }
