@@ -35,6 +35,10 @@
 //!     Ok(Self { bus: res.bus })
 //! }
 //! ```
+//! Or use the `resources!` macro. `Shared<T>` bindings clone the registered
+//! `Arc<T>` so tasks can keep a shared handle without borrowing from the
+//! manager for their full lifetime. `Borrowed<T>` bindings borrow from the
+//! manager directly.
 //! Otherwise, use config to point to the right board resource and you're done.
 
 use crate::config::ComponentConfig;
@@ -69,7 +73,6 @@ impl ResourceEntry {
         }
     }
 
-    #[cfg(feature = "std")]
     fn as_shared_arc<T: 'static + Send + Sync>(&self) -> Option<Arc<T>> {
         match self {
             ResourceEntry::Shared(arc) => Arc::downcast::<T>(arc.clone()).ok(),
@@ -328,7 +331,6 @@ impl ResourceManager {
     }
 
     /// Borrow a shared `Arc`-backed resource by key, cloning the `Arc` for the caller.
-    #[cfg(feature = "std")]
     pub fn borrow_shared_arc<T: 'static + Send + Sync>(
         &self,
         key: ResourceKey<T>,

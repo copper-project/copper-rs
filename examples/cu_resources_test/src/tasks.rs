@@ -44,7 +44,7 @@ pub struct SensorTask {
 impl Freezable for SensorTask {}
 
 impl CuTask for SensorTask {
-    type Resources<'r> = SensorResources<'r>;
+    type Resources<'r> = SensorResources;
     type Input<'m> = CuMsg<Tick>;
     type Output<'m> = CuMsg<BusReading>;
 
@@ -57,9 +57,9 @@ impl CuTask for SensorTask {
         } = resources;
         Ok(Self {
             counter,
-            bus: bus.0.clone(),
-            tag: tag.0.clone(),
-            global: global.0.clone(),
+            bus: (*bus).clone(),
+            tag: (*tag).clone(),
+            global: (*global).clone(),
         })
     }
 
@@ -98,14 +98,14 @@ impl Freezable for InspectorTask {}
 
 impl CuSinkTask for InspectorTask {
     type Input<'m> = CuMsg<BusReading>;
-    type Resources<'r> = InspectorResources<'r>;
+    type Resources<'r> = InspectorResources;
 
     fn new(_config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self> {
         let inspector_resources::Resources { bus, note, global } = resources;
         Ok(Self {
-            bus: bus.0.clone(),
-            note: note.0.clone(),
-            global: global.0.clone(),
+            bus: (*bus).clone(),
+            note: (*note).clone(),
+            global: (*global).clone(),
         })
     }
 
@@ -158,5 +158,5 @@ mod inspector_resources {
     });
 }
 
-type SensorResources<'r> = sensor_resources::Resources<'r>;
-type InspectorResources<'r> = inspector_resources::Resources<'r>;
+type SensorResources = sensor_resources::Resources;
+type InspectorResources = inspector_resources::Resources;

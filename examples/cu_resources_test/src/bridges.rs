@@ -43,7 +43,7 @@ impl Freezable for StatsBridge {}
 impl CuBridge for StatsBridge {
     type Tx = TxChannels;
     type Rx = RxChannels;
-    type Resources<'r> = StatsBridgeResources<'r>;
+    type Resources<'r> = StatsBridgeResources;
 
     fn new(
         _config: Option<&ComponentConfig>,
@@ -56,9 +56,9 @@ impl CuBridge for StatsBridge {
     {
         let stats_bridge_resources::Resources { bus, tag, global } = resources;
         Ok(Self {
-            bus: bus.0.clone(),
-            tag: tag.0.clone(),
-            global: global.0.clone(),
+            bus: (*bus).clone(),
+            tag: (*tag).clone(),
+            global: (*global).clone(),
         })
     }
 
@@ -99,4 +99,4 @@ impl CuBridge for StatsBridge {
     }
 }
 
-type StatsBridgeResources<'r> = stats_bridge_resources::Resources<'r>;
+type StatsBridgeResources = stats_bridge_resources::Resources;
