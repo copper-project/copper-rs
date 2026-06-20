@@ -2,7 +2,10 @@ use cu29::prelude::*;
 use spin::Mutex;
 
 use crate::board::{BdshotBoard, encode_frame};
-#[cfg(feature = "messages-only")]
+#[cfg(all(
+    feature = "messages-only",
+    not(any(feature = "rp2350", feature = "stm32h7"))
+))]
 use crate::messages::DShotTelemetry;
 use crate::messages::{EscCommand, EscTelemetry};
 
@@ -29,7 +32,10 @@ rx_channels! {
 
 const MAX_ESC_CHANNELS: usize = 4;
 
-#[cfg(feature = "messages-only")]
+#[cfg(all(
+    feature = "messages-only",
+    not(any(feature = "rp2350", feature = "stm32h7"))
+))]
 fn telemetry_status(idx: usize, telemetry: Option<DShotTelemetry>) -> CuCompactString {
     match telemetry {
         Some(DShotTelemetry::Erpm(v)) => format!("esc{} {}rpm", idx, v).into(),
@@ -254,13 +260,19 @@ where
         }
         let telemetry_msg: &mut CuMsg<EscTelemetry> = msg.downcast_mut()?;
         if let Some(sample) = self.telemetry_cache[idx].take() {
-            #[cfg(feature = "messages-only")]
+            #[cfg(all(
+                feature = "messages-only",
+                not(any(feature = "rp2350", feature = "stm32h7"))
+            ))]
             telemetry_msg
                 .metadata
                 .set_status(telemetry_status(idx, sample.sample));
             telemetry_msg.set_payload(sample);
         } else {
-            #[cfg(feature = "messages-only")]
+            #[cfg(all(
+                feature = "messages-only",
+                not(any(feature = "rp2350", feature = "stm32h7"))
+            ))]
             telemetry_msg
                 .metadata
                 .set_status(telemetry_status(idx, None));

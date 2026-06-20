@@ -19,7 +19,7 @@ embedded_targets = ["thumbv7em-none-eabihf"]
 
 [features]
 default = ["defmt"]
-defmt = ["dep:defmt", "cu29/defmt", "cu-bdshot/defmt", "stm32h7xx-hal/defmt"]
+defmt = ["dep:defmt", "cu-bdshot/defmt", "stm32h7xx-hal/defmt"]
 textlogs = ["cu29/textlogs", "cu-bdshot/textlogs", "cu-sdlogger/textlogs"]
 
 [dependencies]
