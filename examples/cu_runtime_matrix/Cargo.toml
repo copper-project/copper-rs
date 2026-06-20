@@ -30,6 +30,7 @@ serde_json = { workspace = true }
 [features]
 async-cl-io = ["cu29/async-cl-io"]
 parallel-rt = ["cu29/parallel-rt"]
+rt-scheduling = ["cu29/rt-scheduling"]
 
 [package.metadata.cargo-shear]
 ignored = ["bincode", "serde"]

@@ -16,13 +16,15 @@
         section_size_mib: 4,
         keyframe_interval: 2,
     ),
-    resources: [
-        (
-            id: "threadpool",
-            provider: "cu29::resource::ThreadPoolBundle",
-            config: {"threads": 2},
-        ),
-    ],
+    runtime: (
+        thread_pools: [
+            (
+                id: "background",
+                threads: 2,
+            ),
+            (id: "rt", threads: 1),
+        ],
+    ),
     tasks: [
         (
             id: "otm_src",

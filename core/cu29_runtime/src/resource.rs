@@ -429,64 +429,6 @@ impl<B: ResourceBundleDecl> BundleContext<B> {
     }
 }
 
-#[cfg(feature = "std")]
-pub struct ThreadPoolBundle;
-
-#[cfg(feature = "std")]
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-#[repr(usize)]
-pub enum ThreadPoolId {
-    BgThreads,
-}
-
-#[cfg(feature = "std")]
-impl ResourceId for ThreadPoolId {
-    const COUNT: usize = 1;
-
-    fn index(self) -> usize {
-        self as usize
-    }
-}
-
-#[cfg(feature = "std")]
-impl ResourceBundleDecl for ThreadPoolBundle {
-    type Id = ThreadPoolId;
-}
-
-#[cfg(feature = "std")]
-impl NamedResourceBundleDecl for ThreadPoolBundle {
-    const NAMES: &'static [&'static str] = &["bg_threads"];
-}
-
-#[cfg(feature = "std")]
-impl ResourceBundle for ThreadPoolBundle {
-    fn build(
-        bundle: BundleContext<Self>,
-        config: Option<&ComponentConfig>,
-        manager: &mut ResourceManager,
-    ) -> CuResult<()> {
-        use rayon::ThreadPoolBuilder;
-
-        const DEFAULT_THREADS: usize = 2;
-        let threads: usize = match config {
-            Some(cfg) => cfg
-                .get::<u64>("threads")?
-                .map(|v| v as usize)
-                .unwrap_or(DEFAULT_THREADS),
-            None => DEFAULT_THREADS,
-        };
-
-        let pool = ThreadPoolBuilder::new()
-            .num_threads(threads)
-            .build()
-            .map_err(|e| CuError::from(format!("Failed to build threadpool: {e}")))?;
-
-        let key = bundle.key::<rayon::ThreadPool>(ThreadPoolId::BgThreads);
-        manager.add_shared(key, Arc::new(pool))?;
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

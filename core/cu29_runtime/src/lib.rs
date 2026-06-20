@@ -44,3 +44,5 @@ pub mod resource;
 #[cfg(feature = "std")]
 pub mod simulation;
 pub(crate) mod sync_compat;
+#[cfg(feature = "std")]
+pub mod thread_pool;
