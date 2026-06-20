@@ -1,11 +1,7 @@
 (
-    resources: [
-        (
-            id: "threadpool",
-            provider: "cu29::resource::ThreadPoolBundle",
-            config: {"threads": 1},
-        ),
-    ],
+    runtime: (
+        thread_pools: [(id: "background", threads: 1)],
+    ),
     tasks: [
         (
             id: "src",

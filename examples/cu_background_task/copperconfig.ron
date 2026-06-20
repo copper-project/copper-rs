@@ -1,4 +1,13 @@
 (
+    runtime: (
+        thread_pools: [
+            (
+                id: "background",
+                threads: 1,
+            ),
+            (id: "slow", threads: 1),
+        ],
+    ),
     tasks: [
         (
             id: "task0",
@@ -13,7 +22,7 @@
         (
             id: "task2",
             type: "tasks::ExampleTask",
-            background: true,
+            background: (pool: "slow"),
             config: {"sleep_duration_ms": 250},
         ),
     ],
