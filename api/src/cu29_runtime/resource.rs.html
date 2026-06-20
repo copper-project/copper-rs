@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_runtime/src/resource.rs`."><title>resource.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-1ed95124.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_runtime" data-themes="" data-resource-suffix="" data-rustdoc-version="1.98.0-nightly (c1b22f44c 2026-06-17)" data-channel="nightly" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">cu29_runtime/</div>resource.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Resource descriptors and utilities to hand resources to tasks and bridges.
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_runtime/src/resource.rs`."><title>resource.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-1ed95124.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_runtime" data-themes="" data-resource-suffix="" data-rustdoc-version="1.98.0-nightly (f428d123a 2026-06-19)" data-channel="nightly" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-e779430a.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">cu29_runtime/</div>resource.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Resource descriptors and utilities to hand resources to tasks and bridges.
 <a href=#2 id=2 data-nosnippet>2</a>//! User view: in `copperconfig.ron`, map the binding names your tasks/bridges
 <a href=#3 id=3 data-nosnippet>3</a>//! expect to the resources exported by your board bundle. Exclusive things
 <a href=#4 id=4 data-nosnippet>4</a>//! (like a serial port) should be bound once; shared things (like a telemetry
@@ -427,99 +427,41 @@
 <a href=#427 id=427 data-nosnippet>427</a>    }
 <a href=#428 id=428 data-nosnippet>428</a>}
 <a href=#429 id=429 data-nosnippet>429</a>
-<a href=#430 id=430 data-nosnippet>430</a><span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
-<a href=#431 id=431 data-nosnippet>431</a></span><span class="kw">pub struct </span>ThreadPoolBundle;
-<a href=#432 id=432 data-nosnippet>432</a>
-<a href=#433 id=433 data-nosnippet>433</a><span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
-<a href=#434 id=434 data-nosnippet>434</a>#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-<a href=#435 id=435 data-nosnippet>435</a>#[repr(usize)]
-<a href=#436 id=436 data-nosnippet>436</a></span><span class="kw">pub enum </span>ThreadPoolId {
-<a href=#437 id=437 data-nosnippet>437</a>    BgThreads,
-<a href=#438 id=438 data-nosnippet>438</a>}
-<a href=#439 id=439 data-nosnippet>439</a>
-<a href=#440 id=440 data-nosnippet>440</a><span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
-<a href=#441 id=441 data-nosnippet>441</a></span><span class="kw">impl </span>ResourceId <span class="kw">for </span>ThreadPoolId {
-<a href=#442 id=442 data-nosnippet>442</a>    <span class="kw">const </span>COUNT: usize = <span class="number">1</span>;
+<a href=#430 id=430 data-nosnippet>430</a><span class="attr">#[cfg(test)]
+<a href=#431 id=431 data-nosnippet>431</a></span><span class="kw">mod </span>tests {
+<a href=#432 id=432 data-nosnippet>432</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#433 id=433 data-nosnippet>433</a>
+<a href=#434 id=434 data-nosnippet>434</a>    <span class="attr">#[derive(Copy, Clone, Eq, PartialEq)]
+<a href=#435 id=435 data-nosnippet>435</a>    #[repr(usize)]
+<a href=#436 id=436 data-nosnippet>436</a>    </span><span class="kw">enum </span>DummyBundleId {
+<a href=#437 id=437 data-nosnippet>437</a>        Uart0,
+<a href=#438 id=438 data-nosnippet>438</a>        I2c1,
+<a href=#439 id=439 data-nosnippet>439</a>    }
+<a href=#440 id=440 data-nosnippet>440</a>
+<a href=#441 id=441 data-nosnippet>441</a>    <span class="kw">impl </span>ResourceId <span class="kw">for </span>DummyBundleId {
+<a href=#442 id=442 data-nosnippet>442</a>        <span class="kw">const </span>COUNT: usize = <span class="number">2</span>;
 <a href=#443 id=443 data-nosnippet>443</a>
-<a href=#444 id=444 data-nosnippet>444</a>    <span class="kw">fn </span>index(<span class="self">self</span>) -&gt; usize {
-<a href=#445 id=445 data-nosnippet>445</a>        <span class="self">self </span><span class="kw">as </span>usize
-<a href=#446 id=446 data-nosnippet>446</a>    }
-<a href=#447 id=447 data-nosnippet>447</a>}
+<a href=#444 id=444 data-nosnippet>444</a>        <span class="kw">fn </span>index(<span class="self">self</span>) -&gt; usize {
+<a href=#445 id=445 data-nosnippet>445</a>            <span class="self">self </span><span class="kw">as </span>usize
+<a href=#446 id=446 data-nosnippet>446</a>        }
+<a href=#447 id=447 data-nosnippet>447</a>    }
 <a href=#448 id=448 data-nosnippet>448</a>
-<a href=#449 id=449 data-nosnippet>449</a><span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
-<a href=#450 id=450 data-nosnippet>450</a></span><span class="kw">impl </span>ResourceBundleDecl <span class="kw">for </span>ThreadPoolBundle {
-<a href=#451 id=451 data-nosnippet>451</a>    <span class="kw">type </span>Id = ThreadPoolId;
-<a href=#452 id=452 data-nosnippet>452</a>}
-<a href=#453 id=453 data-nosnippet>453</a>
-<a href=#454 id=454 data-nosnippet>454</a><span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
-<a href=#455 id=455 data-nosnippet>455</a></span><span class="kw">impl </span>NamedResourceBundleDecl <span class="kw">for </span>ThreadPoolBundle {
-<a href=#456 id=456 data-nosnippet>456</a>    <span class="kw">const </span>NAMES: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str] = <span class="kw-2">&amp;</span>[<span class="string">"bg_threads"</span>];
-<a href=#457 id=457 data-nosnippet>457</a>}
+<a href=#449 id=449 data-nosnippet>449</a>    <span class="kw">struct </span>DummyBundle;
+<a href=#450 id=450 data-nosnippet>450</a>
+<a href=#451 id=451 data-nosnippet>451</a>    <span class="kw">impl </span>ResourceBundleDecl <span class="kw">for </span>DummyBundle {
+<a href=#452 id=452 data-nosnippet>452</a>        <span class="kw">type </span>Id = DummyBundleId;
+<a href=#453 id=453 data-nosnippet>453</a>    }
+<a href=#454 id=454 data-nosnippet>454</a>
+<a href=#455 id=455 data-nosnippet>455</a>    <span class="kw">impl </span>NamedResourceBundleDecl <span class="kw">for </span>DummyBundle {
+<a href=#456 id=456 data-nosnippet>456</a>        <span class="kw">const </span>NAMES: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str] = <span class="kw-2">&amp;</span>[<span class="string">"uart0"</span>, <span class="string">"i2c1"</span>];
+<a href=#457 id=457 data-nosnippet>457</a>    }
 <a href=#458 id=458 data-nosnippet>458</a>
-<a href=#459 id=459 data-nosnippet>459</a><span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
-<a href=#460 id=460 data-nosnippet>460</a></span><span class="kw">impl </span>ResourceBundle <span class="kw">for </span>ThreadPoolBundle {
-<a href=#461 id=461 data-nosnippet>461</a>    <span class="kw">fn </span>build(
-<a href=#462 id=462 data-nosnippet>462</a>        bundle: BundleContext&lt;<span class="self">Self</span>&gt;,
-<a href=#463 id=463 data-nosnippet>463</a>        config: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ComponentConfig&gt;,
-<a href=#464 id=464 data-nosnippet>464</a>        manager: <span class="kw-2">&amp;mut </span>ResourceManager,
-<a href=#465 id=465 data-nosnippet>465</a>    ) -&gt; CuResult&lt;()&gt; {
-<a href=#466 id=466 data-nosnippet>466</a>        <span class="kw">use </span>rayon::ThreadPoolBuilder;
-<a href=#467 id=467 data-nosnippet>467</a>
-<a href=#468 id=468 data-nosnippet>468</a>        <span class="kw">const </span>DEFAULT_THREADS: usize = <span class="number">2</span>;
-<a href=#469 id=469 data-nosnippet>469</a>        <span class="kw">let </span>threads: usize = <span class="kw">match </span>config {
-<a href=#470 id=470 data-nosnippet>470</a>            <span class="prelude-val">Some</span>(cfg) =&gt; cfg
-<a href=#471 id=471 data-nosnippet>471</a>                .get::&lt;u64&gt;(<span class="string">"threads"</span>)<span class="question-mark">?
-<a href=#472 id=472 data-nosnippet>472</a>                </span>.map(|v| v <span class="kw">as </span>usize)
-<a href=#473 id=473 data-nosnippet>473</a>                .unwrap_or(DEFAULT_THREADS),
-<a href=#474 id=474 data-nosnippet>474</a>            <span class="prelude-val">None </span>=&gt; DEFAULT_THREADS,
-<a href=#475 id=475 data-nosnippet>475</a>        };
-<a href=#476 id=476 data-nosnippet>476</a>
-<a href=#477 id=477 data-nosnippet>477</a>        <span class="kw">let </span>pool = ThreadPoolBuilder::new()
-<a href=#478 id=478 data-nosnippet>478</a>            .num_threads(threads)
-<a href=#479 id=479 data-nosnippet>479</a>            .build()
-<a href=#480 id=480 data-nosnippet>480</a>            .map_err(|e| CuError::from(<span class="macro">format!</span>(<span class="string">"Failed to build threadpool: {e}"</span>)))<span class="question-mark">?</span>;
-<a href=#481 id=481 data-nosnippet>481</a>
-<a href=#482 id=482 data-nosnippet>482</a>        <span class="kw">let </span>key = bundle.key::&lt;rayon::ThreadPool&gt;(ThreadPoolId::BgThreads);
-<a href=#483 id=483 data-nosnippet>483</a>        manager.add_shared(key, Arc::new(pool))<span class="question-mark">?</span>;
-<a href=#484 id=484 data-nosnippet>484</a>        <span class="prelude-val">Ok</span>(())
-<a href=#485 id=485 data-nosnippet>485</a>    }
-<a href=#486 id=486 data-nosnippet>486</a>}
-<a href=#487 id=487 data-nosnippet>487</a>
-<a href=#488 id=488 data-nosnippet>488</a><span class="attr">#[cfg(test)]
-<a href=#489 id=489 data-nosnippet>489</a></span><span class="kw">mod </span>tests {
-<a href=#490 id=490 data-nosnippet>490</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#491 id=491 data-nosnippet>491</a>
-<a href=#492 id=492 data-nosnippet>492</a>    <span class="attr">#[derive(Copy, Clone, Eq, PartialEq)]
-<a href=#493 id=493 data-nosnippet>493</a>    #[repr(usize)]
-<a href=#494 id=494 data-nosnippet>494</a>    </span><span class="kw">enum </span>DummyBundleId {
-<a href=#495 id=495 data-nosnippet>495</a>        Uart0,
-<a href=#496 id=496 data-nosnippet>496</a>        I2c1,
-<a href=#497 id=497 data-nosnippet>497</a>    }
-<a href=#498 id=498 data-nosnippet>498</a>
-<a href=#499 id=499 data-nosnippet>499</a>    <span class="kw">impl </span>ResourceId <span class="kw">for </span>DummyBundleId {
-<a href=#500 id=500 data-nosnippet>500</a>        <span class="kw">const </span>COUNT: usize = <span class="number">2</span>;
-<a href=#501 id=501 data-nosnippet>501</a>
-<a href=#502 id=502 data-nosnippet>502</a>        <span class="kw">fn </span>index(<span class="self">self</span>) -&gt; usize {
-<a href=#503 id=503 data-nosnippet>503</a>            <span class="self">self </span><span class="kw">as </span>usize
-<a href=#504 id=504 data-nosnippet>504</a>        }
-<a href=#505 id=505 data-nosnippet>505</a>    }
-<a href=#506 id=506 data-nosnippet>506</a>
-<a href=#507 id=507 data-nosnippet>507</a>    <span class="kw">struct </span>DummyBundle;
-<a href=#508 id=508 data-nosnippet>508</a>
-<a href=#509 id=509 data-nosnippet>509</a>    <span class="kw">impl </span>ResourceBundleDecl <span class="kw">for </span>DummyBundle {
-<a href=#510 id=510 data-nosnippet>510</a>        <span class="kw">type </span>Id = DummyBundleId;
-<a href=#511 id=511 data-nosnippet>511</a>    }
-<a href=#512 id=512 data-nosnippet>512</a>
-<a href=#513 id=513 data-nosnippet>513</a>    <span class="kw">impl </span>NamedResourceBundleDecl <span class="kw">for </span>DummyBundle {
-<a href=#514 id=514 data-nosnippet>514</a>        <span class="kw">const </span>NAMES: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str] = <span class="kw-2">&amp;</span>[<span class="string">"uart0"</span>, <span class="string">"i2c1"</span>];
-<a href=#515 id=515 data-nosnippet>515</a>    }
-<a href=#516 id=516 data-nosnippet>516</a>
-<a href=#517 id=517 data-nosnippet>517</a>    <span class="attr">#[test]
-<a href=#518 id=518 data-nosnippet>518</a>    </span><span class="kw">fn </span>resource_index_by_name_matches_declared_slot_name() {
-<a href=#519 id=519 data-nosnippet>519</a>        <span class="macro">assert_eq!</span>(DummyBundleId::Uart0.index(), <span class="number">0</span>);
-<a href=#520 id=520 data-nosnippet>520</a>        <span class="macro">assert_eq!</span>(DummyBundleId::I2c1.index(), <span class="number">1</span>);
-<a href=#521 id=521 data-nosnippet>521</a>        <span class="macro">assert_eq!</span>(resource_index_by_name::&lt;DummyBundle&gt;(<span class="string">"uart0"</span>), <span class="number">0</span>);
-<a href=#522 id=522 data-nosnippet>522</a>        <span class="macro">assert_eq!</span>(resource_index_by_name::&lt;DummyBundle&gt;(<span class="string">"i2c1"</span>), <span class="number">1</span>);
-<a href=#523 id=523 data-nosnippet>523</a>    }
-<a href=#524 id=524 data-nosnippet>524</a>}
+<a href=#459 id=459 data-nosnippet>459</a>    <span class="attr">#[test]
+<a href=#460 id=460 data-nosnippet>460</a>    </span><span class="kw">fn </span>resource_index_by_name_matches_declared_slot_name() {
+<a href=#461 id=461 data-nosnippet>461</a>        <span class="macro">assert_eq!</span>(DummyBundleId::Uart0.index(), <span class="number">0</span>);
+<a href=#462 id=462 data-nosnippet>462</a>        <span class="macro">assert_eq!</span>(DummyBundleId::I2c1.index(), <span class="number">1</span>);
+<a href=#463 id=463 data-nosnippet>463</a>        <span class="macro">assert_eq!</span>(resource_index_by_name::&lt;DummyBundle&gt;(<span class="string">"uart0"</span>), <span class="number">0</span>);
+<a href=#464 id=464 data-nosnippet>464</a>        <span class="macro">assert_eq!</span>(resource_index_by_name::&lt;DummyBundle&gt;(<span class="string">"i2c1"</span>), <span class="number">1</span>);
+<a href=#465 id=465 data-nosnippet>465</a>    }
+<a href=#466 id=466 data-nosnippet>466</a>}
 </code></pre></div></section></main></body></html>
