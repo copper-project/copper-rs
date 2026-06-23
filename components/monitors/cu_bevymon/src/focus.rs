@@ -1,6 +1,6 @@
 use bevy::math::Rect;
 use bevy::prelude::*;
-use bevy::ui::UiGlobalTransform;
+use bevy::ui::{ComputedStackIndex, UiGlobalTransform};
 use bevy::window::PrimaryWindow;
 
 const DEFAULT_FOCUSED_BORDER: Color = Color::srgb(0.38, 0.40, 0.43);
@@ -56,7 +56,12 @@ pub(crate) fn update_surface_focus_from_click(
     window: Single<&Window, With<PrimaryWindow>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut focus: ResMut<CuBevyMonFocus>,
-    surfaces: Query<(&ComputedNode, &UiGlobalTransform, &CuBevyMonSurfaceNode)>,
+    surfaces: Query<(
+        &ComputedNode,
+        &UiGlobalTransform,
+        &ComputedStackIndex,
+        &CuBevyMonSurfaceNode,
+    )>,
 ) {
     if !mouse_buttons.just_pressed(MouseButton::Left) {
         return;
@@ -68,9 +73,9 @@ pub(crate) fn update_surface_focus_from_click(
 
     let next_focus = surfaces
         .iter()
-        .filter(|(node, transform, _)| node.contains_point(**transform, cursor))
-        .max_by_key(|(node, _, _)| node.stack_index())
-        .map(|(_, _, surface)| surface.0);
+        .filter(|(node, transform, _, _)| node.contains_point(**transform, cursor))
+        .max_by_key(|(_, _, stack_index, _)| stack_index.0)
+        .map(|(_, _, _, surface)| surface.0);
 
     if let Some(surface) = next_focus {
         focus.0 = surface;
