@@ -33,7 +33,7 @@ jobs:
     outputs:
       image: ${{ steps.image_ref.outputs.image }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - id: registry_access
@@ -121,7 +121,7 @@ jobs:
     outputs:
       image: ${{ steps.image_ref.outputs.image }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - id: registry_access
@@ -213,7 +213,7 @@ jobs:
     env:
       WORKSPACE_SCOPE: workspace
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -241,7 +241,7 @@ jobs:
     env:
       WORKSPACE_SCOPE: workspace
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -295,7 +295,7 @@ jobs:
       PUBLIC_API_VERSION: "0.51.0"
       PUBLIC_API_TOOLCHAIN: nightly
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
@@ -316,7 +316,7 @@ jobs:
     name: Format Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt

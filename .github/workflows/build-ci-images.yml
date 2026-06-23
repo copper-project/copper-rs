@@ -24,7 +24,7 @@ jobs:
     name: Linux CI Image
     runs-on: ubuntu-latest-m
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: image_refs
         shell: bash
         run: |
@@ -63,7 +63,7 @@ jobs:
     name: Linux CUDA CI Image
     runs-on: ubuntu-latest-m
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: image_refs
         shell: bash
         run: |
