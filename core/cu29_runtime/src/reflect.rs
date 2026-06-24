@@ -8,6 +8,17 @@ use alloc::vec::Vec;
 
 #[cfg(feature = "reflect")]
 pub use bevy_reflect::*;
+#[cfg(feature = "reflect")]
+pub use bevy_reflect::{
+    array::{Array, ArrayInfo},
+    enums::{Enum, EnumInfo, VariantInfo, VariantType},
+    list::{List, ListInfo},
+    map::{Map, MapInfo},
+    set::{Set, SetInfo},
+    structs::{Struct, StructInfo},
+    tuple::{Tuple, TupleInfo},
+    tuple_struct::{TupleStruct, TupleStructInfo},
+};
 
 #[cfg(feature = "reflect")]
 pub trait ReflectTypePath: TypePath {}
