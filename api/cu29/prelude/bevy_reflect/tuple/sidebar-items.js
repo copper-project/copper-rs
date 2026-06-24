@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["tuple_apply","tuple_debug","tuple_partial_cmp","tuple_partial_eq","tuple_try_apply"],"struct":["DynamicTuple","TupleFieldIter","TupleInfo"],"trait":["GetTupleField","Tuple"]};

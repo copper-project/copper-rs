@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["struct_debug","struct_partial_cmp","struct_partial_eq"],"struct":["DynamicStruct","FieldIter","StructInfo"],"trait":["GetField","Struct"]};

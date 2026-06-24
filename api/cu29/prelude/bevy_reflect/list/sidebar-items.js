@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["list_apply","list_debug","list_hash","list_partial_cmp","list_partial_eq","list_try_apply"],"struct":["DynamicList","ListInfo","ListIter"],"trait":["List"]};

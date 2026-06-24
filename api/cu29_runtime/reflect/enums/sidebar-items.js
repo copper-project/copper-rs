@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["DynamicVariant","VariantField","VariantInfo","VariantInfoError","VariantType"],"fn":["enum_debug","enum_hash","enum_partial_cmp","enum_partial_eq"],"struct":["DynamicEnum","EnumInfo","StructVariantInfo","TupleVariantInfo","UnitVariantInfo","VariantFieldIter"],"trait":["Enum"]};

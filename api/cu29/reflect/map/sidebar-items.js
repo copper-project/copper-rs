@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["map_apply","map_debug","map_partial_cmp","map_partial_eq","map_try_apply"],"struct":["DynamicMap","MapInfo"],"trait":["Map"]};
