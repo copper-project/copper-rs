@@ -254,7 +254,7 @@ fn setup_scene(
     commands.spawn((
         DirectionalLight {
             illuminance: 16_000.0,
-            shadows_enabled: true,
+            shadow_maps_enabled: true,
             ..default()
         },
         Transform::from_xyz(8.0, 10.0, 6.0).looking_at(Vec3::ZERO, Vec3::Y),
@@ -360,7 +360,7 @@ fn spawn_demo_layout(
                     DemoHudText,
                     Text::new(""),
                     TextFont {
-                        font_size: 14.0,
+                        font_size: FontSize::Px(14.0),
                         ..default()
                     },
                     TextColor(Color::WHITE),
