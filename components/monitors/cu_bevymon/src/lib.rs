@@ -227,7 +227,7 @@ fn render_terminal_to_handle(
 
     let width = context.backend().get_pixmap_width() as u32;
     let height = context.backend().get_pixmap_height() as u32;
-    let Some(image) = images.get_mut(&texture.0) else {
+    let Some(mut image) = images.get_mut(&texture.0) else {
         return;
     };
 

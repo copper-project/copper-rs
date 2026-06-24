@@ -61,7 +61,7 @@ jobs:
         task: [clippy, test]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -129,7 +129,7 @@ jobs:
         task: [clippy, test]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -195,7 +195,7 @@ jobs:
       WORKSPACE_SCOPE: workspace
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -238,7 +238,7 @@ jobs:
       WORKSPACE_SCOPE: workspace
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -286,7 +286,7 @@ jobs:
       WORKSPACE_SCOPE: workspace
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -350,7 +350,7 @@ jobs:
         task: [test]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -418,7 +418,7 @@ jobs:
       WORKSPACE_SCOPE: core
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -478,7 +478,7 @@ jobs:
       WORKSPACE_SCOPE: workspace
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -525,7 +525,7 @@ jobs:
       WORKSPACE_SCOPE: workspace
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -576,7 +576,7 @@ jobs:
       WORKSPACE_SCOPE: workspace
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -645,7 +645,7 @@ jobs:
         target_os: [macos, windows]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -709,7 +709,7 @@ jobs:
       WORKSPACE_SCOPE: workspace
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -767,7 +767,7 @@ jobs:
       WORKSPACE_SCOPE: workspace
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -823,7 +823,7 @@ jobs:
       WORKSPACE_SCOPE: workspace
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
