@@ -24,9 +24,7 @@ cuda = ["candle-core/cuda", "candle-nn/cuda"]
 
 [dependencies]
 cu29 = { workspace = true, features = ["log-level-debug", "textlogs"] }
-cu-gstreamer = { workspace = true, features = [
-  "gst",
-] }
+cu-gstreamer = { workspace = true, features = ["gst"] }
 cu-sensor-payloads = { workspace = true }
 cu-logmon = { workspace = true }
 
