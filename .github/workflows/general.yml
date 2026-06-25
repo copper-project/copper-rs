@@ -261,9 +261,23 @@ jobs:
       - name: Check no_std default members on MSRV
         run: cargo +${{ env.MSRV }} check --no-default-features
 
-  Unit-Tests:
+  Unit-Tests-Other:
     name: Unit Tests
-    needs: [linux-ci-image, linux-cuda-ci-image]
+    uses: ./.github/workflows/reusable-unit-tests.yml
+    secrets: inherit
+    with:
+      toolchain: stable
+      linux_cargo_paths: true
+      linux_disk_workarounds: false
+      linux_runner_label: ubuntu-latest-m
+      windows_runner_label: windows-latest-l
+      run_linux: false
+      run_cuda: false
+      run_other: true
+
+  Unit-Tests-Linux:
+    name: Unit Tests
+    needs: linux-ci-image
     uses: ./.github/workflows/reusable-unit-tests.yml
     secrets: inherit
     with:
@@ -271,9 +285,27 @@ jobs:
       linux_cargo_paths: true
       linux_disk_workarounds: false
       linux_ci_image: ${{ needs.linux-ci-image.outputs.image }}
+      linux_runner_label: ubuntu-latest-m
+      windows_runner_label: windows-latest-l
+      run_linux: true
+      run_cuda: false
+      run_other: false
+
+  Unit-Tests-CUDA:
+    name: Unit Tests
+    needs: linux-cuda-ci-image
+    uses: ./.github/workflows/reusable-unit-tests.yml
+    secrets: inherit
+    with:
+      toolchain: stable
+      linux_cargo_paths: true
+      linux_disk_workarounds: false
       linux_cuda_ci_image: ${{ needs.linux-cuda-ci-image.outputs.image }}
       linux_runner_label: ubuntu-latest-m
       windows_runner_label: windows-latest-l
+      run_linux: false
+      run_cuda: true
+      run_other: false
 
   extra-examples-container:
     name: Remerged Extra Examples
