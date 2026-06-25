@@ -134,10 +134,10 @@ test:
 	cargo +stable nextest run --all-targets --workspace {{WORKSPACE_EXCLUDES}}
 	cargo +stable nextest run --no-default-features
 
-# Check the large examples remerged from the former extra-examples repo.
+# Check the large examples from the former extra-examples repo.
 check-extra-examples: check-extra-examples-host check-extra-examples-embedded
 
-# Host checks for remerged examples. These intentionally stay out of default workspace CI.
+# Host checks for large examples. These intentionally stay out of default workspace CI.
 check-extra-examples-host:
 	cargo +stable check -p cu-rp-balancebot --all-targets
 	cargo +stable check -p cu-flight-controller --all-targets --features textlogs
@@ -145,12 +145,12 @@ check-extra-examples-host:
 	cargo +stable check -p cu-feetech-demo --all-targets
 	cargo +stable check -p cu-gnss-ublox-demo --all-targets --features logexport
 
-# Embedded checks for remerged examples. These mirror the old satellite CI.
+# Embedded checks for large examples. These mirror the old satellite CI.
 check-extra-examples-embedded:
 	cargo +stable check -p cu-elrs-bdshot-demo --target thumbv8m.main-none-eabihf
 	cargo +stable check -p cu-flight-controller --target thumbv7em-none-eabihf --no-default-features --features firmware,textlogs --bin quad
 
-# Check the benchmarks remerged from the former benchmarks repo.
+# Check the benchmarks from the former benchmarks repo.
 check-benchmarks:
 	cargo +stable check -p cu-dorabench --all-targets
 	cargo +stable check -p cu-async-cl-io-bench --all-targets
