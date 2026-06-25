@@ -1,0 +1,47 @@
+[package]
+name = "cu-human-pose"
+description = "Pose estimation demo using Candle and GStreamer camera input"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+publish = false
+
+[package.metadata.copper]
+environments = ["host"]
+ci_exclude_workspace = true
+
+[features]
+default = ["cpu"]
+cpu = []
+cuda = ["candle-core/cuda", "candle-nn/cuda"]
+
+[dependencies]
+cu29 = { workspace = true, features = ["log-level-debug", "textlogs"] }
+cu-gstreamer = { workspace = true, features = [
+  "gst",
+] }
+cu-sensor-payloads = { workspace = true }
+cu-logmon = { workspace = true }
+
+# Candle ML framework
+candle-core = "0.10.2"
+candle-nn = "0.10.2"
+# Visualization
+rerun = { workspace = true }
+
+# Serialization
+bincode = { workspace = true }
+serde = { workspace = true }
+
+# Model download
+hf-hub = "0.5.0"
+
+[package.metadata.cargo-shear]
+ignored = ["cu-logmon"]

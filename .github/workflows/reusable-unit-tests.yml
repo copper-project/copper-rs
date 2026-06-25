@@ -77,19 +77,19 @@ jobs:
       - name: Set features (Linux)
         run: |
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
-      - name: Detect embedded-only crates
+      - name: Detect default workspace exclusions
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ inputs.toolchain }})
-          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+          EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ inputs.toolchain }})
+          echo "WORKSPACE_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run clippy on (ubuntu-26.04 | debug)
         if: matrix.task == 'clippy'
-        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $EMBEDDED_EXCLUDES -- --deny warnings
+        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $WORKSPACE_EXCLUDES -- --deny warnings
       - name: Run clippy with all features on (ubuntu-26.04 | debug)
         if: matrix.task == 'clippy'
-        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES -- --deny warnings
+        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $WORKSPACE_EXCLUDES -- --deny warnings
       - name: Run Unit Tests on (ubuntu-26.04 | debug)
         if: matrix.task == 'test'
-        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $EMBEDDED_EXCLUDES
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $WORKSPACE_EXCLUDES
       - name: Run cu-caterpillar determinism test (determinism_ci)
         if: matrix.task == 'test'
         env:
@@ -144,19 +144,19 @@ jobs:
       - name: Set features (Linux)
         run: |
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
-      - name: Detect embedded-only crates
+      - name: Detect default workspace exclusions
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ inputs.toolchain }})
-          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+          EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ inputs.toolchain }})
+          echo "WORKSPACE_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run clippy on (${{ inputs.linux_runner_label }} | debug)
         if: matrix.task == 'clippy'
-        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $EMBEDDED_EXCLUDES -- --deny warnings
+        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $WORKSPACE_EXCLUDES -- --deny warnings
       - name: Run clippy with all features on (${{ inputs.linux_runner_label }} | debug)
         if: matrix.task == 'clippy'
-        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES -- --deny warnings
+        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $WORKSPACE_EXCLUDES -- --deny warnings
       - name: Run Unit Tests on (${{ inputs.linux_runner_label }} | debug)
         if: matrix.task == 'test'
-        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $EMBEDDED_EXCLUDES
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $WORKSPACE_EXCLUDES
       - name: Run cu-caterpillar determinism test (determinism_ci)
         if: matrix.task == 'test'
         env:
@@ -208,12 +208,12 @@ jobs:
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
           sccache_key_suffix: doctests
-      - name: Detect embedded-only crates
+      - name: Detect default workspace exclusions
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ inputs.toolchain }})
-          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+          EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ inputs.toolchain }})
+          echo "WORKSPACE_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run doctests on (ubuntu-26.04 | debug)
-        run: cargo +${{ inputs.toolchain }} test --doc $WORKSPACE_FLAG $EMBEDDED_EXCLUDES --quiet
+        run: cargo +${{ inputs.toolchain }} test --doc $WORKSPACE_FLAG $WORKSPACE_EXCLUDES --quiet
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
@@ -250,12 +250,12 @@ jobs:
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
           sccache_key_suffix: doctests
-      - name: Detect embedded-only crates
+      - name: Detect default workspace exclusions
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ inputs.toolchain }})
-          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+          EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ inputs.toolchain }})
+          echo "WORKSPACE_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run doctests on (${{ inputs.linux_runner_label }} | debug)
-        run: cargo +${{ inputs.toolchain }} test --doc $WORKSPACE_FLAG $EMBEDDED_EXCLUDES --quiet
+        run: cargo +${{ inputs.toolchain }} test --doc $WORKSPACE_FLAG $WORKSPACE_EXCLUDES --quiet
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
@@ -314,12 +314,12 @@ jobs:
       - name: Set features (Linux)
         run: |
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python,cuda" >> $GITHUB_ENV
-      - name: Detect embedded-only crates
+      - name: Detect default workspace exclusions
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ inputs.toolchain }})
-          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+          EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ inputs.toolchain }})
+          echo "WORKSPACE_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run clippy with all features on (cuda-ubuntu-24.04 | cuda-debug)
-        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES -- --deny warnings
+        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $WORKSPACE_EXCLUDES -- --deny warnings
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
@@ -378,14 +378,14 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           echo "FEATURES_FLAG=" >> $GITHUB_ENV
-      - name: Detect embedded-only crates
+      - name: Detect default workspace exclusions
         if: env.WORKSPACE_SCOPE == 'workspace'
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ inputs.toolchain }})
-          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+          EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ inputs.toolchain }})
+          echo "WORKSPACE_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run Unit Tests on (${{ matrix.target_os == 'windows' && inputs.windows_runner_label || 'macos-latest' }} | debug)
         if: matrix.task == 'test'
-        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $EMBEDDED_EXCLUDES
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $WORKSPACE_EXCLUDES
       - name: Run cu-caterpillar determinism test (determinism_ci)
         if: matrix.task == 'test' && matrix.target_os == 'macos'
         env:
@@ -494,12 +494,12 @@ jobs:
       - name: Set features (Linux)
         run: |
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
-      - name: Detect embedded-only crates
+      - name: Detect default workspace exclusions
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ inputs.toolchain }})
-          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+          EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ inputs.toolchain }})
+          echo "WORKSPACE_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run Unit Tests with all features on (ubuntu-26.04 | debug)
-        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $WORKSPACE_EXCLUDES
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
@@ -540,12 +540,12 @@ jobs:
       - name: Set features (Linux)
         run: |
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
-      - name: Detect embedded-only crates
+      - name: Detect default workspace exclusions
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ inputs.toolchain }})
-          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+          EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ inputs.toolchain }})
+          echo "WORKSPACE_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run Unit Tests with all features on (${{ inputs.linux_runner_label }} | debug)
-        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $WORKSPACE_EXCLUDES
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
@@ -604,18 +604,18 @@ jobs:
       - name: Set features (Linux)
         run: |
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python,cuda" >> $GITHUB_ENV
-      - name: Detect embedded-only crates
+      - name: Detect default workspace exclusions
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ inputs.toolchain }})
-          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+          EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ inputs.toolchain }})
+          echo "WORKSPACE_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run Unit Tests with all features on (cuda-ubuntu-24.04 | cuda-debug)
         run: |
           if ! ldconfig -p 2>/dev/null | grep -q 'libcuda\.so\.1'; then
             echo "libcuda.so.1 not found; compiling all-feature tests without executing them."
-            cargo +${{ inputs.toolchain }} test --no-run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
+            cargo +${{ inputs.toolchain }} test --no-run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $WORKSPACE_EXCLUDES
             exit 0
           fi
-          cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
+          cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $WORKSPACE_EXCLUDES
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
@@ -673,13 +673,13 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           echo "FEATURES_FLAG=" >> $GITHUB_ENV
-      - name: Detect embedded-only crates
+      - name: Detect default workspace exclusions
         if: env.WORKSPACE_SCOPE == 'workspace'
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ inputs.toolchain }})
-          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+          EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ inputs.toolchain }})
+          echo "WORKSPACE_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run Unit Tests with all features on (${{ matrix.target_os == 'windows' && inputs.windows_runner_label || 'macos-latest' }} | debug)
-        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $WORKSPACE_EXCLUDES
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true

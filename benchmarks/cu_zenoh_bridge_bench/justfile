@@ -1,0 +1,99 @@
+ROOT := `git rev-parse --show-toplevel`
+
+RT_PRIO := "80"
+
+tx:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo run -r -p cu-zenoh-bridge-bench --bin zenoh-bench-tx
+
+tx-udp:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo run -r -p cu-zenoh-bridge-bench --bin zenoh-bench-tx -- --transport udp
+
+tx-tcp:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo run -r -p cu-zenoh-bridge-bench --bin zenoh-bench-tx -- --transport tcp
+
+rx:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo run -r -p cu-zenoh-bridge-bench --bin zenoh-bench-rx
+
+rx-udp:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo run -r -p cu-zenoh-bridge-bench --bin zenoh-bench-rx -- --transport udp
+
+rx-tcp:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo run -r -p cu-zenoh-bridge-bench --bin zenoh-bench-rx -- --transport tcp
+
+tx-rt:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo build -r -p cu-zenoh-bridge-bench --bin zenoh-bench-tx
+  if ! chrt --fifo "{{RT_PRIO}}" true >/dev/null 2>&1; then
+    echo "Realtime scheduling requires CAP_SYS_NICE or sudo. Try: sudo just tx-rt" >&2
+    exit 1
+  fi
+  exec chrt --fifo "{{RT_PRIO}}" "{{ROOT}}/target/release/zenoh-bench-tx"
+
+tx-udp-rt:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo build -r -p cu-zenoh-bridge-bench --bin zenoh-bench-tx
+  if ! chrt --fifo "{{RT_PRIO}}" true >/dev/null 2>&1; then
+    echo "Realtime scheduling requires CAP_SYS_NICE or sudo. Try: sudo just tx-udp-rt" >&2
+    exit 1
+  fi
+  exec chrt --fifo "{{RT_PRIO}}" "{{ROOT}}/target/release/zenoh-bench-tx" --transport udp
+
+tx-tcp-rt:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo build -r -p cu-zenoh-bridge-bench --bin zenoh-bench-tx
+  if ! chrt --fifo "{{RT_PRIO}}" true >/dev/null 2>&1; then
+    echo "Realtime scheduling requires CAP_SYS_NICE or sudo. Try: sudo just tx-tcp-rt" >&2
+    exit 1
+  fi
+  exec chrt --fifo "{{RT_PRIO}}" "{{ROOT}}/target/release/zenoh-bench-tx" --transport tcp
+
+rx-rt:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo build -r -p cu-zenoh-bridge-bench --bin zenoh-bench-rx
+  if ! chrt --fifo "{{RT_PRIO}}" true >/dev/null 2>&1; then
+    echo "Realtime scheduling requires CAP_SYS_NICE or sudo. Try: sudo just rx-rt" >&2
+    exit 1
+  fi
+  exec chrt --fifo "{{RT_PRIO}}" "{{ROOT}}/target/release/zenoh-bench-rx"
+
+rx-udp-rt:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo build -r -p cu-zenoh-bridge-bench --bin zenoh-bench-rx
+  if ! chrt --fifo "{{RT_PRIO}}" true >/dev/null 2>&1; then
+    echo "Realtime scheduling requires CAP_SYS_NICE or sudo. Try: sudo just rx-udp-rt" >&2
+    exit 1
+  fi
+  exec chrt --fifo "{{RT_PRIO}}" "{{ROOT}}/target/release/zenoh-bench-rx" --transport udp
+
+rx-tcp-rt:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo build -r -p cu-zenoh-bridge-bench --bin zenoh-bench-rx
+  if ! chrt --fifo "{{RT_PRIO}}" true >/dev/null 2>&1; then
+    echo "Realtime scheduling requires CAP_SYS_NICE or sudo. Try: sudo just rx-tcp-rt" >&2
+    exit 1
+  fi
+  exec chrt --fifo "{{RT_PRIO}}" "{{ROOT}}/target/release/zenoh-bench-rx" --transport tcp

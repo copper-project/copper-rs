@@ -1,0 +1,11 @@
+[package]
+name = "dora-caterpillat"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+resolver = "2"
+
+[dependencies]
+dora-node-api = { version = "0.4.0", default-features = false }
+eyre = { version = "0.6.12", default-features = false }

@@ -221,6 +221,7 @@ runs:
         sudo apt-get install -y \
           python3-cbor2 \
           python3-dev \
+          just \
           pkg-config \
           "$xml2_pkg" \
           libasound2-dev \
