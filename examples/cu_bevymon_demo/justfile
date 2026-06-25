@@ -1,4 +1,4 @@
-ROOT := `git rev-parse --show-toplevel`
+ROOT := shell('cd "$1/../.." && pwd', justfile_directory())
 
 # Run the BevyMon demo.
 default: bevy
