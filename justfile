@@ -4,8 +4,8 @@ WINDOWS_BASE_FEATURES := "mock,cu-sensor-payloads/image,kornia,python,gst,faer,n
 MSRV := "1.95.0"
 PUBLIC_API_VERSION := "0.51.0"
 PUBLIC_API_TOOLCHAIN := "nightly"
-export ROOT := `git rev-parse --show-toplevel`
-EMBEDDED_EXCLUDES := shell('python3 $1/support/ci/embedded_crates.py excludes --toolchain stable', ROOT)
+export ROOT := justfile_directory()
+WORKSPACE_EXCLUDES := shell('python3 $1/support/ci/workspace_excludes.py excludes --toolchain stable', ROOT)
 PREK_FMT_FIX_HOOKS := "trailing-whitespace mixed-line-ending"
 PREK_FMT_CHECK_HOOKS := "trailing-whitespace check-merge-conflict detect-private-key check-case-conflict check-added-large-files check-yaml check-json check-xml check-symlinks mixed-line-ending"
 PREK_FMT_CI_HOOKS := "trailing-whitespace check-merge-conflict detect-private-key check-case-conflict check-added-large-files check-yaml check-json check-xml check-symlinks mixed-line-ending typos check-rust check-ron check-toml"
@@ -107,10 +107,10 @@ clippy-std:
 		*) features="{{BASE_FEATURES}}" ;;
 	esac
 	features_flag="--features $features"
-	embedded_excludes="{{EMBEDDED_EXCLUDES}}"
+	workspace_excludes="{{WORKSPACE_EXCLUDES}}"
 
-	cargo +stable clippy --workspace --all-targets $embedded_excludes -- --deny warnings
-	cargo +stable clippy --workspace --all-targets $features_flag $embedded_excludes -- --deny warnings
+	cargo +stable clippy --workspace --all-targets $workspace_excludes -- --deny warnings
+	cargo +stable clippy --workspace --all-targets $features_flag $workspace_excludes -- --deny warnings
 
 # Run the Unit-Tests job locally via act (debug/ubuntu matrix).
 ci:
@@ -131,8 +131,32 @@ test:
 	#!/usr/bin/env bash
 	set -euo pipefail
 
-	cargo +stable nextest run --all-targets --workspace {{EMBEDDED_EXCLUDES}}
+	cargo +stable nextest run --all-targets --workspace {{WORKSPACE_EXCLUDES}}
 	cargo +stable nextest run --no-default-features
+
+# Check the large examples from the former extra-examples repo.
+check-extra-examples: check-extra-examples-host check-extra-examples-embedded
+
+# Host checks for large examples. These intentionally stay out of default workspace CI.
+check-extra-examples-host:
+	cargo +stable check -p cu-rp-balancebot --all-targets
+	cargo +stable check -p cu-flight-controller --all-targets --features textlogs
+	cargo +stable check -p cu-human-pose --all-targets
+	cargo +stable check -p cu-feetech-demo --all-targets
+	cargo +stable check -p cu-gnss-ublox-demo --all-targets --features logexport
+
+# Embedded checks for large examples. These mirror the old satellite CI.
+check-extra-examples-embedded:
+	cargo +stable check -p cu-elrs-bdshot-demo --target thumbv8m.main-none-eabihf
+	cargo +stable check -p cu-flight-controller --target thumbv7em-none-eabihf --no-default-features --features firmware,textlogs --bin quad
+
+# Check the benchmarks from the former benchmarks repo.
+check-benchmarks:
+	cargo +stable check -p cu-dorabench --all-targets
+	cargo +stable check -p cu-async-cl-io-bench --all-targets
+	cargo +stable check -p cu-zenoh-bridge-bench --all-targets
+	cargo +stable check --manifest-path benchmarks/dora_caterpillar/Cargo.toml --all-targets
+	cargo +stable check --manifest-path benchmarks/horus_caterpillar/Cargo.toml --all-targets
 
 # Ensure the tools needed by coverage are installed.
 check-coverage-tools:
@@ -165,7 +189,7 @@ msrv-check:
 	#!/usr/bin/env bash
 	set -euo pipefail
 
-	cargo +{{MSRV}} check --workspace --all-targets {{EMBEDDED_EXCLUDES}}
+	cargo +{{MSRV}} check --workspace --all-targets {{WORKSPACE_EXCLUDES}}
 	cargo +{{MSRV}} check --no-default-features
 
 # Run the no_std/embedded CI flow locally.
@@ -206,18 +230,18 @@ std-ci mode="debug":
 		features="${features},cuda"
 	fi
 	features_flag="--features $features"
-	embedded_excludes="{{EMBEDDED_EXCLUDES}}"
+	workspace_excludes="{{WORKSPACE_EXCLUDES}}"
 
-	cargo +stable clippy $release_flag --workspace --all-targets $embedded_excludes -- --deny warnings
-	cargo +stable clippy $release_flag --workspace --all-targets $features_flag $embedded_excludes -- --deny warnings
-	cargo +stable build $release_flag --workspace --all-targets $features_flag $embedded_excludes
+	cargo +stable clippy $release_flag --workspace --all-targets $workspace_excludes -- --deny warnings
+	cargo +stable clippy $release_flag --workspace --all-targets $features_flag $workspace_excludes -- --deny warnings
+	cargo +stable build $release_flag --workspace --all-targets $features_flag $workspace_excludes
 
 	if [[ "$mode" == "debug" ]]; then
-		cargo +stable test --doc --workspace $embedded_excludes --quiet
+		cargo +stable test --doc --workspace $workspace_excludes --quiet
 	fi
 
-	cargo +stable nextest run $release_flag --all-targets --workspace $embedded_excludes
-	cargo +stable nextest run $release_flag --all-targets --workspace $features_flag $embedded_excludes
+	cargo +stable nextest run $release_flag --all-targets --workspace $workspace_excludes
+	cargo +stable nextest run $release_flag --all-targets --workspace $features_flag $workspace_excludes
 
 	RAYON_NUM_THREADS=1 COPPER_DETERMINISM_ITERS=256 COPPER_DETERMINISM_DT_TICKS=1000 \
 		cargo +stable test $release_flag -p cu-caterpillar --features determinism_ci \

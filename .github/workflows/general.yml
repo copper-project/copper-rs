@@ -224,12 +224,12 @@ jobs:
           cache_shared_key: rust-ubuntu
           install_nextest: "false"
           sccache_key_suffix: msrv
-      - name: Detect embedded-only crates
+      - name: Detect default workspace exclusions
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ env.MSRV }})
-          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+          EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ env.MSRV }})
+          echo "WORKSPACE_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Check workspace on MSRV
-        run: cargo +${{ env.MSRV }} check --workspace --all-targets $EMBEDDED_EXCLUDES
+        run: cargo +${{ env.MSRV }} check --workspace --all-targets $WORKSPACE_EXCLUDES
       - name: Check no_std default members on MSRV
         run: cargo +${{ env.MSRV }} check --no-default-features
 
@@ -252,12 +252,12 @@ jobs:
           cache_shared_key: rust-ubuntu
           install_nextest: "false"
           sccache_key_suffix: msrv
-      - name: Detect embedded-only crates
+      - name: Detect default workspace exclusions
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes --toolchain ${{ env.MSRV }})
-          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+          EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ env.MSRV }})
+          echo "WORKSPACE_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Check workspace on MSRV
-        run: cargo +${{ env.MSRV }} check --workspace --all-targets $EMBEDDED_EXCLUDES
+        run: cargo +${{ env.MSRV }} check --workspace --all-targets $WORKSPACE_EXCLUDES
       - name: Check no_std default members on MSRV
         run: cargo +${{ env.MSRV }} check --no-default-features
 
@@ -274,6 +274,144 @@ jobs:
       linux_cuda_ci_image: ${{ needs.linux-cuda-ci-image.outputs.image }}
       linux_runner_label: ubuntu-latest-m
       windows_runner_label: windows-latest-l
+
+  extra-examples-container:
+    name: Remerged Extra Examples
+    if: needs.linux-ci-image.outputs.image != ''
+    needs: linux-ci-image
+    runs-on: ubuntu-latest-m
+    container:
+      image: ${{ needs.linux-ci-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      WORKSPACE_SCOPE: core
+    steps:
+      - uses: actions/checkout@v7
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: stable
+          linux_cargo_paths: true
+          prebaked_linux_image: "true"
+          cache_prefix: extra-examples-ubuntu26-container
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: "false"
+          sccache_key_suffix: extra-examples
+      - name: Install embedded targets
+        run: rustup target add thumbv8m.main-none-eabihf thumbv7em-none-eabihf --toolchain stable
+      - name: Check remerged extra examples
+        run: just check-extra-examples
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
+
+  extra-examples-host:
+    name: Remerged Extra Examples
+    if: needs.linux-ci-image.outputs.image == ''
+    needs: linux-ci-image
+    runs-on: ubuntu-latest-m
+    env:
+      WORKSPACE_SCOPE: core
+    steps:
+      - uses: actions/checkout@v7
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: stable
+          linux_cargo_paths: true
+          linux_disk_workarounds: "false"
+          cache_prefix: extra-examples-ubuntu-host
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: "false"
+          sccache_key_suffix: extra-examples
+      - name: Install embedded targets
+        run: rustup target add thumbv8m.main-none-eabihf thumbv7em-none-eabihf --toolchain stable
+      - name: Check remerged extra examples
+        run: just check-extra-examples
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
+
+  benchmarks-container:
+    name: Remerged Benchmarks
+    if: needs.linux-ci-image.outputs.image != ''
+    needs: linux-ci-image
+    runs-on: ubuntu-latest-m
+    container:
+      image: ${{ needs.linux-ci-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      WORKSPACE_SCOPE: core
+    steps:
+      - uses: actions/checkout@v7
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: stable
+          linux_cargo_paths: true
+          prebaked_linux_image: "true"
+          cache_prefix: benchmarks-ubuntu26-container
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: "false"
+          sccache_key_suffix: benchmarks
+      - name: Check remerged benchmarks
+        run: just check-benchmarks
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
+
+  benchmarks-host:
+    name: Remerged Benchmarks
+    if: needs.linux-ci-image.outputs.image == ''
+    needs: linux-ci-image
+    runs-on: ubuntu-latest-m
+    env:
+      WORKSPACE_SCOPE: core
+    steps:
+      - uses: actions/checkout@v7
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: stable
+          linux_cargo_paths: true
+          linux_disk_workarounds: "false"
+          cache_prefix: benchmarks-ubuntu-host
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: "false"
+          sccache_key_suffix: benchmarks
+      - name: Check remerged benchmarks
+        run: just check-benchmarks
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Save sccache
+        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
 
   coverage:
     if: github.event_name == 'pull_request'

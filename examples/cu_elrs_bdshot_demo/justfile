@@ -1,0 +1,7 @@
+import "../../justfile"
+
+# Attach to the ELRS BDShot demo target with probe-rs.
+elrs-bdshot-attach:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	probe-rs attach ../../target/thumbv8m.main-none-eabihf/debug/cu-elrs-bdshot-demo

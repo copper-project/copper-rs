@@ -40,6 +40,8 @@ def _load_embedded_packages(toolchain: Optional[str]) -> List[Dict[str, Any]]:
     for pkg in metadata.get("packages", []):
         pkg_metadata = pkg.get("metadata") or {}
         copper_meta = pkg_metadata.get("copper", {})
+        if bool(copper_meta.get("ci_exclude_embedded", False)):
+            continue
         environments = set(_normalize_list(copper_meta.get("environments")))
         if "embedded" not in environments or "host" in environments:
             continue

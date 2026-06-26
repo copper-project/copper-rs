@@ -70,14 +70,22 @@ members = [
   "components/tasks/cu_python_task",
   "components/tasks/cu_ratelimit",
   "components/testing/cu_udp_inject",
+  "benchmarks/cu_async_cl_io_bench",
+  "benchmarks/cu_dorabench",
+  "benchmarks/cu_zenoh_bridge_bench",
   "examples/cu_background_task",
   "examples/cu_baremetal_safety",
   "examples/cu_bridge_test",
   "examples/cu_bevymon_demo",
   "examples/cu_caterpillar",
   "examples/cu_distributed_resim_demo",
+  "examples/cu_elrs_bdshot_demo",
+  "examples/cu_feetech_demo",
+  "examples/cu_flight_controller",
   "examples/cu_config_gen",
   "examples/cu_config_variation",
+  "examples/cu_gnss_ublox_demo",
+  "examples/cu_human_pose",
   "examples/cu_image_codec_demo",
   "examples/cu_image_aligner",
   "examples/cu_instance_overrides_demo",
@@ -98,6 +106,7 @@ members = [
   "examples/cu_peer_triangulation",
   "examples/cu_python_task_demo",
   "examples/cu_run_in_sim",
+  "examples/cu_rp_balancebot",
   "examples/cu_standalone_structlog",
   "examples/cu_zenoh",
   "examples/cu_zenoh_bridge_demo",
@@ -173,6 +182,28 @@ cu29-value = { path = "core/cu29_value", default-features = false, version = "1.
 cu-ffv1-codec = { path = "components/codecs/cu_ffv1_codec", version = "1.0.0-rc2" }
 cu-linux-resources = { path = "components/res/cu_linux_resources", version = "1.0.0-rc2" }
 cu-png-codec = { path = "components/codecs/cu_png_codec", version = "1.0.0-rc2" }
+
+# Copper components
+cu-ads7883-new = { path = "components/sources/cu_ads7883", version = "1.0.0-rc2" }
+cu-ahrs = { path = "components/tasks/cu_ahrs", version = "1.0.0-rc2" }
+cu-bdshot = { path = "components/bridges/cu_bdshot", version = "1.0.0-rc2" }
+cu-bevymon = { path = "components/monitors/cu_bevymon", version = "1.0.0-rc2" }
+cu-bmi088 = { path = "components/sources/cu_bmi088", version = "1.0.0-rc2" }
+cu-consolemon = { path = "components/monitors/cu_consolemon", version = "1.0.0-rc2" }
+cu-crsf = { path = "components/bridges/cu_crsf", version = "1.0.0-rc2" }
+cu-dps310 = { path = "components/sources/cu_dps310", version = "1.0.0-rc2" }
+cu-feetech = { path = "components/bridges/cu_feetech", version = "1.0.0-rc2" }
+cu-gnss-ublox = { path = "components/sources/cu_gnss_ublox", version = "1.0.0-rc2" }
+cu-gstreamer = { path = "components/sources/cu_gstreamer", version = "1.0.0-rc2" }
+cu-ist8310 = { path = "components/sources/cu_ist8310", version = "1.0.0-rc2" }
+cu-logmon = { path = "components/monitors/cu_logmon", version = "1.0.0-rc2" }
+cu-micoairh743 = { path = "components/res/cu_micoairh743", version = "1.0.0-rc2" }
+cu-msp-bridge = { path = "components/bridges/cu_msp_bridge", version = "1.0.0-rc2" }
+cu-msp-lib = { path = "components/libs/cu_msp_lib", version = "1.0.0-rc2" }
+cu-rp-encoder = { path = "components/sources/cu_rp_encoder", version = "1.0.0-rc2" }
+cu-rp-sn754410-new = { path = "components/sinks/cu_rp_sn754410", version = "1.0.0-rc2" }
+cu-sdlogger = { path = "components/libs/cu_sdlogger", version = "1.0.0-rc2" }
+cu-zenoh-bridge = { path = "components/bridges/cu_zenoh_bridge", version = "1.0.0-rc2" }
 
 # Payload definitions
 cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version = "1.0.0-rc2" }

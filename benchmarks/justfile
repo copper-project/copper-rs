@@ -1,0 +1,7 @@
+default: check
+
+fmt:
+	cargo fmt --all
+
+check:
+	cd .. && just check-benchmarks
