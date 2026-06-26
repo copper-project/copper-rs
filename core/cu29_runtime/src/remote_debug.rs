@@ -3306,10 +3306,15 @@ where
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
 {
     let mut tasks = serde_json::Map::new();
+    let mut registry = TypeRegistry::default();
+    populate_debug_type_registry::<App>(&mut registry);
 
     for task_id in P::get_all_task_ids() {
-        if let Ok(task) = state.session.reflected_task(task_id) {
-            tasks.insert(task_id.to_string(), reflect_value_to_json(task));
+        if let Ok(task_state) = state
+            .session
+            .with_debug_state(task_id, |task| reflect_value_to_json(task, &registry))
+        {
+            tasks.insert(task_id.to_string(), task_state);
         }
     }
 
@@ -3664,8 +3669,16 @@ where
             crate::curuntime::CuTaskType::Regular => "regular",
             crate::curuntime::CuTaskType::Sink => "sink",
         };
-        let resolved_info = resolve_type_info_by_path(&registry, node.get_type());
-        let state_type_path = resolved_info.map(|info| info.type_path().to_string());
+        let state_type_path =
+            <App as ReflectTaskIntrospection>::debug_state_type_path(node.get_id().as_str())
+                .map(str::to_owned)
+                .or_else(|| {
+                    resolve_type_info_by_path(&registry, node.get_type())
+                        .map(|info| info.type_path().to_string())
+                });
+        let resolved_info = state_type_path
+            .as_deref()
+            .and_then(|type_path| resolve_type_info_by_path(&registry, type_path));
         let state_fields = resolved_info
             .map(|info| build_field_catalog(&registry, info, None))
             .unwrap_or_default();
@@ -4286,16 +4299,14 @@ fn primitive_scalar_kind(type_path: &str) -> Option<DebugScalarKind> {
     }
 }
 #[cfg(feature = "reflect")]
-fn reflect_value_to_json(value: &dyn crate::reflect::Reflect) -> Value {
-    let mut registry = TypeRegistry::default();
-    let _ = &mut registry;
-    let serializer = crate::reflect::serde::ReflectSerializer::new(value, &registry);
+fn reflect_value_to_json(value: &dyn crate::reflect::Reflect, registry: &TypeRegistry) -> Value {
+    let serializer = crate::reflect::serde::TypedReflectSerializer::new(value, registry);
     serde_json::to_value(serializer)
         .unwrap_or_else(|_| Value::String("reflect serialization failed".to_string()))
 }
 
 #[cfg(not(feature = "reflect"))]
-fn reflect_value_to_json(_value: &dyn crate::reflect::Reflect) -> Value {
+fn reflect_value_to_json(_value: &dyn crate::reflect::Reflect, _registry: &TypeRegistry) -> Value {
     Value::String("Reflect feature disabled".to_string())
 }
 
@@ -4355,7 +4366,7 @@ fn hex_digit(n: u8) -> char {
 mod tests {
     use super::{
         build_message_metadata_field_descriptors, build_output_schema_entries, build_stack_schema,
-        metadata_to_json, register_debug_support_types,
+        metadata_to_json, reflect_value_to_json, register_debug_support_types,
     };
     use crate::app::CuSimApplication;
     use crate::curuntime::KeyFrame;
@@ -4409,6 +4420,80 @@ mod tests {
 
         fn reflect_task_mut(&mut self, _task_id: &str) -> Option<&mut dyn Reflect> {
             None
+        }
+    }
+
+    #[derive(Reflect)]
+    struct RawDebugTask {
+        hidden: f32,
+    }
+
+    #[derive(Reflect)]
+    struct CustomDebugState {
+        visible: Ratio,
+    }
+
+    struct CustomDebugStateApp;
+
+    impl ReflectTaskIntrospection for CustomDebugStateApp {
+        fn reflect_task(&self, _task_id: &str) -> Option<&dyn Reflect> {
+            None
+        }
+
+        fn reflect_task_mut(&mut self, _task_id: &str) -> Option<&mut dyn Reflect> {
+            None
+        }
+
+        fn register_reflect_types(registry: &mut TypeRegistry) {
+            registry.register::<CustomDebugState>();
+        }
+
+        fn debug_state_type_path(task_id: &str) -> Option<&'static str> {
+            (task_id == "beta_src").then_some(<CustomDebugState as TypePath>::type_path())
+        }
+    }
+
+    impl CuSimApplication<MmapSectionStorage, MmapUnifiedLoggerWrite> for CustomDebugStateApp {
+        type Step<'z> = ();
+
+        fn get_original_config() -> String {
+            include_str!("../tests/remote_debug_missions_config.ron").to_string()
+        }
+
+        fn mission_id() -> Option<&'static str> {
+            Some("Beta")
+        }
+
+        fn start_all_tasks(
+            &mut self,
+            _sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
+        ) -> CuResult<()> {
+            Ok(())
+        }
+
+        fn run_one_iteration(
+            &mut self,
+            _sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
+        ) -> CuResult<()> {
+            Ok(())
+        }
+
+        fn run(
+            &mut self,
+            _sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
+        ) -> CuResult<()> {
+            Ok(())
+        }
+
+        fn stop_all_tasks(
+            &mut self,
+            _sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
+        ) -> CuResult<()> {
+            Ok(())
+        }
+
+        fn restore_keyframe(&mut self, _freezer: &KeyFrame) -> CuResult<()> {
+            Ok(())
         }
     }
 
@@ -4540,6 +4625,47 @@ mod tests {
                 .iter()
                 .any(|field| field.display_path == "power.value")
         );
+    }
+
+    #[test]
+    fn debug_state_serialization_uses_typed_shape_without_type_wrapper() {
+        let mut registry = TypeRegistry::default();
+        registry.register::<RawDebugTask>();
+        register_debug_support_types(&mut registry);
+
+        let value = reflect_value_to_json(&RawDebugTask { hidden: 1.25 }, &registry);
+        assert_eq!(value["hidden"], serde_json::json!(1.25));
+        assert!(value.get(<RawDebugTask as TypePath>::type_path()).is_none());
+    }
+
+    #[test]
+    fn stack_schema_uses_custom_debug_state_type() -> CuResult<()> {
+        let schema =
+            build_stack_schema::<CustomDebugStateApp, MmapSectionStorage, MmapUnifiedLoggerWrite>(
+            )?;
+
+        let beta_src = schema["tasks"]
+            .as_array()
+            .expect("tasks array")
+            .iter()
+            .find(|task| task["id"].as_str() == Some("beta_src"))
+            .expect("beta_src task");
+        assert_eq!(
+            beta_src["state_type_path"].as_str(),
+            Some(<CustomDebugState as TypePath>::type_path())
+        );
+        assert!(
+            beta_src["state_fields"]
+                .as_array()
+                .expect("state fields")
+                .iter()
+                .any(|field| {
+                    field["display_path"].as_str() == Some("visible")
+                        && field["scalar_kind"].as_str() == Some("f32")
+                })
+        );
+
+        Ok(())
     }
 
     #[test]

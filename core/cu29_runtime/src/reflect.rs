@@ -124,6 +124,16 @@ pub trait ReflectTaskIntrospection {
 
     /// Registers reflected schema types for this mission's app (tasks, messages, bridges).
     fn register_reflect_types(_registry: &mut TypeRegistry) {}
+
+    /// Returns the reflected type path used as the task's debug-state schema.
+    fn debug_state_type_path(_task_id: &str) -> Option<&'static str> {
+        None
+    }
+
+    /// Borrows the task's current debug-state view.
+    fn with_debug_state<R>(&self, _task_id: &str, _f: impl FnOnce(&dyn Reflect) -> R) -> Option<R> {
+        None
+    }
 }
 
 /// Dumps a stable, human-readable schema snapshot for the registered reflected types.

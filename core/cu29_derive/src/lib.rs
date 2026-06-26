@@ -1776,15 +1776,58 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             })
             .collect();
 
+        let task_debug_state_type_path_arms: Vec<proc_macro2::TokenStream> = task_specs
+            .ids
+            .iter()
+            .zip(task_specs.task_types.iter())
+            .zip(task_specs.cutypes.iter())
+            .map(|((task_id, task_type), task_kind)| {
+                let task_id_lit = LitStr::new(task_id, Span::call_site());
+                let task_trait = task_trait_for_kind(*task_kind);
+                quote! {
+                    #task_id_lit => Some(<#task_type as #task_trait>::debug_state_type_path()),
+                }
+            })
+            .collect();
+
+        let task_debug_state_read_arms: Vec<proc_macro2::TokenStream> = task_specs
+            .ids
+            .iter()
+            .zip(task_specs.task_types.iter())
+            .zip(task_specs.cutypes.iter())
+            .enumerate()
+            .map(|(index, ((task_id, task_type), task_kind))| {
+                let task_index = syn::Index::from(index);
+                let task_id_lit = LitStr::new(task_id, Span::call_site());
+                let task_trait = task_trait_for_kind(*task_kind);
+                quote! {
+                    #task_id_lit => Some(
+                        <#task_type as #task_trait>::with_debug_state(
+                            &self.copper_runtime.tasks.#task_index,
+                            f,
+                        )
+                    ),
+                }
+            })
+            .collect();
+
+        let task_debug_state_registration_calls: Vec<proc_macro2::TokenStream> = task_specs
+            .task_types
+            .iter()
+            .zip(task_specs.cutypes.iter())
+            .map(|(task_type, task_kind)| {
+                let task_trait = task_trait_for_kind(*task_kind);
+                quote! {
+                    <#task_type as #task_trait>::register_debug_state_types(registry);
+                }
+            })
+            .collect();
+
         let mut reflect_registry_types: BTreeMap<String, Type> = BTreeMap::new();
         let mut add_reflect_type = |ty: Type| {
             let key = quote! { #ty }.to_string();
             reflect_registry_types.entry(key).or_insert(ty);
         };
-
-        for task_type in &task_specs.task_types {
-            add_reflect_type(task_type.clone());
-        }
 
         let mut sim_bridge_channel_decls = Vec::<proc_macro2::TokenStream>::new();
         let bridge_runtime_types: Vec<Type> = culist_bridge_specs
@@ -4635,6 +4678,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
 
                 pub fn register_reflect_types(registry: &mut cu29::reflect::TypeRegistry) {
+                    #(#task_debug_state_registration_calls)*
                     #(#reflect_type_registration_calls)*
                 }
 
@@ -4707,6 +4751,24 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 fn register_reflect_types(registry: &mut cu29::reflect::TypeRegistry) {
                     #application_name::register_reflect_types(registry);
+                }
+
+                fn debug_state_type_path(task_id: &str) -> Option<&'static str> {
+                    match task_id {
+                        #(#task_debug_state_type_path_arms)*
+                        _ => None,
+                    }
+                }
+
+                fn with_debug_state<R>(
+                    &self,
+                    task_id: &str,
+                    f: impl FnOnce(&dyn cu29::reflect::Reflect) -> R,
+                ) -> Option<R> {
+                    match task_id {
+                        #(#task_debug_state_read_arms)*
+                        _ => None,
+                    }
                 }
             }
         };
@@ -5660,6 +5722,14 @@ fn inferred_single_output_payload_type(task_type: &Type, task_kind: CuTaskType) 
             <<#task_type as cu29::cutask::CuTask>::Output<'static> as cu29::cutask::CuSingleOutputMsg>::Payload
         },
         CuTaskType::Sink => panic!("Sinks do not have output payload types"),
+    }
+}
+
+fn task_trait_for_kind(task_kind: CuTaskType) -> proc_macro2::TokenStream {
+    match task_kind {
+        CuTaskType::Source => quote! { cu29::cutask::CuSrcTask },
+        CuTaskType::Regular => quote! { cu29::cutask::CuTask },
+        CuTaskType::Sink => quote! { cu29::cutask::CuSinkTask },
     }
 }
 
