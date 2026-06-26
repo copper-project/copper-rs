@@ -145,6 +145,17 @@ runs:
       if: inputs.install_nextest == 'true'
       uses: taiki-e/install-action@nextest
 
+    # The justfile uses just's `shell(...)` function which was added in 1.27.0.
+    # Linux host runners get just 1.21 from apt, which fails to parse the
+    # justfile. Install a current just binary from the upstream release feed;
+    # taiki places it in ~/.cargo/bin which precedes /usr/bin on PATH so this
+    # also overrides any apt-installed just inside prebaked images.
+    - name: Install recent just (Linux)
+      if: runner.os == 'Linux'
+      uses: taiki-e/install-action@v2
+      with:
+        tool: just
+
     - name: Set workspace scope
       if: inputs.set_workspace_flag == 'true'
       shell: bash
