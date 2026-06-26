@@ -249,8 +249,8 @@ use cu29_clock::{
 use cu29_log::{CuLogEntry, rebuild_logline};
 use cu29_traits::{
     CopperListTuple, CuCompactString, CuError, CuMsgMetadataTrait, CuMsgOrigin, CuResult,
-    DebugFieldDescriptor, DebugFieldKind, DebugFieldSemantics, ErasedCuStampedDataSet,
-    UnifiedLogType,
+    DebugFieldDescriptor, DebugFieldKind, DebugFieldSemantics, DebugScalarKind,
+    ErasedCuStampedDataSet, UnifiedLogType,
 };
 use cu29_unifiedlog::{
     SectionStorage, UnifiedLogWrite, UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader,
@@ -3808,23 +3808,26 @@ fn build_field_catalog(
     }
 }
 
-fn debug_scalar_field_types() -> &'static HashMap<&'static str, &'static str> {
-    static FIELD_TYPES: OnceLock<HashMap<&'static str, &'static str>> = OnceLock::new();
-    FIELD_TYPES.get_or_init(|| {
-        let mut types = HashMap::new();
+fn debug_scalar_kinds() -> &'static HashMap<&'static str, DebugScalarKind> {
+    static SCALAR_KINDS: OnceLock<HashMap<&'static str, DebugScalarKind>> = OnceLock::new();
+    SCALAR_KINDS.get_or_init(|| {
+        let mut kinds = HashMap::new();
         for registration in cu29_clock::debug_scalar_registrations() {
-            types.insert(registration.type_path, registration.field_type);
+            kinds.insert(registration.type_path, DebugScalarKind::U64);
         }
         for registration in cu29_units::debug_scalar_registrations() {
-            types.insert(registration.type_path, registration.field_type);
+            kinds.insert(registration.type_path, registration.scalar_kind);
         }
-        types.insert(core::any::type_name::<CuCompactString>(), "string");
-        types
+        kinds.insert(
+            core::any::type_name::<CuCompactString>(),
+            DebugScalarKind::String,
+        );
+        kinds
     })
 }
 
-fn debug_scalar_field_type(value_type_path: &str) -> Option<&'static str> {
-    debug_scalar_field_types().get(value_type_path).copied()
+fn debug_scalar_kind(value_type_path: &str) -> Option<DebugScalarKind> {
+    debug_scalar_kinds().get(value_type_path).copied()
 }
 
 fn debug_scalar_semantics(value_type_path: &str) -> Option<DebugFieldSemantics> {
@@ -3880,10 +3883,10 @@ fn build_field_node(
         return debug_field_descriptor(
             display_path,
             binding_name,
-            primitive_field_type_name(value_type_path).unwrap_or("unknown"),
             value_type_path,
             DebugFieldShape {
                 semantics: None,
+                scalar_kind: primitive_scalar_kind(value_type_path),
                 nullable,
                 kind: DebugFieldKind::Scalar,
             },
@@ -3909,14 +3912,14 @@ fn build_type_node(
     binding_name: Option<&str>,
     nullable: bool,
 ) -> DebugFieldDescriptor {
-    if let Some(field_type) = debug_scalar_field_type(value_type_path) {
+    if let Some(scalar_kind) = debug_scalar_kind(value_type_path) {
         return debug_field_descriptor(
             display_path,
             binding_name,
-            field_type,
             value_type_path,
             DebugFieldShape {
                 semantics: debug_type_semantics(value_type_path),
+                scalar_kind: Some(scalar_kind),
                 nullable,
                 kind: DebugFieldKind::Scalar,
             },
@@ -3928,10 +3931,10 @@ fn build_type_node(
         TypeInfo::Struct(info) => debug_field_descriptor(
             display_path,
             binding_name,
-            "object",
             value_type_path,
             DebugFieldShape {
                 semantics: debug_type_semantics(value_type_path),
+                scalar_kind: None,
                 nullable,
                 kind: DebugFieldKind::Struct,
             },
@@ -3940,10 +3943,10 @@ fn build_type_node(
         TypeInfo::TupleStruct(info) => debug_field_descriptor(
             display_path,
             binding_name,
-            "tuple",
             value_type_path,
             DebugFieldShape {
                 semantics: debug_type_semantics(value_type_path),
+                scalar_kind: None,
                 nullable,
                 kind: DebugFieldKind::TupleStruct,
             },
@@ -3952,10 +3955,10 @@ fn build_type_node(
         TypeInfo::Tuple(info) => debug_field_descriptor(
             display_path,
             binding_name,
-            "tuple",
             value_type_path,
             DebugFieldShape {
                 semantics: debug_type_semantics(value_type_path),
+                scalar_kind: None,
                 nullable,
                 kind: DebugFieldKind::Tuple,
             },
@@ -3964,10 +3967,10 @@ fn build_type_node(
         TypeInfo::List(info) => debug_field_descriptor(
             display_path,
             binding_name,
-            "array",
             value_type_path,
             DebugFieldShape {
                 semantics: debug_type_semantics(value_type_path),
+                scalar_kind: None,
                 nullable,
                 kind: DebugFieldKind::List,
             },
@@ -3983,10 +3986,10 @@ fn build_type_node(
         TypeInfo::Array(info) => debug_field_descriptor(
             display_path,
             binding_name,
-            "array",
             value_type_path,
             DebugFieldShape {
                 semantics: debug_type_semantics(value_type_path),
+                scalar_kind: None,
                 nullable,
                 kind: DebugFieldKind::Array,
             },
@@ -4002,10 +4005,10 @@ fn build_type_node(
         TypeInfo::Map(_) => debug_field_descriptor(
             display_path,
             binding_name,
-            "object",
             value_type_path,
             DebugFieldShape {
                 semantics: debug_type_semantics(value_type_path),
+                scalar_kind: None,
                 nullable,
                 kind: DebugFieldKind::Map,
             },
@@ -4014,10 +4017,10 @@ fn build_type_node(
         TypeInfo::Set(info) => debug_field_descriptor(
             display_path,
             binding_name,
-            "array",
             value_type_path,
             DebugFieldShape {
                 semantics: debug_type_semantics(value_type_path),
+                scalar_kind: None,
                 nullable,
                 kind: DebugFieldKind::Set,
             },
@@ -4045,10 +4048,10 @@ fn build_type_node(
             debug_field_descriptor(
                 display_path,
                 binding_name,
-                "enum",
                 value_type_path,
                 DebugFieldShape {
                     semantics: debug_type_semantics(value_type_path),
+                    scalar_kind: None,
                     nullable,
                     kind: DebugFieldKind::Enum,
                 },
@@ -4058,10 +4061,10 @@ fn build_type_node(
         TypeInfo::Opaque(info) => debug_field_descriptor(
             display_path,
             binding_name,
-            primitive_field_type_name(info.type_path()).unwrap_or("unknown"),
             value_type_path,
             DebugFieldShape {
                 semantics: debug_type_semantics(value_type_path),
+                scalar_kind: primitive_scalar_kind(info.type_path()),
                 nullable,
                 kind: DebugFieldKind::Scalar,
             },
@@ -4210,6 +4213,7 @@ fn option_inner_field(info: &EnumInfo) -> Option<(Option<&'static TypeInfo>, &Ty
 
 struct DebugFieldShape {
     semantics: Option<DebugFieldSemantics>,
+    scalar_kind: Option<DebugScalarKind>,
     nullable: bool,
     kind: DebugFieldKind,
 }
@@ -4217,7 +4221,6 @@ struct DebugFieldShape {
 fn debug_field_descriptor(
     display_path: &str,
     binding_name: Option<&str>,
-    field_type: &str,
     value_type_path: &str,
     shape: DebugFieldShape,
     children: Vec<DebugFieldDescriptor>,
@@ -4225,8 +4228,8 @@ fn debug_field_descriptor(
     DebugFieldDescriptor {
         display_path: display_path.to_owned(),
         binding_name: binding_name.map(str::to_owned),
-        field_type: field_type.to_owned(),
         value_type_path: value_type_path.to_owned(),
+        scalar_kind: shape.scalar_kind,
         semantics: shape.semantics,
         nullable: shape.nullable,
         kind: shape.kind,
@@ -4258,37 +4261,27 @@ fn path_or_value(path: &str) -> String {
     }
 }
 
-fn primitive_field_type_name(type_path: &str) -> Option<&'static str> {
+fn primitive_scalar_kind(type_path: &str) -> Option<DebugScalarKind> {
     match type_path {
-        "()" => Some("null"),
-        "bool" | "core::primitive::bool" => Some("bool"),
-        "i8"
-        | "core::primitive::i8"
-        | "i16"
-        | "core::primitive::i16"
-        | "i32"
-        | "core::primitive::i32"
-        | "i64"
-        | "core::primitive::i64"
-        | "i128"
-        | "core::primitive::i128"
-        | "isize"
-        | "core::primitive::isize"
-        | "u8"
-        | "core::primitive::u8"
-        | "u16"
-        | "core::primitive::u16"
-        | "u32"
-        | "core::primitive::u32"
-        | "u64"
-        | "core::primitive::u64"
-        | "u128"
-        | "core::primitive::u128"
-        | "usize"
-        | "core::primitive::usize" => Some("integer"),
-        "f32" | "core::primitive::f32" | "f64" | "core::primitive::f64" => Some("number"),
-        "char" | "core::primitive::char" => Some("string"),
-        "alloc::string::String" | "std::string::String" | "str" | "&str" => Some("string"),
+        "bool" | "core::primitive::bool" => Some(DebugScalarKind::Bool),
+        "i8" | "core::primitive::i8" => Some(DebugScalarKind::I8),
+        "i16" | "core::primitive::i16" => Some(DebugScalarKind::I16),
+        "i32" | "core::primitive::i32" => Some(DebugScalarKind::I32),
+        "i64" | "core::primitive::i64" => Some(DebugScalarKind::I64),
+        "i128" | "core::primitive::i128" => Some(DebugScalarKind::I128),
+        "isize" | "core::primitive::isize" => Some(DebugScalarKind::Isize),
+        "u8" | "core::primitive::u8" => Some(DebugScalarKind::U8),
+        "u16" | "core::primitive::u16" => Some(DebugScalarKind::U16),
+        "u32" | "core::primitive::u32" => Some(DebugScalarKind::U32),
+        "u64" | "core::primitive::u64" => Some(DebugScalarKind::U64),
+        "u128" | "core::primitive::u128" => Some(DebugScalarKind::U128),
+        "usize" | "core::primitive::usize" => Some(DebugScalarKind::Usize),
+        "f32" | "core::primitive::f32" => Some(DebugScalarKind::F32),
+        "f64" | "core::primitive::f64" => Some(DebugScalarKind::F64),
+        "char" | "core::primitive::char" => Some(DebugScalarKind::Char),
+        "alloc::string::String" | "std::string::String" | "str" | "&str" => {
+            Some(DebugScalarKind::String)
+        }
         _ => None,
     }
 }
@@ -4372,8 +4365,8 @@ mod tests {
     use compact_str::CompactString;
     use cu29_clock::{CuTime, CuTimeRange, OptionCuTime, PartialCuTimeRange, Tov};
     use cu29_traits::{
-        CuCompactString, CuMsgOrigin, CuResult, DebugFieldKind, ErasedCuStampedData,
-        ErasedCuStampedDataSet, MatchingTasks, TaskOutputSpec,
+        CuCompactString, CuMsgOrigin, CuResult, DebugFieldKind, DebugScalarKind,
+        ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks, TaskOutputSpec,
     };
     use cu29_unifiedlog::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
     use cu29_units::si::f32::Ratio;
@@ -4539,7 +4532,7 @@ mod tests {
 
         assert!(fields.iter().any(|field| {
             field.display_path == "power"
-                && field.field_type == "number"
+                && field.scalar_kind == Some(DebugScalarKind::F32)
                 && field.value_type_path == <Ratio as TypePath>::type_path()
         }));
         assert!(

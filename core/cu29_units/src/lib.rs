@@ -509,7 +509,7 @@ pub mod si {
 
 use alloc::string::ToString;
 use alloc::vec::Vec;
-use cu29_traits::{DebugFieldSemantics, DebugScalarRegistration, DebugScalarType};
+use cu29_traits::{DebugFieldSemantics, DebugScalarKind, DebugScalarRegistration, DebugScalarType};
 
 macro_rules! impl_debug_scalar_units {
     ($(($unit_mod:ident, $quantity:ident, $base_unit:ident),)+) => {
@@ -520,10 +520,10 @@ macro_rules! impl_debug_scalar_units {
                         fn debug_scalar_registration() -> DebugScalarRegistration {
                             DebugScalarRegistration {
                                 type_path: core::any::type_name::<Self>(),
-                                field_type: if stringify!($storage_ty).starts_with('f') {
-                                    "number"
+                                scalar_kind: if stringify!($storage_ty) == "f32" {
+                                    DebugScalarKind::F32
                                 } else {
-                                    "integer"
+                                    DebugScalarKind::F64
                                 },
                                 semantics: DebugFieldSemantics::Quantity {
                                     quantity_name: stringify!($quantity).to_string(),

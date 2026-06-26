@@ -668,7 +668,6 @@ pub enum ClockDebugScalarKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ClockDebugScalarRegistration {
     pub type_path: &'static str,
-    pub field_type: &'static str,
     pub kind: ClockDebugScalarKind,
 }
 
@@ -676,17 +675,14 @@ pub fn debug_scalar_registrations() -> Vec<ClockDebugScalarRegistration> {
     alloc::vec![
         ClockDebugScalarRegistration {
             type_path: core::any::type_name::<CuDuration>(),
-            field_type: "integer",
             kind: ClockDebugScalarKind::Duration,
         },
         ClockDebugScalarRegistration {
             type_path: core::any::type_name::<CuTime>(),
-            field_type: "integer",
             kind: ClockDebugScalarKind::Time,
         },
         ClockDebugScalarRegistration {
             type_path: core::any::type_name::<OptionCuTime>(),
-            field_type: "integer",
             kind: ClockDebugScalarKind::OptionalTime,
         },
     ]
