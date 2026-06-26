@@ -82,7 +82,34 @@ fn build_callback<'a>(
     _process_clock: RobotClock,
     _clock_for_cb: RobotClockMock,
 ) -> Box<dyn for<'z> FnMut(gnss::SimStep<'z>) -> SimOverride + 'a> {
-    Box::new(move |step: gnss::SimStep<'_>| gnss::recorded_replay_step(step, copperlist))
+    let msgs = &copperlist.msgs;
+    Box::new(move |step: gnss::SimStep<'_>| match step {
+        gnss::SimStep::Bmi088(CuTaskCallbackState::Process(_, output)) => {
+            *output = msgs.get_bmi_088_output().clone();
+            SimOverride::ExecutedBySim
+        }
+        gnss::SimStep::Dps310(CuTaskCallbackState::Process(_, output)) => {
+            *output = msgs.get_dps_310_output().clone();
+            SimOverride::ExecutedBySim
+        }
+        gnss::SimStep::Ist8310(CuTaskCallbackState::Process(_, output)) => {
+            *output = msgs.get_ist_8310_output().clone();
+            SimOverride::ExecutedBySim
+        }
+        gnss::SimStep::BatteryAdc(CuTaskCallbackState::Process(_, output)) => {
+            *output = msgs.get_battery_adc_output().clone();
+            SimOverride::ExecutedBySim
+        }
+        gnss::SimStep::GnssUblox(CuTaskCallbackState::Process(_, output)) => {
+            *output = msgs.get_gnss_ublox_outputs().clone();
+            SimOverride::ExecutedBySim
+        }
+        gnss::SimStep::RcRxRcRx { msg, .. } => {
+            *msg = msgs.get_rc_rx_rc_rx().clone();
+            SimOverride::ExecutedBySim
+        }
+        _ => SimOverride::ExecuteByRuntime,
+    })
 }
 
 fn extract_time(copperlist: &ReplayCopperList) -> Option<CuTime> {
