@@ -654,6 +654,7 @@ struct QueryCursorSnapshot {
     idx: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     ts_ns: Option<u64>,
+    is_keyframe: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     keyframe_cl: Option<u64>,
 }
@@ -3098,6 +3099,7 @@ where
         cl: cl.id,
         idx: resolved.idx,
         ts_ns: time_of(cl.as_ref()).map(|t| t.as_nanos()),
+        is_keyframe: session.is_keyframe_culistid(cl.id),
         keyframe_cl: session.nearest_keyframe_culistid(cl.id),
     })
 }
