@@ -250,10 +250,19 @@ where
     }
 
     fn nearest_keyframe(&self, target_culistid: u64) -> Option<KeyFrame> {
+        // Nonzero runtime keyframes are currently frozen task-by-task immediately before each
+        // task process step, so restoring one and replaying from the top of the CL can create a
+        // mixed task-boundary state. The initial keyframe is still a coherent replay anchor.
         self.keyframes
             .iter()
-            .filter(|kf| kf.culistid <= target_culistid)
+            .filter(|kf| kf.culistid == 0 && kf.culistid <= target_culistid)
             .max_by_key(|kf| kf.culistid)
+            .or_else(|| {
+                self.keyframes
+                    .iter()
+                    .filter(|kf| kf.culistid <= target_culistid)
+                    .min_by_key(|kf| kf.culistid)
+            })
             .cloned()
     }
 
