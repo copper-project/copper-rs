@@ -317,10 +317,11 @@ pub mod prelude {
     pub use cu29_traits::{
         COMPACT_STRING_CAPACITY, CopperListTuple, CuCompactString, CuError, CuMsgMetadataTrait,
         CuMsgOrigin, CuPayloadRawBytes, CuResult, DebugFieldDescriptor, DebugFieldKind,
-        DebugFieldSemantics, DebugScalarRegistration, DebugScalarType, ErasedCuStampedData,
-        ErasedCuStampedDataSet, MatchingTasks, Metadata, ObservedWriter, PayloadSchemas,
-        TaskOutputSpec, UnifiedLogType, WriteStream, abort_observed_encode, begin_observed_encode,
-        finish_observed_encode, observed_encode_bytes, record_observed_encode_bytes, with_cause,
+        DebugFieldSemantics, DebugScalarKind, DebugScalarRegistration, DebugScalarType,
+        ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks, Metadata, ObservedWriter,
+        PayloadSchemas, TaskOutputSpec, UnifiedLogType, WriteStream, abort_observed_encode,
+        begin_observed_encode, finish_observed_encode, observed_encode_bytes,
+        record_observed_encode_bytes, with_cause,
     };
     #[cfg(feature = "std")]
     pub use cu29_unifiedlog::memmap;

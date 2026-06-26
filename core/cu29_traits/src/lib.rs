@@ -551,6 +551,72 @@ pub enum DebugFieldKind {
     Enum,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DebugScalarKind {
+    Bool,
+    I8,
+    I16,
+    I32,
+    I64,
+    I128,
+    Isize,
+    U8,
+    U16,
+    U32,
+    U64,
+    U128,
+    Usize,
+    F32,
+    F64,
+    Char,
+    String,
+}
+
+impl DebugScalarKind {
+    pub const fn type_name(self) -> &'static str {
+        match self {
+            Self::Bool => "bool",
+            Self::I8 => "i8",
+            Self::I16 => "i16",
+            Self::I32 => "i32",
+            Self::I64 => "i64",
+            Self::I128 => "i128",
+            Self::Isize => "isize",
+            Self::U8 => "u8",
+            Self::U16 => "u16",
+            Self::U32 => "u32",
+            Self::U64 => "u64",
+            Self::U128 => "u128",
+            Self::Usize => "usize",
+            Self::F32 => "f32",
+            Self::F64 => "f64",
+            Self::Char => "char",
+            Self::String => "String",
+        }
+    }
+
+    pub const fn is_numeric(self) -> bool {
+        matches!(
+            self,
+            Self::I8
+                | Self::I16
+                | Self::I32
+                | Self::I64
+                | Self::I128
+                | Self::Isize
+                | Self::U8
+                | Self::U16
+                | Self::U32
+                | Self::U64
+                | Self::U128
+                | Self::Usize
+                | Self::F32
+                | Self::F64
+        )
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DebugFieldDescriptor {
     pub display_path: String,
@@ -560,8 +626,9 @@ pub struct DebugFieldDescriptor {
         deserialize_with = "deserialize_debug_binding_name"
     )]
     pub binding_name: Option<String>,
-    pub field_type: String,
     pub value_type_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scalar_kind: Option<DebugScalarKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub semantics: Option<DebugFieldSemantics>,
     pub nullable: bool,
@@ -638,7 +705,7 @@ where
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DebugScalarRegistration {
     pub type_path: &'static str,
-    pub field_type: &'static str,
+    pub scalar_kind: DebugScalarKind,
     pub semantics: DebugFieldSemantics,
 }
 
@@ -801,7 +868,10 @@ mod tests {
 // Tests that require std feature
 #[cfg(all(test, feature = "std"))]
 mod std_tests {
-    use crate::{CuError, DebugFieldDescriptor, DebugFieldKind, DebugFieldSemantics, with_cause};
+    use crate::{
+        CuError, DebugFieldDescriptor, DebugFieldKind, DebugFieldSemantics, DebugScalarKind,
+        with_cause,
+    };
     use serde_json::json;
 
     #[test]
@@ -916,8 +986,8 @@ mod std_tests {
         let descriptor = DebugFieldDescriptor {
             display_path: "meta.process_time.start_ns".to_owned(),
             binding_name: None,
-            field_type: "integer".to_owned(),
             value_type_path: "cu29_clock::CuTime".to_owned(),
+            scalar_kind: Some(DebugScalarKind::U64),
             semantics: Some(DebugFieldSemantics::Time),
             nullable: true,
             kind: DebugFieldKind::Scalar,
@@ -933,7 +1003,6 @@ mod std_tests {
         let encoded = json!({
             "display_path": "meta.process_time.start_ns",
             "binding_name": [],
-            "field_type": "integer",
             "value_type_path": "cu29_clock::CuTime",
             "semantics": "Time",
             "nullable": true,
@@ -943,6 +1012,7 @@ mod std_tests {
         let descriptor: DebugFieldDescriptor = serde_json::from_value(encoded).unwrap();
         assert_eq!(descriptor.binding_name, None);
         assert_eq!(descriptor.semantics, Some(DebugFieldSemantics::Time));
+        assert_eq!(descriptor.scalar_kind, None);
         assert_eq!(descriptor.kind, DebugFieldKind::Scalar);
         assert!(descriptor.children.is_empty());
     }

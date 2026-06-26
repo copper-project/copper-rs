@@ -679,6 +679,17 @@ where
             .ok_or_else(|| CuError::from(format!("Task '{task_id}' was not found.")))
     }
 
+    /// Borrows the current typed debug-state view for one task.
+    pub fn with_debug_state<R>(
+        &self,
+        task_id: &str,
+        f: impl FnOnce(&dyn crate::reflect::Reflect) -> R,
+    ) -> CuResult<R> {
+        self.app
+            .with_debug_state(task_id, f)
+            .ok_or_else(|| CuError::from(format!("Task '{task_id}' was not found.")))
+    }
+
     /// Dumps the reflected runtime state of one task.
     pub fn dump_reflected_task(&self, task_id: &str) -> CuResult<String> {
         let task = self.reflected_task(task_id)?;

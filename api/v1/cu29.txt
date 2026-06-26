@@ -64,6 +64,7 @@ pub use cu29::prelude::CuRuntime
 pub use cu29::prelude::DebugFieldDescriptor
 pub use cu29::prelude::DebugFieldKind
 pub use cu29::prelude::DebugFieldSemantics
+pub use cu29::prelude::DebugScalarKind
 pub use cu29::prelude::DebugScalarRegistration
 pub use cu29::prelude::DebugScalarType
 pub use cu29::prelude::Deserialize

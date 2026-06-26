@@ -3,9 +3,7 @@
 
 use crate::config::ComponentConfig;
 use crate::context::CuContext;
-use crate::reflect::Reflect;
-#[cfg(feature = "reflect")]
-use crate::reflect::TypePath;
+use crate::reflect::{GetTypeRegistration, Reflect, TypePath, TypeRegistry};
 #[cfg(feature = "reflect")]
 use bevy_reflect;
 use bincode::de::{Decode, Decoder};
@@ -445,6 +443,37 @@ pub trait CuSrcTask: Freezable + Reflect {
     /// Resources required by the task.
     type Resources<'r>;
 
+    /// Registers the reflected type used as this task's debug-state contract.
+    ///
+    /// The default exposes the task struct itself. Override this when the task
+    /// contains ignored, third-party, hardware, or otherwise non-inspectable
+    /// internals and should expose a purpose-built debug-state view instead.
+    fn register_debug_state_types(registry: &mut TypeRegistry)
+    where
+        Self: GetTypeRegistration + Sized,
+    {
+        registry.register::<Self>();
+    }
+
+    /// Returns the reflected type path used as this task's debug-state schema.
+    fn debug_state_type_path() -> &'static str
+    where
+        Self: TypePath + Sized,
+    {
+        Self::type_path()
+    }
+
+    /// Borrows this task's current debug-state view.
+    ///
+    /// Override this together with [`debug_state_type_path`](Self::debug_state_type_path)
+    /// when the debug state is a projected view rather than the task struct.
+    fn with_debug_state<R>(&self, f: impl FnOnce(&dyn Reflect) -> R) -> R
+    where
+        Self: Sized,
+    {
+        f(self)
+    }
+
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
     /// The config allows you to access the configuration of the task.
     fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
@@ -487,6 +516,37 @@ pub trait CuTask: Freezable + Reflect {
     type Output<'m>: CuMsgPayload;
     /// Resources required by the task.
     type Resources<'r>;
+
+    /// Registers the reflected type used as this task's debug-state contract.
+    ///
+    /// The default exposes the task struct itself. Override this when the task
+    /// contains ignored, third-party, hardware, or otherwise non-inspectable
+    /// internals and should expose a purpose-built debug-state view instead.
+    fn register_debug_state_types(registry: &mut TypeRegistry)
+    where
+        Self: GetTypeRegistration + Sized,
+    {
+        registry.register::<Self>();
+    }
+
+    /// Returns the reflected type path used as this task's debug-state schema.
+    fn debug_state_type_path() -> &'static str
+    where
+        Self: TypePath + Sized,
+    {
+        Self::type_path()
+    }
+
+    /// Borrows this task's current debug-state view.
+    ///
+    /// Override this together with [`debug_state_type_path`](Self::debug_state_type_path)
+    /// when the debug state is a projected view rather than the task struct.
+    fn with_debug_state<R>(&self, f: impl FnOnce(&dyn Reflect) -> R) -> R
+    where
+        Self: Sized,
+    {
+        f(self)
+    }
 
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
     /// The config allows you to access the configuration of the task.
@@ -534,6 +594,37 @@ pub trait CuSinkTask: Freezable + Reflect {
     type Input<'m>: CuMsgPack;
     /// Resources required by the task.
     type Resources<'r>;
+
+    /// Registers the reflected type used as this task's debug-state contract.
+    ///
+    /// The default exposes the task struct itself. Override this when the task
+    /// contains ignored, third-party, hardware, or otherwise non-inspectable
+    /// internals and should expose a purpose-built debug-state view instead.
+    fn register_debug_state_types(registry: &mut TypeRegistry)
+    where
+        Self: GetTypeRegistration + Sized,
+    {
+        registry.register::<Self>();
+    }
+
+    /// Returns the reflected type path used as this task's debug-state schema.
+    fn debug_state_type_path() -> &'static str
+    where
+        Self: TypePath + Sized,
+    {
+        Self::type_path()
+    }
+
+    /// Borrows this task's current debug-state view.
+    ///
+    /// Override this together with [`debug_state_type_path`](Self::debug_state_type_path)
+    /// when the debug state is a projected view rather than the task struct.
+    fn with_debug_state<R>(&self, f: impl FnOnce(&dyn Reflect) -> R) -> R
+    where
+        Self: Sized,
+    {
+        f(self)
+    }
 
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
     /// The config allows you to access the configuration of the task.

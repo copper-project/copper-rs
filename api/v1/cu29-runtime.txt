@@ -501,12 +501,15 @@ pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::new(config: core::option
 impl<T, O> cu29_runtime::cutask::CuSrcTask for cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O> where T: for<'m> cu29_runtime::cutask::CuSrcTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
 pub type cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::Output<'m> = <T as cu29_runtime::cutask::CuSrcTask>::Output
 pub type cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::Resources<'r> = cu29_runtime::cuasynctask::CuAsyncSrcTaskResources<'r, T>
+pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::debug_state_type_path() -> &'static str where Self: cu29_runtime::reflect::TypePath + core::marker::Sized
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::new(config: core::option::Option<&cu29_runtime::config::ComponentConfig>, resources: Self::Resources) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::postprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::preprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::process<'o>(&mut self, ctx: &cu29_runtime::context::CuContext, real_output: &mut Self::Output) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::register_debug_state_types(registry: &mut cu29_runtime::reflect::TypeRegistry) where Self: cu29_runtime::reflect::GetTypeRegistration + core::marker::Sized
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::start(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::stop(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
 impl<T, O> cu29_runtime::cutask::Freezable for cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O> where T: for<'m> cu29_runtime::cutask::CuSrcTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::thaw<D: cu_bincode::de::Decoder>(&mut self, _decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
@@ -526,12 +529,15 @@ impl<T, I, O> cu29_runtime::cutask::CuTask for cu29_runtime::cuasynctask::CuAsyn
 pub type cu29_runtime::cuasynctask::CuAsyncTask<T, O>::Input<'m> = <T as cu29_runtime::cutask::CuTask>::Input
 pub type cu29_runtime::cuasynctask::CuAsyncTask<T, O>::Output<'m> = <T as cu29_runtime::cutask::CuTask>::Output
 pub type cu29_runtime::cuasynctask::CuAsyncTask<T, O>::Resources<'r> = cu29_runtime::cuasynctask::CuAsyncTaskResources<'r, T>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::debug_state_type_path() -> &'static str where Self: cu29_runtime::reflect::TypePath + core::marker::Sized
 pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::new(config: core::option::Option<&cu29_runtime::config::ComponentConfig>, resources: Self::Resources) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
 pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::postprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::preprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::process<'i, 'o>(&mut self, ctx: &cu29_runtime::context::CuContext, input: &Self::Input, real_output: &mut Self::Output) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::register_debug_state_types(registry: &mut cu29_runtime::reflect::TypeRegistry) where Self: cu29_runtime::reflect::GetTypeRegistration + core::marker::Sized
 pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::start(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::stop(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
 impl<T, O> cu29_runtime::cutask::Freezable for cu29_runtime::cuasynctask::CuAsyncTask<T, O> where T: for<'m> cu29_runtime::cutask::CuTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
 pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::thaw<D: cu_bincode::de::Decoder>(&mut self, _decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
@@ -836,68 +842,89 @@ pub type cu29_runtime::cutask::CuMsg<T>::Payload = T
 pub trait cu29_runtime::cutask::CuSinkTask: cu29_runtime::cutask::Freezable + cu29_runtime::reflect::Reflect
 pub type cu29_runtime::cutask::CuSinkTask::Input<'m>: cu29_runtime::cutask::CuMsgPack
 pub type cu29_runtime::cutask::CuSinkTask::Resources<'r>
+pub fn cu29_runtime::cutask::CuSinkTask::debug_state_type_path() -> &'static str where Self: cu29_runtime::reflect::TypePath + core::marker::Sized
 pub fn cu29_runtime::cutask::CuSinkTask::new(_config: core::option::Option<&cu29_runtime::config::ComponentConfig>, _resources: Self::Resources) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
 pub fn cu29_runtime::cutask::CuSinkTask::postprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask::CuSinkTask::preprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask::CuSinkTask::process<'i>(&mut self, _ctx: &cu29_runtime::context::CuContext, input: &Self::Input) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cutask::CuSinkTask::register_debug_state_types(registry: &mut cu29_runtime::reflect::TypeRegistry) where Self: cu29_runtime::reflect::GetTypeRegistration + core::marker::Sized
 pub fn cu29_runtime::cutask::CuSinkTask::start(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask::CuSinkTask::stop(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cutask::CuSinkTask::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
 impl<I: cu29_runtime::simulation::CuSimSinkInput + 'static> cu29_runtime::cutask::CuSinkTask for cu29_runtime::simulation::CuSimSinkTask<I>
 pub type cu29_runtime::simulation::CuSimSinkTask<I>::Input<'m> = <I as cu29_runtime::simulation::CuSimSinkInput>::With
 pub type cu29_runtime::simulation::CuSimSinkTask<I>::Resources<'r> = ()
+pub fn cu29_runtime::simulation::CuSimSinkTask<I>::debug_state_type_path() -> &'static str where Self: cu29_runtime::reflect::TypePath + core::marker::Sized
 pub fn cu29_runtime::simulation::CuSimSinkTask<I>::new(_config: core::option::Option<&cu29_runtime::config::ComponentConfig>, _resources: Self::Resources) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
 pub fn cu29_runtime::simulation::CuSimSinkTask<I>::postprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::simulation::CuSimSinkTask<I>::preprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::simulation::CuSimSinkTask<I>::process(&mut self, _ctx: &cu29_runtime::context::CuContext, _input: &Self::Input) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::simulation::CuSimSinkTask<I>::register_debug_state_types(registry: &mut cu29_runtime::reflect::TypeRegistry) where Self: cu29_runtime::reflect::GetTypeRegistration + core::marker::Sized
 pub fn cu29_runtime::simulation::CuSimSinkTask<I>::start(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::simulation::CuSimSinkTask<I>::stop(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::simulation::CuSimSinkTask<I>::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
 pub trait cu29_runtime::cutask::CuSrcTask: cu29_runtime::cutask::Freezable + cu29_runtime::reflect::Reflect
 pub type cu29_runtime::cutask::CuSrcTask::Output<'m>: cu29_runtime::cutask::CuMsgPayload
 pub type cu29_runtime::cutask::CuSrcTask::Resources<'r>
+pub fn cu29_runtime::cutask::CuSrcTask::debug_state_type_path() -> &'static str where Self: cu29_runtime::reflect::TypePath + core::marker::Sized
 pub fn cu29_runtime::cutask::CuSrcTask::new(_config: core::option::Option<&cu29_runtime::config::ComponentConfig>, _resources: Self::Resources) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
 pub fn cu29_runtime::cutask::CuSrcTask::postprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask::CuSrcTask::preprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask::CuSrcTask::process<'o>(&mut self, ctx: &cu29_runtime::context::CuContext, new_msg: &mut Self::Output) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cutask::CuSrcTask::register_debug_state_types(registry: &mut cu29_runtime::reflect::TypeRegistry) where Self: cu29_runtime::reflect::GetTypeRegistration + core::marker::Sized
 pub fn cu29_runtime::cutask::CuSrcTask::start(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask::CuSrcTask::stop(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cutask::CuSrcTask::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
 impl<T, O> cu29_runtime::cutask::CuSrcTask for cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O> where T: for<'m> cu29_runtime::cutask::CuSrcTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
 pub type cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::Output<'m> = <T as cu29_runtime::cutask::CuSrcTask>::Output
 pub type cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::Resources<'r> = cu29_runtime::cuasynctask::CuAsyncSrcTaskResources<'r, T>
+pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::debug_state_type_path() -> &'static str where Self: cu29_runtime::reflect::TypePath + core::marker::Sized
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::new(config: core::option::Option<&cu29_runtime::config::ComponentConfig>, resources: Self::Resources) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::postprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::preprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::process<'o>(&mut self, ctx: &cu29_runtime::context::CuContext, real_output: &mut Self::Output) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::register_debug_state_types(registry: &mut cu29_runtime::reflect::TypeRegistry) where Self: cu29_runtime::reflect::GetTypeRegistration + core::marker::Sized
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::start(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::stop(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
 impl<T: cu29_runtime::cutask::CuMsgPayload + 'static> cu29_runtime::cutask::CuSrcTask for cu29_runtime::simulation::CuSimSrcTask<T>
 pub type cu29_runtime::simulation::CuSimSrcTask<T>::Output<'m> = cu29_runtime::cutask::CuStampedData<T, cu29_runtime::cutask::CuMsgMetadata>
 pub type cu29_runtime::simulation::CuSimSrcTask<T>::Resources<'r> = ()
+pub fn cu29_runtime::simulation::CuSimSrcTask<T>::debug_state_type_path() -> &'static str where Self: cu29_runtime::reflect::TypePath + core::marker::Sized
 pub fn cu29_runtime::simulation::CuSimSrcTask<T>::new(_config: core::option::Option<&cu29_runtime::config::ComponentConfig>, _resources: Self::Resources) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
 pub fn cu29_runtime::simulation::CuSimSrcTask<T>::postprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::simulation::CuSimSrcTask<T>::preprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::simulation::CuSimSrcTask<T>::process(&mut self, _ctx: &cu29_runtime::context::CuContext, _new_msg: &mut Self::Output) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::simulation::CuSimSrcTask<T>::register_debug_state_types(registry: &mut cu29_runtime::reflect::TypeRegistry) where Self: cu29_runtime::reflect::GetTypeRegistration + core::marker::Sized
 pub fn cu29_runtime::simulation::CuSimSrcTask<T>::start(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::simulation::CuSimSrcTask<T>::stop(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::simulation::CuSimSrcTask<T>::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
 pub trait cu29_runtime::cutask::CuTask: cu29_runtime::cutask::Freezable + cu29_runtime::reflect::Reflect
 pub type cu29_runtime::cutask::CuTask::Input<'m>: cu29_runtime::cutask::CuMsgPack
 pub type cu29_runtime::cutask::CuTask::Output<'m>: cu29_runtime::cutask::CuMsgPayload
 pub type cu29_runtime::cutask::CuTask::Resources<'r>
+pub fn cu29_runtime::cutask::CuTask::debug_state_type_path() -> &'static str where Self: cu29_runtime::reflect::TypePath + core::marker::Sized
 pub fn cu29_runtime::cutask::CuTask::new(_config: core::option::Option<&cu29_runtime::config::ComponentConfig>, _resources: Self::Resources) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
 pub fn cu29_runtime::cutask::CuTask::postprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask::CuTask::preprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask::CuTask::process<'i, 'o>(&mut self, _ctx: &cu29_runtime::context::CuContext, input: &Self::Input, output: &mut Self::Output) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cutask::CuTask::register_debug_state_types(registry: &mut cu29_runtime::reflect::TypeRegistry) where Self: cu29_runtime::reflect::GetTypeRegistration + core::marker::Sized
 pub fn cu29_runtime::cutask::CuTask::start(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask::CuTask::stop(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cutask::CuTask::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
 impl<T, I, O> cu29_runtime::cutask::CuTask for cu29_runtime::cuasynctask::CuAsyncTask<T, O> where T: for<'i, 'o> cu29_runtime::cutask::CuTask<Input<'i> = cu29_runtime::cutask::CuMsg<I>, Output<'o> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, I: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + core::marker::Sync + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
 pub type cu29_runtime::cuasynctask::CuAsyncTask<T, O>::Input<'m> = <T as cu29_runtime::cutask::CuTask>::Input
 pub type cu29_runtime::cuasynctask::CuAsyncTask<T, O>::Output<'m> = <T as cu29_runtime::cutask::CuTask>::Output
 pub type cu29_runtime::cuasynctask::CuAsyncTask<T, O>::Resources<'r> = cu29_runtime::cuasynctask::CuAsyncTaskResources<'r, T>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::debug_state_type_path() -> &'static str where Self: cu29_runtime::reflect::TypePath + core::marker::Sized
 pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::new(config: core::option::Option<&cu29_runtime::config::ComponentConfig>, resources: Self::Resources) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
 pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::postprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::preprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::process<'i, 'o>(&mut self, ctx: &cu29_runtime::context::CuContext, input: &Self::Input, real_output: &mut Self::Output) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::register_debug_state_types(registry: &mut cu29_runtime::reflect::TypeRegistry) where Self: cu29_runtime::reflect::GetTypeRegistration + core::marker::Sized
 pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::start(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::stop(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
 pub trait cu29_runtime::cutask::Freezable
 pub fn cu29_runtime::cutask::Freezable::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 pub fn cu29_runtime::cutask::Freezable::thaw<D: cu_bincode::de::Decoder>(&mut self, _decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
@@ -925,6 +952,7 @@ pub fn cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L>::dump_reflected
 pub fn cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L>::dump_reflected_task_schemas(&self) -> alloc::string::String
 pub fn cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L>::reflected_task(&self, task_id: &str) -> cu29_traits::CuResult<&dyn cu29_runtime::reflect::Reflect>
 pub fn cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L>::reflected_task_mut(&mut self, task_id: &str) -> cu29_traits::CuResult<&mut dyn cu29_runtime::reflect::Reflect>
+pub fn cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L>::with_debug_state<R>(&self, task_id: &str, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> cu29_traits::CuResult<R>
 impl<App, P, CB, TF, S, L> cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L> where App: cu29_runtime::app::CuSimApplication<S, L>, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, S: cu29_unifiedlog::SectionStorage, P: cu29_traits::CopperListTuple + 'static, CB: for<'a> core::ops::function::Fn(&'a cu29_runtime::copperlist::CopperList<P>, cu29_clock::RobotClock, cu29_clock::RobotClockMock) -> alloc::boxed::Box<(dyn for<'z> core::ops::function::FnMut(<App as cu29_runtime::app::CuSimApplication>::Step) -> cu29_runtime::simulation::SimOverride + 'a)>, TF: core::ops::function::Fn(&cu29_runtime::copperlist::CopperList<P>) -> core::option::Option<cu29_clock::CuTime> + core::clone::Clone
 pub fn cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L>::app(&self) -> &App
 pub fn cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L>::app_mut(&mut self) -> &mut App
@@ -1607,9 +1635,11 @@ impl<T> cu29_runtime::reflect::GetTypeRegistration for T
 pub trait cu29_runtime::reflect::Reflect: 'static
 impl<T: 'static> cu29_runtime::reflect::Reflect for T
 pub trait cu29_runtime::reflect::ReflectTaskIntrospection
+pub fn cu29_runtime::reflect::ReflectTaskIntrospection::debug_state_type_path(_task_id: &str) -> core::option::Option<&'static str>
 pub fn cu29_runtime::reflect::ReflectTaskIntrospection::reflect_task(&self, task_id: &str) -> core::option::Option<&dyn cu29_runtime::reflect::Reflect>
 pub fn cu29_runtime::reflect::ReflectTaskIntrospection::reflect_task_mut(&mut self, task_id: &str) -> core::option::Option<&mut dyn cu29_runtime::reflect::Reflect>
 pub fn cu29_runtime::reflect::ReflectTaskIntrospection::register_reflect_types(_registry: &mut cu29_runtime::reflect::TypeRegistry)
+pub fn cu29_runtime::reflect::ReflectTaskIntrospection::with_debug_state<R>(&self, _task_id: &str, _f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> core::option::Option<R>
 pub trait cu29_runtime::reflect::ReflectTypePath
 impl<T> cu29_runtime::reflect::ReflectTypePath for T
 pub trait cu29_runtime::reflect::TypePath
@@ -1916,12 +1946,15 @@ pub fn cu29_runtime::simulation::CuSimSinkTask<I>::type_path() -> &'static str
 impl<I: cu29_runtime::simulation::CuSimSinkInput + 'static> cu29_runtime::cutask::CuSinkTask for cu29_runtime::simulation::CuSimSinkTask<I>
 pub type cu29_runtime::simulation::CuSimSinkTask<I>::Input<'m> = <I as cu29_runtime::simulation::CuSimSinkInput>::With
 pub type cu29_runtime::simulation::CuSimSinkTask<I>::Resources<'r> = ()
+pub fn cu29_runtime::simulation::CuSimSinkTask<I>::debug_state_type_path() -> &'static str where Self: cu29_runtime::reflect::TypePath + core::marker::Sized
 pub fn cu29_runtime::simulation::CuSimSinkTask<I>::new(_config: core::option::Option<&cu29_runtime::config::ComponentConfig>, _resources: Self::Resources) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
 pub fn cu29_runtime::simulation::CuSimSinkTask<I>::postprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::simulation::CuSimSinkTask<I>::preprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::simulation::CuSimSinkTask<I>::process(&mut self, _ctx: &cu29_runtime::context::CuContext, _input: &Self::Input) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::simulation::CuSimSinkTask<I>::register_debug_state_types(registry: &mut cu29_runtime::reflect::TypeRegistry) where Self: cu29_runtime::reflect::GetTypeRegistration + core::marker::Sized
 pub fn cu29_runtime::simulation::CuSimSinkTask<I>::start(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::simulation::CuSimSinkTask<I>::stop(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::simulation::CuSimSinkTask<I>::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
 impl<I> cu29_runtime::cutask::Freezable for cu29_runtime::simulation::CuSimSinkTask<I>
 pub fn cu29_runtime::simulation::CuSimSinkTask<I>::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 pub fn cu29_runtime::simulation::CuSimSinkTask<I>::thaw<D: cu_bincode::de::Decoder>(&mut self, _decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
@@ -1937,12 +1970,15 @@ pub fn cu29_runtime::simulation::CuSimSrcTask<T>::type_path() -> &'static str
 impl<T: cu29_runtime::cutask::CuMsgPayload + 'static> cu29_runtime::cutask::CuSrcTask for cu29_runtime::simulation::CuSimSrcTask<T>
 pub type cu29_runtime::simulation::CuSimSrcTask<T>::Output<'m> = cu29_runtime::cutask::CuStampedData<T, cu29_runtime::cutask::CuMsgMetadata>
 pub type cu29_runtime::simulation::CuSimSrcTask<T>::Resources<'r> = ()
+pub fn cu29_runtime::simulation::CuSimSrcTask<T>::debug_state_type_path() -> &'static str where Self: cu29_runtime::reflect::TypePath + core::marker::Sized
 pub fn cu29_runtime::simulation::CuSimSrcTask<T>::new(_config: core::option::Option<&cu29_runtime::config::ComponentConfig>, _resources: Self::Resources) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
 pub fn cu29_runtime::simulation::CuSimSrcTask<T>::postprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::simulation::CuSimSrcTask<T>::preprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::simulation::CuSimSrcTask<T>::process(&mut self, _ctx: &cu29_runtime::context::CuContext, _new_msg: &mut Self::Output) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::simulation::CuSimSrcTask<T>::register_debug_state_types(registry: &mut cu29_runtime::reflect::TypeRegistry) where Self: cu29_runtime::reflect::GetTypeRegistration + core::marker::Sized
 pub fn cu29_runtime::simulation::CuSimSrcTask<T>::start(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::simulation::CuSimSrcTask<T>::stop(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::simulation::CuSimSrcTask<T>::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
 impl<T> cu29_runtime::cutask::Freezable for cu29_runtime::simulation::CuSimSrcTask<T>
 pub fn cu29_runtime::simulation::CuSimSrcTask<T>::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 pub fn cu29_runtime::simulation::CuSimSrcTask<T>::thaw<D: cu_bincode::de::Decoder>(&mut self, decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
