@@ -122,7 +122,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -192,7 +192,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -240,7 +240,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -282,7 +282,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -346,7 +346,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -425,7 +425,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -479,7 +479,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -531,7 +531,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -577,7 +577,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -647,7 +647,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -712,7 +712,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -775,7 +775,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -832,7 +832,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -889,7 +889,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}

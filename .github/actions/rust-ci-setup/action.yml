@@ -55,6 +55,9 @@ outputs:
   sccache_cache_primary_key:
     description: Primary sccache key for this job.
     value: ${{ steps.sccache_key.outputs.primary }}
+  sccache_cache_save_allowed:
+    description: Whether this run is allowed to save CI caches.
+    value: ${{ steps.sccache_save_policy.outputs.allowed }}
 runs:
   using: composite
   steps:
@@ -89,7 +92,6 @@ runs:
           echo "restore_keys<<EOF"
           echo "sccache-${{ runner.os }}-${{ runner.arch }}-${{ inputs.toolchain }}-${{ inputs.cache_prefix }}-${{ inputs.sccache_key_suffix }}-"
           echo "sccache-${{ runner.os }}-${{ runner.arch }}-${{ inputs.toolchain }}-${{ inputs.cache_prefix }}-"
-          echo "sccache-${{ runner.os }}-${{ runner.arch }}-${{ inputs.toolchain }}-"
           echo "EOF"
         } >> "$GITHUB_OUTPUT"
     - name: Restore sccache
@@ -123,6 +125,22 @@ runs:
           du -sh "$SCCACHE_DIR" || true
           find "$SCCACHE_DIR" -mindepth 1 -maxdepth 1 | wc -l | awk '{print "sccache top-level entries: " $1}'
         fi
+    - name: Compute cache save policy
+      id: sccache_save_policy
+      shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        REF_NAME: ${{ github.ref }}
+        REPOSITORY: ${{ github.repository }}
+        PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+      run: |
+        allowed=false
+        if [[ "$REF_NAME" == "refs/heads/master" ]]; then
+          allowed=true
+        elif [[ "$EVENT_NAME" == "pull_request" && "$PR_HEAD_REPOSITORY" == "$REPOSITORY" ]]; then
+          allowed=true
+        fi
+        echo "allowed=$allowed" >> "$GITHUB_OUTPUT"
     - name: Install latest nextest
       if: inputs.install_nextest == 'true'
       uses: taiki-e/install-action@nextest
@@ -184,7 +202,7 @@ runs:
       with:
         prefix-key: ${{ inputs.cache_prefix }}
         shared-key: ${{ inputs.cache_shared_key }}
-        save-if: ${{ github.ref == 'refs/heads/master' }}
+        save-if: ${{ steps.sccache_save_policy.outputs.allowed == 'true' }}
         cache-targets: "false"
         cache-bin: "true"
 

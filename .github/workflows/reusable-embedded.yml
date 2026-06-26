@@ -36,7 +36,7 @@ jobs:
       - name: Unit tests of core with no-std
         run: cargo +${{ inputs.toolchain }} nextest run --no-default-features
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.embedded_setup.outputs.sccache_cache_primary_key != '' && steps.embedded_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.embedded_setup.outputs.sccache_cache_save_allowed == 'true' && steps.embedded_setup.outputs.sccache_cache_primary_key != '' && steps.embedded_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -62,7 +62,7 @@ jobs:
       - name: Build embedded-only crates
         run: python3 support/ci/embedded_crates.py run --action build --toolchain ${{ inputs.toolchain }}
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.embedded_setup.outputs.sccache_cache_primary_key != '' && steps.embedded_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.embedded_setup.outputs.sccache_cache_save_allowed == 'true' && steps.embedded_setup.outputs.sccache_cache_primary_key != '' && steps.embedded_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -100,7 +100,7 @@ jobs:
         working-directory: examples/cu_rp2350_skeleton
         run: cargo +${{ inputs.toolchain }} build --no-default-features --features host --bin blinky-logreader --target ${HOST_TARGET}
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.embedded_setup.outputs.sccache_cache_primary_key != '' && steps.embedded_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.embedded_setup.outputs.sccache_cache_save_allowed == 'true' && steps.embedded_setup.outputs.sccache_cache_primary_key != '' && steps.embedded_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
