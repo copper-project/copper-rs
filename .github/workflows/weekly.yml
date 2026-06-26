@@ -41,6 +41,7 @@ jobs:
       toolchain: beta
       linux_cargo_paths: true
       linux_runner_label: ubuntu-latest
+      linux_light_runner_label: ubuntu-latest
       windows_runner_label: windows-latest
 
   embedded:
