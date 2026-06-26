@@ -530,8 +530,22 @@ where
             }
 
             if target_idx >= current {
-                replay_start = current + 1;
-                keyframe_used = self.last_keyframe;
+                let nearest_keyframe = self.nearest_keyframe(target_culistid);
+                let nearest_keyframe_idx = nearest_keyframe
+                    .as_ref()
+                    .and_then(|kf| self.index_for_culistid(kf.culistid).ok());
+
+                if let (Some(kf), Some(kf_idx)) = (nearest_keyframe, nearest_keyframe_idx)
+                    && kf_idx > current
+                {
+                    self.restore_keyframe(&kf)?;
+                    self.clear_runtime_copperlist_snapshot();
+                    keyframe_used = Some(kf.culistid);
+                    replay_start = kf_idx;
+                } else {
+                    replay_start = current + 1;
+                    keyframe_used = self.last_keyframe;
+                }
             } else {
                 // Need to rewind to nearest keyframe
                 let Some(kf) = self.nearest_keyframe(target_culistid) else {
