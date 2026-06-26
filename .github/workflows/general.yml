@@ -309,7 +309,7 @@ jobs:
       run_other: false
 
   extra-examples-container:
-    name: Remerged Extra Examples
+    name: Extra Examples
     if: needs.linux-ci-image.outputs.image != ''
     needs: linux-ci-image
     runs-on: ubuntu-latest-m
@@ -334,7 +334,7 @@ jobs:
           sccache_key_suffix: extra-examples
       - name: Install embedded targets
         run: rustup target add thumbv8m.main-none-eabihf thumbv7em-none-eabihf --toolchain stable
-      - name: Check remerged extra examples
+      - name: Check extra examples
         run: just check-extra-examples
       - name: Show sccache stats
         if: always()
@@ -347,7 +347,7 @@ jobs:
           key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
 
   extra-examples-host:
-    name: Remerged Extra Examples
+    name: Extra Examples
     if: needs.linux-ci-image.outputs.image == ''
     needs: linux-ci-image
     runs-on: ubuntu-latest-m
@@ -367,7 +367,7 @@ jobs:
           sccache_key_suffix: extra-examples
       - name: Install embedded targets
         run: rustup target add thumbv8m.main-none-eabihf thumbv7em-none-eabihf --toolchain stable
-      - name: Check remerged extra examples
+      - name: Check extra examples
         run: just check-extra-examples
       - name: Show sccache stats
         if: always()
@@ -380,7 +380,7 @@ jobs:
           key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
 
   benchmarks-container:
-    name: Remerged Benchmarks
+    name: Benchmarks
     if: needs.linux-ci-image.outputs.image != ''
     needs: linux-ci-image
     runs-on: ubuntu-latest-m
@@ -403,7 +403,7 @@ jobs:
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
           sccache_key_suffix: benchmarks
-      - name: Check remerged benchmarks
+      - name: Check benchmarks
         run: just check-benchmarks
       - name: Show sccache stats
         if: always()
@@ -416,7 +416,7 @@ jobs:
           key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
 
   benchmarks-host:
-    name: Remerged Benchmarks
+    name: Benchmarks
     if: needs.linux-ci-image.outputs.image == ''
     needs: linux-ci-image
     runs-on: ubuntu-latest-m
@@ -434,7 +434,7 @@ jobs:
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
           sccache_key_suffix: benchmarks
-      - name: Check remerged benchmarks
+      - name: Check benchmarks
         run: just check-benchmarks
       - name: Show sccache stats
         if: always()
