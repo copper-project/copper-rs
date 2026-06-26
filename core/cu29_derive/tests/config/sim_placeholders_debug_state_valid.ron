@@ -1,0 +1,21 @@
+(
+    tasks: [
+        (
+            id: "src",
+            type: "Source",
+            run_in_sim: false,
+        ),
+        (
+            id: "sink",
+            type: "Sink",
+            run_in_sim: false,
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "sink",
+            msg: "u32",
+        ),
+    ],
+)

@@ -13,10 +13,10 @@
 //! affinity is cross-platform). When the feature is off, the requested affinity
 //! and policy are ignored and a warning is emitted.
 //!
-//! Per-pool [`OnError`] controls what happens when a request cannot be applied
+//! Per-pool [`OnError`](crate::config::OnError) controls what happens when a request cannot be applied
 //! (for example, setting a real-time priority without `CAP_SYS_NICE`):
-//! [`OnError::Warn`] logs and continues with default scheduling, while
-//! [`OnError::Strict`] fails the build.
+//! [`OnError::Warn`](crate::config::OnError::Warn) logs and continues with default scheduling, while
+//! [`OnError::Strict`](crate::config::OnError::Strict) fails the build.
 
 #[cfg(feature = "rt-scheduling")]
 use crate::config::OnError;
@@ -102,9 +102,10 @@ fn apply_scheduling(_pool: &ThreadPool, spec: &ThreadPoolConfig) -> CuResult<()>
 ///
 /// This is for worker threads that are not part of a rayon pool — notably the
 /// `parallel-rt` stage workers, which are plain `std::thread::scope` threads.
-/// Behavior mirrors [`build_pool`]: [`OnError::Warn`] logs and returns `Ok`,
-/// [`OnError::Strict`] returns `Err`. When the `rt-scheduling` feature is off the
-/// request is ignored (with a warning).
+/// Behavior mirrors [`build_pool`]: [`OnError::Warn`](crate::config::OnError::Warn)
+/// logs and returns `Ok`, [`OnError::Strict`](crate::config::OnError::Strict)
+/// returns `Err`. When the `rt-scheduling` feature is off the request is ignored
+/// (with a warning).
 #[cfg(feature = "rt-scheduling")]
 pub fn apply_current_thread_scheduling(spec: &ThreadPoolConfig, index: usize) -> CuResult<()> {
     if spec.affinity.is_none() && spec.policy == SchedulingPolicy::Fair {

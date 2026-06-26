@@ -17,6 +17,27 @@ pub cu29_traits::DebugFieldSemantics::Quantity
 pub cu29_traits::DebugFieldSemantics::Quantity::quantity_name: alloc::string::String
 pub cu29_traits::DebugFieldSemantics::Quantity::unit_symbol: alloc::string::String
 pub cu29_traits::DebugFieldSemantics::Time
+pub enum cu29_traits::DebugScalarKind
+pub cu29_traits::DebugScalarKind::Bool
+pub cu29_traits::DebugScalarKind::Char
+pub cu29_traits::DebugScalarKind::F32
+pub cu29_traits::DebugScalarKind::F64
+pub cu29_traits::DebugScalarKind::I128
+pub cu29_traits::DebugScalarKind::I16
+pub cu29_traits::DebugScalarKind::I32
+pub cu29_traits::DebugScalarKind::I64
+pub cu29_traits::DebugScalarKind::I8
+pub cu29_traits::DebugScalarKind::Isize
+pub cu29_traits::DebugScalarKind::String
+pub cu29_traits::DebugScalarKind::U128
+pub cu29_traits::DebugScalarKind::U16
+pub cu29_traits::DebugScalarKind::U32
+pub cu29_traits::DebugScalarKind::U64
+pub cu29_traits::DebugScalarKind::U8
+pub cu29_traits::DebugScalarKind::Usize
+impl cu29_traits::DebugScalarKind
+pub const fn cu29_traits::DebugScalarKind::is_numeric(self) -> bool
+pub const fn cu29_traits::DebugScalarKind::type_name(self) -> &'static str
 pub enum cu29_traits::UnifiedLogType
 pub cu29_traits::UnifiedLogType::CopperList
 pub cu29_traits::UnifiedLogType::Empty
@@ -77,13 +98,13 @@ pub struct cu29_traits::DebugFieldDescriptor
 pub cu29_traits::DebugFieldDescriptor::binding_name: core::option::Option<alloc::string::String>
 pub cu29_traits::DebugFieldDescriptor::children: alloc::vec::Vec<cu29_traits::DebugFieldDescriptor>
 pub cu29_traits::DebugFieldDescriptor::display_path: alloc::string::String
-pub cu29_traits::DebugFieldDescriptor::field_type: alloc::string::String
 pub cu29_traits::DebugFieldDescriptor::kind: cu29_traits::DebugFieldKind
 pub cu29_traits::DebugFieldDescriptor::nullable: bool
+pub cu29_traits::DebugFieldDescriptor::scalar_kind: core::option::Option<cu29_traits::DebugScalarKind>
 pub cu29_traits::DebugFieldDescriptor::semantics: core::option::Option<cu29_traits::DebugFieldSemantics>
 pub cu29_traits::DebugFieldDescriptor::value_type_path: alloc::string::String
 pub struct cu29_traits::DebugScalarRegistration
-pub cu29_traits::DebugScalarRegistration::field_type: &'static str
+pub cu29_traits::DebugScalarRegistration::scalar_kind: cu29_traits::DebugScalarKind
 pub cu29_traits::DebugScalarRegistration::semantics: cu29_traits::DebugFieldSemantics
 pub cu29_traits::DebugScalarRegistration::type_path: &'static str
 pub struct cu29_traits::ObservedWriter<W>

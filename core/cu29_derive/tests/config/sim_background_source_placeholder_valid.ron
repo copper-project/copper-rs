@@ -1,0 +1,20 @@
+(
+    runtime: (
+        thread_pools: [(id: "background", threads: 1)],
+    ),
+    tasks: [
+        (
+            id: "src",
+            type: "BackgroundSource",
+            background: true,
+            run_in_sim: false,
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "__nc__",
+            msg: "u32",
+        ),
+    ],
+)

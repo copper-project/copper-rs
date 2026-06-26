@@ -1611,7 +1611,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     Err(e) => return return_error(e.to_string()),
                 };
             let task_resource_mappings =
-                match build_task_resource_mappings(&resource_specs, &task_specs) {
+                match build_task_resource_mappings(&resource_specs, &task_specs, sim_mode) {
                     Ok(tokens) => tokens,
                     Err(e) => return return_error(e.to_string()),
                 };
@@ -1645,7 +1645,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     Err(e) => return return_error(e.to_string()),
                 };
             let task_resource_mappings =
-                match build_task_resource_mappings(&resource_specs, &task_specs) {
+                match build_task_resource_mappings(&resource_specs, &task_specs, sim_mode) {
                     Ok(tokens) => tokens,
                     Err(e) => return return_error(e.to_string()),
                 };
@@ -1750,6 +1750,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             Err(e) => return return_error(e),
         };
 
+        let runtime_task_types: Vec<Type> = (0..task_specs.ids.len())
+            .map(|index| runtime_task_type_for_index(&task_specs, graph, index, sim_mode))
+            .collect();
+
         let task_reflect_read_arms: Vec<proc_macro2::TokenStream> = task_specs
             .ids
             .iter()
@@ -1779,7 +1783,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let task_debug_state_type_path_arms: Vec<proc_macro2::TokenStream> = task_specs
             .ids
             .iter()
-            .zip(task_specs.task_types.iter())
+            .zip(runtime_task_types.iter())
             .zip(task_specs.cutypes.iter())
             .map(|((task_id, task_type), task_kind)| {
                 let task_id_lit = LitStr::new(task_id, Span::call_site());
@@ -1793,7 +1797,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let task_debug_state_read_arms: Vec<proc_macro2::TokenStream> = task_specs
             .ids
             .iter()
-            .zip(task_specs.task_types.iter())
+            .zip(runtime_task_types.iter())
             .zip(task_specs.cutypes.iter())
             .enumerate()
             .map(|(index, ((task_id, task_type), task_kind))| {
@@ -1812,8 +1816,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             .collect();
 
         let task_debug_state_registration_calls: Vec<proc_macro2::TokenStream> = task_specs
-            .task_types
+            .ids
             .iter()
+            .enumerate()
+            .map(|(index, _)| &runtime_task_types[index])
             .zip(task_specs.cutypes.iter())
             .map(|(task_type, task_kind)| {
                 let task_trait = task_trait_for_kind(*task_kind);
@@ -2033,71 +2039,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
-        let all_sim_tasks_types: Vec<Type> = task_specs
-            .ids
-            .iter()
-            .zip(&task_specs.cutypes)
-            .zip(&task_specs.sim_task_types)
-            .zip(&task_specs.background_flags)
-            .zip(&task_specs.run_in_sim_flags)
-            .zip(task_specs.output_types.iter())
-            .map(|(((((task_id, task_type), sim_type), background), run_in_sim), output_type)| {
-                match task_type {
-                    CuTaskType::Source => {
-                        if *background {
-                            if let Some(out_ty) = output_type {
-                                parse_quote!(CuAsyncSrcTask<#sim_type, #out_ty>)
-                            } else {
-                                panic!("{task_id}: If a source is background, it has to have an output");
-                            }
-                        } else if *run_in_sim {
-                            sim_type.clone()
-                        } else {
-                            let msg_type = graph
-                                .get_node_output_msg_type(task_id.as_str())
-                                .unwrap_or_else(|| panic!("CuSrcTask {task_id} should have an outgoing connection with a valid output msg type"));
-                            let sim_task_name = format!("CuSimSrcTask<{msg_type}>");
-                            parse_str(sim_task_name.as_str()).unwrap_or_else(|_| panic!("Could not build the placeholder for simulation: {sim_task_name}"))
-                        }
-                    }
-                    CuTaskType::Regular => {
-                        if *background {
-                            if let Some(out_ty) = output_type {
-                                parse_quote!(CuAsyncTask<#sim_type, #out_ty>)
-                            } else {
-                                panic!("{task_id}: If a task is background, it has to have an output");
-                            }
-                        } else {
-                            // run_in_sim has no effect for normal tasks, they are always run in sim as is.
-                            sim_type.clone()
-                        }
-                    },
-                    CuTaskType::Sink => {
-                        if *background {
-                            panic!("CuSinkTask {task_id} cannot be a background task, it should be a regular task.");
-                        }
-
-                        if *run_in_sim {
-                            // Use the real task in sim if asked to.
-                            sim_type.clone()
-                        }
-                        else {
-                            // Use the placeholder sim task.
-                            let msg_types = graph
-                                .get_node_input_msg_types(task_id.as_str())
-                                .unwrap_or_else(|| panic!("CuSinkTask {task_id} should have an incoming connection with a valid input msg type"));
-                            let msg_type = if msg_types.len() == 1 {
-                                format!("({},)", msg_types[0])
-                            } else {
-                                format!("({})", msg_types.join(", "))
-                            };
-                            let sim_task_name = format!("CuSimSinkTask<{msg_type}>");
-                            parse_str(sim_task_name.as_str()).unwrap_or_else(|_| panic!("Could not build the placeholder for simulation: {sim_task_name}"))
-                        }
-                    }
-                }
-            })
-            .collect();
+        let all_sim_tasks_types = runtime_task_types.clone();
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[build task tuples]");
@@ -2178,7 +2120,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     task_specs.type_names[index], index
                 );
                 let mapping_ref = task_resource_mappings.refs[index].clone();
-                let background = task_specs.background_flags[index];
+                let background = task_specs.background_flags[index]
+                    && !(sim_mode
+                        && task_specs.cutypes[index] == CuTaskType::Source
+                        && !task_specs.run_in_sim_flags[index]);
                 let inner_task_type = &task_specs.sim_task_types[index];
                 match task_specs.cutypes[index] {
                     CuTaskType::Source => {
@@ -2986,6 +2931,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             step,
                             *task_index,
                             &task_specs,
+                            &runtime_task_types[*task_index],
                             StepGenerationContext::new(
                                 &output_pack_sizes,
                                 &task_input_layouts,
@@ -3084,6 +3030,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     step,
                                     *task_index,
                                     &task_specs,
+                                    &task_specs.task_types[*task_index],
                                     StepGenerationContext::new(
                                         &output_pack_sizes,
                                         &task_input_layouts,
@@ -3506,33 +3453,33 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         };
         let parallel_process_stage_count_tokens =
             proc_macro2::Literal::usize_unsuffixed(parallel_process_step_idents.len());
-        let parallel_task_ptrs_type = if task_types.is_empty() {
+        let parallel_task_ptrs_type = if runtime_task_types.is_empty() {
             quote! { () }
         } else {
-            let elems = task_types
+            let elems = runtime_task_types
                 .iter()
                 .map(|ty| quote! { ParallelSharedPtr<#ty> });
             quote! { (#(#elems),*,) }
         };
-        let parallel_task_locks_type = if task_types.is_empty() {
+        let parallel_task_locks_type = if runtime_task_types.is_empty() {
             quote! { () }
         } else {
-            let elems = (0..task_types.len()).map(|_| quote! { std::sync::Mutex<()> });
+            let elems = (0..runtime_task_types.len()).map(|_| quote! { std::sync::Mutex<()> });
             quote! { (#(#elems),*,) }
         };
-        let parallel_task_ptr_values = if task_types.is_empty() {
+        let parallel_task_ptr_values = if runtime_task_types.is_empty() {
             quote! { () }
         } else {
-            let elems = (0..task_types.len()).map(|index| {
+            let elems = (0..runtime_task_types.len()).map(|index| {
                 let index = syn::Index::from(index);
                 quote! { ParallelSharedPtr::new(&mut runtime.tasks.#index as *mut _) }
             });
             quote! { (#(#elems),*,) }
         };
-        let parallel_task_lock_values = if task_types.is_empty() {
+        let parallel_task_lock_values = if runtime_task_types.is_empty() {
             quote! { () }
         } else {
-            let elems = (0..task_types.len()).map(|_| quote! { std::sync::Mutex::new(()) });
+            let elems = (0..runtime_task_types.len()).map(|_| quote! { std::sync::Mutex::new(()) });
             quote! { (#(#elems),*,) }
         };
         let parallel_bridge_ptrs_type = if bridge_runtime_types.is_empty() {
@@ -7366,6 +7313,7 @@ struct ResourceMappingTokens {
 fn build_task_resource_mappings(
     resource_specs: &[ResourceKeySpec],
     task_specs: &CuTaskSpecSet,
+    sim_mode: bool,
 ) -> CuResult<ResourceMappingTokens> {
     let mut per_task: Vec<Vec<&ResourceKeySpec>> = vec![Vec::new(); task_specs.ids.len()];
 
@@ -7373,6 +7321,12 @@ fn build_task_resource_mappings(
         let ResourceOwner::Task(task_index) = spec.owner else {
             continue;
         };
+        if sim_mode
+            && !task_specs.run_in_sim_flags[task_index]
+            && task_specs.cutypes[task_index] != CuTaskType::Regular
+        {
+            continue;
+        }
         per_task
             .get_mut(task_index)
             .ok_or_else(|| {
@@ -8207,6 +8161,7 @@ fn generate_task_execution_tokens(
     step: &CuExecutionStep,
     task_index: usize,
     task_specs: &CuTaskSpecSet,
+    runtime_task_type: &Type,
     ctx: StepGenerationContext<'_>,
     task_tokens: TaskExecutionTokens,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
@@ -8257,10 +8212,9 @@ fn generate_task_execution_tokens(
     );
     let rt_guard = rtsan_guard_tokens();
     let run_in_sim_flag = task_specs.run_in_sim_flags[tid];
-    let task_type = &task_specs.task_types[tid];
     let (parallel_task_preprocess, parallel_task_postprocess) = parallel_task_lifecycle_tokens(
         step.task_type,
-        task_type,
+        runtime_task_type,
         tid,
         mission_mod,
         &task_instance,
@@ -9096,6 +9050,81 @@ fn runtime_bridge_type_for_spec(bridge_spec: &BridgeSpec, sim_mode: bool) -> Typ
         parse_quote!(cu29::simulation::CuSimBridge<#tx_type, #rx_type>)
     } else {
         bridge_spec.type_path.clone()
+    }
+}
+
+fn runtime_task_type_for_index(
+    task_specs: &CuTaskSpecSet,
+    graph: &CuGraph,
+    index: usize,
+    sim_mode: bool,
+) -> Type {
+    let task_id = &task_specs.ids[index];
+    let declared_task_type = &task_specs.sim_task_types[index];
+    let background = task_specs.background_flags[index];
+    let run_in_sim = task_specs.run_in_sim_flags[index];
+    let output_type = &task_specs.output_types[index];
+
+    match task_specs.cutypes[index] {
+        CuTaskType::Source => {
+            if sim_mode && !run_in_sim {
+                let msg_type = graph.get_node_output_msg_type(task_id.as_str()).unwrap_or_else(|| {
+                    panic!(
+                        "CuSrcTask {task_id} should have an outgoing connection with a valid output msg type"
+                    )
+                });
+                let sim_task_name = format!("CuSimSrcTask<{msg_type}>");
+                parse_str(sim_task_name.as_str()).unwrap_or_else(|_| {
+                    panic!("Could not build the placeholder for simulation: {sim_task_name}")
+                })
+            } else if background {
+                if let Some(out_ty) = output_type {
+                    parse_quote!(CuAsyncSrcTask<#declared_task_type, #out_ty>)
+                } else {
+                    panic!("{task_id}: If a source is background, it has to have an output");
+                }
+            } else {
+                declared_task_type.clone()
+            }
+        }
+        CuTaskType::Regular => {
+            if background {
+                if let Some(out_ty) = output_type {
+                    parse_quote!(CuAsyncTask<#declared_task_type, #out_ty>)
+                } else {
+                    panic!("{task_id}: If a task is background, it has to have an output");
+                }
+            } else {
+                // run_in_sim has no effect for regular tasks; they always run as themselves in sim.
+                declared_task_type.clone()
+            }
+        }
+        CuTaskType::Sink => {
+            if background {
+                panic!(
+                    "CuSinkTask {task_id} cannot be a background task, it should be a regular task."
+                );
+            }
+
+            if sim_mode && !run_in_sim {
+                let msg_types = graph.get_node_input_msg_types(task_id.as_str()).unwrap_or_else(|| {
+                    panic!(
+                        "CuSinkTask {task_id} should have an incoming connection with a valid input msg type"
+                    )
+                });
+                let msg_type = if msg_types.len() == 1 {
+                    format!("({},)", msg_types[0])
+                } else {
+                    format!("({})", msg_types.join(", "))
+                };
+                let sim_task_name = format!("CuSimSinkTask<{msg_type}>");
+                parse_str(sim_task_name.as_str()).unwrap_or_else(|_| {
+                    panic!("Could not build the placeholder for simulation: {sim_task_name}")
+                })
+            } else {
+                declared_task_type.clone()
+            }
+        }
     }
 }
 
