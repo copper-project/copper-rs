@@ -30,6 +30,10 @@ on:
         required: false
         type: string
         default: "ubuntu-latest-m"
+      linux_light_runner_label:
+        required: false
+        type: string
+        default: "ubuntu-latest-m"
       windows_runner_label:
         required: false
         type: string
@@ -191,7 +195,7 @@ jobs:
   doctests-linux-container:
     if: inputs.run_linux && inputs.linux_ci_image != ''
     name: Doctests (ubuntu-26.04, debug)
-    runs-on: ${{ inputs.linux_runner_label }}
+    runs-on: ${{ inputs.linux_light_runner_label }}
     container:
       image: ${{ inputs.linux_ci_image }}
       credentials:
@@ -238,8 +242,8 @@ jobs:
 
   doctests-linux-host:
     if: inputs.run_linux && inputs.linux_ci_image == ''
-    name: Doctests (${{ inputs.linux_runner_label }}, debug)
-    runs-on: ${{ inputs.linux_runner_label }}
+    name: Doctests (${{ inputs.linux_light_runner_label }}, debug)
+    runs-on: ${{ inputs.linux_light_runner_label }}
 
     defaults:
       run:
@@ -266,7 +270,7 @@ jobs:
         run: |
           EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ inputs.toolchain }})
           echo "WORKSPACE_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
-      - name: Run doctests on (${{ inputs.linux_runner_label }} | debug)
+      - name: Run doctests on (${{ inputs.linux_light_runner_label }} | debug)
         run: cargo +${{ inputs.toolchain }} test --doc $WORKSPACE_FLAG $WORKSPACE_EXCLUDES --quiet
       - name: Show sccache stats
         if: always()
@@ -707,8 +711,8 @@ jobs:
 
   templates-linux-container:
     if: inputs.run_linux && inputs.linux_ci_image != ''
-    name: Templates (debug) (${{ inputs.linux_runner_label }}, debug)
-    runs-on: ${{ inputs.linux_runner_label }}
+    name: Templates (debug) (${{ inputs.linux_light_runner_label }}, debug)
+    runs-on: ${{ inputs.linux_light_runner_label }}
     container:
       image: ${{ inputs.linux_ci_image }}
       credentials:
@@ -737,11 +741,11 @@ jobs:
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
           sccache_key_suffix: templates
-      - name: Install cargo-generate on (${{ inputs.linux_runner_label }} | debug)
+      - name: Install cargo-generate on (${{ inputs.linux_light_runner_label }} | debug)
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-generate
-      - name: Generate new templates on (${{ inputs.linux_runner_label }} | debug)
+      - name: Generate new templates on (${{ inputs.linux_light_runner_label }} | debug)
         run: |
           export USER="${USER:-${GITHUB_ACTOR:-ci}}"
           export USERNAME="${USERNAME:-$USER}"
@@ -751,7 +755,7 @@ jobs:
           tmpdir="$(mktemp -d)"
           cargo +${{ inputs.toolchain }} generate --path support/cargo_cunew/templates/cu_project --name cargo_generate_project --destination "$tmpdir" -d copper_source=local -d copper_root_path="$PWD" --silent
           echo "CARGO_GENERATE_PROJECT=$tmpdir/cargo_generate_project" >> $GITHUB_ENV
-      - name: Build generated templates on (${{ inputs.linux_runner_label }} | debug)
+      - name: Build generated templates on (${{ inputs.linux_light_runner_label }} | debug)
         run: |
           bash support/cargo_cunew/templates/smoke_generated.sh \
             "${{ inputs.toolchain }}" \
@@ -770,8 +774,8 @@ jobs:
 
   templates-linux-host:
     if: inputs.run_linux && inputs.linux_ci_image == ''
-    name: Templates (debug) (${{ inputs.linux_runner_label }}, debug)
-    runs-on: ${{ inputs.linux_runner_label }}
+    name: Templates (debug) (${{ inputs.linux_light_runner_label }}, debug)
+    runs-on: ${{ inputs.linux_light_runner_label }}
 
     defaults:
       run:
@@ -794,11 +798,11 @@ jobs:
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
           sccache_key_suffix: templates
-      - name: Install cargo-generate on (${{ inputs.linux_runner_label }} | debug)
+      - name: Install cargo-generate on (${{ inputs.linux_light_runner_label }} | debug)
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-generate
-      - name: Generate new templates on (${{ inputs.linux_runner_label }} | debug)
+      - name: Generate new templates on (${{ inputs.linux_light_runner_label }} | debug)
         run: |
           export USER="${USER:-${GITHUB_ACTOR:-ci}}"
           export USERNAME="${USERNAME:-$USER}"
@@ -808,7 +812,7 @@ jobs:
           tmpdir="$(mktemp -d)"
           cargo +${{ inputs.toolchain }} generate --path support/cargo_cunew/templates/cu_project --name cargo_generate_project --destination "$tmpdir" -d copper_source=local -d copper_root_path="$PWD" --silent
           echo "CARGO_GENERATE_PROJECT=$tmpdir/cargo_generate_project" >> $GITHUB_ENV
-      - name: Build generated templates on (${{ inputs.linux_runner_label }} | debug)
+      - name: Build generated templates on (${{ inputs.linux_light_runner_label }} | debug)
         run: |
           bash support/cargo_cunew/templates/smoke_generated.sh \
             "${{ inputs.toolchain }}" \
