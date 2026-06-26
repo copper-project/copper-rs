@@ -1862,10 +1862,51 @@ pub fn panic_payload_to_string(payload: &(dyn core::any::Any + Send)) -> String 
 }
 
 /// A simple allocator that counts the number of bytes allocated and deallocated.
+///
+/// Tracks two views of the same activity:
+/// - Process-wide atomic counters (`allocated()`/`deallocated()`), suitable for
+///   probes like [`global_allocated_bytes`].
+/// - Per-thread `Cell<usize>` counters (when both `std` and `memory_monitoring`
+///   are enabled), used by [`ScopedAllocCounter`] so deltas under `parallel-rt`
+///   attribute only the calling thread's allocations to the calling thread's
+///   open scope.
 pub struct CountingAlloc<A: GlobalAlloc> {
     inner: A,
     allocated: AtomicUsize,
     deallocated: AtomicUsize,
+}
+
+#[cfg(all(feature = "std", feature = "memory_monitoring"))]
+thread_local! {
+    static THREAD_ALLOCATED: Cell<usize> = const { Cell::new(0) };
+    static THREAD_DEALLOCATED: Cell<usize> = const { Cell::new(0) };
+}
+
+#[cfg(all(feature = "std", feature = "memory_monitoring"))]
+#[inline]
+fn bump_thread_allocated(bytes: usize) {
+    // try_with is no-op during TLS teardown — we attribute nothing in that
+    // window, which is fine: monitored steps don't run while a worker thread is
+    // being torn down.
+    let _ = THREAD_ALLOCATED.try_with(|c| c.set(c.get().wrapping_add(bytes)));
+}
+
+#[cfg(all(feature = "std", feature = "memory_monitoring"))]
+#[inline]
+fn bump_thread_deallocated(bytes: usize) {
+    let _ = THREAD_DEALLOCATED.try_with(|c| c.set(c.get().wrapping_add(bytes)));
+}
+
+#[cfg(all(feature = "std", feature = "memory_monitoring"))]
+#[inline]
+fn read_thread_allocated() -> usize {
+    THREAD_ALLOCATED.try_with(|c| c.get()).unwrap_or(0)
+}
+
+#[cfg(all(feature = "std", feature = "memory_monitoring"))]
+#[inline]
+fn read_thread_deallocated() -> usize {
+    THREAD_DEALLOCATED.try_with(|c| c.get()).unwrap_or(0)
 }
 
 impl<A: GlobalAlloc> CountingAlloc<A> {
@@ -1899,6 +1940,8 @@ unsafe impl<A: GlobalAlloc> GlobalAlloc for CountingAlloc<A> {
         let p = unsafe { self.inner.alloc(layout) };
         if !p.is_null() {
             self.allocated.fetch_add(layout.size(), Ordering::SeqCst);
+            #[cfg(all(feature = "std", feature = "memory_monitoring"))]
+            bump_thread_allocated(layout.size());
         }
         p
     }
@@ -1908,6 +1951,8 @@ unsafe impl<A: GlobalAlloc> GlobalAlloc for CountingAlloc<A> {
         // SAFETY: Forwarding to the inner allocator preserves GlobalAlloc invariants.
         unsafe { self.inner.dealloc(ptr, layout) }
         self.deallocated.fetch_add(layout.size(), Ordering::SeqCst);
+        #[cfg(all(feature = "std", feature = "memory_monitoring"))]
+        bump_thread_deallocated(layout.size());
     }
 }
 
@@ -1945,13 +1990,24 @@ pub fn global_deallocated_bytes() -> Option<usize> {
     }
 }
 
-/// Scoped helper that captures the global allocation counters on construction
-/// and exposes the delta accumulated by the time you query it.
+/// Scoped helper that captures the calling thread's allocation counters on
+/// construction and exposes the delta accumulated by the time you query it.
+///
+/// Per-thread accounting matters under `parallel-rt`: multiple worker threads
+/// run monitored steps concurrently, and a delta computed from the
+/// process-wide counters would attribute every other thread's allocations to
+/// the local step. The counters this type snapshots are thread-local, so
+/// `allocated()` only reflects allocations performed on the same thread that
+/// constructed the counter.
 ///
 /// When the runtime is built without `feature = "memory_monitoring"`, this
 /// becomes a zero-sized no-op: `allocated()`/`deallocated()` return `0`, the
-/// constructor performs no atomic load, and the type is fully eliminated by the
+/// constructor performs no TLS load, and the type is fully eliminated by the
 /// optimizer. This lets the runtime macro emit the same code in both builds.
+///
+/// `ScopedAllocCounter` is intentionally pinned to the constructing thread —
+/// the macro always uses it as a stack-local within a single step, so this
+/// matches the only realistic usage pattern.
 ///
 /// # Example
 /// ```
@@ -1969,6 +2025,13 @@ pub struct ScopedAllocCounter {
     bf_allocated: usize,
     #[cfg(all(feature = "std", feature = "memory_monitoring"))]
     bf_deallocated: usize,
+    // Marker that pins the counter to the constructing thread: under
+    // `parallel-rt` it's a logic error to read the delta from another thread,
+    // since the TLS counters being read belong to the reading thread, not the
+    // thread the snapshot was taken on. `PhantomData<*const ()>` is a ZST so
+    // this doesn't change the type's footprint.
+    #[cfg(all(feature = "std", feature = "memory_monitoring"))]
+    _not_send_sync: core::marker::PhantomData<*const ()>,
 }
 
 impl Default for ScopedAllocCounter {
@@ -1983,8 +2046,9 @@ impl ScopedAllocCounter {
         #[cfg(all(feature = "std", feature = "memory_monitoring"))]
         {
             ScopedAllocCounter {
-                bf_allocated: GLOBAL.allocated(),
-                bf_deallocated: GLOBAL.deallocated(),
+                bf_allocated: read_thread_allocated(),
+                bf_deallocated: read_thread_deallocated(),
+                _not_send_sync: core::marker::PhantomData,
             }
         }
         #[cfg(not(all(feature = "std", feature = "memory_monitoring")))]
@@ -1993,13 +2057,13 @@ impl ScopedAllocCounter {
         }
     }
 
-    /// Bytes allocated since this counter was created.
-    /// Always `0` when `memory_monitoring` is not enabled.
+    /// Bytes allocated by the constructing thread since this counter was
+    /// created. Always `0` when `memory_monitoring` is not enabled.
     #[inline]
     pub fn allocated(&self) -> usize {
         #[cfg(all(feature = "std", feature = "memory_monitoring"))]
         {
-            GLOBAL.allocated().wrapping_sub(self.bf_allocated)
+            read_thread_allocated().wrapping_sub(self.bf_allocated)
         }
         #[cfg(not(all(feature = "std", feature = "memory_monitoring")))]
         {
@@ -2007,13 +2071,13 @@ impl ScopedAllocCounter {
         }
     }
 
-    /// Bytes deallocated since this counter was created.
-    /// Always `0` when `memory_monitoring` is not enabled.
+    /// Bytes deallocated by the constructing thread since this counter was
+    /// created. Always `0` when `memory_monitoring` is not enabled.
     #[inline]
     pub fn deallocated(&self) -> usize {
         #[cfg(all(feature = "std", feature = "memory_monitoring"))]
         {
-            GLOBAL.deallocated().wrapping_sub(self.bf_deallocated)
+            read_thread_deallocated().wrapping_sub(self.bf_deallocated)
         }
         #[cfg(not(all(feature = "std", feature = "memory_monitoring")))]
         {
@@ -2458,6 +2522,58 @@ mod tests {
             two.process_error(ComponentId::new(0), CuComponentState::Process, &err),
             Decision::Abort
         ));
+    }
+
+    #[cfg(all(feature = "std", feature = "memory_monitoring"))]
+    #[test]
+    fn scoped_alloc_counter_attributes_only_calling_threads_allocations() {
+        // Under parallel-rt, monitored steps run on different worker threads
+        // concurrently. ScopedAllocCounter must read per-thread counters so
+        // thread A's open scope is not contaminated by allocations made by
+        // thread B in the same wall-clock window.
+        use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
+        use std::sync::{Arc, Barrier};
+
+        let barrier = Arc::new(Barrier::new(2));
+        let other_running = Arc::new(AtomicBool::new(true));
+
+        let b = barrier.clone();
+        let flag = other_running.clone();
+        let other = std::thread::spawn(move || {
+            // Wait until the main thread has opened its scope, then churn
+            // through allocations the entire time it is sampling.
+            b.wait();
+            let mut total: usize = 0;
+            while flag.load(AtomicOrdering::Relaxed) {
+                let v: Vec<u8> = vec![0u8; 1024 * 16];
+                total = total.wrapping_add(v.len());
+            }
+            total
+        });
+
+        let counter = ScopedAllocCounter::new();
+        barrier.wait();
+        // Sample for long enough that the other thread definitely allocates a
+        // lot more than the 1 KiB we deliberately allocate here.
+        let local_alloc_size = 1024;
+        let local = vec![0u8; local_alloc_size];
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        let observed = counter.allocated();
+        other_running.store(false, AtomicOrdering::Relaxed);
+        drop(local);
+        let _ = other.join();
+
+        // The other thread will have allocated megabytes during the sleep —
+        // an upper bound of ~1 MiB on this thread's delta is comfortably
+        // below that and well above the local allocation.
+        assert!(
+            observed >= local_alloc_size,
+            "expected at least {local_alloc_size} B, got {observed}"
+        );
+        assert!(
+            observed < 1024 * 1024,
+            "thread-local scope leaked across threads: observed {observed} B"
+        );
     }
 
     #[test]
