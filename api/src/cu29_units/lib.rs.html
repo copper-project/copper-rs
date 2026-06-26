@@ -509,7 +509,7 @@
 <a href=#509 id=509 data-nosnippet>509</a>
 <a href=#510 id=510 data-nosnippet>510</a><span class="kw">use </span>alloc::string::ToString;
 <a href=#511 id=511 data-nosnippet>511</a><span class="kw">use </span>alloc::vec::Vec;
-<a href=#512 id=512 data-nosnippet>512</a><span class="kw">use </span>cu29_traits::{DebugFieldSemantics, DebugScalarRegistration, DebugScalarType};
+<a href=#512 id=512 data-nosnippet>512</a><span class="kw">use </span>cu29_traits::{DebugFieldSemantics, DebugScalarKind, DebugScalarRegistration, DebugScalarType};
 <a href=#513 id=513 data-nosnippet>513</a>
 <a href=#514 id=514 data-nosnippet>514</a><span class="macro">macro_rules!</span> impl_debug_scalar_units {
 <a href=#515 id=515 data-nosnippet>515</a>    ($((<span class="macro-nonterminal">$unit_mod</span>:ident, <span class="macro-nonterminal">$quantity</span>:ident, <span class="macro-nonterminal">$base_unit</span>:ident),)+) =&gt; {
@@ -520,11 +520,11 @@
 <a href=#520 id=520 data-nosnippet>520</a>                        <span class="kw">fn </span>debug_scalar_registration() -&gt; DebugScalarRegistration {
 <a href=#521 id=521 data-nosnippet>521</a>                            DebugScalarRegistration {
 <a href=#522 id=522 data-nosnippet>522</a>                                type_path: core::any::type_name::&lt;<span class="self">Self</span>&gt;(),
-<a href=#523 id=523 data-nosnippet>523</a>                                field_type: <span class="kw">if </span><span class="macro">stringify!</span>(<span class="macro-nonterminal">$storage_ty</span>).starts_with(<span class="string">'f'</span>) {
-<a href=#524 id=524 data-nosnippet>524</a>                                    <span class="string">"number"
-<a href=#525 id=525 data-nosnippet>525</a>                                </span>} <span class="kw">else </span>{
-<a href=#526 id=526 data-nosnippet>526</a>                                    <span class="string">"integer"
-<a href=#527 id=527 data-nosnippet>527</a>                                </span>},
+<a href=#523 id=523 data-nosnippet>523</a>                                scalar_kind: <span class="kw">if </span><span class="macro">stringify!</span>(<span class="macro-nonterminal">$storage_ty</span>) == <span class="string">"f32" </span>{
+<a href=#524 id=524 data-nosnippet>524</a>                                    DebugScalarKind::F32
+<a href=#525 id=525 data-nosnippet>525</a>                                } <span class="kw">else </span>{
+<a href=#526 id=526 data-nosnippet>526</a>                                    DebugScalarKind::F64
+<a href=#527 id=527 data-nosnippet>527</a>                                },
 <a href=#528 id=528 data-nosnippet>528</a>                                semantics: DebugFieldSemantics::Quantity {
 <a href=#529 id=529 data-nosnippet>529</a>                                    quantity_name: <span class="macro">stringify!</span>(<span class="macro-nonterminal">$quantity</span>).to_string(),
 <a href=#530 id=530 data-nosnippet>530</a>                                    unit_symbol: &lt;uom::si::<span class="macro-nonterminal">$unit_mod</span>::<span class="macro-nonterminal">$base_unit </span><span class="kw">as </span>uom::si::Unit&gt;::abbreviation()

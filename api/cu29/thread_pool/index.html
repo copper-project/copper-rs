@@ -12,9 +12,9 @@ worker pinned per dedicated core; and</li>
 feature is enabled on a supported platform (Linux for real-time policies; CPU
 affinity is cross-platform). When the feature is off, the requested affinity
 and policy are ignored and a warning is emitted.</p>
-<p>Per-pool [<code>OnError</code>] controls what happens when a request cannot be applied
+<p>Per-pool <a href="../prelude/enum.OnError.html" title="enum cu29::prelude::OnError"><code>OnError</code></a> controls what happens when a request cannot be applied
 (for example, setting a real-time priority without <code>CAP_SYS_NICE</code>):
-[<code>OnError::Warn</code>] logs and continues with default scheduling, while
-[<code>OnError::Strict</code>] fails the build.</p>
+<a href="../prelude/enum.OnError.html#variant.Warn" title="variant cu29::prelude::OnError::Warn"><code>OnError::Warn</code></a> logs and continues with default scheduling, while
+<a href="../prelude/enum.OnError.html#variant.Strict" title="variant cu29::prelude::OnError::Strict"><code>OnError::Strict</code></a> fails the build.</p>
 </div></details><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.apply_current_thread_scheduling.html" title="fn cu29::thread_pool::apply_current_thread_scheduling">apply_<wbr>current_<wbr>thread_<wbr>scheduling</a></dt><dt><a class="fn" href="fn.build_pool.html" title="fn cu29::thread_pool::build_pool">build_<wbr>pool</a></dt><dd>Builds a rayon thread pool from a declarative <a href="../prelude/struct.ThreadPoolConfig.html" title="struct cu29::prelude::ThreadPoolConfig"><code>ThreadPoolConfig</code></a>, applying
 the configured CPU affinity and scheduling policy/priority to each worker.</dd></dl></section></div></main></body></html>
