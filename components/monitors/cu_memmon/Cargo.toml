@@ -36,3 +36,7 @@ cu29 = { path = "../../../core/cu29", version = "1.0.0-rc2", default-features = 
 [features]
 default = ["std"]
 std = ["cu29/std"]
+# Passthrough that turns on per-task allocation accounting in the runtime and
+# the derive macro. Without this, the monitor compiles and runs but reports
+# zeros — and warns once at startup or on the first summary tick.
+memory_monitoring = ["cu29/memory_monitoring"]
