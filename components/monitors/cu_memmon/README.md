@@ -9,16 +9,24 @@ leaked at shutdown.
 ## How it works
 
 `cu29-runtime` ships a `CountingAlloc` global allocator (gated behind
-`cu29/memory_monitoring`) that bumps two atomic counters on every `alloc` /
-`dealloc`. With the feature on, the `#[copper_runtime]` macro wraps every
+`cu29/memory_monitoring`) that bumps two views of every `alloc` / `dealloc`:
+a process-wide pair of atomic counters and a pair of per-thread `Cell<usize>`
+counters. With the feature on, the `#[copper_runtime]` macro wraps every
 task and bridge lifecycle step in a `ScopedAllocCounter` and fans the delta
 out to all monitors via the `CuMonitor::observe_alloc` hook. `CuMemMon`
 collects those deltas, keeps per-`(component, step)` running totals, emits
 a throttled summary line every N copperlists, and reports leaks at `stop`.
 
+`ScopedAllocCounter` snapshots the **per-thread** counters, so under
+`parallel-rt` — where worker threads run monitored steps concurrently — a
+step's reported delta only includes allocations performed on the same thread
+that runs that step. Concurrent work on other worker threads does not
+contaminate the number.
+
 With the feature **off**, the macro emits no allocation scopes at all — zero
-runtime cost — and the monitor probes the runtime API at startup to detect
-this and warn once.
+runtime cost — and the monitor warns at startup if the runtime probe shows
+the allocator isn't installed, or on the first summary tick if the allocator
+is installed but no scopes have fired (the derive-side feature is off).
 
 Coverage in this release: task `start` / `stop` / `preprocess` / `process` /
 `postprocess`; bridge `start` / `stop` / `preprocess` / `process` (rx and tx) /
@@ -29,10 +37,11 @@ lifecycle steps from cu29 1.0.0-rc2 are observed.
 
 ```toml
 [dependencies]
-cu-memmon = { version = "*" }
-# Required for any non-zero numbers: installs the counting global allocator
-# and wires the macro to emit per-step allocation scopes.
-cu29 = { version = "*", features = ["memory_monitoring"] }
+# `memory_monitoring` is a passthrough that turns on both halves of the
+# feature — the counting allocator in cu29-runtime and the per-step scope
+# codegen in cu29-derive. Without it the monitor compiles and runs but
+# reports zeros.
+cu-memmon = { version = "*", features = ["memory_monitoring"] }
 ```
 
 In `copperconfig.ron`:
@@ -77,15 +86,18 @@ sibling task), which is worth knowing but not necessarily a bug.
 
 With `realtime_strict: true`, any non-zero allocation in `preprocess`,
 `process`, or `postprocess` is latched and surfaced as a `CuError` from the
-next `process_copperlist` call. The runtime treats that as a fatal monitor
-error and shuts the application down — so a violation reliably trips a CI
-smoke test regardless of whether any other component happens to error.
-Unrelated task errors are not escalated by this mode.
+following `process_copperlist` call — which in practice is the same iteration's
+`process_copperlist`, since it runs after every step. The runtime treats that
+as a fatal monitor error and shuts the application down, so a violation
+reliably trips a CI smoke test regardless of whether any other component
+happens to error. Unrelated task errors are not escalated by this mode. When
+multiple steps violate in the same iteration the *first* one wins; later
+violations are observed but don't overwrite the latched cause.
 
 ## Try it
 
 ```bash
-cargo run -p cu-memmon --example copper_app --features cu29/memory_monitoring
+cargo run -p cu-memmon --example copper_app --features memory_monitoring
 ```
 
 The intermediate `Step` task in the example allocates and drops a small `Vec`

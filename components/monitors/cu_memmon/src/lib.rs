@@ -11,17 +11,25 @@
 //!
 //! Optional realtime-strict mode (`realtime_strict: true` in the monitor's
 //! RON config) latches any non-zero allocation observed during `Preprocess`,
-//! `Process`, or `Postprocess` and surfaces it from the *next*
-//! `process_copperlist` as a `CuError`. The runtime treats that as a fatal
-//! monitor error and shuts down cleanly — so a violation in
-//! e.g. `process` reliably aborts the run regardless of whether any other
-//! component errored, and unrelated task errors are not affected.
+//! `Process`, or `Postprocess` and surfaces it from the *following*
+//! `process_copperlist` call as a `CuError`. In practice that is the very same
+//! iteration's `process_copperlist` (it runs after all the step hooks), so the
+//! violation aborts the run within the same tick it occurred in. The runtime
+//! treats the returned error as a fatal monitor error and shuts down cleanly
+//! — unrelated task errors are not escalated by this path. The first violating
+//! step in a copperlist wins (later violations in the same window are
+//! observed but don't overwrite the latched cause).
 //!
 //! When the runtime is **not** built with `cu29/memory_monitoring`, the macro
-//! emits no allocation scopes, so `observe_alloc` is never called.
-//! `CuMemMon` detects this at `start()` by probing the public counter API
-//! and emits a single `warning!` so the build configuration is obvious from
-//! the log.
+//! emits no allocation scopes, so `observe_alloc` is never called. `CuMemMon`
+//! detects this in two complementary ways:
+//! - At `start()` it probes the public counter API
+//!   ([`cu29::monitoring::global_allocated_bytes`]). If that returns `None`
+//!   the runtime side is off and we warn immediately.
+//! - If the runtime side is on but no `observe_alloc` ever fires (the macro
+//!   side was built without the feature — possible when features are wired
+//!   piecemeal instead of through the `cu29` umbrella), the first scheduled
+//!   summary tick emits a one-shot warning.
 
 extern crate alloc;
 
@@ -133,6 +141,14 @@ pub struct CuMemMon {
     state: Mutex<State>,
     /// True once we've emitted the "feature off" warning, so we don't spam.
     feature_off_warned: AtomicBool,
+    /// Set to true the first time `observe_alloc` fires. Combined with
+    /// `counters_available`, this catches the case where the runtime crate has
+    /// `memory_monitoring` enabled but the derive crate doesn't — the probe
+    /// would otherwise read as "active" while no scope ever runs.
+    first_observation_seen: AtomicBool,
+    /// True once we've warned that the macro side seems to be off despite the
+    /// runtime side being on. Prevents spamming the log every summary tick.
+    derive_off_warned: AtomicBool,
     /// Total observed allocations / deallocations across the whole runtime
     /// (cheap monotonic counters for the periodic summary header).
     total_alloc: AtomicU64,
@@ -224,6 +240,8 @@ impl CuMonitor for CuMemMon {
             cl_counter: AtomicU64::new(0),
             state: Mutex::new(state),
             feature_off_warned: AtomicBool::new(false),
+            first_observation_seen: AtomicBool::new(false),
+            derive_off_warned: AtomicBool::new(false),
             total_alloc: AtomicU64::new(0),
             total_dealloc: AtomicU64::new(0),
         })
@@ -292,6 +310,24 @@ impl CuMonitor for CuMemMon {
                 .map(|(meta, counters)| (meta.id(), *counters))
                 .collect()
         };
+        // Detect the derive-side-off misconfiguration: the runtime crate has
+        // the counting allocator installed (counters_available == true) but
+        // the proc-macro never emitted any ScopedAllocCounter scopes, so
+        // observe_alloc has never fired by the time the first summary fires.
+        // Warn once and continue; the summary lines will read all-zero on
+        // their own and that explains why.
+        if !self.first_observation_seen.load(Ordering::Relaxed)
+            && !self.derive_off_warned.swap(true, Ordering::Relaxed)
+        {
+            warning!(
+                ctx,
+                "cu_memmon: runtime allocator counters are active but no allocation \
+                 scopes have fired after {} copperlists. This usually means cu29-derive \
+                 was built without the `memory_monitoring` feature. Enable it via the \
+                 cu29 umbrella crate: `cu29 = {{ features = [\"memory_monitoring\"] }}`.",
+                n,
+            );
+        }
         for (name, c) in snapshot.iter() {
             let leak = c.lifetime_alloc().saturating_sub(c.lifetime_dealloc());
             info!(
@@ -323,6 +359,9 @@ impl CuMonitor for CuMemMon {
         // eventually-correct periodic summary header.
         self.total_alloc.fetch_add(alloc_u64, Ordering::Relaxed);
         self.total_dealloc.fetch_add(dealloc_u64, Ordering::Relaxed);
+        // Record that the macro side did wire up scopes, so the periodic
+        // probe in process_copperlist doesn't false-alarm.
+        self.first_observation_seen.store(true, Ordering::Relaxed);
 
         let mut state = lock_state(&self.state);
         let idx = component_id.index();
@@ -342,9 +381,16 @@ impl CuMonitor for CuMemMon {
             slot.max_allocated = alloc_u64;
         }
 
-        // Latch realtime violations: any non-zero alloc on a hot-path step
-        // becomes a pending error that the next process_copperlist surfaces.
-        if self.realtime_strict && is_realtime_step(step) && allocated_bytes > 0 {
+        // Latch realtime violations: first non-zero alloc on a hot-path step
+        // becomes a pending error that the following process_copperlist
+        // surfaces. First-wins: once a violation is latched we keep it, so
+        // the surfaced cause names the *earliest* offending step rather than
+        // whatever happened to fire last.
+        if self.realtime_strict
+            && is_realtime_step(step)
+            && allocated_bytes > 0
+            && state.rt_pending[idx].is_none()
+        {
             state.rt_pending[idx] = Some(RtViolation {
                 step,
                 allocated: alloc_u64,
