@@ -92,7 +92,49 @@ pub struct VtxOsd {
     last_ground_speed_mps: Option<f32>,
 }
 
-impl Freezable for VtxOsd {}
+impl Freezable for VtxOsd {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        cu29::bincode::Encode::encode(&self.last_label, encoder)?;
+        cu29::bincode::Encode::encode(&self.last_heartbeat, encoder)?;
+        cu29::bincode::Encode::encode(&self.last_draw, encoder)?;
+        cu29::bincode::Encode::encode(&self.last_armed, encoder)?;
+        cu29::bincode::Encode::encode(&self.last_mode, encoder)?;
+        cu29::bincode::Encode::encode(&self.last_voltage_centi, encoder)?;
+        cu29::bincode::Encode::encode(&self.takeoff_pressure_pa, encoder)?;
+        cu29::bincode::Encode::encode(&self.pressure_sum_pa, encoder)?;
+        cu29::bincode::Encode::encode(&self.pressure_samples, encoder)?;
+        cu29::bincode::Encode::encode(&self.last_pressure_pa, encoder)?;
+        cu29::bincode::Encode::encode(&self.last_heading_deg, encoder)?;
+        cu29::bincode::Encode::encode(&self.last_lat_deg, encoder)?;
+        cu29::bincode::Encode::encode(&self.last_lon_deg, encoder)?;
+        cu29::bincode::Encode::encode(&self.last_ground_speed_mps, encoder)?;
+        Ok(())
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.last_label = cu29::bincode::Decode::decode(decoder)?;
+        self.last_heartbeat = cu29::bincode::Decode::decode(decoder)?;
+        self.last_draw = cu29::bincode::Decode::decode(decoder)?;
+        self.last_armed = cu29::bincode::Decode::decode(decoder)?;
+        self.last_mode = cu29::bincode::Decode::decode(decoder)?;
+        self.last_voltage_centi = cu29::bincode::Decode::decode(decoder)?;
+        self.takeoff_pressure_pa = cu29::bincode::Decode::decode(decoder)?;
+        self.pressure_sum_pa = cu29::bincode::Decode::decode(decoder)?;
+        self.pressure_samples = cu29::bincode::Decode::decode(decoder)?;
+        self.last_pressure_pa = cu29::bincode::Decode::decode(decoder)?;
+        self.last_heading_deg = cu29::bincode::Decode::decode(decoder)?;
+        self.last_lat_deg = cu29::bincode::Decode::decode(decoder)?;
+        self.last_lon_deg = cu29::bincode::Decode::decode(decoder)?;
+        self.last_ground_speed_mps = cu29::bincode::Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuTask for VtxOsd {
     type Input<'m> = input_msg!(
@@ -791,7 +833,25 @@ pub struct VtxMspResponder {
     vbat_warn_cell_centivolts: u16,
 }
 
-impl Freezable for VtxMspResponder {}
+impl Freezable for VtxMspResponder {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        cu29::bincode::Encode::encode(&self.last_voltage_centi, encoder)?;
+        cu29::bincode::Encode::encode(&self.battery_cells, encoder)?;
+        Ok(())
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.last_voltage_centi = cu29::bincode::Decode::decode(decoder)?;
+        self.battery_cells = cu29::bincode::Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuTask for VtxMspResponder {
     type Input<'m> = input_msg!('m, MspRequestBatch, BatteryVoltage);

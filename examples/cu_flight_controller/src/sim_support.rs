@@ -131,6 +131,23 @@ impl SimBatteryAdc {
     }
 }
 
+impl Freezable for SimBatteryAdc {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        cu29::bincode::Encode::encode(&self.phase, encoder)
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.phase = cu29::bincode::Decode::decode(decoder)?;
+        Ok(())
+    }
+}
+
 pub fn sim_battery_adc(base_voltage: f32, sag_max_ratio: f32) -> SimBatteryAdc {
     SimBatteryAdc {
         base_voltage,
@@ -144,7 +161,22 @@ pub struct SimBmi088Source {
     step: u64,
 }
 
-impl Freezable for SimBmi088Source {}
+impl Freezable for SimBmi088Source {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        cu29::bincode::Encode::encode(&self.step, encoder)
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.step = cu29::bincode::Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuSrcTask for SimBmi088Source {
     type Resources<'r> = ();
@@ -172,7 +204,22 @@ pub struct SimDps310Source {
     step: u64,
 }
 
-impl Freezable for SimDps310Source {}
+impl Freezable for SimDps310Source {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        cu29::bincode::Encode::encode(&self.step, encoder)
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.step = cu29::bincode::Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuSrcTask for SimDps310Source {
     type Resources<'r> = ();
@@ -199,7 +246,22 @@ pub struct SimIst8310Source {
     step: u64,
 }
 
-impl Freezable for SimIst8310Source {}
+impl Freezable for SimIst8310Source {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        cu29::bincode::Encode::encode(&self.step, encoder)
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.step = cu29::bincode::Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuSrcTask for SimIst8310Source {
     type Resources<'r> = ();

@@ -67,7 +67,29 @@ pub struct BatteryAdcSource {
     calib: BatteryAdcCalibration,
 }
 
-impl Freezable for BatteryAdcSource {}
+impl Freezable for BatteryAdcSource {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        _encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        #[cfg(all(any(feature = "sim", feature = "bevymon"), not(feature = "firmware")))]
+        {
+            self.adc.freeze(_encoder)?;
+        }
+        Ok(())
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        _decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        #[cfg(all(any(feature = "sim", feature = "bevymon"), not(feature = "firmware")))]
+        {
+            self.adc.thaw(_decoder)?;
+        }
+        Ok(())
+    }
+}
 
 impl CuSrcTask for BatteryAdcSource {
     type Output<'m> = output_msg!(BatteryVoltage);
