@@ -42,6 +42,11 @@ macro_debug = ["cu29-runtime/macro_debug"]
 std = ["cu29-traits/std", "cu29-unifiedlog/std"]
 async-cl-io = ["cu29-runtime/async-cl-io"]
 parallel-rt = ["cu29-runtime/parallel-rt"]
+# Emit per-task allocation scopes around each task/bridge lifecycle step in the
+# generated runtime so a monitor can fan deltas out via `observe_alloc`. The
+# `cu29` umbrella crate's `memory_monitoring` feature forwards to this one; you
+# normally don't enable it directly on `cu29-derive`.
+memory_monitoring = ["cu29-runtime/memory_monitoring"]
 signal-handler = []
 rtsan = []
 

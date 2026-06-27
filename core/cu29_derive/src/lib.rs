@@ -54,6 +54,44 @@ fn rtsan_guard_tokens() -> proc_macro2::TokenStream {
     }
 }
 
+/// Opens a heap-allocation accounting scope (binds `__cu_alloc_scope`) iff the
+/// `memory_monitoring` feature is enabled. Otherwise expands to nothing, so a
+/// default build emits zero extra code per task step.
+fn alloc_scope_open_tokens() -> proc_macro2::TokenStream {
+    if cfg!(feature = "memory_monitoring") {
+        quote! {
+            let __cu_alloc_scope = cu29::monitoring::ScopedAllocCounter::new();
+        }
+    } else {
+        quote! {}
+    }
+}
+
+/// Forwards the scope's accumulated delta to `monitor.observe_alloc(...)` and
+/// drops the scope. `monitor_expr` is whatever expression reaches the monitor
+/// in the current code block (`monitor` for preprocess/process/postprocess,
+/// `self.copper_runtime.monitor` for start/stop). `component_index` and `step`
+/// are the tokens to be passed through to `ComponentId::new(...)` and the
+/// `CuComponentState` variant.
+fn alloc_scope_close_tokens(
+    monitor_expr: proc_macro2::TokenStream,
+    component_index: proc_macro2::TokenStream,
+    step: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    if cfg!(feature = "memory_monitoring") {
+        quote! {
+            #monitor_expr.observe_alloc(
+                cu29::monitoring::ComponentId::new(#component_index),
+                #step,
+                __cu_alloc_scope.allocated(),
+                __cu_alloc_scope.deallocated(),
+            );
+        }
+    } else {
+        quote! {}
+    }
+}
+
 fn git_output_trimmed(repo_root: &Path, args: &[&str]) -> Option<String> {
     let output = Command::new("git")
         .arg("-C")
@@ -2511,6 +2549,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         };
 
 
+                        let alloc_open = alloc_scope_open_tokens();
+                        let alloc_close = alloc_scope_close_tokens(
+                            quote! { self.copper_runtime.monitor },
+                            quote! { #index },
+                            quote! { CuComponentState::Start },
+                        );
                         quote! {
                             #call_sim_callback
                             if doit {
@@ -2523,7 +2567,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 );
                                 let task = &mut self.copper_runtime.tasks.#task_index;
                                 ctx.set_current_task(#index);
-                                if let Err(error) = task.start(&ctx) {
+                                #alloc_open
+                                let __cu_step_result = task.start(&ctx);
+                                #alloc_close
+                                if let Err(error) = __cu_step_result {
                                     #monitoring_action
                                 }
                             }
@@ -2569,6 +2616,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let doit = true;  // in normal mode always execute the steps in the runtime.
                             }
                         };
+                        let alloc_open = alloc_scope_open_tokens();
+                        let alloc_close = alloc_scope_close_tokens(
+                            quote! { self.copper_runtime.monitor },
+                            quote! { #index },
+                            quote! { CuComponentState::Stop },
+                        );
                         quote! {
                             #call_sim_callback
                             if doit {
@@ -2581,7 +2634,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 );
                                 let task = &mut self.copper_runtime.tasks.#task_index;
                                 ctx.set_current_task(#index);
-                                if let Err(error) = task.stop(&ctx) {
+                                #alloc_open
+                                let __cu_step_result = task.stop(&ctx);
+                                #alloc_close
+                                if let Err(error) = __cu_step_result {
                                     #monitoring_action
                                 }
                             }
@@ -2626,6 +2682,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let doit = true;  // in normal mode always execute the steps in the runtime.
                             }
                         };
+                        let alloc_open = alloc_scope_open_tokens();
+                        let alloc_close = alloc_scope_close_tokens(
+                            quote! { monitor },
+                            quote! { #index },
+                            quote! { CuComponentState::Preprocess },
+                        );
                         quote! {
                             #call_sim_callback
                             if doit {
@@ -2635,10 +2697,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     culistid: None,
                                 });
                                 ctx.set_current_task(#index);
+                                #alloc_open
                                 let maybe_error = {
                                     #rt_guard
                                     tasks.#task_index.preprocess(&ctx)
                                 };
+                                #alloc_close
                                 if let Err(error) = maybe_error {
                                     #monitoring_action
                                 }
@@ -2684,6 +2748,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let doit = true;  // in normal mode always execute the steps in the runtime.
                             }
                         };
+                        let alloc_open = alloc_scope_open_tokens();
+                        let alloc_close = alloc_scope_close_tokens(
+                            quote! { monitor },
+                            quote! { #index },
+                            quote! { CuComponentState::Postprocess },
+                        );
                         quote! {
                             #call_sim_callback
                             if doit {
@@ -2693,10 +2763,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     culistid: None,
                                 });
                                 ctx.set_current_task(#index);
+                                #alloc_open
                                 let maybe_error = {
                                     #rt_guard
                                     tasks.#task_index.postprocess(&ctx)
                                 };
+                                #alloc_close
                                 if let Err(error) = maybe_error {
                                     #monitoring_action
                                 }
@@ -2740,6 +2812,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 } else {
                     quote! { let doit = true; }
                 };
+                let alloc_open = alloc_scope_open_tokens();
+                let alloc_close = alloc_scope_close_tokens(
+                    quote! { self.copper_runtime.monitor },
+                    quote! { #monitor_index },
+                    quote! { CuComponentState::Start },
+                );
                 quote! {
                     {
                         #call_sim
@@ -2754,7 +2832,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         ctx.set_current_component(#monitor_index);
                         ctx.clear_current_task();
                         let bridge = &mut self.copper_runtime.bridges.#bridge_index;
-                        if let Err(error) = bridge.start(&ctx) {
+                        #alloc_open
+                        let __cu_step_result = bridge.start(&ctx);
+                        #alloc_close
+                        if let Err(error) = __cu_step_result {
                             let decision = self.copper_runtime.monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Start, &error);
                             match decision {
                                 Decision::Abort => {
@@ -2808,6 +2889,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 } else {
                     quote! { let doit = true; }
                 };
+                let alloc_open = alloc_scope_open_tokens();
+                let alloc_close = alloc_scope_close_tokens(
+                    quote! { self.copper_runtime.monitor },
+                    quote! { #monitor_index },
+                    quote! { CuComponentState::Stop },
+                );
                 quote! {
                     {
                         #call_sim
@@ -2822,7 +2909,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         ctx.set_current_component(#monitor_index);
                         ctx.clear_current_task();
                         let bridge = &mut self.copper_runtime.bridges.#bridge_index;
-                        if let Err(error) = bridge.stop(&ctx) {
+                        #alloc_open
+                        let __cu_step_result = bridge.stop(&ctx);
+                        #alloc_close
+                        if let Err(error) = __cu_step_result {
                             let decision = self.copper_runtime.monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Stop, &error);
                             match decision {
                                 Decision::Abort => {
@@ -2876,6 +2966,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 } else {
                     quote! { let doit = true; }
                 };
+                let alloc_open = alloc_scope_open_tokens();
+                let alloc_close = alloc_scope_close_tokens(
+                    quote! { monitor },
+                    quote! { #monitor_index },
+                    quote! { CuComponentState::Preprocess },
+                );
                 quote! {
                     {
                         #call_sim
@@ -2888,10 +2984,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 step: CuComponentState::Preprocess,
                                 culistid: None,
                             });
+                            #alloc_open
                             let maybe_error = {
                                 #rt_guard
                                 bridge.preprocess(&ctx)
                             };
+                            #alloc_close
                             if let Err(error) = maybe_error {
                                 let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Preprocess, &error);
                                 match decision {
@@ -2947,6 +3045,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 } else {
                     quote! { let doit = true; }
                 };
+                let alloc_open = alloc_scope_open_tokens();
+                let alloc_close = alloc_scope_close_tokens(
+                    quote! { monitor },
+                    quote! { #monitor_index },
+                    quote! { CuComponentState::Postprocess },
+                );
                 quote! {
                     {
                         #call_sim
@@ -2960,10 +3064,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 step: CuComponentState::Postprocess,
                                 culistid: Some(clid),
                             });
+                            #alloc_open
                             let maybe_error = {
                                 #rt_guard
                                 bridge.postprocess(&ctx)
                             };
+                            #alloc_close
                             if let Err(error) = maybe_error {
                                 let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Postprocess, &error);
                                 match decision {
@@ -8003,6 +8109,18 @@ fn parallel_task_lifecycle_tokens(
         CuTaskType::Regular => quote! { cu29::cutask::CuTask },
     };
 
+    let preprocess_alloc_open = alloc_scope_open_tokens();
+    let preprocess_alloc_close = alloc_scope_close_tokens(
+        quote! { monitor },
+        quote! { #component_index },
+        quote! { CuComponentState::Preprocess },
+    );
+    let postprocess_alloc_open = alloc_scope_open_tokens();
+    let postprocess_alloc_close = alloc_scope_close_tokens(
+        quote! { monitor },
+        quote! { #component_index },
+        quote! { CuComponentState::Postprocess },
+    );
     let preprocess = if placement.preprocess {
         quote! {
             execution_probe.record(cu29::monitoring::ExecutionMarker {
@@ -8011,10 +8129,12 @@ fn parallel_task_lifecycle_tokens(
                 culistid: Some(clid),
             });
             ctx.set_current_task(#component_index);
+            #preprocess_alloc_open
             let maybe_error = {
                 #rt_guard
                 <#task_type as #task_trait>::preprocess(&mut #task_instance, &ctx)
             };
+            #preprocess_alloc_close
             if let Err(error) = maybe_error {
                 let decision = monitor.process_error(
                     cu29::monitoring::ComponentId::new(#component_index),
@@ -8061,10 +8181,12 @@ fn parallel_task_lifecycle_tokens(
                 culistid: Some(clid),
             });
             ctx.set_current_task(#component_index);
+            #postprocess_alloc_open
             let maybe_error = {
                 #rt_guard
                 <#task_type as #task_trait>::postprocess(&mut #task_instance, &ctx)
             };
+            #postprocess_alloc_close
             if let Err(error) = maybe_error {
                 let decision = monitor.process_error(
                     cu29::monitoring::ComponentId::new(#component_index),
@@ -8113,6 +8235,18 @@ fn parallel_bridge_lifecycle_tokens(
     let rt_guard = rtsan_guard_tokens();
     let abort_process_step = abort_process_step_tokens(true);
 
+    let preprocess_alloc_open = alloc_scope_open_tokens();
+    let preprocess_alloc_close = alloc_scope_close_tokens(
+        quote! { monitor },
+        quote! { #component_index },
+        quote! { CuComponentState::Preprocess },
+    );
+    let postprocess_alloc_open = alloc_scope_open_tokens();
+    let postprocess_alloc_close = alloc_scope_close_tokens(
+        quote! { monitor },
+        quote! { #component_index },
+        quote! { CuComponentState::Postprocess },
+    );
     let preprocess = if placement.preprocess {
         quote! {
             execution_probe.record(cu29::monitoring::ExecutionMarker {
@@ -8122,10 +8256,12 @@ fn parallel_bridge_lifecycle_tokens(
             });
             ctx.set_current_component(#component_index);
             ctx.clear_current_task();
+            #preprocess_alloc_open
             let maybe_error = {
                 #rt_guard
                 <#bridge_type as cu29::cubridge::CuBridge>::preprocess(bridge, &ctx)
             };
+            #preprocess_alloc_close
             if let Err(error) = maybe_error {
                 let decision = monitor.process_error(
                     cu29::monitoring::ComponentId::new(#component_index),
@@ -8174,10 +8310,12 @@ fn parallel_bridge_lifecycle_tokens(
             });
             ctx.set_current_component(#component_index);
             ctx.clear_current_task();
+            #postprocess_alloc_open
             let maybe_error = {
                 #rt_guard
                 <#bridge_type as cu29::cubridge::CuBridge>::postprocess(bridge, &ctx)
             };
+            #postprocess_alloc_close
             if let Err(error) = maybe_error {
                 let decision = monitor.process_error(
                     cu29::monitoring::ComponentId::new(#component_index),
@@ -8429,6 +8567,12 @@ fn generate_task_execution_tokens(
             } else {
                 quote!()
             };
+            let alloc_open = alloc_scope_open_tokens();
+            let alloc_close = alloc_scope_close_tokens(
+                quote! { monitor },
+                quote! { #tid },
+                quote! { CuComponentState::Process },
+            );
             let source_process_tokens = quote! {
                 #[allow(non_camel_case_types)]
                 trait #source_slot_match_trait_ident<Expected> {
@@ -8452,6 +8596,7 @@ fn generate_task_execution_tokens(
                 }
 
                 #output_start_time
+                #alloc_open
                 let result = {
                     let cumsg_output = #source_slot_match_fn_ident::<
                         _,
@@ -8462,6 +8607,7 @@ fn generate_task_execution_tokens(
                     #task_instance.process(&ctx, cumsg_output)
                 };
                 #output_end_time
+                #alloc_close
                 result
             };
 
@@ -8550,6 +8696,12 @@ fn generate_task_execution_tokens(
                 quote! { let doit = true; }
             };
 
+            let alloc_open = alloc_scope_open_tokens();
+            let alloc_close = alloc_scope_close_tokens(
+                quote! { monitor },
+                quote! { #tid },
+                quote! { CuComponentState::Process },
+            );
             (
                 wrap_process_step_tokens(
                     wrap_process_step,
@@ -8569,12 +8721,14 @@ fn generate_task_execution_tokens(
                                 culistid: Some(clid),
                             });
                             #output_start_time
+                            #alloc_open
                             let result = {
                                 #rt_guard
                                 ctx.set_current_task(#tid);
                                 #task_instance.process(&ctx, cumsg_input)
                             };
                             #output_end_time
+                            #alloc_close
                             result
                         } else {
                             Ok(())
@@ -8652,6 +8806,12 @@ fn generate_task_execution_tokens(
             } else {
                 quote!()
             };
+            let alloc_open = alloc_scope_open_tokens();
+            let alloc_close = alloc_scope_close_tokens(
+                quote! { monitor },
+                quote! { #tid },
+                quote! { CuComponentState::Process },
+            );
             let regular_process_tokens = quote! {
                 #[allow(non_camel_case_types)]
                 trait #regular_slot_match_trait_ident<Expected> {
@@ -8675,6 +8835,7 @@ fn generate_task_execution_tokens(
                 }
 
                 #output_start_time
+                #alloc_open
                 let result = {
                     let cumsg_output = #regular_slot_match_fn_ident::<
                         _,
@@ -8685,6 +8846,7 @@ fn generate_task_execution_tokens(
                     #task_instance.process(&ctx, cumsg_input, cumsg_output)
                 };
                 #output_end_time
+                #alloc_close
                 result
             };
 
@@ -8817,6 +8979,12 @@ fn generate_bridge_rx_execution_tokens(
     } else {
         quote! { let doit = true; }
     };
+    let alloc_open = alloc_scope_open_tokens();
+    let alloc_close = alloc_scope_close_tokens(
+        quote! { monitor },
+        quote! { #monitor_index },
+        quote! { CuComponentState::Process },
+    );
     (
         wrap_process_step_tokens(
             wrap_process_step,
@@ -8832,6 +9000,7 @@ fn generate_bridge_rx_execution_tokens(
                         culistid: Some(clid),
                     });
                     cumsg_output.metadata.process_time.start = cu29::curuntime::perf_now(clock).into();
+                    #alloc_open
                     let maybe_error = {
                         #rt_guard
                         ctx.set_current_component(#monitor_index);
@@ -8843,6 +9012,7 @@ fn generate_bridge_rx_execution_tokens(
                         )
                     };
                     cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
+                    #alloc_close
                     if let Err(error) = maybe_error {
                         let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Process, &error);
                         match decision {
@@ -8975,6 +9145,12 @@ fn generate_bridge_tx_execution_tokens(
     } else {
         quote! { let doit = true; }
     };
+    let alloc_open = alloc_scope_open_tokens();
+    let alloc_close = alloc_scope_close_tokens(
+        quote! { monitor },
+        quote! { #monitor_index },
+        quote! { CuComponentState::Process },
+    );
     (
         wrap_process_step_tokens(
             wrap_process_step,
@@ -8992,6 +9168,7 @@ fn generate_bridge_tx_execution_tokens(
                         culistid: Some(clid),
                     });
                     cumsg_output.metadata.process_time.start = cu29::curuntime::perf_now(clock).into();
+                    #alloc_open
                     let maybe_error = if bridge_channel.should_send(cumsg_input.payload().is_some()) {
                         {
                             #rt_guard
@@ -9006,6 +9183,7 @@ fn generate_bridge_tx_execution_tokens(
                     } else {
                         Ok(())
                     };
+                    #alloc_close
                     if let Err(error) = maybe_error {
                         let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#monitor_index), CuComponentState::Process, &error);
                         match decision {

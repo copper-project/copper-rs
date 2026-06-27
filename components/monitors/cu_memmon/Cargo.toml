@@ -1,0 +1,42 @@
+[package]
+name = "cu-memmon"
+description = "Copper monitor that tracks per-task heap allocations via the runtime's CountingAlloc and reports leaks and realtime violations."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+build = "build.rs"
+
+[package.metadata.copper]
+kind = "monitor"
+domains = ["monitor/memory"]
+environments = ["host"]
+
+[package.metadata.cargo-shear]
+ignored = ["serde"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+cu29 = { path = "../../../core/cu29", version = "1.0.0-rc2", default-features = false }
+spin = { workspace = true }
+
+[dev-dependencies]
+serde = { workspace = true }
+cu29 = { path = "../../../core/cu29", version = "1.0.0-rc2", default-features = false, features = [
+  "log-level-info",
+] }
+
+[features]
+default = ["std"]
+std = ["cu29/std"]
+# Passthrough that turns on per-task allocation accounting in the runtime and
+# the derive macro. Without this, the monitor compiles and runs but reports
+# zeros — and warns once at startup or on the first summary tick.
+memory_monitoring = ["cu29/memory_monitoring"]
