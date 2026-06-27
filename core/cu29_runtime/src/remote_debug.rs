@@ -131,7 +131,7 @@
 //! | `nav.seek` | yes | `{ target, resolve? }` | yes |
 //! | `nav.run_until` | yes | `{ target, resolve?, max_steps?, timeout_ms?, progress_every_n_steps? }` | yes |
 //! | `nav.step` | yes | `{ delta }` | yes |
-//! | `nav.replay` | yes | `{ at? }` | yes (replays current step; optional pre-seek) |
+//! | `nav.replay` | yes | `{ at?, limit?, include_cl_snapshot?, include_payloads?, include_metadata?, include_raw?, include_replayed_cl?, include_state? }` | yes (replays current step/page; optional pre-seek) |
 //!
 //! Notes:
 //!
@@ -235,7 +235,7 @@
 
 use crate::app::{CuSimApplication, CurrentRuntimeCopperList};
 use crate::config::{BridgeChannelConfigRepresentation, Flavor, read_configuration_str};
-use crate::debug::{CuDebugSession, JumpOutcome};
+use crate::debug::{CuDebugSession, IndexedResolveMode, JumpOutcome};
 use crate::reflect::{
     EnumInfo, Reflect, ReflectTaskIntrospection, StructInfo, TupleInfo, TupleStructInfo, Type,
     TypeInfo, TypeRegistry, VariantInfo, serde::SerializationData,
@@ -256,7 +256,7 @@ use cu29_unifiedlog::{
     SectionStorage, UnifiedLogWrite, UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::hash::{Hash, Hasher};
@@ -277,6 +277,7 @@ const LOCAL_SHM_MESSAGE_THRESHOLD_BYTES: u64 = 3 * 1024;
 const DEFAULT_SESSION_IDLE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const DEFAULT_MAX_ACTIVE_SESSIONS: usize = 64;
 const MAX_PAGE_LIMIT: u32 = 1000;
+const MAX_REPLAY_BATCH_LIMIT: u32 = 128;
 const MAX_LOG_PAGE_LIMIT: usize = 5000;
 const SERVER_RECV_POLL_TIMEOUT: Duration = Duration::from_millis(250);
 
@@ -510,6 +511,20 @@ struct NavStepParams {
 struct NavReplayParams {
     #[serde(default)]
     at: Option<At>,
+    #[serde(default = "default_nav_replay_limit")]
+    limit: u32,
+    #[serde(default)]
+    include_cl_snapshot: bool,
+    #[serde(default)]
+    include_payloads: bool,
+    #[serde(default)]
+    include_metadata: bool,
+    #[serde(default)]
+    include_raw: bool,
+    #[serde(default)]
+    include_replayed_cl: bool,
+    #[serde(default)]
+    include_state: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -1628,6 +1643,18 @@ where
             Ok(v) => v,
             Err(err) => return param_err_response(request_id, err),
         };
+        if parsed.limit == 0 {
+            return param_err_response(request_id, "limit must be greater than zero".to_string());
+        }
+        if parsed.limit > MAX_REPLAY_BATCH_LIMIT {
+            return param_err_response(
+                request_id,
+                format!(
+                    "limit must be <= {MAX_REPLAY_BATCH_LIMIT}, got {}",
+                    parsed.limit
+                ),
+            );
+        }
 
         let sid = match session_id {
             Some(v) => v,
@@ -1655,11 +1682,28 @@ where
             update_after_jump(state, &jump);
         }
 
-        let replayed = match replay_current_step(&mut state.session) {
-            Ok(v) => v,
-            Err(e) => return err_response(request_id, "ReplayFailed", &e.to_string()),
-        };
-        update_after_jump(state, &replayed);
+        let mut items = Vec::with_capacity(parsed.limit as usize);
+        for step_idx in 0..parsed.limit {
+            let replayed = if step_idx == 0 {
+                match replay_current_step(&mut state.session) {
+                    Ok(v) => v,
+                    Err(e) => return err_response(request_id, "ReplayFailed", &e.to_string()),
+                }
+            } else {
+                match state.session.step(1) {
+                    Ok(v) => v,
+                    Err(e) => return err_response(request_id, "ReplayFailed", &e.to_string()),
+                }
+            };
+            update_after_jump(state, &replayed);
+
+            let item =
+                match nav_replay_item_snapshot::<App, P, CB, TF, S, L>(state, &time_of, &parsed) {
+                    Ok(v) => v,
+                    Err(e) => return err_response(request_id, "ReplayFailed", &e.to_string()),
+                };
+            items.push(item);
+        }
 
         let cursor = match cursor_snapshot(state, &time_of) {
             Ok(v) => v,
@@ -1670,7 +1714,9 @@ where
             request_id,
             json!({
                 "cursor": cursor,
-                "replayed": 1,
+                "replayed": items.len(),
+                "items": items,
+                "next_offset": Value::Null,
             }),
             Some(state.cursor_rev),
             resolved_at,
@@ -2738,11 +2784,12 @@ fn capabilities_json(session_lifecycle: SessionLifecycleLimits) -> Value {
         "version": API_VERSION,
         "wire_codecs": ["cbor", "json"],
         "supports_targets": ["cl", "ts"],
-            "session_lifecycle": {
-                "idle_timeout_ms": session_lifecycle.idle_timeout.as_millis() as u64,
-                "max_sessions": session_lifecycle.max_sessions,
-                "cleanup_policy": "on_each_request_or_timeout_tick",
-            },
+        "max_replay_batch_limit": MAX_REPLAY_BATCH_LIMIT,
+        "session_lifecycle": {
+            "idle_timeout_ms": session_lifecycle.idle_timeout.as_millis() as u64,
+            "max_sessions": session_lifecycle.max_sessions,
+            "cleanup_policy": "on_each_request_or_timeout_tick",
+        },
         "supports_methods": [
             "admin.stop",
             "session.open",
@@ -3026,10 +3073,7 @@ where
         -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
 {
-    let cl = session
-        .cl_at(idx)?
-        .ok_or_else(|| CuError::from(format!("No copperlist at idx {idx}")))?;
-    session.goto_cl(cl.id)
+    session.goto_index(idx)
 }
 
 fn replay_current_step<App, P, CB, TF, S, L>(
@@ -3058,6 +3102,68 @@ where
     }
     session.step(-1)?;
     session.step(1)
+}
+
+fn nav_replay_item_snapshot<App, P, CB, TF, S, L>(
+    state: &mut SessionState<App, P, CB, TF, S, L>,
+    time_of: &TF,
+    params: &NavReplayParams,
+) -> CuResult<Value>
+where
+    App: CuSimApplication<S, L> + ReflectTaskIntrospection + CurrentRuntimeCopperList<P>,
+    L: UnifiedLogWrite<S> + 'static,
+    S: SectionStorage,
+    P: CopperListTuple + 'static,
+    CB: for<'a> Fn(
+        &'a crate::copperlist::CopperList<P>,
+        RobotClock,
+        RobotClockMock,
+    )
+        -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
+    TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
+{
+    let cursor = cursor_snapshot(state, time_of)?;
+    let mut item = Map::new();
+    item.insert(
+        "cursor".to_string(),
+        serde_json::to_value(&cursor).unwrap_or(Value::Null),
+    );
+
+    if params.include_cl_snapshot
+        || params.include_payloads
+        || params.include_metadata
+        || params.include_raw
+    {
+        let current_cl = match state.session.current_cl()? {
+            Some(cl) => copperlist_snapshot::<P>(
+                cl.as_ref(),
+                time_of,
+                params.include_payloads,
+                params.include_metadata,
+                params.include_raw,
+            )?,
+            None => Value::Null,
+        };
+        item.insert("cl_snapshot".to_string(), current_cl);
+    }
+
+    if params.include_replayed_cl {
+        let replayed_cl = replayed_copperlist_snapshot::<App, P, CB, TF, S, L>(
+            state,
+            time_of,
+            params.include_payloads,
+            params.include_metadata,
+            params.include_raw,
+        )?;
+        item.insert("replayed_cl".to_string(), replayed_cl);
+    }
+
+    if params.include_state {
+        let tasks = build_tasks_json::<App, P, CB, TF, S, L>(state)?;
+        item.insert("tasks".to_string(), tasks);
+    }
+
+    Ok(Value::Object(item))
 }
 
 fn cursor_snapshot<App, P, CB, TF, S, L>(
@@ -3144,93 +3250,29 @@ where
         -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
 {
-    let total = session.total_entries();
-
-    match target {
-        Target::Cl { cl } => {
-            let mut best_after: Option<ResolvedAt> = None;
-            let mut best_before: Option<ResolvedAt> = None;
-
-            for idx in 0..total {
-                let entry = session
-                    .cl_at(idx)?
-                    .ok_or_else(|| CuError::from("Corrupt session index"))?;
-                let ts = time_of(entry.as_ref()).map(|t| t.as_nanos());
-                let this = ResolvedAt {
-                    cl: entry.id,
-                    ts_ns: ts,
-                    idx,
-                };
-
-                if entry.id == *cl {
-                    return Ok(this);
-                }
-                if entry.id > *cl && best_after.is_none() {
-                    best_after = Some(this.clone());
-                }
-                if entry.id < *cl {
-                    best_before = Some(this);
-                }
-            }
-
-            match mode {
-                ResolveMode::Exact => Err(CuError::from(format!("No exact CL target for {cl}"))),
-                ResolveMode::AtOrAfter => {
-                    best_after.ok_or_else(|| CuError::from(format!("No CL at/after target {cl}")))
-                }
-                ResolveMode::AtOrBefore => {
-                    best_before.ok_or_else(|| CuError::from(format!("No CL at/before target {cl}")))
-                }
-            }
-        }
+    let indexed_mode = indexed_resolve_mode(mode);
+    let idx = match target {
+        Target::Cl { cl } => session.resolve_index_for_culistid(*cl, indexed_mode)?,
         Target::Ts { ts_ns } => {
-            let target_time = CuTime::from(*ts_ns);
-
-            let mut exact: Option<ResolvedAt> = None;
-            let mut best_after: Option<ResolvedAt> = None;
-            let mut best_before: Option<ResolvedAt> = None;
-
-            for idx in 0..total {
-                let entry = session
-                    .cl_at(idx)?
-                    .ok_or_else(|| CuError::from("Corrupt session index"))?;
-                let ts = time_of(entry.as_ref()).map(|t| t.as_nanos());
-                let this = ResolvedAt {
-                    cl: entry.id,
-                    ts_ns: ts,
-                    idx,
-                };
-
-                if let Some(entry_ts) = ts {
-                    if entry_ts == *ts_ns {
-                        exact = Some(this);
-                        break;
-                    }
-                    if entry_ts > *ts_ns && best_after.is_none() {
-                        best_after = Some(this.clone());
-                    }
-                    if entry_ts < *ts_ns {
-                        best_before = Some(this);
-                    }
-                } else {
-                    let _ = target_time;
-                }
-            }
-
-            if let Some(exact) = exact {
-                return Ok(exact);
-            }
-
-            match mode {
-                ResolveMode::Exact => Err(CuError::from(format!(
-                    "No exact timestamp target for {ts_ns}"
-                ))),
-                ResolveMode::AtOrAfter => best_after
-                    .ok_or_else(|| CuError::from(format!("No timestamp at/after {ts_ns}"))),
-                ResolveMode::AtOrBefore => best_before
-                    .ok_or_else(|| CuError::from(format!("No timestamp at/before {ts_ns}"))),
-            }
+            session.resolve_index_for_time(CuTime::from(*ts_ns), indexed_mode)?
         }
+    };
+    let entry = session
+        .cl_at(idx)?
+        .ok_or_else(|| CuError::from("Resolved target points to missing copperlist"))?;
+
+    Ok(ResolvedAt {
+        cl: entry.id,
+        ts_ns: time_of(entry.as_ref()).map(|t| t.as_nanos()),
+        idx,
+    })
+}
+
+fn indexed_resolve_mode(mode: ResolveMode) -> IndexedResolveMode {
+    match mode {
+        ResolveMode::Exact => IndexedResolveMode::Exact,
+        ResolveMode::AtOrAfter => IndexedResolveMode::AtOrAfter,
+        ResolveMode::AtOrBefore => IndexedResolveMode::AtOrBefore,
     }
 }
 
@@ -3311,12 +3353,11 @@ fn erased_serialize_to_json(value: &dyn erased_serde::Serialize) -> CuResult<Val
         .map_err(|e| CuError::new_with_cause("Failed to parse serialized payload JSON", e))
 }
 
-fn build_state_root_json<App, P, CB, TF, S, L>(
+fn build_tasks_json<App, P, CB, TF, S, L>(
     state: &mut SessionState<App, P, CB, TF, S, L>,
-    time_of: &TF,
 ) -> CuResult<Value>
 where
-    App: CuSimApplication<S, L> + ReflectTaskIntrospection + CurrentRuntimeCopperList<P>,
+    App: CuSimApplication<S, L> + ReflectTaskIntrospection,
     L: UnifiedLogWrite<S> + 'static,
     S: SectionStorage,
     P: CopperListTuple + 'static,
@@ -3341,29 +3382,82 @@ where
         }
     }
 
+    Ok(Value::Object(tasks))
+}
+
+fn replayed_copperlist_snapshot<App, P, CB, TF, S, L>(
+    state: &mut SessionState<App, P, CB, TF, S, L>,
+    time_of: &TF,
+    include_payloads: bool,
+    include_metadata: bool,
+    include_raw: bool,
+) -> CuResult<Value>
+where
+    App: CuSimApplication<S, L> + CurrentRuntimeCopperList<P>,
+    L: UnifiedLogWrite<S> + 'static,
+    S: SectionStorage,
+    P: CopperListTuple + 'static,
+    CB: for<'a> Fn(
+        &'a crate::copperlist::CopperList<P>,
+        RobotClock,
+        RobotClockMock,
+    )
+        -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
+    TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
+{
+    let snapshot = state.session.with_app(|app| {
+        app.current_runtime_copperlist_bytes()
+            .map(|bytes| {
+                bincode::decode_from_slice::<crate::copperlist::CopperList<P>, _>(
+                    bytes,
+                    bincode::config::standard(),
+                )
+                .map(|(cl, _)| cl)
+                .map_err(|e| {
+                    CuError::new_with_cause("Failed to decode replayed CopperList snapshot", e)
+                })
+                .and_then(|cl| {
+                    copperlist_snapshot::<P>(
+                        &cl,
+                        time_of,
+                        include_payloads,
+                        include_metadata,
+                        include_raw,
+                    )
+                })
+            })
+            .transpose()
+    })?;
+
+    Ok(snapshot.unwrap_or(Value::Null))
+}
+
+fn build_state_root_json<App, P, CB, TF, S, L>(
+    state: &mut SessionState<App, P, CB, TF, S, L>,
+    time_of: &TF,
+) -> CuResult<Value>
+where
+    App: CuSimApplication<S, L> + ReflectTaskIntrospection + CurrentRuntimeCopperList<P>,
+    L: UnifiedLogWrite<S> + 'static,
+    S: SectionStorage,
+    P: CopperListTuple + 'static,
+    CB: for<'a> Fn(
+        &'a crate::copperlist::CopperList<P>,
+        RobotClock,
+        RobotClockMock,
+    )
+        -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
+    TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
+{
+    let tasks = build_tasks_json::<App, P, CB, TF, S, L>(state)?;
+
     let current_cl = match state.session.current_cl()? {
         Some(cl) => copperlist_snapshot::<P>(cl.as_ref(), time_of, true, true, false)?,
         None => Value::Null,
     };
 
-    let replayed_cl = state
-        .session
-        .with_app(|app| {
-            app.current_runtime_copperlist_bytes()
-                .map(|bytes| {
-                    bincode::decode_from_slice::<crate::copperlist::CopperList<P>, _>(
-                        bytes,
-                        bincode::config::standard(),
-                    )
-                    .map(|(cl, _)| cl)
-                    .map_err(|e| {
-                        CuError::new_with_cause("Failed to decode replayed CopperList snapshot", e)
-                    })
-                    .and_then(|cl| copperlist_snapshot::<P>(&cl, time_of, true, true, false))
-                })
-                .transpose()
-        })?
-        .unwrap_or(Value::Null);
+    let replayed_cl =
+        replayed_copperlist_snapshot::<App, P, CB, TF, S, L>(state, time_of, true, true, false)?;
 
     let cursor = cursor_snapshot(state, time_of)
         .map(|c| serde_json::to_value(c).unwrap_or(Value::Null))
@@ -4360,6 +4454,10 @@ fn default_root_path() -> String {
 
 fn default_state_format() -> String {
     "json".to_string()
+}
+
+fn default_nav_replay_limit() -> u32 {
+    1
 }
 
 fn now_unix_ns() -> u64 {

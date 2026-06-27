@@ -491,18 +491,42 @@ fn run_remote_debug_session(debug_base: &str) -> CuResult<()> {
 
     let _ = call_step(&client, Some(&session_id), "nav.step", json!({"delta": -1}))?;
 
-    let _ = call_step(
-        &client,
-        Some(&session_id),
-        "nav.replay",
-        json!({
-            "at": {
-                "target": {"kind": "cl", "cl": 6},
-                "mutate_cursor": true,
-                "resolve": "exact"
+    {
+        let replay_page = call_step(
+            &client,
+            Some(&session_id),
+            "nav.replay",
+            json!({
+                "at": {
+                    "target": {"kind": "cl", "cl": 6},
+                    "mutate_cursor": true,
+                    "resolve": "exact"
+                },
+                "limit": 2,
+                "include_cl_snapshot": true,
+                "include_payloads": true,
+                "include_replayed_cl": true,
+                "include_state": true
+            }),
+        )?;
+        let replay_items = replay_page
+            .get("items")
+            .and_then(Value::as_array)
+            .ok_or_else(|| CuError::from("nav.replay missing items"))?;
+        if replay_items.len() != 2 {
+            return Err(CuError::from(format!(
+                "nav.replay returned {} items, expected 2",
+                replay_items.len()
+            )));
+        }
+        for item in replay_items {
+            for field in ["cursor", "cl_snapshot", "replayed_cl", "tasks"] {
+                if item.get(field).is_none() {
+                    return Err(CuError::from(format!("nav.replay item missing {field}")));
+                }
             }
-        }),
-    )?;
+        }
+    }
 
     let _ = call_step(&client, Some(&session_id), "schema.get_stack", json!({}))?;
 
