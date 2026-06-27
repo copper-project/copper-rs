@@ -24,6 +24,9 @@ concurrency:
   group: catalog-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CARGO_NET_RETRY: "10"
+
 jobs:
   build:
     name: Build Catalog

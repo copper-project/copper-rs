@@ -39,6 +39,9 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Configure Cargo network retries
+      shell: bash
+      run: echo "CARGO_NET_RETRY=10" >> "$GITHUB_ENV"
     - name: Configure CARGO_TARGET_DIR
       if: inputs.cargo_target_dir != ''
       shell: bash
