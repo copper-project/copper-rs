@@ -47,6 +47,14 @@ pub struct SectionCacheStats {
     pub evictions: u64,
 }
 
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum IndexedResolveMode {
+    Exact,
+    AtOrAfter,
+    AtOrBefore,
+}
+
 /// Metadata for one copperlist section (no payload kept).
 #[derive(Debug, Clone)]
 pub(crate) struct SectionIndexEntry {
@@ -324,73 +332,6 @@ where
             .ok()
     }
 
-    /// Lower-bound lookup: return the first section whose `first_ts >= ts`.
-    /// If `ts` is earlier than the first section, return the first section.
-    /// Return `None` only when `ts` is beyond the last section's range.
-    fn find_section_for_time(&self, ts: CuTime) -> Option<usize> {
-        if self.sections.is_empty() {
-            return None;
-        }
-
-        // Fast path when all sections carry timestamps.
-        if self.sections.iter().all(|s| s.first_ts.is_some()) {
-            let idx = match self.sections.binary_search_by(|s| {
-                let a = s.first_ts.unwrap();
-                if a < ts {
-                    std::cmp::Ordering::Less
-                } else if a > ts {
-                    std::cmp::Ordering::Greater
-                } else {
-                    std::cmp::Ordering::Equal
-                }
-            }) {
-                Ok(i) => i,
-                Err(i) => i, // insertion point = first first_ts >= ts
-            };
-
-            if idx < self.sections.len() {
-                return Some(idx);
-            }
-
-            // ts is after the last section start; allow selecting the last section
-            // if the timestamp still lies inside its recorded range.
-            let last = self.sections.last().unwrap();
-            if let Some(last_ts) = last.last_ts
-                && ts <= last_ts
-            {
-                return Some(self.sections.len() - 1);
-            }
-            return None;
-        }
-
-        // Fallback for sections missing timestamps: choose first window that contains ts;
-        // if ts is earlier than the first timestamped section, pick that section; otherwise
-        // only return None when ts is past the last known range.
-        if let Some(first_ts) = self.sections.first().and_then(|s| s.first_ts)
-            && ts <= first_ts
-        {
-            return Some(0);
-        }
-
-        if let Some(idx) = self
-            .sections
-            .iter()
-            .position(|s| match (s.first_ts, s.last_ts) {
-                (Some(a), Some(b)) => a <= ts && ts <= b,
-                (Some(a), None) => a <= ts,
-                _ => false,
-            })
-        {
-            return Some(idx);
-        }
-
-        let last = self.sections.last().unwrap();
-        match last.last_ts {
-            Some(b) if ts <= b => Some(self.sections.len() - 1),
-            _ => None,
-        }
-    }
-
     fn touch_cache(&mut self, key: usize) {
         if let Some(pos) = self.cache_order.iter().position(|k| *k == key) {
             self.cache_order.remove(pos);
@@ -451,6 +392,64 @@ where
         Ok((cl, ts))
     }
 
+    fn first_section_with_last_id_at_least(&self, culistid: u64) -> usize {
+        let mut left = 0usize;
+        let mut right = self.sections.len();
+        while left < right {
+            let mid = left + (right - left) / 2;
+            if self.sections[mid].last_id < culistid {
+                left = mid + 1;
+            } else {
+                right = mid;
+            }
+        }
+        left
+    }
+
+    fn first_section_with_first_id_greater_than(&self, culistid: u64) -> usize {
+        let mut left = 0usize;
+        let mut right = self.sections.len();
+        while left < right {
+            let mid = left + (right - left) / 2;
+            if self.sections[mid].first_id <= culistid {
+                left = mid + 1;
+            } else {
+                right = mid;
+            }
+        }
+        left
+    }
+
+    fn index_for_culistid_at_or_after(&mut self, culistid: u64) -> CuResult<usize> {
+        let mut section_idx = self.first_section_with_last_id_at_least(culistid);
+        while section_idx < self.sections.len() {
+            let start_idx = self.sections[section_idx].start_idx;
+            let section = self.load_section(section_idx)?;
+            for (offset, cl) in section.entries.iter().enumerate() {
+                if cl.id >= culistid {
+                    return Ok(start_idx + offset);
+                }
+            }
+            section_idx += 1;
+        }
+        Err(CuError::from(format!("No CL at/after target {culistid}")))
+    }
+
+    fn index_for_culistid_at_or_before(&mut self, culistid: u64) -> CuResult<usize> {
+        let mut section_idx = self.first_section_with_first_id_greater_than(culistid);
+        while section_idx > 0 {
+            section_idx -= 1;
+            let start_idx = self.sections[section_idx].start_idx;
+            let section = self.load_section(section_idx)?;
+            for (offset, cl) in section.entries.iter().enumerate().rev() {
+                if cl.id <= culistid {
+                    return Ok(start_idx + offset);
+                }
+            }
+        }
+        Err(CuError::from(format!("No CL at/before target {culistid}")))
+    }
+
     fn index_for_culistid(&mut self, culistid: u64) -> CuResult<usize> {
         let section_idx = self
             .find_section_for_culistid(culistid)
@@ -465,19 +464,108 @@ where
         Err(CuError::from("culistid not found inside indexed section"))
     }
 
-    fn index_for_time(&mut self, ts: CuTime) -> CuResult<usize> {
-        let section_idx = self
-            .find_section_for_time(ts)
-            .ok_or_else(|| CuError::from("No copperlist at or after requested timestamp"))?;
-        let start_idx = self.sections[section_idx].start_idx;
-        let section = self.load_section(section_idx)?;
-        let idx = start_idx;
-        for (i, maybe) in section.timestamps.iter().enumerate() {
-            if matches!(maybe, Some(t) if *t >= ts) {
-                return Ok(idx + i);
+    pub(crate) fn resolve_index_for_culistid(
+        &mut self,
+        culistid: u64,
+        mode: IndexedResolveMode,
+    ) -> CuResult<usize> {
+        match mode {
+            IndexedResolveMode::Exact => self
+                .index_for_culistid(culistid)
+                .map_err(|_| CuError::from(format!("No exact CL target for {culistid}"))),
+            IndexedResolveMode::AtOrAfter => self.index_for_culistid_at_or_after(culistid),
+            IndexedResolveMode::AtOrBefore => self.index_for_culistid_at_or_before(culistid),
+        }
+    }
+
+    fn index_for_time_at_or_after(&mut self, ts: CuTime) -> CuResult<usize> {
+        for section_idx in 0..self.sections.len() {
+            let section_entry = &self.sections[section_idx];
+            if matches!(section_entry.last_ts, Some(last) if last < ts) {
+                continue;
+            }
+
+            let start_idx = section_entry.start_idx;
+            let section_first_ts = section_entry.first_ts;
+            let section = self.load_section(section_idx)?;
+            for (offset, maybe_ts) in section.timestamps.iter().enumerate() {
+                if matches!(maybe_ts, Some(entry_ts) if *entry_ts >= ts) {
+                    return Ok(start_idx + offset);
+                }
+            }
+
+            if matches!(section_first_ts, Some(first) if first > ts) {
+                break;
             }
         }
-        Err(CuError::from("Timestamp not found within section"))
+
+        Err(CuError::from(format!(
+            "No timestamp at/after {}",
+            ts.as_nanos()
+        )))
+    }
+
+    fn index_for_time_at_or_before(&mut self, ts: CuTime) -> CuResult<usize> {
+        for section_idx in (0..self.sections.len()).rev() {
+            let section_entry = &self.sections[section_idx];
+            if matches!(section_entry.first_ts, Some(first) if first > ts) {
+                continue;
+            }
+
+            let start_idx = section_entry.start_idx;
+            let section = self.load_section(section_idx)?;
+            for (offset, maybe_ts) in section.timestamps.iter().enumerate().rev() {
+                if matches!(maybe_ts, Some(entry_ts) if *entry_ts <= ts) {
+                    return Ok(start_idx + offset);
+                }
+            }
+        }
+
+        Err(CuError::from(format!(
+            "No timestamp at/before {}",
+            ts.as_nanos()
+        )))
+    }
+
+    fn index_for_exact_time(&mut self, ts: CuTime) -> CuResult<usize> {
+        for section_idx in 0..self.sections.len() {
+            let section_entry = &self.sections[section_idx];
+            if matches!(section_entry.last_ts, Some(last) if last < ts) {
+                continue;
+            }
+            if matches!(section_entry.first_ts, Some(first) if first > ts) {
+                break;
+            }
+
+            let start_idx = section_entry.start_idx;
+            let section = self.load_section(section_idx)?;
+            for (offset, maybe_ts) in section.timestamps.iter().enumerate() {
+                if matches!(maybe_ts, Some(entry_ts) if *entry_ts == ts) {
+                    return Ok(start_idx + offset);
+                }
+            }
+        }
+
+        Err(CuError::from(format!(
+            "No exact timestamp target for {}",
+            ts.as_nanos()
+        )))
+    }
+
+    fn index_for_time(&mut self, ts: CuTime) -> CuResult<usize> {
+        self.resolve_index_for_time(ts, IndexedResolveMode::AtOrAfter)
+    }
+
+    pub(crate) fn resolve_index_for_time(
+        &mut self,
+        ts: CuTime,
+        mode: IndexedResolveMode,
+    ) -> CuResult<usize> {
+        match mode {
+            IndexedResolveMode::Exact => self.index_for_exact_time(ts),
+            IndexedResolveMode::AtOrAfter => self.index_for_time_at_or_after(ts),
+            IndexedResolveMode::AtOrBefore => self.index_for_time_at_or_before(ts),
+        }
     }
 
     fn replay_range(&mut self, start: usize, end: usize) -> CuResult<usize>
@@ -501,7 +589,7 @@ where
         Ok(replayed)
     }
 
-    fn goto_index(&mut self, target_idx: usize) -> CuResult<JumpOutcome>
+    pub(crate) fn goto_index(&mut self, target_idx: usize) -> CuResult<JumpOutcome>
     where
         App: CurrentRuntimeCopperList<P>,
     {
@@ -583,7 +671,7 @@ where
     where
         App: CurrentRuntimeCopperList<P>,
     {
-        let idx = self.index_for_culistid(culistid)?;
+        let idx = self.resolve_index_for_culistid(culistid, IndexedResolveMode::Exact)?;
         self.goto_index(idx)
     }
 
