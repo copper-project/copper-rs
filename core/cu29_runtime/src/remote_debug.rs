@@ -145,7 +145,7 @@
 //! | --- | --- | --- | --- |
 //! | `timeline.get_cursor` | yes | `{}` | current cursor snapshot |
 //! | `timeline.get_cl` | yes | `{ at?, include_payloads?, include_metadata?, include_raw? }` | `cl_snapshot`, `query_cursor` (+ optional resolution) |
-//! | `timeline.list` | yes | `{ from, to, page? }` | list of `{ idx, cl, ts_ns }` + `next_offset` |
+//! | `timeline.list` | yes | `{ from, to, page? }` | list of timeline rows with CL snapshots and keyframe metadata + `next_offset` |
 //!
 //! ### Logs
 //!
@@ -1849,15 +1849,16 @@ where
         if end.idx < start.idx {
             return ok_response(
                 request_id,
-                json!({"items": [], "next_offset": Value::Null}),
+                json!({"items": [], "next_offset": Value::Null, "total": 0}),
                 Some(state.cursor_rev),
                 None,
             );
         }
 
+        let max_idx = end.idx;
+        let total = max_idx.saturating_sub(start.idx).saturating_add(1);
         let mut items = Vec::new();
         let mut idx = start.idx.saturating_add(page.offset as usize);
-        let max_idx = end.idx;
         let mut emitted = 0usize;
 
         while idx <= max_idx && emitted < page.limit as usize {
@@ -1866,12 +1867,23 @@ where
                 Ok(None) => break,
                 Err(e) => return err_response(request_id, "TimelineListFailed", &e.to_string()),
             };
-            let ts = (time_of)(cl.as_ref()).map(|t| t.as_nanos());
-            items.push(json!({
-                "idx": idx,
-                "cl": cl.id,
-                "ts_ns": ts,
-            }));
+            let mut item = match copperlist_snapshot::<P>(cl.as_ref(), &time_of, true, false, false)
+            {
+                Ok(v) => v,
+                Err(e) => return err_response(request_id, "TimelineListFailed", &e.to_string()),
+            };
+            if let Value::Object(map) = &mut item {
+                map.insert("idx".to_owned(), json!(idx));
+                map.insert(
+                    "is_keyframe".to_owned(),
+                    json!(state.session.is_keyframe_culistid(cl.id)),
+                );
+                map.insert(
+                    "keyframe_cl".to_owned(),
+                    json!(state.session.nearest_keyframe_culistid(cl.id)),
+                );
+            }
+            items.push(item);
             idx = idx.saturating_add(1);
             emitted += 1;
         }
@@ -1887,6 +1899,7 @@ where
             json!({
                 "items": items,
                 "next_offset": next_offset,
+                "total": total,
             }),
             Some(state.cursor_rev),
             None,
