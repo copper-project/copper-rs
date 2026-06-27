@@ -42,7 +42,23 @@ pub struct ActivityLed {
     led: ActivityLedBackend,
 }
 
-impl Freezable for ActivityLed {}
+impl Freezable for ActivityLed {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        cu29::bincode::Encode::encode(&self.on, encoder)
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.on = cu29::bincode::Decode::decode(decoder)?;
+        self.led.set_on(self.on);
+        Ok(())
+    }
+}
 
 impl CuSinkTask for ActivityLed {
     type Input<'m> = CuMsg<ControlInputs>;

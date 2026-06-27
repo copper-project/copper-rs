@@ -8,6 +8,7 @@ use cu_bdshot::EscCommand;
 use cu_crsf::messages::RcChannelsPayload;
 use cu_pid::{PIDControlOutputPayload, PIDController};
 use cu_sensor_payloads::ImuPayload;
+use cu29::bincode::{Decode, Encode};
 use cu29::prelude::*;
 use cu29::units::si::angle::{degree, radian};
 use cu29::units::si::angular_velocity::{degree_per_second, radian_per_second};
@@ -106,7 +107,7 @@ static LOG_RATE: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::
 static LOG_MOTORS: spin::Mutex<LogRateLimiter> =
     spin::Mutex::new(LogRateLimiter::new(LOG_PERIOD_MS));
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Encode, Decode, Reflect)]
 enum StatusLabel {
     Disarmed,
     Calibrating,
@@ -144,7 +145,22 @@ pub struct ImuLogger {
     last_tov: Option<CuTime>,
 }
 
-impl Freezable for ImuLogger {}
+impl Freezable for ImuLogger {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        Encode::encode(&self.last_tov, encoder)
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.last_tov = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuSinkTask for ImuLogger {
     type Input<'m> = CuMsg<ImuPayload>;
@@ -475,7 +491,33 @@ pub struct ImuCalibrator {
     calibrating: bool,
 }
 
-impl Freezable for ImuCalibrator {}
+impl Freezable for ImuCalibrator {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        cu29::bincode::Encode::encode(&self.bias, encoder)?;
+        cu29::bincode::Encode::encode(&self.sum, encoder)?;
+        cu29::bincode::Encode::encode(&self.samples, encoder)?;
+        cu29::bincode::Encode::encode(&self.required_samples, encoder)?;
+        cu29::bincode::Encode::encode(&self.last_armed, encoder)?;
+        cu29::bincode::Encode::encode(&self.calibrating, encoder)?;
+        Ok(())
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.bias = cu29::bincode::Decode::decode(decoder)?;
+        self.sum = cu29::bincode::Decode::decode(decoder)?;
+        self.samples = cu29::bincode::Decode::decode(decoder)?;
+        self.required_samples = cu29::bincode::Decode::decode(decoder)?;
+        self.last_armed = cu29::bincode::Decode::decode(decoder)?;
+        self.calibrating = cu29::bincode::Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuTask for ImuCalibrator {
     type Input<'m> = input_msg!('m, ImuPayload, ControlInputs);
@@ -617,6 +659,26 @@ impl AxisPid {
     }
 }
 
+impl Freezable for AxisPid {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        self.pid.freeze(encoder)?;
+        Encode::encode(&self.initialized, encoder)?;
+        Ok(())
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.pid.thaw(decoder)?;
+        self.initialized = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
+
 #[derive(Reflect)]
 #[reflect(from_reflect = false)]
 pub struct AttitudeController {
@@ -634,7 +696,29 @@ pub struct AttitudeController {
     last_mode: FlightMode,
 }
 
-impl Freezable for AttitudeController {}
+impl Freezable for AttitudeController {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        self.roll_pid.freeze(encoder)?;
+        self.pitch_pid.freeze(encoder)?;
+        Encode::encode(&self.last_time, encoder)?;
+        Encode::encode(&self.last_mode, encoder)?;
+        Ok(())
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.roll_pid.thaw(decoder)?;
+        self.pitch_pid.thaw(decoder)?;
+        self.last_time = Decode::decode(decoder)?;
+        self.last_mode = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuTask for AttitudeController {
     type Input<'m> = input_msg!('m, AhrsPose, ControlInputs);
@@ -801,7 +885,31 @@ pub struct RateController {
     last_time: Option<CuTime>,
 }
 
-impl Freezable for RateController {}
+impl Freezable for RateController {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        self.roll_pid.freeze(encoder)?;
+        self.pitch_pid.freeze(encoder)?;
+        self.yaw_pid.freeze(encoder)?;
+        Encode::encode(&self.airmode_active, encoder)?;
+        Encode::encode(&self.last_time, encoder)?;
+        Ok(())
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.roll_pid.thaw(decoder)?;
+        self.pitch_pid.thaw(decoder)?;
+        self.yaw_pid.thaw(decoder)?;
+        self.airmode_active = Decode::decode(decoder)?;
+        self.last_time = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuTask for RateController {
     type Input<'m> = input_msg!('m, BodyRateSetpoint, ImuPayload, ControlInputs);
