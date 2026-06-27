@@ -6,6 +6,7 @@ mod protocol;
 
 use alloc::collections::VecDeque;
 use alloc::format;
+use alloc::string::ToString;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
