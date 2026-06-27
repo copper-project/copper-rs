@@ -49,7 +49,25 @@ struct DummyBridge {
     pub rx_called: usize,
 }
 
-impl Freezable for DummyBridge {}
+impl Freezable for DummyBridge {
+    fn freeze<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        Encode::encode(&self.tx_called, encoder)?;
+        Encode::encode(&self.rx_called, encoder)?;
+        Ok(())
+    }
+
+    fn thaw<D: bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), bincode::error::DecodeError> {
+        self.tx_called = Decode::decode(decoder)?;
+        self.rx_called = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuBridge for DummyBridge {
     type Tx = TxChannels;

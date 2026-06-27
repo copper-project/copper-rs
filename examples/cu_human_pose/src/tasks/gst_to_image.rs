@@ -2,6 +2,7 @@
 
 use cu_gstreamer::CuGstBuffer;
 use cu_sensor_payloads::{CuImage, CuImageBufferFormat};
+use cu29::bincode::{Decode, Encode};
 use cu29::prelude::*;
 use std::ops::DerefMut;
 use std::sync::Arc;
@@ -19,7 +20,25 @@ pub struct GstToCuImage {
     last_warn_ns: u64,
 }
 
-impl Freezable for GstToCuImage {}
+impl Freezable for GstToCuImage {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        Encode::encode(&self.last_payload_ns, encoder)?;
+        Encode::encode(&self.last_warn_ns, encoder)?;
+        Ok(())
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.last_payload_ns = Decode::decode(decoder)?;
+        self.last_warn_ns = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuTask for GstToCuImage {
     type Resources<'r> = ();

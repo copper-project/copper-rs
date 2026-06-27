@@ -19,7 +19,22 @@ pub struct MyMsg {
 pub struct MySource {
     next: u32,
 }
-impl Freezable for MySource {}
+impl Freezable for MySource {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        Encode::encode(&self.next, encoder)
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.next = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 impl CuSrcTask for MySource {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(MyMsg);

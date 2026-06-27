@@ -67,7 +67,22 @@ impl From<&ADCReadingPayload<u16>> for f32 {
     }
 }
 
-impl Freezable for ADS7883 {} // This device is stateless.
+impl Freezable for ADS7883 {
+    fn freeze<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        Encode::encode(&self.integrated_value, encoder)
+    }
+
+    fn thaw<D: bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), bincode::error::DecodeError> {
+        self.integrated_value = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 /// Reads one sample from the ADC.
 /// The value is a 12-bit number. i.e. 0-4095

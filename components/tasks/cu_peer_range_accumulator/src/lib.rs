@@ -1,6 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use cu_sensor_payloads::{PeerRangeObservation, PeerRangeSample, PeerRangeSnapshot};
+use cu29::bincode::de::{Decode, Decoder};
+use cu29::bincode::enc::{Encode, Encoder};
+use cu29::bincode::error::{DecodeError, EncodeError};
 use cu29::clock::{CuDuration, CuTime};
 use cu29::prelude::*;
 use serde::Deserialize;
@@ -41,7 +44,16 @@ pub struct PeerRangeAccumulatorTask<const N: usize> {
     sample_retention: SampleRetention,
 }
 
-impl<const N: usize> Freezable for PeerRangeAccumulatorTask<N> {}
+impl<const N: usize> Freezable for PeerRangeAccumulatorTask<N> {
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&self.samples, encoder)
+    }
+
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        self.samples = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl<const N: usize> PeerRangeAccumulatorTask<N> {
     pub fn new_with_limits(min_samples: usize, sample_retention: SampleRetention) -> Self {

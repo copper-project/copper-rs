@@ -267,7 +267,22 @@ mod tasks {
         sent: bool,
     }
 
-    impl Freezable for LoopbackSource {}
+    impl Freezable for LoopbackSource {
+        fn freeze<E: cu29::bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), cu29::bincode::error::EncodeError> {
+            cu29::bincode::Encode::encode(&self.sent, encoder)
+        }
+
+        fn thaw<D: cu29::bincode::de::Decoder>(
+            &mut self,
+            decoder: &mut D,
+        ) -> Result<(), cu29::bincode::error::DecodeError> {
+            self.sent = cu29::bincode::Decode::decode(decoder)?;
+            Ok(())
+        }
+    }
 
     impl CuSrcTask for LoopbackSource {
         type Resources<'r> = ();

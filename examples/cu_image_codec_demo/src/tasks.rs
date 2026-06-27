@@ -1,4 +1,5 @@
 use cu_sensor_payloads::{CuImage, CuImageBufferFormat};
+use cu29::bincode::{Decode, Encode};
 use cu29::prelude::*;
 use std::f32::consts::PI;
 use std::sync::Arc;
@@ -51,7 +52,22 @@ pub struct SyntheticImageSrc {
     format: CuImageBufferFormat,
 }
 
-impl Freezable for SyntheticImageSrc {}
+impl Freezable for SyntheticImageSrc {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        Encode::encode(&self.tick, encoder)
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.tick = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuSrcTask for SyntheticImageSrc {
     type Resources<'r> = ();

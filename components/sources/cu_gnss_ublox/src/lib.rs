@@ -15,6 +15,9 @@ use cu_gnss_payloads::{
 };
 #[cfg(feature = "std")]
 use cu_linux_resources::LinuxSerialPort;
+use cu29::bincode::de::{Decode, Decoder};
+use cu29::bincode::enc::{Encode, Encoder};
+use cu29::bincode::error::{DecodeError, EncodeError};
 use cu29::prelude::*;
 use cu29::resource::{Owned, ResourceBindingMap, ResourceBindings, ResourceManager};
 use embedded_io::{ErrorKind, ErrorType, Read, Write};
@@ -135,7 +138,55 @@ impl<S> fmt::Debug for UbxSourceTask<S> {
     }
 }
 
-impl<S> Freezable for UbxSourceTask<S> {}
+impl<S> Freezable for UbxSourceTask<S> {
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&self.frame_buffer, encoder)?;
+
+        Encode::encode(&(self.pending_events.len() as u64), encoder)?;
+        for event in &self.pending_events {
+            Encode::encode(event, encoder)?;
+        }
+
+        Encode::encode(&self.last_poll_nav_pvt_ns, encoder)?;
+        Encode::encode(&self.last_poll_nav_sat_ns, encoder)?;
+        Encode::encode(&self.last_poll_nav_sig_ns, encoder)?;
+        Encode::encode(&self.last_poll_mon_rf_ns, encoder)?;
+        Ok(())
+    }
+
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        let frame_buffer: Vec<u8> = Decode::decode(decoder)?;
+        if frame_buffer.len() > self.frame_buffer.capacity() {
+            return Err(DecodeError::ArrayLengthMismatch {
+                required: self.frame_buffer.capacity(),
+                found: frame_buffer.len(),
+            });
+        }
+        self.frame_buffer.clear();
+        self.frame_buffer.extend_from_slice(&frame_buffer);
+
+        let pending_len: u64 = Decode::decode(decoder)?;
+        let pending_len = usize::try_from(pending_len).map_err(|_| {
+            DecodeError::OtherString("UBX pending event count overflows usize".to_string())
+        })?;
+        if pending_len > self.max_pending_events {
+            return Err(DecodeError::ArrayLengthMismatch {
+                required: self.max_pending_events,
+                found: pending_len,
+            });
+        }
+        self.pending_events.clear();
+        for _ in 0..pending_len {
+            self.pending_events.push_back(Decode::decode(decoder)?);
+        }
+
+        self.last_poll_nav_pvt_ns = Decode::decode(decoder)?;
+        self.last_poll_nav_sat_ns = Decode::decode(decoder)?;
+        self.last_poll_nav_sig_ns = Decode::decode(decoder)?;
+        self.last_poll_mon_rf_ns = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl<S> CuSrcTask for UbxSourceTask<S>
 where

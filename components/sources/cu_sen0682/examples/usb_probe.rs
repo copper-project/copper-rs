@@ -133,7 +133,22 @@ pub mod probe {
         rs: Vec<f32>,
     }
 
-    impl Freezable for CeilingProbeSink {}
+    impl Freezable for CeilingProbeSink {
+        fn freeze<E: cu29::bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), cu29::bincode::error::EncodeError> {
+            cu29::bincode::Encode::encode(&self.frame_index, encoder)
+        }
+
+        fn thaw<D: cu29::bincode::de::Decoder>(
+            &mut self,
+            decoder: &mut D,
+        ) -> Result<(), cu29::bincode::error::DecodeError> {
+            self.frame_index = cu29::bincode::Decode::decode(decoder)?;
+            Ok(())
+        }
+    }
 
     impl CuSinkTask for CeilingProbeSink {
         type Resources<'r> = ();
