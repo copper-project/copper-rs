@@ -15,6 +15,7 @@
 *.mcap
 cu29_logstats.json
 Cargo.lock
+**/logs/*.log
 
 # independent project from the workspace
 /examples/cu_rp2350_skeleton/.idea/
