@@ -33,6 +33,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           install_nextest: "true"
+          sccache_write: "true"
       - name: Check compilation of core with no-std
         run: cargo +${{ inputs.toolchain }} build --no-default-features
       - name: Unit tests of core with no-std
@@ -50,6 +51,7 @@ jobs:
         with:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          sccache_write: "true"
 
       - name: Clippy embedded-only crates
         run: python3 support/ci/embedded_crates.py run --action clippy --toolchain ${{ inputs.toolchain }}
@@ -68,6 +70,7 @@ jobs:
         with:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          sccache_write: "true"
 
       - name: Detect host target
         run: |

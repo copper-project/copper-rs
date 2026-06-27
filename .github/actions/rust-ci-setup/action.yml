@@ -34,6 +34,10 @@ inputs:
     description: Whether to set WORKSPACE_FLAG from WORKSPACE_SCOPE.
     required: false
     default: "true"
+  sccache_write:
+    description: Whether this job may write to the sccache GitHub Actions backend on master.
+    required: false
+    default: "false"
 runs:
   using: composite
   steps:
@@ -71,7 +75,7 @@ runs:
     - name: Configure sccache
       shell: bash
       env:
-        SCCACHE_GHA_RW_MODE_VALUE: ${{ steps.cache_save_policy.outputs.allowed == 'true' && 'READ_WRITE' || 'READ_ONLY' }}
+        SCCACHE_GHA_RW_MODE_VALUE: ${{ inputs.sccache_write == 'true' && github.ref == 'refs/heads/master' && github.event_name != 'pull_request' && 'READ_WRITE' || 'READ_ONLY' }}
       run: |
         sep=":"
         if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
@@ -94,11 +98,13 @@ runs:
         {
           echo "SCCACHE_GHA_ENABLED=true"
           echo "SCCACHE_GHA_RW_MODE=$SCCACHE_GHA_RW_MODE_VALUE"
+          echo "SCCACHE_GHA_VERSION=copper-rs-ci-v1"
           echo "SCCACHE_BASEDIRS=$sccache_basedirs"
           echo "RUSTC_WRAPPER=sccache"
         } >> "$GITHUB_ENV"
 
         echo "sccache backend: GitHub Actions ($SCCACHE_GHA_RW_MODE_VALUE)"
+        echo "sccache GHA version: copper-rs-ci-v1"
         echo "sccache basedirs: ${sccache_basedirs:-<none>}"
     - name: Install latest nextest
       if: inputs.install_nextest == 'true'

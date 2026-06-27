@@ -92,6 +92,7 @@ jobs:
           cache_prefix: debug-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
           install_nextest: ${{ matrix.task == 'test' }}
+          sccache_write: ${{ matrix.task == 'clippy' }}
       - name: Set features (Linux)
         run: |
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
@@ -154,6 +155,7 @@ jobs:
           cache_prefix: debug-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: ${{ matrix.task == 'test' }}
+          sccache_write: ${{ matrix.task == 'clippy' }}
       - name: Set features (Linux)
         run: |
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
@@ -411,6 +413,7 @@ jobs:
           cache_prefix: debug
           cache_shared_key: rust-windows
           install_nextest: "false"
+          sccache_write: "true"
       - name: Check selected Windows components
         run: >
           cargo +${{ inputs.toolchain }} check --all-targets
@@ -464,6 +467,7 @@ jobs:
           cache_prefix: debug-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "true"
+          sccache_write: "true"
       - name: Set features (Linux)
         run: |
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
@@ -502,6 +506,7 @@ jobs:
           cache_prefix: debug-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "true"
+          sccache_write: "true"
       - name: Set features (Linux)
         run: |
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
@@ -546,6 +551,7 @@ jobs:
           cache_prefix: cuda-debug-ubuntu24-container
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "true"
+          sccache_write: "true"
       - name: Set CUDA compute capability (CI)
         run: |
           if command -v nvcc >/dev/null 2>&1; then
@@ -607,6 +613,7 @@ jobs:
           cache_prefix: debug
           cache_shared_key: rust-${{ matrix.target_os }}
           install_nextest: "true"
+          sccache_write: ${{ matrix.target_os == 'macos' }}
       - name: Set up Python (macOS)
         if: runner.os == 'macOS'
         uses: actions/setup-python@v6
