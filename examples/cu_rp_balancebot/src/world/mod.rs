@@ -264,6 +264,7 @@ pub fn build_world(app: &mut App, headless: bool, split_monitor: bool) -> &mut A
     app.register_type::<Handle<WorldAsset>>();
     app.register_type::<bevy::gltf::GltfExtras>();
     app.register_type::<bevy::gltf::GltfSceneExtras>();
+    app.register_type::<bevy::gltf::GltfSceneName>();
     app.register_type::<bevy::gltf::GltfMeshExtras>();
     app.register_type::<bevy::gltf::GltfMeshName>();
     app.register_type::<bevy::gltf::GltfMaterialExtras>();
