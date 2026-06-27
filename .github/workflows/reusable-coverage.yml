@@ -27,6 +27,9 @@ on:
         type: string
         default: "ubuntu-latest-m"
 
+env:
+  CARGO_NET_RETRY: "10"
+
 jobs:
   coverage-linux-container:
     if: inputs.linux_ci_image != ''

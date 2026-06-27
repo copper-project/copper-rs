@@ -15,6 +15,9 @@ on:
         type: string
         default: "ubuntu-latest-m"
 
+env:
+  CARGO_NET_RETRY: "10"
+
 jobs:
   nostd:
     name: Core no-std

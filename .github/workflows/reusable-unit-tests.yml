@@ -51,6 +51,9 @@ on:
         type: boolean
         default: true
 
+env:
+  CARGO_NET_RETRY: "10"
+
 jobs:
   unit-linux-container:
     if: inputs.run_linux && inputs.linux_ci_image != ''
