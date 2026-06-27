@@ -92,7 +92,6 @@ jobs:
           cache_prefix: debug-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
           install_nextest: ${{ matrix.task == 'test' }}
-          sccache_key_suffix: unit-${{ matrix.task }}
       - name: Set features (Linux)
         run: |
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
@@ -124,13 +123,6 @@ jobs:
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
-      - name: Save sccache
-        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
-
   unit-linux-host:
     if: inputs.run_linux && inputs.linux_ci_image == ''
     name: Unit Checks / ${{ matrix.task }} (${{ inputs.linux_runner_label }}, debug)
@@ -162,7 +154,6 @@ jobs:
           cache_prefix: debug-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: ${{ matrix.task == 'test' }}
-          sccache_key_suffix: unit-${{ matrix.task }}
       - name: Set features (Linux)
         run: |
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
@@ -194,13 +185,6 @@ jobs:
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
-      - name: Save sccache
-        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
-
   doctests-linux-container:
     if: inputs.run_linux && inputs.linux_ci_image != ''
     name: Doctests (ubuntu-26.04, debug)
@@ -232,7 +216,6 @@ jobs:
           cache_prefix: debug-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
-          sccache_key_suffix: doctests
       - name: Detect default workspace exclusions
         run: |
           EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ inputs.toolchain }})
@@ -242,13 +225,6 @@ jobs:
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
-      - name: Save sccache
-        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
-
   doctests-linux-host:
     if: inputs.run_linux && inputs.linux_ci_image == ''
     name: Doctests (${{ inputs.linux_light_runner_label }}, debug)
@@ -274,7 +250,6 @@ jobs:
           cache_prefix: debug-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
-          sccache_key_suffix: doctests
       - name: Detect default workspace exclusions
         run: |
           EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ inputs.toolchain }})
@@ -284,13 +259,6 @@ jobs:
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
-      - name: Save sccache
-        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
-
   unit-linux-cuda-container:
     if: inputs.run_cuda && inputs.linux_cuda_ci_image != ''
     name: Unit Checks / clippy (cuda-ubuntu-24.04, cuda-debug)
@@ -323,7 +291,6 @@ jobs:
           cache_prefix: cuda-debug-ubuntu24-container
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
-          sccache_key_suffix: unit-clippy
       - name: Set CUDA compute capability (CI)
         run: |
           if command -v nvcc >/dev/null 2>&1; then
@@ -348,13 +315,6 @@ jobs:
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
-      - name: Save sccache
-        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
-
   unit-other:
     if: inputs.run_other
     name: Unit Checks / ${{ matrix.task }} (${{ matrix.target_os == 'windows' && inputs.windows_runner_label || 'macos-latest' }}, debug)
@@ -387,7 +347,6 @@ jobs:
           cache_prefix: debug
           cache_shared_key: rust-${{ matrix.target_os }}
           install_nextest: ${{ matrix.task == 'test' }}
-          sccache_key_suffix: unit-${{ matrix.task }}
       - name: Set up Python (macOS)
         if: runner.os == 'macOS'
         uses: actions/setup-python@v6
@@ -427,13 +386,6 @@ jobs:
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
-      - name: Save sccache
-        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
-
   windows-component-smoke:
     if: inputs.run_other
     name: Component Smoke (Windows, debug)
@@ -459,7 +411,6 @@ jobs:
           cache_prefix: debug
           cache_shared_key: rust-windows
           install_nextest: "false"
-          sccache_key_suffix: windows-component-smoke
       - name: Check selected Windows components
         run: >
           cargo +${{ inputs.toolchain }} check --all-targets
@@ -481,13 +432,6 @@ jobs:
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
-      - name: Save sccache
-        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
-
   tests-features-linux-container:
     if: inputs.run_linux && inputs.linux_ci_image != ''
     name: Unit Tests (all features) (ubuntu-26.04, debug)
@@ -520,7 +464,6 @@ jobs:
           cache_prefix: debug-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "true"
-          sccache_key_suffix: tests-features
       - name: Set features (Linux)
         run: |
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
@@ -533,13 +476,6 @@ jobs:
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
-      - name: Save sccache
-        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
-
   tests-features-linux-host:
     if: inputs.run_linux && inputs.linux_ci_image == ''
     name: Unit Tests (all features) (${{ inputs.linux_runner_label }}, debug)
@@ -566,7 +502,6 @@ jobs:
           cache_prefix: debug-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "true"
-          sccache_key_suffix: tests-features
       - name: Set features (Linux)
         run: |
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
@@ -579,13 +514,6 @@ jobs:
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
-      - name: Save sccache
-        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
-
   tests-features-linux-cuda-container:
     if: inputs.run_cuda && inputs.linux_cuda_ci_image != ''
     name: Unit Tests (all features) (cuda-ubuntu-24.04, cuda-debug)
@@ -618,7 +546,6 @@ jobs:
           cache_prefix: cuda-debug-ubuntu24-container
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "true"
-          sccache_key_suffix: tests-features
       - name: Set CUDA compute capability (CI)
         run: |
           if command -v nvcc >/dev/null 2>&1; then
@@ -649,13 +576,6 @@ jobs:
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
-      - name: Save sccache
-        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
-
   tests-features-other:
     if: inputs.run_other
     name: Unit Tests (all features) (${{ matrix.target_os == 'windows' && inputs.windows_runner_label || 'macos-latest' }}, debug)
@@ -687,7 +607,6 @@ jobs:
           cache_prefix: debug
           cache_shared_key: rust-${{ matrix.target_os }}
           install_nextest: "true"
-          sccache_key_suffix: tests-features
       - name: Set up Python (macOS)
         if: runner.os == 'macOS'
         uses: actions/setup-python@v6
@@ -714,13 +633,6 @@ jobs:
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
-      - name: Save sccache
-        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
-
   templates-linux-container:
     if: inputs.run_linux && inputs.linux_ci_image != ''
     name: Templates (debug) (${{ inputs.linux_light_runner_label }}, debug)
@@ -752,7 +664,6 @@ jobs:
           cache_prefix: debug-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
-          sccache_key_suffix: templates
       - name: Install cargo-generate on (${{ inputs.linux_light_runner_label }} | debug)
         uses: taiki-e/install-action@v2
         with:
@@ -777,13 +688,6 @@ jobs:
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
-      - name: Save sccache
-        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
-
   templates-linux-host:
     if: inputs.run_linux && inputs.linux_ci_image == ''
     name: Templates (debug) (${{ inputs.linux_light_runner_label }}, debug)
@@ -809,7 +713,6 @@ jobs:
           cache_prefix: debug-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
-          sccache_key_suffix: templates
       - name: Install cargo-generate on (${{ inputs.linux_light_runner_label }} | debug)
         uses: taiki-e/install-action@v2
         with:
@@ -834,13 +737,6 @@ jobs:
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
-      - name: Save sccache
-        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
-
   templates-macos:
     if: inputs.run_other
     name: Templates (debug) (macos-latest, debug)
@@ -866,7 +762,6 @@ jobs:
           cache_prefix: debug
           cache_shared_key: rust-macos-latest
           install_nextest: "false"
-          sccache_key_suffix: templates
       - name: Install cargo-generate on (macos-latest | debug)
         uses: taiki-e/install-action@v2
         with:
@@ -891,9 +786,3 @@ jobs:
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
-      - name: Save sccache
-        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
