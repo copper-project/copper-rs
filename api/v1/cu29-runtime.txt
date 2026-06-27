@@ -963,6 +963,7 @@ pub fn cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L>::from_log(log_b
 pub fn cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L>::from_log_with_cache_cap(log_base: &std::path::Path, app: App, robot_clock: cu29_clock::RobotClock, clock_mock: cu29_clock::RobotClockMock, build_callback: CB, time_of: TF, cache_cap: usize) -> cu29_traits::CuResult<Self>
 pub fn cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L>::goto_cl(&mut self, culistid: u64) -> cu29_traits::CuResult<cu29_runtime::debug::JumpOutcome> where App: cu29_runtime::app::CurrentRuntimeCopperList<P>
 pub fn cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L>::goto_time(&mut self, ts: cu29_clock::CuTime) -> cu29_traits::CuResult<cu29_runtime::debug::JumpOutcome> where App: cu29_runtime::app::CurrentRuntimeCopperList<P>
+pub fn cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L>::is_keyframe_culistid(&self, target_culistid: u64) -> bool
 pub fn cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L>::nearest_keyframe_culistid(&self, target_culistid: u64) -> core::option::Option<u64>
 pub fn cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L>::section_cache_stats(&self) -> cu29_runtime::debug::SectionCacheStats
 pub fn cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L>::step(&mut self, delta: i32) -> cu29_traits::CuResult<cu29_runtime::debug::JumpOutcome> where App: cu29_runtime::app::CurrentRuntimeCopperList<P>
