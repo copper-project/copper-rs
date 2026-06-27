@@ -237,7 +237,6 @@ jobs:
           cache_shared_key: rust-ubuntu
           install_nextest: "false"
           sccache_write: "true"
-          sccache_key_suffix: msrv
       - name: Detect default workspace exclusions
         run: |
           EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ env.MSRV }})
@@ -266,7 +265,6 @@ jobs:
           cache_shared_key: rust-ubuntu
           install_nextest: "false"
           sccache_write: "true"
-          sccache_key_suffix: msrv
       - name: Detect default workspace exclusions
         run: |
           EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ env.MSRV }})
@@ -346,7 +344,6 @@ jobs:
           cache_prefix: extra-examples-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
-          sccache_key_suffix: extra-examples
       - name: Install embedded targets
         run: rustup target add thumbv8m.main-none-eabihf thumbv7em-none-eabihf --toolchain stable
       - name: Check extra examples
@@ -354,13 +351,6 @@ jobs:
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
-      - name: Save sccache
-        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
-
   extra-examples-host:
     name: Extra Examples
     if: needs.linux-ci-image.outputs.image == ''
@@ -379,7 +369,6 @@ jobs:
           cache_prefix: extra-examples-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
-          sccache_key_suffix: extra-examples
       - name: Install embedded targets
         run: rustup target add thumbv8m.main-none-eabihf thumbv7em-none-eabihf --toolchain stable
       - name: Check extra examples
@@ -387,13 +376,6 @@ jobs:
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
-      - name: Save sccache
-        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
-
   benchmarks-container:
     name: Benchmarks
     if: needs.linux-ci-image.outputs.image != ''
@@ -417,19 +399,11 @@ jobs:
           cache_prefix: benchmarks-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
-          sccache_key_suffix: benchmarks
       - name: Check benchmarks
         run: just check-benchmarks
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
-      - name: Save sccache
-        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
-
   benchmarks-host:
     name: Benchmarks
     if: needs.linux-ci-image.outputs.image == ''
@@ -448,19 +422,11 @@ jobs:
           cache_prefix: benchmarks-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
-          sccache_key_suffix: benchmarks
       - name: Check benchmarks
         run: just check-benchmarks
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
-      - name: Save sccache
-        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          key: ${{ steps.rust_ci_setup.outputs.sccache_cache_primary_key }}
-
   coverage:
     if: github.event_name == 'pull_request'
     name: Coverage

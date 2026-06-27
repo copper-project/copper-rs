@@ -12,34 +12,10 @@ inputs:
     description: Whether to install nextest.
     required: false
     default: "false"
-  sccache_restore:
-    description: Whether to restore the legacy local SCCACHE_DIR cache.
-    required: false
-    default: "false"
   sccache_write:
     description: Whether this job may write to the sccache GitHub Actions backend on master.
     required: false
     default: "false"
-  sccache_key_suffix:
-    description: Suffix used to separate sccache writers per job/task.
-    required: true
-  sccache_dir:
-    description: Optional SCCACHE_DIR override.
-    required: false
-    default: ""
-outputs:
-  sccache_cache_hit:
-    description: Whether sccache restore matched the primary key.
-    value: ${{ steps.restore_sccache.outputs.cache-hit }}
-  sccache_cache_matched_key:
-    description: Cache key that was restored, if any.
-    value: ${{ steps.restore_sccache.outputs.cache-matched-key }}
-  sccache_cache_primary_key:
-    description: Primary sccache key for this job.
-    value: ${{ steps.sccache_key.outputs.primary }}
-  sccache_cache_save_allowed:
-    description: Whether this run is allowed to save CI caches.
-    value: ${{ steps.sccache_save_policy.outputs.allowed }}
 runs:
   using: composite
   steps:
@@ -57,75 +33,10 @@ runs:
         components: rustc,cargo,rust-std,rustfmt,clippy
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
-    - name: Configure sccache
-      shell: bash
-      run: |
-        SCCACHE_DIR="${{ inputs.sccache_dir }}"
-        if [[ -z "$SCCACHE_DIR" ]]; then
-          SCCACHE_DIR="$PWD/.sccache"
-        fi
-        sccache_gha_rw_mode=READ_ONLY
-        if [[ "${{ inputs.sccache_write }}" == "true" && "$GITHUB_REF" == "refs/heads/master" && "$GITHUB_EVENT_NAME" != "pull_request" ]]; then
-          sccache_gha_rw_mode=READ_WRITE
-        fi
-        mkdir -p "$SCCACHE_DIR"
-        echo "SCCACHE_DIR=$SCCACHE_DIR" >> "$GITHUB_ENV"
-        echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
-        echo "SCCACHE_GHA_RW_MODE=$sccache_gha_rw_mode" >> "$GITHUB_ENV"
-        echo "SCCACHE_GHA_VERSION=copper-rs-ci-v1" >> "$GITHUB_ENV"
-        echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
-    - name: Report sccache mode
-      shell: bash
-      run: |
-        echo "sccache GHA mode: $SCCACHE_GHA_RW_MODE"
-        echo "sccache GHA version: $SCCACHE_GHA_VERSION"
-        echo "legacy local SCCACHE_DIR restore: ${{ inputs.sccache_restore }}"
-    - name: Compute sccache keys
-      if: inputs.sccache_restore == 'true'
-      id: sccache_key
-      shell: bash
-      run: |
-        primary="sccache-${{ runner.os }}-${{ runner.arch }}-${{ inputs.toolchain }}-embedded-${{ inputs.sccache_key_suffix }}-${{ github.sha }}"
-        echo "primary=$primary" >> "$GITHUB_OUTPUT"
-        {
-          echo "restore_keys<<EOF"
-          echo "sccache-${{ runner.os }}-${{ runner.arch }}-${{ inputs.toolchain }}-embedded-${{ inputs.sccache_key_suffix }}-"
-          echo "sccache-${{ runner.os }}-${{ runner.arch }}-${{ inputs.toolchain }}-embedded-"
-          echo "EOF"
-        } >> "$GITHUB_OUTPUT"
-    - name: Restore sccache
-      if: inputs.sccache_restore == 'true'
-      id: restore_sccache
-      uses: actions/cache/restore@v4
       with:
-        path: ${{ env.SCCACHE_DIR }}
-        key: ${{ steps.sccache_key.outputs.primary }}
-        restore-keys: ${{ steps.sccache_key.outputs.restore_keys }}
-    - name: Report sccache restore
-      if: inputs.sccache_restore == 'true'
-      shell: bash
-      env:
-        SCCACHE_REQUESTED_KEY: ${{ steps.sccache_key.outputs.primary }}
-        SCCACHE_MATCHED_KEY: ${{ steps.restore_sccache.outputs.cache-matched-key }}
-        SCCACHE_CACHE_HIT: ${{ steps.restore_sccache.outputs.cache-hit }}
-      run: |
-        status="miss"
-        if [[ -n "$SCCACHE_MATCHED_KEY" ]]; then
-          status="partial-hit"
-          if [[ "$SCCACHE_CACHE_HIT" == "true" ]]; then
-            status="exact-hit"
-          fi
-        fi
-        echo "sccache requested key: $SCCACHE_REQUESTED_KEY"
-        echo "sccache matched key: ${SCCACHE_MATCHED_KEY:-<none>}"
-        echo "sccache restore status: $status"
-        echo "sccache directory: $SCCACHE_DIR"
-        if [[ -d "$SCCACHE_DIR" ]]; then
-          du -sh "$SCCACHE_DIR" || true
-          find "$SCCACHE_DIR" -mindepth 1 -maxdepth 1 | wc -l | awk '{print "sccache top-level entries: " $1}'
-        fi
+        version: "v0.16.0"
     - name: Compute cache save policy
-      id: sccache_save_policy
+      id: cache_save_policy
       shell: bash
       env:
         EVENT_NAME: ${{ github.event_name }}
@@ -140,6 +51,40 @@ runs:
           allowed=true
         fi
         echo "allowed=$allowed" >> "$GITHUB_OUTPUT"
+    - name: Configure sccache
+      shell: bash
+      env:
+        SCCACHE_GHA_RW_MODE_VALUE: ${{ inputs.sccache_write == 'true' && github.ref == 'refs/heads/master' && github.event_name != 'pull_request' && 'READ_WRITE' || 'READ_ONLY' }}
+      run: |
+        sep=":"
+        if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
+          sep=";"
+        fi
+
+        basedirs=()
+        if [[ -n "${GITHUB_WORKSPACE:-}" ]]; then
+          basedirs+=("$GITHUB_WORKSPACE")
+        fi
+        if [[ -n "${RUNNER_TEMP:-}" ]]; then
+          basedirs+=("$RUNNER_TEMP")
+        fi
+
+        sccache_basedirs=""
+        if [[ "${#basedirs[@]}" -gt 0 ]]; then
+          sccache_basedirs="$(IFS="$sep"; echo "${basedirs[*]}")"
+        fi
+
+        {
+          echo "SCCACHE_GHA_ENABLED=true"
+          echo "SCCACHE_GHA_RW_MODE=$SCCACHE_GHA_RW_MODE_VALUE"
+          echo "SCCACHE_GHA_VERSION=copper-rs-ci-v1"
+          echo "SCCACHE_BASEDIRS=$sccache_basedirs"
+          echo "RUSTC_WRAPPER=sccache"
+        } >> "$GITHUB_ENV"
+
+        echo "sccache backend: GitHub Actions ($SCCACHE_GHA_RW_MODE_VALUE)"
+        echo "sccache GHA version: copper-rs-ci-v1"
+        echo "sccache basedirs: ${sccache_basedirs:-<none>}"
     - name: Install latest nextest
       if: inputs.install_nextest == 'true'
       uses: taiki-e/install-action@nextest
@@ -148,6 +93,6 @@ runs:
       with:
         prefix-key: embedded-${{ inputs.toolchain }}
         shared-key: rust-embedded-${{ inputs.toolchain }}
-        save-if: ${{ steps.sccache_save_policy.outputs.allowed == 'true' }}
+        save-if: ${{ steps.cache_save_policy.outputs.allowed == 'true' }}
         cache-targets: "false"
         cache-bin: "true"
