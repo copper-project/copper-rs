@@ -1375,21 +1375,22 @@
 <pre><code class="language-rust">use cu29::prelude::*;
 
 resources!({
-    bus =&gt; Borrowed&lt;TelemetryBus&gt;,
+    bus =&gt; Shared&lt;TelemetryBus&gt;,
 });
 
 impl CuTask for TelemetryTask {
     type Resources&lt;'r&gt; = Resources;
     // ...
     fn new_with(_cfg: Option&lt;&amp;ComponentConfig&gt;, resources: Self::Resources&lt;'_&gt;) -&gt; CuResult&lt;Self&gt; {
-        Ok(Self { bus: resources.bus.0 })
+        Ok(Self { bus: resources.bus })
     }
 }
 </code></pre>
 <p>Notes:</p>
 <ul>
 <li><code>Owned&lt;T&gt;</code> means the task takes exclusive ownership (common for peripherals).</li>
-<li><code>Borrowed&lt;T&gt;</code> (macro form) or shared <code>Arc&lt;T&gt;</code> means the resource can be reused by multiple consumers.</li>
+<li><code>Shared&lt;T&gt;</code> means the task receives an owned <code>Arc&lt;T&gt;</code> cloned from a shared resource registered by the bundle.</li>
+<li><code>Borrowed&lt;T&gt;</code> means the task borrows <code>&amp;T</code> from the <code>ResourceManager</code> for the lifetime of its resource binding.</li>
 <li>Use <code>missions: [...]</code> on resource entries to scope bundles to specific missions.</li>
 <li>See <a href="../Copper-RON-Configuration-Reference/">Copper Configuration file Reference</a> for the full schema.</li>
 </ul>
