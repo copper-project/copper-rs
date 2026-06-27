@@ -250,11 +250,7 @@ where
     }
 
     fn nearest_keyframe(&self, target_culistid: u64) -> Option<KeyFrame> {
-        self.keyframes
-            .iter()
-            .filter(|kf| kf.culistid <= target_culistid)
-            .max_by_key(|kf| kf.culistid)
-            .cloned()
+        nearest_replay_anchor(&self.keyframes, target_culistid)
     }
 
     fn restore_keyframe(&mut self, kf: &KeyFrame) -> CuResult<()> {
@@ -923,4 +919,53 @@ where
     }
 
     Ok((sections, keyframes, total_entries))
+}
+
+fn nearest_replay_anchor(keyframes: &[KeyFrame], target_culistid: u64) -> Option<KeyFrame> {
+    // Nonzero runtime keyframes are currently frozen task-by-task immediately before each
+    // task process step, so restoring one and replaying from the top of the CL can create a
+    // mixed task-boundary state. The initial keyframe is still a coherent replay anchor.
+    keyframes
+        .iter()
+        .filter(|kf| kf.culistid == 0 && kf.culistid <= target_culistid)
+        .max_by_key(|kf| kf.culistid)
+        .or_else(|| {
+            keyframes
+                .iter()
+                .filter(|kf| kf.culistid <= target_culistid)
+                .min_by_key(|kf| kf.culistid)
+        })
+        .cloned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn keyframe(culistid: u64) -> KeyFrame {
+        KeyFrame {
+            culistid,
+            timestamp: CuTime::from_nanos(culistid),
+            serialized_tasks: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn replay_anchor_prefers_initial_keyframe_over_later_task_boundary_keyframes() {
+        let keyframes = [keyframe(0), keyframe(100), keyframe(500)];
+
+        let anchor = nearest_replay_anchor(&keyframes, 533).expect("replay anchor");
+
+        assert_eq!(anchor.culistid, 0);
+    }
+
+    #[test]
+    fn replay_anchor_falls_back_to_earliest_keyframe_without_initial_anchor() {
+        let keyframes = [keyframe(100), keyframe(500), keyframe(900)];
+
+        let anchor = nearest_replay_anchor(&keyframes, 533).expect("replay anchor");
+
+        assert_eq!(anchor.culistid, 100);
+        assert!(nearest_replay_anchor(&keyframes, 99).is_none());
+    }
 }
