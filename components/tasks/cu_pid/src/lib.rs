@@ -140,6 +140,24 @@ impl PIDController {
     }
 }
 
+impl Freezable for PIDController {
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&self.integral, encoder)?;
+        Encode::encode(&self.last_error, encoder)?;
+        Encode::encode(&self.elapsed, encoder)?;
+        Encode::encode(&self.last_output, encoder)?;
+        Ok(())
+    }
+
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        self.integral = Decode::decode(decoder)?;
+        self.last_error = Decode::decode(decoder)?;
+        self.elapsed = Decode::decode(decoder)?;
+        self.last_output = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
+
 /// This is the Copper task encapsulating the PID controller.
 #[derive(Reflect)]
 pub struct GenericPIDTask<I>
@@ -287,20 +305,14 @@ where
     f32: for<'a> From<&'a I>,
 {
     fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        Encode::encode(&self.pid.integral, encoder)?;
-        Encode::encode(&self.pid.last_error, encoder)?;
-        Encode::encode(&self.pid.elapsed, encoder)?;
-        Encode::encode(&self.pid.last_output, encoder)?;
+        self.pid.freeze(encoder)?;
         Encode::encode(&self.first_run, encoder)?;
         Encode::encode(&self.last_tov, encoder)?;
         Ok(())
     }
 
     fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
-        self.pid.integral = Decode::decode(decoder)?;
-        self.pid.last_error = Decode::decode(decoder)?;
-        self.pid.elapsed = Decode::decode(decoder)?;
-        self.pid.last_output = Decode::decode(decoder)?;
+        self.pid.thaw(decoder)?;
         self.first_run = Decode::decode(decoder)?;
         self.last_tov = Decode::decode(decoder)?;
         Ok(())
