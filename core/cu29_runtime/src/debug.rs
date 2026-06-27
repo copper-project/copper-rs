@@ -637,6 +637,13 @@ where
         self.nearest_keyframe(target_culistid).map(|kf| kf.culistid)
     }
 
+    /// Whether the log contains an exact keyframe for this copperlist id.
+    pub fn is_keyframe_culistid(&self, target_culistid: u64) -> bool {
+        self.keyframes
+            .iter()
+            .any(|kf| kf.culistid == target_culistid)
+    }
+
     /// Returns section-cache statistics for this session.
     pub fn section_cache_stats(&self) -> SectionCacheStats {
         SectionCacheStats {

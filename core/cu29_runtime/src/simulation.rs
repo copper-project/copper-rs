@@ -106,6 +106,17 @@
 //!   should be skipped.
 //! - **`ExecuteByRuntime`**: Indicates that the real implementation should proceed as normal.
 //!
+//! ## Recorded Replay Helpers
+//!
+//! Simulation-enabled generated runtimes expose two recorded replay callbacks:
+//!
+//! - `recorded_replay_step` is exact-output replay. It copies recorded outputs
+//!   from a CopperList and skips the runtime implementation for deterministic
+//!   log reproduction.
+//! - `recorded_debug_replay_step` is debugger state replay. It injects recorded
+//!   external inputs, suppresses external side effects, and lets regular Copper
+//!   tasks execute so restored keyframe state advances to the inspected CL.
+//!
 
 use crate::config::ComponentConfig;
 use crate::context::CuContext;

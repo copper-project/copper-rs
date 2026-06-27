@@ -82,7 +82,7 @@ fn build_callback<'a>(
     _process_clock: RobotClock,
     _clock_for_cb: RobotClockMock,
 ) -> Box<dyn for<'z> FnMut(gnss::SimStep<'z>) -> SimOverride + 'a> {
-    Box::new(move |step: gnss::SimStep<'_>| gnss::recorded_replay_step(step, copperlist))
+    Box::new(move |step: gnss::SimStep<'_>| gnss::recorded_debug_replay_step(step, copperlist))
 }
 
 fn extract_time(copperlist: &ReplayCopperList) -> Option<CuTime> {
