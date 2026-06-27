@@ -270,7 +270,10 @@ use zenoh::key_expr::KeyExpr;
 use zenoh::{Config as ZenohConfig, Error as ZenohError};
 
 const API_VERSION: &str = "debug.v1";
-const LOCAL_SHM_MESSAGE_THRESHOLD_BYTES: u64 = 1;
+// Zenoh mlocks the whole transport-optimization pool, so keep this below
+// common 8 MiB RLIMIT_MEMLOCK defaults.
+const LOCAL_SHM_POOL_BYTES: u64 = 4 * 1024 * 1024;
+const LOCAL_SHM_MESSAGE_THRESHOLD_BYTES: u64 = 3 * 1024;
 const DEFAULT_SESSION_IDLE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const DEFAULT_MAX_ACTIVE_SESSIONS: usize = 64;
 const MAX_PAGE_LIMIT: u32 = 1000;
@@ -928,11 +931,6 @@ fn set_config_json5(config: &mut ZenohConfig, key: &str, value: &str) -> CuResul
 }
 
 fn local_server_zenoh_config(paths: &RemoteDebugPaths) -> CuResult<ZenohConfig> {
-    let socket_path = local_socket_path(&paths.base);
-    if socket_path.exists() {
-        let _ = fs::remove_file(&socket_path);
-    }
-
     let endpoint = local_endpoint(&paths.base);
     let endpoint_json = serde_json::to_string(&endpoint)
         .map_err(|e| CuError::new_with_cause("RemoteDebug: endpoint encoding failed", e))?;
@@ -952,6 +950,11 @@ fn local_server_zenoh_config(paths: &RemoteDebugPaths) -> CuResult<ZenohConfig> 
         &mut config,
         "transport/shared_memory/transport_optimization/enabled",
         "true",
+    )?;
+    set_config_json5(
+        &mut config,
+        "transport/shared_memory/transport_optimization/pool_size",
+        &LOCAL_SHM_POOL_BYTES.to_string(),
     )?;
     set_config_json5(
         &mut config,
@@ -981,6 +984,11 @@ fn local_client_zenoh_config(paths: &RemoteDebugPaths) -> CuResult<ZenohConfig> 
         &mut config,
         "transport/shared_memory/transport_optimization/enabled",
         "true",
+    )?;
+    set_config_json5(
+        &mut config,
+        "transport/shared_memory/transport_optimization/pool_size",
+        &LOCAL_SHM_POOL_BYTES.to_string(),
     )?;
     set_config_json5(
         &mut config,

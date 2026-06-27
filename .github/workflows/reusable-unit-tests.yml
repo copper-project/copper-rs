@@ -74,7 +74,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        task: [clippy, test]
+        task: [clippy, test, trybuild]
 
     steps:
       - uses: actions/checkout@v7
@@ -105,7 +105,10 @@ jobs:
         run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $WORKSPACE_EXCLUDES -- --deny warnings
       - name: Run Unit Tests on (ubuntu-26.04 | debug)
         if: matrix.task == 'test'
-        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $WORKSPACE_EXCLUDES
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $WORKSPACE_EXCLUDES -- --skip test_compile_fail
+      - name: Run cu29-derive trybuild tests on (ubuntu-26.04 | debug)
+        if: matrix.task == 'trybuild'
+        run: cargo +${{ inputs.toolchain }} test -p cu29-derive test_compile_fail -- --nocapture
       - name: Run cu-caterpillar determinism test (determinism_ci)
         if: matrix.task == 'test'
         env:
@@ -119,7 +122,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -142,7 +145,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        task: [clippy, test]
+        task: [clippy, test, trybuild]
 
     steps:
       - uses: actions/checkout@v7
@@ -172,7 +175,10 @@ jobs:
         run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $WORKSPACE_EXCLUDES -- --deny warnings
       - name: Run Unit Tests on (${{ inputs.linux_runner_label }} | debug)
         if: matrix.task == 'test'
-        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $WORKSPACE_EXCLUDES
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $WORKSPACE_EXCLUDES -- --skip test_compile_fail
+      - name: Run cu29-derive trybuild tests on (${{ inputs.linux_runner_label }} | debug)
+        if: matrix.task == 'trybuild'
+        run: cargo +${{ inputs.toolchain }} test -p cu29-derive test_compile_fail -- --nocapture
       - name: Run cu-caterpillar determinism test (determinism_ci)
         if: matrix.task == 'test'
         env:
@@ -186,7 +192,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -234,7 +240,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -276,7 +282,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -340,7 +346,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -364,7 +370,7 @@ jobs:
       fail-fast: false
       matrix:
         target_os: [macos, windows]
-        task: [test]
+        task: [test, trybuild]
 
     steps:
       - uses: actions/checkout@v7
@@ -402,7 +408,10 @@ jobs:
           echo "WORKSPACE_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run Unit Tests on (${{ matrix.target_os == 'windows' && inputs.windows_runner_label || 'macos-latest' }} | debug)
         if: matrix.task == 'test'
-        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $WORKSPACE_EXCLUDES
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $WORKSPACE_EXCLUDES -- --skip test_compile_fail
+      - name: Run cu29-derive trybuild tests on (${{ matrix.target_os == 'windows' && inputs.windows_runner_label || 'macos-latest' }} | debug)
+        if: matrix.task == 'trybuild'
+        run: cargo +${{ inputs.toolchain }} test -p cu29-derive test_compile_fail -- --nocapture
       - name: Run cu-caterpillar determinism test (determinism_ci)
         if: matrix.task == 'test' && matrix.target_os == 'macos'
         env:
@@ -416,7 +425,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -470,7 +479,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -517,12 +526,12 @@ jobs:
           EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ inputs.toolchain }})
           echo "WORKSPACE_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run Unit Tests with all features on (ubuntu-26.04 | debug)
-        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $WORKSPACE_EXCLUDES
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $WORKSPACE_EXCLUDES -- --skip test_compile_fail
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -563,12 +572,12 @@ jobs:
           EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ inputs.toolchain }})
           echo "WORKSPACE_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run Unit Tests with all features on (${{ inputs.linux_runner_label }} | debug)
-        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $WORKSPACE_EXCLUDES
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $WORKSPACE_EXCLUDES -- --skip test_compile_fail
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -633,12 +642,12 @@ jobs:
             cargo +${{ inputs.toolchain }} test --no-run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $WORKSPACE_EXCLUDES
             exit 0
           fi
-          cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $WORKSPACE_EXCLUDES
+          cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $WORKSPACE_EXCLUDES -- --skip test_compile_fail
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -698,12 +707,12 @@ jobs:
           EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ inputs.toolchain }})
           echo "WORKSPACE_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Run Unit Tests with all features on (${{ matrix.target_os == 'windows' && inputs.windows_runner_label || 'macos-latest' }} | debug)
-        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $WORKSPACE_EXCLUDES
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $WORKSPACE_EXCLUDES -- --skip test_compile_fail
       - name: Show sccache stats
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -766,7 +775,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -823,7 +832,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -880,7 +889,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}

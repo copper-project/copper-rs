@@ -35,7 +35,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 1
       - id: registry_access
         shell: bash
         run: |
@@ -65,12 +65,18 @@ jobs:
               exit 0
             fi
 
+            git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
             changed_files="$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "$GITHUB_SHA")"
             if grep -Eq "$relevant_image_paths" <<<"$changed_files"; then
               force_rebuild=true
             fi
           elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-            changed_files="$(git diff --name-only "${{ github.event.before }}" "$GITHUB_SHA" || true)"
+            if [[ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
+              git fetch --no-tags --depth=1 origin "${{ github.event.before }}" || true
+              changed_files="$(git diff --name-only "${{ github.event.before }}" "$GITHUB_SHA" || true)"
+            else
+              changed_files="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" || true)"
+            fi
             if grep -Eq "$relevant_image_paths" <<<"$changed_files"; then
               force_rebuild=true
             fi
@@ -123,7 +129,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 1
       - id: registry_access
         shell: bash
         run: |
@@ -153,12 +159,18 @@ jobs:
               exit 0
             fi
 
+            git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
             changed_files="$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "$GITHUB_SHA")"
             if grep -Eq "$relevant_image_paths" <<<"$changed_files"; then
               force_rebuild=true
             fi
           elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-            changed_files="$(git diff --name-only "${{ github.event.before }}" "$GITHUB_SHA" || true)"
+            if [[ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
+              git fetch --no-tags --depth=1 origin "${{ github.event.before }}" || true
+              changed_files="$(git diff --name-only "${{ github.event.before }}" "$GITHUB_SHA" || true)"
+            else
+              changed_files="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" || true)"
+            fi
             if grep -Eq "$relevant_image_paths" <<<"$changed_files"; then
               force_rebuild=true
             fi
@@ -340,7 +352,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -373,7 +385,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -409,7 +421,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -440,7 +452,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
       - name: Save sccache
-        if: github.ref == 'refs/heads/master' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
+        if: steps.rust_ci_setup.outputs.sccache_cache_save_allowed == 'true' && steps.rust_ci_setup.outputs.sccache_cache_primary_key != '' && steps.rust_ci_setup.outputs.sccache_cache_hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -474,7 +486,7 @@ jobs:
           prefix-key: api-check
           shared-key: rust-ubuntu
           cache-bin: "true"
-          save-if: ${{ github.ref == 'refs/heads/master' }}
+          save-if: ${{ github.ref == 'refs/heads/master' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
       - name: Install cargo-public-api
         run: |
           if ! cargo +stable public-api --version 2>/dev/null | grep -qx "cargo-public-api ${PUBLIC_API_VERSION}"; then
