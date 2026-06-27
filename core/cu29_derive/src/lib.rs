@@ -1336,8 +1336,96 @@ fn gen_recorded_replay_support(
             CuExecutionUnit::Loop(_) => None,
         })
         .collect();
+    let debug_replay_arms: Vec<proc_macro2::TokenStream> =
+        runtime_plan
+            .steps
+            .iter()
+            .filter_map(|unit| match unit {
+                CuExecutionUnit::Step(step) => match &exec_entities[step.node_id as usize].kind {
+                    ExecutionEntityKind::Task { .. } => {
+                        if step.task_type == CuTaskType::Regular {
+                            return None;
+                        }
+                        let enum_entry_name = config_id_to_enum(step.node.get_id().as_str());
+                        let enum_ident = Ident::new(&enum_entry_name, Span::call_site());
+                        let output_pack = step
+                            .output_msg_pack
+                            .as_ref()
+                            .expect("Task step missing output pack for recorded debug replay");
+                        let culist_index = int2sliceindex(output_pack.culist_index);
+                        Some(quote! {
+                            SimStep::#enum_ident(CuTaskCallbackState::Process(_, output)) => {
+                                *output = recorded.msgs.0.#culist_index.clone();
+                                SimOverride::ExecutedBySim
+                            }
+                        })
+                    }
+                    ExecutionEntityKind::BridgeRx {
+                        bridge_index,
+                        channel_index,
+                    } => {
+                        let bridge_spec = &bridge_specs[*bridge_index];
+                        let channel = &bridge_spec.rx_channels[*channel_index];
+                        let enum_entry_name =
+                            config_id_to_enum(&format!("{}_rx_{}", bridge_spec.id, channel.id));
+                        let enum_ident = Ident::new(&enum_entry_name, Span::call_site());
+                        let output_pack = step.output_msg_pack.as_ref().expect(
+                            "Bridge Rx channel missing output pack for recorded debug replay",
+                        );
+                        let port_index = output_pack
+                            .msg_types
+                            .iter()
+                            .position(|msg| msg == &channel.msg_type_name)
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "Bridge Rx channel '{}' missing output port for '{}'",
+                                    channel.id, channel.msg_type_name
+                                )
+                            });
+                        let culist_index = int2sliceindex(output_pack.culist_index);
+                        let recorded_slot = if output_pack.msg_types.len() == 1 {
+                            quote! { recorded.msgs.0.#culist_index.clone() }
+                        } else {
+                            let port_index = syn::Index::from(port_index);
+                            quote! { recorded.msgs.0.#culist_index.#port_index.clone() }
+                        };
+                        Some(quote! {
+                            SimStep::#enum_ident { msg, .. } => {
+                                *msg = #recorded_slot;
+                                SimOverride::ExecutedBySim
+                            }
+                        })
+                    }
+                    ExecutionEntityKind::BridgeTx {
+                        bridge_index,
+                        channel_index,
+                    } => {
+                        let bridge_spec = &bridge_specs[*bridge_index];
+                        let channel = &bridge_spec.tx_channels[*channel_index];
+                        let enum_entry_name =
+                            config_id_to_enum(&format!("{}_tx_{}", bridge_spec.id, channel.id));
+                        let enum_ident = Ident::new(&enum_entry_name, Span::call_site());
+                        let output_pack = step.output_msg_pack.as_ref().expect(
+                            "Bridge Tx channel missing output pack for recorded debug replay",
+                        );
+                        let culist_index = int2sliceindex(output_pack.culist_index);
+                        Some(quote! {
+                            SimStep::#enum_ident { output, .. } => {
+                                *output = recorded.msgs.0.#culist_index.clone();
+                                SimOverride::ExecutedBySim
+                            }
+                        })
+                    }
+                },
+                CuExecutionUnit::Loop(_) => None,
+            })
+            .collect();
 
     quote! {
+        /// Exact-output replay callback: every recorded task and bridge output is
+        /// copied from the CopperList and the runtime implementation is skipped.
+        ///
+        /// This is for deterministic log reproduction, not for debugger state replay.
         #[allow(dead_code)]
         pub fn recorded_replay_step<'a>(
             step: SimStep<'a>,
@@ -1345,6 +1433,22 @@ fn gen_recorded_replay_support(
         ) -> SimOverride {
             match step {
                 #(#replay_arms),*,
+                _ => SimOverride::ExecuteByRuntime,
+            }
+        }
+
+        /// Debugger state replay callback: recorded external inputs are injected,
+        /// regular Copper tasks execute normally, and external sink/bridge effects
+        /// are suppressed.
+        ///
+        /// This preserves task-state evolution after restoring an intra-CL keyframe.
+        #[allow(dead_code)]
+        pub fn recorded_debug_replay_step<'a>(
+            step: SimStep<'a>,
+            recorded: &CopperList<CuStampedDataSet>,
+        ) -> SimOverride {
+            match step {
+                #(#debug_replay_arms),*,
                 _ => SimOverride::ExecuteByRuntime,
             }
         }
