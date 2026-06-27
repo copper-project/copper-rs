@@ -56,6 +56,9 @@ pub mod messages;
 use crate::calibration::{CalibrationData, Units};
 use crate::messages::{JointPositions, MAX_SERVOS};
 use cu_linux_resources::LinuxSerialPort;
+use cu29::bincode::de::{Decode, Decoder};
+use cu29::bincode::enc::{Encode, Encoder};
+use cu29::bincode::error::{DecodeError, EncodeError};
 use cu29::cubridge::{
     BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
 };
@@ -234,8 +237,14 @@ pub struct FeetechBridge {
 }
 
 impl Freezable for FeetechBridge {
-    // No mutable runtime state beyond what the hardware provides.
-    // Default freeze / thaw (no-op) is fine.
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&self.cached_positions, encoder)
+    }
+
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        self.cached_positions = Decode::decode(decoder)?;
+        Ok(())
+    }
 }
 
 // ===========================================================================

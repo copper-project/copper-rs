@@ -2,6 +2,9 @@ use crate::config::ComponentConfig;
 use crate::context::CuContext;
 use crate::cutask::{CuMsg, CuMsgPayload, CuSrcTask, CuTask, Freezable};
 use crate::reflect::{Reflect, TypePath};
+use bincode::de::{Decode, Decoder};
+use bincode::enc::{Encode, Encoder};
+use bincode::error::{DecodeError, EncodeError};
 use cu29_clock::CuTime;
 use cu29_traits::{CuError, CuResult};
 use rayon::ThreadPool;
@@ -11,6 +14,55 @@ struct AsyncState {
     processing: bool,
     ready_at: Option<CuTime>,
     last_error: Option<CuError>,
+}
+
+fn encode_async_state<E: Encoder>(state: &AsyncState, encoder: &mut E) -> Result<(), EncodeError> {
+    if state.processing {
+        return Err(EncodeError::OtherString(
+            "cannot freeze async task while background work is in progress".to_string(),
+        ));
+    }
+
+    Encode::encode(&state.ready_at, encoder)?;
+    let last_error = state.last_error.as_ref().map(ToString::to_string);
+    Encode::encode(&last_error, encoder)?;
+    Ok(())
+}
+
+fn decode_async_state<D: Decoder>(
+    state: &mut AsyncState,
+    decoder: &mut D,
+) -> Result<(), DecodeError> {
+    state.processing = false;
+    state.ready_at = Decode::decode(decoder)?;
+    let last_error: Option<String> = Decode::decode(decoder)?;
+    state.last_error = last_error.map(CuError::from);
+    Ok(())
+}
+
+fn encode_buffered_output<O, E>(output: &CuMsg<O>, encoder: &mut E) -> Result<(), EncodeError>
+where
+    O: CuMsgPayload + Send + 'static,
+    E: Encoder,
+{
+    let bytes = bincode::encode_to_vec(output, bincode::config::standard())?;
+    Encode::encode(&bytes, encoder)
+}
+
+fn decode_buffered_output<O, D>(decoder: &mut D) -> Result<CuMsg<O>, DecodeError>
+where
+    O: CuMsgPayload + Send + 'static,
+    D: Decoder,
+{
+    let bytes: Vec<u8> = Decode::decode(decoder)?;
+    let (output, bytes_read): (CuMsg<O>, usize) =
+        bincode::decode_from_slice(&bytes, bincode::config::standard())?;
+    if bytes_read != bytes.len() {
+        return Err(DecodeError::OtherString(
+            "async task buffered output snapshot had trailing bytes".to_string(),
+        ));
+    }
+    Ok(output)
 }
 
 fn record_async_error(state: &Mutex<AsyncState>, error: CuError) {
@@ -171,6 +223,45 @@ where
     T: for<'m> CuTask<Output<'m> = CuMsg<O>> + Send + 'static,
     O: CuMsgPayload + Send + 'static,
 {
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| EncodeError::OtherString("async task state mutex poisoned".to_string()))?;
+        encode_async_state(&state, encoder)?;
+
+        let task = self
+            .task
+            .lock()
+            .map_err(|_| EncodeError::OtherString("async task mutex poisoned".to_string()))?;
+        task.freeze(encoder)?;
+
+        let output = self.output.lock().map_err(|_| {
+            EncodeError::OtherString("async task output mutex poisoned".to_string())
+        })?;
+        encode_buffered_output(&output, encoder)?;
+        Ok(())
+    }
+
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| DecodeError::OtherString("async task state mutex poisoned".to_string()))?;
+        decode_async_state(&mut state, decoder)?;
+
+        let mut task = self
+            .task
+            .lock()
+            .map_err(|_| DecodeError::OtherString("async task mutex poisoned".to_string()))?;
+        task.thaw(decoder)?;
+
+        let mut output = self.output.lock().map_err(|_| {
+            DecodeError::OtherString("async task output mutex poisoned".to_string())
+        })?;
+        *output = decode_buffered_output(decoder)?;
+        Ok(())
+    }
 }
 
 impl<T, I, O> CuTask for CuAsyncTask<T, O>
@@ -338,6 +429,43 @@ where
     T: for<'m> CuSrcTask<Output<'m> = CuMsg<O>> + Send + 'static,
     O: CuMsgPayload + Send + 'static,
 {
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        let state = self.state.lock().map_err(|_| {
+            EncodeError::OtherString("async source state mutex poisoned".to_string())
+        })?;
+        encode_async_state(&state, encoder)?;
+
+        let task = self
+            .task
+            .lock()
+            .map_err(|_| EncodeError::OtherString("async source mutex poisoned".to_string()))?;
+        task.freeze(encoder)?;
+
+        let output = self.output.lock().map_err(|_| {
+            EncodeError::OtherString("async source output mutex poisoned".to_string())
+        })?;
+        encode_buffered_output(&output, encoder)?;
+        Ok(())
+    }
+
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        let mut state = self.state.lock().map_err(|_| {
+            DecodeError::OtherString("async source state mutex poisoned".to_string())
+        })?;
+        decode_async_state(&mut state, decoder)?;
+
+        let mut task = self
+            .task
+            .lock()
+            .map_err(|_| DecodeError::OtherString("async source mutex poisoned".to_string()))?;
+        task.thaw(decoder)?;
+
+        let mut output = self.output.lock().map_err(|_| {
+            DecodeError::OtherString("async source output mutex poisoned".to_string())
+        })?;
+        *output = decode_buffered_output(decoder)?;
+        Ok(())
+    }
 }
 
 impl<T, O> CuSrcTask for CuAsyncSrcTask<T, O>

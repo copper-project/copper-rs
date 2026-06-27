@@ -59,6 +59,10 @@ pub mod harness {
                 self.next += 1;
                 current
             }
+
+            pub fn restore(&mut self, next: i32) {
+                self.next = next;
+            }
         }
 
         pub struct BoardBundle;
@@ -136,7 +140,23 @@ pub mod harness {
             tag: String,
         }
 
-        impl Freezable for ResourceProbeTask {}
+        impl Freezable for ResourceProbeTask {
+            fn freeze<E: cu29::bincode::enc::Encoder>(
+                &self,
+                encoder: &mut E,
+            ) -> Result<(), cu29::bincode::error::EncodeError> {
+                cu29::bincode::Encode::encode(&self.counter.peek(), encoder)
+            }
+
+            fn thaw<D: cu29::bincode::de::Decoder>(
+                &mut self,
+                decoder: &mut D,
+            ) -> Result<(), cu29::bincode::error::DecodeError> {
+                self.counter
+                    .restore(cu29::bincode::Decode::decode(decoder)?);
+                Ok(())
+            }
+        }
 
         impl CuTask for ResourceProbeTask {
             type Resources<'r> = ResourceProbeResources;

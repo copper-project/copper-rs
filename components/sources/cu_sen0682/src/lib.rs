@@ -10,6 +10,9 @@ use core::fmt;
 #[cfg(feature = "std")]
 use cu_linux_resources::LinuxSerialPort;
 use cu_sensor_payloads::PointCloudSoa;
+use cu29::bincode::de::{Decode, Decoder};
+use cu29::bincode::enc::{Encode, Encoder};
+use cu29::bincode::error::{DecodeError, EncodeError};
 use cu29::prelude::*;
 use cu29::resource::{Owned, ResourceBindingMap, ResourceBindings, ResourceManager};
 use embedded_io::{ErrorKind, ErrorType, Read, Write};
@@ -255,6 +258,34 @@ impl<S> SerialTransport<S> {
                 }
             }
         }
+    }
+
+    fn freeze_state<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&(self.buffered as u64), encoder)?;
+        for byte in &self.buffer[..self.buffered] {
+            Encode::encode(byte, encoder)?;
+        }
+        Encode::encode(&self.configured_by_driver, encoder)?;
+        Ok(())
+    }
+
+    fn thaw_state<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        let buffered: u64 = Decode::decode(decoder)?;
+        let buffered = usize::try_from(buffered).map_err(|_| {
+            DecodeError::OtherString("sen0682 buffered byte count overflows usize".to_string())
+        })?;
+        if buffered > self.buffer.len() {
+            return Err(DecodeError::ArrayLengthMismatch {
+                required: self.buffer.len(),
+                found: buffered,
+            });
+        }
+        self.buffered = buffered;
+        for slot in &mut self.buffer[..self.buffered] {
+            *slot = Decode::decode(decoder)?;
+        }
+        self.configured_by_driver = Decode::decode(decoder)?;
+        Ok(())
     }
 }
 
@@ -555,7 +586,15 @@ impl<S> fmt::Debug for Sen0682SerialSourceTask<S> {
     }
 }
 
-impl<S> Freezable for Sen0682SerialSourceTask<S> {}
+impl<S> Freezable for Sen0682SerialSourceTask<S> {
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        self.core.transport.freeze_state(encoder)
+    }
+
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        self.core.transport.thaw_state(decoder)
+    }
+}
 
 impl<S> Sen0682SerialSourceTask<S> {
     fn readout_config(&self) -> Sen0682ReadoutConfig {

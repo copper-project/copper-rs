@@ -512,7 +512,7 @@ pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::stop(&mut self, ctx: &cu
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
 impl<T, O> cu29_runtime::cutask::Freezable for cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O> where T: for<'m> cu29_runtime::cutask::CuSrcTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
-pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::thaw<D: cu_bincode::de::Decoder>(&mut self, _decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
+pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::thaw<D: cu_bincode::de::Decoder>(&mut self, decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
 impl<T, O> cu29_runtime::reflect::TypePath for cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O> where T: for<'m> cu29_runtime::cutask::CuSrcTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::crate_name() -> core::option::Option<&'static str>
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::module_path() -> core::option::Option<&'static str>
@@ -540,7 +540,7 @@ pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::stop(&mut self, ctx: &cu29_
 pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
 impl<T, O> cu29_runtime::cutask::Freezable for cu29_runtime::cuasynctask::CuAsyncTask<T, O> where T: for<'m> cu29_runtime::cutask::CuTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
 pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::thaw<D: cu_bincode::de::Decoder>(&mut self, _decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::thaw<D: cu_bincode::de::Decoder>(&mut self, decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
 impl<T, O> cu29_runtime::reflect::TypePath for cu29_runtime::cuasynctask::CuAsyncTask<T, O> where T: for<'m> cu29_runtime::cutask::CuTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
 pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::crate_name() -> core::option::Option<&'static str>
 pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::module_path() -> core::option::Option<&'static str>
@@ -933,10 +933,10 @@ pub fn cu29_runtime::simulation::CuSimSinkTask<I>::freeze<E: cu_bincode::enc::En
 pub fn cu29_runtime::simulation::CuSimSinkTask<I>::thaw<D: cu_bincode::de::Decoder>(&mut self, _decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
 impl<T, O> cu29_runtime::cutask::Freezable for cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O> where T: for<'m> cu29_runtime::cutask::CuSrcTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
-pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::thaw<D: cu_bincode::de::Decoder>(&mut self, _decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
+pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::thaw<D: cu_bincode::de::Decoder>(&mut self, decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
 impl<T, O> cu29_runtime::cutask::Freezable for cu29_runtime::cuasynctask::CuAsyncTask<T, O> where T: for<'m> cu29_runtime::cutask::CuTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
 pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
-pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::thaw<D: cu_bincode::de::Decoder>(&mut self, _decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
+pub fn cu29_runtime::cuasynctask::CuAsyncTask<T, O>::thaw<D: cu_bincode::de::Decoder>(&mut self, decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
 impl<T> cu29_runtime::cutask::Freezable for cu29_runtime::simulation::CuSimSrcTask<T>
 pub fn cu29_runtime::simulation::CuSimSrcTask<T>::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 pub fn cu29_runtime::simulation::CuSimSrcTask<T>::thaw<D: cu_bincode::de::Decoder>(&mut self, decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>

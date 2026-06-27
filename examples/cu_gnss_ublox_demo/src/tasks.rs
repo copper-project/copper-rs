@@ -4,6 +4,7 @@ use cu_gnss_payloads::{
     GnssAccuracy, GnssEpochTime, GnssFixSolution, GnssFixType, GnssInfoSeverity, GnssInfoText,
     GnssSatelliteState, GnssSatsInView,
 };
+use cu29::bincode::{Decode, Encode};
 use cu29::prelude::*;
 use cu29::units::si::angle::degree;
 use cu29::units::si::length::meter;
@@ -82,7 +83,22 @@ pub struct TimeSink {
     seen: u64,
 }
 
-impl Freezable for TimeSink {}
+impl Freezable for TimeSink {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        Encode::encode(&self.seen, encoder)
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.seen = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuSinkTask for TimeSink {
     type Resources<'r> = ();
@@ -120,7 +136,29 @@ pub struct FixSink {
     last_sats_used: Option<u8>,
 }
 
-impl Freezable for FixSink {}
+impl Freezable for FixSink {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        Encode::encode(&self.seen, encoder)?;
+        Encode::encode(&self.last_fix_type, encoder)?;
+        Encode::encode(&self.last_fix_ok, encoder)?;
+        Encode::encode(&self.last_sats_used, encoder)?;
+        Ok(())
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.seen = Decode::decode(decoder)?;
+        self.last_fix_type = Decode::decode(decoder)?;
+        self.last_fix_ok = Decode::decode(decoder)?;
+        self.last_sats_used = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuSinkTask for FixSink {
     type Resources<'r> = ();
@@ -173,7 +211,22 @@ pub struct AccuracySink {
     seen: u64,
 }
 
-impl Freezable for AccuracySink {}
+impl Freezable for AccuracySink {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        Encode::encode(&self.seen, encoder)
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.seen = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuSinkTask for AccuracySink {
     type Resources<'r> = ();
@@ -210,7 +263,25 @@ pub struct SatsInViewSink {
     last_count: Option<u16>,
 }
 
-impl Freezable for SatsInViewSink {}
+impl Freezable for SatsInViewSink {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        Encode::encode(&self.seen, encoder)?;
+        Encode::encode(&self.last_count, encoder)?;
+        Ok(())
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.seen = Decode::decode(decoder)?;
+        self.last_count = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuSinkTask for SatsInViewSink {
     type Resources<'r> = ();

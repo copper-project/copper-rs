@@ -1,5 +1,6 @@
 use cu_aligner::define_task;
 use cu_sensor_payloads::{CuImage, CuImageBufferFormat};
+use cu29::bincode::{Decode, Encode};
 use cu29::payload::CuArray;
 use cu29::prelude::*;
 use std::sync::Arc;
@@ -25,7 +26,22 @@ pub struct ImageSrcTask {
     tov_offset: CuDuration,
 }
 
-impl Freezable for ImageSrcTask {}
+impl Freezable for ImageSrcTask {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        Encode::encode(&self.seq, encoder)
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.seq = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuSrcTask for ImageSrcTask {
     type Resources<'r> = ();

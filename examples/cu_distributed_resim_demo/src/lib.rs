@@ -66,6 +66,7 @@ pub mod bridges {
 
 pub mod tasks {
     use super::messages::{Feedback, Plan, Pulse};
+    use bincode::{Decode, Encode};
     use cu29::prelude::*;
 
     #[derive(Reflect)]
@@ -76,7 +77,29 @@ pub mod tasks {
         accepted_feedback: u64,
     }
 
-    impl Freezable for ScoutTask {}
+    impl Freezable for ScoutTask {
+        fn freeze<E: bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), bincode::error::EncodeError> {
+            Encode::encode(&self.phase, encoder)?;
+            Encode::encode(&self.last_feedback_signature, encoder)?;
+            Encode::encode(&self.emitted, encoder)?;
+            Encode::encode(&self.accepted_feedback, encoder)?;
+            Ok(())
+        }
+
+        fn thaw<D: bincode::de::Decoder>(
+            &mut self,
+            decoder: &mut D,
+        ) -> Result<(), bincode::error::DecodeError> {
+            self.phase = Decode::decode(decoder)?;
+            self.last_feedback_signature = Decode::decode(decoder)?;
+            self.emitted = Decode::decode(decoder)?;
+            self.accepted_feedback = Decode::decode(decoder)?;
+            Ok(())
+        }
+    }
 
     impl CuTask for ScoutTask {
         type Input<'m> = input_msg!(Feedback);
@@ -152,7 +175,27 @@ pub mod tasks {
         ignored: u64,
     }
 
-    impl Freezable for PlannerTask {}
+    impl Freezable for PlannerTask {
+        fn freeze<E: bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), bincode::error::EncodeError> {
+            Encode::encode(&self.integrator, encoder)?;
+            Encode::encode(&self.accepted, encoder)?;
+            Encode::encode(&self.ignored, encoder)?;
+            Ok(())
+        }
+
+        fn thaw<D: bincode::de::Decoder>(
+            &mut self,
+            decoder: &mut D,
+        ) -> Result<(), bincode::error::DecodeError> {
+            self.integrator = Decode::decode(decoder)?;
+            self.accepted = Decode::decode(decoder)?;
+            self.ignored = Decode::decode(decoder)?;
+            Ok(())
+        }
+    }
 
     impl CuTask for PlannerTask {
         type Input<'m> = input_msg!(Pulse);
@@ -214,7 +257,25 @@ pub mod tasks {
         applied: u64,
     }
 
-    impl Freezable for ControllerTask {}
+    impl Freezable for ControllerTask {
+        fn freeze<E: bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), bincode::error::EncodeError> {
+            Encode::encode(&self.checksum, encoder)?;
+            Encode::encode(&self.applied, encoder)?;
+            Ok(())
+        }
+
+        fn thaw<D: bincode::de::Decoder>(
+            &mut self,
+            decoder: &mut D,
+        ) -> Result<(), bincode::error::DecodeError> {
+            self.checksum = Decode::decode(decoder)?;
+            self.applied = Decode::decode(decoder)?;
+            Ok(())
+        }
+    }
 
     impl CuTask for ControllerTask {
         type Input<'m> = input_msg!(Plan);

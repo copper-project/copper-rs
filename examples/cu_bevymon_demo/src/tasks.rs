@@ -37,7 +37,22 @@ pub struct ClockSource {
     phase_step: f32,
 }
 
-impl Freezable for ClockSource {}
+impl Freezable for ClockSource {
+    fn freeze<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        Encode::encode(&self.tick, encoder)
+    }
+
+    fn thaw<D: bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), bincode::error::DecodeError> {
+        self.tick = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuSrcTask for ClockSource {
     type Resources<'r> = ();

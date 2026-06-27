@@ -620,7 +620,29 @@ mod tests {
         alert_codes: Vec<u32>,
     }
 
-    impl Freezable for ExampleBridge {}
+    impl Freezable for ExampleBridge {
+        fn freeze<E: bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), bincode::error::EncodeError> {
+            bincode::Encode::encode(&self.imu_samples, encoder)?;
+            bincode::Encode::encode(&self.motor_torques, encoder)?;
+            bincode::Encode::encode(&self.status_temps, encoder)?;
+            bincode::Encode::encode(&self.alert_codes, encoder)?;
+            Ok(())
+        }
+
+        fn thaw<D: bincode::de::Decoder>(
+            &mut self,
+            decoder: &mut D,
+        ) -> Result<(), bincode::error::DecodeError> {
+            self.imu_samples = bincode::Decode::decode(decoder)?;
+            self.motor_torques = bincode::Decode::decode(decoder)?;
+            self.status_temps = bincode::Decode::decode(decoder)?;
+            self.alert_codes = bincode::Decode::decode(decoder)?;
+            Ok(())
+        }
+    }
 
     impl CuBridge for ExampleBridge {
         type Resources<'r> = ();

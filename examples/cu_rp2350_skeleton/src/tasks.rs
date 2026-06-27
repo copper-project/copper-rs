@@ -2,6 +2,7 @@
 extern crate alloc;
 
 use cu29::prelude::*;
+use cu29::bincode::{Decode, Encode};
 
 #[cfg(feature = "firmware")]
 mod imp {
@@ -57,7 +58,22 @@ pub use imp::*;
 pub struct BooleanSource {
     state: bool,
 }
-impl Freezable for BooleanSource {}
+impl Freezable for BooleanSource {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        Encode::encode(&self.state, encoder)
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.state = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 impl CuSrcTask for BooleanSource {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(bool);

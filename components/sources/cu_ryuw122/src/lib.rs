@@ -12,6 +12,9 @@ use core::fmt;
 #[cfg(feature = "std")]
 use cu_linux_resources::LinuxSerialPort;
 use cu_sensor_payloads::{PeerRangeObservation, RangePeerId};
+use cu29::bincode::de::{Decode, Decoder};
+use cu29::bincode::enc::{Encode, Encoder};
+use cu29::bincode::error::{DecodeError, EncodeError};
 use cu29::clock::{CuTime, Tov};
 use cu29::prelude::*;
 use cu29::resource::{Owned, ResourceBindingMap, ResourceBindings, ResourceManager};
@@ -147,7 +150,87 @@ impl<S> fmt::Debug for Ryuw122InitiatorSourceTask<S> {
     }
 }
 
-impl<S> Freezable for Ryuw122InitiatorSourceTask<S> {}
+impl<S> Freezable for Ryuw122InitiatorSourceTask<S> {
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&self.line_buffer, encoder)?;
+
+        Encode::encode(&(self.pending_observations.len() as u64), encoder)?;
+        for pending in &self.pending_observations {
+            Encode::encode(&pending.observed_at, encoder)?;
+            Encode::encode(&pending.observation, encoder)?;
+        }
+
+        Encode::encode(&(self.next_anchor_index as u64), encoder)?;
+        let in_flight = self
+            .in_flight
+            .map(|request| (request.anchor_index as u64, request.sent_at_ns));
+        Encode::encode(&in_flight, encoder)?;
+        Ok(())
+    }
+
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        let line_buffer: Vec<u8> = Decode::decode(decoder)?;
+        if line_buffer.len() > self.line_buffer.capacity() {
+            return Err(DecodeError::ArrayLengthMismatch {
+                required: self.line_buffer.capacity(),
+                found: line_buffer.len(),
+            });
+        }
+        self.line_buffer.clear();
+        self.line_buffer.extend_from_slice(&line_buffer);
+
+        let pending_len: u64 = Decode::decode(decoder)?;
+        let pending_len = usize::try_from(pending_len).map_err(|_| {
+            DecodeError::OtherString(
+                "RYUW122 pending observation count overflows usize".to_string(),
+            )
+        })?;
+        if pending_len > self.max_pending_observations {
+            return Err(DecodeError::ArrayLengthMismatch {
+                required: self.max_pending_observations,
+                found: pending_len,
+            });
+        }
+        self.pending_observations.clear();
+        for _ in 0..pending_len {
+            self.pending_observations.push_back(PendingObservation {
+                observed_at: Decode::decode(decoder)?,
+                observation: Decode::decode(decoder)?,
+            });
+        }
+
+        let next_anchor_index: u64 = Decode::decode(decoder)?;
+        self.next_anchor_index = usize::try_from(next_anchor_index).map_err(|_| {
+            DecodeError::OtherString("RYUW122 next anchor index overflows usize".to_string())
+        })?;
+        if !self.anchor_ids.is_empty() && self.next_anchor_index >= self.anchor_ids.len() {
+            return Err(DecodeError::OtherString(
+                "RYUW122 keyframe next anchor index is out of range".to_string(),
+            ));
+        }
+
+        let in_flight: Option<(u64, u64)> = Decode::decode(decoder)?;
+        self.in_flight = in_flight
+            .map(|(anchor_index, sent_at_ns)| {
+                let anchor_index = usize::try_from(anchor_index).map_err(|_| {
+                    DecodeError::OtherString(
+                        "RYUW122 in-flight anchor index overflows usize".to_string(),
+                    )
+                })?;
+                if anchor_index >= self.anchor_ids.len() {
+                    return Err(DecodeError::OtherString(
+                        "RYUW122 keyframe in-flight anchor index is out of range".to_string(),
+                    ));
+                }
+                Ok(InFlightRequest {
+                    anchor_index,
+                    sent_at_ns,
+                })
+            })
+            .transpose()?;
+        Ok(())
+    }
+}
 
 impl<S> CuSrcTask for Ryuw122InitiatorSourceTask<S>
 where

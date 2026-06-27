@@ -27,7 +27,15 @@ macro_rules! define_task {
             aligner: AlignmentBuffers,
         }
 
-        impl Freezable for $name {}
+        impl Freezable for $name {
+            fn freeze<E: cu29::bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), cu29::bincode::error::EncodeError> {
+                self.aligner.freeze(encoder)
+            }
+
+            fn thaw<D: cu29::bincode::de::Decoder>(&mut self, decoder: &mut D) -> Result<(), cu29::bincode::error::DecodeError> {
+                self.aligner.thaw(decoder)
+            }
+        }
 
         impl CuTask for $name {
     type Resources<'r> = ();

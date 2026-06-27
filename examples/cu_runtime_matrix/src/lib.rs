@@ -175,6 +175,28 @@ fn stamp_with_delay(metadata: &mut CuMsgMetadata, now: CuTime, delay_ticks: u64)
     metadata.process_time.end = (now + CuDuration::from_nanos(delay_ticks)).into();
 }
 
+macro_rules! impl_freezable_fields {
+    ($ty:ty, $($field:ident),+ $(,)?) => {
+        impl Freezable for $ty {
+            fn freeze<E: bincode::enc::Encoder>(
+                &self,
+                encoder: &mut E,
+            ) -> Result<(), bincode::error::EncodeError> {
+                $(Encode::encode(&self.$field, encoder)?;)*
+                Ok(())
+            }
+
+            fn thaw<D: bincode::de::Decoder>(
+                &mut self,
+                decoder: &mut D,
+            ) -> Result<(), bincode::error::DecodeError> {
+                $(self.$field = Decode::decode(decoder)?;)*
+                Ok(())
+            }
+        }
+    };
+}
+
 pub mod tasks {
     use super::*;
 
@@ -189,7 +211,7 @@ pub mod tasks {
         next_seq: u32,
     }
 
-    impl Freezable for SequenceSrc {}
+    impl_freezable_fields!(SequenceSrc, next_seq);
 
     impl CuSrcTask for SequenceSrc {
         type Resources<'r> = ();
@@ -460,7 +482,7 @@ pub mod tasks {
         scratch: Vec<u64>,
     }
 
-    impl Freezable for BridgeStampTask {}
+    impl_freezable_fields!(BridgeStampTask, next_seq);
 
     impl CuTask for BridgeStampTask {
         type Resources<'r> = ();
@@ -666,7 +688,7 @@ pub mod bridges {
         next_seq: u32,
     }
 
-    impl Freezable for AlphaBridge {}
+    impl_freezable_fields!(AlphaBridge, next_seq);
 
     impl CuBridge for AlphaBridge {
         type Resources<'r> = ();
@@ -758,7 +780,7 @@ pub mod bridges {
         completed_pairs: u32,
     }
 
-    impl Freezable for BetaBridge {}
+    impl_freezable_fields!(BetaBridge, pending_left, pending_right, completed_pairs);
 
     impl CuBridge for BetaBridge {
         type Resources<'r> = ();
@@ -1464,6 +1486,7 @@ mod tests {
     const TEST_COMPUTE_ROUNDS: u32 = 2;
     const MAX_BG_SETTLE_ITERS: u64 = 32;
     const BG_STABLE_PASSES: usize = 4;
+    const TRACE_FIXTURE_KEYFRAME_INTERVAL: u32 = u32::MAX;
 
     #[derive(Debug, Clone, PartialEq)]
     struct NormalizedCuMsg {
@@ -1552,6 +1575,16 @@ mod tests {
                 read_copperlists_normalized::<BridgeFanoutBackground::CuStampedDataSet>(log_base)
             }
         }
+    }
+
+    fn configure_trace_fixture_logging(config: &mut CuConfig) {
+        let logging = config
+            .logging
+            .get_or_insert_with(cu29::config::LoggingConfig::default);
+        // These tests validate live traces and CopperLists, not replay keyframes.
+        // Async background tasks may legitimately have work in flight at normal
+        // keyframe boundaries, so keep only the initial idle keyframe.
+        logging.keyframe_interval = Some(TRACE_FIXTURE_KEYFRAME_INTERVAL);
     }
 
     fn background_delay_steps() -> u64 {
@@ -1861,6 +1894,7 @@ mod tests {
             TEST_COMPUTE_ROUNDS,
             true,
         )?;
+        configure_trace_fixture_logging(&mut config);
         mutate_config(&mut config);
         clear_trace();
 

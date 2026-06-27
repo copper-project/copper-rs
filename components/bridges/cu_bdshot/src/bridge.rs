@@ -1,3 +1,6 @@
+use bincode::de::{Decode, Decoder};
+use bincode::enc::{Encode, Encoder};
+use bincode::error::{DecodeError, EncodeError};
 use cu29::prelude::*;
 use spin::Mutex;
 
@@ -91,8 +94,22 @@ where
     }
 }
 
-impl<P: BdshotBoardProvider + 'static> Freezable for CuBdshotBridge<P> where P::Board: Send + 'static
-{}
+impl<P: BdshotBoardProvider + 'static> Freezable for CuBdshotBridge<P>
+where
+    P::Board: Send + 'static,
+{
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&self.telemetry_cache, encoder)?;
+        Encode::encode(&self.last_send, encoder)?;
+        Ok(())
+    }
+
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        self.telemetry_cache = Decode::decode(decoder)?;
+        self.last_send = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl<P: BdshotBoardProvider + 'static> CuBridge for CuBdshotBridge<P>
 where

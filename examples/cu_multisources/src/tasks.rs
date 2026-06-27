@@ -1,3 +1,4 @@
+use cu29::bincode::{Decode, Encode};
 use cu29::prelude::*;
 
 /// A source task that generates an integer at each cycle.
@@ -6,7 +7,22 @@ pub struct IntegerSrcTask {
     pub value: i32,
 }
 
-impl Freezable for IntegerSrcTask {}
+impl Freezable for IntegerSrcTask {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        Encode::encode(&self.value, encoder)
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.value = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuSrcTask for IntegerSrcTask {
     type Resources<'r> = ();
@@ -28,7 +44,22 @@ pub struct FloatSrcTask {
     pub value: f32,
 }
 
-impl Freezable for FloatSrcTask {}
+impl Freezable for FloatSrcTask {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        Encode::encode(&self.value, encoder)
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.value = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuSrcTask for FloatSrcTask {
     type Resources<'r> = ();

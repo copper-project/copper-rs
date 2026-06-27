@@ -1,4 +1,7 @@
 use crate::payloads::MandelbrotStripe;
+use bincode::de::{Decode, Decoder};
+use bincode::enc::{Encode, Encoder};
+use bincode::error::{DecodeError, EncodeError};
 use cu_sensor_payloads::{CuImage, CuImageBufferFormat};
 use cu29::prelude::*;
 use minifb::{Key, Scale, ScaleMode, Window, WindowOptions};
@@ -522,7 +525,16 @@ pub struct MandelbrotStripeSource {
     pixels_pool: Arc<CuHostMemoryPool<Vec<u8>>>,
 }
 
-impl Freezable for MandelbrotStripeSource {}
+impl Freezable for MandelbrotStripeSource {
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&self.next_linear_index, encoder)
+    }
+
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        self.next_linear_index = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuSrcTask for MandelbrotStripeSource {
     type Resources<'r> = ();
@@ -649,7 +661,16 @@ pub struct MandelbrotIterBand {
     expected_linear_index: u64,
 }
 
-impl Freezable for MandelbrotIterBand {}
+impl Freezable for MandelbrotIterBand {
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&self.expected_linear_index, encoder)
+    }
+
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        self.expected_linear_index = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuTask for MandelbrotIterBand {
     type Resources<'r> = ();
@@ -751,7 +772,26 @@ pub struct FrameAssembler {
     current_frame: Vec<u8>,
 }
 
-impl Freezable for FrameAssembler {}
+impl Freezable for FrameAssembler {
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&self.expected_linear_index, encoder)?;
+        Encode::encode(&self.current_frame, encoder)?;
+        Ok(())
+    }
+
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        self.expected_linear_index = Decode::decode(decoder)?;
+        let current_frame: Vec<u8> = Decode::decode(decoder)?;
+        if current_frame.len() != self.current_frame.len() {
+            return Err(DecodeError::ArrayLengthMismatch {
+                required: self.current_frame.len(),
+                found: current_frame.len(),
+            });
+        }
+        self.current_frame = current_frame;
+        Ok(())
+    }
+}
 
 impl CuTask for FrameAssembler {
     type Resources<'r> = ();
@@ -872,7 +912,48 @@ pub struct ViewerFrameSink {
     framebuffers: [Arc<Mutex<Vec<u32>>>; VIEWER_BUFFER_COUNT],
 }
 
-impl Freezable for ViewerFrameSink {}
+impl Freezable for ViewerFrameSink {
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&self.expected_linear_index, encoder)?;
+        Encode::encode(&self.frame_digest, encoder)?;
+        Encode::encode(&(self.write_buffer_index as u64), encoder)?;
+        for framebuffer in &self.framebuffers {
+            let framebuffer = framebuffer.lock().map_err(|_| {
+                EncodeError::OtherString("viewer framebuffer lock poisoned".to_string())
+            })?;
+            Encode::encode(&*framebuffer, encoder)?;
+        }
+        Ok(())
+    }
+
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        self.expected_linear_index = Decode::decode(decoder)?;
+        self.frame_digest = Decode::decode(decoder)?;
+        let write_buffer_index: u64 = Decode::decode(decoder)?;
+        self.write_buffer_index = usize::try_from(write_buffer_index).map_err(|_| {
+            DecodeError::OtherString("viewer write buffer index overflows usize".to_string())
+        })?;
+        if self.write_buffer_index >= VIEWER_BUFFER_COUNT {
+            return Err(DecodeError::OtherString(
+                "viewer write buffer index out of range".to_string(),
+            ));
+        }
+        for framebuffer in &self.framebuffers {
+            let restored: Vec<u32> = Decode::decode(decoder)?;
+            let mut framebuffer = framebuffer.lock().map_err(|_| {
+                DecodeError::OtherString("viewer framebuffer lock poisoned".to_string())
+            })?;
+            if restored.len() != framebuffer.len() {
+                return Err(DecodeError::ArrayLengthMismatch {
+                    required: framebuffer.len(),
+                    found: restored.len(),
+                });
+            }
+            *framebuffer = restored;
+        }
+        Ok(())
+    }
+}
 
 impl CuSinkTask for ViewerFrameSink {
     type Resources<'r> = ();

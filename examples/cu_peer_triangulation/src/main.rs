@@ -3,6 +3,7 @@ use std::path::Path;
 
 use cu_peer_triangulation::LocalPosition3d;
 use cu_sensor_payloads::{PeerRangeObservation, RangePeerId};
+use cu29::bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::prelude::app::CuSimApplication;
 use cu29::prelude::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
@@ -15,7 +16,22 @@ pub struct RangeScenarioSource {
     next: usize,
 }
 
-impl Freezable for RangeScenarioSource {}
+impl Freezable for RangeScenarioSource {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        Encode::encode(&self.next, encoder)
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.next = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuSrcTask for RangeScenarioSource {
     type Resources<'r> = ();
@@ -43,7 +59,22 @@ pub struct PositionSink {
     latest: Option<LocalPosition3d>,
 }
 
-impl Freezable for PositionSink {}
+impl Freezable for PositionSink {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        Encode::encode(&self.latest, encoder)
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.latest = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl CuSinkTask for PositionSink {
     type Resources<'r> = ();

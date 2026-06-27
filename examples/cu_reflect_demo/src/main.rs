@@ -30,7 +30,22 @@ pub mod tasks {
         pub next_measurement: f32,
     }
 
-    impl Freezable for MeasurementSource {}
+    impl Freezable for MeasurementSource {
+        fn freeze<E: cu29::bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), cu29::bincode::error::EncodeError> {
+            Encode::encode(&self.next_measurement, encoder)
+        }
+
+        fn thaw<D: cu29::bincode::de::Decoder>(
+            &mut self,
+            decoder: &mut D,
+        ) -> Result<(), cu29::bincode::error::DecodeError> {
+            self.next_measurement = Decode::decode(decoder)?;
+            Ok(())
+        }
+    }
 
     impl CuSrcTask for MeasurementSource {
         type Resources<'r> = ();
@@ -62,7 +77,22 @@ pub mod tasks {
         pub last_output: Option<f32>,
     }
 
-    impl Freezable for OutputSink {}
+    impl Freezable for OutputSink {
+        fn freeze<E: cu29::bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), cu29::bincode::error::EncodeError> {
+            Encode::encode(&self.last_output, encoder)
+        }
+
+        fn thaw<D: cu29::bincode::de::Decoder>(
+            &mut self,
+            decoder: &mut D,
+        ) -> Result<(), cu29::bincode::error::DecodeError> {
+            self.last_output = Decode::decode(decoder)?;
+            Ok(())
+        }
+    }
 
     impl CuSinkTask for OutputSink {
         type Resources<'r> = ();

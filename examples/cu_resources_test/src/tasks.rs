@@ -1,5 +1,6 @@
 use crate::bridges::BusReading;
 use crate::resources::{GlobalLog, OwnedCounter, SharedBus};
+use cu29::bincode::{Decode, Encode};
 use cu29::prelude::*;
 use cu29::resources;
 use serde::{Deserialize, Serialize};
@@ -41,7 +42,25 @@ pub struct SensorTask {
     global: GlobalLog,
 }
 
-impl Freezable for SensorTask {}
+impl Freezable for SensorTask {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        Encode::encode(&self.counter.0.snapshot(), encoder)?;
+        Encode::encode(&self.bus.get(), encoder)?;
+        Ok(())
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.counter.0.restore(Decode::decode(decoder)?);
+        self.bus.set(Decode::decode(decoder)?);
+        Ok(())
+    }
+}
 
 impl CuTask for SensorTask {
     type Resources<'r> = SensorResources;
