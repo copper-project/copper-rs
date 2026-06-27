@@ -14,6 +14,7 @@ use bevy::prelude::{
 };
 use bevy::render::RenderPlugin;
 use bevy::scene::ScenePlugin;
+use bevy::world_serialization::WorldSerializationPlugin;
 use cu29::prelude::*;
 
 pub fn make_world(headless: bool) -> App {
@@ -38,6 +39,7 @@ pub fn make_world(headless: bool) -> App {
                 unapproved_path_mode: UnapprovedPathMode::Allow,
                 ..default()
             },
+            WorldSerializationPlugin,
             ScenePlugin,
             ImagePlugin::default(),
         ));
