@@ -455,7 +455,7 @@ jobs:
           prefix-key: api-check
           shared-key: rust-ubuntu
           cache-bin: "true"
-          save-if: ${{ github.ref == 'refs/heads/master' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+          save-if: ${{ github.ref == 'refs/heads/master' && github.event_name != 'pull_request' }}
       - name: Install cargo-public-api
         run: |
           if ! cargo +stable public-api --version 2>/dev/null | grep -qx "cargo-public-api ${PUBLIC_API_VERSION}"; then
