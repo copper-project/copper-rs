@@ -64,8 +64,6 @@ jobs:
           cache_prefix: coverage-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "true"
-          sccache_restore: "false"
-          sccache_key_suffix: coverage
       - name: Install llvm-tools-preview
         run: rustup component add llvm-tools-preview --toolchain ${{ inputs.toolchain }}
       - name: Install cargo-llvm-cov
@@ -114,8 +112,6 @@ jobs:
           cache_prefix: coverage-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "true"
-          sccache_restore: "false"
-          sccache_key_suffix: coverage
       - name: Install llvm-tools-preview
         run: rustup component add llvm-tools-preview --toolchain ${{ inputs.toolchain }}
       - name: Install cargo-llvm-cov
