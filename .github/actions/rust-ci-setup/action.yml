@@ -35,9 +35,13 @@ inputs:
     required: false
     default: "true"
   sccache_restore:
-    description: Whether to restore sccache.
+    description: Whether to restore the legacy local SCCACHE_DIR cache.
     required: false
-    default: "true"
+    default: "false"
+  sccache_write:
+    description: Whether this job may write to the sccache GitHub Actions backend on master.
+    required: false
+    default: "false"
   sccache_key_suffix:
     description: Suffix used to separate sccache writers per job/task.
     required: true
@@ -81,9 +85,22 @@ runs:
         if [[ -z "$SCCACHE_DIR" ]]; then
           SCCACHE_DIR="$PWD/.sccache"
         fi
+        sccache_gha_rw_mode=READ_ONLY
+        if [[ "${{ inputs.sccache_write }}" == "true" && "$GITHUB_REF" == "refs/heads/master" && "$GITHUB_EVENT_NAME" != "pull_request" ]]; then
+          sccache_gha_rw_mode=READ_WRITE
+        fi
         mkdir -p "$SCCACHE_DIR"
         echo "SCCACHE_DIR=$SCCACHE_DIR" >> "$GITHUB_ENV"
+        echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+        echo "SCCACHE_GHA_RW_MODE=$sccache_gha_rw_mode" >> "$GITHUB_ENV"
+        echo "SCCACHE_GHA_VERSION=copper-rs-ci-v1" >> "$GITHUB_ENV"
         echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+    - name: Report sccache mode
+      shell: bash
+      run: |
+        echo "sccache GHA mode: $SCCACHE_GHA_RW_MODE"
+        echo "sccache GHA version: $SCCACHE_GHA_VERSION"
+        echo "legacy local SCCACHE_DIR restore: ${{ inputs.sccache_restore }}"
     - name: Compute sccache keys
       if: inputs.sccache_restore == 'true'
       id: sccache_key

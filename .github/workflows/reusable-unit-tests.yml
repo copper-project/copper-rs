@@ -92,6 +92,7 @@ jobs:
           cache_prefix: debug-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
           install_nextest: ${{ matrix.task == 'test' }}
+          sccache_write: ${{ matrix.task == 'clippy' }}
           sccache_key_suffix: unit-${{ matrix.task }}
       - name: Set features (Linux)
         run: |
@@ -162,6 +163,7 @@ jobs:
           cache_prefix: debug-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: ${{ matrix.task == 'test' }}
+          sccache_write: ${{ matrix.task == 'clippy' }}
           sccache_key_suffix: unit-${{ matrix.task }}
       - name: Set features (Linux)
         run: |
@@ -459,6 +461,7 @@ jobs:
           cache_prefix: debug
           cache_shared_key: rust-windows
           install_nextest: "false"
+          sccache_write: "true"
           sccache_key_suffix: windows-component-smoke
       - name: Check selected Windows components
         run: >
@@ -520,6 +523,7 @@ jobs:
           cache_prefix: debug-ubuntu26-container
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "true"
+          sccache_write: "true"
           sccache_key_suffix: tests-features
       - name: Set features (Linux)
         run: |
@@ -566,6 +570,7 @@ jobs:
           cache_prefix: debug-ubuntu-host
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "true"
+          sccache_write: "true"
           sccache_key_suffix: tests-features
       - name: Set features (Linux)
         run: |
@@ -618,6 +623,7 @@ jobs:
           cache_prefix: cuda-debug-ubuntu24-container
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "true"
+          sccache_write: "true"
           sccache_key_suffix: tests-features
       - name: Set CUDA compute capability (CI)
         run: |
@@ -687,6 +693,7 @@ jobs:
           cache_prefix: debug
           cache_shared_key: rust-${{ matrix.target_os }}
           install_nextest: "true"
+          sccache_write: ${{ matrix.target_os == 'macos' }}
           sccache_key_suffix: tests-features
       - name: Set up Python (macOS)
         if: runner.os == 'macOS'

@@ -236,6 +236,7 @@ jobs:
           cache_prefix: msrv-ubuntu26-container
           cache_shared_key: rust-ubuntu
           install_nextest: "false"
+          sccache_write: "true"
           sccache_key_suffix: msrv
       - name: Detect default workspace exclusions
         run: |
@@ -264,6 +265,7 @@ jobs:
           cache_prefix: msrv-ubuntu-host
           cache_shared_key: rust-ubuntu
           install_nextest: "false"
+          sccache_write: "true"
           sccache_key_suffix: msrv
       - name: Detect default workspace exclusions
         run: |

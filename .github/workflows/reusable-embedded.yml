@@ -33,6 +33,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           install_nextest: "true"
+          sccache_write: "true"
           sccache_key_suffix: nostd
       - name: Check compilation of core with no-std
         run: cargo +${{ inputs.toolchain }} build --no-default-features
@@ -58,6 +59,7 @@ jobs:
         with:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          sccache_write: "true"
           sccache_key_suffix: embedded-crates
 
       - name: Clippy embedded-only crates
@@ -84,6 +86,7 @@ jobs:
         with:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
+          sccache_write: "true"
           sccache_key_suffix: rp2350
 
       - name: Detect host target
