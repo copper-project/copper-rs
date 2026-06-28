@@ -13,7 +13,7 @@ inputs:
     required: false
     default: "false"
   sccache_write:
-    description: Whether this job may write to the sccache GitHub Actions backend on master.
+    description: Whether this job may write CI caches on master.
     required: false
     default: "false"
 runs:
@@ -39,22 +39,19 @@ runs:
       id: cache_save_policy
       shell: bash
       env:
+        SCCACHE_WRITE: ${{ inputs.sccache_write }}
         EVENT_NAME: ${{ github.event_name }}
         REF_NAME: ${{ github.ref }}
-        REPOSITORY: ${{ github.repository }}
-        PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
       run: |
         allowed=false
-        if [[ "$REF_NAME" == "refs/heads/master" ]]; then
-          allowed=true
-        elif [[ "$EVENT_NAME" == "pull_request" && "$PR_HEAD_REPOSITORY" == "$REPOSITORY" ]]; then
+        if [[ "$SCCACHE_WRITE" == "true" && "$REF_NAME" == "refs/heads/master" && "$EVENT_NAME" != "pull_request" ]]; then
           allowed=true
         fi
         echo "allowed=$allowed" >> "$GITHUB_OUTPUT"
     - name: Configure sccache
       shell: bash
       env:
-        SCCACHE_GHA_RW_MODE_VALUE: ${{ inputs.sccache_write == 'true' && github.ref == 'refs/heads/master' && github.event_name != 'pull_request' && 'READ_WRITE' || 'READ_ONLY' }}
+        SCCACHE_GHA_RW_MODE_VALUE: ${{ steps.cache_save_policy.outputs.allowed == 'true' && 'READ_WRITE' || 'READ_ONLY' }}
       run: |
         sep=":"
         if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
