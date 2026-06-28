@@ -18,6 +18,10 @@ pub type FlightMonitor = cu_consolemon::CuConsoleMon;
 
 #[cfg(any(
     feature = "firmware",
-    all(not(feature = "sim"), not(feature = "bevymon"), not(feature = "memmon"))
+    all(
+        not(feature = "sim"),
+        not(feature = "bevymon"),
+        not(feature = "memmon")
+    )
 ))]
 pub type FlightMonitor = cu_logmon::CuLogMon;
