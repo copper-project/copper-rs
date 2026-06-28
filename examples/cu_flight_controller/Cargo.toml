@@ -106,6 +106,10 @@ cortex-m = { workspace = true, features = [
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 cu-consolemon = { workspace = true, optional = true }
 cu-bevymon = { workspace = true, optional = true }
+cu-memmon = { path = "../../components/monitors/cu_memmon", version = "1.0.0-rc2", default-features = false, features = [
+  "std",
+  "memory_monitoring",
+], optional = true }
 image = { workspace = true, default-features = false, features = [
   "png",
 ], optional = true }
@@ -266,6 +270,10 @@ bevymon = [
   "dep:image",
   "dep:winit",
 ]
+# Swap the default sim monitor for cu-memmon (per-task heap-allocation
+# tracking). Host-only; not available in `firmware` builds. Mutually exclusive
+# with `bevymon` at the type-alias level.
+memmon = ["sim", "dep:cu-memmon"]
 
 [lib]
 name = "cu_flight_controller_export"
