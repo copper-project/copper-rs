@@ -10,10 +10,13 @@ pub type BalPID = GenericPIDTask<ADSReadingPayload>;
 pub type PosPID = GenericPIDTask<EncoderPayload>;
 
 pub mod monitor {
-    #[cfg(feature = "bevymon")]
+    #[cfg(feature = "memmon")]
+    pub type AppMonitor = cu_memmon::CuMemMon;
+
+    #[cfg(all(feature = "bevymon", not(feature = "memmon")))]
     pub type AppMonitor = cu_bevymon::CuBevyMon;
 
-    #[cfg(not(feature = "bevymon"))]
+    #[cfg(all(not(feature = "bevymon"), not(feature = "memmon")))]
     pub type AppMonitor = cu_consolemon::CuConsoleMon;
 }
 

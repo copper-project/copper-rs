@@ -48,6 +48,10 @@ avian3d = { workspace = true, default-features = false, features = [
 cu29 = { workspace = true }
 cu-consolemon = { workspace = true }
 cu-bevymon = { workspace = true, optional = true }
+cu-memmon = { path = "../../components/monitors/cu_memmon", version = "1.0.0-rc2", default-features = false, features = [
+  "std",
+  "memory_monitoring",
+], optional = true }
 image = { workspace = true, default-features = false, features = [
   "png",
 ], optional = true }
@@ -129,6 +133,9 @@ sim = [
 ]
 sim-debug = ["logreader", "cu29/reflect", "cu29/remote-debug"]
 bevymon = ["sim", "dep:cu-bevymon"]
+# Swap the default console monitor for cu-memmon (per-task heap-allocation
+# tracking). Mutually exclusive with `bevymon` at the type-alias level.
+memmon = ["sim", "dep:cu-memmon"]
 
 [[bin]]
 name = "balancebot"
