@@ -28,9 +28,14 @@ required-features = ["sim-debug"]
 default = []
 logreader = ["dep:cu29-export"]
 sim-debug = ["logreader", "cu29/reflect", "cu29/remote-debug"]
+# Per-task heap-allocation monitor. To enable, uncomment the `cu-memmon`
+# dependency below and add the matching `monitor:` entry to copperconfig.ron
+# (see the README's "Monitors" section).
+# memmon = ["dep:cu-memmon"]
 
 [dependencies]
 cu29 = { {%if copper_source == "crates.io" %} version = "{{copper_version}}" {%elsif copper_source == "git" %} git = "{{copper_git_url}}"{{copper_git_ref_snippet}} {%elsif copper_source == "local" %} path = "{{copper_root_path}}/core/cu29" {%endif %} }
 bincode = { package = "cu-bincode", version = "2.0", default-features = false, features = ["derive", "alloc"] }
 serde = { version = "1.0", features = ["derive"] }
 cu29-export = { {%if copper_source == "crates.io" %} version = "{{copper_export_version}}" {%elsif copper_source == "git" %} git = "{{copper_git_url}}"{{copper_git_ref_snippet}} {%elsif copper_source == "local" %} path = "{{copper_root_path}}/core/cu29_export" {%endif %}, optional = true }
+# cu-memmon = { {%if copper_source == "crates.io" %} version = "{{copper_version}}" {%elsif copper_source == "git" %} git = "{{copper_git_url}}"{{copper_git_ref_snippet}} {%elsif copper_source == "local" %} path = "{{copper_root_path}}/components/monitors/cu_memmon" {%endif %}, default-features = false, features = ["std", "memory_monitoring"], optional = true }
