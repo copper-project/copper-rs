@@ -20,7 +20,7 @@ environments = ["host", "embedded"]
 bincode = { workspace = true, features = ["alloc"], optional = true }
 serde = { workspace = true }
 heapless = { workspace = true }
-crc-any = { version = "2.5.0", default-features = false }
+crc-any = { version = "3.0.1", default-features = false }
 packed_struct = { version = "0.10.1", default-features = false }
 
 [features]
