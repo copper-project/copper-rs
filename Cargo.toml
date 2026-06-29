@@ -311,7 +311,7 @@ bytemuck = "1.23.0"
 cached-path = { version = "0.10.0", default-features = false }
 cfg_aliases = "0.2.1"
 chrono = "0.4.41"
-circular-buffer = { version = "1.1.0", default-features = false }
+circular-buffer = { version = "2.0.0", default-features = false }
 cortex-m = "0.7"
 cortex-m-rt = "0.7"
 ctrlc = "3.5"
