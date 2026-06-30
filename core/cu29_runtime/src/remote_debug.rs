@@ -152,7 +152,7 @@
 //! | Method | Session required | Params | Result |
 //! | --- | --- | --- | --- |
 //! | `logs.strings` | yes | `{}` | interned string table and resolved index path |
-//! | `logs.list` | yes | `{ offset?, limit? }` | structured log entries + `next_offset` |
+//! | `logs.list` | yes | `{ source?, offset?, limit? }` | structured log entries + `next_offset` |
 //!
 //! ### Schema
 //!
@@ -246,7 +246,8 @@ use bincode::error::DecodeError;
 use cu29_clock::{
     CuTime, CuTimeRange, OptionCuTime, PartialCuTimeRange, RobotClock, RobotClockMock, Tov,
 };
-use cu29_log::{CuLogEntry, rebuild_logline};
+use cu29_log::CuLogEntry;
+use cu29_log_runtime::capture_live_logs;
 use cu29_traits::{
     CopperListTuple, CuCompactString, CuError, CuMsgMetadataTrait, CuMsgOrigin, CuResult,
     DebugFieldDescriptor, DebugFieldKind, DebugFieldSemantics, DebugScalarKind,
@@ -447,6 +448,16 @@ struct LogsListParams {
     offset: usize,
     #[serde(default)]
     limit: Option<usize>,
+    #[serde(default)]
+    source: LogsSource,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum LogsSource {
+    #[default]
+    Recorded,
+    Replay,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -687,6 +698,7 @@ where
     log_base: PathBuf,
     log_index_path: Option<PathBuf>,
     interned_strings: Option<Vec<String>>,
+    replay_structured_logs: Vec<CuLogEntry>,
     opened_at: Instant,
     last_touched_at: Instant,
     cursor_rev: u64,
@@ -1392,6 +1404,7 @@ where
                 log_base: path,
                 log_index_path: None,
                 interned_strings: None,
+                replay_structured_logs: Vec::new(),
                 opened_at: Instant::now(),
                 last_touched_at: Instant::now(),
                 cursor_rev: 0,
@@ -1509,10 +1522,13 @@ where
                 Err(e) => return err_response(request_id, "ResolveFailed", &e.to_string()),
             };
 
-        let jump = match seek_to_index(&mut state.session, resolved.idx) {
+        let (jump_result, captured_logs) =
+            capture_live_logs(|| seek_to_index(&mut state.session, resolved.idx));
+        let jump = match jump_result {
             Ok(v) => v,
             Err(e) => return err_response(request_id, "SeekFailed", &e.to_string()),
         };
+        state.replay_structured_logs.extend(captured_logs);
 
         update_after_jump(state, &jump);
         let cursor = match cursor_snapshot(state, &time_of) {
@@ -1558,10 +1574,13 @@ where
                 Err(e) => return err_response(request_id, "ResolveFailed", &e.to_string()),
             };
 
-        let jump = match seek_to_index(&mut state.session, resolved.idx) {
+        let (jump_result, captured_logs) =
+            capture_live_logs(|| seek_to_index(&mut state.session, resolved.idx));
+        let jump = match jump_result {
             Ok(v) => v,
             Err(e) => return err_response(request_id, "RunUntilFailed", &e.to_string()),
         };
+        state.replay_structured_logs.extend(captured_logs);
         update_after_jump(state, &jump);
 
         let cursor = match cursor_snapshot(state, &time_of) {
@@ -1614,10 +1633,12 @@ where
             Err(e) => return err_response(request_id, "SessionNotFound", &e.to_string()),
         };
 
-        let jump = match state.session.step(parsed.delta) {
+        let (jump_result, captured_logs) = capture_live_logs(|| state.session.step(parsed.delta));
+        let jump = match jump_result {
             Ok(v) => v,
             Err(e) => return err_response(request_id, "StepFailed", &e.to_string()),
         };
+        state.replay_structured_logs.extend(captured_logs);
         update_after_jump(state, &jump);
 
         let cursor = match cursor_snapshot(state, &time_of) {
@@ -1675,26 +1696,28 @@ where
                     Err(e) => return err_response(request_id, "ResolveFailed", &e.to_string()),
                 };
             resolved_at = Some(resolved.clone());
-            let jump = match seek_to_index(&mut state.session, resolved.idx) {
+            let (jump_result, captured_logs) =
+                capture_live_logs(|| seek_to_index(&mut state.session, resolved.idx));
+            let jump = match jump_result {
                 Ok(v) => v,
                 Err(e) => return err_response(request_id, "ReplayFailed", &e.to_string()),
             };
+            state.replay_structured_logs.extend(captured_logs);
             update_after_jump(state, &jump);
         }
 
         let mut items = Vec::with_capacity(parsed.limit as usize);
         for step_idx in 0..parsed.limit {
-            let replayed = if step_idx == 0 {
-                match replay_current_step(&mut state.session) {
-                    Ok(v) => v,
-                    Err(e) => return err_response(request_id, "ReplayFailed", &e.to_string()),
-                }
+            let (replay_result, captured_logs) = if step_idx == 0 {
+                capture_live_logs(|| replay_current_step(&mut state.session))
             } else {
-                match state.session.step(1) {
-                    Ok(v) => v,
-                    Err(e) => return err_response(request_id, "ReplayFailed", &e.to_string()),
-                }
+                capture_live_logs(|| state.session.step(1))
             };
+            let replayed = match replay_result {
+                Ok(v) => v,
+                Err(e) => return err_response(request_id, "ReplayFailed", &e.to_string()),
+            };
+            state.replay_structured_logs.extend(captured_logs);
             update_after_jump(state, &replayed);
 
             let item =
@@ -1999,6 +2022,35 @@ where
                 return err_response(request_id, "StructuredLogStringsFailed", &err.to_string());
             }
         };
+        if parsed.source == LogsSource::Replay {
+            let limit = parsed
+                .limit
+                .unwrap_or(MAX_LOG_PAGE_LIMIT)
+                .min(MAX_LOG_PAGE_LIMIT);
+            let total = state.replay_structured_logs.len();
+            let entries = state
+                .replay_structured_logs
+                .iter()
+                .enumerate()
+                .skip(parsed.offset)
+                .take(limit)
+                .map(|(index, entry)| structured_log_entry_json(index, &strings, entry))
+                .collect::<Vec<_>>();
+            let next_offset = parsed.offset.saturating_add(entries.len());
+
+            return ok_response(
+                request_id,
+                json!({
+                    "entries": entries,
+                    "next_offset": (next_offset < total).then_some(next_offset),
+                    "index_path": state.log_index_path.as_ref().map(|path| path.display().to_string()),
+                    "source": "replay",
+                }),
+                Some(state.cursor_rev),
+                None,
+            );
+        }
+
         let mut reader = match open_structured_log_reader(&state.log_base) {
             Ok(reader) => reader,
             Err(err) => {
@@ -2040,6 +2092,7 @@ where
                 "entries": entries,
                 "next_offset": (!reached_end).then_some(parsed.offset.saturating_add(emitted)),
                 "index_path": state.log_index_path.as_ref().map(|path| path.display().to_string()),
+                "source": "recorded",
             }),
             Some(state.cursor_rev),
             None,
@@ -3025,7 +3078,6 @@ fn structured_log_entry_json(index: usize, strings: &[String], entry: &CuLogEntr
         "level": format!("{:?}", entry.level),
         "msg_index": entry.msg_index,
         "message_template": strings.get(entry.msg_index as usize).cloned(),
-        "rendered": rebuild_logline(strings, entry).ok(),
         "culistid": entry.origin.culistid,
         "component_id": entry.origin.component_id,
         "task_index": entry.origin.task_index,
