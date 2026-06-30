@@ -9506,13 +9506,17 @@ mod tests {
         use std::fmt::Write as _;
         let pass_dir = std::path::Path::new("tests/compile_pass");
         let mut entries: Vec<std::path::PathBuf> = Vec::new();
-        for sub in std::fs::read_dir(pass_dir).unwrap() {
-            let sub = sub.unwrap();
-            if !sub.file_type().unwrap().is_dir() {
+        for sub in std::fs::read_dir(pass_dir).expect("read tests/compile_pass") {
+            let sub = sub.expect("read tests/compile_pass entry");
+            if !sub
+                .file_type()
+                .expect("stat tests/compile_pass entry")
+                .is_dir()
+            {
                 continue;
             }
-            for file in std::fs::read_dir(sub.path()).unwrap() {
-                let p = file.unwrap().path();
+            for file in std::fs::read_dir(sub.path()).expect("read compile_pass subdir") {
+                let p = file.expect("read compile_pass subdir entry").path();
                 if p.extension().and_then(|x| x.to_str()) == Some("rs") {
                     entries.push(p);
                 }
@@ -9522,13 +9526,18 @@ mod tests {
 
         let mut src = String::from("#![allow(dead_code, unused_imports, non_snake_case)]\n");
         for p in &entries {
-            let abs = std::fs::canonicalize(p).unwrap();
+            let abs = std::fs::canonicalize(p)
+                .unwrap_or_else(|e| panic!("canonicalize {}: {e}", p.display()));
             let subdir = abs
                 .parent()
                 .and_then(|d| d.file_name())
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_default();
-            let stem = abs.file_stem().unwrap().to_string_lossy().into_owned();
+            let stem = abs
+                .file_stem()
+                .expect("compile_pass file has stem")
+                .to_string_lossy()
+                .into_owned();
             let mod_name = format!("{subdir}_{stem}").replace('-', "_");
             writeln!(
                 src,
@@ -9536,20 +9545,27 @@ mod tests {
                 abs.to_string_lossy(),
                 mod_name
             )
-            .unwrap();
+            .expect("write to String");
         }
         src.push_str("fn main() {}\n");
 
         // Put the umbrella under target/ so cargo doesn't auto-discover it as
         // an integration test of the cu29-derive crate (anything under
-        // `tests/*/main.rs` would be picked up).
-        let umbrella_dir = std::path::Path::new("../../target/generated");
-        std::fs::create_dir_all(umbrella_dir).unwrap();
+        // `tests/*/main.rs` would be picked up). Honor CARGO_TARGET_DIR so
+        // contributors with a custom target dir aren't broken.
+        let target_dir = std::env::var_os("CARGO_TARGET_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("../../target"));
+        let umbrella_dir = target_dir.join("generated");
+        std::fs::create_dir_all(&umbrella_dir)
+            .unwrap_or_else(|e| panic!("create {}: {e}", umbrella_dir.display()));
         let umbrella = umbrella_dir.join("compile_pass_umbrella.rs");
         if std::fs::read_to_string(&umbrella).ok().as_deref() != Some(src.as_str()) {
-            std::fs::write(&umbrella, &src).unwrap();
+            std::fs::write(&umbrella, &src)
+                .unwrap_or_else(|e| panic!("write {}: {e}", umbrella.display()));
         }
-        std::fs::canonicalize(&umbrella).unwrap()
+        std::fs::canonicalize(&umbrella)
+            .unwrap_or_else(|e| panic!("canonicalize {}: {e}", umbrella.display()))
     }
 
     #[test]
