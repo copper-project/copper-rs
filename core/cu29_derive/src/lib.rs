@@ -9491,11 +9491,8 @@ mod tests {
             }
         }
 
-        // Single TestCases keeps both phases in the same cargo profile
-        // ("build" mode), so workspace deps compile only once for both fail
-        // and pass tests. The compile_pass set is collapsed into a single
-        // umbrella .rs (one `mod` per file) so trybuild's per-test
-        // `cargo clean --package` + `cargo build --bin` runs once instead of 17.
+        // One TestCases keeps fail+pass in the same cargo profile so workspace
+        // deps compile once; the umbrella collapses pass tests into one bin.
         let umbrella = build_compile_pass_umbrella();
         let t = trybuild::TestCases::new();
         t.compile_fail("tests/compile_fail/*/*.rs");
@@ -9549,10 +9546,8 @@ mod tests {
         }
         src.push_str("fn main() {}\n");
 
-        // Put the umbrella under target/ so cargo doesn't auto-discover it as
-        // an integration test of the cu29-derive crate (anything under
-        // `tests/*/main.rs` would be picked up). Honor CARGO_TARGET_DIR so
-        // contributors with a custom target dir aren't broken.
+        // Keep the umbrella outside `tests/` so cargo doesn't pick it up as an
+        // integration test.
         let target_dir = std::env::var_os("CARGO_TARGET_DIR")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| std::path::PathBuf::from("../../target"));
