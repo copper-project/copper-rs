@@ -1275,6 +1275,7 @@ pub cu29_runtime::monitoring::MonitorTopology::nodes: alloc::vec::Vec<cu29_runti
 pub struct cu29_runtime::monitoring::NoMonitor
 impl cu29_runtime::monitoring::CuMonitor for cu29_runtime::monitoring::NoMonitor
 pub fn cu29_runtime::monitoring::NoMonitor::new(_metadata: cu29_runtime::monitoring::CuMonitoringMetadata, _runtime: cu29_runtime::monitoring::CuMonitoringRuntime) -> cu29_traits::CuResult<Self>
+pub fn cu29_runtime::monitoring::NoMonitor::observe_alloc(&self, _component_id: cu29_runtime::monitoring::ComponentId, _step: cu29_runtime::monitoring::CuComponentState, _allocated_bytes: usize, _deallocated_bytes: usize)
 pub fn cu29_runtime::monitoring::NoMonitor::observe_copperlist_io(&self, _stats: cu29_runtime::monitoring::CopperListIoStats)
 pub fn cu29_runtime::monitoring::NoMonitor::process_copperlist(&self, _ctx: &cu29_runtime::context::CuContext, _view: cu29_runtime::monitoring::CopperListView<'_>) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::monitoring::NoMonitor::process_error(&self, _component_id: cu29_runtime::monitoring::ComponentId, _step: cu29_runtime::monitoring::CuComponentState, _error: &cu29_traits::CuError) -> cu29_runtime::monitoring::Decision
@@ -1304,8 +1305,16 @@ pub fn cu29_runtime::monitoring::RuntimeExecutionProbe::record(&self, marker: cu
 pub fn cu29_runtime::monitoring::RuntimeExecutionProbe::sequence(&self) -> usize
 impl core::default::Default for cu29_runtime::monitoring::RuntimeExecutionProbe
 pub fn cu29_runtime::monitoring::RuntimeExecutionProbe::default() -> Self
+pub struct cu29_runtime::monitoring::ScopedAllocCounter
+impl cu29_runtime::monitoring::ScopedAllocCounter
+pub fn cu29_runtime::monitoring::ScopedAllocCounter::allocated(&self) -> usize
+pub fn cu29_runtime::monitoring::ScopedAllocCounter::deallocated(&self) -> usize
+pub fn cu29_runtime::monitoring::ScopedAllocCounter::new() -> Self
+impl core::default::Default for cu29_runtime::monitoring::ScopedAllocCounter
+pub fn cu29_runtime::monitoring::ScopedAllocCounter::default() -> Self
 pub trait cu29_runtime::monitoring::CuMonitor: core::marker::Sized
 pub fn cu29_runtime::monitoring::CuMonitor::new(metadata: cu29_runtime::monitoring::CuMonitoringMetadata, runtime: cu29_runtime::monitoring::CuMonitoringRuntime) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
+pub fn cu29_runtime::monitoring::CuMonitor::observe_alloc(&self, _component_id: cu29_runtime::monitoring::ComponentId, _step: cu29_runtime::monitoring::CuComponentState, _allocated_bytes: usize, _deallocated_bytes: usize)
 pub fn cu29_runtime::monitoring::CuMonitor::observe_copperlist_io(&self, _stats: cu29_runtime::monitoring::CopperListIoStats)
 pub fn cu29_runtime::monitoring::CuMonitor::process_copperlist(&self, _ctx: &cu29_runtime::context::CuContext, view: cu29_runtime::monitoring::CopperListView<'_>) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::monitoring::CuMonitor::process_error(&self, component_id: cu29_runtime::monitoring::ComponentId, step: cu29_runtime::monitoring::CuComponentState, error: &cu29_traits::CuError) -> cu29_runtime::monitoring::Decision
@@ -1314,6 +1323,7 @@ pub fn cu29_runtime::monitoring::CuMonitor::start(&mut self, _ctx: &cu29_runtime
 pub fn cu29_runtime::monitoring::CuMonitor::stop(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 impl cu29_runtime::monitoring::CuMonitor for cu29_runtime::monitoring::NoMonitor
 pub fn cu29_runtime::monitoring::NoMonitor::new(_metadata: cu29_runtime::monitoring::CuMonitoringMetadata, _runtime: cu29_runtime::monitoring::CuMonitoringRuntime) -> cu29_traits::CuResult<Self>
+pub fn cu29_runtime::monitoring::NoMonitor::observe_alloc(&self, _component_id: cu29_runtime::monitoring::ComponentId, _step: cu29_runtime::monitoring::CuComponentState, _allocated_bytes: usize, _deallocated_bytes: usize)
 pub fn cu29_runtime::monitoring::NoMonitor::observe_copperlist_io(&self, _stats: cu29_runtime::monitoring::CopperListIoStats)
 pub fn cu29_runtime::monitoring::NoMonitor::process_copperlist(&self, _ctx: &cu29_runtime::context::CuContext, _view: cu29_runtime::monitoring::CopperListView<'_>) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::monitoring::NoMonitor::process_error(&self, _component_id: cu29_runtime::monitoring::ComponentId, _step: cu29_runtime::monitoring::CuComponentState, _error: &cu29_traits::CuError) -> cu29_runtime::monitoring::Decision
@@ -1322,6 +1332,7 @@ pub fn cu29_runtime::monitoring::NoMonitor::start(&mut self, _ctx: &cu29_runtime
 pub fn cu29_runtime::monitoring::NoMonitor::stop(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 impl<M0: cu29_runtime::monitoring::CuMonitor, M1: cu29_runtime::monitoring::CuMonitor, M2: cu29_runtime::monitoring::CuMonitor, M3: cu29_runtime::monitoring::CuMonitor, M4: cu29_runtime::monitoring::CuMonitor, M5: cu29_runtime::monitoring::CuMonitor> cu29_runtime::monitoring::CuMonitor for (M0, M1, M2, M3, M4, M5)
 pub fn (M0, M1, M2, M3, M4, M5)::new(metadata: cu29_runtime::monitoring::CuMonitoringMetadata, runtime: cu29_runtime::monitoring::CuMonitoringRuntime) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
+pub fn (M0, M1, M2, M3, M4, M5)::observe_alloc(&self, component_id: cu29_runtime::monitoring::ComponentId, step: cu29_runtime::monitoring::CuComponentState, allocated_bytes: usize, deallocated_bytes: usize)
 pub fn (M0, M1, M2, M3, M4, M5)::observe_copperlist_io(&self, stats: cu29_runtime::monitoring::CopperListIoStats)
 pub fn (M0, M1, M2, M3, M4, M5)::process_copperlist(&self, ctx: &cu29_runtime::context::CuContext, view: cu29_runtime::monitoring::CopperListView<'_>) -> cu29_traits::CuResult<()>
 pub fn (M0, M1, M2, M3, M4, M5)::process_error(&self, component_id: cu29_runtime::monitoring::ComponentId, step: cu29_runtime::monitoring::CuComponentState, error: &cu29_traits::CuError) -> cu29_runtime::monitoring::Decision
@@ -1330,6 +1341,7 @@ pub fn (M0, M1, M2, M3, M4, M5)::start(&mut self, ctx: &cu29_runtime::context::C
 pub fn (M0, M1, M2, M3, M4, M5)::stop(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 impl<M0: cu29_runtime::monitoring::CuMonitor, M1: cu29_runtime::monitoring::CuMonitor, M2: cu29_runtime::monitoring::CuMonitor, M3: cu29_runtime::monitoring::CuMonitor, M4: cu29_runtime::monitoring::CuMonitor> cu29_runtime::monitoring::CuMonitor for (M0, M1, M2, M3, M4)
 pub fn (M0, M1, M2, M3, M4)::new(metadata: cu29_runtime::monitoring::CuMonitoringMetadata, runtime: cu29_runtime::monitoring::CuMonitoringRuntime) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
+pub fn (M0, M1, M2, M3, M4)::observe_alloc(&self, component_id: cu29_runtime::monitoring::ComponentId, step: cu29_runtime::monitoring::CuComponentState, allocated_bytes: usize, deallocated_bytes: usize)
 pub fn (M0, M1, M2, M3, M4)::observe_copperlist_io(&self, stats: cu29_runtime::monitoring::CopperListIoStats)
 pub fn (M0, M1, M2, M3, M4)::process_copperlist(&self, ctx: &cu29_runtime::context::CuContext, view: cu29_runtime::monitoring::CopperListView<'_>) -> cu29_traits::CuResult<()>
 pub fn (M0, M1, M2, M3, M4)::process_error(&self, component_id: cu29_runtime::monitoring::ComponentId, step: cu29_runtime::monitoring::CuComponentState, error: &cu29_traits::CuError) -> cu29_runtime::monitoring::Decision
@@ -1338,6 +1350,7 @@ pub fn (M0, M1, M2, M3, M4)::start(&mut self, ctx: &cu29_runtime::context::CuCon
 pub fn (M0, M1, M2, M3, M4)::stop(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 impl<M0: cu29_runtime::monitoring::CuMonitor, M1: cu29_runtime::monitoring::CuMonitor, M2: cu29_runtime::monitoring::CuMonitor, M3: cu29_runtime::monitoring::CuMonitor> cu29_runtime::monitoring::CuMonitor for (M0, M1, M2, M3)
 pub fn (M0, M1, M2, M3)::new(metadata: cu29_runtime::monitoring::CuMonitoringMetadata, runtime: cu29_runtime::monitoring::CuMonitoringRuntime) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
+pub fn (M0, M1, M2, M3)::observe_alloc(&self, component_id: cu29_runtime::monitoring::ComponentId, step: cu29_runtime::monitoring::CuComponentState, allocated_bytes: usize, deallocated_bytes: usize)
 pub fn (M0, M1, M2, M3)::observe_copperlist_io(&self, stats: cu29_runtime::monitoring::CopperListIoStats)
 pub fn (M0, M1, M2, M3)::process_copperlist(&self, ctx: &cu29_runtime::context::CuContext, view: cu29_runtime::monitoring::CopperListView<'_>) -> cu29_traits::CuResult<()>
 pub fn (M0, M1, M2, M3)::process_error(&self, component_id: cu29_runtime::monitoring::ComponentId, step: cu29_runtime::monitoring::CuComponentState, error: &cu29_traits::CuError) -> cu29_runtime::monitoring::Decision
@@ -1346,6 +1359,7 @@ pub fn (M0, M1, M2, M3)::start(&mut self, ctx: &cu29_runtime::context::CuContext
 pub fn (M0, M1, M2, M3)::stop(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 impl<M0: cu29_runtime::monitoring::CuMonitor, M1: cu29_runtime::monitoring::CuMonitor, M2: cu29_runtime::monitoring::CuMonitor> cu29_runtime::monitoring::CuMonitor for (M0, M1, M2)
 pub fn (M0, M1, M2)::new(metadata: cu29_runtime::monitoring::CuMonitoringMetadata, runtime: cu29_runtime::monitoring::CuMonitoringRuntime) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
+pub fn (M0, M1, M2)::observe_alloc(&self, component_id: cu29_runtime::monitoring::ComponentId, step: cu29_runtime::monitoring::CuComponentState, allocated_bytes: usize, deallocated_bytes: usize)
 pub fn (M0, M1, M2)::observe_copperlist_io(&self, stats: cu29_runtime::monitoring::CopperListIoStats)
 pub fn (M0, M1, M2)::process_copperlist(&self, ctx: &cu29_runtime::context::CuContext, view: cu29_runtime::monitoring::CopperListView<'_>) -> cu29_traits::CuResult<()>
 pub fn (M0, M1, M2)::process_error(&self, component_id: cu29_runtime::monitoring::ComponentId, step: cu29_runtime::monitoring::CuComponentState, error: &cu29_traits::CuError) -> cu29_runtime::monitoring::Decision
@@ -1354,6 +1368,7 @@ pub fn (M0, M1, M2)::start(&mut self, ctx: &cu29_runtime::context::CuContext) ->
 pub fn (M0, M1, M2)::stop(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 impl<M0: cu29_runtime::monitoring::CuMonitor, M1: cu29_runtime::monitoring::CuMonitor> cu29_runtime::monitoring::CuMonitor for (M0, M1)
 pub fn (M0, M1)::new(metadata: cu29_runtime::monitoring::CuMonitoringMetadata, runtime: cu29_runtime::monitoring::CuMonitoringRuntime) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
+pub fn (M0, M1)::observe_alloc(&self, component_id: cu29_runtime::monitoring::ComponentId, step: cu29_runtime::monitoring::CuComponentState, allocated_bytes: usize, deallocated_bytes: usize)
 pub fn (M0, M1)::observe_copperlist_io(&self, stats: cu29_runtime::monitoring::CopperListIoStats)
 pub fn (M0, M1)::process_copperlist(&self, ctx: &cu29_runtime::context::CuContext, view: cu29_runtime::monitoring::CopperListView<'_>) -> cu29_traits::CuResult<()>
 pub fn (M0, M1)::process_error(&self, component_id: cu29_runtime::monitoring::ComponentId, step: cu29_runtime::monitoring::CuComponentState, error: &cu29_traits::CuError) -> cu29_runtime::monitoring::Decision
@@ -1361,6 +1376,8 @@ pub fn (M0, M1)::process_panic(&self, panic_message: &str)
 pub fn (M0, M1)::start(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn (M0, M1)::stop(&mut self, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::monitoring::build_monitor_topology(config: &cu29_runtime::config::CuConfig, mission: &str) -> cu29_traits::CuResult<cu29_runtime::monitoring::MonitorTopology>
+pub fn cu29_runtime::monitoring::global_allocated_bytes() -> core::option::Option<usize>
+pub fn cu29_runtime::monitoring::global_deallocated_bytes() -> core::option::Option<usize>
 pub fn cu29_runtime::monitoring::panic_payload_to_string(payload: &(dyn core::any::Any + core::marker::Send)) -> alloc::string::String
 pub fn cu29_runtime::monitoring::payload_io_stats<T>(payload: &T) -> cu29_traits::CuResult<cu29_runtime::monitoring::PayloadIoStats> where T: cu_bincode::enc::Encode
 pub fn cu29_runtime::monitoring::runtime_panic_hook_active() -> bool
