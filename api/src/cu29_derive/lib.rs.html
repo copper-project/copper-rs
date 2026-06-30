@@ -9491,271 +9491,338 @@
 <a href=#9491 id=9491 data-nosnippet>9491</a>            }
 <a href=#9492 id=9492 data-nosnippet>9492</a>        }
 <a href=#9493 id=9493 data-nosnippet>9493</a>
-<a href=#9494 id=9494 data-nosnippet>9494</a>        <span class="kw">let </span>t = trybuild::TestCases::new();
-<a href=#9495 id=9495 data-nosnippet>9495</a>        t.compile_fail(<span class="string">"tests/compile_fail/*/*.rs"</span>);
-<a href=#9496 id=9496 data-nosnippet>9496</a>        t.pass(<span class="string">"tests/compile_pass/*/*.rs"</span>);
-<a href=#9497 id=9497 data-nosnippet>9497</a>    }
-<a href=#9498 id=9498 data-nosnippet>9498</a>
-<a href=#9499 id=9499 data-nosnippet>9499</a>    <span class="attr">#[test]
-<a href=#9500 id=9500 data-nosnippet>9500</a>    </span><span class="kw">fn </span>runtime_plan_keeps_nc_order_for_non_first_connected_output() {
-<a href=#9501 id=9501 data-nosnippet>9501</a>        <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#9502 id=9502 data-nosnippet>9502</a>        <span class="kw">use </span>cu29::config::CuConfig;
-<a href=#9503 id=9503 data-nosnippet>9503</a>        <span class="kw">use </span>cu29::curuntime::{CuExecutionUnit, compute_runtime_plan};
-<a href=#9504 id=9504 data-nosnippet>9504</a>
-<a href=#9505 id=9505 data-nosnippet>9505</a>        <span class="kw">let </span>config: CuConfig =
-<a href=#9506 id=9506 data-nosnippet>9506</a>            read_config(<span class="string">"tests/config/multi_output_source_non_first_connected_valid.ron"</span>)
-<a href=#9507 id=9507 data-nosnippet>9507</a>                .expect(<span class="string">"failed to read test config"</span>);
-<a href=#9508 id=9508 data-nosnippet>9508</a>        <span class="kw">let </span>graph = config.get_graph(<span class="prelude-val">None</span>).expect(<span class="string">"missing graph"</span>);
-<a href=#9509 id=9509 data-nosnippet>9509</a>        <span class="kw">let </span>src_id = graph.get_node_id_by_name(<span class="string">"src"</span>).expect(<span class="string">"missing src node"</span>);
-<a href=#9510 id=9510 data-nosnippet>9510</a>
-<a href=#9511 id=9511 data-nosnippet>9511</a>        <span class="kw">let </span>runtime = compute_runtime_plan(graph).expect(<span class="string">"runtime plan failed"</span>);
-<a href=#9512 id=9512 data-nosnippet>9512</a>        <span class="kw">let </span>src_step = runtime
-<a href=#9513 id=9513 data-nosnippet>9513</a>            .steps
-<a href=#9514 id=9514 data-nosnippet>9514</a>            .iter()
-<a href=#9515 id=9515 data-nosnippet>9515</a>            .find_map(|step| <span class="kw">match </span>step {
-<a href=#9516 id=9516 data-nosnippet>9516</a>                CuExecutionUnit::Step(step) <span class="kw">if </span>step.node_id == src_id =&gt; <span class="prelude-val">Some</span>(step),
-<a href=#9517 id=9517 data-nosnippet>9517</a>                <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#9518 id=9518 data-nosnippet>9518</a>            })
-<a href=#9519 id=9519 data-nosnippet>9519</a>            .expect(<span class="string">"missing source step"</span>);
-<a href=#9520 id=9520 data-nosnippet>9520</a>
-<a href=#9521 id=9521 data-nosnippet>9521</a>        <span class="macro">assert_eq!</span>(
-<a href=#9522 id=9522 data-nosnippet>9522</a>            src_step.output_msg_pack.as_ref().unwrap().msg_types,
-<a href=#9523 id=9523 data-nosnippet>9523</a>            <span class="macro">vec!</span>[<span class="string">"i32"</span>, <span class="string">"bool"</span>]
-<a href=#9524 id=9524 data-nosnippet>9524</a>        );
-<a href=#9525 id=9525 data-nosnippet>9525</a>    }
-<a href=#9526 id=9526 data-nosnippet>9526</a>
-<a href=#9527 id=9527 data-nosnippet>9527</a>    <span class="attr">#[test]
-<a href=#9528 id=9528 data-nosnippet>9528</a>    </span><span class="kw">fn </span>matching_task_ids_are_flattened_per_output_message() {
-<a href=#9529 id=9529 data-nosnippet>9529</a>        <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#9530 id=9530 data-nosnippet>9530</a>        <span class="kw">use </span>cu29::config::CuConfig;
-<a href=#9531 id=9531 data-nosnippet>9531</a>
-<a href=#9532 id=9532 data-nosnippet>9532</a>        <span class="kw">let </span>config: CuConfig =
-<a href=#9533 id=9533 data-nosnippet>9533</a>            read_config(<span class="string">"tests/config/multi_output_source_non_first_connected_valid.ron"</span>)
-<a href=#9534 id=9534 data-nosnippet>9534</a>                .expect(<span class="string">"failed to read test config"</span>);
-<a href=#9535 id=9535 data-nosnippet>9535</a>        <span class="kw">let </span>graph = config.get_graph(<span class="prelude-val">None</span>).expect(<span class="string">"missing graph"</span>);
-<a href=#9536 id=9536 data-nosnippet>9536</a>        <span class="kw">let </span>task_specs = CuTaskSpecSet::from_graph(graph).expect(<span class="string">"task specs"</span>);
-<a href=#9537 id=9537 data-nosnippet>9537</a>        <span class="kw">let </span>channel_usage = collect_bridge_channel_usage(graph);
-<a href=#9538 id=9538 data-nosnippet>9538</a>        <span class="kw">let </span><span class="kw-2">mut </span>bridge_specs = build_bridge_specs(<span class="kw-2">&amp;</span>config, graph, <span class="kw-2">&amp;</span>channel_usage);
-<a href=#9539 id=9539 data-nosnippet>9539</a>        <span class="kw">let </span>(runtime_plan, exec_entities, plan_to_original) =
-<a href=#9540 id=9540 data-nosnippet>9540</a>            build_execution_plan(graph, <span class="kw-2">&amp;</span>task_specs, <span class="kw-2">&amp;mut </span>bridge_specs)
-<a href=#9541 id=9541 data-nosnippet>9541</a>                .expect(<span class="string">"runtime plan failed"</span>);
-<a href=#9542 id=9542 data-nosnippet>9542</a>        <span class="kw">let </span>output_packs = extract_output_packs(<span class="kw-2">&amp;</span>runtime_plan);
-<a href=#9543 id=9543 data-nosnippet>9543</a>        <span class="kw">let </span>task_names = collect_task_names(graph);
-<a href=#9544 id=9544 data-nosnippet>9544</a>        <span class="kw">let </span>(<span class="kw">_</span>, node_output_positions) = collect_culist_metadata(
-<a href=#9545 id=9545 data-nosnippet>9545</a>            <span class="kw-2">&amp;</span>runtime_plan,
-<a href=#9546 id=9546 data-nosnippet>9546</a>            <span class="kw-2">&amp;</span>exec_entities,
-<a href=#9547 id=9547 data-nosnippet>9547</a>            <span class="kw-2">&amp;mut </span>bridge_specs,
-<a href=#9548 id=9548 data-nosnippet>9548</a>            <span class="kw-2">&amp;</span>plan_to_original,
-<a href=#9549 id=9549 data-nosnippet>9549</a>        );
-<a href=#9550 id=9550 data-nosnippet>9550</a>
-<a href=#9551 id=9551 data-nosnippet>9551</a>        <span class="comment">// Rebuild per-slot origin ids like `gen_culist_support` does.
-<a href=#9552 id=9552 data-nosnippet>9552</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>slot_origin_ids: Vec&lt;<span class="prelude-ty">Option</span>&lt;String&gt;&gt; = <span class="macro">vec!</span>[<span class="prelude-val">None</span>; output_packs.len()];
-<a href=#9553 id=9553 data-nosnippet>9553</a>        <span class="kw">for </span>(node_id, task_id, <span class="kw">_</span>) <span class="kw">in </span>task_names {
-<a href=#9554 id=9554 data-nosnippet>9554</a>            <span class="kw">let </span>output_position = node_output_positions
-<a href=#9555 id=9555 data-nosnippet>9555</a>                .get(<span class="kw-2">&amp;</span>node_id)
-<a href=#9556 id=9556 data-nosnippet>9556</a>                .unwrap_or_else(|| <span class="macro">panic!</span>(<span class="string">"Task {task_id} (node id: {node_id}) not found"</span>));
-<a href=#9557 id=9557 data-nosnippet>9557</a>            slot_origin_ids[<span class="kw-2">*</span>output_position] = <span class="prelude-val">Some</span>(task_id);
-<a href=#9558 id=9558 data-nosnippet>9558</a>        }
-<a href=#9559 id=9559 data-nosnippet>9559</a>
-<a href=#9560 id=9560 data-nosnippet>9560</a>        <span class="kw">let </span>flattened_ids = flatten_slot_origin_ids(<span class="kw-2">&amp;</span>output_packs, <span class="kw-2">&amp;</span>slot_origin_ids);
-<a href=#9561 id=9561 data-nosnippet>9561</a>
-<a href=#9562 id=9562 data-nosnippet>9562</a>        <span class="comment">// src emits two messages (i32 + bool), both map to src.
-<a href=#9563 id=9563 data-nosnippet>9563</a>        // sink contributes its own output slot (CuMsg&lt;()&gt;), mapped to sink.
-<a href=#9564 id=9564 data-nosnippet>9564</a>        </span><span class="macro">assert_eq!</span>(
-<a href=#9565 id=9565 data-nosnippet>9565</a>            flattened_ids,
-<a href=#9566 id=9566 data-nosnippet>9566</a>            <span class="macro">vec!</span>[<span class="string">"src"</span>.to_string(), <span class="string">"src"</span>.to_string(), <span class="string">"sink"</span>.to_string()]
-<a href=#9567 id=9567 data-nosnippet>9567</a>        );
-<a href=#9568 id=9568 data-nosnippet>9568</a>    }
-<a href=#9569 id=9569 data-nosnippet>9569</a>
-<a href=#9570 id=9570 data-nosnippet>9570</a>    <span class="attr">#[test]
-<a href=#9571 id=9571 data-nosnippet>9571</a>    </span><span class="kw">fn </span>bridge_resources_are_collected() {
-<a href=#9572 id=9572 data-nosnippet>9572</a>        <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#9573 id=9573 data-nosnippet>9573</a>        <span class="kw">use </span>cu29::config::{CuGraph, Flavor, Node};
-<a href=#9574 id=9574 data-nosnippet>9574</a>        <span class="kw">use </span>std::collections::HashMap;
-<a href=#9575 id=9575 data-nosnippet>9575</a>        <span class="kw">use </span>syn::parse_str;
-<a href=#9576 id=9576 data-nosnippet>9576</a>
-<a href=#9577 id=9577 data-nosnippet>9577</a>        <span class="kw">let </span><span class="kw-2">mut </span>graph = CuGraph::default();
-<a href=#9578 id=9578 data-nosnippet>9578</a>        <span class="kw">let </span><span class="kw-2">mut </span>node = Node::new_with_flavor(<span class="string">"radio"</span>, <span class="string">"bridge::Dummy"</span>, Flavor::Bridge);
-<a href=#9579 id=9579 data-nosnippet>9579</a>        <span class="kw">let </span><span class="kw-2">mut </span>res = HashMap::new();
-<a href=#9580 id=9580 data-nosnippet>9580</a>        res.insert(<span class="string">"serial"</span>.to_string(), <span class="string">"fc.serial0"</span>.to_string());
-<a href=#9581 id=9581 data-nosnippet>9581</a>        node.set_resources(<span class="prelude-val">Some</span>(res));
-<a href=#9582 id=9582 data-nosnippet>9582</a>        graph.add_node(node).expect(<span class="string">"bridge node"</span>);
-<a href=#9583 id=9583 data-nosnippet>9583</a>
-<a href=#9584 id=9584 data-nosnippet>9584</a>        <span class="kw">let </span>task_specs = CuTaskSpecSet::from_graph(<span class="kw-2">&amp;</span>graph).expect(<span class="string">"task specs"</span>);
-<a href=#9585 id=9585 data-nosnippet>9585</a>        <span class="kw">let </span>bridge_spec = BridgeSpec {
-<a href=#9586 id=9586 data-nosnippet>9586</a>            id: <span class="string">"radio"</span>.to_string(),
-<a href=#9587 id=9587 data-nosnippet>9587</a>            type_path: parse_str(<span class="string">"bridge::Dummy"</span>).unwrap(),
-<a href=#9588 id=9588 data-nosnippet>9588</a>            run_in_sim: <span class="bool-val">true</span>,
-<a href=#9589 id=9589 data-nosnippet>9589</a>            config_index: <span class="number">0</span>,
-<a href=#9590 id=9590 data-nosnippet>9590</a>            tuple_index: <span class="number">0</span>,
-<a href=#9591 id=9591 data-nosnippet>9591</a>            monitor_index: <span class="prelude-val">None</span>,
-<a href=#9592 id=9592 data-nosnippet>9592</a>            rx_channels: Vec::new(),
-<a href=#9593 id=9593 data-nosnippet>9593</a>            tx_channels: Vec::new(),
-<a href=#9594 id=9594 data-nosnippet>9594</a>        };
-<a href=#9595 id=9595 data-nosnippet>9595</a>
-<a href=#9596 id=9596 data-nosnippet>9596</a>        <span class="kw">let </span><span class="kw-2">mut </span>config = cu29::config::CuConfig::default();
-<a href=#9597 id=9597 data-nosnippet>9597</a>        config.resources.push(ResourceBundleConfig {
-<a href=#9598 id=9598 data-nosnippet>9598</a>            id: <span class="string">"fc"</span>.to_string(),
-<a href=#9599 id=9599 data-nosnippet>9599</a>            provider: <span class="string">"board::Bundle"</span>.to_string(),
-<a href=#9600 id=9600 data-nosnippet>9600</a>            config: <span class="prelude-val">None</span>,
-<a href=#9601 id=9601 data-nosnippet>9601</a>            missions: <span class="prelude-val">None</span>,
-<a href=#9602 id=9602 data-nosnippet>9602</a>        });
-<a href=#9603 id=9603 data-nosnippet>9603</a>        <span class="kw">let </span>bundle_specs = build_bundle_specs(<span class="kw-2">&amp;</span>config, <span class="string">"default"</span>).expect(<span class="string">"bundle specs"</span>);
-<a href=#9604 id=9604 data-nosnippet>9604</a>        <span class="kw">let </span>specs = collect_resource_specs(<span class="kw-2">&amp;</span>graph, <span class="kw-2">&amp;</span>task_specs, <span class="kw-2">&amp;</span>[bridge_spec], <span class="kw-2">&amp;</span>bundle_specs)
-<a href=#9605 id=9605 data-nosnippet>9605</a>            .expect(<span class="string">"collect specs"</span>);
-<a href=#9606 id=9606 data-nosnippet>9606</a>        <span class="macro">assert_eq!</span>(specs.len(), <span class="number">1</span>);
-<a href=#9607 id=9607 data-nosnippet>9607</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(specs[<span class="number">0</span>].owner, ResourceOwner::Bridge(<span class="number">0</span>)));
-<a href=#9608 id=9608 data-nosnippet>9608</a>        <span class="macro">assert_eq!</span>(specs[<span class="number">0</span>].binding_name, <span class="string">"serial"</span>);
-<a href=#9609 id=9609 data-nosnippet>9609</a>        <span class="macro">assert_eq!</span>(specs[<span class="number">0</span>].bundle_index, <span class="number">0</span>);
-<a href=#9610 id=9610 data-nosnippet>9610</a>        <span class="macro">assert_eq!</span>(specs[<span class="number">0</span>].resource_name, <span class="string">"serial0"</span>);
-<a href=#9611 id=9611 data-nosnippet>9611</a>    }
-<a href=#9612 id=9612 data-nosnippet>9612</a>
-<a href=#9613 id=9613 data-nosnippet>9613</a>    <span class="attr">#[test]
-<a href=#9614 id=9614 data-nosnippet>9614</a>    </span><span class="kw">fn </span>copper_runtime_args_parse_subsystem_mode() {
-<a href=#9615 id=9615 data-nosnippet>9615</a>        <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#9616 id=9616 data-nosnippet>9616</a>        <span class="kw">use </span>quote::quote;
+<a href=#9494 id=9494 data-nosnippet>9494</a>        <span class="comment">// One TestCases keeps fail+pass in the same cargo profile so workspace
+<a href=#9495 id=9495 data-nosnippet>9495</a>        // deps compile once; the umbrella collapses pass tests into one bin.
+<a href=#9496 id=9496 data-nosnippet>9496</a>        </span><span class="kw">let </span>umbrella = build_compile_pass_umbrella();
+<a href=#9497 id=9497 data-nosnippet>9497</a>        <span class="kw">let </span>t = trybuild::TestCases::new();
+<a href=#9498 id=9498 data-nosnippet>9498</a>        t.compile_fail(<span class="string">"tests/compile_fail/*/*.rs"</span>);
+<a href=#9499 id=9499 data-nosnippet>9499</a>        t.pass(<span class="kw-2">&amp;</span>umbrella);
+<a href=#9500 id=9500 data-nosnippet>9500</a>    }
+<a href=#9501 id=9501 data-nosnippet>9501</a>
+<a href=#9502 id=9502 data-nosnippet>9502</a>    <span class="kw">fn </span>build_compile_pass_umbrella() -&gt; std::path::PathBuf {
+<a href=#9503 id=9503 data-nosnippet>9503</a>        <span class="kw">use </span>std::fmt::Write <span class="kw">as _</span>;
+<a href=#9504 id=9504 data-nosnippet>9504</a>        <span class="kw">let </span>pass_dir = std::path::Path::new(<span class="string">"tests/compile_pass"</span>);
+<a href=#9505 id=9505 data-nosnippet>9505</a>        <span class="kw">let </span><span class="kw-2">mut </span>entries: Vec&lt;std::path::PathBuf&gt; = Vec::new();
+<a href=#9506 id=9506 data-nosnippet>9506</a>        <span class="kw">for </span>sub <span class="kw">in </span>std::fs::read_dir(pass_dir).expect(<span class="string">"read tests/compile_pass"</span>) {
+<a href=#9507 id=9507 data-nosnippet>9507</a>            <span class="kw">let </span>sub = sub.expect(<span class="string">"read tests/compile_pass entry"</span>);
+<a href=#9508 id=9508 data-nosnippet>9508</a>            <span class="kw">if </span>!sub
+<a href=#9509 id=9509 data-nosnippet>9509</a>                .file_type()
+<a href=#9510 id=9510 data-nosnippet>9510</a>                .expect(<span class="string">"stat tests/compile_pass entry"</span>)
+<a href=#9511 id=9511 data-nosnippet>9511</a>                .is_dir()
+<a href=#9512 id=9512 data-nosnippet>9512</a>            {
+<a href=#9513 id=9513 data-nosnippet>9513</a>                <span class="kw">continue</span>;
+<a href=#9514 id=9514 data-nosnippet>9514</a>            }
+<a href=#9515 id=9515 data-nosnippet>9515</a>            <span class="kw">for </span>file <span class="kw">in </span>std::fs::read_dir(sub.path()).expect(<span class="string">"read compile_pass subdir"</span>) {
+<a href=#9516 id=9516 data-nosnippet>9516</a>                <span class="kw">let </span>p = file.expect(<span class="string">"read compile_pass subdir entry"</span>).path();
+<a href=#9517 id=9517 data-nosnippet>9517</a>                <span class="kw">if </span>p.extension().and_then(|x| x.to_str()) == <span class="prelude-val">Some</span>(<span class="string">"rs"</span>) {
+<a href=#9518 id=9518 data-nosnippet>9518</a>                    entries.push(p);
+<a href=#9519 id=9519 data-nosnippet>9519</a>                }
+<a href=#9520 id=9520 data-nosnippet>9520</a>            }
+<a href=#9521 id=9521 data-nosnippet>9521</a>        }
+<a href=#9522 id=9522 data-nosnippet>9522</a>        entries.sort();
+<a href=#9523 id=9523 data-nosnippet>9523</a>
+<a href=#9524 id=9524 data-nosnippet>9524</a>        <span class="kw">let </span><span class="kw-2">mut </span>src = String::from(<span class="string">"#![allow(dead_code, unused_imports, non_snake_case)]\n"</span>);
+<a href=#9525 id=9525 data-nosnippet>9525</a>        <span class="kw">for </span>p <span class="kw">in </span><span class="kw-2">&amp;</span>entries {
+<a href=#9526 id=9526 data-nosnippet>9526</a>            <span class="kw">let </span>abs = std::fs::canonicalize(p)
+<a href=#9527 id=9527 data-nosnippet>9527</a>                .unwrap_or_else(|e| <span class="macro">panic!</span>(<span class="string">"canonicalize {}: {e}"</span>, p.display()));
+<a href=#9528 id=9528 data-nosnippet>9528</a>            <span class="kw">let </span>subdir = abs
+<a href=#9529 id=9529 data-nosnippet>9529</a>                .parent()
+<a href=#9530 id=9530 data-nosnippet>9530</a>                .and_then(|d| d.file_name())
+<a href=#9531 id=9531 data-nosnippet>9531</a>                .map(|s| s.to_string_lossy().into_owned())
+<a href=#9532 id=9532 data-nosnippet>9532</a>                .unwrap_or_default();
+<a href=#9533 id=9533 data-nosnippet>9533</a>            <span class="kw">let </span>stem = abs
+<a href=#9534 id=9534 data-nosnippet>9534</a>                .file_stem()
+<a href=#9535 id=9535 data-nosnippet>9535</a>                .expect(<span class="string">"compile_pass file has stem"</span>)
+<a href=#9536 id=9536 data-nosnippet>9536</a>                .to_string_lossy()
+<a href=#9537 id=9537 data-nosnippet>9537</a>                .into_owned();
+<a href=#9538 id=9538 data-nosnippet>9538</a>            <span class="kw">let </span>mod_name = <span class="macro">format!</span>(<span class="string">"{subdir}_{stem}"</span>).replace(<span class="string">'-'</span>, <span class="string">"_"</span>);
+<a href=#9539 id=9539 data-nosnippet>9539</a>            <span class="macro">writeln!</span>(
+<a href=#9540 id=9540 data-nosnippet>9540</a>                src,
+<a href=#9541 id=9541 data-nosnippet>9541</a>                <span class="string">"#[path = {:?}] mod compile_pass_{};"</span>,
+<a href=#9542 id=9542 data-nosnippet>9542</a>                abs.to_string_lossy(),
+<a href=#9543 id=9543 data-nosnippet>9543</a>                mod_name
+<a href=#9544 id=9544 data-nosnippet>9544</a>            )
+<a href=#9545 id=9545 data-nosnippet>9545</a>            .expect(<span class="string">"write to String"</span>);
+<a href=#9546 id=9546 data-nosnippet>9546</a>        }
+<a href=#9547 id=9547 data-nosnippet>9547</a>        src.push_str(<span class="string">"fn main() {}\n"</span>);
+<a href=#9548 id=9548 data-nosnippet>9548</a>
+<a href=#9549 id=9549 data-nosnippet>9549</a>        <span class="comment">// Keep the umbrella outside `tests/` so cargo doesn't pick it up as an
+<a href=#9550 id=9550 data-nosnippet>9550</a>        // integration test.
+<a href=#9551 id=9551 data-nosnippet>9551</a>        </span><span class="kw">let </span>target_dir = std::env::var_os(<span class="string">"CARGO_TARGET_DIR"</span>)
+<a href=#9552 id=9552 data-nosnippet>9552</a>            .map(std::path::PathBuf::from)
+<a href=#9553 id=9553 data-nosnippet>9553</a>            .unwrap_or_else(|| std::path::PathBuf::from(<span class="string">"../../target"</span>));
+<a href=#9554 id=9554 data-nosnippet>9554</a>        <span class="kw">let </span>umbrella_dir = target_dir.join(<span class="string">"generated"</span>);
+<a href=#9555 id=9555 data-nosnippet>9555</a>        std::fs::create_dir_all(<span class="kw-2">&amp;</span>umbrella_dir)
+<a href=#9556 id=9556 data-nosnippet>9556</a>            .unwrap_or_else(|e| <span class="macro">panic!</span>(<span class="string">"create {}: {e}"</span>, umbrella_dir.display()));
+<a href=#9557 id=9557 data-nosnippet>9557</a>        <span class="kw">let </span>umbrella = umbrella_dir.join(<span class="string">"compile_pass_umbrella.rs"</span>);
+<a href=#9558 id=9558 data-nosnippet>9558</a>        <span class="kw">if </span>std::fs::read_to_string(<span class="kw-2">&amp;</span>umbrella).ok().as_deref() != <span class="prelude-val">Some</span>(src.as_str()) {
+<a href=#9559 id=9559 data-nosnippet>9559</a>            std::fs::write(<span class="kw-2">&amp;</span>umbrella, <span class="kw-2">&amp;</span>src)
+<a href=#9560 id=9560 data-nosnippet>9560</a>                .unwrap_or_else(|e| <span class="macro">panic!</span>(<span class="string">"write {}: {e}"</span>, umbrella.display()));
+<a href=#9561 id=9561 data-nosnippet>9561</a>        }
+<a href=#9562 id=9562 data-nosnippet>9562</a>        std::fs::canonicalize(<span class="kw-2">&amp;</span>umbrella)
+<a href=#9563 id=9563 data-nosnippet>9563</a>            .unwrap_or_else(|e| <span class="macro">panic!</span>(<span class="string">"canonicalize {}: {e}"</span>, umbrella.display()))
+<a href=#9564 id=9564 data-nosnippet>9564</a>    }
+<a href=#9565 id=9565 data-nosnippet>9565</a>
+<a href=#9566 id=9566 data-nosnippet>9566</a>    <span class="attr">#[test]
+<a href=#9567 id=9567 data-nosnippet>9567</a>    </span><span class="kw">fn </span>runtime_plan_keeps_nc_order_for_non_first_connected_output() {
+<a href=#9568 id=9568 data-nosnippet>9568</a>        <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#9569 id=9569 data-nosnippet>9569</a>        <span class="kw">use </span>cu29::config::CuConfig;
+<a href=#9570 id=9570 data-nosnippet>9570</a>        <span class="kw">use </span>cu29::curuntime::{CuExecutionUnit, compute_runtime_plan};
+<a href=#9571 id=9571 data-nosnippet>9571</a>
+<a href=#9572 id=9572 data-nosnippet>9572</a>        <span class="kw">let </span>config: CuConfig =
+<a href=#9573 id=9573 data-nosnippet>9573</a>            read_config(<span class="string">"tests/config/multi_output_source_non_first_connected_valid.ron"</span>)
+<a href=#9574 id=9574 data-nosnippet>9574</a>                .expect(<span class="string">"failed to read test config"</span>);
+<a href=#9575 id=9575 data-nosnippet>9575</a>        <span class="kw">let </span>graph = config.get_graph(<span class="prelude-val">None</span>).expect(<span class="string">"missing graph"</span>);
+<a href=#9576 id=9576 data-nosnippet>9576</a>        <span class="kw">let </span>src_id = graph.get_node_id_by_name(<span class="string">"src"</span>).expect(<span class="string">"missing src node"</span>);
+<a href=#9577 id=9577 data-nosnippet>9577</a>
+<a href=#9578 id=9578 data-nosnippet>9578</a>        <span class="kw">let </span>runtime = compute_runtime_plan(graph).expect(<span class="string">"runtime plan failed"</span>);
+<a href=#9579 id=9579 data-nosnippet>9579</a>        <span class="kw">let </span>src_step = runtime
+<a href=#9580 id=9580 data-nosnippet>9580</a>            .steps
+<a href=#9581 id=9581 data-nosnippet>9581</a>            .iter()
+<a href=#9582 id=9582 data-nosnippet>9582</a>            .find_map(|step| <span class="kw">match </span>step {
+<a href=#9583 id=9583 data-nosnippet>9583</a>                CuExecutionUnit::Step(step) <span class="kw">if </span>step.node_id == src_id =&gt; <span class="prelude-val">Some</span>(step),
+<a href=#9584 id=9584 data-nosnippet>9584</a>                <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#9585 id=9585 data-nosnippet>9585</a>            })
+<a href=#9586 id=9586 data-nosnippet>9586</a>            .expect(<span class="string">"missing source step"</span>);
+<a href=#9587 id=9587 data-nosnippet>9587</a>
+<a href=#9588 id=9588 data-nosnippet>9588</a>        <span class="macro">assert_eq!</span>(
+<a href=#9589 id=9589 data-nosnippet>9589</a>            src_step.output_msg_pack.as_ref().unwrap().msg_types,
+<a href=#9590 id=9590 data-nosnippet>9590</a>            <span class="macro">vec!</span>[<span class="string">"i32"</span>, <span class="string">"bool"</span>]
+<a href=#9591 id=9591 data-nosnippet>9591</a>        );
+<a href=#9592 id=9592 data-nosnippet>9592</a>    }
+<a href=#9593 id=9593 data-nosnippet>9593</a>
+<a href=#9594 id=9594 data-nosnippet>9594</a>    <span class="attr">#[test]
+<a href=#9595 id=9595 data-nosnippet>9595</a>    </span><span class="kw">fn </span>matching_task_ids_are_flattened_per_output_message() {
+<a href=#9596 id=9596 data-nosnippet>9596</a>        <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#9597 id=9597 data-nosnippet>9597</a>        <span class="kw">use </span>cu29::config::CuConfig;
+<a href=#9598 id=9598 data-nosnippet>9598</a>
+<a href=#9599 id=9599 data-nosnippet>9599</a>        <span class="kw">let </span>config: CuConfig =
+<a href=#9600 id=9600 data-nosnippet>9600</a>            read_config(<span class="string">"tests/config/multi_output_source_non_first_connected_valid.ron"</span>)
+<a href=#9601 id=9601 data-nosnippet>9601</a>                .expect(<span class="string">"failed to read test config"</span>);
+<a href=#9602 id=9602 data-nosnippet>9602</a>        <span class="kw">let </span>graph = config.get_graph(<span class="prelude-val">None</span>).expect(<span class="string">"missing graph"</span>);
+<a href=#9603 id=9603 data-nosnippet>9603</a>        <span class="kw">let </span>task_specs = CuTaskSpecSet::from_graph(graph).expect(<span class="string">"task specs"</span>);
+<a href=#9604 id=9604 data-nosnippet>9604</a>        <span class="kw">let </span>channel_usage = collect_bridge_channel_usage(graph);
+<a href=#9605 id=9605 data-nosnippet>9605</a>        <span class="kw">let </span><span class="kw-2">mut </span>bridge_specs = build_bridge_specs(<span class="kw-2">&amp;</span>config, graph, <span class="kw-2">&amp;</span>channel_usage);
+<a href=#9606 id=9606 data-nosnippet>9606</a>        <span class="kw">let </span>(runtime_plan, exec_entities, plan_to_original) =
+<a href=#9607 id=9607 data-nosnippet>9607</a>            build_execution_plan(graph, <span class="kw-2">&amp;</span>task_specs, <span class="kw-2">&amp;mut </span>bridge_specs)
+<a href=#9608 id=9608 data-nosnippet>9608</a>                .expect(<span class="string">"runtime plan failed"</span>);
+<a href=#9609 id=9609 data-nosnippet>9609</a>        <span class="kw">let </span>output_packs = extract_output_packs(<span class="kw-2">&amp;</span>runtime_plan);
+<a href=#9610 id=9610 data-nosnippet>9610</a>        <span class="kw">let </span>task_names = collect_task_names(graph);
+<a href=#9611 id=9611 data-nosnippet>9611</a>        <span class="kw">let </span>(<span class="kw">_</span>, node_output_positions) = collect_culist_metadata(
+<a href=#9612 id=9612 data-nosnippet>9612</a>            <span class="kw-2">&amp;</span>runtime_plan,
+<a href=#9613 id=9613 data-nosnippet>9613</a>            <span class="kw-2">&amp;</span>exec_entities,
+<a href=#9614 id=9614 data-nosnippet>9614</a>            <span class="kw-2">&amp;mut </span>bridge_specs,
+<a href=#9615 id=9615 data-nosnippet>9615</a>            <span class="kw-2">&amp;</span>plan_to_original,
+<a href=#9616 id=9616 data-nosnippet>9616</a>        );
 <a href=#9617 id=9617 data-nosnippet>9617</a>
-<a href=#9618 id=9618 data-nosnippet>9618</a>        <span class="kw">let </span>args = CopperRuntimeArgs::parse_tokens(<span class="macro">quote!</span>(
-<a href=#9619 id=9619 data-nosnippet>9619</a>            config = <span class="string">"multi_copper.ron"</span>,
-<a href=#9620 id=9620 data-nosnippet>9620</a>            subsystem = <span class="string">"ping"</span>,
-<a href=#9621 id=9621 data-nosnippet>9621</a>            sim_mode,
-<a href=#9622 id=9622 data-nosnippet>9622</a>            ignore_resources
-<a href=#9623 id=9623 data-nosnippet>9623</a>        ))
-<a href=#9624 id=9624 data-nosnippet>9624</a>        .expect(<span class="string">"parse runtime args"</span>);
-<a href=#9625 id=9625 data-nosnippet>9625</a>
-<a href=#9626 id=9626 data-nosnippet>9626</a>        <span class="macro">assert_eq!</span>(args.config_path, <span class="string">"multi_copper.ron"</span>);
-<a href=#9627 id=9627 data-nosnippet>9627</a>        <span class="macro">assert_eq!</span>(args.subsystem_id.as_deref(), <span class="prelude-val">Some</span>(<span class="string">"ping"</span>));
-<a href=#9628 id=9628 data-nosnippet>9628</a>        <span class="macro">assert!</span>(args.sim_mode);
-<a href=#9629 id=9629 data-nosnippet>9629</a>        <span class="macro">assert!</span>(args.ignore_resources);
-<a href=#9630 id=9630 data-nosnippet>9630</a>    }
-<a href=#9631 id=9631 data-nosnippet>9631</a>
-<a href=#9632 id=9632 data-nosnippet>9632</a>    <span class="attr">#[test]
-<a href=#9633 id=9633 data-nosnippet>9633</a>    </span><span class="kw">fn </span>resolve_runtime_config_from_multi_config_selects_local_subsystem() {
-<a href=#9634 id=9634 data-nosnippet>9634</a>        <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#9635 id=9635 data-nosnippet>9635</a>
-<a href=#9636 id=9636 data-nosnippet>9636</a>        <span class="kw">let </span>root = unique_test_dir(<span class="string">"multi_runtime_resolve"</span>);
-<a href=#9637 id=9637 data-nosnippet>9637</a>        <span class="kw">let </span>alpha_config = root.join(<span class="string">"alpha.ron"</span>);
-<a href=#9638 id=9638 data-nosnippet>9638</a>        <span class="kw">let </span>beta_config = root.join(<span class="string">"beta.ron"</span>);
-<a href=#9639 id=9639 data-nosnippet>9639</a>        <span class="kw">let </span>network_config = root.join(<span class="string">"multi.ron"</span>);
-<a href=#9640 id=9640 data-nosnippet>9640</a>
-<a href=#9641 id=9641 data-nosnippet>9641</a>        write_file(
-<a href=#9642 id=9642 data-nosnippet>9642</a>            <span class="kw-2">&amp;</span>alpha_config,
-<a href=#9643 id=9643 data-nosnippet>9643</a>            <span class="string">r#"
-<a href=#9644 id=9644 data-nosnippet>9644</a>(
-<a href=#9645 id=9645 data-nosnippet>9645</a>    tasks: [
-<a href=#9646 id=9646 data-nosnippet>9646</a>        (id: "src", type: "AlphaSource", run_in_sim: true),
-<a href=#9647 id=9647 data-nosnippet>9647</a>        (id: "sink", type: "AlphaSink", run_in_sim: true),
-<a href=#9648 id=9648 data-nosnippet>9648</a>    ],
-<a href=#9649 id=9649 data-nosnippet>9649</a>    cnx: [
-<a href=#9650 id=9650 data-nosnippet>9650</a>        (src: "src", dst: "sink", msg: "u32"),
-<a href=#9651 id=9651 data-nosnippet>9651</a>    ],
-<a href=#9652 id=9652 data-nosnippet>9652</a>)
-<a href=#9653 id=9653 data-nosnippet>9653</a>"#</span>,
-<a href=#9654 id=9654 data-nosnippet>9654</a>        );
-<a href=#9655 id=9655 data-nosnippet>9655</a>        write_file(
-<a href=#9656 id=9656 data-nosnippet>9656</a>            <span class="kw-2">&amp;</span>beta_config,
-<a href=#9657 id=9657 data-nosnippet>9657</a>            <span class="string">r#"
-<a href=#9658 id=9658 data-nosnippet>9658</a>(
-<a href=#9659 id=9659 data-nosnippet>9659</a>    tasks: [
-<a href=#9660 id=9660 data-nosnippet>9660</a>        (id: "src", type: "BetaSource", run_in_sim: true),
-<a href=#9661 id=9661 data-nosnippet>9661</a>        (id: "sink", type: "BetaSink", run_in_sim: true),
-<a href=#9662 id=9662 data-nosnippet>9662</a>    ],
-<a href=#9663 id=9663 data-nosnippet>9663</a>    cnx: [
-<a href=#9664 id=9664 data-nosnippet>9664</a>        (src: "src", dst: "sink", msg: "u64"),
-<a href=#9665 id=9665 data-nosnippet>9665</a>    ],
-<a href=#9666 id=9666 data-nosnippet>9666</a>)
-<a href=#9667 id=9667 data-nosnippet>9667</a>"#</span>,
-<a href=#9668 id=9668 data-nosnippet>9668</a>        );
-<a href=#9669 id=9669 data-nosnippet>9669</a>        write_file(
-<a href=#9670 id=9670 data-nosnippet>9670</a>            <span class="kw-2">&amp;</span>network_config,
-<a href=#9671 id=9671 data-nosnippet>9671</a>            <span class="string">r#"
-<a href=#9672 id=9672 data-nosnippet>9672</a>(
-<a href=#9673 id=9673 data-nosnippet>9673</a>    subsystems: [
-<a href=#9674 id=9674 data-nosnippet>9674</a>        (id: "beta", config: "beta.ron"),
-<a href=#9675 id=9675 data-nosnippet>9675</a>        (id: "alpha", config: "alpha.ron"),
-<a href=#9676 id=9676 data-nosnippet>9676</a>    ],
-<a href=#9677 id=9677 data-nosnippet>9677</a>    interconnects: [],
-<a href=#9678 id=9678 data-nosnippet>9678</a>)
-<a href=#9679 id=9679 data-nosnippet>9679</a>"#</span>,
-<a href=#9680 id=9680 data-nosnippet>9680</a>        );
-<a href=#9681 id=9681 data-nosnippet>9681</a>
-<a href=#9682 id=9682 data-nosnippet>9682</a>        <span class="kw">let </span>args = CopperRuntimeArgs {
-<a href=#9683 id=9683 data-nosnippet>9683</a>            config_path: <span class="string">"multi.ron"</span>.to_string(),
-<a href=#9684 id=9684 data-nosnippet>9684</a>            subsystem_id: <span class="prelude-val">Some</span>(<span class="string">"beta"</span>.to_string()),
-<a href=#9685 id=9685 data-nosnippet>9685</a>            sim_mode: <span class="bool-val">false</span>,
-<a href=#9686 id=9686 data-nosnippet>9686</a>            ignore_resources: <span class="bool-val">false</span>,
-<a href=#9687 id=9687 data-nosnippet>9687</a>        };
-<a href=#9688 id=9688 data-nosnippet>9688</a>
-<a href=#9689 id=9689 data-nosnippet>9689</a>        <span class="kw">let </span>resolved =
-<a href=#9690 id=9690 data-nosnippet>9690</a>            resolve_runtime_config_with_root(<span class="kw-2">&amp;</span>args, <span class="kw-2">&amp;</span>root).expect(<span class="string">"resolve multi runtime config"</span>);
-<a href=#9691 id=9691 data-nosnippet>9691</a>
-<a href=#9692 id=9692 data-nosnippet>9692</a>        <span class="macro">assert_eq!</span>(resolved.subsystem_id.as_deref(), <span class="prelude-val">Some</span>(<span class="string">"beta"</span>));
-<a href=#9693 id=9693 data-nosnippet>9693</a>        <span class="macro">assert_eq!</span>(resolved.subsystem_code, <span class="number">1</span>);
-<a href=#9694 id=9694 data-nosnippet>9694</a>        <span class="kw">let </span>graph = resolved
-<a href=#9695 id=9695 data-nosnippet>9695</a>            .local_config
-<a href=#9696 id=9696 data-nosnippet>9696</a>            .get_graph(<span class="prelude-val">None</span>)
-<a href=#9697 id=9697 data-nosnippet>9697</a>            .expect(<span class="string">"resolved local config graph"</span>);
-<a href=#9698 id=9698 data-nosnippet>9698</a>        <span class="macro">assert!</span>(graph.get_node_id_by_name(<span class="string">"src"</span>).is_some());
-<a href=#9699 id=9699 data-nosnippet>9699</a>        <span class="macro">assert!</span>(resolved.bundled_local_config_content.contains(<span class="string">"BetaSource"</span>));
-<a href=#9700 id=9700 data-nosnippet>9700</a>    }
-<a href=#9701 id=9701 data-nosnippet>9701</a>
-<a href=#9702 id=9702 data-nosnippet>9702</a>    <span class="attr">#[test]
-<a href=#9703 id=9703 data-nosnippet>9703</a>    </span><span class="kw">fn </span>resolve_runtime_config_rejects_missing_subsystem() {
-<a href=#9704 id=9704 data-nosnippet>9704</a>        <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#9705 id=9705 data-nosnippet>9705</a>
-<a href=#9706 id=9706 data-nosnippet>9706</a>        <span class="kw">let </span>root = unique_test_dir(<span class="string">"multi_runtime_missing_subsystem"</span>);
-<a href=#9707 id=9707 data-nosnippet>9707</a>        <span class="kw">let </span>alpha_config = root.join(<span class="string">"alpha.ron"</span>);
-<a href=#9708 id=9708 data-nosnippet>9708</a>        <span class="kw">let </span>network_config = root.join(<span class="string">"multi.ron"</span>);
-<a href=#9709 id=9709 data-nosnippet>9709</a>
-<a href=#9710 id=9710 data-nosnippet>9710</a>        write_file(
-<a href=#9711 id=9711 data-nosnippet>9711</a>            <span class="kw-2">&amp;</span>alpha_config,
-<a href=#9712 id=9712 data-nosnippet>9712</a>            <span class="string">r#"
-<a href=#9713 id=9713 data-nosnippet>9713</a>(
-<a href=#9714 id=9714 data-nosnippet>9714</a>    tasks: [
-<a href=#9715 id=9715 data-nosnippet>9715</a>        (id: "src", type: "AlphaSource", run_in_sim: true),
-<a href=#9716 id=9716 data-nosnippet>9716</a>        (id: "sink", type: "AlphaSink", run_in_sim: true),
-<a href=#9717 id=9717 data-nosnippet>9717</a>    ],
-<a href=#9718 id=9718 data-nosnippet>9718</a>    cnx: [
-<a href=#9719 id=9719 data-nosnippet>9719</a>        (src: "src", dst: "sink", msg: "u32"),
-<a href=#9720 id=9720 data-nosnippet>9720</a>    ],
-<a href=#9721 id=9721 data-nosnippet>9721</a>)
-<a href=#9722 id=9722 data-nosnippet>9722</a>"#</span>,
-<a href=#9723 id=9723 data-nosnippet>9723</a>        );
-<a href=#9724 id=9724 data-nosnippet>9724</a>        write_file(
-<a href=#9725 id=9725 data-nosnippet>9725</a>            <span class="kw-2">&amp;</span>network_config,
-<a href=#9726 id=9726 data-nosnippet>9726</a>            <span class="string">r#"
-<a href=#9727 id=9727 data-nosnippet>9727</a>(
-<a href=#9728 id=9728 data-nosnippet>9728</a>    subsystems: [
-<a href=#9729 id=9729 data-nosnippet>9729</a>        (id: "alpha", config: "alpha.ron"),
-<a href=#9730 id=9730 data-nosnippet>9730</a>    ],
-<a href=#9731 id=9731 data-nosnippet>9731</a>    interconnects: [],
-<a href=#9732 id=9732 data-nosnippet>9732</a>)
-<a href=#9733 id=9733 data-nosnippet>9733</a>"#</span>,
-<a href=#9734 id=9734 data-nosnippet>9734</a>        );
-<a href=#9735 id=9735 data-nosnippet>9735</a>
-<a href=#9736 id=9736 data-nosnippet>9736</a>        <span class="kw">let </span>args = CopperRuntimeArgs {
-<a href=#9737 id=9737 data-nosnippet>9737</a>            config_path: <span class="string">"multi.ron"</span>.to_string(),
-<a href=#9738 id=9738 data-nosnippet>9738</a>            subsystem_id: <span class="prelude-val">Some</span>(<span class="string">"missing"</span>.to_string()),
-<a href=#9739 id=9739 data-nosnippet>9739</a>            sim_mode: <span class="bool-val">false</span>,
-<a href=#9740 id=9740 data-nosnippet>9740</a>            ignore_resources: <span class="bool-val">false</span>,
-<a href=#9741 id=9741 data-nosnippet>9741</a>        };
-<a href=#9742 id=9742 data-nosnippet>9742</a>
-<a href=#9743 id=9743 data-nosnippet>9743</a>        <span class="kw">let </span>err = resolve_runtime_config_with_root(<span class="kw-2">&amp;</span>args, <span class="kw-2">&amp;</span>root).expect_err(<span class="string">"missing subsystem"</span>);
-<a href=#9744 id=9744 data-nosnippet>9744</a>        <span class="macro">assert!</span>(err.to_string().contains(<span class="string">"Subsystem 'missing'"</span>));
-<a href=#9745 id=9745 data-nosnippet>9745</a>    }
-<a href=#9746 id=9746 data-nosnippet>9746</a>
-<a href=#9747 id=9747 data-nosnippet>9747</a>    <span class="attr">#[test]
-<a href=#9748 id=9748 data-nosnippet>9748</a>    </span><span class="kw">fn </span>synthesized_single_output_type_name_parses_for_source_and_regular_tasks() {
-<a href=#9749 id=9749 data-nosnippet>9749</a>        <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#9750 id=9750 data-nosnippet>9750</a>
-<a href=#9751 id=9751 data-nosnippet>9751</a>        <span class="kw">let </span>src_ty: Type = <span class="macro">parse_quote!</span>(SingleSource);
-<a href=#9752 id=9752 data-nosnippet>9752</a>        <span class="kw">let </span>regular_ty: Type = <span class="macro">parse_quote!</span>(RegularTask);
-<a href=#9753 id=9753 data-nosnippet>9753</a>
-<a href=#9754 id=9754 data-nosnippet>9754</a>        <span class="kw">let </span>src_name = synthesized_single_output_msg_name(<span class="kw-2">&amp;</span>src_ty, CuTaskType::Source);
-<a href=#9755 id=9755 data-nosnippet>9755</a>        <span class="kw">let </span>regular_name = synthesized_single_output_msg_name(<span class="kw-2">&amp;</span>regular_ty, CuTaskType::Regular);
-<a href=#9756 id=9756 data-nosnippet>9756</a>
-<a href=#9757 id=9757 data-nosnippet>9757</a>        parse_str::&lt;Type&gt;(src_name.as_str()).expect(<span class="string">"source payload type should parse"</span>);
-<a href=#9758 id=9758 data-nosnippet>9758</a>        parse_str::&lt;Type&gt;(regular_name.as_str()).expect(<span class="string">"regular payload type should parse"</span>);
-<a href=#9759 id=9759 data-nosnippet>9759</a>    }
-<a href=#9760 id=9760 data-nosnippet>9760</a>}
+<a href=#9618 id=9618 data-nosnippet>9618</a>        <span class="comment">// Rebuild per-slot origin ids like `gen_culist_support` does.
+<a href=#9619 id=9619 data-nosnippet>9619</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>slot_origin_ids: Vec&lt;<span class="prelude-ty">Option</span>&lt;String&gt;&gt; = <span class="macro">vec!</span>[<span class="prelude-val">None</span>; output_packs.len()];
+<a href=#9620 id=9620 data-nosnippet>9620</a>        <span class="kw">for </span>(node_id, task_id, <span class="kw">_</span>) <span class="kw">in </span>task_names {
+<a href=#9621 id=9621 data-nosnippet>9621</a>            <span class="kw">let </span>output_position = node_output_positions
+<a href=#9622 id=9622 data-nosnippet>9622</a>                .get(<span class="kw-2">&amp;</span>node_id)
+<a href=#9623 id=9623 data-nosnippet>9623</a>                .unwrap_or_else(|| <span class="macro">panic!</span>(<span class="string">"Task {task_id} (node id: {node_id}) not found"</span>));
+<a href=#9624 id=9624 data-nosnippet>9624</a>            slot_origin_ids[<span class="kw-2">*</span>output_position] = <span class="prelude-val">Some</span>(task_id);
+<a href=#9625 id=9625 data-nosnippet>9625</a>        }
+<a href=#9626 id=9626 data-nosnippet>9626</a>
+<a href=#9627 id=9627 data-nosnippet>9627</a>        <span class="kw">let </span>flattened_ids = flatten_slot_origin_ids(<span class="kw-2">&amp;</span>output_packs, <span class="kw-2">&amp;</span>slot_origin_ids);
+<a href=#9628 id=9628 data-nosnippet>9628</a>
+<a href=#9629 id=9629 data-nosnippet>9629</a>        <span class="comment">// src emits two messages (i32 + bool), both map to src.
+<a href=#9630 id=9630 data-nosnippet>9630</a>        // sink contributes its own output slot (CuMsg&lt;()&gt;), mapped to sink.
+<a href=#9631 id=9631 data-nosnippet>9631</a>        </span><span class="macro">assert_eq!</span>(
+<a href=#9632 id=9632 data-nosnippet>9632</a>            flattened_ids,
+<a href=#9633 id=9633 data-nosnippet>9633</a>            <span class="macro">vec!</span>[<span class="string">"src"</span>.to_string(), <span class="string">"src"</span>.to_string(), <span class="string">"sink"</span>.to_string()]
+<a href=#9634 id=9634 data-nosnippet>9634</a>        );
+<a href=#9635 id=9635 data-nosnippet>9635</a>    }
+<a href=#9636 id=9636 data-nosnippet>9636</a>
+<a href=#9637 id=9637 data-nosnippet>9637</a>    <span class="attr">#[test]
+<a href=#9638 id=9638 data-nosnippet>9638</a>    </span><span class="kw">fn </span>bridge_resources_are_collected() {
+<a href=#9639 id=9639 data-nosnippet>9639</a>        <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#9640 id=9640 data-nosnippet>9640</a>        <span class="kw">use </span>cu29::config::{CuGraph, Flavor, Node};
+<a href=#9641 id=9641 data-nosnippet>9641</a>        <span class="kw">use </span>std::collections::HashMap;
+<a href=#9642 id=9642 data-nosnippet>9642</a>        <span class="kw">use </span>syn::parse_str;
+<a href=#9643 id=9643 data-nosnippet>9643</a>
+<a href=#9644 id=9644 data-nosnippet>9644</a>        <span class="kw">let </span><span class="kw-2">mut </span>graph = CuGraph::default();
+<a href=#9645 id=9645 data-nosnippet>9645</a>        <span class="kw">let </span><span class="kw-2">mut </span>node = Node::new_with_flavor(<span class="string">"radio"</span>, <span class="string">"bridge::Dummy"</span>, Flavor::Bridge);
+<a href=#9646 id=9646 data-nosnippet>9646</a>        <span class="kw">let </span><span class="kw-2">mut </span>res = HashMap::new();
+<a href=#9647 id=9647 data-nosnippet>9647</a>        res.insert(<span class="string">"serial"</span>.to_string(), <span class="string">"fc.serial0"</span>.to_string());
+<a href=#9648 id=9648 data-nosnippet>9648</a>        node.set_resources(<span class="prelude-val">Some</span>(res));
+<a href=#9649 id=9649 data-nosnippet>9649</a>        graph.add_node(node).expect(<span class="string">"bridge node"</span>);
+<a href=#9650 id=9650 data-nosnippet>9650</a>
+<a href=#9651 id=9651 data-nosnippet>9651</a>        <span class="kw">let </span>task_specs = CuTaskSpecSet::from_graph(<span class="kw-2">&amp;</span>graph).expect(<span class="string">"task specs"</span>);
+<a href=#9652 id=9652 data-nosnippet>9652</a>        <span class="kw">let </span>bridge_spec = BridgeSpec {
+<a href=#9653 id=9653 data-nosnippet>9653</a>            id: <span class="string">"radio"</span>.to_string(),
+<a href=#9654 id=9654 data-nosnippet>9654</a>            type_path: parse_str(<span class="string">"bridge::Dummy"</span>).unwrap(),
+<a href=#9655 id=9655 data-nosnippet>9655</a>            run_in_sim: <span class="bool-val">true</span>,
+<a href=#9656 id=9656 data-nosnippet>9656</a>            config_index: <span class="number">0</span>,
+<a href=#9657 id=9657 data-nosnippet>9657</a>            tuple_index: <span class="number">0</span>,
+<a href=#9658 id=9658 data-nosnippet>9658</a>            monitor_index: <span class="prelude-val">None</span>,
+<a href=#9659 id=9659 data-nosnippet>9659</a>            rx_channels: Vec::new(),
+<a href=#9660 id=9660 data-nosnippet>9660</a>            tx_channels: Vec::new(),
+<a href=#9661 id=9661 data-nosnippet>9661</a>        };
+<a href=#9662 id=9662 data-nosnippet>9662</a>
+<a href=#9663 id=9663 data-nosnippet>9663</a>        <span class="kw">let </span><span class="kw-2">mut </span>config = cu29::config::CuConfig::default();
+<a href=#9664 id=9664 data-nosnippet>9664</a>        config.resources.push(ResourceBundleConfig {
+<a href=#9665 id=9665 data-nosnippet>9665</a>            id: <span class="string">"fc"</span>.to_string(),
+<a href=#9666 id=9666 data-nosnippet>9666</a>            provider: <span class="string">"board::Bundle"</span>.to_string(),
+<a href=#9667 id=9667 data-nosnippet>9667</a>            config: <span class="prelude-val">None</span>,
+<a href=#9668 id=9668 data-nosnippet>9668</a>            missions: <span class="prelude-val">None</span>,
+<a href=#9669 id=9669 data-nosnippet>9669</a>        });
+<a href=#9670 id=9670 data-nosnippet>9670</a>        <span class="kw">let </span>bundle_specs = build_bundle_specs(<span class="kw-2">&amp;</span>config, <span class="string">"default"</span>).expect(<span class="string">"bundle specs"</span>);
+<a href=#9671 id=9671 data-nosnippet>9671</a>        <span class="kw">let </span>specs = collect_resource_specs(<span class="kw-2">&amp;</span>graph, <span class="kw-2">&amp;</span>task_specs, <span class="kw-2">&amp;</span>[bridge_spec], <span class="kw-2">&amp;</span>bundle_specs)
+<a href=#9672 id=9672 data-nosnippet>9672</a>            .expect(<span class="string">"collect specs"</span>);
+<a href=#9673 id=9673 data-nosnippet>9673</a>        <span class="macro">assert_eq!</span>(specs.len(), <span class="number">1</span>);
+<a href=#9674 id=9674 data-nosnippet>9674</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(specs[<span class="number">0</span>].owner, ResourceOwner::Bridge(<span class="number">0</span>)));
+<a href=#9675 id=9675 data-nosnippet>9675</a>        <span class="macro">assert_eq!</span>(specs[<span class="number">0</span>].binding_name, <span class="string">"serial"</span>);
+<a href=#9676 id=9676 data-nosnippet>9676</a>        <span class="macro">assert_eq!</span>(specs[<span class="number">0</span>].bundle_index, <span class="number">0</span>);
+<a href=#9677 id=9677 data-nosnippet>9677</a>        <span class="macro">assert_eq!</span>(specs[<span class="number">0</span>].resource_name, <span class="string">"serial0"</span>);
+<a href=#9678 id=9678 data-nosnippet>9678</a>    }
+<a href=#9679 id=9679 data-nosnippet>9679</a>
+<a href=#9680 id=9680 data-nosnippet>9680</a>    <span class="attr">#[test]
+<a href=#9681 id=9681 data-nosnippet>9681</a>    </span><span class="kw">fn </span>copper_runtime_args_parse_subsystem_mode() {
+<a href=#9682 id=9682 data-nosnippet>9682</a>        <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#9683 id=9683 data-nosnippet>9683</a>        <span class="kw">use </span>quote::quote;
+<a href=#9684 id=9684 data-nosnippet>9684</a>
+<a href=#9685 id=9685 data-nosnippet>9685</a>        <span class="kw">let </span>args = CopperRuntimeArgs::parse_tokens(<span class="macro">quote!</span>(
+<a href=#9686 id=9686 data-nosnippet>9686</a>            config = <span class="string">"multi_copper.ron"</span>,
+<a href=#9687 id=9687 data-nosnippet>9687</a>            subsystem = <span class="string">"ping"</span>,
+<a href=#9688 id=9688 data-nosnippet>9688</a>            sim_mode,
+<a href=#9689 id=9689 data-nosnippet>9689</a>            ignore_resources
+<a href=#9690 id=9690 data-nosnippet>9690</a>        ))
+<a href=#9691 id=9691 data-nosnippet>9691</a>        .expect(<span class="string">"parse runtime args"</span>);
+<a href=#9692 id=9692 data-nosnippet>9692</a>
+<a href=#9693 id=9693 data-nosnippet>9693</a>        <span class="macro">assert_eq!</span>(args.config_path, <span class="string">"multi_copper.ron"</span>);
+<a href=#9694 id=9694 data-nosnippet>9694</a>        <span class="macro">assert_eq!</span>(args.subsystem_id.as_deref(), <span class="prelude-val">Some</span>(<span class="string">"ping"</span>));
+<a href=#9695 id=9695 data-nosnippet>9695</a>        <span class="macro">assert!</span>(args.sim_mode);
+<a href=#9696 id=9696 data-nosnippet>9696</a>        <span class="macro">assert!</span>(args.ignore_resources);
+<a href=#9697 id=9697 data-nosnippet>9697</a>    }
+<a href=#9698 id=9698 data-nosnippet>9698</a>
+<a href=#9699 id=9699 data-nosnippet>9699</a>    <span class="attr">#[test]
+<a href=#9700 id=9700 data-nosnippet>9700</a>    </span><span class="kw">fn </span>resolve_runtime_config_from_multi_config_selects_local_subsystem() {
+<a href=#9701 id=9701 data-nosnippet>9701</a>        <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#9702 id=9702 data-nosnippet>9702</a>
+<a href=#9703 id=9703 data-nosnippet>9703</a>        <span class="kw">let </span>root = unique_test_dir(<span class="string">"multi_runtime_resolve"</span>);
+<a href=#9704 id=9704 data-nosnippet>9704</a>        <span class="kw">let </span>alpha_config = root.join(<span class="string">"alpha.ron"</span>);
+<a href=#9705 id=9705 data-nosnippet>9705</a>        <span class="kw">let </span>beta_config = root.join(<span class="string">"beta.ron"</span>);
+<a href=#9706 id=9706 data-nosnippet>9706</a>        <span class="kw">let </span>network_config = root.join(<span class="string">"multi.ron"</span>);
+<a href=#9707 id=9707 data-nosnippet>9707</a>
+<a href=#9708 id=9708 data-nosnippet>9708</a>        write_file(
+<a href=#9709 id=9709 data-nosnippet>9709</a>            <span class="kw-2">&amp;</span>alpha_config,
+<a href=#9710 id=9710 data-nosnippet>9710</a>            <span class="string">r#"
+<a href=#9711 id=9711 data-nosnippet>9711</a>(
+<a href=#9712 id=9712 data-nosnippet>9712</a>    tasks: [
+<a href=#9713 id=9713 data-nosnippet>9713</a>        (id: "src", type: "AlphaSource", run_in_sim: true),
+<a href=#9714 id=9714 data-nosnippet>9714</a>        (id: "sink", type: "AlphaSink", run_in_sim: true),
+<a href=#9715 id=9715 data-nosnippet>9715</a>    ],
+<a href=#9716 id=9716 data-nosnippet>9716</a>    cnx: [
+<a href=#9717 id=9717 data-nosnippet>9717</a>        (src: "src", dst: "sink", msg: "u32"),
+<a href=#9718 id=9718 data-nosnippet>9718</a>    ],
+<a href=#9719 id=9719 data-nosnippet>9719</a>)
+<a href=#9720 id=9720 data-nosnippet>9720</a>"#</span>,
+<a href=#9721 id=9721 data-nosnippet>9721</a>        );
+<a href=#9722 id=9722 data-nosnippet>9722</a>        write_file(
+<a href=#9723 id=9723 data-nosnippet>9723</a>            <span class="kw-2">&amp;</span>beta_config,
+<a href=#9724 id=9724 data-nosnippet>9724</a>            <span class="string">r#"
+<a href=#9725 id=9725 data-nosnippet>9725</a>(
+<a href=#9726 id=9726 data-nosnippet>9726</a>    tasks: [
+<a href=#9727 id=9727 data-nosnippet>9727</a>        (id: "src", type: "BetaSource", run_in_sim: true),
+<a href=#9728 id=9728 data-nosnippet>9728</a>        (id: "sink", type: "BetaSink", run_in_sim: true),
+<a href=#9729 id=9729 data-nosnippet>9729</a>    ],
+<a href=#9730 id=9730 data-nosnippet>9730</a>    cnx: [
+<a href=#9731 id=9731 data-nosnippet>9731</a>        (src: "src", dst: "sink", msg: "u64"),
+<a href=#9732 id=9732 data-nosnippet>9732</a>    ],
+<a href=#9733 id=9733 data-nosnippet>9733</a>)
+<a href=#9734 id=9734 data-nosnippet>9734</a>"#</span>,
+<a href=#9735 id=9735 data-nosnippet>9735</a>        );
+<a href=#9736 id=9736 data-nosnippet>9736</a>        write_file(
+<a href=#9737 id=9737 data-nosnippet>9737</a>            <span class="kw-2">&amp;</span>network_config,
+<a href=#9738 id=9738 data-nosnippet>9738</a>            <span class="string">r#"
+<a href=#9739 id=9739 data-nosnippet>9739</a>(
+<a href=#9740 id=9740 data-nosnippet>9740</a>    subsystems: [
+<a href=#9741 id=9741 data-nosnippet>9741</a>        (id: "beta", config: "beta.ron"),
+<a href=#9742 id=9742 data-nosnippet>9742</a>        (id: "alpha", config: "alpha.ron"),
+<a href=#9743 id=9743 data-nosnippet>9743</a>    ],
+<a href=#9744 id=9744 data-nosnippet>9744</a>    interconnects: [],
+<a href=#9745 id=9745 data-nosnippet>9745</a>)
+<a href=#9746 id=9746 data-nosnippet>9746</a>"#</span>,
+<a href=#9747 id=9747 data-nosnippet>9747</a>        );
+<a href=#9748 id=9748 data-nosnippet>9748</a>
+<a href=#9749 id=9749 data-nosnippet>9749</a>        <span class="kw">let </span>args = CopperRuntimeArgs {
+<a href=#9750 id=9750 data-nosnippet>9750</a>            config_path: <span class="string">"multi.ron"</span>.to_string(),
+<a href=#9751 id=9751 data-nosnippet>9751</a>            subsystem_id: <span class="prelude-val">Some</span>(<span class="string">"beta"</span>.to_string()),
+<a href=#9752 id=9752 data-nosnippet>9752</a>            sim_mode: <span class="bool-val">false</span>,
+<a href=#9753 id=9753 data-nosnippet>9753</a>            ignore_resources: <span class="bool-val">false</span>,
+<a href=#9754 id=9754 data-nosnippet>9754</a>        };
+<a href=#9755 id=9755 data-nosnippet>9755</a>
+<a href=#9756 id=9756 data-nosnippet>9756</a>        <span class="kw">let </span>resolved =
+<a href=#9757 id=9757 data-nosnippet>9757</a>            resolve_runtime_config_with_root(<span class="kw-2">&amp;</span>args, <span class="kw-2">&amp;</span>root).expect(<span class="string">"resolve multi runtime config"</span>);
+<a href=#9758 id=9758 data-nosnippet>9758</a>
+<a href=#9759 id=9759 data-nosnippet>9759</a>        <span class="macro">assert_eq!</span>(resolved.subsystem_id.as_deref(), <span class="prelude-val">Some</span>(<span class="string">"beta"</span>));
+<a href=#9760 id=9760 data-nosnippet>9760</a>        <span class="macro">assert_eq!</span>(resolved.subsystem_code, <span class="number">1</span>);
+<a href=#9761 id=9761 data-nosnippet>9761</a>        <span class="kw">let </span>graph = resolved
+<a href=#9762 id=9762 data-nosnippet>9762</a>            .local_config
+<a href=#9763 id=9763 data-nosnippet>9763</a>            .get_graph(<span class="prelude-val">None</span>)
+<a href=#9764 id=9764 data-nosnippet>9764</a>            .expect(<span class="string">"resolved local config graph"</span>);
+<a href=#9765 id=9765 data-nosnippet>9765</a>        <span class="macro">assert!</span>(graph.get_node_id_by_name(<span class="string">"src"</span>).is_some());
+<a href=#9766 id=9766 data-nosnippet>9766</a>        <span class="macro">assert!</span>(resolved.bundled_local_config_content.contains(<span class="string">"BetaSource"</span>));
+<a href=#9767 id=9767 data-nosnippet>9767</a>    }
+<a href=#9768 id=9768 data-nosnippet>9768</a>
+<a href=#9769 id=9769 data-nosnippet>9769</a>    <span class="attr">#[test]
+<a href=#9770 id=9770 data-nosnippet>9770</a>    </span><span class="kw">fn </span>resolve_runtime_config_rejects_missing_subsystem() {
+<a href=#9771 id=9771 data-nosnippet>9771</a>        <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#9772 id=9772 data-nosnippet>9772</a>
+<a href=#9773 id=9773 data-nosnippet>9773</a>        <span class="kw">let </span>root = unique_test_dir(<span class="string">"multi_runtime_missing_subsystem"</span>);
+<a href=#9774 id=9774 data-nosnippet>9774</a>        <span class="kw">let </span>alpha_config = root.join(<span class="string">"alpha.ron"</span>);
+<a href=#9775 id=9775 data-nosnippet>9775</a>        <span class="kw">let </span>network_config = root.join(<span class="string">"multi.ron"</span>);
+<a href=#9776 id=9776 data-nosnippet>9776</a>
+<a href=#9777 id=9777 data-nosnippet>9777</a>        write_file(
+<a href=#9778 id=9778 data-nosnippet>9778</a>            <span class="kw-2">&amp;</span>alpha_config,
+<a href=#9779 id=9779 data-nosnippet>9779</a>            <span class="string">r#"
+<a href=#9780 id=9780 data-nosnippet>9780</a>(
+<a href=#9781 id=9781 data-nosnippet>9781</a>    tasks: [
+<a href=#9782 id=9782 data-nosnippet>9782</a>        (id: "src", type: "AlphaSource", run_in_sim: true),
+<a href=#9783 id=9783 data-nosnippet>9783</a>        (id: "sink", type: "AlphaSink", run_in_sim: true),
+<a href=#9784 id=9784 data-nosnippet>9784</a>    ],
+<a href=#9785 id=9785 data-nosnippet>9785</a>    cnx: [
+<a href=#9786 id=9786 data-nosnippet>9786</a>        (src: "src", dst: "sink", msg: "u32"),
+<a href=#9787 id=9787 data-nosnippet>9787</a>    ],
+<a href=#9788 id=9788 data-nosnippet>9788</a>)
+<a href=#9789 id=9789 data-nosnippet>9789</a>"#</span>,
+<a href=#9790 id=9790 data-nosnippet>9790</a>        );
+<a href=#9791 id=9791 data-nosnippet>9791</a>        write_file(
+<a href=#9792 id=9792 data-nosnippet>9792</a>            <span class="kw-2">&amp;</span>network_config,
+<a href=#9793 id=9793 data-nosnippet>9793</a>            <span class="string">r#"
+<a href=#9794 id=9794 data-nosnippet>9794</a>(
+<a href=#9795 id=9795 data-nosnippet>9795</a>    subsystems: [
+<a href=#9796 id=9796 data-nosnippet>9796</a>        (id: "alpha", config: "alpha.ron"),
+<a href=#9797 id=9797 data-nosnippet>9797</a>    ],
+<a href=#9798 id=9798 data-nosnippet>9798</a>    interconnects: [],
+<a href=#9799 id=9799 data-nosnippet>9799</a>)
+<a href=#9800 id=9800 data-nosnippet>9800</a>"#</span>,
+<a href=#9801 id=9801 data-nosnippet>9801</a>        );
+<a href=#9802 id=9802 data-nosnippet>9802</a>
+<a href=#9803 id=9803 data-nosnippet>9803</a>        <span class="kw">let </span>args = CopperRuntimeArgs {
+<a href=#9804 id=9804 data-nosnippet>9804</a>            config_path: <span class="string">"multi.ron"</span>.to_string(),
+<a href=#9805 id=9805 data-nosnippet>9805</a>            subsystem_id: <span class="prelude-val">Some</span>(<span class="string">"missing"</span>.to_string()),
+<a href=#9806 id=9806 data-nosnippet>9806</a>            sim_mode: <span class="bool-val">false</span>,
+<a href=#9807 id=9807 data-nosnippet>9807</a>            ignore_resources: <span class="bool-val">false</span>,
+<a href=#9808 id=9808 data-nosnippet>9808</a>        };
+<a href=#9809 id=9809 data-nosnippet>9809</a>
+<a href=#9810 id=9810 data-nosnippet>9810</a>        <span class="kw">let </span>err = resolve_runtime_config_with_root(<span class="kw-2">&amp;</span>args, <span class="kw-2">&amp;</span>root).expect_err(<span class="string">"missing subsystem"</span>);
+<a href=#9811 id=9811 data-nosnippet>9811</a>        <span class="macro">assert!</span>(err.to_string().contains(<span class="string">"Subsystem 'missing'"</span>));
+<a href=#9812 id=9812 data-nosnippet>9812</a>    }
+<a href=#9813 id=9813 data-nosnippet>9813</a>
+<a href=#9814 id=9814 data-nosnippet>9814</a>    <span class="attr">#[test]
+<a href=#9815 id=9815 data-nosnippet>9815</a>    </span><span class="kw">fn </span>synthesized_single_output_type_name_parses_for_source_and_regular_tasks() {
+<a href=#9816 id=9816 data-nosnippet>9816</a>        <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#9817 id=9817 data-nosnippet>9817</a>
+<a href=#9818 id=9818 data-nosnippet>9818</a>        <span class="kw">let </span>src_ty: Type = <span class="macro">parse_quote!</span>(SingleSource);
+<a href=#9819 id=9819 data-nosnippet>9819</a>        <span class="kw">let </span>regular_ty: Type = <span class="macro">parse_quote!</span>(RegularTask);
+<a href=#9820 id=9820 data-nosnippet>9820</a>
+<a href=#9821 id=9821 data-nosnippet>9821</a>        <span class="kw">let </span>src_name = synthesized_single_output_msg_name(<span class="kw-2">&amp;</span>src_ty, CuTaskType::Source);
+<a href=#9822 id=9822 data-nosnippet>9822</a>        <span class="kw">let </span>regular_name = synthesized_single_output_msg_name(<span class="kw-2">&amp;</span>regular_ty, CuTaskType::Regular);
+<a href=#9823 id=9823 data-nosnippet>9823</a>
+<a href=#9824 id=9824 data-nosnippet>9824</a>        parse_str::&lt;Type&gt;(src_name.as_str()).expect(<span class="string">"source payload type should parse"</span>);
+<a href=#9825 id=9825 data-nosnippet>9825</a>        parse_str::&lt;Type&gt;(regular_name.as_str()).expect(<span class="string">"regular payload type should parse"</span>);
+<a href=#9826 id=9826 data-nosnippet>9826</a>    }
+<a href=#9827 id=9827 data-nosnippet>9827</a>}
 </code></pre></div></section></main></body></html>
