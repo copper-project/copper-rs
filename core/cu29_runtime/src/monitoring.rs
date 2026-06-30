@@ -21,9 +21,7 @@ use cu29_clock::CuDuration;
 #[allow(unused_imports)]
 use cu29_log::CuLogLevel;
 #[cfg(all(feature = "std", debug_assertions))]
-use cu29_log_runtime::{
-    format_message_only, register_live_log_listener, unregister_live_log_listener,
-};
+use cu29_log_runtime::{LiveLogListenerGuard, format_message_only, scoped_live_log_listener};
 use cu29_traits::{
     CuError, CuResult, ObservedWriter, abort_observed_encode, begin_observed_encode,
     finish_observed_encode,
@@ -1721,27 +1719,37 @@ pub trait CuMonitor: Sized {
 
 /// A do nothing monitor if no monitor is provided.
 /// This is basically defining the default behavior of Copper in case of error.
-pub struct NoMonitor {}
+pub struct NoMonitor {
+    #[cfg(all(feature = "std", debug_assertions))]
+    live_log_listener: Option<LiveLogListenerGuard>,
+}
 impl CuMonitor for NoMonitor {
     fn new(_metadata: CuMonitoringMetadata, _runtime: CuMonitoringRuntime) -> CuResult<Self> {
-        Ok(NoMonitor {})
+        Ok(NoMonitor {
+            #[cfg(all(feature = "std", debug_assertions))]
+            live_log_listener: None,
+        })
     }
 
     fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         #[cfg(all(feature = "std", debug_assertions))]
-        register_live_log_listener(|entry, format_str, param_names| {
-            let params: Vec<String> = entry.params.iter().map(|v| v.to_string()).collect();
-            let named: Map<String, String> = param_names
-                .iter()
-                .zip(params.iter())
-                .map(|(k, v)| (k.to_string(), v.clone()))
-                .collect();
+        {
+            self.live_log_listener = Some(scoped_live_log_listener(
+                |entry, format_str, param_names| {
+                    let params: Vec<String> = entry.params.iter().map(|v| v.to_string()).collect();
+                    let named: Map<String, String> = param_names
+                        .iter()
+                        .zip(params.iter())
+                        .map(|(k, v)| (k.to_string(), v.clone()))
+                        .collect();
 
-            if let Ok(msg) = format_message_only(format_str, params.as_slice(), &named) {
-                let ts = format_timestamp(entry.time.into());
-                println!("{} [{:?}] {}", ts, entry.level, msg);
-            }
-        });
+                    if let Ok(msg) = format_message_only(format_str, params.as_slice(), &named) {
+                        let ts = format_timestamp(entry.time.into());
+                        println!("{} [{:?}] {}", ts, entry.level, msg);
+                    }
+                },
+            ));
+        }
         Ok(())
     }
 
@@ -1762,7 +1770,9 @@ impl CuMonitor for NoMonitor {
 
     fn stop(&mut self, _ctx: &CuContext) -> CuResult<()> {
         #[cfg(all(feature = "std", debug_assertions))]
-        unregister_live_log_listener();
+        {
+            self.live_log_listener = None;
+        }
         Ok(())
     }
 }
