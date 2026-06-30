@@ -23,9 +23,14 @@ required-features = ["sim-debug"]
 default = []
 logreader = ["dep:cu29-export"]
 sim-debug = ["logreader", "cu29/reflect", "cu29/remote-debug"]
+# Per-task heap-allocation monitor. To enable, uncomment the `cu-memmon`
+# dependency (here and in the workspace Cargo.toml) and add the matching
+# `monitor:` entry to copperconfig.ron — see the workspace README.
+# memmon = ["dep:cu-memmon"]
 
 [dependencies]
 cu29 = { workspace = true }
 cu29-export = { workspace = true, optional = true }
 bincode = { workspace = true }
 serde = { workspace = true }
+# cu-memmon = { workspace = true, optional = true }
