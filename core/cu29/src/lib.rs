@@ -360,7 +360,7 @@ mod tests {
         let runtime = LoggerRuntime::init(RobotClock::default(), CaptureStream, None::<NullLog>);
         let captured = Arc::new(Mutex::new(Vec::new()));
         let sink = captured.clone();
-        register_live_log_listener(move |entry, _, _| {
+        let _listener = scoped_live_log_listener(move |entry, _, _| {
             sink.lock()
                 .unwrap_or_else(|poison| poison.into_inner())
                 .push(entry.clone());
@@ -368,7 +368,6 @@ mod tests {
 
         emit();
 
-        unregister_live_log_listener();
         drop(runtime);
 
         let entries = captured.lock().unwrap_or_else(|poison| poison.into_inner());
