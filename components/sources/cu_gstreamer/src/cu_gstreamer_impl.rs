@@ -5,7 +5,7 @@ use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
-use circular_buffer::CircularBuffer;
+use circular_buffer::FixedCircularBuffer;
 use gstreamer::buffer::{BufferMap, Readable};
 use gstreamer::{Buffer, BufferRef, Caps, FlowSuccess, Pipeline, parse};
 use gstreamer_app::{AppSink, AppSinkCallbacks};
@@ -136,7 +136,7 @@ pub struct CuGStreamer<const N: usize> {
     #[reflect(ignore)]
     pipeline: Pipeline,
     #[reflect(ignore)]
-    circular_buffer: Arc<Mutex<CircularBuffer<N, CuGstBuffer>>>,
+    circular_buffer: Arc<Mutex<FixedCircularBuffer<CuGstBuffer, N>>>,
     #[reflect(ignore)]
     _appsink: AppSink,
 }
@@ -190,7 +190,7 @@ impl<const N: usize> CuSrcTask for CuGStreamer<N> {
 
         appsink.set_caps(Some(&caps));
 
-        let circular_buffer = Arc::new(Mutex::new(CircularBuffer::new()));
+        let circular_buffer = Arc::new(Mutex::new(FixedCircularBuffer::new()));
 
         // Configure `appsink` to handle incoming buffers
         appsink.set_callbacks(

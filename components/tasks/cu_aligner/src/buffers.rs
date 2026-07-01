@@ -1,4 +1,4 @@
-use circular_buffer::CircularBuffer;
+use circular_buffer::FixedCircularBuffer;
 use cu29::bincode::de::{Decode, Decoder};
 use cu29::bincode::enc::{Encode, Encoder};
 use cu29::bincode::error::{DecodeError, EncodeError};
@@ -10,7 +10,7 @@ where
     P: CuMsgPayload,
     M: Metadata,
 {
-    pub inner: CircularBuffer<S, CuStampedData<P, M>>,
+    pub inner: FixedCircularBuffer<CuStampedData<P, M>, S>,
 }
 
 #[allow(dead_code)]
@@ -76,7 +76,7 @@ where
     pub fn new() -> Self {
         Self {
             // It is assumed to be sorted by time with non overlapping ranges if they are Tov::Range
-            inner: CircularBuffer::<S, CuStampedData<P, CuMsgMetadata>>::new(),
+            inner: FixedCircularBuffer::<CuStampedData<P, CuMsgMetadata>, S>::new(),
         }
     }
 
