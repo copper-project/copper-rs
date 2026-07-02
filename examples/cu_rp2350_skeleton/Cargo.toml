@@ -26,7 +26,7 @@ cu29 = { path = "../../core/cu29", version = "1.0.0-rc2", default-features = fal
 ] } # pick it up directly to build it no-std
 cu-sdlogger = { path = "../../components/libs/cu_sdlogger", default-features = false, features = [
   "eh1",
-], optional = true }
+], optional = true, version = "1.0.0-rc2" }
 cu29-export = { path = "../../core/cu29_export", version = "1.0.0-rc2", optional = true, default-features = false }
 bincode = { version = "2.0", default-features = false, features = ["derive"] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
