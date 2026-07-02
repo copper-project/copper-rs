@@ -9,6 +9,7 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/cu-ros2-payloads"
 description = "ROS2 Payloads that can be constructed from/to Copper Payloads for compatibility"
 
 [package.metadata.copper]

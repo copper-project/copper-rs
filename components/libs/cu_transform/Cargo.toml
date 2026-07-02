@@ -9,6 +9,7 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/cu-transform"
 description = "A coordinate frame transformation library for copper-rs, similar to tf2 in ROS2"
 
 [package.metadata.copper]

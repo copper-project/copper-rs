@@ -11,6 +11,7 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/cu-ryuw122"
 
 [package.metadata.copper]
 kind = "source"
