@@ -22,15 +22,15 @@ To set the minimum log level for your application, add one of the following feat
 
 ```toml
 [dependencies]
-cu29-log = { version = "1.0.0-rc2" }
-cu29-log-derive = { version = "1.0.0-rc2", features = ["log-level-info"]  }
+cu29-log = { version = "1.0.0" }
+cu29-log-derive = { version = "1.0.0", features = ["log-level-info"]  }
 ```
 
 or
 
 ```toml
 [dependencies]
-cu29 = { version = "1.0.0-rc2", features = ["log-level-info"]}
+cu29 = { version = "1.0.0", features = ["log-level-info"]}
 ```
 
 Available feature flags:

@@ -23,19 +23,19 @@ embedded_targets = ["thumbv8m.main-none-eabihf"]
 buddy_system_allocator = { workspace = true, default-features = false, features = [
   "use_spin",
 ] }
-cu29 = { path = "../../core/cu29", version = "1.0.0-rc2", default-features = false, features = [
+cu29 = { path = "../../core/cu29", version = "1.0.0", default-features = false, features = [
   "defmt",
   "log-level-debug",
   "textlogs",
 ] }
-cu-bdshot = { path = "../../components/bridges/cu_bdshot", version = "1.0.0-rc2", default-features = false, features = [
+cu-bdshot = { path = "../../components/bridges/cu_bdshot", version = "1.0.0", default-features = false, features = [
   "rp2350",
 ] }
-cu-crsf = { path = "../../components/bridges/cu_crsf", version = "1.0.0-rc2", default-features = false, features = [
+cu-crsf = { path = "../../components/bridges/cu_crsf", version = "1.0.0", default-features = false, features = [
   "defmt",
   "alloc",
 ] }
-cu-sdlogger = { path = "../../components/libs/cu_sdlogger", version = "1.0.0-rc2", default-features = false, features = [
+cu-sdlogger = { path = "../../components/libs/cu_sdlogger", version = "1.0.0", default-features = false, features = [
   "eh1",
 ] }
 cortex-m-rt = { workspace = true }

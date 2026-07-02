@@ -17,8 +17,8 @@ domains = ["sensor/barometer"]
 environments = ["host", "embedded"]
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version = "1.0.0-rc2", default-features = false }
-cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "1.0.0-rc2", default-features = false }
+cu29 = { path = "../../../core/cu29", version = "1.0.0", default-features = false }
+cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "1.0.0", default-features = false }
 serde = { workspace = true }
 
 [features]
