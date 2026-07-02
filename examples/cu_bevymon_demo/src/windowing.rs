@@ -12,10 +12,7 @@ use std::sync::OnceLock;
 use winit::window::Icon;
 
 #[cfg(not(target_arch = "wasm32"))]
-const COPPER_ICON_PNG: &[u8] = include_bytes!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../doc/static/cu29.png"
-));
+const COPPER_ICON_PNG: &[u8] = include_bytes!("../assets/cu29.png");
 #[cfg(not(target_arch = "wasm32"))]
 static COPPER_WINDOW_ICON: OnceLock<Option<Icon>> = OnceLock::new();
 
