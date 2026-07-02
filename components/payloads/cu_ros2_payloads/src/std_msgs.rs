@@ -143,7 +143,7 @@ mod tests {
         T: RosBridgeAdapter + PartialEq + core::fmt::Debug,
     {
         let ros_value = value.to_ros_message();
-        let bytes = cdr::serialize::<_, _, cdr::CdrBe>(&ros_value, cdr::Infinite)
+        let bytes = cdr::serialize::<_, _, cdr::CdrLe>(&ros_value, cdr::Infinite)
             .expect("cdr encode should succeed");
         let decoded_ros: <T as RosBridgeAdapter>::RosMessage =
             cdr::deserialize(bytes.as_slice()).expect("cdr decode should succeed");

@@ -50,7 +50,22 @@ pub mod tasks {
         label: String,
     }
 
-    impl Freezable for PingSource {}
+    impl Freezable for PingSource {
+        fn freeze<E: bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), bincode::error::EncodeError> {
+            bincode::Encode::encode(&self.seq, encoder)
+        }
+
+        fn thaw<D: bincode::de::Decoder>(
+            &mut self,
+            decoder: &mut D,
+        ) -> Result<(), bincode::error::DecodeError> {
+            self.seq = bincode::Decode::decode(decoder)?;
+            Ok(())
+        }
+    }
 
     impl CuSrcTask for PingSource {
         type Output<'m> = output_msg!(Ping);
@@ -148,9 +163,10 @@ pub mod tasks {
             Ok(Self { label })
         }
 
-        fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
             if let Some(pong) = input.payload() {
                 debug!(
+                    ctx,
                     "{}: got pong seq={} reply={}",
                     self.label.as_str(),
                     pong.seq,

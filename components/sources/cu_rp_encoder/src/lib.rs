@@ -101,7 +101,33 @@ pub struct Encoder {
 }
 
 impl Freezable for Encoder {
-    // pin is derived from the config/resources, so we keep the default implementation.
+    fn freeze<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        let data = self.data_from_interrupts.lock().map_err(|_| {
+            bincode::error::EncodeError::OtherString(
+                "encoder interrupt data mutex poisoned".to_string(),
+            )
+        })?;
+        Encode::encode(&data.ticks, encoder)?;
+        Encode::encode(&data.tov, encoder)?;
+        Ok(())
+    }
+
+    fn thaw<D: bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), bincode::error::DecodeError> {
+        let mut data = self.data_from_interrupts.lock().map_err(|_| {
+            bincode::error::DecodeError::OtherString(
+                "encoder interrupt data mutex poisoned".to_string(),
+            )
+        })?;
+        data.ticks = Decode::decode(decoder)?;
+        data.tov = Decode::decode(decoder)?;
+        Ok(())
+    }
 }
 
 impl CuSrcTask for Encoder {

@@ -2,6 +2,8 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+mod sync_compat;
+
 use core::sync::atomic::{AtomicUsize, Ordering};
 use cu29_clock::RobotClock;
 use cu29_log::CuLogEntry;
@@ -9,12 +11,12 @@ use cu29_log::CuLogEntry;
 use cu29_log::CuLogLevel;
 use cu29_traits::{CuResult, WriteStream};
 use log::Log;
+use sync_compat::{Mutex, OnceLock, init_once, lock as lock_mutex};
 
 #[cfg(not(feature = "std"))]
 mod imp {
     pub use alloc::boxed::Box;
-    pub use spin::Mutex;
-    pub use spin::once::Once as OnceLock;
+    pub use alloc::vec::Vec;
 }
 
 #[cfg(feature = "std")]
@@ -29,7 +31,6 @@ mod imp {
     pub use std::fs::File;
     pub use std::io::{BufWriter, Write};
     pub use std::path::PathBuf;
-    pub use std::sync::{Mutex, OnceLock};
 
     #[cfg(debug_assertions)]
     pub use {std::collections::HashMap, strfmt::strfmt};
@@ -54,9 +55,45 @@ type LogWriter = Box<dyn WriteStream<CuLogEntry> + Send + 'static>;
 /// Callback signature: receives the structured entry plus its format string and param names.
 pub type LiveLogListener = Box<dyn Fn(&CuLogEntry, &str, &[&str]) + Send + Sync + 'static>;
 
-#[cfg(feature = "std")]
-fn lock_mutex<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(|e| e.into_inner())
+pub type LiveLogListenerId = usize;
+
+struct LiveLogListeners {
+    next_id: LiveLogListenerId,
+    listeners: Vec<(LiveLogListenerId, LiveLogListener)>,
+}
+
+impl Default for LiveLogListeners {
+    fn default() -> Self {
+        Self {
+            next_id: 1,
+            listeners: Vec::new(),
+        }
+    }
+}
+
+impl LiveLogListeners {
+    fn insert(&mut self, listener: LiveLogListener) -> LiveLogListenerId {
+        let id = self.next_id;
+        self.next_id = self.next_id.saturating_add(1).max(1);
+        self.listeners.push((id, listener));
+        id
+    }
+
+    fn remove(&mut self, id: LiveLogListenerId) {
+        self.listeners.retain(|(listener_id, _)| *listener_id != id);
+    }
+}
+
+pub struct LiveLogListenerGuard {
+    id: Option<LiveLogListenerId>,
+}
+
+impl Drop for LiveLogListenerGuard {
+    fn drop(&mut self) {
+        if let Some(id) = self.id.take() {
+            unregister_live_log_listener_id(id);
+        }
+    }
 }
 
 #[cfg(all(feature = "std", debug_assertions))]
@@ -73,14 +110,14 @@ pub fn format_message_only(
             }
             formatted = formatted.replacen("{}", param, 1);
         }
-        if formatted.contains("{}") && !named_params.is_empty() {
+        if !named_params.is_empty() {
             let mut named = named_params.iter().collect::<Vec<_>>();
             named.sort_by(|a, b| a.0.cmp(b.0));
-            for (_, value) in named {
-                if !formatted.contains("{}") {
-                    break;
+            for (name, value) in named {
+                if formatted.contains("{}") {
+                    formatted = formatted.replacen("{}", value, 1);
                 }
-                formatted = formatted.replacen("{}", value, 1);
+                formatted = formatted.replace(&format!("{{{name}}}"), value);
             }
         }
         return Ok(formatted);
@@ -98,16 +135,11 @@ pub fn format_message_only(
     })
 }
 
-#[cfg(not(feature = "std"))]
-fn lock_mutex<T>(m: &Mutex<T>) -> spin::MutexGuard<'_, T> {
-    m.lock()
-}
-
 /// Shared logging state reachable from the macro-generated calls.
 struct LoggerState {
     writer: Mutex<LogWriter>,
     clock: RobotClock,
-    live_listener: Mutex<Option<LiveLogListener>>,
+    live_listeners: Mutex<LiveLogListeners>,
 }
 
 impl core::fmt::Debug for LoggerState {
@@ -121,14 +153,8 @@ impl core::fmt::Debug for LoggerState {
 static LOGGER_STATE: OnceLock<LoggerState> = OnceLock::new();
 static STRUCTURED_LOG_BYTES: AtomicUsize = AtomicUsize::new(0);
 
-#[cfg(feature = "std")]
 fn init_logger_state(state: LoggerState) {
-    LOGGER_STATE.set(state).unwrap();
-}
-
-#[cfg(not(feature = "std"))]
-fn init_logger_state(state: LoggerState) {
-    LOGGER_STATE.call_once(|| state);
+    init_once(&LOGGER_STATE, state);
 }
 
 pub struct NullLog;
@@ -161,7 +187,7 @@ impl LoggerRuntime {
             let state = LoggerState {
                 writer: Mutex::new(Box::new(destination)),
                 clock,
-                live_listener: Mutex::new(None),
+                live_listeners: Mutex::new(LiveLogListeners::default()),
             };
             init_logger_state(state);
         }
@@ -172,11 +198,16 @@ impl LoggerRuntime {
             register_live_log_listener(move |entry, format_str, param_names| {
                 // Build a text line from structured data—no parsing.
                 let params: Vec<String> = entry.params.iter().map(|v| v.to_string()).collect();
-                let named_params: HashMap<String, String> = param_names
-                    .iter()
-                    .zip(params.iter())
-                    .map(|(name, value)| (name.to_string(), value.clone()))
-                    .collect();
+                let mut named_params = HashMap::new();
+                let mut param_names_iter = param_names.iter();
+                for (name_index, value) in entry.paramname_indexes.iter().zip(params.iter()) {
+                    if *name_index != cu29_log::ANONYMOUS {
+                        let Some(name) = param_names_iter.next() else {
+                            continue;
+                        };
+                        named_params.insert(name.to_string(), value.clone());
+                    }
+                }
                 if let Ok(line) = format_message_only(format_str, params.as_slice(), &named_params)
                 {
                     logger.log(
@@ -290,30 +321,79 @@ fn extra_log(entry: &mut CuLogEntry, format_str: &str, param_names: &[&str]) -> 
     Ok(())
 }
 
-/// Register a live log listener; subsequent logs invoke `cb`. No-op if runtime not initialized.
-pub fn register_live_log_listener<F>(cb: F)
+/// Register a live log listener; subsequent logs invoke `cb`.
+pub fn register_live_log_listener<F>(cb: F) -> Option<LiveLogListenerId>
 where
     F: Fn(&CuLogEntry, &str, &[&str]) + Send + Sync + 'static,
 {
-    if let Some(state) = LOGGER_STATE.get() {
-        let mut guard = lock_mutex(&state.live_listener);
-        *guard = Some(Box::new(cb));
+    LOGGER_STATE.get().map(|state| {
+        let mut guard = lock_mutex(&state.live_listeners);
+        guard.insert(Box::new(cb))
+    })
+}
+
+/// Register a scoped live log listener and remove it when the returned guard is dropped.
+pub fn scoped_live_log_listener<F>(cb: F) -> LiveLogListenerGuard
+where
+    F: Fn(&CuLogEntry, &str, &[&str]) + Send + Sync + 'static,
+{
+    LiveLogListenerGuard {
+        id: register_live_log_listener(cb),
     }
 }
 
-/// Remove any registered live log listener. No-op if runtime not initialized.
+/// Remove a live log listener by id. No-op if runtime not initialized.
+pub fn unregister_live_log_listener_id(id: LiveLogListenerId) {
+    if let Some(state) = LOGGER_STATE.get() {
+        let mut guard = lock_mutex(&state.live_listeners);
+        guard.remove(id);
+    }
+}
+
+/// Remove all registered live log listeners. No-op if runtime not initialized.
 pub fn unregister_live_log_listener() {
     if let Some(state) = LOGGER_STATE.get() {
-        let mut guard = lock_mutex(&state.live_listener);
-        *guard = None;
+        let mut guard = lock_mutex(&state.live_listeners);
+        guard.listeners.clear();
     }
+}
+
+/// Capture structured log entries emitted while `f` runs.
+///
+/// This is a scoped tee: existing live listeners still receive entries while
+/// capture is active.
+#[cfg(feature = "std")]
+pub fn capture_live_logs<F, R>(f: F) -> (R, Vec<CuLogEntry>)
+where
+    F: FnOnce() -> R,
+{
+    let captured_logs = std::sync::Arc::new(std::sync::Mutex::new(Vec::<CuLogEntry>::new()));
+    let listener_guard = LOGGER_STATE.get().map(|_| {
+        let captured_logs_for_listener = captured_logs.clone();
+        scoped_live_log_listener(move |entry, _, _| {
+            captured_logs_for_listener
+                .lock()
+                .expect("live log capture poisoned")
+                .push(entry.clone());
+        })
+    });
+
+    let result = f();
+    drop(listener_guard);
+    let logs = captured_logs
+        .lock()
+        .expect("live log capture poisoned")
+        .clone();
+
+    (result, logs)
 }
 
 /// Notify registered listener if any.
 #[allow(clippy::collapsible_if)]
 pub(crate) fn notify_live_listeners(entry: &CuLogEntry, format_str: &str, param_names: &[&str]) {
     if let Some(state) = LOGGER_STATE.get() {
-        if let Some(cb) = lock_mutex(&state.live_listener).as_ref() {
+        let guard = lock_mutex(&state.live_listeners);
+        for (_, cb) in &guard.listeners {
             cb(entry, format_str, param_names);
         }
     }
@@ -418,7 +498,7 @@ impl WriteStream<CuLogEntry> for SimpleFileWriter {
 mod tests {
     use crate::CuLogEntry;
     use bincode::config::standard;
-    use cu29_log::CuLogLevel;
+    use cu29_log::{CuLogLevel, CuLogOrigin};
     use cu29_value::Value;
     use smallvec::smallvec;
 
@@ -430,6 +510,7 @@ mod tests {
         let log_entry = CuLogEntry {
             time: 0.into(),
             level: CuLogLevel::Info,
+            origin: CuLogOrigin::default(),
             msg_index: 1,
             paramname_indexes: smallvec![2, 3],
             params: smallvec![Value::String("test".to_string())],
@@ -438,5 +519,26 @@ mod tests {
         let decoded_tuple: (CuLogEntry, usize) =
             bincode::decode_from_slice(&encoded, standard()).unwrap();
         assert_eq!(log_entry, decoded_tuple.0);
+    }
+
+    #[cfg(all(feature = "std", debug_assertions))]
+    #[test]
+    fn test_format_message_only_mixes_named_and_positional_placeholders() {
+        let params = vec!["event payload".to_string()];
+        let mut named_params = std::collections::HashMap::new();
+        named_params.insert("hash".to_string(), "0x000000000".to_string());
+        named_params.insert("size".to_string(), "420".to_string());
+
+        let formatted = crate::format_message_only(
+            "File closed after hash was calculated Hash: {hash}, size: {size};\n{}",
+            &params,
+            &named_params,
+        )
+        .unwrap();
+
+        assert_eq!(
+            formatted,
+            "File closed after hash was calculated Hash: 0x000000000, size: 420;\nevent payload"
+        );
     }
 }

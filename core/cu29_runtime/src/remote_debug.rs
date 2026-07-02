@@ -131,7 +131,7 @@
 //! | `nav.seek` | yes | `{ target, resolve? }` | yes |
 //! | `nav.run_until` | yes | `{ target, resolve?, max_steps?, timeout_ms?, progress_every_n_steps? }` | yes |
 //! | `nav.step` | yes | `{ delta }` | yes |
-//! | `nav.replay` | yes | `{ at? }` | yes (replays current step; optional pre-seek) |
+//! | `nav.replay` | yes | `{ at?, limit?, include_cl_snapshot?, include_payloads?, include_metadata?, include_raw?, include_replayed_cl?, include_state? }` | yes (replays current step/page; optional pre-seek) |
 //!
 //! Notes:
 //!
@@ -145,7 +145,14 @@
 //! | --- | --- | --- | --- |
 //! | `timeline.get_cursor` | yes | `{}` | current cursor snapshot |
 //! | `timeline.get_cl` | yes | `{ at?, include_payloads?, include_metadata?, include_raw? }` | `cl_snapshot`, `query_cursor` (+ optional resolution) |
-//! | `timeline.list` | yes | `{ from, to, page? }` | list of `{ idx, cl, ts_ns }` + `next_offset` |
+//! | `timeline.list` | yes | `{ from, to, page? }` | list of timeline rows with CL snapshots and keyframe metadata + `next_offset` |
+//!
+//! ### Logs
+//!
+//! | Method | Session required | Params | Result |
+//! | --- | --- | --- | --- |
+//! | `logs.strings` | yes | `{}` | interned string table and resolved index path |
+//! | `logs.list` | yes | `{ source?, offset?, limit? }` | structured log entries + `next_offset` |
 //!
 //! ### Schema
 //!
@@ -228,25 +235,34 @@
 
 use crate::app::{CuSimApplication, CurrentRuntimeCopperList};
 use crate::config::{BridgeChannelConfigRepresentation, Flavor, read_configuration_str};
-use crate::debug::{CuDebugSession, JumpOutcome};
+use crate::debug::{CuDebugSession, IndexedResolveMode, JumpOutcome};
 use crate::reflect::{
     EnumInfo, Reflect, ReflectTaskIntrospection, StructInfo, TupleInfo, TupleStructInfo, Type,
     TypeInfo, TypeRegistry, VariantInfo, serde::SerializationData,
 };
+use bincode::config::standard;
+use bincode::decode_from_std_read;
+use bincode::error::DecodeError;
 use cu29_clock::{
     CuTime, CuTimeRange, OptionCuTime, PartialCuTimeRange, RobotClock, RobotClockMock, Tov,
 };
+use cu29_log::CuLogEntry;
+use cu29_log_runtime::capture_live_logs;
 use cu29_traits::{
     CopperListTuple, CuCompactString, CuError, CuMsgMetadataTrait, CuMsgOrigin, CuResult,
-    DebugFieldDescriptor, DebugFieldKind, DebugFieldSemantics, ErasedCuStampedDataSet,
+    DebugFieldDescriptor, DebugFieldKind, DebugFieldSemantics, DebugScalarKind,
+    ErasedCuStampedDataSet, UnifiedLogType,
 };
-use cu29_unifiedlog::{SectionStorage, UnifiedLogWrite};
+use cu29_unifiedlog::{
+    SectionStorage, UnifiedLogWrite, UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader,
+};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
+use std::io;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -255,10 +271,15 @@ use zenoh::key_expr::KeyExpr;
 use zenoh::{Config as ZenohConfig, Error as ZenohError};
 
 const API_VERSION: &str = "debug.v1";
-const LOCAL_SHM_MESSAGE_THRESHOLD_BYTES: u64 = 1;
+// Zenoh mlocks the whole transport-optimization pool, so keep this below
+// common 8 MiB RLIMIT_MEMLOCK defaults.
+const LOCAL_SHM_POOL_BYTES: u64 = 4 * 1024 * 1024;
+const LOCAL_SHM_MESSAGE_THRESHOLD_BYTES: u64 = 3 * 1024;
 const DEFAULT_SESSION_IDLE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const DEFAULT_MAX_ACTIVE_SESSIONS: usize = 64;
 const MAX_PAGE_LIMIT: u32 = 1000;
+const MAX_REPLAY_BATCH_LIMIT: u32 = 128;
+const MAX_LOG_PAGE_LIMIT: usize = 5000;
 const SERVER_RECV_POLL_TIMEOUT: Duration = Duration::from_millis(250);
 
 #[derive(Clone, Debug, Serialize, Reflect)]
@@ -421,6 +442,24 @@ pub struct SessionOpenParams {
     pub codecs: Option<Vec<WireCodec>>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct LogsListParams {
+    #[serde(default)]
+    offset: usize,
+    #[serde(default)]
+    limit: Option<usize>,
+    #[serde(default)]
+    source: LogsSource,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum LogsSource {
+    #[default]
+    Recorded,
+    Replay,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteDebugProcessInfo {
     pub pid: u32,
@@ -483,6 +522,20 @@ struct NavStepParams {
 struct NavReplayParams {
     #[serde(default)]
     at: Option<At>,
+    #[serde(default = "default_nav_replay_limit")]
+    limit: u32,
+    #[serde(default)]
+    include_cl_snapshot: bool,
+    #[serde(default)]
+    include_payloads: bool,
+    #[serde(default)]
+    include_metadata: bool,
+    #[serde(default)]
+    include_raw: bool,
+    #[serde(default)]
+    include_replayed_cl: bool,
+    #[serde(default)]
+    include_state: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -630,6 +683,7 @@ struct QueryCursorSnapshot {
     idx: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     ts_ns: Option<u64>,
+    is_keyframe: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     keyframe_cl: Option<u64>,
 }
@@ -641,6 +695,10 @@ where
     L: UnifiedLogWrite<S> + 'static,
 {
     session: CuDebugSession<App, P, CB, TF, S, L>,
+    log_base: PathBuf,
+    log_index_path: Option<PathBuf>,
+    interned_strings: Option<Vec<String>>,
+    replay_structured_logs: Vec<CuLogEntry>,
     opened_at: Instant,
     last_touched_at: Instant,
     cursor_rev: u64,
@@ -859,6 +917,7 @@ fn should_capture_restart_env(key: &str) -> bool {
             | "LD_LIBRARY_PATH"
             | "PATH"
             | "PYTHONPATH"
+            | "LOG_INDEX_DIR"
             | "RUST_BACKTRACE"
             | "RUST_LOG"
     ) || key.starts_with("COPPER_")
@@ -899,11 +958,6 @@ fn set_config_json5(config: &mut ZenohConfig, key: &str, value: &str) -> CuResul
 }
 
 fn local_server_zenoh_config(paths: &RemoteDebugPaths) -> CuResult<ZenohConfig> {
-    let socket_path = local_socket_path(&paths.base);
-    if socket_path.exists() {
-        let _ = fs::remove_file(&socket_path);
-    }
-
     let endpoint = local_endpoint(&paths.base);
     let endpoint_json = serde_json::to_string(&endpoint)
         .map_err(|e| CuError::new_with_cause("RemoteDebug: endpoint encoding failed", e))?;
@@ -923,6 +977,11 @@ fn local_server_zenoh_config(paths: &RemoteDebugPaths) -> CuResult<ZenohConfig> 
         &mut config,
         "transport/shared_memory/transport_optimization/enabled",
         "true",
+    )?;
+    set_config_json5(
+        &mut config,
+        "transport/shared_memory/transport_optimization/pool_size",
+        &LOCAL_SHM_POOL_BYTES.to_string(),
     )?;
     set_config_json5(
         &mut config,
@@ -952,6 +1011,11 @@ fn local_client_zenoh_config(paths: &RemoteDebugPaths) -> CuResult<ZenohConfig> 
         &mut config,
         "transport/shared_memory/transport_optimization/enabled",
         "true",
+    )?;
+    set_config_json5(
+        &mut config,
+        "transport/shared_memory/transport_optimization/pool_size",
+        &LOCAL_SHM_POOL_BYTES.to_string(),
     )?;
     set_config_json5(
         &mut config,
@@ -1221,6 +1285,10 @@ where
                 request.session_id.as_deref(),
                 &request.params,
             ),
+            "logs.strings" => self.handle_logs_strings(request_id, request.session_id.as_deref()),
+            "logs.list" => {
+                self.handle_logs_list(request_id, request.session_id.as_deref(), &request.params)
+            }
             "schema.get_stack" => {
                 self.handle_schema_get_stack(request_id, request.session_id.as_deref())
             }
@@ -1333,6 +1401,10 @@ where
             session_id.clone(),
             SessionState {
                 session,
+                log_base: path,
+                log_index_path: None,
+                interned_strings: None,
+                replay_structured_logs: Vec::new(),
                 opened_at: Instant::now(),
                 last_touched_at: Instant::now(),
                 cursor_rev: 0,
@@ -1450,10 +1522,13 @@ where
                 Err(e) => return err_response(request_id, "ResolveFailed", &e.to_string()),
             };
 
-        let jump = match seek_to_index(&mut state.session, resolved.idx) {
+        let (jump_result, captured_logs) =
+            capture_live_logs(|| seek_to_index(&mut state.session, resolved.idx));
+        let jump = match jump_result {
             Ok(v) => v,
             Err(e) => return err_response(request_id, "SeekFailed", &e.to_string()),
         };
+        state.replay_structured_logs.extend(captured_logs);
 
         update_after_jump(state, &jump);
         let cursor = match cursor_snapshot(state, &time_of) {
@@ -1499,10 +1574,13 @@ where
                 Err(e) => return err_response(request_id, "ResolveFailed", &e.to_string()),
             };
 
-        let jump = match seek_to_index(&mut state.session, resolved.idx) {
+        let (jump_result, captured_logs) =
+            capture_live_logs(|| seek_to_index(&mut state.session, resolved.idx));
+        let jump = match jump_result {
             Ok(v) => v,
             Err(e) => return err_response(request_id, "RunUntilFailed", &e.to_string()),
         };
+        state.replay_structured_logs.extend(captured_logs);
         update_after_jump(state, &jump);
 
         let cursor = match cursor_snapshot(state, &time_of) {
@@ -1555,10 +1633,12 @@ where
             Err(e) => return err_response(request_id, "SessionNotFound", &e.to_string()),
         };
 
-        let jump = match state.session.step(parsed.delta) {
+        let (jump_result, captured_logs) = capture_live_logs(|| state.session.step(parsed.delta));
+        let jump = match jump_result {
             Ok(v) => v,
             Err(e) => return err_response(request_id, "StepFailed", &e.to_string()),
         };
+        state.replay_structured_logs.extend(captured_logs);
         update_after_jump(state, &jump);
 
         let cursor = match cursor_snapshot(state, &time_of) {
@@ -1584,6 +1664,18 @@ where
             Ok(v) => v,
             Err(err) => return param_err_response(request_id, err),
         };
+        if parsed.limit == 0 {
+            return param_err_response(request_id, "limit must be greater than zero".to_string());
+        }
+        if parsed.limit > MAX_REPLAY_BATCH_LIMIT {
+            return param_err_response(
+                request_id,
+                format!(
+                    "limit must be <= {MAX_REPLAY_BATCH_LIMIT}, got {}",
+                    parsed.limit
+                ),
+            );
+        }
 
         let sid = match session_id {
             Some(v) => v,
@@ -1604,18 +1696,37 @@ where
                     Err(e) => return err_response(request_id, "ResolveFailed", &e.to_string()),
                 };
             resolved_at = Some(resolved.clone());
-            let jump = match seek_to_index(&mut state.session, resolved.idx) {
+            let (jump_result, captured_logs) =
+                capture_live_logs(|| seek_to_index(&mut state.session, resolved.idx));
+            let jump = match jump_result {
                 Ok(v) => v,
                 Err(e) => return err_response(request_id, "ReplayFailed", &e.to_string()),
             };
+            state.replay_structured_logs.extend(captured_logs);
             update_after_jump(state, &jump);
         }
 
-        let replayed = match replay_current_step(&mut state.session) {
-            Ok(v) => v,
-            Err(e) => return err_response(request_id, "ReplayFailed", &e.to_string()),
-        };
-        update_after_jump(state, &replayed);
+        let mut items = Vec::with_capacity(parsed.limit as usize);
+        for step_idx in 0..parsed.limit {
+            let (replay_result, captured_logs) = if step_idx == 0 {
+                capture_live_logs(|| replay_current_step(&mut state.session))
+            } else {
+                capture_live_logs(|| state.session.step(1))
+            };
+            let replayed = match replay_result {
+                Ok(v) => v,
+                Err(e) => return err_response(request_id, "ReplayFailed", &e.to_string()),
+            };
+            state.replay_structured_logs.extend(captured_logs);
+            update_after_jump(state, &replayed);
+
+            let item =
+                match nav_replay_item_snapshot::<App, P, CB, TF, S, L>(state, &time_of, &parsed) {
+                    Ok(v) => v,
+                    Err(e) => return err_response(request_id, "ReplayFailed", &e.to_string()),
+                };
+            items.push(item);
+        }
 
         let cursor = match cursor_snapshot(state, &time_of) {
             Ok(v) => v,
@@ -1626,7 +1737,9 @@ where
             request_id,
             json!({
                 "cursor": cursor,
-                "replayed": 1,
+                "replayed": items.len(),
+                "items": items,
+                "next_offset": Value::Null,
             }),
             Some(state.cursor_rev),
             resolved_at,
@@ -1805,15 +1918,16 @@ where
         if end.idx < start.idx {
             return ok_response(
                 request_id,
-                json!({"items": [], "next_offset": Value::Null}),
+                json!({"items": [], "next_offset": Value::Null, "total": 0}),
                 Some(state.cursor_rev),
                 None,
             );
         }
 
+        let max_idx = end.idx;
+        let total = max_idx.saturating_sub(start.idx).saturating_add(1);
         let mut items = Vec::new();
         let mut idx = start.idx.saturating_add(page.offset as usize);
-        let max_idx = end.idx;
         let mut emitted = 0usize;
 
         while idx <= max_idx && emitted < page.limit as usize {
@@ -1822,12 +1936,23 @@ where
                 Ok(None) => break,
                 Err(e) => return err_response(request_id, "TimelineListFailed", &e.to_string()),
             };
-            let ts = (time_of)(cl.as_ref()).map(|t| t.as_nanos());
-            items.push(json!({
-                "idx": idx,
-                "cl": cl.id,
-                "ts_ns": ts,
-            }));
+            let mut item = match copperlist_snapshot::<P>(cl.as_ref(), &time_of, true, false, false)
+            {
+                Ok(v) => v,
+                Err(e) => return err_response(request_id, "TimelineListFailed", &e.to_string()),
+            };
+            if let Value::Object(map) = &mut item {
+                map.insert("idx".to_owned(), json!(idx));
+                map.insert(
+                    "is_keyframe".to_owned(),
+                    json!(state.session.is_keyframe_culistid(cl.id)),
+                );
+                map.insert(
+                    "keyframe_cl".to_owned(),
+                    json!(state.session.nearest_keyframe_culistid(cl.id)),
+                );
+            }
+            items.push(item);
             idx = idx.saturating_add(1);
             emitted += 1;
         }
@@ -1843,6 +1968,131 @@ where
             json!({
                 "items": items,
                 "next_offset": next_offset,
+                "total": total,
+            }),
+            Some(state.cursor_rev),
+            None,
+        )
+    }
+
+    fn handle_logs_strings(
+        &mut self,
+        request_id: String,
+        session_id: Option<&str>,
+    ) -> DebugRpcResponse {
+        let process_info = self.process_info.clone();
+        let state = match self.session_mut(session_id) {
+            Ok(v) => v,
+            Err(e) => return err_response(request_id, "SessionNotFound", &e.to_string()),
+        };
+
+        match ensure_session_interned_strings(state, &process_info) {
+            Ok(strings) => ok_response(
+                request_id,
+                json!({
+                    "strings": strings,
+                    "index_path": state.log_index_path.as_ref().map(|path| path.display().to_string()),
+                }),
+                Some(state.cursor_rev),
+                None,
+            ),
+            Err(err) => err_response(request_id, "StructuredLogStringsFailed", &err.to_string()),
+        }
+    }
+
+    fn handle_logs_list(
+        &mut self,
+        request_id: String,
+        session_id: Option<&str>,
+        params: &Value,
+    ) -> DebugRpcResponse {
+        let parsed: LogsListParams = match from_params(params) {
+            Ok(v) => v,
+            Err(err) => return param_err_response(request_id, err),
+        };
+        let process_info = self.process_info.clone();
+        let state = match self.session_mut(session_id) {
+            Ok(v) => v,
+            Err(e) => return err_response(request_id, "SessionNotFound", &e.to_string()),
+        };
+
+        let strings = match ensure_session_interned_strings(state, &process_info) {
+            Ok(strings) => strings.to_vec(),
+            Err(err) => {
+                return err_response(request_id, "StructuredLogStringsFailed", &err.to_string());
+            }
+        };
+        if parsed.source == LogsSource::Replay {
+            let limit = parsed
+                .limit
+                .unwrap_or(MAX_LOG_PAGE_LIMIT)
+                .min(MAX_LOG_PAGE_LIMIT);
+            let total = state.replay_structured_logs.len();
+            let entries = state
+                .replay_structured_logs
+                .iter()
+                .enumerate()
+                .skip(parsed.offset)
+                .take(limit)
+                .map(|(index, entry)| structured_log_entry_json(index, &strings, entry))
+                .collect::<Vec<_>>();
+            let next_offset = parsed.offset.saturating_add(entries.len());
+
+            return ok_response(
+                request_id,
+                json!({
+                    "entries": entries,
+                    "next_offset": (next_offset < total).then_some(next_offset),
+                    "index_path": state.log_index_path.as_ref().map(|path| path.display().to_string()),
+                    "source": "replay",
+                }),
+                Some(state.cursor_rev),
+                None,
+            );
+        }
+
+        let mut reader = match open_structured_log_reader(&state.log_base) {
+            Ok(reader) => reader,
+            Err(err) => {
+                return err_response(request_id, "StructuredLogOpenFailed", &err.to_string());
+            }
+        };
+
+        let limit = parsed
+            .limit
+            .unwrap_or(MAX_LOG_PAGE_LIMIT)
+            .min(MAX_LOG_PAGE_LIMIT);
+        let mut entries = Vec::new();
+        let mut decoded_index = 0usize;
+        let mut emitted = 0usize;
+        let mut reached_end = false;
+
+        while emitted < limit {
+            let entry = match read_next_structured_log_entry(&mut reader) {
+                Ok(Some(entry)) => entry,
+                Ok(None) => {
+                    reached_end = true;
+                    break;
+                }
+                Err(err) => {
+                    return err_response(request_id, "StructuredLogReadFailed", &err.to_string());
+                }
+            };
+
+            if decoded_index >= parsed.offset {
+                entries.push(structured_log_entry_json(decoded_index, &strings, &entry));
+                emitted += 1;
+            }
+            decoded_index = decoded_index.saturating_add(1);
+        }
+
+        ok_response(
+            request_id,
+            json!({
+                "entries": entries,
+                "next_offset": (!reached_end).then_some(parsed.offset.saturating_add(emitted)),
+                "index_path": state.log_index_path.as_ref().map(|path| path.display().to_string()),
+                "source": "recorded",
             }),
             Some(state.cursor_rev),
             None,
@@ -2587,11 +2837,12 @@ fn capabilities_json(session_lifecycle: SessionLifecycleLimits) -> Value {
         "version": API_VERSION,
         "wire_codecs": ["cbor", "json"],
         "supports_targets": ["cl", "ts"],
-            "session_lifecycle": {
-                "idle_timeout_ms": session_lifecycle.idle_timeout.as_millis() as u64,
-                "max_sessions": session_lifecycle.max_sessions,
-                "cleanup_policy": "on_each_request_or_timeout_tick",
-            },
+        "max_replay_batch_limit": MAX_REPLAY_BATCH_LIMIT,
+        "session_lifecycle": {
+            "idle_timeout_ms": session_lifecycle.idle_timeout.as_millis() as u64,
+            "max_sessions": session_lifecycle.max_sessions,
+            "cleanup_policy": "on_each_request_or_timeout_tick",
+        },
         "supports_methods": [
             "admin.stop",
             "session.open",
@@ -2605,6 +2856,8 @@ fn capabilities_json(session_lifecycle: SessionLifecycleLimits) -> Value {
             "timeline.get_cursor",
             "timeline.get_cl",
             "timeline.list",
+            "logs.strings",
+            "logs.list",
             "schema.get_stack",
             "schema.list_types",
             "schema.get_type",
@@ -2676,6 +2929,185 @@ fn update_after_jump<App, P, CB, TF, S, L>(
     state.bump_rev();
 }
 
+fn ensure_session_interned_strings<'a, App, P, CB, TF, S, L>(
+    state: &'a mut SessionState<App, P, CB, TF, S, L>,
+    process_info: &RemoteDebugProcessInfo,
+) -> CuResult<&'a [String]>
+where
+    P: CopperListTuple + 'static,
+    S: SectionStorage,
+    L: UnifiedLogWrite<S> + 'static,
+{
+    if state.interned_strings.is_none() {
+        let index_path =
+            find_structured_log_index(&state.log_base, process_info).ok_or_else(|| {
+                CuError::from("structured log string index not found on debug server")
+            })?;
+        let strings = cu29_intern_strs::read_interned_strings(&index_path).map_err(|err| {
+            CuError::new_with_cause(
+                "failed reading structured log string index",
+                io::Error::other(err.to_string()),
+            )
+        })?;
+        state.log_index_path = Some(index_path);
+        state.interned_strings = Some(strings);
+    }
+    Ok(state.interned_strings.as_deref().unwrap_or(&[]))
+}
+
+fn find_structured_log_index(
+    log_base: &Path,
+    process_info: &RemoteDebugProcessInfo,
+) -> Option<PathBuf> {
+    let mut candidates = Vec::<PathBuf>::new();
+    if let Ok(path) = std::env::var("LOG_INDEX_DIR") {
+        push_log_index_candidate(&mut candidates, PathBuf::from(path));
+    }
+    if let Some(path) = process_info.restart_env.get("LOG_INDEX_DIR") {
+        push_log_index_candidate(&mut candidates, PathBuf::from(path));
+    }
+
+    push_log_index_candidates_from_base(&mut candidates, &process_info.working_dir);
+    if let Some(parent) = process_info.executable_path.parent() {
+        push_log_index_candidates_from_base(&mut candidates, parent);
+        for ancestor in parent.ancestors().take(8) {
+            push_log_index_candidates_from_base(&mut candidates, ancestor);
+        }
+    }
+    if let Some(parent) = log_base.parent() {
+        push_log_index_candidates_from_base(&mut candidates, parent);
+        if let Some(grandparent) = parent.parent() {
+            push_log_index_candidates_from_base(&mut candidates, grandparent);
+        }
+    }
+
+    candidates
+        .into_iter()
+        .find(|path| path.is_file() || path.join("strings.bin").is_file())
+}
+
+fn push_log_index_candidates_from_base(candidates: &mut Vec<PathBuf>, base: &Path) {
+    for candidate in [
+        base.join("cu29_log_index"),
+        base.join("target").join("cu29_log_index"),
+        base.join("target").join("debug").join("cu29_log_index"),
+        base.join("target").join("release").join("cu29_log_index"),
+    ] {
+        push_log_index_candidate(candidates, candidate);
+    }
+
+    if let Ok(entries) = fs::read_dir(base.join("target")) {
+        for entry in entries.flatten() {
+            push_log_index_candidate(candidates, entry.path().join("cu29_log_index"));
+        }
+    }
+}
+
+fn push_log_index_candidate(candidates: &mut Vec<PathBuf>, candidate: PathBuf) {
+    if !candidates.iter().any(|existing| existing == &candidate) {
+        candidates.push(candidate);
+    }
+}
+
+fn open_structured_log_reader(log_base: &Path) -> CuResult<UnifiedLoggerIOReader> {
+    let logger = UnifiedLoggerBuilder::new()
+        .file_base_name(log_base)
+        .build()
+        .map_err(|err| CuError::new_with_cause("failed opening unified log", err))?;
+    match logger {
+        UnifiedLogger::Read(read_logger) => Ok(UnifiedLoggerIOReader::new(
+            read_logger,
+            UnifiedLogType::StructuredLogLine,
+        )),
+        UnifiedLogger::Write(_) => Err(CuError::from(
+            "expected read-only unified logger for structured log",
+        )),
+    }
+}
+
+fn read_next_structured_log_entry(
+    reader: &mut UnifiedLoggerIOReader,
+) -> CuResult<Option<CuLogEntry>> {
+    loop {
+        return match decode_from_std_read::<CuLogEntry, _, _>(reader, standard()) {
+            Ok(entry) if entry.msg_index == 0 => continue,
+            Ok(entry) => Ok(Some(entry)),
+            Err(DecodeError::UnexpectedEnd { .. }) => Ok(None),
+            Err(DecodeError::Io { inner, .. })
+                if inner.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                Ok(None)
+            }
+            Err(err) => Err(CuError::new_with_cause("error reading structured log", err)),
+        };
+    }
+}
+
+fn structured_log_entry_json(index: usize, strings: &[String], entry: &CuLogEntry) -> Value {
+    let params = entry
+        .params
+        .iter()
+        .enumerate()
+        .map(|(param_index, value)| {
+            let name_index = entry
+                .paramname_indexes
+                .get(param_index)
+                .copied()
+                .unwrap_or(0);
+            let label = if name_index == 0 {
+                format!("${param_index}")
+            } else {
+                strings
+                    .get(name_index as usize)
+                    .cloned()
+                    .unwrap_or_else(|| format!("param#{name_index}"))
+            };
+            json!({
+                "label": label,
+                "name_index": name_index,
+                "value": value.to_string(),
+                "json_value": serde_json::to_value(value).unwrap_or(Value::Null),
+                "numeric_value": numeric_structured_log_value(value),
+            })
+        })
+        .collect::<Vec<_>>();
+
+    json!({
+        "index": index,
+        "time_ns": entry.time.as_nanos(),
+        "level": format!("{:?}", entry.level),
+        "msg_index": entry.msg_index,
+        "message_template": strings.get(entry.msg_index as usize).cloned(),
+        "culistid": entry.origin.culistid,
+        "component_id": entry.origin.component_id,
+        "task_index": entry.origin.task_index,
+        "paramname_indexes": entry.paramname_indexes.iter().copied().collect::<Vec<_>>(),
+        "params": params,
+    })
+}
+
+fn numeric_structured_log_value(value: &cu29_value::Value) -> Option<f64> {
+    match value {
+        cu29_value::Value::U8(value) => Some(f64::from(*value)),
+        cu29_value::Value::U16(value) => Some(f64::from(*value)),
+        cu29_value::Value::U32(value) => Some(f64::from(*value)),
+        cu29_value::Value::U64(value) => Some(*value as f64),
+        cu29_value::Value::U128(value) => Some(*value as f64),
+        cu29_value::Value::I8(value) => Some(f64::from(*value)),
+        cu29_value::Value::I16(value) => Some(f64::from(*value)),
+        cu29_value::Value::I32(value) => Some(f64::from(*value)),
+        cu29_value::Value::I64(value) => Some(*value as f64),
+        cu29_value::Value::I128(value) => Some(*value as f64),
+        cu29_value::Value::F32(value) => Some(f64::from(*value)),
+        cu29_value::Value::F64(value) => Some(*value),
+        cu29_value::Value::CuTime(value) => Some(value.as_nanos() as f64),
+        cu29_value::Value::Newtype(value) | cu29_value::Value::Option(Some(value)) => {
+            numeric_structured_log_value(value)
+        }
+        _ => None,
+    }
+}
+
 fn seek_to_index<App, P, CB, TF, S, L>(
     session: &mut CuDebugSession<App, P, CB, TF, S, L>,
     idx: usize,
@@ -2693,10 +3125,7 @@ where
         -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
 {
-    let cl = session
-        .cl_at(idx)?
-        .ok_or_else(|| CuError::from(format!("No copperlist at idx {idx}")))?;
-    session.goto_cl(cl.id)
+    session.goto_index(idx)
 }
 
 fn replay_current_step<App, P, CB, TF, S, L>(
@@ -2725,6 +3154,68 @@ where
     }
     session.step(-1)?;
     session.step(1)
+}
+
+fn nav_replay_item_snapshot<App, P, CB, TF, S, L>(
+    state: &mut SessionState<App, P, CB, TF, S, L>,
+    time_of: &TF,
+    params: &NavReplayParams,
+) -> CuResult<Value>
+where
+    App: CuSimApplication<S, L> + ReflectTaskIntrospection + CurrentRuntimeCopperList<P>,
+    L: UnifiedLogWrite<S> + 'static,
+    S: SectionStorage,
+    P: CopperListTuple + 'static,
+    CB: for<'a> Fn(
+        &'a crate::copperlist::CopperList<P>,
+        RobotClock,
+        RobotClockMock,
+    )
+        -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
+    TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
+{
+    let cursor = cursor_snapshot(state, time_of)?;
+    let mut item = Map::new();
+    item.insert(
+        "cursor".to_string(),
+        serde_json::to_value(&cursor).unwrap_or(Value::Null),
+    );
+
+    if params.include_cl_snapshot
+        || params.include_payloads
+        || params.include_metadata
+        || params.include_raw
+    {
+        let current_cl = match state.session.current_cl()? {
+            Some(cl) => copperlist_snapshot::<P>(
+                cl.as_ref(),
+                time_of,
+                params.include_payloads,
+                params.include_metadata,
+                params.include_raw,
+            )?,
+            None => Value::Null,
+        };
+        item.insert("cl_snapshot".to_string(), current_cl);
+    }
+
+    if params.include_replayed_cl {
+        let replayed_cl = replayed_copperlist_snapshot::<App, P, CB, TF, S, L>(
+            state,
+            time_of,
+            params.include_payloads,
+            params.include_metadata,
+            params.include_raw,
+        )?;
+        item.insert("replayed_cl".to_string(), replayed_cl);
+    }
+
+    if params.include_state {
+        let tasks = build_tasks_json::<App, P, CB, TF, S, L>(state)?;
+        item.insert("tasks".to_string(), tasks);
+    }
+
+    Ok(Value::Object(item))
 }
 
 fn cursor_snapshot<App, P, CB, TF, S, L>(
@@ -2787,6 +3278,7 @@ where
         cl: cl.id,
         idx: resolved.idx,
         ts_ns: time_of(cl.as_ref()).map(|t| t.as_nanos()),
+        is_keyframe: session.is_keyframe_culistid(cl.id),
         keyframe_cl: session.nearest_keyframe_culistid(cl.id),
     })
 }
@@ -2810,93 +3302,29 @@ where
         -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
 {
-    let total = session.total_entries();
-
-    match target {
-        Target::Cl { cl } => {
-            let mut best_after: Option<ResolvedAt> = None;
-            let mut best_before: Option<ResolvedAt> = None;
-
-            for idx in 0..total {
-                let entry = session
-                    .cl_at(idx)?
-                    .ok_or_else(|| CuError::from("Corrupt session index"))?;
-                let ts = time_of(entry.as_ref()).map(|t| t.as_nanos());
-                let this = ResolvedAt {
-                    cl: entry.id,
-                    ts_ns: ts,
-                    idx,
-                };
-
-                if entry.id == *cl {
-                    return Ok(this);
-                }
-                if entry.id > *cl && best_after.is_none() {
-                    best_after = Some(this.clone());
-                }
-                if entry.id < *cl {
-                    best_before = Some(this);
-                }
-            }
-
-            match mode {
-                ResolveMode::Exact => Err(CuError::from(format!("No exact CL target for {cl}"))),
-                ResolveMode::AtOrAfter => {
-                    best_after.ok_or_else(|| CuError::from(format!("No CL at/after target {cl}")))
-                }
-                ResolveMode::AtOrBefore => {
-                    best_before.ok_or_else(|| CuError::from(format!("No CL at/before target {cl}")))
-                }
-            }
-        }
+    let indexed_mode = indexed_resolve_mode(mode);
+    let idx = match target {
+        Target::Cl { cl } => session.resolve_index_for_culistid(*cl, indexed_mode)?,
         Target::Ts { ts_ns } => {
-            let target_time = CuTime::from(*ts_ns);
-
-            let mut exact: Option<ResolvedAt> = None;
-            let mut best_after: Option<ResolvedAt> = None;
-            let mut best_before: Option<ResolvedAt> = None;
-
-            for idx in 0..total {
-                let entry = session
-                    .cl_at(idx)?
-                    .ok_or_else(|| CuError::from("Corrupt session index"))?;
-                let ts = time_of(entry.as_ref()).map(|t| t.as_nanos());
-                let this = ResolvedAt {
-                    cl: entry.id,
-                    ts_ns: ts,
-                    idx,
-                };
-
-                if let Some(entry_ts) = ts {
-                    if entry_ts == *ts_ns {
-                        exact = Some(this);
-                        break;
-                    }
-                    if entry_ts > *ts_ns && best_after.is_none() {
-                        best_after = Some(this.clone());
-                    }
-                    if entry_ts < *ts_ns {
-                        best_before = Some(this);
-                    }
-                } else {
-                    let _ = target_time;
-                }
-            }
-
-            if let Some(exact) = exact {
-                return Ok(exact);
-            }
-
-            match mode {
-                ResolveMode::Exact => Err(CuError::from(format!(
-                    "No exact timestamp target for {ts_ns}"
-                ))),
-                ResolveMode::AtOrAfter => best_after
-                    .ok_or_else(|| CuError::from(format!("No timestamp at/after {ts_ns}"))),
-                ResolveMode::AtOrBefore => best_before
-                    .ok_or_else(|| CuError::from(format!("No timestamp at/before {ts_ns}"))),
-            }
+            session.resolve_index_for_time(CuTime::from(*ts_ns), indexed_mode)?
         }
+    };
+    let entry = session
+        .cl_at(idx)?
+        .ok_or_else(|| CuError::from("Resolved target points to missing copperlist"))?;
+
+    Ok(ResolvedAt {
+        cl: entry.id,
+        ts_ns: time_of(entry.as_ref()).map(|t| t.as_nanos()),
+        idx,
+    })
+}
+
+fn indexed_resolve_mode(mode: ResolveMode) -> IndexedResolveMode {
+    match mode {
+        ResolveMode::Exact => IndexedResolveMode::Exact,
+        ResolveMode::AtOrAfter => IndexedResolveMode::AtOrAfter,
+        ResolveMode::AtOrBefore => IndexedResolveMode::AtOrBefore,
     }
 }
 
@@ -2977,6 +3405,85 @@ fn erased_serialize_to_json(value: &dyn erased_serde::Serialize) -> CuResult<Val
         .map_err(|e| CuError::new_with_cause("Failed to parse serialized payload JSON", e))
 }
 
+fn build_tasks_json<App, P, CB, TF, S, L>(
+    state: &mut SessionState<App, P, CB, TF, S, L>,
+) -> CuResult<Value>
+where
+    App: CuSimApplication<S, L> + ReflectTaskIntrospection,
+    L: UnifiedLogWrite<S> + 'static,
+    S: SectionStorage,
+    P: CopperListTuple + 'static,
+    CB: for<'a> Fn(
+        &'a crate::copperlist::CopperList<P>,
+        RobotClock,
+        RobotClockMock,
+    )
+        -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
+    TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
+{
+    let mut tasks = serde_json::Map::new();
+    let mut registry = TypeRegistry::default();
+    populate_debug_type_registry::<App>(&mut registry);
+
+    for task_id in P::get_all_task_ids() {
+        if let Ok(task_state) = state
+            .session
+            .with_debug_state(task_id, |task| reflect_value_to_json(task, &registry))
+        {
+            tasks.insert(task_id.to_string(), task_state);
+        }
+    }
+
+    Ok(Value::Object(tasks))
+}
+
+fn replayed_copperlist_snapshot<App, P, CB, TF, S, L>(
+    state: &mut SessionState<App, P, CB, TF, S, L>,
+    time_of: &TF,
+    include_payloads: bool,
+    include_metadata: bool,
+    include_raw: bool,
+) -> CuResult<Value>
+where
+    App: CuSimApplication<S, L> + CurrentRuntimeCopperList<P>,
+    L: UnifiedLogWrite<S> + 'static,
+    S: SectionStorage,
+    P: CopperListTuple + 'static,
+    CB: for<'a> Fn(
+        &'a crate::copperlist::CopperList<P>,
+        RobotClock,
+        RobotClockMock,
+    )
+        -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
+    TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
+{
+    let snapshot = state.session.with_app(|app| {
+        app.current_runtime_copperlist_bytes()
+            .map(|bytes| {
+                bincode::decode_from_slice::<crate::copperlist::CopperList<P>, _>(
+                    bytes,
+                    bincode::config::standard(),
+                )
+                .map(|(cl, _)| cl)
+                .map_err(|e| {
+                    CuError::new_with_cause("Failed to decode replayed CopperList snapshot", e)
+                })
+                .and_then(|cl| {
+                    copperlist_snapshot::<P>(
+                        &cl,
+                        time_of,
+                        include_payloads,
+                        include_metadata,
+                        include_raw,
+                    )
+                })
+            })
+            .transpose()
+    })?;
+
+    Ok(snapshot.unwrap_or(Value::Null))
+}
+
 fn build_state_root_json<App, P, CB, TF, S, L>(
     state: &mut SessionState<App, P, CB, TF, S, L>,
     time_of: &TF,
@@ -2994,37 +3501,15 @@ where
         -> Box<dyn for<'z> FnMut(App::Step<'z>) -> crate::simulation::SimOverride + 'a>,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
 {
-    let mut tasks = serde_json::Map::new();
-
-    for task_id in P::get_all_task_ids() {
-        if let Ok(task) = state.session.reflected_task(task_id) {
-            tasks.insert(task_id.to_string(), reflect_value_to_json(task));
-        }
-    }
+    let tasks = build_tasks_json::<App, P, CB, TF, S, L>(state)?;
 
     let current_cl = match state.session.current_cl()? {
         Some(cl) => copperlist_snapshot::<P>(cl.as_ref(), time_of, true, true, false)?,
         None => Value::Null,
     };
 
-    let replayed_cl = state
-        .session
-        .with_app(|app| {
-            app.current_runtime_copperlist_bytes()
-                .map(|bytes| {
-                    bincode::decode_from_slice::<crate::copperlist::CopperList<P>, _>(
-                        bytes,
-                        bincode::config::standard(),
-                    )
-                    .map(|(cl, _)| cl)
-                    .map_err(|e| {
-                        CuError::new_with_cause("Failed to decode replayed CopperList snapshot", e)
-                    })
-                    .and_then(|cl| copperlist_snapshot::<P>(&cl, time_of, true, true, false))
-                })
-                .transpose()
-        })?
-        .unwrap_or(Value::Null);
+    let replayed_cl =
+        replayed_copperlist_snapshot::<App, P, CB, TF, S, L>(state, time_of, true, true, false)?;
 
     let cursor = cursor_snapshot(state, time_of)
         .map(|c| serde_json::to_value(c).unwrap_or(Value::Null))
@@ -3353,8 +3838,16 @@ where
             crate::curuntime::CuTaskType::Regular => "regular",
             crate::curuntime::CuTaskType::Sink => "sink",
         };
-        let resolved_info = resolve_type_info_by_path(&registry, node.get_type());
-        let state_type_path = resolved_info.map(|info| info.type_path().to_string());
+        let state_type_path =
+            <App as ReflectTaskIntrospection>::debug_state_type_path(node.get_id().as_str())
+                .map(str::to_owned)
+                .or_else(|| {
+                    resolve_type_info_by_path(&registry, node.get_type())
+                        .map(|info| info.type_path().to_string())
+                });
+        let resolved_info = state_type_path
+            .as_deref()
+            .and_then(|type_path| resolve_type_info_by_path(&registry, type_path));
         let state_fields = resolved_info
             .map(|info| build_field_catalog(&registry, info, None))
             .unwrap_or_default();
@@ -3497,23 +3990,26 @@ fn build_field_catalog(
     }
 }
 
-fn debug_scalar_field_types() -> &'static HashMap<&'static str, &'static str> {
-    static FIELD_TYPES: OnceLock<HashMap<&'static str, &'static str>> = OnceLock::new();
-    FIELD_TYPES.get_or_init(|| {
-        let mut types = HashMap::new();
+fn debug_scalar_kinds() -> &'static HashMap<&'static str, DebugScalarKind> {
+    static SCALAR_KINDS: OnceLock<HashMap<&'static str, DebugScalarKind>> = OnceLock::new();
+    SCALAR_KINDS.get_or_init(|| {
+        let mut kinds = HashMap::new();
         for registration in cu29_clock::debug_scalar_registrations() {
-            types.insert(registration.type_path, registration.field_type);
+            kinds.insert(registration.type_path, DebugScalarKind::U64);
         }
         for registration in cu29_units::debug_scalar_registrations() {
-            types.insert(registration.type_path, registration.field_type);
+            kinds.insert(registration.type_path, registration.scalar_kind);
         }
-        types.insert(core::any::type_name::<CuCompactString>(), "string");
-        types
+        kinds.insert(
+            core::any::type_name::<CuCompactString>(),
+            DebugScalarKind::String,
+        );
+        kinds
     })
 }
 
-fn debug_scalar_field_type(value_type_path: &str) -> Option<&'static str> {
-    debug_scalar_field_types().get(value_type_path).copied()
+fn debug_scalar_kind(value_type_path: &str) -> Option<DebugScalarKind> {
+    debug_scalar_kinds().get(value_type_path).copied()
 }
 
 fn debug_scalar_semantics(value_type_path: &str) -> Option<DebugFieldSemantics> {
@@ -3569,10 +4065,10 @@ fn build_field_node(
         return debug_field_descriptor(
             display_path,
             binding_name,
-            primitive_field_type_name(value_type_path).unwrap_or("unknown"),
             value_type_path,
             DebugFieldShape {
                 semantics: None,
+                scalar_kind: primitive_scalar_kind(value_type_path),
                 nullable,
                 kind: DebugFieldKind::Scalar,
             },
@@ -3598,14 +4094,14 @@ fn build_type_node(
     binding_name: Option<&str>,
     nullable: bool,
 ) -> DebugFieldDescriptor {
-    if let Some(field_type) = debug_scalar_field_type(value_type_path) {
+    if let Some(scalar_kind) = debug_scalar_kind(value_type_path) {
         return debug_field_descriptor(
             display_path,
             binding_name,
-            field_type,
             value_type_path,
             DebugFieldShape {
                 semantics: debug_type_semantics(value_type_path),
+                scalar_kind: Some(scalar_kind),
                 nullable,
                 kind: DebugFieldKind::Scalar,
             },
@@ -3617,10 +4113,10 @@ fn build_type_node(
         TypeInfo::Struct(info) => debug_field_descriptor(
             display_path,
             binding_name,
-            "object",
             value_type_path,
             DebugFieldShape {
                 semantics: debug_type_semantics(value_type_path),
+                scalar_kind: None,
                 nullable,
                 kind: DebugFieldKind::Struct,
             },
@@ -3629,10 +4125,10 @@ fn build_type_node(
         TypeInfo::TupleStruct(info) => debug_field_descriptor(
             display_path,
             binding_name,
-            "tuple",
             value_type_path,
             DebugFieldShape {
                 semantics: debug_type_semantics(value_type_path),
+                scalar_kind: None,
                 nullable,
                 kind: DebugFieldKind::TupleStruct,
             },
@@ -3641,10 +4137,10 @@ fn build_type_node(
         TypeInfo::Tuple(info) => debug_field_descriptor(
             display_path,
             binding_name,
-            "tuple",
             value_type_path,
             DebugFieldShape {
                 semantics: debug_type_semantics(value_type_path),
+                scalar_kind: None,
                 nullable,
                 kind: DebugFieldKind::Tuple,
             },
@@ -3653,10 +4149,10 @@ fn build_type_node(
         TypeInfo::List(info) => debug_field_descriptor(
             display_path,
             binding_name,
-            "array",
             value_type_path,
             DebugFieldShape {
                 semantics: debug_type_semantics(value_type_path),
+                scalar_kind: None,
                 nullable,
                 kind: DebugFieldKind::List,
             },
@@ -3672,10 +4168,10 @@ fn build_type_node(
         TypeInfo::Array(info) => debug_field_descriptor(
             display_path,
             binding_name,
-            "array",
             value_type_path,
             DebugFieldShape {
                 semantics: debug_type_semantics(value_type_path),
+                scalar_kind: None,
                 nullable,
                 kind: DebugFieldKind::Array,
             },
@@ -3691,10 +4187,10 @@ fn build_type_node(
         TypeInfo::Map(_) => debug_field_descriptor(
             display_path,
             binding_name,
-            "object",
             value_type_path,
             DebugFieldShape {
                 semantics: debug_type_semantics(value_type_path),
+                scalar_kind: None,
                 nullable,
                 kind: DebugFieldKind::Map,
             },
@@ -3703,10 +4199,10 @@ fn build_type_node(
         TypeInfo::Set(info) => debug_field_descriptor(
             display_path,
             binding_name,
-            "array",
             value_type_path,
             DebugFieldShape {
                 semantics: debug_type_semantics(value_type_path),
+                scalar_kind: None,
                 nullable,
                 kind: DebugFieldKind::Set,
             },
@@ -3734,10 +4230,10 @@ fn build_type_node(
             debug_field_descriptor(
                 display_path,
                 binding_name,
-                "enum",
                 value_type_path,
                 DebugFieldShape {
                     semantics: debug_type_semantics(value_type_path),
+                    scalar_kind: None,
                     nullable,
                     kind: DebugFieldKind::Enum,
                 },
@@ -3747,10 +4243,10 @@ fn build_type_node(
         TypeInfo::Opaque(info) => debug_field_descriptor(
             display_path,
             binding_name,
-            primitive_field_type_name(info.type_path()).unwrap_or("unknown"),
             value_type_path,
             DebugFieldShape {
                 semantics: debug_type_semantics(value_type_path),
+                scalar_kind: primitive_scalar_kind(info.type_path()),
                 nullable,
                 kind: DebugFieldKind::Scalar,
             },
@@ -3899,6 +4395,7 @@ fn option_inner_field(info: &EnumInfo) -> Option<(Option<&'static TypeInfo>, &Ty
 
 struct DebugFieldShape {
     semantics: Option<DebugFieldSemantics>,
+    scalar_kind: Option<DebugScalarKind>,
     nullable: bool,
     kind: DebugFieldKind,
 }
@@ -3906,7 +4403,6 @@ struct DebugFieldShape {
 fn debug_field_descriptor(
     display_path: &str,
     binding_name: Option<&str>,
-    field_type: &str,
     value_type_path: &str,
     shape: DebugFieldShape,
     children: Vec<DebugFieldDescriptor>,
@@ -3914,8 +4410,8 @@ fn debug_field_descriptor(
     DebugFieldDescriptor {
         display_path: display_path.to_owned(),
         binding_name: binding_name.map(str::to_owned),
-        field_type: field_type.to_owned(),
         value_type_path: value_type_path.to_owned(),
+        scalar_kind: shape.scalar_kind,
         semantics: shape.semantics,
         nullable: shape.nullable,
         kind: shape.kind,
@@ -3947,51 +4443,39 @@ fn path_or_value(path: &str) -> String {
     }
 }
 
-fn primitive_field_type_name(type_path: &str) -> Option<&'static str> {
+fn primitive_scalar_kind(type_path: &str) -> Option<DebugScalarKind> {
     match type_path {
-        "()" => Some("null"),
-        "bool" | "core::primitive::bool" => Some("bool"),
-        "i8"
-        | "core::primitive::i8"
-        | "i16"
-        | "core::primitive::i16"
-        | "i32"
-        | "core::primitive::i32"
-        | "i64"
-        | "core::primitive::i64"
-        | "i128"
-        | "core::primitive::i128"
-        | "isize"
-        | "core::primitive::isize"
-        | "u8"
-        | "core::primitive::u8"
-        | "u16"
-        | "core::primitive::u16"
-        | "u32"
-        | "core::primitive::u32"
-        | "u64"
-        | "core::primitive::u64"
-        | "u128"
-        | "core::primitive::u128"
-        | "usize"
-        | "core::primitive::usize" => Some("integer"),
-        "f32" | "core::primitive::f32" | "f64" | "core::primitive::f64" => Some("number"),
-        "char" | "core::primitive::char" => Some("string"),
-        "alloc::string::String" | "std::string::String" | "str" | "&str" => Some("string"),
+        "bool" | "core::primitive::bool" => Some(DebugScalarKind::Bool),
+        "i8" | "core::primitive::i8" => Some(DebugScalarKind::I8),
+        "i16" | "core::primitive::i16" => Some(DebugScalarKind::I16),
+        "i32" | "core::primitive::i32" => Some(DebugScalarKind::I32),
+        "i64" | "core::primitive::i64" => Some(DebugScalarKind::I64),
+        "i128" | "core::primitive::i128" => Some(DebugScalarKind::I128),
+        "isize" | "core::primitive::isize" => Some(DebugScalarKind::Isize),
+        "u8" | "core::primitive::u8" => Some(DebugScalarKind::U8),
+        "u16" | "core::primitive::u16" => Some(DebugScalarKind::U16),
+        "u32" | "core::primitive::u32" => Some(DebugScalarKind::U32),
+        "u64" | "core::primitive::u64" => Some(DebugScalarKind::U64),
+        "u128" | "core::primitive::u128" => Some(DebugScalarKind::U128),
+        "usize" | "core::primitive::usize" => Some(DebugScalarKind::Usize),
+        "f32" | "core::primitive::f32" => Some(DebugScalarKind::F32),
+        "f64" | "core::primitive::f64" => Some(DebugScalarKind::F64),
+        "char" | "core::primitive::char" => Some(DebugScalarKind::Char),
+        "alloc::string::String" | "std::string::String" | "str" | "&str" => {
+            Some(DebugScalarKind::String)
+        }
         _ => None,
     }
 }
 #[cfg(feature = "reflect")]
-fn reflect_value_to_json(value: &dyn crate::reflect::Reflect) -> Value {
-    let mut registry = TypeRegistry::default();
-    let _ = &mut registry;
-    let serializer = crate::reflect::serde::ReflectSerializer::new(value, &registry);
+fn reflect_value_to_json(value: &dyn crate::reflect::Reflect, registry: &TypeRegistry) -> Value {
+    let serializer = crate::reflect::serde::TypedReflectSerializer::new(value, registry);
     serde_json::to_value(serializer)
         .unwrap_or_else(|_| Value::String("reflect serialization failed".to_string()))
 }
 
 #[cfg(not(feature = "reflect"))]
-fn reflect_value_to_json(_value: &dyn crate::reflect::Reflect) -> Value {
+fn reflect_value_to_json(_value: &dyn crate::reflect::Reflect, _registry: &TypeRegistry) -> Value {
     Value::String("Reflect feature disabled".to_string())
 }
 
@@ -4024,6 +4508,10 @@ fn default_state_format() -> String {
     "json".to_string()
 }
 
+fn default_nav_replay_limit() -> u32 {
+    1
+}
+
 fn now_unix_ns() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -4051,7 +4539,7 @@ fn hex_digit(n: u8) -> char {
 mod tests {
     use super::{
         build_message_metadata_field_descriptors, build_output_schema_entries, build_stack_schema,
-        metadata_to_json, register_debug_support_types,
+        metadata_to_json, reflect_value_to_json, register_debug_support_types,
     };
     use crate::app::CuSimApplication;
     use crate::curuntime::KeyFrame;
@@ -4061,8 +4549,8 @@ mod tests {
     use compact_str::CompactString;
     use cu29_clock::{CuTime, CuTimeRange, OptionCuTime, PartialCuTimeRange, Tov};
     use cu29_traits::{
-        CuCompactString, CuMsgOrigin, CuResult, DebugFieldKind, ErasedCuStampedData,
-        ErasedCuStampedDataSet, MatchingTasks, TaskOutputSpec,
+        CuCompactString, CuMsgOrigin, CuResult, DebugFieldKind, DebugScalarKind,
+        ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks, TaskOutputSpec,
     };
     use cu29_unifiedlog::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
     use cu29_units::si::f32::Ratio;
@@ -4105,6 +4593,80 @@ mod tests {
 
         fn reflect_task_mut(&mut self, _task_id: &str) -> Option<&mut dyn Reflect> {
             None
+        }
+    }
+
+    #[derive(Reflect)]
+    struct RawDebugTask {
+        hidden: f32,
+    }
+
+    #[derive(Reflect)]
+    struct CustomDebugState {
+        visible: Ratio,
+    }
+
+    struct CustomDebugStateApp;
+
+    impl ReflectTaskIntrospection for CustomDebugStateApp {
+        fn reflect_task(&self, _task_id: &str) -> Option<&dyn Reflect> {
+            None
+        }
+
+        fn reflect_task_mut(&mut self, _task_id: &str) -> Option<&mut dyn Reflect> {
+            None
+        }
+
+        fn register_reflect_types(registry: &mut TypeRegistry) {
+            registry.register::<CustomDebugState>();
+        }
+
+        fn debug_state_type_path(task_id: &str) -> Option<&'static str> {
+            (task_id == "beta_src").then_some(<CustomDebugState as TypePath>::type_path())
+        }
+    }
+
+    impl CuSimApplication<MmapSectionStorage, MmapUnifiedLoggerWrite> for CustomDebugStateApp {
+        type Step<'z> = ();
+
+        fn get_original_config() -> String {
+            include_str!("../tests/remote_debug_missions_config.ron").to_string()
+        }
+
+        fn mission_id() -> Option<&'static str> {
+            Some("Beta")
+        }
+
+        fn start_all_tasks(
+            &mut self,
+            _sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
+        ) -> CuResult<()> {
+            Ok(())
+        }
+
+        fn run_one_iteration(
+            &mut self,
+            _sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
+        ) -> CuResult<()> {
+            Ok(())
+        }
+
+        fn run(
+            &mut self,
+            _sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
+        ) -> CuResult<()> {
+            Ok(())
+        }
+
+        fn stop_all_tasks(
+            &mut self,
+            _sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
+        ) -> CuResult<()> {
+            Ok(())
+        }
+
+        fn restore_keyframe(&mut self, _freezer: &KeyFrame) -> CuResult<()> {
+            Ok(())
         }
     }
 
@@ -4228,7 +4790,7 @@ mod tests {
 
         assert!(fields.iter().any(|field| {
             field.display_path == "power"
-                && field.field_type == "number"
+                && field.scalar_kind == Some(DebugScalarKind::F32)
                 && field.value_type_path == <Ratio as TypePath>::type_path()
         }));
         assert!(
@@ -4236,6 +4798,47 @@ mod tests {
                 .iter()
                 .any(|field| field.display_path == "power.value")
         );
+    }
+
+    #[test]
+    fn debug_state_serialization_uses_typed_shape_without_type_wrapper() {
+        let mut registry = TypeRegistry::default();
+        registry.register::<RawDebugTask>();
+        register_debug_support_types(&mut registry);
+
+        let value = reflect_value_to_json(&RawDebugTask { hidden: 1.25 }, &registry);
+        assert_eq!(value["hidden"], serde_json::json!(1.25));
+        assert!(value.get(<RawDebugTask as TypePath>::type_path()).is_none());
+    }
+
+    #[test]
+    fn stack_schema_uses_custom_debug_state_type() -> CuResult<()> {
+        let schema =
+            build_stack_schema::<CustomDebugStateApp, MmapSectionStorage, MmapUnifiedLoggerWrite>(
+            )?;
+
+        let beta_src = schema["tasks"]
+            .as_array()
+            .expect("tasks array")
+            .iter()
+            .find(|task| task["id"].as_str() == Some("beta_src"))
+            .expect("beta_src task");
+        assert_eq!(
+            beta_src["state_type_path"].as_str(),
+            Some(<CustomDebugState as TypePath>::type_path())
+        );
+        assert!(
+            beta_src["state_fields"]
+                .as_array()
+                .expect("state fields")
+                .iter()
+                .any(|field| {
+                    field["display_path"].as_str() == Some("visible")
+                        && field["scalar_kind"].as_str() == Some("f32")
+                })
+        );
+
+        Ok(())
     }
 
     #[test]

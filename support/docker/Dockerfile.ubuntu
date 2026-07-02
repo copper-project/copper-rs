@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
     git \
     curl \
+    just \
     python3 \
     python3-pip \
     build-essential \

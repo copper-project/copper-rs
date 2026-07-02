@@ -53,6 +53,14 @@ impl OwnedCounter {
         self.next += 1;
         v
     }
+
+    pub fn snapshot(&self) -> i64 {
+        self.next
+    }
+
+    pub fn restore(&mut self, next: i64) {
+        self.next = next;
+    }
 }
 
 #[derive(Clone, Default, Reflect)]

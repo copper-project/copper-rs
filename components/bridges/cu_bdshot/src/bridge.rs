@@ -1,7 +1,14 @@
+use bincode::de::{Decode, Decoder};
+use bincode::enc::{Encode, Encoder};
+use bincode::error::{DecodeError, EncodeError};
 use cu29::prelude::*;
+use spin::Mutex;
 
 use crate::board::{BdshotBoard, encode_frame};
-#[cfg(feature = "messages-only")]
+#[cfg(all(
+    feature = "messages-only",
+    not(any(feature = "rp2350", feature = "stm32h7"))
+))]
 use crate::messages::DShotTelemetry;
 use crate::messages::{EscCommand, EscTelemetry};
 
@@ -28,7 +35,10 @@ rx_channels! {
 
 const MAX_ESC_CHANNELS: usize = 4;
 
-#[cfg(feature = "messages-only")]
+#[cfg(all(
+    feature = "messages-only",
+    not(any(feature = "rp2350", feature = "stm32h7"))
+))]
 fn telemetry_status(idx: usize, telemetry: Option<DShotTelemetry>) -> CuCompactString {
     match telemetry {
         Some(DShotTelemetry::Erpm(v)) => format!("esc{} {}rpm", idx, v).into(),
@@ -51,7 +61,7 @@ where
     P::Board: Send + 'static,
 {
     #[reflect(ignore)]
-    board: spin::Mutex<P::Board>,
+    board: Mutex<P::Board>,
     #[reflect(ignore)]
     telemetry_cache: [Option<EscTelemetry>; MAX_ESC_CHANNELS],
     active_channels: [bool; MAX_ESC_CHANNELS],
@@ -84,8 +94,22 @@ where
     }
 }
 
-impl<P: BdshotBoardProvider + 'static> Freezable for CuBdshotBridge<P> where P::Board: Send + 'static
-{}
+impl<P: BdshotBoardProvider + 'static> Freezable for CuBdshotBridge<P>
+where
+    P::Board: Send + 'static,
+{
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&self.telemetry_cache, encoder)?;
+        Encode::encode(&self.last_send, encoder)?;
+        Ok(())
+    }
+
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        self.telemetry_cache = Decode::decode(decoder)?;
+        self.last_send = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl<P: BdshotBoardProvider + 'static> CuBridge for CuBdshotBridge<P>
 where
@@ -130,7 +154,7 @@ where
             None
         };
         Ok(Self {
-            board: spin::Mutex::new(board),
+            board: Mutex::new(board),
             telemetry_cache: Default::default(),
             active_channels: active,
             send_interval,
@@ -138,7 +162,7 @@ where
         })
     }
 
-    fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
+    fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
         let idle_frame = encode_frame(EscCommand::disarm());
 
         let mut ready = true;
@@ -148,7 +172,7 @@ where
                 if !self.active_channels[idx] {
                     continue;
                 }
-                debug!("Sending disarm frames {}", idx);
+                debug!(ctx, "Sending disarm frames {}", idx);
                 let sample = {
                     let mut board = self.board.lock();
                     board.delay(200);
@@ -165,11 +189,11 @@ where
             if ready {
                 break;
             }
-            debug!("Waiting for ESCs startup {}...", i);
+            debug!(ctx, "Waiting for ESCs startup {}...", i);
         }
 
         if !ready {
-            error!("Timeout waiting for ESC to start up");
+            error!(ctx, "Timeout waiting for ESC to start up");
             return Err(CuError::from("Timeout waiting for ESC to start up"));
         }
 
@@ -253,13 +277,19 @@ where
         }
         let telemetry_msg: &mut CuMsg<EscTelemetry> = msg.downcast_mut()?;
         if let Some(sample) = self.telemetry_cache[idx].take() {
-            #[cfg(feature = "messages-only")]
+            #[cfg(all(
+                feature = "messages-only",
+                not(any(feature = "rp2350", feature = "stm32h7"))
+            ))]
             telemetry_msg
                 .metadata
                 .set_status(telemetry_status(idx, sample.sample));
             telemetry_msg.set_payload(sample);
         } else {
-            #[cfg(feature = "messages-only")]
+            #[cfg(all(
+                feature = "messages-only",
+                not(any(feature = "rp2350", feature = "stm32h7"))
+            ))]
             telemetry_msg
                 .metadata
                 .set_status(telemetry_status(idx, None));

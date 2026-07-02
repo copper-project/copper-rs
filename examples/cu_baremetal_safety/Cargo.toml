@@ -1,0 +1,32 @@
+[package]
+name = "cu-baremetal-safety"
+description = "Bare-metal safety harness covering compiler lowering and foreground task lifecycle contracts."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+publish = false
+
+[package.metadata.copper-safety]
+scope = "bare-metal-no-std"
+
+[[test]]
+name = "safety_ids"
+path = "tests/safety_ids.rs"
+harness = false
+required-features = ["safety-ids"]
+
+[dependencies]
+cu29 = { workspace = true }
+serde = { workspace = true }
+tempfile = { workspace = true }
+
+[features]
+default = []
+safety-ids = ["cu29/safety-ids"]

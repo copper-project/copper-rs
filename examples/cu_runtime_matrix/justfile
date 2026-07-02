@@ -1,4 +1,4 @@
-ROOT := `git rev-parse --show-toplevel`
+ROOT := shell('cd "$1/../.." && pwd', justfile_directory())
 
 # Run the four benchmark modes by default.
 default warmup="128" iterations="256" spin="0" words="2048" rounds="16" seconds="1.0":

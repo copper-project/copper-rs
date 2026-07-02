@@ -30,3 +30,19 @@ To start the replay-backed remote debug server manually:
 ```bash
 just resim-debug
 ```
+
+## Monitors
+
+Copper runs without a monitor by default. To enable the per-task
+heap-allocation monitor, uncomment the `cu-memmon` dependency and the
+`memmon` feature in `Cargo.toml`, then add this entry to `copperconfig.ron`:
+
+```ron
+monitor: (
+    type: "cu_memmon::CuMemMon",
+    config: { "realtime_strict": false, "summary_every": 100 },
+),
+```
+
+Build with `cargo run --features memmon`. See the `cu_memmon` crate README
+for tuning knobs and output format.

@@ -85,7 +85,22 @@ pub mod tasks {
         next: u32,
     }
 
-    impl Freezable for SourceToBridge {}
+    impl Freezable for SourceToBridge {
+        fn freeze<E: cu29::bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), cu29::bincode::error::EncodeError> {
+            cu29::bincode::Encode::encode(&self.next, encoder)
+        }
+
+        fn thaw<D: cu29::bincode::de::Decoder>(
+            &mut self,
+            decoder: &mut D,
+        ) -> Result<(), cu29::bincode::error::DecodeError> {
+            self.next = cu29::bincode::Decode::decode(decoder)?;
+            Ok(())
+        }
+    }
 
     impl CuSrcTask for SourceToBridge {
         type Resources<'r> = ();

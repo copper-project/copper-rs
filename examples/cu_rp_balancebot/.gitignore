@@ -1,0 +1,6 @@
+dist/
+assets/balancebot.glb
+assets/skybox.ktx2
+assets/diffuse_map.ktx2
+assets/.download-cache/
+!assets/.gitkeep

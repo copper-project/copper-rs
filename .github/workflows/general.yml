@@ -6,12 +6,17 @@ on:
   pull_request:
     branches: ["master"]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   packages: read
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_NET_RETRY: "10"
   CARGO_PROFILE_DEV_DEBUG: "0"
   CARGO_PROFILE_TEST_DEBUG: "0"
   CARGO_PROFILE_DEV_CODEGEN_UNITS: "16"
@@ -29,15 +34,30 @@ jobs:
     outputs:
       image: ${{ steps.image_ref.outputs.image }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+      - id: registry_access
+        shell: bash
+        run: |
+          can_use_registry=true
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]] && [[ "${{ github.event.pull_request.head.repo.full_name }}" != "$GITHUB_REPOSITORY" ]]; then
+            can_use_registry=false
+          fi
+          echo "enabled=$can_use_registry" >> "$GITHUB_OUTPUT"
+      - name: Log in to GHCR
+        if: steps.registry_access.outputs.enabled == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - id: image_ref
         shell: bash
         run: |
           stable_image="ghcr.io/copper-project/copper-rs-ci:ubuntu-26.04"
           force_rebuild=false
-          relevant_image_paths='^(support/docker/|\.github/actions/rust-ci-setup/action\.yml$|\.github/workflows/general\.yml$|\.github/workflows/build-ci-images\.yml$)'
+          relevant_image_paths='^support/docker/'
 
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
             if [[ "${{ github.event.pull_request.head.repo.full_name }}" != "$GITHUB_REPOSITORY" ]]; then
@@ -46,12 +66,18 @@ jobs:
               exit 0
             fi
 
+            git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
             changed_files="$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "$GITHUB_SHA")"
             if grep -Eq "$relevant_image_paths" <<<"$changed_files"; then
               force_rebuild=true
             fi
           elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-            changed_files="$(git diff --name-only "${{ github.event.before }}" "$GITHUB_SHA" || true)"
+            if [[ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
+              git fetch --no-tags --depth=1 origin "${{ github.event.before }}" || true
+              changed_files="$(git diff --name-only "${{ github.event.before }}" "$GITHUB_SHA" || true)"
+            else
+              changed_files="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" || true)"
+            fi
             if grep -Eq "$relevant_image_paths" <<<"$changed_files"; then
               force_rebuild=true
             fi
@@ -74,13 +100,6 @@ jobs:
             fi
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
-      - name: Log in to GHCR
-        if: steps.image_ref.outputs.should_build == 'true'
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Docker Buildx
         if: steps.image_ref.outputs.should_build == 'true'
         id: buildx
@@ -97,6 +116,8 @@ jobs:
           pull: true
           push: true
           tags: ${{ steps.image_ref.outputs.tags }}
+          cache-from: type=gha,scope=linux-ci-image-ubuntu26
+          cache-to: type=gha,mode=max,scope=linux-ci-image-ubuntu26
 
   linux-cuda-ci-image:
     name: Linux CUDA CI Image
@@ -107,15 +128,30 @@ jobs:
     outputs:
       image: ${{ steps.image_ref.outputs.image }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+      - id: registry_access
+        shell: bash
+        run: |
+          can_use_registry=true
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]] && [[ "${{ github.event.pull_request.head.repo.full_name }}" != "$GITHUB_REPOSITORY" ]]; then
+            can_use_registry=false
+          fi
+          echo "enabled=$can_use_registry" >> "$GITHUB_OUTPUT"
+      - name: Log in to GHCR
+        if: steps.registry_access.outputs.enabled == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - id: image_ref
         shell: bash
         run: |
           stable_image="ghcr.io/copper-project/copper-rs-ci:cuda-12.6.1-ubuntu-24.04"
           force_rebuild=false
-          relevant_image_paths='^(support/docker/|\.github/actions/rust-ci-setup/action\.yml$|\.github/workflows/general\.yml$|\.github/workflows/build-ci-images\.yml$)'
+          relevant_image_paths='^support/docker/'
 
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
             if [[ "${{ github.event.pull_request.head.repo.full_name }}" != "$GITHUB_REPOSITORY" ]]; then
@@ -124,12 +160,18 @@ jobs:
               exit 0
             fi
 
+            git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
             changed_files="$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "$GITHUB_SHA")"
             if grep -Eq "$relevant_image_paths" <<<"$changed_files"; then
               force_rebuild=true
             fi
           elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-            changed_files="$(git diff --name-only "${{ github.event.before }}" "$GITHUB_SHA" || true)"
+            if [[ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
+              git fetch --no-tags --depth=1 origin "${{ github.event.before }}" || true
+              changed_files="$(git diff --name-only "${{ github.event.before }}" "$GITHUB_SHA" || true)"
+            else
+              changed_files="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" || true)"
+            fi
             if grep -Eq "$relevant_image_paths" <<<"$changed_files"; then
               force_rebuild=true
             fi
@@ -152,13 +194,6 @@ jobs:
             fi
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
-      - name: Log in to GHCR
-        if: steps.image_ref.outputs.should_build == 'true'
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Docker Buildx
         if: steps.image_ref.outputs.should_build == 'true'
         id: buildx
@@ -175,12 +210,14 @@ jobs:
           pull: true
           push: true
           tags: ${{ steps.image_ref.outputs.tags }}
+          cache-from: type=gha,scope=linux-cuda-ci-image-ubuntu24
+          cache-to: type=gha,mode=max,scope=linux-cuda-ci-image-ubuntu24
 
   msrv-container:
     name: MSRV Check
     if: needs.linux-ci-image.outputs.image != ''
     needs: linux-ci-image
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     container:
       image: ${{ needs.linux-ci-image.outputs.image }}
       credentials:
@@ -189,7 +226,7 @@ jobs:
     env:
       WORKSPACE_SCOPE: workspace
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -199,13 +236,13 @@ jobs:
           cache_prefix: msrv-ubuntu26-container
           cache_shared_key: rust-ubuntu
           install_nextest: "false"
-          sccache_key_suffix: msrv
-      - name: Detect embedded-only crates
+          sccache_write: "true"
+      - name: Detect default workspace exclusions
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
-          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+          EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ env.MSRV }})
+          echo "WORKSPACE_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Check workspace on MSRV
-        run: cargo +${{ env.MSRV }} check --workspace --all-targets $EMBEDDED_EXCLUDES
+        run: cargo +${{ env.MSRV }} check --workspace --all-targets $WORKSPACE_EXCLUDES
       - name: Check no_std default members on MSRV
         run: cargo +${{ env.MSRV }} check --no-default-features
 
@@ -213,11 +250,11 @@ jobs:
     name: MSRV Check
     if: needs.linux-ci-image.outputs.image == ''
     needs: linux-ci-image
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     env:
       WORKSPACE_SCOPE: workspace
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: rust_ci_setup
         uses: ./.github/actions/rust-ci-setup
         with:
@@ -227,19 +264,33 @@ jobs:
           cache_prefix: msrv-ubuntu-host
           cache_shared_key: rust-ubuntu
           install_nextest: "false"
-          sccache_key_suffix: msrv
-      - name: Detect embedded-only crates
+          sccache_write: "true"
+      - name: Detect default workspace exclusions
         run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
-          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+          EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ env.MSRV }})
+          echo "WORKSPACE_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
       - name: Check workspace on MSRV
-        run: cargo +${{ env.MSRV }} check --workspace --all-targets $EMBEDDED_EXCLUDES
+        run: cargo +${{ env.MSRV }} check --workspace --all-targets $WORKSPACE_EXCLUDES
       - name: Check no_std default members on MSRV
         run: cargo +${{ env.MSRV }} check --no-default-features
 
-  Unit-Tests:
+  Unit-Tests-Other:
     name: Unit Tests
-    needs: [linux-ci-image, linux-cuda-ci-image]
+    uses: ./.github/workflows/reusable-unit-tests.yml
+    secrets: inherit
+    with:
+      toolchain: stable
+      linux_cargo_paths: true
+      linux_disk_workarounds: false
+      linux_runner_label: ubuntu-latest-m
+      windows_runner_label: windows-latest-l
+      run_linux: false
+      run_cuda: false
+      run_other: true
+
+  Unit-Tests-Linux:
+    name: Unit Tests
+    needs: linux-ci-image
     uses: ./.github/workflows/reusable-unit-tests.yml
     secrets: inherit
     with:
@@ -247,10 +298,135 @@ jobs:
       linux_cargo_paths: true
       linux_disk_workarounds: false
       linux_ci_image: ${{ needs.linux-ci-image.outputs.image }}
+      linux_runner_label: ubuntu-latest-m
+      linux_light_runner_label: ubuntu-latest
+      windows_runner_label: windows-latest-l
+      run_linux: true
+      run_cuda: false
+      run_other: false
+
+  Unit-Tests-CUDA:
+    name: Unit Tests
+    needs: linux-cuda-ci-image
+    uses: ./.github/workflows/reusable-unit-tests.yml
+    secrets: inherit
+    with:
+      toolchain: stable
+      linux_cargo_paths: true
+      linux_disk_workarounds: false
       linux_cuda_ci_image: ${{ needs.linux-cuda-ci-image.outputs.image }}
       linux_runner_label: ubuntu-latest-m
       windows_runner_label: windows-latest-l
+      run_linux: false
+      run_cuda: true
+      run_other: false
 
+  extra-examples-container:
+    name: Extra Examples
+    if: needs.linux-ci-image.outputs.image != ''
+    needs: linux-ci-image
+    runs-on: ubuntu-latest-m
+    container:
+      image: ${{ needs.linux-ci-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      WORKSPACE_SCOPE: core
+    steps:
+      - uses: actions/checkout@v7
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: stable
+          linux_cargo_paths: true
+          prebaked_linux_image: "true"
+          cache_prefix: extra-examples-ubuntu26-container
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: "false"
+      - name: Install embedded targets
+        run: rustup target add thumbv8m.main-none-eabihf thumbv7em-none-eabihf --toolchain stable
+      - name: Check extra examples
+        run: just check-extra-examples
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+  extra-examples-host:
+    name: Extra Examples
+    if: needs.linux-ci-image.outputs.image == ''
+    needs: linux-ci-image
+    runs-on: ubuntu-latest-m
+    env:
+      WORKSPACE_SCOPE: core
+    steps:
+      - uses: actions/checkout@v7
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: stable
+          linux_cargo_paths: true
+          linux_disk_workarounds: "false"
+          cache_prefix: extra-examples-ubuntu-host
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: "false"
+      - name: Install embedded targets
+        run: rustup target add thumbv8m.main-none-eabihf thumbv7em-none-eabihf --toolchain stable
+      - name: Check extra examples
+        run: just check-extra-examples
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+  benchmarks-container:
+    name: Benchmarks
+    if: needs.linux-ci-image.outputs.image != ''
+    needs: linux-ci-image
+    runs-on: ubuntu-latest-m
+    container:
+      image: ${{ needs.linux-ci-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      WORKSPACE_SCOPE: core
+    steps:
+      - uses: actions/checkout@v7
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: stable
+          linux_cargo_paths: true
+          prebaked_linux_image: "true"
+          cache_prefix: benchmarks-ubuntu26-container
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: "false"
+      - name: Check benchmarks
+        run: just check-benchmarks
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
+  benchmarks-host:
+    name: Benchmarks
+    if: needs.linux-ci-image.outputs.image == ''
+    needs: linux-ci-image
+    runs-on: ubuntu-latest-m
+    env:
+      WORKSPACE_SCOPE: core
+    steps:
+      - uses: actions/checkout@v7
+      - id: rust_ci_setup
+        uses: ./.github/actions/rust-ci-setup
+        with:
+          toolchain: stable
+          linux_cargo_paths: true
+          linux_disk_workarounds: "false"
+          cache_prefix: benchmarks-ubuntu-host
+          cache_shared_key: rust-ubuntu-latest
+          install_nextest: "false"
+      - name: Check benchmarks
+        run: just check-benchmarks
+      - name: Show sccache stats
+        if: always()
+        run: sccache --show-stats || true
   coverage:
     if: github.event_name == 'pull_request'
     name: Coverage
@@ -271,7 +447,7 @@ jobs:
       PUBLIC_API_VERSION: "0.51.0"
       PUBLIC_API_TOOLCHAIN: nightly
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
@@ -279,7 +455,7 @@ jobs:
           prefix-key: api-check
           shared-key: rust-ubuntu
           cache-bin: "true"
-          save-if: ${{ github.ref == 'refs/heads/master' }}
+          save-if: ${{ github.ref == 'refs/heads/master' && github.event_name != 'pull_request' }}
       - name: Install cargo-public-api
         run: |
           if ! cargo +stable public-api --version 2>/dev/null | grep -qx "cargo-public-api ${PUBLIC_API_VERSION}"; then
@@ -292,7 +468,7 @@ jobs:
     name: Format Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -325,4 +501,4 @@ jobs:
     uses: ./.github/workflows/reusable-embedded.yml
     with:
       toolchain: stable
-      linux_runner_label: ubuntu-latest-m
+      linux_runner_label: ubuntu-latest

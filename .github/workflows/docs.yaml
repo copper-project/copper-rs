@@ -9,6 +9,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_NET_RETRY: "10"
 
 jobs:
   coverage:
@@ -26,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@nightly
       - name: Install dependencies
@@ -50,7 +51,7 @@ jobs:
           mkdir -p build/wiki/site/api
           cp -R target/doc/* build/wiki/site/api/
       - name: Download coverage artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: coverage-report
           path: build/coverage-report

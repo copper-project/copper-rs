@@ -267,7 +267,22 @@ mod tasks {
         sent: bool,
     }
 
-    impl Freezable for LoopbackSource {}
+    impl Freezable for LoopbackSource {
+        fn freeze<E: cu29::bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), cu29::bincode::error::EncodeError> {
+            cu29::bincode::Encode::encode(&self.sent, encoder)
+        }
+
+        fn thaw<D: cu29::bincode::de::Decoder>(
+            &mut self,
+            decoder: &mut D,
+        ) -> Result<(), cu29::bincode::error::DecodeError> {
+            self.sent = cu29::bincode::Decode::decode(decoder)?;
+            Ok(())
+        }
+    }
 
     impl CuSrcTask for LoopbackSource {
         type Resources<'r> = ();
@@ -280,13 +295,13 @@ mod tasks {
             Ok(Self { sent: false })
         }
 
-        fn process(&mut self, _ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
+        fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
             if self.sent {
-                debug!("LoopbackSource: completed sending MSP request");
+                debug!(ctx, "LoopbackSource: completed sending MSP request");
                 output.clear_payload();
             } else {
                 let mut batch = MspRequestBatch::new();
-                debug!("Pushing MSP_RC request");
+                debug!(ctx, "Pushing MSP_RC request");
                 batch.push(cu_msp_lib::structs::MspRequest::MspRc)?;
                 output.set_payload(batch);
                 self.sent = true;
@@ -311,14 +326,15 @@ mod tasks {
             Ok(Self)
         }
 
-        fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
             if let Some(batch) = input.payload() {
                 debug!(
+                    ctx,
                     "LoopbackSink: received MSP response batch with {} responses",
                     batch.0.len()
                 );
                 if let Some(MspResponse::MspRc(rc)) = batch.0.first() {
-                    debug!("Received RC response: {}", rc);
+                    debug!(ctx, "Received RC response: {}", rc);
                     if rc.channels[0] == 1234 {
                         state::mark_valid();
                     }

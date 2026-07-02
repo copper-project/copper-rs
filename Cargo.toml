@@ -32,6 +32,7 @@ members = [
   "components/monitors/cu_consolemon",
   "components/monitors/cu_bevymon",
   "components/monitors/cu_logmon",
+  "components/monitors/cu_memmon",
   "components/monitors/cu_safetymon",
   "components/payloads/cu_ros2_payloads",
   "components/payloads/cu_gnss_payloads",
@@ -58,22 +59,34 @@ members = [
   "components/sources/cu_vlp16",
   "components/sources/cu_wt901",
   "components/sources/cu_rp_encoder",
+  "components/sources/cu_ryuw122",
   "components/sources/cu_sen0682",
   "components/tasks/cu_aligner",
   "components/tasks/cu_ahrs",
   "components/tasks/cu_apriltag",
   "components/tasks/cu_dynthreshold",
+  "components/tasks/cu_peer_range_accumulator",
+  "components/tasks/cu_peer_triangulation",
   "components/tasks/cu_pid",
   "components/tasks/cu_python_task",
   "components/tasks/cu_ratelimit",
   "components/testing/cu_udp_inject",
+  "benchmarks/cu_async_cl_io_bench",
+  "benchmarks/cu_dorabench",
+  "benchmarks/cu_zenoh_bridge_bench",
   "examples/cu_background_task",
+  "examples/cu_baremetal_safety",
   "examples/cu_bridge_test",
   "examples/cu_bevymon_demo",
   "examples/cu_caterpillar",
   "examples/cu_distributed_resim_demo",
+  "examples/cu_elrs_bdshot_demo",
+  "examples/cu_feetech_demo",
+  "examples/cu_flight_controller",
   "examples/cu_config_gen",
   "examples/cu_config_variation",
+  "examples/cu_gnss_ublox_demo",
+  "examples/cu_human_pose",
   "examples/cu_image_codec_demo",
   "examples/cu_image_aligner",
   "examples/cu_instance_overrides_demo",
@@ -91,8 +104,10 @@ members = [
   "examples/cu_rate_target",
   "examples/cu_reflect_demo",
   "examples/cu_pointclouds",
+  "examples/cu_peer_triangulation",
   "examples/cu_python_task_demo",
   "examples/cu_run_in_sim",
+  "examples/cu_rp_balancebot",
   "examples/cu_standalone_structlog",
   "examples/cu_zenoh",
   "examples/cu_zenoh_bridge_demo",
@@ -101,6 +116,7 @@ members = [
   "examples/cu_runtime_matrix",
   "examples/cu_parallel_mandelbrot",
   "examples/cu_remote_debug_session",
+  "examples/cu_ryuw122_probe",
   "support/cargo_cunew",
 ]
 
@@ -168,6 +184,28 @@ cu-ffv1-codec = { path = "components/codecs/cu_ffv1_codec", version = "1.0.0-rc2
 cu-linux-resources = { path = "components/res/cu_linux_resources", version = "1.0.0-rc2" }
 cu-png-codec = { path = "components/codecs/cu_png_codec", version = "1.0.0-rc2" }
 
+# Copper components
+cu-ads7883-new = { path = "components/sources/cu_ads7883", version = "1.0.0-rc2" }
+cu-ahrs = { path = "components/tasks/cu_ahrs", version = "1.0.0-rc2" }
+cu-bdshot = { path = "components/bridges/cu_bdshot", version = "1.0.0-rc2" }
+cu-bevymon = { path = "components/monitors/cu_bevymon", version = "1.0.0-rc2" }
+cu-bmi088 = { path = "components/sources/cu_bmi088", version = "1.0.0-rc2" }
+cu-consolemon = { path = "components/monitors/cu_consolemon", version = "1.0.0-rc2" }
+cu-crsf = { path = "components/bridges/cu_crsf", version = "1.0.0-rc2" }
+cu-dps310 = { path = "components/sources/cu_dps310", version = "1.0.0-rc2" }
+cu-feetech = { path = "components/bridges/cu_feetech", version = "1.0.0-rc2" }
+cu-gnss-ublox = { path = "components/sources/cu_gnss_ublox", version = "1.0.0-rc2" }
+cu-gstreamer = { path = "components/sources/cu_gstreamer", version = "1.0.0-rc2" }
+cu-ist8310 = { path = "components/sources/cu_ist8310", version = "1.0.0-rc2" }
+cu-logmon = { path = "components/monitors/cu_logmon", version = "1.0.0-rc2" }
+cu-micoairh743 = { path = "components/res/cu_micoairh743", version = "1.0.0-rc2" }
+cu-msp-bridge = { path = "components/bridges/cu_msp_bridge", version = "1.0.0-rc2" }
+cu-msp-lib = { path = "components/libs/cu_msp_lib", version = "1.0.0-rc2" }
+cu-rp-encoder = { path = "components/sources/cu_rp_encoder", version = "1.0.0-rc2" }
+cu-rp-sn754410-new = { path = "components/sinks/cu_rp_sn754410", version = "1.0.0-rc2" }
+cu-sdlogger = { path = "components/libs/cu_sdlogger", version = "1.0.0-rc2" }
+cu-zenoh-bridge = { path = "components/bridges/cu_zenoh_bridge", version = "1.0.0-rc2" }
+
 # Payload definitions
 cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version = "1.0.0-rc2" }
 cu-gnss-payloads = { path = "components/payloads/cu_gnss_payloads", version = "1.0.0-rc2" }
@@ -192,7 +230,7 @@ erased-serde = { version = "0.4", default-features = false, features = [
   "alloc",
 ] }
 serde_derive = { version = "1.0", features = ["default"] }
-pyo3 = { version = "0.28", default-features = false, features = ["macros"] }
+pyo3 = { version = "0.29", default-features = false, features = ["macros"] }
 inventory = "0.3"
 
 # External CLI
@@ -230,18 +268,18 @@ compact_str = { version = "0.9", default-features = false, features = [
   "serde",
 ] }
 paste = { version = "1.0.15", default-features = false }
-bevy_reflect = { version = "0.18.0", default-features = false, features = [
+bevy_reflect = { version = "0.19.0", default-features = false, features = [
   "auto_register_static",
 ] }
-bevy_reflect_derive = "0.18.0"
+bevy_reflect_derive = "0.19.0"
 
 # used across testing
 tempfile = { version = "3.23", default-features = false }
 
-spin = { version = "0.10" } # should be removed when std is on, but cargo is bad at negative features
+spin = { version = "0.12" } # should be removed when std is on, but cargo is bad at negative features
 
 # rerun
-rerun = { version = "0.31", default-features = false, features = [
+rerun = { version = "0.33", default-features = false, features = [
   "sdk",
   "server",
   "log",
@@ -254,6 +292,9 @@ heapless = { version = "0.9", default-features = false, features = ["serde"] }
 # rayon for thread pools and such.
 rayon = "1.11"
 
+# CPU affinity for real-time thread pools (std/native only).
+core_affinity = "0.8"
+
 # Realtime sanitizer (standalone)
 rtsan-standalone = { version = "0.3.0", default-features = false }
 
@@ -263,15 +304,15 @@ hashbrown = { version = "0.17", features = ["serde"] }
 # Shared external dependencies of workspace members.
 anyhow = { version = "1.0", default-features = false }
 arrayvec = { version = "0.7", default-features = false }
-avian3d = { version = "0.6.1", default-features = false }
-bevy = { version = "0.18.0", default-features = false }
+avian3d = { version = "0.7.0", default-features = false }
+bevy = { version = "0.19.0", default-features = false }
 bevy_ratatui = { version = "0.11.1", default-features = false }
 buddy_system_allocator = { version = "0.13", default-features = false }
 bytemuck = "1.23.0"
 cached-path = { version = "0.10.0", default-features = false }
 cfg_aliases = "0.2.1"
 chrono = "0.4.41"
-circular-buffer = { version = "1.1.0", default-features = false }
+circular-buffer = { version = "2.0.0", default-features = false }
 cortex-m = "0.7"
 cortex-m-rt = "0.7"
 ctrlc = "3.5"
@@ -289,7 +330,7 @@ libc = { version = "0.2", default-features = false }
 linux-embedded-hal = "0.4.0"
 log = { version = "0.4", default-features = false }
 minicbor = { version = "2.2.1", default-features = false }
-minicbor-serde = { version = "0.6.2", default-features = false }
+minicbor-serde = { version = "0.7.0", default-features = false }
 nix = { version = "0.31", default-features = false }
 panic-probe = "1.0"
 petgraph = { version = "0.8", default-features = false }

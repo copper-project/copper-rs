@@ -8,7 +8,6 @@ pub use inventory;
 pub struct SafetyCheckRef {
     pub check_id: &'static str,
     pub requirement_id: &'static str,
-    pub description: &'static str,
     pub kind: &'static str,
 }
 
@@ -44,7 +43,6 @@ pub struct CollectedSafetyCase {
 pub struct CollectedSafetyCheck {
     pub check_id: String,
     pub requirement_id: String,
-    pub description: String,
     pub kind: String,
 }
 
@@ -64,7 +62,6 @@ pub fn collect_package_index(package: &str) -> PackageSafetyIndex {
                 .map(|check| CollectedSafetyCheck {
                     check_id: check.check_id.to_string(),
                     requirement_id: check.requirement_id.to_string(),
-                    description: check.description.to_string(),
                     kind: check.kind.to_string(),
                 })
                 .collect(),

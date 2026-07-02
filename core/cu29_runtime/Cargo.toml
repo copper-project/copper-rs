@@ -20,9 +20,10 @@ required-features = ["std"]
 
 [dependencies]
 cu29-clock = { workspace = true }
+cu29-intern-strs = { workspace = true, optional = true }
 cu29-log = { workspace = true }
 cu29-log-derive = { workspace = true }
-cu29-log-runtime = { workspace = true }            # needed
+cu29-log-runtime = { workspace = true }                  # needed
 cu29-traits = { workspace = true }
 cu29-units = { workspace = true, optional = true }
 cu29-unifiedlog = { workspace = true }
@@ -48,6 +49,7 @@ paste = { workspace = true }
 portable-atomic = { version = "1.11", default-features = false, features = [
   "fallback",
 ] }
+spin = { workspace = true }
 bevy_reflect = { workspace = true, optional = true }
 cu29-reflect-derive = { workspace = true }
 layout = { package = "layout-rs", version = "0.1.3", optional = true }
@@ -72,8 +74,11 @@ object-pool = { version = "0.6", optional = true } # used for large object pooli
 rtrb = { version = "0.3.3", optional = true }
 memmap2 = { version = "0.9", optional = true }
 
-# no std only dependencies
-spin = { workspace = true }                          # should be removed when std is on, but cargo is bad at negative features
+# Real-time thread-pool scheduling (CPU affinity + scheduler policy/priority).
+# Native/std only; never pulled on wasm or no_std.
+core_affinity = { workspace = true, optional = true }
+libc = { workspace = true, optional = true }
+
 libm = { version = "0.2", default-features = false } # f64 math for 32 bit platforms
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
@@ -102,10 +107,13 @@ sysclock-perf = ["std"]
 high-precision-limiter = ["std"]
 async-cl-io = ["std"]
 parallel-rt = ["std", "dep:rtrb"]
+# CPU affinity + real-time scheduler policy/priority for thread pools.
+rt-scheduling = ["std", "dep:core_affinity", "dep:libc"]
 mmap-fsync = ["std", "cu29-unifiedlog/mmap-fsync"]
 remote-debug = [
   "std",
   "reflect",
+  "dep:cu29-intern-strs",
   "dep:cu29-units",
   "dep:serde_json",
   "dep:zenoh",

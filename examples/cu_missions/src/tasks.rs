@@ -46,11 +46,11 @@ impl CuTask for ExampleTask {
 
     fn process(
         &mut self,
-        _ctx: &CuContext,
+        ctx: &CuContext,
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
-        debug!("Processing from {}.", &self.label);
+        debug!(ctx, "Processing from {}.", &self.label);
         output.set_payload(input.payload().unwrap() + 1);
         Ok(())
     }

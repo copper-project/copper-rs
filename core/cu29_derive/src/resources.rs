@@ -26,7 +26,13 @@ pub fn resources(input: TokenStream) -> TokenStream {
 
     let mut needs_lifetime = false;
     let mut fields = Vec::new();
-    let mut inits = Vec::new();
+    let mut field_idents = Vec::new();
+    // Fetch statements are bucketed by access kind so `from_bindings` can run
+    // all owned takes before any shared handle clone or borrowed reference,
+    // independent of the order the user declared the entries.
+    let mut owned_stmts = Vec::new();
+    let mut shared_stmts = Vec::new();
+    let mut borrow_stmts = Vec::new();
 
     let mut binding_variants = Vec::new();
 
@@ -35,28 +41,41 @@ pub fn resources(input: TokenStream) -> TokenStream {
         let binding = name.to_string();
         let binding_ident = Ident::new(&config_id_to_enum(&binding), name.span());
         let ty = entry.ty;
-        let (field_ty, access) = match entry.kind {
+        let (field_ty, access, access_kind) = match entry.kind {
             ResourceKind::Owned => (
                 quote! { ::cu29::resource::Owned<#ty> },
                 quote! { take::<#ty> },
+                ResourceAccessKind::Owned,
             ),
-            ResourceKind::Borrowed | ResourceKind::Shared => {
+            ResourceKind::Shared => (
+                quote! { ::cu29::__private::sync::Arc<#ty> },
+                quote! { borrow_shared_arc::<#ty> },
+                ResourceAccessKind::Shared,
+            ),
+            ResourceKind::Borrowed => {
                 needs_lifetime = true;
                 (
                     quote! { ::cu29::resource::Borrowed<'r, #ty> },
                     quote! { borrow::<#ty> },
+                    ResourceAccessKind::Borrowed,
                 )
             }
         };
         fields.push(quote! { pub #name: #field_ty });
-        inits.push(quote! {
-            #name: {
+        let stmt = quote! {
+            let #name = {
                 let key = mapping
                     .get(Binding::#binding_ident)
                     .ok_or_else(|| ::cu29::CuError::from(concat!("missing `", #binding, "` resource binding")))?;
                 manager.#access(key.typed())?
-            }
-        });
+            };
+        };
+        match access_kind {
+            ResourceAccessKind::Owned => owned_stmts.push(stmt),
+            ResourceAccessKind::Shared => shared_stmts.push(stmt),
+            ResourceAccessKind::Borrowed => borrow_stmts.push(stmt),
+        }
+        field_idents.push(name);
         binding_variants.push(binding_ident);
     }
 
@@ -66,11 +85,24 @@ pub fn resources(input: TokenStream) -> TokenStream {
         quote! { where #(#where_preds),* }
     };
 
-    if !generics.is_empty() {
+    let marker_init = if !generics.is_empty() {
         let marker_ty = quote! { ::core::marker::PhantomData<(#(#generics),*)> };
         fields.push(quote! { _marker: #marker_ty });
-        inits.push(quote! { _marker: ::core::marker::PhantomData });
-    }
+        quote! { _marker: ::core::marker::PhantomData, }
+    } else {
+        quote! {}
+    };
+
+    // Shared `from_bindings` body: take all owned resources first, clone shared
+    // handles next, then borrow references, and finally assemble the struct via
+    // field-init shorthand (struct field order stays in the user's declared order).
+    let from_bindings_body = quote! {
+        let mapping = mapping.ok_or_else(|| ::cu29::CuError::from("missing resource bindings"))?;
+        #(#owned_stmts)*
+        #(#shared_stmts)*
+        #(#borrow_stmts)*
+        Ok(Self { #(#field_idents,)* #marker_init })
+    };
 
     let generic_params = if generics.is_empty() {
         quote! {}
@@ -108,8 +140,7 @@ pub fn resources(input: TokenStream) -> TokenStream {
                     manager: &'r mut ::cu29::resource::ResourceManager,
                     mapping: Option<&::cu29::resource::ResourceBindingMap<Self::Binding>>,
                 ) -> ::cu29::CuResult<Self> {
-                    let mapping = mapping.ok_or_else(|| ::cu29::CuError::from("missing resource bindings"))?;
-                    Ok(Self { #(#inits),* })
+                    #from_bindings_body
                 }
             }
         }
@@ -133,8 +164,7 @@ pub fn resources(input: TokenStream) -> TokenStream {
                     manager: &mut ::cu29::resource::ResourceManager,
                     mapping: Option<&::cu29::resource::ResourceBindingMap<Self::Binding>>,
                 ) -> ::cu29::CuResult<Self> {
-                    let mapping = mapping.ok_or_else(|| ::cu29::CuError::from("missing resource bindings"))?;
-                    Ok(Self { #(#inits),* })
+                    #from_bindings_body
                 }
             }
         }
@@ -238,6 +268,12 @@ impl Parse for ResourceEntry {
 }
 
 enum ResourceKind {
+    Owned,
+    Shared,
+    Borrowed,
+}
+
+enum ResourceAccessKind {
     Owned,
     Shared,
     Borrowed,

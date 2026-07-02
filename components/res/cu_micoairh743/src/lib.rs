@@ -373,19 +373,19 @@ pub struct MicoAirH743;
 
 bundle_resources!(
     MicoAirH743:
-        Uart6,
-        Uart3,
-        Uart2,
-        Uart4,
-        GreenLed,
-        Logger,
-        Bmi088Spi,
-        Bmi088AccCs,
-        Bmi088GyrCs,
-        Bmi088Delay,
-        I2C2Dps310,
-        I2C2Ist8310,
-        BatteryAdc
+        Uart6 = "uart6",
+        Uart3 = "uart3",
+        Uart2 = "uart2",
+        Uart4 = "uart4",
+        GreenLed = "green_led",
+        Logger = "logger",
+        Bmi088Spi = "bmi088_spi",
+        Bmi088AccCs = "bmi088_acc_cs",
+        Bmi088GyrCs = "bmi088_gyr_cs",
+        Bmi088Delay = "bmi088_delay",
+        I2C2Dps310 = "i2c2_dps310",
+        I2C2Ist8310 = "i2c2_ist8310",
+        BatteryAdc = "battery_adc"
 );
 
 impl ResourceBundle for MicoAirH743 {

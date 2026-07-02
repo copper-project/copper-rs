@@ -1,5 +1,6 @@
 use crate::bridges::BusReading;
 use crate::resources::{GlobalLog, OwnedCounter, SharedBus};
+use cu29::bincode::{Decode, Encode};
 use cu29::prelude::*;
 use cu29::resources;
 use serde::{Deserialize, Serialize};
@@ -22,8 +23,8 @@ impl CuSrcTask for TriggerTask {
         Ok(Self)
     }
 
-    fn process<'o>(&mut self, _ctx: &CuContext, output: &mut Self::Output<'o>) -> CuResult<()> {
-        info!("[trigger] tick");
+    fn process<'o>(&mut self, ctx: &CuContext, output: &mut Self::Output<'o>) -> CuResult<()> {
+        info!(ctx, "[trigger] tick");
         output.set_payload(Tick);
         Ok(())
     }
@@ -41,10 +42,28 @@ pub struct SensorTask {
     global: GlobalLog,
 }
 
-impl Freezable for SensorTask {}
+impl Freezable for SensorTask {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        Encode::encode(&self.counter.0.snapshot(), encoder)?;
+        Encode::encode(&self.bus.get(), encoder)?;
+        Ok(())
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.counter.0.restore(Decode::decode(decoder)?);
+        self.bus.set(Decode::decode(decoder)?);
+        Ok(())
+    }
+}
 
 impl CuTask for SensorTask {
-    type Resources<'r> = SensorResources<'r>;
+    type Resources<'r> = SensorResources;
     type Input<'m> = CuMsg<Tick>;
     type Output<'m> = CuMsg<BusReading>;
 
@@ -57,21 +76,22 @@ impl CuTask for SensorTask {
         } = resources;
         Ok(Self {
             counter,
-            bus: bus.0.clone(),
-            tag: tag.0.clone(),
-            global: global.0.clone(),
+            bus: (*bus).clone(),
+            tag: (*tag).clone(),
+            global: (*global).clone(),
         })
     }
 
     fn process<'i, 'o>(
         &mut self,
-        _ctx: &CuContext,
+        ctx: &CuContext,
         _input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
         let value = self.counter.0.next();
         self.bus.set(value);
         record(
+            ctx,
             &self.global,
             format!("sensor {} ({}) -> {}", self.tag, self.bus.label(), value),
         );
@@ -97,20 +117,21 @@ impl Freezable for InspectorTask {}
 
 impl CuSinkTask for InspectorTask {
     type Input<'m> = CuMsg<BusReading>;
-    type Resources<'r> = InspectorResources<'r>;
+    type Resources<'r> = InspectorResources;
 
     fn new(_config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self> {
         let inspector_resources::Resources { bus, note, global } = resources;
         Ok(Self {
-            bus: bus.0.clone(),
-            note: note.0.clone(),
-            global: global.0.clone(),
+            bus: (*bus).clone(),
+            note: (*note).clone(),
+            global: (*global).clone(),
         })
     }
 
-    fn process<'i>(&mut self, _ctx: &CuContext, input: &Self::Input<'i>) -> CuResult<()> {
+    fn process<'i>(&mut self, ctx: &CuContext, input: &Self::Input<'i>) -> CuResult<()> {
         if let Some(reading) = input.payload() {
             record(
+                ctx,
                 &self.global,
                 format!(
                     "inspector got {} from {} (note {})",
@@ -120,6 +141,7 @@ impl CuSinkTask for InspectorTask {
         } else {
             let current = self.bus.get();
             record(
+                ctx,
                 &self.global,
                 format!("inspector polled {} (note {})", current, self.note),
             );
@@ -128,10 +150,10 @@ impl CuSinkTask for InspectorTask {
     }
 }
 
-fn record(global: &GlobalLog, message: impl Into<String>) {
+fn record(ctx: &CuContext, global: &GlobalLog, message: impl Into<String>) {
     let msg = message.into();
     global.push(msg.clone());
-    info!("{msg}");
+    info!(ctx, "{msg}");
 }
 
 mod sensor_resources {
@@ -155,5 +177,5 @@ mod inspector_resources {
     });
 }
 
-type SensorResources<'r> = sensor_resources::Resources<'r>;
-type InspectorResources<'r> = inspector_resources::Resources<'r>;
+type SensorResources = sensor_resources::Resources;
+type InspectorResources = inspector_resources::Resources;

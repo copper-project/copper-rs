@@ -35,6 +35,10 @@
 //!     Ok(Self { bus: res.bus })
 //! }
 //! ```
+//! Or use the `resources!` macro. `Shared<T>` bindings clone the registered
+//! `Arc<T>` so tasks can keep a shared handle without borrowing from the
+//! manager for their full lifetime. `Borrowed<T>` bindings borrow from the
+//! manager directly.
 //! Otherwise, use config to point to the right board resource and you're done.
 
 use crate::config::ComponentConfig;
@@ -69,7 +73,6 @@ impl ResourceEntry {
         }
     }
 
-    #[cfg(feature = "std")]
     fn as_shared_arc<T: 'static + Send + Sync>(&self) -> Option<Arc<T>> {
         match self {
             ResourceEntry::Shared(arc) => Arc::downcast::<T>(arc.clone()).ok(),
@@ -156,6 +159,49 @@ pub trait ResourceId: Copy + Eq {
 /// Trait implemented by bundle providers to declare their resource id enum.
 pub trait ResourceBundleDecl {
     type Id: ResourceId;
+}
+
+/// Optional name metadata for resource bundles.
+///
+/// Bundles created via `bundle_resources!` implement this automatically. The
+/// derive macro uses these canonical slot names to resolve `bundle.resource`
+/// bindings without guessing enum variant casing from config strings.
+pub trait NamedResourceBundleDecl: ResourceBundleDecl {
+    const NAMES: &'static [&'static str];
+}
+
+const fn str_eq(left: &str, right: &str) -> bool {
+    let left = left.as_bytes();
+    let right = right.as_bytes();
+    if left.len() != right.len() {
+        return false;
+    }
+
+    let mut idx = 0;
+    while idx < left.len() {
+        if left[idx] != right[idx] {
+            return false;
+        }
+        idx += 1;
+    }
+
+    true
+}
+
+/// Resolve a bundle slot name to its resource index.
+///
+/// This is a `const fn` so generated resource binding tables can stay static.
+#[doc(hidden)]
+pub const fn resource_index_by_name<B: NamedResourceBundleDecl>(name: &str) -> usize {
+    let mut idx = 0;
+    while idx < B::NAMES.len() {
+        if str_eq(B::NAMES[idx], name) {
+            return idx;
+        }
+        idx += 1;
+    }
+
+    panic!("resource slot name not declared by bundle");
 }
 
 /// Static mapping between user-defined binding ids and resource keys.
@@ -285,7 +331,6 @@ impl ResourceManager {
     }
 
     /// Borrow a shared `Arc`-backed resource by key, cloning the `Arc` for the caller.
-    #[cfg(feature = "std")]
     pub fn borrow_shared_arc<T: 'static + Send + Sync>(
         &self,
         key: ResourceKey<T>,
@@ -384,55 +429,40 @@ impl<B: ResourceBundleDecl> BundleContext<B> {
     }
 }
 
-#[cfg(feature = "std")]
-pub struct ThreadPoolBundle;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[cfg(feature = "std")]
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-#[repr(usize)]
-pub enum ThreadPoolId {
-    BgThreads,
-}
-
-#[cfg(feature = "std")]
-impl ResourceId for ThreadPoolId {
-    const COUNT: usize = 1;
-
-    fn index(self) -> usize {
-        self as usize
+    #[derive(Copy, Clone, Eq, PartialEq)]
+    #[repr(usize)]
+    enum DummyBundleId {
+        Uart0,
+        I2c1,
     }
-}
 
-#[cfg(feature = "std")]
-impl ResourceBundleDecl for ThreadPoolBundle {
-    type Id = ThreadPoolId;
-}
+    impl ResourceId for DummyBundleId {
+        const COUNT: usize = 2;
 
-#[cfg(feature = "std")]
-impl ResourceBundle for ThreadPoolBundle {
-    fn build(
-        bundle: BundleContext<Self>,
-        config: Option<&ComponentConfig>,
-        manager: &mut ResourceManager,
-    ) -> CuResult<()> {
-        use rayon::ThreadPoolBuilder;
+        fn index(self) -> usize {
+            self as usize
+        }
+    }
 
-        const DEFAULT_THREADS: usize = 2;
-        let threads: usize = match config {
-            Some(cfg) => cfg
-                .get::<u64>("threads")?
-                .map(|v| v as usize)
-                .unwrap_or(DEFAULT_THREADS),
-            None => DEFAULT_THREADS,
-        };
+    struct DummyBundle;
 
-        let pool = ThreadPoolBuilder::new()
-            .num_threads(threads)
-            .build()
-            .map_err(|e| CuError::from(format!("Failed to build threadpool: {e}")))?;
+    impl ResourceBundleDecl for DummyBundle {
+        type Id = DummyBundleId;
+    }
 
-        let key = bundle.key::<rayon::ThreadPool>(ThreadPoolId::BgThreads);
-        manager.add_shared(key, Arc::new(pool))?;
-        Ok(())
+    impl NamedResourceBundleDecl for DummyBundle {
+        const NAMES: &'static [&'static str] = &["uart0", "i2c1"];
+    }
+
+    #[test]
+    fn resource_index_by_name_matches_declared_slot_name() {
+        assert_eq!(DummyBundleId::Uart0.index(), 0);
+        assert_eq!(DummyBundleId::I2c1.index(), 1);
+        assert_eq!(resource_index_by_name::<DummyBundle>("uart0"), 0);
+        assert_eq!(resource_index_by_name::<DummyBundle>("i2c1"), 1);
     }
 }

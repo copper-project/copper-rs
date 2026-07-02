@@ -91,6 +91,8 @@ pub use cu29_runtime::parallel_queue;
 #[cfg(all(feature = "std", feature = "parallel-rt"))]
 pub use cu29_runtime::parallel_rt;
 pub use cu29_runtime::payload;
+#[cfg(feature = "std")]
+pub use cu29_runtime::pool;
 pub use cu29_runtime::reflect;
 pub use cu29_runtime::reflect as bevy_reflect;
 #[cfg(feature = "remote-debug")]
@@ -101,6 +103,8 @@ pub use cu29_runtime::resource;
 pub use cu29_runtime::rx_channels;
 #[cfg(feature = "std")]
 pub use cu29_runtime::simulation;
+#[cfg(feature = "std")]
+pub use cu29_runtime::thread_pool;
 pub use cu29_runtime::tx_channels;
 #[cfg(feature = "safety-ids")]
 pub mod safety;
@@ -166,6 +170,19 @@ pub use cu29_traits::*;
 #[cfg(feature = "std")]
 pub use rayon;
 
+#[doc(hidden)]
+pub mod __private {
+    #[doc(hidden)]
+    pub mod sync {
+        #[cfg(not(feature = "std"))]
+        pub use alloc::sync::Arc;
+        #[cfg(not(feature = "std"))]
+        pub use spin::Mutex;
+        #[cfg(feature = "std")]
+        pub use std::sync::{Arc, Mutex};
+    }
+}
+
 // defmt shims re-exported for proc-macro call sites
 #[cfg(all(feature = "defmt", not(feature = "std")))]
 #[macro_export]
@@ -221,15 +238,23 @@ macro_rules! defmt_error {
 
 #[macro_export]
 macro_rules! safety_check {
-    ($check_id:literal, $requirement_id:literal, $description:literal, $condition:expr $(,)?) => {
-        assert!($condition, "{}", $description);
+    ($check_id:literal, $requirement_id:literal, $condition:expr $(,)?) => {
+        assert!(
+            $condition,
+            "safety check {} for requirement {} failed",
+            $check_id, $requirement_id
+        );
     };
 }
 
 #[macro_export]
 macro_rules! safety_check_eq {
-    ($check_id:literal, $requirement_id:literal, $description:literal, $left:expr, $right:expr $(,)?) => {
-        assert_eq!($left, $right, "{}", $description);
+    ($check_id:literal, $requirement_id:literal, $left:expr, $right:expr $(,)?) => {
+        assert_eq!(
+            $left, $right,
+            "safety check {} for requirement {} failed",
+            $check_id, $requirement_id
+        );
     };
 }
 
@@ -292,10 +317,11 @@ pub mod prelude {
     pub use cu29_traits::{
         COMPACT_STRING_CAPACITY, CopperListTuple, CuCompactString, CuError, CuMsgMetadataTrait,
         CuMsgOrigin, CuPayloadRawBytes, CuResult, DebugFieldDescriptor, DebugFieldKind,
-        DebugFieldSemantics, DebugScalarRegistration, DebugScalarType, ErasedCuStampedData,
-        ErasedCuStampedDataSet, MatchingTasks, Metadata, ObservedWriter, PayloadSchemas,
-        TaskOutputSpec, UnifiedLogType, WriteStream, abort_observed_encode, begin_observed_encode,
-        finish_observed_encode, observed_encode_bytes, record_observed_encode_bytes, with_cause,
+        DebugFieldSemantics, DebugScalarKind, DebugScalarRegistration, DebugScalarType,
+        ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks, Metadata, ObservedWriter,
+        PayloadSchemas, TaskOutputSpec, UnifiedLogType, WriteStream, abort_observed_encode,
+        begin_observed_encode, finish_observed_encode, observed_encode_bytes,
+        record_observed_encode_bytes, with_cause,
     };
     #[cfg(feature = "std")]
     pub use cu29_unifiedlog::memmap;
@@ -303,4 +329,90 @@ pub mod prelude {
     pub use cu29_value::Value;
     pub use cu29_value::to_value;
     pub use serde_derive::{Deserialize, Serialize};
+}
+
+#[cfg(all(test, feature = "std"))]
+mod tests {
+    use super::prelude::*;
+    use std::sync::{Arc, Mutex, OnceLock};
+
+    #[derive(Debug)]
+    struct CaptureStream;
+
+    impl WriteStream<CuLogEntry> for CaptureStream {
+        fn log(&mut self, _obj: &CuLogEntry) -> CuResult<()> {
+            Ok(())
+        }
+    }
+
+    fn logger_test_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+    }
+
+    fn capture_one_log<F>(emit: F) -> CuLogEntry
+    where
+        F: FnOnce(),
+    {
+        let _guard = logger_test_lock();
+        let runtime = LoggerRuntime::init(RobotClock::default(), CaptureStream, None::<NullLog>);
+        let captured = Arc::new(Mutex::new(Vec::new()));
+        let sink = captured.clone();
+        let _listener = scoped_live_log_listener(move |entry, _, _| {
+            sink.lock()
+                .unwrap_or_else(|poison| poison.into_inner())
+                .push(entry.clone());
+        });
+
+        emit();
+
+        drop(runtime);
+
+        let entries = captured.lock().unwrap_or_else(|poison| poison.into_inner());
+        assert_eq!(entries.len(), 1, "expected exactly one captured log entry");
+        entries[0].clone()
+    }
+
+    #[test]
+    fn explicit_context_logs_capture_task_origin() {
+        let mut ctx = CuContext::builder(RobotClock::default())
+            .cl_id(77)
+            .task_ids(&["task-0"])
+            .build();
+        ctx.set_current_task(0);
+
+        let entry = capture_one_log(|| {
+            debug!(ctx, "task log {}", 7);
+        });
+
+        assert_eq!(entry.origin.culistid, Some(77));
+        assert_eq!(entry.origin.component_id, Some(0));
+        assert_eq!(entry.origin.task_index, Some(0));
+    }
+
+    #[test]
+    fn explicit_context_logs_capture_bridge_component_origin() {
+        let mut ctx = CuContext::builder(RobotClock::default()).cl_id(88).build();
+        ctx.set_current_component(5);
+        ctx.clear_current_task();
+
+        let entry = capture_one_log(|| {
+            info!(ctx, "bridge log {}", 3);
+        });
+
+        assert_eq!(entry.origin.culistid, Some(88));
+        assert_eq!(entry.origin.component_id, Some(5));
+        assert_eq!(entry.origin.task_index, None);
+    }
+
+    #[test]
+    fn context_free_logs_leave_origin_empty() {
+        let entry = capture_one_log(|| {
+            warning!("context free {}", 1);
+        });
+
+        assert_eq!(entry.origin, CuLogOrigin::default());
+    }
 }

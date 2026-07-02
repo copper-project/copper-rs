@@ -10,12 +10,13 @@ extern crate alloc;
 // std implementation
 #[cfg(feature = "std")]
 mod std_impl {
-    pub use std::{mem, vec::Vec};
+    pub use std::{mem, string::String, vec::Vec};
 }
 
 // no-std implementation
 #[cfg(not(feature = "std"))]
 mod no_std_impl {
+    pub use alloc::string::String;
     pub use alloc::vec::Vec;
     pub use core::mem;
 }
@@ -70,6 +71,31 @@ where
             })?;
     }
     Ok(batch)
+}
+
+fn encode_snapshot_value<T, E>(value: &T, encoder: &mut E) -> Result<(), EncodeError>
+where
+    T: Encode,
+    E: Encoder,
+{
+    let bytes = bincode::encode_to_vec(value, bincode::config::standard())?;
+    Encode::encode(&bytes, encoder)
+}
+
+fn decode_snapshot_value<T, D>(decoder: &mut D) -> Result<T, DecodeError>
+where
+    T: Decode<()>,
+    D: Decoder,
+{
+    let bytes: Vec<u8> = Decode::decode(decoder)?;
+    let (value, bytes_read): (T, usize) =
+        bincode::decode_from_slice(&bytes, bincode::config::standard())?;
+    if bytes_read != bytes.len() {
+        return Err(DecodeError::OtherString(String::from(
+            "MSP bridge state snapshot had trailing bytes",
+        )));
+    }
+    Ok(value)
 }
 
 /// Batch of MSP requests transported over the bridge.
@@ -251,6 +277,17 @@ where
     S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static,
     E: 'static,
 {
+    fn freeze<Enc: Encoder>(&self, encoder: &mut Enc) -> Result<(), EncodeError> {
+        encode_snapshot_value(&self.pending_responses, encoder)?;
+        encode_snapshot_value(&self.pending_requests, encoder)?;
+        Ok(())
+    }
+
+    fn thaw<Dec: Decoder>(&mut self, decoder: &mut Dec) -> Result<(), DecodeError> {
+        self.pending_responses = decode_snapshot_value(decoder)?;
+        self.pending_requests = decode_snapshot_value(decoder)?;
+        Ok(())
+    }
 }
 
 impl<S, E> cu29::reflect::TypePath for CuMspBridge<S, E>

@@ -1,0 +1,101 @@
+# BalanceBot: this is a full Copper demo robot
+
+with:
+
+- a physical robot implementation
+- a simulation implementation
+- a resimulation demoing the deterministic replay
+- a log export
+
+## To run the simulation
+
+```bash
+$ cd examples/cu_rp_balancebot
+$ cargo run
+```
+
+See the UI help for the navigation.
+
+## To run the simulation with the monitor embedded in Bevy
+
+```bash
+$ cd examples/cu_rp_balancebot
+$ just bevy
+```
+
+This keeps the Bevy sim on the left and the live Copper monitor on the right.
+
+## To run the simulation in the browser
+
+```bash
+$ cd examples/cu_rp_balancebot
+$ just web
+```
+
+This serves the Bevy sim and the live Copper monitor through Trunk. The first run downloads the scene assets into `assets/` so the browser can load them from the same origin.
+The browser path now uses the same asset filenames as the native sim: `balancebot.glb`, `skybox.ktx2`, and `diffuse_map.ktx2`.
+
+## To build a static browser bundle
+
+```bash
+$ cd examples/cu_rp_balancebot
+$ just web-dist
+```
+
+This writes a relocatable static Trunk bundle into `dist/balancebot/` with hashed asset filenames.
+
+## To run the resimulation
+
+(you need at least a log in `logs` for example from a simulation run).
+
+```bash
+$ cd examples/cu_rp_balancebot
+$ cargo run --no-default-features --features sim-debug --bin balancebot-resim --release
+```
+
+This replay-only build enables Copper's debug API feature set without pulling the Bevy simulator.
+It will recreate the logs from only the inputs of the previous run in `logs/balanceresim*.copper`.
+
+To start the replay-backed remote debug server instead of a one-shot replay:
+
+```bash
+$ cd examples/cu_rp_balancebot
+$ just resim-debug
+```
+
+## To run on the real robot
+
+You will need to cross compile for Arm:
+
+```bash
+cargo build --target armv7-unknown-linux-musleabihf --release --no-default-features
+```
+
+Be sure you save your log string index:
+
+```bash
+cp -rv ../../target/armv7-unknown-linux-musleabihf/release/cu29_log_index .  # or anywhere you want
+```
+
+Deploy on the target:
+
+```bash
+scp ../../target/armv7-unknown-linux-musleabihf/release/balancebot copperconfig.ron copper7:copper/  # change to match your target
+```
+
+## To export logs
+
+```bash
+$ cd examples/cu_rp_balancebot
+$ cargo run --bin balancebot-logreader --release
+```
+
+## Justfile commands
+
+- `just bevy` — run the split-view Bevy sim with `cu_bevymon`.
+- `just web` — serve the split-view wasm demo with Trunk.
+- `just web-dist` — build a deployable static wasm bundle into `dist/balancebot/`.
+- `just balancebot-dump-text-logs` — extract human-readable logs from `logs/balance.copper` into `../../target/debug/cu29_log_index/strings.bin`.
+- `just balancebot-fsck` — integrity check of `logs/balance.copper`.
+- `just balancebot-set-pwm-permissions` — fix PWM sysfs permissions on the target (requires appropriate privileges).
+- `just dag-logstats` — generate logstats and open an annotated DAG SVG for the current `copperconfig.ron`.

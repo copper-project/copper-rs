@@ -10,12 +10,12 @@
 
 ### Why Copper
 
-<p><strong style="color: #b87333;">Rust-first</strong> – ergonomic & safe
-<p><strong style="color: #b87333;">Sub-microsecond latency</strong> – zero-alloc, data-oriented runtime
-<p><strong style="color: #b87333;">Deterministic replay</strong> – every run, bit-for-bit identical
-<p><strong style="color: #b87333;">Interoperable with ROS2</strong> – bridges via Zenoh opening the path for a progressive migration.
-<p><strong style="color: #b87333;">Runs anywhere</strong> – from Linux servers, workstations, SBC to bare-metal MPUs
-<p><strong style="color: #b87333;">Built to ship</strong> – one stack from simulation to production
+<p><strong style="color: #b87333;">Rust-first</strong> – ergonomic & safe</p>
+<p><strong style="color: #b87333;">Sub-microsecond latency</strong> – zero-alloc, data-oriented runtime</p>
+<p><strong style="color: #b87333;">Deterministic replay</strong> – every run, bit-for-bit identical</p>
+<p><strong style="color: #b87333;">Interoperable with ROS2</strong> – bridges via Zenoh opening the path for a progressive migration.</p>
+<p><strong style="color: #b87333;">Runs anywhere</strong> – from Linux servers, workstations, SBC to bare-metal MPUs</p>
+<p><strong style="color: #b87333;">Built to ship</strong> – one stack from simulation to production</p>
 
 Already showing up in: ✈️ Flying | 🚗 Driving | 🌊 Swimming | 🚀 Spacefaring | 🤖 Humanoids
 
@@ -36,7 +36,7 @@ These are not mockups: BalanceBot is the exact same application that runs on a R
       <br />
       Self-balancing robot sim with a live Copper DAG and latency monitor.
       <br />
-      <a href="https://github.com/copper-project/extra-examples/tree/master/examples/cu_rp_balancebot">Source code</a>
+      <a href="examples/cu_rp_balancebot">Source code</a>
     </td>
     <td width="50%" valign="top">
       <a href="https://cdn.copper-robotics.com/demo/flight-controller/index.html">
@@ -47,7 +47,7 @@ These are not mockups: BalanceBot is the exact same application that runs on a R
       <br />
       Quadcopter flight sim with the same live Copper monitor.
       <br />
-      <a href="https://github.com/copper-project/extra-examples/tree/master/examples/cu_flight_controller">Source code</a>
+      <a href="examples/cu_flight_controller">Source code</a>
     </td>
   </tr>
 </table>
@@ -62,10 +62,8 @@ cargo install cu-flight-controller
 quad-sim
 ```
 
-The source for the published demo crates above lives in
-[`copper-project/extra-examples`](https://github.com/copper-project/extra-examples).
-Cross-framework comparison benchmarks live in
-[`copper-project/benchmarks`](https://github.com/copper-project/benchmarks).
+The source for the published demo crates above lives in `examples/`.
+Cross-framework comparison benchmarks live in `benchmarks/`.
 
 Want to see more Copper in action? Watch the [community showcase video](https://youtu.be/weV_JYaUsmo).
 

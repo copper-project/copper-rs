@@ -1,0 +1,35 @@
+[package]
+name = "cu-dorabench"
+default-run = "cu-dorabench"
+description = "This is the matching benchmark for https://github.com/dora-rs/dora-benchmark."
+
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+publish = false
+
+[package.metadata.copper]
+environments = ["host"]
+ci_exclude_workspace = true
+
+[[bin]]
+name = "cu-dorabench"
+path = "src/main.rs"
+
+[[bin]]
+name = "cu-dorabench-logreader"
+path = "src/logreader.rs"
+
+[dependencies]
+bincode = { workspace = true }
+cu29 = { workspace = true }
+cu29-export = { workspace = true, features = ["python", "mcap"] }
+serde = { workspace = true }
+cu-consolemon = { workspace = true }

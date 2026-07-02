@@ -67,7 +67,22 @@ impl From<&ADCReadingPayload<u16>> for f32 {
     }
 }
 
-impl Freezable for ADS7883 {} // This device is stateless.
+impl Freezable for ADS7883 {
+    fn freeze<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        Encode::encode(&self.integrated_value, encoder)
+    }
+
+    fn thaw<D: bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), bincode::error::DecodeError> {
+        self.integrated_value = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 /// Reads one sample from the ADC.
 /// The value is a 12-bit number. i.e. 0-4095
@@ -123,7 +138,7 @@ impl CuSrcTask for ADS7883 {
         })
     }
     fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
-        debug!("ADS7883 started at {}", ctx.now());
+        debug!(ctx, "ADS7883 started at {}", ctx.now());
         // initialize the integrated value.
         self.integrated_value = read_adc_value(&mut self.spi)? as u64;
         self.integrated_value *= INTEGRATION_FACTOR;
@@ -171,8 +186,8 @@ pub mod test_support {
             Ok(Self {})
         }
 
-        fn process(&mut self, _ctx: &CuContext, new_msg: &Self::Input<'_>) -> CuResult<()> {
-            debug!("Received: {}", &new_msg.payload());
+        fn process(&mut self, ctx: &CuContext, new_msg: &Self::Input<'_>) -> CuResult<()> {
+            debug!(ctx, "Received: {}", &new_msg.payload());
             Ok(())
         }
     }

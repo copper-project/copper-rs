@@ -10,6 +10,7 @@ use cu29::remote_debug::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::env;
 use std::fs;
 use std::path::Path;
 use std::thread;
@@ -47,8 +48,9 @@ impl CuSrcTask for CounterSrc {
         Ok(Self { next: 0 })
     }
 
-    fn process(&mut self, _ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
         self.next += 1;
+        debug!(ctx, "counter emitted value={}", self.next);
         output.set_payload(CounterMsg { value: self.next });
         Ok(())
     }
@@ -79,12 +81,13 @@ impl CuTask for Accumulator {
 
     fn process(
         &mut self,
-        _ctx: &CuContext,
+        ctx: &CuContext,
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
         if let Some(msg) = input.payload() {
             self.sum += msg.value;
+            debug!(ctx, "accumulator updated sum={sum}", sum = self.sum);
             output.set_payload(AccumMsg { sum: self.sum });
         } else {
             output.clear_payload();
@@ -115,8 +118,11 @@ impl CuSinkTask for SpySink {
         Ok(Self { last: None })
     }
 
-    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         self.last = input.payload().map(|p| p.sum);
+        if let Some(last) = self.last {
+            debug!(ctx, "spy sink observed last={last}", last = last);
+        }
         Ok(())
     }
 }
@@ -126,6 +132,7 @@ struct DebugApp {}
 
 const LOG_PATH: &str = "logs/cu_remote_debug_session.copper";
 const REPLAY_LOG_PATH: &str = "logs/cu_remote_debug_session_replay.copper";
+const DEBUG_BASE: &str = "copper/examples/cu_remote_debug_session/debug/v1";
 const LOG_SLAB_SIZE: Option<usize> = Some(256 * 1024 * 1024);
 const REPLAY_LOG_SLAB_SIZE: Option<usize> = Some(128 * 1024 * 1024);
 
@@ -238,6 +245,24 @@ fn call_step(
     Ok(result)
 }
 
+fn arg_value(args: &[String], flag: &str) -> Option<String> {
+    for (idx, arg) in args.iter().enumerate() {
+        if arg == flag {
+            return args.get(idx + 1).cloned();
+        }
+        if let Some((prefix, value)) = arg.split_once('=')
+            && prefix == flag
+        {
+            return Some(value.to_owned());
+        }
+    }
+    None
+}
+
+fn debug_base_from_args(args: &[String]) -> String {
+    arg_value(args, "--debug-base").unwrap_or_else(|| DEBUG_BASE.to_owned())
+}
+
 fn wait_for_server_ready(
     client: &RemoteDebugZenohClient,
     timeout: Duration,
@@ -311,9 +336,9 @@ fn connect_client_when_ready(
     }
 }
 
-fn run_remote_debug_session() -> CuResult<()> {
+fn run_remote_debug_session(debug_base: &str) -> CuResult<()> {
     println!("[session] Preparing remote debug paths");
-    let paths = RemoteDebugPaths::new("copper/examples/cu_remote_debug_session/debug/v1");
+    let paths = RemoteDebugPaths::new(debug_base);
 
     let server_paths = paths.clone();
     let server_handle = thread::spawn(move || -> CuResult<()> {
@@ -384,6 +409,19 @@ fn run_remote_debug_session() -> CuResult<()> {
             "include_raw": true,
         }),
     )?;
+
+    let logs = call_step(
+        &client,
+        Some(&session_id),
+        "logs.list",
+        json!({"offset": 0, "limit": 8}),
+    )?;
+    let log_count = logs
+        .get("entries")
+        .and_then(Value::as_array)
+        .map_or(0, Vec::len);
+    println!("[session] logs.list returned {log_count} structured log entries");
+
     let ts_list = call_step(
         &client,
         Some(&session_id),
@@ -453,18 +491,42 @@ fn run_remote_debug_session() -> CuResult<()> {
 
     let _ = call_step(&client, Some(&session_id), "nav.step", json!({"delta": -1}))?;
 
-    let _ = call_step(
-        &client,
-        Some(&session_id),
-        "nav.replay",
-        json!({
-            "at": {
-                "target": {"kind": "cl", "cl": 6},
-                "mutate_cursor": true,
-                "resolve": "exact"
+    {
+        let replay_page = call_step(
+            &client,
+            Some(&session_id),
+            "nav.replay",
+            json!({
+                "at": {
+                    "target": {"kind": "cl", "cl": 6},
+                    "mutate_cursor": true,
+                    "resolve": "exact"
+                },
+                "limit": 2,
+                "include_cl_snapshot": true,
+                "include_payloads": true,
+                "include_replayed_cl": true,
+                "include_state": true
+            }),
+        )?;
+        let replay_items = replay_page
+            .get("items")
+            .and_then(Value::as_array)
+            .ok_or_else(|| CuError::from("nav.replay missing items"))?;
+        if replay_items.len() != 2 {
+            return Err(CuError::from(format!(
+                "nav.replay returned {} items, expected 2",
+                replay_items.len()
+            )));
+        }
+        for item in replay_items {
+            for field in ["cursor", "cl_snapshot", "replayed_cl", "tasks"] {
+                if item.get(field).is_none() {
+                    return Err(CuError::from(format!("nav.replay item missing {field}")));
+                }
             }
-        }),
-    )?;
+        }
+    }
 
     let _ = call_step(&client, Some(&session_id), "schema.get_stack", json!({}))?;
 
@@ -581,9 +643,60 @@ fn run_remote_debug_session() -> CuResult<()> {
     Ok(())
 }
 
-fn main() -> CuResult<()> {
+fn serve_remote_debug_session(debug_base: &str) -> CuResult<()> {
+    println!("[server] Starting RemoteDebugZenohServer");
+    let paths = RemoteDebugPaths::new(debug_base);
+    let mut server = RemoteDebugZenohServer::<
+        DebugApp,
+        default::CuStampedDataSet,
+        _,
+        _,
+        MmapSectionStorage,
+        MmapUnifiedLoggerWrite,
+        _,
+    >::new(paths, app_factory, build_cb, time_of)?;
+    println!("[server] Serving remote debug API until admin.stop");
+    server.serve_until_stopped()
+}
+
+fn run_full_demo(debug_base: &str) -> CuResult<()> {
     println!("[main] Recording baseline log");
     record_log()?;
     println!("[main] Running remote debug API session");
-    run_remote_debug_session()
+    run_remote_debug_session(debug_base)
+}
+
+fn print_usage(program: &str) {
+    eprintln!("Usage: {program} [record|resim-debug|smoke|demo]");
+}
+
+fn main() -> CuResult<()> {
+    let args = env::args().collect::<Vec<_>>();
+    let program = env::args()
+        .next()
+        .unwrap_or_else(|| "cu-remote-debug-session".to_string());
+    let debug_base = debug_base_from_args(&args);
+    match args.get(1).map(String::as_str) {
+        None | Some("demo") => run_full_demo(&debug_base),
+        Some("record") => {
+            println!("[main] Recording baseline log");
+            record_log()
+        }
+        Some("resim-debug") => {
+            println!("[main] Starting remote debug server");
+            serve_remote_debug_session(&debug_base)
+        }
+        Some("smoke") => {
+            println!("[main] Running remote debug API smoke test");
+            run_remote_debug_session(&debug_base)
+        }
+        Some("-h" | "--help") => {
+            print_usage(&program);
+            Ok(())
+        }
+        Some(command) => {
+            print_usage(&program);
+            Err(CuError::from(format!("unknown command: {command}")))
+        }
+    }
 }

@@ -9,7 +9,9 @@ use cu29::prelude::*;
 use cu29::units::si::acceleration::meter_per_second_squared;
 use cu29::units::si::angle::radian;
 use cu29::units::si::angular_velocity::radian_per_second;
-use cu29::units::si::f32::Angle;
+use cu29::units::si::f32::{Angle, AngularVelocity, Ratio, Time};
+use cu29::units::si::ratio::ratio;
+use cu29::units::si::time::second;
 use nalgebra::{Quaternion, UnitQuaternion, Vector3};
 use serde::{Deserialize, Serialize};
 use uf_ahrs::{Ahrs, Mahony, MahonyParams};
@@ -35,6 +37,30 @@ pub struct CuAhrs {
     auto_sample_period: bool,
     mahony_kp: f32,
     mahony_ki: f32,
+}
+
+/// Typed debug-state view for AHRS internals.
+///
+/// This is projected from the live task state when the debugger reads it; it is
+/// not a second copy of the filter state.
+#[derive(Debug, Clone, Copy, Serialize, Reflect)]
+#[reflect(from_reflect = false)]
+pub struct CuAhrsDebugState {
+    pub orientation_w: Ratio,
+    pub orientation_i: Ratio,
+    pub orientation_j: Ratio,
+    pub orientation_k: Ratio,
+    pub roll: Angle,
+    pub pitch: Angle,
+    pub yaw: Angle,
+    pub gyro_bias_x: AngularVelocity,
+    pub gyro_bias_y: AngularVelocity,
+    pub gyro_bias_z: AngularVelocity,
+    pub last_tov: Option<CuTime>,
+    pub sample_period: Time,
+    pub auto_sample_period: bool,
+    pub mahony_kp: Ratio,
+    pub mahony_ki: Ratio,
 }
 
 impl CuAhrs {
@@ -70,6 +96,30 @@ impl CuAhrs {
             auto_sample_period: true,
             mahony_kp: kp,
             mahony_ki: ki,
+        }
+    }
+
+    pub fn debug_state(&self) -> CuAhrsDebugState {
+        let orientation = self.filter.orientation();
+        let q = orientation.quaternion();
+        let (roll, pitch, yaw) = orientation.euler_angles();
+
+        CuAhrsDebugState {
+            orientation_w: Ratio::new::<ratio>(q.w),
+            orientation_i: Ratio::new::<ratio>(q.i),
+            orientation_j: Ratio::new::<ratio>(q.j),
+            orientation_k: Ratio::new::<ratio>(q.k),
+            roll: Angle::new::<radian>(roll),
+            pitch: Angle::new::<radian>(pitch),
+            yaw: Angle::new::<radian>(yaw),
+            gyro_bias_x: AngularVelocity::new::<radian_per_second>(self.filter.bias.x),
+            gyro_bias_y: AngularVelocity::new::<radian_per_second>(self.filter.bias.y),
+            gyro_bias_z: AngularVelocity::new::<radian_per_second>(self.filter.bias.z),
+            last_tov: self.last_tov,
+            sample_period: Time::new::<second>(self.sample_period_s),
+            auto_sample_period: self.auto_sample_period,
+            mahony_kp: Ratio::new::<ratio>(self.mahony_kp),
+            mahony_ki: Ratio::new::<ratio>(self.mahony_ki),
         }
     }
 
@@ -202,12 +252,13 @@ pub mod sinks {
 
         fn process(
             &mut self,
-            _ctx: &CuContext,
+            ctx: &CuContext,
             input: &Self::Input<'_>,
             output: &mut Self::Output<'_>,
         ) -> CuResult<()> {
             if let Some(pose) = input.payload() {
                 info!(
+                    ctx,
                     "AHRS RPY [rad]: roll={} pitch={} yaw={}",
                     pose.roll.get::<radian>(),
                     pose.pitch.get::<radian>(),
@@ -299,6 +350,19 @@ impl CuTask for CuAhrs {
     type Resources<'r> = ();
     type Input<'m> = input_msg!('m, ImuPayload, MagnetometerPayload);
     type Output<'m> = output_msg!(AhrsPose);
+
+    fn register_debug_state_types(registry: &mut TypeRegistry) {
+        registry.register::<CuAhrsDebugState>();
+    }
+
+    fn debug_state_type_path() -> &'static str {
+        CuAhrsDebugState::type_path()
+    }
+
+    fn with_debug_state<R>(&self, f: impl FnOnce(&dyn bevy_reflect::Reflect) -> R) -> R {
+        let state = self.debug_state();
+        f(&state)
+    }
 
     fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where

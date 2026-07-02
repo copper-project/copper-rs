@@ -3,9 +3,7 @@
 
 use crate::config::ComponentConfig;
 use crate::context::CuContext;
-use crate::reflect::Reflect;
-#[cfg(feature = "reflect")]
-use crate::reflect::TypePath;
+use crate::reflect::{GetTypeRegistration, Reflect, TypePath, TypeRegistry};
 #[cfg(feature = "reflect")]
 use bevy_reflect;
 use bincode::de::{Decode, Decoder};
@@ -226,6 +224,13 @@ where
     M: Metadata,
 {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        // NOTE: the `HandleContent` policy decision (TouchedOnly / None) is NOT made
+        // here. It can't be: this impl is generic over `T`, so method resolution at
+        // the `payload_should_log()` call site would always pick the trait blanket
+        // default (true) — autoref-specialization only works at concrete-type sites.
+        // The codegen-emitted per-slot encoder in cu29_derive consults the policy at
+        // the concrete payload type and routes to `encode_metadata_only` when the
+        // bytes should be skipped. This generic impl just writes the full payload.
         match &self.payload {
             None => {
                 0u8.encode(encoder)?;
@@ -250,6 +255,28 @@ where
         self.metadata.encode(encoder)?;
         Ok(())
     }
+}
+
+/// Write a metadata-only record for a stamped message: presence tag = 0u8 (no payload),
+/// followed by `tov` and `metadata`. Wire-compatible with the existing decode path —
+/// a reader sees `payload: None` for the frame, same as if the source had been
+/// disabled entirely, but the surrounding timestamp/status are preserved.
+///
+/// Codegen emits a call to this helper when a slot's producing task is configured with
+/// `HandleContent::None` or `HandleContent::TouchedOnly` and the handle wasn't touched.
+pub fn encode_metadata_only<T, M, E>(
+    msg: &CuStampedData<T, M>,
+    encoder: &mut E,
+) -> Result<(), EncodeError>
+where
+    T: CuMsgPayload,
+    M: Metadata,
+    E: Encoder,
+{
+    0u8.encode(encoder)?;
+    msg.tov.encode(encoder)?;
+    msg.metadata.encode(encoder)?;
+    Ok(())
 }
 
 impl Default for CuMsgMetadata {
@@ -416,6 +443,37 @@ pub trait CuSrcTask: Freezable + Reflect {
     /// Resources required by the task.
     type Resources<'r>;
 
+    /// Registers the reflected type used as this task's debug-state contract.
+    ///
+    /// The default exposes the task struct itself. Override this when the task
+    /// contains ignored, third-party, hardware, or otherwise non-inspectable
+    /// internals and should expose a purpose-built debug-state view instead.
+    fn register_debug_state_types(registry: &mut TypeRegistry)
+    where
+        Self: GetTypeRegistration + Sized,
+    {
+        registry.register::<Self>();
+    }
+
+    /// Returns the reflected type path used as this task's debug-state schema.
+    fn debug_state_type_path() -> &'static str
+    where
+        Self: TypePath + Sized,
+    {
+        Self::type_path()
+    }
+
+    /// Borrows this task's current debug-state view.
+    ///
+    /// Override this together with [`debug_state_type_path`](Self::debug_state_type_path)
+    /// when the debug state is a projected view rather than the task struct.
+    fn with_debug_state<R>(&self, f: impl FnOnce(&dyn Reflect) -> R) -> R
+    where
+        Self: Sized,
+    {
+        f(self)
+    }
+
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
     /// The config allows you to access the configuration of the task.
     fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
@@ -458,6 +516,37 @@ pub trait CuTask: Freezable + Reflect {
     type Output<'m>: CuMsgPayload;
     /// Resources required by the task.
     type Resources<'r>;
+
+    /// Registers the reflected type used as this task's debug-state contract.
+    ///
+    /// The default exposes the task struct itself. Override this when the task
+    /// contains ignored, third-party, hardware, or otherwise non-inspectable
+    /// internals and should expose a purpose-built debug-state view instead.
+    fn register_debug_state_types(registry: &mut TypeRegistry)
+    where
+        Self: GetTypeRegistration + Sized,
+    {
+        registry.register::<Self>();
+    }
+
+    /// Returns the reflected type path used as this task's debug-state schema.
+    fn debug_state_type_path() -> &'static str
+    where
+        Self: TypePath + Sized,
+    {
+        Self::type_path()
+    }
+
+    /// Borrows this task's current debug-state view.
+    ///
+    /// Override this together with [`debug_state_type_path`](Self::debug_state_type_path)
+    /// when the debug state is a projected view rather than the task struct.
+    fn with_debug_state<R>(&self, f: impl FnOnce(&dyn Reflect) -> R) -> R
+    where
+        Self: Sized,
+    {
+        f(self)
+    }
 
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
     /// The config allows you to access the configuration of the task.
@@ -505,6 +594,37 @@ pub trait CuSinkTask: Freezable + Reflect {
     type Input<'m>: CuMsgPack;
     /// Resources required by the task.
     type Resources<'r>;
+
+    /// Registers the reflected type used as this task's debug-state contract.
+    ///
+    /// The default exposes the task struct itself. Override this when the task
+    /// contains ignored, third-party, hardware, or otherwise non-inspectable
+    /// internals and should expose a purpose-built debug-state view instead.
+    fn register_debug_state_types(registry: &mut TypeRegistry)
+    where
+        Self: GetTypeRegistration + Sized,
+    {
+        registry.register::<Self>();
+    }
+
+    /// Returns the reflected type path used as this task's debug-state schema.
+    fn debug_state_type_path() -> &'static str
+    where
+        Self: TypePath + Sized,
+    {
+        Self::type_path()
+    }
+
+    /// Borrows this task's current debug-state view.
+    ///
+    /// Override this together with [`debug_state_type_path`](Self::debug_state_type_path)
+    /// when the debug state is a projected view rather than the task struct.
+    fn with_debug_state<R>(&self, f: impl FnOnce(&dyn Reflect) -> R) -> R
+    where
+        Self: Sized,
+    {
+        f(self)
+    }
 
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
     /// The config allows you to access the configuration of the task.
@@ -555,5 +675,101 @@ mod tests {
         let (decoded, _): (CuCompactString, usize) =
             decode_from_slice(&encoded, config).expect("Decoding failed");
         assert_eq!(cstr.0, decoded.0);
+    }
+
+    /// Test wrapper proving that a composite payload can forward `payload_should_log`
+    /// to an inner [`CuHandle`] via an inherent method — exactly the pattern real
+    /// composite payloads like `CuImage` will use.
+    ///
+    /// Gated on the default (non-bevy_reflect) feature configuration where
+    /// `Reflect` is auto-impl'd for any `'static`, so the wrapper satisfies
+    /// `CuMsgPayload` without needing `#[derive(Reflect)]`.
+    #[cfg(not(feature = "reflect"))]
+    #[derive(Debug, Clone, bincode::Encode, bincode::Decode, Serialize, Deserialize)]
+    struct TestHandlePayload {
+        handle: crate::pool::CuHandle<Vec<u8>>,
+    }
+
+    #[cfg(not(feature = "reflect"))]
+    impl Default for TestHandlePayload {
+        fn default() -> Self {
+            Self {
+                handle: crate::pool::CuHandle::new_detached(Vec::new()),
+            }
+        }
+    }
+
+    #[cfg(not(feature = "reflect"))]
+    impl TestHandlePayload {
+        // Inherent specialization arm: real composite payloads (e.g. CuImage) provide
+        // an identical method that forwards to their inner CuHandle.
+        fn payload_should_log(&self) -> bool {
+            self.handle.payload_should_log()
+        }
+    }
+
+    /// Encoding a CuMsg whose payload wraps a CuHandle in `TouchedOnly` mode must:
+    /// * skip the payload bytes when no consumer marked the handle touched, and
+    /// * include them once `mark_touched` was called.
+    /// The wire shape stays compatible with the existing `Option<T>` decode path
+    /// (presence tag is 0u8 for skip, 1u8 + payload otherwise).
+    #[cfg(not(feature = "reflect"))]
+    #[test]
+    fn test_encode_skips_payload_for_untouched_handle() {
+        use crate::pool::{CuHandle, HandleContent};
+        let cfg = config::standard();
+
+        let untouched = TestHandlePayload {
+            handle: CuHandle::new_detached_with_mode(
+                vec![0xAA, 0xBB, 0xCC, 0xDD],
+                HandleContent::TouchedOnly,
+            ),
+        };
+        let msg_skip: CuMsg<TestHandlePayload> = CuMsg::new(Some(untouched));
+        let skip_bytes = encode_to_vec(&msg_skip, cfg).expect("encode");
+
+        let touched_payload = TestHandlePayload {
+            handle: CuHandle::new_detached_with_mode(
+                vec![0xAA, 0xBB, 0xCC, 0xDD],
+                HandleContent::TouchedOnly,
+            ),
+        };
+        touched_payload.handle.mark_touched();
+        let msg_keep: CuMsg<TestHandlePayload> = CuMsg::new(Some(touched_payload));
+        let keep_bytes = encode_to_vec(&msg_keep, cfg).expect("encode");
+
+        assert_eq!(
+            skip_bytes[0], 0u8,
+            "first byte must be the no-payload presence tag for an untouched TouchedOnly handle"
+        );
+        assert_eq!(
+            keep_bytes[0], 1u8,
+            "first byte must be the payload-present tag once the handle was touched"
+        );
+        assert!(
+            keep_bytes.len() > skip_bytes.len(),
+            "touched encoding ({} bytes) must include payload content; skip is {} bytes",
+            keep_bytes.len(),
+            skip_bytes.len()
+        );
+    }
+
+    /// `HandleContent::All` (the default for every existing source) must never drop
+    /// payload bytes — regardless of whether the handle was touched.
+    #[cfg(not(feature = "reflect"))]
+    #[test]
+    fn test_encode_keeps_payload_for_default_mode() {
+        use crate::pool::{CuHandle, HandleContent};
+        let cfg = config::standard();
+
+        let payload = TestHandlePayload {
+            handle: CuHandle::new_detached_with_mode(vec![1, 2, 3], HandleContent::All),
+        };
+        let msg: CuMsg<TestHandlePayload> = CuMsg::new(Some(payload));
+        let bytes = encode_to_vec(&msg, cfg).expect("encode");
+        assert_eq!(
+            bytes[0], 1u8,
+            "default (HandleContent::All) must keep emitting the payload"
+        );
     }
 }

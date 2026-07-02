@@ -1,0 +1,29 @@
+[package]
+name = "cu-gnss-ublox-demo"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[package.metadata.copper]
+environments = ["host"]
+ci_exclude_workspace = true
+
+[dependencies]
+cu29 = { workspace = true, features = ["log-level-debug"] }
+cu-gnss-ublox = { workspace = true }
+cu-gnss-payloads = { workspace = true }
+cu29-export = { workspace = true, optional = true }
+cu-linux-resources = { workspace = true }
+tempfile = { workspace = true }
+serde = { workspace = true }
+ctrlc = { workspace = true }
+
+[package.metadata.cargo-shear]
+ignored = ["serde", "cu-linux-resources"]
+
+[features]
+default = []
+logexport = ["dep:cu29-export", "cu-gnss-ublox/reflect"]

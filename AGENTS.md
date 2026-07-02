@@ -207,7 +207,9 @@ Implications:
 - When touching Rust code, avoid clippy-denied cleanup mistakes that keep recurring here:
   - do not keep redundant same-type casts such as `u64` to `u64`
   - prefer `.is_multiple_of(...)` over `% ... == 0` when checking divisibility
+  - collapse nested `if` / `if let` statements into `if let` chains when clippy's `collapsible_if` lint applies
 - Use `cargo expand` when proc-macro behavior is unclear.
+- Lockfiles are intentionally not committed in this checkout. Before starting a work pass, remove any existing generated `Cargo.lock` files unless explicitly asked otherwise; do not remove lockfiles as final cleanup after the work is complete. Resolving without lockfiles matches remote/CI behavior.
 - Many examples/apps create logs under their own `logs/` directories.
 - App builders own unified log setup via `.with_log_path(...)`; examples may still inject a custom logger directly with `.with_logger(...)` when needed.
 - Some examples intentionally disable task logging in config even though a unified log slab is still allocated.

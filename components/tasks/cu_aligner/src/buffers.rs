@@ -1,4 +1,7 @@
-use circular_buffer::CircularBuffer;
+use circular_buffer::FixedCircularBuffer;
+use cu29::bincode::de::{Decode, Decoder};
+use cu29::bincode::enc::{Encode, Encoder};
+use cu29::bincode::error::{DecodeError, EncodeError};
 use cu29::prelude::*;
 
 /// An augmented circular buffer that allows for time-based operations.
@@ -7,7 +10,7 @@ where
     P: CuMsgPayload,
     M: Metadata,
 {
-    pub inner: CircularBuffer<S, CuStampedData<P, M>>,
+    pub inner: FixedCircularBuffer<CuStampedData<P, M>, S>,
 }
 
 #[allow(dead_code)]
@@ -27,6 +30,36 @@ fn extract_tov_time_right(tov: &Tov) -> Option<CuTime> {
     }
 }
 
+fn encode_buffered_msg<P, E>(
+    msg: &CuStampedData<P, CuMsgMetadata>,
+    encoder: &mut E,
+) -> Result<(), EncodeError>
+where
+    P: CuMsgPayload,
+    E: Encoder,
+{
+    let bytes = cu29::bincode::encode_to_vec(msg, cu29::bincode::config::standard())?;
+    Encode::encode(&bytes, encoder)
+}
+
+fn decode_buffered_msg<P, D>(
+    decoder: &mut D,
+) -> Result<CuStampedData<P, CuMsgMetadata>, DecodeError>
+where
+    P: CuMsgPayload,
+    D: Decoder,
+{
+    let bytes: Vec<u8> = Decode::decode(decoder)?;
+    let (msg, bytes_read): (CuStampedData<P, CuMsgMetadata>, usize) =
+        cu29::bincode::decode_from_slice(&bytes, cu29::bincode::config::standard())?;
+    if bytes_read != bytes.len() {
+        return Err(DecodeError::OtherString(
+            "alignment buffer message snapshot had trailing bytes".to_string(),
+        ));
+    }
+    Ok(msg)
+}
+
 impl<const S: usize, P> Default for TimeboundCircularBuffer<S, P, CuMsgMetadata>
 where
     P: CuMsgPayload,
@@ -43,7 +76,7 @@ where
     pub fn new() -> Self {
         Self {
             // It is assumed to be sorted by time with non overlapping ranges if they are Tov::Range
-            inner: CircularBuffer::<S, CuStampedData<P, CuMsgMetadata>>::new(),
+            inner: FixedCircularBuffer::<CuStampedData<P, CuMsgMetadata>, S>::new(),
         }
     }
 
@@ -94,6 +127,33 @@ where
     pub fn push(&mut self, msg: CuStampedData<P, CuMsgMetadata>) {
         self.inner.push_back(msg);
     }
+
+    pub fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&(self.inner.len() as u64), encoder)?;
+        for msg in self.inner.iter() {
+            encode_buffered_msg(msg, encoder)?;
+        }
+        Ok(())
+    }
+
+    pub fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        let len: u64 = Decode::decode(decoder)?;
+        let len = usize::try_from(len).map_err(|_| {
+            DecodeError::OtherString("alignment buffer length does not fit usize".to_string())
+        })?;
+        if len > S {
+            return Err(DecodeError::ArrayLengthMismatch {
+                required: S,
+                found: len,
+            });
+        }
+
+        self.inner.clear();
+        for _ in 0..len {
+            self.inner.push_back(decode_buffered_msg(decoder)?);
+        }
+        Ok(())
+    }
 }
 
 #[macro_export]
@@ -138,6 +198,18 @@ macro_rules! alignment_buffers {
 
                 let time_to_get_complete_window = most_recent_time - self.target_alignment_window;
                 Some(($(self.$name.iter_window(time_to_get_complete_window, most_recent_time)),*))
+            }
+
+            #[allow(dead_code)]
+            pub fn freeze<E: cu29::bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), cu29::bincode::error::EncodeError> {
+                $(self.$name.freeze(encoder)?;)*
+                Ok(())
+            }
+
+            #[allow(dead_code)]
+            pub fn thaw<D: cu29::bincode::de::Decoder>(&mut self, decoder: &mut D) -> Result<(), cu29::bincode::error::DecodeError> {
+                $(self.$name.thaw(decoder)?;)*
+                Ok(())
             }
         }
     };

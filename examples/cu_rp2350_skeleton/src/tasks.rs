@@ -2,12 +2,13 @@
 extern crate alloc;
 
 use cu29::prelude::*;
+use cu29::bincode::{Decode, Encode};
 
 #[cfg(feature = "firmware")]
 mod imp {
     pub use alloc::boxed::Box;
     pub use embedded_hal::digital::OutputPin;
-    pub use spin::{Mutex, Once};
+    pub use spin::Mutex;
 
     pub trait LedPin: Send {
         fn set(&mut self, on: bool);
@@ -25,19 +26,21 @@ mod imp {
         }
     }
 
-    pub static LED: Once<Mutex<Box<dyn LedPin>>> = Once::new();
+    pub static LED: Mutex<Option<Box<dyn LedPin>>> = Mutex::new(None);
     pub fn register_led<P>(p: P)
     where
         P: OutputPin + Send + 'static,
     {
-        LED.call_once(|| Mutex::new(Box::new(LedWrap(p))));
+        let mut led = LED.lock();
+        if led.is_none() {
+            *led = Some(Box::new(LedWrap(p)));
+        }
     }
 
     pub fn set_led(on: bool) {
-        if let Some(m) = LED.get() {
-            // info!("LED on: {}", on);
-            let mut g = m.lock();
-            g.set(on);
+        let mut led = LED.lock();
+        if let Some(led) = led.as_mut() {
+            led.set(on);
         }
     }
 }
@@ -55,7 +58,22 @@ pub use imp::*;
 pub struct BooleanSource {
     state: bool,
 }
-impl Freezable for BooleanSource {}
+impl Freezable for BooleanSource {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        Encode::encode(&self.state, encoder)
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.state = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 impl CuSrcTask for BooleanSource {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(bool);
@@ -83,11 +101,11 @@ impl CuSinkTask for LEDSink {
     fn new(_: Option<&ComponentConfig>, _: Self::Resources<'_>) -> CuResult<Self> {
         Ok(Self)
     }
-    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+    fn process(&mut self, ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
         if let Some(&v) = input.payload().as_ref() {
             set_led(*v);
         }
-        info!("LEDSink got: {:?}", input.payload());
+        info!(ctx, "LEDSink got: {:?}", input.payload());
         Ok(())
     }
 }

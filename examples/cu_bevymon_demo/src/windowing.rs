@@ -34,9 +34,6 @@ pub fn set_copper_window_icon(mut created_windows: MessageReader<WindowCreated>)
     }
 }
 
-#[cfg(target_arch = "wasm32")]
-pub fn set_copper_window_icon() {}
-
 #[cfg(not(target_arch = "wasm32"))]
 fn copper_window_icon() -> Option<Icon> {
     COPPER_WINDOW_ICON

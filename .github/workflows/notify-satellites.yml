@@ -26,12 +26,6 @@ jobs:
           - repo: zed
             ref: master
             notify_on_pr: false
-          - repo: extra-examples
-            ref: master
-            notify_on_pr: false
-          - repo: benchmarks
-            ref: master
-            notify_on_pr: false
           - repo: cu-timetraveler
             ref: main
             notify_on_pr: true

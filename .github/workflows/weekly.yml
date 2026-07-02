@@ -7,6 +7,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_NET_RETRY: "10"
   CARGO_PROFILE_DEV_DEBUG: "0"
   CARGO_PROFILE_TEST_DEBUG: "0"
   CARGO_PROFILE_DEV_CODEGEN_UNITS: "16"
@@ -17,7 +18,7 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@beta
         with:
           components: clippy, rustfmt
@@ -41,6 +42,7 @@ jobs:
       toolchain: beta
       linux_cargo_paths: true
       linux_runner_label: ubuntu-latest
+      linux_light_runner_label: ubuntu-latest
       windows_runner_label: windows-latest
 
   embedded:

@@ -502,6 +502,43 @@ impl Display for Value {
     }
 }
 
+/// Logging policy for a `CuHandle`'s payload content.
+///
+/// Set by the source that produces the handle (typically via this enum's slot under
+/// `NodeLogging`) and propagated through clones. The unified-log encoder reads this to
+/// decide whether to write the payload bytes or just a metadata-only record for the
+/// frame. See `cu29_runtime::pool::CuHandle` for the runtime side.
+///
+/// Defined here (instead of in `pool.rs`) so the type is reachable from both the
+/// library and the `cu29-rendercfg` binary, which compiles `config.rs` standalone.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(u8)]
+pub enum HandleContent {
+    /// Always log the full payload (current default).
+    #[serde(rename = "all", alias = "All")]
+    #[default]
+    All = 0,
+    /// Log the payload only if a downstream consumer called `CuHandle::mark_touched`.
+    #[serde(rename = "touched_only", alias = "TouchedOnly")]
+    TouchedOnly = 1,
+    /// Never log the payload; keep only the surrounding metadata (timestamps, status).
+    #[serde(rename = "none", alias = "None")]
+    None = 2,
+}
+
+impl HandleContent {
+    /// Reconstruct a [`HandleContent`] from its `AtomicU8` representation. Unknown
+    /// values fall back to `All` so corrupt state never silently drops payload bytes.
+    #[allow(dead_code)] // Only the lib's pool module calls this; the rendercfg bin doesn't.
+    pub fn from_u8(v: u8) -> Self {
+        match v {
+            1 => HandleContent::TouchedOnly,
+            2 => HandleContent::None,
+            _ => HandleContent::All,
+        }
+    }
+}
+
 /// Configuration for logging in the node.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NodeLogging {
@@ -511,6 +548,14 @@ pub struct NodeLogging {
     codec: Option<String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     codecs: HashMap<String, String>,
+    /// Logging policy applied to the source's pool-acquired `CuHandle`s. Surfaced
+    /// in user RON config as e.g. `logging: ( handle_content: "touched_only" )`.
+    #[serde(default, skip_serializing_if = "is_default_handle_content")]
+    handle_content: HandleContent,
+}
+
+fn is_default_handle_content(c: &HandleContent) -> bool {
+    *c == HandleContent::default()
 }
 
 impl NodeLogging {
@@ -536,6 +581,12 @@ impl NodeLogging {
             .map(String::as_str)
             .or(self.codec.as_deref())
     }
+
+    /// Logging policy applied to handles minted by this node's pool. Defaults to
+    /// `HandleContent::All` — i.e. existing behavior.
+    pub fn handle_content(&self) -> HandleContent {
+        self.handle_content
+    }
 }
 
 impl Default for NodeLogging {
@@ -544,6 +595,7 @@ impl Default for NodeLogging {
             enabled: true,
             codec: None,
             codecs: HashMap::new(),
+            handle_content: HandleContent::default(),
         }
     }
 }
@@ -582,6 +634,28 @@ impl TaskKind {
     }
 }
 
+/// Default thread pool name used by `background: true` tasks.
+pub const DEFAULT_BACKGROUND_POOL: &str = "background";
+
+/// Reserved thread pool name driving the `parallel-rt` execution engine. Applied
+/// to each stage worker at startup; never task-bound nor built as a rayon pool.
+#[allow(dead_code)] // consumed by cu29_derive; unused in some binary targets
+pub const RT_POOL: &str = "rt";
+
+/// How a task is backgrounded.
+///
+/// Either a simple on/off flag (`background: true`), which runs the task on the
+/// default [`DEFAULT_BACKGROUND_POOL`] pool, or an explicit pool selection
+/// (`background: (pool: "vision")`).
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum BackgroundConfig {
+    /// `background: true` / `background: false`.
+    Flag(bool),
+    /// `background: (pool: "vision")`.
+    Pool { pool: String },
+}
+
 /// A node in the configuration graph.
 /// A node represents a Task in the system Graph.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -611,8 +685,12 @@ pub struct Node {
 
     /// Run this task in the background:
     /// ie. Will be set to run on a background thread and until it is finished `CuTask::process` will return None.
+    ///
+    /// Accepts either a simple flag (`background: true`, which uses the default
+    /// [`DEFAULT_BACKGROUND_POOL`] pool) or an explicit pool selection
+    /// (`background: (pool: "vision")`).
     #[serde(skip_serializing_if = "Option::is_none")]
-    background: Option<bool>,
+    background: Option<BackgroundConfig>,
 
     /// Option to include/exclude stubbing for simulation.
     /// By default, sources and sinks are replaces (stubbed) by the runtime to avoid trying to compile hardware specific code for sensing or actuation.
@@ -699,7 +777,21 @@ impl Node {
 
     #[allow(dead_code)]
     pub fn is_background(&self) -> bool {
-        self.background.unwrap_or(false)
+        match &self.background {
+            Some(BackgroundConfig::Flag(flag)) => *flag,
+            Some(BackgroundConfig::Pool { .. }) => true,
+            None => false,
+        }
+    }
+
+    /// Name of the thread pool this task should run on when backgrounded.
+    /// Defaults to [`DEFAULT_BACKGROUND_POOL`] when no explicit pool is set.
+    #[allow(dead_code)]
+    pub fn background_pool(&self) -> &str {
+        match &self.background {
+            Some(BackgroundConfig::Pool { pool }) => pool.as_str(),
+            _ => DEFAULT_BACKGROUND_POOL,
+        }
     }
 
     #[allow(dead_code)]
@@ -726,6 +818,17 @@ impl Node {
         } else {
             true
         }
+    }
+
+    /// Convenience wrapper around [`NodeLogging::handle_content`]: returns the per-handle
+    /// logging policy for this node, defaulting to [`HandleContent::All`] when no
+    /// `logging` block is configured.
+    #[allow(dead_code)]
+    pub fn handle_content_policy(&self) -> HandleContent {
+        self.logging
+            .as_ref()
+            .map(NodeLogging::handle_content)
+            .unwrap_or_default()
     }
 
     #[allow(dead_code)]
@@ -1615,27 +1718,33 @@ pub struct CuConfig {
 }
 
 impl CuConfig {
+    /// Guarantees that a default `"background"` thread pool entry exists in
+    /// `runtime.thread_pools` whenever the graph has any `background: true`
+    /// task that didn't explicitly select a pool. Thread pools are otherwise
+    /// constructed straight from `runtime.thread_pools` by the runtime — they
+    /// are not stored in `ResourceManager`.
     #[cfg(feature = "std")]
-    fn ensure_threadpool_bundle(&mut self) {
+    fn ensure_default_background_pool(&mut self) {
         if !self.has_background_tasks() {
             return;
         }
-        if self
-            .resources
-            .iter()
-            .any(|bundle| bundle.id == "threadpool")
-        {
-            return;
-        }
 
-        let mut config = ComponentConfig::default();
-        config.set("threads", 2u64);
-        self.resources.push(ResourceBundleConfig {
-            id: "threadpool".to_string(),
-            provider: "cu29::resource::ThreadPoolBundle".to_string(),
-            config: Some(config),
-            missions: None,
-        });
+        const DEFAULT_BACKGROUND_THREADS: usize = 2;
+
+        let runtime = self.runtime.get_or_insert_with(RuntimeConfig::default);
+        if !runtime
+            .thread_pools
+            .iter()
+            .any(|pool| pool.id == DEFAULT_BACKGROUND_POOL)
+        {
+            runtime.thread_pools.push(ThreadPoolConfig {
+                id: DEFAULT_BACKGROUND_POOL.to_string(),
+                threads: DEFAULT_BACKGROUND_THREADS,
+                affinity: None,
+                policy: SchedulingPolicy::Fair,
+                on_error: OnError::Warn,
+            });
+        }
     }
 
     #[cfg(feature = "std")]
@@ -1749,6 +1858,158 @@ pub struct RuntimeConfig {
     /// The main usecase is to not waste cycles when the system doesn't need an unbounded execution rate.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rate_target_hz: Option<u64>,
+
+    /// Declarative thread pool definitions used by the background-task pools and
+    /// the `parallel-rt` execution engine. Each pool carries an optional CPU
+    /// affinity and a scheduling policy/priority.
+    ///
+    /// This is a `std`-only concept; on `no_std`/embedded targets there are no
+    /// threads and this section is ignored.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub thread_pools: Vec<ThreadPoolConfig>,
+}
+
+/// Smallest valid real-time priority for [`SchedulingPolicy::Fifo`]/[`SchedulingPolicy::RoundRobin`].
+pub const MIN_RT_PRIORITY: u8 = 1;
+/// Largest valid real-time priority for [`SchedulingPolicy::Fifo`]/[`SchedulingPolicy::RoundRobin`].
+pub const MAX_RT_PRIORITY: u8 = 99;
+/// Lowest valid niceness for [`SchedulingPolicy::Nice`] (most favorable).
+pub const MIN_NICE: i8 = -20;
+/// Highest valid niceness for [`SchedulingPolicy::Nice`] (least favorable).
+pub const MAX_NICE: i8 = 19;
+
+/// Scheduling policy applied to every worker thread of a [`ThreadPoolConfig`].
+///
+/// On Linux these map directly onto the POSIX scheduling policies. On other
+/// platforms they are applied best-effort (see the per-pool
+/// [`ThreadPoolConfig::on_error`] behavior).
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SchedulingPolicy {
+    /// Normal fair time-sharing scheduler (`SCHED_OTHER`/CFS on Linux) with default
+    /// niceness. The OS shares the CPU fairly across threads and no thread starves.
+    ///
+    /// Use for everything that isn't latency-critical. This is the default.
+    #[default]
+    Fair,
+    /// Fair scheduler with an explicit niceness (`-20..=19`, lower is more favorable).
+    ///
+    /// A soft priority hint, not a guarantee: a higher (nicer) value yields the CPU
+    /// more readily. Use to bias a pool below or above normal work without leaving
+    /// the fair scheduler — e.g. `Nice(10)` for heavy background work that should
+    /// step aside for the control loop.
+    Nice(i8),
+    /// `SCHED_FIFO` real-time policy, priority `1..=99` (higher wins).
+    ///
+    /// Hard real-time: a FIFO thread runs ahead of every fair thread and is not
+    /// time-sliced — it runs until it blocks or a higher-priority RT thread preempts
+    /// it. Use for the latency-critical pipeline, and pin it with `affinity` so a
+    /// busy worker cannot starve other work on the same core. Linux-only; typically
+    /// needs `CAP_SYS_NICE`.
+    Fifo { priority: u8 },
+    /// `SCHED_RR` real-time policy, priority `1..=99` (higher wins).
+    ///
+    /// Same real-time semantics as [`Fifo`](Self::Fifo), except threads at the same
+    /// priority are round-robin time-sliced rather than run-to-block. Use when
+    /// several RT workers share a priority and should interleave fairly. Linux-only;
+    /// typically needs `CAP_SYS_NICE`.
+    RoundRobin { priority: u8 },
+}
+
+/// What to do when a pool's affinity or scheduling request cannot be applied
+/// (for example, setting a real-time priority without `CAP_SYS_NICE`).
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum OnError {
+    /// Log a warning and fall back to default scheduling. This keeps unprivileged
+    /// dev/laptop runs working out of the box.
+    #[default]
+    Warn,
+    /// Hard-fail at startup if the requested affinity/scheduler cannot be applied.
+    /// Use this for deployed real-time robots that must fail loudly.
+    Strict,
+}
+
+/// Declarative definition of a single thread pool.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct ThreadPoolConfig {
+    /// Unique pool id. Reserved ids: [`RT_POOL`] (the `parallel-rt` execution
+    /// engine) and [`DEFAULT_BACKGROUND_POOL`] (the default background pool).
+    pub id: String,
+    /// Number of worker threads in the pool.
+    pub threads: usize,
+    /// Optional set of logical CPU cores the pool may use. When set, worker `i`
+    /// is pinned to `affinity[i % affinity.len()]` (Spread): `threads ==
+    /// affinity.len()` yields one worker pinned per dedicated core.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub affinity: Option<Vec<usize>>,
+    /// Scheduling policy/priority applied to each worker thread.
+    #[serde(default)]
+    pub policy: SchedulingPolicy,
+    /// What to do if affinity/scheduling cannot be applied.
+    #[serde(default)]
+    pub on_error: OnError,
+}
+
+/// Validates the declarative thread pool definitions of a runtime config.
+///
+/// Checks ids are non-empty and unique, thread counts are non-zero, real-time
+/// priorities and niceness values are in range, and affinity lists are non-empty
+/// when present. This is purely a config-level check; pools are built later.
+fn validate_thread_pools<E>(runtime: &Option<RuntimeConfig>) -> Result<(), E>
+where
+    E: From<String>,
+{
+    let Some(runtime) = runtime else {
+        return Ok(());
+    };
+
+    let mut seen: Vec<&str> = Vec::new();
+    for pool in &runtime.thread_pools {
+        if pool.id.is_empty() {
+            return Err(E::from("Thread pool id cannot be empty".to_string()));
+        }
+        if seen.contains(&pool.id.as_str()) {
+            return Err(E::from(format!("Duplicate thread pool id '{}'", pool.id)));
+        }
+        seen.push(pool.id.as_str());
+
+        if pool.threads == 0 {
+            return Err(E::from(format!(
+                "Thread pool '{}' must have at least 1 thread",
+                pool.id
+            )));
+        }
+
+        match pool.policy {
+            SchedulingPolicy::Fifo { priority } | SchedulingPolicy::RoundRobin { priority } => {
+                if !(MIN_RT_PRIORITY..=MAX_RT_PRIORITY).contains(&priority) {
+                    return Err(E::from(format!(
+                        "Thread pool '{}' real-time priority {priority} is out of range ({MIN_RT_PRIORITY}..={MAX_RT_PRIORITY})",
+                        pool.id
+                    )));
+                }
+            }
+            SchedulingPolicy::Nice(nice) => {
+                if !(MIN_NICE..=MAX_NICE).contains(&nice) {
+                    return Err(E::from(format!(
+                        "Thread pool '{}' niceness {nice} is out of range ({MIN_NICE}..={MAX_NICE})",
+                        pool.id
+                    )));
+                }
+            }
+            SchedulingPolicy::Fair => {}
+        }
+
+        if let Some(affinity) = &pool.affinity
+            && affinity.is_empty()
+        {
+            return Err(E::from(format!(
+                "Thread pool '{}' has an empty affinity list; omit `affinity` for no pinning",
+                pool.id
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 /// Maximum representable Copper runtime rate target in whole Hertz.
@@ -2166,6 +2427,8 @@ where
     cuconfig.runtime = representation.runtime.clone();
     cuconfig.resources = representation.resources.clone().unwrap_or_default();
     cuconfig.bridges = representation.bridges.clone().unwrap_or_default();
+
+    validate_thread_pools::<E>(&cuconfig.runtime)?;
 
     Ok(cuconfig)
 }
@@ -3847,7 +4110,7 @@ fn config_representation_to_config(representation: CuConfigRepresentation) -> Cu
         .map_err(|e| CuError::from(format!("Error deserializing configuration: {e}")))?;
 
     #[cfg(feature = "std")]
-    cuconfig.ensure_threadpool_bundle();
+    cuconfig.ensure_default_background_pool();
 
     cuconfig.validate_logging_config()?;
     cuconfig.validate_runtime_config()?;
@@ -4201,6 +4464,59 @@ mod tests {
         assert_eq!(logging_config.slab_size_mib.unwrap(), 1024);
         assert_eq!(logging_config.section_size_mib.unwrap(), 100);
         assert!(logging_config.enable_task_logging);
+    }
+
+    #[test]
+    fn test_node_logging_handle_content_round_trips() {
+        // RON enum variants use bare identifiers — same convention as `kind: source`.
+        let txt = r#"(
+            tasks: [
+                (id: "cam", type: "pkg::Cam", kind: source, logging: (handle_content: touched_only)),
+                (id: "noop", type: "pkg::Noop", kind: sink),
+            ],
+            cnx: [
+                (src: "cam", dst: "noop", msg: "pkg::Frame"),
+            ],
+        )"#;
+
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let cam = config.find_task_node(None, "cam").unwrap();
+        assert_eq!(cam.handle_content_policy(), HandleContent::TouchedOnly);
+
+        // A node without an explicit `logging` block falls back to `All`.
+        let noop = config.find_task_node(None, "noop").unwrap();
+        assert_eq!(noop.handle_content_policy(), HandleContent::All);
+
+        // Round-trip preserves the policy.
+        let reserialized = config.serialize_ron().unwrap();
+        let reparsed = CuConfig::deserialize_ron(&reserialized).unwrap();
+        let cam2 = reparsed.find_task_node(None, "cam").unwrap();
+        assert_eq!(cam2.handle_content_policy(), HandleContent::TouchedOnly);
+    }
+
+    #[test]
+    fn test_node_logging_handle_content_all_variants_parse() {
+        for (value, expected) in [
+            ("all", HandleContent::All),
+            ("touched_only", HandleContent::TouchedOnly),
+            ("none", HandleContent::None),
+        ] {
+            let txt = format!(
+                r#"(
+                    tasks: [(id: "s", type: "pkg::T", kind: source, logging: (handle_content: {value}))],
+                    cnx: [(src: "s", dst: "__nc__", msg: "pkg::M")],
+                )"#
+            );
+            let config = CuConfig::deserialize_ron(&txt).unwrap();
+            assert_eq!(
+                config
+                    .find_task_node(None, "s")
+                    .unwrap()
+                    .handle_content_policy(),
+                expected,
+                "policy mismatch for `{value}`"
+            );
+        }
     }
 
     #[test]
@@ -5391,5 +5707,130 @@ mod tests {
             err.to_string().contains("targets unknown task 'missing'"),
             "unexpected error: {err}"
         );
+    }
+
+    #[test]
+    fn test_thread_pools_parse_and_round_trip() {
+        let txt = r#"(
+            runtime: (
+                rate_target_hz: 1000,
+                thread_pools: [
+                    ( id: "rt",         threads: 4, affinity: [2, 3, 4, 5], policy: Fifo(priority: 80) ),
+                    ( id: "background", threads: 2, affinity: [0, 1] ),
+                    ( id: "vision",     threads: 2, policy: Nice(10), on_error: Strict ),
+                ],
+            ),
+            tasks: [ ( id: "t", type: "tasks::Foo" ) ],
+        )"#;
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let runtime = config.runtime.as_ref().expect("runtime config");
+        assert_eq!(runtime.thread_pools.len(), 3);
+
+        let rt = &runtime.thread_pools[0];
+        assert_eq!(rt.id, "rt");
+        assert_eq!(rt.threads, 4);
+        assert_eq!(rt.affinity.as_deref(), Some([2, 3, 4, 5].as_slice()));
+        assert_eq!(rt.policy, SchedulingPolicy::Fifo { priority: 80 });
+        assert_eq!(rt.on_error, OnError::Warn);
+
+        let bg = &runtime.thread_pools[1];
+        assert_eq!(bg.id, "background");
+        assert_eq!(bg.policy, SchedulingPolicy::Fair);
+
+        let vision = &runtime.thread_pools[2];
+        assert_eq!(vision.policy, SchedulingPolicy::Nice(10));
+        assert_eq!(vision.affinity, None);
+        assert_eq!(vision.on_error, OnError::Strict);
+
+        // Round-trips through serialization.
+        let serialized = config.serialize_ron().unwrap();
+        let reparsed = CuConfig::deserialize_ron(&serialized).unwrap();
+        assert_eq!(
+            reparsed.runtime.as_ref().unwrap().thread_pools,
+            runtime.thread_pools
+        );
+    }
+
+    #[test]
+    fn test_background_flag_and_pool_forms() {
+        let txt = r#"(
+            tasks: [
+                ( id: "a", type: "tasks::Foo", background: true ),
+                ( id: "b", type: "tasks::Foo", background: (pool: "vision") ),
+                ( id: "c", type: "tasks::Foo" ),
+            ],
+            cnx: [],
+        )"#;
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let graph = config.get_graph(None).unwrap();
+
+        let a = graph.get_node(0).unwrap();
+        assert!(a.is_background());
+        assert_eq!(a.background_pool(), DEFAULT_BACKGROUND_POOL);
+
+        let b = graph.get_node(1).unwrap();
+        assert!(b.is_background());
+        assert_eq!(b.background_pool(), "vision");
+
+        let c = graph.get_node(2).unwrap();
+        assert!(!c.is_background());
+        assert_eq!(c.background_pool(), DEFAULT_BACKGROUND_POOL);
+    }
+
+    #[test]
+    fn test_thread_pool_validation_rejects_bad_configs() {
+        let cases = [
+            (
+                r#"( runtime: ( thread_pools: [ ( id: "rt", threads: 0 ) ] ), tasks: [] )"#,
+                "at least 1 thread",
+            ),
+            (
+                r#"( runtime: ( thread_pools: [ ( id: "a", threads: 1 ), ( id: "a", threads: 1 ) ] ), tasks: [] )"#,
+                "Duplicate thread pool id",
+            ),
+            (
+                r#"( runtime: ( thread_pools: [ ( id: "rt", threads: 1, policy: Fifo(priority: 200) ) ] ), tasks: [] )"#,
+                "out of range",
+            ),
+            (
+                r#"( runtime: ( thread_pools: [ ( id: "rt", threads: 1, affinity: [] ) ] ), tasks: [] )"#,
+                "empty affinity",
+            ),
+        ];
+
+        for (txt, expected) in cases {
+            let err = CuConfig::deserialize_ron(txt)
+                .expect_err("expected thread pool validation to fail");
+            assert!(
+                err.to_string().contains(expected),
+                "error '{err}' did not contain '{expected}'"
+            );
+        }
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_default_background_pool_injected_for_background_tasks() {
+        let txt = r#"(
+            tasks: [
+                ( id: "src", type: "tasks::Src" ),
+                ( id: "bg",  type: "tasks::Task", background: true ),
+            ],
+            cnx: [
+                ( src: "src", dst: "bg", msg: "i32" ),
+                ( src: "bg", dst: "__nc__", msg: "i32" ),
+            ],
+        )"#;
+        let config = read_configuration_str(txt.to_string(), None).unwrap();
+        let pools = &config.runtime.as_ref().unwrap().thread_pools;
+        let background: Vec<_> = pools
+            .iter()
+            .filter(|p| p.id == DEFAULT_BACKGROUND_POOL)
+            .collect();
+        assert_eq!(background.len(), 1);
+        assert_eq!(background[0].threads, 2);
+        // Thread pools are owned by the runtime, not the resource manager — no
+        // synthetic "threadpool" bundle should be injected.
+        assert!(!config.resources.iter().any(|b| b.id == "threadpool"));
     }
 }

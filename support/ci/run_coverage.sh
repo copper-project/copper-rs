@@ -7,13 +7,13 @@ cd "$ROOT"
 TOOLCHAIN="${COVERAGE_TOOLCHAIN:-stable}"
 BASE_FEATURES="${BASE_FEATURES:-mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug}"
 FEATURES_FLAG="--features ${BASE_FEATURES},python"
-EMBEDDED_EXCLUDES="$(python3 support/ci/embedded_crates.py excludes)"
+WORKSPACE_EXCLUDES="$(python3 support/ci/workspace_excludes.py excludes --toolchain "$TOOLCHAIN")"
 
 source <(cargo +"$TOOLCHAIN" llvm-cov show-env --sh)
 cargo +"$TOOLCHAIN" llvm-cov clean --workspace
 
-cargo +"$TOOLCHAIN" nextest run --all-targets --workspace $EMBEDDED_EXCLUDES
-cargo +"$TOOLCHAIN" nextest run --all-targets --workspace $FEATURES_FLAG $EMBEDDED_EXCLUDES
+cargo +"$TOOLCHAIN" nextest run --all-targets --workspace $WORKSPACE_EXCLUDES
+cargo +"$TOOLCHAIN" nextest run --all-targets --workspace $FEATURES_FLAG $WORKSPACE_EXCLUDES
 
 RAYON_NUM_THREADS=1 COPPER_DETERMINISM_ITERS=256 COPPER_DETERMINISM_DT_TICKS=1000 \
     cargo +"$TOOLCHAIN" test -p cu-caterpillar --features determinism_ci \

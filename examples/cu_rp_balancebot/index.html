@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Copper BalanceBot BevyMon</title>
+    <link
+      data-trunk
+      rel="rust"
+      data-bin="balancebot-bevymon"
+      data-cargo-features="bevymon"
+      data-cargo-no-default-features
+    />
+    <link data-trunk rel="copy-dir" href="assets" />
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "JetBrains Mono", "Fira Code", monospace;
+        --guide-bg: rgba(13, 17, 23, 0.9);
+        --guide-bg-strong: rgba(20, 26, 34, 0.96);
+        --guide-border: rgba(223, 232, 242, 0.38);
+        --guide-text: #f7fbff;
+        --guide-strong: #f7fbff;
+        --guide-muted: #c5d0db;
+        --guide-accent: #dfe8f2;
+        --guide-accent-glow: rgba(223, 232, 242, 0.22);
+        --guide-accent-soft: rgba(223, 232, 242, 0.12);
+        --guide-scrim: rgba(5, 8, 12, 0.42);
+        --guide-danger: #ff6b6b;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #05070a;
+      }
+
+      #bevy {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+        touch-action: none;
+      }
+
+      body {
+        position: relative;
+        background:
+          radial-gradient(circle at top, #162330 0%, #0b1118 46%, #05070a 100%);
+      }
+
+      .github-star-banner {
+        position: fixed;
+        top: 14px;
+        left: 14px;
+        z-index: 4;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        border: 1px solid var(--guide-border);
+        border-radius: 14px;
+        background: rgba(13, 17, 23, 0.88);
+        color: var(--guide-text);
+        text-decoration: none;
+        backdrop-filter: blur(10px);
+        box-shadow:
+          0 14px 30px rgba(0, 0, 0, 0.28),
+          0 0 0 1px var(--guide-accent-soft);
+      }
+
+      .github-star-banner:hover {
+        border-color: var(--guide-accent);
+      }
+
+      .github-star-copy {
+        display: inline-flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+
+      .github-star-copy strong {
+        color: var(--guide-strong);
+        font-size: 13px;
+        line-height: 1.1;
+      }
+
+      .github-star-copy span {
+        color: var(--guide-muted);
+        font-size: 11px;
+        line-height: 1.1;
+        letter-spacing: 0.03em;
+      }
+
+      .github-star-banner img {
+        display: block;
+        height: 20px;
+      }
+
+      .guide-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 3;
+        pointer-events: none;
+        opacity: 1;
+        visibility: visible;
+        transition:
+          opacity 180ms ease-out,
+          visibility 0s linear 180ms;
+      }
+
+      body.guide-dismissed .guide-overlay {
+        opacity: 0;
+        visibility: hidden;
+      }
+
+      .guide-scrim {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(circle at top, var(--guide-accent-soft), transparent 42%),
+          var(--guide-scrim);
+      }
+
+      .guide-lines {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      .guide-lines .guide-line {
+        fill: none;
+        stroke: var(--guide-accent);
+        stroke-width: 0.72;
+        stroke-linecap: round;
+        filter: drop-shadow(0 0 12px var(--guide-accent-glow));
+      }
+
+      .guide-card {
+        position: absolute;
+        padding: 20px 24px;
+        border: 2px solid var(--guide-border);
+        border-radius: 22px;
+        background:
+          linear-gradient(180deg, var(--guide-bg-strong), var(--guide-bg));
+        color: var(--guide-text);
+        font-size: clamp(16px, 1.35vw, 22px);
+        line-height: 1.4;
+        letter-spacing: 0.015em;
+        backdrop-filter: blur(12px);
+        box-shadow:
+          0 20px 48px rgba(0, 0, 0, 0.42),
+          0 0 0 1px var(--guide-accent-soft),
+          0 0 28px var(--guide-accent-glow);
+      }
+
+      .guide-card strong {
+        display: block;
+        color: var(--guide-strong);
+        font-size: 1.18em;
+        line-height: 1.15;
+      }
+
+      .guide-label {
+        display: block;
+        margin-bottom: 10px;
+        color: var(--guide-accent);
+        font-size: 0.8em;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .guide-copy {
+        display: block;
+        margin-top: 10px;
+        color: var(--guide-muted);
+      }
+
+      .guide-card kbd {
+        display: inline-block;
+        min-width: 1.6em;
+        padding: 0.12em 0.42em;
+        border: 1px solid var(--guide-border);
+        border-bottom-width: 2px;
+        border-radius: 6px;
+        background: var(--guide-accent-soft);
+        color: var(--guide-strong);
+        font: inherit;
+        text-align: center;
+      }
+
+      .guide-top {
+        top: clamp(14px, 2vh, 28px);
+        left: 50%;
+        width: min(44rem, 82vw);
+        transform: translateX(-50%);
+        text-align: center;
+      }
+
+      .guide-sim {
+        left: 24%;
+        bottom: clamp(14px, 3.5vh, 34px);
+        width: min(42rem, 50vw);
+        transform: translateX(-50%);
+      }
+
+      .guide-monitor {
+        left: 77%;
+        bottom: clamp(14px, 3.5vh, 34px);
+        width: min(40rem, 48vw);
+        transform: translateX(-50%);
+      }
+
+      .guide-gesture {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-top: 14px;
+        padding: 12px 14px;
+        border: 1px solid var(--guide-border);
+        border-radius: 16px;
+        background: rgba(223, 232, 242, 0.06);
+      }
+
+      .guide-gesture svg {
+        display: block;
+        width: 152px;
+        height: 56px;
+        flex: none;
+      }
+
+      .guide-gesture-copy {
+        color: var(--guide-muted);
+        font-size: 0.93em;
+        line-height: 1.3;
+      }
+
+      .guide-gesture-track {
+        stroke: var(--guide-accent);
+        stroke-width: 3;
+        stroke-linecap: round;
+        opacity: 0.85;
+      }
+
+      .guide-gesture-rod {
+        stroke: var(--guide-accent);
+        stroke-width: 4;
+        stroke-linecap: round;
+      }
+
+      .guide-gesture-drag {
+        stroke: var(--guide-accent);
+        stroke-width: 2.5;
+        stroke-linecap: round;
+      }
+
+      .guide-gesture-dot {
+        fill: var(--guide-danger);
+        filter: drop-shadow(0 0 8px rgba(255, 107, 107, 0.55));
+      }
+
+      @media (max-width: 980px) {
+        .guide-scrim {
+          background: rgba(6, 8, 12, 0.52);
+        }
+
+        .guide-card {
+          border-radius: 16px;
+          padding: 14px 16px;
+          font-size: 13px;
+        }
+
+        .guide-top {
+          width: min(34rem, calc(100vw - 24px));
+        }
+
+        .guide-sim,
+        .guide-monitor {
+          width: min(20rem, calc(50vw - 24px));
+        }
+
+        .guide-gesture {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a
+      class="github-star-banner"
+      href="https://github.com/copper-project/copper-rs"
+      target="_blank"
+      rel="noreferrer"
+      aria-label="Star Copper on GitHub"
+    >
+      <span class="github-star-copy">
+        <strong>Star us on GitHub</strong>
+        <span>copper-project/copper-rs</span>
+      </span>
+      <img
+        src="https://img.shields.io/github/stars/copper-project/copper-rs?style=social"
+        alt="GitHub stars for copper-project/copper-rs"
+      />
+    </a>
+
+    <div class="guide-overlay" id="guide-overlay" aria-hidden="true">
+      <div class="guide-scrim"></div>
+      <svg class="guide-lines" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <defs>
+          <marker
+            id="guide-arrowhead"
+            markerWidth="8"
+            markerHeight="8"
+            refX="6"
+            refY="4"
+            orient="auto"
+          >
+            <path d="M0,0 L8,4 L0,8 z" fill="#dfe8f2" />
+          </marker>
+        </defs>
+
+        <path
+          class="guide-line"
+          d="M46 18 C40 20, 32 24, 26 33"
+          marker-end="url(#guide-arrowhead)"
+        />
+        <path
+          class="guide-line"
+          d="M54 18 C60 20, 68 24, 74 33"
+          marker-end="url(#guide-arrowhead)"
+        />
+        <path
+          class="guide-line"
+          d="M24 83 C24 74, 22 66, 18 56"
+          marker-end="url(#guide-arrowhead)"
+        />
+        <path
+          class="guide-line"
+          d="M78 83 C78 74, 79 66, 82 56"
+          marker-end="url(#guide-arrowhead)"
+        />
+      </svg>
+
+      <div class="guide-card guide-top">
+        <span class="guide-label">Focus</span>
+        <strong>Click to focus on either the Sim or the monitor.</strong>
+        <span class="guide-copy">Left is the BalanceBot sim. Right is the live Copper monitor.</span>
+      </div>
+
+      <div class="guide-card guide-sim">
+        <span class="guide-label">Sim Controls</span>
+        <strong>Move with <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> / <kbd>Q</kbd> <kbd>E</kbd></strong>
+        <span class="guide-copy">
+          Orbit with Middle-Click + Drag. On macOS, use Control-Click + Drag.
+        </span>
+        <div class="guide-gesture">
+          <svg viewBox="0 0 160 56" aria-hidden="true">
+            <defs>
+              <marker
+                id="gesture-arrowhead"
+                markerWidth="6"
+                markerHeight="6"
+                refX="5"
+                refY="3"
+                orient="auto"
+              >
+                <path d="M0,0 L6,3 L0,6 z" fill="#dfe8f2" />
+              </marker>
+            </defs>
+            <line class="guide-gesture-track" x1="22" y1="40" x2="138" y2="40" />
+            <line class="guide-gesture-rod" x1="76" y1="14" x2="96" y2="40" />
+            <circle class="guide-gesture-dot" cx="76" cy="14" r="6" />
+            <line
+              class="guide-gesture-drag"
+              x1="44"
+              y1="18"
+              x2="118"
+              y2="18"
+              marker-start="url(#gesture-arrowhead)"
+              marker-end="url(#gesture-arrowhead)"
+            />
+          </svg>
+          <span class="guide-gesture-copy">Click + Drag the rod to interact.</span>
+        </div>
+        <span class="guide-copy">
+          Use Scroll Wheel to zoom. <kbd>Space</kbd> pauses, <kbd>R</kbd> resets, and
+          <kbd>F</kbd> shows forces.
+        </span>
+      </div>
+
+      <div class="guide-card guide-monitor">
+        <span class="guide-label">Monitor Controls</span>
+        <strong>Click tabs or press <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd></strong>
+        <span class="guide-copy">Use <kbd>&larr;</kbd> and <kbd>&rarr;</kbd> to scroll monitor views.</span>
+      </div>
+    </div>
+
+    <canvas id="bevy"></canvas>
+    <script>
+      (() => {
+        const guideOverlay = document.getElementById("guide-overlay");
+        if (!guideOverlay) {
+          return;
+        }
+
+        const dismissGuide = () => {
+          document.body.classList.add("guide-dismissed");
+        };
+
+        window.addEventListener("pointerdown", dismissGuide, { capture: true, once: true });
+        window.addEventListener("keydown", dismissGuide, { capture: true, once: true });
+        window.addEventListener("wheel", dismissGuide, { capture: true, once: true });
+        window.addEventListener("touchstart", dismissGuide, { capture: true, once: true });
+      })();
+    </script>
+  </body>
+</html>

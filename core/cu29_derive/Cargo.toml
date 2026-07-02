@@ -19,7 +19,7 @@ proc-macro = true
 cu29-runtime = { workspace = true, features = ["std"] }
 cu29-traits = { workspace = true }
 convert_case = "0.11"
-itertools = { version = "0.14", default-features = false }
+itertools = { version = "0.15", default-features = false }
 quote = { workspace = true }
 proc-macro2 = { workspace = true }
 syn = { workspace = true }
@@ -31,8 +31,9 @@ cu29-unifiedlog = { workspace = true } # needed
 [dev-dependencies]
 trybuild = "1.0"
 rustc_version = "0.4"
-cu29 = { workspace = true }  # needed for compile_fail tests
-serde = { workspace = true } # needed for compile_fail tests
+cu29 = { workspace = true }    # needed for compile_fail tests
+serde = { workspace = true }   # needed for compile_fail tests
+bincode = { workspace = true } # compile_pass tests that define custom payloads
 
 [features]
 default = ["std", "signal-handler"]
@@ -41,6 +42,11 @@ macro_debug = ["cu29-runtime/macro_debug"]
 std = ["cu29-traits/std", "cu29-unifiedlog/std"]
 async-cl-io = ["cu29-runtime/async-cl-io"]
 parallel-rt = ["cu29-runtime/parallel-rt"]
+# Emit per-task allocation scopes around each task/bridge lifecycle step in the
+# generated runtime so a monitor can fan deltas out via `observe_alloc`. The
+# `cu29` umbrella crate's `memory_monitoring` feature forwards to this one; you
+# normally don't enable it directly on `cu29-derive`.
+memory_monitoring = ["cu29-runtime/memory_monitoring"]
 signal-handler = []
 rtsan = []
 

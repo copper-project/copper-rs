@@ -22,9 +22,15 @@ def _normalize_list(value: Any) -> List[str]:
     return []
 
 
-def _load_embedded_packages() -> List[Dict[str, Any]]:
+def _cargo_command(toolchain: Optional[str]) -> List[str]:
+    if toolchain:
+        return ["rustup", "run", toolchain, "cargo"]
+    return ["cargo"]
+
+
+def _load_embedded_packages(toolchain: Optional[str]) -> List[Dict[str, Any]]:
     metadata_json = subprocess.check_output(
-        ["cargo", "metadata", "--format-version", "1", "--no-deps"],
+        _cargo_command(toolchain) + ["metadata", "--format-version", "1", "--no-deps"],
         text=True,
         encoding="utf-8",
     )
@@ -34,6 +40,8 @@ def _load_embedded_packages() -> List[Dict[str, Any]]:
     for pkg in metadata.get("packages", []):
         pkg_metadata = pkg.get("metadata") or {}
         copper_meta = pkg_metadata.get("copper", {})
+        if bool(copper_meta.get("ci_exclude_embedded", False)):
+            continue
         environments = set(_normalize_list(copper_meta.get("environments")))
         if "embedded" not in environments or "host" in environments:
             continue
@@ -87,10 +95,7 @@ def _run_action(
     for pkg in packages:
         compile_targets = pkg["compile_targets"] or [None]
         for compile_target in compile_targets:
-            cmd = ["cargo"]
-            if toolchain:
-                cmd.append(f"+{toolchain}")
-            cmd.extend([action, "-p", pkg["name"]])
+            cmd = _cargo_command(toolchain) + [action, "-p", pkg["name"]]
             if pkg["no_default_features"]:
                 cmd.append("--no-default-features")
             if pkg["features"]:
@@ -120,38 +125,60 @@ def _run_action(
             subprocess.run(cmd, check=True)
 
 
+def _add_toolchain_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--toolchain",
+        default="default",
+        help=(
+            "Rust toolchain channel to use with cargo commands and metadata lookup. "
+            "Set to 'default' to rely on the runner's default toolchain."
+        ),
+    )
+
+
+def _resolve_toolchain(command: str, requested: str) -> Optional[str]:
+    if requested != "default":
+        return requested
+    if command == "run":
+        return "stable"
+    return None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Utilities for embedded-only workspace members."
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    subparsers.add_parser("list", help="Print newline-separated embedded package names.")
-    subparsers.add_parser("json", help="Print embedded package metadata as JSON.")
-    subparsers.add_parser(
+    list_parser = subparsers.add_parser(
+        "list", help="Print newline-separated embedded package names."
+    )
+    _add_toolchain_argument(list_parser)
+
+    json_parser = subparsers.add_parser(
+        "json", help="Print embedded package metadata as JSON."
+    )
+    _add_toolchain_argument(json_parser)
+
+    excludes_parser = subparsers.add_parser(
         "excludes", help="Print cargo --exclude flags for embedded packages."
     )
+    _add_toolchain_argument(excludes_parser)
 
     run_parser = subparsers.add_parser(
         "run", help="Execute cargo for each embedded package."
     )
+    _add_toolchain_argument(run_parser)
     run_parser.add_argument(
         "--action",
         choices=("clippy", "build"),
         default="clippy",
         help="Cargo subcommand to run (default: clippy).",
     )
-    run_parser.add_argument(
-        "--toolchain",
-        default="stable",
-        help=(
-            "Rust toolchain channel to use with cargo commands (default: stable). "
-            "Set to 'default' to rely on the runner's default toolchain."
-        ),
-    )
 
     args = parser.parse_args()
-    packages = _load_embedded_packages()
+    toolchain = _resolve_toolchain(args.command, args.toolchain)
+    packages = _load_embedded_packages(toolchain)
 
     if args.command == "list":
         _print_names(packages)
@@ -160,7 +187,6 @@ def main() -> None:
     elif args.command == "excludes":
         _print_excludes(packages)
     elif args.command == "run":
-        toolchain = None if args.toolchain == "default" else args.toolchain
         _run_action(packages, args.action, toolchain)
     else:
         parser.error(f"unsupported command: {args.command}")
