@@ -96,6 +96,23 @@ jobs:
       - name: Set features (Linux)
         run: |
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
+      - name: Source ROS 2 (if present)
+        if: matrix.task == 'test'
+        run: |
+          if [ -f "/opt/ros/lyrical/setup.bash" ]; then
+            source /opt/ros/lyrical/setup.bash
+            {
+              echo "AMENT_PREFIX_PATH=${AMENT_PREFIX_PATH:-}"
+              echo "CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH:-}"
+              echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}"
+              echo "PYTHONPATH=${PYTHONPATH:-}"
+              echo "PATH=$PATH"
+              echo "ROS_DISTRO=${ROS_DISTRO:-lyrical}"
+              echo "ROS_VERSION=${ROS_VERSION:-2}"
+              echo "ROS_PYTHON_VERSION=${ROS_PYTHON_VERSION:-3}"
+              echo "RMW_IMPLEMENTATION=rmw_zenoh_cpp"
+            } >> "$GITHUB_ENV"
+          fi
       - name: Detect default workspace exclusions
         run: |
           EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ inputs.toolchain }})
@@ -159,6 +176,22 @@ jobs:
       - name: Set features (Linux)
         run: |
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
+      - name: Source ROS 2 (if present)
+        run: |
+          if [ -f "/opt/ros/lyrical/setup.bash" ]; then
+            source /opt/ros/lyrical/setup.bash
+            {
+              echo "AMENT_PREFIX_PATH=${AMENT_PREFIX_PATH:-}"
+              echo "CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH:-}"
+              echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}"
+              echo "PYTHONPATH=${PYTHONPATH:-}"
+              echo "PATH=$PATH"
+              echo "ROS_DISTRO=${ROS_DISTRO:-lyrical}"
+              echo "ROS_VERSION=${ROS_VERSION:-2}"
+              echo "ROS_PYTHON_VERSION=${ROS_PYTHON_VERSION:-3}"
+              echo "RMW_IMPLEMENTATION=rmw_zenoh_cpp"
+            } >> "$GITHUB_ENV"
+          fi
       - name: Detect default workspace exclusions
         run: |
           EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ inputs.toolchain }})
@@ -471,6 +504,22 @@ jobs:
       - name: Set features (Linux)
         run: |
           echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
+      - name: Source ROS 2 (if present)
+        run: |
+          if [ -f "/opt/ros/lyrical/setup.bash" ]; then
+            source /opt/ros/lyrical/setup.bash
+            {
+              echo "AMENT_PREFIX_PATH=${AMENT_PREFIX_PATH:-}"
+              echo "CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH:-}"
+              echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}"
+              echo "PYTHONPATH=${PYTHONPATH:-}"
+              echo "PATH=$PATH"
+              echo "ROS_DISTRO=${ROS_DISTRO:-lyrical}"
+              echo "ROS_VERSION=${ROS_VERSION:-2}"
+              echo "ROS_PYTHON_VERSION=${ROS_PYTHON_VERSION:-3}"
+              echo "RMW_IMPLEMENTATION=rmw_zenoh_cpp"
+            } >> "$GITHUB_ENV"
+          fi
       - name: Detect default workspace exclusions
         run: |
           EXCLUDES=$(python3 support/ci/workspace_excludes.py excludes --toolchain ${{ inputs.toolchain }})

@@ -658,7 +658,7 @@ mod tests {
         let cloud = sample_pointcloud();
 
         let ros_value = cloud.to_ros_message();
-        let bytes = cdr::serialize::<_, _, cdr::CdrBe>(&ros_value, cdr::Infinite)
+        let bytes = cdr::serialize::<_, _, cdr::CdrLe>(&ros_value, cdr::Infinite)
             .expect("cdr encode should succeed");
         let decoded_ros: <PointCloudSoa<4> as RosBridgeAdapter>::RosMessage =
             cdr::deserialize(bytes.as_slice()).expect("cdr decode should succeed");
@@ -673,7 +673,7 @@ mod tests {
         let expected = sample_pointcloud();
         let cloud = PointCloudSoaHandle::from_box(Box::new(sample_pointcloud()));
         let ros_value = cloud.to_ros_message();
-        let bytes = cdr::serialize::<_, _, cdr::CdrBe>(&ros_value, cdr::Infinite)
+        let bytes = cdr::serialize::<_, _, cdr::CdrLe>(&ros_value, cdr::Infinite)
             .expect("cdr encode should succeed");
         let decoded_ros: <PointCloudSoaHandle<4> as RosBridgeAdapter>::RosMessage =
             cdr::deserialize(bytes.as_slice()).expect("cdr decode should succeed");
@@ -696,7 +696,7 @@ mod tests {
         image.seq = 0;
 
         let ros_value = image.to_ros_message();
-        let encoded = cdr::serialize::<_, _, cdr::CdrBe>(&ros_value, cdr::Infinite)
+        let encoded = cdr::serialize::<_, _, cdr::CdrLe>(&ros_value, cdr::Infinite)
             .expect("cdr encode should succeed");
         let decoded_ros: <CuImage<Vec<u8>> as RosBridgeAdapter>::RosMessage =
             cdr::deserialize(encoded.as_slice()).expect("cdr decode should succeed");
@@ -739,7 +739,7 @@ mod tests {
         let imu = ImuPayload::from_raw([9.8, -0.2, 0.5], [0.1, -0.2, 1.5], 0.0);
 
         let ros_value = imu.to_ros_message();
-        let encoded = cdr::serialize::<_, _, cdr::CdrBe>(&ros_value, cdr::Infinite)
+        let encoded = cdr::serialize::<_, _, cdr::CdrLe>(&ros_value, cdr::Infinite)
             .expect("cdr encode should succeed");
         let decoded_ros: <ImuPayload as RosBridgeAdapter>::RosMessage =
             cdr::deserialize(encoded.as_slice()).expect("cdr decode should succeed");
@@ -765,7 +765,7 @@ mod tests {
         let mag = MagnetometerPayload::from_raw([42.0, -13.0, 8.0]);
 
         let ros_value = mag.to_ros_message();
-        let encoded = cdr::serialize::<_, _, cdr::CdrBe>(&ros_value, cdr::Infinite)
+        let encoded = cdr::serialize::<_, _, cdr::CdrLe>(&ros_value, cdr::Infinite)
             .expect("cdr encode should succeed");
         let decoded_ros: <MagnetometerPayload as RosBridgeAdapter>::RosMessage =
             cdr::deserialize(encoded.as_slice()).expect("cdr decode should succeed");
