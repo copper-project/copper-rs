@@ -52,3 +52,23 @@ register it once at startup:
 ```rust
 cu_ros2_bridge::register_ros2_payload::<MyPayload>();
 ```
+
+## Wire encoding
+
+Copper -> ROS 2 samples are serialized as OMG CDR little-endian (`CdrLe`). Inbound samples use
+`cdr::deserialize`, which reads the CDR encapsulation header and accepts either endianness.
+
+## ROS 2 interop test
+
+The `ros2_interop` test auto-detects a sourced ROS 2 environment. If `ros2`, `std_msgs`, or
+`rmw_zenoh_cpp` are unavailable, the test prints a warning with the skip reason and returns
+success. The Linux CI image includes ROS 2 Lyrical and `rmw_zenoh_cpp`, so the same normal test
+flow exercises real ROS 2 bridge interoperability in CI.
+
+When available, the test starts `rmw_zenohd`, runs a real ROS 2 subscriber with
+`ros2 topic echo --once`, publishes an `std_msgs/msg/Int32` through `Ros2Bridge`, and requires
+the ROS 2 process to print `data: 42`.
+
+```bash
+cargo test -p cu-ros2-bridge --test ros2_interop -- --nocapture
+```

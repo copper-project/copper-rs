@@ -6,7 +6,7 @@ mod node;
 mod topic;
 
 use attachment::encode_attachment;
-use cdr::{CdrBe, Infinite};
+use cdr::{CdrLe, Infinite};
 use cu_ros2_payloads::RosBridgeAdapter;
 use cu29::cubridge::{BridgeChannel, BridgeChannelConfig, BridgeChannelSet, CuBridge};
 use cu29::prelude::*;
@@ -89,7 +89,7 @@ where
         ))
     })?;
     let ros_payload = payload.to_ros_message();
-    cdr::serialize::<_, _, CdrBe>(&ros_payload, Infinite)
+    cdr::serialize::<_, _, CdrLe>(&ros_payload, Infinite)
         .map_err(|e| CuError::new_with_cause("Ros2Bridge: Failed to serialize payload", e))
 }
 
@@ -710,18 +710,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn i8_payload_cdr_roundtrip() {
-        let mut src = CuMsg::<i8>::default();
-        src.set_payload(42);
+    fn scalar_payload_cdr_roundtrip_uses_little_endian_encapsulation() {
+        let mut src = CuMsg::<i32>::default();
+        src.set_payload(0x0102_0304);
 
         let codec =
-            Ros2Bridge::<crate::tests::DummyTx, crate::tests::DummyRx>::codec_for_payload::<i8>()
+            Ros2Bridge::<crate::tests::DummyTx, crate::tests::DummyRx>::codec_for_payload::<i32>()
                 .expect("codec should be registered");
         let bytes =
             Ros2Bridge::<crate::tests::DummyTx, crate::tests::DummyRx>::encode_payload(&src, codec)
                 .expect("encode should succeed");
 
-        let mut dst = CuMsg::<i8>::default();
+        assert_eq!(&bytes[..4], &[0, 1, 0, 0], "CDR_LE encapsulation");
+        assert_eq!(&bytes[4..8], &[4, 3, 2, 1], "little-endian i32 data");
+
+        let mut dst = CuMsg::<i32>::default();
         Ros2Bridge::<crate::tests::DummyTx, crate::tests::DummyRx>::decode_payload_into(
             bytes.as_slice(),
             &mut dst,
@@ -729,7 +732,7 @@ mod tests {
         )
         .expect("decode should succeed");
 
-        assert_eq!(dst.payload(), Some(&42));
+        assert_eq!(dst.payload(), Some(&0x0102_0304));
     }
 
     #[test]
