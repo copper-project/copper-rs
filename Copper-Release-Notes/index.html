@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#v100-tbd" class="md-skip">
+        <a href="#v100-2026-07-02" class="md-skip">
           Skip to content
         </a>
       
@@ -1356,10 +1356,10 @@
   
 
 
-<h1 id="v100-tbd">v1.0.0 - TBD<a class="headerlink" href="#v100-tbd" title="Permanent link">&para;</a></h1>
+<h1 id="v100-2026-07-02">v1.0.0 - 2026-07-02<a class="headerlink" href="#v100-2026-07-02" title="Permanent link">&para;</a></h1>
 <h2 id="high-level">High Level<a class="headerlink" href="#high-level" title="Permanent link">&para;</a></h2>
-<p>Copper V1 is the point where the application-facing runtime contract becomes something users can build on without expecting churn every few weeks. Since <code>v1.0.0-rc2</code>, the work is less about adding another big graph abstraction and more about finishing the last user-facing edges before calling the surface stable: named execution pools, handle-aware logging, clearer resource ownership, typed debug state, structured log access from the debugger, and a much stronger replay/keyframe story.</p>
-<p>The theme is: V1 should feel static, inspectable, and replayable in the places robotics users actually care about. A control pipeline can declare which work is background, a camera pipeline can avoid logging frames nobody consumed, a debugger can inspect task state as typed data instead of opaque JSON, and replay should preserve real task/controller state instead of replaying through conveniently empty defaults.</p>
+<p>Copper V1 is the point where the application-facing runtime contract becomes something users can build on without expecting churn every few weeks. Since <code>v1.0.0-rc2</code>, the work is less about adding another big graph abstraction and more about finishing the last user-facing edges before calling the surface stable: named execution pools, handle-aware logging, clearer resource ownership, typed debug state, structured log access from the debugger, memory-allocation monitoring, and a much stronger replay/keyframe story.</p>
+<p>The theme is: V1 should feel static, inspectable, and replayable in the places robotics users actually care about. A control pipeline can declare which work is background, a camera pipeline can avoid logging frames nobody consumed, a debugger can inspect task state as typed data instead of opaque JSON, a CI job can fail if realtime lifecycle code allocates, and replay should preserve real task/controller state instead of replaying through conveniently empty defaults.</p>
 <h2 id="final-v1-surface-polish">Final V1 Surface Polish<a class="headerlink" href="#final-v1-surface-polish" title="Permanent link">&para;</a></h2>
 <ul>
 <li>
@@ -1407,8 +1407,16 @@
 <h2 id="replay-debugging-and-observability">Replay, Debugging, And Observability<a class="headerlink" href="#replay-debugging-and-observability" title="Permanent link">&para;</a></h2>
 <ul>
 <li>
-<p><strong>Remote debug can read structured logs directly</strong>
-  The remote debug API now exposes <code>logs.strings</code> and <code>logs.list</code>. A debug client can page through structured log entries, get rendered messages, raw parameter values, numeric parameter projections, message template indexes, and the runtime origin captured by contextual log macros. This makes logs part of the same inspectable replay session as timeline, schema, and task state. (<a href="https://github.com/copper-project/copper-rs/pull/1131">#1131</a>)</p>
+<p><strong>Remote debug can read structured logs directly, including replay-generated logs</strong>
+  The remote debug API now exposes <code>logs.strings</code> and <code>logs.list</code>. A debug client can page through structured log entries, get rendered messages, raw parameter values, numeric parameter projections, message template indexes, and the runtime origin captured by contextual log macros. Live log listeners are now chainable and scoped, so replay/navigation can capture the structured logs it generates without stealing console or monitor listeners. This makes logs part of the same inspectable replay session as timeline, schema, and task state. (<a href="https://github.com/copper-project/copper-rs/pull/1131">#1131</a>, <a href="https://github.com/copper-project/copper-rs/pull/1169">#1169</a>)</p>
+</li>
+<li>
+<p><strong>Remote-debug timeline and replay queries are faster and more page-friendly</strong>
+  Debug sessions now resolve CopperList and timestamp targets through indexed lookups, <code>timeline.list</code> can page over a target range with keyframe metadata, and <code>nav.replay</code> can replay batches with optional CopperList, payload, raw, replayed-output, and state snapshots. The user-facing result is better large-log tooling: inspectors can load timelines, scrub by time, and collect replay pages without driving the replay engine one request at a time. (<a href="https://github.com/copper-project/copper-rs/pull/1156">#1156</a>, <a href="https://github.com/copper-project/copper-rs/pull/1160">#1160</a>)</p>
+</li>
+<li>
+<p><strong>Heap allocations can be monitored per task and bridge lifecycle step</strong>
+  The new <code>cu_memmon</code> monitor uses the <code>cu29/memory_monitoring</code> counting allocator and derive-inserted lifecycle scopes to report allocation/deallocation deltas for task and bridge <code>start</code>, <code>preprocess</code>, <code>process</code>, <code>postprocess</code>, and <code>stop</code> paths, including <code>parallel-rt</code> execution. It reports per-call process peaks, lifetime balance/leaks, and can run in <code>realtime_strict</code> mode where allocations in realtime lifecycle steps become fatal monitor errors. Project templates and reference apps now include commented hooks for enabling it. (<a href="https://github.com/copper-project/copper-rs/pull/1135">#1135</a>, <a href="https://github.com/copper-project/copper-rs/pull/1172">#1172</a>)</p>
 </li>
 <li>
 <p><strong>State inspection no longer has to expose raw task internals</strong>
@@ -1416,12 +1424,12 @@
 </li>
 <li>
 <p><strong>Replay and remote-debug keyframe behavior is stricter and less surprising</strong>
-  Remote debug now handles forward navigation across keyframes, repeated replay from keyframe anchors, and replay output snapshots more reliably. Shared-memory transport settings were also tuned so local debug sessions do not over-lock memory for ordinary inspector traffic. (<a href="https://github.com/copper-project/copper-rs/pull/1149">#1149</a>, <a href="https://github.com/copper-project/copper-rs/pull/1150">#1150</a>, <a href="https://github.com/copper-project/copper-rs/pull/1151">#1151</a>)</p>
+  Remote debug now handles forward navigation across keyframes, keyframe restoration ordering, repeated replay from keyframe anchors, and replay output snapshots more reliably. Shared-memory transport settings were also tuned so local debug sessions do not over-lock memory for ordinary inspector traffic. (<a href="https://github.com/copper-project/copper-rs/pull/1149">#1149</a>, <a href="https://github.com/copper-project/copper-rs/pull/1150">#1150</a>, <a href="https://github.com/copper-project/copper-rs/pull/1151">#1151</a>, <a href="https://github.com/copper-project/copper-rs/pull/1154">#1154</a>)</p>
 </li>
 <li>
 <p><strong>More task, bridge, and component state is actually frozen and thawed</strong>
   The flight-controller example and <code>cu_pid</code> now preserve controller state across freeze/thaw. The broader component pass also moved many sources, bridges, tasks, and examples away from empty <code>Freezable</code> defaults where state matters for replay. Async task wrappers now snapshot their buffered output and async scheduling state, and they refuse to freeze while background work is still in progress.
-  The user reason is replay correctness: keyframes are only useful if they restore the state that affects the next tick. A replay that restarts a PID integral, calibration state, bridge buffer, or background-task output is not a faithful replay. (<a href="https://github.com/copper-project/copper-rs/pull/1153">#1153</a>, <a href="https://github.com/copper-project/copper-rs/commit/07d5ee82eeacec7fea03271413e8127e0f490f25">freezable-followup</a>)</p>
+  The user reason is replay correctness: keyframes are only useful if they restore the state that affects the next tick. A replay that restarts a PID integral, calibration state, bridge buffer, or background-task output is not a faithful replay. (<a href="https://github.com/copper-project/copper-rs/pull/1153">#1153</a>, <a href="https://github.com/copper-project/copper-rs/pull/1155">#1155</a>)</p>
 </li>
 <li>
 <p><strong>GStreamer-backed image payloads replay without live GStreamer</strong>
@@ -1471,11 +1479,19 @@
 </li>
 <li>
 <p><strong>Replay/debug no longer gets stuck around keyframe jumps</strong>
-  Remote-debug navigation now replays when crossing a keyframe and avoids the frozen second-replay behavior observed when jumping repeatedly from keyframe state. (<a href="https://github.com/copper-project/copper-rs/pull/1149">#1149</a>, <a href="https://github.com/copper-project/copper-rs/pull/1151">#1151</a>)</p>
+  Remote-debug navigation now replays when crossing a keyframe, restores keyframes in the right sequence, and avoids the frozen second-replay behavior observed when jumping repeatedly from keyframe state. (<a href="https://github.com/copper-project/copper-rs/pull/1149">#1149</a>, <a href="https://github.com/copper-project/copper-rs/pull/1151">#1151</a>, <a href="https://github.com/copper-project/copper-rs/pull/1154">#1154</a>)</p>
 </li>
 <li>
 <p><strong>Flight-controller and PID replay preserve controller state</strong>
-  PID integral/error/output state and flight-controller task state now survive freeze/thaw, making replay from keyframes meaningful for the reference controller instead of restarting important controller internals. (<a href="https://github.com/copper-project/copper-rs/pull/1153">#1153</a>)</p>
+  PID integral/error/output state and flight-controller task state now survive freeze/thaw, and the wider component set now implements real freeze/thaw behavior where replay depends on it. That makes replay from keyframes meaningful for the reference controller and less likely to hide reset-to-default behavior in sources, bridges, and async wrappers. (<a href="https://github.com/copper-project/copper-rs/pull/1153">#1153</a>, <a href="https://github.com/copper-project/copper-rs/pull/1155">#1155</a>)</p>
+</li>
+<li>
+<p><strong>ROS2 bridge payloads use the expected CDR little-endian encoding</strong>
+  <code>cu_ros2_bridge</code> now serializes Copper payloads with CDR little-endian encapsulation, matching ROS2 wire expectations for scalar and sensor payloads. The fix is covered by an end-to-end ROS2 interoperability test so the bridge does not silently regress back to the wrong byte order. (<a href="https://github.com/copper-project/copper-rs/pull/1176">#1176</a>)</p>
+</li>
+<li>
+<p><strong>Example and monitor compatibility was refreshed for the final branch</strong>
+  The release branch includes final workspace build fixes for component feature combinations and support-tool dependencies, the Bevy monitor/demo has been ported to Bevy 0.19, and the balancebot simulation registers the Bevy types it needs. These are not new runtime concepts, but they keep the reference apps usable as V1 examples. (<a href="https://github.com/copper-project/copper-rs/pull/1136">#1136</a>, <a href="https://github.com/copper-project/copper-rs/pull/1143">#1143</a>, <a href="https://github.com/copper-project/copper-rs/pull/1162">#1162</a>)</p>
 </li>
 </ul>
 <!-- v1.0.0 links -->
