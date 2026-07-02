@@ -1,6 +1,6 @@
 <h1 style="color: #b87333;"><img src="https://github.com/copper-project/copper-rs/blob/master/doc/static/cu29.png?raw=true" width="60" /> &nbsp;&nbsp;&nbsp;&nbsp; Copper Runtime & SDK</h1>
 
-[![copper](https://github.com/gbin/copper-project/actions/workflows/general.yml/badge.svg)](https://github.com/gbin/copper-project/actions/workflows/general.yml)
+[![CI/CD](https://github.com/copper-project/copper-rs/actions/workflows/general.yml/badge.svg?branch=master)](https://github.com/copper-project/copper-rs/actions/workflows/general.yml)
 ![GitHub last commit](https://img.shields.io/github/last-commit/copper-project/copper-rs)
 ![](https://img.shields.io/badge/Rust-1.95+-orange.svg)
 [![dependency status](https://deps.rs/repo/github/copper-project/copper-rs/status.svg)](https://deps.rs/repo/github/copper-project/copper-rs)
@@ -146,7 +146,7 @@ If you use Copper-rs in your research, please cite it as:
   year         = {2026},
   howpublished = {GitHub repository},
   url          = {https://github.com/copper-project/copper-rs},
-  note         = {Version v1.0.0-rc2 or latest}
+  note         = {Version v1.0.0 or latest}
 }
 ```
 

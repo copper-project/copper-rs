@@ -10,6 +10,7 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/cu-crsf"
 
 [package.metadata.copper]
 kind = "bridge"
@@ -17,7 +18,7 @@ domains = ["control/radio", "protocol/crsf"]
 environments = ["host", "embedded"]
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version = "1.0.0-rc2", default-features = false }
+cu29 = { path = "../../../core/cu29", version = "1.0.0", default-features = false }
 crsf = "2.0.1"
 embedded-io = { version = "0.7.1", default-features = false }
 serde = { workspace = true, features = ["derive"] }

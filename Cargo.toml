@@ -146,7 +146,7 @@ debug = 2
 soft_ratatui = { path = "vendor/soft_ratatui" }
 
 [workspace.package]
-version = "1.0.0-rc2"
+version = "1.0.0"
 authors = ["Guillaume Binet <gbin@gootz.net>"]
 edition = "2024"
 rust-version = "1.95"
@@ -162,56 +162,56 @@ no_individual_tags = true
 [workspace.dependencies]
 
 # Copper Core
-cu29 = { path = "core/cu29", version = "1.0.0-rc2" } # default std
-cu29-reflect-derive = { path = "core/cu29_reflect_derive", version = "1.0.0-rc2" }
-cu29-clock = { path = "core/cu29_clock", default-features = false, version = "1.0.0-rc2" }
-cu29-derive = { path = "core/cu29_derive", default-features = false, version = "1.0.0-rc2" }
-cu29-export = { path = "core/cu29_export", version = "1.0.0-rc2" } # std only
-cu29-helpers = { path = "core/cu29_helpers", version = "1.0.0-rc2" } # compatibility stub
-cu29-intern-strs = { path = "core/cu29_intern_strs", version = "1.0.0-rc2" } # std only
-cu29-log = { path = "core/cu29_log", default-features = false, version = "1.0.0-rc2" }
-cu29-log-derive = { path = "core/cu29_log_derive", default-features = false, version = "1.0.0-rc2" }
-cu29-log-runtime = { path = "core/cu29_log_runtime", default-features = false, version = "1.0.0-rc2" }
-cu29-runtime = { path = "core/cu29_runtime", default-features = false, version = "1.0.0-rc2" }
-cu29-soa-derive = { path = "core/cu29_soa_derive", default-features = false, version = "1.0.0-rc2" }
-cu29-traits = { path = "core/cu29_traits", default-features = false, version = "1.0.0-rc2" }
+cu29 = { path = "core/cu29", version = "1.0.0" } # default std
+cu29-reflect-derive = { path = "core/cu29_reflect_derive", version = "1.0.0" }
+cu29-clock = { path = "core/cu29_clock", default-features = false, version = "1.0.0" }
+cu29-derive = { path = "core/cu29_derive", default-features = false, version = "1.0.0" }
+cu29-export = { path = "core/cu29_export", version = "1.0.0" } # std only
+cu29-helpers = { path = "core/cu29_helpers", version = "1.0.0" } # compatibility stub
+cu29-intern-strs = { path = "core/cu29_intern_strs", version = "1.0.0" } # std only
+cu29-log = { path = "core/cu29_log", default-features = false, version = "1.0.0" }
+cu29-log-derive = { path = "core/cu29_log_derive", default-features = false, version = "1.0.0" }
+cu29-log-runtime = { path = "core/cu29_log_runtime", default-features = false, version = "1.0.0" }
+cu29-runtime = { path = "core/cu29_runtime", default-features = false, version = "1.0.0" }
+cu29-soa-derive = { path = "core/cu29_soa_derive", default-features = false, version = "1.0.0" }
+cu29-traits = { path = "core/cu29_traits", default-features = false, version = "1.0.0" }
 cu29-unifiedlog = { path = "core/cu29_unifiedlog", default-features = false, features = [
   "compact",
-], version = "1.0.0-rc2" }
-cu29-units = { path = "core/cu29_units", version = "1.0.0-rc2" }
-cu29-value = { path = "core/cu29_value", default-features = false, version = "1.0.0-rc2" }
-cu-ffv1-codec = { path = "components/codecs/cu_ffv1_codec", version = "1.0.0-rc2" }
-cu-linux-resources = { path = "components/res/cu_linux_resources", version = "1.0.0-rc2" }
-cu-png-codec = { path = "components/codecs/cu_png_codec", version = "1.0.0-rc2" }
+], version = "1.0.0" }
+cu29-units = { path = "core/cu29_units", version = "1.0.0" }
+cu29-value = { path = "core/cu29_value", default-features = false, version = "1.0.0" }
+cu-ffv1-codec = { path = "components/codecs/cu_ffv1_codec", version = "1.0.0" }
+cu-linux-resources = { path = "components/res/cu_linux_resources", version = "1.0.0" }
+cu-png-codec = { path = "components/codecs/cu_png_codec", version = "1.0.0" }
 
 # Copper components
-cu-ads7883-new = { path = "components/sources/cu_ads7883", version = "1.0.0-rc2" }
-cu-ahrs = { path = "components/tasks/cu_ahrs", version = "1.0.0-rc2" }
-cu-bdshot = { path = "components/bridges/cu_bdshot", version = "1.0.0-rc2" }
-cu-bevymon = { path = "components/monitors/cu_bevymon", version = "1.0.0-rc2" }
-cu-bmi088 = { path = "components/sources/cu_bmi088", version = "1.0.0-rc2" }
-cu-consolemon = { path = "components/monitors/cu_consolemon", version = "1.0.0-rc2" }
-cu-crsf = { path = "components/bridges/cu_crsf", version = "1.0.0-rc2" }
-cu-dps310 = { path = "components/sources/cu_dps310", version = "1.0.0-rc2" }
-cu-feetech = { path = "components/bridges/cu_feetech", version = "1.0.0-rc2" }
-cu-gnss-ublox = { path = "components/sources/cu_gnss_ublox", version = "1.0.0-rc2" }
-cu-gstreamer = { path = "components/sources/cu_gstreamer", version = "1.0.0-rc2" }
-cu-ist8310 = { path = "components/sources/cu_ist8310", version = "1.0.0-rc2" }
-cu-logmon = { path = "components/monitors/cu_logmon", version = "1.0.0-rc2" }
-cu-micoairh743 = { path = "components/res/cu_micoairh743", version = "1.0.0-rc2" }
-cu-msp-bridge = { path = "components/bridges/cu_msp_bridge", version = "1.0.0-rc2" }
-cu-msp-lib = { path = "components/libs/cu_msp_lib", version = "1.0.0-rc2" }
-cu-rp-encoder = { path = "components/sources/cu_rp_encoder", version = "1.0.0-rc2" }
-cu-rp-sn754410-new = { path = "components/sinks/cu_rp_sn754410", version = "1.0.0-rc2" }
-cu-sdlogger = { path = "components/libs/cu_sdlogger", version = "1.0.0-rc2" }
-cu-zenoh-bridge = { path = "components/bridges/cu_zenoh_bridge", version = "1.0.0-rc2" }
+cu-ads7883-new = { path = "components/sources/cu_ads7883", version = "1.0.0" }
+cu-ahrs = { path = "components/tasks/cu_ahrs", version = "1.0.0" }
+cu-bdshot = { path = "components/bridges/cu_bdshot", version = "1.0.0" }
+cu-bevymon = { path = "components/monitors/cu_bevymon", version = "1.0.0" }
+cu-bmi088 = { path = "components/sources/cu_bmi088", version = "1.0.0" }
+cu-consolemon = { path = "components/monitors/cu_consolemon", version = "1.0.0" }
+cu-crsf = { path = "components/bridges/cu_crsf", version = "1.0.0" }
+cu-dps310 = { path = "components/sources/cu_dps310", version = "1.0.0" }
+cu-feetech = { path = "components/bridges/cu_feetech", version = "1.0.0" }
+cu-gnss-ublox = { path = "components/sources/cu_gnss_ublox", version = "1.0.0" }
+cu-gstreamer = { path = "components/sources/cu_gstreamer", version = "1.0.0" }
+cu-ist8310 = { path = "components/sources/cu_ist8310", version = "1.0.0" }
+cu-logmon = { path = "components/monitors/cu_logmon", version = "1.0.0" }
+cu-micoairh743 = { path = "components/res/cu_micoairh743", version = "1.0.0" }
+cu-msp-bridge = { path = "components/bridges/cu_msp_bridge", version = "1.0.0" }
+cu-msp-lib = { path = "components/libs/cu_msp_lib", version = "1.0.0" }
+cu-rp-encoder = { path = "components/sources/cu_rp_encoder", version = "1.0.0" }
+cu-rp-sn754410-new = { path = "components/sinks/cu_rp_sn754410", version = "1.0.0" }
+cu-sdlogger = { path = "components/libs/cu_sdlogger", version = "1.0.0" }
+cu-zenoh-bridge = { path = "components/bridges/cu_zenoh_bridge", version = "1.0.0" }
 
 # Payload definitions
-cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version = "1.0.0-rc2" }
-cu-gnss-payloads = { path = "components/payloads/cu_gnss_payloads", version = "1.0.0-rc2" }
-cu-spatial-payloads = { path = "components/payloads/cu_spatial_payloads", version = "1.0.0-rc2" }
-cu-ros2-payloads = { path = "components/payloads/cu_ros2_payloads", version = "1.0.0-rc2" }
-cu-pid = { path = "components/tasks/cu_pid", version = "1.0.0-rc2" }
+cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version = "1.0.0" }
+cu-gnss-payloads = { path = "components/payloads/cu_gnss_payloads", version = "1.0.0" }
+cu-spatial-payloads = { path = "components/payloads/cu_spatial_payloads", version = "1.0.0" }
+cu-ros2-payloads = { path = "components/payloads/cu_ros2_payloads", version = "1.0.0" }
+cu-pid = { path = "components/tasks/cu_pid", version = "1.0.0" }
 
 # External serialization
 bincode = { package = "cu-bincode", version = "2.0", default-features = false, features = [

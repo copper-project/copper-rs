@@ -10,6 +10,7 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/cu-sdlogger"
 
 [package.metadata.copper]
 kind = "lib"
@@ -17,7 +18,7 @@ domains = ["storage/logging"]
 environments = ["embedded"]
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version = "1.0.0-rc2", default-features = false }
+cu29 = { path = "../../../core/cu29", version = "1.0.0", default-features = false }
 # HALs we target (e.g. stm32h7xx-hal 0.16) still vendor embedded-sdmmc 0.5, so keep it aligned to avoid dual versions.
 embedded-sdmmc = { version = "0.5", default-features = false, optional = true }
 # Some HALs (e.g. rp235x-hal) sit on embedded-hal 1.0 and need embedded-sdmmc 0.9.

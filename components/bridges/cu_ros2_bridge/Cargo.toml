@@ -9,6 +9,7 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/cu-ros2-bridge"
 description = "Copper bridge for ROS 2 messaging over Zenoh transport."
 
 [package.metadata.copper]

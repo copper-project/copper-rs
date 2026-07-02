@@ -10,6 +10,7 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/cu-bdshot"
 
 [package.metadata.copper]
 kind = "bridge"
@@ -18,7 +19,7 @@ environments = ["embedded"]
 embedded_targets = ["thumbv8m.main-none-eabihf"]
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version = "1.0.0-rc2", default-features = false }
+cu29 = { path = "../../../core/cu29", version = "1.0.0", default-features = false }
 rp235x-hal = { workspace = true, features = [
   "critical-section-impl",
 ], optional = true }

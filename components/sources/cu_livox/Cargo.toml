@@ -10,6 +10,7 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/cu-livox"
 
 [package.metadata.copper]
 kind = "source"
@@ -27,7 +28,7 @@ serde = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-cu-udp-inject = { path = "../../testing/cu_udp_inject", version = "1.0.0-rc2" }
+cu-udp-inject = { path = "../../testing/cu_udp_inject", version = "1.0.0" }
 serde = { workspace = true }
 
 [features]

@@ -10,6 +10,7 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/cu-spatial-payloads"
 
 [package.metadata.copper]
 kind = "payload"
@@ -18,7 +19,7 @@ environments = ["host", "embedded"]
 
 [dependencies]
 bincode = { workspace = true }
-cu29 = { path = "../../../core/cu29", version = "1.0.0-rc2", default-features = false, features = [
+cu29 = { path = "../../../core/cu29", version = "1.0.0", default-features = false, features = [
   "units",
 ] }
 serde = { workspace = true }

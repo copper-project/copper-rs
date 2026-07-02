@@ -10,6 +10,7 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/cu-pid"
 
 [package.metadata.copper]
 kind = "task"
@@ -23,6 +24,6 @@ textlogs = ["cu29/textlogs"]
 reflect = ["cu29/reflect"]
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version = "1.0.0-rc2", default-features = false }
+cu29 = { path = "../../../core/cu29", version = "1.0.0", default-features = false }
 bincode = { workspace = true }
 serde = { workspace = true }

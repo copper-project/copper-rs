@@ -10,6 +10,7 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/cu-mpu9250"
 
 [package.metadata.copper]
 kind = "source"
@@ -17,10 +18,10 @@ domains = ["sensor/imu"]
 environments = ["host", "embedded"]
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version = "1.0.0-rc2", default-features = false, features = [
+cu29 = { path = "../../../core/cu29", version = "1.0.0", default-features = false, features = [
   "units",
 ] }
-cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "1.0.0-rc2", default-features = false }
+cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "1.0.0", default-features = false }
 mpu9250 = { version = "0.25.0", default-features = false }
 serde = { workspace = true }
 embedded-hal-1 = { package = "embedded-hal", version = "1.0.0", default-features = false }

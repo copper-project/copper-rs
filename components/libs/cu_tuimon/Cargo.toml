@@ -10,6 +10,7 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/cu-tuimon"
 
 [package.metadata.copper]
 kind = "lib"
@@ -30,7 +31,7 @@ sysinfo_pane = [
 [dependencies]
 ansi-to-tui = { version = "8.0.0", default-features = false }
 compact_str = { workspace = true }
-cu29 = { path = "../../../core/cu29", version = "1.0.0-rc2", default-features = false, features = [
+cu29 = { path = "../../../core/cu29", version = "1.0.0", default-features = false, features = [
   "std",
 ] }
 cu29-log = { workspace = true, optional = true }

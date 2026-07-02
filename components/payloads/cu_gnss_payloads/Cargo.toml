@@ -10,6 +10,7 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/cu-gnss-payloads"
 description = "Standardized GNSS payload definitions for Copper"
 
 [package.metadata.copper]
@@ -19,10 +20,10 @@ environments = ["host", "embedded"]
 
 [dependencies]
 bincode = { workspace = true }
-cu29 = { path = "../../../core/cu29", version = "1.0.0-rc2", default-features = false, features = [
+cu29 = { path = "../../../core/cu29", version = "1.0.0", default-features = false, features = [
   "units",
 ] }
-cu-spatial-payloads = { path = "../cu_spatial_payloads", version = "1.0.0-rc2", default-features = false }
+cu-spatial-payloads = { path = "../cu_spatial_payloads", version = "1.0.0", default-features = false }
 serde = { workspace = true }
 
 [features]

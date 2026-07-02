@@ -2,7 +2,7 @@
 name = "cargo-cubuild"
 description = "A cargo tool to help with copper macro expansion errors."
 publish = false
-version = "1.0.0-rc2"
+version = "1.0.0"
 edition = "2024"
 rust-version = "1.95"
 license = "Apache-2.0"
