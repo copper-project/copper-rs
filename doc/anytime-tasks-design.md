@@ -513,9 +513,15 @@ smells like dynamic scheduling); cross-task budget allocation.
 1. **`reuse_last` and `tov`.** Re-emitting with the prior `tov` lets downstream detect
    staleness; re-emitting with the current `tov` would hide it. Decision: prior `tov`.
    This is a per-task contract worth nailing down before Phase 2.
-2. **Budget vs cycle period.** A `budget_us` larger than the cycle period derived from
-   `rate_target_hz` is a config bug; reject it at startup with a clear error. Tiny
-   validation pass at app build time.
+2. **Budget vs cycle period.** A `budget_us` larger than the cycle period derived
+   from `runtime.rate_target_hz` is a config bug. `AnytimeTask::new(cfg)` sees
+   only the node's `ComponentConfig`, not the runtime-wide `rate_target_hz`
+   (`core/cu29_runtime/src/config.rs:1860`), so it can bounds-check `budget_us`
+   itself but cannot compare it against the period. The cross-field check runs
+   one layer up — either inside `#[copper_runtime]` codegen (which has both) or
+   inside `CuApp::build()` before the first cycle — so a bad config fails
+   startup with a clear error rather than blowing past the deadline every tick.
+   Pick one site in Phase 2 and document it.
 3. **Determinism surface area of debug replay.** Running an anytime task under
    `recorded_debug_replay_step` pushes correctness obligations onto the task author
    (pure `refine`, reproducible RNG, deterministic simulated clock reads). The
