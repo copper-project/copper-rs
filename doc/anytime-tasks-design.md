@@ -77,7 +77,7 @@ non-interruptible tasks.
 | Determinism on debug replay | `recorded_debug_replay_step` + `SimOverride::ExecuteByRuntime` under simulated `RobotClock` | No — see §6.2 |
 | Cross-cycle task state | `Freezable` + keyframes (`core/cu29_runtime/src/cutask.rs`) | No |
 | Task config (per-node) | `ComponentConfig` from RON | Add fields, no new mechanism |
-| Downstream quality contract | Wrap the payload (`Anytime<O>`) | No `CuMsgMetadata` change |
+| Downstream quality contract | Wrap the payload (`AnytimeOutput<O>`) | No `CuMsgMetadata` change |
 | Deadline polling inside `process()` | Cooperative loop in the `AnytimeTask<A>` adapter reading `RobotClock` — no preemption | New adapter, no runtime change |
 | Seeded randomness (needed for debug-replay of randomized tasks) | Does not exist | Deferred; a separate `CuRng` resource design lands with the first randomized example |
 
@@ -199,7 +199,7 @@ impl<A: Anytime> Freezable for AnytimeTask<A> {
 
 impl<A: Anytime> CuTask for AnytimeTask<A> {
     type Input<'m>     = input_msg!(A::Input);
-    type Output<'m>    = output_msg!(Anytime<A::Output>);
+    type Output<'m>    = output_msg!(AnytimeOutput<A::Output>);
     type Resources<'r> = A::Resources<'r>;
 
     fn new(cfg: Option<&ComponentConfig>, res: Self::Resources<'_>) -> CuResult<Self> {
@@ -238,7 +238,7 @@ impl<A: Anytime> CuTask for AnytimeTask<A> {
 
         let value = self.inner.best();
         self.cache_last(&value, progress, ctx);                // private method on the adapter.
-        out.set_payload(Anytime { value, progress });
+        out.set_payload(AnytimeOutput { value, progress });
         out.tov = Tov::Time(ctx.clock.now());
         Ok(())
     }
@@ -297,9 +297,9 @@ add a second one.
 
 **What happens to an anytime task under each flavor.**
 
-*Exact-output replay.* The adapter never runs. The logged `Anytime<O>` payload —
-carrying the recorded `value` and `Progress::Passes { done }` — is injected into
-the CopperList. Downstream tasks see byte-identical output and identical
+*Exact-output replay.* The adapter never runs. The logged `AnytimeOutput<O>`
+payload — carrying the recorded `value` and `Progress::Passes { done }` — is
+injected into the CopperList. Downstream tasks see byte-identical output and identical
 `progress`. Bit-for-bit downstream replay holds with no determinism requirement
 on `refine` beyond forward progress in live mode. This is the free path and is
 the default for anyone just running a recorded log.
@@ -318,8 +318,8 @@ already secured by the design carry all the weight:
 1. The adapter reads the clock; `refine`'s signature has no `ctx` at all (§9).
    Under a deterministic simulated `RobotClock`, "same clock reads → same
    deadline → same number of `refine` calls."
-2. The `Anytime<O>` payload is an ordinary `CuMsg` payload, so exact-output replay
-   handles it via the normal recorded-log path with zero anytime-specific code.
+2. The `AnytimeOutput<O>` payload is an ordinary `CuMsg` payload, so exact-output
+   replay handles it via the normal recorded-log path with zero anytime-specific code.
 
 **Determinism obligations for debug replay** (an app-level opt-in — the user picks
 debug replay by choosing that harness) are covered in §9. Randomized tasks debug-
@@ -379,31 +379,43 @@ A separate design doc will specify `CuRng` — seed logging, per-task instances,
 interaction with `Freezable`, and the trade-off between logging the seed vs. the
 stream — when the first randomized task is proposed.
 
-## 8. `Anytime<O>` payload, downstream contract, overload, convergence
+## 8. `AnytimeOutput<O>` payload, downstream contract, overload, convergence
 
 ### 8.1 Payload wrapper
 
 The progress marker travels with the value as a wrapped payload, **not** as a
 `CuMsgMetadata` extension. Wrapping leaves the wire format untouched and means
-non-anytime tasks pay zero bytes.
+non-anytime tasks pay zero bytes. The payload is a distinct type from the
+`Anytime` trait so `impl Anytime for MyTask` and `AnytimeOutput { value, progress }`
+never share a name at a use site.
+
+The derive set matches `CuMsgPayload`'s bound (`core/cu29_runtime/src/cutask.rs:28`):
+`Default + Debug + Clone + Encode + Decode<()> + Serialize + DeserializeOwned +
+Reflect + TypePath`. `Progress` and `SkipReason` need `Default` too, because
+`CuMsg`'s output slot is preallocated with `O::default()`.
 
 ```rust
-#[derive(Encode, Decode, Reflect, Clone, Debug)]
-pub struct Anytime<O: CuMsgPayload> {
-    pub value: O,
+#[derive(Default, Encode, Decode, Serialize, Deserialize, Reflect, Clone, Debug)]
+pub struct AnytimeOutput<O: CuMsgPayload> {
+    pub value:    O,
     pub progress: Progress,
 }
 
-#[derive(Encode, Decode, Reflect, Clone, Copy, Debug)]
+#[derive(Default, Encode, Decode, Serialize, Deserialize, Reflect, Clone, Copy, Debug)]
 pub enum Progress {
+    #[default]
     Passes { done: u32 },
     Converged,
     // ExitHead { index: u32, of: u32 } — added when §9 accelerator support lands.
     Skipped { reason: SkipReason },
 }
 
-#[derive(Encode, Decode, Reflect, Clone, Copy, Debug)]
-pub enum SkipReason { NoInput, ReusedLast }
+#[derive(Default, Encode, Decode, Serialize, Deserialize, Reflect, Clone, Copy, Debug)]
+pub enum SkipReason {
+    #[default]
+    NoInput,
+    ReusedLast,
+}
 ```
 
 ### 8.2 Downstream quality contract
@@ -424,7 +436,7 @@ config: { "budget_us": 8000, "on_overload": "reuse_last" }
 ```
 
 - `reuse_last` (default): the adapter's own `last` slot holds the previous cycle's
-  `Anytime<O>`; on skip it re-emits with the **prior `tov`** so downstream can
+  `AnytimeOutput<O>`; on skip it re-emits with the **prior `tov`** so downstream can
   detect staleness. `progress` becomes `Skipped { reason: ReusedLast }`.
 - `fail`: the adapter returns `CuError`; the existing copper-rs error path takes
   over.
@@ -481,7 +493,7 @@ anytime-interface PR and gets its own design doc when it lands.
 
 | Phase | Deliverable | Exit criterion |
 |---|---|---|
-| 1 | `Anytime` trait + `AnytimeTask<A>` adapter + `Anytime<O>` payload + `Progress` enum, in `core/cu29_runtime/src/cutask_anytime.rs` | A trivial in-tree counter-style anytime task compiles and runs; recorded `Anytime<O>` payload replays byte-for-byte under `recorded_replay_step` |
+| 1 | `Anytime` trait + `AnytimeTask<A>` adapter + `AnytimeOutput<O>` payload + `Progress` enum, in `core/cu29_runtime/src/cutask_anytime.rs` | A trivial in-tree counter-style anytime task compiles and runs; recorded `AnytimeOutput<O>` payload replays byte-for-byte under `recorded_replay_step` |
 | 2 | `budget_us` config field, `on_overload` policy, skip-and-reuse, cache-last | Forced overload re-emits last `best()` with prior `tov`; cycle stays on time; exact-output replay holds through the overload |
 | 3 | Verify `AnytimeTask<A>` composes correctly with the existing `recorded_debug_replay_step` callback (deterministic simulated `RobotClock` → identical pass counts → identical `refine` trajectory) | A deterministic in-tree anytime task under debug replay reproduces the recorded pass count and `best()` output on every cycle |
 | — | — | — |
