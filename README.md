@@ -2,7 +2,7 @@
 
 [![CI/CD](https://github.com/copper-project/copper-rs/actions/workflows/general.yml/badge.svg?branch=master)](https://github.com/copper-project/copper-rs/actions/workflows/general.yml)
 ![GitHub last commit](https://img.shields.io/github/last-commit/copper-project/copper-rs)
-![](https://img.shields.io/badge/Rust-1.95+-orange.svg)
+![](https://img.shields.io/badge/Rust-1.95+-orange.svg)[![crates.io](https://img.shields.io/crates/v/cu29.svg)](https://crates.io/crates/cu29)
 [![dependency status](https://deps.rs/repo/github/copper-project/copper-rs/status.svg)](https://deps.rs/repo/github/copper-project/copper-rs)
 [![Discord](https://img.shields.io/discord/1305916875741597826?logo=discord)](https://discord.gg/VkCG7Sb9Kw)
 [![Book](https://img.shields.io/badge/book-Docs-blue)](https://copper-project.github.io/copper-rs-book/)
