@@ -102,8 +102,15 @@ pub struct AnytimeOutput<O: CuMsgPayload> {
 pub enum OnOverload {
     /// Re-emit the previous cycle's `best()` with the prior `tov` so downstream
     /// can detect staleness. `progress` becomes
-    /// `Progress::Skipped { reason: ReusedLast }` (or `NoInput` if there is
-    /// also no cached previous output).
+    /// [`Progress::Skipped`] `{ reason: ReusedLast }`.
+    ///
+    /// Cold start: if the adapter has never produced a real output yet
+    /// (typically the very first cycle takes the skip path), there is no
+    /// cached value to reuse. In that case the adapter emits
+    /// `A::Output::default()` with `Tov::None` and preserves the *original*
+    /// skip reason on `Progress::Skipped` (e.g. `NoInput`), so downstream
+    /// contract code can distinguish "warm-cache reuse" (`ReusedLast`) from
+    /// "cold default" (the original reason with `Tov::None`).
     #[default]
     ReuseLast,
     /// Return a `CuError` from `process`; the existing copper-rs error path
@@ -708,6 +715,34 @@ mod tests {
         );
         assert_eq!(p2.value.value, first_value);
         assert_eq!(out2.tov, first_tov, "reused output must carry prior tov");
+    }
+
+    // Cold start: on a skip cycle before any real cycle has populated the
+    // cache, `ReuseLast` emits `A::Output::default()` with `Tov::None` and
+    // keeps the original skip reason (here `NoInput`). This is the contract
+    // downstream code relies on to tell "warm-cache reuse" apart from a
+    // "cold default" emission.
+    #[test]
+    fn adapter_cold_start_reuse_last_emits_default_with_none_tov() {
+        let cfg = cfg_with_budget(1_000);
+        let mut t = AnytimeTask::<TestPlanner>::new(Some(&cfg), ()).unwrap();
+        let (clock, _mock) = RobotClock::mock();
+        let ctx = CuContext::from_clock(clock);
+
+        let input: CuMsg<Counter> = CuMsg::new(None);
+        let mut out: CuMsg<AnytimeOutput<Counter>> = CuMsg::new(None);
+        t.process(&ctx, &input, &mut out).unwrap();
+
+        let payload = out.payload().expect("cold-start reuse_last still emits");
+        assert_eq!(
+            payload.progress,
+            Progress::Skipped {
+                reason: SkipReason::NoInput
+            },
+            "cold-start skip must preserve the original SkipReason, not ReusedLast"
+        );
+        assert_eq!(payload.value.value, u32::default());
+        assert_eq!(out.tov, Tov::None);
     }
 
     #[test]
