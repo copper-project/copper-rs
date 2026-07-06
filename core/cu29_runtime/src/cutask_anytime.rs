@@ -21,6 +21,7 @@ use cu29_traits::{CuError, CuResult};
 use serde::{Deserialize, Serialize};
 
 use alloc::format;
+use alloc::string::String;
 use alloc::vec::Vec;
 
 /// Outcome of a single refinement step.
