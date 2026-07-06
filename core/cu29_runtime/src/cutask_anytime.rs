@@ -25,13 +25,19 @@ use alloc::vec::Vec;
 
 /// Outcome of a single refinement step.
 ///
-/// `Continue` means the task can still improve if given more time; `Converged`
-/// tells the adapter that no further refinement is possible and it may exit the
-/// loop even before the deadline.
+/// `Continue` means the task can still improve if given more time. The two
+/// early-exit variants are semantically distinct and are logged separately in
+/// [`Progress`] so operators can tell them apart:
+///
+/// - `Converged` — no further improvement is *possible* (algorithmic fixpoint).
+/// - `Satisfied` — no further improvement is *needed* (task-defined quality
+///   target reached). Improvement may still be possible, but the task judges
+///   it not worth the cycles. See also [`Anytime::is_satisfied`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
     Continue,
     Converged,
+    Satisfied,
 }
 
 /// Quality marker emitted alongside every `AnytimeOutput`.
@@ -47,6 +53,10 @@ pub enum Progress {
     /// `refine` returned [`Step::Converged`]; no further improvement is
     /// available.
     Converged,
+    /// `refine` returned [`Step::Satisfied`], or [`Anytime::is_satisfied`]
+    /// reported the quality target had been met. Distinct from `Converged`
+    /// because improvement may still be possible — the task chose to stop.
+    Satisfied,
     /// Adapter did not run this cycle; see `SkipReason` for why.
     Skipped { reason: SkipReason },
 }
@@ -147,6 +157,37 @@ pub trait Anytime: Freezable + Reflect {
 
     /// Quality marker logged alongside the output. Cheap.
     fn progress(&self) -> Progress;
+
+    /// Task-defined "quality target reached" predicate, checked by the
+    /// adapter between refines. Return `true` to exit the refine loop with
+    /// [`Progress::Satisfied`] without running another `refine`.
+    ///
+    /// MUST be cheap and MUST NOT allocate. Default: never satisfied.
+    ///
+    /// Use this when the satisfaction condition is cheaper to check than a
+    /// full refine step (e.g. a cost delta cached by the last `refine`). If
+    /// checking is only meaningful *after* another refine ran, return
+    /// [`Step::Satisfied`] from `refine` itself instead.
+    fn is_satisfied(&self) -> bool {
+        false
+    }
+
+    /// Called by the adapter once per cycle after the refine loop exits (via
+    /// deadline, `Converged`, `Satisfied`, or `is_satisfied`) and before
+    /// `best()` is read. Default no-op.
+    ///
+    /// This is the drain point for tasks that dispatch asynchronous work
+    /// inside `refine` (e.g. accelerator kernels): `finalize` waits for the
+    /// last in-flight stage and commits its readback so `best()` is coherent.
+    /// The wait must be bounded — the caller has already spent the cycle
+    /// budget, so `finalize` should complete promptly (typically one
+    /// last-dispatched stage's worth of work).
+    ///
+    /// Not called on skipped cycles (no input, or overload reuse) — nothing
+    /// was dispatched, so there is nothing to drain.
+    fn finalize(&mut self, _ctx: &CuContext) -> CuResult<()> {
+        Ok(())
+    }
 
     fn start(&mut self, _ctx: &CuContext) -> CuResult<()> {
         Ok(())
@@ -425,12 +466,17 @@ impl<A: Anytime + GetTypeRegistration + TypePath + 'static> CuTask for AnytimeTa
             if ctx.clock.now() >= deadline {
                 break self.inner.progress();
             }
+            if self.inner.is_satisfied() {
+                break Progress::Satisfied;
+            }
             match self.inner.refine()? {
                 Step::Continue => continue,
                 Step::Converged => break Progress::Converged,
+                Step::Satisfied => break Progress::Satisfied,
             }
         };
 
+        self.inner.finalize(ctx)?;
         let value = self.inner.best();
         let tov = Tov::Time(ctx.clock.now());
         self.cache_last(&value, tov);
@@ -459,6 +505,13 @@ mod tests {
         best_val: u32,
         pass_count: u32,
         max_passes: u32,
+        // When Some(n), `refine` returns `Step::Satisfied` once `pass_count >= n`.
+        satisfy_after: Option<u32>,
+        // When Some(n), `is_satisfied` returns true once `pass_count >= n`.
+        // Checked by the adapter between refines.
+        is_satisfied_after: Option<u32>,
+        // Incremented every time `finalize` is called.
+        finalize_calls: u32,
     }
 
     impl Freezable for TestPlanner {}
@@ -473,6 +526,9 @@ mod tests {
                 best_val: 0,
                 pass_count: 0,
                 max_passes: 1_000,
+                satisfy_after: None,
+                is_satisfied_after: None,
+                finalize_calls: 0,
             })
         }
 
@@ -488,6 +544,11 @@ mod tests {
             }
             self.pass_count += 1;
             self.best_val += 1;
+            if let Some(n) = self.satisfy_after
+                && self.pass_count >= n
+            {
+                return Ok(Step::Satisfied);
+            }
             Ok(Step::Continue)
         }
 
@@ -501,6 +562,18 @@ mod tests {
             Progress::Passes {
                 done: self.pass_count,
             }
+        }
+
+        fn is_satisfied(&self) -> bool {
+            match self.is_satisfied_after {
+                Some(n) => self.pass_count >= n,
+                None => false,
+            }
+        }
+
+        fn finalize(&mut self, _ctx: &CuContext) -> CuResult<()> {
+            self.finalize_calls += 1;
+            Ok(())
         }
     }
 
@@ -650,6 +723,107 @@ mod tests {
         let err = t.process(&ctx, &input, &mut out).unwrap_err();
         let msg = format!("{err:?}");
         assert!(msg.contains("fail"), "unexpected error: {msg}");
+    }
+
+    // `Step::Satisfied` returned from `refine` exits the loop and is logged as
+    // `Progress::Satisfied` — distinct from `Converged`, so operators can
+    // tell "quality target reached" apart from "algorithmic fixpoint".
+    #[test]
+    fn adapter_reports_satisfied_when_refine_returns_satisfied() {
+        let cfg = cfg_with_budget(1_000);
+        let mut t = AnytimeTask::<TestPlanner>::new(Some(&cfg), ()).unwrap();
+        let (clock, mock) = RobotClock::mock();
+        mock.set_value(0);
+        let ctx = CuContext::from_clock(clock);
+
+        // Clock frozen so the deadline never expires; convergence disabled;
+        // task asks the adapter to stop after 4 refines via Step::Satisfied.
+        t.inner.max_passes = 1_000_000;
+        t.inner.satisfy_after = Some(4);
+
+        let input: CuMsg<Counter> = CuMsg::new(Some(Counter { value: 10 }));
+        let mut out: CuMsg<AnytimeOutput<Counter>> = CuMsg::new(None);
+        t.process(&ctx, &input, &mut out).unwrap();
+
+        let payload = out.payload().expect("output must be set");
+        assert_eq!(payload.progress, Progress::Satisfied);
+        assert_eq!(payload.value.value, 10 + 4);
+    }
+
+    // `is_satisfied` returning true between refines exits the loop with
+    // `Progress::Satisfied` without running another refine — the "cheap
+    // predicate" path documented on the trait.
+    #[test]
+    fn adapter_reports_satisfied_when_is_satisfied_predicate_fires() {
+        let cfg = cfg_with_budget(1_000);
+        let mut t = AnytimeTask::<TestPlanner>::new(Some(&cfg), ()).unwrap();
+        let (clock, mock) = RobotClock::mock();
+        mock.set_value(0);
+        let ctx = CuContext::from_clock(clock);
+
+        t.inner.max_passes = 1_000_000;
+        // After 3 refines the adapter's next top-of-loop check sees
+        // is_satisfied() == true and exits — pass_count must be exactly 3.
+        t.inner.is_satisfied_after = Some(3);
+
+        let input: CuMsg<Counter> = CuMsg::new(Some(Counter { value: 100 }));
+        let mut out: CuMsg<AnytimeOutput<Counter>> = CuMsg::new(None);
+        t.process(&ctx, &input, &mut out).unwrap();
+
+        let payload = out.payload().expect("output must be set");
+        assert_eq!(payload.progress, Progress::Satisfied);
+        assert_eq!(payload.value.value, 103);
+    }
+
+    // `finalize` is called exactly once per non-skipped cycle, before `best()`
+    // is read. This is the async-drain contract accelerator tasks rely on.
+    #[test]
+    fn adapter_calls_finalize_exactly_once_per_processed_cycle() {
+        let cfg = cfg_with_budget(1_000);
+        let mut t = AnytimeTask::<TestPlanner>::new(Some(&cfg), ()).unwrap();
+        let (clock, mock) = RobotClock::mock();
+        mock.set_value(0);
+        let ctx = CuContext::from_clock(clock);
+        t.inner.max_passes = 5;
+
+        let input: CuMsg<Counter> = CuMsg::new(Some(Counter { value: 0 }));
+        let mut out: CuMsg<AnytimeOutput<Counter>> = CuMsg::new(None);
+        t.process(&ctx, &input, &mut out).unwrap();
+        assert_eq!(t.inner.finalize_calls, 1);
+
+        // A second normal cycle bumps the counter to 2 — one call per cycle.
+        let input: CuMsg<Counter> = CuMsg::new(Some(Counter { value: 0 }));
+        let mut out: CuMsg<AnytimeOutput<Counter>> = CuMsg::new(None);
+        t.process(&ctx, &input, &mut out).unwrap();
+        assert_eq!(t.inner.finalize_calls, 2);
+    }
+
+    // `finalize` must NOT be called on skip paths — nothing was dispatched, so
+    // there is nothing to drain. Documented on the trait.
+    #[test]
+    fn adapter_does_not_call_finalize_on_skip_paths() {
+        let cfg = cfg_with_budget(1_000);
+        let mut t = AnytimeTask::<TestPlanner>::new(Some(&cfg), ()).unwrap();
+        let (clock, _mock) = RobotClock::mock();
+        let ctx = CuContext::from_clock(clock);
+
+        // NoInput skip.
+        let input: CuMsg<Counter> = CuMsg::new(None);
+        let mut out: CuMsg<AnytimeOutput<Counter>> = CuMsg::new(None);
+        t.process(&ctx, &input, &mut out).unwrap();
+        assert_eq!(t.inner.finalize_calls, 0);
+
+        // ReuseLast skip after a real cycle: the real cycle bumps finalize
+        // once; the skipped cycle must not.
+        let input: CuMsg<Counter> = CuMsg::new(Some(Counter { value: 1 }));
+        let mut out: CuMsg<AnytimeOutput<Counter>> = CuMsg::new(None);
+        t.process(&ctx, &input, &mut out).unwrap();
+        assert_eq!(t.inner.finalize_calls, 1);
+
+        let input: CuMsg<Counter> = CuMsg::new(None);
+        let mut out: CuMsg<AnytimeOutput<Counter>> = CuMsg::new(None);
+        t.process(&ctx, &input, &mut out).unwrap();
+        assert_eq!(t.inner.finalize_calls, 1, "skip must not call finalize");
     }
 
     // Cached `last` must survive freeze/thaw so a keyframe-based replay can

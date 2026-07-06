@@ -970,6 +970,7 @@ pub enum cu29_runtime::cutask_anytime::Progress
 pub cu29_runtime::cutask_anytime::Progress::Converged
 pub cu29_runtime::cutask_anytime::Progress::Passes
 pub cu29_runtime::cutask_anytime::Progress::Passes::done: u32
+pub cu29_runtime::cutask_anytime::Progress::Satisfied
 pub cu29_runtime::cutask_anytime::Progress::Skipped
 pub cu29_runtime::cutask_anytime::Progress::Skipped::reason: cu29_runtime::cutask_anytime::SkipReason
 impl core::default::Default for cu29_runtime::cutask_anytime::Progress
@@ -1004,6 +1005,7 @@ pub fn cu29_runtime::cutask_anytime::SkipReason::decode<__D: cu_bincode::de::Dec
 pub enum cu29_runtime::cutask_anytime::Step
 pub cu29_runtime::cutask_anytime::Step::Continue
 pub cu29_runtime::cutask_anytime::Step::Converged
+pub cu29_runtime::cutask_anytime::Step::Satisfied
 pub struct cu29_runtime::cutask_anytime::AnytimeOutput<O: cu29_runtime::cutask::CuMsgPayload>
 pub cu29_runtime::cutask_anytime::AnytimeOutput::progress: cu29_runtime::cutask_anytime::Progress
 pub cu29_runtime::cutask_anytime::AnytimeOutput::value: O
@@ -1048,6 +1050,8 @@ pub type cu29_runtime::cutask_anytime::Anytime::Output: cu29_runtime::cutask::Cu
 pub type cu29_runtime::cutask_anytime::Anytime::Resources<'r>
 pub fn cu29_runtime::cutask_anytime::Anytime::base(&mut self, input: &Self::Input, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask_anytime::Anytime::best(&self) -> Self::Output
+pub fn cu29_runtime::cutask_anytime::Anytime::finalize(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cutask_anytime::Anytime::is_satisfied(&self) -> bool
 pub fn cu29_runtime::cutask_anytime::Anytime::new(config: core::option::Option<&cu29_runtime::config::ComponentConfig>, resources: Self::Resources) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
 pub fn cu29_runtime::cutask_anytime::Anytime::postprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask_anytime::Anytime::preprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
