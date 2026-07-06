@@ -1,4 +1,8 @@
-// --- Cortex-M (bare-metal)
+// Source: Cortex-M DWT cycle counter (`DWT.CYCCNT`).
+// Guarantee: 32-bit core-cycle counter after `initialize()`. This backend
+// extends it by resetting CYCCNT on every read and accumulating deltas, so it
+// assumes a single core/single reader and reads frequent enough to avoid a
+// 32-bit wrap between reads.
 
 use cortex_m::peripheral::{DWT, Peripherals};
 

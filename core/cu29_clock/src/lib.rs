@@ -5,24 +5,6 @@ extern crate alloc;
 extern crate approx;
 
 mod calibration;
-#[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
-#[cfg_attr(all(target_os = "none", target_arch = "arm"), path = "cortexm.rs")]
-#[cfg_attr(target_arch = "riscv64", path = "riscv64.rs")]
-#[cfg_attr(
-    all(feature = "std", target_arch = "wasm32", target_os = "unknown"),
-    path = "wasm.rs"
-)]
-#[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
-#[cfg_attr(
-    not(any(
-        target_arch = "x86_64",
-        target_arch = "aarch64",
-        all(target_os = "none", target_arch = "arm"),
-        target_arch = "riscv64",
-        all(feature = "std", target_arch = "wasm32", target_os = "unknown")
-    )),
-    path = "fallback.rs"
-)]
 mod raw_counter;
 
 pub use raw_counter::*;
