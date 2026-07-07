@@ -1049,16 +1049,16 @@ pub type cu29_runtime::cutask_anytime::Anytime::Input: cu29_runtime::cutask::CuM
 pub type cu29_runtime::cutask_anytime::Anytime::Output: cu29_runtime::cutask::CuMsgPayload
 pub type cu29_runtime::cutask_anytime::Anytime::Resources<'r>
 pub fn cu29_runtime::cutask_anytime::Anytime::base(&mut self, input: &Self::Input, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
-pub fn cu29_runtime::cutask_anytime::Anytime::best(&self) -> Self::Output
 pub fn cu29_runtime::cutask_anytime::Anytime::finalize(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
-pub fn cu29_runtime::cutask_anytime::Anytime::is_satisfied(&self) -> bool
+pub fn cu29_runtime::cutask_anytime::Anytime::is_satisfied(&self, _input: &Self::Input) -> bool
 pub fn cu29_runtime::cutask_anytime::Anytime::new(config: core::option::Option<&cu29_runtime::config::ComponentConfig>, resources: Self::Resources) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
 pub fn cu29_runtime::cutask_anytime::Anytime::postprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask_anytime::Anytime::preprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask_anytime::Anytime::progress(&self) -> cu29_runtime::cutask_anytime::Progress
-pub fn cu29_runtime::cutask_anytime::Anytime::refine(&mut self) -> cu29_traits::CuResult<cu29_runtime::cutask_anytime::Step>
+pub fn cu29_runtime::cutask_anytime::Anytime::refine(&mut self, input: &Self::Input) -> cu29_traits::CuResult<cu29_runtime::cutask_anytime::Step>
 pub fn cu29_runtime::cutask_anytime::Anytime::start(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask_anytime::Anytime::stop(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cutask_anytime::Anytime::write_best(&self, out: &mut Self::Output)
 pub mod cu29_runtime::debug
 pub struct cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L> where P: cu29_traits::CopperListTuple, S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static
 impl<App, P, CB, TF, S, L> cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L> where App: cu29_runtime::app::CuSimApplication<S, L> + cu29_runtime::reflect::ReflectTaskIntrospection, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, S: cu29_unifiedlog::SectionStorage, P: cu29_traits::CopperListTuple, CB: for<'a> core::ops::function::Fn(&'a cu29_runtime::copperlist::CopperList<P>, cu29_clock::RobotClock, cu29_clock::RobotClockMock) -> alloc::boxed::Box<(dyn for<'z> core::ops::function::FnMut(<App as cu29_runtime::app::CuSimApplication>::Step) -> cu29_runtime::simulation::SimOverride + 'a)>, TF: core::ops::function::Fn(&cu29_runtime::copperlist::CopperList<P>) -> core::option::Option<cu29_clock::CuTime> + core::clone::Clone

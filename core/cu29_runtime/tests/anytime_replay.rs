@@ -111,7 +111,7 @@ impl Anytime for TestPlanner {
         Ok(())
     }
 
-    fn refine(&mut self) -> CuResult<Step> {
+    fn refine(&mut self, _input: &Self::Input) -> CuResult<Step> {
         if self.pass_count >= self.max_passes {
             return Ok(Step::Converged);
         }
@@ -120,10 +120,8 @@ impl Anytime for TestPlanner {
         Ok(Step::Continue)
     }
 
-    fn best(&self) -> Self::Output {
-        CounterMsg {
-            value: self.best_val,
-        }
+    fn write_best(&self, out: &mut Self::Output) {
+        out.value = self.best_val;
     }
 
     fn progress(&self) -> Progress {

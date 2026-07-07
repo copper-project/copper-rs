@@ -21,7 +21,6 @@ use cu29_traits::{CuError, CuResult};
 use serde::{Deserialize, Serialize};
 
 use alloc::format;
-use alloc::string::String;
 use alloc::vec::Vec;
 
 /// Outcome of a single refinement step.
@@ -99,9 +98,13 @@ pub struct AnytimeOutput<O: CuMsgPayload> {
 
 /// Policy applied when the current cycle cannot produce a fresh output:
 /// either the previous output is reused, or the adapter returns an error.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+///
+/// Serialised form in RON is snake_case (`"reuse_last"`, `"fail"`) — one
+/// canonical spelling, no aliases.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum OnOverload {
-    /// Re-emit the previous cycle's `best()` with the prior `tov` so downstream
+    /// Re-emit the previous cycle's best with the prior `tov` so downstream
     /// can detect staleness. `progress` becomes
     /// [`Progress::Skipped`] `{ reason: ReusedLast }`.
     ///
@@ -117,18 +120,6 @@ pub enum OnOverload {
     /// Return a `CuError` from `process`; the existing copper-rs error path
     /// takes over.
     Fail,
-}
-
-impl OnOverload {
-    fn parse(s: &str) -> CuResult<Self> {
-        match s {
-            "reuse_last" | "ReuseLast" => Ok(Self::ReuseLast),
-            "fail" | "Fail" => Ok(Self::Fail),
-            other => Err(CuError::from(format!(
-                "AnytimeTask: invalid on_overload value '{other}' (expected 'reuse_last' or 'fail')"
-            ))),
-        }
-    }
 }
 
 /// User-facing trait for anytime tasks.
@@ -151,17 +142,27 @@ pub trait Anytime: Freezable + Reflect {
     ///
     /// Cheap, MUST always fit within any plausible budget, produces a safe
     /// rough result. Reads `input` and resets per-cycle scratch on `self`.
-    /// After this returns, `best()` and `progress()` are valid.
+    /// After this returns, `write_best` and `progress` are valid.
     fn base(&mut self, input: &Self::Input, ctx: &CuContext) -> CuResult<()>;
 
     /// One bounded refinement increment, sized so overshoot is at most one
     /// step. MUST NOT allocate on the RT path. Signature deliberately takes no
     /// `ctx` — `refine` must be pure w.r.t. wall time; the adapter checks the
     /// deadline between calls.
-    fn refine(&mut self) -> CuResult<Step>;
+    ///
+    /// `input` is re-passed each call so implementors never need to cache it
+    /// on `self` between the adapter's `base`/`refine` calls — the copperlist
+    /// already owns it for the whole cycle.
+    fn refine(&mut self, input: &Self::Input) -> CuResult<Step>;
 
-    /// Best-so-far. Cheap. Valid after `base` and after every `refine`.
-    fn best(&self) -> Self::Output;
+    /// Write the best-so-far into a caller-owned buffer. Cheap. Valid after
+    /// `base` and after every `refine`.
+    ///
+    /// Writes in place — do not construct-then-return. `out` is the payload
+    /// slot the runtime already owns; reuse its allocations (e.g. `out.clear();
+    /// out.extend_from_slice(&self.buf)`) rather than materialising a fresh
+    /// value.
+    fn write_best(&self, out: &mut Self::Output);
 
     /// Quality marker logged alongside the output. Cheap.
     fn progress(&self) -> Progress;
@@ -176,7 +177,9 @@ pub trait Anytime: Freezable + Reflect {
     /// full refine step (e.g. a cost delta cached by the last `refine`). If
     /// checking is only meaningful *after* another refine ran, return
     /// [`Step::Satisfied`] from `refine` itself instead.
-    fn is_satisfied(&self) -> bool {
+    ///
+    /// `input` is re-passed for the same reason as [`refine`](Self::refine).
+    fn is_satisfied(&self, _input: &Self::Input) -> bool {
         false
     }
 
@@ -265,20 +268,10 @@ impl<A: Anytime + TypePath> AnytimeTask<A> {
         let Some(cfg) = cfg else {
             return Ok(OnOverload::default());
         };
-        match cfg
-            .get::<String>("on_overload")
+        Ok(cfg
+            .get_value::<OnOverload>("on_overload")
             .map_err(|e| CuError::from(format!("AnytimeTask config 'on_overload': {e}")))?
-        {
-            Some(s) => OnOverload::parse(&s),
-            None => Ok(OnOverload::default()),
-        }
-    }
-
-    fn cache_last(&mut self, value: &A::Output, tov: Tov) {
-        self.last = Some(CachedOutput {
-            value: value.clone(),
-            tov,
-        });
+            .unwrap_or_default())
     }
 
     fn emit_skip(
@@ -474,10 +467,10 @@ impl<A: Anytime + GetTypeRegistration + TypePath + 'static> CuTask for AnytimeTa
             if ctx.clock.now() >= deadline {
                 break self.inner.progress();
             }
-            if self.inner.is_satisfied() {
+            if self.inner.is_satisfied(in_payload) {
                 break Progress::Satisfied;
             }
-            match self.inner.refine()? {
+            match self.inner.refine(in_payload)? {
                 Step::Continue => continue,
                 Step::Converged => break Progress::Converged,
                 Step::Satisfied => break Progress::Satisfied,
@@ -485,11 +478,21 @@ impl<A: Anytime + GetTypeRegistration + TypePath + 'static> CuTask for AnytimeTa
         };
 
         self.inner.finalize(ctx)?;
-        let value = self.inner.best();
         let tov = Tov::Time(ctx.clock.now());
-        self.cache_last(&value, tov);
-        out.set_payload(AnytimeOutput { value, progress });
+        out.set_payload(AnytimeOutput {
+            value: A::Output::default(),
+            progress,
+        });
+        {
+            let payload = out.payload_mut().as_mut().expect("just set above");
+            self.inner.write_best(&mut payload.value);
+        }
         out.tov = tov;
+        let cached_value = out.payload().expect("just set above").value.clone();
+        self.last = Some(CachedOutput {
+            value: cached_value,
+            tov,
+        });
         Ok(())
     }
 }
@@ -546,7 +549,7 @@ mod tests {
             Ok(())
         }
 
-        fn refine(&mut self) -> CuResult<Step> {
+        fn refine(&mut self, _input: &Self::Input) -> CuResult<Step> {
             if self.pass_count >= self.max_passes {
                 return Ok(Step::Converged);
             }
@@ -560,10 +563,8 @@ mod tests {
             Ok(Step::Continue)
         }
 
-        fn best(&self) -> Self::Output {
-            Counter {
-                value: self.best_val,
-            }
+        fn write_best(&self, out: &mut Self::Output) {
+            out.value = self.best_val;
         }
 
         fn progress(&self) -> Progress {
@@ -572,7 +573,7 @@ mod tests {
             }
         }
 
-        fn is_satisfied(&self) -> bool {
+        fn is_satisfied(&self, _input: &Self::Input) -> bool {
             match self.is_satisfied_after {
                 Some(n) => self.pass_count >= n,
                 None => false,
@@ -931,13 +932,11 @@ mod tests {
                 self.best_val = i.value;
                 Ok(())
             }
-            fn refine(&mut self) -> CuResult<Step> {
+            fn refine(&mut self, _i: &Self::Input) -> CuResult<Step> {
                 Ok(Step::Converged)
             }
-            fn best(&self) -> Self::Output {
-                Counter {
-                    value: self.best_val,
-                }
+            fn write_best(&self, out: &mut Self::Output) {
+                out.value = self.best_val;
             }
             fn progress(&self) -> Progress {
                 Progress::Converged
