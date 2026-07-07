@@ -6,7 +6,14 @@
 //
 // Backend files document the clock source and the guarantees Copper relies on.
 #[cfg_attr(target_arch = "aarch64", path = "aarch64_cntvct.rs")]
-#[cfg_attr(all(target_os = "none", target_arch = "arm"), path = "cortex_m_dwt.rs")]
+#[cfg_attr(
+    all(copper_cortex_r, target_os = "none", target_arch = "arm"),
+    path = "armv7r_pmu.rs"
+)]
+#[cfg_attr(
+    all(not(copper_cortex_r), target_os = "none", target_arch = "arm"),
+    path = "cortex_m_dwt.rs"
+)]
 #[cfg_attr(target_arch = "riscv64", path = "riscv64_rdcycle.rs")]
 #[cfg_attr(
     all(feature = "std", target_arch = "wasm32", target_os = "unknown"),
