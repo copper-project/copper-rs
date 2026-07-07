@@ -1050,7 +1050,6 @@ pub type cu29_runtime::cutask_anytime::Anytime::Output: cu29_runtime::cutask::Cu
 pub type cu29_runtime::cutask_anytime::Anytime::Resources<'r>
 pub fn cu29_runtime::cutask_anytime::Anytime::base(&mut self, input: &Self::Input, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask_anytime::Anytime::finalize(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
-pub fn cu29_runtime::cutask_anytime::Anytime::is_satisfied(&self, _input: &Self::Input) -> bool
 pub fn cu29_runtime::cutask_anytime::Anytime::new(config: core::option::Option<&cu29_runtime::config::ComponentConfig>, resources: Self::Resources) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
 pub fn cu29_runtime::cutask_anytime::Anytime::postprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask_anytime::Anytime::preprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
