@@ -19,9 +19,9 @@ environments = ["host", "embedded"]
 
 [dependencies]
 cu29 = { path = "../../../core/cu29", version = "1.0.0", default-features = false }
-rand_core = { version = "0.9", default-features = false }
-rand_chacha = { version = "0.9", default-features = false }
+rand = { version = "0.10", default-features = false }
+rand_chacha = { version = "0.10", default-features = false }
 
 [features]
 default = ["std"]
-std = ["cu29/std", "rand_core/std", "rand_chacha/std"]
+std = ["cu29/std", "rand/std", "rand_chacha/std"]

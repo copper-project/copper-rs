@@ -1,9 +1,28 @@
 //! Seeded pseudo-random number generator resource for Copper.
 //!
 //! [`CuRng`] is a deterministic, reproducible RNG (ChaCha8) usable anywhere
-//! [`rand_core::RngCore`] is expected. It is wired into a Copper app as a
+//! [`rand::Rng`] is expected. It is wired into a Copper app as a
 //! single-slot resource bundle, [`CuRngBundle`], via the standard resource
 //! mechanism.
+//!
+//! Use [`prelude`] to bring the normal `rand` sampling API into scope:
+//!
+//! ```rust
+//! use cu_rng::prelude::*;
+//!
+//! let mut rng = CuRng::from_seed(12345);
+//! let unit_f64: f64 = rng.random();
+//! let unit_f32: f32 = rng.random();
+//! let noise: f64 = rng.random_range(-0.05..0.05);
+//! let enabled: bool = rng.random();
+//! let dropout: bool = rng.random_bool(0.02);
+//! let vector: [f32; 3] = rng.random();
+//!
+//! assert!((0.0..1.0).contains(&unit_f64));
+//! assert!((0.0..1.0).contains(&unit_f32));
+//! assert!((-0.05..0.05).contains(&noise));
+//! let _ = (enabled, dropout, vector);
+//! ```
 //!
 //! # Example config
 //!
@@ -24,7 +43,7 @@
 //! ```rust,ignore
 //! use cu29::prelude::*;
 //! use cu29::resources;
-//! use cu_rng::CuRng;
+//! use cu_rng::prelude::*;
 //!
 //! mod planner_resources {
 //!     use super::*;
@@ -38,8 +57,16 @@ use cu29::bundle_resources;
 use cu29::prelude::*;
 use cu29::resource::{BundleContext, ResourceBundle, ResourceManager};
 
+use rand::Rng;
+use rand::rand_core::{Infallible, SeedableRng, TryRng};
 use rand_chacha::ChaCha8Rng;
-use rand_core::{RngCore, SeedableRng};
+
+/// Common imports for using [`CuRng`] as a typed random source.
+pub mod prelude {
+    pub use crate::{CuRng, CuRngBundle};
+    pub use rand::distr::{Bernoulli, Distribution, Uniform};
+    pub use rand::{Rng, RngExt};
+}
 
 /// RON config key that carries the seed value.
 pub const SEED_KEY: &str = "seed";
@@ -76,17 +103,20 @@ impl CuRng {
     }
 }
 
-impl RngCore for CuRng {
-    fn next_u32(&mut self) -> u32 {
-        self.inner.next_u32()
+impl TryRng for CuRng {
+    type Error = Infallible;
+
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        Ok(self.inner.next_u32())
     }
 
-    fn next_u64(&mut self) -> u64 {
-        self.inner.next_u64()
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        Ok(self.inner.next_u64())
     }
 
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
-        self.inner.fill_bytes(dest)
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Self::Error> {
+        self.inner.fill_bytes(dest);
+        Ok(())
     }
 }
 
@@ -118,6 +148,7 @@ impl ResourceBundle for CuRngBundle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::prelude::*;
     use cu29::resource::{NamedResourceBundleDecl, resource_index_by_name};
 
     #[test]
@@ -158,6 +189,38 @@ mod tests {
         a.fill_bytes(&mut a_bytes);
         b.fill_bytes(&mut b_bytes);
         assert_eq!(a_bytes, b_bytes);
+    }
+
+    #[test]
+    fn supports_typed_sampling_api() {
+        let mut rng = CuRng::from_seed(0xA11CE);
+
+        let unit_f64: f64 = rng.random();
+        let unit_f32: f32 = rng.random();
+        let ranged_float: f64 = rng.random_range(-0.25..0.25);
+        let ranged_int: usize = rng.random_range(0..16);
+        let coin: bool = rng.random();
+        let rare_event = rng.random_bool(0.05);
+        let vector: [f32; 3] = rng.random();
+
+        assert!((0.0..1.0).contains(&unit_f64));
+        assert!((0.0..1.0).contains(&unit_f32));
+        assert!((-0.25..0.25).contains(&ranged_float));
+        assert!(ranged_int < 16);
+        let _ = (coin, rare_event, vector);
+    }
+
+    #[test]
+    fn supports_prebuilt_distributions() {
+        let mut rng = CuRng::from_seed(0xB0B);
+        let noise = Uniform::new(-0.05, 0.05).expect("valid float range");
+        let dropout = Bernoulli::new(0.02).expect("valid probability");
+
+        let sampled_noise = noise.sample(&mut rng);
+        let sampled_dropout = dropout.sample(&mut rng);
+
+        assert!((-0.05..0.05).contains(&sampled_noise));
+        let _ = sampled_dropout;
     }
 
     #[test]
