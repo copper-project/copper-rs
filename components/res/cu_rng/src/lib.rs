@@ -50,9 +50,10 @@ pub const RNG_NAME: &str = "rng";
 
 /// Deterministic, seedable RNG resource.
 ///
-/// Backed by ChaCha8: the same seed produces the same stream on every
-/// platform and every run. This is the property replay tests and debug
-/// replay of randomized tasks rely on.
+/// Backed by ChaCha8: same seed, same stream, on every platform. This is
+/// what replay of randomized tasks relies on.
+///
+/// Not a CSPRNG — do not use for keys or nonces.
 pub struct CuRng {
     inner: ChaCha8Rng,
 }
@@ -65,10 +66,11 @@ impl CuRng {
         }
     }
 
-    /// Re-seed the RNG in place, discarding any accumulated stream state.
+    /// Reset the stream to step 0 with a new seed.
     ///
-    /// Useful when restoring a task from a `Freezable` keyframe that
-    /// captured its own seed rather than logging the raw stream.
+    /// Equivalent to replacing `self` with `from_seed(seed)`; it does not
+    /// fast-forward to a mid-stream position, so it cannot resume a task
+    /// mid-run from just a stored seed.
     pub fn reseed(&mut self, seed: u64) {
         self.inner = ChaCha8Rng::seed_from_u64(seed);
     }
@@ -102,11 +104,12 @@ impl ResourceBundle for CuRngBundle {
         config: Option<&ComponentConfig>,
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
-        let cfg = config
-            .ok_or_else(|| CuError::from("CuRngBundle requires a config with a 'seed' key"))?;
-        let seed = cfg.get::<u64>(SEED_KEY)?.ok_or_else(|| {
-            CuError::from("CuRngBundle: missing required config key 'seed' (u64)")
-        })?;
+        let seed = config
+            .and_then(|cfg| cfg.get::<u64>(SEED_KEY).transpose())
+            .transpose()?
+            .ok_or_else(|| {
+                CuError::from("CuRngBundle: missing required config key 'seed' (u64)")
+            })?;
         manager.add_owned(bundle.key(CuRngBundleId::Rng), CuRng::from_seed(seed))?;
         Ok(())
     }
