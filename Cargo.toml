@@ -40,6 +40,7 @@ members = [
   "components/payloads/cu_spatial_payloads",
   "components/res/cu_micoairh743",
   "components/res/cu_linux_resources",
+  "components/res/cu_rng",
   "components/libs/cu_sdlogger",
   "components/bridges/cu_bdshot",
   "components/sinks/cu_rp_gpio",
@@ -183,6 +184,7 @@ cu29-value = { path = "core/cu29_value", default-features = false, version = "1.
 cu-ffv1-codec = { path = "components/codecs/cu_ffv1_codec", version = "1.0.0" }
 cu-linux-resources = { path = "components/res/cu_linux_resources", version = "1.0.0" }
 cu-png-codec = { path = "components/codecs/cu_png_codec", version = "1.0.0" }
+cu-rng = { path = "components/res/cu_rng", version = "1.0.0" }
 
 # Copper components
 cu-ads7883-new = { path = "components/sources/cu_ads7883", version = "1.0.0" }

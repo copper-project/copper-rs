@@ -1,0 +1,27 @@
+[package]
+name = "cu-rng"
+description = "Seedable pseudo-random number generator resource for Copper."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/cu-rng"
+
+[package.metadata.copper]
+kind = "resource"
+domains = ["resource/rng"]
+environments = ["host", "embedded"]
+
+[dependencies]
+cu29 = { path = "../../../core/cu29", version = "1.0.0", default-features = false }
+rand = { version = "0.10", default-features = false }
+rand_chacha = { version = "0.10", default-features = false }
+
+[features]
+default = ["std"]
+std = ["cu29/std", "rand/std", "rand_chacha/std"]
