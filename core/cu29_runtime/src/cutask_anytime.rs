@@ -32,7 +32,7 @@ use alloc::vec::Vec;
 /// - `Converged` — no further improvement is *possible* (algorithmic fixpoint).
 /// - `Satisfied` — no further improvement is *needed* (task-defined quality
 ///   target reached). Improvement may still be possible, but the task judges
-///   it not worth the cycles. See also [`Anytime::is_satisfied`].
+///   it not worth the cycles.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
     Continue,
@@ -53,9 +53,10 @@ pub enum Progress {
     /// `refine` returned [`Step::Converged`]; no further improvement is
     /// available.
     Converged,
-    /// `refine` returned [`Step::Satisfied`], or [`Anytime::is_satisfied`]
-    /// reported the quality target had been met. Distinct from `Converged`
-    /// because improvement may still be possible — the task chose to stop.
+    /// `refine` returned [`Step::Satisfied`], or the task's [`Anytime::progress`]
+    /// reported [`Progress::Satisfied`] between refines. Distinct from
+    /// `Converged` because improvement may still be possible — the task chose
+    /// to stop.
     Satisfied,
     /// Adapter did not run this cycle; see `SkipReason` for why.
     Skipped { reason: SkipReason },
@@ -164,28 +165,15 @@ pub trait Anytime: Freezable + Reflect {
     /// value.
     fn write_best(&self, out: &mut Self::Output);
 
-    /// Quality marker logged alongside the output. Cheap.
+    /// Quality marker logged alongside the output, and checked at the top of
+    /// every refine iteration: any non-[`Progress::Passes`] value short-circuits
+    /// the loop. Set it from `base`/`refine` for the cheap-predicate early-out;
+    /// otherwise return [`Step::Satisfied`] from `refine`. Cheap, MUST NOT allocate.
     fn progress(&self) -> Progress;
 
-    /// Task-defined "quality target reached" predicate, checked by the
-    /// adapter between refines. Return `true` to exit the refine loop with
-    /// [`Progress::Satisfied`] without running another `refine`.
-    ///
-    /// MUST be cheap and MUST NOT allocate. Default: never satisfied.
-    ///
-    /// Use this when the satisfaction condition is cheaper to check than a
-    /// full refine step (e.g. a cost delta cached by the last `refine`). If
-    /// checking is only meaningful *after* another refine ran, return
-    /// [`Step::Satisfied`] from `refine` itself instead.
-    ///
-    /// `input` is re-passed for the same reason as [`refine`](Self::refine).
-    fn is_satisfied(&self, _input: &Self::Input) -> bool {
-        false
-    }
-
     /// Called by the adapter once per cycle after the refine loop exits (via
-    /// deadline, `Converged`, `Satisfied`, or `is_satisfied`) and before
-    /// `best()` is read. Default no-op.
+    /// deadline, `Converged`, or `Satisfied`) and before `best()` is read.
+    /// Default no-op.
     ///
     /// This is the drain point for tasks that dispatch asynchronous work
     /// inside `refine` (e.g. accelerator kernels): `finalize` waits for the
@@ -464,11 +452,12 @@ impl<A: Anytime + GetTypeRegistration + TypePath + 'static> CuTask for AnytimeTa
 
         self.inner.base(in_payload, ctx)?;
         let progress = loop {
-            if ctx.clock.now() >= deadline {
-                break self.inner.progress();
+            let p = self.inner.progress();
+            if !matches!(p, Progress::Passes { .. }) {
+                break p;
             }
-            if self.inner.is_satisfied(in_payload) {
-                break Progress::Satisfied;
+            if ctx.clock.now() >= deadline {
+                break p;
             }
             match self.inner.refine(in_payload)? {
                 Step::Continue => continue,
@@ -518,9 +507,10 @@ mod tests {
         max_passes: u32,
         // When Some(n), `refine` returns `Step::Satisfied` once `pass_count >= n`.
         satisfy_after: Option<u32>,
-        // When Some(n), `is_satisfied` returns true once `pass_count >= n`.
-        // Checked by the adapter between refines.
-        is_satisfied_after: Option<u32>,
+        // When Some(n), `progress()` returns `Progress::Satisfied` once
+        // `pass_count >= n`. The adapter checks this at the top of the refine
+        // loop and short-circuits without running another refine.
+        progress_satisfied_after: Option<u32>,
         // Incremented every time `finalize` is called.
         finalize_calls: u32,
     }
@@ -538,7 +528,7 @@ mod tests {
                 pass_count: 0,
                 max_passes: 1_000,
                 satisfy_after: None,
-                is_satisfied_after: None,
+                progress_satisfied_after: None,
                 finalize_calls: 0,
             })
         }
@@ -568,15 +558,13 @@ mod tests {
         }
 
         fn progress(&self) -> Progress {
+            if let Some(n) = self.progress_satisfied_after
+                && self.pass_count >= n
+            {
+                return Progress::Satisfied;
+            }
             Progress::Passes {
                 done: self.pass_count,
-            }
-        }
-
-        fn is_satisfied(&self, _input: &Self::Input) -> bool {
-            match self.is_satisfied_after {
-                Some(n) => self.pass_count >= n,
-                None => false,
             }
         }
 
@@ -787,11 +775,11 @@ mod tests {
         assert_eq!(payload.value.value, 10 + 4);
     }
 
-    // `is_satisfied` returning true between refines exits the loop with
-    // `Progress::Satisfied` without running another refine — the "cheap
-    // predicate" path documented on the trait.
+    // `progress()` returning `Satisfied` between refines exits the loop
+    // without running another refine — the "cheap predicate" path documented
+    // on the trait.
     #[test]
-    fn adapter_reports_satisfied_when_is_satisfied_predicate_fires() {
+    fn adapter_reports_satisfied_when_progress_reports_satisfied() {
         let cfg = cfg_with_budget(1_000);
         let mut t = AnytimeTask::<TestPlanner>::new(Some(&cfg), ()).unwrap();
         let (clock, mock) = RobotClock::mock();
@@ -800,8 +788,8 @@ mod tests {
 
         t.inner.max_passes = 1_000_000;
         // After 3 refines the adapter's next top-of-loop check sees
-        // is_satisfied() == true and exits — pass_count must be exactly 3.
-        t.inner.is_satisfied_after = Some(3);
+        // progress() == Satisfied and exits — pass_count must be exactly 3.
+        t.inner.progress_satisfied_after = Some(3);
 
         let input: CuMsg<Counter> = CuMsg::new(Some(Counter { value: 100 }));
         let mut out: CuMsg<AnytimeOutput<Counter>> = CuMsg::new(None);
@@ -916,28 +904,24 @@ mod tests {
     #[cfg(feature = "reflect")]
     #[test]
     fn type_path_is_per_inner_monomorphization() {
+        // Second distinct `A` for the type_path comparison; bodies unused.
         #[derive(Reflect)]
-        struct OtherPlanner {
-            best_val: u32,
-        }
+        struct OtherPlanner;
         impl Freezable for OtherPlanner {}
         impl Anytime for OtherPlanner {
             type Input = Counter;
             type Output = Counter;
             type Resources<'r> = ();
             fn new(_c: Option<&ComponentConfig>, _r: Self::Resources<'_>) -> CuResult<Self> {
-                Ok(Self { best_val: 0 })
+                Ok(Self)
             }
-            fn base(&mut self, i: &Self::Input, _c: &CuContext) -> CuResult<()> {
-                self.best_val = i.value;
+            fn base(&mut self, _i: &Self::Input, _c: &CuContext) -> CuResult<()> {
                 Ok(())
             }
             fn refine(&mut self, _i: &Self::Input) -> CuResult<Step> {
                 Ok(Step::Converged)
             }
-            fn write_best(&self, out: &mut Self::Output) {
-                out.value = self.best_val;
-            }
+            fn write_best(&self, _out: &mut Self::Output) {}
             fn progress(&self) -> Progress {
                 Progress::Converged
             }
