@@ -153,11 +153,11 @@ mod tests {
     fn fill_bytes_is_deterministic() {
         let mut a = CuRng::from_seed(0xC0FFEE);
         let mut b = CuRng::from_seed(0xC0FFEE);
-        let mut ba = [0u8; 32];
-        let mut bb = [0u8; 32];
-        a.fill_bytes(&mut ba);
-        b.fill_bytes(&mut bb);
-        assert_eq!(ba, bb);
+        let mut a_bytes = [0u8; 32];
+        let mut b_bytes = [0u8; 32];
+        a.fill_bytes(&mut a_bytes);
+        b.fill_bytes(&mut b_bytes);
+        assert_eq!(a_bytes, b_bytes);
     }
 
     #[test]
