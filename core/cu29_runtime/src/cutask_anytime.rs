@@ -130,6 +130,11 @@ pub enum OnOverload {
 /// quality, plus cheap `best`/`progress` accessors. The runtime wraps the
 /// implementor in an [`AnytimeTask`] adapter which handles the budget clock
 /// and the overload/skip policy.
+///
+/// For large or accelerator-produced outputs, use
+/// [`CuHandle<T>`](crate::pool::CuHandle) as `type Output`: `write_best`
+/// becomes an Arc clone (no payload copy) and readback in `finalize` lands
+/// directly in the pooled cell.
 pub trait Anytime: Freezable + Reflect {
     type Input: CuMsgPayload;
     type Output: CuMsgPayload;
@@ -156,13 +161,9 @@ pub trait Anytime: Freezable + Reflect {
     /// already owns it for the whole cycle.
     fn refine(&mut self, input: &Self::Input) -> CuResult<Step>;
 
-    /// Write the best-so-far into a caller-owned buffer. Cheap. Valid after
-    /// `base` and after every `refine`.
-    ///
-    /// Writes in place — do not construct-then-return. `out` is the payload
-    /// slot the runtime already owns; reuse its allocations (e.g. `out.clear();
-    /// out.extend_from_slice(&self.buf)`) rather than materialising a fresh
-    /// value.
+    /// Write the best-so-far into `out` in place. `out` is the runtime-owned
+    /// slot, preserved across cycles — reuse its allocations (e.g.
+    /// `out.clear(); out.extend_from_slice(&self.buf)`).
     fn write_best(&self, out: &mut Self::Output);
 
     /// Quality marker logged alongside the output, and checked at the top of
@@ -202,11 +203,34 @@ pub trait Anytime: Freezable + Reflect {
     }
 }
 
-/// Cached copy of the last emitted output, used to serve
-/// [`OnOverload::ReuseLast`] on skipped cycles.
-struct CachedOutput<O: CuMsgPayload> {
+pub(crate) struct CachedOutput<O: CuMsgPayload> {
     value: O,
     tov: Tov,
+}
+
+/// Overload policy + its cache. `ReuseLast(None)` is cold; becomes
+/// `Some(cached)` after the first real cycle. `Fail` cannot cache.
+pub(crate) enum OverloadState<O: CuMsgPayload> {
+    Fail,
+    ReuseLast(Option<CachedOutput<O>>),
+}
+
+impl<O: CuMsgPayload> OverloadState<O> {
+    fn from_policy(policy: OnOverload) -> Self {
+        match policy {
+            OnOverload::Fail => Self::Fail,
+            OnOverload::ReuseLast => Self::ReuseLast(None),
+        }
+    }
+
+    /// Test-only: the configured policy, ignoring cache warmth.
+    #[cfg(test)]
+    pub(crate) fn policy(&self) -> OnOverload {
+        match self {
+            Self::Fail => OnOverload::Fail,
+            Self::ReuseLast(_) => OnOverload::ReuseLast,
+        }
+    }
 }
 
 /// Adapter that turns any `A: Anytime` into a `CuTask` visible to
@@ -228,10 +252,10 @@ pub struct AnytimeTask<A: Anytime + TypePath> {
     inner: A,
     #[reflect(ignore)]
     budget: CuDuration,
+    // `budget` and the policy tag inside `overload` are re-derived by `new()`
+    // from config on replay, not persisted through freeze/thaw.
     #[reflect(ignore)]
-    on_overload: OnOverload,
-    #[reflect(ignore)]
-    last: Option<CachedOutput<A::Output>>,
+    pub(crate) overload: OverloadState<A::Output>,
 }
 
 impl<A: Anytime + TypePath> AnytimeTask<A> {
@@ -267,25 +291,37 @@ impl<A: Anytime + TypePath> AnytimeTask<A> {
         out: &mut CuMsg<AnytimeOutput<A::Output>>,
         reason: SkipReason,
     ) -> CuResult<()> {
-        match (self.on_overload, self.last.as_ref()) {
-            (OnOverload::Fail, _) => Err(CuError::from(format!(
+        match &self.overload {
+            OverloadState::Fail => Err(CuError::from(format!(
                 "AnytimeTask overload with on_overload=fail (reason: {reason:?})"
             ))),
-            (OnOverload::ReuseLast, Some(cached)) => {
-                out.set_payload(AnytimeOutput {
-                    value: cached.value.clone(),
-                    progress: Progress::Skipped {
-                        reason: SkipReason::ReusedLast,
-                    },
-                });
+            OverloadState::ReuseLast(Some(cached)) => {
+                if out.payload().is_none() {
+                    out.set_payload(AnytimeOutput::default());
+                }
+                let payload = out
+                    .payload_mut()
+                    .as_mut()
+                    .expect("payload set above if missing");
+                payload.value.clone_from(&cached.value);
+                payload.progress = Progress::Skipped {
+                    reason: SkipReason::ReusedLast,
+                };
                 out.tov = cached.tov;
                 Ok(())
             }
-            (OnOverload::ReuseLast, None) => {
-                out.set_payload(AnytimeOutput {
-                    value: A::Output::default(),
-                    progress: Progress::Skipped { reason },
-                });
+            OverloadState::ReuseLast(None) => {
+                // Cold start: preserve original reason so downstream can
+                // distinguish this from a warm-cache reuse.
+                if out.payload().is_none() {
+                    out.set_payload(AnytimeOutput::default());
+                }
+                let payload = out
+                    .payload_mut()
+                    .as_mut()
+                    .expect("payload set above if missing");
+                payload.value = A::Output::default();
+                payload.progress = Progress::Skipped { reason };
                 out.tov = Tov::None;
                 Ok(())
             }
@@ -294,31 +330,39 @@ impl<A: Anytime + TypePath> AnytimeTask<A> {
 }
 
 impl<A: Anytime + TypePath> Freezable for AnytimeTask<A> {
+    // Wire: inner | reuse:bool [ has_cache:bool [ value:Vec<u8> tov ] ].
+    // `value` goes through a `Vec<u8>` blob so the inner `A::Output: Decode<()>`
+    // bound is satisfied regardless of the outer decoder's context.
     fn freeze<E: Encoder>(&self, e: &mut E) -> Result<(), EncodeError> {
         self.inner.freeze(e)?;
-        // Persist `last` so exact-output replay reproduces the `ReuseLast`
-        // payload when the recorded cycle skipped. The outer `Decoder::Context`
-        // is unconstrained by `Freezable`, so `A::Output` goes through as a
-        // length-prefixed blob under the standard bincode config, decoupling
-        // from the caller's Decoder context.
-        match &self.last {
-            None => Encode::encode(&false, e),
-            Some(cached) => {
+        match &self.overload {
+            OverloadState::Fail => Encode::encode(&false, e),
+            OverloadState::ReuseLast(None) => {
+                Encode::encode(&true, e)?;
+                Encode::encode(&false, e)
+            }
+            OverloadState::ReuseLast(Some(cached)) => {
+                Encode::encode(&true, e)?;
                 Encode::encode(&true, e)?;
                 let value_bytes =
                     bincode::encode_to_vec(&cached.value, bincode::config::standard()).map_err(
                         |_| EncodeError::Other("AnytimeTask: failed to encode cached output"),
                     )?;
                 Encode::encode(&value_bytes, e)?;
-                Encode::encode(&cached.tov, e)
+                cached.tov.encode(e)
             }
         }
     }
 
     fn thaw<D: Decoder>(&mut self, d: &mut D) -> Result<(), DecodeError> {
         self.inner.thaw(d)?;
+        let reuse: bool = Decode::decode(d)?;
+        if !reuse {
+            self.overload = OverloadState::Fail;
+            return Ok(());
+        }
         let has_cache: bool = Decode::decode(d)?;
-        self.last = if has_cache {
+        self.overload = if has_cache {
             let value_bytes: Vec<u8> = Decode::decode(d)?;
             let (value, _read) = bincode::decode_from_slice::<A::Output, _>(
                 &value_bytes,
@@ -326,9 +370,9 @@ impl<A: Anytime + TypePath> Freezable for AnytimeTask<A> {
             )
             .map_err(|_| DecodeError::Other("AnytimeTask: failed to decode cached output"))?;
             let tov: Tov = Decode::decode(d)?;
-            Some(CachedOutput { value, tov })
+            OverloadState::ReuseLast(Some(CachedOutput { value, tov }))
         } else {
-            None
+            OverloadState::ReuseLast(None)
         };
         Ok(())
     }
@@ -412,12 +456,11 @@ impl<A: Anytime + GetTypeRegistration + TypePath + 'static> CuTask for AnytimeTa
 
     fn new(cfg: Option<&ComponentConfig>, res: Self::Resources<'_>) -> CuResult<Self> {
         let budget = Self::read_budget_us(cfg)?;
-        let on_overload = Self::read_on_overload(cfg)?;
+        let policy = Self::read_on_overload(cfg)?;
         Ok(Self {
             inner: A::new(cfg, res)?,
             budget,
-            on_overload,
-            last: None,
+            overload: OverloadState::from_policy(policy),
         })
     }
 
@@ -468,20 +511,37 @@ impl<A: Anytime + GetTypeRegistration + TypePath + 'static> CuTask for AnytimeTa
 
         self.inner.finalize(ctx)?;
         let tov = Tov::Time(ctx.clock.now());
-        out.set_payload(AnytimeOutput {
-            value: A::Output::default(),
-            progress,
-        });
+
+        // Mutate the slot in place so `write_best` can reuse its allocation.
+        if out.payload().is_none() {
+            out.set_payload(AnytimeOutput::default());
+        }
         {
-            let payload = out.payload_mut().as_mut().expect("just set above");
+            let payload = out
+                .payload_mut()
+                .as_mut()
+                .expect("payload set above if missing");
+            payload.progress = progress;
             self.inner.write_best(&mut payload.value);
         }
         out.tov = tov;
-        let cached_value = out.payload().expect("just set above").value.clone();
-        self.last = Some(CachedOutput {
-            value: cached_value,
-            tov,
-        });
+
+        // Cache only under ReuseLast; `clone_from` reuses capacity.
+        if let OverloadState::ReuseLast(slot) = &mut self.overload {
+            let payload = out.payload().expect("payload written just above");
+            match slot {
+                Some(cached) => {
+                    cached.value.clone_from(&payload.value);
+                    cached.tov = tov;
+                }
+                None => {
+                    *slot = Some(CachedOutput {
+                        value: payload.value.clone(),
+                        tov,
+                    });
+                }
+            }
+        }
         Ok(())
     }
 }
@@ -607,19 +667,21 @@ mod tests {
         let mut cfg = cfg_with_budget(1_000);
         cfg.set("on_overload", "fail".to_string());
         let t = AnytimeTask::<TestPlanner>::new(Some(&cfg), ()).unwrap();
-        assert_eq!(t.on_overload, OnOverload::Fail);
+        assert_eq!(t.overload.policy(), OnOverload::Fail);
+        assert!(matches!(t.overload, OverloadState::Fail));
 
         let mut cfg = cfg_with_budget(1_000);
         cfg.set("on_overload", "reuse_last".to_string());
         let t = AnytimeTask::<TestPlanner>::new(Some(&cfg), ()).unwrap();
-        assert_eq!(t.on_overload, OnOverload::ReuseLast);
+        assert_eq!(t.overload.policy(), OnOverload::ReuseLast);
+        assert!(matches!(t.overload, OverloadState::ReuseLast(None)));
     }
 
     #[test]
     fn on_overload_defaults_to_reuse_last() {
         let cfg = cfg_with_budget(1_000);
         let t = AnytimeTask::<TestPlanner>::new(Some(&cfg), ()).unwrap();
-        assert_eq!(t.on_overload, OnOverload::ReuseLast);
+        assert_eq!(t.overload.policy(), OnOverload::ReuseLast);
     }
 
     #[test]
@@ -871,16 +933,22 @@ mod tests {
         src.process(&ctx, &input, &mut out).unwrap();
         let expected = out.payload().unwrap().value.value;
         let expected_tov = out.tov;
-        assert!(src.last.is_some(), "process must populate the cache");
+        assert!(
+            matches!(&src.overload, OverloadState::ReuseLast(Some(_))),
+            "process must populate the cache"
+        );
 
         let bytes = bincode::encode_to_vec(BincodeAdapter(&src), bincode::config::standard())
             .expect("freeze must succeed");
 
         let mut dst = AnytimeTask::<TestPlanner>::new(Some(&cfg), ()).unwrap();
-        assert!(dst.last.is_none());
+        assert!(matches!(&dst.overload, OverloadState::ReuseLast(None)));
         let mut d = DecoderImpl::new(SliceReader::new(&bytes), bincode::config::standard(), ());
         Freezable::thaw(&mut dst, &mut d).expect("thaw must succeed");
-        let cached = dst.last.as_ref().expect("cache must be restored");
+        let cached = match &dst.overload {
+            OverloadState::ReuseLast(Some(cached)) => cached,
+            _ => panic!("cache must be restored"),
+        };
         assert_eq!(cached.value.value, expected);
         assert_eq!(cached.tov, expected_tov);
 
@@ -897,6 +965,111 @@ mod tests {
         );
         assert_eq!(p.value.value, expected);
         assert_eq!(skip_out.tov, expected_tov);
+    }
+
+    // Slot `Vec` capacity must survive across cycles (`write_best` reuse).
+    #[test]
+    fn process_preserves_slot_vec_capacity_across_cycles() {
+        #[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
+        struct BufMsg {
+            data: Vec<u32>,
+        }
+
+        #[derive(Default, Reflect)]
+        struct BufPlanner {
+            n: u32,
+        }
+
+        impl Freezable for BufPlanner {}
+
+        impl Anytime for BufPlanner {
+            type Input = Counter;
+            type Output = BufMsg;
+            type Resources<'r> = ();
+
+            fn new(_c: Option<&ComponentConfig>, _r: Self::Resources<'_>) -> CuResult<Self> {
+                Ok(Self { n: 0 })
+            }
+            fn base(&mut self, input: &Self::Input, _ctx: &CuContext) -> CuResult<()> {
+                self.n = input.value;
+                Ok(())
+            }
+            fn refine(&mut self, _i: &Self::Input) -> CuResult<Step> {
+                Ok(Step::Converged)
+            }
+            fn write_best(&self, out: &mut Self::Output) {
+                out.data.clear();
+                out.data.push(self.n);
+            }
+            fn progress(&self) -> Progress {
+                Progress::Converged
+            }
+        }
+
+        let cfg = cfg_with_budget(1_000);
+        let mut t = AnytimeTask::<BufPlanner>::new(Some(&cfg), ()).unwrap();
+        let (clock, _mock) = RobotClock::mock();
+        let ctx = CuContext::from_clock(clock);
+
+        // Prime with high capacity — collapses to 0 if the adapter resets.
+        let mut out: CuMsg<AnytimeOutput<BufMsg>> = CuMsg::new(None);
+        out.set_payload(AnytimeOutput {
+            value: BufMsg {
+                data: Vec::with_capacity(1024),
+            },
+            progress: Progress::default(),
+        });
+
+        let input: CuMsg<Counter> = CuMsg::new(Some(Counter { value: 7 }));
+        t.process(&ctx, &input, &mut out).unwrap();
+
+        let payload = out.payload().expect("output set");
+        assert_eq!(payload.value.data, [7]);
+        assert!(
+            payload.value.data.capacity() >= 1024,
+            "primed capacity must survive — got {}",
+            payload.value.data.capacity()
+        );
+    }
+
+    #[test]
+    fn fail_mode_carries_no_cache_after_real_cycle() {
+        let mut cfg = cfg_with_budget(1_000);
+        cfg.set("on_overload", "fail".to_string());
+        let mut t = AnytimeTask::<TestPlanner>::new(Some(&cfg), ()).unwrap();
+        let (clock, mock) = RobotClock::mock();
+        mock.set_value(0);
+        let ctx = CuContext::from_clock(clock);
+        t.inner.max_passes = 3;
+
+        let input: CuMsg<Counter> = CuMsg::new(Some(Counter { value: 1 }));
+        let mut out: CuMsg<AnytimeOutput<Counter>> = CuMsg::new(None);
+        t.process(&ctx, &input, &mut out).unwrap();
+
+        assert!(
+            matches!(t.overload, OverloadState::Fail),
+            "Fail mode must not switch to ReuseLast after a real cycle"
+        );
+    }
+
+    #[test]
+    fn freeze_thaw_round_trips_fail_mode() {
+        use crate::cutask::BincodeAdapter;
+        use bincode::de::DecoderImpl;
+        use bincode::de::read::SliceReader;
+
+        let mut cfg = cfg_with_budget(1_000);
+        cfg.set("on_overload", "fail".to_string());
+        let src = AnytimeTask::<TestPlanner>::new(Some(&cfg), ()).unwrap();
+        assert!(matches!(src.overload, OverloadState::Fail));
+
+        let bytes = bincode::encode_to_vec(BincodeAdapter(&src), bincode::config::standard())
+            .expect("freeze must succeed");
+
+        let mut dst = AnytimeTask::<TestPlanner>::new(Some(&cfg), ()).unwrap();
+        let mut d = DecoderImpl::new(SliceReader::new(&bytes), bincode::config::standard(), ());
+        Freezable::thaw(&mut dst, &mut d).expect("thaw must succeed");
+        assert!(matches!(dst.overload, OverloadState::Fail));
     }
 
     // Distinct `A` monomorphizations must yield distinct `TypePath::type_path`
