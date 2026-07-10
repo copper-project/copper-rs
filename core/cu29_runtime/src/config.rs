@@ -2828,65 +2828,6 @@ impl CuConfig {
         }
         Ok(())
     }
-
-    /// Cross-field check for anytime tasks: any `AnytimeTask<A>` node must
-    /// have a `budget_us` that fits inside the cycle period derived from
-    /// `runtime.rate_target_hz`. `AnytimeTask::new` sees only its own
-    /// `ComponentConfig` and cannot make this comparison itself, so we do it
-    /// here at config load — a bad config fails startup instead of blowing
-    /// past the deadline every tick.
-    ///
-    /// Nodes are matched by type-string prefix so a hand-rolled task that
-    /// happens to name a `budget_us` config field is not caught by mistake.
-    pub fn validate_anytime_budgets(&self) -> CuResult<()> {
-        // Match RON's two accepted spellings of the adapter: the crate-root
-        // re-export and the fully-qualified module path.
-        fn is_anytime_task_type(ty: &str) -> bool {
-            let ty = ty.trim();
-            ty.starts_with("cu29::AnytimeTask<")
-                || ty.starts_with("cu29_runtime::cutask_anytime::AnytimeTask<")
-        }
-
-        let Some(rate_hz) = self.runtime.as_ref().and_then(|r| r.rate_target_hz) else {
-            return Ok(());
-        };
-        if rate_hz == 0 {
-            return Ok(());
-        }
-        let period_us = 1_000_000u64 / rate_hz;
-        for (mission_id, graph) in self.graphs.get_all_missions_graphs() {
-            for (_id, node) in graph.get_all_nodes() {
-                if node.get_flavor() != Flavor::Task {
-                    continue;
-                }
-                if !is_anytime_task_type(node.get_type()) {
-                    continue;
-                }
-                let Some(cfg) = node.get_instance_config() else {
-                    continue;
-                };
-                let ComponentConfig(map) = cfg;
-                let Some(v) = map.get("budget_us") else {
-                    continue;
-                };
-                let budget_us: u64 = u64::try_from(v).map_err(|e| {
-                    CuError::from(format!(
-                        "Task '{}' (mission '{mission_id}') config 'budget_us': {e}",
-                        node.id
-                    ))
-                })?;
-                if budget_us > period_us {
-                    return Err(CuError::from(format!(
-                        "Task '{}' (mission '{mission_id}') has budget_us={budget_us} which \
-                         exceeds the cycle period {period_us} us derived from \
-                         runtime.rate_target_hz={rate_hz}",
-                        node.id
-                    )));
-                }
-            }
-        }
-        Ok(())
-    }
 }
 
 #[cfg(feature = "std")]
@@ -4173,7 +4114,6 @@ fn config_representation_to_config(representation: CuConfigRepresentation) -> Cu
 
     cuconfig.validate_logging_config()?;
     cuconfig.validate_runtime_config()?;
-    cuconfig.validate_anytime_budgets()?;
 
     Ok(cuconfig)
 }
@@ -5321,118 +5261,6 @@ mod tests {
                 .contains("Runtime rate target cannot be zero"),
             "unexpected error: {err}"
         );
-    }
-
-    #[test]
-    fn test_anytime_budget_rejects_when_exceeds_period() {
-        // rate_target_hz=100 → period = 10_000 us. budget_us=20_000 must fail.
-        let txt = r#"(
-            tasks: [
-                (id: "src", type: "SomeSrc"),
-                (id: "planner", type: "cu29::AnytimeTask<my::P>", config: {"budget_us": 20000}),
-                (id: "sink", type: "SomeSink"),
-            ],
-            cnx: [
-                (src: "src", dst: "planner", msg: "msg::A"),
-                (src: "planner", dst: "sink", msg: "msg::B"),
-            ],
-            runtime: (rate_target_hz: 100)
-        )"#;
-
-        let err = read_configuration_str(txt.to_string(), None)
-            .expect_err("anytime budget check should fail");
-        let s = err.to_string();
-        assert!(s.contains("planner"), "unexpected error: {s}");
-        assert!(
-            s.contains("exceeds the cycle period"),
-            "unexpected error: {s}"
-        );
-    }
-
-    #[test]
-    fn test_anytime_budget_accepts_when_within_period() {
-        // rate_target_hz=100 → period = 10_000 us. budget_us=8000 fits.
-        let txt = r#"(
-            tasks: [
-                (id: "src", type: "SomeSrc"),
-                (id: "planner", type: "cu29::AnytimeTask<my::P>", config: {"budget_us": 8000}),
-                (id: "sink", type: "SomeSink"),
-            ],
-            cnx: [
-                (src: "src", dst: "planner", msg: "msg::A"),
-                (src: "planner", dst: "sink", msg: "msg::B"),
-            ],
-            runtime: (rate_target_hz: 100)
-        )"#;
-
-        read_configuration_str(txt.to_string(), None)
-            .expect("anytime budget within period should validate");
-    }
-
-    #[test]
-    fn test_anytime_budget_check_skipped_without_rate_target() {
-        // No rate_target_hz → cross-field check is vacuous; must not fail.
-        let txt = r#"(
-            tasks: [
-                (id: "src", type: "SomeSrc"),
-                (id: "planner", type: "cu29::AnytimeTask<my::P>", config: {"budget_us": 99999999}),
-                (id: "sink", type: "SomeSink"),
-            ],
-            cnx: [
-                (src: "src", dst: "planner", msg: "msg::A"),
-                (src: "planner", dst: "sink", msg: "msg::B"),
-            ],
-        )"#;
-
-        read_configuration_str(txt.to_string(), None)
-            .expect("no rate_target_hz means no cross-field check");
-    }
-
-    #[test]
-    fn test_anytime_budget_check_ignores_non_anytime_task_type() {
-        // A hand-rolled task named something else that happens to configure a
-        // `budget_us` field must not be caught by the anytime cross-check.
-        // Its budget wildly exceeds the cycle period, and this must still load.
-        let txt = r#"(
-            tasks: [
-                (id: "src", type: "SomeSrc"),
-                (id: "worker", type: "my::MyTask", config: {"budget_us": 99999999}),
-                (id: "sink", type: "SomeSink"),
-            ],
-            cnx: [
-                (src: "src", dst: "worker", msg: "msg::A"),
-                (src: "worker", dst: "sink", msg: "msg::B"),
-            ],
-            runtime: (rate_target_hz: 100)
-        )"#;
-
-        read_configuration_str(txt.to_string(), None)
-            .expect("non-AnytimeTask nodes must not be caught by the anytime check");
-    }
-
-    #[test]
-    fn test_anytime_budget_matches_fully_qualified_type() {
-        // The check must also match the fully-qualified module path spelling
-        // (`cu29_runtime::cutask_anytime::AnytimeTask<...>`), not only the
-        // re-export.
-        let txt = r#"(
-            tasks: [
-                (id: "src", type: "SomeSrc"),
-                (id: "planner",
-                 type: "cu29_runtime::cutask_anytime::AnytimeTask<my::P>",
-                 config: {"budget_us": 20000}),
-                (id: "sink", type: "SomeSink"),
-            ],
-            cnx: [
-                (src: "src", dst: "planner", msg: "msg::A"),
-                (src: "planner", dst: "sink", msg: "msg::B"),
-            ],
-            runtime: (rate_target_hz: 100)
-        )"#;
-
-        let err = read_configuration_str(txt.to_string(), None)
-            .expect_err("fully-qualified AnytimeTask must also be checked");
-        assert!(err.to_string().contains("planner"));
     }
 
     #[test]

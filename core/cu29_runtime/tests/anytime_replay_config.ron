@@ -13,7 +13,9 @@
         (
             id: "planner",
             type: "cu29::AnytimeTask<TestPlanner>",
-            config: {"budget_us": 1000},
+            config: {
+                "refinement_budget_us": 1000,
+            },
             run_in_sim: true,
         ),
         (

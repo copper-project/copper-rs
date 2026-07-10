@@ -1,10 +1,8 @@
 #![cfg(all(test, feature = "std"))]
 
-//! Debug-replay determinism test for the anytime interface. A deterministic
-//! in-tree anytime task is wrapped by `AnytimeTask<A>`, run once under record,
-//! then replayed via `replay_recorded_copperlist` under a mocked `RobotClock`
-//! — the replayed copperlist and keyframe must be byte-identical to the
-//! recorded ones.
+//! Exact-output replay test for the anytime interface. A deterministic in-tree
+//! anytime task is wrapped by `AnytimeTask<A>` and run once under record. The
+//! existing exact-output path must reproduce the recorded bytes.
 
 use bincode::{Decode, Encode, config::standard, encode_to_vec};
 use cu29::cutask_anytime::{Anytime, AnytimeOutput, Progress, Step};
@@ -16,6 +14,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+
+static REPLAY_TEST_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
 struct CounterMsg {
@@ -59,15 +59,12 @@ impl CuSrcTask for CounterSrc {
     }
 }
 
-// Deterministic anytime task: `base` seeds from the input; each `refine`
-// increments the best value and the pass counter. Bounded by `max_passes` so
-// the deadline loop terminates on Converged even under a fully-frozen mock
-// clock (the mock never advances between reads, so we depend on Converged).
+// Non-converging anytime task: live execution stops on its physical refinement
+// budget even though the RobotClock is frozen.
 #[derive(Reflect)]
 struct TestPlanner {
     best_val: u32,
     pass_count: u32,
-    max_passes: u32,
 }
 
 impl Freezable for TestPlanner {
@@ -77,7 +74,6 @@ impl Freezable for TestPlanner {
     ) -> Result<(), bincode::error::EncodeError> {
         Encode::encode(&self.best_val, encoder)?;
         Encode::encode(&self.pass_count, encoder)?;
-        Encode::encode(&self.max_passes, encoder)?;
         Ok(())
     }
 
@@ -87,7 +83,6 @@ impl Freezable for TestPlanner {
     ) -> Result<(), bincode::error::DecodeError> {
         self.best_val = Decode::decode(decoder)?;
         self.pass_count = Decode::decode(decoder)?;
-        self.max_passes = Decode::decode(decoder)?;
         Ok(())
     }
 }
@@ -101,33 +96,24 @@ impl Anytime for TestPlanner {
         Ok(Self {
             best_val: 0,
             pass_count: 0,
-            max_passes: 5,
         })
     }
 
-    fn base(&mut self, input: &Self::Input, _ctx: &CuContext) -> CuResult<()> {
+    fn base(&mut self, input: &Self::Input, _ctx: &CuContext) -> CuResult<Step> {
         self.best_val = input.value;
         self.pass_count = 0;
-        Ok(())
+        Ok(Step::Continue)
     }
 
     fn refine(&mut self, _input: &Self::Input) -> CuResult<Step> {
-        if self.pass_count >= self.max_passes {
-            return Ok(Step::Converged);
-        }
         self.pass_count += 1;
         self.best_val += 1;
         Ok(Step::Continue)
     }
 
-    fn write_best(&self, out: &mut Self::Output) {
+    fn write_best(&mut self, out: &mut Self::Output) -> CuResult<()> {
         out.value = self.best_val;
-    }
-
-    fn progress(&self) -> Progress {
-        Progress::Passes {
-            done: self.pass_count,
-        }
+        Ok(())
     }
 }
 
@@ -142,7 +128,8 @@ impl Freezable for AnytimeSpySink {
         &self,
         encoder: &mut E,
     ) -> Result<(), bincode::error::EncodeError> {
-        Encode::encode(&self.last_value, encoder)
+        Encode::encode(&self.last_value, encoder)?;
+        Encode::encode(&self.last_progress, encoder)
     }
 
     fn thaw<D: bincode::de::Decoder>(
@@ -150,6 +137,7 @@ impl Freezable for AnytimeSpySink {
         decoder: &mut D,
     ) -> Result<(), bincode::error::DecodeError> {
         self.last_value = Decode::decode(decoder)?;
+        self.last_progress = Decode::decode(decoder)?;
         Ok(())
     }
 }
@@ -252,7 +240,7 @@ fn record_reference_run(
     ))
 }
 
-fn replay_run(
+fn exact_replay_run(
     log_path: &Path,
     recorded_cl: &CopperList<default::CuStampedDataSet>,
     keyframe: Option<&KeyFrame>,
@@ -280,14 +268,18 @@ fn replay_run(
 }
 
 #[test]
-fn anytime_task_debug_replay_reproduces_copperlist_bytes() -> CuResult<()> {
+fn anytime_task_exact_replay_reproduces_recorded_bytes() -> CuResult<()> {
+    let _guard = REPLAY_TEST_LOCK
+        .lock()
+        .map_err(|_| cu29::CuError::from("anytime replay test lock poisoned"))?;
     let temp_dir = tempfile::tempdir()
         .map_err(|e| cu29::CuError::new_with_cause("create temp dir failed", e))?;
     let record_path = temp_dir.path().join("anytime_recorded.copper");
     let replay_path = temp_dir.path().join("anytime_replayed.copper");
 
     let (recorded_cl, recorded_kf) = record_reference_run(&record_path)?;
-    let (replayed_cl, replayed_kf) = replay_run(&replay_path, &recorded_cl, Some(&recorded_kf))?;
+    let (replayed_cl, replayed_kf) =
+        exact_replay_run(&replay_path, &recorded_cl, Some(&recorded_kf))?;
 
     // Same pass count, same best value, same tov, byte-for-byte.
     assert_eq!(encode_bytes(&replayed_cl), encode_bytes(&recorded_cl));

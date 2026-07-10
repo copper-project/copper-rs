@@ -148,7 +148,6 @@ pub fn cu29_runtime::config::CuConfig::new_mission_type() -> Self
 pub fn cu29_runtime::config::CuConfig::new_simple_type() -> Self
 pub fn cu29_runtime::config::CuConfig::render(&self, output: &mut dyn std::io::Write, mission_id: core::option::Option<&str>) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::config::CuConfig::serialize_ron(&self) -> cu29_traits::CuResult<alloc::string::String>
-pub fn cu29_runtime::config::CuConfig::validate_anytime_budgets(&self) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::config::CuConfig::validate_logging_config(&self) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::config::CuConfig::validate_runtime_config(&self) -> cu29_traits::CuResult<()>
 impl core::default::Default for cu29_runtime::config::CuConfig
@@ -963,16 +962,13 @@ pub fn cu29_runtime::simulation::CuSimBridge<Tx, Rx>::thaw<D: cu_bincode::de::De
 pub fn cu29_runtime::cutask::encode_metadata_only<T, M, E>(msg: &cu29_runtime::cutask::CuStampedData<T, M>, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError> where T: cu29_runtime::cutask::CuMsgPayload, M: cu29_traits::Metadata, E: cu_bincode::enc::Encoder
 pub type cu29_runtime::cutask::CuMsg<T> = cu29_runtime::cutask::CuStampedData<T, cu29_runtime::cutask::CuMsgMetadata>
 pub mod cu29_runtime::cutask_anytime
-pub enum cu29_runtime::cutask_anytime::OnOverload
-pub cu29_runtime::cutask_anytime::OnOverload::Fail
-pub cu29_runtime::cutask_anytime::OnOverload::ReuseLast
 pub enum cu29_runtime::cutask_anytime::Progress
 pub cu29_runtime::cutask_anytime::Progress::Converged
-pub cu29_runtime::cutask_anytime::Progress::Passes
-pub cu29_runtime::cutask_anytime::Progress::Passes::done: u32
+pub cu29_runtime::cutask_anytime::Progress::Converged::refinements: u32
+pub cu29_runtime::cutask_anytime::Progress::RefinementBudgetExhausted
+pub cu29_runtime::cutask_anytime::Progress::RefinementBudgetExhausted::refinements: u32
 pub cu29_runtime::cutask_anytime::Progress::Satisfied
-pub cu29_runtime::cutask_anytime::Progress::Skipped
-pub cu29_runtime::cutask_anytime::Progress::Skipped::reason: cu29_runtime::cutask_anytime::SkipReason
+pub cu29_runtime::cutask_anytime::Progress::Satisfied::refinements: u32
 impl core::default::Default for cu29_runtime::cutask_anytime::Progress
 pub fn cu29_runtime::cutask_anytime::Progress::default() -> Self
 impl cu29_runtime::reflect::TypePath for cu29_runtime::cutask_anytime::Progress
@@ -987,25 +983,16 @@ impl<'__de, __Context> cu_bincode::de::BorrowDecode<'__de, __Context> for cu29_r
 pub fn cu29_runtime::cutask_anytime::Progress::borrow_decode<__D: cu_bincode::de::BorrowDecoder<'__de, Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
 impl<__Context> cu_bincode::de::Decode<__Context> for cu29_runtime::cutask_anytime::Progress
 pub fn cu29_runtime::cutask_anytime::Progress::decode<__D: cu_bincode::de::Decoder<Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
-pub enum cu29_runtime::cutask_anytime::SkipReason
-pub cu29_runtime::cutask_anytime::SkipReason::NoInput
-pub cu29_runtime::cutask_anytime::SkipReason::ReusedLast
-impl cu29_runtime::reflect::TypePath for cu29_runtime::cutask_anytime::SkipReason
-pub fn cu29_runtime::cutask_anytime::SkipReason::crate_name() -> core::option::Option<&'static str>
-pub fn cu29_runtime::cutask_anytime::SkipReason::module_path() -> core::option::Option<&'static str>
-pub fn cu29_runtime::cutask_anytime::SkipReason::short_type_path() -> &'static str
-pub fn cu29_runtime::cutask_anytime::SkipReason::type_ident() -> core::option::Option<&'static str>
-pub fn cu29_runtime::cutask_anytime::SkipReason::type_path() -> &'static str
-impl cu_bincode::enc::Encode for cu29_runtime::cutask_anytime::SkipReason
-pub fn cu29_runtime::cutask_anytime::SkipReason::encode<__E: cu_bincode::enc::Encoder>(&self, encoder: &mut __E) -> core::result::Result<(), cu_bincode::error::EncodeError>
-impl<'__de, __Context> cu_bincode::de::BorrowDecode<'__de, __Context> for cu29_runtime::cutask_anytime::SkipReason
-pub fn cu29_runtime::cutask_anytime::SkipReason::borrow_decode<__D: cu_bincode::de::BorrowDecoder<'__de, Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
-impl<__Context> cu_bincode::de::Decode<__Context> for cu29_runtime::cutask_anytime::SkipReason
-pub fn cu29_runtime::cutask_anytime::SkipReason::decode<__D: cu_bincode::de::Decoder<Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
 pub enum cu29_runtime::cutask_anytime::Step
 pub cu29_runtime::cutask_anytime::Step::Continue
 pub cu29_runtime::cutask_anytime::Step::Converged
 pub cu29_runtime::cutask_anytime::Step::Satisfied
+impl cu29_runtime::reflect::TypePath for cu29_runtime::cutask_anytime::Step
+pub fn cu29_runtime::cutask_anytime::Step::crate_name() -> core::option::Option<&'static str>
+pub fn cu29_runtime::cutask_anytime::Step::module_path() -> core::option::Option<&'static str>
+pub fn cu29_runtime::cutask_anytime::Step::short_type_path() -> &'static str
+pub fn cu29_runtime::cutask_anytime::Step::type_ident() -> core::option::Option<&'static str>
+pub fn cu29_runtime::cutask_anytime::Step::type_path() -> &'static str
 pub struct cu29_runtime::cutask_anytime::AnytimeOutput<O: cu29_runtime::cutask::CuMsgPayload>
 pub cu29_runtime::cutask_anytime::AnytimeOutput::progress: cu29_runtime::cutask_anytime::Progress
 pub cu29_runtime::cutask_anytime::AnytimeOutput::value: O
@@ -1048,16 +1035,14 @@ pub trait cu29_runtime::cutask_anytime::Anytime: cu29_runtime::cutask::Freezable
 pub type cu29_runtime::cutask_anytime::Anytime::Input: cu29_runtime::cutask::CuMsgPayload
 pub type cu29_runtime::cutask_anytime::Anytime::Output: cu29_runtime::cutask::CuMsgPayload
 pub type cu29_runtime::cutask_anytime::Anytime::Resources<'r>
-pub fn cu29_runtime::cutask_anytime::Anytime::base(&mut self, input: &Self::Input, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
-pub fn cu29_runtime::cutask_anytime::Anytime::finalize(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::cutask_anytime::Anytime::base(&mut self, input: &Self::Input, ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<cu29_runtime::cutask_anytime::Step>
 pub fn cu29_runtime::cutask_anytime::Anytime::new(config: core::option::Option<&cu29_runtime::config::ComponentConfig>, resources: Self::Resources) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
 pub fn cu29_runtime::cutask_anytime::Anytime::postprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask_anytime::Anytime::preprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
-pub fn cu29_runtime::cutask_anytime::Anytime::progress(&self) -> cu29_runtime::cutask_anytime::Progress
 pub fn cu29_runtime::cutask_anytime::Anytime::refine(&mut self, input: &Self::Input) -> cu29_traits::CuResult<cu29_runtime::cutask_anytime::Step>
 pub fn cu29_runtime::cutask_anytime::Anytime::start(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask_anytime::Anytime::stop(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
-pub fn cu29_runtime::cutask_anytime::Anytime::write_best(&self, out: &mut Self::Output)
+pub fn cu29_runtime::cutask_anytime::Anytime::write_best(&mut self, out: &mut Self::Output) -> cu29_traits::CuResult<()>
 pub mod cu29_runtime::debug
 pub struct cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L> where P: cu29_traits::CopperListTuple, S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static
 impl<App, P, CB, TF, S, L> cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L> where App: cu29_runtime::app::CuSimApplication<S, L> + cu29_runtime::reflect::ReflectTaskIntrospection, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, S: cu29_unifiedlog::SectionStorage, P: cu29_traits::CopperListTuple, CB: for<'a> core::ops::function::Fn(&'a cu29_runtime::copperlist::CopperList<P>, cu29_clock::RobotClock, cu29_clock::RobotClockMock) -> alloc::boxed::Box<(dyn for<'z> core::ops::function::FnMut(<App as cu29_runtime::app::CuSimApplication>::Step) -> cu29_runtime::simulation::SimOverride + 'a)>, TF: core::ops::function::Fn(&cu29_runtime::copperlist::CopperList<P>) -> core::option::Option<cu29_clock::CuTime> + core::clone::Clone
@@ -1809,12 +1794,12 @@ pub fn cu29_runtime::cutask_anytime::Progress::module_path() -> core::option::Op
 pub fn cu29_runtime::cutask_anytime::Progress::short_type_path() -> &'static str
 pub fn cu29_runtime::cutask_anytime::Progress::type_ident() -> core::option::Option<&'static str>
 pub fn cu29_runtime::cutask_anytime::Progress::type_path() -> &'static str
-impl cu29_runtime::reflect::TypePath for cu29_runtime::cutask_anytime::SkipReason
-pub fn cu29_runtime::cutask_anytime::SkipReason::crate_name() -> core::option::Option<&'static str>
-pub fn cu29_runtime::cutask_anytime::SkipReason::module_path() -> core::option::Option<&'static str>
-pub fn cu29_runtime::cutask_anytime::SkipReason::short_type_path() -> &'static str
-pub fn cu29_runtime::cutask_anytime::SkipReason::type_ident() -> core::option::Option<&'static str>
-pub fn cu29_runtime::cutask_anytime::SkipReason::type_path() -> &'static str
+impl cu29_runtime::reflect::TypePath for cu29_runtime::cutask_anytime::Step
+pub fn cu29_runtime::cutask_anytime::Step::crate_name() -> core::option::Option<&'static str>
+pub fn cu29_runtime::cutask_anytime::Step::module_path() -> core::option::Option<&'static str>
+pub fn cu29_runtime::cutask_anytime::Step::short_type_path() -> &'static str
+pub fn cu29_runtime::cutask_anytime::Step::type_ident() -> core::option::Option<&'static str>
+pub fn cu29_runtime::cutask_anytime::Step::type_path() -> &'static str
 impl cu29_runtime::reflect::TypePath for f32
 pub fn f32::crate_name() -> core::option::Option<&'static str>
 pub fn f32::module_path() -> core::option::Option<&'static str>

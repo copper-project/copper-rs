@@ -80,9 +80,7 @@ pub use cu29_runtime::curuntime;
 pub use cu29_runtime::cutask;
 pub use cu29_runtime::cutask_anytime;
 // Re-exported at the crate root so RON can name `cu29::AnytimeTask<...>` directly.
-pub use cu29_runtime::cutask_anytime::{
-    Anytime, AnytimeOutput, AnytimeTask, OnOverload, Progress, SkipReason, Step,
-};
+pub use cu29_runtime::cutask_anytime::{Anytime, AnytimeOutput, AnytimeTask, Progress, Step};
 #[cfg(feature = "std")]
 pub use cu29_runtime::debug;
 #[cfg(feature = "std")]
