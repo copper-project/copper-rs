@@ -1,3 +1,7 @@
+// Source: `std::time::SystemTime` as a last-resort counter for unsupported
+// `std` targets.
+// Guarantee: availability, not strict monotonicity. Real-time targets should
+// use a target-specific monotonic counter backend instead of this fallback.
 pub fn initialize() {}
 
 #[inline(always)]
