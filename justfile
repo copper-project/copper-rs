@@ -3,7 +3,7 @@ BASE_FEATURES := "mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,de
 WINDOWS_BASE_FEATURES := "mock,cu-sensor-payloads/image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode"
 MSRV := "1.95.0"
 PUBLIC_API_VERSION := "0.51.0"
-PUBLIC_API_TOOLCHAIN := "nightly"
+PUBLIC_API_TOOLCHAIN := "nightly-2026-06-25"
 export ROOT := justfile_directory()
 WORKSPACE_EXCLUDES := shell('python3 $1/support/ci/workspace_excludes.py excludes --toolchain stable', ROOT)
 PREK_FMT_FIX_HOOKS := "trailing-whitespace mixed-line-ending"
@@ -87,11 +87,11 @@ check-public-api:
 
 # Check the V1 public API snapshot baseline.
 api-check: check-public-api
-	@support/ci/check_public_api.sh
+	@PUBLIC_API_TOOLCHAIN={{PUBLIC_API_TOOLCHAIN}} support/ci/check_public_api.sh
 
 # Refresh the V1 public API snapshot baseline after an intentional API change.
 api-update: check-public-api
-	@UPDATE_PUBLIC_API=1 support/ci/check_public_api.sh
+	@UPDATE_PUBLIC_API=1 PUBLIC_API_TOOLCHAIN={{PUBLIC_API_TOOLCHAIN}} support/ci/check_public_api.sh
 
 # Std clippy checks aligned with reusable unit-test workflow defaults.
 clippy-std:
