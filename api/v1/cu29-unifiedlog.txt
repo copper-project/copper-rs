@@ -21,7 +21,7 @@ pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite::flush_section(&mut self,
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite::status(&self) -> cu29_unifiedlog::UnifiedLogStatus
 pub struct cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder
 impl cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder
-pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::build(self) -> core::io::error::Result<cu29_unifiedlog::memmap::MmapUnifiedLogger>
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::build(self) -> std::io::error::Result<cu29_unifiedlog::memmap::MmapUnifiedLogger>
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::create(self, create: bool) -> Self
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::file_base_name(self, file_path: &std::path::Path) -> Self
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::new() -> Self
@@ -31,7 +31,7 @@ impl core::default::Default for cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilde
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::default() -> Self
 pub struct cu29_unifiedlog::memmap::MmapUnifiedLoggerRead
 impl cu29_unifiedlog::memmap::MmapUnifiedLoggerRead
-pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::new(base_file_path: &std::path::Path) -> core::io::error::Result<Self>
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::new(base_file_path: &std::path::Path) -> std::io::error::Result<Self>
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::position(&self) -> cu29_unifiedlog::memmap::LogPosition
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::raw_main_header(&self) -> &cu29_unifiedlog::MainHeader
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::scan_section_bytes(&mut self, datalogtype: cu29_traits::UnifiedLogType) -> cu29_traits::CuResult<u64>
@@ -52,7 +52,7 @@ pub struct cu29_unifiedlog::memmap::UnifiedLoggerIOReader
 impl cu29_unifiedlog::memmap::UnifiedLoggerIOReader
 pub fn cu29_unifiedlog::memmap::UnifiedLoggerIOReader::new(logger: cu29_unifiedlog::memmap::MmapUnifiedLoggerRead, log_type: cu29_traits::UnifiedLogType) -> Self
 impl std::io::Read for cu29_unifiedlog::memmap::UnifiedLoggerIOReader
-pub fn cu29_unifiedlog::memmap::UnifiedLoggerIOReader::read(&mut self, buf: &mut [u8]) -> core::io::error::Result<usize>
+pub fn cu29_unifiedlog::memmap::UnifiedLoggerIOReader::read(&mut self, buf: &mut [u8]) -> std::io::error::Result<usize>
 pub mod cu29_unifiedlog::noop
 pub struct cu29_unifiedlog::noop::NoopLogger
 impl cu29_unifiedlog::noop::NoopLogger
@@ -156,7 +156,7 @@ pub cu29_unifiedlog::UnifiedLogStatus::total_allocated_space: usize
 pub cu29_unifiedlog::UnifiedLogStatus::total_used_space: usize
 pub struct cu29_unifiedlog::UnifiedLoggerBuilder
 impl cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder
-pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::build(self) -> core::io::error::Result<cu29_unifiedlog::memmap::MmapUnifiedLogger>
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::build(self) -> std::io::error::Result<cu29_unifiedlog::memmap::MmapUnifiedLogger>
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::create(self, create: bool) -> Self
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::file_base_name(self, file_path: &std::path::Path) -> Self
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerBuilder::new() -> Self
@@ -168,10 +168,10 @@ pub struct cu29_unifiedlog::UnifiedLoggerIOReader
 impl cu29_unifiedlog::memmap::UnifiedLoggerIOReader
 pub fn cu29_unifiedlog::memmap::UnifiedLoggerIOReader::new(logger: cu29_unifiedlog::memmap::MmapUnifiedLoggerRead, log_type: cu29_traits::UnifiedLogType) -> Self
 impl std::io::Read for cu29_unifiedlog::memmap::UnifiedLoggerIOReader
-pub fn cu29_unifiedlog::memmap::UnifiedLoggerIOReader::read(&mut self, buf: &mut [u8]) -> core::io::error::Result<usize>
+pub fn cu29_unifiedlog::memmap::UnifiedLoggerIOReader::read(&mut self, buf: &mut [u8]) -> std::io::error::Result<usize>
 pub struct cu29_unifiedlog::UnifiedLoggerRead
 impl cu29_unifiedlog::memmap::MmapUnifiedLoggerRead
-pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::new(base_file_path: &std::path::Path) -> core::io::error::Result<Self>
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::new(base_file_path: &std::path::Path) -> std::io::error::Result<Self>
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::position(&self) -> cu29_unifiedlog::memmap::LogPosition
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::raw_main_header(&self) -> &cu29_unifiedlog::MainHeader
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::scan_section_bytes(&mut self, datalogtype: cu29_traits::UnifiedLogType) -> cu29_traits::CuResult<u64>
