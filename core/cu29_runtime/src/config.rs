@@ -4078,7 +4078,7 @@ pub fn read_configuration(config_filename: &str) -> CuResult<CuConfig> {
     let config_content = read_to_string(config_filename).map_err(|e| {
         CuError::from(format!(
             "Failed to read configuration file: {:?}",
-            &config_filename
+            config_filename
         ))
         .add_cause(e.to_string().as_str())
     })?;
@@ -4146,7 +4146,7 @@ pub fn read_multi_configuration(config_filename: &str) -> CuResult<MultiCopperCo
     let config_content = read_to_string(config_filename).map_err(|e| {
         CuError::from(format!(
             "Failed to read multi-Copper configuration file: {:?}",
-            &config_filename
+            config_filename
         ))
         .add_cause(e.to_string().as_str())
     })?;
