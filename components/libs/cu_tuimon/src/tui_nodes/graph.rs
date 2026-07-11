@@ -161,7 +161,7 @@ impl<'a> NodeGraph<'a> {
         // Repeat the for loop until in runs all the way through without any
         // intersections. Surely there's a more efficient way to do this.
         'outer: loop {
-            for (_, ea_them) in self.placements.iter() {
+            for ea_them in self.placements.values() {
                 if rect_me.intersects(*ea_them) {
                     rect_me.y = rect_me.y.max(ea_them.bottom());
                     continue 'outer;

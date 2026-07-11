@@ -283,7 +283,7 @@ where
                 }
                 output.metadata.set_status(format!(
                     "{:>5.2} {:>5.2} {:>5.2} {:>5.2}",
-                    &state.output, &state.p, &state.i, &state.d
+                    state.output, state.p, state.i, state.d
                 ));
                 output.set_payload(state);
             }
