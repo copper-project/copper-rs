@@ -445,11 +445,12 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PUBLIC_API_VERSION: "0.51.0"
-      PUBLIC_API_TOOLCHAIN: nightly
+      PUBLIC_API_TOOLCHAIN: nightly-2026-06-25
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - uses: dtolnay/rust-toolchain@nightly
+      - name: Install public API Rust toolchain
+        run: rustup toolchain install "${PUBLIC_API_TOOLCHAIN}" --profile minimal
       - uses: Swatinem/rust-cache@v2
         with:
           prefix-key: api-check
