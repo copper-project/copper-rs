@@ -8,10 +8,7 @@
             id: "compute_heartbeat_sink",
             type: "tasks::ComputeHeartbeatSink",
         ),
-        (
-            id: "zed",
-            type: "cu_zed::Zed",
-        ),
+        (id: "zed", type: "cu_zed::Zed"),
     ],
     cnx: [
         (
