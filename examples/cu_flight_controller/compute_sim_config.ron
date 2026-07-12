@@ -1,21 +1,13 @@
 (
     tasks: [
         (
-            id: "compute_heartbeat",
-            type: "tasks::ComputeHeartbeatSource",
+            id: "zed",
+            type: "sim_zed::SimZed2iSource",
+            run_in_sim: true,
+            logging: (enabled: false),
         ),
-        (
-            id: "compute_heartbeat_sink",
-            type: "tasks::ComputeHeartbeatSink",
-        ),
-        (id: "zed", type: "cu_zed::Zed"),
     ],
     cnx: [
-        (
-            src: "compute_heartbeat",
-            dst: "compute_heartbeat_sink",
-            msg: "u64",
-        ),
         (
             src: "zed",
             dst: "__nc__",

@@ -8,6 +8,8 @@ mod messages;
 mod rc_joystick;
 #[cfg(feature = "sim")]
 mod sim_support;
+#[cfg(any(feature = "sim", feature = "bevymon"))]
+mod sim_zed;
 #[cfg(feature = "sim")]
 mod tasks;
 #[cfg(not(target_arch = "wasm32"))]
@@ -22,21 +24,34 @@ use bevy::asset::UnapprovedPathMode;
 #[cfg(feature = "bevymon")]
 use bevy::camera::ClearColorConfig;
 use bevy::camera::RenderTarget;
-use bevy::core_pipeline::Skybox;
+use bevy::core_pipeline::{Core3dSystems, Skybox, prepass::DepthPrepass, schedule::Core3d};
 use bevy::ecs::change_detection::DetectChanges;
 use bevy::ecs::schedule::IntoScheduleConfigs;
-use bevy::image::TextureFormatPixelInfo;
+use bevy::image::{
+    ImageCompareFunction, ImageSampler, ImageSamplerDescriptor, TextureFormatPixelInfo,
+};
 use bevy::prelude::{
     App, AssetPlugin, AssetServer, Assets, ButtonInput, Camera, Camera3d, Color, Commands,
     Component, ComputedNode, DefaultPlugins, Dir3, DirectionalLight, Entity, EnvironmentMapLight,
     FixedUpdate, FontSize, GlobalAmbientLight, GlobalTransform, GltfAssetLabel, Handle, Image,
-    ImageNode, IsDefaultUiCamera, KeyCode, MessageReader, MessageWriter, MinimalPlugins, Name,
-    Node, PerspectiveProjection, Pickable, PluginGroup, PositionType, PostUpdate, Projection, Quat,
-    Query, Res, ResMut, Resource, Startup, Text, TextColor, TextFont, TextureAtlasLayout, Time,
-    Transform, UVec2, UiRect, Update, Val, Vec2, Vec3, Visibility, Window, WindowPlugin, With,
-    Without, WorldAsset, WorldAssetRoot, default,
+    ImageNode, IsDefaultUiCamera, KeyCode, MessageReader, MessageWriter, MinimalPlugins, Msaa,
+    Name, Node, On, PerspectiveProjection, Pickable, PluginGroup, PositionType, PostUpdate,
+    Projection, Quat, Query, Res, ResMut, Resource, Startup, Text, TextColor, TextFont,
+    TextureAtlasLayout, Time, Transform, UVec2, UiRect, Update, Val, Vec2, Vec3, Visibility,
+    Window, WindowPlugin, With, Without, WorldAsset, WorldAssetRoot, default,
 };
-use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
+use bevy::render::RenderApp;
+use bevy::render::camera::ExtractedCamera;
+use bevy::render::extract_resource::{ExtractResource, ExtractResourcePlugin};
+use bevy::render::gpu_readback::{Readback, ReadbackComplete};
+use bevy::render::render_asset::RenderAssets;
+use bevy::render::render_resource::{
+    Extent3d, Origin3d, TexelCopyTextureInfo, TextureAspect, TextureDimension, TextureFormat,
+    TextureUsages,
+};
+use bevy::render::renderer::{RenderContext, ViewQuery};
+use bevy::render::texture::GpuImage;
+use bevy::render::view::ViewDepthTexture;
 #[cfg(not(target_arch = "wasm32"))]
 use cached_path::{Cache, Error as CacheError, ProgressBar};
 #[cfg(feature = "bevymon")]
@@ -59,14 +74,229 @@ use cu_sensor_payloads::{BarometerPayload, ImuPayload, MagnetometerPayload};
 use std::fs;
 #[cfg(not(target_arch = "wasm32"))]
 use std::io::{self, Write};
+use std::mem::size_of;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 #[cfg(feature = "bevymon")]
 use std::sync::{Arc, Mutex};
 
-#[copper_runtime(config = "copperconfig.ron", sim_mode = true, ignore_resources = true)]
-struct FlightControllerSim {}
+mod mcu_copper {
+    use super::*;
+
+    pub mod tasks {
+        pub use crate::tasks::*;
+    }
+
+    #[copper_runtime(
+        config = "multi_copper_sim.ron",
+        subsystem = "mcu",
+        sim_mode = true,
+        ignore_resources = true
+    )]
+    struct FlightControllerSim {}
+
+    pub(super) struct Runtime {
+        app: default::FlightControllerSim,
+    }
+
+    impl Runtime {
+        #[cfg(all(not(target_arch = "wasm32"), feature = "sim"))]
+        pub(super) fn with_log_path(
+            clock: &RobotClock,
+            logger_path: &Path,
+            log_slab_size: Option<usize>,
+        ) -> Self {
+            let app = default::FlightControllerSim::builder()
+                .with_clock(clock.clone())
+                .with_log_path(PathBuf::from(logger_path), log_slab_size)
+                .expect("failed to create logger")
+                .with_sim_callback(&mut default_callback)
+                .build()
+                .expect("failed to create runtime");
+            Self { app }
+        }
+
+        #[cfg(test)]
+        pub(super) fn without_logger(clock: &RobotClock) -> Self {
+            let app = default::FlightControllerSim::builder()
+                .with_clock(clock.clone())
+                .with_sim_callback(&mut default_callback)
+                .build()
+                .expect("failed to create runtime");
+            Self { app }
+        }
+
+        #[cfg(feature = "bevymon")]
+        pub(super) fn with_bevymon_logger(
+            clock: &RobotClock,
+            logger: Arc<Mutex<BevyMonUnifiedLogger>>,
+        ) -> Self {
+            let app = default::FlightControllerSim::builder()
+                .with_clock(clock.clone())
+                .with_logger::<BevyMonSectionStorage, BevyMonUnifiedLogger>(logger)
+                .with_sim_callback(&mut default_callback)
+                .build()
+                .expect("failed to create runtime");
+            Self { app }
+        }
+
+        pub(super) fn start(&mut self) -> CuResult<()> {
+            self.app.start_all_tasks(&mut default_callback)
+        }
+
+        pub(super) fn stop(&mut self) -> CuResult<()> {
+            self.app.stop_all_tasks(&mut default_callback)
+        }
+
+        pub(super) fn log_shutdown_completed(&mut self) -> CuResult<()> {
+            self.app.log_shutdown_completed()
+        }
+
+        #[cfg(feature = "bevymon")]
+        pub(super) fn monitor_model(&mut self) -> MonitorModel {
+            self.app.copper_runtime_mut().monitor.model()
+        }
+
+        pub(super) fn run_iteration(
+            &mut self,
+            clock: &RobotClock,
+            vehicle: SimVehicleState,
+            rc: SimRcInput,
+            motor_commands: &mut SimMotorCommands,
+            osd_overlay: &mut SimOsdOverlay,
+        ) -> CuResult<()> {
+            let clock = clock.clone();
+            let dshot = &mut motor_commands.dshot;
+            let mut sim_callback = move |step: default::SimStep| -> SimOverride {
+                match step {
+                    default::SimStep::Bmi088(CuTaskCallbackState::Process(_, output)) => {
+                        set_msg_timing(&clock, output);
+                        output.set_payload(ImuPayload::from_raw(
+                            vehicle.body_accel_fc,
+                            vehicle.body_gyro_fc,
+                            29.0,
+                        ));
+                        SimOverride::ExecutedBySim
+                    }
+                    default::SimStep::Dps310(CuTaskCallbackState::Process(_, output)) => {
+                        let altitude_m = vehicle.position.y.max(-100.0);
+                        let pressure_pa = 101_325.0 * (1.0 - altitude_m / 44_330.0).powf(5.255);
+                        set_msg_timing(&clock, output);
+                        output.set_payload(BarometerPayload::from_raw(pressure_pa, 25.0));
+                        SimOverride::ExecutedBySim
+                    }
+                    default::SimStep::Ist8310(CuTaskCallbackState::Process(_, output)) => {
+                        let world_mag = Vec3::from_array(WORLD_MAG_FIELD_UT);
+                        let body_mag = vehicle.rotation.inverse() * world_mag;
+                        set_msg_timing(&clock, output);
+                        output.set_payload(MagnetometerPayload::from_raw(
+                            map_bevy_body_to_fc_magnetometer(body_mag),
+                        ));
+                        SimOverride::ExecutedBySim
+                    }
+                    default::SimStep::RcRxRcRx { msg, .. } => {
+                        let mut payload = RcChannelsPayload::default();
+                        let channels = &mut payload.inner_mut().0;
+                        channels[0] = axis_to_rc(rc.roll);
+                        channels[1] = axis_to_rc(rc.pitch);
+                        channels[2] = throttle_to_rc(rc.throttle);
+                        channels[3] = axis_to_rc(rc.yaw);
+                        channels[4] = if rc.armed { 1750 } else { 172 };
+                        channels[5] = match rc.mode {
+                            messages::FlightMode::Acro => 300,
+                            messages::FlightMode::Angle => 992,
+                            messages::FlightMode::PositionHold => 1700,
+                        };
+
+                        set_msg_timing(&clock, msg);
+                        msg.set_payload(payload);
+                        SimOverride::ExecutedBySim
+                    }
+                    default::SimStep::BdshotTxEsc0Tx { msg, .. } => {
+                        dshot[0] = msg.payload().map_or(0, |c| c.throttle);
+                        SimOverride::ExecuteByRuntime
+                    }
+                    default::SimStep::BdshotTxEsc1Tx { msg, .. } => {
+                        dshot[1] = msg.payload().map_or(0, |c| c.throttle);
+                        SimOverride::ExecuteByRuntime
+                    }
+                    default::SimStep::BdshotTxEsc2Tx { msg, .. } => {
+                        dshot[2] = msg.payload().map_or(0, |c| c.throttle);
+                        SimOverride::ExecuteByRuntime
+                    }
+                    default::SimStep::BdshotTxEsc3Tx { msg, .. } => {
+                        dshot[3] = msg.payload().map_or(0, |c| c.throttle);
+                        SimOverride::ExecuteByRuntime
+                    }
+                    default::SimStep::VtxMspTxRequests { msg, .. } => {
+                        if let Some(batch) = msg.payload() {
+                            osd_overlay.apply_batch(batch);
+                        }
+                        SimOverride::ExecuteByRuntime
+                    }
+                    _ => SimOverride::ExecuteByRuntime,
+                }
+            };
+
+            self.app.run_one_iteration(&mut sim_callback)
+        }
+    }
+
+    fn default_callback(_step: default::SimStep) -> SimOverride {
+        SimOverride::ExecuteByRuntime
+    }
+}
+
+mod compute_copper {
+    use super::*;
+
+    pub mod sim_zed {
+        pub use crate::sim_zed::*;
+    }
+
+    #[copper_runtime(
+        config = "multi_copper_sim.ron",
+        subsystem = "compute",
+        sim_mode = true
+    )]
+    struct FlightComputeSim {}
+
+    pub(super) struct Runtime {
+        app: default::FlightComputeSim,
+    }
+
+    impl Runtime {
+        pub(super) fn new(clock: &RobotClock) -> Self {
+            let app = default::FlightComputeSim::builder()
+                .with_clock(clock.clone())
+                .with_sim_callback(&mut default_callback)
+                .build()
+                .expect("failed to create compute runtime");
+            Self { app }
+        }
+
+        pub(super) fn start(&mut self) -> CuResult<()> {
+            self.app.start_all_tasks(&mut default_callback)
+        }
+
+        pub(super) fn run_iteration(&mut self) -> CuResult<()> {
+            self.app.run_one_iteration(&mut default_callback)
+        }
+
+        pub(super) fn stop(&mut self) -> CuResult<()> {
+            self.app.stop_all_tasks(&mut default_callback)
+        }
+
+        pub(super) fn log_shutdown_completed(&mut self) -> CuResult<()> {
+            self.app.log_shutdown_completed()
+        }
+    }
+
+    fn default_callback(_step: default::SimStep) -> SimOverride {
+        SimOverride::ExecuteByRuntime
+    }
+}
 
 #[derive(Clone)]
 struct SimVehicleState {
@@ -93,7 +323,8 @@ impl Default for SimVehicleState {
 struct CopperState {
     clock: RobotClock,
     clock_mock: RobotClockMock,
-    app: gnss::FlightControllerSim,
+    mcu: mcu_copper::Runtime,
+    compute: compute_copper::Runtime,
 }
 
 #[derive(Clone, Resource)]
@@ -179,6 +410,7 @@ struct SimHudSpawnState {
     loading: bool,
     help: bool,
     osd: bool,
+    zed: bool,
 }
 
 #[cfg(feature = "bevymon")]
@@ -201,6 +433,23 @@ struct SimSceneCamera;
 
 #[derive(Component)]
 struct SplitSceneCamera;
+
+#[derive(Component)]
+struct ZedDepthCamera;
+
+#[derive(Clone, Resource)]
+struct ZedDepthTexture(Handle<Image>);
+
+impl ExtractResource for ZedDepthTexture {
+    type Source = Self;
+
+    fn extract_resource(source: &Self::Source) -> Self {
+        source.clone()
+    }
+}
+
+#[derive(Resource)]
+struct ZedDepthPreview(Handle<Image>);
 
 #[derive(Component)]
 struct SceneLoadingOverlay;
@@ -648,10 +897,6 @@ fn quad_x_propellers() -> Vec<PropellerInfo> {
     ]
 }
 
-fn default_callback(_step: gnss::SimStep) -> SimOverride {
-    SimOverride::ExecuteByRuntime
-}
-
 fn set_msg_timing<T: CuMsgPayload>(clock: &RobotClock, msg: &mut CuMsg<T>) {
     let tov = clock.now();
     let perf = cu29::curuntime::perf_now(clock);
@@ -738,21 +983,17 @@ fn build_sim_copper_state(logger_path: &Path, log_slab_size: Option<usize>) -> C
     }
 
     let (clock, clock_mock) = RobotClock::mock();
-    let mut app = gnss::FlightControllerSim::builder()
-        .with_clock(clock.clone())
-        .with_log_path(PathBuf::from(logger_path), log_slab_size)
-        .expect("failed to create logger")
-        .with_sim_callback(&mut default_callback)
-        .build()
-        .expect("failed to create runtime");
+    let mut mcu = mcu_copper::Runtime::with_log_path(&clock, logger_path, log_slab_size);
+    let mut compute = compute_copper::Runtime::new(&clock);
 
-    app.start_all_tasks(&mut default_callback)
-        .expect("failed to start tasks");
+    mcu.start().expect("failed to start tasks");
+    compute.start().expect("failed to start compute tasks");
 
     CopperState {
         clock,
         clock_mock,
-        app,
+        mcu,
+        compute,
     }
 }
 
@@ -764,24 +1005,20 @@ fn build_bevymon_copper() -> (MonitorModel, CopperState) {
     let (clock, clock_mock) = RobotClock::mock();
     let unified_logger = build_unified_logger(LOG_SLAB_SIZE).expect("failed to create logger");
 
-    let mut sim_callback = default_callback;
-    let mut app = gnss::FlightControllerSim::builder()
-        .with_clock(clock.clone())
-        .with_logger::<BevyMonSectionStorage, BevyMonUnifiedLogger>(unified_logger)
-        .with_sim_callback(&mut sim_callback)
-        .build()
-        .expect("failed to create runtime");
+    let mut mcu = mcu_copper::Runtime::with_bevymon_logger(&clock, unified_logger);
+    let mut compute = compute_copper::Runtime::new(&clock);
 
-    app.start_all_tasks(&mut sim_callback)
-        .expect("failed to start tasks");
+    mcu.start().expect("failed to start tasks");
+    compute.start().expect("failed to start compute tasks");
 
-    let monitor_model = app.copper_runtime_mut().monitor.model();
+    let monitor_model = mcu.monitor_model();
     (
         monitor_model,
         CopperState {
             clock,
             clock_mock,
-            app,
+            mcu,
+            compute,
         },
     )
 }
@@ -823,6 +1060,126 @@ fn build_unified_logger(
         }
     };
     Ok(Arc::new(Mutex::new(logger)))
+}
+
+const ZED_DEPTH_CAMERA_ORDER: isize = -2;
+
+fn zed_depth_texture() -> Image {
+    let mut image = Image::new_uninit(
+        Extent3d {
+            width: sim_zed::ZED_SIM_WIDTH,
+            height: sim_zed::ZED_SIM_HEIGHT,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        TextureFormat::Depth32Float,
+        RenderAssetUsages::all(),
+    );
+    image.texture_descriptor.usage |=
+        TextureUsages::COPY_DST | TextureUsages::COPY_SRC | TextureUsages::TEXTURE_BINDING;
+    image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+        label: Some("ZED2i simulated depth".to_owned()),
+        compare: Some(ImageCompareFunction::Always),
+        ..default()
+    });
+    image
+}
+
+fn zed_depth_preview() -> Image {
+    Image::new_fill(
+        Extent3d {
+            width: sim_zed::ZED_SIM_WIDTH,
+            height: sim_zed::ZED_SIM_HEIGHT,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        &[0, 0, 0, 255],
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::all(),
+    )
+}
+
+fn copy_zed_depth_texture(
+    view: ViewQuery<(&ExtractedCamera, &ViewDepthTexture)>,
+    depth_texture: Option<Res<ZedDepthTexture>>,
+    image_assets: Res<RenderAssets<GpuImage>>,
+    mut ctx: RenderContext,
+) {
+    let Some(depth_texture) = depth_texture else {
+        return;
+    };
+    let (camera, view_depth) = view.into_inner();
+    if camera.order != ZED_DEPTH_CAMERA_ORDER {
+        return;
+    }
+    let Some(destination) = image_assets.get(depth_texture.0.id()) else {
+        return;
+    };
+
+    ctx.command_encoder().copy_texture_to_texture(
+        TexelCopyTextureInfo {
+            texture: &view_depth.texture,
+            mip_level: 0,
+            origin: Origin3d::default(),
+            aspect: TextureAspect::DepthOnly,
+        },
+        TexelCopyTextureInfo {
+            texture: &destination.texture,
+            mip_level: 0,
+            origin: Origin3d::default(),
+            aspect: TextureAspect::DepthOnly,
+        },
+        Extent3d {
+            width: sim_zed::ZED_SIM_WIDTH,
+            height: sim_zed::ZED_SIM_HEIGHT,
+            depth_or_array_layers: 1,
+        },
+    );
+}
+
+fn capture_zed_depth(
+    event: On<ReadbackComplete>,
+    store: Res<sim_zed::SimZedFrameStore>,
+    preview: Res<ZedDepthPreview>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    let pixel_count = (sim_zed::ZED_SIM_WIDTH * sim_zed::ZED_SIM_HEIGHT) as usize;
+    if event.data.len() != pixel_count * size_of::<f32>() {
+        return;
+    }
+
+    let mut depth = Vec::with_capacity(pixel_count);
+    let mut confidence = Vec::with_capacity(pixel_count);
+    let mut preview_pixels = Vec::with_capacity(pixel_count * 4);
+    for bytes in event.data.chunks_exact(size_of::<f32>()) {
+        let reverse_z = f32::from_ne_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        let distance = if reverse_z > 0.0 {
+            sim_zed::ZED_SIM_NEAR_M / reverse_z
+        } else {
+            f32::NAN
+        };
+        let valid = distance.is_finite() && distance <= sim_zed::ZED_SIM_MAX_DEPTH_M;
+        depth.push(if valid { distance } else { f32::NAN });
+        confidence.push(if valid { 0.0 } else { 100.0 });
+        preview_pixels.extend_from_slice(&depth_preview_color(distance));
+    }
+
+    if let Some(mut preview_image) = images.get_mut(&preview.0)
+        && let Some(pixels) = preview_image.data.as_mut()
+    {
+        pixels.copy_from_slice(&preview_pixels);
+    }
+    store.set_depth(depth, confidence);
+}
+
+fn depth_preview_color(distance: f32) -> [u8; 4] {
+    if !distance.is_finite() || distance > sim_zed::ZED_SIM_MAX_DEPTH_M {
+        return [0, 0, 0, 255];
+    }
+
+    let t = (distance / sim_zed::ZED_SIM_MAX_DEPTH_M).clamp(0.0, 1.0);
+    let intensity = ((1.0 - t).sqrt() * 255.0).round() as u8;
+    [intensity, intensity, intensity, 255]
 }
 
 fn setup_world(
@@ -888,7 +1245,7 @@ fn setup_world(
         },
         EnvironmentMapLight {
             diffuse_map: skybox_handle.clone(),
-            specular_map: specular_map_handle,
+            specular_map: specular_map_handle.clone(),
             intensity: 900.0,
             ..default()
         },
@@ -907,6 +1264,38 @@ fn setup_world(
     } else {
         camera.insert(IsDefaultUiCamera);
     }
+
+    let depth_texture = images.add(zed_depth_texture());
+    let depth_preview = images.add(zed_depth_preview());
+    commands.insert_resource(ZedDepthTexture(depth_texture.clone()));
+    commands.insert_resource(ZedDepthPreview(depth_preview));
+    commands.spawn((
+        Name::new("zed2i-depth-camera"),
+        Camera3d::default(),
+        Camera {
+            order: ZED_DEPTH_CAMERA_ORDER,
+            ..default()
+        },
+        RenderTarget::None {
+            size: UVec2::new(sim_zed::ZED_SIM_WIDTH, sim_zed::ZED_SIM_HEIGHT),
+        },
+        Projection::Perspective(PerspectiveProjection {
+            fov: sim_zed::ZED_SIM_VERTICAL_FOV_DEG.to_radians(),
+            near: sim_zed::ZED_SIM_NEAR_M,
+            far: sim_zed::ZED_SIM_MAX_DEPTH_M,
+            ..default()
+        }),
+        Msaa::Off,
+        DepthPrepass,
+        Transform::from_xyz(0.0, 1.0, 0.0),
+        ZedDepthCamera,
+    ));
+    commands
+        .spawn((
+            Name::new("zed2i-depth-readback"),
+            Readback::texture(depth_texture),
+        ))
+        .observe(capture_zed_depth);
 
     commands.spawn((
         Name::new("sun"),
@@ -1217,6 +1606,62 @@ fn spawn_help_overlay(
             });
     });
     spawned.help = true;
+}
+
+fn spawn_zed_overlay(
+    mut commands: Commands,
+    hud_root: Option<Res<SimHudRoot>>,
+    preview_image: Option<Res<ZedDepthPreview>>,
+    mut spawned: ResMut<SimHudSpawnState>,
+) {
+    if spawned.zed {
+        return;
+    }
+    let (Some(hud_root), Some(preview_image)) = (hud_root, preview_image) else {
+        return;
+    };
+
+    commands.entity(hud_root.0).with_children(|parent| {
+        parent
+            .spawn((
+                Name::new("zed2i-preview"),
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: Val::Px(5.0),
+                    right: Val::Px(5.0),
+                    padding: UiRect::all(Val::Px(5.0)),
+                    row_gap: Val::Px(4.0),
+                    flex_direction: bevy::ui::FlexDirection::Column,
+                    border: UiRect::all(Val::Px(2.0)),
+                    border_radius: bevy::ui::BorderRadius::all(Val::Px(8.0)),
+                    ..default()
+                },
+                Pickable::IGNORE,
+                bevy::ui::BackgroundColor(Color::srgba(0.03, 0.05, 0.09, 0.94)),
+                bevy::ui::BorderColor::all(Color::srgba(0.58, 0.74, 0.96, 0.95)),
+            ))
+            .with_children(|preview| {
+                preview.spawn((
+                    Pickable::IGNORE,
+                    Text::new("depth"),
+                    TextFont {
+                        font_size: FontSize::Px(12.0),
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.78, 0.86, 0.96)),
+                ));
+                preview.spawn((
+                    Node {
+                        width: Val::Px(sim_zed::ZED_SIM_WIDTH as f32),
+                        height: Val::Px(sim_zed::ZED_SIM_HEIGHT as f32),
+                        ..default()
+                    },
+                    Pickable::IGNORE,
+                    ImageNode::new(preview_image.0.clone()),
+                ));
+            });
+    });
+    spawned.zed = true;
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1546,82 +1991,19 @@ fn run_copper_iteration(
             vehicle.velocity_world.z,
         ],
     );
-    let clock = copper.clock.clone();
-    let dshot = &mut motor_commands.dshot;
-
-    let mut sim_callback = move |step: gnss::SimStep| -> SimOverride {
-        match step {
-            gnss::SimStep::Bmi088(CuTaskCallbackState::Process(_, output)) => {
-                set_msg_timing(&clock, output);
-                output.set_payload(ImuPayload::from_raw(
-                    vehicle.body_accel_fc,
-                    vehicle.body_gyro_fc,
-                    29.0,
-                ));
-                SimOverride::ExecutedBySim
-            }
-            gnss::SimStep::Dps310(CuTaskCallbackState::Process(_, output)) => {
-                let altitude_m = vehicle.position.y.max(-100.0);
-                let pressure_pa = 101_325.0 * (1.0 - altitude_m / 44_330.0).powf(5.255);
-                set_msg_timing(&clock, output);
-                output.set_payload(BarometerPayload::from_raw(pressure_pa, 25.0));
-                SimOverride::ExecutedBySim
-            }
-            gnss::SimStep::Ist8310(CuTaskCallbackState::Process(_, output)) => {
-                let world_mag = Vec3::from_array(WORLD_MAG_FIELD_UT);
-                // Convert world vector into body frame using the same world->body convention as IMU.
-                let body_mag = vehicle.rotation.inverse() * world_mag;
-                set_msg_timing(&clock, output);
-                output.set_payload(MagnetometerPayload::from_raw(
-                    map_bevy_body_to_fc_magnetometer(body_mag),
-                ));
-                SimOverride::ExecutedBySim
-            }
-            gnss::SimStep::RcRxRcRx { msg, .. } => {
-                let mut payload = RcChannelsPayload::default();
-                let channels = &mut payload.inner_mut().0;
-                channels[0] = axis_to_rc(rc.roll);
-                channels[1] = axis_to_rc(rc.pitch);
-                channels[2] = throttle_to_rc(rc.throttle);
-                channels[3] = axis_to_rc(rc.yaw);
-                channels[4] = if rc.armed { 1750 } else { 172 };
-                channels[5] = match rc.mode {
-                    messages::FlightMode::Acro => 300,
-                    messages::FlightMode::Angle => 992,
-                    messages::FlightMode::PositionHold => 1700,
-                };
-
-                set_msg_timing(&clock, msg);
-                msg.set_payload(payload);
-                SimOverride::ExecutedBySim
-            }
-            gnss::SimStep::BdshotTxEsc0Tx { msg, .. } => {
-                dshot[0] = msg.payload().map_or(0, |c| c.throttle);
-                SimOverride::ExecuteByRuntime
-            }
-            gnss::SimStep::BdshotTxEsc1Tx { msg, .. } => {
-                dshot[1] = msg.payload().map_or(0, |c| c.throttle);
-                SimOverride::ExecuteByRuntime
-            }
-            gnss::SimStep::BdshotTxEsc2Tx { msg, .. } => {
-                dshot[2] = msg.payload().map_or(0, |c| c.throttle);
-                SimOverride::ExecuteByRuntime
-            }
-            gnss::SimStep::BdshotTxEsc3Tx { msg, .. } => {
-                dshot[3] = msg.payload().map_or(0, |c| c.throttle);
-                SimOverride::ExecuteByRuntime
-            }
-            gnss::SimStep::VtxMspTxRequests { msg, .. } => {
-                if let Some(batch) = msg.payload() {
-                    osd_overlay.apply_batch(batch);
-                }
-                SimOverride::ExecuteByRuntime
-            }
-            _ => SimOverride::ExecuteByRuntime,
-        }
-    };
-
-    copper.app.run_one_iteration(&mut sim_callback)
+    let world_mag = Vec3::from_array(WORLD_MAG_FIELD_UT);
+    let body_mag = vehicle.rotation.inverse() * world_mag;
+    let altitude_m = vehicle.position.y.max(-100.0);
+    let pressure_pa = 101_325.0 * (1.0 - altitude_m / 44_330.0).powf(5.255);
+    sim_zed::sim_zed_frame_store().set_sensors(sim_zed::SimZedSensors {
+        imu: ImuPayload::from_raw(vehicle.body_accel_fc, vehicle.body_gyro_fc, 29.0),
+        magnetometer: MagnetometerPayload::from_raw(map_bevy_body_to_fc_magnetometer(body_mag)),
+        barometer: BarometerPayload::from_raw(pressure_pa, 25.0),
+    });
+    copper
+        .mcu
+        .run_iteration(&copper.clock, vehicle, rc, motor_commands, osd_overlay)?;
+    copper.compute.run_iteration()
 }
 
 fn apply_multicopter_dynamics(
@@ -1694,6 +2076,22 @@ fn camera_follow_quadcopter(
         }
     };
     camera_tf.translation = camera_position;
+    *camera_tf = camera_tf.looking_to(quad_tf.forward(), quad_tf.up());
+}
+
+fn zed_camera_follow_quadcopter(
+    quadcopter_query: Query<&GlobalTransform, With<Multicopter>>,
+    mut camera_query: Query<&mut Transform, (With<ZedDepthCamera>, Without<Multicopter>)>,
+) {
+    let Ok(quad_tf) = quadcopter_query.single() else {
+        return;
+    };
+    let Ok(mut camera_tf) = camera_query.single_mut() else {
+        return;
+    };
+
+    camera_tf.translation = quad_tf.translation() + 0.08 * quad_tf.up() + 0.16 * quad_tf.forward()
+        - 0.5 * sim_zed::ZED_SIM_BASELINE_M * quad_tf.right();
     *camera_tf = camera_tf.looking_to(quad_tf.forward(), quad_tf.up());
 }
 
@@ -2044,8 +2442,10 @@ fn update_osd_overlay(
 
 fn stop_copper_on_exit(mut exit_events: MessageReader<AppExit>, mut copper: ResMut<CopperState>) {
     for _ in exit_events.read() {
-        let _ = copper.app.stop_all_tasks(&mut default_callback);
-        let _ = copper.app.log_shutdown_completed();
+        let _ = copper.mcu.stop();
+        let _ = copper.mcu.log_shutdown_completed();
+        let _ = copper.compute.stop();
+        let _ = copper.compute.log_shutdown_completed();
     }
 }
 
@@ -2228,6 +2628,7 @@ fn build_world_with_assets(
         .insert_resource(SimJoystickState::default())
         .insert_resource(CameraView::default())
         .insert_resource(SimOsdOverlay::default())
+        .insert_resource(sim_zed::sim_zed_frame_store())
         .init_resource::<OsdRasterSource>()
         .insert_resource(WorldLayout { split_monitor })
         .init_resource::<SceneLoadState>()
@@ -2250,6 +2651,15 @@ fn build_world_with_assets(
             })
             .set(asset_plugin()),
     );
+    app.add_plugins(ExtractResourcePlugin::<ZedDepthTexture>::default());
+    app.get_sub_app_mut(RenderApp)
+        .expect("render app should be present")
+        .add_systems(
+            Core3d,
+            copy_zed_depth_texture
+                .after(Core3dSystems::Prepass)
+                .before(Core3dSystems::MainPass),
+        );
     #[cfg(not(target_arch = "wasm32"))]
     app.add_systems(Update, windowing::set_copper_window_icon);
     app.add_plugins(PhysicsPlugins::default())
@@ -2265,6 +2675,7 @@ fn build_world_with_assets(
                 spawn_loading_overlay,
                 spawn_help_overlay,
                 spawn_osd_overlay,
+                spawn_zed_overlay,
                 sync_loading_overlay,
             ),
         )
@@ -2284,6 +2695,7 @@ fn build_world_with_assets(
                 toggle_camera_view,
                 update_quadcopter_visibility,
                 camera_follow_quadcopter,
+                zed_camera_follow_quadcopter,
                 track_sim_led_state,
                 update_help_overlay,
                 prepare_osd_raster_source,
@@ -2377,20 +2789,17 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     fn build_test_copper_state() -> CopperState {
         let (clock, clock_mock) = RobotClock::mock();
-        let mut sim_callback = default_callback;
-        let mut app = gnss::FlightControllerSim::builder()
-            .with_clock(clock.clone())
-            .with_sim_callback(&mut sim_callback)
-            .build()
-            .expect("failed to create runtime");
+        let mut mcu = mcu_copper::Runtime::without_logger(&clock);
+        let mut compute = compute_copper::Runtime::new(&clock);
 
-        app.start_all_tasks(&mut sim_callback)
-            .expect("failed to start tasks");
+        mcu.start().expect("failed to start tasks");
+        compute.start().expect("failed to start compute tasks");
 
         CopperState {
             clock,
             clock_mock,
-            app,
+            mcu,
+            compute,
         }
     }
 
@@ -2470,14 +2879,16 @@ mod tests {
         )
         .expect("copper sim iteration should keep running");
 
+        copper.mcu.stop().expect("failed to stop tasks");
         copper
-            .app
-            .stop_all_tasks(&mut default_callback)
-            .expect("failed to stop tasks");
-        copper
-            .app
+            .mcu
             .log_shutdown_completed()
             .expect("failed to log shutdown");
+        copper.compute.stop().expect("failed to stop compute tasks");
+        copper
+            .compute
+            .log_shutdown_completed()
+            .expect("failed to log compute shutdown");
     }
 
     #[cfg(not(target_arch = "wasm32"))]

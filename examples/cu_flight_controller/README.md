@@ -6,12 +6,12 @@ A bare-metal quadcopter flight controller implemented end-to-end using Copper co
 
 This example demonstrates a complete flight controller running on the MicoAir H743 board (STM32H743), plus a separate host Copper runtime intended for onboard compute. It showcases Copper's ability to run deterministic, real-time control loops on embedded hardware with zero dynamic allocation during runtime.
 
-The deployment is described by `multi_copper.ron` as two independent subsystems:
+The deployment is described by the multi-Copper configurations as two independent subsystems:
 
 - `mcu`: the default flight-controller mission from `mcu_config.ron`
-- `compute`: a host-only placeholder graph from `compute_config.ron`
+- `compute`: a host graph that owns the ZED camera source
 
-There are deliberately no interconnects yet. The compute graph will host `cu_zed::Zed` in the next integration step without tying the subsystem identity to a specific computer or adding the ZED SDK to the MCU build.
+The real camera is enabled by the `end2end` feature and uses `cu_zed::Zed`. The simulator uses `multi_copper_sim.ron` to start both subsystem runtimes in one Bevy process and substitutes `SimZed2iSource` on the compute side. The MCU firmware remains independent and does not enable the ZED dependency.
 
 ## Hardware
 
@@ -78,6 +78,13 @@ To run the current onboard-compute placeholder graph:
 
 ```bash
 just compute
+```
+
+To compile or run the real ZED-enabled compute graph:
+
+```bash
+just end2end-check
+just end2end
 ```
 
 ### Firmware (for flashing to hardware)
@@ -168,7 +175,7 @@ just rc
 ### Simulator (Bevy + Copper)
 
 ```bash
-# Run the normal full-window simulator
+# Run the normal full-window simulator with MCU + compute Copper runtimes
 just
 
 # Run the split BevyMon simulator
@@ -184,6 +191,13 @@ just web-dist
 The split BevyMon path reuses the same `cu_bevymon::spawn_split_layout(...)` shell as
 `cu_rp_balancebot` and `cu_bevymon_demo`, but the left panel still runs the real flight-controller
 sim world, OSD, and help overlays.
+
+The simulated compute subsystem publishes a ZED2i-compatible 320×180 depth and confidence map,
+calibration and rig transforms, plus IMU, magnetometer, barometer, and frame metadata. Its stereo
+image output is intentionally empty: the sim renders one GPU depth-only camera instead of two
+color cameras. The top-right inset shows that live depth map; the bottom-right help overlay remains
+unchanged. GPU rendering and asynchronous readback are confined to Bevy simulation systems,
+while the Copper source publishes cloned `CuHandle` references in its process path.
 
 ### RC Input In Simulation
 
