@@ -1,0 +1,74 @@
+(
+    tasks: [
+        (
+            id: "compute_heartbeat",
+            type: "tasks::ComputeHeartbeatSource",
+        ),
+        (
+            id: "compute_heartbeat_sink",
+            type: "tasks::ComputeHeartbeatSink",
+        ),
+        (
+            id: "zed",
+            type: "cu_zed::Zed",
+        ),
+    ],
+    cnx: [
+        (
+            src: "compute_heartbeat",
+            dst: "compute_heartbeat_sink",
+            msg: "u64",
+        ),
+        (
+            src: "zed",
+            dst: "__nc__",
+            msg: "cu_zed::ZedStereoImages",
+        ),
+        (
+            src: "zed",
+            dst: "__nc__",
+            msg: "cu_zed::ZedDepthMap<Vec<f32>>",
+        ),
+        (
+            src: "zed",
+            dst: "__nc__",
+            msg: "cu_zed::ZedConfidenceMap<Vec<f32>>",
+        ),
+        (
+            src: "zed",
+            dst: "__nc__",
+            msg: "cu29::prelude::CuLatchedStateUpdate<cu_zed::ZedCalibrationBundle>",
+        ),
+        (
+            src: "zed",
+            dst: "__nc__",
+            msg: "cu29::prelude::CuLatchedStateUpdate<cu_zed::ZedRigTransforms>",
+        ),
+        (
+            src: "zed",
+            dst: "__nc__",
+            msg: "cu_sensor_payloads::ImuPayload",
+        ),
+        (
+            src: "zed",
+            dst: "__nc__",
+            msg: "cu_sensor_payloads::MagnetometerPayload",
+        ),
+        (
+            src: "zed",
+            dst: "__nc__",
+            msg: "cu_sensor_payloads::BarometerPayload",
+        ),
+        (
+            src: "zed",
+            dst: "__nc__",
+            msg: "cu_zed::ZedFrameMeta",
+        ),
+    ],
+    logging: (
+        enable_task_logging: false,
+        slab_size_mib: 64,
+        section_size_mib: 8,
+    ),
+    runtime: (rate_target_hz: 30),
+)

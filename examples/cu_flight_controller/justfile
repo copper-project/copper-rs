@@ -18,6 +18,21 @@ compute:
   cd "{{ROOT}}"
   cargo run -p cu-flight-controller --no-default-features --features compute --bin quad-compute
 
+# Compile the ZED-enabled compute graph and the independent MCU firmware graph.
+end2end-check:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo check -p cu-flight-controller --no-default-features --features end2end --bin quad-compute
+  cargo check --config examples/cu_flight_controller/.cargo/config-firmware.toml --no-default-features --features firmware -p cu-flight-controller --bin quad
+
+# Run the onboard-compute graph with the ZED camera source enabled.
+end2end:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo run -p cu-flight-controller --no-default-features --features end2end --bin quad-compute
+
 # Render copperconfig.ron from the current working directory.
 dag mission="":
   #!/usr/bin/env bash
