@@ -93,6 +93,7 @@
 //!
 //! - **`CuSimSrcTask<T>`**: A placeholder for a source task that simulates a sensor or data acquisition hardware.
 //!   This task provides the ability to simulate incoming data without requiring actual hardware initialization.
+//! - **`CuSimSrcTaskPack<O>`**: The corresponding placeholder for multi-output sources.
 //!
 //! - **`CuSimSinkTask<T>`**: A placeholder for a sink task that simulates sending data to hardware. It serves as a
 //!   mock for hardware actuators or output devices during simulations.
@@ -273,6 +274,74 @@ impl<T> CuSimSrcTask<T> {
     /// simulator is responsible for providing deterministic outputs and state
     /// snapshots are carried by the real task (when run_in_sim = true).
     /// Keeping this as a no-op avoids baking any fake behavior into keyframes.
+    pub fn sim_tick(&mut self) {}
+}
+
+/// Simulation placeholder preserving the complete output tuple of a multi-output source.
+#[derive(Reflect)]
+#[reflect(no_field_bounds, from_reflect = false, type_path = false)]
+pub struct CuSimSrcTaskPack<O> {
+    #[reflect(ignore)]
+    output: PhantomData<fn() -> O>,
+    state: bool,
+}
+
+impl<O: 'static> TypePath for CuSimSrcTaskPack<O> {
+    fn type_path() -> &'static str {
+        "cu29_runtime::simulation::CuSimSrcTaskPack"
+    }
+
+    fn short_type_path() -> &'static str {
+        "CuSimSrcTaskPack"
+    }
+
+    fn type_ident() -> Option<&'static str> {
+        Some("CuSimSrcTaskPack")
+    }
+
+    fn crate_name() -> Option<&'static str> {
+        Some("cu29_runtime")
+    }
+
+    fn module_path() -> Option<&'static str> {
+        Some("simulation")
+    }
+}
+
+impl<O> Freezable for CuSimSrcTaskPack<O> {
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&self.state, encoder)
+    }
+
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        self.state = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
+
+impl<O: CuMsgPayload + 'static> CuSrcTask for CuSimSrcTaskPack<O> {
+    type Resources<'r> = ();
+    type Output<'m> = O;
+
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        Ok(Self {
+            output: PhantomData,
+            state: true,
+        })
+    }
+
+    fn process(&mut self, _ctx: &CuContext, _new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+        unimplemented!(
+            "A placeholder for sim was called for a multi-output source, you need answer SimOverride to ExecutedBySim for the Process step."
+        )
+    }
+}
+
+impl<O> CuSimSrcTaskPack<O> {
+    /// Placeholder hook for simulation-driven multi-output sources.
     pub fn sim_tick(&mut self) {}
 }
 
