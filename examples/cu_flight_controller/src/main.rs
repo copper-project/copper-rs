@@ -52,7 +52,7 @@ static mut LAST_HARDFAULT: HardFaultSnapshot = HardFaultSnapshot {
     afsr: 0,
 };
 
-#[copper_runtime(config = "copperconfig.ron")]
+#[copper_runtime(config = "multi_copper.ron", subsystem = "mcu")]
 struct FlightControllerApp {}
 
 #[defmt::panic_handler]
