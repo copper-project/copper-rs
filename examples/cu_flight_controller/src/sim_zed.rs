@@ -1,14 +1,16 @@
-//! Simulation-only ZED2i-compatible Copper source and frame exchange.
+//! Bevy-produced data used to preempt the real ZED source in simulation.
 
 use bevy::prelude::Resource;
-use cu_sensor_payloads::{BarometerPayload, ImuPayload, MagnetometerPayload};
+use cu_sensor_payloads::{
+    BarometerPayload, CuImage, CuImageBufferFormat, ImuPayload, MagnetometerPayload,
+};
 use cu_zed::{
     ZedCalibrationBundle, ZedCameraIntrinsics, ZedConfidenceMap, ZedCoordinateSystem,
     ZedCoordinateUnit, ZedDepthMap, ZedFrameMeta, ZedNamedTransform, ZedRasterFormat,
-    ZedRigTransforms, ZedSourceOutputs,
+    ZedRigTransforms, ZedSourceOutputs, ZedStereoImages,
 };
 use cu29::prelude::*;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 
 pub(crate) const ZED_SIM_WIDTH: u32 = 320;
 pub(crate) const ZED_SIM_HEIGHT: u32 = 180;
@@ -28,17 +30,28 @@ pub(crate) struct SimZedSensors {
 #[derive(Default)]
 struct SimZedFrame {
     seq: u64,
+    left: Option<CuHandle<Vec<u8>>>,
+    right: Option<CuHandle<Vec<u8>>>,
     depth: Option<CuHandle<Vec<f32>>>,
     confidence: Option<CuHandle<Vec<f32>>>,
     sensors: Option<SimZedSensors>,
+    published_depth: Option<ZedDepthMap<Vec<f32>>>,
 }
 
-#[derive(Clone, Resource)]
+#[derive(Clone, Default, Resource)]
 pub(crate) struct SimZedFrameStore {
     inner: Arc<Mutex<SimZedFrame>>,
 }
 
 impl SimZedFrameStore {
+    pub(crate) fn set_left_image(&self, pixels: Vec<u8>) {
+        self.lock().left = Some(CuHandle::new_detached(pixels));
+    }
+
+    pub(crate) fn set_right_image(&self, pixels: Vec<u8>) {
+        self.lock().right = Some(CuHandle::new_detached(pixels));
+    }
+
     pub(crate) fn set_depth(&self, depth: Vec<f32>, confidence: Vec<f32>) {
         let mut frame = self.lock();
         frame.seq = frame.seq.wrapping_add(1);
@@ -50,13 +63,24 @@ impl SimZedFrameStore {
         self.lock().sensors = Some(sensors);
     }
 
+    pub(crate) fn publish_vitfly_depth(&self, depth: Option<&ZedDepthMap<Vec<f32>>>) {
+        self.lock().published_depth = depth.cloned();
+    }
+
+    pub(crate) fn published_depth(&self) -> Option<ZedDepthMap<Vec<f32>>> {
+        self.lock().published_depth.clone()
+    }
+
     fn snapshot(&self) -> SimZedFrame {
         let frame = self.lock();
         SimZedFrame {
             seq: frame.seq,
+            left: frame.left.clone(),
+            right: frame.right.clone(),
             depth: frame.depth.clone(),
             confidence: frame.confidence.clone(),
             sensors: frame.sensors,
+            published_depth: None,
         }
     }
 
@@ -67,116 +91,91 @@ impl SimZedFrameStore {
     }
 }
 
-pub(crate) fn sim_zed_frame_store() -> SimZedFrameStore {
-    static STORE: OnceLock<SimZedFrameStore> = OnceLock::new();
-    STORE
-        .get_or_init(|| SimZedFrameStore {
-            inner: Arc::new(Mutex::new(SimZedFrame::default())),
-        })
-        .clone()
-}
+pub(crate) fn write_source_outputs(
+    clock: &RobotClock,
+    store: &SimZedFrameStore,
+    static_state_sent: &mut bool,
+    output: &mut ZedSourceOutputs,
+) {
+    let (stereo, depth, confidence, calibration, transforms, imu, mag, baro, meta) = output;
+    let frame = store.snapshot();
+    let now = clock.now();
+    let tov = Tov::Time(now);
 
-#[derive(Reflect)]
-#[reflect(from_reflect = false)]
-pub struct SimZed2iSource {
-    #[reflect(ignore)]
-    store: SimZedFrameStore,
-    static_state_sent: bool,
-}
-
-impl Freezable for SimZed2iSource {
-    fn freeze<E: cu29::bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> Result<(), cu29::bincode::error::EncodeError> {
-        cu29::bincode::Encode::encode(&self.static_state_sent, encoder)
-    }
-
-    fn thaw<D: cu29::bincode::de::Decoder>(
-        &mut self,
-        decoder: &mut D,
-    ) -> Result<(), cu29::bincode::error::DecodeError> {
-        self.static_state_sent = cu29::bincode::Decode::decode(decoder)?;
-        Ok(())
-    }
-}
-
-impl CuSrcTask for SimZed2iSource {
-    type Resources<'r> = ();
-    type Output<'m> = ZedSourceOutputs;
-
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
-        Ok(Self {
-            store: sim_zed_frame_store(),
-            static_state_sent: false,
-        })
-    }
-
-    fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
-        let (stereo, depth, confidence, calibration, transforms, imu, mag, baro, meta) = output;
-        let frame = self.store.snapshot();
-        let tov = Tov::Time(ctx.now());
-
+    if let (Some(left), Some(right)) = (frame.left, frame.right) {
+        let mut left = CuImage::new(image_format(), left);
+        let mut right = CuImage::new(image_format(), right);
+        left.seq = frame.seq;
+        right.seq = frame.seq;
+        stereo.set_payload(ZedStereoImages { left, right });
+    } else {
         stereo.clear_payload();
-        stereo.tov = tov;
+    }
+    stereo.tov = tov;
 
-        if let Some(depth_handle) = frame.depth {
-            let mut payload = ZedDepthMap::new(raster_format(), depth_handle);
-            payload.seq = frame.seq;
-            depth.set_payload(payload);
-        } else {
-            depth.clear_payload();
-        }
-        depth.tov = tov;
+    if let Some(depth_handle) = frame.depth {
+        let mut payload = ZedDepthMap::new(raster_format(), depth_handle);
+        payload.seq = frame.seq;
+        depth.set_payload(payload);
+    } else {
+        depth.clear_payload();
+    }
+    depth.tov = tov;
 
-        if let Some(confidence_handle) = frame.confidence {
-            let mut payload = ZedConfidenceMap::new(raster_format(), confidence_handle);
-            payload.seq = frame.seq;
-            confidence.set_payload(payload);
-        } else {
-            confidence.clear_payload();
-        }
-        confidence.tov = tov;
+    if let Some(confidence_handle) = frame.confidence {
+        let mut payload = ZedConfidenceMap::new(raster_format(), confidence_handle);
+        payload.seq = frame.seq;
+        confidence.set_payload(payload);
+    } else {
+        confidence.clear_payload();
+    }
+    confidence.tov = tov;
 
-        if self.static_state_sent {
-            calibration.set_payload(CuLatchedStateUpdate::NoChange);
-            transforms.set_payload(CuLatchedStateUpdate::NoChange);
-        } else {
-            calibration.set_payload(CuLatchedStateUpdate::Set(calibration_bundle()));
-            transforms.set_payload(CuLatchedStateUpdate::Set(rig_transforms()));
-            self.static_state_sent = true;
-        }
-        calibration.tov = tov;
-        transforms.tov = tov;
+    if *static_state_sent {
+        calibration.set_payload(CuLatchedStateUpdate::NoChange);
+        transforms.set_payload(CuLatchedStateUpdate::NoChange);
+    } else {
+        calibration.set_payload(CuLatchedStateUpdate::Set(calibration_bundle()));
+        transforms.set_payload(CuLatchedStateUpdate::Set(rig_transforms()));
+        *static_state_sent = true;
+    }
+    calibration.tov = tov;
+    transforms.tov = tov;
 
-        if let Some(sensors) = frame.sensors {
-            imu.set_payload(sensors.imu);
-            mag.set_payload(sensors.magnetometer);
-            baro.set_payload(sensors.barometer);
-        } else {
-            imu.clear_payload();
-            mag.clear_payload();
-            baro.clear_payload();
-        }
-        imu.tov = tov;
-        mag.tov = tov;
-        baro.tov = tov;
+    if let Some(sensors) = frame.sensors {
+        imu.set_payload(sensors.imu);
+        mag.set_payload(sensors.magnetometer);
+        baro.set_payload(sensors.barometer);
+    } else {
+        imu.clear_payload();
+        mag.clear_payload();
+        baro.clear_payload();
+    }
+    imu.tov = tov;
+    mag.tov = tov;
+    baro.tov = tov;
 
-        meta.set_payload(ZedFrameMeta {
-            seq: frame.seq,
-            image_timestamp_ns: ctx.now().as_nanos(),
-            current_timestamp_ns: ctx.now().as_nanos(),
-            current_fps: ZED_SIM_DEPTH_FPS as f32,
-            camera_moving_state: Some(1),
-            image_sync_trigger: Some(0),
-            imu_temp_c: Some(29.0),
-            barometer_temp_c: Some(25.0),
-            onboard_left_temp_c: Some(31.0),
-            onboard_right_temp_c: Some(31.0),
-        });
-        meta.tov = tov;
+    meta.set_payload(ZedFrameMeta {
+        seq: frame.seq,
+        image_timestamp_ns: now.as_nanos(),
+        current_timestamp_ns: now.as_nanos(),
+        current_fps: ZED_SIM_DEPTH_FPS as f32,
+        camera_moving_state: Some(1),
+        image_sync_trigger: Some(0),
+        imu_temp_c: Some(29.0),
+        barometer_temp_c: Some(25.0),
+        onboard_left_temp_c: Some(31.0),
+        onboard_right_temp_c: Some(31.0),
+    });
+    meta.tov = tov;
+}
 
-        Ok(())
+fn image_format() -> CuImageBufferFormat {
+    CuImageBufferFormat {
+        width: ZED_SIM_WIDTH,
+        height: ZED_SIM_HEIGHT,
+        stride: ZED_SIM_WIDTH * 4,
+        pixel_format: *b"RGBA",
     }
 }
 
@@ -267,5 +266,12 @@ mod tests {
         assert_eq!(calibration.stereo_translation_m[0], ZED_SIM_BASELINE_M);
         assert!(calibration.left.fx > 0.0);
         assert!(calibration.left.fy > 0.0);
+    }
+
+    #[test]
+    fn zed2i_sim_image_format_is_rgba() {
+        let format = image_format();
+        assert_eq!(format.pixel_format, *b"RGBA");
+        assert_eq!(format.stride, ZED_SIM_WIDTH * 4);
     }
 }

@@ -1,54 +1,9 @@
 use cu29::prelude::*;
 
+mod compute_tasks;
+
 mod tasks {
-    use cu29::prelude::*;
-
-    /// Compile-only source that keeps the compute subsystem graph valid until the
-    /// real `cu_zed::Zed` source is wired in.
-    #[derive(Reflect)]
-    pub struct ComputeHeartbeatSource;
-
-    impl Freezable for ComputeHeartbeatSource {}
-
-    impl CuSrcTask for ComputeHeartbeatSource {
-        type Resources<'r> = ();
-        type Output<'m> = output_msg!(u64);
-
-        fn new(
-            _config: Option<&ComponentConfig>,
-            _resources: Self::Resources<'_>,
-        ) -> CuResult<Self> {
-            Ok(Self)
-        }
-
-        fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
-            output.set_payload(ctx.cl_id());
-            output.tov = Tov::Time(ctx.now());
-            Ok(())
-        }
-    }
-
-    /// Terminal placeholder for the compute-local graph.
-    #[derive(Reflect)]
-    pub struct ComputeHeartbeatSink;
-
-    impl Freezable for ComputeHeartbeatSink {}
-
-    impl CuSinkTask for ComputeHeartbeatSink {
-        type Resources<'r> = ();
-        type Input<'m> = input_msg!(u64);
-
-        fn new(
-            _config: Option<&ComponentConfig>,
-            _resources: Self::Resources<'_>,
-        ) -> CuResult<Self> {
-            Ok(Self)
-        }
-
-        fn process(&mut self, _ctx: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
-            Ok(())
-        }
-    }
+    pub use crate::compute_tasks::*;
 }
 
 #[cfg(not(feature = "end2end"))]

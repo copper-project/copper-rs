@@ -33,15 +33,15 @@ end2end:
   cd "{{ROOT}}"
   cargo run -p cu-flight-controller --no-default-features --features end2end --bin quad-compute
 
-# Render copperconfig.ron from the current working directory.
-dag mission="":
+# Render the complete two-subsystem deployment by default.
+dag config="multi_copper_end2end.ron" mission="":
   #!/usr/bin/env bash
   set -euo pipefail
 
   invocation_dir="{{invocation_directory()}}"
-  cfg_path="${invocation_dir}/copperconfig.ron"
+  cfg_path="${invocation_dir}/{{config}}"
   if [[ ! -f "$cfg_path" ]]; then
-    echo "No copperconfig.ron found in ${invocation_dir}" >&2
+    echo "No Copper config found at ${cfg_path}" >&2
     exit 1
   fi
 

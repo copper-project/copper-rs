@@ -1,6 +1,7 @@
 #[cfg(feature = "sim")]
 extern crate alloc;
 
+mod compute_tasks;
 #[cfg(feature = "sim")]
 mod messages;
 #[cfg(feature = "sim")]
@@ -251,8 +252,8 @@ mod mcu_copper {
 mod compute_copper {
     use super::*;
 
-    pub mod sim_zed {
-        pub use crate::sim_zed::*;
+    pub mod tasks {
+        pub use crate::compute_tasks::*;
     }
 
     #[copper_runtime(
@@ -264,24 +265,54 @@ mod compute_copper {
 
     pub(super) struct Runtime {
         app: default::FlightComputeSim,
+        zed_store: sim_zed::SimZedFrameStore,
+        zed_static_state_sent: bool,
     }
 
     impl Runtime {
-        pub(super) fn new(clock: &RobotClock) -> Self {
+        pub(super) fn new(clock: &RobotClock, zed_store: sim_zed::SimZedFrameStore) -> Self {
             let app = default::FlightComputeSim::builder()
                 .with_clock(clock.clone())
                 .with_sim_callback(&mut default_callback)
                 .build()
                 .expect("failed to create compute runtime");
-            Self { app }
+            Self {
+                app,
+                zed_store,
+                zed_static_state_sent: false,
+            }
         }
 
         pub(super) fn start(&mut self) -> CuResult<()> {
             self.app.start_all_tasks(&mut default_callback)
         }
 
-        pub(super) fn run_iteration(&mut self) -> CuResult<()> {
-            self.app.run_one_iteration(&mut default_callback)
+        pub(super) fn run_iteration(&mut self, clock: &RobotClock) -> CuResult<()> {
+            let zed_store = &self.zed_store;
+            let zed_static_state_sent = &mut self.zed_static_state_sent;
+            let mut sim_callback = |step: default::SimStep| -> SimOverride {
+                match step {
+                    default::SimStep::Zed(CuTaskCallbackState::Process(_, output)) => {
+                        sim_zed::write_source_outputs(
+                            clock,
+                            zed_store,
+                            zed_static_state_sent,
+                            output,
+                        );
+                        SimOverride::ExecutedBySim
+                    }
+                    default::SimStep::Vitfly(CuTaskCallbackState::Process(input, _)) => {
+                        zed_store.publish_vitfly_depth(input.1.payload());
+                        SimOverride::ExecuteByRuntime
+                    }
+                    _ => SimOverride::ExecuteByRuntime,
+                }
+            };
+            self.app.run_one_iteration(&mut sim_callback)
+        }
+
+        pub(super) fn set_zed_sensors(&self, sensors: sim_zed::SimZedSensors) {
+            self.zed_store.set_sensors(sensors);
         }
 
         pub(super) fn stop(&mut self) -> CuResult<()> {
@@ -437,6 +468,14 @@ struct SplitSceneCamera;
 #[derive(Component)]
 struct ZedDepthCamera;
 
+#[derive(Component)]
+struct ZedRightCamera;
+
+type ZedCameraFilter = (
+    Without<Multicopter>,
+    bevy::ecs::query::Or<(With<ZedDepthCamera>, With<ZedRightCamera>)>,
+);
+
 #[derive(Clone, Resource)]
 struct ZedDepthTexture(Handle<Image>);
 
@@ -449,7 +488,10 @@ impl ExtractResource for ZedDepthTexture {
 }
 
 #[derive(Resource)]
-struct ZedDepthPreview(Handle<Image>);
+struct ZedDepthPreview {
+    image: Handle<Image>,
+    last_seq: Option<u64>,
+}
 
 #[derive(Component)]
 struct SceneLoadingOverlay;
@@ -965,17 +1007,22 @@ type BevyMonSectionStorage = memmap::MmapSectionStorage;
 type BevyMonUnifiedLogger = UnifiedLoggerWrite;
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "sim"))]
-fn setup_copper(mut commands: Commands) {
+fn setup_copper(mut commands: Commands, zed_store: Res<sim_zed::SimZedFrameStore>) {
     #[allow(clippy::identity_op)]
     const LOG_SLAB_SIZE: Option<usize> = Some(128 * 1024 * 1024);
     commands.insert_resource(build_sim_copper_state(
         Path::new("logs/flight_controller_sim.copper"),
         LOG_SLAB_SIZE,
+        zed_store.clone(),
     ));
 }
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "sim"))]
-fn build_sim_copper_state(logger_path: &Path, log_slab_size: Option<usize>) -> CopperState {
+fn build_sim_copper_state(
+    logger_path: &Path,
+    log_slab_size: Option<usize>,
+    zed_store: sim_zed::SimZedFrameStore,
+) -> CopperState {
     if let Some(parent) = logger_path.parent()
         && !parent.exists()
     {
@@ -984,7 +1031,7 @@ fn build_sim_copper_state(logger_path: &Path, log_slab_size: Option<usize>) -> C
 
     let (clock, clock_mock) = RobotClock::mock();
     let mut mcu = mcu_copper::Runtime::with_log_path(&clock, logger_path, log_slab_size);
-    let mut compute = compute_copper::Runtime::new(&clock);
+    let mut compute = compute_copper::Runtime::new(&clock, zed_store);
 
     mcu.start().expect("failed to start tasks");
     compute.start().expect("failed to start compute tasks");
@@ -998,7 +1045,7 @@ fn build_sim_copper_state(logger_path: &Path, log_slab_size: Option<usize>) -> C
 }
 
 #[cfg(feature = "bevymon")]
-fn build_bevymon_copper() -> (MonitorModel, CopperState) {
+fn build_bevymon_copper(zed_store: sim_zed::SimZedFrameStore) -> (MonitorModel, CopperState) {
     #[allow(clippy::identity_op)]
     const LOG_SLAB_SIZE: Option<usize> = Some(128 * 1024 * 1024);
 
@@ -1006,7 +1053,7 @@ fn build_bevymon_copper() -> (MonitorModel, CopperState) {
     let unified_logger = build_unified_logger(LOG_SLAB_SIZE).expect("failed to create logger");
 
     let mut mcu = mcu_copper::Runtime::with_bevymon_logger(&clock, unified_logger);
-    let mut compute = compute_copper::Runtime::new(&clock);
+    let mut compute = compute_copper::Runtime::new(&clock, zed_store);
 
     mcu.start().expect("failed to start tasks");
     compute.start().expect("failed to start compute tasks");
@@ -1063,6 +1110,24 @@ fn build_unified_logger(
 }
 
 const ZED_DEPTH_CAMERA_ORDER: isize = -2;
+const ZED_RIGHT_CAMERA_ORDER: isize = -1;
+
+fn zed_color_texture() -> Image {
+    let mut image = Image::new_fill(
+        Extent3d {
+            width: sim_zed::ZED_SIM_WIDTH,
+            height: sim_zed::ZED_SIM_HEIGHT,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        &[0, 0, 0, 255],
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::all(),
+    );
+    image.texture_descriptor.usage =
+        TextureUsages::RENDER_ATTACHMENT | TextureUsages::COPY_SRC | TextureUsages::TEXTURE_BINDING;
+    image
+}
 
 fn zed_depth_texture() -> Image {
     let mut image = Image::new_uninit(
@@ -1137,12 +1202,7 @@ fn copy_zed_depth_texture(
     );
 }
 
-fn capture_zed_depth(
-    event: On<ReadbackComplete>,
-    store: Res<sim_zed::SimZedFrameStore>,
-    preview: Res<ZedDepthPreview>,
-    mut images: ResMut<Assets<Image>>,
-) {
+fn capture_zed_depth(event: On<ReadbackComplete>, store: Res<sim_zed::SimZedFrameStore>) {
     let pixel_count = (sim_zed::ZED_SIM_WIDTH * sim_zed::ZED_SIM_HEIGHT) as usize;
     if event.data.len() != pixel_count * size_of::<f32>() {
         return;
@@ -1150,26 +1210,70 @@ fn capture_zed_depth(
 
     let mut depth = Vec::with_capacity(pixel_count);
     let mut confidence = Vec::with_capacity(pixel_count);
-    let mut preview_pixels = Vec::with_capacity(pixel_count * 4);
     for bytes in event.data.chunks_exact(size_of::<f32>()) {
         let reverse_z = f32::from_ne_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-        let distance = if reverse_z > 0.0 {
-            sim_zed::ZED_SIM_NEAR_M / reverse_z
-        } else {
-            f32::NAN
-        };
+        let distance = zed_reverse_z_to_distance(reverse_z);
         let valid = distance.is_finite() && distance <= sim_zed::ZED_SIM_MAX_DEPTH_M;
         depth.push(if valid { distance } else { f32::NAN });
         confidence.push(if valid { 0.0 } else { 100.0 });
-        preview_pixels.extend_from_slice(&depth_preview_color(distance));
     }
 
-    if let Some(mut preview_image) = images.get_mut(&preview.0)
-        && let Some(pixels) = preview_image.data.as_mut()
-    {
-        pixels.copy_from_slice(&preview_pixels);
-    }
     store.set_depth(depth, confidence);
+}
+
+fn zed_reverse_z_to_distance(reverse_z: f32) -> f32 {
+    if reverse_z <= 0.0 {
+        return f32::NAN;
+    }
+    let near = sim_zed::ZED_SIM_NEAR_M;
+    let far = sim_zed::ZED_SIM_MAX_DEPTH_M;
+    (near * far) / (near + reverse_z * (far - near))
+}
+
+fn capture_zed_left_image(event: On<ReadbackComplete>, store: Res<sim_zed::SimZedFrameStore>) {
+    let expected_len = (sim_zed::ZED_SIM_WIDTH * sim_zed::ZED_SIM_HEIGHT * 4) as usize;
+    if event.data.len() == expected_len {
+        store.set_left_image(event.data.to_vec());
+    }
+}
+
+fn capture_zed_right_image(event: On<ReadbackComplete>, store: Res<sim_zed::SimZedFrameStore>) {
+    let expected_len = (sim_zed::ZED_SIM_WIDTH * sim_zed::ZED_SIM_HEIGHT * 4) as usize;
+    if event.data.len() == expected_len {
+        store.set_right_image(event.data.to_vec());
+    }
+}
+
+fn update_zed_depth_preview(
+    store: Res<sim_zed::SimZedFrameStore>,
+    mut preview: ResMut<ZedDepthPreview>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    let Some(depth) = store.published_depth() else {
+        return;
+    };
+    if preview.last_seq == Some(depth.seq) {
+        return;
+    }
+
+    let preview_pixels = depth.buffer_handle.with_inner(|values| {
+        let mut pixels = Vec::with_capacity(values.len() * 4);
+        for &distance in values.iter() {
+            pixels.extend_from_slice(&depth_preview_color(distance));
+        }
+        pixels
+    });
+    let Some(mut preview_image) = images.get_mut(&preview.image) else {
+        return;
+    };
+    let Some(pixels) = preview_image.data.as_mut() else {
+        return;
+    };
+    if pixels.len() != preview_pixels.len() {
+        return;
+    }
+    pixels.copy_from_slice(&preview_pixels);
+    preview.last_seq = Some(depth.seq);
 }
 
 fn depth_preview_color(distance: f32) -> [u8; 4] {
@@ -1267,18 +1371,21 @@ fn setup_world(
 
     let depth_texture = images.add(zed_depth_texture());
     let depth_preview = images.add(zed_depth_preview());
+    let left_image = images.add(zed_color_texture());
+    let right_image = images.add(zed_color_texture());
     commands.insert_resource(ZedDepthTexture(depth_texture.clone()));
-    commands.insert_resource(ZedDepthPreview(depth_preview));
+    commands.insert_resource(ZedDepthPreview {
+        image: depth_preview,
+        last_seq: None,
+    });
     commands.spawn((
-        Name::new("zed2i-depth-camera"),
+        Name::new("zed2i-left-depth-camera"),
         Camera3d::default(),
         Camera {
             order: ZED_DEPTH_CAMERA_ORDER,
             ..default()
         },
-        RenderTarget::None {
-            size: UVec2::new(sim_zed::ZED_SIM_WIDTH, sim_zed::ZED_SIM_HEIGHT),
-        },
+        RenderTarget::Image(left_image.clone().into()),
         Projection::Perspective(PerspectiveProjection {
             fov: sim_zed::ZED_SIM_VERTICAL_FOV_DEG.to_radians(),
             near: sim_zed::ZED_SIM_NEAR_M,
@@ -1290,12 +1397,42 @@ fn setup_world(
         Transform::from_xyz(0.0, 1.0, 0.0),
         ZedDepthCamera,
     ));
+    commands.spawn((
+        Name::new("zed2i-right-camera"),
+        Camera3d::default(),
+        Camera {
+            order: ZED_RIGHT_CAMERA_ORDER,
+            ..default()
+        },
+        RenderTarget::Image(right_image.clone().into()),
+        Projection::Perspective(PerspectiveProjection {
+            fov: sim_zed::ZED_SIM_VERTICAL_FOV_DEG.to_radians(),
+            near: sim_zed::ZED_SIM_NEAR_M,
+            far: sim_zed::ZED_SIM_MAX_DEPTH_M,
+            ..default()
+        }),
+        Msaa::Off,
+        Transform::from_xyz(0.0, 1.0, 0.0),
+        ZedRightCamera,
+    ));
     commands
         .spawn((
             Name::new("zed2i-depth-readback"),
             Readback::texture(depth_texture),
         ))
         .observe(capture_zed_depth);
+    commands
+        .spawn((
+            Name::new("zed2i-left-readback"),
+            Readback::texture(left_image),
+        ))
+        .observe(capture_zed_left_image);
+    commands
+        .spawn((
+            Name::new("zed2i-right-readback"),
+            Readback::texture(right_image),
+        ))
+        .observe(capture_zed_right_image);
 
     commands.spawn((
         Name::new("sun"),
@@ -1657,7 +1794,7 @@ fn spawn_zed_overlay(
                         ..default()
                     },
                     Pickable::IGNORE,
-                    ImageNode::new(preview_image.0.clone()),
+                    ImageNode::new(preview_image.image.clone()),
                 ));
             });
     });
@@ -1995,7 +2132,7 @@ fn run_copper_iteration(
     let body_mag = vehicle.rotation.inverse() * world_mag;
     let altitude_m = vehicle.position.y.max(-100.0);
     let pressure_pa = 101_325.0 * (1.0 - altitude_m / 44_330.0).powf(5.255);
-    sim_zed::sim_zed_frame_store().set_sensors(sim_zed::SimZedSensors {
+    copper.compute.set_zed_sensors(sim_zed::SimZedSensors {
         imu: ImuPayload::from_raw(vehicle.body_accel_fc, vehicle.body_gyro_fc, 29.0),
         magnetometer: MagnetometerPayload::from_raw(map_bevy_body_to_fc_magnetometer(body_mag)),
         barometer: BarometerPayload::from_raw(pressure_pa, 25.0),
@@ -2003,7 +2140,7 @@ fn run_copper_iteration(
     copper
         .mcu
         .run_iteration(&copper.clock, vehicle, rc, motor_commands, osd_overlay)?;
-    copper.compute.run_iteration()
+    copper.compute.run_iteration(&copper.clock)
 }
 
 fn apply_multicopter_dynamics(
@@ -2081,18 +2218,23 @@ fn camera_follow_quadcopter(
 
 fn zed_camera_follow_quadcopter(
     quadcopter_query: Query<&GlobalTransform, With<Multicopter>>,
-    mut camera_query: Query<&mut Transform, (With<ZedDepthCamera>, Without<Multicopter>)>,
+    mut cameras: Query<(&mut Transform, Option<&ZedDepthCamera>), ZedCameraFilter>,
 ) {
     let Ok(quad_tf) = quadcopter_query.single() else {
         return;
     };
-    let Ok(mut camera_tf) = camera_query.single_mut() else {
-        return;
-    };
+    let camera_center = quad_tf.translation() + 0.08 * quad_tf.up() + 0.16 * quad_tf.forward();
+    let half_baseline = sim_zed::ZED_SIM_BASELINE_M * 0.5;
 
-    camera_tf.translation = quad_tf.translation() + 0.08 * quad_tf.up() + 0.16 * quad_tf.forward()
-        - 0.5 * sim_zed::ZED_SIM_BASELINE_M * quad_tf.right();
-    *camera_tf = camera_tf.looking_to(quad_tf.forward(), quad_tf.up());
+    for (mut camera, left) in &mut cameras {
+        let horizontal_offset = if left.is_some() {
+            -half_baseline
+        } else {
+            half_baseline
+        };
+        camera.translation = camera_center + horizontal_offset * quad_tf.right();
+        *camera = camera.looking_to(quad_tf.forward(), quad_tf.up());
+    }
 }
 
 fn update_quadcopter_visibility(
@@ -2611,13 +2753,19 @@ fn sync_loading_overlay(
 }
 
 pub fn build_world(headless: bool, split_monitor: bool) -> App {
-    build_world_with_assets(headless, split_monitor, None)
+    build_world_with_assets(
+        headless,
+        split_monitor,
+        None,
+        sim_zed::SimZedFrameStore::default(),
+    )
 }
 
 fn build_world_with_assets(
     headless: bool,
     split_monitor: bool,
     scene_assets: Option<SceneAssetPaths>,
+    zed_store: sim_zed::SimZedFrameStore,
 ) -> App {
     let mut app = App::new();
     app.insert_resource(SimState::default())
@@ -2628,7 +2776,7 @@ fn build_world_with_assets(
         .insert_resource(SimJoystickState::default())
         .insert_resource(CameraView::default())
         .insert_resource(SimOsdOverlay::default())
-        .insert_resource(sim_zed::sim_zed_frame_store())
+        .insert_resource(zed_store)
         .init_resource::<OsdRasterSource>()
         .insert_resource(WorldLayout { split_monitor })
         .init_resource::<SceneLoadState>()
@@ -2696,6 +2844,7 @@ fn build_world_with_assets(
                 update_quadcopter_visibility,
                 camera_follow_quadcopter,
                 zed_camera_follow_quadcopter,
+                update_zed_depth_preview,
                 track_sim_led_state,
                 update_help_overlay,
                 prepare_osd_raster_source,
@@ -2713,7 +2862,8 @@ fn build_world_with_assets(
 #[cfg(feature = "sim")]
 pub fn run_sim() {
     let scene_assets = prepare_scene_assets();
-    let mut app = build_world_with_assets(false, false, Some(scene_assets));
+    let zed_store = sim_zed::SimZedFrameStore::default();
+    let mut app = build_world_with_assets(false, false, Some(scene_assets), zed_store);
     #[cfg(not(target_arch = "wasm32"))]
     {
         app.add_systems(Startup, setup_copper);
@@ -2731,9 +2881,10 @@ pub fn run_sim() {
 #[cfg(feature = "bevymon")]
 pub fn run_bevymon() {
     let scene_assets = prepare_scene_assets();
-    let (monitor_model, copper) = build_bevymon_copper();
+    let zed_store = sim_zed::SimZedFrameStore::default();
+    let (monitor_model, copper) = build_bevymon_copper(zed_store.clone());
 
-    let mut app = build_world_with_assets(false, true, Some(scene_assets));
+    let mut app = build_world_with_assets(false, true, Some(scene_assets), zed_store);
     app.insert_resource(copper)
         .init_resource::<LayoutSpawned>()
         .add_plugins(
@@ -2786,11 +2937,24 @@ mod tests {
         );
     }
 
+    #[test]
+    fn zed_reverse_z_depth_is_linearized_in_meters() {
+        let near = sim_zed::ZED_SIM_NEAR_M;
+        let far = sim_zed::ZED_SIM_MAX_DEPTH_M;
+        assert!((zed_reverse_z_to_distance(1.0) - near).abs() < f32::EPSILON);
+        assert!(zed_reverse_z_to_distance(0.0).is_nan());
+
+        let expected_distance = 5.0;
+        let reverse_z = near * (far - expected_distance) / (expected_distance * (far - near));
+        assert!((zed_reverse_z_to_distance(reverse_z) - expected_distance).abs() < 1.0e-4);
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     fn build_test_copper_state() -> CopperState {
         let (clock, clock_mock) = RobotClock::mock();
         let mut mcu = mcu_copper::Runtime::without_logger(&clock);
-        let mut compute = compute_copper::Runtime::new(&clock);
+        let mut compute =
+            compute_copper::Runtime::new(&clock, sim_zed::SimZedFrameStore::default());
 
         mcu.start().expect("failed to start tasks");
         compute.start().expect("failed to start compute tasks");
@@ -2887,6 +3051,40 @@ mod tests {
         copper.compute.stop().expect("failed to stop compute tasks");
         copper
             .compute
+            .log_shutdown_completed()
+            .expect("failed to log compute shutdown");
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn simulated_zed_outputs_reach_vitfly_input() {
+        let (clock, clock_mock) = RobotClock::mock();
+        let zed_store = sim_zed::SimZedFrameStore::default();
+        let pixel_count = (sim_zed::ZED_SIM_WIDTH * sim_zed::ZED_SIM_HEIGHT) as usize;
+        zed_store.set_left_image(vec![1; pixel_count * 4]);
+        zed_store.set_right_image(vec![2; pixel_count * 4]);
+        zed_store.set_depth(vec![3.5; pixel_count], vec![0.0; pixel_count]);
+
+        let mut compute = compute_copper::Runtime::new(&clock, zed_store.clone());
+        compute.start().expect("failed to start compute tasks");
+        clock_mock.set_value(1_000_000);
+        compute
+            .run_iteration(&clock)
+            .expect("failed to run compute iteration");
+
+        let published = zed_store
+            .published_depth()
+            .expect("VitFly input should observe simulated ZED depth");
+        assert_eq!(published.seq, 1);
+        assert_eq!(published.format.width, sim_zed::ZED_SIM_WIDTH);
+        assert_eq!(published.format.height, sim_zed::ZED_SIM_HEIGHT);
+        published.buffer_handle.with_inner(|depth| {
+            assert_eq!(depth.len(), pixel_count);
+            assert_eq!(depth[0], 3.5);
+        });
+
+        compute.stop().expect("failed to stop compute tasks");
+        compute
             .log_shutdown_completed()
             .expect("failed to log compute shutdown");
     }

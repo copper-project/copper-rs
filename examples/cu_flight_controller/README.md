@@ -11,7 +11,7 @@ The deployment is described by the multi-Copper configurations as two independen
 - `mcu`: the default flight-controller mission from `mcu_config.ron`
 - `compute`: a host graph that owns the ZED camera source
 
-The real camera is enabled by the `end2end` feature and uses `cu_zed::Zed`. The simulator uses `multi_copper_sim.ron` to start both subsystem runtimes in one Bevy process and substitutes `SimZed2iSource` on the compute side. The MCU firmware remains independent and does not enable the ZED dependency.
+The real camera is enabled by the `end2end` feature and uses `cu_zed::Zed`. The simulator starts both subsystem runtimes in one Bevy process using the same compute graph. Copper's simulation callback preempts the hardware ZED source and fills its normal outputs from Bevy. The MCU firmware remains independent and does not enable the ZED dependency.
 
 ## Hardware
 
@@ -192,12 +192,13 @@ The split BevyMon path reuses the same `cu_bevymon::spawn_split_layout(...)` she
 `cu_rp_balancebot` and `cu_bevymon_demo`, but the left panel still runs the real flight-controller
 sim world, OSD, and help overlays.
 
-The simulated compute subsystem publishes a ZED2i-compatible 320×180 depth and confidence map,
-calibration and rig transforms, plus IMU, magnetometer, barometer, and frame metadata. Its stereo
-image output is intentionally empty: the sim renders one GPU depth-only camera instead of two
-color cameras. The top-right inset shows that live depth map; the bottom-right help overlay remains
-unchanged. GPU rendering and asynchronous readback are confined to Bevy simulation systems,
-while the Copper source publishes cloned `CuHandle` references in its process path.
+The simulated compute subsystem publishes ZED2i-compatible 320×180 stereo RGBA images, depth and
+confidence maps, calibration and rig transforms, plus IMU, magnetometer, barometer, and frame
+metadata. Bevy performs the camera rendering and GPU depth readback; the simulator injects those
+buffers into the preempted `cu_zed::Zed` source. The compute graph routes stereo and depth into the
+placeholder `NoopVitFlyTask`. The top-right inset is reconstructed from the depth map observed at
+that ML task's Copper input, so it displays the same payload the future inference implementation
+will consume.
 
 ### RC Input In Simulation
 

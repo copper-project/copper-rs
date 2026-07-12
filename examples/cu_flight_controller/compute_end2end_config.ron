@@ -3,12 +3,25 @@
         (
             id: "compute_heartbeat",
             type: "tasks::ComputeHeartbeatSource",
+            run_in_sim: true,
         ),
         (
             id: "compute_heartbeat_sink",
             type: "tasks::ComputeHeartbeatSink",
+            run_in_sim: true,
         ),
-        (id: "zed", type: "cu_zed::Zed"),
+        (
+            id: "zed",
+            type: "cu_zed::Zed",
+            run_in_sim: false,
+            logging: (enabled: false),
+        ),
+        (
+            id: "vitfly",
+            type: "tasks::NoopVitFlyTask",
+            kind: task,
+            logging: (enabled: false),
+        ),
     ],
     cnx: [
         (
@@ -18,13 +31,18 @@
         ),
         (
             src: "zed",
-            dst: "__nc__",
+            dst: "vitfly",
             msg: "cu_zed::ZedStereoImages",
         ),
         (
             src: "zed",
-            dst: "__nc__",
+            dst: "vitfly",
             msg: "cu_zed::ZedDepthMap<Vec<f32>>",
+        ),
+        (
+            src: "vitfly",
+            dst: "__nc__",
+            msg: "()",
         ),
         (
             src: "zed",
