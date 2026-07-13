@@ -65,7 +65,7 @@ sim:
   #!/usr/bin/env bash
   set -euo pipefail
   cd "{{ROOT}}"
-  cargo run -p cu-flight-controller --no-default-features --features sim --bin quad-sim
+  cargo --config examples/cu_flight_controller/.cargo/config.toml run -p cu-flight-controller --no-default-features --features sim --bin quad-sim
 
 # Run the simulator with ViTFly inference on NVIDIA CUDA.
 sim-cuda:
@@ -88,7 +88,7 @@ resim debug_base="copper/examples/cu_flight_controller/debug/v1" log="logs/fligh
     replay_log="${invocation_dir}/${replay_log}"
   fi
   cd "{{ROOT}}"
-  cargo run -p cu-flight-controller --no-default-features --features sim-debug --bin quad-resim -- \
+  cargo --config examples/cu_flight_controller/.cargo/config.toml run -p cu-flight-controller --no-default-features --features sim-debug --bin quad-resim -- \
     --debug-base "{{debug_base}}" \
     --log-base "$log" \
     --replay-log-base "$replay_log"
@@ -107,7 +107,7 @@ resim-debug debug_base="copper/examples/cu_flight_controller/debug/v1" log="logs
     replay_log="${invocation_dir}/${replay_log}"
   fi
   cd "{{ROOT}}"
-  cargo run -p cu-flight-controller --no-default-features --features sim-debug --bin quad-resim -- \
+  cargo --config examples/cu_flight_controller/.cargo/config.toml run -p cu-flight-controller --no-default-features --features sim-debug --bin quad-resim -- \
     --debug-base "{{debug_base}}" \
     --log-base "$log" \
     --replay-log-base "$replay_log"

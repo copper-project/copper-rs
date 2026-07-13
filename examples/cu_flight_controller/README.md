@@ -199,6 +199,10 @@ buffers into the preempted `cu_zed::Zed` source. The compute graph runs ViTFly i
 by default and draws its predicted velocity over the top-right depth inset. Use `just sim-cuda` to
 run the same graph with ViTFly inference on NVIDIA CUDA.
 
+CPU runs use `RAYON_NUM_THREADS=8` from the checked-in `.cargo/config.toml`. Making the pool size
+explicit prevents Candle from repeatedly probing Linux CPU topology while retaining parallelism for
+Bevy and Avian. The setting is scoped to this example, and an existing shell value takes precedence.
+
 ### RC Input In Simulation
 
 The simulator reads RC input from a host joystick device (`evdev`). By default it only auto-connects to

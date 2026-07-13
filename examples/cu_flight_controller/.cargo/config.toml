@@ -1,0 +1,4 @@
+[env]
+# Candle 0.11 reads this value for every CPU GEMM. Keeping it explicit avoids
+# repeated Linux CPU-topology scans while retaining parallelism for Bevy/Avian.
+RAYON_NUM_THREADS = { value = "8", force = false }
