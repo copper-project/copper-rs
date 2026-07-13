@@ -143,7 +143,39 @@ resolver = "2"
 [profile.release]
 debug = 2
 
+# Keep normal application code debuggable while compiling the CPU inference
+# hot path with the optimizations it requires. Cargo profiles declared by the
+# git dependency itself are ignored, so these overrides belong at the workspace
+# root.
+[profile.dev.package.cu-vitfly]
+opt-level = 3
+
+[profile.dev.package.candle-core]
+opt-level = 3
+
+[profile.dev.package.candle-nn]
+opt-level = 3
+
+[profile.dev.package."gemm:0.19.0"]
+opt-level = 3
+
+[profile.dev.package."gemm-common:0.19.0"]
+opt-level = 3
+
+[profile.dev.package."gemm-f32:0.19.0"]
+opt-level = 3
+
+[profile.dev.package."pulp:0.22.3"]
+opt-level = 3
+
+[profile.dev.package.rayon]
+opt-level = 3
+
+[profile.dev.package.rayon-core]
+opt-level = 3
+
 [patch.crates-io]
+cu-ahrs = { path = "components/tasks/cu_ahrs" }
 cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads" }
 cu-transform = { path = "components/libs/cu_transform" }
 cu29 = { path = "core/cu29" }

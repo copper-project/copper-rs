@@ -4,19 +4,7 @@ ROOT := shell('cd "$1/../.." && pwd', justfile_directory())
 default: sim
 
 # Compile both independent multi-Copper subsystem targets.
-subsystems-check:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  cd "{{ROOT}}"
-  cargo check -p cu-flight-controller --no-default-features --features compute --bin quad-compute
-  cargo check --config examples/cu_flight_controller/.cargo/config-firmware.toml --no-default-features --features firmware -p cu-flight-controller --bin quad
-
-# Run the onboard-compute Copper placeholder graph.
-compute:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  cd "{{ROOT}}"
-  cargo run -p cu-flight-controller --no-default-features --features compute --bin quad-compute
+subsystems-check: end2end-check
 
 # Compile the ZED-enabled compute graph and the independent MCU firmware graph.
 end2end-check:
@@ -34,7 +22,7 @@ end2end:
   cargo run -p cu-flight-controller --no-default-features --features end2end --bin quad-compute
 
 # Render the complete two-subsystem deployment by default.
-dag config="multi_copper_end2end.ron" mission="":
+dag config="multi_copper.ron" mission="":
   #!/usr/bin/env bash
   set -euo pipefail
 
@@ -65,7 +53,14 @@ sim:
   #!/usr/bin/env bash
   set -euo pipefail
   cd "{{ROOT}}"
-  cargo run -p cu-flight-controller --no-default-features --features sim --bin quad-sim
+  cargo --config examples/cu_flight_controller/.cargo/config.toml run -p cu-flight-controller --no-default-features --features sim --bin quad-sim
+
+# Run the simulator with ViTFly inference on NVIDIA CUDA.
+sim-cuda:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo run --release -p cu-flight-controller --no-default-features --features vitfly-cuda --bin quad-sim
 
 # Run the replay-backed remote debug server for the flight controller log.
 resim debug_base="copper/examples/cu_flight_controller/debug/v1" log="logs/flight_controller_sim.copper" replay_log="logs/flight_controller_resim.copper":
@@ -81,7 +76,7 @@ resim debug_base="copper/examples/cu_flight_controller/debug/v1" log="logs/fligh
     replay_log="${invocation_dir}/${replay_log}"
   fi
   cd "{{ROOT}}"
-  cargo run -p cu-flight-controller --no-default-features --features sim-debug --bin quad-resim -- \
+  cargo --config examples/cu_flight_controller/.cargo/config.toml run -p cu-flight-controller --no-default-features --features sim-debug --bin quad-resim -- \
     --debug-base "{{debug_base}}" \
     --log-base "$log" \
     --replay-log-base "$replay_log"
@@ -100,7 +95,7 @@ resim-debug debug_base="copper/examples/cu_flight_controller/debug/v1" log="logs
     replay_log="${invocation_dir}/${replay_log}"
   fi
   cd "{{ROOT}}"
-  cargo run -p cu-flight-controller --no-default-features --features sim-debug --bin quad-resim -- \
+  cargo --config examples/cu_flight_controller/.cargo/config.toml run -p cu-flight-controller --no-default-features --features sim-debug --bin quad-resim -- \
     --debug-base "{{debug_base}}" \
     --log-base "$log" \
     --replay-log-base "$replay_log"

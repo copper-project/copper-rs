@@ -36,6 +36,8 @@ struct SimZedFrame {
     confidence: Option<CuHandle<Vec<f32>>>,
     sensors: Option<SimZedSensors>,
     published_depth: Option<ZedDepthMap<Vec<f32>>>,
+    vitfly_prediction_seq: u64,
+    vitfly_prediction_mps: Option<[f32; 3]>,
 }
 
 #[derive(Clone, Default, Resource)]
@@ -71,6 +73,18 @@ impl SimZedFrameStore {
         self.lock().published_depth.clone()
     }
 
+    #[cfg(feature = "sim")]
+    pub(crate) fn publish_vitfly_prediction(&self, prediction_mps: Option<[f32; 3]>) {
+        let mut frame = self.lock();
+        frame.vitfly_prediction_seq = frame.vitfly_prediction_seq.wrapping_add(1);
+        frame.vitfly_prediction_mps = prediction_mps;
+    }
+
+    pub(crate) fn vitfly_prediction(&self) -> (u64, Option<[f32; 3]>) {
+        let frame = self.lock();
+        (frame.vitfly_prediction_seq, frame.vitfly_prediction_mps)
+    }
+
     fn snapshot(&self) -> SimZedFrame {
         let frame = self.lock();
         SimZedFrame {
@@ -81,6 +95,8 @@ impl SimZedFrameStore {
             confidence: frame.confidence.clone(),
             sensors: frame.sensors,
             published_depth: None,
+            vitfly_prediction_seq: frame.vitfly_prediction_seq,
+            vitfly_prediction_mps: frame.vitfly_prediction_mps,
         }
     }
 

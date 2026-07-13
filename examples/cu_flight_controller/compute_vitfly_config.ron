@@ -7,16 +7,30 @@
             logging: (enabled: false),
         ),
         (
+            id: "vitfly_context",
+            type: "tasks::VitFlyContextSource",
+            run_in_sim: false,
+            logging: (enabled: false),
+        ),
+        (
             id: "vitfly",
-            type: "tasks::NoopVitFlyTask",
-            kind: task,
+            type: "cu_vitfly::VitFlyTask",
+            config: {
+                "max_depth_m": 12.5,
+                "invalid_depth": 0.8,
+            },
+            logging: (enabled: true),
+        ),
+        (
+            id: "vitfly_listener",
+            type: "tasks::VitFlySimListener",
             logging: (enabled: false),
         ),
     ],
     cnx: [
         (
             src: "zed",
-            dst: "vitfly",
+            dst: "__nc__",
             msg: "cu_zed::ZedStereoImages",
         ),
         (
@@ -25,9 +39,19 @@
             msg: "cu_zed::ZedDepthMap<Vec<f32>>",
         ),
         (
+            src: "vitfly_context",
+            dst: "vitfly",
+            msg: "cu_ahrs::AhrsPose",
+        ),
+        (
+            src: "vitfly_context",
+            dst: "vitfly",
+            msg: "cu29::units::si::f32::Velocity",
+        ),
+        (
             src: "vitfly",
-            dst: "__nc__",
-            msg: "()",
+            dst: "vitfly_listener",
+            msg: "cu_vitfly::VitFlyVelocity",
         ),
         (
             src: "zed",
@@ -66,7 +90,7 @@
         ),
     ],
     logging: (
-        enable_task_logging: false,
+        enable_task_logging: true,
         slab_size_mib: 64,
         section_size_mib: 8,
     ),

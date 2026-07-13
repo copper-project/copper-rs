@@ -72,13 +72,8 @@ RC Input (CRSF) -> RC Mapper -> Attitude Controller -> Rate Controller -> Mixer 
 just subsystems-check
 ```
 
-This checks the onboard-compute host binary and the STM32 firmware binary from the same strict multi-Copper umbrella configuration.
-
-To run the current onboard-compute placeholder graph:
-
-```bash
-just compute
-```
+This checks the real ZED-enabled onboard-compute host binary and the STM32 firmware binary from the
+same strict multi-Copper umbrella configuration.
 
 To compile or run the real ZED-enabled compute graph:
 
@@ -195,10 +190,13 @@ sim world, OSD, and help overlays.
 The simulated compute subsystem publishes ZED2i-compatible 320×180 stereo RGBA images, depth and
 confidence maps, calibration and rig transforms, plus IMU, magnetometer, barometer, and frame
 metadata. Bevy performs the camera rendering and GPU depth readback; the simulator injects those
-buffers into the preempted `cu_zed::Zed` source. The compute graph routes stereo and depth into the
-placeholder `NoopVitFlyTask`. The top-right inset is reconstructed from the depth map observed at
-that ML task's Copper input, so it displays the same payload the future inference implementation
-will consume.
+buffers into the preempted `cu_zed::Zed` source. The compute graph runs ViTFly inference on the CPU
+by default and draws its predicted velocity over the top-right depth inset. Use `just sim-cuda` to
+run the same graph with ViTFly inference on NVIDIA CUDA.
+
+CPU runs use `RAYON_NUM_THREADS=8` from the checked-in `.cargo/config.toml`. Making the pool size
+explicit prevents Candle from repeatedly probing Linux CPU topology while retaining parallelism for
+Bevy and Avian. The setting is scoped to this example, and an existing shell value takes precedence.
 
 ### RC Input In Simulation
 

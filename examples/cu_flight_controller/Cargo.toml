@@ -108,6 +108,7 @@ cortex-m = { workspace = true, features = [
 ], optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+cu-vitfly = { git = "https://github.com/copper-project/cu-vitfly.git", default-features = false, optional = true }
 cu-consolemon = { workspace = true, optional = true }
 cu-bevymon = { workspace = true, optional = true }
 cu-memmon = { path = "../../components/monitors/cu_memmon", version = "1.0.0", default-features = false, features = [
@@ -230,8 +231,13 @@ firmware = [
   "cu-ahrs/firmware",
   "cu-logmon/defmt",
 ]
-compute = ["dep:cu29", "cu29/std", "cu29/signal-handler", "cu29/sysclock-perf"]
-end2end = ["compute", "dep:cu-zed"]
+end2end = [
+  "dep:cu29",
+  "cu29/std",
+  "cu29/signal-handler",
+  "cu29/sysclock-perf",
+  "dep:cu-zed",
+]
 logreader = [
   "dep:cu29",
   "cu29/std",
@@ -262,12 +268,15 @@ python-bindings = [
 ]
 sim = [
   "sim_core",
+  "dep:cu-vitfly",
+  "cu29/reflect",
   "dep:cu-consolemon",
   "dep:cached-path",
   "dep:evdev",
   "dep:image",
   "dep:winit",
 ]
+vitfly-cuda = ["sim", "cu-vitfly/cuda"]
 sim-debug = ["sim", "cu29/reflect", "cu29/remote-debug"]
 bevymon = [
   "sim_core",
@@ -297,7 +306,7 @@ required-features = ["firmware"]
 [[bin]]
 name = "quad-compute"
 path = "src/compute.rs"
-required-features = ["compute"]
+required-features = ["end2end"]
 
 [[bin]]
 name = "rc-tester"
