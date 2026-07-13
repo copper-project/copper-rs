@@ -67,6 +67,13 @@ sim:
   cd "{{ROOT}}"
   cargo run -p cu-flight-controller --no-default-features --features sim --bin quad-sim
 
+# Run ViTFly on NVIDIA CUDA and draw its open-loop velocity over the depth preview.
+sim-vitfly:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo run --release -p cu-flight-controller --no-default-features --features vitfly-cuda --bin quad-sim
+
 # Run the replay-backed remote debug server for the flight controller log.
 resim debug_base="copper/examples/cu_flight_controller/debug/v1" log="logs/flight_controller_sim.copper" replay_log="logs/flight_controller_resim.copper":
   #!/usr/bin/env bash

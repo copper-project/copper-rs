@@ -31,6 +31,8 @@ use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::image::{
     ImageCompareFunction, ImageSampler, ImageSamplerDescriptor, TextureFormatPixelInfo,
 };
+#[cfg(feature = "vitfly-cuda")]
+use bevy::prelude::EulerRot;
 use bevy::prelude::{
     App, AssetPlugin, AssetServer, Assets, ButtonInput, Camera, Camera3d, Color, Commands,
     Component, ComputedNode, DefaultPlugins, Dir3, DirectionalLight, Entity, EnvironmentMapLight,
@@ -61,6 +63,12 @@ use cu_bevymon::{
     CuBevyMonSurface, CuBevyMonTexture, MonitorModel, MonitorUiOptions, spawn_split_layout,
 };
 use cu29::prelude::*;
+#[cfg(feature = "vitfly-cuda")]
+use cu29::units::si::angle::radian;
+#[cfg(feature = "vitfly-cuda")]
+use cu29::units::si::f32::{Angle, Velocity};
+#[cfg(feature = "vitfly-cuda")]
+use cu29::units::si::velocity::meter_per_second;
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::rc_joystick::{RcAxisBindings, RcFrame, RcJoystick};
@@ -256,8 +264,17 @@ mod compute_copper {
         pub use crate::compute_tasks::*;
     }
 
+    #[cfg(not(feature = "vitfly-cuda"))]
     #[copper_runtime(
         config = "multi_copper_sim.ron",
+        subsystem = "compute",
+        sim_mode = true
+    )]
+    struct FlightComputeSim {}
+
+    #[cfg(feature = "vitfly-cuda")]
+    #[copper_runtime(
+        config = "multi_copper_vitfly_sim.ron",
         subsystem = "compute",
         sim_mode = true
     )]
@@ -267,6 +284,8 @@ mod compute_copper {
         app: default::FlightComputeSim,
         zed_store: sim_zed::SimZedFrameStore,
         zed_static_state_sent: bool,
+        #[cfg(feature = "vitfly-cuda")]
+        vitfly_rotation: Quat,
     }
 
     impl Runtime {
@@ -280,6 +299,8 @@ mod compute_copper {
                 app,
                 zed_store,
                 zed_static_state_sent: false,
+                #[cfg(feature = "vitfly-cuda")]
+                vitfly_rotation: Quat::IDENTITY,
             }
         }
 
@@ -290,6 +311,8 @@ mod compute_copper {
         pub(super) fn run_iteration(&mut self, clock: &RobotClock) -> CuResult<()> {
             let zed_store = &self.zed_store;
             let zed_static_state_sent = &mut self.zed_static_state_sent;
+            #[cfg(feature = "vitfly-cuda")]
+            let vitfly_rotation = self.vitfly_rotation;
             let mut sim_callback = |step: default::SimStep| -> SimOverride {
                 match step {
                     default::SimStep::Zed(CuTaskCallbackState::Process(_, output)) => {
@@ -301,9 +324,33 @@ mod compute_copper {
                         );
                         SimOverride::ExecutedBySim
                     }
+                    #[cfg(not(feature = "vitfly-cuda"))]
                     default::SimStep::Vitfly(CuTaskCallbackState::Process(input, _)) => {
                         zed_store.publish_vitfly_depth(input.1.payload());
                         SimOverride::ExecuteByRuntime
+                    }
+                    #[cfg(feature = "vitfly-cuda")]
+                    default::SimStep::Vitfly(CuTaskCallbackState::Process(input, _)) => {
+                        zed_store.publish_vitfly_depth(input.0.payload());
+                        SimOverride::ExecuteByRuntime
+                    }
+                    #[cfg(feature = "vitfly-cuda")]
+                    default::SimStep::VitflyContext(CuTaskCallbackState::Process(_, output)) => {
+                        let now = clock.now();
+                        let pose = vitfly_pose(vitfly_rotation);
+                        output.0.set_payload(pose);
+                        output.0.tov = Tov::Time(now);
+                        output.1.set_payload(Velocity::new::<meter_per_second>(4.0));
+                        output.1.tov = Tov::Time(now);
+                        SimOverride::ExecutedBySim
+                    }
+                    #[cfg(feature = "vitfly-cuda")]
+                    default::SimStep::VitflyListener(CuTaskCallbackState::Process(input, _)) => {
+                        let prediction = input
+                            .payload()
+                            .map(|velocity| velocity.map(|axis| axis.get::<meter_per_second>()));
+                        zed_store.publish_vitfly_prediction(prediction);
+                        SimOverride::ExecutedBySim
                     }
                     _ => SimOverride::ExecuteByRuntime,
                 }
@@ -313,6 +360,11 @@ mod compute_copper {
 
         pub(super) fn set_zed_sensors(&self, sensors: sim_zed::SimZedSensors) {
             self.zed_store.set_sensors(sensors);
+        }
+
+        #[cfg(feature = "vitfly-cuda")]
+        pub(super) fn set_vitfly_rotation(&mut self, rotation: Quat) {
+            self.vitfly_rotation = rotation;
         }
 
         pub(super) fn stop(&mut self) -> CuResult<()> {
@@ -491,7 +543,11 @@ impl ExtractResource for ZedDepthTexture {
 struct ZedDepthPreview {
     image: Handle<Image>,
     last_seq: Option<u64>,
+    last_prediction_seq: u64,
 }
+
+#[derive(Component)]
+struct VitFlyPreviewText;
 
 #[derive(Component)]
 struct SceneLoadingOverlay;
@@ -992,6 +1048,18 @@ fn map_bevy_body_to_fc_magnetometer(v: Vec3) -> [f32; 3] {
     map_bevy_body_to_fc_polar(v)
 }
 
+#[cfg(feature = "vitfly-cuda")]
+fn vitfly_pose(rotation: Quat) -> cu_ahrs::AhrsPose {
+    // Bevy body axes are right/up/forward; the FC convention is
+    // forward/right/down. Axial angles therefore map as [-Z, -X, +Y].
+    let (yaw_bevy, pitch_bevy, roll_bevy) = rotation.to_euler(EulerRot::YXZ);
+    cu_ahrs::AhrsPose {
+        roll: Angle::new::<radian>(-roll_bevy),
+        pitch: Angle::new::<radian>(-pitch_bevy),
+        yaw: Angle::new::<radian>(yaw_bevy),
+    }
+}
+
 #[cfg(feature = "bevymon")]
 #[cfg(target_arch = "wasm32")]
 type BevyMonSectionStorage = NoopSectionStorage;
@@ -1248,21 +1316,31 @@ fn update_zed_depth_preview(
     store: Res<sim_zed::SimZedFrameStore>,
     mut preview: ResMut<ZedDepthPreview>,
     mut images: ResMut<Assets<Image>>,
+    mut labels: Query<&mut Text, With<VitFlyPreviewText>>,
 ) {
     let Some(depth) = store.published_depth() else {
         return;
     };
-    if preview.last_seq == Some(depth.seq) {
+    let (prediction_seq, prediction) = store.vitfly_prediction();
+    if preview.last_seq == Some(depth.seq) && preview.last_prediction_seq == prediction_seq {
         return;
     }
 
-    let preview_pixels = depth.buffer_handle.with_inner(|values| {
+    let mut preview_pixels = depth.buffer_handle.with_inner(|values| {
         let mut pixels = Vec::with_capacity(values.len() * 4);
         for &distance in values.iter() {
             pixels.extend_from_slice(&depth_preview_color(distance));
         }
         pixels
     });
+    if let Some(velocity) = prediction {
+        draw_vitfly_arrow(
+            &mut preview_pixels,
+            depth.format.width as usize,
+            depth.format.height as usize,
+            velocity,
+        );
+    }
     let Some(mut preview_image) = images.get_mut(&preview.image) else {
         return;
     };
@@ -1274,6 +1352,101 @@ fn update_zed_depth_preview(
     }
     pixels.copy_from_slice(&preview_pixels);
     preview.last_seq = Some(depth.seq);
+    preview.last_prediction_seq = prediction_seq;
+
+    let label = prediction.map_or_else(
+        || "depth · ViTFly CUDA\nwaiting for prediction (open loop)".to_owned(),
+        |[forward, left, up]| {
+            format!(
+                "depth · ViTFly CUDA\nv [fwd left up] = [{forward:+.2} {left:+.2} {up:+.2}] m/s · open loop"
+            )
+        },
+    );
+    for mut text in &mut labels {
+        text.0.clone_from(&label);
+    }
+}
+
+fn draw_vitfly_arrow(pixels: &mut [u8], width: usize, height: usize, velocity: [f32; 3]) {
+    let [_forward, left, up] = velocity;
+    if !left.is_finite() || !up.is_finite() || width == 0 || height == 0 {
+        return;
+    }
+
+    let center = (width as f32 * 0.5, height as f32 * 0.5);
+    // Match the original Python preview: lateral points left on the image and
+    // positive vertical velocity points upward.
+    let end = (
+        (center.0 - left * width as f32 / 3.0).clamp(0.0, (width - 1) as f32),
+        (center.1 - up * height as f32 / 3.0).clamp(0.0, (height - 1) as f32),
+    );
+    draw_preview_line(pixels, width, height, center, end, 2);
+
+    let direction = Vec2::new(center.0 - end.0, center.1 - end.1);
+    if direction.length_squared() < 1.0 {
+        return;
+    }
+    let direction = direction.normalize();
+    let perpendicular = Vec2::new(-direction.y, direction.x);
+    let tip = Vec2::new(end.0, end.1);
+    let base = tip + direction * 12.0;
+    draw_preview_line(
+        pixels,
+        width,
+        height,
+        (tip.x, tip.y),
+        (
+            base.x + perpendicular.x * 7.0,
+            base.y + perpendicular.y * 7.0,
+        ),
+        2,
+    );
+    draw_preview_line(
+        pixels,
+        width,
+        height,
+        (tip.x, tip.y),
+        (
+            base.x - perpendicular.x * 7.0,
+            base.y - perpendicular.y * 7.0,
+        ),
+        2,
+    );
+}
+
+fn draw_preview_line(
+    pixels: &mut [u8],
+    width: usize,
+    height: usize,
+    start: (f32, f32),
+    end: (f32, f32),
+    radius: i32,
+) {
+    let delta_x = end.0 - start.0;
+    let delta_y = end.1 - start.1;
+    let steps = delta_x.abs().max(delta_y.abs()).ceil().max(1.0) as usize;
+    for step in 0..=steps {
+        let t = step as f32 / steps as f32;
+        let x = (start.0 + delta_x * t).round() as i32;
+        let y = (start.1 + delta_y * t).round() as i32;
+        for offset_y in -radius..=radius {
+            for offset_x in -radius..=radius {
+                if offset_x * offset_x + offset_y * offset_y > radius * radius {
+                    continue;
+                }
+                let pixel_x = x + offset_x;
+                let pixel_y = y + offset_y;
+                if pixel_x < 0 || pixel_y < 0 || pixel_x >= width as i32 || pixel_y >= height as i32
+                {
+                    continue;
+                }
+                let index = (pixel_y as usize * width + pixel_x as usize) * 4;
+                if let Some(pixel) = pixels.get_mut(index..index + 4) {
+                    pixel.copy_from_slice(&[255, 32, 32, 255]);
+                }
+            }
+        }
+    }
 }
 
 fn depth_preview_color(distance: f32) -> [u8; 4] {
@@ -1377,6 +1550,7 @@ fn setup_world(
     commands.insert_resource(ZedDepthPreview {
         image: depth_preview,
         last_seq: None,
+        last_prediction_seq: 0,
     });
     commands.spawn((
         Name::new("zed2i-left-depth-camera"),
@@ -1780,7 +1954,8 @@ fn spawn_zed_overlay(
             .with_children(|preview| {
                 preview.spawn((
                     Pickable::IGNORE,
-                    Text::new("depth"),
+                    VitFlyPreviewText,
+                    Text::new("depth · ViTFly\nopen-loop listener disabled"),
                     TextFont {
                         font_size: FontSize::Px(12.0),
                         ..default()
@@ -2137,6 +2312,8 @@ fn run_copper_iteration(
         magnetometer: MagnetometerPayload::from_raw(map_bevy_body_to_fc_magnetometer(body_mag)),
         barometer: BarometerPayload::from_raw(pressure_pa, 25.0),
     });
+    #[cfg(feature = "vitfly-cuda")]
+    copper.compute.set_vitfly_rotation(vehicle.rotation);
     copper
         .mcu
         .run_iteration(&copper.clock, vehicle, rc, motor_commands, osd_overlay)?;
@@ -2949,6 +3126,30 @@ mod tests {
         assert!((zed_reverse_z_to_distance(reverse_z) - expected_distance).abs() < 1.0e-4);
     }
 
+    #[test]
+    fn vitfly_preview_arrow_uses_python_image_axes() {
+        let width = 40;
+        let height = 20;
+        let mut pixels = vec![0; width * height * 4];
+        draw_vitfly_arrow(&mut pixels, width, height, [2.0, 0.5, 0.5]);
+
+        let is_red = |x: usize, y: usize| pixels[(y * width + x) * 4..][..4] == [255, 32, 32, 255];
+        assert!(is_red(width / 2, height / 2));
+        assert!(
+            (0..width / 2).any(|x| (0..height / 2).any(|y| is_red(x, y))),
+            "positive left/up velocity should point toward the image's upper-left"
+        );
+    }
+
+    #[cfg(feature = "vitfly-cuda")]
+    #[test]
+    fn vitfly_identity_pose_uses_zero_aerospace_angles() {
+        let pose = vitfly_pose(Quat::IDENTITY);
+        assert_eq!(pose.roll.get::<radian>(), 0.0);
+        assert_eq!(pose.pitch.get::<radian>(), 0.0);
+        assert_eq!(pose.yaw.get::<radian>(), 0.0);
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     fn build_test_copper_state() -> CopperState {
         let (clock, clock_mock) = RobotClock::mock();
@@ -3082,6 +3283,12 @@ mod tests {
             assert_eq!(depth.len(), pixel_count);
             assert_eq!(depth[0], 3.5);
         });
+        #[cfg(feature = "vitfly-cuda")]
+        {
+            let (_, prediction) = zed_store.vitfly_prediction();
+            let prediction = prediction.expect("ViTFly listener should receive a CUDA result");
+            assert!(prediction.iter().all(|component| component.is_finite()));
+        }
 
         compute.stop().expect("failed to stop compute tasks");
         compute

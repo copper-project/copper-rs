@@ -108,6 +108,7 @@ cortex-m = { workspace = true, features = [
 ], optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+cu-vitfly = { path = "../../../cu-vitfly", default-features = false, optional = true }
 cu-consolemon = { workspace = true, optional = true }
 cu-bevymon = { workspace = true, optional = true }
 cu-memmon = { path = "../../components/monitors/cu_memmon", version = "1.0.0", default-features = false, features = [
@@ -268,6 +269,7 @@ sim = [
   "dep:image",
   "dep:winit",
 ]
+vitfly-cuda = ["sim", "dep:cu-vitfly", "cu-vitfly/cuda", "cu29/reflect"]
 sim-debug = ["sim", "cu29/reflect", "cu29/remote-debug"]
 bevymon = [
   "sim_core",
