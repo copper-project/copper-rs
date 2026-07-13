@@ -27,22 +27,24 @@ fn main() -> io::Result<()> {
     let bindings = joystick.axis_bindings();
     println!("Using RC joystick: {}", joystick.device_name());
     println!(
-        "Axis bindings: roll={:?} pitch={:?} yaw={:?} throttle={:?} sa={:?} sb={:?} sc={:?}",
+        "Axis bindings: roll={:?} pitch={:?} yaw={:?} throttle={:?} arm={:?} sa={:?} sb={:?} sc={:?}",
         bindings.roll,
         bindings.pitch,
         bindings.yaw,
         bindings.throttle,
+        bindings.arm,
         bindings.knob_sa,
         bindings.knob_sb,
         bindings.knob_sc
     );
     let frame = joystick.current_frame();
     println!(
-        "Initial frame: roll {:+.2} pitch {:+.2} yaw {:+.2} throttle {:+.2} sa {:+.2} sb {:+.2} sc {:+.2}",
+        "Initial frame: roll {:+.2} pitch {:+.2} yaw {:+.2} throttle {:+.2} arm {:?} sa {:+.2} sb {:+.2} sc {:+.2}",
         frame.roll,
         frame.pitch,
         frame.yaw,
         frame.throttle,
+        frame.arm,
         frame.knob_sa,
         frame.knob_sb,
         frame.knob_sc
@@ -65,11 +67,12 @@ fn main() -> io::Result<()> {
                     .collect::<Vec<_>>()
                     .join(" ");
                 println!(
-                    "roll {:+.2} pitch {:+.2} yaw {:+.2} throttle {:+.2} sa {:+.2} sb {:+.2} sc {:+.2} | {} | {}",
+                    "roll {:+.2} pitch {:+.2} yaw {:+.2} throttle {:+.2} arm {:?} sa {:+.2} sb {:+.2} sc {:+.2} | {} | {}",
                     frame.roll,
                     frame.pitch,
                     frame.yaw,
                     frame.throttle,
+                    frame.arm,
                     frame.knob_sa,
                     frame.knob_sb,
                     frame.knob_sc,

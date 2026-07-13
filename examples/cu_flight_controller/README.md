@@ -224,8 +224,10 @@ Notes:
 
 - **Simulation path**: no receiver is used directly; input is read from the host joystick interface.
 - **Auto-detected TX joystick profiles**:
-  - ExpressLRS-style USB joystick names (`expresslrs`, `radiomaster`)
+  - ExpressLRS-style joystick names (`expresslrs`, `elrs`, `radiomaster`)
   - OpenTX / EdgeTX USB joystick names (`opentx`, `edgetx`)
+- **ExpressLRS BLE mapping**: CH1-CH8 are joystick axes and CH9-CH16 are buttons. The sim uses
+  CH5 (`ABS_Z`) for arm and CH6 (`ABS_RZ`) for flight mode.
 - **Firmware path (real hardware)**: RC input is CRSF on UART, so use a CRSF-compatible RX link
   (for example ExpressLRS/Crossfire-class receivers and compatible transmitters).
 
