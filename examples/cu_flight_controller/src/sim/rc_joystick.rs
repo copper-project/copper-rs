@@ -6,13 +6,14 @@ use std::path::PathBuf;
 
 use evdev::{AbsoluteAxisCode, AttributeSetRef, Device, EventSummary, EventType, KeyCode};
 
-/// Snapshot of all RC inputs normalized to [-1.0, 1.0].
-#[derive(Debug, Clone)]
+/// Snapshot of the normalized RC inputs exposed by a joystick device.
+#[derive(Debug, Clone, Default)]
 pub struct RcFrame {
     pub roll: f32,
     pub pitch: f32,
     pub yaw: f32,
     pub throttle: f32,
+    pub arm: Option<f32>,
     pub knob_sa: f32,
     pub knob_sb: f32,
     pub knob_sc: f32,
@@ -39,6 +40,7 @@ pub struct RcAxisBindings {
     pub pitch: Option<String>,
     pub yaw: Option<String>,
     pub throttle: Option<String>,
+    pub arm: Option<String>,
     pub knob_sa: Option<String>,
     pub knob_sb: Option<String>,
     pub knob_sc: Option<String>,
@@ -50,6 +52,7 @@ enum RcAxis {
     Pitch,
     Yaw,
     Throttle,
+    Arm,
     KnobSa,
     KnobSb,
     KnobSc,
@@ -100,6 +103,7 @@ impl RcJoystick {
             pitch: 0.0,
             yaw: 0.0,
             throttle: 0.0,
+            arm: None,
             knob_sa: 0.0,
             knob_sb: 0.0,
             knob_sc: 0.0,
@@ -182,6 +186,7 @@ impl RcJoystick {
                 RcAxis::Pitch => bindings.pitch = Some(label),
                 RcAxis::Yaw => bindings.yaw = Some(label),
                 RcAxis::Throttle => bindings.throttle = Some(label),
+                RcAxis::Arm => bindings.arm = Some(label),
                 RcAxis::KnobSa => bindings.knob_sa = Some(label),
                 RcAxis::KnobSb => bindings.knob_sb = Some(label),
                 RcAxis::KnobSc => bindings.knob_sc = Some(label),
@@ -216,6 +221,11 @@ impl RcJoystick {
             RcAxis::Throttle => {
                 let changed = !float_eq(self.state.throttle, value);
                 self.state.throttle = value;
+                changed
+            }
+            RcAxis::Arm => {
+                let changed = self.state.arm.is_none_or(|arm| !float_eq(arm, value));
+                self.state.arm = Some(value);
                 changed
             }
             RcAxis::KnobSa => {
@@ -266,6 +276,7 @@ fn prime_axes(device: &Device, axis_map: &HashMap<u16, (RcAxis, AxisScale)>, sta
                 RcAxis::Pitch => state.pitch = value,
                 RcAxis::Yaw => state.yaw = value,
                 RcAxis::Throttle => state.throttle = value,
+                RcAxis::Arm => state.arm = Some(value),
                 RcAxis::KnobSa => state.knob_sa = value,
                 RcAxis::KnobSb => state.knob_sb = value,
                 RcAxis::KnobSc => state.knob_sc = value,
@@ -298,23 +309,30 @@ fn is_radio_profile_name(name: &str) -> bool {
 }
 
 fn is_elrs_profile_name(name: &str) -> bool {
-    name.contains("expresslrs") || name.contains("radiomaster")
+    name.contains("expresslrs") || name.contains("elrs") || name.contains("radiomaster")
 }
 
 fn is_opentx_profile_name(name: &str) -> bool {
     name.contains("opentx") || name.contains("edgetx")
 }
 
-// ExpressLRS joystick switch codes mapped to radio labels directly.
-// Update these names if your Lua script exports different labels.
-const ELRS_SWITCH_CODES: &[(KeyCode, &str)] =
-    &[(KeyCode::new(0x120), "se"), (KeyCode::new(0x121), "sf")];
+// ExpressLRS maps channels 9-16 to the eight HID joystick buttons.
+const ELRS_SWITCH_CODES: &[(KeyCode, &str)] = &[
+    (KeyCode::new(0x120), "ch9"),
+    (KeyCode::new(0x121), "ch10"),
+    (KeyCode::new(0x122), "ch11"),
+    (KeyCode::new(0x123), "ch12"),
+    (KeyCode::new(0x124), "ch13"),
+    (KeyCode::new(0x125), "ch14"),
+    (KeyCode::new(0x126), "ch15"),
+    (KeyCode::new(0x127), "ch16"),
+];
 
 fn build_switches(device: &Device) -> Vec<SwitchState> {
     let name = joystick_device_name(device);
     let supported = device.supported_keys();
 
-    if is_radio_profile_name(&name) {
+    if is_elrs_profile_name(&name) {
         return ELRS_SWITCH_CODES
             .iter()
             .filter(|(code, _)| supported.is_some_and(|s| s.contains(*code)))
@@ -341,7 +359,7 @@ fn build_switches(device: &Device) -> Vec<SwitchState> {
 fn build_switch_map(device: &Device, switches: &[SwitchState]) -> HashMap<u16, usize> {
     let mut map = HashMap::new();
     let device_name = joystick_device_name(device);
-    if is_radio_profile_name(&device_name) {
+    if is_elrs_profile_name(&device_name) {
         for (code, name) in ELRS_SWITCH_CODES.iter() {
             if let Some(idx) = switches.iter().position(|s| s.name == *name) {
                 map.insert(code.0, idx);
@@ -460,7 +478,7 @@ fn build_axis_map(device: &Device) -> HashMap<u16, (RcAxis, AxisScale)> {
             axes,
             &mut map,
             AbsoluteAxisCode::ABS_Z,
-            RcAxis::KnobSa,
+            RcAxis::Arm,
             AxisScale::NegOneToOne,
         );
         insert_if_present(
