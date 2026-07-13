@@ -141,13 +141,15 @@ fn load_model_weights(variant: &str) -> CuResult<std::path::PathBuf> {
     let filename = format!("yolov8{size}-pose.safetensors");
 
     // Try to download from HuggingFace Hub
-    let api = hf_hub::api::sync::Api::new()
+    let client = hf_hub::HFClientSync::new()
         .map_err(|e| CuError::new_with_cause("Failed to create HuggingFace API", e))?;
 
-    let repo = api.model("lmz/candle-yolo-v8".to_string());
+    let repo = client.model("lmz", "candle-yolo-v8");
 
     let path = repo
-        .get(&filename)
+        .download_file()
+        .filename(filename)
+        .send()
         .map_err(|e| CuError::new_with_cause("Failed to download model weights", e))?;
 
     Ok(path)
