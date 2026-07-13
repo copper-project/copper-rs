@@ -195,10 +195,9 @@ sim world, OSD, and help overlays.
 The simulated compute subsystem publishes ZED2i-compatible 320×180 stereo RGBA images, depth and
 confidence maps, calibration and rig transforms, plus IMU, magnetometer, barometer, and frame
 metadata. Bevy performs the camera rendering and GPU depth readback; the simulator injects those
-buffers into the preempted `cu_zed::Zed` source. The compute graph routes stereo and depth into the
-placeholder `NoopVitFlyTask`. The top-right inset is reconstructed from the depth map observed at
-that ML task's Copper input, so it displays the same payload the future inference implementation
-will consume.
+buffers into the preempted `cu_zed::Zed` source. The compute graph runs ViTFly inference on the CPU
+by default and draws its predicted velocity over the top-right depth inset. Use `just sim-cuda` to
+run the same graph with ViTFly inference on NVIDIA CUDA.
 
 ### RC Input In Simulation
 

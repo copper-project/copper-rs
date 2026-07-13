@@ -31,7 +31,7 @@ use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::image::{
     ImageCompareFunction, ImageSampler, ImageSamplerDescriptor, TextureFormatPixelInfo,
 };
-#[cfg(feature = "vitfly-cuda")]
+#[cfg(feature = "sim")]
 use bevy::prelude::EulerRot;
 use bevy::prelude::{
     App, AssetPlugin, AssetServer, Assets, ButtonInput, Camera, Camera3d, Color, Commands,
@@ -63,11 +63,11 @@ use cu_bevymon::{
     CuBevyMonSurface, CuBevyMonTexture, MonitorModel, MonitorUiOptions, spawn_split_layout,
 };
 use cu29::prelude::*;
-#[cfg(feature = "vitfly-cuda")]
+#[cfg(feature = "sim")]
 use cu29::units::si::angle::radian;
-#[cfg(feature = "vitfly-cuda")]
+#[cfg(feature = "sim")]
 use cu29::units::si::f32::{Angle, Velocity};
-#[cfg(feature = "vitfly-cuda")]
+#[cfg(feature = "sim")]
 use cu29::units::si::velocity::meter_per_second;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -264,7 +264,7 @@ mod compute_copper {
         pub use crate::compute_tasks::*;
     }
 
-    #[cfg(not(feature = "vitfly-cuda"))]
+    #[cfg(not(feature = "sim"))]
     #[copper_runtime(
         config = "multi_copper_sim.ron",
         subsystem = "compute",
@@ -272,7 +272,7 @@ mod compute_copper {
     )]
     struct FlightComputeSim {}
 
-    #[cfg(feature = "vitfly-cuda")]
+    #[cfg(feature = "sim")]
     #[copper_runtime(
         config = "multi_copper_vitfly_sim.ron",
         subsystem = "compute",
@@ -284,7 +284,7 @@ mod compute_copper {
         app: default::FlightComputeSim,
         zed_store: sim_zed::SimZedFrameStore,
         zed_static_state_sent: bool,
-        #[cfg(feature = "vitfly-cuda")]
+        #[cfg(feature = "sim")]
         vitfly_rotation: Quat,
     }
 
@@ -299,7 +299,7 @@ mod compute_copper {
                 app,
                 zed_store,
                 zed_static_state_sent: false,
-                #[cfg(feature = "vitfly-cuda")]
+                #[cfg(feature = "sim")]
                 vitfly_rotation: Quat::IDENTITY,
             }
         }
@@ -311,7 +311,7 @@ mod compute_copper {
         pub(super) fn run_iteration(&mut self, clock: &RobotClock) -> CuResult<()> {
             let zed_store = &self.zed_store;
             let zed_static_state_sent = &mut self.zed_static_state_sent;
-            #[cfg(feature = "vitfly-cuda")]
+            #[cfg(feature = "sim")]
             let vitfly_rotation = self.vitfly_rotation;
             let mut sim_callback = |step: default::SimStep| -> SimOverride {
                 match step {
@@ -324,17 +324,17 @@ mod compute_copper {
                         );
                         SimOverride::ExecutedBySim
                     }
-                    #[cfg(not(feature = "vitfly-cuda"))]
+                    #[cfg(not(feature = "sim"))]
                     default::SimStep::Vitfly(CuTaskCallbackState::Process(input, _)) => {
                         zed_store.publish_vitfly_depth(input.1.payload());
                         SimOverride::ExecuteByRuntime
                     }
-                    #[cfg(feature = "vitfly-cuda")]
+                    #[cfg(feature = "sim")]
                     default::SimStep::Vitfly(CuTaskCallbackState::Process(input, _)) => {
                         zed_store.publish_vitfly_depth(input.0.payload());
                         SimOverride::ExecuteByRuntime
                     }
-                    #[cfg(feature = "vitfly-cuda")]
+                    #[cfg(feature = "sim")]
                     default::SimStep::VitflyContext(CuTaskCallbackState::Process(_, output)) => {
                         let now = clock.now();
                         let pose = vitfly_pose(vitfly_rotation);
@@ -344,7 +344,7 @@ mod compute_copper {
                         output.1.tov = Tov::Time(now);
                         SimOverride::ExecutedBySim
                     }
-                    #[cfg(feature = "vitfly-cuda")]
+                    #[cfg(feature = "sim")]
                     default::SimStep::VitflyListener(CuTaskCallbackState::Process(input, _)) => {
                         let prediction = input
                             .payload()
@@ -362,7 +362,7 @@ mod compute_copper {
             self.zed_store.set_sensors(sensors);
         }
 
-        #[cfg(feature = "vitfly-cuda")]
+        #[cfg(feature = "sim")]
         pub(super) fn set_vitfly_rotation(&mut self, rotation: Quat) {
             self.vitfly_rotation = rotation;
         }
@@ -545,6 +545,13 @@ struct ZedDepthPreview {
     last_seq: Option<u64>,
     last_prediction_seq: u64,
 }
+
+#[cfg(feature = "vitfly-cuda")]
+const ZED_DEPTH_PREVIEW_TITLE: &str = "depth & prediction (GPU)";
+#[cfg(all(feature = "sim", not(feature = "vitfly-cuda")))]
+const ZED_DEPTH_PREVIEW_TITLE: &str = "depth & prediction (CPU)";
+#[cfg(not(feature = "sim"))]
+const ZED_DEPTH_PREVIEW_TITLE: &str = "depth";
 
 #[derive(Component)]
 struct SceneLoadingOverlay;
@@ -1045,7 +1052,7 @@ fn map_bevy_body_to_fc_magnetometer(v: Vec3) -> [f32; 3] {
     map_bevy_body_to_fc_polar(v)
 }
 
-#[cfg(feature = "vitfly-cuda")]
+#[cfg(feature = "sim")]
 fn vitfly_pose(rotation: Quat) -> cu_ahrs::AhrsPose {
     // Bevy body axes are right/up/forward; the FC convention is
     // forward/right/down. Axial angles therefore map as [-Z, -X, +Y].
@@ -1938,7 +1945,7 @@ fn spawn_zed_overlay(
             .with_children(|preview| {
                 preview.spawn((
                     Pickable::IGNORE,
-                    Text::new("depth & prediction"),
+                    Text::new(ZED_DEPTH_PREVIEW_TITLE),
                     TextFont {
                         font_size: FontSize::Px(12.0),
                         ..default()
@@ -2298,7 +2305,7 @@ fn run_copper_iteration(
         magnetometer: MagnetometerPayload::from_raw(map_bevy_body_to_fc_magnetometer(body_mag)),
         barometer: BarometerPayload::from_raw(pressure_pa, 25.0),
     });
-    #[cfg(feature = "vitfly-cuda")]
+    #[cfg(feature = "sim")]
     copper.compute.set_vitfly_rotation(vehicle.rotation);
     copper
         .mcu
@@ -3129,7 +3136,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "vitfly-cuda")]
+    #[cfg(feature = "sim")]
     #[test]
     fn vitfly_identity_pose_uses_zero_aerospace_angles() {
         let pose = vitfly_pose(Quat::IDENTITY);
@@ -3293,10 +3300,10 @@ mod tests {
             assert_eq!(depth.len(), pixel_count);
             assert_eq!(depth[0], 3.5);
         });
-        #[cfg(feature = "vitfly-cuda")]
+        #[cfg(feature = "sim")]
         {
             let (_, prediction) = zed_store.vitfly_prediction();
-            let prediction = prediction.expect("ViTFly listener should receive a CUDA result");
+            let prediction = prediction.expect("ViTFly listener should receive a prediction");
             assert!(prediction.iter().all(|component| component.is_finite()));
         }
 

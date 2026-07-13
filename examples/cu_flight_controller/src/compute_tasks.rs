@@ -43,15 +43,15 @@ impl CuSinkTask for ComputeHeartbeatSink {
 }
 
 /// Simulation-preempted source for ViTFly's non-camera inputs.
-#[cfg(feature = "vitfly-cuda")]
+#[cfg(feature = "sim")]
 #[allow(dead_code)]
 #[derive(Reflect)]
 pub struct VitFlyContextSource;
 
-#[cfg(feature = "vitfly-cuda")]
+#[cfg(feature = "sim")]
 impl Freezable for VitFlyContextSource {}
 
-#[cfg(feature = "vitfly-cuda")]
+#[cfg(feature = "sim")]
 impl CuSrcTask for VitFlyContextSource {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(cu_ahrs::AhrsPose, cu29::units::si::f32::Velocity);
@@ -67,16 +67,16 @@ impl CuSrcTask for VitFlyContextSource {
     }
 }
 
-/// Open-loop terminal for the ViTFly prediction in the NVIDIA simulator.
-#[cfg(feature = "vitfly-cuda")]
+/// Terminal for the ViTFly prediction in the simulator.
+#[cfg(feature = "sim")]
 #[allow(dead_code)]
 #[derive(Reflect)]
 pub struct VitFlySimListener;
 
-#[cfg(feature = "vitfly-cuda")]
+#[cfg(feature = "sim")]
 impl Freezable for VitFlySimListener {}
 
-#[cfg(feature = "vitfly-cuda")]
+#[cfg(feature = "sim")]
 impl CuSinkTask for VitFlySimListener {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(cu_vitfly::VitFlyVelocity);
@@ -94,24 +94,15 @@ impl CuSinkTask for VitFlySimListener {
 ///
 /// The simulator observes this task's Copper inputs to render the depth preview;
 /// the task itself intentionally performs no inference yet.
-#[cfg(any(
-    feature = "end2end",
-    all(feature = "sim_core", not(feature = "vitfly-cuda"))
-))]
+#[cfg(any(feature = "end2end", all(feature = "sim_core", not(feature = "sim"))))]
 #[allow(dead_code)]
 #[derive(Reflect)]
 pub struct NoopVitFlyTask;
 
-#[cfg(any(
-    feature = "end2end",
-    all(feature = "sim_core", not(feature = "vitfly-cuda"))
-))]
+#[cfg(any(feature = "end2end", all(feature = "sim_core", not(feature = "sim"))))]
 impl Freezable for NoopVitFlyTask {}
 
-#[cfg(any(
-    feature = "end2end",
-    all(feature = "sim_core", not(feature = "vitfly-cuda"))
-))]
+#[cfg(any(feature = "end2end", all(feature = "sim_core", not(feature = "sim"))))]
 impl CuTask for NoopVitFlyTask {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(

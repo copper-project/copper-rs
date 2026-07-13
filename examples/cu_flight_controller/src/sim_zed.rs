@@ -73,7 +73,7 @@ impl SimZedFrameStore {
         self.lock().published_depth.clone()
     }
 
-    #[cfg(feature = "vitfly-cuda")]
+    #[cfg(feature = "sim")]
     pub(crate) fn publish_vitfly_prediction(&self, prediction_mps: Option<[f32; 3]>) {
         let mut frame = self.lock();
         frame.vitfly_prediction_seq = frame.vitfly_prediction_seq.wrapping_add(1);

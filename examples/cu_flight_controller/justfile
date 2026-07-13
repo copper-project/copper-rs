@@ -67,8 +67,8 @@ sim:
   cd "{{ROOT}}"
   cargo run -p cu-flight-controller --no-default-features --features sim --bin quad-sim
 
-# Run ViTFly on NVIDIA CUDA and draw its open-loop velocity over the depth preview.
-sim-vitfly:
+# Run the simulator with ViTFly inference on NVIDIA CUDA.
+sim-cuda:
   #!/usr/bin/env bash
   set -euo pipefail
   cd "{{ROOT}}"

@@ -26,8 +26,6 @@
             id: "vitfly",
             type: "cu_vitfly::VitFlyTask",
             config: {
-                "device": "cuda",
-                "cuda_ordinal": 0,
                 "max_depth_m": 12.5,
                 "invalid_depth": 0.8,
             },

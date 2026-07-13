@@ -263,13 +263,15 @@ python-bindings = [
 ]
 sim = [
   "sim_core",
+  "dep:cu-vitfly",
+  "cu29/reflect",
   "dep:cu-consolemon",
   "dep:cached-path",
   "dep:evdev",
   "dep:image",
   "dep:winit",
 ]
-vitfly-cuda = ["sim", "dep:cu-vitfly", "cu-vitfly/cuda", "cu29/reflect"]
+vitfly-cuda = ["sim", "cu-vitfly/cuda"]
 sim-debug = ["sim", "cu29/reflect", "cu29/remote-debug"]
 bevymon = [
   "sim_core",
