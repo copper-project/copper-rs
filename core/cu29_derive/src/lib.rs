@@ -5413,6 +5413,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::simulation::SimOverride;
                 use cu29::simulation::CuTaskCallbackState;
                 use cu29::simulation::CuSimSrcTask;
+                use cu29::simulation::CuSimSrcTaskPack;
                 use cu29::simulation::CuSimSinkTask;
                 use cu29::simulation::CuSimBridge;
                 use cu29::prelude::app::CuSimApplication;
@@ -9350,12 +9351,23 @@ fn runtime_task_type_for_index(
     match task_specs.cutypes[index] {
         CuTaskType::Source => {
             if sim_mode && !run_in_sim {
-                let msg_type = graph.get_node_output_msg_type(task_id.as_str()).unwrap_or_else(|| {
-                    panic!(
-                        "CuSrcTask {task_id} should have an outgoing connection with a valid output msg type"
-                    )
-                });
-                let sim_task_name = format!("CuSimSrcTask<{msg_type}>");
+                let msg_types = graph
+                    .get_node_output_msg_types(task_id.as_str())
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "CuSrcTask {task_id} should have an outgoing connection with a valid output msg type"
+                        )
+                    });
+                let sim_task_name = if msg_types.len() == 1 {
+                    format!("CuSimSrcTask<{}>", msg_types[0])
+                } else {
+                    let messages = msg_types
+                        .iter()
+                        .map(|msg_type| format!("cu29::prelude::CuMsg<{msg_type}>"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!("CuSimSrcTaskPack<({messages})>")
+                };
                 parse_str(sim_task_name.as_str()).unwrap_or_else(|_| {
                     panic!("Could not build the placeholder for simulation: {sim_task_name}")
                 })
