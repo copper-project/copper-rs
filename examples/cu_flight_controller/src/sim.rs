@@ -547,9 +547,6 @@ struct ZedDepthPreview {
 }
 
 #[derive(Component)]
-struct VitFlyPreviewText;
-
-#[derive(Component)]
 struct SceneLoadingOverlay;
 
 const OSD_COLS: usize = 53;
@@ -1316,7 +1313,6 @@ fn update_zed_depth_preview(
     store: Res<sim_zed::SimZedFrameStore>,
     mut preview: ResMut<ZedDepthPreview>,
     mut images: ResMut<Assets<Image>>,
-    mut labels: Query<&mut Text, With<VitFlyPreviewText>>,
 ) {
     let Some(depth) = store.published_depth() else {
         return;
@@ -1353,18 +1349,6 @@ fn update_zed_depth_preview(
     pixels.copy_from_slice(&preview_pixels);
     preview.last_seq = Some(depth.seq);
     preview.last_prediction_seq = prediction_seq;
-
-    let label = prediction.map_or_else(
-        || "depth · ViTFly CUDA\nwaiting for prediction (open loop)".to_owned(),
-        |[forward, left, up]| {
-            format!(
-                "depth · ViTFly CUDA\nv [fwd left up] = [{forward:+.2} {left:+.2} {up:+.2}] m/s · open loop"
-            )
-        },
-    );
-    for mut text in &mut labels {
-        text.0.clone_from(&label);
-    }
 }
 
 fn draw_vitfly_arrow(pixels: &mut [u8], width: usize, height: usize, velocity: [f32; 3]) {
@@ -1954,8 +1938,7 @@ fn spawn_zed_overlay(
             .with_children(|preview| {
                 preview.spawn((
                     Pickable::IGNORE,
-                    VitFlyPreviewText,
-                    Text::new("depth · ViTFly\nopen-loop listener disabled"),
+                    Text::new("depth & prediction"),
                     TextFont {
                         font_size: FontSize::Px(12.0),
                         ..default()
