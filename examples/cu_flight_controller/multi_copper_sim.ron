@@ -1,0 +1,13 @@
+(
+    subsystems: [
+        (
+            id: "compute",
+            config: "compute_end2end_config.ron",
+        ),
+        (
+            id: "mcu",
+            config: "mcu_config.ron",
+        ),
+    ],
+    interconnects: [],
+)
