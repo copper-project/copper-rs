@@ -1,0 +1,25 @@
+(
+    tasks: [
+        (
+            id: "compute_heartbeat",
+            type: "tasks::ComputeHeartbeatSource",
+        ),
+        (
+            id: "compute_heartbeat_sink",
+            type: "tasks::ComputeHeartbeatSink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "compute_heartbeat",
+            dst: "compute_heartbeat_sink",
+            msg: "u64",
+        ),
+    ],
+    logging: (
+        enable_task_logging: false,
+        slab_size_mib: 64,
+        section_size_mib: 8,
+    ),
+    runtime: (rate_target_hz: 30),
+)

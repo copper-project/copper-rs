@@ -4,7 +4,14 @@ A bare-metal quadcopter flight controller implemented end-to-end using Copper co
 
 ## Overview
 
-This example demonstrates a complete flight controller running on the MicoAir H743 board (STM32H743). It showcases Copper's ability to run deterministic, real-time control loops on embedded hardware with zero dynamic allocation during runtime.
+This example demonstrates a complete flight controller running on the MicoAir H743 board (STM32H743), plus a separate host Copper runtime intended for onboard compute. It showcases Copper's ability to run deterministic, real-time control loops on embedded hardware with zero dynamic allocation during runtime.
+
+The deployment is described by `multi_copper.ron` as two independent subsystems:
+
+- `mcu`: the default flight-controller mission from `mcu_config.ron`
+- `compute`: a host-only placeholder graph from `compute_config.ron`
+
+There are deliberately no interconnects yet. The compute graph will host `cu_zed::Zed` in the next integration step without tying the subsystem identity to a specific computer or adding the ZED SDK to the MCU build.
 
 ## Hardware
 
@@ -58,6 +65,20 @@ RC Input (CRSF) -> RC Mapper -> Attitude Controller -> Rate Controller -> Mixer 
 - **Zero-copy logging**: Binary logs to SD card via unified logger
 
 ## Building
+
+### Distributed subsystem compile check
+
+```bash
+just subsystems-check
+```
+
+This checks the onboard-compute host binary and the STM32 firmware binary from the same strict multi-Copper umbrella configuration.
+
+To run the current onboard-compute placeholder graph:
+
+```bash
+just compute
+```
 
 ### Firmware (for flashing to hardware)
 
