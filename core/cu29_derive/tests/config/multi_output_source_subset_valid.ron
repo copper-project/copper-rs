@@ -3,7 +3,7 @@
         (
             id: "src",
             type: "MultiSource",
-            run_in_sim: true,
+            run_in_sim: false,
         ),
         (
             id: "sink",

@@ -32,7 +32,6 @@ end2end:
   set -euo pipefail
   cd "{{ROOT}}"
   cargo run -p cu-flight-controller --no-default-features --features end2end --bin quad-compute
-
 # Render copperconfig.ron from the current working directory.
 dag mission="":
   #!/usr/bin/env bash
