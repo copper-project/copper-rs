@@ -98,7 +98,7 @@ mod mcu_copper {
     }
 
     #[copper_runtime(
-        config = "multi_copper_sim.ron",
+        config = "multi_copper.ron",
         subsystem = "mcu",
         sim_mode = true,
         ignore_resources = true
@@ -265,11 +265,7 @@ mod compute_copper {
     }
 
     #[cfg(not(feature = "sim"))]
-    #[copper_runtime(
-        config = "multi_copper_sim.ron",
-        subsystem = "compute",
-        sim_mode = true
-    )]
+    #[copper_runtime(config = "multi_copper.ron", subsystem = "compute", sim_mode = true)]
     struct FlightComputeSim {}
 
     #[cfg(feature = "sim")]

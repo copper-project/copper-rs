@@ -231,8 +231,13 @@ firmware = [
   "cu-ahrs/firmware",
   "cu-logmon/defmt",
 ]
-compute = ["dep:cu29", "cu29/std", "cu29/signal-handler", "cu29/sysclock-perf"]
-end2end = ["compute", "dep:cu-zed"]
+end2end = [
+  "dep:cu29",
+  "cu29/std",
+  "cu29/signal-handler",
+  "cu29/sysclock-perf",
+  "dep:cu-zed",
+]
 logreader = [
   "dep:cu29",
   "cu29/std",
@@ -301,7 +306,7 @@ required-features = ["firmware"]
 [[bin]]
 name = "quad-compute"
 path = "src/compute.rs"
-required-features = ["compute"]
+required-features = ["end2end"]
 
 [[bin]]
 name = "rc-tester"

@@ -72,13 +72,8 @@ RC Input (CRSF) -> RC Mapper -> Attitude Controller -> Rate Controller -> Mixer 
 just subsystems-check
 ```
 
-This checks the onboard-compute host binary and the STM32 firmware binary from the same strict multi-Copper umbrella configuration.
-
-To run the current onboard-compute placeholder graph:
-
-```bash
-just compute
-```
+This checks the real ZED-enabled onboard-compute host binary and the STM32 firmware binary from the
+same strict multi-Copper umbrella configuration.
 
 To compile or run the real ZED-enabled compute graph:
 

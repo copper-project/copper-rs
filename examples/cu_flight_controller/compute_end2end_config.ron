@@ -1,16 +1,6 @@
 (
     tasks: [
         (
-            id: "compute_heartbeat",
-            type: "tasks::ComputeHeartbeatSource",
-            run_in_sim: true,
-        ),
-        (
-            id: "compute_heartbeat_sink",
-            type: "tasks::ComputeHeartbeatSink",
-            run_in_sim: true,
-        ),
-        (
             id: "zed",
             type: "cu_zed::Zed",
             run_in_sim: false,
@@ -24,11 +14,6 @@
         ),
     ],
     cnx: [
-        (
-            src: "compute_heartbeat",
-            dst: "compute_heartbeat_sink",
-            msg: "u64",
-        ),
         (
             src: "zed",
             dst: "vitfly",
