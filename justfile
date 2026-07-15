@@ -14,6 +14,10 @@ PREK_FMT_CI_HOOKS := "trailing-whitespace check-merge-conflict detect-private-ke
 default:
 	just pr-check
 
+# Replace logs/vit-extracted with replayable VitFly tensors and UI-style previews.
+vit-extract:
+	just --justfile "{{ROOT}}/examples/cu_flight_controller/justfile" vit-extract
+
 # Local PR pipeline: format, lint, then tests.
 pr-check:
 	just fmt
