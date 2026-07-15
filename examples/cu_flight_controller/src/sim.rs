@@ -942,10 +942,12 @@ const THRUST_CONSTANT: f32 = 1.0e-6;
 const DRAG_CONSTANT: f32 = 1.0e-7;
 const MAX_OMEGA_RAD_S: f32 = 2200.0;
 const EARTH_METERS_PER_DEG_LAT: f64 = 111_320.0;
-// Bevy world frame uses X east, Y up, Z south in this scene.
-// Keep declination at 0 in the simulated magnetic field itself so
-// `declination_deg` in `MagneticTrueHeading` can be tested independently.
-const WORLD_MAG_FIELD_UT: [f32; 3] = [0.0, -45.0, -20.0];
+// The FC sensor convention maps Bevy body +Z to forward, so its northward
+// magnetic component must be +Z even though the rendered vehicle faces -Z.
+// This produces the expected NED field [north=20, east=0, down=45] at the
+// identity spawn pose. Declination remains 0 here and is applied separately by
+// `MagneticTrueHeading`.
+const WORLD_MAG_FIELD_UT: [f32; 3] = [0.0, -45.0, 20.0];
 #[cfg(not(target_arch = "wasm32"))]
 const BASE_ASSETS_URL: &str = "https://cdn.copper-robotics.com/";
 const SKYBOX: &str = "skybox.ktx2";
@@ -3987,20 +3989,68 @@ mod tests {
     fn sim_magnetometer_heading_tracks_bevy_yaw_convention() {
         let world_mag = Vec3::from_array(WORLD_MAG_FIELD_UT);
 
-        // In Bevy body axes, identity faces world +Z (south), so heading is 180 deg.
-        let south_body = Quat::IDENTITY.inverse() * world_mag;
-        let south_fc = map_bevy_body_to_fc_magnetometer(south_body);
-        assert!(south_fc[2] > 0.0, "expected positive down component");
-        assert_heading_close(heading_from_mag_xy_deg(south_fc), 180.0);
+        let north_body = Quat::IDENTITY.inverse() * world_mag;
+        let north_fc = map_bevy_body_to_fc_magnetometer(north_body);
+        assert_eq!(north_fc, [20.0, 0.0, 45.0]);
+        assert_heading_close(heading_from_mag_xy_deg(north_fc), 0.0);
 
         // Positive Bevy yaw rotates counter-clockwise; compass heading decreases clockwise.
         let yaw_90_body = Quat::from_rotation_y(90.0_f32.to_radians()).inverse() * world_mag;
         let yaw_90_fc = map_bevy_body_to_fc_magnetometer(yaw_90_body);
-        assert_heading_close(heading_from_mag_xy_deg(yaw_90_fc), 90.0);
+        assert_heading_close(heading_from_mag_xy_deg(yaw_90_fc), 270.0);
 
         let yaw_180_body = Quat::from_rotation_y(180.0_f32.to_radians()).inverse() * world_mag;
         let yaw_180_fc = map_bevy_body_to_fc_magnetometer(yaw_180_body);
-        assert_heading_close(heading_from_mag_xy_deg(yaw_180_fc), 0.0);
+        assert_heading_close(heading_from_mag_xy_deg(yaw_180_fc), 180.0);
+    }
+
+    #[test]
+    fn sim_sensor_frame_tracks_level_and_forward_tilt() {
+        let settle_pose = |rotation: Quat| {
+            let ctx = CuContext::new_with_clock();
+            let mut ahrs = <cu_ahrs::CuAhrs as CuTask>::new(None, ()).expect("create AHRS");
+            let accel_body = rotation.inverse() * Vec3::new(0.0, -9.81, 0.0);
+            let imu = ImuPayload::from_raw(map_bevy_body_to_fc_polar(accel_body), [0.0; 3], 29.0);
+            let body_mag = rotation.inverse() * Vec3::from_array(WORLD_MAG_FIELD_UT);
+            let magnetometer =
+                MagnetometerPayload::from_raw(map_bevy_body_to_fc_magnetometer(body_mag));
+            let mut pose = None;
+
+            for sample in 1..=512_u64 {
+                let tov = Tov::Time(CuTime::from(sample * 15_625_000));
+                let mut imu_msg = CuMsg::new(Some(imu));
+                imu_msg.tov = tov;
+                let mut mag_msg = CuMsg::new(Some(magnetometer));
+                mag_msg.tov = tov;
+                let mut output = CuMsg::new(None);
+                ahrs.process(&ctx, &(&imu_msg, &mag_msg), &mut output)
+                    .expect("process simulated sensor sample");
+                pose = output.payload().copied();
+            }
+
+            pose.expect("AHRS should produce a pose")
+        };
+
+        let pose = settle_pose(Quat::IDENTITY);
+        assert!(
+            pose.roll.get::<radian>().abs() < 0.01,
+            "level simulated roll drifted to {} degrees",
+            pose.roll.get::<radian>().to_degrees()
+        );
+        assert!(
+            pose.pitch.get::<radian>().abs() < 0.01,
+            "level simulated pitch drifted to {} degrees",
+            pose.pitch.get::<radian>().to_degrees()
+        );
+
+        let rotation = Quat::from_rotation_x(-10.0_f32.to_radians());
+        let pose = settle_pose(rotation);
+        let expected = vitfly_pose(rotation);
+        assert!(
+            (pose.pitch.get::<radian>() - expected.pitch.get::<radian>()).abs() < 0.02,
+            "10-degree forward tilt estimated as {} degrees",
+            pose.pitch.get::<radian>().to_degrees()
+        );
     }
 
     #[test]
