@@ -11,6 +11,43 @@ use cu29::units::si::velocity::meter_per_second;
 #[cfg(any(feature = "sim", feature = "end2end"))]
 const MIN_FORWARD_SPEED_MPS: f32 = 1.0;
 
+/// Gives simulated depth its own logged Copper slot without copying the raster.
+///
+/// The ZED source remains unlogged so its unused stereo and confidence outputs do
+/// not inflate the compute log. Cloning `ZedDepthMap` only clones its `CuHandle`.
+#[cfg(feature = "sim")]
+#[derive(Reflect)]
+pub struct VitFlyDepthLog;
+
+#[cfg(feature = "sim")]
+impl Freezable for VitFlyDepthLog {}
+
+#[cfg(feature = "sim")]
+impl CuTask for VitFlyDepthLog {
+    type Resources<'r> = ();
+    type Input<'m> = input_msg!(cu_zed::ZedDepthMap<Vec<f32>>);
+    type Output<'m> = output_msg!(cu_zed::ZedDepthMap<Vec<f32>>);
+
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
+        Ok(Self)
+    }
+
+    fn process(
+        &mut self,
+        _ctx: &CuContext,
+        input: &Self::Input<'_>,
+        output: &mut Self::Output<'_>,
+    ) -> CuResult<()> {
+        output.tov = input.tov;
+        if let Some(depth) = input.payload() {
+            output.set_payload(depth.clone());
+        } else {
+            output.clear_payload();
+        }
+        Ok(())
+    }
+}
+
 /// Adapts the fixed-size MCU context message to ViTFly's typed inputs.
 #[cfg(any(feature = "sim", feature = "end2end"))]
 #[derive(Reflect, Default)]

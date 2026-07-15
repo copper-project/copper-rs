@@ -24,6 +24,12 @@ const CONTEXT_PERIOD: CuDuration = CuDuration(33_000_000);
 const COMMAND_TIMEOUT: CuDuration = CuDuration(250_000_000);
 const AUTO_MAX_SPEED_MPS: f32 = 4.0;
 const AUTO_HOVER_THROTTLE: f32 = 0.48;
+// ViTFly was evaluated with Flightmare's geometric controller, whose XY
+// velocity-error gain is 3 m/s^2 per m/s. With this app's 60-degree attitude
+// limit, the equivalent small-angle stick ratio is approximately
+// (3 / 9.81) / radians(60) = 0.29 per m/s.
+const AUTO_XY_VELOCITY_TO_TILT_RATIO_PER_MPS: f32 = 0.29;
+const AUTO_MAX_TILT_RATIO: f32 = 0.35;
 
 #[derive(Reflect, Default)]
 pub struct NavigationStateTask {
@@ -473,9 +479,15 @@ fn velocity_command_to_controls(
         wrap_signed_degrees(desired_heading_deg - navigation.heading.get::<degree>());
 
     ControlInputs {
-        roll: Ratio::new::<ratio>((-left_error * 0.08).clamp(-0.35, 0.35)),
+        roll: Ratio::new::<ratio>(
+            (-left_error * AUTO_XY_VELOCITY_TO_TILT_RATIO_PER_MPS)
+                .clamp(-AUTO_MAX_TILT_RATIO, AUTO_MAX_TILT_RATIO),
+        ),
         // Positive FC pitch is forward (the same convention produced by W through RcMapper).
-        pitch: Ratio::new::<ratio>((forward_error * 0.08).clamp(-0.35, 0.35)),
+        pitch: Ratio::new::<ratio>(
+            (forward_error * AUTO_XY_VELOCITY_TO_TILT_RATIO_PER_MPS)
+                .clamp(-AUTO_MAX_TILT_RATIO, AUTO_MAX_TILT_RATIO),
+        ),
         // FC yaw and compass heading have opposite signs.
         yaw: Ratio::new::<ratio>((-heading_error_deg * 0.005).clamp(-0.35, 0.35)),
         throttle: Ratio::new::<ratio>((AUTO_HOVER_THROTTLE + up_error * 0.06).clamp(0.25, 0.75)),
@@ -659,6 +671,40 @@ mod tests {
                 "heading {heading_deg} introduced lateral roll"
             );
         }
+    }
+
+    #[test]
+    fn auto_xy_velocity_gain_matches_flightmare_geometric_controller() {
+        let start = start();
+        let raw = ControlInputs {
+            armed: true,
+            auto: true,
+            ..ControlInputs::default()
+        };
+        let navigation = NavigationState {
+            valid: true,
+            position: start,
+            heading: cu29::units::si::f32::Angle::new::<degree>(0.0),
+            ..NavigationState::default()
+        };
+        let target = AutoMissionTarget {
+            active: true,
+            position: offset_position(start, 0.0, AUTO_DISTANCE_M),
+            ..AutoMissionTarget::default()
+        };
+        let command = AutonomyVelocityCommand {
+            forward: Velocity::new::<meter_per_second>(1.0),
+            left: Velocity::new::<meter_per_second>(1.0),
+            ..AutonomyVelocityCommand::default()
+        };
+
+        let controls = velocity_command_to_controls(&raw, &navigation, &target, &command);
+        assert!(
+            (controls.pitch.get::<ratio>() - AUTO_XY_VELOCITY_TO_TILT_RATIO_PER_MPS).abs() < 1.0e-6
+        );
+        assert!(
+            (controls.roll.get::<ratio>() + AUTO_XY_VELOCITY_TO_TILT_RATIO_PER_MPS).abs() < 1.0e-6
+        );
     }
 
     #[test]

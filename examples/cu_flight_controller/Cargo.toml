@@ -256,6 +256,7 @@ logreader = [
   "dep:cu-gnss-payloads",
   "cu-bdshot/messages-only",
 ]
+compute-logreader = ["logreader", "dep:cu-zed", "dep:cu-vitfly"]
 python-bindings = [
   "dep:cu29",
   "cu29/std",
@@ -325,6 +326,11 @@ path = "src/logreader.rs"
 required-features = ["logreader"]
 
 [[bin]]
+name = "quad-compute-logreader"
+path = "src/compute_logreader.rs"
+required-features = ["compute-logreader"]
+
+[[bin]]
 name = "quad-sim"
 path = "src/sim.rs"
 required-features = ["sim"]
@@ -338,3 +344,7 @@ required-features = ["sim-debug"]
 name = "quad-bevymon"
 path = "src/bevymon.rs"
 required-features = ["bevymon"]
+
+[dev-dependencies]
+cu29-export = { workspace = true }
+tempfile = { workspace = true }
