@@ -1,0 +1,138 @@
+(
+    includes: [
+        (
+            path: "mcu_graph.ron",
+            params: {
+                "control_source": "mode_supervisor",
+            },
+        ),
+    ],
+    tasks: [
+        (
+            id: "navigation",
+            type: "tasks::autonomy::NavigationStateTask",
+            logging: (enabled: true),
+        ),
+        (
+            id: "auto_mission",
+            type: "tasks::autonomy::AutoMission",
+            logging: (enabled: true),
+        ),
+        (
+            id: "autonomy_context",
+            type: "tasks::autonomy::AutonomyContextTask",
+            logging: (enabled: true),
+        ),
+        (
+            id: "auto_controller",
+            type: "tasks::autonomy::AutoVelocityController",
+            logging: (enabled: true),
+        ),
+        (
+            id: "mode_supervisor",
+            type: "tasks::autonomy::ModeSupervisor",
+            logging: (enabled: true),
+        ),
+    ],
+    bridges: [
+        (
+            id: "autonomy",
+            type: "autonomy_bridge::AutonomyBridge",
+            run_in_sim: false,
+            logging: (enabled: true),
+            config: {"wire_format": "bincode"},
+            channels: [
+                Tx(
+                    id: "context",
+                    route: "flight/autonomy/context",
+                ),
+                Rx(
+                    id: "command",
+                    route: "flight/autonomy/command",
+                ),
+            ],
+        ),
+    ],
+    cnx: [
+        (
+            src: "gnss_ublox",
+            dst: "__nc__",
+            msg: "cu_gnss_payloads::GnssEpochTime",
+        ),
+        (
+            src: "gnss_ublox",
+            dst: "navigation",
+            msg: "cu_gnss_payloads::GnssFixSolution",
+        ),
+        (
+            src: "ahrs",
+            dst: "navigation",
+            msg: "cu_ahrs::AhrsPose",
+        ),
+        (
+            src: "mag_heading",
+            dst: "navigation",
+            msg: "crate::messages::GeographicHeading",
+        ),
+        (
+            src: "mapper",
+            dst: "auto_mission",
+            msg: "crate::messages::ControlInputs",
+        ),
+        (
+            src: "navigation",
+            dst: "auto_mission",
+            msg: "crate::messages::NavigationState",
+        ),
+        (
+            src: "mapper",
+            dst: "autonomy_context",
+            msg: "crate::messages::ControlInputs",
+        ),
+        (
+            src: "navigation",
+            dst: "autonomy_context",
+            msg: "crate::messages::NavigationState",
+        ),
+        (
+            src: "auto_mission",
+            dst: "autonomy_context",
+            msg: "crate::messages::AutoMissionTarget",
+        ),
+        (
+            src: "autonomy_context",
+            dst: "autonomy/context",
+            msg: "crate::messages::AutonomyContext",
+        ),
+        (
+            src: "mapper",
+            dst: "auto_controller",
+            msg: "crate::messages::ControlInputs",
+        ),
+        (
+            src: "navigation",
+            dst: "auto_controller",
+            msg: "crate::messages::NavigationState",
+        ),
+        (
+            src: "auto_mission",
+            dst: "auto_controller",
+            msg: "crate::messages::AutoMissionTarget",
+        ),
+        (
+            src: "autonomy/command",
+            dst: "auto_controller",
+            msg: "crate::messages::AutonomyVelocityCommand",
+        ),
+        (
+            src: "mapper",
+            dst: "mode_supervisor",
+            msg: "crate::messages::ControlInputs",
+        ),
+        (
+            src: "auto_controller",
+            dst: "mode_supervisor",
+            msg: "crate::messages::AutonomyControl",
+        ),
+    ],
+)

@@ -1,7 +1,9 @@
 #![allow(dead_code)]
 
 use crate::messages::{
+    AutoMissionLeg, AutoMissionTarget, AutonomyContext, AutonomyControl, AutonomyVelocityCommand,
     BatteryVoltage, BodyCommand, BodyRateSetpoint, ControlInputs, FlightMode, GeographicHeading,
+    NavigationState,
 };
 use cu_ahrs::AhrsPose;
 use cu_bdshot::EscCommand;
@@ -44,6 +46,7 @@ const MSP_FC_VERSION_MINOR: u8 = 4;
 const MSP_FC_VERSION_PATCH: u8 = 0;
 
 pub mod activity_led;
+pub mod autonomy;
 pub mod battery;
 pub mod flow_msp;
 pub mod gnss;
@@ -114,6 +117,7 @@ enum StatusLabel {
     Angle,
     Air,
     Position,
+    Auto,
 }
 
 impl StatusLabel {
@@ -124,6 +128,7 @@ impl StatusLabel {
             StatusLabel::Angle => "ANGLE",
             StatusLabel::Air => " AIR ",
             StatusLabel::Position => " POS ",
+            StatusLabel::Auto => "AUTO ",
         }
     }
 }
@@ -295,6 +300,12 @@ impl Freezable for BodyRateSetpoint {}
 impl Freezable for BodyCommand {}
 impl Freezable for BatteryVoltage {}
 impl Freezable for GeographicHeading {}
+impl Freezable for AutoMissionLeg {}
+impl Freezable for NavigationState {}
+impl Freezable for AutoMissionTarget {}
+impl Freezable for AutonomyContext {}
+impl Freezable for AutonomyVelocityCommand {}
+impl Freezable for AutonomyControl {}
 
 #[derive(Reflect)]
 pub struct RcMapper {
@@ -308,6 +319,9 @@ pub struct RcMapper {
     mode_channel: Option<usize>,
     mode_low_max: Option<u16>,
     mode_mid_max: Option<u16>,
+    auto_channel: Option<usize>,
+    auto_min: u16,
+    auto_max: u16,
 }
 
 impl Freezable for RcMapper {}
@@ -351,15 +365,24 @@ impl CuTask for RcMapper {
                 .map(|v| v.min(u16::MAX as u32) as u16),
             None => None,
         };
+        let auto_channel = match config {
+            Some(cfg) => cfg.get::<u32>("auto_channel")?.map(|v| v as usize),
+            None => None,
+        };
+        let auto_min = cfg_u16(config, "auto_min", 600)?;
+        let auto_max = cfg_u16(config, "auto_max", 1400)?;
 
         info!(
-            "rc mapper cfg arm_channel={:?} arm_min={} arm_max={} mode_channel={:?} mode_low_max={} mode_mid_max={}",
+            "rc mapper cfg arm_channel={:?} arm_min={} arm_max={} mode_channel={:?} mode_low_max={} mode_mid_max={} auto_channel={:?} auto_min={} auto_max={}",
             arm_cfg,
             arm_min,
             arm_max,
             mode_cfg,
             mode_low_max.unwrap_or(0),
-            mode_mid_max.unwrap_or(0)
+            mode_mid_max.unwrap_or(0),
+            auto_channel,
+            auto_min,
+            auto_max
         );
 
         Ok(Self {
@@ -373,6 +396,9 @@ impl CuTask for RcMapper {
             mode_channel: mode_cfg,
             mode_low_max,
             mode_mid_max,
+            auto_channel,
+            auto_min,
+            auto_max,
         })
     }
 
@@ -423,6 +449,13 @@ impl CuTask for RcMapper {
             }
             None => FlightMode::Angle,
         };
+        let auto_value = self
+            .auto_channel
+            .and_then(|idx| channels.get(idx).copied())
+            .unwrap_or(0);
+        let auto = self.auto_channel.is_some()
+            && auto_value >= self.auto_min
+            && auto_value <= self.auto_max;
 
         debug_rl!(&LOG_RC, tov_time, {
             let mode_channel = self.mode_channel.unwrap_or(0);
@@ -431,7 +464,7 @@ impl CuTask for RcMapper {
                 .and_then(|idx| channels.get(idx).copied())
                 .unwrap_or(0);
             debug!(
-                "rc ch0={} ch1={} ch2={} ch3={} ch4={} ch5={} ch6={} ch7={} ch8={} ch9={} ch10={} ch11={} ch12={} ch13={} ch14={} ch15={} arm_ch0={} arm_raw={} armed={} mode_ch0={} mode_raw={} mode={} mode_low_max={} mode_mid_max={}",
+                "rc ch0={} ch1={} ch2={} ch3={} ch4={} ch5={} ch6={} ch7={} ch8={} ch9={} ch10={} ch11={} ch12={} ch13={} ch14={} ch15={} arm_ch0={} arm_raw={} armed={} mode_ch0={} mode_raw={} mode={} mode_low_max={} mode_mid_max={} auto_ch0={} auto_raw={} auto={} auto_min={} auto_max={}",
                 channels[0],
                 channels[1],
                 channels[2],
@@ -455,7 +488,12 @@ impl CuTask for RcMapper {
                 mode_value,
                 mode_label(mode),
                 self.mode_low_max.unwrap_or(0),
-                self.mode_mid_max.unwrap_or(0)
+                self.mode_mid_max.unwrap_or(0),
+                self.auto_channel.unwrap_or(0),
+                auto_value,
+                auto,
+                self.auto_min,
+                self.auto_max
             );
         });
 
@@ -467,13 +505,14 @@ impl CuTask for RcMapper {
             throttle: Ratio::new::<ratio>(throttle),
             armed,
             mode,
+            auto,
         });
         status_if_not_firmware!(
             output.metadata,
             format!(
                 "{} {} T{}%",
                 if armed { "ARM" } else { "DIS" },
-                mode_tag(mode),
+                if auto { "AUT" } else { mode_tag(mode) },
                 throttle_percent(throttle)
             )
         );

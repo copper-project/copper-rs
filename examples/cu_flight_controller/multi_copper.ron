@@ -2,7 +2,7 @@
     subsystems: [
         (
             id: "compute",
-            config: "compute_end2end_config.ron",
+            config: "compute_bevymon_config.ron",
         ),
         (
             id: "mcu",

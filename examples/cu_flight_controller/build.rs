@@ -7,7 +7,20 @@ fn main() {
     std::fs::write(out_dir.join("memory.x"), memory_x).unwrap();
     println!("cargo:rerun-if-changed=memory.x");
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=copperconfig.ron");
+    for config in [
+        "copperconfig.ron",
+        "mcu_graph.ron",
+        "mcu_config.ron",
+        "mcu_autonomy_config.ron",
+        "compute_bevymon_config.ron",
+        "compute_end2end_config.ron",
+        "compute_vitfly_config.ron",
+        "multi_copper.ron",
+        "multi_copper_udp.ron",
+        "multi_copper_vitfly_sim.ron",
+    ] {
+        println!("cargo:rerun-if-changed={config}");
+    }
 
     println!(
         "cargo:rustc-env=LOG_INDEX_DIR={}",

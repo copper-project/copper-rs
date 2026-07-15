@@ -81,6 +81,7 @@ pub struct VtxOsd {
     last_draw: Option<CuTime>,
     last_armed: bool,
     last_mode: FlightMode,
+    last_auto: bool,
     last_voltage_centi: Option<u16>,
     takeoff_pressure_pa: Option<f32>,
     pressure_sum_pa: f32,
@@ -102,6 +103,7 @@ impl Freezable for VtxOsd {
         cu29::bincode::Encode::encode(&self.last_draw, encoder)?;
         cu29::bincode::Encode::encode(&self.last_armed, encoder)?;
         cu29::bincode::Encode::encode(&self.last_mode, encoder)?;
+        cu29::bincode::Encode::encode(&self.last_auto, encoder)?;
         cu29::bincode::Encode::encode(&self.last_voltage_centi, encoder)?;
         cu29::bincode::Encode::encode(&self.takeoff_pressure_pa, encoder)?;
         cu29::bincode::Encode::encode(&self.pressure_sum_pa, encoder)?;
@@ -123,6 +125,7 @@ impl Freezable for VtxOsd {
         self.last_draw = cu29::bincode::Decode::decode(decoder)?;
         self.last_armed = cu29::bincode::Decode::decode(decoder)?;
         self.last_mode = cu29::bincode::Decode::decode(decoder)?;
+        self.last_auto = cu29::bincode::Decode::decode(decoder)?;
         self.last_voltage_centi = cu29::bincode::Decode::decode(decoder)?;
         self.takeoff_pressure_pa = cu29::bincode::Decode::decode(decoder)?;
         self.pressure_sum_pa = cu29::bincode::Decode::decode(decoder)?;
@@ -210,6 +213,7 @@ impl CuTask for VtxOsd {
             last_draw: None,
             last_armed: false,
             last_mode: FlightMode::Angle,
+            last_auto: false,
             last_voltage_centi: None,
             takeoff_pressure_pa: None,
             pressure_sum_pa: 0.0,
@@ -279,6 +283,7 @@ impl CuTask for VtxOsd {
         if let Some(ctrl) = ctrl {
             self.last_armed = ctrl.armed;
             self.last_mode = ctrl.mode;
+            self.last_auto = ctrl.auto;
         }
         let armed = self.last_armed;
         let calibrating = false;
@@ -337,10 +342,14 @@ impl CuTask for VtxOsd {
         let label = if calibrating {
             StatusLabel::Calibrating
         } else if armed {
-            match self.last_mode {
-                FlightMode::Acro => StatusLabel::Air,
-                FlightMode::Angle => StatusLabel::Angle,
-                FlightMode::PositionHold => StatusLabel::Position,
+            if self.last_auto {
+                StatusLabel::Auto
+            } else {
+                match self.last_mode {
+                    FlightMode::Acro => StatusLabel::Air,
+                    FlightMode::Angle => StatusLabel::Angle,
+                    FlightMode::PositionHold => StatusLabel::Position,
+                }
             }
         } else {
             StatusLabel::Disarmed
