@@ -22,7 +22,7 @@ const NAV_FIX_TIMEOUT: CuDuration = CuDuration(2_000_000_000);
 const NAV_ATTITUDE_TIMEOUT: CuDuration = CuDuration(250_000_000);
 const CONTEXT_PERIOD: CuDuration = CuDuration(33_000_000);
 const COMMAND_TIMEOUT: CuDuration = CuDuration(250_000_000);
-const AUTO_MAX_SPEED_MPS: f32 = 4.0;
+const AUTO_MAX_SPEED_MPS: f32 = 7.0;
 const AUTO_HOVER_THROTTLE: f32 = 0.48;
 // ViTFly was evaluated with Flightmare's geometric controller, whose XY
 // velocity-error gain is 3 m/s^2 per m/s. With this app's 60-degree attitude

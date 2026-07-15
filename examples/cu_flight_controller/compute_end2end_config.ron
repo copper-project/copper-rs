@@ -69,6 +69,11 @@
         ),
         (
             src: "zed",
+            dst: "vitfly_context",
+            msg: "cu_zed::ZedDepthMap<Vec<f32>>",
+        ),
+        (
+            src: "zed",
             dst: "vitfly",
             msg: "cu_zed::ZedDepthMap<Vec<f32>>",
         ),
@@ -86,6 +91,11 @@
             src: "vitfly",
             dst: "vitfly_command",
             msg: "cu_vitfly::VitFlyVelocity",
+        ),
+        (
+            src: "vitfly_context",
+            dst: "vitfly_command",
+            msg: "cu29::units::si::f32::Velocity",
         ),
         (
             src: "vitfly_command",
