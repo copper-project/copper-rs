@@ -138,7 +138,7 @@ default-members = [
   "core/cu29_unifiedlog",
 ]
 
-resolver = "2"
+resolver = "3"
 
 [profile.release]
 debug = 2
