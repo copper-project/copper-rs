@@ -36,6 +36,7 @@ use bevy::camera::RenderTarget;
 use bevy::core_pipeline::{Core3dSystems, Skybox, prepass::DepthPrepass, schedule::Core3d};
 use bevy::ecs::change_detection::DetectChanges;
 use bevy::ecs::schedule::IntoScheduleConfigs;
+use bevy::ecs::system::SystemParam;
 use bevy::image::{
     ImageCompareFunction, ImageSampler, ImageSamplerDescriptor, TextureFormatPixelInfo,
 };
@@ -99,6 +100,19 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 #[cfg(feature = "bevymon")]
 use std::sync::{Arc, Mutex};
+
+#[cfg(feature = "sim")]
+fn replace_reflected_task<A, T>(app: &mut A, task_id: &str, replacement: T) -> CuResult<()>
+where
+    A: cu29::reflect::ReflectTaskIntrospection,
+    T: cu29::reflect::Reflect,
+{
+    let task = cu29::reflect::ReflectTaskIntrospection::reflect_task_mut(app, task_id)
+        .and_then(|task| task.downcast_mut::<T>())
+        .ok_or_else(|| CuError::from(format!("sim reset cannot access task {task_id}")))?;
+    *task = replacement;
+    Ok(())
+}
 
 mod mcu_copper {
     use super::*;
@@ -180,6 +194,31 @@ mod mcu_copper {
 
         pub(super) fn log_shutdown_completed(&mut self) -> CuResult<()> {
             self.app.log_shutdown_completed()
+        }
+
+        #[cfg(feature = "sim")]
+        pub(super) fn reset_sim_state(&mut self) -> CuResult<()> {
+            replace_reflected_task(&mut self.app, "ahrs", cu_ahrs::CuAhrs::new_filter())?;
+            replace_reflected_task(
+                &mut self.app,
+                "navigation",
+                crate::tasks::autonomy::NavigationStateTask::default(),
+            )?;
+            replace_reflected_task(
+                &mut self.app,
+                "auto_mission",
+                crate::tasks::autonomy::AutoMission::default(),
+            )?;
+            replace_reflected_task(
+                &mut self.app,
+                "autonomy_context",
+                crate::tasks::autonomy::AutonomyContextTask::default(),
+            )?;
+            replace_reflected_task(
+                &mut self.app,
+                "auto_controller",
+                crate::tasks::autonomy::AutoVelocityController::default(),
+            )
         }
 
         #[cfg(feature = "bevymon")]
@@ -287,6 +326,13 @@ mod mcu_copper {
     fn default_callback(_step: default::SimStep) -> SimOverride {
         SimOverride::ExecuteByRuntime
     }
+
+    #[cfg(all(test, not(target_arch = "wasm32"), feature = "sim"))]
+    pub(super) fn register_distributed_replay(
+        builder: cu29::distributed_replay::DistributedReplayBuilder,
+    ) -> CuResult<cu29::distributed_replay::DistributedReplayBuilder> {
+        builder.register::<FlightControllerSim>("mcu")
+    }
 }
 
 mod compute_copper {
@@ -314,7 +360,32 @@ mod compute_copper {
         zed_static_state_sent: bool,
     }
 
+    #[cfg(test)]
+    pub(super) type RecordedDataSet = default::CuStampedDataSet;
+
     impl Runtime {
+        #[cfg(all(not(target_arch = "wasm32"), feature = "sim"))]
+        pub(super) fn with_log_path(
+            clock: &RobotClock,
+            zed_store: sim_zed::SimZedFrameStore,
+            logger_path: &Path,
+            log_slab_size: Option<usize>,
+        ) -> Self {
+            let app = default::FlightComputeSim::builder()
+                .with_clock(clock.clone())
+                .with_log_path(PathBuf::from(logger_path), log_slab_size)
+                .expect("failed to create compute logger")
+                .with_sim_callback(&mut default_callback)
+                .build()
+                .expect("failed to create compute runtime");
+            Self {
+                app,
+                zed_store,
+                zed_static_state_sent: false,
+            }
+        }
+
+        #[cfg(any(test, feature = "bevymon"))]
         pub(super) fn new(clock: &RobotClock, zed_store: sim_zed::SimZedFrameStore) -> Self {
             let app = default::FlightComputeSim::builder()
                 .with_clock(clock.clone())
@@ -368,11 +439,25 @@ mod compute_copper {
                     #[cfg(feature = "sim")]
                     default::SimStep::AutonomyTxCommand { msg, .. } => {
                         _autonomy_link.command = msg.clone();
+                        if let Some(command) = msg.payload() {
+                            // The upstream ViTFly preview draws the normalized
+                            // velocity command, not the raw network vector.
+                            zed_store.publish_vitfly_prediction([
+                                command.forward.get::<meter_per_second>(),
+                                command.left.get::<meter_per_second>(),
+                                command.up.get::<meter_per_second>(),
+                            ]);
+                        }
                         SimOverride::ExecutedBySim
                     }
                     #[cfg(feature = "sim")]
                     default::SimStep::VitflyListener(CuTaskCallbackState::Process(input, _)) => {
-                        if let Some(velocity) = input.payload() {
+                        // Keep an inference preview available while AUTO is
+                        // inactive. An active conditioned command published
+                        // above always takes precedence over this raw vector.
+                        if _autonomy_link.command.payload().is_none()
+                            && let Some(velocity) = input.payload()
+                        {
                             zed_store.publish_vitfly_prediction(
                                 velocity.map(|axis| axis.get::<meter_per_second>()),
                             );
@@ -396,10 +481,47 @@ mod compute_copper {
         pub(super) fn log_shutdown_completed(&mut self) -> CuResult<()> {
             self.app.log_shutdown_completed()
         }
+
+        #[cfg(feature = "sim")]
+        pub(super) fn reset_sim_state(&mut self) -> CuResult<()> {
+            replace_reflected_task(
+                &mut self.app,
+                "vitfly_context",
+                crate::compute_tasks::VitFlyContextAdapter::default(),
+            )?;
+
+            let vitfly =
+                cu29::reflect::ReflectTaskIntrospection::reflect_task_mut(&mut self.app, "vitfly")
+                    .and_then(|task| task.downcast_mut::<cu_vitfly::VitFlyTask>())
+                    .ok_or_else(|| CuError::from("sim reset cannot access task vitfly"))?;
+            let config = cu29::bincode::config::standard();
+            let encoded =
+                cu29::bincode::encode_to_vec(Option::<(Vec<f32>, Vec<f32>)>::None, config)
+                    .map_err(|err| {
+                        CuError::new_with_cause(
+                            "failed to encode empty ViTFly recurrent state",
+                            err,
+                        )
+                    })?;
+            let reader = cu29::bincode::de::read::SliceReader::new(&encoded);
+            let mut decoder = cu29::bincode::de::DecoderImpl::new(reader, config, ());
+            vitfly.thaw(&mut decoder).map_err(|err| {
+                CuError::new_with_cause("failed to clear ViTFly recurrent state", err)
+            })?;
+            self.zed_static_state_sent = false;
+            Ok(())
+        }
     }
 
     fn default_callback(_step: default::SimStep) -> SimOverride {
         SimOverride::ExecuteByRuntime
+    }
+
+    #[cfg(all(test, not(target_arch = "wasm32"), feature = "sim"))]
+    pub(super) fn register_distributed_replay(
+        builder: cu29::distributed_replay::DistributedReplayBuilder,
+    ) -> CuResult<cu29::distributed_replay::DistributedReplayBuilder> {
+        builder.register::<FlightComputeSim>("compute")
     }
 }
 
@@ -499,6 +621,48 @@ enum RcInputSource {
     #[default]
     Keyboard,
     Joystick,
+}
+
+#[derive(Resource, Default)]
+struct SimResetInterlock {
+    waiting_for_joystick_safe: bool,
+}
+
+impl SimResetInterlock {
+    fn begin(&mut self, source: RcInputSource, rc_input: &mut SimRcInput) {
+        match source {
+            RcInputSource::Keyboard => {
+                self.waiting_for_joystick_safe = false;
+                init_keyboard_rc(rc_input);
+            }
+            RcInputSource::Joystick => {
+                self.waiting_for_joystick_safe = true;
+                force_disarmed(rc_input);
+            }
+        }
+    }
+
+    fn apply_joystick_frame(&mut self, rc_input: &mut SimRcInput) {
+        if !self.waiting_for_joystick_safe {
+            return;
+        }
+
+        if !rc_input.armed && !rc_input.auto {
+            self.waiting_for_joystick_safe = false;
+            return;
+        }
+
+        force_disarmed(rc_input);
+    }
+}
+
+fn force_disarmed(rc_input: &mut SimRcInput) {
+    rc_input.roll = 0.0;
+    rc_input.pitch = 0.0;
+    rc_input.yaw = 0.0;
+    rc_input.throttle = 0.0;
+    rc_input.armed = false;
+    rc_input.auto = false;
 }
 
 #[derive(Resource, Default)]
@@ -1143,6 +1307,7 @@ fn setup_copper(mut commands: Commands, zed_store: Res<sim_zed::SimZedFrameStore
     const LOG_SLAB_SIZE: Option<usize> = Some(128 * 1024 * 1024);
     commands.insert_resource(build_sim_copper_state(
         Path::new("logs/flight_controller_sim.copper"),
+        Path::new("logs/flight_compute_sim.copper"),
         LOG_SLAB_SIZE,
         zed_store.clone(),
     ));
@@ -1150,19 +1315,27 @@ fn setup_copper(mut commands: Commands, zed_store: Res<sim_zed::SimZedFrameStore
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "sim"))]
 fn build_sim_copper_state(
-    logger_path: &Path,
+    mcu_logger_path: &Path,
+    compute_logger_path: &Path,
     log_slab_size: Option<usize>,
     zed_store: sim_zed::SimZedFrameStore,
 ) -> CopperState {
-    if let Some(parent) = logger_path.parent()
-        && !parent.exists()
-    {
-        fs::create_dir_all(parent).expect("failed to create logs directory");
+    for logger_path in [mcu_logger_path, compute_logger_path] {
+        if let Some(parent) = logger_path.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent).expect("failed to create logs directory");
+        }
     }
 
     let (clock, clock_mock) = RobotClock::mock();
-    let mut mcu = mcu_copper::Runtime::with_log_path(&clock, logger_path, log_slab_size);
-    let mut compute = compute_copper::Runtime::new(&clock, zed_store);
+    let mut mcu = mcu_copper::Runtime::with_log_path(&clock, mcu_logger_path, log_slab_size);
+    let mut compute = compute_copper::Runtime::with_log_path(
+        &clock,
+        zed_store,
+        compute_logger_path,
+        log_slab_size,
+    );
 
     mcu.start().expect("failed to start tasks");
     compute.start().expect("failed to start compute tasks");
@@ -2078,6 +2251,7 @@ fn poll_joystick(
     mut joystick: ResMut<SimJoystickState>,
     mut rc_input: ResMut<SimRcInput>,
     mut rc_source: ResMut<RcInputSource>,
+    mut reset_interlock: ResMut<SimResetInterlock>,
 ) {
     let Some(reader) = joystick.reader.as_mut() else {
         return;
@@ -2089,6 +2263,7 @@ fn poll_joystick(
             let prev_mode = rc_input.mode;
             let prev_auto = rc_input.auto;
             apply_joystick_frame(&frame, &mut rc_input);
+            reset_interlock.apply_joystick_frame(&mut rc_input);
             *rc_source = RcInputSource::Joystick;
             if rc_input.armed != prev_armed
                 || rc_input.mode != prev_mode
@@ -2231,6 +2406,19 @@ fn adjust_keyboard_throttle(
         };
 }
 
+#[derive(SystemParam)]
+struct SimResetResources<'w> {
+    motors: ResMut<'w, SimMotorCommands>,
+    kinematics: ResMut<'w, SimKinematics>,
+    sim_state: ResMut<'w, SimState>,
+    rc_source: Res<'w, RcInputSource>,
+    rc_input: ResMut<'w, SimRcInput>,
+    interlock: ResMut<'w, SimResetInterlock>,
+    zed_store: Res<'w, sim_zed::SimZedFrameStore>,
+    #[cfg(feature = "sim")]
+    copper: ResMut<'w, CopperState>,
+}
+
 fn reset_vehicle(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut query: Query<
@@ -2243,10 +2431,7 @@ fn reset_vehicle(
         ),
         With<Multicopter>,
     >,
-    mut motors: ResMut<SimMotorCommands>,
-    mut kin: ResMut<SimKinematics>,
-    rc_source: Res<RcInputSource>,
-    mut rc_input: ResMut<SimRcInput>,
+    mut reset: SimResetResources,
     _layout: Res<WorldLayout>,
     #[cfg(feature = "bevymon")] focus: Option<Res<CuBevyMonFocus>>,
 ) {
@@ -2271,12 +2456,29 @@ fn reset_vehicle(
         *ang_vel = spawn_ang_vel;
     }
 
-    motors.dshot = [0; 4];
-    kin.prev_linear_velocity = None;
+    reset.motors.dshot = [0; 4];
+    reset.kinematics.prev_linear_velocity = None;
+    reset.sim_state.vehicle = SimVehicleState::default();
+    reset.zed_store.reset_dynamic();
+    let rc_source = *reset.rc_source;
+    reset.interlock.begin(rc_source, &mut reset.rc_input);
 
-    if *rc_source == RcInputSource::Keyboard {
-        init_keyboard_rc(&mut rc_input);
-        info!("sim rc: reset to disarmed keyboard start");
+    #[cfg(feature = "sim")]
+    {
+        reset.copper.autonomy_link = SimAutonomyLink::default();
+        if let Err(err) = reset.copper.mcu.reset_sim_state() {
+            error!("failed to reset MCU task state: {}", err);
+        }
+        if let Err(err) = reset.copper.compute.reset_sim_state() {
+            error!("failed to reset compute task state: {}", err);
+        }
+    }
+
+    match rc_source {
+        RcInputSource::Keyboard => info!("sim reset: disarmed and cleared controller state"),
+        RcInputSource::Joystick => info!(
+            "sim reset: disarmed and cleared controller state; set ARM low and AUTO off before rearming"
+        ),
     }
 }
 
@@ -2572,7 +2774,11 @@ fn axis_or_unmapped(axis: Option<&String>) -> &str {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn connected_help_values(view_label: &str, joystick: &RcJoystick) -> String {
+fn connected_help_values(
+    view_label: &str,
+    joystick: &RcJoystick,
+    reset_interlock: &SimResetInterlock,
+) -> String {
     let axes: RcAxisBindings = joystick.axis_bindings();
     let frame = joystick.current_frame();
     let device_name = joystick.device_name();
@@ -2592,8 +2798,13 @@ fn connected_help_values(view_label: &str, joystick: &RcJoystick) -> String {
         axis_or_unmapped(axes.knob_sc.as_ref())
     );
 
+    let reset_line = if reset_interlock.waiting_for_joystick_safe {
+        "ARM LOW + AUTO OFF"
+    } else {
+        "R"
+    };
     format!(
-        "{view_label}\nConnected ({device_name})\n{arm_line}\n{mode_line}\n{auto_line}\n{}\n{} / {}\n{}\nR",
+        "{view_label}\nConnected ({device_name})\n{arm_line}\n{mode_line}\n{auto_line}\n{}\n{} / {}\n{}\n{reset_line}",
         axis_or_unmapped(axes.throttle.as_ref()),
         axis_or_unmapped(axes.roll.as_ref()),
         axis_or_unmapped(axes.pitch.as_ref()),
@@ -2604,6 +2815,7 @@ fn connected_help_values(view_label: &str, joystick: &RcJoystick) -> String {
 fn update_help_overlay(
     camera_view: Res<CameraView>,
     rc_source: Res<RcInputSource>,
+    reset_interlock: Res<SimResetInterlock>,
     _joystick_state: Res<SimJoystickState>,
     mut help_text_query: Query<&mut Text, With<SimHelpValuesText>>,
 ) {
@@ -2629,7 +2841,7 @@ fn update_help_overlay(
                             "{view_label}\nConnected (USB/BT)\nRC source initializing...\n-\n-\n-\n-\n-\nR"
                         )
                     },
-                    |joy| connected_help_values(view_label, joy),
+                    |joy| connected_help_values(view_label, joy, &reset_interlock),
                 )
             }
             #[cfg(target_arch = "wasm32")]
@@ -3004,6 +3216,7 @@ fn build_world_with_assets(
         .insert_resource(SimMotorCommands::default())
         .insert_resource(SimRcInput::default())
         .insert_resource(SimKinematics::default())
+        .insert_resource(SimResetInterlock::default())
         .insert_resource(RcInputSource::default())
         .insert_resource(SimJoystickState::default())
         .insert_resource(CameraView::default())
@@ -3257,6 +3470,52 @@ mod tests {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn joystick_reset_interlock_requires_safe_switch_positions() {
+        let mut rc_input = SimRcInput {
+            armed: true,
+            auto: true,
+            throttle: 0.8,
+            ..SimRcInput::default()
+        };
+        let mut interlock = SimResetInterlock::default();
+        interlock.begin(RcInputSource::Joystick, &mut rc_input);
+        assert!(!rc_input.armed);
+        assert!(!rc_input.auto);
+
+        let mut frame = RcFrame {
+            arm: Some(1.0),
+            knob_sc: Some(0.0),
+            throttle: 0.8,
+            ..RcFrame::default()
+        };
+        apply_joystick_frame(&frame, &mut rc_input);
+        interlock.apply_joystick_frame(&mut rc_input);
+        assert!(!rc_input.armed, "held ARM switch must not bypass reset");
+        assert!(!rc_input.auto, "held AUTO switch must not bypass reset");
+        assert_eq!(rc_input.throttle, 0.0);
+
+        frame.arm = Some(-1.0);
+        apply_joystick_frame(&frame, &mut rc_input);
+        interlock.apply_joystick_frame(&mut rc_input);
+        assert!(
+            interlock.waiting_for_joystick_safe,
+            "AUTO must also be switched off"
+        );
+
+        frame.knob_sc = Some(1.0);
+        apply_joystick_frame(&frame, &mut rc_input);
+        interlock.apply_joystick_frame(&mut rc_input);
+        assert!(!interlock.waiting_for_joystick_safe);
+
+        frame.arm = Some(1.0);
+        apply_joystick_frame(&frame, &mut rc_input);
+        interlock.apply_joystick_frame(&mut rc_input);
+        assert!(rc_input.armed, "arming should work after the safe cycle");
+        assert!(!rc_input.auto);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     fn build_test_copper_state() -> CopperState {
         let (clock, clock_mock) = RobotClock::mock();
         let mut mcu = mcu_copper::Runtime::without_logger(&clock);
@@ -3351,6 +3610,15 @@ mod tests {
             &mut osd_overlay,
         )
         .expect("copper sim iteration should keep running");
+
+        copper
+            .mcu
+            .reset_sim_state()
+            .expect("MCU task state should reset");
+        copper
+            .compute
+            .reset_sim_state()
+            .expect("compute task state should reset");
 
         copper.mcu.stop().expect("failed to stop tasks");
         copper
@@ -3480,12 +3748,187 @@ mod tests {
                 .payload()
                 .expect("active ViTFly command should cross the simulated bridge");
             assert!(command.forward.get::<meter_per_second>() >= 1.0);
+            assert_eq!(
+                zed_store.vitfly_prediction().1,
+                Some([
+                    command.forward.get::<meter_per_second>(),
+                    command.left.get::<meter_per_second>(),
+                    command.up.get::<meter_per_second>(),
+                ]),
+                "active preview should show the conditioned command sent to the controller"
+            );
         }
 
         compute.stop().expect("failed to stop compute tasks");
         compute
             .log_shutdown_completed()
             .expect("failed to log compute shutdown");
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn sim_reset_clears_vitfly_recurrent_state() {
+        let _guard = copper_runtime_test_lock().lock().unwrap();
+        let (clock, clock_mock) = RobotClock::mock();
+        let zed_store = sim_zed::SimZedFrameStore::default();
+        let pixel_count = (sim_zed::ZED_SIM_WIDTH * sim_zed::ZED_SIM_HEIGHT) as usize;
+        zed_store.set_depth(vec![6.0; pixel_count], vec![0.0; pixel_count]);
+
+        let mut compute = compute_copper::Runtime::new(&clock, zed_store.clone());
+        compute.start().expect("failed to start compute tasks");
+        let context = messages::AutonomyContext {
+            sequence: 1,
+            mission_generation: 1,
+            active: true,
+            pose: vitfly_pose(Quat::IDENTITY),
+            desired_speed: cu29::units::si::f32::Velocity::new::<meter_per_second>(4.0),
+        };
+        let mut autonomy_link = SimAutonomyLink::default();
+
+        clock_mock.set_value(1_000_000);
+        autonomy_link.context.tov = Tov::Time(clock.now());
+        autonomy_link.context.set_payload(context);
+        compute
+            .run_iteration(&clock, &mut autonomy_link)
+            .expect("first ViTFly inference should run");
+        let (_, first_prediction) = zed_store.vitfly_prediction();
+        let first_prediction = first_prediction.expect("first prediction should be published");
+
+        clock_mock.set_value(2_000_000);
+        compute
+            .run_iteration(&clock, &mut autonomy_link)
+            .expect("second ViTFly inference should run");
+
+        compute
+            .reset_sim_state()
+            .expect("ViTFly recurrent state should reset");
+        clock_mock.set_value(3_000_000);
+        autonomy_link.context.tov = Tov::Time(clock.now());
+        autonomy_link.context.set_payload(context);
+        compute
+            .run_iteration(&clock, &mut autonomy_link)
+            .expect("post-reset ViTFly inference should run");
+        let (_, reset_prediction) = zed_store.vitfly_prediction();
+        let reset_prediction = reset_prediction.expect("reset prediction should be published");
+
+        for (first, reset) in first_prediction.into_iter().zip(reset_prediction) {
+            assert!(
+                (first - reset).abs() < 1.0e-5,
+                "reset inference {reset} did not match initial inference {first}"
+            );
+        }
+
+        compute.stop().expect("failed to stop compute tasks");
+        compute
+            .log_shutdown_completed()
+            .expect("failed to log compute shutdown");
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn subsystem_logs_record_depth_and_complete_distributed_replay() {
+        let _guard = copper_runtime_test_lock().lock().unwrap();
+        let temp_dir = tempfile::tempdir().expect("failed to create temporary log directory");
+        let mcu_log_base = temp_dir.path().join("flight_controller_sim.copper");
+        let compute_log_base = temp_dir.path().join("flight_compute_sim.copper");
+        let zed_store = sim_zed::SimZedFrameStore::default();
+        let pixel_count = (sim_zed::ZED_SIM_WIDTH * sim_zed::ZED_SIM_HEIGHT) as usize;
+        zed_store.set_depth(vec![3.5; pixel_count], vec![0.0; pixel_count]);
+
+        let mut copper = build_sim_copper_state(
+            &mcu_log_base,
+            &compute_log_base,
+            Some(128 * 1024 * 1024),
+            zed_store,
+        );
+        let mut motors = SimMotorCommands::default();
+        let mut osd_overlay = SimOsdOverlay::default();
+        let rc = SimRcInput {
+            armed: true,
+            auto: true,
+            mode: messages::FlightMode::PositionHold,
+            ..SimRcInput::default()
+        };
+        for elapsed_ns in [1_000_000, 2_000_000] {
+            run_copper_iteration(
+                &mut copper,
+                elapsed_ns,
+                SimVehicleState::default(),
+                rc.clone(),
+                &mut motors,
+                &mut osd_overlay,
+            )
+            .expect("failed to run logged subsystem iteration");
+        }
+        copper.mcu.stop().expect("failed to stop MCU tasks");
+        copper
+            .mcu
+            .log_shutdown_completed()
+            .expect("failed to log MCU shutdown");
+        copper.compute.stop().expect("failed to stop compute tasks");
+        copper
+            .compute
+            .log_shutdown_completed()
+            .expect("failed to log compute shutdown");
+        drop(copper);
+
+        let discovered =
+            cu29::distributed_replay::DistributedReplayLog::discover(&compute_log_base)
+                .expect("compute log should be discoverable for distributed replay");
+        assert_eq!(discovered.instance_id(), 0);
+        assert_eq!(discovered.subsystem_id(), Some("compute"));
+
+        let UnifiedLogger::Read(logger) = UnifiedLoggerBuilder::new()
+            .file_base_name(&compute_log_base)
+            .build()
+            .expect("failed to reopen compute log")
+        else {
+            panic!("expected a readable compute log");
+        };
+        let mut reader = UnifiedLoggerIOReader::new(logger, UnifiedLogType::CopperList);
+        let (depth, prediction) =
+            cu29_export::copperlists_reader::<compute_copper::RecordedDataSet>(&mut reader)
+                .find_map(|copperlist| {
+                    Some((
+                        copperlist.msgs.0.1.payload()?.clone(),
+                        *copperlist.msgs.0.4.payload()?,
+                    ))
+                })
+                .expect("compute log should contain synchronized depth and prediction payloads");
+
+        assert_eq!(depth.format.width, sim_zed::ZED_SIM_WIDTH);
+        assert_eq!(depth.format.height, sim_zed::ZED_SIM_HEIGHT);
+        depth.buffer_handle.with_inner(|samples| {
+            assert_eq!(samples.len(), pixel_count);
+            assert!(samples.iter().all(|sample| *sample == 3.5));
+        });
+        assert!(prediction.iter().all(|component| {
+            component
+                .get::<cu29::units::si::velocity::meter_per_second>()
+                .is_finite()
+        }));
+
+        let multi_config_path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("multi_copper_vitfly_sim.ron");
+        let builder = cu29::distributed_replay::DistributedReplayPlan::builder(multi_config_path)
+            .expect("failed to load distributed replay config")
+            .discover_logs_under(temp_dir.path())
+            .expect("failed to discover subsystem logs");
+        let builder = mcu_copper::register_distributed_replay(builder)
+            .expect("failed to register MCU replay app");
+        let plan = compute_copper::register_distributed_replay(builder)
+            .expect("failed to register compute replay app")
+            .build()
+            .expect("the two subsystem logs should form a valid replay plan");
+        assert_eq!(plan.assignments.len(), 2);
+        assert!(plan.assignment(0, "mcu").is_some());
+        assert!(plan.assignment(0, "compute").is_some());
+
+        let mut replay = plan.start().expect("failed to start distributed replay");
+        replay
+            .run_all()
+            .expect("failed to replay both subsystem logs");
+        assert_eq!(replay.executed_nodes(), replay.total_nodes());
     }
 
     #[cfg(not(target_arch = "wasm32"))]

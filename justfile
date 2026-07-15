@@ -43,7 +43,7 @@ fmt-check: check-format-tools
 fmt: check-format-tools
 	@cargo +stable fmt --all
 	@git ls-files -z '*.toml' | xargs -0 -r env RUST_LOG=warn taplo format >/dev/null
-	@git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' | xargs -0 -r -n 1 sh -c 'test ! -f "$1" || fmtron --input "$1"' _ >/dev/null
+	@git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' ':!examples/cu_flight_controller/mcu_graph.ron' | xargs -0 -r -n 1 sh -c 'test ! -f "$1" || fmtron --input "$1"' _ >/dev/null
 	@find . -type f -name '*.ron.bak' -delete
 	@bash -lc 'set -euo pipefail; prek run --all-files {{PREK_FMT_FIX_HOOKS}} || prek run --all-files {{PREK_FMT_FIX_HOOKS}}'
 	@prek run --all-files {{PREK_FMT_CI_HOOKS}}

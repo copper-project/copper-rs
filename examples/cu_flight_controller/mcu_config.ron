@@ -2,7 +2,10 @@
     includes: [
         (
             path: "mcu_graph.ron",
-            params: {"control_source": "mapper"},
+            params: {
+                "control_source": "mapper",
+                "attitude_kp": 1.0,
+            },
         ),
     ],
 )

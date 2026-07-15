@@ -4,6 +4,7 @@
             path: "mcu_graph.ron",
             params: {
                 "control_source": "mode_supervisor",
+                "attitude_kp": 10.0,
             },
         ),
     ],

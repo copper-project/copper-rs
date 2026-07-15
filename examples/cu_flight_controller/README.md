@@ -246,12 +246,13 @@ The split BevyMon path reuses the same `cu_bevymon::spawn_split_layout(...)` she
 `cu_rp_balancebot` and `cu_bevymon_demo`, but the left panel still runs the real flight-controller
 sim world, OSD, and help overlays.
 
-The simulated compute subsystem publishes ZED2i-compatible 320×180 stereo RGBA images, depth and
-confidence maps, calibration and rig transforms, plus IMU, magnetometer, barometer, and frame
-metadata. Bevy performs the camera rendering and GPU depth readback; the simulator injects those
-buffers into the preempted `cu_zed::Zed` source. The compute graph runs ViTFly inference on the CPU
-by default and draws its predicted velocity over the top-right depth inset. Use `just sim-cuda` to
-run the same graph with ViTFly inference on NVIDIA CUDA.
+The simulated compute subsystem publishes ZED2i-compatible 320×240 stereo RGBA images at a 100°
+vertical field of view, matching the 4:3 projection used to train and evaluate ViTFly. It also
+publishes depth and confidence maps, calibration and rig transforms, plus IMU, magnetometer,
+barometer, and frame metadata. Bevy performs the camera rendering and GPU depth readback; the
+simulator injects those buffers into the preempted `cu_zed::Zed` source. The compute graph runs
+ViTFly inference on the CPU by default and draws its predicted velocity over the top-right depth
+inset. Use `just sim-cuda` to run the same graph with ViTFly inference on NVIDIA CUDA.
 
 The simulator has mutually exclusive `forest-world` and `urban-world` features. `forest-world` is
 the default for `cargo run` and `just sim`; use `just sim-urban` for the original city scene. The
@@ -298,6 +299,9 @@ Notes:
 - If no compatible RC joystick is found, the sim falls back to keyboard controls.
 - When connected, the bottom-right help panel shows the selected device name and technical axis bindings (`ABS_X`, `ABS_RY`, etc.).
 - USB and Bluetooth radios both work if they appear as a joystick device on the host.
+- `R` resets the rigid body, controller/estimator state, AUTO mission, camera cache, and ViTFly
+  recurrent state. With a joystick, move ARM low and AUTO off after resetting before the interlock
+  permits rearming.
 
 ### Compatible TX/RX Notes
 
