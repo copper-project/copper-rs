@@ -50,7 +50,7 @@ RC Input -> RC Mapper -------------------------------> mode supervisor -> attitu
 | `ahrs` | Attitude and Heading Reference System |
 | `mapper` | RC channel mapping and arm/mode logic |
 | `navigation` | Latches GNSS, AHRS, and true heading into a freshness-checked navigation state |
-| `auto_mission` | Latches home and a point 500 m ahead / 50 m up, then alternates forever |
+| `auto_mission` | Latches home and a point 500 m ahead / 8 m up, then alternates forever |
 | `autonomy_context` | Publishes the fixed-size ViTFly context at approximately 30 Hz |
 | `auto_controller` | Tracks fresh ViTFly `[forward, left, up]` commands toward the current waypoint |
 | `mode_supervisor` | Selects manual or AUTO controls before the cascaded flight controller |
@@ -67,7 +67,7 @@ RC Input -> RC Mapper -------------------------------> mode supervisor -> attitu
 - **Acro**: Rate mode for aerobatic flight
 - **Position Hold**: (placeholder for GPS integration)
 - **Auto**: SC middle position. Each entry latches the current position/heading, creates a target
-  500 m ahead at current MSL altitude + 50 m, and alternates between that point and home forever.
+  500 m ahead at current MSL altitude + 8 m, and alternates between that point and home forever.
   SC high remains reserved for forced recovery.
 
 ### Features
@@ -208,6 +208,28 @@ buffers into the preempted `cu_zed::Zed` source. The compute graph runs ViTFly i
 by default and draws its predicted velocity over the top-right depth inset. Use `just sim-cuda` to
 run the same graph with ViTFly inference on NVIDIA CUDA.
 
+The simulator has mutually exclusive `forest-world` and `urban-world` features. `forest-world` is
+the default for `cargo run` and `just sim`; use `just sim-urban` for the original city scene. The
+equivalent Cargo commands are:
+
+```bash
+cargo run
+cargo run --no-default-features --features sim,urban-world
+```
+
+The forest is a deterministic 635 m hilly world built from the CC0 Kenney Nature Kit. Its source
+GLBs, license, editable Blender scene, final GLB, and spawn-point preview live under `assets/`.
+Regenerate the scene with:
+
+```bash
+just forest-assets
+```
+
+Both world GLBs are resolved through the same Copper CDN asset path as the quadcopter and lighting
+assets. Atmospheric fog is enabled only for the forest observer camera, so the simulated ZED depth
+camera continues to measure scene geometry without a cosmetic fog layer. Each world feature carries
+its own scale, bounds, spawn position, and spawn yaw.
+
 CPU runs use `RAYON_NUM_THREADS=8` from the checked-in `.cargo/config.toml`. Making the pool size
 explicit prevents Candle from repeatedly probing Linux CPU topology while retaining parallelism for
 Bevy and Avian. The setting is scoped to this example, and an existing shell value takes precedence.
@@ -249,7 +271,7 @@ Notes:
 ## Configuration
 
 The shared MCU nodes live in `mcu_graph.ron`; `mcu_config.ron` selects direct manual control and
-`mcu_autonomy_config.ron` inserts the AUTO tasks and bridge. The 500 m / 50 m waypoint geometry and
+`mcu_autonomy_config.ron` inserts the AUTO tasks and bridge. The 500 m / 8 m waypoint geometry and
 infinite repetition are fixed demo constants, not RON parameters. Key configurable parameters:
 
 ### Rate Controller

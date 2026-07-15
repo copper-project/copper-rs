@@ -15,7 +15,7 @@ use cu29::units::si::velocity::meter_per_second;
 
 const EARTH_RADIUS_M: f64 = 6_371_008.8;
 const AUTO_DISTANCE_M: f64 = 500.0;
-const AUTO_ALTITUDE_OFFSET_M: f32 = 50.0;
+const AUTO_ALTITUDE_OFFSET_M: f32 = 8.0;
 const AUTO_ARRIVAL_HORIZONTAL_M: f64 = 12.0;
 const AUTO_ARRIVAL_VERTICAL_M: f32 = 5.0;
 const NAV_FIX_TIMEOUT: CuDuration = CuDuration(2_000_000_000);
@@ -688,7 +688,7 @@ mod tests {
         assert_eq!(first.leg, AutoMissionLeg::Outbound);
         assert_eq!(first.generation, 1);
         assert!((position_distance_m(start, first.position) - AUTO_DISTANCE_M).abs() < 0.1);
-        assert!((first.altitude_msl.get::<meter>() - 262.0).abs() < f32::EPSILON);
+        assert!((first.altitude_msl.get::<meter>() - 220.0).abs() < f32::EPSILON);
 
         for expected_leg in [
             AutoMissionLeg::Return,
@@ -726,6 +726,6 @@ mod tests {
         assert_eq!(reseeded.generation, 2);
         assert_eq!(reseeded.leg, AutoMissionLeg::Outbound);
         assert!((position_distance_m(new_start, reseeded.position) - AUTO_DISTANCE_M).abs() < 0.1);
-        assert!((reseeded.altitude_msl.get::<meter>() - 280.0).abs() < f32::EPSILON);
+        assert!((reseeded.altitude_msl.get::<meter>() - 238.0).abs() < f32::EPSILON);
     }
 }
