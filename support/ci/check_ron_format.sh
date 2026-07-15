@@ -15,7 +15,11 @@ while IFS= read -r -d '' f; do
     fi
 
     rm -f "$tmp" "$tmp.bak"
-done < <(git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron')
+done < <(
+    git ls-files -z '*.ron' \
+        ':!examples/modular_config_example/motors.ron' \
+        ':!examples/cu_flight_controller/mcu_graph.ron'
+)
 
 if ((${#changed[@]})); then
     printf 'RON formatting check failed:\n'

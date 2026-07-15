@@ -75,7 +75,7 @@
                 "rate_limit_dps": 210.0,
                 "acro_rate_dps": 500.0,
                 "acro_expo": 0.4,
-                "kp": 1.0,
+                "kp": {{attitude_kp}},
                 "ki": 0.0,
                 "kd": 0.0,
             },

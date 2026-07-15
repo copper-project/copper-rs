@@ -12,9 +12,13 @@ use cu_zed::{
 use cu29::prelude::*;
 use std::sync::{Arc, Mutex};
 
+// Match the 640x480, 100-degree vertical-FOV Flightmare camera used to train
+// and evaluate the pretrained ViTFly policy. Half resolution preserves the
+// same 4:3 projection while avoiding pixels that are discarded by ViTFly's
+// fixed 90x60 input resize.
 pub(crate) const ZED_SIM_WIDTH: u32 = 320;
-pub(crate) const ZED_SIM_HEIGHT: u32 = 180;
-pub(crate) const ZED_SIM_VERTICAL_FOV_DEG: f32 = 70.0;
+pub(crate) const ZED_SIM_HEIGHT: u32 = 240;
+pub(crate) const ZED_SIM_VERTICAL_FOV_DEG: f32 = 100.0;
 pub(crate) const ZED_SIM_BASELINE_M: f32 = 0.12;
 pub(crate) const ZED_SIM_MAX_DEPTH_M: f32 = 20.0;
 pub(crate) const ZED_SIM_DEPTH_FPS: u64 = 30;
@@ -46,6 +50,19 @@ pub(crate) struct SimZedFrameStore {
 }
 
 impl SimZedFrameStore {
+    pub(crate) fn reset_dynamic(&self) {
+        let mut frame = self.lock();
+        frame.seq = frame.seq.wrapping_add(1);
+        frame.left = None;
+        frame.right = None;
+        frame.depth = None;
+        frame.confidence = None;
+        frame.sensors = None;
+        frame.published_depth = None;
+        frame.vitfly_prediction_seq = frame.vitfly_prediction_seq.wrapping_add(1);
+        frame.vitfly_prediction_mps = None;
+    }
+
     pub(crate) fn set_left_image(&self, pixels: Vec<u8>) {
         self.lock().left = Some(CuHandle::new_detached(pixels));
     }
@@ -279,6 +296,8 @@ mod tests {
         let calibration = calibration_bundle();
         assert_eq!(calibration.width, ZED_SIM_WIDTH);
         assert_eq!(calibration.height, ZED_SIM_HEIGHT);
+        assert_eq!(ZED_SIM_WIDTH * 3, ZED_SIM_HEIGHT * 4);
+        assert_eq!(calibration.left.v_fov, 100.0);
         assert_eq!(calibration.stereo_translation_m[0], ZED_SIM_BASELINE_M);
         assert!(calibration.left.fx > 0.0);
         assert!(calibration.left.fy > 0.0);
@@ -303,5 +322,25 @@ mod tests {
 
         // A compute tick without a new inference result does not touch the cache.
         assert_eq!(store.vitfly_prediction(), (published_seq, Some(prediction)));
+    }
+
+    #[cfg(feature = "sim")]
+    #[test]
+    fn reset_drops_stale_camera_and_prediction_state() {
+        let store = SimZedFrameStore::default();
+        store.set_left_image(vec![1; 4]);
+        store.set_right_image(vec![2; 4]);
+        store.set_depth(vec![3.0], vec![0.0]);
+        store.publish_vitfly_prediction([1.0, 2.0, 3.0]);
+
+        store.reset_dynamic();
+
+        let snapshot = store.snapshot();
+        assert!(snapshot.left.is_none());
+        assert!(snapshot.right.is_none());
+        assert!(snapshot.depth.is_none());
+        assert!(snapshot.confidence.is_none());
+        assert!(store.published_depth().is_none());
+        assert_eq!(store.vitfly_prediction().1, None);
     }
 }
