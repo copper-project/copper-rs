@@ -53,14 +53,14 @@ sim:
   #!/usr/bin/env bash
   set -euo pipefail
   cd "{{ROOT}}"
-  cargo --config examples/cu_flight_controller/.cargo/config.toml run -p cu-flight-controller --no-default-features --features sim,forest-world --bin quad-sim
+  cargo --config examples/cu_flight_controller/.cargo/config.toml run -r -p cu-flight-controller --no-default-features --features sim,forest-world --bin quad-sim
 
 # Run the Bevy + Copper simulation loop in the urban world.
 sim-urban:
   #!/usr/bin/env bash
   set -euo pipefail
   cd "{{ROOT}}"
-  cargo --config examples/cu_flight_controller/.cargo/config.toml run -p cu-flight-controller --no-default-features --features sim,urban-world --bin quad-sim
+  cargo --config examples/cu_flight_controller/.cargo/config.toml run -r -p cu-flight-controller --no-default-features --features sim,urban-world --bin quad-sim
 
 # Run the simulator with ViTFly inference on NVIDIA CUDA.
 sim-cuda:

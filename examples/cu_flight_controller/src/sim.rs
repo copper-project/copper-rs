@@ -818,7 +818,7 @@ const SIM_WORLD: SimWorldConfig = SimWorldConfig {
     bbox_min_units: Vec3::new(-30_614.165, -648.2196, -4_185.883),
     bbox_max_units: Vec3::new(18_754.953, 11_102.407, 35_871.875),
     scale: 0.01,
-    spawn_position: Vec3::new(-10.0, 1.0, 20.0),
+    spawn_position: Vec3::new(-10.0, 0.12, 20.0),
     spawn_yaw_deg: 180.0,
 };
 
