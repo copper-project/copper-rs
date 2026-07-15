@@ -274,6 +274,7 @@ python-bindings = [
   "cu29-export/python",
   "dep:pyo3",
 ]
+python-vitfly-bindings = ["python-bindings", "dep:cu-zed", "dep:cu-vitfly"]
 sim = [
   "sim_core",
   "dep:cu-vitfly",

@@ -210,6 +210,27 @@ py-build:
   cd "{{ROOT}}"
   cargo rustc -p cu-flight-controller --no-default-features --features python-bindings --lib --crate-type cdylib
 
+# Build the Python extension with the compute-subsystem VitFly schema.
+py-vitfly-build:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  echo "Building the VitFly Copper log reader..."
+  cd "{{ROOT}}"
+  cargo rustc -p cu-flight-controller --no-default-features --features python-vitfly-bindings --lib --crate-type cdylib
+
+# Replace logs/vit-extracted with replayable VitFly tensors and UI-style previews.
+vit-extract: py-vitfly-build
+  #!/usr/bin/env bash
+  set -euo pipefail
+  logs="{{justfile_directory()}}/logs"
+  output="$logs/vit-extracted"
+  echo "Clearing $output..."
+  rm -rf "$output"
+  mkdir -p "$output"
+  python3 "{{justfile_directory()}}/python/extract_vitfly_samples.py" \
+    "$logs/flight_compute_sim.copper" \
+    --output "$output"
+
 # Python example reading the log.
 py log="logs/flight_controller_sim.copper": py-build
   #!/usr/bin/env bash

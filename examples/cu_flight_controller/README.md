@@ -174,6 +174,51 @@ Implementation notes:
 This pattern is the recommended Python story in Copper: post-process logs in Python
 after the run, keep Python off the control path during the run.
 
+### VitFly Sample Extraction
+
+The compute log records the complete ZED depth raster, VitFly pose/speed context,
+network task output, and conditioned command. Extract them into replayable NumPy
+samples and human-readable previews with:
+
+```bash
+# From the workspace root.
+just vit-extract
+```
+
+The command always reads
+`examples/cu_flight_controller/logs/flight_compute_sim.copper`. It empties and
+recreates `examples/cu_flight_controller/logs/vit-extracted`, so every run
+produces a fresh, self-contained dataset without stale samples.
+
+Each frame produces a paired `.npz` and `.png`, with `manifest.jsonl` preserving
+log order. The PNG uses the same depth transfer function, arrow axes, arrow shape,
+and command-vs-task-output precedence as the simulator UI. The NPZ includes:
+
+- `model_input`: exact `[1, 1, 60, 90]` float32 tensor fed to Candle
+- `desired_velocity`: `[1, 1]` float32 meters/second
+- `attitude`: `[1, 4]` scalar-first `wxyz` quaternion
+- `depth_m`: original logged meter-depth raster
+- `copper_model_output`: unscaled three-axis network output
+- the task, conditioned-command, and preview velocities in meters/second
+
+The first three arrays can be passed directly to the original PyTorch model:
+
+```python
+import numpy as np
+import torch
+
+sample = np.load("sample_000000_cl_0000000000.npz")
+inputs = [
+    torch.from_numpy(sample["model_input"]),
+    torch.from_numpy(sample["desired_velocity"]),
+    torch.from_numpy(sample["attitude"]),
+]
+prediction, hidden_state = model(inputs)
+```
+
+For `LSTMNetVIT`, iterate samples in manifest order and pass the returned hidden
+state as the fourth input on subsequent frames.
+
 ### RC Tester (simulation)
 
 ```bash
