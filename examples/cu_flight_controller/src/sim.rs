@@ -1,6 +1,12 @@
 #[cfg(feature = "sim")]
 extern crate alloc;
 
+#[cfg(all(feature = "forest-world", feature = "urban-world"))]
+compile_error!("`forest-world` and `urban-world` are mutually exclusive");
+
+#[cfg(not(any(feature = "forest-world", feature = "urban-world")))]
+compile_error!("select exactly one simulator world feature: `forest-world` or `urban-world`");
+
 #[cfg(feature = "sim")]
 mod autonomy_bridge;
 mod compute_tasks;
@@ -33,6 +39,8 @@ use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::image::{
     ImageCompareFunction, ImageSampler, ImageSamplerDescriptor, TextureFormatPixelInfo,
 };
+#[cfg(feature = "forest-world")]
+use bevy::pbr::{DistanceFog, FogFalloff};
 #[cfg(all(feature = "sim", test))]
 use bevy::prelude::EulerRot;
 use bevy::prelude::{
@@ -407,7 +415,7 @@ struct SimVehicleState {
 impl Default for SimVehicleState {
     fn default() -> Self {
         Self {
-            position: SIM_SPAWN_POSITION,
+            position: SIM_WORLD.spawn_position,
             velocity_world: Vec3::ZERO,
             rotation: spawn_rotation(),
             body_accel_fc: [0.0, 0.0, 9.81],
@@ -435,7 +443,7 @@ struct SimAutonomyLink {
 #[derive(Clone, Resource)]
 struct SceneAssetPaths {
     quadcopter: String,
-    city: String,
+    world: String,
     skybox: String,
     specular_map: String,
 }
@@ -483,7 +491,7 @@ struct SimKinematics {
 #[derive(Resource)]
 struct PendingQuadcopterSpawn {
     quadcopter_scene: Handle<WorldAsset>,
-    city_scene: Handle<WorldAsset>,
+    world_scene: Handle<WorldAsset>,
 }
 
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -779,24 +787,51 @@ const BASE_ASSETS_URL: &str = "https://cdn.copper-robotics.com/";
 const SKYBOX: &str = "skybox.ktx2";
 const SPECULAR_MAP: &str = "specular_map.ktx2";
 const QUADCOPTER: &str = "quadcopter.glb";
-const CITY: &str = "city-fixed.glb";
-const SCENE_ASSETS: [&str; 4] = [QUADCOPTER, CITY, SKYBOX, SPECULAR_MAP];
 #[cfg(not(target_arch = "wasm32"))]
 const SCENE_ASSET_CACHE_DIR: &str = ".download-cache";
-// Measured from `gltf-transform inspect city.glb` in source model units.
-const LOCAL_CITY_BBOX_MIN_UNITS: Vec3 = Vec3::new(-30_614.165, -648.2196, -4_185.883);
-const LOCAL_CITY_BBOX_MAX_UNITS: Vec3 = Vec3::new(18_754.953, 11_102.407, 35_871.875);
-// Source appears to be authored in centimeters; convert units to meters.
-const LOCAL_CITY_SCALE: f32 = 0.01;
-const SIM_SPAWN_POSITION: Vec3 = Vec3::new(-10.0, 1.0, 20.0);
-const SIM_SPAWN_YAW_DEG: f32 = 180.0;
+
+struct SimWorldConfig {
+    asset_name: &'static str,
+    entity_name: &'static str,
+    bbox_min_units: Vec3,
+    bbox_max_units: Vec3,
+    scale: f32,
+    spawn_position: Vec3,
+    spawn_yaw_deg: f32,
+}
+
+#[cfg(feature = "forest-world")]
+const SIM_WORLD: SimWorldConfig = SimWorldConfig {
+    asset_name: "forest.glb",
+    entity_name: "forest",
+    bbox_min_units: Vec3::new(-115.0, -2.5065, -545.0),
+    bbox_max_units: Vec3::new(115.0, 28.97935, 90.0),
+    scale: 1.0,
+    spawn_position: Vec3::new(-10.0, 0.12, 20.0),
+    spawn_yaw_deg: 0.0,
+};
+
+#[cfg(feature = "urban-world")]
+const SIM_WORLD: SimWorldConfig = SimWorldConfig {
+    asset_name: "city-fixed.glb",
+    entity_name: "city",
+    bbox_min_units: Vec3::new(-30_614.165, -648.2196, -4_185.883),
+    bbox_max_units: Vec3::new(18_754.953, 11_102.407, 35_871.875),
+    scale: 0.01,
+    spawn_position: Vec3::new(-10.0, 1.0, 20.0),
+    spawn_yaw_deg: 180.0,
+};
+
+// Extend beyond the rendered frame and motor-arm centers so scene-geometry
+// contacts happen before the model visibly penetrates the environment.
+const SIM_QUADCOPTER_COLLIDER_SIZE: Vec3 = Vec3::new(0.18, 0.06, 0.18);
 // With the corrected 0.44 kg sim mass and 10% airmode idle, hover is about 0.48.
 // Keep keyboard idle slightly below hover so release-to-descend works again.
 const KEYBOARD_HOVER_THROTTLE_LOW: f32 = 0.47;
 const KEYBOARD_HOVER_THROTTLE_HIGH: f32 = 0.52;
 
 fn spawn_rotation() -> Quat {
-    Quat::from_rotation_y(SIM_SPAWN_YAW_DEG.to_radians())
+    Quat::from_rotation_y(SIM_WORLD.spawn_yaw_deg.to_radians())
 }
 
 fn init_keyboard_rc(rc_input: &mut SimRcInput) {
@@ -814,11 +849,11 @@ fn spawn_pose_components() -> (
     AngularVelocity,
 ) {
     (
-        Transform::from_translation(SIM_SPAWN_POSITION).with_rotation(spawn_rotation()),
+        Transform::from_translation(SIM_WORLD.spawn_position).with_rotation(spawn_rotation()),
         Position::from_xyz(
-            SIM_SPAWN_POSITION.x,
-            SIM_SPAWN_POSITION.y,
-            SIM_SPAWN_POSITION.z,
+            SIM_WORLD.spawn_position.x,
+            SIM_WORLD.spawn_position.y,
+            SIM_WORLD.spawn_position.z,
         ),
         Rotation(spawn_rotation()),
         LinearVelocity(Vec3::ZERO),
@@ -966,15 +1001,16 @@ fn prepare_scene_assets() -> SceneAssetPaths {
         .build()
         .expect("failed to create offline scene asset cache");
 
-    let total = SCENE_ASSETS.len();
+    let scene_assets = [QUADCOPTER, SIM_WORLD.asset_name, SKYBOX, SPECULAR_MAP];
+    let total = scene_assets.len();
     let mut paths = Vec::with_capacity(total);
-    for (i, asset_name) in SCENE_ASSETS.iter().enumerate() {
+    for (index, asset_name) in scene_assets.iter().enumerate() {
         paths.push(
             precached_asset_path(
                 &online_cache,
                 &offline_cache,
                 &asset_root,
-                i + 1,
+                index + 1,
                 total,
                 asset_name,
             )
@@ -985,7 +1021,7 @@ fn prepare_scene_assets() -> SceneAssetPaths {
     eprintln!("Scene assets ready.");
     SceneAssetPaths {
         quadcopter: paths[0].clone(),
-        city: paths[1].clone(),
+        world: paths[1].clone(),
         skybox: paths[2].clone(),
         specular_map: paths[3].clone(),
     }
@@ -995,7 +1031,7 @@ fn prepare_scene_assets() -> SceneAssetPaths {
 fn prepare_scene_assets() -> SceneAssetPaths {
     SceneAssetPaths {
         quadcopter: QUADCOPTER.to_string(),
-        city: CITY.to_string(),
+        world: SIM_WORLD.asset_name.to_string(),
         skybox: SKYBOX.to_string(),
         specular_map: SPECULAR_MAP.to_string(),
     }
@@ -1482,22 +1518,22 @@ fn setup_world(
     layout: Res<WorldLayout>,
     asset_paths: Res<SceneAssetPaths>,
 ) {
-    let city_size_units = LOCAL_CITY_BBOX_MAX_UNITS - LOCAL_CITY_BBOX_MIN_UNITS;
-    let city_size_m = city_size_units * LOCAL_CITY_SCALE;
-    let city_translation = Vec3::ZERO;
-    let city_scale = Vec3::splat(LOCAL_CITY_SCALE);
+    let world_size_units = SIM_WORLD.bbox_max_units - SIM_WORLD.bbox_min_units;
+    let world_size_m = world_size_units * SIM_WORLD.scale;
+    let world_translation = Vec3::ZERO;
+    let world_scale = Vec3::splat(SIM_WORLD.scale);
     info!(
-        "sim world: loading city {} (bbox {}x{}x{} units, scaled to {}x{}x{} m) with translation ({}, {}, {})",
-        asset_paths.city.as_str(),
-        city_size_units.x,
-        city_size_units.y,
-        city_size_units.z,
-        city_size_m.x,
-        city_size_m.y,
-        city_size_m.z,
-        city_translation.x,
-        city_translation.y,
-        city_translation.z
+        "sim world: loading {} (bbox {}x{}x{} units, scaled to {}x{}x{} m) with translation ({}, {}, {})",
+        asset_paths.world.as_str(),
+        world_size_units.x,
+        world_size_units.y,
+        world_size_units.z,
+        world_size_m.x,
+        world_size_m.y,
+        world_size_m.z,
+        world_translation.x,
+        world_translation.y,
+        world_translation.z
     );
 
     let skybox_handle = asset_server.load(asset_paths.skybox.clone());
@@ -1543,6 +1579,12 @@ fn setup_world(
             ..default()
         },
         Transform::from_xyz(-2.0, 1.6, -2.0).looking_at(Vec3::ZERO, Vec3::Y),
+        #[cfg(feature = "forest-world")]
+        DistanceFog {
+            color: Color::srgba(0.58, 0.68, 0.65, 0.22),
+            falloff: FogFalloff::from_visibility(180.0),
+            ..default()
+        },
         SimSceneCamera,
     ));
     if layout.split_monitor {
@@ -1635,22 +1677,22 @@ fn setup_world(
     ));
 
     let quadcopter_scene_path = format!("{}#scene0", asset_paths.quadcopter.as_str());
-    let city_scene_path = format!("{}#scene0", asset_paths.city.as_str());
+    let world_scene_path = format!("{}#scene0", asset_paths.world.as_str());
 
     let quadcopter_scene =
         asset_server.load(GltfAssetLabel::Scene(0).from_asset(quadcopter_scene_path));
-    let city_scene = asset_server.load(GltfAssetLabel::Scene(0).from_asset(city_scene_path));
+    let world_scene = asset_server.load(GltfAssetLabel::Scene(0).from_asset(world_scene_path));
     commands.insert_resource(PendingQuadcopterSpawn {
         quadcopter_scene: quadcopter_scene.clone(),
-        city_scene: city_scene.clone(),
+        world_scene: world_scene.clone(),
     });
 
     commands.spawn((
-        Name::new("city"),
-        WorldAssetRoot(city_scene),
+        Name::new(SIM_WORLD.entity_name),
+        WorldAssetRoot(world_scene),
         Transform {
-            translation: city_translation,
-            scale: city_scale,
+            translation: world_translation,
+            scale: world_scale,
             ..default()
         },
         ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
@@ -1669,7 +1711,7 @@ fn spawn_quadcopter_when_world_ready(
         return;
     };
 
-    if !asset_server.is_loaded_with_dependencies(pending_spawn.city_scene.id())
+    if !asset_server.is_loaded_with_dependencies(pending_spawn.world_scene.id())
         || !asset_server.is_loaded_with_dependencies(pending_spawn.quadcopter_scene.id())
         || colliders.is_empty()
     {
@@ -1687,7 +1729,11 @@ fn spawn_quadcopter_when_world_ready(
             rotation,
             lin_vel,
             ang_vel,
-            Collider::cuboid(0.14, 0.05, 0.14),
+            Collider::cuboid(
+                SIM_QUADCOPTER_COLLIDER_SIZE.x,
+                SIM_QUADCOPTER_COLLIDER_SIZE.y,
+                SIM_QUADCOPTER_COLLIDER_SIZE.z,
+            ),
             Multicopter::new(quad_x_propellers()),
             Mass(0.44),
             AngularInertia::new(Vec3::new(0.012, 0.02, 0.012)),
@@ -3259,7 +3305,7 @@ mod tests {
         let asset_server = app.world().resource::<AssetServer>();
         (
             asset_server.load(GltfAssetLabel::Scene(0).from_asset(scene_assets.quadcopter.clone())),
-            asset_server.load(GltfAssetLabel::Scene(0).from_asset(scene_assets.city.clone())),
+            asset_server.load(GltfAssetLabel::Scene(0).from_asset(scene_assets.world.clone())),
         )
     }
 
@@ -3267,13 +3313,13 @@ mod tests {
     fn wait_for_scene_asset_loads(
         app: &mut App,
         quadcopter_scene: &Handle<WorldAsset>,
-        city_scene: &Handle<WorldAsset>,
+        world_scene: &Handle<WorldAsset>,
     ) -> bool {
         for _ in 0..300 {
             app.update();
             let asset_server = app.world().resource::<AssetServer>();
             if asset_server.is_loaded_with_dependencies(quadcopter_scene.id())
-                && asset_server.is_loaded_with_dependencies(city_scene.id())
+                && asset_server.is_loaded_with_dependencies(world_scene.id())
             {
                 return true;
             }
@@ -3447,17 +3493,17 @@ mod tests {
     fn sim_gltf_world_assets_load() {
         let scene_assets = prepare_scene_assets();
         let mut app = build_scene_asset_test_app(false);
-        let (quadcopter_scene, city_scene) = load_scene_asset_handles(&mut app, &scene_assets);
+        let (quadcopter_scene, world_scene) = load_scene_asset_handles(&mut app, &scene_assets);
 
-        if wait_for_scene_asset_loads(&mut app, &quadcopter_scene, &city_scene) {
+        if wait_for_scene_asset_loads(&mut app, &quadcopter_scene, &world_scene) {
             return;
         }
 
         let asset_server = app.world().resource::<AssetServer>();
         panic!(
-            "scene assets did not load: quadcopter_loaded={} city_loaded={}",
+            "scene assets did not load: quadcopter_loaded={} world_loaded={}",
             asset_server.is_loaded_with_dependencies(quadcopter_scene.id()),
-            asset_server.is_loaded_with_dependencies(city_scene.id())
+            asset_server.is_loaded_with_dependencies(world_scene.id())
         );
     }
 
@@ -3466,9 +3512,9 @@ mod tests {
     fn sim_gltf_world_assets_clone_with_registered_types() {
         let scene_assets = prepare_scene_assets();
         let mut app = build_scene_asset_test_app(true);
-        let (quadcopter_scene, city_scene) = load_scene_asset_handles(&mut app, &scene_assets);
+        let (quadcopter_scene, world_scene) = load_scene_asset_handles(&mut app, &scene_assets);
         assert!(
-            wait_for_scene_asset_loads(&mut app, &quadcopter_scene, &city_scene),
+            wait_for_scene_asset_loads(&mut app, &quadcopter_scene, &world_scene),
             "scene assets did not load"
         );
 
@@ -3477,7 +3523,7 @@ mod tests {
             .resource::<bevy::ecs::reflect::AppTypeRegistry>()
             .clone();
         let world_assets = app.world().resource::<Assets<WorldAsset>>();
-        for (name, handle) in [("quadcopter", &quadcopter_scene), ("city", &city_scene)] {
+        for (name, handle) in [("quadcopter", &quadcopter_scene), ("world", &world_scene)] {
             let world_asset = world_assets
                 .get(handle)
                 .unwrap_or_else(|| panic!("{name} world asset did not load"));
