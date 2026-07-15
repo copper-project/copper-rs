@@ -141,8 +141,8 @@ impl PyVitFlySampleIterator {
                     .map(|command| {
                         use cu29::units::si::velocity::meter_per_second;
                         [
-                            command.forward.get::<meter_per_second>(),
-                            command.left.get::<meter_per_second>(),
+                            command.north.get::<meter_per_second>(),
+                            command.west.get::<meter_per_second>(),
                             command.up.get::<meter_per_second>(),
                         ]
                     });

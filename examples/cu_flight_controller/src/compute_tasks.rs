@@ -144,7 +144,7 @@ impl CuTask for VitFlyCommandAdapter {
             output.clear_payload();
             return Ok(());
         }
-        let Some([forward, left, up]) = conditioned_body_velocity(
+        let Some([north, west, up]) = conditioned_world_velocity(
             velocity.map(|axis| axis.get::<meter_per_second>()),
             context.desired_speed.get::<meter_per_second>(),
         ) else {
@@ -154,19 +154,20 @@ impl CuTask for VitFlyCommandAdapter {
         output.set_payload(AutonomyVelocityCommand {
             context_sequence: context.sequence,
             mission_generation: context.mission_generation,
-            forward: cu29::units::si::f32::Velocity::new::<meter_per_second>(forward),
-            left: cu29::units::si::f32::Velocity::new::<meter_per_second>(left),
+            north: cu29::units::si::f32::Velocity::new::<meter_per_second>(north),
+            west: cu29::units::si::f32::Velocity::new::<meter_per_second>(west),
             up: cu29::units::si::f32::Velocity::new::<meter_per_second>(up),
         });
         Ok(())
     }
 }
 
-/// Match ViTFly's upstream command conditioning while retaining a forward
-/// component for waypoint progress. The learned output is a direction in the
-/// camera/body FLU frame, not an already-normalized velocity setpoint.
+/// Match ViTFly's upstream command conditioning while retaining a northward
+/// component for mission progress. The learned output is a direction in its
+/// fixed world `[north, west, up]` frame, not a body-frame vector or an
+/// already-normalized velocity setpoint.
 #[cfg(any(feature = "sim", feature = "end2end"))]
-fn conditioned_body_velocity(raw: [f32; 3], desired_speed_mps: f32) -> Option<[f32; 3]> {
+fn conditioned_world_velocity(raw: [f32; 3], desired_speed_mps: f32) -> Option<[f32; 3]> {
     if !desired_speed_mps.is_finite()
         || desired_speed_mps <= 0.0
         || !raw.iter().all(|axis| axis.is_finite())
@@ -286,14 +287,14 @@ mod tests {
 
     #[test]
     fn vitfly_direction_is_normalized_with_positive_forward_progress() {
-        let clear_path = conditioned_body_velocity([0.5, 0.0, 0.0], 4.0).unwrap();
+        let clear_path = conditioned_world_velocity([0.5, 0.0, 0.0], 4.0).unwrap();
         assert_eq!(clear_path, [4.0, 0.0, 0.0]);
 
-        let avoidance = conditioned_body_velocity([-0.5, 0.5, 0.0], 4.0).unwrap();
+        let avoidance = conditioned_world_velocity([-0.5, 0.5, 0.0], 4.0).unwrap();
         assert!(avoidance[0] >= MIN_FORWARD_SPEED_MPS);
         assert!(avoidance[1] > 0.0);
 
-        let degenerate = conditioned_body_velocity([0.0; 3], 4.0).unwrap();
+        let degenerate = conditioned_world_velocity([0.0; 3], 4.0).unwrap();
         assert_eq!(degenerate, [4.0, 0.0, 0.0]);
     }
 }

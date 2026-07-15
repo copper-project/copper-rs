@@ -52,7 +52,7 @@ RC Input -> RC Mapper -------------------------------> mode supervisor -> attitu
 | `navigation` | Latches GNSS, AHRS, and true heading into a freshness-checked navigation state |
 | `auto_mission` | Latches home and a point 500 m ahead / 8 m up, then alternates forever |
 | `autonomy_context` | Publishes the fixed-size ViTFly context at approximately 30 Hz |
-| `auto_controller` | Tracks fresh ViTFly `[forward, left, up]` commands toward the current waypoint |
+| `auto_controller` | Tracks fresh ViTFly world-frame `[north, west, up]` commands toward the current waypoint |
 | `mode_supervisor` | Selects manual or AUTO controls before the cascaded flight controller |
 | `attitude` | Outer loop PID (angle to rate setpoint) |
 | `rate` | Inner loop PID (rate to motor commands) |

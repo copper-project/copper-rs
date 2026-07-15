@@ -462,8 +462,13 @@ fn velocity_command_to_controls(
     let velocity_west = -navigation.velocity_east.get::<meter_per_second>();
     let (measured_forward, measured_left) =
         world_flu_to_body(velocity_north, velocity_west, sin_heading, cos_heading);
-    let desired_forward = command.forward.get::<meter_per_second>();
-    let desired_left = command.left.get::<meter_per_second>();
+    // ViTFly was trained to emit a fixed world-frame velocity. Rotate that
+    // desired vector by the same transform as the GNSS velocity before taking
+    // the body-frame controller error.
+    let desired_north = command.north.get::<meter_per_second>();
+    let desired_west = command.west.get::<meter_per_second>();
+    let (desired_forward, desired_left) =
+        world_flu_to_body(desired_north, desired_west, sin_heading, cos_heading);
     let measured_up = -navigation.velocity_down.get::<meter_per_second>();
 
     let forward_error = desired_forward - measured_forward;
@@ -533,8 +538,8 @@ fn navigation_values_are_finite(
 }
 
 fn command_values_are_finite(command: &AutonomyVelocityCommand) -> bool {
-    command.forward.get::<meter_per_second>().is_finite()
-        && command.left.get::<meter_per_second>().is_finite()
+    command.north.get::<meter_per_second>().is_finite()
+        && command.west.get::<meter_per_second>().is_finite()
         && command.up.get::<meter_per_second>().is_finite()
 }
 
@@ -635,7 +640,7 @@ mod tests {
     }
 
     #[test]
-    fn body_frame_vitfly_command_drives_forward_at_cardinal_headings() {
+    fn world_frame_vitfly_command_drives_forward_at_cardinal_headings() {
         let start = start();
         let raw = ControlInputs {
             armed: true,
@@ -655,9 +660,10 @@ mod tests {
                 position: offset_position(start, heading_deg as f64, AUTO_DISTANCE_M),
                 ..AutoMissionTarget::default()
             };
+            let heading_rad = heading_deg.to_radians();
             let command = AutonomyVelocityCommand {
-                forward: Velocity::new::<meter_per_second>(4.0),
-                left: Velocity::new::<meter_per_second>(0.0),
+                north: Velocity::new::<meter_per_second>(4.0 * libm::cosf(heading_rad)),
+                west: Velocity::new::<meter_per_second>(-4.0 * libm::sinf(heading_rad)),
                 ..AutonomyVelocityCommand::default()
             };
 
@@ -671,6 +677,38 @@ mod tests {
                 "heading {heading_deg} introduced lateral roll"
             );
         }
+    }
+
+    #[test]
+    fn north_world_command_is_leftward_when_facing_east() {
+        let start = start();
+        let raw = ControlInputs {
+            armed: true,
+            auto: true,
+            ..ControlInputs::default()
+        };
+        let navigation = NavigationState {
+            valid: true,
+            position: start,
+            heading: cu29::units::si::f32::Angle::new::<degree>(90.0),
+            ..NavigationState::default()
+        };
+        let target = AutoMissionTarget {
+            active: true,
+            position: offset_position(start, 90.0, AUTO_DISTANCE_M),
+            ..AutoMissionTarget::default()
+        };
+        let command = AutonomyVelocityCommand {
+            north: Velocity::new::<meter_per_second>(1.0),
+            west: Velocity::new::<meter_per_second>(0.0),
+            ..AutonomyVelocityCommand::default()
+        };
+
+        let controls = velocity_command_to_controls(&raw, &navigation, &target, &command);
+        assert!(controls.pitch.get::<ratio>().abs() < 1.0e-5);
+        assert!(
+            (controls.roll.get::<ratio>() + AUTO_XY_VELOCITY_TO_TILT_RATIO_PER_MPS).abs() < 1.0e-5
+        );
     }
 
     #[test]
@@ -693,8 +731,8 @@ mod tests {
             ..AutoMissionTarget::default()
         };
         let command = AutonomyVelocityCommand {
-            forward: Velocity::new::<meter_per_second>(1.0),
-            left: Velocity::new::<meter_per_second>(1.0),
+            north: Velocity::new::<meter_per_second>(1.0),
+            west: Velocity::new::<meter_per_second>(1.0),
             ..AutonomyVelocityCommand::default()
         };
 

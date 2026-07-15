@@ -443,8 +443,8 @@ mod compute_copper {
                             // The upstream ViTFly preview draws the normalized
                             // velocity command, not the raw network vector.
                             zed_store.publish_vitfly_prediction([
-                                command.forward.get::<meter_per_second>(),
-                                command.left.get::<meter_per_second>(),
+                                command.north.get::<meter_per_second>(),
+                                command.west.get::<meter_per_second>(),
                                 command.up.get::<meter_per_second>(),
                             ]);
                         }
@@ -1593,16 +1593,16 @@ fn update_zed_depth_preview(
 }
 
 fn draw_vitfly_arrow(pixels: &mut [u8], width: usize, height: usize, velocity: [f32; 3]) {
-    let [_forward, left, up] = velocity;
-    if !left.is_finite() || !up.is_finite() || width == 0 || height == 0 {
+    let [_north, west, up] = velocity;
+    if !west.is_finite() || !up.is_finite() || width == 0 || height == 0 {
         return;
     }
 
     let center = (width as f32 * 0.5, height as f32 * 0.5);
-    // Match the original Python preview: lateral points left on the image and
-    // positive vertical velocity points upward.
+    // Match the original Python preview. Its fixed world frame is aligned with
+    // the simulator's initial camera: west points left and up points upward.
     let end = (
-        (center.0 - left * width as f32 / 3.0).clamp(0.0, (width - 1) as f32),
+        (center.0 - west * width as f32 / 3.0).clamp(0.0, (width - 1) as f32),
         (center.1 - up * height as f32 / 3.0).clamp(0.0, (height - 1) as f32),
     );
     draw_preview_line(pixels, width, height, center, end, 2);
@@ -2703,10 +2703,10 @@ fn sim_battery_set_armed(armed: bool) {
 }
 
 fn sim_gnss_set_vehicle_state(position_xyz_m: [f32; 3], velocity_xyz_mps: [f32; 3]) {
-    // Scene/world alignment in this sim: +Z tracks geographic north and +X tracks geographic west.
-    // GNSS expects NED signs, so east is the opposite of world +X.
-    let north_m = position_xyz_m[2] as f64;
-    let east_m = -(position_xyz_m[0] as f64);
+    // Bevy world uses +X east, +Y up, and +Z south. The identity quad therefore
+    // faces geographic north along Bevy's -Z forward axis.
+    let north_m = -(position_xyz_m[2] as f64);
+    let east_m = position_xyz_m[0] as f64;
     let up_m = position_xyz_m[1];
 
     let meters_per_deg_lon = (EARTH_METERS_PER_DEG_LAT
@@ -2715,8 +2715,8 @@ fn sim_gnss_set_vehicle_state(position_xyz_m: [f32; 3], velocity_xyz_mps: [f32; 
     let lat_deg = sim_support::GNSS_FIXED_LAT_DEG + (north_m / EARTH_METERS_PER_DEG_LAT);
     let lon_deg = sim_support::GNSS_FIXED_LON_DEG + (east_m / meters_per_deg_lon);
 
-    let velocity_north_mps = velocity_xyz_mps[2];
-    let velocity_east_mps = -velocity_xyz_mps[0];
+    let velocity_north_mps = -velocity_xyz_mps[2];
+    let velocity_east_mps = velocity_xyz_mps[0];
     let velocity_down_mps = -velocity_xyz_mps[1];
     let ground_speed_mps = libm::sqrtf(
         velocity_north_mps * velocity_north_mps + velocity_east_mps * velocity_east_mps,
@@ -3747,12 +3747,12 @@ mod tests {
                 .command
                 .payload()
                 .expect("active ViTFly command should cross the simulated bridge");
-            assert!(command.forward.get::<meter_per_second>() >= 1.0);
+            assert!(command.north.get::<meter_per_second>() >= 1.0);
             assert_eq!(
                 zed_store.vitfly_prediction().1,
                 Some([
-                    command.forward.get::<meter_per_second>(),
-                    command.left.get::<meter_per_second>(),
+                    command.north.get::<meter_per_second>(),
+                    command.west.get::<meter_per_second>(),
                     command.up.get::<meter_per_second>(),
                 ]),
                 "active preview should show the conditioned command sent to the controller"
@@ -4015,21 +4015,29 @@ mod tests {
     }
 
     #[test]
-    fn sim_gnss_east_is_negative_world_x() {
+    fn sim_gnss_horizontal_position_matches_bevy_world_axes() {
         let _guard = sim_gnss_test_lock().lock().unwrap();
         let state = sim_support::sim_gnss_state();
 
         sim_gnss_set_vehicle_state([0.0, 0.0, 0.0], [0.0, 0.0, 0.0]);
+        let lat0 = f64::from_bits(state.lat_deg_bits.load(Ordering::Relaxed));
         let lon0 = f64::from_bits(state.lon_deg_bits.load(Ordering::Relaxed));
 
-        // In this scene, moving east is -X in world.
-        sim_gnss_set_vehicle_state([-20.0, 0.0, 0.0], [0.0, 0.0, 0.0]);
+        sim_gnss_set_vehicle_state([20.0, 0.0, 0.0], [0.0, 0.0, 0.0]);
         let lon_east = f64::from_bits(state.lon_deg_bits.load(Ordering::Relaxed));
         assert!(lon_east > lon0, "east movement should increase longitude");
 
-        sim_gnss_set_vehicle_state([20.0, 0.0, 0.0], [0.0, 0.0, 0.0]);
+        sim_gnss_set_vehicle_state([-20.0, 0.0, 0.0], [0.0, 0.0, 0.0]);
         let lon_west = f64::from_bits(state.lon_deg_bits.load(Ordering::Relaxed));
         assert!(lon_west < lon0, "west movement should decrease longitude");
+
+        sim_gnss_set_vehicle_state([0.0, 0.0, -20.0], [0.0, 0.0, 0.0]);
+        let lat_north = f64::from_bits(state.lat_deg_bits.load(Ordering::Relaxed));
+        assert!(lat_north > lat0, "north movement should increase latitude");
+
+        sim_gnss_set_vehicle_state([0.0, 0.0, 20.0], [0.0, 0.0, 0.0]);
+        let lat_south = f64::from_bits(state.lat_deg_bits.load(Ordering::Relaxed));
+        assert!(lat_south < lat0, "south movement should decrease latitude");
     }
 
     #[test]
@@ -4037,8 +4045,8 @@ mod tests {
         let _guard = sim_gnss_test_lock().lock().unwrap();
         let state = sim_support::sim_gnss_state();
 
-        // World velocity +X is west, +Z is north, +Y is up.
-        sim_gnss_set_vehicle_state([0.0, 0.0, 0.0], [-5.0, 2.0, 0.0]); // 5 m/s east, 2 m/s up
+        // World velocity +X is east, -Z is north, and +Y is up.
+        sim_gnss_set_vehicle_state([0.0, 0.0, 0.0], [5.0, 2.0, -3.0]);
 
         let vn = f32::from_bits(state.velocity_north_mps_bits.load(Ordering::Relaxed));
         let ve = f32::from_bits(state.velocity_east_mps_bits.load(Ordering::Relaxed));
@@ -4046,19 +4054,19 @@ mod tests {
         let gs = f32::from_bits(state.ground_speed_mps_bits.load(Ordering::Relaxed));
         let hm = f32::from_bits(state.heading_motion_deg_bits.load(Ordering::Relaxed));
 
-        assert!(vn.abs() < 1.0e-6, "north velocity should be ~0");
+        assert!((vn - 3.0).abs() < 1.0e-6, "north velocity should be +3 m/s");
         assert!((ve - 5.0).abs() < 1.0e-6, "east velocity should be +5 m/s");
         assert!(
             (vd + 2.0).abs() < 1.0e-6,
             "down velocity should be -2 m/s for upward motion"
         );
         assert!(
-            (gs - 5.0).abs() < 1.0e-6,
+            (gs - libm::sqrtf(34.0)).abs() < 1.0e-6,
             "ground speed should track horizontal speed"
         );
         assert!(
-            (hm - 90.0).abs() < 1.0e-6,
-            "eastward motion heading should be 90 deg"
+            (hm - libm::atan2f(5.0, 3.0).to_degrees()).abs() < 1.0e-6,
+            "heading should use north/east velocity components"
         );
     }
 }
