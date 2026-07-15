@@ -3,21 +3,69 @@
         (
             id: "zed",
             type: "cu_zed::Zed",
-            run_in_sim: false,
             logging: (enabled: false),
         ),
         (
+            id: "vitfly_context",
+            type: "tasks::VitFlyContextAdapter",
+            logging: (enabled: true),
+        ),
+        (
             id: "vitfly",
-            type: "tasks::NoopVitFlyTask",
-            kind: task,
-            logging: (enabled: false),
+            type: "cu_vitfly::VitFlyTask",
+            config: {
+                "max_depth_m": 12.5,
+                "invalid_depth": 0.8,
+            },
+            logging: (enabled: true),
+        ),
+        (
+            id: "vitfly_command",
+            type: "tasks::VitFlyCommandAdapter",
+            logging: (enabled: true),
+        ),
+    ],
+    bridges: [
+        (
+            id: "autonomy",
+            type: "autonomy_bridge::AutonomyBridge",
+            logging: (enabled: true),
+            config: {
+                "wire_format": "bincode",
+                "zenoh_config_json": r#"
+                    {
+                        mode: "peer",
+                        listen: { endpoints: ["udp/0.0.0.0:7447"] },
+                    }
+                "#,
+            },
+            channels: [
+                Rx(
+                    id: "context",
+                    route: "flight/autonomy/context",
+                ),
+                Tx(
+                    id: "command",
+                    route: "flight/autonomy/command",
+                ),
+            ],
         ),
     ],
     cnx: [
         (
             src: "zed",
-            dst: "vitfly",
+            dst: "__nc__",
             msg: "cu_zed::ZedStereoImages",
+        ),
+        (
+            src: "autonomy/context",
+            dst: "vitfly_context",
+            msg: "crate::messages::AutonomyContext",
+        ),
+        (
+            src: "autonomy/context",
+            dst: "vitfly_command",
+            msg: "crate::messages::AutonomyContext",
         ),
         (
             src: "zed",
@@ -25,9 +73,24 @@
             msg: "cu_zed::ZedDepthMap<Vec<f32>>",
         ),
         (
+            src: "vitfly_context",
+            dst: "vitfly",
+            msg: "cu_ahrs::AhrsPose",
+        ),
+        (
+            src: "vitfly_context",
+            dst: "vitfly",
+            msg: "cu29::units::si::f32::Velocity",
+        ),
+        (
             src: "vitfly",
-            dst: "__nc__",
-            msg: "()",
+            dst: "vitfly_command",
+            msg: "cu_vitfly::VitFlyVelocity",
+        ),
+        (
+            src: "vitfly_command",
+            dst: "autonomy/command",
+            msg: "crate::messages::AutonomyVelocityCommand",
         ),
         (
             src: "zed",
@@ -66,7 +129,7 @@
         ),
     ],
     logging: (
-        enable_task_logging: false,
+        enable_task_logging: true,
         slab_size_mib: 64,
         section_size_mib: 8,
     ),

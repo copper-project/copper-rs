@@ -22,7 +22,7 @@ end2end:
   cargo run -p cu-flight-controller --no-default-features --features end2end --bin quad-compute
 
 # Render the complete two-subsystem deployment by default.
-dag config="multi_copper.ron" mission="":
+dag config="multi_copper_udp.ron" mission="":
   #!/usr/bin/env bash
   set -euo pipefail
 

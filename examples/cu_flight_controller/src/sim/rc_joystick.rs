@@ -16,7 +16,7 @@ pub struct RcFrame {
     pub arm: Option<f32>,
     pub knob_sa: f32,
     pub knob_sb: f32,
-    pub knob_sc: f32,
+    pub knob_sc: Option<f32>,
     pub aux: Vec<AuxChannel>,
     pub switches: Vec<SwitchState>,
 }
@@ -106,7 +106,7 @@ impl RcJoystick {
             arm: None,
             knob_sa: 0.0,
             knob_sb: 0.0,
-            knob_sc: 0.0,
+            knob_sc: None,
             aux,
             switches,
         };
@@ -239,8 +239,11 @@ impl RcJoystick {
                 changed
             }
             RcAxis::KnobSc => {
-                let changed = !float_eq(self.state.knob_sc, value);
-                self.state.knob_sc = value;
+                let changed = self
+                    .state
+                    .knob_sc
+                    .is_none_or(|knob_sc| !float_eq(knob_sc, value));
+                self.state.knob_sc = Some(value);
                 changed
             }
             RcAxis::Aux(i) => {
@@ -279,7 +282,7 @@ fn prime_axes(device: &Device, axis_map: &HashMap<u16, (RcAxis, AxisScale)>, sta
                 RcAxis::Arm => state.arm = Some(value),
                 RcAxis::KnobSa => state.knob_sa = value,
                 RcAxis::KnobSb => state.knob_sb = value,
-                RcAxis::KnobSc => state.knob_sc = value,
+                RcAxis::KnobSc => state.knob_sc = Some(value),
                 RcAxis::Aux(i) => {
                     if let Some(aux) = state.aux.get_mut(*i as usize) {
                         aux.value = value;

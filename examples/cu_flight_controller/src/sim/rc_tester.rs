@@ -39,7 +39,7 @@ fn main() -> io::Result<()> {
     );
     let frame = joystick.current_frame();
     println!(
-        "Initial frame: roll {:+.2} pitch {:+.2} yaw {:+.2} throttle {:+.2} arm {:?} sa {:+.2} sb {:+.2} sc {:+.2}",
+        "Initial frame: roll {:+.2} pitch {:+.2} yaw {:+.2} throttle {:+.2} arm {:?} sa {:+.2} sb {:+.2} sc {:?}",
         frame.roll,
         frame.pitch,
         frame.yaw,
@@ -67,7 +67,7 @@ fn main() -> io::Result<()> {
                     .collect::<Vec<_>>()
                     .join(" ");
                 println!(
-                    "roll {:+.2} pitch {:+.2} yaw {:+.2} throttle {:+.2} arm {:?} sa {:+.2} sb {:+.2} sc {:+.2} | {} | {}",
+                    "roll {:+.2} pitch {:+.2} yaw {:+.2} throttle {:+.2} arm {:?} sa {:+.2} sb {:+.2} sc {:?} | {} | {}",
                     frame.roll,
                     frame.pitch,
                     frame.yaw,

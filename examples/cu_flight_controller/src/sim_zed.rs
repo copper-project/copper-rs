@@ -74,10 +74,10 @@ impl SimZedFrameStore {
     }
 
     #[cfg(feature = "sim")]
-    pub(crate) fn publish_vitfly_prediction(&self, prediction_mps: Option<[f32; 3]>) {
+    pub(crate) fn publish_vitfly_prediction(&self, prediction_mps: [f32; 3]) {
         let mut frame = self.lock();
         frame.vitfly_prediction_seq = frame.vitfly_prediction_seq.wrapping_add(1);
-        frame.vitfly_prediction_mps = prediction_mps;
+        frame.vitfly_prediction_mps = Some(prediction_mps);
     }
 
     pub(crate) fn vitfly_prediction(&self) -> (u64, Option<[f32; 3]>) {
@@ -289,5 +289,19 @@ mod tests {
         let format = image_format();
         assert_eq!(format.pixel_format, *b"RGBA");
         assert_eq!(format.stride, ZED_SIM_WIDTH * 4);
+    }
+
+    #[cfg(feature = "sim")]
+    #[test]
+    fn vitfly_prediction_persists_between_publications() {
+        let store = SimZedFrameStore::default();
+        let prediction = [3.0, -0.25, 0.5];
+
+        store.publish_vitfly_prediction(prediction);
+        let (published_seq, published) = store.vitfly_prediction();
+        assert_eq!(published, Some(prediction));
+
+        // A compute tick without a new inference result does not touch the cache.
+        assert_eq!(store.vitfly_prediction(), (published_seq, Some(prediction)));
     }
 }

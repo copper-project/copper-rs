@@ -1,9 +1,4 @@
 (
-    missions: [
-        (id: "default"),
-        (id: "flow"),
-        (id: "gnss"),
-    ],
     resources: [
         (
             id: "fc",
@@ -182,13 +177,6 @@
             },
         ),
         (
-            id: "flow_logger",
-            type: "tasks::flow_msp::FlowMspLogger",
-            missions: ["flow"],
-            run_in_sim: true,
-            logging: (enabled: false),
-        ),
-        (
             id: "gnss_ublox",
             type: "tasks::gnss::GnssSource",
             run_in_sim: true,
@@ -201,13 +189,6 @@
                 "poll_mon_rf_ms": 2000,
                 "emit_raw_unknown": true,
             },
-        ),
-        (
-            id: "gnss_fix_sink",
-            type: "tasks::gnss::GnssFixSink",
-            missions: ["gnss"],
-            run_in_sim: true,
-            logging: (enabled: true),
         ),
     ],
     bridges: [
@@ -228,19 +209,6 @@
             run_in_sim: false,
             logging: (enabled: false),
             resources: {"serial": "fc.uart2"},
-            channels: [
-                Tx(id: "requests"),
-                Rx(id: "responses"),
-                Rx(id: "incoming"),
-            ],
-        ),
-        (
-            id: "flow_msp",
-            type: "cu_msp_bridge::CuMspBridge<cu_micoairh743::Uart4Port, cu_micoairh743::SerialPortError>",
-            missions: ["flow"],
-            run_in_sim: false,
-            logging: (enabled: false),
-            resources: {"serial": "fc.uart4"},
             channels: [
                 Tx(id: "requests"),
                 Rx(id: "responses"),
@@ -296,7 +264,7 @@
             msg: "cu_ahrs::AhrsPose",
         ),
         (
-            src: "mapper",
+            src: "{{control_source}}",
             dst: "attitude",
             msg: "crate::messages::ControlInputs",
         ),
@@ -311,7 +279,7 @@
             msg: "cu_sensor_payloads::ImuPayload",
         ),
         (
-            src: "mapper",
+            src: "{{control_source}}",
             dst: "rate",
             msg: "crate::messages::ControlInputs",
         ),
@@ -321,32 +289,32 @@
             msg: "cu_crsf::messages::RcChannelsPayload",
         ),
         (
-            src: "mapper",
+            src: "{{control_source}}",
             dst: "act_led",
             msg: "crate::messages::ControlInputs",
         ),
         (
-            src: "mapper",
+            src: "{{control_source}}",
             dst: "mixer0",
             msg: "crate::messages::ControlInputs",
         ),
         (
-            src: "mapper",
+            src: "{{control_source}}",
             dst: "mixer1",
             msg: "crate::messages::ControlInputs",
         ),
         (
-            src: "mapper",
+            src: "{{control_source}}",
             dst: "mixer2",
             msg: "crate::messages::ControlInputs",
         ),
         (
-            src: "mapper",
+            src: "{{control_source}}",
             dst: "mixer3",
             msg: "crate::messages::ControlInputs",
         ),
         (
-            src: "mapper",
+            src: "{{control_source}}",
             dst: "vtx_osd",
             msg: "crate::messages::ControlInputs",
         ),
@@ -416,12 +384,6 @@
             msg: "cu_msp_bridge::MspRequestBatch",
         ),
         (
-            src: "flow_msp/incoming",
-            dst: "flow_logger",
-            msg: "cu_msp_bridge::MspRequestBatch",
-            missions: ["flow"],
-        ),
-        (
             src: "gnss_ublox",
             dst: "__nc__",
             msg: "cu_gnss_payloads::GnssEpochTime",
@@ -430,12 +392,6 @@
             src: "gnss_ublox",
             dst: "vtx_osd",
             msg: "cu_gnss_payloads::GnssFixSolution",
-        ),
-        (
-            src: "gnss_ublox",
-            dst: "gnss_fix_sink",
-            msg: "cu_gnss_payloads::GnssFixSolution",
-            missions: ["gnss"],
         ),
         (
             src: "gnss_ublox",

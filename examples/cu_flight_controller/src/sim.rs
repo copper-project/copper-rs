@@ -1,6 +1,8 @@
 #[cfg(feature = "sim")]
 extern crate alloc;
 
+#[cfg(feature = "sim")]
+mod autonomy_bridge;
 mod compute_tasks;
 #[cfg(feature = "sim")]
 mod messages;
@@ -31,7 +33,7 @@ use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::image::{
     ImageCompareFunction, ImageSampler, ImageSamplerDescriptor, TextureFormatPixelInfo,
 };
-#[cfg(feature = "sim")]
+#[cfg(all(feature = "sim", test))]
 use bevy::prelude::EulerRot;
 use bevy::prelude::{
     App, AssetPlugin, AssetServer, Assets, ButtonInput, Camera, Camera3d, Color, Commands,
@@ -63,10 +65,10 @@ use cu_bevymon::{
     CuBevyMonSurface, CuBevyMonTexture, MonitorModel, MonitorUiOptions, spawn_split_layout,
 };
 use cu29::prelude::*;
-#[cfg(feature = "sim")]
+#[cfg(all(feature = "sim", test))]
 use cu29::units::si::angle::radian;
-#[cfg(feature = "sim")]
-use cu29::units::si::f32::{Angle, Velocity};
+#[cfg(all(feature = "sim", test))]
+use cu29::units::si::f32::Angle;
 #[cfg(feature = "sim")]
 use cu29::units::si::velocity::meter_per_second;
 
@@ -97,8 +99,18 @@ mod mcu_copper {
         pub use crate::tasks::*;
     }
 
+    #[cfg(not(feature = "sim"))]
     #[copper_runtime(
         config = "multi_copper.ron",
+        subsystem = "mcu",
+        sim_mode = true,
+        ignore_resources = true
+    )]
+    struct FlightControllerSim {}
+
+    #[cfg(feature = "sim")]
+    #[copper_runtime(
+        config = "multi_copper_vitfly_sim.ron",
         subsystem = "mcu",
         sim_mode = true,
         ignore_resources = true
@@ -174,6 +186,7 @@ mod mcu_copper {
             rc: SimRcInput,
             motor_commands: &mut SimMotorCommands,
             osd_overlay: &mut SimOsdOverlay,
+            _autonomy_link: &mut SimAutonomyLink,
         ) -> CuResult<()> {
             let clock = clock.clone();
             let dshot = &mut motor_commands.dshot;
@@ -217,6 +230,7 @@ mod mcu_copper {
                             messages::FlightMode::Angle => 992,
                             messages::FlightMode::PositionHold => 1700,
                         };
+                        channels[6] = if rc.auto { 992 } else { 172 };
 
                         set_msg_timing(&clock, msg);
                         msg.set_payload(payload);
@@ -243,6 +257,16 @@ mod mcu_copper {
                             osd_overlay.apply_batch(batch);
                         }
                         SimOverride::ExecuteByRuntime
+                    }
+                    #[cfg(feature = "sim")]
+                    default::SimStep::AutonomyTxContext { msg, .. } => {
+                        _autonomy_link.context = msg.clone();
+                        SimOverride::ExecutedBySim
+                    }
+                    #[cfg(feature = "sim")]
+                    default::SimStep::AutonomyRxCommand { msg, .. } => {
+                        *msg = core::mem::take(&mut _autonomy_link.command);
+                        SimOverride::ExecutedBySim
                     }
                     _ => SimOverride::ExecuteByRuntime,
                 }
@@ -280,8 +304,6 @@ mod compute_copper {
         app: default::FlightComputeSim,
         zed_store: sim_zed::SimZedFrameStore,
         zed_static_state_sent: bool,
-        #[cfg(feature = "sim")]
-        vitfly_rotation: Quat,
     }
 
     impl Runtime {
@@ -295,8 +317,6 @@ mod compute_copper {
                 app,
                 zed_store,
                 zed_static_state_sent: false,
-                #[cfg(feature = "sim")]
-                vitfly_rotation: Quat::IDENTITY,
             }
         }
 
@@ -304,11 +324,13 @@ mod compute_copper {
             self.app.start_all_tasks(&mut default_callback)
         }
 
-        pub(super) fn run_iteration(&mut self, clock: &RobotClock) -> CuResult<()> {
+        pub(super) fn run_iteration(
+            &mut self,
+            clock: &RobotClock,
+            _autonomy_link: &mut SimAutonomyLink,
+        ) -> CuResult<()> {
             let zed_store = &self.zed_store;
             let zed_static_state_sent = &mut self.zed_static_state_sent;
-            #[cfg(feature = "sim")]
-            let vitfly_rotation = self.vitfly_rotation;
             let mut sim_callback = |step: default::SimStep| -> SimOverride {
                 match step {
                     default::SimStep::Zed(CuTaskCallbackState::Process(_, output)) => {
@@ -331,21 +353,22 @@ mod compute_copper {
                         SimOverride::ExecuteByRuntime
                     }
                     #[cfg(feature = "sim")]
-                    default::SimStep::VitflyContext(CuTaskCallbackState::Process(_, output)) => {
-                        let now = clock.now();
-                        let pose = vitfly_pose(vitfly_rotation);
-                        output.0.set_payload(pose);
-                        output.0.tov = Tov::Time(now);
-                        output.1.set_payload(Velocity::new::<meter_per_second>(4.0));
-                        output.1.tov = Tov::Time(now);
+                    default::SimStep::AutonomyRxContext { msg, .. } => {
+                        *msg = core::mem::take(&mut _autonomy_link.context);
+                        SimOverride::ExecutedBySim
+                    }
+                    #[cfg(feature = "sim")]
+                    default::SimStep::AutonomyTxCommand { msg, .. } => {
+                        _autonomy_link.command = msg.clone();
                         SimOverride::ExecutedBySim
                     }
                     #[cfg(feature = "sim")]
                     default::SimStep::VitflyListener(CuTaskCallbackState::Process(input, _)) => {
-                        let prediction = input
-                            .payload()
-                            .map(|velocity| velocity.map(|axis| axis.get::<meter_per_second>()));
-                        zed_store.publish_vitfly_prediction(prediction);
+                        if let Some(velocity) = input.payload() {
+                            zed_store.publish_vitfly_prediction(
+                                velocity.map(|axis| axis.get::<meter_per_second>()),
+                            );
+                        }
                         SimOverride::ExecutedBySim
                     }
                     _ => SimOverride::ExecuteByRuntime,
@@ -356,11 +379,6 @@ mod compute_copper {
 
         pub(super) fn set_zed_sensors(&self, sensors: sim_zed::SimZedSensors) {
             self.zed_store.set_sensors(sensors);
-        }
-
-        #[cfg(feature = "sim")]
-        pub(super) fn set_vitfly_rotation(&mut self, rotation: Quat) {
-            self.vitfly_rotation = rotation;
         }
 
         pub(super) fn stop(&mut self) -> CuResult<()> {
@@ -404,6 +422,14 @@ struct CopperState {
     clock_mock: RobotClockMock,
     mcu: mcu_copper::Runtime,
     compute: compute_copper::Runtime,
+    autonomy_link: SimAutonomyLink,
+}
+
+#[derive(Default)]
+#[allow(dead_code)]
+struct SimAutonomyLink {
+    context: CuMsg<messages::AutonomyContext>,
+    command: CuMsg<messages::AutonomyVelocityCommand>,
 }
 
 #[derive(Clone, Resource)]
@@ -432,6 +458,7 @@ struct SimRcInput {
     throttle: f32,
     armed: bool,
     mode: messages::FlightMode,
+    auto: bool,
 }
 
 impl Default for SimRcInput {
@@ -443,6 +470,7 @@ impl Default for SimRcInput {
             throttle: 0.0,
             armed: false,
             mode: messages::FlightMode::Acro,
+            auto: false,
         }
     }
 }
@@ -762,8 +790,6 @@ const LOCAL_CITY_BBOX_MAX_UNITS: Vec3 = Vec3::new(18_754.953, 11_102.407, 35_871
 const LOCAL_CITY_SCALE: f32 = 0.01;
 const SIM_SPAWN_POSITION: Vec3 = Vec3::new(-10.0, 1.0, 20.0);
 const SIM_SPAWN_YAW_DEG: f32 = 180.0;
-#[cfg(not(target_arch = "wasm32"))]
-const ARM_SWITCH_NAMES: &[&str] = &["sf", "se", "arm", "btn1"];
 // With the corrected 0.44 kg sim mass and 10% airmode idle, hover is about 0.48.
 // Keep keyboard idle slightly below hover so release-to-descend works again.
 const KEYBOARD_HOVER_THROTTLE_LOW: f32 = 0.47;
@@ -775,6 +801,7 @@ fn spawn_rotation() -> Quat {
 
 fn init_keyboard_rc(rc_input: &mut SimRcInput) {
     rc_input.mode = messages::FlightMode::Acro;
+    rc_input.auto = false;
     rc_input.armed = false;
     rc_input.throttle = 0.0;
 }
@@ -1048,7 +1075,7 @@ fn map_bevy_body_to_fc_magnetometer(v: Vec3) -> [f32; 3] {
     map_bevy_body_to_fc_polar(v)
 }
 
-#[cfg(feature = "sim")]
+#[cfg(all(feature = "sim", test))]
 fn vitfly_pose(rotation: Quat) -> cu_ahrs::AhrsPose {
     // Bevy body axes are right/up/forward; the FC convention is
     // forward/right/down. Axial angles therefore map as [-Z, -X, +Y].
@@ -1109,6 +1136,7 @@ fn build_sim_copper_state(
         clock_mock,
         mcu,
         compute,
+        autonomy_link: SimAutonomyLink::default(),
     }
 }
 
@@ -1134,6 +1162,7 @@ fn build_bevymon_copper(zed_store: sim_zed::SimZedFrameStore) -> (MonitorModel, 
             clock_mock,
             mcu,
             compute,
+            autonomy_link: SimAutonomyLink::default(),
         },
     )
 }
@@ -1883,7 +1912,7 @@ fn spawn_help_overlay(
             .with_children(|help| {
                 help.spawn((
                     Pickable::IGNORE,
-                    Text::new("View\nRC Link\nArm\nMode\nThrottle\nRoll/Pitch\nYaw\nReset"),
+                    Text::new("View\nRC Link\nArm\nMode\nAuto\nThrottle\nRoll/Pitch\nYaw\nReset"),
                     TextFont {
                         font_size: FontSize::Px(12.0),
                         ..default()
@@ -2012,10 +2041,17 @@ fn poll_joystick(
         Ok(Some(frame)) => {
             let prev_armed = rc_input.armed;
             let prev_mode = rc_input.mode;
+            let prev_auto = rc_input.auto;
             apply_joystick_frame(&frame, &mut rc_input);
             *rc_source = RcInputSource::Joystick;
-            if rc_input.armed != prev_armed || rc_input.mode != prev_mode {
-                info!("sim rc: armed={} mode={:?}", rc_input.armed, rc_input.mode);
+            if rc_input.armed != prev_armed
+                || rc_input.mode != prev_mode
+                || rc_input.auto != prev_auto
+            {
+                info!(
+                    "sim rc: armed={} mode={:?} auto={}",
+                    rc_input.armed, rc_input.mode, rc_input.auto
+                );
             }
         }
         Ok(None) => {}
@@ -2046,23 +2082,8 @@ fn mode_from_three_pos(value: f32) -> messages::FlightMode {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn find_arm_switch(frame: &RcFrame) -> Option<&rc_joystick::SwitchState> {
-    for name in ARM_SWITCH_NAMES {
-        if let Some(sw) = frame
-            .switches
-            .iter()
-            .find(|s| s.name.eq_ignore_ascii_case(name))
-        {
-            return Some(sw);
-        }
-    }
-
-    frame.switches.first()
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn arm_from_switches(frame: &RcFrame) -> Option<bool> {
-    find_arm_switch(frame).map(|s| s.on)
+fn three_pos_is_middle(value: f32) -> bool {
+    (-0.33..0.33).contains(&value)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -2073,19 +2094,9 @@ fn apply_joystick_frame(frame: &RcFrame, rc_input: &mut SimRcInput) {
     rc_input.yaw = (-frame.yaw).clamp(-1.0, 1.0);
     rc_input.throttle = frame.throttle.clamp(0.0, 1.0);
 
-    let armed_from_axis = frame.arm.map(|arm| arm > 0.5);
-    let armed_from_switch = arm_from_switches(frame);
-    let arm_uses_aux_axis = armed_from_axis.is_some() || armed_from_switch.is_none();
-    rc_input.armed = armed_from_axis
-        .or(armed_from_switch)
-        .unwrap_or(frame.knob_sa > 0.5);
-
-    let mode_axis = if arm_uses_aux_axis {
-        frame.knob_sb
-    } else {
-        frame.knob_sa
-    };
-    rc_input.mode = mode_from_three_pos(mode_axis);
+    rc_input.armed = frame.arm.map_or(frame.knob_sa > 0.5, |arm| arm > 0.5);
+    rc_input.mode = mode_from_three_pos(frame.knob_sb);
+    rc_input.auto = frame.knob_sc.is_some_and(three_pos_is_middle);
 }
 
 fn update_rc_input_keyboard(
@@ -2124,15 +2135,23 @@ fn update_rc_input_keyboard(
     if keyboard.just_pressed(KeyCode::Digit3) {
         rc_input.mode = messages::FlightMode::PositionHold;
     }
+    if keyboard.just_pressed(KeyCode::Digit4) {
+        rc_input.auto = !rc_input.auto;
+        info!("sim rc: auto={}", rc_input.auto);
+    }
     if keyboard.just_pressed(KeyCode::Space) && !rc_input.armed {
         rc_input.armed = true;
         rc_input.mode = messages::FlightMode::Angle;
+        rc_input.auto = false;
         info!("sim rc: keyboard armed in Angle mode");
     }
 
     if keyboard.just_pressed(KeyCode::KeyT) {
         rc_input.armed = !rc_input.armed;
-        info!("sim rc: armed={} mode={:?}", rc_input.armed, rc_input.mode);
+        info!(
+            "sim rc: armed={} mode={:?} auto={}",
+            rc_input.armed, rc_input.mode, rc_input.auto
+        );
     }
 }
 
@@ -2301,12 +2320,17 @@ fn run_copper_iteration(
         magnetometer: MagnetometerPayload::from_raw(map_bevy_body_to_fc_magnetometer(body_mag)),
         barometer: BarometerPayload::from_raw(pressure_pa, 25.0),
     });
-    #[cfg(feature = "sim")]
-    copper.compute.set_vitfly_rotation(vehicle.rotation);
+    copper.mcu.run_iteration(
+        &copper.clock,
+        vehicle,
+        rc,
+        motor_commands,
+        osd_overlay,
+        &mut copper.autonomy_link,
+    )?;
     copper
-        .mcu
-        .run_iteration(&copper.clock, vehicle, rc, motor_commands, osd_overlay)?;
-    copper.compute.run_iteration(&copper.clock)
+        .compute
+        .run_iteration(&copper.clock, &mut copper.autonomy_link)
 }
 
 fn apply_multicopter_dynamics(
@@ -2505,31 +2529,25 @@ fn axis_or_unmapped(axis: Option<&String>) -> &str {
 fn connected_help_values(view_label: &str, joystick: &RcJoystick) -> String {
     let axes: RcAxisBindings = joystick.axis_bindings();
     let frame = joystick.current_frame();
-    let arm_switch = find_arm_switch(&frame);
     let device_name = joystick.device_name();
 
     let arm_line = if frame.arm.is_some() {
         format!("arm {} > 0.5", axis_or_unmapped(axes.arm.as_ref()))
-    } else if let Some(sw) = arm_switch {
-        format!("switch {}", sw.name)
     } else {
         format!("knob_sa {} > 0.5", axis_or_unmapped(axes.knob_sa.as_ref()))
     };
 
-    let mode_line = if frame.arm.is_none() && arm_switch.is_some() {
-        format!(
-            "knob_sa {} (3-pos)",
-            axis_or_unmapped(axes.knob_sa.as_ref())
-        )
-    } else {
-        format!(
-            "knob_sb {} (3-pos)",
-            axis_or_unmapped(axes.knob_sb.as_ref())
-        )
-    };
+    let mode_line = format!(
+        "knob_sb {} (3-pos)",
+        axis_or_unmapped(axes.knob_sb.as_ref())
+    );
+    let auto_line = format!(
+        "knob_sc {} (middle auto)",
+        axis_or_unmapped(axes.knob_sc.as_ref())
+    );
 
     format!(
-        "{view_label}\nConnected ({device_name})\n{arm_line}\n{mode_line}\n{}\n{} / {}\n{}\nR",
+        "{view_label}\nConnected ({device_name})\n{arm_line}\n{mode_line}\n{auto_line}\n{}\n{} / {}\n{}\nR",
         axis_or_unmapped(axes.throttle.as_ref()),
         axis_or_unmapped(axes.roll.as_ref()),
         axis_or_unmapped(axes.pitch.as_ref()),
@@ -2554,7 +2572,7 @@ fn update_help_overlay(
 
     let values = match *rc_source {
         RcInputSource::Keyboard => format!(
-            "{view_label}\nNot connected (plug RC via USB/BT)\nT\n1=Acro 2=Angle 3=PosHold\nSpace (arm Angle / climb)\nWASD\nQ / E\nR"
+            "{view_label}\nNot connected (plug RC via USB/BT)\nT\n1=Acro 2=Angle 3=PosHold\n4=Auto toggle\nSpace (arm Angle / climb)\nWASD\nQ / E\nR"
         ),
         RcInputSource::Joystick => {
             #[cfg(not(target_arch = "wasm32"))]
@@ -2562,7 +2580,7 @@ fn update_help_overlay(
                 _joystick_state.reader.as_ref().map_or_else(
                     || {
                         format!(
-                            "{view_label}\nConnected (USB/BT)\nRC source initializing...\n-\n-\n-\n-\nR"
+                            "{view_label}\nConnected (USB/BT)\nRC source initializing...\n-\n-\n-\n-\n-\nR"
                         )
                     },
                     |joy| connected_help_values(view_label, joy),
@@ -2571,7 +2589,7 @@ fn update_help_overlay(
             #[cfg(target_arch = "wasm32")]
             {
                 format!(
-                    "{view_label}\nWeb build keyboard mode\nT\n1=Acro 2=Angle 3=PosHold\nSpace (arm Angle / climb)\nWASD\nQ / E\nR"
+                    "{view_label}\nWeb build keyboard mode\nT\n1=Acro 2=Angle 3=PosHold\n4=Auto toggle\nSpace (arm Angle / climb)\nWASD\nQ / E\nR"
                 )
             }
         }
@@ -3097,6 +3115,11 @@ mod tests {
         LOCK.get_or_init(|| Mutex::new(()))
     }
 
+    fn copper_runtime_test_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
     fn assert_heading_close(actual: f32, expected: f32) {
         let err = (actual - expected + 540.0).rem_euclid(360.0) - 180.0;
         assert!(
@@ -3164,6 +3187,30 @@ mod tests {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn joystick_maps_sa_sb_and_sc_independently() {
+        let mut rc_input = SimRcInput::default();
+        let mut frame = RcFrame {
+            arm: Some(1.0),
+            knob_sb: 1.0,
+            knob_sc: Some(0.0),
+            ..RcFrame::default()
+        };
+
+        apply_joystick_frame(&frame, &mut rc_input);
+        assert!(rc_input.armed);
+        assert_eq!(rc_input.mode, messages::FlightMode::PositionHold);
+        assert!(rc_input.auto);
+
+        frame.knob_sb = -1.0;
+        frame.knob_sc = Some(1.0);
+        apply_joystick_frame(&frame, &mut rc_input);
+        assert!(rc_input.armed);
+        assert_eq!(rc_input.mode, messages::FlightMode::Acro);
+        assert!(!rc_input.auto);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     fn build_test_copper_state() -> CopperState {
         let (clock, clock_mock) = RobotClock::mock();
         let mut mcu = mcu_copper::Runtime::without_logger(&clock);
@@ -3178,6 +3225,7 @@ mod tests {
             clock_mock,
             mcu,
             compute,
+            autonomy_link: SimAutonomyLink::default(),
         }
     }
 
@@ -3243,6 +3291,7 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn sim_copper_runs_one_iteration() {
+        let _guard = copper_runtime_test_lock().lock().unwrap();
         let mut copper = build_test_copper_state();
         let mut motors = SimMotorCommands::default();
         let mut osd_overlay = SimOsdOverlay::default();
@@ -3271,7 +3320,48 @@ mod tests {
 
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
-    fn simulated_zed_outputs_reach_vitfly_input() {
+    fn simulated_sc_auto_switch_reaches_vtx_osd() {
+        let _guard = copper_runtime_test_lock().lock().unwrap();
+        let mut copper = build_test_copper_state();
+        let mut motors = SimMotorCommands::default();
+        let mut osd_overlay = SimOsdOverlay::default();
+        let rc = SimRcInput {
+            armed: true,
+            auto: true,
+            ..SimRcInput::default()
+        };
+
+        run_copper_iteration(
+            &mut copper,
+            0,
+            SimVehicleState::default(),
+            rc,
+            &mut motors,
+            &mut osd_overlay,
+        )
+        .expect("copper sim iteration should keep running");
+
+        assert!(
+            osd_overlay.cells.windows(4).any(|window| window == b"AUTO"),
+            "armed SC auto switch should render AUTO in the VTX OSD"
+        );
+
+        copper.mcu.stop().expect("failed to stop tasks");
+        copper
+            .mcu
+            .log_shutdown_completed()
+            .expect("failed to log shutdown");
+        copper.compute.stop().expect("failed to stop compute tasks");
+        copper
+            .compute
+            .log_shutdown_completed()
+            .expect("failed to log compute shutdown");
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn vitfly_infers_while_inactive_and_between_context_packets() {
+        let _guard = copper_runtime_test_lock().lock().unwrap();
         let (clock, clock_mock) = RobotClock::mock();
         let zed_store = sim_zed::SimZedFrameStore::default();
         let pixel_count = (sim_zed::ZED_SIM_WIDTH * sim_zed::ZED_SIM_HEIGHT) as usize;
@@ -3282,9 +3372,24 @@ mod tests {
         let mut compute = compute_copper::Runtime::new(&clock, zed_store.clone());
         compute.start().expect("failed to start compute tasks");
         clock_mock.set_value(1_000_000);
+        let mut autonomy_link = SimAutonomyLink::default();
+        autonomy_link.context.tov = Tov::Time(clock.now());
+        autonomy_link
+            .context
+            .set_payload(messages::AutonomyContext {
+                sequence: 1,
+                mission_generation: 1,
+                active: false,
+                pose: vitfly_pose(Quat::IDENTITY),
+                desired_speed: cu29::units::si::f32::Velocity::new::<meter_per_second>(4.0),
+            });
         compute
-            .run_iteration(&clock)
+            .run_iteration(&clock, &mut autonomy_link)
             .expect("failed to run compute iteration");
+        assert!(
+            autonomy_link.command.payload().is_none(),
+            "inactive inference must not produce an MCU command"
+        );
 
         let published = zed_store
             .published_depth()
@@ -3298,9 +3403,37 @@ mod tests {
         });
         #[cfg(feature = "sim")]
         {
-            let (_, prediction) = zed_store.vitfly_prediction();
+            let (first_prediction_seq, prediction) = zed_store.vitfly_prediction();
             let prediction = prediction.expect("ViTFly listener should receive a prediction");
             assert!(prediction.iter().all(|component| component.is_finite()));
+
+            clock_mock.increment(CuDuration::from_millis(1));
+            compute
+                .run_iteration(&clock, &mut autonomy_link)
+                .expect("ViTFly should run without a fresh context packet");
+            let (second_prediction_seq, second_prediction) = zed_store.vitfly_prediction();
+            assert!(second_prediction_seq > first_prediction_seq);
+            assert!(second_prediction.is_some());
+
+            clock_mock.increment(CuDuration::from_millis(1));
+            autonomy_link.context.tov = Tov::Time(clock.now());
+            autonomy_link
+                .context
+                .set_payload(messages::AutonomyContext {
+                    sequence: 2,
+                    mission_generation: 1,
+                    active: true,
+                    pose: vitfly_pose(Quat::IDENTITY),
+                    desired_speed: cu29::units::si::f32::Velocity::new::<meter_per_second>(4.0),
+                });
+            compute
+                .run_iteration(&clock, &mut autonomy_link)
+                .expect("active ViTFly inference should produce a command");
+            let command = autonomy_link
+                .command
+                .payload()
+                .expect("active ViTFly command should cross the simulated bridge");
+            assert!(command.forward.get::<meter_per_second>() >= 1.0);
         }
 
         compute.stop().expect("failed to stop compute tasks");

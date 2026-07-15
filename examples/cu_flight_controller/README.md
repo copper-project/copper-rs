@@ -6,12 +6,13 @@ A bare-metal quadcopter flight controller implemented end-to-end using Copper co
 
 This example demonstrates a complete flight controller running on the MicoAir H743 board (STM32H743), plus a separate host Copper runtime intended for onboard compute. It showcases Copper's ability to run deterministic, real-time control loops on embedded hardware with zero dynamic allocation during runtime.
 
-The deployment is described by the multi-Copper configurations as two independent subsystems:
+The deployment is described by multi-Copper configurations with two independent subsystems:
 
-- `mcu`: the default flight-controller mission from `mcu_config.ron`
-- `compute`: a host graph that owns the ZED camera source
+- `multi_copper.ron`: the buildable manual MCU firmware graph
+- `multi_copper_udp.ron`: the closed-loop MCU + compute deployment contract over typed Zenoh routes
+- `multi_copper_vitfly_sim.ron`: the same closed-loop graph with bridge I/O and sensors preempted by Bevy
 
-The real camera is enabled by the `end2end` feature and uses `cu_zed::Zed`. The simulator starts both subsystem runtimes in one Bevy process using the same compute graph. Copper's simulation callback preempts the hardware ZED source and fills its normal outputs from Bevy. The MCU firmware remains independent and does not enable the ZED dependency.
+The real camera is enabled by the `end2end` feature and uses `cu_zed::Zed`. The simulator starts both subsystem runtimes in one Bevy process, preempts the hardware ZED source, and transfers the normal typed bridge messages through a simulator-owned link. On a deployed system the compute-side Copper Zenoh bridge listens on `udp/0.0.0.0:7447` and uses bincode for the two fixed-size messages. Binding a no-std UDP network resource and Zenoh backend on the H743 is intentionally deferred; the firmware graph remains buildable without pretending that transport exists.
 
 ## Hardware
 
@@ -27,13 +28,17 @@ See [doc/PINOUT.md](doc/PINOUT.md) for the complete pinout reference.
 
 ## Architecture
 
-The flight controller uses a cascaded control architecture:
+Manual and AUTO commands join at one MCU-side mode supervisor before the existing cascaded controller:
 
 ```
-RC Input (CRSF) -> RC Mapper -> Attitude Controller -> Rate Controller -> Mixer -> ESCs (BDShot)
-                                      ^                      ^
-                                      |                      |
-                          IMU -> Calibrator -> AHRS ---------+
+GNSS + AHRS + heading -> navigation -> round-trip mission -> MCU context bridge
+                                                               |
+                                                               v
+                                                        ZED -> ViTFly (compute)
+                                                               |
+                                                               v
+RC Input -> RC Mapper -------------------------------> mode supervisor -> attitude -> rate -> mixers
+                    \-> AUTO mission/controller <- MCU command bridge ---/
 ```
 
 ### Task Graph
@@ -44,6 +49,11 @@ RC Input (CRSF) -> RC Mapper -> Attitude Controller -> Rate Controller -> Mixer 
 | `imu_cal` | Gyroscope bias calibration on arm |
 | `ahrs` | Attitude and Heading Reference System |
 | `mapper` | RC channel mapping and arm/mode logic |
+| `navigation` | Latches GNSS, AHRS, and true heading into a freshness-checked navigation state |
+| `auto_mission` | Latches home and a point 500 m ahead / 50 m up, then alternates forever |
+| `autonomy_context` | Publishes the fixed-size ViTFly context at approximately 30 Hz |
+| `auto_controller` | Tracks fresh ViTFly `[forward, left, up]` commands toward the current waypoint |
+| `mode_supervisor` | Selects manual or AUTO controls before the cascaded flight controller |
 | `attitude` | Outer loop PID (angle to rate setpoint) |
 | `rate` | Inner loop PID (rate to motor commands) |
 | `mixer0-3` | QuadX motor mixing |
@@ -56,6 +66,9 @@ RC Input (CRSF) -> RC Mapper -> Attitude Controller -> Rate Controller -> Mixer 
 - **Angle**: Self-leveling mode with attitude hold
 - **Acro**: Rate mode for aerobatic flight
 - **Position Hold**: (placeholder for GPS integration)
+- **Auto**: SC middle position. Each entry latches the current position/heading, creates a target
+  500 m ahead at current MSL altitude + 50 m, and alternates between that point and home forever.
+  SC high remains reserved for forced recovery.
 
 ### Features
 
@@ -72,8 +85,9 @@ RC Input (CRSF) -> RC Mapper -> Attitude Controller -> Rate Controller -> Mixer 
 just subsystems-check
 ```
 
-This checks the real ZED-enabled onboard-compute host binary and the STM32 firmware binary from the
-same strict multi-Copper umbrella configuration.
+This checks the real ZED/ViTFly/Zenoh compute graph and the current buildable STM32 firmware graph.
+The MCU half of `multi_copper_udp.ron` becomes the firmware entrypoint once its no-std UDP resource
+and bridge backend are bound.
 
 To compile or run the real ZED-enabled compute graph:
 
@@ -225,13 +239,18 @@ Notes:
   - ExpressLRS-style joystick names (`expresslrs`, `elrs`, `radiomaster`)
   - OpenTX / EdgeTX USB joystick names (`opentx`, `edgetx`)
 - **ExpressLRS BLE mapping**: CH1-CH8 are joystick axes and CH9-CH16 are buttons. The sim uses
-  CH5 (`ABS_Z`) for arm and CH6 (`ABS_RZ`) for flight mode.
+  CH5 / SA (`ABS_Z`) for arm, CH6 / SB (`ABS_RZ`) for Acro/Angle/Position Hold, and
+  CH7 / SC (`ABS_THROTTLE`) middle position for Auto; the high position is reserved for forced
+  recovery mode.
+- **Keyboard mapping**: `1`/`2`/`3` select Acro/Angle/Position Hold and `4` toggles Auto.
 - **Firmware path (real hardware)**: RC input is CRSF on UART, so use a CRSF-compatible RX link
   (for example ExpressLRS/Crossfire-class receivers and compatible transmitters).
 
 ## Configuration
 
-The task graph is defined in `copperconfig.ron`. Key configurable parameters:
+The shared MCU nodes live in `mcu_graph.ron`; `mcu_config.ron` selects direct manual control and
+`mcu_autonomy_config.ron` inserts the AUTO tasks and bridge. The 500 m / 50 m waypoint geometry and
+infinite repetition are fixed demo constants, not RON parameters. Key configurable parameters:
 
 ### Rate Controller
 ```ron
