@@ -15,15 +15,18 @@ use cu29::units::si::velocity::meter_per_second;
 
 const EARTH_RADIUS_M: f64 = 6_371_008.8;
 const AUTO_DISTANCE_M: f64 = 500.0;
-const AUTO_ALTITUDE_OFFSET_M: f32 = 8.0;
+const AUTO_ALTITUDE_OFFSET_M: f32 = 6.0;
 const AUTO_ARRIVAL_HORIZONTAL_M: f64 = 12.0;
 const AUTO_ARRIVAL_VERTICAL_M: f32 = 5.0;
 const NAV_FIX_TIMEOUT: CuDuration = CuDuration(2_000_000_000);
 const NAV_ATTITUDE_TIMEOUT: CuDuration = CuDuration(250_000_000);
-const CONTEXT_PERIOD: CuDuration = CuDuration(33_000_000);
+const CONTEXT_PERIOD: CuDuration = CuDuration(1_000_000_000 / 30);
 const COMMAND_TIMEOUT: CuDuration = CuDuration(250_000_000);
-const AUTO_MAX_SPEED_MPS: f32 = 7.0;
+const AUTO_MAX_SPEED_MPS: f32 = 5.0;
 const AUTO_HOVER_THROTTLE: f32 = 0.48;
+const AUTO_YAW_COMMAND_MIN_SPEED_MPS: f32 = 0.75;
+const AUTO_YAW_TARGET_TIME_CONSTANT_S: f32 = 0.35;
+const AUTO_YAW_TARGET_RATE_LIMIT_DPS: f32 = 90.0;
 // ViTFly was evaluated with Flightmare's geometric controller, whose XY
 // velocity-error gain is 3 m/s^2 per m/s. With this app's 60-degree attitude
 // limit, the equivalent small-angle stick ratio is approximately
@@ -288,9 +291,9 @@ impl CuTask for AutonomyContextTask {
         let active = controls.is_some_and(|controls| controls.armed && controls.auto)
             && navigation.valid
             && target.active;
-        let emit_due = self
-            .last_emit
-            .is_none_or(|last_emit| now - last_emit >= CONTEXT_PERIOD);
+        let period_ns = CONTEXT_PERIOD.as_nanos();
+        let emit_phase = CuTime::from(now.as_nanos() / period_ns * period_ns);
+        let emit_due = self.last_emit != Some(emit_phase);
         output.tov = Tov::Time(now);
         if !emit_due && active == self.last_active {
             output.clear_payload();
@@ -298,7 +301,7 @@ impl CuTask for AutonomyContextTask {
         }
 
         self.sequence = self.sequence.wrapping_add(1);
-        self.last_emit = Some(now);
+        self.last_emit = Some(emit_phase);
         self.last_active = active;
         let distance_m = position_distance_m(navigation.position, target.position) as f32;
         // Keep the ViTFly preview live at its normal cruise reference even when
@@ -323,6 +326,8 @@ impl CuTask for AutonomyContextTask {
 pub struct AutoVelocityController {
     last_command: Option<AutonomyVelocityCommand>,
     last_command_at: Option<CuTime>,
+    filtered_heading_deg: Option<f32>,
+    last_heading_update: Option<CuTime>,
 }
 
 impl Freezable for AutoVelocityController {
@@ -331,7 +336,9 @@ impl Freezable for AutoVelocityController {
         encoder: &mut E,
     ) -> Result<(), cu29::bincode::error::EncodeError> {
         Encode::encode(&self.last_command, encoder)?;
-        Encode::encode(&self.last_command_at, encoder)
+        Encode::encode(&self.last_command_at, encoder)?;
+        Encode::encode(&self.filtered_heading_deg, encoder)?;
+        Encode::encode(&self.last_heading_update, encoder)
     }
 
     fn thaw<D: cu29::bincode::de::Decoder>(
@@ -340,6 +347,8 @@ impl Freezable for AutoVelocityController {
     ) -> Result<(), cu29::bincode::error::DecodeError> {
         self.last_command = Decode::decode(decoder)?;
         self.last_command_at = Decode::decode(decoder)?;
+        self.filtered_heading_deg = Decode::decode(decoder)?;
+        self.last_heading_update = Decode::decode(decoder)?;
         Ok(())
     }
 }
@@ -388,8 +397,23 @@ impl CuTask for AutoVelocityController {
             && is_fresh(now, self.last_command_at, COMMAND_TIMEOUT);
 
         let controls = if valid {
-            velocity_command_to_controls(&raw, &navigation, &target, &command)
+            let requested_heading_deg = command_heading_degrees(&command, &navigation, &target);
+            let elapsed_s = self
+                .last_heading_update
+                .map(|last_update| (now - last_update).as_nanos() as f32 * 1.0e-9)
+                .unwrap_or(0.0);
+            let filtered_heading_deg = filter_heading_degrees(
+                self.filtered_heading_deg,
+                navigation.heading.get::<degree>(),
+                requested_heading_deg,
+                elapsed_s,
+            );
+            self.filtered_heading_deg = Some(filtered_heading_deg);
+            self.last_heading_update = Some(now);
+            velocity_command_to_controls(&raw, &navigation, &target, &command, filtered_heading_deg)
         } else {
+            self.filtered_heading_deg = None;
+            self.last_heading_update = None;
             auto_hover_controls(&raw)
         };
         output.tov = Tov::Time(now);
@@ -454,6 +478,7 @@ fn velocity_command_to_controls(
     navigation: &NavigationState,
     target: &AutoMissionTarget,
     command: &AutonomyVelocityCommand,
+    desired_heading_deg: f32,
 ) -> ControlInputs {
     let heading_rad = navigation.heading.get::<radian>();
     let sin_heading = libm::sinf(heading_rad);
@@ -479,7 +504,6 @@ fn velocity_command_to_controls(
         (command.up.get::<meter_per_second>() + altitude_error * 0.25).clamp(-3.0, 3.0);
     let up_error = desired_up - measured_up;
 
-    let desired_heading_deg = bearing_degrees(navigation.position, target.position) as f32;
     let heading_error_deg =
         wrap_signed_degrees(desired_heading_deg - navigation.heading.get::<degree>());
 
@@ -589,6 +613,41 @@ fn bearing_degrees(from: GeodeticPosition, to: GeodeticPosition) -> f64 {
     rem_euclid_f64(libm::atan2(east, north).to_degrees(), 360.0)
 }
 
+fn command_heading_degrees(
+    command: &AutonomyVelocityCommand,
+    navigation: &NavigationState,
+    target: &AutoMissionTarget,
+) -> f32 {
+    let north_mps = command.north.get::<meter_per_second>();
+    // ViTFly's fixed world frame is north/west/up, while compass heading is
+    // measured clockwise from north toward east.
+    let east_mps = -command.west.get::<meter_per_second>();
+    let speed_squared_mps2 = north_mps * north_mps + east_mps * east_mps;
+    if north_mps.is_finite()
+        && east_mps.is_finite()
+        && speed_squared_mps2 >= AUTO_YAW_COMMAND_MIN_SPEED_MPS * AUTO_YAW_COMMAND_MIN_SPEED_MPS
+    {
+        rem_euclid_f32(libm::atan2f(east_mps, north_mps).to_degrees(), 360.0)
+    } else {
+        bearing_degrees(navigation.position, target.position) as f32
+    }
+}
+
+fn filter_heading_degrees(
+    filtered_heading_deg: Option<f32>,
+    current_heading_deg: f32,
+    requested_heading_deg: f32,
+    elapsed_s: f32,
+) -> f32 {
+    let filtered_heading_deg = filtered_heading_deg.unwrap_or(current_heading_deg);
+    let elapsed_s = elapsed_s.max(0.0);
+    let alpha = elapsed_s / (AUTO_YAW_TARGET_TIME_CONSTANT_S + elapsed_s);
+    let heading_error_deg = wrap_signed_degrees(requested_heading_deg - filtered_heading_deg);
+    let max_step_deg = AUTO_YAW_TARGET_RATE_LIMIT_DPS * elapsed_s;
+    let step_deg = (heading_error_deg * alpha).clamp(-max_step_deg, max_step_deg);
+    rem_euclid_f32(filtered_heading_deg + step_deg, 360.0)
+}
+
 fn wrap_signed_degrees(value: f32) -> f32 {
     rem_euclid_f32(value + 180.0, 360.0) - 180.0
 }
@@ -640,6 +699,96 @@ mod tests {
     }
 
     #[test]
+    fn auto_yaw_tracks_commanded_world_velocity_instead_of_ground_track() {
+        let start = start();
+        let navigation = NavigationState {
+            position: start,
+            // Ground track points west and must not feed the yaw reference.
+            velocity_east: Velocity::new::<meter_per_second>(-8.0),
+            ..NavigationState::default()
+        };
+        let target = AutoMissionTarget {
+            position: offset_position(start, 0.0, AUTO_DISTANCE_M),
+            ..AutoMissionTarget::default()
+        };
+        let command = AutonomyVelocityCommand {
+            north: Velocity::new::<meter_per_second>(3.0),
+            west: Velocity::new::<meter_per_second>(-3.0),
+            ..AutonomyVelocityCommand::default()
+        };
+
+        assert!((command_heading_degrees(&command, &navigation, &target) - 45.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn auto_yaw_uses_mission_bearing_below_command_speed_threshold() {
+        let start = start();
+        let navigation = NavigationState {
+            position: start,
+            ..NavigationState::default()
+        };
+        let target = AutoMissionTarget {
+            position: offset_position(start, 90.0, AUTO_DISTANCE_M),
+            ..AutoMissionTarget::default()
+        };
+        let command = AutonomyVelocityCommand {
+            west: Velocity::new::<meter_per_second>(-0.5),
+            ..AutonomyVelocityCommand::default()
+        };
+
+        assert!((command_heading_degrees(&command, &navigation, &target) - 90.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn auto_yaw_filter_takes_shortest_path_across_north() {
+        let filtered = filter_heading_degrees(Some(350.0), 350.0, 10.0, 0.1);
+        let step = wrap_signed_degrees(filtered - 350.0);
+
+        assert!(step > 0.0);
+        assert!(step <= AUTO_YAW_TARGET_RATE_LIMIT_DPS * 0.1);
+        assert!(wrap_signed_degrees(10.0 - filtered).abs() < 20.0);
+    }
+
+    #[test]
+    fn auto_yaw_filter_rate_limits_large_direction_changes() {
+        let filtered = filter_heading_degrees(Some(0.0), 0.0, 170.0, 0.1);
+
+        assert!((filtered - AUTO_YAW_TARGET_RATE_LIMIT_DPS * 0.1).abs() < 0.001);
+    }
+
+    #[test]
+    fn diagonal_command_combines_bank_and_yaw_into_a_coordinated_turn() {
+        let start = start();
+        let raw = ControlInputs {
+            armed: true,
+            auto: true,
+            ..ControlInputs::default()
+        };
+        let navigation = NavigationState {
+            valid: true,
+            position: start,
+            heading: cu29::units::si::f32::Angle::new::<degree>(0.0),
+            ..NavigationState::default()
+        };
+        let target = AutoMissionTarget {
+            active: true,
+            position: offset_position(start, 0.0, AUTO_DISTANCE_M),
+            ..AutoMissionTarget::default()
+        };
+        let command = AutonomyVelocityCommand {
+            north: Velocity::new::<meter_per_second>(3.0),
+            west: Velocity::new::<meter_per_second>(-3.0),
+            ..AutonomyVelocityCommand::default()
+        };
+
+        let controls = velocity_command_to_controls(&raw, &navigation, &target, &command, 45.0);
+
+        assert!(controls.pitch.get::<ratio>() > 0.0);
+        assert!(controls.roll.get::<ratio>() > 0.0);
+        assert!(controls.yaw.get::<ratio>() < 0.0);
+    }
+
+    #[test]
     fn world_frame_vitfly_command_drives_forward_at_cardinal_headings() {
         let start = start();
         let raw = ControlInputs {
@@ -667,7 +816,8 @@ mod tests {
                 ..AutonomyVelocityCommand::default()
             };
 
-            let controls = velocity_command_to_controls(&raw, &navigation, &target, &command);
+            let controls =
+                velocity_command_to_controls(&raw, &navigation, &target, &command, heading_deg);
             assert!(
                 controls.pitch.get::<ratio>() > 0.0,
                 "heading {heading_deg} should command forward pitch"
@@ -704,7 +854,7 @@ mod tests {
             ..AutonomyVelocityCommand::default()
         };
 
-        let controls = velocity_command_to_controls(&raw, &navigation, &target, &command);
+        let controls = velocity_command_to_controls(&raw, &navigation, &target, &command, 90.0);
         assert!(controls.pitch.get::<ratio>().abs() < 1.0e-5);
         assert!(
             (controls.roll.get::<ratio>() + AUTO_XY_VELOCITY_TO_TILT_RATIO_PER_MPS).abs() < 1.0e-5
@@ -736,13 +886,44 @@ mod tests {
             ..AutonomyVelocityCommand::default()
         };
 
-        let controls = velocity_command_to_controls(&raw, &navigation, &target, &command);
+        let controls = velocity_command_to_controls(&raw, &navigation, &target, &command, 0.0);
         assert!(
             (controls.pitch.get::<ratio>() - AUTO_XY_VELOCITY_TO_TILT_RATIO_PER_MPS).abs() < 1.0e-6
         );
         assert!(
             (controls.roll.get::<ratio>() + AUTO_XY_VELOCITY_TO_TILT_RATIO_PER_MPS).abs() < 1.0e-6
         );
+    }
+
+    #[test]
+    fn autonomy_context_preserves_30_hz_phase_at_64_hz() {
+        let (ctx, clock_mock) = CuContext::new_mock_clock();
+        let mut task = <AutonomyContextTask as CuTask>::new(None, ()).expect("create context task");
+        let controls = CuMsg::new(Some(ControlInputs {
+            armed: true,
+            auto: true,
+            ..ControlInputs::default()
+        }));
+        let navigation = CuMsg::new(Some(NavigationState {
+            valid: true,
+            ..NavigationState::default()
+        }));
+        let target = CuMsg::new(Some(AutoMissionTarget {
+            active: true,
+            generation: 1,
+            ..AutoMissionTarget::default()
+        }));
+        let mut output = CuMsg::default();
+        let mut emitted = 0;
+
+        for source_tick in 0..64 {
+            clock_mock.set_value(source_tick * 15_625_000);
+            task.process(&ctx, &(&controls, &navigation, &target), &mut output)
+                .expect("emit autonomy context");
+            emitted += usize::from(output.payload().is_some());
+        }
+
+        assert_eq!(emitted, 30);
     }
 
     #[test]
@@ -772,7 +953,10 @@ mod tests {
         assert_eq!(first.leg, AutoMissionLeg::Outbound);
         assert_eq!(first.generation, 1);
         assert!((position_distance_m(start, first.position) - AUTO_DISTANCE_M).abs() < 0.1);
-        assert!((first.altitude_msl.get::<meter>() - 220.0).abs() < f32::EPSILON);
+        assert!(
+            (first.altitude_msl.get::<meter>() - (212.0 + AUTO_ALTITUDE_OFFSET_M)).abs()
+                < f32::EPSILON
+        );
 
         for expected_leg in [
             AutoMissionLeg::Return,
@@ -810,6 +994,9 @@ mod tests {
         assert_eq!(reseeded.generation, 2);
         assert_eq!(reseeded.leg, AutoMissionLeg::Outbound);
         assert!((position_distance_m(new_start, reseeded.position) - AUTO_DISTANCE_M).abs() < 0.1);
-        assert!((reseeded.altitude_msl.get::<meter>() - 238.0).abs() < f32::EPSILON);
+        assert!(
+            (reseeded.altitude_msl.get::<meter>() - (230.0 + AUTO_ALTITUDE_OFFSET_M)).abs()
+                < f32::EPSILON
+        );
     }
 }

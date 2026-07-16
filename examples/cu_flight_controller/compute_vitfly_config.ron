@@ -17,6 +17,12 @@
             logging: (enabled: true),
         ),
         (
+            id: "vitfly_depth_rate",
+            type: "cu_ratelimit::CuRateLimit<cu_zed::ZedDepthMap<Vec<f32>>>",
+            config: {"rate": 30.0},
+            logging: (enabled: false),
+        ),
+        (
             id: "vitfly",
             type: "cu_vitfly::VitFlyTask",
             config: {
@@ -86,11 +92,11 @@
         ),
         (
             src: "vitfly_depth_log",
-            dst: "vitfly_context",
+            dst: "vitfly_depth_rate",
             msg: "cu_zed::ZedDepthMap<Vec<f32>>",
         ),
         (
-            src: "vitfly_depth_log",
+            src: "vitfly_depth_rate",
             dst: "vitfly",
             msg: "cu_zed::ZedDepthMap<Vec<f32>>",
         ),
@@ -108,11 +114,6 @@
             src: "vitfly",
             dst: "vitfly_command",
             msg: "cu_vitfly::VitFlyVelocity",
-        ),
-        (
-            src: "vitfly_context",
-            dst: "vitfly_command",
-            msg: "cu29::units::si::f32::Velocity",
         ),
         (
             src: "vitfly_command",

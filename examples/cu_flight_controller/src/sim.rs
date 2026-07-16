@@ -3676,7 +3676,7 @@ mod tests {
 
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
-    fn vitfly_infers_while_inactive_and_between_context_packets() {
+    fn vitfly_is_rate_limited_and_infers_between_context_packets() {
         let _guard = copper_runtime_test_lock().lock().unwrap();
         let (clock, clock_mock) = RobotClock::mock();
         let zed_store = sim_zed::SimZedFrameStore::default();
@@ -3698,6 +3698,7 @@ mod tests {
                 active: false,
                 pose: vitfly_pose(Quat::IDENTITY),
                 desired_speed: cu29::units::si::f32::Velocity::new::<meter_per_second>(4.0),
+                ..messages::AutonomyContext::default()
             });
         compute
             .run_iteration(&clock, &mut autonomy_link)
@@ -3726,12 +3727,20 @@ mod tests {
             clock_mock.increment(CuDuration::from_millis(1));
             compute
                 .run_iteration(&clock, &mut autonomy_link)
-                .expect("ViTFly should run without a fresh context packet");
+                .expect("compute should run inside the ViTFly rate-limit interval");
             let (second_prediction_seq, second_prediction) = zed_store.vitfly_prediction();
-            assert!(second_prediction_seq > first_prediction_seq);
-            assert!(second_prediction.is_some());
+            assert_eq!(second_prediction_seq, first_prediction_seq);
+            assert_eq!(second_prediction, Some(prediction));
 
-            clock_mock.increment(CuDuration::from_millis(1));
+            clock_mock.increment(CuDuration::from_millis(33));
+            compute
+                .run_iteration(&clock, &mut autonomy_link)
+                .expect("ViTFly should run at 30 Hz without a fresh context packet");
+            let (third_prediction_seq, third_prediction) = zed_store.vitfly_prediction();
+            assert!(third_prediction_seq > second_prediction_seq);
+            assert!(third_prediction.is_some());
+
+            clock_mock.increment(CuDuration::from_millis(34));
             autonomy_link.context.tov = Tov::Time(clock.now());
             autonomy_link
                 .context
@@ -3741,6 +3750,7 @@ mod tests {
                     active: true,
                     pose: vitfly_pose(Quat::IDENTITY),
                     desired_speed: cu29::units::si::f32::Velocity::new::<meter_per_second>(4.0),
+                    ..messages::AutonomyContext::default()
                 });
             compute
                 .run_iteration(&clock, &mut autonomy_link)
@@ -3784,6 +3794,7 @@ mod tests {
             active: true,
             pose: vitfly_pose(Quat::IDENTITY),
             desired_speed: cu29::units::si::f32::Velocity::new::<meter_per_second>(4.0),
+            ..messages::AutonomyContext::default()
         };
         let mut autonomy_link = SimAutonomyLink::default();
 
@@ -3796,7 +3807,7 @@ mod tests {
         let (_, first_prediction) = zed_store.vitfly_prediction();
         let first_prediction = first_prediction.expect("first prediction should be published");
 
-        clock_mock.set_value(2_000_000);
+        clock_mock.set_value(35_000_000);
         compute
             .run_iteration(&clock, &mut autonomy_link)
             .expect("second ViTFly inference should run");
@@ -3892,8 +3903,12 @@ mod tests {
             cu29_export::copperlists_reader::<compute_copper::RecordedDataSet>(&mut reader)
                 .find_map(|copperlist| {
                     Some((
-                        copperlist.msgs.0.1.payload()?.clone(),
-                        *copperlist.msgs.0.4.payload()?,
+                        copperlist
+                            .msgs
+                            .get_vitfly_depth_log_output()
+                            .payload()?
+                            .clone(),
+                        *copperlist.msgs.get_vitfly_output().payload()?,
                     ))
                 })
                 .expect("compute log should contain synchronized depth and prediction payloads");
