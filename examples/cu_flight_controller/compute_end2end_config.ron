@@ -3,6 +3,7 @@
         (
             id: "zed",
             type: "cu_zed::Zed",
+            run_in_sim: false,
             logging: (enabled: false),
         ),
         (
@@ -35,6 +36,7 @@
         (
             id: "autonomy",
             type: "autonomy_bridge::AutonomyBridge",
+            run_in_sim: false,
             logging: (enabled: true),
             config: {
                 "wire_format": "bincode",

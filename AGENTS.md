@@ -58,6 +58,7 @@ Most useful book chapters:
   - `cu_project` for single-crate apps, `cu_full` for multi-crate workspaces.
 - `support/`
   - CI helpers, cross/deploy support, Docker, `cargo_cubuild`, docs generation helpers.
+  - Make examples log into their OWN logs/ subdirectory, NEVER in copper-rs/logs
 
 ## Architectural Facts That Matter
 
@@ -276,7 +277,7 @@ Notes:
 - `section_size_mib` must not exceed `slab_size_mib`.
 - Be conservative with slab/section sizes, especially for small-memory targets.
 
-2. Per-task / per-bridge message logging:
+1. Per-task / per-bridge message logging:
 
 ```ron
 (

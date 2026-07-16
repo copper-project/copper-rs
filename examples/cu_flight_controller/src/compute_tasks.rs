@@ -10,43 +10,6 @@ use cu29::units::si::{f32::Velocity, velocity::meter_per_second};
 #[cfg(any(feature = "sim", feature = "end2end"))]
 const MIN_FORWARD_SPEED_MPS: f32 = 1.0;
 
-/// Gives simulated depth its own logged Copper slot without copying the raster.
-///
-/// The ZED source remains unlogged so its unused stereo and confidence outputs do
-/// not inflate the compute log. Cloning `ZedDepthMap` only clones its `CuHandle`.
-#[cfg(feature = "sim")]
-#[derive(Reflect)]
-pub struct VitFlyDepthLog;
-
-#[cfg(feature = "sim")]
-impl Freezable for VitFlyDepthLog {}
-
-#[cfg(feature = "sim")]
-impl CuTask for VitFlyDepthLog {
-    type Resources<'r> = ();
-    type Input<'m> = input_msg!(cu_zed::ZedDepthMap<Vec<f32>>);
-    type Output<'m> = output_msg!(cu_zed::ZedDepthMap<Vec<f32>>);
-
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
-        Ok(Self)
-    }
-
-    fn process(
-        &mut self,
-        _ctx: &CuContext,
-        input: &Self::Input<'_>,
-        output: &mut Self::Output<'_>,
-    ) -> CuResult<()> {
-        output.tov = input.tov;
-        if let Some(depth) = input.payload() {
-            output.set_payload(depth.clone());
-        } else {
-            output.clear_payload();
-        }
-        Ok(())
-    }
-}
-
 /// Adapts MCU context to ViTFly's pose and desired-speed inputs.
 #[cfg(any(feature = "sim", feature = "end2end"))]
 #[derive(Reflect, Default)]
@@ -116,11 +79,28 @@ impl CuTask for VitFlyContextAdapter {
 
 /// Packages ViTFly output for the typed compute -> MCU bridge channel.
 #[cfg(any(feature = "sim", feature = "end2end"))]
-#[derive(Reflect)]
-pub struct VitFlyCommandAdapter;
+#[derive(Reflect, Default)]
+pub struct VitFlyCommandAdapter {
+    last_context: Option<AutonomyContext>,
+}
 
 #[cfg(any(feature = "sim", feature = "end2end"))]
-impl Freezable for VitFlyCommandAdapter {}
+impl Freezable for VitFlyCommandAdapter {
+    fn freeze<E: cu29::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), cu29::bincode::error::EncodeError> {
+        Encode::encode(&self.last_context, encoder)
+    }
+
+    fn thaw<D: cu29::bincode::de::Decoder>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<(), cu29::bincode::error::DecodeError> {
+        self.last_context = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 #[cfg(any(feature = "sim", feature = "end2end"))]
 impl CuTask for VitFlyCommandAdapter {
@@ -129,7 +109,7 @@ impl CuTask for VitFlyCommandAdapter {
     type Output<'m> = CuMsg<AutonomyVelocityCommand>;
 
     fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
-        Ok(Self)
+        Ok(Self::default())
     }
 
     fn process(
@@ -139,7 +119,11 @@ impl CuTask for VitFlyCommandAdapter {
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
         output.tov = input.1.tov;
-        let (Some(context), Some(velocity)) = (input.0.payload(), input.1.payload()) else {
+        if let Some(context) = input.0.payload() {
+            self.last_context = Some(*context);
+        }
+
+        let (Some(context), Some(velocity)) = (self.last_context, input.1.payload()) else {
             output.clear_payload();
             return Ok(());
         };
@@ -219,29 +203,6 @@ impl CuSrcTask for VitFlyContextSource {
     fn process(&mut self, _ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
         output.0.clear_payload();
         output.1.clear_payload();
-        Ok(())
-    }
-}
-
-/// Terminal for the ViTFly prediction in the simulator.
-#[cfg(feature = "sim")]
-#[allow(dead_code)]
-#[derive(Reflect)]
-pub struct VitFlySimListener;
-
-#[cfg(feature = "sim")]
-impl Freezable for VitFlySimListener {}
-
-#[cfg(feature = "sim")]
-impl CuSinkTask for VitFlySimListener {
-    type Resources<'r> = ();
-    type Input<'m> = input_msg!(cu_vitfly::VitFlyVelocity);
-
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
-        Ok(Self)
-    }
-
-    fn process(&mut self, _ctx: &CuContext, _input: &Self::Input<'_>) -> CuResult<()> {
         Ok(())
     }
 }

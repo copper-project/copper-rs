@@ -123,7 +123,7 @@ mod mcu_copper {
 
     #[cfg(not(feature = "sim"))]
     #[copper_runtime(
-        config = "multi_copper.ron",
+        config = "manual_flying.ron",
         subsystem = "mcu",
         sim_mode = true,
         ignore_resources = true
@@ -132,7 +132,7 @@ mod mcu_copper {
 
     #[cfg(feature = "sim")]
     #[copper_runtime(
-        config = "multi_copper_vitfly_sim.ron",
+        config = "auto_flying.ron",
         subsystem = "mcu",
         sim_mode = true,
         ignore_resources = true
@@ -343,15 +343,11 @@ mod compute_copper {
     }
 
     #[cfg(not(feature = "sim"))]
-    #[copper_runtime(config = "multi_copper.ron", subsystem = "compute", sim_mode = true)]
+    #[copper_runtime(config = "manual_flying.ron", subsystem = "compute", sim_mode = true)]
     struct FlightComputeSim {}
 
     #[cfg(feature = "sim")]
-    #[copper_runtime(
-        config = "multi_copper_vitfly_sim.ron",
-        subsystem = "compute",
-        sim_mode = true
-    )]
+    #[copper_runtime(config = "auto_flying.ron", subsystem = "compute", sim_mode = true)]
     struct FlightComputeSim {}
 
     pub(super) struct Runtime {
@@ -432,6 +428,15 @@ mod compute_copper {
                         SimOverride::ExecuteByRuntime
                     }
                     #[cfg(feature = "sim")]
+                    default::SimStep::VitflyCommand(CuTaskCallbackState::Process(input, _)) => {
+                        if let Some(velocity) = input.1.payload() {
+                            zed_store.publish_vitfly_prediction(
+                                velocity.map(|axis| axis.get::<meter_per_second>()),
+                            );
+                        }
+                        SimOverride::ExecuteByRuntime
+                    }
+                    #[cfg(feature = "sim")]
                     default::SimStep::AutonomyRxContext { msg, .. } => {
                         *msg = core::mem::take(&mut _autonomy_link.context);
                         SimOverride::ExecutedBySim
@@ -447,20 +452,6 @@ mod compute_copper {
                                 command.west.get::<meter_per_second>(),
                                 command.up.get::<meter_per_second>(),
                             ]);
-                        }
-                        SimOverride::ExecutedBySim
-                    }
-                    #[cfg(feature = "sim")]
-                    default::SimStep::VitflyListener(CuTaskCallbackState::Process(input, _)) => {
-                        // Keep an inference preview available while AUTO is
-                        // inactive. An active conditioned command published
-                        // above always takes precedence over this raw vector.
-                        if _autonomy_link.command.payload().is_none()
-                            && let Some(velocity) = input.payload()
-                        {
-                            zed_store.publish_vitfly_prediction(
-                                velocity.map(|axis| axis.get::<meter_per_second>()),
-                            );
                         }
                         SimOverride::ExecutedBySim
                     }
@@ -1307,12 +1298,22 @@ type BevyMonUnifiedLogger = UnifiedLoggerWrite;
 fn setup_copper(mut commands: Commands, zed_store: Res<sim_zed::SimZedFrameStore>) {
     #[allow(clippy::identity_op)]
     const LOG_SLAB_SIZE: Option<usize> = Some(128 * 1024 * 1024);
+    let (mcu_logger_path, compute_logger_path) = sim_log_paths();
     commands.insert_resource(build_sim_copper_state(
-        Path::new("logs/flight_controller_sim.copper"),
-        Path::new("logs/flight_compute_sim.copper"),
+        &mcu_logger_path,
+        &compute_logger_path,
         LOG_SLAB_SIZE,
         zed_store.clone(),
     ));
+}
+
+#[cfg(all(not(target_arch = "wasm32"), feature = "sim"))]
+fn sim_log_paths() -> (PathBuf, PathBuf) {
+    let log_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("logs");
+    (
+        log_dir.join("flight_controller_sim.copper"),
+        log_dir.join("flight_compute_sim.copper"),
+    )
 }
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "sim"))]
@@ -3381,6 +3382,15 @@ mod tests {
         LOCK.get_or_init(|| Mutex::new(()))
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn simulator_logs_are_anchored_to_the_example_directory() {
+        let example_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let (mcu, compute) = sim_log_paths();
+        assert_eq!(mcu, example_dir.join("logs/flight_controller_sim.copper"));
+        assert_eq!(compute, example_dir.join("logs/flight_compute_sim.copper"));
+    }
+
     fn assert_heading_close(actual: f32, expected: f32) {
         let err = (actual - expected + 540.0).rem_euclid(360.0) - 180.0;
         assert!(
@@ -3839,7 +3849,7 @@ mod tests {
 
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
-    fn subsystem_logs_record_depth_and_complete_distributed_replay() {
+    fn subsystem_logs_record_predictions_and_complete_distributed_replay() {
         let _guard = copper_runtime_test_lock().lock().unwrap();
         let temp_dir = tempfile::tempdir().expect("failed to create temporary log directory");
         let mcu_log_base = temp_dir.path().join("flight_controller_sim.copper");
@@ -3899,34 +3909,18 @@ mod tests {
             panic!("expected a readable compute log");
         };
         let mut reader = UnifiedLoggerIOReader::new(logger, UnifiedLogType::CopperList);
-        let (depth, prediction) =
+        let prediction =
             cu29_export::copperlists_reader::<compute_copper::RecordedDataSet>(&mut reader)
-                .find_map(|copperlist| {
-                    Some((
-                        copperlist
-                            .msgs
-                            .get_vitfly_depth_log_output()
-                            .payload()?
-                            .clone(),
-                        *copperlist.msgs.get_vitfly_output().payload()?,
-                    ))
-                })
-                .expect("compute log should contain synchronized depth and prediction payloads");
+                .find_map(|copperlist| copperlist.msgs.get_vitfly_output().payload().copied())
+                .expect("compute log should contain a ViTFly prediction");
 
-        assert_eq!(depth.format.width, sim_zed::ZED_SIM_WIDTH);
-        assert_eq!(depth.format.height, sim_zed::ZED_SIM_HEIGHT);
-        depth.buffer_handle.with_inner(|samples| {
-            assert_eq!(samples.len(), pixel_count);
-            assert!(samples.iter().all(|sample| *sample == 3.5));
-        });
         assert!(prediction.iter().all(|component| {
             component
                 .get::<cu29::units::si::velocity::meter_per_second>()
                 .is_finite()
         }));
 
-        let multi_config_path =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("multi_copper_vitfly_sim.ron");
+        let multi_config_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("auto_flying.ron");
         let builder = cu29::distributed_replay::DistributedReplayPlan::builder(multi_config_path)
             .expect("failed to load distributed replay config")
             .discover_logs_under(temp_dir.path())

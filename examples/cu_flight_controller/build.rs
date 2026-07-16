@@ -14,10 +14,8 @@ fn main() {
         "mcu_autonomy_config.ron",
         "compute_bevymon_config.ron",
         "compute_end2end_config.ron",
-        "compute_vitfly_config.ron",
-        "multi_copper.ron",
-        "multi_copper_udp.ron",
-        "multi_copper_vitfly_sim.ron",
+        "manual_flying.ron",
+        "auto_flying.ron",
     ] {
         println!("cargo:rerun-if-changed={config}");
     }

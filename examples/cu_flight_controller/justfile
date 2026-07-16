@@ -22,7 +22,7 @@ end2end:
   cargo run -p cu-flight-controller --no-default-features --features end2end --bin quad-compute
 
 # Render the complete two-subsystem deployment by default.
-dag config="multi_copper_udp.ron" mission="":
+dag config="auto_flying.ron" mission="":
   #!/usr/bin/env bash
   set -euo pipefail
 
@@ -73,14 +73,14 @@ sim-cuda:
 resim debug_base="copper/examples/cu_flight_controller/debug/v1" log="logs/flight_controller_sim.copper" replay_log="logs/flight_controller_resim.copper":
   #!/usr/bin/env bash
   set -euo pipefail
-  invocation_dir="{{invocation_directory()}}"
+  example_dir="{{justfile_directory()}}"
   log="{{log}}"
   replay_log="{{replay_log}}"
   if [[ "$log" != /* ]]; then
-    log="${invocation_dir}/${log}"
+    log="${example_dir}/${log}"
   fi
   if [[ "$replay_log" != /* ]]; then
-    replay_log="${invocation_dir}/${replay_log}"
+    replay_log="${example_dir}/${replay_log}"
   fi
   cd "{{ROOT}}"
   cargo --config examples/cu_flight_controller/.cargo/config.toml run -p cu-flight-controller --no-default-features --features sim-debug --bin quad-resim -- \
@@ -92,14 +92,14 @@ resim debug_base="copper/examples/cu_flight_controller/debug/v1" log="logs/fligh
 resim-debug debug_base="copper/examples/cu_flight_controller/debug/v1" log="logs/flight_controller_sim.copper" replay_log="logs/flight_controller_resim.copper":
   #!/usr/bin/env bash
   set -euo pipefail
-  invocation_dir="{{invocation_directory()}}"
+  example_dir="{{justfile_directory()}}"
   log="{{log}}"
   replay_log="{{replay_log}}"
   if [[ "$log" != /* ]]; then
-    log="${invocation_dir}/${log}"
+    log="${example_dir}/${log}"
   fi
   if [[ "$replay_log" != /* ]]; then
-    replay_log="${invocation_dir}/${replay_log}"
+    replay_log="${example_dir}/${replay_log}"
   fi
   cd "{{ROOT}}"
   cargo --config examples/cu_flight_controller/.cargo/config.toml run -p cu-flight-controller --no-default-features --features sim-debug --bin quad-resim -- \
@@ -174,20 +174,21 @@ web-dist:
 logreader log="logs/flight_controller_sim.copper":
   #!/usr/bin/env bash
   set -euo pipefail
-  invocation_dir="{{invocation_directory()}}"
+  example_dir="{{justfile_directory()}}"
   log="{{log}}"
   if [[ "$log" != /* ]]; then
-    log="${invocation_dir}/${log}"
+    log="${example_dir}/${log}"
   fi
+  cd "{{ROOT}}"
   RUST_BACKTRACE=1 cargo run -p cu-flight-controller --no-default-features --features logreader --bin quad-logreader -- "$log" extract-copperlists --export-format json
 
-# Extract compute CopperLists, including depth and ViTFly predictions (JSON export).
+# Extract compute CopperLists, including ViTFly predictions (JSON export).
 compute-logreader log="logs/flight_compute_sim.copper":
   #!/usr/bin/env bash
   set -euo pipefail
   log="{{log}}"
   if [[ "$log" != /* ]]; then
-    log="{{ROOT}}/${log}"
+    log="{{justfile_directory()}}/${log}"
   fi
   cd "{{ROOT}}"
   RUST_BACKTRACE=1 cargo run -p cu-flight-controller --no-default-features --features compute-logreader --bin quad-compute-logreader -- "$log" extract-copperlists --export-format json
@@ -198,7 +199,7 @@ compute-fsck log="logs/flight_compute_sim.copper":
   set -euo pipefail
   log="{{log}}"
   if [[ "$log" != /* ]]; then
-    log="{{ROOT}}/${log}"
+    log="{{justfile_directory()}}/${log}"
   fi
   cd "{{ROOT}}"
   RUST_BACKTRACE=1 cargo run -p cu-flight-controller --no-default-features --features compute-logreader --bin quad-compute-logreader -- "$log" fsck
@@ -210,77 +211,58 @@ py-build:
   cd "{{ROOT}}"
   cargo rustc -p cu-flight-controller --no-default-features --features python-bindings --lib --crate-type cdylib
 
-# Build the Python extension with the compute-subsystem VitFly schema.
-py-vitfly-build:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  echo "Building the VitFly Copper log reader..."
-  cd "{{ROOT}}"
-  cargo rustc -p cu-flight-controller --no-default-features --features python-vitfly-bindings --lib --crate-type cdylib
-
-# Replace logs/vit-extracted with replayable VitFly tensors and UI-style previews.
-vit-extract: py-vitfly-build
-  #!/usr/bin/env bash
-  set -euo pipefail
-  logs="{{justfile_directory()}}/logs"
-  output="$logs/vit-extracted"
-  echo "Clearing $output..."
-  rm -rf "$output"
-  mkdir -p "$output"
-  python3 "{{justfile_directory()}}/python/extract_vitfly_samples.py" \
-    "$logs/flight_compute_sim.copper" \
-    --output "$output"
-
 # Python example reading the log.
 py log="logs/flight_controller_sim.copper": py-build
   #!/usr/bin/env bash
   set -euo pipefail
-  invocation_dir="{{invocation_directory()}}"
+  example_dir="{{justfile_directory()}}"
   log="{{log}}"
   if [[ "$log" != /* ]]; then
-    log="${invocation_dir}/${log}"
+    log="${example_dir}/${log}"
   fi
   cd "{{ROOT}}"
   cargo rustc -p cu-flight-controller --no-default-features --features python-bindings --lib --crate-type cdylib
-  python3 "${invocation_dir}/python/print_gnss_from_log.py" "$log"
+  python3 "${example_dir}/python/print_gnss_from_log.py" "$log"
 
 # Print GNSS coordinates from a Copper log via the Python extension.
 py-gnss log="logs/flight_controller_sim.copper":
   #!/usr/bin/env bash
   set -euo pipefail
-  invocation_dir="{{invocation_directory()}}"
+  example_dir="{{justfile_directory()}}"
   log="{{log}}"
   if [[ "$log" != /* ]]; then
-    log="${invocation_dir}/${log}"
+    log="${example_dir}/${log}"
   fi
   cd "{{ROOT}}"
   cargo rustc -p cu-flight-controller --no-default-features --features python-bindings --lib --crate-type cdylib
-  python3 "${invocation_dir}/python/print_gnss_from_log.py" "$log"
+  python3 "${example_dir}/python/print_gnss_from_log.py" "$log"
 # Run log reader fsck against a log file.
 fsck log="logs/flight_controller_sim.copper":
   #!/usr/bin/env bash
   set -euo pipefail
-  invocation_dir="{{invocation_directory()}}"
+  example_dir="{{justfile_directory()}}"
   log="{{log}}"
   if [[ "$log" != /* ]]; then
-    log="${invocation_dir}/${log}"
+    log="${example_dir}/${log}"
   fi
+  cd "{{ROOT}}"
   RUST_BACKTRACE=1 cargo run -p cu-flight-controller --no-default-features --features logreader --bin quad-logreader -- "$log" fsck
 
 # Extract text logs with a specified log index directory.
 textlogs log="logs/embedded.copper" index="../../target/debug/cu29_log_index":
   #!/usr/bin/env bash
   set -euo pipefail
-  invocation_dir="{{invocation_directory()}}"
+  example_dir="{{justfile_directory()}}"
   log="{{log}}"
   index="{{index}}"
   if [[ "$log" != /* ]]; then
-    log="${invocation_dir}/${log}"
+    log="${example_dir}/${log}"
   fi
   if [[ "$index" != /* ]]; then
-    index="${invocation_dir}/${index}"
+    index="${example_dir}/${index}"
   fi
   [[ -e "$index" ]] || { echo "log index not found: $index" >&2; exit 1; }
+  cd "{{ROOT}}"
   RUST_BACKTRACE=1 cargo run -p cu-flight-controller --no-default-features --features logreader --bin quad-logreader -- "$log" extract-text-log "$index"
 
 # Build and run firmware with textlogs enabled (release profile).

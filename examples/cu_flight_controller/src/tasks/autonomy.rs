@@ -22,7 +22,7 @@ const NAV_FIX_TIMEOUT: CuDuration = CuDuration(2_000_000_000);
 const NAV_ATTITUDE_TIMEOUT: CuDuration = CuDuration(250_000_000);
 const CONTEXT_PERIOD: CuDuration = CuDuration(1_000_000_000 / 30);
 const COMMAND_TIMEOUT: CuDuration = CuDuration(250_000_000);
-const AUTO_MAX_SPEED_MPS: f32 = 5.0;
+const AUTO_MAX_SPEED_MPS: f32 = 12.0;
 const AUTO_HOVER_THROTTLE: f32 = 0.48;
 const AUTO_YAW_COMMAND_MIN_SPEED_MPS: f32 = 0.75;
 const AUTO_YAW_TARGET_TIME_CONSTANT_S: f32 = 0.35;
@@ -303,20 +303,14 @@ impl CuTask for AutonomyContextTask {
         self.sequence = self.sequence.wrapping_add(1);
         self.last_emit = Some(emit_phase);
         self.last_active = active;
-        let distance_m = position_distance_m(navigation.position, target.position) as f32;
-        // Keep the ViTFly preview live at its normal cruise reference even when
-        // AUTO is inactive. The active flag, not a zero speed, gates actuation.
-        let desired_speed_mps = if active {
-            (distance_m * 0.1).clamp(1.0, AUTO_MAX_SPEED_MPS)
-        } else {
-            AUTO_MAX_SPEED_MPS
-        };
+        // Keep ViTFly at the cruise speed it handles reliably. The active flag,
+        // not a waypoint-distance speed ramp or zero speed, gates actuation.
         output.set_payload(AutonomyContext {
             sequence: self.sequence,
             mission_generation: target.generation,
             active,
             pose: navigation.pose,
-            desired_speed: Velocity::new::<meter_per_second>(desired_speed_mps),
+            desired_speed: Velocity::new::<meter_per_second>(AUTO_MAX_SPEED_MPS),
         });
         Ok(())
     }

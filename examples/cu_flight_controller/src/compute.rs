@@ -8,7 +8,7 @@ mod tasks {
     pub use crate::compute_tasks::*;
 }
 
-#[copper_runtime(config = "multi_copper_udp.ron", subsystem = "compute")]
+#[copper_runtime(config = "auto_flying.ron", subsystem = "compute")]
 struct ComputeApp {}
 
 const LOG_SLAB_SIZE: Option<usize> = Some(64 * 1024 * 1024);
