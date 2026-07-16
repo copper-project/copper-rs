@@ -96,13 +96,13 @@ pub struct AutonomyContext {
     pub desired_speed: Velocity,
 }
 
-/// Fixed-size compute -> MCU body-frame velocity command in `[forward, left, up]` axes.
+/// Fixed-size compute -> MCU world-frame velocity command in `[north, west, up]` axes.
 #[derive(Debug, Default, Clone, Copy, Encode, Decode, Serialize, Deserialize, Reflect)]
 pub struct AutonomyVelocityCommand {
     pub context_sequence: u64,
     pub mission_generation: u32,
-    pub forward: Velocity,
-    pub left: Velocity,
+    pub north: Velocity,
+    pub west: Velocity,
     pub up: Velocity,
 }
 

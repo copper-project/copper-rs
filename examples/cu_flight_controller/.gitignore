@@ -1,6 +1,8 @@
 /dist/
+/assets/forest.glb
 /assets/quadcopter.glb
 /assets/city-fixed.glb
 /assets/skybox.ktx2
 /assets/specular_map.ktx2
 /assets/.download-cache/
+/python/__pycache__/

@@ -66,6 +66,7 @@ libm = { version = "0.2", default-features = false }
 ## End-to-end compute dependencies
 cu-zed = { version = "1.0.0", optional = true }
 cu-zenoh-bridge = { path = "../../components/bridges/cu_zenoh_bridge", version = "1.0.0", optional = true }
+cu-ratelimit = { path = "../../components/tasks/cu_ratelimit", version = "1.0.0", optional = true }
 
 ## Log reader depencies
 cu29-export = { workspace = true, optional = true }
@@ -244,6 +245,7 @@ end2end = [
   "dep:cu-gnss-payloads",
   "dep:cu-vitfly",
   "dep:cu-zenoh-bridge",
+  "dep:cu-ratelimit",
 ]
 logreader = [
   "dep:cu29",
@@ -274,11 +276,11 @@ python-bindings = [
   "cu29-export/python",
   "dep:pyo3",
 ]
-python-vitfly-bindings = ["python-bindings", "dep:cu-zed", "dep:cu-vitfly"]
 sim = [
   "sim_core",
   "dep:cu-vitfly",
   "dep:cu-zenoh-bridge",
+  "dep:cu-ratelimit",
   "cu29/reflect",
   "dep:cu-consolemon",
   "dep:cached-path",

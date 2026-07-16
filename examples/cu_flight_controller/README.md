@@ -8,9 +8,11 @@ This example demonstrates a complete flight controller running on the MicoAir H7
 
 The deployment is described by multi-Copper configurations with two independent subsystems:
 
-- `multi_copper.ron`: the buildable manual MCU firmware graph
-- `multi_copper_udp.ron`: the closed-loop MCU + compute deployment contract over typed Zenoh routes
-- `multi_copper_vitfly_sim.ron`: the same closed-loop graph with bridge I/O and sensors preempted by Bevy
+- `manual_flying.ron`: the buildable manual-flying MCU firmware graph
+- `auto_flying.ron`: the closed-loop auto-flying MCU + compute deployment contract over typed Zenoh routes
+
+The simulator runs these same graphs in `sim_mode`; it replaces external hardware and transport
+at the graph boundaries without changing the application topology.
 
 The real camera is enabled by the `end2end` feature and uses `cu_zed::Zed`. The simulator starts both subsystem runtimes in one Bevy process, preempts the hardware ZED source, and transfers the normal typed bridge messages through a simulator-owned link. On a deployed system the compute-side Copper Zenoh bridge listens on `udp/0.0.0.0:7447` and uses bincode for the two fixed-size messages. Binding a no-std UDP network resource and Zenoh backend on the H743 is intentionally deferred; the firmware graph remains buildable without pretending that transport exists.
 
@@ -52,7 +54,7 @@ RC Input -> RC Mapper -------------------------------> mode supervisor -> attitu
 | `navigation` | Latches GNSS, AHRS, and true heading into a freshness-checked navigation state |
 | `auto_mission` | Latches home and a point 500 m ahead / 8 m up, then alternates forever |
 | `autonomy_context` | Publishes the fixed-size ViTFly context at approximately 30 Hz |
-| `auto_controller` | Tracks fresh ViTFly `[forward, left, up]` commands toward the current waypoint |
+| `auto_controller` | Tracks fresh ViTFly world-frame `[north, west, up]` commands toward the current waypoint |
 | `mode_supervisor` | Selects manual or AUTO controls before the cascaded flight controller |
 | `attitude` | Outer loop PID (angle to rate setpoint) |
 | `rate` | Inner loop PID (rate to motor commands) |
@@ -86,7 +88,7 @@ just subsystems-check
 ```
 
 This checks the real ZED/ViTFly/Zenoh compute graph and the current buildable STM32 firmware graph.
-The MCU half of `multi_copper_udp.ron` becomes the firmware entrypoint once its no-std UDP resource
+The MCU half of `auto_flying.ron` becomes the firmware entrypoint once its no-std UDP resource
 and bridge backend are bound.
 
 To compile or run the real ZED-enabled compute graph:
@@ -173,51 +175,6 @@ Implementation notes:
 
 This pattern is the recommended Python story in Copper: post-process logs in Python
 after the run, keep Python off the control path during the run.
-
-### VitFly Sample Extraction
-
-The compute log records the complete ZED depth raster, VitFly pose/speed context,
-network task output, and conditioned command. Extract them into replayable NumPy
-samples and human-readable previews with:
-
-```bash
-# From the workspace root.
-just vit-extract
-```
-
-The command always reads
-`examples/cu_flight_controller/logs/flight_compute_sim.copper`. It empties and
-recreates `examples/cu_flight_controller/logs/vit-extracted`, so every run
-produces a fresh, self-contained dataset without stale samples.
-
-Each frame produces a paired `.npz` and `.png`, with `manifest.jsonl` preserving
-log order. The PNG uses the same depth transfer function, arrow axes, arrow shape,
-and command-vs-task-output precedence as the simulator UI. The NPZ includes:
-
-- `model_input`: exact `[1, 1, 60, 90]` float32 tensor fed to Candle
-- `desired_velocity`: `[1, 1]` float32 meters/second
-- `attitude`: `[1, 4]` scalar-first `wxyz` quaternion
-- `depth_m`: original logged meter-depth raster
-- `copper_model_output`: unscaled three-axis network output
-- the task, conditioned-command, and preview velocities in meters/second
-
-The first three arrays can be passed directly to the original PyTorch model:
-
-```python
-import numpy as np
-import torch
-
-sample = np.load("sample_000000_cl_0000000000.npz")
-inputs = [
-    torch.from_numpy(sample["model_input"]),
-    torch.from_numpy(sample["desired_velocity"]),
-    torch.from_numpy(sample["attitude"]),
-]
-prediction, hidden_state = model(inputs)
-```
-
-For `LSTMNetVIT`, iterate samples in manifest order and pass the returned hidden
-state as the fourth input on subsequent frames.
 
 ### RC Tester (simulation)
 

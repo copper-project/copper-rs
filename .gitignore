@@ -15,8 +15,7 @@
 *.mcap
 cu29_logstats.json
 Cargo.lock
-**/logs/*.log
-/examples/cu_flight_controller/logs/vit-extracted/
+/examples/**/logs/*
 
 # independent project from the workspace
 /examples/cu_rp2350_skeleton/.idea/

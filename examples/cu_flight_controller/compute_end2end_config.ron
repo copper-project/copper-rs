@@ -3,12 +3,19 @@
         (
             id: "zed",
             type: "cu_zed::Zed",
+            run_in_sim: false,
             logging: (enabled: false),
         ),
         (
             id: "vitfly_context",
             type: "tasks::VitFlyContextAdapter",
             logging: (enabled: true),
+        ),
+        (
+            id: "vitfly_depth_rate",
+            type: "cu_ratelimit::CuRateLimit<cu_zed::ZedDepthMap<Vec<f32>>>",
+            config: {"rate": 30.0},
+            logging: (enabled: false),
         ),
         (
             id: "vitfly",
@@ -29,6 +36,7 @@
         (
             id: "autonomy",
             type: "autonomy_bridge::AutonomyBridge",
+            run_in_sim: false,
             logging: (enabled: true),
             config: {
                 "wire_format": "bincode",
@@ -69,6 +77,11 @@
         ),
         (
             src: "zed",
+            dst: "vitfly_depth_rate",
+            msg: "cu_zed::ZedDepthMap<Vec<f32>>",
+        ),
+        (
+            src: "vitfly_depth_rate",
             dst: "vitfly",
             msg: "cu_zed::ZedDepthMap<Vec<f32>>",
         ),

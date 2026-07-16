@@ -123,7 +123,7 @@ mod mcu_copper {
 
     #[cfg(not(feature = "sim"))]
     #[copper_runtime(
-        config = "multi_copper.ron",
+        config = "manual_flying.ron",
         subsystem = "mcu",
         sim_mode = true,
         ignore_resources = true
@@ -132,7 +132,7 @@ mod mcu_copper {
 
     #[cfg(feature = "sim")]
     #[copper_runtime(
-        config = "multi_copper_vitfly_sim.ron",
+        config = "auto_flying.ron",
         subsystem = "mcu",
         sim_mode = true,
         ignore_resources = true
@@ -343,15 +343,11 @@ mod compute_copper {
     }
 
     #[cfg(not(feature = "sim"))]
-    #[copper_runtime(config = "multi_copper.ron", subsystem = "compute", sim_mode = true)]
+    #[copper_runtime(config = "manual_flying.ron", subsystem = "compute", sim_mode = true)]
     struct FlightComputeSim {}
 
     #[cfg(feature = "sim")]
-    #[copper_runtime(
-        config = "multi_copper_vitfly_sim.ron",
-        subsystem = "compute",
-        sim_mode = true
-    )]
+    #[copper_runtime(config = "auto_flying.ron", subsystem = "compute", sim_mode = true)]
     struct FlightComputeSim {}
 
     pub(super) struct Runtime {
@@ -432,6 +428,15 @@ mod compute_copper {
                         SimOverride::ExecuteByRuntime
                     }
                     #[cfg(feature = "sim")]
+                    default::SimStep::VitflyCommand(CuTaskCallbackState::Process(input, _)) => {
+                        if let Some(velocity) = input.1.payload() {
+                            zed_store.publish_vitfly_prediction(
+                                velocity.map(|axis| axis.get::<meter_per_second>()),
+                            );
+                        }
+                        SimOverride::ExecuteByRuntime
+                    }
+                    #[cfg(feature = "sim")]
                     default::SimStep::AutonomyRxContext { msg, .. } => {
                         *msg = core::mem::take(&mut _autonomy_link.context);
                         SimOverride::ExecutedBySim
@@ -443,24 +448,10 @@ mod compute_copper {
                             // The upstream ViTFly preview draws the normalized
                             // velocity command, not the raw network vector.
                             zed_store.publish_vitfly_prediction([
-                                command.forward.get::<meter_per_second>(),
-                                command.left.get::<meter_per_second>(),
+                                command.north.get::<meter_per_second>(),
+                                command.west.get::<meter_per_second>(),
                                 command.up.get::<meter_per_second>(),
                             ]);
-                        }
-                        SimOverride::ExecutedBySim
-                    }
-                    #[cfg(feature = "sim")]
-                    default::SimStep::VitflyListener(CuTaskCallbackState::Process(input, _)) => {
-                        // Keep an inference preview available while AUTO is
-                        // inactive. An active conditioned command published
-                        // above always takes precedence over this raw vector.
-                        if _autonomy_link.command.payload().is_none()
-                            && let Some(velocity) = input.payload()
-                        {
-                            zed_store.publish_vitfly_prediction(
-                                velocity.map(|axis| axis.get::<meter_per_second>()),
-                            );
                         }
                         SimOverride::ExecutedBySim
                     }
@@ -942,10 +933,12 @@ const THRUST_CONSTANT: f32 = 1.0e-6;
 const DRAG_CONSTANT: f32 = 1.0e-7;
 const MAX_OMEGA_RAD_S: f32 = 2200.0;
 const EARTH_METERS_PER_DEG_LAT: f64 = 111_320.0;
-// Bevy world frame uses X east, Y up, Z south in this scene.
-// Keep declination at 0 in the simulated magnetic field itself so
-// `declination_deg` in `MagneticTrueHeading` can be tested independently.
-const WORLD_MAG_FIELD_UT: [f32; 3] = [0.0, -45.0, -20.0];
+// The FC sensor convention maps Bevy body +Z to forward, so its northward
+// magnetic component must be +Z even though the rendered vehicle faces -Z.
+// This produces the expected NED field [north=20, east=0, down=45] at the
+// identity spawn pose. Declination remains 0 here and is applied separately by
+// `MagneticTrueHeading`.
+const WORLD_MAG_FIELD_UT: [f32; 3] = [0.0, -45.0, 20.0];
 #[cfg(not(target_arch = "wasm32"))]
 const BASE_ASSETS_URL: &str = "https://cdn.copper-robotics.com/";
 const SKYBOX: &str = "skybox.ktx2";
@@ -1305,12 +1298,22 @@ type BevyMonUnifiedLogger = UnifiedLoggerWrite;
 fn setup_copper(mut commands: Commands, zed_store: Res<sim_zed::SimZedFrameStore>) {
     #[allow(clippy::identity_op)]
     const LOG_SLAB_SIZE: Option<usize> = Some(128 * 1024 * 1024);
+    let (mcu_logger_path, compute_logger_path) = sim_log_paths();
     commands.insert_resource(build_sim_copper_state(
-        Path::new("logs/flight_controller_sim.copper"),
-        Path::new("logs/flight_compute_sim.copper"),
+        &mcu_logger_path,
+        &compute_logger_path,
         LOG_SLAB_SIZE,
         zed_store.clone(),
     ));
+}
+
+#[cfg(all(not(target_arch = "wasm32"), feature = "sim"))]
+fn sim_log_paths() -> (PathBuf, PathBuf) {
+    let log_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("logs");
+    (
+        log_dir.join("flight_controller_sim.copper"),
+        log_dir.join("flight_compute_sim.copper"),
+    )
 }
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "sim"))]
@@ -1593,16 +1596,16 @@ fn update_zed_depth_preview(
 }
 
 fn draw_vitfly_arrow(pixels: &mut [u8], width: usize, height: usize, velocity: [f32; 3]) {
-    let [_forward, left, up] = velocity;
-    if !left.is_finite() || !up.is_finite() || width == 0 || height == 0 {
+    let [_north, west, up] = velocity;
+    if !west.is_finite() || !up.is_finite() || width == 0 || height == 0 {
         return;
     }
 
     let center = (width as f32 * 0.5, height as f32 * 0.5);
-    // Match the original Python preview: lateral points left on the image and
-    // positive vertical velocity points upward.
+    // Match the original Python preview. Its fixed world frame is aligned with
+    // the simulator's initial camera: west points left and up points upward.
     let end = (
-        (center.0 - left * width as f32 / 3.0).clamp(0.0, (width - 1) as f32),
+        (center.0 - west * width as f32 / 3.0).clamp(0.0, (width - 1) as f32),
         (center.1 - up * height as f32 / 3.0).clamp(0.0, (height - 1) as f32),
     );
     draw_preview_line(pixels, width, height, center, end, 2);
@@ -2703,10 +2706,10 @@ fn sim_battery_set_armed(armed: bool) {
 }
 
 fn sim_gnss_set_vehicle_state(position_xyz_m: [f32; 3], velocity_xyz_mps: [f32; 3]) {
-    // Scene/world alignment in this sim: +Z tracks geographic north and +X tracks geographic west.
-    // GNSS expects NED signs, so east is the opposite of world +X.
-    let north_m = position_xyz_m[2] as f64;
-    let east_m = -(position_xyz_m[0] as f64);
+    // Bevy world uses +X east, +Y up, and +Z south. The identity quad therefore
+    // faces geographic north along Bevy's -Z forward axis.
+    let north_m = -(position_xyz_m[2] as f64);
+    let east_m = position_xyz_m[0] as f64;
     let up_m = position_xyz_m[1];
 
     let meters_per_deg_lon = (EARTH_METERS_PER_DEG_LAT
@@ -2715,8 +2718,8 @@ fn sim_gnss_set_vehicle_state(position_xyz_m: [f32; 3], velocity_xyz_mps: [f32; 
     let lat_deg = sim_support::GNSS_FIXED_LAT_DEG + (north_m / EARTH_METERS_PER_DEG_LAT);
     let lon_deg = sim_support::GNSS_FIXED_LON_DEG + (east_m / meters_per_deg_lon);
 
-    let velocity_north_mps = velocity_xyz_mps[2];
-    let velocity_east_mps = -velocity_xyz_mps[0];
+    let velocity_north_mps = -velocity_xyz_mps[2];
+    let velocity_east_mps = velocity_xyz_mps[0];
     let velocity_down_mps = -velocity_xyz_mps[1];
     let ground_speed_mps = libm::sqrtf(
         velocity_north_mps * velocity_north_mps + velocity_east_mps * velocity_east_mps,
@@ -3379,6 +3382,15 @@ mod tests {
         LOCK.get_or_init(|| Mutex::new(()))
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn simulator_logs_are_anchored_to_the_example_directory() {
+        let example_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let (mcu, compute) = sim_log_paths();
+        assert_eq!(mcu, example_dir.join("logs/flight_controller_sim.copper"));
+        assert_eq!(compute, example_dir.join("logs/flight_compute_sim.copper"));
+    }
+
     fn assert_heading_close(actual: f32, expected: f32) {
         let err = (actual - expected + 540.0).rem_euclid(360.0) - 180.0;
         assert!(
@@ -3674,7 +3686,7 @@ mod tests {
 
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
-    fn vitfly_infers_while_inactive_and_between_context_packets() {
+    fn vitfly_is_rate_limited_and_infers_between_context_packets() {
         let _guard = copper_runtime_test_lock().lock().unwrap();
         let (clock, clock_mock) = RobotClock::mock();
         let zed_store = sim_zed::SimZedFrameStore::default();
@@ -3696,6 +3708,7 @@ mod tests {
                 active: false,
                 pose: vitfly_pose(Quat::IDENTITY),
                 desired_speed: cu29::units::si::f32::Velocity::new::<meter_per_second>(4.0),
+                ..messages::AutonomyContext::default()
             });
         compute
             .run_iteration(&clock, &mut autonomy_link)
@@ -3724,12 +3737,20 @@ mod tests {
             clock_mock.increment(CuDuration::from_millis(1));
             compute
                 .run_iteration(&clock, &mut autonomy_link)
-                .expect("ViTFly should run without a fresh context packet");
+                .expect("compute should run inside the ViTFly rate-limit interval");
             let (second_prediction_seq, second_prediction) = zed_store.vitfly_prediction();
-            assert!(second_prediction_seq > first_prediction_seq);
-            assert!(second_prediction.is_some());
+            assert_eq!(second_prediction_seq, first_prediction_seq);
+            assert_eq!(second_prediction, Some(prediction));
 
-            clock_mock.increment(CuDuration::from_millis(1));
+            clock_mock.increment(CuDuration::from_millis(33));
+            compute
+                .run_iteration(&clock, &mut autonomy_link)
+                .expect("ViTFly should run at 30 Hz without a fresh context packet");
+            let (third_prediction_seq, third_prediction) = zed_store.vitfly_prediction();
+            assert!(third_prediction_seq > second_prediction_seq);
+            assert!(third_prediction.is_some());
+
+            clock_mock.increment(CuDuration::from_millis(34));
             autonomy_link.context.tov = Tov::Time(clock.now());
             autonomy_link
                 .context
@@ -3739,6 +3760,7 @@ mod tests {
                     active: true,
                     pose: vitfly_pose(Quat::IDENTITY),
                     desired_speed: cu29::units::si::f32::Velocity::new::<meter_per_second>(4.0),
+                    ..messages::AutonomyContext::default()
                 });
             compute
                 .run_iteration(&clock, &mut autonomy_link)
@@ -3747,12 +3769,12 @@ mod tests {
                 .command
                 .payload()
                 .expect("active ViTFly command should cross the simulated bridge");
-            assert!(command.forward.get::<meter_per_second>() >= 1.0);
+            assert!(command.north.get::<meter_per_second>() >= 1.0);
             assert_eq!(
                 zed_store.vitfly_prediction().1,
                 Some([
-                    command.forward.get::<meter_per_second>(),
-                    command.left.get::<meter_per_second>(),
+                    command.north.get::<meter_per_second>(),
+                    command.west.get::<meter_per_second>(),
                     command.up.get::<meter_per_second>(),
                 ]),
                 "active preview should show the conditioned command sent to the controller"
@@ -3782,6 +3804,7 @@ mod tests {
             active: true,
             pose: vitfly_pose(Quat::IDENTITY),
             desired_speed: cu29::units::si::f32::Velocity::new::<meter_per_second>(4.0),
+            ..messages::AutonomyContext::default()
         };
         let mut autonomy_link = SimAutonomyLink::default();
 
@@ -3794,7 +3817,7 @@ mod tests {
         let (_, first_prediction) = zed_store.vitfly_prediction();
         let first_prediction = first_prediction.expect("first prediction should be published");
 
-        clock_mock.set_value(2_000_000);
+        clock_mock.set_value(35_000_000);
         compute
             .run_iteration(&clock, &mut autonomy_link)
             .expect("second ViTFly inference should run");
@@ -3826,7 +3849,7 @@ mod tests {
 
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
-    fn subsystem_logs_record_depth_and_complete_distributed_replay() {
+    fn subsystem_logs_record_predictions_and_complete_distributed_replay() {
         let _guard = copper_runtime_test_lock().lock().unwrap();
         let temp_dir = tempfile::tempdir().expect("failed to create temporary log directory");
         let mcu_log_base = temp_dir.path().join("flight_controller_sim.copper");
@@ -3886,30 +3909,18 @@ mod tests {
             panic!("expected a readable compute log");
         };
         let mut reader = UnifiedLoggerIOReader::new(logger, UnifiedLogType::CopperList);
-        let (depth, prediction) =
+        let prediction =
             cu29_export::copperlists_reader::<compute_copper::RecordedDataSet>(&mut reader)
-                .find_map(|copperlist| {
-                    Some((
-                        copperlist.msgs.0.1.payload()?.clone(),
-                        *copperlist.msgs.0.4.payload()?,
-                    ))
-                })
-                .expect("compute log should contain synchronized depth and prediction payloads");
+                .find_map(|copperlist| copperlist.msgs.get_vitfly_output().payload().copied())
+                .expect("compute log should contain a ViTFly prediction");
 
-        assert_eq!(depth.format.width, sim_zed::ZED_SIM_WIDTH);
-        assert_eq!(depth.format.height, sim_zed::ZED_SIM_HEIGHT);
-        depth.buffer_handle.with_inner(|samples| {
-            assert_eq!(samples.len(), pixel_count);
-            assert!(samples.iter().all(|sample| *sample == 3.5));
-        });
         assert!(prediction.iter().all(|component| {
             component
                 .get::<cu29::units::si::velocity::meter_per_second>()
                 .is_finite()
         }));
 
-        let multi_config_path =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("multi_copper_vitfly_sim.ron");
+        let multi_config_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("auto_flying.ron");
         let builder = cu29::distributed_replay::DistributedReplayPlan::builder(multi_config_path)
             .expect("failed to load distributed replay config")
             .discover_logs_under(temp_dir.path())
@@ -3987,20 +3998,68 @@ mod tests {
     fn sim_magnetometer_heading_tracks_bevy_yaw_convention() {
         let world_mag = Vec3::from_array(WORLD_MAG_FIELD_UT);
 
-        // In Bevy body axes, identity faces world +Z (south), so heading is 180 deg.
-        let south_body = Quat::IDENTITY.inverse() * world_mag;
-        let south_fc = map_bevy_body_to_fc_magnetometer(south_body);
-        assert!(south_fc[2] > 0.0, "expected positive down component");
-        assert_heading_close(heading_from_mag_xy_deg(south_fc), 180.0);
+        let north_body = Quat::IDENTITY.inverse() * world_mag;
+        let north_fc = map_bevy_body_to_fc_magnetometer(north_body);
+        assert_eq!(north_fc, [20.0, 0.0, 45.0]);
+        assert_heading_close(heading_from_mag_xy_deg(north_fc), 0.0);
 
         // Positive Bevy yaw rotates counter-clockwise; compass heading decreases clockwise.
         let yaw_90_body = Quat::from_rotation_y(90.0_f32.to_radians()).inverse() * world_mag;
         let yaw_90_fc = map_bevy_body_to_fc_magnetometer(yaw_90_body);
-        assert_heading_close(heading_from_mag_xy_deg(yaw_90_fc), 90.0);
+        assert_heading_close(heading_from_mag_xy_deg(yaw_90_fc), 270.0);
 
         let yaw_180_body = Quat::from_rotation_y(180.0_f32.to_radians()).inverse() * world_mag;
         let yaw_180_fc = map_bevy_body_to_fc_magnetometer(yaw_180_body);
-        assert_heading_close(heading_from_mag_xy_deg(yaw_180_fc), 0.0);
+        assert_heading_close(heading_from_mag_xy_deg(yaw_180_fc), 180.0);
+    }
+
+    #[test]
+    fn sim_sensor_frame_tracks_level_and_forward_tilt() {
+        let settle_pose = |rotation: Quat| {
+            let ctx = CuContext::new_with_clock();
+            let mut ahrs = <cu_ahrs::CuAhrs as CuTask>::new(None, ()).expect("create AHRS");
+            let accel_body = rotation.inverse() * Vec3::new(0.0, -9.81, 0.0);
+            let imu = ImuPayload::from_raw(map_bevy_body_to_fc_polar(accel_body), [0.0; 3], 29.0);
+            let body_mag = rotation.inverse() * Vec3::from_array(WORLD_MAG_FIELD_UT);
+            let magnetometer =
+                MagnetometerPayload::from_raw(map_bevy_body_to_fc_magnetometer(body_mag));
+            let mut pose = None;
+
+            for sample in 1..=512_u64 {
+                let tov = Tov::Time(CuTime::from(sample * 15_625_000));
+                let mut imu_msg = CuMsg::new(Some(imu));
+                imu_msg.tov = tov;
+                let mut mag_msg = CuMsg::new(Some(magnetometer));
+                mag_msg.tov = tov;
+                let mut output = CuMsg::new(None);
+                ahrs.process(&ctx, &(&imu_msg, &mag_msg), &mut output)
+                    .expect("process simulated sensor sample");
+                pose = output.payload().copied();
+            }
+
+            pose.expect("AHRS should produce a pose")
+        };
+
+        let pose = settle_pose(Quat::IDENTITY);
+        assert!(
+            pose.roll.get::<radian>().abs() < 0.01,
+            "level simulated roll drifted to {} degrees",
+            pose.roll.get::<radian>().to_degrees()
+        );
+        assert!(
+            pose.pitch.get::<radian>().abs() < 0.01,
+            "level simulated pitch drifted to {} degrees",
+            pose.pitch.get::<radian>().to_degrees()
+        );
+
+        let rotation = Quat::from_rotation_x(-10.0_f32.to_radians());
+        let pose = settle_pose(rotation);
+        let expected = vitfly_pose(rotation);
+        assert!(
+            (pose.pitch.get::<radian>() - expected.pitch.get::<radian>()).abs() < 0.02,
+            "10-degree forward tilt estimated as {} degrees",
+            pose.pitch.get::<radian>().to_degrees()
+        );
     }
 
     #[test]
@@ -4015,21 +4074,29 @@ mod tests {
     }
 
     #[test]
-    fn sim_gnss_east_is_negative_world_x() {
+    fn sim_gnss_horizontal_position_matches_bevy_world_axes() {
         let _guard = sim_gnss_test_lock().lock().unwrap();
         let state = sim_support::sim_gnss_state();
 
         sim_gnss_set_vehicle_state([0.0, 0.0, 0.0], [0.0, 0.0, 0.0]);
+        let lat0 = f64::from_bits(state.lat_deg_bits.load(Ordering::Relaxed));
         let lon0 = f64::from_bits(state.lon_deg_bits.load(Ordering::Relaxed));
 
-        // In this scene, moving east is -X in world.
-        sim_gnss_set_vehicle_state([-20.0, 0.0, 0.0], [0.0, 0.0, 0.0]);
+        sim_gnss_set_vehicle_state([20.0, 0.0, 0.0], [0.0, 0.0, 0.0]);
         let lon_east = f64::from_bits(state.lon_deg_bits.load(Ordering::Relaxed));
         assert!(lon_east > lon0, "east movement should increase longitude");
 
-        sim_gnss_set_vehicle_state([20.0, 0.0, 0.0], [0.0, 0.0, 0.0]);
+        sim_gnss_set_vehicle_state([-20.0, 0.0, 0.0], [0.0, 0.0, 0.0]);
         let lon_west = f64::from_bits(state.lon_deg_bits.load(Ordering::Relaxed));
         assert!(lon_west < lon0, "west movement should decrease longitude");
+
+        sim_gnss_set_vehicle_state([0.0, 0.0, -20.0], [0.0, 0.0, 0.0]);
+        let lat_north = f64::from_bits(state.lat_deg_bits.load(Ordering::Relaxed));
+        assert!(lat_north > lat0, "north movement should increase latitude");
+
+        sim_gnss_set_vehicle_state([0.0, 0.0, 20.0], [0.0, 0.0, 0.0]);
+        let lat_south = f64::from_bits(state.lat_deg_bits.load(Ordering::Relaxed));
+        assert!(lat_south < lat0, "south movement should decrease latitude");
     }
 
     #[test]
@@ -4037,8 +4104,8 @@ mod tests {
         let _guard = sim_gnss_test_lock().lock().unwrap();
         let state = sim_support::sim_gnss_state();
 
-        // World velocity +X is west, +Z is north, +Y is up.
-        sim_gnss_set_vehicle_state([0.0, 0.0, 0.0], [-5.0, 2.0, 0.0]); // 5 m/s east, 2 m/s up
+        // World velocity +X is east, -Z is north, and +Y is up.
+        sim_gnss_set_vehicle_state([0.0, 0.0, 0.0], [5.0, 2.0, -3.0]);
 
         let vn = f32::from_bits(state.velocity_north_mps_bits.load(Ordering::Relaxed));
         let ve = f32::from_bits(state.velocity_east_mps_bits.load(Ordering::Relaxed));
@@ -4046,19 +4113,19 @@ mod tests {
         let gs = f32::from_bits(state.ground_speed_mps_bits.load(Ordering::Relaxed));
         let hm = f32::from_bits(state.heading_motion_deg_bits.load(Ordering::Relaxed));
 
-        assert!(vn.abs() < 1.0e-6, "north velocity should be ~0");
+        assert!((vn - 3.0).abs() < 1.0e-6, "north velocity should be +3 m/s");
         assert!((ve - 5.0).abs() < 1.0e-6, "east velocity should be +5 m/s");
         assert!(
             (vd + 2.0).abs() < 1.0e-6,
             "down velocity should be -2 m/s for upward motion"
         );
         assert!(
-            (gs - 5.0).abs() < 1.0e-6,
+            (gs - libm::sqrtf(34.0)).abs() < 1.0e-6,
             "ground speed should track horizontal speed"
         );
         assert!(
-            (hm - 90.0).abs() < 1.0e-6,
-            "eastward motion heading should be 90 deg"
+            (hm - libm::atan2f(5.0, 3.0).to_degrees()).abs() < 1.0e-6,
+            "heading should use north/east velocity components"
         );
     }
 }
