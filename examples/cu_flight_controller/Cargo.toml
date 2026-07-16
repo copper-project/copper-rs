@@ -110,7 +110,7 @@ cortex-m = { workspace = true, features = [
 ], optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-cu-vitfly = { path = "../../../cu-vitfly", default-features = false, optional = true }
+cu-vitfly = { git = "https://github.com/copper-project/cu-vitfly.git", default-features = false, optional = true }
 cu-consolemon = { workspace = true, optional = true }
 cu-bevymon = { workspace = true, optional = true }
 cu-memmon = { path = "../../components/monitors/cu_memmon", version = "1.0.0", default-features = false, features = [
