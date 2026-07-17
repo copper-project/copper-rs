@@ -49,3 +49,6 @@ cu29-export = { workspace = true, features = [
 [features]
 default = ["std"]                                     # Compile with --no-default-features to target no_std
 std = ["dep:cu29-export", "bincode/std", "serde/std"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

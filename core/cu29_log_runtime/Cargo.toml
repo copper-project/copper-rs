@@ -34,3 +34,6 @@ std = [
   "bincode/std",
   "dep:strfmt",
 ]
+
+[build-dependencies]
+cu29-build = { workspace = true }

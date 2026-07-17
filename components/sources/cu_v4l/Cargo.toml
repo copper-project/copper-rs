@@ -30,3 +30,6 @@ v4l = "0.14.0"
 [dev-dependencies]
 rerun = { workspace = true }
 simplelog = { workspace = true }
+
+[build-dependencies]
+cu29-build = { workspace = true }

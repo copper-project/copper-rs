@@ -26,3 +26,6 @@ cu-ryuw122 = { path = "../../components/sources/cu_ryuw122", version = "1.0.0" }
 cu-sensor-payloads = { workspace = true }
 cu29 = { workspace = true }
 serialport = { workspace = true }
+
+[build-dependencies]
+cu29-build = { workspace = true }

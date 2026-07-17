@@ -28,3 +28,6 @@ ctrlc = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = ["serde", "cu-linux-resources"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

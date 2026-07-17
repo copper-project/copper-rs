@@ -106,3 +106,6 @@ std = [
 ]
 rtsan = ["dep:rtsan-standalone", "cu29-derive/rtsan"]
 safety-ids = ["std", "dep:inventory", "dep:serde_json"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

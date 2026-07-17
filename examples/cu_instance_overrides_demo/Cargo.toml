@@ -16,3 +16,6 @@ publish = false
 [dependencies]
 cu29 = { workspace = true }
 serde = { workspace = true }
+
+[build-dependencies]
+cu29-build = { workspace = true }

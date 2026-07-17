@@ -28,3 +28,6 @@ cu-gstreamer = { path = "../../sources/cu_gstreamer", version = "1.0.0", optiona
 # The 'gst' feature includes dependencies for GStreamer support.
 # 'cu-gstreamer/gst' is included to propagate the 'gst' flag to the cu-gstreamer crate.
 gst = ["dep:gstreamer", "dep:cu-gstreamer", "cu-gstreamer/gst"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

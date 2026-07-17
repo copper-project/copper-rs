@@ -27,3 +27,6 @@ ignored = ["serde", "cu-linux-resources"]
 [features]
 default = []
 logexport = ["dep:cu29-export", "cu-gnss-ublox/reflect"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

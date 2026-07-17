@@ -24,8 +24,5 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 
     // Struct logging for Copper
-    println!(
-        "cargo:rustc-env=LOG_INDEX_DIR={}",
-        std::env::var("OUT_DIR").unwrap()
-    );
+    cu29_build::setup();
 }

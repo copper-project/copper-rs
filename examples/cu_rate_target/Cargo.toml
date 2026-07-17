@@ -37,3 +37,6 @@ required-features = ["high-precision-limiter"]
 
 [package.metadata.cargo-shear]
 ignored = ["serde", "cu29-export"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

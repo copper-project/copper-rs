@@ -58,3 +58,6 @@ default = []
 
 [package.metadata.cargo-shear]
 ignored = ["serde", "bincode"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

@@ -27,3 +27,6 @@ reflect = ["cu29/reflect"]
 cu29 = { path = "../../../core/cu29", version = "1.0.0", default-features = false }
 bincode = { workspace = true }
 serde = { workspace = true }
+
+[build-dependencies]
+cu29-build = { workspace = true }

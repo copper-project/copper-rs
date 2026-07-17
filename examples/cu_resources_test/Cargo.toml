@@ -30,3 +30,6 @@ parking_lot = "0.12"
 [features]
 default = []
 macro_debug = ["cu29/macro_debug"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

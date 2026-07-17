@@ -353,3 +353,6 @@ required-features = ["bevymon"]
 [dev-dependencies]
 cu29-export = { workspace = true }
 tempfile = { workspace = true }
+
+[build-dependencies]
+cu29-build = { workspace = true }

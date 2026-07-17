@@ -34,3 +34,6 @@ serde = { workspace = true }
 
 [features]
 hardware = []
+
+[build-dependencies]
+cu29-build = { workspace = true }

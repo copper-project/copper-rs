@@ -42,3 +42,6 @@ cu-logmon = { path = "../cu_logmon", version = "1.0.0", default-features = false
 default = ["std"]
 std = ["cu29/std"]
 safety-ids = ["std", "cu29/safety-ids"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

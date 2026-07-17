@@ -2,6 +2,7 @@
 
 members = [
   "core/cu29",
+  "core/cu29_build",
   "core/cu29_base_derive",
   "core/cu29_reflect_derive",
   "core/cu29_clock",
@@ -124,6 +125,7 @@ members = [
 # put only the core crates here that are not platform specific
 default-members = [
   "core/cu29",
+  "core/cu29_build",
   "core/cu29_clock",
   "core/cu29_derive",
   "core/cu29_export",
@@ -199,6 +201,7 @@ no_individual_tags = true
 
 # Copper Core
 cu29 = { path = "core/cu29", version = "1.0.0" } # default std
+cu29-build = { path = "core/cu29_build", version = "1.0.0" }
 cu29-reflect-derive = { path = "core/cu29_reflect_derive", version = "1.0.0" }
 cu29-clock = { path = "core/cu29_clock", default-features = false, version = "1.0.0" }
 cu29-derive = { path = "core/cu29_derive", default-features = false, version = "1.0.0" }

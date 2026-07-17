@@ -20,3 +20,6 @@ serde = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = ["cu-caterpillar", "cu-rp-gpio", "serde"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

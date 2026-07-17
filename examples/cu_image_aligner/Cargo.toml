@@ -25,3 +25,6 @@ serde = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = ["cu29-clock", "paste", "serde"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

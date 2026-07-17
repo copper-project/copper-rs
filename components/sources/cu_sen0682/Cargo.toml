@@ -36,3 +36,6 @@ std = ["cu29/std", "cu-sensor-payloads/std", "dep:cu-linux-resources"]
 defmt = ["cu29/defmt"]
 textlogs = ["cu29/textlogs", "cu-sensor-payloads/textlogs"]
 reflect = ["cu29/reflect"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

@@ -101,3 +101,6 @@ firmware = [
   "dep:cu-sdlogger",
 ]
 host = ["dep:cu29-export", "cu29/std", "bincode/std", "serde/std"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

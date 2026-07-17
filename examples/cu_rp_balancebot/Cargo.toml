@@ -161,3 +161,6 @@ required-features = ["sim"]
 name = "balancebot-resim"
 path = "src/resim.rs"
 required-features = ["sim-debug"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

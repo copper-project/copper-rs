@@ -28,3 +28,6 @@ serde = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = ["bincode", "serde", "cu-linux-resources"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

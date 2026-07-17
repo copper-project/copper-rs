@@ -32,3 +32,6 @@ tempfile = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = ["bincode"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

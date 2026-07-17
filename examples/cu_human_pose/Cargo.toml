@@ -43,3 +43,6 @@ hf-hub = { version = "1.0.0", features = ["blocking"] }
 
 [package.metadata.cargo-shear]
 ignored = ["cu-logmon"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

@@ -25,3 +25,6 @@ velodyne-lidar = { version = "0.3.0", features = ["pcap", "parallel"] }
 
 [dev-dependencies]
 cu-udp-inject = { path = "../../testing/cu_udp_inject", version = "1.0.0" }
+
+[build-dependencies]
+cu29-build = { workspace = true }
