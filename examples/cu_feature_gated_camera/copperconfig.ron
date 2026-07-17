@@ -1,0 +1,17 @@
+(
+    includes: [
+        (
+            path: "graph/base.ron",
+            params: {},
+        ),
+        (
+            path: "graph/jetson_mipi.ron",
+            params: {},
+            when: Feature("jetson-mipi"),
+        ),
+    ],
+    logging: (
+        enable_task_logging: false,
+        slab_size_mib: 16,
+    ),
+)

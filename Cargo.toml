@@ -84,6 +84,7 @@ members = [
   "examples/cu_distributed_resim_demo",
   "examples/cu_elrs_bdshot_demo",
   "examples/cu_feetech_demo",
+  "examples/cu_feature_gated_camera",
   "examples/cu_flight_controller",
   "examples/cu_config_gen",
   "examples/cu_config_variation",

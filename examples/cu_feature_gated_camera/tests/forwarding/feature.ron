@@ -1,0 +1,19 @@
+(
+    tasks: [
+        (
+            id: "feature_source",
+            type: "tasks::Source",
+        ),
+        (
+            id: "feature_sink",
+            type: "tasks::Sink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "feature_source",
+            dst: "feature_sink",
+            msg: "u64",
+        ),
+    ],
+)

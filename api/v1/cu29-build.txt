@@ -1,2 +1,3 @@
 pub mod cu29_build
+pub const cu29_build::COPPER_CFG_FEATURES_ENV: &str
 pub fn cu29_build::setup()

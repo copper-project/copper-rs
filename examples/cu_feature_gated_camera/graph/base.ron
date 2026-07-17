@@ -1,0 +1,19 @@
+(
+    tasks: [
+        (
+            id: "heartbeat",
+            type: "tasks::HeartbeatSource",
+        ),
+        (
+            id: "heartbeat_sink",
+            type: "tasks::HeartbeatSink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "heartbeat",
+            dst: "heartbeat_sink",
+            msg: "u64",
+        ),
+    ],
+)

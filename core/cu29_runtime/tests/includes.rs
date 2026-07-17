@@ -1,6 +1,10 @@
 #[cfg(all(test, feature = "std"))]
 mod tests {
-    use cu29_runtime::config::{NodeId, read_configuration};
+    use cu29_runtime::config::{
+        NodeId, read_configuration, read_configuration_with_features,
+        read_configuration_with_resolved_ron_and_features,
+    };
+    use std::collections::BTreeSet;
     use std::fs::{create_dir_all, write};
     use tempfile::tempdir;
 
@@ -57,6 +61,159 @@ mod tests {
             .collect();
         assert!(task_ids.contains(&"main_task".to_string()));
         assert!(task_ids.contains(&"included_task".to_string()));
+    }
+
+    #[test]
+    fn test_feature_predicate_combinations() {
+        let temp_dir = tempdir().unwrap();
+        let config_dir = temp_dir.path().join("config");
+        create_dir_all(&config_dir).unwrap();
+
+        for (name, task_id) in [
+            ("feature", "feature_task"),
+            ("not", "not_task"),
+            ("all", "all_task"),
+            ("any", "any_task"),
+        ] {
+            write(
+                config_dir.join(format!("{name}.ron")),
+                format!(
+                    r#"(
+                        tasks: [(id: "{task_id}", type: "tasks::Marker")],
+                        cnx: [],
+                    )"#
+                ),
+            )
+            .unwrap();
+        }
+
+        let main_path = config_dir.join("main.ron");
+        write(
+            &main_path,
+            r#"(
+                tasks: [],
+                cnx: [],
+                includes: [
+                    (path: "feature.ron", when: Feature("camera")),
+                    (path: "not.ron", when: Not(Feature("camera"))),
+                    (
+                        path: "all.ron",
+                        when: All([Feature("camera"), Feature("recording")]),
+                    ),
+                    (
+                        path: "any.ron",
+                        when: Any([Feature("camera"), Feature("recording")]),
+                    ),
+                ],
+            )"#,
+        )
+        .unwrap();
+
+        let cases: &[(&[&str], &[&str])] = &[
+            (&[], &["not_task"]),
+            (&["camera"], &["any_task", "feature_task"]),
+            (
+                &["camera", "recording"],
+                &["all_task", "any_task", "feature_task"],
+            ),
+            (&["recording"], &["any_task", "not_task"]),
+        ];
+
+        for (features, expected_tasks) in cases {
+            let config =
+                read_configuration_with_features(main_path.to_str().unwrap(), features).unwrap();
+            let actual: BTreeSet<_> = config
+                .get_graph(None)
+                .unwrap()
+                .get_all_nodes()
+                .into_iter()
+                .map(|(_, node)| node.get_id())
+                .collect();
+            let expected: BTreeSet<_> = expected_tasks
+                .iter()
+                .map(|task| (*task).to_string())
+                .collect();
+            assert_eq!(actual, expected, "features={features:?}");
+        }
+    }
+
+    #[test]
+    fn test_disabled_feature_include_is_not_read() {
+        let temp_dir = tempdir().unwrap();
+        let main_path = temp_dir.path().join("main.ron");
+        write(
+            &main_path,
+            r#"(
+                tasks: [],
+                cnx: [],
+                includes: [
+                    (path: "target-only.ron", when: Feature("target-camera")),
+                ],
+            )"#,
+        )
+        .unwrap();
+
+        read_configuration_with_features(main_path.to_str().unwrap(), &[])
+            .expect("a disabled include must not touch its file");
+
+        let error =
+            read_configuration_with_features(main_path.to_str().unwrap(), &["target-camera"])
+                .expect_err("an enabled include must be read");
+        assert!(error.to_string().contains("target-only.ron"));
+    }
+
+    #[test]
+    fn test_resolved_ron_contains_only_the_selected_graph() {
+        let temp_dir = tempdir().unwrap();
+        let camera_path = temp_dir.path().join("camera.ron");
+        write(
+            &camera_path,
+            r#"(
+                tasks: [
+                    (id: "camera", type: "target_camera::Camera"),
+                    (id: "sink", type: "tasks::FrameSink"),
+                ],
+                cnx: [
+                    (src: "camera", dst: "sink", msg: "target_camera::Frame"),
+                ],
+            )"#,
+        )
+        .unwrap();
+
+        let main_path = temp_dir.path().join("main.ron");
+        write(
+            &main_path,
+            r#"(
+                tasks: [],
+                cnx: [],
+                includes: [
+                    (path: "camera.ron", when: Feature("target-camera")),
+                ],
+            )"#,
+        )
+        .unwrap();
+
+        let (without_camera, resolved_without_camera) =
+            read_configuration_with_resolved_ron_and_features(main_path.to_str().unwrap(), &[])
+                .unwrap();
+        assert_eq!(without_camera.get_graph(None).unwrap().node_count(), 0);
+        assert!(!resolved_without_camera.contains("target_camera"));
+        assert!(!resolved_without_camera.contains("camera.ron"));
+        assert!(!resolved_without_camera.contains("Feature"));
+
+        let (with_camera, resolved_with_camera) =
+            read_configuration_with_resolved_ron_and_features(
+                main_path.to_str().unwrap(),
+                &["target-camera"],
+            )
+            .unwrap();
+        let graph = with_camera.get_graph(None).unwrap();
+        assert_eq!(graph.node_count(), 2);
+        assert_eq!(graph.edge_count(), 1);
+        assert!(resolved_with_camera.contains("target_camera::Camera"));
+        assert!(resolved_with_camera.contains("target_camera::Frame"));
+        assert!(!resolved_with_camera.contains("camera.ron"));
+        assert!(!resolved_with_camera.contains("Feature"));
     }
 
     #[test]

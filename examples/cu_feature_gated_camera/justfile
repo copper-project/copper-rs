@@ -1,0 +1,54 @@
+ROOT := shell('cd "$1/../.." && pwd', justfile_directory())
+
+default: host
+
+# Compile the host graph and prove the Jetson dependency is absent.
+host:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo check -p cu-feature-gated-camera --no-default-features
+  if cargo tree -p cu-feature-gated-camera --no-default-features --target x86_64-unknown-linux-gnu | rg -q 'cu-gstreamer v'; then
+    echo "cu-gstreamer unexpectedly present in the host dependency graph" >&2
+    exit 1
+  fi
+
+# Enabling Jetson hardware on the wrong target must fail with a focused error.
+wrong-target:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  if cargo tree -p cu-feature-gated-camera --no-default-features --features jetson-mipi --target x86_64-unknown-linux-gnu | rg -q 'cu-gstreamer v'; then
+    echo "cu-gstreamer unexpectedly present on the wrong target" >&2
+    exit 1
+  fi
+  output="$(mktemp)"
+  trap 'rm -f "$output"' EXIT
+  if cargo check -p cu-feature-gated-camera --no-default-features --features jetson-mipi >"$output" 2>&1; then
+    echo "jetson-mipi unexpectedly compiled on the host target" >&2
+    exit 1
+  fi
+  rg -q 'feature `jetson-mipi` requires a Linux/aarch64 Jetson target' "$output"
+
+# Prove the optional hardware crate enters Cargo's graph on the Jetson target.
+jetson-deps target="aarch64-unknown-linux-gnu":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo tree -p cu-feature-gated-camera --no-default-features --features jetson-mipi --target "{{target}}" | rg -q 'cu-gstreamer v'
+
+# Compile the complete hardware graph on a configured Jetson toolchain.
+jetson target="aarch64-unknown-linux-gnu":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo check -p cu-feature-gated-camera --no-default-features --features jetson-mipi --target "{{target}}"
+
+# Run every host-verifiable feature/target combination.
+matrix: host wrong-target jetson-deps
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo test -p cu-feature-gated-camera --no-default-features --test config_matrix
+  cargo test -p cu-feature-gated-camera --no-default-features --lib
+  cargo test -p cu-feature-gated-camera --no-default-features --features jetson-mipi --lib
