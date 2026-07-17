@@ -8,14 +8,13 @@ fn main() {
     println!("cargo:rerun-if-changed=memory.x");
     println!("cargo:rerun-if-changed=build.rs");
     for config in [
-        "copperconfig.ron",
-        "mcu_graph.ron",
+        "flight_controller.ron",
         "mcu_config.ron",
-        "mcu_autonomy_config.ron",
-        "compute_bevymon_config.ron",
-        "compute_end2end_config.ron",
-        "manual_flying.ron",
-        "auto_flying.ron",
+        "mcu_graph.ron",
+        "mcu_autonomy.ron",
+        "compute_config.ron",
+        "compute_preview.ron",
+        "compute_autonomy.ron",
     ] {
         println!("cargo:rerun-if-changed={config}");
     }

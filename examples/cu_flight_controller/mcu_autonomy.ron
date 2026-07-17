@@ -1,13 +1,4 @@
 (
-    includes: [
-        (
-            path: "mcu_graph.ron",
-            params: {
-                "control_source": "mode_supervisor",
-                "attitude_kp": 10.0,
-            },
-        ),
-    ],
     tasks: [
         (
             id: "navigation",
@@ -55,11 +46,6 @@
         ),
     ],
     cnx: [
-        (
-            src: "gnss_ublox",
-            dst: "__nc__",
-            msg: "cu_gnss_payloads::GnssEpochTime",
-        ),
         (
             src: "gnss_ublox",
             dst: "navigation",
