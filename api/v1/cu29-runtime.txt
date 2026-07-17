@@ -247,6 +247,7 @@ pub struct cu29_runtime::config::MultiCopperInterconnectConfig
 pub cu29_runtime::config::MultiCopperInterconnectConfig::from: alloc::string::String
 pub cu29_runtime::config::MultiCopperInterconnectConfig::msg: alloc::string::String
 pub cu29_runtime::config::MultiCopperInterconnectConfig::to: alloc::string::String
+pub cu29_runtime::config::MultiCopperInterconnectConfig::when: core::option::Option<cu29_runtime::config::ConfigPredicate>
 pub struct cu29_runtime::config::MultiCopperSubsystem
 pub cu29_runtime::config::MultiCopperSubsystem::config: cu29_runtime::config::CuConfig
 pub cu29_runtime::config::MultiCopperSubsystem::config_path: alloc::string::String
