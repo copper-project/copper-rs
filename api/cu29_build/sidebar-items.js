@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["setup"]};
+window.SIDEBAR_ITEMS = {"constant":["COPPER_CFG_FEATURES_ENV"],"fn":["setup"]};
