@@ -103,4 +103,4 @@ firmware = [
 host = ["dep:cu29-export", "cu29/std", "bincode/std", "serde/std"]
 
 [build-dependencies]
-cu29-build = { workspace = true }
+cu29-build = { path = "../../core/cu29_build", version = "1.0.0" }
