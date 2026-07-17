@@ -1,12 +1,6 @@
 (
     tasks: [
         (
-            id: "zed",
-            type: "cu_zed::Zed",
-            run_in_sim: false,
-            logging: (enabled: false),
-        ),
-        (
             id: "vitfly_context",
             type: "tasks::VitFlyContextAdapter",
             logging: (enabled: true),
@@ -146,5 +140,4 @@
         slab_size_mib: 64,
         section_size_mib: 8,
     ),
-    runtime: (rate_target_hz: 30),
 )

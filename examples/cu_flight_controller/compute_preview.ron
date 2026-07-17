@@ -1,12 +1,6 @@
 (
     tasks: [
         (
-            id: "zed",
-            type: "cu_zed::Zed",
-            run_in_sim: false,
-            logging: (enabled: false),
-        ),
-        (
             id: "vitfly",
             type: "tasks::NoopVitFlyTask",
             kind: task,
@@ -23,11 +17,6 @@
             src: "zed",
             dst: "vitfly",
             msg: "cu_zed::ZedDepthMap<Vec<f32>>",
-        ),
-        (
-            src: "vitfly",
-            dst: "__nc__",
-            msg: "()",
         ),
         (
             src: "zed",
@@ -64,11 +53,15 @@
             dst: "__nc__",
             msg: "cu_zed::ZedFrameMeta",
         ),
+        (
+            src: "vitfly",
+            dst: "__nc__",
+            msg: "()",
+        ),
     ],
     logging: (
         enable_task_logging: false,
         slab_size_mib: 64,
         section_size_mib: 8,
     ),
-    runtime: (rate_target_hz: 30),
 )

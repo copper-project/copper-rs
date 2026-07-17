@@ -6,10 +6,10 @@ A bare-metal quadcopter flight controller implemented end-to-end using Copper co
 
 This example demonstrates a complete flight controller running on the MicoAir H743 board (STM32H743), plus a separate host Copper runtime intended for onboard compute. It showcases Copper's ability to run deterministic, real-time control loops on embedded hardware with zero dynamic allocation during runtime.
 
-The deployment is described by multi-Copper configurations with two independent subsystems:
-
-- `manual_flying.ron`: the buildable manual-flying MCU firmware graph
-- `auto_flying.ron`: the closed-loop auto-flying MCU + compute deployment contract over typed Zenoh routes
+The deployment has one multi-Copper root, `flight_controller.ron`, with independent MCU and
+compute subsystems. Cargo features select coherent graph fragments inside each subsystem: firmware
+and BevyMon use the manual/preview fragments, while `sim` and `end2end` select the closed-loop
+autonomy fragments and typed Zenoh interconnects.
 
 The simulator runs these same graphs in `sim_mode`; it replaces external hardware and transport
 at the graph boundaries without changing the application topology.
@@ -88,7 +88,7 @@ just subsystems-check
 ```
 
 This checks the real ZED/ViTFly/Zenoh compute graph and the current buildable STM32 firmware graph.
-The MCU half of `auto_flying.ron` becomes the firmware entrypoint once its no-std UDP resource
+The autonomy MCU graph becomes the firmware entrypoint once its no-std UDP resource
 and bridge backend are bound.
 
 To compile or run the real ZED-enabled compute graph:
@@ -170,7 +170,7 @@ python3 python/print_gnss_from_log.py logs/flight_controller_sim.copper
 Implementation notes:
 
 - `src/python_module.rs` exposes an app-specific `#[pymodule]`
-- it uses `gen_cumsgs!("copperconfig.ron")` so the CopperList type matches this app
+- it uses `gen_cumsgs!("mcu_config.ron")` so the CopperList type matches this app
 - the Python script imports that module and iterates typed CopperLists plus runtime lifecycle records
 
 This pattern is the recommended Python story in Copper: post-process logs in Python
@@ -276,9 +276,10 @@ Notes:
 
 ## Configuration
 
-The shared MCU nodes live in `mcu_graph.ron`; `mcu_config.ron` selects direct manual control and
-`mcu_autonomy_config.ron` inserts the AUTO tasks and bridge. The 500 m / 8 m waypoint geometry and
-infinite repetition are fixed demo constants, not RON parameters. Key configurable parameters:
+`mcu_config.ron` and `compute_config.ron` contain each subsystem's shared graph exactly once. Their
+feature-gated manual/preview and autonomy fragments add only the nodes and connections that differ.
+The 500 m / 8 m waypoint geometry and infinite repetition are fixed demo constants, not RON
+parameters. Key configurable parameters:
 
 ### Rate Controller
 ```ron

@@ -27,7 +27,7 @@ use std::path::Path;
 mod gnss_schema {
     use super::*;
 
-    gen_cumsgs!("copperconfig.ron");
+    gen_cumsgs!("mcu_config.ron");
 
     pub type DataSet = cumsgs::gnss::CuStampedDataSet;
 }

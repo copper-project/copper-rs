@@ -18,7 +18,7 @@ const DEFAULT_LOG_BASE: &str = "logs/flight_controller_sim.copper";
 const DEFAULT_REPLAY_LOG_BASE: &str = "logs/flight_controller_resim.copper";
 const REPLAY_LOG_SLAB_SIZE: Option<usize> = Some(128 * 1024 * 1024);
 
-#[copper_runtime(config = "copperconfig.ron", sim_mode = true, ignore_resources = true)]
+#[copper_runtime(config = "mcu_config.ron", sim_mode = true, ignore_resources = true)]
 struct FlightControllerReSim {}
 
 type ReplayCopperList = CopperList<gnss::CuStampedDataSet>;

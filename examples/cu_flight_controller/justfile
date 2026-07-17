@@ -6,6 +6,13 @@ default: sim
 # Compile both independent multi-Copper subsystem targets.
 subsystems-check: end2end-check
 
+# Validate every feature-selected MCU, compute, and deployment graph.
+config-matrix:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo test -p cu-flight-controller --no-default-features --features logreader --test config_matrix
+
 # Compile the ZED-enabled compute graph and the independent MCU firmware graph.
 end2end-check:
   #!/usr/bin/env bash
@@ -22,7 +29,7 @@ end2end:
   cargo run -p cu-flight-controller --no-default-features --features end2end --bin quad-compute
 
 # Render the complete two-subsystem deployment by default.
-dag config="auto_flying.ron" mission="":
+dag config="flight_controller.ron" mission="":
   #!/usr/bin/env bash
   set -euo pipefail
 

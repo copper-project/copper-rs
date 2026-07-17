@@ -350,6 +350,11 @@ name = "quad-bevymon"
 path = "src/bevymon.rs"
 required-features = ["bevymon"]
 
+[[test]]
+name = "config_matrix"
+path = "tests/config_matrix.rs"
+required-features = ["logreader"]
+
 [dev-dependencies]
 cu29-export = { workspace = true }
 tempfile = { workspace = true }

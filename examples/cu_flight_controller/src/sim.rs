@@ -121,18 +121,8 @@ mod mcu_copper {
         pub use crate::tasks::*;
     }
 
-    #[cfg(not(feature = "sim"))]
     #[copper_runtime(
-        config = "manual_flying.ron",
-        subsystem = "mcu",
-        sim_mode = true,
-        ignore_resources = true
-    )]
-    struct FlightControllerSim {}
-
-    #[cfg(feature = "sim")]
-    #[copper_runtime(
-        config = "auto_flying.ron",
+        config = "flight_controller.ron",
         subsystem = "mcu",
         sim_mode = true,
         ignore_resources = true
@@ -342,12 +332,11 @@ mod compute_copper {
         pub use crate::compute_tasks::*;
     }
 
-    #[cfg(not(feature = "sim"))]
-    #[copper_runtime(config = "manual_flying.ron", subsystem = "compute", sim_mode = true)]
-    struct FlightComputeSim {}
-
-    #[cfg(feature = "sim")]
-    #[copper_runtime(config = "auto_flying.ron", subsystem = "compute", sim_mode = true)]
+    #[copper_runtime(
+        config = "flight_controller.ron",
+        subsystem = "compute",
+        sim_mode = true
+    )]
     struct FlightComputeSim {}
 
     pub(super) struct Runtime {
@@ -3920,7 +3909,7 @@ mod tests {
                 .is_finite()
         }));
 
-        let multi_config_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("auto_flying.ron");
+        let multi_config_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("flight_controller.ron");
         let builder = cu29::distributed_replay::DistributedReplayPlan::builder(multi_config_path)
             .expect("failed to load distributed replay config")
             .discover_logs_under(temp_dir.path())
