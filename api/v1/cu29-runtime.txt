@@ -61,6 +61,11 @@ pub fn cu29_runtime::config::ConfigGraphs::get_all_missions_graphs(&self) -> has
 pub fn cu29_runtime::config::ConfigGraphs::get_default_mission_graph(&self) -> cu29_traits::CuResult<&cu29_runtime::config::CuGraph>
 pub fn cu29_runtime::config::ConfigGraphs::get_graph(&self, mission_id: core::option::Option<&str>) -> cu29_traits::CuResult<&cu29_runtime::config::CuGraph>
 pub fn cu29_runtime::config::ConfigGraphs::get_graph_mut(&mut self, mission_id: core::option::Option<&str>) -> cu29_traits::CuResult<&mut cu29_runtime::config::CuGraph>
+pub enum cu29_runtime::config::ConfigPredicate
+pub cu29_runtime::config::ConfigPredicate::All(alloc::vec::Vec<cu29_runtime::config::ConfigPredicate>)
+pub cu29_runtime::config::ConfigPredicate::Any(alloc::vec::Vec<cu29_runtime::config::ConfigPredicate>)
+pub cu29_runtime::config::ConfigPredicate::Feature(alloc::string::String)
+pub cu29_runtime::config::ConfigPredicate::Not(alloc::boxed::Box<cu29_runtime::config::ConfigPredicate>)
 pub enum cu29_runtime::config::CuDirection
 pub cu29_runtime::config::CuDirection::Incoming
 pub cu29_runtime::config::CuDirection::Outgoing
@@ -195,6 +200,7 @@ pub struct cu29_runtime::config::IncludesConfig
 pub cu29_runtime::config::IncludesConfig::missions: core::option::Option<alloc::vec::Vec<alloc::string::String>>
 pub cu29_runtime::config::IncludesConfig::params: hashbrown::map::HashMap<alloc::string::String, cu29_runtime::config::Value>
 pub cu29_runtime::config::IncludesConfig::path: alloc::string::String
+pub cu29_runtime::config::IncludesConfig::when: core::option::Option<cu29_runtime::config::ConfigPredicate>
 pub struct cu29_runtime::config::InstanceConfigSetOperation
 pub cu29_runtime::config::InstanceConfigSetOperation::path: alloc::string::String
 pub cu29_runtime::config::InstanceConfigSetOperation::value: cu29_runtime::config::ComponentConfig
@@ -397,8 +403,12 @@ pub const cu29_runtime::config::RT_POOL: &str
 pub fn cu29_runtime::config::infer_task_kind_for_id(graph: &cu29_runtime::config::CuGraph, node_id: cu29_runtime::config::NodeId) -> core::option::Option<cu29_runtime::config::TaskKind>
 pub fn cu29_runtime::config::read_configuration(config_filename: &str) -> cu29_traits::CuResult<cu29_runtime::config::CuConfig>
 pub fn cu29_runtime::config::read_configuration_str(config_content: alloc::string::String, file_path: core::option::Option<&str>) -> cu29_traits::CuResult<cu29_runtime::config::CuConfig>
+pub fn cu29_runtime::config::read_configuration_str_with_features(config_content: alloc::string::String, file_path: core::option::Option<&str>, active_features: &[&str]) -> cu29_traits::CuResult<cu29_runtime::config::CuConfig>
+pub fn cu29_runtime::config::read_configuration_with_features(config_filename: &str, active_features: &[&str]) -> cu29_traits::CuResult<cu29_runtime::config::CuConfig>
 pub fn cu29_runtime::config::read_multi_configuration(config_filename: &str) -> cu29_traits::CuResult<cu29_runtime::config::MultiCopperConfig>
 pub fn cu29_runtime::config::read_multi_configuration_str(config_content: alloc::string::String, file_path: core::option::Option<&str>) -> cu29_traits::CuResult<cu29_runtime::config::MultiCopperConfig>
+pub fn cu29_runtime::config::read_multi_configuration_str_with_features(config_content: alloc::string::String, file_path: core::option::Option<&str>, active_features: &[&str]) -> cu29_traits::CuResult<cu29_runtime::config::MultiCopperConfig>
+pub fn cu29_runtime::config::read_multi_configuration_with_features(config_filename: &str, active_features: &[&str]) -> cu29_traits::CuResult<cu29_runtime::config::MultiCopperConfig>
 pub fn cu29_runtime::config::resolve_task_kind_for_id(graph: &cu29_runtime::config::CuGraph, node_id: cu29_runtime::config::NodeId) -> cu29_traits::CuResult<cu29_runtime::config::TaskKind>
 pub type cu29_runtime::config::NodeId = u32
 pub mod cu29_runtime::context

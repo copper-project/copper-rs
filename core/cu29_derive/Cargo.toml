@@ -16,6 +16,7 @@ repository.workspace = true
 proc-macro = true
 
 [dependencies]
+cu29-build = { workspace = true }
 cu29-runtime = { workspace = true, features = ["std"] }
 cu29-traits = { workspace = true }
 convert_case = "0.11"

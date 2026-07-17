@@ -1,0 +1,37 @@
+[package]
+name = "cu-feature-gated-camera"
+description = "Feature-gated Copper graph with a Jetson-only camera dependency."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+publish = false
+
+[[bin]]
+name = "cu-feature-gated-camera"
+path = "src/main.rs"
+test = false
+bench = false
+
+[package.metadata.copper]
+environments = ["host"]
+ci_exclude_workspace = true
+
+[features]
+default = []
+jetson-mipi = ["dep:cu-gstreamer"]
+
+[dependencies]
+cu29 = { workspace = true }
+
+[target.'cfg(all(target_os = "linux", target_arch = "aarch64"))'.dependencies]
+cu-gstreamer = { workspace = true, features = ["gst"], optional = true }
+
+[build-dependencies]
+cu29-build = { workspace = true }

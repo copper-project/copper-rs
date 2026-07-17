@@ -1,0 +1,9 @@
+(
+    includes: [
+        (path: "base.ron"),
+        (
+            path: "feature.ron",
+            when: Feature("jetson-mipi"),
+        ),
+    ],
+)

@@ -1,0 +1,19 @@
+(
+    tasks: [
+        (
+            id: "base_source",
+            type: "tasks::Source",
+        ),
+        (
+            id: "base_sink",
+            type: "tasks::Sink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "base_source",
+            dst: "base_sink",
+            msg: "u64",
+        ),
+    ],
+)

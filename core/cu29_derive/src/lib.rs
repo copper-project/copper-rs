@@ -13,10 +13,12 @@ use syn::{
 };
 
 use crate::utils::{config_id_to_bridge_const, config_id_to_enum, config_id_to_struct_member};
+use cu29_build::COPPER_CFG_FEATURES_ENV;
 use cu29_runtime::config::CuConfig;
 use cu29_runtime::config::{
     BridgeChannelConfigRepresentation, ConfigGraphs, CuGraph, Flavor, HandleContent, Node, NodeId,
-    RT_POOL, ResourceBundleConfig, read_configuration, read_configuration_with_resolved_ron,
+    RT_POOL, ResourceBundleConfig, read_configuration_with_features,
+    read_configuration_with_resolved_ron_and_features,
 };
 use cu29_runtime::curuntime::{
     CuExecutionLoop, CuExecutionStep, CuExecutionUnit, CuTaskType, compute_runtime_plan,
@@ -187,6 +189,7 @@ impl CopperRuntimeArgs {
 struct ResolvedRuntimeConfig {
     local_config: CuConfig,
     bundled_local_config_content: String,
+    active_features: Vec<String>,
     subsystem_id: Option<String>,
     subsystem_code: u16,
 }
@@ -1545,6 +1548,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     };
     let subsystem_code = resolved_runtime_config.subsystem_code;
     let subsystem_id = resolved_runtime_config.subsystem_id.clone();
+    let config_features = resolved_runtime_config.active_features.clone();
     let copper_config_content = resolved_runtime_config.bundled_local_config_content.clone();
     let copper_config = resolved_runtime_config.local_config;
     let copperlist_count = copper_config
@@ -3845,8 +3849,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {}
         };
 
-        let config_load_stmt =
-            build_config_load_stmt(std, application_name, subsystem_id.as_deref());
+        let config_load_stmt = build_config_load_stmt(
+            std,
+            application_name,
+            subsystem_id.as_deref(),
+            &config_features,
+        );
 
         let copperlist_count_check = quote! {
             let configured_copperlist_count = config
@@ -5722,6 +5730,16 @@ fn resolve_runtime_config_with_root(
     args: &CopperRuntimeArgs,
     caller_root: &Path,
 ) -> CuResult<ResolvedRuntimeConfig> {
+    let active_features = active_config_features();
+    let active_feature_refs: Vec<_> = active_features.iter().map(String::as_str).collect();
+    resolve_runtime_config_with_root_and_features(args, caller_root, &active_feature_refs)
+}
+
+fn resolve_runtime_config_with_root_and_features(
+    args: &CopperRuntimeArgs,
+    caller_root: &Path,
+    active_features: &[&str],
+) -> CuResult<ResolvedRuntimeConfig> {
     let filename = config_full_path_from_root(caller_root, &args.config_path);
     if !Path::new(&filename).exists() {
         return Err(CuError::from(format!(
@@ -5731,13 +5749,16 @@ fn resolve_runtime_config_with_root(
     }
 
     if let Some(subsystem_id) = args.subsystem_id.as_deref() {
-        let multi_config = cu29_runtime::config::read_multi_configuration(filename.as_str())
-            .map_err(|e| {
-                CuError::from(format!(
-                    "When `subsystem = \"{subsystem_id}\"` is provided, `config = \"{}\"` must point to a valid multi-Copper configuration: {e}",
-                    args.config_path
-                ))
-            })?;
+        let multi_config = cu29_runtime::config::read_multi_configuration_with_features(
+            filename.as_str(),
+            active_features,
+        )
+        .map_err(|e| {
+            CuError::from(format!(
+                "When `subsystem = \"{subsystem_id}\"` is provided, `config = \"{}\"` must point to a valid multi-Copper configuration: {e}",
+                args.config_path
+            ))
+        })?;
         let subsystem = multi_config.subsystem(subsystem_id).ok_or_else(|| {
             CuError::from(format!(
                 "Subsystem '{subsystem_id}' was not found in multi-Copper configuration '{}'.",
@@ -5747,7 +5768,11 @@ fn resolve_runtime_config_with_root(
         // Bundle the include-expanded source representation. Serializing the lowered
         // mission graphs would lose the source task order because missions use hash maps.
         let (local_config, bundled_local_config_content) =
-            read_configuration_with_resolved_ron(&subsystem.config_path).map_err(|e| {
+            read_configuration_with_resolved_ron_and_features(
+                &subsystem.config_path,
+                active_features,
+            )
+            .map_err(|e| {
                 CuError::from(format!(
                     "Failed to prepare bundled local configuration for subsystem '{subsystem_id}' from '{}'.",
                     subsystem.config_path
@@ -5758,29 +5783,52 @@ fn resolve_runtime_config_with_root(
         Ok(ResolvedRuntimeConfig {
             local_config,
             bundled_local_config_content,
+            active_features: active_features
+                .iter()
+                .map(|feature| (*feature).to_string())
+                .collect(),
             subsystem_id: Some(subsystem_id.to_string()),
             subsystem_code: subsystem.subsystem_code,
         })
     } else {
         let (local_config, bundled_local_config_content) =
-            read_configuration_with_resolved_ron(filename.as_str())?;
+            read_configuration_with_resolved_ron_and_features(filename.as_str(), active_features)?;
         Ok(ResolvedRuntimeConfig {
             local_config,
             bundled_local_config_content,
+            active_features: active_features
+                .iter()
+                .map(|feature| (*feature).to_string())
+                .collect(),
             subsystem_id: None,
             subsystem_code: 0,
         })
     }
 }
 
+fn active_config_features() -> Vec<String> {
+    let mut features: Vec<_> = std::env::var(COPPER_CFG_FEATURES_ENV)
+        .unwrap_or_default()
+        .split(',')
+        .filter(|feature| !feature.is_empty())
+        .map(str::to_owned)
+        .collect();
+    features.sort_unstable();
+    features.dedup();
+    features
+}
+
 fn build_config_load_stmt(
     std_enabled: bool,
     application_name: &Ident,
     subsystem_id: Option<&str>,
+    active_features: &[String],
 ) -> proc_macro2::TokenStream {
+    let active_features = active_features.iter();
     if std_enabled {
         if let Some(subsystem_id) = subsystem_id {
             quote! {
+                const COPPER_CFG_FEATURES: &[&str] = &[#(#active_features),*];
                 let (config, config_source) = if let Some(overridden_config) = config_override {
                     debug!("CuConfig: Overridden programmatically.");
                     (overridden_config, RuntimeLifecycleConfigSource::ProgrammaticOverride)
@@ -5793,7 +5841,10 @@ fn build_config_load_stmt(
                         config_filename,
                         subsystem_id
                     );
-                    let multi_config = cu29::config::read_multi_configuration(config_filename)?;
+                    let multi_config = cu29::config::read_multi_configuration_with_features(
+                        config_filename,
+                        COPPER_CFG_FEATURES,
+                    )?;
                     (
                         multi_config.resolve_subsystem_config_for_instance(subsystem_id, instance_id)?,
                         RuntimeLifecycleConfigSource::ExternalFile,
@@ -5819,6 +5870,7 @@ fn build_config_load_stmt(
             }
         } else {
             quote! {
+                const COPPER_CFG_FEATURES: &[&str] = &[#(#active_features),*];
                 let _ = instance_id;
                 let (config, config_source) = if let Some(overridden_config) = config_override {
                     debug!("CuConfig: Overridden programmatically.");
@@ -5826,7 +5878,10 @@ fn build_config_load_stmt(
                 } else if ::std::path::Path::new(config_filename).exists() {
                     debug!("CuConfig: Reading configuration from file: {}", config_filename);
                     (
-                        cu29::config::read_configuration(config_filename)?,
+                        cu29::config::read_configuration_with_features(
+                            config_filename,
+                            COPPER_CFG_FEATURES,
+                        )?,
                         RuntimeLifecycleConfigSource::ExternalFile,
                     )
                 } else {
@@ -5866,7 +5921,9 @@ fn config_full_path_from_root(caller_root: &Path, config_file: &str) -> String {
 
 fn read_config(config_file: &str) -> CuResult<CuConfig> {
     let filename = config_full_path(config_file);
-    read_configuration(filename.as_str())
+    let active_features = active_config_features();
+    let active_feature_refs: Vec<_> = active_features.iter().map(String::as_str).collect();
+    read_configuration_with_features(filename.as_str(), &active_feature_refs)
 }
 
 fn inferred_single_output_payload_type(task_type: &Type, task_kind: CuTaskType) -> Type {
@@ -9858,6 +9915,151 @@ mod tests {
         assert!(graph.get_node_id_by_name("src").is_some());
         assert!(graph.get_node_id_by_name("sink").is_some());
         assert_eq!(graph.edge_count(), 1);
+    }
+
+    #[test]
+    fn resolve_runtime_config_uses_forwarded_features_for_codegen_and_reload() {
+        use super::*;
+
+        let root = unique_test_dir("feature_runtime_resolve");
+        let camera_config = root.join("camera.ron");
+        let app_config = root.join("app.ron");
+
+        write_file(
+            &camera_config,
+            r#"
+(
+    tasks: [
+        (id: "camera", type: "target_camera::Camera"),
+        (id: "sink", type: "tasks::CameraSink"),
+    ],
+    cnx: [
+        (src: "camera", dst: "sink", msg: "target_camera::Frame"),
+    ],
+)
+"#,
+        );
+        write_file(
+            &app_config,
+            r#"
+(
+    tasks: [],
+    cnx: [],
+    includes: [
+        (path: "camera.ron", when: Feature("camera")),
+    ],
+)
+"#,
+        );
+
+        let args = CopperRuntimeArgs {
+            config_path: "app.ron".to_string(),
+            subsystem_id: None,
+            sim_mode: false,
+            ignore_resources: false,
+        };
+
+        let without_camera =
+            resolve_runtime_config_with_root_and_features(&args, &root, &[]).unwrap();
+        assert!(without_camera.active_features.is_empty());
+        assert!(
+            !without_camera
+                .bundled_local_config_content
+                .contains("target_camera")
+        );
+
+        let with_camera =
+            resolve_runtime_config_with_root_and_features(&args, &root, &["camera"]).unwrap();
+        assert_eq!(with_camera.active_features, ["camera"]);
+        assert!(
+            with_camera
+                .bundled_local_config_content
+                .contains("target_camera::Camera")
+        );
+        assert!(
+            with_camera
+                .bundled_local_config_content
+                .contains("target_camera::Frame")
+        );
+        assert!(!with_camera.bundled_local_config_content.contains("Feature"));
+    }
+
+    #[test]
+    fn resolve_multi_runtime_config_uses_forwarded_features() {
+        use super::*;
+
+        let root = unique_test_dir("feature_multi_runtime_resolve");
+        write_file(
+            &root.join("camera.ron"),
+            r#"
+(
+    tasks: [
+        (id: "camera", type: "target_camera::Camera"),
+        (id: "sink", type: "tasks::CameraSink"),
+    ],
+    cnx: [
+        (src: "camera", dst: "sink", msg: "target_camera::Frame"),
+    ],
+)
+"#,
+        );
+        write_file(
+            &root.join("robot.ron"),
+            r#"
+(
+    tasks: [],
+    cnx: [],
+    includes: [
+        (path: "camera.ron", when: Feature("camera")),
+    ],
+)
+"#,
+        );
+        write_file(
+            &root.join("multi.ron"),
+            r#"
+(
+    subsystems: [
+        (id: "robot", config: "robot.ron"),
+    ],
+    interconnects: [],
+)
+"#,
+        );
+
+        let args = CopperRuntimeArgs {
+            config_path: "multi.ron".to_string(),
+            subsystem_id: Some("robot".to_string()),
+            sim_mode: false,
+            ignore_resources: false,
+        };
+
+        let without_camera =
+            resolve_runtime_config_with_root_and_features(&args, &root, &[]).unwrap();
+        assert_eq!(
+            without_camera
+                .local_config
+                .get_graph(None)
+                .unwrap()
+                .node_count(),
+            0
+        );
+
+        let with_camera =
+            resolve_runtime_config_with_root_and_features(&args, &root, &["camera"]).unwrap();
+        assert_eq!(
+            with_camera
+                .local_config
+                .get_graph(None)
+                .unwrap()
+                .node_count(),
+            2
+        );
+        assert!(
+            with_camera
+                .bundled_local_config_content
+                .contains("target_camera::Frame")
+        );
     }
 
     #[test]

@@ -2024,12 +2024,41 @@ pub struct MissionsConfig {
     pub id: String,
 }
 
+/// A compile-time predicate controlling whether a configuration fragment is included.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub enum ConfigPredicate {
+    Feature(String),
+    Not(Box<ConfigPredicate>),
+    All(Vec<ConfigPredicate>),
+    Any(Vec<ConfigPredicate>),
+}
+
+#[cfg(feature = "std")]
+impl ConfigPredicate {
+    fn evaluate(&self, active_features: &[&str]) -> bool {
+        match self {
+            Self::Feature(feature) => active_features.contains(&feature.as_str()),
+            Self::Not(predicate) => !predicate.evaluate(active_features),
+            Self::All(predicates) => predicates
+                .iter()
+                .all(|predicate| predicate.evaluate(active_features)),
+            Self::Any(predicates) => predicates
+                .iter()
+                .any(|predicate| predicate.evaluate(active_features)),
+        }
+    }
+}
+
 /// Includes are used to include other configuration files.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct IncludesConfig {
     pub path: String,
+    #[serde(default)]
     pub params: HashMap<String, Value>,
+    #[serde(default)]
     pub missions: Option<Vec<String>>,
+    #[serde(default)]
+    pub when: Option<ConfigPredicate>,
 }
 
 /// One subsystem participating in a multi-Copper deployment.
@@ -3349,6 +3378,7 @@ fn process_includes(
     file_path: &str,
     base_representation: CuConfigRepresentation,
     processed_files: &mut Vec<String>,
+    active_features: &[&str],
 ) -> CuResult<CuConfigRepresentation> {
     // Note: Circular dependency detection removed
     processed_files.push(file_path.to_string());
@@ -3357,6 +3387,14 @@ fn process_includes(
 
     if let Some(includes) = result.includes.take() {
         for include in includes {
+            if include
+                .when
+                .as_ref()
+                .is_some_and(|predicate| !predicate.evaluate(active_features))
+            {
+                continue;
+            }
+
             let include_path = if include.path.starts_with('/') {
                 include.path.clone()
             } else {
@@ -3392,8 +3430,12 @@ fn process_includes(
                 }
             };
 
-            included_representation =
-                process_includes(&include_path, included_representation, processed_files)?;
+            included_representation = process_includes(
+                &include_path,
+                included_representation,
+                processed_files,
+                active_features,
+            )?;
 
             if let Some(included_tasks) = included_representation.tasks {
                 if result.tasks.is_none() {
@@ -3878,6 +3920,7 @@ fn build_multi_bridge_channel_contracts(
 fn validate_multi_config_representation(
     representation: MultiCopperConfigRepresentation,
     file_path: Option<&str>,
+    active_features: &[&str],
 ) -> CuResult<MultiCopperConfig> {
     if representation
         .instance_overrides_root
@@ -3938,12 +3981,13 @@ fn validate_multi_config_representation(
 
     for subsystem in representation.subsystems {
         let resolved_config_path = resolve_relative_config_path(file_path, &subsystem.config);
-        let config = read_configuration(&resolved_config_path).map_err(|e| {
-            CuError::from(format!(
-                "Failed to read subsystem '{}' from '{}': {e}",
-                subsystem.id, resolved_config_path
-            ))
-        })?;
+        let config = read_configuration_with_features(&resolved_config_path, active_features)
+            .map_err(|e| {
+                CuError::from(format!(
+                    "Failed to read subsystem '{}' from '{}': {e}",
+                    subsystem.id, resolved_config_path
+                ))
+            })?;
         let contracts = build_multi_bridge_channel_contracts(&config).map_err(|e| {
             CuError::from(format!(
                 "Invalid subsystem '{}' for multi-Copper validation: {e}",
@@ -4075,8 +4119,17 @@ fn validate_multi_config_representation(
 /// Read a copper configuration from a file.
 #[cfg(feature = "std")]
 pub fn read_configuration(config_filename: &str) -> CuResult<CuConfig> {
+    read_configuration_with_features(config_filename, &[])
+}
+
+/// Read a Copper configuration using the supplied compile-time Cargo features.
+#[cfg(feature = "std")]
+pub fn read_configuration_with_features(
+    config_filename: &str,
+    active_features: &[&str],
+) -> CuResult<CuConfig> {
     let config_content = read_configuration_content(config_filename)?;
-    read_configuration_str(config_content, Some(config_filename))
+    read_configuration_str_with_features(config_content, Some(config_filename), active_features)
 }
 
 #[cfg(feature = "std")]
@@ -4127,6 +4180,7 @@ fn config_representation_to_config(representation: CuConfigRepresentation) -> Cu
 fn resolve_configuration_representation(
     config_content: &str,
     file_path: Option<&str>,
+    active_features: &[&str],
 ) -> CuResult<CuConfigRepresentation> {
     // Parse the configuration string
     let representation = parse_config_string(config_content)?;
@@ -4135,7 +4189,7 @@ fn resolve_configuration_representation(
     // includes are only available with std.
     #[cfg(feature = "std")]
     let representation = if let Some(path) = file_path {
-        process_includes(path, representation, &mut Vec::new())?
+        process_includes(path, representation, &mut Vec::new(), active_features)?
     } else {
         representation
     };
@@ -4151,9 +4205,22 @@ fn resolve_configuration_representation(
 #[doc(hidden)]
 #[allow(dead_code)]
 pub fn read_configuration_with_resolved_ron(config_filename: &str) -> CuResult<(CuConfig, String)> {
+    read_configuration_with_resolved_ron_and_features(config_filename, &[])
+}
+
+/// Read and expand a Copper configuration using the supplied compile-time Cargo features.
+#[cfg(feature = "std")]
+#[doc(hidden)]
+pub fn read_configuration_with_resolved_ron_and_features(
+    config_filename: &str,
+    active_features: &[&str],
+) -> CuResult<(CuConfig, String)> {
     let config_content = read_configuration_content(config_filename)?;
-    let representation =
-        resolve_configuration_representation(&config_content, Some(config_filename))?;
+    let representation = resolve_configuration_representation(
+        &config_content,
+        Some(config_filename),
+        active_features,
+    )?;
     let resolved_ron = CuConfig::get_options()
         .to_string_pretty(&representation, ron::ser::PrettyConfig::default())
         .map_err(|e| CuError::from(format!("Error serializing configuration: {e}")))?;
@@ -4161,11 +4228,22 @@ pub fn read_configuration_with_resolved_ron(config_filename: &str) -> CuResult<(
     Ok((config, resolved_ron))
 }
 
+#[allow(dead_code)]
 pub fn read_configuration_str(
     config_content: String,
     file_path: Option<&str>,
 ) -> CuResult<CuConfig> {
-    let representation = resolve_configuration_representation(&config_content, file_path)?;
+    read_configuration_str_with_features(config_content, file_path, &[])
+}
+
+/// Read a Copper configuration string using the supplied compile-time Cargo features.
+pub fn read_configuration_str_with_features(
+    config_content: String,
+    file_path: Option<&str>,
+    active_features: &[&str],
+) -> CuResult<CuConfig> {
+    let representation =
+        resolve_configuration_representation(&config_content, file_path, active_features)?;
 
     // Convert the representation to a CuConfig and validate
     config_representation_to_config(representation)
@@ -4175,6 +4253,16 @@ pub fn read_configuration_str(
 #[cfg(feature = "std")]
 #[allow(dead_code)]
 pub fn read_multi_configuration(config_filename: &str) -> CuResult<MultiCopperConfig> {
+    read_multi_configuration_with_features(config_filename, &[])
+}
+
+/// Read a multi-Copper configuration using the supplied compile-time Cargo features.
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+pub fn read_multi_configuration_with_features(
+    config_filename: &str,
+    active_features: &[&str],
+) -> CuResult<MultiCopperConfig> {
     let config_content = read_to_string(config_filename).map_err(|e| {
         CuError::from(format!(
             "Failed to read multi-Copper configuration file: {:?}",
@@ -4182,7 +4270,11 @@ pub fn read_multi_configuration(config_filename: &str) -> CuResult<MultiCopperCo
         ))
         .add_cause(e.to_string().as_str())
     })?;
-    read_multi_configuration_str(config_content, Some(config_filename))
+    read_multi_configuration_str_with_features(
+        config_content,
+        Some(config_filename),
+        active_features,
+    )
 }
 
 /// Read a strict multi-Copper umbrella configuration from a string.
@@ -4192,8 +4284,19 @@ pub fn read_multi_configuration_str(
     config_content: String,
     file_path: Option<&str>,
 ) -> CuResult<MultiCopperConfig> {
+    read_multi_configuration_str_with_features(config_content, file_path, &[])
+}
+
+/// Read a multi-Copper configuration string using the supplied compile-time Cargo features.
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+pub fn read_multi_configuration_str_with_features(
+    config_content: String,
+    file_path: Option<&str>,
+    active_features: &[&str],
+) -> CuResult<MultiCopperConfig> {
     let representation = parse_multi_config_string(&config_content)?;
-    validate_multi_config_representation(representation, file_path)
+    validate_multi_config_representation(representation, file_path, active_features)
 }
 
 // tests
