@@ -2078,6 +2078,8 @@ pub struct MultiCopperInterconnectConfig {
     pub from: String,
     pub to: String,
     pub msg: String,
+    #[serde(default)]
+    pub when: Option<ConfigPredicate>,
 }
 
 /// One path-based config overlay applied to a parsed local Copper config.
@@ -3855,11 +3857,14 @@ fn register_multi_channel_msg(
 fn build_multi_bridge_channel_contracts(
     config: &CuConfig,
 ) -> CuResult<HashMap<String, MultiCopperChannelContract>> {
-    let graph = config.graphs.get_default_mission_graph().map_err(|e| {
-        CuError::from(format!(
-            "Multi-Copper subsystem configs currently require exactly one local graph: {e}"
-        ))
-    })?;
+    let graph = config
+        .graphs
+        .get_graph(Some(DEFAULT_MISSION_ID))
+        .map_err(|e| {
+            CuError::from(format!(
+                "Multi-Copper subsystem configs with missions must define a '{DEFAULT_MISSION_ID}' mission: {e}"
+            ))
+        })?;
 
     let mut contracts = HashMap::new();
     for bridge in &config.bridges {
@@ -4007,6 +4012,14 @@ fn validate_multi_config_representation(
 
     let mut interconnects = Vec::with_capacity(representation.interconnects.len());
     for interconnect in representation.interconnects {
+        if interconnect
+            .when
+            .as_ref()
+            .is_some_and(|predicate| !predicate.evaluate(active_features))
+        {
+            continue;
+        }
+
         let from = parse_multi_endpoint(&interconnect.from).map_err(|e| {
             CuError::from(format!(
                 "Invalid multi-Copper interconnect source '{}': {e}",
@@ -5617,6 +5630,107 @@ mod tests {
         assert_eq!(beta.subsystem_code, 1);
         assert_eq!(config.interconnects.len(), 2);
         assert_eq!(config.interconnects[0].bridge_type, "demo::ZenohBridge");
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_multi_configuration_filters_interconnects_by_feature() {
+        let dir = multi_config_test_dir("feature_interconnects");
+        write_multi_config_file(&dir, "alpha.ron", alpha_subsystem_config());
+        write_multi_config_file(&dir, "beta.ron", beta_subsystem_config());
+        let network_path = write_multi_config_file(
+            &dir,
+            "network.ron",
+            r#"(
+                subsystems: [
+                    (id: "alpha", config: "alpha.ron"),
+                    (id: "beta", config: "beta.ron"),
+                ],
+                interconnects: [
+                    (
+                        from: "alpha/zenoh/ping",
+                        to: "beta/zenoh/ping",
+                        msg: "demo::Ping",
+                        when: Feature("networked"),
+                    ),
+                    (
+                        from: "beta/zenoh/pong",
+                        to: "alpha/zenoh/pong",
+                        msg: "demo::Pong",
+                        when: Feature("networked"),
+                    ),
+                ],
+            )"#,
+        );
+
+        let disconnected = read_multi_configuration_with_features(
+            network_path.to_str().expect("network path utf8"),
+            &[],
+        )
+        .unwrap();
+        assert!(disconnected.interconnects.is_empty());
+
+        let networked = read_multi_configuration_with_features(
+            network_path.to_str().expect("network path utf8"),
+            &["networked"],
+        )
+        .unwrap();
+        assert_eq!(networked.interconnects.len(), 2);
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_multi_configuration_uses_default_mission_contracts() {
+        let dir = multi_config_test_dir("default_mission");
+        write_multi_config_file(
+            &dir,
+            "alpha.ron",
+            r#"(
+                missions: [(id: "default"), (id: "diagnostics")],
+                tasks: [
+                    (id: "src", type: "demo::Src"),
+                    (
+                        id: "diagnostic",
+                        type: "demo::Diagnostic",
+                        missions: ["diagnostics"],
+                    ),
+                ],
+                bridges: [
+                    (
+                        id: "zenoh",
+                        type: "demo::ZenohBridge",
+                        channels: [Tx(id: "ping")],
+                    ),
+                ],
+                cnx: [
+                    (src: "src", dst: "zenoh/ping", msg: "demo::Ping"),
+                    (
+                        src: "diagnostic",
+                        dst: "__nc__",
+                        msg: "demo::DiagnosticMessage",
+                        missions: ["diagnostics"],
+                    ),
+                ],
+            )"#,
+        );
+        write_multi_config_file(&dir, "beta.ron", beta_subsystem_config());
+        let network_path = write_multi_config_file(
+            &dir,
+            "network.ron",
+            r#"(
+                subsystems: [
+                    (id: "alpha", config: "alpha.ron"),
+                    (id: "beta", config: "beta.ron"),
+                ],
+                interconnects: [
+                    (from: "alpha/zenoh/ping", to: "beta/zenoh/ping", msg: "demo::Ping"),
+                ],
+            )"#,
+        );
+
+        let config =
+            read_multi_configuration(network_path.to_str().expect("network path utf8")).unwrap();
+        assert_eq!(config.interconnects.len(), 1);
     }
 
     #[cfg(feature = "std")]
