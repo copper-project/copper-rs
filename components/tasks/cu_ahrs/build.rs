@@ -19,6 +19,6 @@ fn main() {
     }
     println!("cargo:rerun-if-changed=build.rs");
 
-    // Needed by cu29 logging macros (LOG_INDEX_DIR env var)
-    println!("cargo:rustc-env=LOG_INDEX_DIR={}", out.display());
+    // Configure Copper's build-time support.
+    cu29_build::setup();
 }

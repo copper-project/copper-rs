@@ -32,3 +32,6 @@ path = "src/bin/tx.rs"
 [[bin]]
 name = "zenoh-bench-rx"
 path = "src/bin/rx.rs"
+
+[build-dependencies]
+cu29-build = { workspace = true }

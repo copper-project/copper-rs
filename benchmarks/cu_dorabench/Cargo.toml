@@ -33,3 +33,6 @@ cu29 = { workspace = true }
 cu29-export = { workspace = true, features = ["python", "mcap"] }
 serde = { workspace = true }
 cu-consolemon = { workspace = true }
+
+[build-dependencies]
+cu29-build = { workspace = true }

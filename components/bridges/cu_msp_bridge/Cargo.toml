@@ -40,3 +40,6 @@ defmt = ["embedded-io/defmt", "cu29/defmt"]
 alloc = ["embedded-io/alloc"]
 textlogs = ["cu29/textlogs"]
 log-level-info = ["cu29/log-level-info"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

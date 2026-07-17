@@ -37,3 +37,6 @@ path = "src/bin/control.rs"
 [[bin]]
 name = "distributed-resim"
 path = "src/bin/resim.rs"
+
+[build-dependencies]
+cu29-build = { workspace = true }

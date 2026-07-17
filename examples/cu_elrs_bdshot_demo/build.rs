@@ -4,10 +4,7 @@ use std::path::PathBuf;
 
 fn main() {
     // Struct logging for Copper
-    println!(
-        "cargo:rustc-env=LOG_INDEX_DIR={}",
-        std::env::var("OUT_DIR").unwrap()
-    );
+    cu29_build::setup();
     //
     // Put the linker script somewhere the linker can find it
     let out = PathBuf::from(std::env::var_os("OUT_DIR").unwrap());

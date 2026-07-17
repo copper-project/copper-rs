@@ -47,3 +47,6 @@ cu29-log-runtime = { workspace = true, features = ["std"] }
 cu29-clock = { workspace = true, features = ["std"] }
 cu29-traits = { workspace = true, features = ["std"] }
 cu29-value = { workspace = true, features = ["std"] }
+
+[build-dependencies]
+cu29-build = { workspace = true }

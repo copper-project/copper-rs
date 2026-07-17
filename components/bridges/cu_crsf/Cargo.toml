@@ -31,3 +31,6 @@ std = ["cu29/std", "embedded-io/std", "dep:cu-linux-resources"]
 defmt = ["cu29/defmt"]
 alloc = []
 textlogs = ["cu29/textlogs"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

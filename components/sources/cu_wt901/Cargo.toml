@@ -35,6 +35,7 @@ embedded-hal = "1"
 cu-linux-resources = { workspace = true }
 
 [build-dependencies]
+cu29-build = { workspace = true }
 cfg_aliases = { workspace = true }
 
 [features]

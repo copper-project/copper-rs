@@ -29,3 +29,6 @@ path = "src/bin/ping.rs"
 [[bin]]
 name = "iceoryx2-pong"
 path = "src/bin/pong.rs"
+
+[build-dependencies]
+cu29-build = { workspace = true }

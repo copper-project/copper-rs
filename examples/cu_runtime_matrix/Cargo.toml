@@ -34,3 +34,6 @@ rt-scheduling = ["cu29/rt-scheduling"]
 
 [package.metadata.cargo-shear]
 ignored = ["bincode", "serde"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

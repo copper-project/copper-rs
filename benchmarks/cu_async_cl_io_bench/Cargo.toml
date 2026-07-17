@@ -34,3 +34,6 @@ async-cl-io = ["cu29/async-cl-io"]
 
 [package.metadata.cargo-shear]
 ignored = ["bincode", "serde"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

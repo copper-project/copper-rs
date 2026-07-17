@@ -53,3 +53,6 @@ safety-ids = ["determinism_ci", "cu29/safety-ids"]
 
 [package.metadata.cargo-shear]
 ignored = ["serde"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

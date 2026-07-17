@@ -34,6 +34,7 @@ tempfile = { workspace = true }
 rppal = { workspace = true, default-features = false, features = ["hal"] }
 
 [build-dependencies]
+cu29-build = { workspace = true }
 cfg_aliases = { workspace = true }
 
 [features]

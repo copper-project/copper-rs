@@ -142,3 +142,6 @@ std = [
 ]
 memory_monitoring = []
 bridge-sim-callbacks = []
+
+[build-dependencies]
+cu29-build = { workspace = true }

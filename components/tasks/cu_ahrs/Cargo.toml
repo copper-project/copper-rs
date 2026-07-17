@@ -74,3 +74,6 @@ path = "examples/rp2350_copper.rs"
 required-features = ["rp2350-demo"]
 
 [dev-dependencies]
+
+[build-dependencies]
+cu29-build = { workspace = true }

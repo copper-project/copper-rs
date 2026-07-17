@@ -39,3 +39,6 @@ defmt = ["stm32h7xx-hal/defmt"]
 stm32h7 = ["dep:stm32h7xx-hal", "defmt"]
 messages-only = []
 textlogs = ["cu29/textlogs"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

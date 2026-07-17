@@ -22,3 +22,6 @@ zenoh = { workspace = true, default-features = false, features = [
   "transport_tcp",
 ] }
 cu29 = { workspace = true }
+
+[build-dependencies]
+cu29-build = { workspace = true }

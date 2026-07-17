@@ -21,3 +21,6 @@ serde_json = { version = "1.0", default-features = false }
 
 [package.metadata.cargo-shear]
 ignored = ["bincode"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

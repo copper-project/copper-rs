@@ -46,3 +46,6 @@ path = "src/logreader.rs"
 
 [package.metadata.cargo-shear]
 ignored = ["bincode", "serde"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

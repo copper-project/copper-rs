@@ -30,3 +30,6 @@ tempfile = { workspace = true }
 [features]
 default = []
 safety-ids = ["cu29/safety-ids"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

@@ -37,3 +37,6 @@ default = []
 macro_debug = ["cu29/macro_debug"]
 reflect = ["cu29/reflect"]
 sim-debug = ["reflect", "cu29/remote-debug"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

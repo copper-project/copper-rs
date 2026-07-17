@@ -36,3 +36,6 @@ rppal = { workspace = true, default-features = false, features = ["hal"] }
 default = []
 defmt = ["embedded-io/defmt", "embedded-hal/defmt-03", "cu29/defmt"]
 alloc = ["embedded-io/alloc"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

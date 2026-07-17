@@ -31,3 +31,6 @@ cu29 = { workspace = true }
 bincode = { workspace = true, features = ["derive"] }
 serde = { workspace = true, features = ["derive"] }
 cu29-export = { workspace = true, optional = true }
+
+[build-dependencies]
+cu29-build = { workspace = true }

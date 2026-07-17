@@ -19,3 +19,6 @@ cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "1
 
 [package.metadata.cargo-shear]
 ignored = ["serde"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

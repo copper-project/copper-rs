@@ -53,3 +53,6 @@ cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "1.0.0",
 [[bin]]
 name = "cu-bevymon-demo"
 path = "src/main.rs"
+
+[build-dependencies]
+cu29-build = { workspace = true }

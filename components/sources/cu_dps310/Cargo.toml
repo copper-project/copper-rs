@@ -30,3 +30,6 @@ textlogs = ["cu29/textlogs", "cu-sensor-payloads/textlogs"]
 
 [package.metadata.cargo-shear]
 ignored = ["serde"]
+
+[build-dependencies]
+cu29-build = { workspace = true }

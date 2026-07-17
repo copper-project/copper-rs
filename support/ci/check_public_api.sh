@@ -9,6 +9,7 @@ CARGO_PUBLIC_API=(cargo "+${PUBLIC_API_TOOLCHAIN}" public-api)
 
 CRATES=(
   cu29
+  cu29-build
   cu29-runtime
   cu29-traits
   cu29-derive

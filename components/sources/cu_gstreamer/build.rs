@@ -6,10 +6,7 @@ fn main() {
             "cargo:warning=GStreamer feature (gst) is not enabled. Skipping cu_gstreamer build."
         );
     }
-    println!(
-        "cargo:rustc-env=LOG_INDEX_DIR={}",
-        std::env::var("OUT_DIR").unwrap()
-    );
+    cu29_build::setup();
     cfg_aliases! {
         hardware: { all(target_os = "linux", not(feature = "mock")) },
         mock: { any(not(target_os = "linux"), feature = "mock") },
