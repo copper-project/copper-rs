@@ -4,58 +4,48 @@
 //! plus optional bounded improvements ([`CuAnytimeTask::refine`]). The task *reports*
 //! what each quantum achieved through [`AnytimeStatus`]; the runtime *decides* whether
 //! to schedule another quantum from that status stream and its configured time budget
-//! and quality target. The task never sees the policy, only the [`AnytimeStep`] hints,
-//! so implementations stay reusable under any policy.
+//! and quality target. The task never sees the policy, so implementations stay
+//! reusable under any policy.
 
 use crate::config::ComponentConfig;
 use crate::context::CuContext;
 use crate::cutask::{CuMsgPack, CuMsgPayload, Freezable};
 use crate::reflect::Reflect;
-use cu29_clock::CuDuration;
-use cu29_traits::{CuError, CuResult};
+use cu29_traits::CuResult;
 
-/// User-defined quality metric; higher is better. The scale is task-defined but must
-/// be consistent with the quality target configured for the task.
+/// Normalized quality of a published result: a unit ratio in `0.0..=1.0`, higher is
+/// better and `1.0` means no further improvement is meaningful. Sharing one scale
+/// across tasks keeps a configured quality target portable.
 pub type Quality = f32;
 
 /// Returned by [`CuAnytimeTask::base`] and [`CuAnytimeTask::refine`]; drives the
 /// runtime's refinement scheduling.
+///
+/// `Q` is [`CuAnytimeTask::Quality`]: [`Quality`] for tasks that can score their
+/// result, `()` for tasks that cannot.
 ///
 /// After any `Ok` return, the output must be valid and hold the best result produced
 /// so far for the current job: a quantum that regresses or plateaus keeps its
 /// candidate in task-local state and leaves the output untouched. The runtime never
 /// buffers or rolls back the output, so it can publish it at any stop point, and the
 /// published quality is monotone even when the algorithm internally is not.
-#[derive(Debug, Clone)]
-pub enum AnytimeStatus {
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum AnytimeStatus<Q> {
     /// The output holds the best result so far; further refinement may help.
-    Improved { quality: Option<Quality> },
+    Improved(Q),
     /// Proactive yield: no further improvement is possible for this job. The output
     /// holds the final result.
-    Converged { quality: Option<Quality> },
+    Converged(Q),
     /// Proactive give-up: the algorithm diverged or reached an unrecoverable state
     /// for this job. Refinement stops; the output is published as-is, so a task that
     /// can no longer vouch even for its base result must clear the payload before
     /// returning this. The next copperlist starts a fresh job.
     ///
-    /// Return this when retrying with fresh input could plausibly succeed; return
-    /// `Err` from `base`/`refine` when the task itself is broken.
-    Aborted { error: Option<CuError> },
-}
-
-/// Runtime knowledge passed to [`CuAnytimeTask::refine`] — scheduling hints, not
-/// commands.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct AnytimeStep {
-    /// 0 for the first `refine()` after `base()`.
-    pub iteration: u32,
-    /// Time since `base()` started for this job.
-    pub elapsed: CuDuration,
-    /// Time left in the budget; `None` if no time budget is configured. A task can
-    /// use this to size its next quantum (e.g. skip a strategy that cannot fit).
-    pub remaining: Option<CuDuration>,
-    /// Best quality reported so far for this job, including by `base()`.
-    pub best_quality: Option<Quality>,
+    /// This is a controlled per-job outcome, not a failure, so it carries no error:
+    /// return it when retrying with fresh input could plausibly succeed (logging any
+    /// diagnostics from the task), and return `Err` from `base`/`refine` when the
+    /// task itself is broken.
+    Aborted,
 }
 
 /// A task producing a valid result from the bare-minimum compute, then improving it
@@ -69,6 +59,11 @@ pub trait CuAnytimeTask: Freezable + Reflect {
     type Output<'m>: CuMsgPayload;
     /// Resources required by the task.
     type Resources<'r>;
+    /// Measure reported through [`AnytimeStatus`]: [`Quality`] for tasks that can
+    /// score their result, `()` for tasks that cannot. A quality target can only be
+    /// configured for tasks whose `Quality` is comparable to it, so a target on a
+    /// `()` task is rejected at compile time.
+    type Quality: Copy + PartialOrd;
 
     /// Here you need to initialize everything your task will need for the duration
     /// of its lifetime. The config allows you to access the configuration of the task.
@@ -105,7 +100,7 @@ pub trait CuAnytimeTask: Freezable + Reflect {
         ctx: &CuContext,
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
-    ) -> CuResult<AnytimeStatus>;
+    ) -> CuResult<AnytimeStatus<Self::Quality>>;
 
     /// Performs exactly one bounded refinement quantum.
     ///
@@ -113,15 +108,18 @@ pub trait CuAnytimeTask: Freezable + Reflect {
     /// far for this job; see [`AnytimeStatus`] for the commit-only-improvements
     /// contract.
     ///
+    /// Anything a quantum could want to know about its own job the task already has:
+    /// it can count its quanta, read the clock through `ctx`, and remembers the last
+    /// quality it reported.
+    ///
     /// This method must not contain an unbounded refinement loop: the runtime can
     /// only observe time and quality *between* calls, so one call must be one
     /// bounded quantum.
     fn refine<'o>(
         &mut self,
         ctx: &CuContext,
-        step: &AnytimeStep,
         output: &mut Self::Output<'o>,
-    ) -> CuResult<AnytimeStatus>;
+    ) -> CuResult<AnytimeStatus<Self::Quality>>;
 
     /// This is a method called by the runtime after the job's refinement window has
     /// closed. It is best effort a chance for the task to update some state out of
@@ -159,6 +157,7 @@ mod tests {
         type Input<'m> = input_msg!(u32);
         type Output<'m> = output_msg!(u32);
         type Resources<'r> = ();
+        type Quality = Quality;
 
         fn new(
             _config: Option<&ComponentConfig>,
@@ -172,27 +171,26 @@ mod tests {
             _ctx: &CuContext,
             input: &Self::Input<'i>,
             output: &mut Self::Output<'o>,
-        ) -> CuResult<AnytimeStatus> {
+        ) -> CuResult<AnytimeStatus<Quality>> {
             self.target = *input.payload().ok_or("no input")?;
             self.acc = 0;
             output.set_payload(self.acc);
-            Ok(AnytimeStatus::Improved { quality: Some(0.0) })
+            Ok(AnytimeStatus::Improved(0.0))
         }
 
         fn refine<'o>(
             &mut self,
             _ctx: &CuContext,
-            _step: &AnytimeStep,
             output: &mut Self::Output<'o>,
-        ) -> CuResult<AnytimeStatus> {
+        ) -> CuResult<AnytimeStatus<Quality>> {
             if self.acc == self.target {
-                return Ok(AnytimeStatus::Converged { quality: Some(1.0) });
+                return Ok(AnytimeStatus::Converged(1.0));
             }
             self.acc += 1;
             output.set_payload(self.acc);
-            Ok(AnytimeStatus::Improved {
-                quality: Some(self.acc as Quality / self.target as Quality),
-            })
+            Ok(AnytimeStatus::Improved(
+                self.acc as Quality / self.target as Quality,
+            ))
         }
     }
 
@@ -206,25 +204,22 @@ mod tests {
         task.start(&ctx).unwrap();
         task.preprocess(&ctx).unwrap();
         let status = task.base(&ctx, &input, &mut output).unwrap();
-        assert!(matches!(status, AnytimeStatus::Improved { .. }));
+        assert!(matches!(status, AnytimeStatus::Improved(_)));
         assert_eq!(output.payload(), Some(&0));
 
-        let mut best_quality = Some(0.0);
-        for iteration in 0..8 {
-            let step = AnytimeStep {
-                iteration,
-                elapsed: CuDuration(0),
-                remaining: None,
-                best_quality,
-            };
-            match task.refine(&ctx, &step, &mut output).unwrap() {
-                AnytimeStatus::Improved { quality } => best_quality = quality,
-                AnytimeStatus::Converged { .. } => break,
+        let mut best_quality = 0.0;
+        for _ in 0..8 {
+            match task.refine(&ctx, &mut output).unwrap() {
+                AnytimeStatus::Improved(quality) => best_quality = quality,
+                AnytimeStatus::Converged(quality) => {
+                    best_quality = quality;
+                    break;
+                }
                 status => panic!("unexpected status: {status:?}"),
             }
         }
         assert_eq!(output.payload(), Some(&3));
-        assert_eq!(best_quality, Some(1.0));
+        assert_eq!(best_quality, 1.0);
         task.postprocess(&ctx).unwrap();
         task.stop(&ctx).unwrap();
     }
