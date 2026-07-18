@@ -12,11 +12,13 @@ use crate::context::CuContext;
 use crate::cutask::{CuMsgPack, CuMsgPayload, Freezable};
 use crate::reflect::Reflect;
 use cu29_traits::CuResult;
+use cu29_units::si::f32::Ratio;
 
-/// Normalized quality of a published result: a unit ratio in `0.0..=1.0`, higher is
-/// better and `1.0` means no further improvement is meaningful. Sharing one scale
-/// across tasks keeps a configured quality target portable.
-pub type Quality = f32;
+/// Normalized quality of a published result: a dimensionless [`Ratio`] in
+/// `0.0..=1.0`, higher is better and `1.0` means no further improvement is
+/// meaningful. Sharing one scale across tasks keeps a configured quality target
+/// portable.
+pub type Quality = Ratio;
 
 /// Returned by [`CuAnytimeTask::base`] and [`CuAnytimeTask::refine`]; drives the
 /// runtime's refinement scheduling.
@@ -40,11 +42,6 @@ pub enum AnytimeStatus<Q> {
     /// for this job. Refinement stops; the output is published as-is, so a task that
     /// can no longer vouch even for its base result must clear the payload before
     /// returning this. The next copperlist starts a fresh job.
-    ///
-    /// This is a controlled per-job outcome, not a failure, so it carries no error:
-    /// return it when retrying with fresh input could plausibly succeed (logging any
-    /// diagnostics from the task), and return `Err` from `base`/`refine` when the
-    /// task itself is broken.
     Aborted,
 }
 
@@ -142,6 +139,7 @@ mod tests {
     use crate::cutask::CuMsg;
     use crate::input_msg;
     use crate::output_msg;
+    use cu29_units::si::ratio::ratio;
 
     /// Sums its input one increment per quantum: base publishes 0, each refine
     /// commits one more increment until the captured input is fully consumed.
@@ -175,7 +173,7 @@ mod tests {
             self.target = *input.payload().ok_or("no input")?;
             self.acc = 0;
             output.set_payload(self.acc);
-            Ok(AnytimeStatus::Improved(0.0))
+            Ok(AnytimeStatus::Improved(Quality::new::<ratio>(0.0)))
         }
 
         fn refine<'o>(
@@ -184,13 +182,13 @@ mod tests {
             output: &mut Self::Output<'o>,
         ) -> CuResult<AnytimeStatus<Quality>> {
             if self.acc == self.target {
-                return Ok(AnytimeStatus::Converged(1.0));
+                return Ok(AnytimeStatus::Converged(Quality::new::<ratio>(1.0)));
             }
             self.acc += 1;
             output.set_payload(self.acc);
-            Ok(AnytimeStatus::Improved(
-                self.acc as Quality / self.target as Quality,
-            ))
+            Ok(AnytimeStatus::Improved(Quality::new::<ratio>(
+                self.acc as f32 / self.target as f32,
+            )))
         }
     }
 
@@ -207,7 +205,7 @@ mod tests {
         assert!(matches!(status, AnytimeStatus::Improved(_)));
         assert_eq!(output.payload(), Some(&0));
 
-        let mut best_quality = 0.0;
+        let mut best_quality = Quality::new::<ratio>(0.0);
         for _ in 0..8 {
             match task.refine(&ctx, &mut output).unwrap() {
                 AnytimeStatus::Improved(quality) => best_quality = quality,
@@ -219,7 +217,7 @@ mod tests {
             }
         }
         assert_eq!(output.payload(), Some(&3));
-        assert_eq!(best_quality, 1.0);
+        assert_eq!(best_quality.get::<ratio>(), 1.0);
         task.postprocess(&ctx).unwrap();
         task.stop(&ctx).unwrap();
     }
