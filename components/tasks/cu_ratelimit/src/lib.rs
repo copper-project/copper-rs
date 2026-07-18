@@ -14,7 +14,7 @@ fn phase_at_or_before(tov: CuTime, interval: CuDuration) -> CuTime {
 #[reflect(no_field_bounds, from_reflect = false, type_path = false)]
 pub struct CuRateLimit<T>
 where
-    T: for<'a> CuMsgPayload + 'static,
+    T: CuMsgPayload + 'static,
 {
     #[reflect(ignore)]
     _marker: PhantomData<fn() -> T>,

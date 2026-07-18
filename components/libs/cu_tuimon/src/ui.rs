@@ -651,7 +651,7 @@ impl MonitorUi {
                             .alignment(Alignment::Right),
                     ),
                     Cell::from(
-                        Line::from(format!("{}", stat.handles_in_use)).alignment(Alignment::Right),
+                        Line::from(stat.handles_in_use.to_string()).alignment(Alignment::Right),
                     ),
                     Cell::from(
                         Line::from(format!("{}/s", stat.handles_per_second))
