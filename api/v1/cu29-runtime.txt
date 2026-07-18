@@ -961,30 +961,23 @@ pub fn cu29_runtime::simulation::CuSimBridge<Tx, Rx>::thaw<D: cu_bincode::de::De
 pub fn cu29_runtime::cutask::encode_metadata_only<T, M, E>(msg: &cu29_runtime::cutask::CuStampedData<T, M>, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError> where T: cu29_runtime::cutask::CuMsgPayload, M: cu29_traits::Metadata, E: cu_bincode::enc::Encoder
 pub type cu29_runtime::cutask::CuMsg<T> = cu29_runtime::cutask::CuStampedData<T, cu29_runtime::cutask::CuMsgMetadata>
 pub mod cu29_runtime::cutask_anytime
-pub enum cu29_runtime::cutask_anytime::AnytimeStatus
+pub enum cu29_runtime::cutask_anytime::AnytimeStatus<Q>
 pub cu29_runtime::cutask_anytime::AnytimeStatus::Aborted
-pub cu29_runtime::cutask_anytime::AnytimeStatus::Aborted::error: core::option::Option<cu29_traits::CuError>
-pub cu29_runtime::cutask_anytime::AnytimeStatus::Converged
-pub cu29_runtime::cutask_anytime::AnytimeStatus::Converged::quality: core::option::Option<cu29_runtime::cutask_anytime::Quality>
-pub cu29_runtime::cutask_anytime::AnytimeStatus::Improved
-pub cu29_runtime::cutask_anytime::AnytimeStatus::Improved::quality: core::option::Option<cu29_runtime::cutask_anytime::Quality>
-pub struct cu29_runtime::cutask_anytime::AnytimeStep
-pub cu29_runtime::cutask_anytime::AnytimeStep::best_quality: core::option::Option<cu29_runtime::cutask_anytime::Quality>
-pub cu29_runtime::cutask_anytime::AnytimeStep::elapsed: cu29_clock::CuDuration
-pub cu29_runtime::cutask_anytime::AnytimeStep::iteration: u32
-pub cu29_runtime::cutask_anytime::AnytimeStep::remaining: core::option::Option<cu29_clock::CuDuration>
+pub cu29_runtime::cutask_anytime::AnytimeStatus::Converged(Q)
+pub cu29_runtime::cutask_anytime::AnytimeStatus::Improved(Q)
 pub trait cu29_runtime::cutask_anytime::CuAnytimeTask: cu29_runtime::cutask::Freezable + cu29_runtime::reflect::Reflect
 pub type cu29_runtime::cutask_anytime::CuAnytimeTask::Input<'m>: cu29_runtime::cutask::CuMsgPack
 pub type cu29_runtime::cutask_anytime::CuAnytimeTask::Output<'m>: cu29_runtime::cutask::CuMsgPayload
+pub type cu29_runtime::cutask_anytime::CuAnytimeTask::Quality: core::marker::Copy + core::cmp::PartialOrd
 pub type cu29_runtime::cutask_anytime::CuAnytimeTask::Resources<'r>
-pub fn cu29_runtime::cutask_anytime::CuAnytimeTask::base<'i, 'o>(&mut self, ctx: &cu29_runtime::context::CuContext, input: &Self::Input, output: &mut Self::Output) -> cu29_traits::CuResult<cu29_runtime::cutask_anytime::AnytimeStatus>
+pub fn cu29_runtime::cutask_anytime::CuAnytimeTask::base<'i, 'o>(&mut self, ctx: &cu29_runtime::context::CuContext, input: &Self::Input, output: &mut Self::Output) -> cu29_traits::CuResult<cu29_runtime::cutask_anytime::AnytimeStatus<Self::Quality>>
 pub fn cu29_runtime::cutask_anytime::CuAnytimeTask::new(_config: core::option::Option<&cu29_runtime::config::ComponentConfig>, _resources: Self::Resources) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
 pub fn cu29_runtime::cutask_anytime::CuAnytimeTask::postprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask_anytime::CuAnytimeTask::preprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
-pub fn cu29_runtime::cutask_anytime::CuAnytimeTask::refine<'o>(&mut self, ctx: &cu29_runtime::context::CuContext, step: &cu29_runtime::cutask_anytime::AnytimeStep, output: &mut Self::Output) -> cu29_traits::CuResult<cu29_runtime::cutask_anytime::AnytimeStatus>
+pub fn cu29_runtime::cutask_anytime::CuAnytimeTask::refine<'o>(&mut self, ctx: &cu29_runtime::context::CuContext, output: &mut Self::Output) -> cu29_traits::CuResult<cu29_runtime::cutask_anytime::AnytimeStatus<Self::Quality>>
 pub fn cu29_runtime::cutask_anytime::CuAnytimeTask::start(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask_anytime::CuAnytimeTask::stop(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
-pub type cu29_runtime::cutask_anytime::Quality = f32
+pub type cu29_runtime::cutask_anytime::Quality = cu29_units::si::f32::Ratio
 pub mod cu29_runtime::debug
 pub struct cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L> where P: cu29_traits::CopperListTuple, S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static
 impl<App, P, CB, TF, S, L> cu29_runtime::debug::CuDebugSession<App, P, CB, TF, S, L> where App: cu29_runtime::app::CuSimApplication<S, L> + cu29_runtime::reflect::ReflectTaskIntrospection, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, S: cu29_unifiedlog::SectionStorage, P: cu29_traits::CopperListTuple, CB: for<'a> core::ops::function::Fn(&'a cu29_runtime::copperlist::CopperList<P>, cu29_clock::RobotClock, cu29_clock::RobotClockMock) -> alloc::boxed::Box<(dyn for<'z> core::ops::function::FnMut(<App as cu29_runtime::app::CuSimApplication>::Step) -> cu29_runtime::simulation::SimOverride + 'a)>, TF: core::ops::function::Fn(&cu29_runtime::copperlist::CopperList<P>) -> core::option::Option<cu29_clock::CuTime> + core::clone::Clone
