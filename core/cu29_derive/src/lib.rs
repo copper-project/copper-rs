@@ -382,8 +382,8 @@ fn collect_safety_checks_from_expr(
         Expr::Match(expr) => {
             collect_safety_checks_from_expr(&expr.expr, checks)?;
             for arm in &expr.arms {
-                if let Some((_, guard)) = &arm.guard {
-                    collect_safety_checks_from_expr(guard, checks)?;
+                if let syn::Pat::Guard(pat_guard) = &arm.pat {
+                    collect_safety_checks_from_expr(&pat_guard.guard, checks)?;
                 }
                 collect_safety_checks_from_expr(&arm.body, checks)?;
             }
