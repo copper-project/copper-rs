@@ -78,6 +78,7 @@ pub use cu29_runtime::cuasynctask;
 pub use cu29_runtime::cubridge;
 pub use cu29_runtime::curuntime;
 pub use cu29_runtime::cutask;
+pub use cu29_runtime::cutask_anytime;
 #[cfg(feature = "std")]
 pub use cu29_runtime::debug;
 #[cfg(feature = "std")]

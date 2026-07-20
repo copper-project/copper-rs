@@ -23,9 +23,9 @@ cu29-clock = { workspace = true }
 cu29-intern-strs = { workspace = true, optional = true }
 cu29-log = { workspace = true }
 cu29-log-derive = { workspace = true }
-cu29-log-runtime = { workspace = true }                  # needed
+cu29-log-runtime = { workspace = true }                                              # needed
 cu29-traits = { workspace = true }
-cu29-units = { workspace = true, optional = true }
+cu29-units = { path = "../cu29_units", version = "1.0.0", default-features = false }
 cu29-unifiedlog = { workspace = true }
 cu29-value = { workspace = true }
 
@@ -114,7 +114,6 @@ remote-debug = [
   "std",
   "reflect",
   "dep:cu29-intern-strs",
-  "dep:cu29-units",
   "dep:serde_json",
   "dep:zenoh",
   "dep:minicbor-serde",
@@ -134,6 +133,7 @@ std = [
   "portable-atomic/require-cas",
   "cu29-clock/std",
   "cu29-log/std",
+  "cu29-units/std",
   "cu29-log-runtime/std",
   "cu29-traits/std",
   "cu29-unifiedlog/std",
