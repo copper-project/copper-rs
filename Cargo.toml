@@ -305,7 +305,7 @@ uom = { version = "0.38", default-features = false, features = [
 ] }
 
 # Compact strings support
-compact_str = { version = "0.9", default-features = false, features = [
+compact_str = { version = "0.10", default-features = false, features = [
   "serde",
 ] }
 paste = { version = "1.0.15", default-features = false }
