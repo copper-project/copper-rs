@@ -968,7 +968,7 @@ mod std_tests {
     #[test]
     fn test_cuerror_display() {
         let err = CuError::from("test error").add_cause("some context");
-        let display = format!("{}", err);
+        let display = err.to_string();
         assert!(display.contains("test error"));
         assert!(display.contains("some context"));
     }

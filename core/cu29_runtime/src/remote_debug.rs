@@ -3913,7 +3913,7 @@ fn simple_jsonschema_for_type(info: &'static TypeInfo) -> Value {
     json!({
         "$schema": "https://json-schema.org/draft-07/schema#",
         "title": info.type_path(),
-        "description": format!("{}", info.type_path()),
+        "description": info.type_path().to_string(),
         "reflect": format!("{info:#?}"),
     })
 }

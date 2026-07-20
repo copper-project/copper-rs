@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 // We use this to be able to support embedded 32bit platforms
 use portable_atomic::{AtomicU64, Ordering};
 
-use alloc::format;
+use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::{Display, Formatter};
@@ -702,12 +702,12 @@ impl Display for PartialCuTimeRange {
         let start = if self.start.is_none() {
             "…"
         } else {
-            &format!("{}", self.start)
+            &self.start.to_string()
         };
         let end = if self.end.is_none() {
             "…"
         } else {
-            &format!("{}", self.end)
+            &self.end.to_string()
         };
         write!(f, "[{start} – {end}]")
     }
