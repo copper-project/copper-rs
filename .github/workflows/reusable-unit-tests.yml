@@ -384,7 +384,7 @@ jobs:
           install_nextest: ${{ matrix.task == 'test' }}
       - name: Set up Python (macOS)
         if: runner.os == 'macOS'
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.x"
       - name: Install Python task dependency (macOS)
@@ -665,7 +665,7 @@ jobs:
           sccache_write: ${{ matrix.target_os == 'macos' }}
       - name: Set up Python (macOS)
         if: runner.os == 'macOS'
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.x"
       - name: Install Python task dependency (macOS)
