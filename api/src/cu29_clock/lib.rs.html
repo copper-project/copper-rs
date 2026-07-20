@@ -23,7 +23,7 @@
 <a href=#23 id=23 data-nosnippet>23</a><span class="comment">// We use this to be able to support embedded 32bit platforms
 <a href=#24 id=24 data-nosnippet>24</a></span><span class="kw">use </span>portable_atomic::{AtomicU64, Ordering};
 <a href=#25 id=25 data-nosnippet>25</a>
-<a href=#26 id=26 data-nosnippet>26</a><span class="kw">use </span>alloc::format;
+<a href=#26 id=26 data-nosnippet>26</a><span class="kw">use </span>alloc::string::ToString;
 <a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span>alloc::sync::Arc;
 <a href=#28 id=28 data-nosnippet>28</a><span class="kw">use </span>alloc::vec::Vec;
 <a href=#29 id=29 data-nosnippet>29</a><span class="kw">use </span>core::fmt::{Display, Formatter};
@@ -702,12 +702,12 @@
 <a href=#702 id=702 data-nosnippet>702</a>        <span class="kw">let </span>start = <span class="kw">if </span><span class="self">self</span>.start.is_none() {
 <a href=#703 id=703 data-nosnippet>703</a>            <span class="string">"…"
 <a href=#704 id=704 data-nosnippet>704</a>        </span>} <span class="kw">else </span>{
-<a href=#705 id=705 data-nosnippet>705</a>            <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}"</span>, <span class="self">self</span>.start)
+<a href=#705 id=705 data-nosnippet>705</a>            <span class="kw-2">&amp;</span><span class="self">self</span>.start.to_string()
 <a href=#706 id=706 data-nosnippet>706</a>        };
 <a href=#707 id=707 data-nosnippet>707</a>        <span class="kw">let </span>end = <span class="kw">if </span><span class="self">self</span>.end.is_none() {
 <a href=#708 id=708 data-nosnippet>708</a>            <span class="string">"…"
 <a href=#709 id=709 data-nosnippet>709</a>        </span>} <span class="kw">else </span>{
-<a href=#710 id=710 data-nosnippet>710</a>            <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}"</span>, <span class="self">self</span>.end)
+<a href=#710 id=710 data-nosnippet>710</a>            <span class="kw-2">&amp;</span><span class="self">self</span>.end.to_string()
 <a href=#711 id=711 data-nosnippet>711</a>        };
 <a href=#712 id=712 data-nosnippet>712</a>        <span class="macro">write!</span>(f, <span class="string">"[{start} – {end}]"</span>)
 <a href=#713 id=713 data-nosnippet>713</a>    }

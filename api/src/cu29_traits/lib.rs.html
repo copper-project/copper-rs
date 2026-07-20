@@ -968,7 +968,7 @@
 <a href=#968 id=968 data-nosnippet>968</a>    <span class="attr">#[test]
 <a href=#969 id=969 data-nosnippet>969</a>    </span><span class="kw">fn </span>test_cuerror_display() {
 <a href=#970 id=970 data-nosnippet>970</a>        <span class="kw">let </span>err = CuError::from(<span class="string">"test error"</span>).add_cause(<span class="string">"some context"</span>);
-<a href=#971 id=971 data-nosnippet>971</a>        <span class="kw">let </span>display = <span class="macro">format!</span>(<span class="string">"{}"</span>, err);
+<a href=#971 id=971 data-nosnippet>971</a>        <span class="kw">let </span>display = err.to_string();
 <a href=#972 id=972 data-nosnippet>972</a>        <span class="macro">assert!</span>(display.contains(<span class="string">"test error"</span>));
 <a href=#973 id=973 data-nosnippet>973</a>        <span class="macro">assert!</span>(display.contains(<span class="string">"some context"</span>));
 <a href=#974 id=974 data-nosnippet>974</a>    }
