@@ -1,0 +1,7 @@
+check:
+    cargo clippy
+    cargo clippy --features=zenoh-nostd/defmt
+
+fix:
+    cargo clippy --fix --lib --allow-dirty --allow-staged
+    cargo clippy --features=zenoh-nostd/defmt --fix --lib --allow-dirty --allow-staged

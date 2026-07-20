@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>WASM Example</title>
+    </head>
+    <body>
+        <h1>WASM Example</h1>
+        <script type="module">
+            import init, { main } from "./z_example.js";
+
+            async function run() {
+                await init();
+            }
+
+            run();
+        </script>
+    </body>
+</html>

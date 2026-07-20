@@ -15,19 +15,29 @@ description = "Copper bridge for bidirectional Zenoh messaging."
 [package.metadata.copper]
 kind = "bridge"
 domains = ["middleware/zenoh"]
-environments = ["host"]
+environments = ["host", "embedded"]
+
+[features]
+default = ["std"]
+std = ["cu29/std", "dep:serde_json", "dep:minicbor-serde", "dep:zenoh"]
+nostd = ["dep:zenoh-nostd", "zenoh-nostd/embedded"]
 
 [dependencies]
-cu29 = { workspace = true }
+cu29 = { path = "../../../core/cu29", version = "1.0.0", default-features = false }
 serde = { workspace = true }
-serde_json = { version = "1.0", default-features = false }
-minicbor-serde = { workspace = true, default-features = false, features = [
+serde_json = { version = "1.0", default-features = false, optional = true }
+minicbor-serde = { workspace = true, default-features = false, optional = true, features = [
   "alloc",
 ] }
 bincode = { workspace = true }
+spin = { version = "0.9", default-features = false, features = [
+  "mutex",
+  "spin_mutex",
+] }
+zenoh-nostd = { path = "../../../support/zenoh-nostd/crates/zenoh-nostd", optional = true }
 
 [target.'cfg(unix)'.dependencies]
-zenoh = { workspace = true, default-features = false, features = [
+zenoh = { workspace = true, optional = true, default-features = false, features = [
   "shared-memory",
   "transport_tcp",
   "transport_udp",
@@ -35,7 +45,7 @@ zenoh = { workspace = true, default-features = false, features = [
 ] }
 
 [target.'cfg(not(unix))'.dependencies]
-zenoh = { workspace = true, default-features = false, features = [
+zenoh = { workspace = true, optional = true, default-features = false, features = [
   "transport_tcp",
   "transport_udp",
 ] }

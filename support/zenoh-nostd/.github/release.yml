@@ -1,0 +1,36 @@
+changelog:
+  categories:
+    - title: Breaking changes 💥
+      labels:
+        - breaking-change
+    - title: New features 🎉
+      labels:
+        - enhancement
+        - new feature
+      exclude:
+        labels:
+          - internal
+    - title: Bug fixes 🐞
+      labels:
+        - bug
+      exclude:
+        labels:
+          - internal
+    - title: Documentation 📝
+      labels:
+        - documentation
+      exclude:
+        labels:
+          - internal
+    - title: Dependencies 👷
+      labels:
+        - dependencies
+      exclude:
+        labels:
+          - internal
+    - title: Other changes
+      labels:
+        - "*"
+      exclude:
+        labels:
+          - internal

@@ -1,0 +1,177 @@
+[workspace]
+members = [
+    "crates/zenoh-derive",
+    "crates/zenoh-proto",
+    "crates/zenoh-sansio",
+
+    "crates/zenoh-nostd"
+]
+exclude = ["platforms/zenoh-std", "platforms/zenoh-embassy", "platforms/zenoh-wasm"]
+resolver = "3"
+
+[workspace.package]
+authors = []
+categories = ["network-programming"]
+description = "Zenoh: The Zero Overhead Pub/Sub/Query Protocol."
+edition = "2024"
+homepage = "http://zenoh.io"
+license = "EPL-2.0 OR Apache-2.0"
+repository = "https://github.com/eclipse-zenoh/zenoh-nostd"
+rust-version = "1.91.0"
+version = "0.1.0"
+readme = "README.md"
+
+[workspace.dependencies]
+zenoh-derive = { version = "0.1.0", path = "crates/zenoh-derive" }
+zenoh-proto = { version = "0.1.0", path = "crates/zenoh-proto" }
+zenoh-sansio = { version = "0.1.0", path = "crates/zenoh-sansio" }
+
+zenoh-nostd = { version = "0.1.0", path = "crates/zenoh-nostd" }
+
+# General dependencies
+
+uhlc = { version = "0.9.0", default-features = false }
+sha3 = { version = "0.10.8", default-features = false }
+chacha20 = { version = "0.9" }
+dyn-utils = { version = "0.1.1", default-features = false, features = ["macros", "const_panic"] }
+
+# Embassy (for async/await support)
+embassy-futures = "0.1.2"
+embassy-time = "0.5.0"
+embassy-sync = "0.7.2"
+embassy-executor = "0.9.1"
+
+embedded-io-async = "0.7"
+
+# Heapless / static
+heapless = { version = "0.8", default-features = false }
+static_cell = "2.1.1"
+
+# Macros
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full"] }
+paste = "1.0"
+
+# Logs
+defmt = "1.0"
+log = "0.4"
+web-sys = { version = "0.3.82", features = ["console"] }
+
+# Tests
+rand = "0.8"
+criterion = "0.7"
+
+[package]
+name = "zenoh-examples"
+authors.workspace = true
+description.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+readme.workspace = true
+
+[features]
+default = ["std", "alloc", "log"]
+log = ["zenoh-nostd/log"]
+defmt = ["zenoh-nostd/defmt"]
+web_console = ["zenoh-nostd/web_console"]
+alloc = ["zenoh-nostd/alloc"]
+
+std = [
+    "dep:zenoh-std",
+
+    "dep:env_logger",
+
+    "embassy-executor/arch-std",
+    "embassy-executor/executor-thread",
+    "embassy-time/std",
+]
+esp32s3 = [
+    "dep:zenoh-embassy",
+    "dep:getrandom",
+    "dep:esp-bootloader-esp-idf",
+    "dep:esp-hal",
+    "dep:embassy-net",
+    "dep:esp-alloc",
+    "dep:esp-println",
+    "dep:esp-rtos",
+    "dep:esp-radio",
+    "embassy-executor/defmt",
+]
+wasm = [
+    "dep:zenoh-wasm",
+
+    "dep:env_logger",
+
+    "getrandom/std",
+    "getrandom/js",
+    "dep:wasm-bindgen",
+
+    "embassy-executor/arch-wasm",
+    "embassy-executor/executor-thread",
+    "embassy-time/wasm",
+]
+
+[dependencies]
+zenoh-nostd = { workspace = true }
+
+static_cell = { workspace = true }
+embassy-sync = { workspace = true  }
+embassy-executor = { workspace = true }
+embassy-time = { workspace = true }
+embassy-futures = { workspace = true }
+
+zenoh-std = { version = "0.1.0", path = "platforms/zenoh-std", optional = true }
+zenoh-embassy = { version = "0.1.0", path = "platforms/zenoh-embassy", optional = true }
+zenoh-wasm = { version = "0.1.0", path = "platforms/zenoh-wasm", optional = true }
+
+env_logger = { version = "0.11", optional = true}
+
+getrandom = { version = "0.2.16", features = ["custom"], optional = true }
+embassy-net = { version = "0.8.0", features = ["defmt", "dhcpv4", "medium-ethernet", "tcp", "udp"], optional = true }
+esp-bootloader-esp-idf = { version = "0.4.0", features = ["defmt", "esp32s3"], optional = true }
+esp-hal = { version = "1.0.0", features = ["defmt", "esp32s3", "unstable"], optional = true }
+esp-alloc = { version = "0.9.0", features = ["defmt"], optional = true }
+esp-println = { version = "0.16.1", features = ["defmt-espflash", "esp32s3"], optional = true }
+esp-rtos = { version = "0.2.0", features = ["defmt", "esp32s3", "esp-radio", "esp-alloc", "embassy"], optional = true }
+esp-radio = { version = "0.17.0", features = ["unstable", "defmt", "esp-alloc", "esp32s3", "smoltcp", "wifi"], optional = true }
+defmt = { workspace = true }
+
+wasm-bindgen = { version = "0.2", optional = true }
+
+[[example]]
+path = "examples/z_broker.rs"
+name = "z_broker"
+required-features = ["alloc"]
+
+[profile.dev]
+opt-level = "s"
+lto = false
+codegen-units = 16
+panic = "abort"
+strip = false
+incremental = true
+debug = true
+overflow-checks = true
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = false
+incremental = false
+debug = false
+overflow-checks = false
+
+[patch.crates-io.yawc]
+git = "https://github.com/infinitefield/yawc"
+rev = "b43b05d51e18345d228b72c4f12a93e2f51df9d8"
+
+[patch.crates-io.async-net]
+git = "https://github.com/Hennzau/async-net"
+rev = "f1ade444e88677b31b71ed1b7de0b2778d977aa8"

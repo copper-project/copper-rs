@@ -1,0 +1,25 @@
+[package]
+name = "zenoh-embassy"
+authors = []
+categories = ["network-programming"]
+description = "Zenoh: The Zero Overhead Pub/Sub/Query Protocol."
+edition = "2024"
+homepage = "http://zenoh.io"
+license = "EPL-2.0 OR Apache-2.0"
+repository = "https://github.com/eclipse-zenoh/zenoh-nostd"
+rust-version = "1.91.0"
+version = "0.1.0"
+
+[dependencies]
+zenoh-nostd = { version = "0.1.0", path = "../../crates/zenoh-nostd" }
+
+embassy-net = { version = "0.8.0", features = [
+  "defmt",
+  "dhcpv4",
+  "medium-ethernet",
+  "tcp",
+  "udp",
+]}
+
+embedded-io-async = { version = "0.7", features = ["defmt"] }
+getrandom = { version = "0.2", features = ["custom"] }

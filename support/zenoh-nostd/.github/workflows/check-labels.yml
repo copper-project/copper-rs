@@ -1,0 +1,23 @@
+name: Check required labels
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    branches: ["**"]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  check-labels:
+    name: Check PR labels
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require at least one changelog label
+        uses: mheap/github-action-required-labels@v5
+        with:
+          mode: minimum
+          count: 1
+          labels: >-
+            breaking-change, enhancement, new feature, bug,
+            documentation, dependencies, internal

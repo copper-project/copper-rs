@@ -12,3 +12,6 @@ In this example we will focus on a pure no-std environment.
 ### Features
 - Basic Copper library integration
 - Minimal setup for RP2350 microcontroller
+- Optional `cu-zenoh-bridge` no-std backend is intended to run through an Embassy-owned UART
+  session resource.  The bridge itself never waits on UART I/O; use UART0 GP0/GP1 at 115200 for
+  the initial host-router serial setup.

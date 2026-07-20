@@ -1,0 +1,36 @@
+[package]
+name = "zenoh-sansio"
+authors.workspace = true
+categories.workspace = true
+description.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+readme.workspace = true
+
+[features]
+default = []
+
+std = []
+
+log = ["std", "zenoh-proto/log"]
+web_console = ["std", "zenoh-proto/web_console"]
+defmt = ["zenoh-proto/defmt"]
+embedded = ["zenoh-proto/embedded"]
+
+[dependencies]
+zenoh-proto.workspace = true
+sha3.workspace = true
+
+[[example]]
+name = "z_flood"
+path = "examples/z_flood.rs"
+required-features = ["std"]
+
+[[example]]
+name = "z_drain"
+path = "examples/z_drain.rs"
+required-features = ["std"]

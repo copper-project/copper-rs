@@ -1,5 +1,10 @@
 [workspace]
 
+# `zenoh-nostd` remains an independently versioned upstream workspace under
+# Copper's source tree.  Excluding it lets Cargo resolve its own workspace
+# inheritance when it is consumed as a path dependency by the embedded bridge.
+exclude = ["support/zenoh-nostd"]
+
 members = [
   "core/cu29",
   "core/cu29_build",

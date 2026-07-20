@@ -126,6 +126,7 @@ host_target := `rustc +stable -vV | sed -n 's/host: //p'`
 # no_std/embedded clippy checks mirroring the embedded workflow.
 clippy-nostd:
 	cargo +stable clippy --no-default-features
+	cargo +stable clippy -p cu-zenoh-bridge --no-default-features --features nostd -- --deny warnings
 	python3 support/ci/embedded_crates.py run --action clippy --toolchain stable
 	cd examples/cu_rp2350_skeleton && cargo +stable clippy --target thumbv8m.main-none-eabihf --bin cu-blinky --features firmware
 	cd examples/cu_rp2350_skeleton && cargo +stable clippy --no-default-features --features host --bins --target={{host_target}}
@@ -202,6 +203,7 @@ nostd-ci:
 	just typos
 	cargo +stable build --no-default-features
 	cargo +stable nextest run --no-default-features
+	cargo +stable clippy -p cu-zenoh-bridge --no-default-features --features nostd -- --deny warnings
 	python3 support/ci/embedded_crates.py run --action clippy --toolchain stable
 	python3 support/ci/embedded_crates.py run --action build --toolchain stable
 	cd examples/cu_rp2350_skeleton && cargo +stable clippy --target thumbv8m.main-none-eabihf --bin cu-blinky --features firmware

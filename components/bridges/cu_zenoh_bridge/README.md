@@ -67,3 +67,22 @@ config: {
 ```
 
 The bridge uses a single Zenoh session and declares one publisher/subscriber per configured channel.
+
+## no_std / RP2350 serial
+
+Enable `cu-zenoh-bridge` with `default-features = false, features = ["nostd"]` to keep the
+same `ZenohBridge<Tx, Rx>` application type on an MCU.  The embedded backend uses the in-tree
+`support/zenoh-nostd` fork and supports bincode messages plus Copper provenance
+attachments only.
+
+The application must provide an `Arc<spin::Mutex<dyn ZenohNostdRuntime>>` resource.  That
+resource owns the Embassy Zenoh session and UART task, and its `try_publish` / `try_receive`
+methods must be nonblocking.  A full outgoing queue drops the newest frame; inspect
+`ZenohBridge::dropped_newest()` for the count.  This keeps serial latency and allocation out of
+Copper's execution cycle.
+
+Embedded routes are intentionally static: declare them in `tx_channels!` / `rx_channels!` and do
+not override them in RON.  JSON/CBOR and Zenoh JSON5 configuration are host-only.  The first
+transport is a client-only `serial/...` link; configure the host router with its matching serial
+listener.  `zenoh-nostd` needs a board-provided `getrandom` custom backend for its session ID;
+the RP2350 firmware must register its hardware entropy source before it starts the session task.

@@ -1,0 +1,36 @@
+[package]
+name = "zenoh-nostd"
+authors.workspace = true
+categories.workspace = true
+description.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[features]
+default = []
+
+std = []
+alloc = ["dyn-utils/alloc"]
+
+log = ["std", "zenoh-proto/log", "zenoh-sansio/log"]
+web_console = ["std", "zenoh-proto/web_console", "zenoh-sansio/web_console"]
+defmt = ["zenoh-proto/defmt", "zenoh-sansio/defmt"]
+embedded = ["zenoh-proto/embedded", "zenoh-sansio/embedded"]
+
+[dependencies]
+zenoh-derive.workspace = true
+zenoh-proto.workspace = true
+zenoh-sansio.workspace = true
+
+dyn-utils.workspace = true
+heapless.workspace = true
+
+embassy-futures.workspace = true
+embassy-time.workspace = true
+embassy-sync.workspace = true
+
+embedded-io-async.workspace = true

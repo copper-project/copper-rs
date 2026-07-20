@@ -1,0 +1,7 @@
+check:
+    cargo clippy --target wasm32-unknown-unknown
+    cargo clippy --features=zenoh-nostd/web_console --target wasm32-unknown-unknown
+
+fix:
+    cargo clippy --target wasm32-unknown-unknown --fix --lib --allow-dirty --allow-staged
+    cargo clippy --features=zenoh-nostd/web_console --target wasm32-unknown-unknown --fix --lib --allow-dirty --allow-staged
