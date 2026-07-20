@@ -579,6 +579,15 @@ impl<T: Debug + Send + Sync> CuHandle<T> {
         self.strong_count() == 1
     }
 
+    /// Returns a process-local identifier for the shared storage behind this handle.
+    ///
+    /// Clones of the same handle return the same identifier. This is intended for
+    /// diagnostics such as proving that a task graph forwarded a pooled allocation
+    /// without replacing it with a copy; it is not a device or host memory address.
+    pub fn storage_id(&self) -> usize {
+        Arc::as_ptr(&self.0) as usize
+    }
+
     /// Mark this handle as read by a downstream consumer.
     ///
     /// When the source is configured with [`HandleContent::TouchedOnly`], the unified-log
@@ -978,7 +987,7 @@ impl<E: ElementType + 'static> ArrayLike for Vec<E> {
 }
 
 #[cfg(all(feature = "cuda", not(target_os = "macos")))]
-mod cuda {
+pub mod cuda {
     use super::*;
     use cu29_traits::CuError;
     use cudarc::driver::{
@@ -1015,6 +1024,21 @@ mod cuda {
     }
 
     impl<E> CudaSliceWrapper<E> {
+        /// Number of elements in the device allocation.
+        pub fn len(&self) -> usize {
+            self.0.len()
+        }
+
+        /// Whether the device allocation is empty.
+        pub fn is_empty(&self) -> bool {
+            self.0.is_empty()
+        }
+
+        /// Size of the device allocation in bytes.
+        pub fn num_bytes(&self) -> usize {
+            self.0.num_bytes()
+        }
+
         pub fn as_cuda_slice(&self) -> &CudaSlice<E> {
             &self.0
         }
@@ -1110,14 +1134,13 @@ mod cuda {
         nb_element_per_buffer: usize,
     }
 
-    impl<E: ElementType + ValidAsZeroBits + DeviceRepr> CuCudaPool<E> {
-        #[allow(dead_code)]
+    impl<E: ElementType + ValidAsZeroBits + DeviceRepr + 'static> CuCudaPool<E> {
         pub fn new(
-            id: &'static str,
+            id: &str,
             ctx: Arc<CudaContext>,
             nb_buffers: usize,
             nb_element_per_buffer: usize,
-        ) -> CuResult<Self> {
+        ) -> CuResult<Arc<Self>> {
             let stream = ctx.default_stream();
             let pool = (0..nb_buffers)
                 .map(|_| {
@@ -1129,13 +1152,15 @@ mod cuda {
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
-            Ok(Self {
+            let pool = Arc::new(Self {
                 id: PoolID::from(id).map_err(|_| "Failed to create PoolID")?,
                 stream,
                 pool: Arc::new(Pool::from_vec(pool)),
                 nb_buffers,
                 nb_element_per_buffer,
-            })
+            });
+            register_pool(pool.clone());
+            Ok(pool)
         }
     }
 
@@ -1331,6 +1356,16 @@ mod tests {
         drop(clone);
         assert_eq!(h.strong_count(), 1);
         assert!(h.is_unique());
+    }
+
+    #[test]
+    fn test_handle_storage_id_tracks_shared_allocation() {
+        let first: CuHandle<Vec<u8>> = CuHandle::new_detached(vec![1]);
+        let clone = first.clone();
+        let second: CuHandle<Vec<u8>> = CuHandle::new_detached(vec![1]);
+
+        assert_eq!(first.storage_id(), clone.storage_id());
+        assert_ne!(first.storage_id(), second.storage_id());
     }
 
     #[test]
