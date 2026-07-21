@@ -656,6 +656,127 @@ pub enum BackgroundConfig {
     Pool { pool: String },
 }
 
+/// Refinement policy for an anytime node (`anytime:` on a task).
+///
+/// Every field is optional, but validation requires at least one - `time_budget_ms`,
+/// `max_age_ms` and `max_refines`; see [`CuConfig::validate_anytime_configs`].
+///
+/// Two orthogonal axes organize the fields:
+///
+/// - **Budget** — how much to *spend* per result: `time_budget_ms` and
+///   `max_refines` are hard bounds, `quality_target` and `max_stall` stop
+///   spending early when more is provably not worth it.
+/// - **Utility** — whether the result is *worth having* at all: `max_age_ms`
+///   (worthless because too old) and `quality_floor` (worthless because too
+///   crude).
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct AnytimeConfig {
+    /// Wall-clock window for one job in milliseconds, measured from the start of
+    /// the base computation and checked *between* refinement quanta.
+    /// In background placement it is measured on the worker thread and may exceed the
+    /// copperlist period.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time_budget_ms: Option<f64>,
+
+    /// Validity deadline in milliseconds, measured from the input's earliest time
+    /// of validity (Tov): past this data age a result is no longer worth starting
+    /// or waiting for.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_age_ms: Option<f64>,
+
+    /// Stop refining early once the reported quality reaches this target, in
+    /// `(0.0, 1.0]` on the normalized quality scale. Only valid for tasks that
+    /// report a comparable quality.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quality_target: Option<f32>,
+
+    /// Publish only if the final reported quality is at least this floor, in
+    /// `(0.0, 1.0)` on the normalized quality scale; below it the payload is
+    /// cleared. Only valid for tasks that report a comparable quality.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quality_floor: Option<f32>,
+
+    /// Hard bound on refinement quanta per job.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_refines: Option<u32>,
+
+    /// Stop after this many quanta without the published quality improving.
+    /// Only valid for tasks that report a comparable quality.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_stall: Option<u32>,
+}
+
+impl AnytimeConfig {
+    /// Validates the node-local invariants of this policy.
+    ///
+    /// Ranges are written as positive containment checks so a NaN coming from
+    /// the RON fails the check and is rejected, and at least one hard bound is
+    /// mandatory: `quality_target`, `max_stall` and `quality_floor` alone leave
+    /// refinement unbounded.
+    fn validate(&self, task_id: &str) -> CuResult<()> {
+        if let Some(budget) = self.time_budget_ms {
+            let valid = budget.is_finite() && budget > 0.0;
+            if !valid {
+                return Err(CuError::from(format!(
+                    "Task '{task_id}': anytime.time_budget_ms must be a positive number of milliseconds (got {budget})."
+                )));
+            }
+        }
+        if let Some(age) = self.max_age_ms {
+            let valid = age.is_finite() && age > 0.0;
+            if !valid {
+                return Err(CuError::from(format!(
+                    "Task '{task_id}': anytime.max_age_ms must be a positive number of milliseconds (got {age})."
+                )));
+            }
+        }
+        if let Some(target) = self.quality_target {
+            let valid = target > 0.0 && target <= 1.0;
+            if !valid {
+                return Err(CuError::from(format!(
+                    "Task '{task_id}': anytime.quality_target must be within (0.0, 1.0] (got {target})."
+                )));
+            }
+        }
+        if let Some(floor) = self.quality_floor {
+            let valid = floor > 0.0 && floor < 1.0;
+            if !valid {
+                return Err(CuError::from(format!(
+                    "Task '{task_id}': anytime.quality_floor must be within (0.0, 1.0) (got {floor})."
+                )));
+            }
+        }
+        if let Some(refines) = self.max_refines
+            && refines == 0
+        {
+            return Err(CuError::from(format!(
+                "Task '{task_id}': anytime.max_refines must be at least 1."
+            )));
+        }
+        if let Some(stall) = self.max_stall
+            && stall == 0
+        {
+            return Err(CuError::from(format!(
+                "Task '{task_id}': anytime.max_stall must be at least 1."
+            )));
+        }
+        if let (Some(floor), Some(target)) = (self.quality_floor, self.quality_target)
+            && floor > target
+        {
+            return Err(CuError::from(format!(
+                "Task '{task_id}': anytime.quality_floor ({floor}) must not exceed anytime.quality_target ({target}): refinement could stop at the target and then always discard the result."
+            )));
+        }
+        if self.time_budget_ms.is_none() && self.max_age_ms.is_none() && self.max_refines.is_none()
+        {
+            return Err(CuError::from(format!(
+                "Task '{task_id}': anytime needs at least one hard bound: set time_budget_ms, max_age_ms or max_refines. quality_target, max_stall and quality_floor alone leave refinement unbounded."
+            )));
+        }
+        Ok(())
+    }
+}
+
 /// A node in the configuration graph.
 /// A node represents a Task in the system Graph.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -692,6 +813,13 @@ pub struct Node {
     #[serde(skip_serializing_if = "Option::is_none")]
     background: Option<BackgroundConfig>,
 
+    /// Anytime refinement policy for this task (base + bounded refinements).
+    ///
+    /// Only supported on regular tasks. Orthogonal to `background:`, which adds
+    /// the async placement layer on top of the refinement loop.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    anytime: Option<AnytimeConfig>,
+
     /// Option to include/exclude stubbing for simulation.
     /// By default, sources and sinks are replaces (stubbed) by the runtime to avoid trying to compile hardware specific code for sensing or actuation.
     /// In some cases, for example a sink or source used as a middleware bridge, you might want to run the real code even in simulation.
@@ -726,6 +854,7 @@ impl Node {
             resources: None,
             missions: None,
             background: None,
+            anytime: None,
             run_in_sim: None,
             logging: None,
             flavor: Flavor::Task,
@@ -792,6 +921,17 @@ impl Node {
             Some(BackgroundConfig::Pool { pool }) => pool.as_str(),
             _ => DEFAULT_BACKGROUND_POOL,
         }
+    }
+
+    #[allow(dead_code)]
+    pub fn is_anytime(&self) -> bool {
+        self.anytime.is_some()
+    }
+
+    /// Anytime refinement policy configured on this node, if any.
+    #[allow(dead_code)]
+    pub fn anytime(&self) -> Option<&AnytimeConfig> {
+        self.anytime.as_ref()
     }
 
     #[allow(dead_code)]
@@ -2859,6 +2999,80 @@ impl CuConfig {
         }
         Ok(())
     }
+
+    /// Validates every `anytime:` policy in the resolved graphs.
+    ///
+    /// Runs at configuration-resolution time, the first point where both the
+    /// resolved graphs and `runtime.rate_target_hz` are known:
+    ///
+    /// 1. node-local bounds and ranges (see [`AnytimeConfig`]);
+    /// 2. `anytime:` is only supported on regular tasks — refinement needs both
+    ///    an input and an output;
+    /// 3. fit the period: a *foreground* anytime task in a rate-limited config
+    ///    must set a time bound (`time_budget_ms` or `max_age_ms`), and the
+    ///    worst-case window — `min` of the ones set — must be smaller than the
+    ///    loop period. Background nodes and configs without a rate target skip
+    ///    this check.
+    pub fn validate_anytime_configs(&self) -> CuResult<()> {
+        let rate_target_hz = self.runtime.as_ref().and_then(|r| r.rate_target_hz);
+        match &self.graphs {
+            Simple(graph) => validate_anytime_graph(graph, rate_target_hz),
+            Missions(graphs) => {
+                for graph in graphs.values() {
+                    validate_anytime_graph(graph, rate_target_hz)?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+/// Checks every `anytime:` node of one graph: local bounds, regular-task kind,
+/// and the foreground fit-the-period rule (see [`CuConfig::validate_anytime_configs`]).
+fn validate_anytime_graph(graph: &CuGraph, rate_target_hz: Option<u64>) -> CuResult<()> {
+    for (node_id, node) in graph.get_all_nodes() {
+        let Some(anytime) = node.anytime() else {
+            continue;
+        };
+        anytime.validate(&node.id)?;
+
+        let kind = resolve_task_kind_for_id(graph, node_id)?;
+        if kind != TaskKind::Regular {
+            return Err(CuError::from(format!(
+                "Task '{}' is declared with an anytime: policy but resolves to kind '{}'. Anytime refinement needs both an input and an output, so it is only supported on regular tasks.",
+                node.id,
+                kind.as_str()
+            )));
+        }
+
+        // Background placement: the refinement window runs on a worker thread
+        // and may exceed the copperlist period — that is the point of it.
+        if node.is_background() {
+            continue;
+        }
+        let Some(rate_target_hz) = rate_target_hz else {
+            continue;
+        };
+        let window_ms = match (anytime.time_budget_ms, anytime.max_age_ms) {
+            (Some(budget), Some(age)) => budget.min(age),
+            (Some(budget), None) => budget,
+            (None, Some(age)) => age,
+            (None, None) => {
+                return Err(CuError::from(format!(
+                    "Task '{}' is a foreground anytime task in a rate-limited config and needs a time bound: set anytime.time_budget_ms or anytime.max_age_ms. max_refines alone gives the runtime no time quantity to check against the {rate_target_hz} Hz loop period, and one slow quantum would silently overrun it.",
+                    node.id
+                )));
+            }
+        };
+        let period_ms = 1_000.0 / rate_target_hz as f64;
+        if window_ms >= period_ms {
+            return Err(CuError::from(format!(
+                "Task '{}': the worst-case anytime window ({window_ms} ms) does not fit within the {rate_target_hz} Hz loop period ({period_ms} ms) with headroom for the rest of the copperlist. Tighten the time bound, lower runtime.rate_target_hz, or run the task with background: true.",
+                node.id
+            )));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(feature = "std")]
@@ -4185,6 +4399,7 @@ fn config_representation_to_config(representation: CuConfigRepresentation) -> Cu
 
     cuconfig.validate_logging_config()?;
     cuconfig.validate_runtime_config()?;
+    cuconfig.validate_anytime_configs()?;
 
     Ok(cuconfig)
 }
@@ -5427,6 +5642,265 @@ mod tests {
             err.to_string().contains("exceeds the supported maximum"),
             "unexpected error: {err}"
         );
+    }
+
+    /// Builds a src -> any -> sink config with the given `anytime:` policy body,
+    /// extra node attributes (e.g. `, background: true`) and top-level extras
+    /// (e.g. `runtime: (rate_target_hz: 100),`).
+    fn anytime_config_txt(policy: &str, node_attrs: &str, top_level: &str) -> String {
+        format!(
+            r#"(
+            tasks: [
+                (id: "src", type: "a"),
+                (id: "any", type: "b", anytime: ({policy}){node_attrs}),
+                (id: "sink", type: "c"),
+            ],
+            cnx: [
+                (src: "src", dst: "any", msg: "msg::A"),
+                (src: "any", dst: "sink", msg: "msg::B"),
+            ],
+            {top_level}
+        )"#
+        )
+    }
+
+    fn expect_anytime_error(txt: String, expected: &str) {
+        let err = read_configuration_str(txt, None).expect_err("anytime config should fail");
+        assert!(
+            err.to_string().contains(expected),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_anytime_node_parses_and_exposes_policy() {
+        let txt = anytime_config_txt(
+            r#"
+                time_budget_ms: 8.0,
+                max_age_ms: 100.0,
+                quality_target: 0.95,
+                quality_floor: 0.30,
+                max_refines: 64,
+                max_stall: 4,
+            "#,
+            ", background: true",
+            "",
+        );
+        let config = read_configuration_str(txt, None).unwrap();
+        let graph = config.get_graph(None).unwrap();
+        let node = graph
+            .get_node(graph.get_node_id_by_name("any").unwrap())
+            .unwrap();
+        assert!(node.is_anytime());
+        assert!(node.is_background());
+        assert_eq!(
+            node.anytime().unwrap(),
+            &AnytimeConfig {
+                time_budget_ms: Some(8.0),
+                max_age_ms: Some(100.0),
+                quality_target: Some(0.95),
+                quality_floor: Some(0.30),
+                max_refines: Some(64),
+                max_stall: Some(4),
+            }
+        );
+        let src = graph
+            .get_node(graph.get_node_id_by_name("src").unwrap())
+            .unwrap();
+        assert!(!src.is_anytime());
+        assert!(src.anytime().is_none());
+    }
+
+    #[test]
+    fn test_anytime_typical_perception_config_is_accepted() {
+        // The doc's typical two-field config: max_age_ms is the hard bound.
+        let txt = anytime_config_txt("max_age_ms: 100.0, quality_target: 0.9", "", "");
+        let config = read_configuration_str(txt, None).unwrap();
+        let graph = config.get_graph(None).unwrap();
+        let node = graph
+            .get_node(graph.get_node_id_by_name("any").unwrap())
+            .unwrap();
+        let anytime = node.anytime().unwrap();
+        assert_eq!(anytime.max_age_ms, Some(100.0));
+        assert_eq!(anytime.quality_target, Some(0.9));
+        assert_eq!(anytime.time_budget_ms, None);
+    }
+
+    #[test]
+    fn test_anytime_survives_serialize_roundtrip() {
+        let txt = anytime_config_txt("time_budget_ms: 8.0, max_refines: 64", "", "");
+        let config = CuConfig::deserialize_ron(&txt).unwrap();
+        let serialized = config.serialize_ron().unwrap();
+        let deserialized = CuConfig::deserialize_ron(&serialized).unwrap();
+        let graph = deserialized.get_graph(None).unwrap();
+        let node = graph
+            .get_node(graph.get_node_id_by_name("any").unwrap())
+            .unwrap();
+        assert_eq!(
+            node.anytime().unwrap(),
+            &AnytimeConfig {
+                time_budget_ms: Some(8.0),
+                max_age_ms: None,
+                quality_target: None,
+                quality_floor: None,
+                max_refines: Some(64),
+                max_stall: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_anytime_rejects_missing_hard_bound() {
+        expect_anytime_error(
+            anytime_config_txt("quality_target: 0.9, max_stall: 4", "", ""),
+            "needs at least one hard bound",
+        );
+    }
+
+    #[test]
+    fn test_anytime_rejects_nan_quality_target() {
+        expect_anytime_error(
+            anytime_config_txt("time_budget_ms: 8.0, quality_target: NaN", "", ""),
+            "anytime.quality_target must be within (0.0, 1.0]",
+        );
+    }
+
+    #[test]
+    fn test_anytime_rejects_non_positive_times() {
+        expect_anytime_error(
+            anytime_config_txt("time_budget_ms: 0.0", "", ""),
+            "anytime.time_budget_ms must be a positive",
+        );
+        expect_anytime_error(
+            anytime_config_txt("max_age_ms: -5.0", "", ""),
+            "anytime.max_age_ms must be a positive",
+        );
+        expect_anytime_error(
+            anytime_config_txt("time_budget_ms: inf", "", ""),
+            "anytime.time_budget_ms must be a positive",
+        );
+    }
+
+    #[test]
+    fn test_anytime_rejects_zero_counts() {
+        expect_anytime_error(
+            anytime_config_txt("max_refines: 0", "", ""),
+            "anytime.max_refines must be at least 1",
+        );
+        expect_anytime_error(
+            anytime_config_txt("max_refines: 4, max_stall: 0", "", ""),
+            "anytime.max_stall must be at least 1",
+        );
+    }
+
+    #[test]
+    fn test_anytime_quality_ranges() {
+        // target is (0.0, 1.0]: exactly 1.0 is fine, 0.0 is not.
+        let ok = anytime_config_txt("time_budget_ms: 8.0, quality_target: 1.0", "", "");
+        read_configuration_str(ok, None).unwrap();
+        expect_anytime_error(
+            anytime_config_txt("time_budget_ms: 8.0, quality_target: 0.0", "", ""),
+            "anytime.quality_target must be within (0.0, 1.0]",
+        );
+        // floor is (0.0, 1.0): exactly 1.0 is rejected.
+        expect_anytime_error(
+            anytime_config_txt("time_budget_ms: 8.0, quality_floor: 1.0", "", ""),
+            "anytime.quality_floor must be within (0.0, 1.0)",
+        );
+    }
+
+    #[test]
+    fn test_anytime_rejects_floor_above_target() {
+        expect_anytime_error(
+            anytime_config_txt(
+                "time_budget_ms: 8.0, quality_target: 0.5, quality_floor: 0.8",
+                "",
+                "",
+            ),
+            "must not exceed anytime.quality_target",
+        );
+    }
+
+    #[test]
+    fn test_anytime_rejects_sources_and_sinks() {
+        let on_source = r#"(
+            tasks: [
+                (id: "src", type: "a", anytime: (max_refines: 4)),
+                (id: "sink", type: "b"),
+            ],
+            cnx: [(src: "src", dst: "sink", msg: "msg::A")],
+        )"#;
+        expect_anytime_error(on_source.to_string(), "only supported on regular tasks");
+
+        let on_sink = r#"(
+            tasks: [
+                (id: "src", type: "a"),
+                (id: "sink", type: "b", anytime: (max_refines: 4)),
+            ],
+            cnx: [(src: "src", dst: "sink", msg: "msg::A")],
+        )"#;
+        expect_anytime_error(on_sink.to_string(), "only supported on regular tasks");
+    }
+
+    #[test]
+    fn test_anytime_foreground_rate_limited_needs_time_bound() {
+        expect_anytime_error(
+            anytime_config_txt("max_refines: 64", "", "runtime: (rate_target_hz: 100),"),
+            "needs a time bound",
+        );
+    }
+
+    #[test]
+    fn test_anytime_foreground_window_must_fit_period() {
+        expect_anytime_error(
+            anytime_config_txt(
+                "time_budget_ms: 12.0",
+                "",
+                "runtime: (rate_target_hz: 100),",
+            ),
+            "does not fit within",
+        );
+        // The worst-case window is min(time_budget_ms, max_age_ms).
+        let ok = anytime_config_txt(
+            "time_budget_ms: 20.0, max_age_ms: 5.0",
+            "",
+            "runtime: (rate_target_hz: 100),",
+        );
+        read_configuration_str(ok, None).unwrap();
+    }
+
+    #[test]
+    fn test_anytime_background_exempt_from_fit_check() {
+        let txt = anytime_config_txt(
+            "max_refines: 64",
+            ", background: true",
+            "runtime: (rate_target_hz: 100),",
+        );
+        read_configuration_str(txt, None).unwrap();
+    }
+
+    #[test]
+    fn test_anytime_no_rate_target_accepts_refines_only_foreground() {
+        let txt = anytime_config_txt("max_refines: 64", "", "");
+        read_configuration_str(txt, None).unwrap();
+    }
+
+    #[test]
+    fn test_anytime_validated_per_mission_graph() {
+        let txt = r#"(
+            missions: [(id: "A"), (id: "B")],
+            tasks: [
+                (id: "src", type: "a"),
+                (id: "any", type: "b", missions: ["B"], anytime: (quality_target: 0.9)),
+                (id: "sink", type: "c"),
+            ],
+            cnx: [
+                (src: "src", dst: "any", msg: "msg::A", missions: ["B"]),
+                (src: "any", dst: "sink", msg: "msg::B", missions: ["B"]),
+                (src: "src", dst: "sink", msg: "msg::A", missions: ["A"]),
+            ],
+        )"#;
+        expect_anytime_error(txt.to_string(), "needs at least one hard bound");
     }
 
     #[test]

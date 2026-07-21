@@ -98,6 +98,13 @@ impl cu29_runtime::config::TaskKind
 pub fn cu29_runtime::config::TaskKind::as_str(&self) -> &'static str
 impl core::convert::From<cu29_runtime::config::TaskKind> for cu29_runtime::curuntime::CuTaskType
 pub fn cu29_runtime::curuntime::CuTaskType::from(value: cu29_runtime::config::TaskKind) -> Self
+pub struct cu29_runtime::config::AnytimeConfig
+pub cu29_runtime::config::AnytimeConfig::max_age_ms: core::option::Option<f64>
+pub cu29_runtime::config::AnytimeConfig::max_refines: core::option::Option<u32>
+pub cu29_runtime::config::AnytimeConfig::max_stall: core::option::Option<u32>
+pub cu29_runtime::config::AnytimeConfig::quality_floor: core::option::Option<f32>
+pub cu29_runtime::config::AnytimeConfig::quality_target: core::option::Option<f32>
+pub cu29_runtime::config::AnytimeConfig::time_budget_ms: core::option::Option<f64>
 pub struct cu29_runtime::config::BridgeConfig
 pub cu29_runtime::config::BridgeConfig::channels: alloc::vec::Vec<cu29_runtime::config::BridgeChannelConfigRepresentation>
 pub cu29_runtime::config::BridgeConfig::config: core::option::Option<cu29_runtime::config::ComponentConfig>
@@ -153,6 +160,7 @@ pub fn cu29_runtime::config::CuConfig::new_mission_type() -> Self
 pub fn cu29_runtime::config::CuConfig::new_simple_type() -> Self
 pub fn cu29_runtime::config::CuConfig::render(&self, output: &mut dyn std::io::Write, mission_id: core::option::Option<&str>) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::config::CuConfig::serialize_ron(&self) -> cu29_traits::CuResult<alloc::string::String>
+pub fn cu29_runtime::config::CuConfig::validate_anytime_configs(&self) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::config::CuConfig::validate_logging_config(&self) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::config::CuConfig::validate_runtime_config(&self) -> cu29_traits::CuResult<()>
 impl core::default::Default for cu29_runtime::config::CuConfig
@@ -259,6 +267,7 @@ pub cu29_runtime::config::MultiCopperSubsystemConfig::id: alloc::string::String
 pub struct cu29_runtime::config::Node
 impl cu29_runtime::config::Node
 pub fn cu29_runtime::config::Node::add_nc_output(&mut self, msg_type: &str, order: usize)
+pub fn cu29_runtime::config::Node::anytime(&self) -> core::option::Option<&cu29_runtime::config::AnytimeConfig>
 pub fn cu29_runtime::config::Node::background_pool(&self) -> &str
 pub fn cu29_runtime::config::Node::get_declared_task_kind(&self) -> core::option::Option<cu29_runtime::config::TaskKind>
 pub fn cu29_runtime::config::Node::get_flavor(&self) -> cu29_runtime::config::Flavor
@@ -269,6 +278,7 @@ pub fn cu29_runtime::config::Node::get_param<T>(&self, key: &str) -> core::resul
 pub fn cu29_runtime::config::Node::get_resources(&self) -> core::option::Option<&hashbrown::map::HashMap<alloc::string::String, alloc::string::String>>
 pub fn cu29_runtime::config::Node::get_type(&self) -> &str
 pub fn cu29_runtime::config::Node::handle_content_policy(&self) -> cu29_runtime::config::HandleContent
+pub fn cu29_runtime::config::Node::is_anytime(&self) -> bool
 pub fn cu29_runtime::config::Node::is_background(&self) -> bool
 pub fn cu29_runtime::config::Node::is_logging_enabled(&self) -> bool
 pub fn cu29_runtime::config::Node::is_run_in_sim(&self) -> bool
