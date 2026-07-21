@@ -658,9 +658,7 @@ pub enum BackgroundConfig {
 
 /// Refinement policy for an anytime node (`anytime:` on a task).
 ///
-/// Checked between quanta; compiled into the generated refinement loop (no
-/// runtime `Option`-field interpretation). Every field is optional, but
-/// validation requires at least one hard bound among `time_budget_ms`,
+/// Every field is optional, but validation requires at least one - `time_budget_ms`,
 /// `max_age_ms` and `max_refines`; see [`CuConfig::validate_anytime_configs`].
 ///
 /// Two orthogonal axes organize the fields:
@@ -674,19 +672,15 @@ pub enum BackgroundConfig {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct AnytimeConfig {
     /// Wall-clock window for one job in milliseconds, measured from the start of
-    /// the base computation and checked *between* refinement quanta. It can
-    /// suppress every refinement, never the base computation. In background
-    /// placement it is measured on the worker thread and may exceed the
+    /// the base computation and checked *between* refinement quanta.
+    /// In background placement it is measured on the worker thread and may exceed the
     /// copperlist period.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub time_budget_ms: Option<f64>,
 
-    /// Validity horizon in milliseconds, measured from the input's earliest time
+    /// Validity deadline in milliseconds, measured from the input's earliest time
     /// of validity (Tov): past this data age a result is no longer worth starting
-    /// or waiting for. If the horizon has already passed when the job would
-    /// start, the whole job is skipped; once it passes between quanta, the
-    /// best-so-far output is published. If no input carries a Tov, the anchor
-    /// falls back to job start and this degrades to a budget.
+    /// or waiting for.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_age_ms: Option<f64>,
 
@@ -3014,14 +3008,11 @@ impl CuConfig {
     /// 1. node-local bounds and ranges (see [`AnytimeConfig`]);
     /// 2. `anytime:` is only supported on regular tasks — refinement needs both
     ///    an input and an output;
-    /// 3. a *foreground* anytime task in a rate-limited config needs a time
-    ///    bound (`time_budget_ms` or `max_age_ms`) whose worst case fits within
-    ///    the loop period with headroom for the rest of the copperlist.
-    ///    `max_refines` as the only hard bound is accepted for background nodes
-    ///    and configs without a rate target, but not here: with no time quantity
-    ///    there is nothing to check and one slow quantum would silently overrun
-    ///    the period. Background nodes are exempt from the fit check — their
-    ///    budget is measured on the worker thread.
+    /// 3. fit the period: a *foreground* anytime task in a rate-limited config
+    ///    must set a time bound (`time_budget_ms` or `max_age_ms`), and the
+    ///    worst-case window — `min` of the ones set — must be smaller than the
+    ///    loop period. Background nodes and configs without a rate target skip
+    ///    this check.
     pub fn validate_anytime_configs(&self) -> CuResult<()> {
         let rate_target_hz = self.runtime.as_ref().and_then(|r| r.rate_target_hz);
         match &self.graphs {
