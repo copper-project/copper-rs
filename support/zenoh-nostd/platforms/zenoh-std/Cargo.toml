@@ -13,7 +13,14 @@ version = "0.1.0"
 [dependencies]
 zenoh-nostd = { version = "0.1.0", path = "../../crates/zenoh-nostd" }
 
-wtx = { version = "0.39.0", default-features = false, features = ["std", "web-socket-handshake", "web-socket", "async-net", "optimization", "futures-lite"] }
+wtx = { version = "0.39.0", default-features = false, features = [
+  "std",
+  "web-socket-handshake",
+  "web-socket",
+  "async-net",
+  "optimization",
+  "futures-lite",
+] }
 async-net = { version = "2.0.0" }
 socket2 = { version = "0.6.0", features = ["all"] }
 futures-lite = { version = "2.6.1" }

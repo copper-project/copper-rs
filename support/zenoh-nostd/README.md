@@ -70,9 +70,9 @@ async fn entry(spawner: embassy_executor::Spawner) -> zenoh::ZResult<()> {
 
     let ke = zenoh::keyexpr::new("demo/example")?;
     let payload = b"Hello, from no-std!";
-    
+
     session.put(ke, payload).finish().await?;
-    
+
     Ok(())
 }
 ```

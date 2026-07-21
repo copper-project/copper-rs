@@ -2,12 +2,10 @@
 runner = "espflash flash --monitor --chip esp32s3 --log-format defmt"
 
 [env]
-DEFMT_LOG="info"
+DEFMT_LOG = "info"
 
 [build]
-rustflags = [
-  "-C", "link-arg=-nostartfiles",
-]
+rustflags = ["-C", "link-arg=-nostartfiles"]
 
 target = "xtensa-esp32s3-none-elf"
 
