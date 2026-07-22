@@ -20,6 +20,14 @@ macro_rules! ros_type_name {
 pub trait RosMsgAdapter<'a>: Sized {
     type Output: Serialize + for<'b> From<&'b Self>;
 
+    /// Validates that this payload can be represented by the selected ROS compatibility profile.
+    ///
+    /// Most adapters are always representable. Payloads with distro-specific restrictions can
+    /// override this hook so bridges fail before conversion and serialization.
+    fn validate_ros_message(&self) -> Result<(), String> {
+        Ok(())
+    }
+
     /// The namespace of the ROS message, such as "std_msgs" or "sensor_msgs".
     fn namespace() -> &'a str;
 
@@ -42,6 +50,11 @@ pub trait RosMsgAdapter<'a>: Sized {
 pub trait RosBridgeAdapter: Sized + 'static {
     type RosMessage: Serialize + DeserializeOwned + 'static;
 
+    /// Validates that this payload can be represented by the selected ROS compatibility profile.
+    fn validate_ros_message(&self) -> Result<(), String> {
+        Ok(())
+    }
+
     fn namespace() -> &'static str;
 
     fn type_name() -> &'static str {
@@ -62,6 +75,10 @@ where
     <T as TryFrom<<T as RosMsgAdapter<'static>>::Output>>::Error: Display,
 {
     type RosMessage = <T as RosMsgAdapter<'static>>::Output;
+
+    fn validate_ros_message(&self) -> Result<(), String> {
+        <T as RosMsgAdapter<'static>>::validate_ros_message(self)
+    }
 
     fn namespace() -> &'static str {
         <T as RosMsgAdapter<'static>>::namespace()

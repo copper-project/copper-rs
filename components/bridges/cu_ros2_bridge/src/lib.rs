@@ -88,6 +88,9 @@ where
             type_name::<Payload>()
         ))
     })?;
+    payload
+        .validate_ros_message()
+        .map_err(|e| CuError::from(format!("Ros2Bridge: Payload is not ROS-compatible: {e}")))?;
     let ros_payload = payload.to_ros_message();
     cdr::serialize::<_, _, CdrLe>(&ros_payload, Infinite)
         .map_err(|e| CuError::new_with_cause("Ros2Bridge: Failed to serialize payload", e))
@@ -708,6 +711,43 @@ fn cu_error_map(msg: &str) -> impl FnOnce(ZenohError) -> CuError + '_ {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cu29::bincode::{Decode, Encode};
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Clone, Debug, Default, Encode, Decode, Serialize, Deserialize, Reflect)]
+    struct RejectingPayload;
+
+    impl RosBridgeAdapter for RejectingPayload {
+        type RosMessage = i32;
+
+        fn validate_ros_message(&self) -> Result<(), String> {
+            Err("test payload rejected".to_string())
+        }
+
+        fn namespace() -> &'static str {
+            "test_msgs"
+        }
+
+        fn type_hash() -> &'static str {
+            "test_hash"
+        }
+
+        fn to_ros_message(&self) -> Self::RosMessage {
+            0
+        }
+
+        fn from_ros_message(_msg: Self::RosMessage) -> Result<Self, String> {
+            Ok(Self)
+        }
+    }
+
+    #[test]
+    fn payload_validation_failure_stops_encoding() {
+        let error = encode_payload_with::<RejectingPayload>(&RejectingPayload)
+            .expect_err("validation failure should stop ROS encoding");
+
+        assert!(error.to_string().contains("test payload rejected"));
+    }
 
     #[test]
     fn scalar_payload_cdr_roundtrip_uses_little_endian_encapsulation() {

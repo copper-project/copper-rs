@@ -58,6 +58,14 @@ cu_ros2_bridge::register_ros2_payload::<MyPayload>();
 Copper -> ROS 2 samples are serialized as OMG CDR little-endian (`CdrLe`). Inbound samples use
 `cdr::deserialize`, which reads the CDR encapsulation header and accepts either endianness.
 
+### ROS 2 Humble image compatibility
+
+Enable the `humble` feature when bridging `cu_sensor_payloads::CuImage<Vec<u8>>` to ROS 2 Humble.
+The image adapter uses Humble's legacy `yuv422_yuy2` and `yuv422` encoding names for YUYV and
+UYVY buffers. Humble's `cv_bridge` cannot consume NV12, NV21, I420, or YV12 images, so the bridge
+rejects those formats instead of publishing an image that tools such as `rqt_image_view` cannot
+decode. Convert those images to a supported packed format before sending them through the bridge.
+
 ## ROS 2 interop test
 
 The `ros2_interop` test auto-detects a sourced ROS 2 environment. If `ros2`, `std_msgs`, or
