@@ -19,9 +19,9 @@ path = "src/main.rs"
 [dependencies]
 cu29 = { workspace = true }
 cu-linux-resources = { workspace = true }
-cu-msp-bridge = { path = "../../components/bridges/cu_msp_bridge", version = "1.0.0" }
-cu-msp-lib = { path = "../../components/libs/cu_msp_lib", version = "1.0.0" }
-cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "1.0.0" }
+cu-msp-bridge = { path = "../../components/bridges/cu_msp_bridge", version = "1.0.1" }
+cu-msp-lib = { path = "../../components/libs/cu_msp_lib", version = "1.0.1" }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "1.0.1" }
 nix = { workspace = true, default-features = false, features = ["term", "fs"] }
 serde = { workspace = true }
 ctrlc = { workspace = true }

@@ -31,10 +31,10 @@ required-features = ["safety-ids"]
 path = "src/lib.rs"
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version = "1.0.0", default-features = false }
+cu29 = { path = "../../../core/cu29", version = "1.0.1", default-features = false }
 
 [dev-dependencies]
-cu-logmon = { path = "../cu_logmon", version = "1.0.0", default-features = false, features = [
+cu-logmon = { path = "../cu_logmon", version = "1.0.1", default-features = false, features = [
   "std",
 ] }
 

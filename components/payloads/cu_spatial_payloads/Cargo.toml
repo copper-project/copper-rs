@@ -19,7 +19,7 @@ environments = ["host", "embedded"]
 
 [dependencies]
 bincode = { workspace = true }
-cu29 = { path = "../../../core/cu29", version = "1.0.0", default-features = false, features = [
+cu29 = { path = "../../../core/cu29", version = "1.0.1", default-features = false, features = [
   "units",
 ] }
 serde = { workspace = true }
