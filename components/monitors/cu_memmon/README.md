@@ -31,7 +31,7 @@ is installed but no scopes have fired (the derive-side feature is off).
 Coverage in this release: task `start` / `stop` / `preprocess` / `process` /
 `postprocess`; bridge `start` / `stop` / `preprocess` / `process` (rx and tx) /
 `postprocess`; and the parallel-rt counterparts of both. So all monitored
-lifecycle steps from cu29 1.0.0 are observed.
+lifecycle steps from cu29 1.0.1 are observed.
 
 ## Usage
 

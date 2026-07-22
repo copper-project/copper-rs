@@ -177,7 +177,7 @@ cu29-soa-derive = { path = "core/cu29_soa_derive", default-features = false, ver
 cu29-traits = { path = "core/cu29_traits", default-features = false, version = "1.0.1" }
 cu29-unifiedlog = { path = "core/cu29_unifiedlog", default-features = false, features = [
   "compact",
-], version = "1.0.0" }
+], version = "1.0.1" }
 cu29-units = { path = "core/cu29_units", version = "1.0.1" }
 cu29-value = { path = "core/cu29_value", default-features = false, version = "1.0.1" }
 cu-ffv1-codec = { path = "components/codecs/cu_ffv1_codec", version = "1.0.1" }
