@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-workspace_root="$(git rev-parse --show-toplevel)"
+workspace_root="${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel)}"
 projects_root="$(dirname "$workspace_root")"
 
 checkout_dependency() {
@@ -11,8 +11,8 @@ checkout_dependency() {
     local destination="${projects_root}/${directory}"
 
     if [[ -d "${destination}/.git" ]]; then
-        git -C "$destination" checkout "$branch"
-        git -C "$destination" pull --ff-only origin "$branch"
+        git -c safe.directory="$destination" -C "$destination" checkout "$branch"
+        git -c safe.directory="$destination" -C "$destination" pull --ff-only origin "$branch"
     else
         git clone --depth 1 --branch "$branch" \
             "https://github.com/copper-project/${repository}.git" \
