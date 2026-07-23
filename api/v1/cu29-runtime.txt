@@ -875,6 +875,18 @@ pub fn cu29_runtime::cutask::CuSrcTask::register_debug_state_types(registry: &mu
 pub fn cu29_runtime::cutask::CuSrcTask::start(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask::CuSrcTask::stop(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask::CuSrcTask::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
+impl<O: cu29_runtime::cutask::CuMsgPayload + 'static> cu29_runtime::cutask::CuSrcTask for cu29_runtime::simulation::CuSimSrcTaskPack<O>
+pub type cu29_runtime::simulation::CuSimSrcTaskPack<O>::Output<'m> = O
+pub type cu29_runtime::simulation::CuSimSrcTaskPack<O>::Resources<'r> = ()
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::debug_state_type_path() -> &'static str where Self: cu29_runtime::reflect::TypePath + core::marker::Sized
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::new(_config: core::option::Option<&cu29_runtime::config::ComponentConfig>, _resources: Self::Resources) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::postprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::preprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::process(&mut self, _ctx: &cu29_runtime::context::CuContext, _new_msg: &mut Self::Output) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::register_debug_state_types(registry: &mut cu29_runtime::reflect::TypeRegistry) where Self: cu29_runtime::reflect::GetTypeRegistration + core::marker::Sized
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::start(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::stop(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
 impl<T, O> cu29_runtime::cutask::CuSrcTask for cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O> where T: for<'m> cu29_runtime::cutask::CuSrcTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
 pub type cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::Output<'m> = <T as cu29_runtime::cutask::CuSrcTask>::Output
 pub type cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::Resources<'r> = cu29_runtime::cuasynctask::CuAsyncSrcTaskResources<'r, T>
@@ -931,6 +943,9 @@ pub fn cu29_runtime::cutask::Freezable::thaw<D: cu_bincode::de::Decoder>(&mut se
 impl<I> cu29_runtime::cutask::Freezable for cu29_runtime::simulation::CuSimSinkTask<I>
 pub fn cu29_runtime::simulation::CuSimSinkTask<I>::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 pub fn cu29_runtime::simulation::CuSimSinkTask<I>::thaw<D: cu_bincode::de::Decoder>(&mut self, _decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
+impl<O> cu29_runtime::cutask::Freezable for cu29_runtime::simulation::CuSimSrcTaskPack<O>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::thaw<D: cu_bincode::de::Decoder>(&mut self, decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
 impl<T, O> cu29_runtime::cutask::Freezable for cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O> where T: for<'m> cu29_runtime::cutask::CuSrcTask<Output<'m> = cu29_runtime::cutask::CuMsg<O>> + core::marker::Send + 'static, O: cu29_runtime::cutask::CuMsgPayload + core::marker::Send + 'static
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 pub fn cu29_runtime::cuasynctask::CuAsyncSrcTask<T, O>::thaw<D: cu_bincode::de::Decoder>(&mut self, decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
@@ -1786,6 +1801,12 @@ pub fn cu29_runtime::simulation::CuSimSinkTask<I>::module_path() -> core::option
 pub fn cu29_runtime::simulation::CuSimSinkTask<I>::short_type_path() -> &'static str
 pub fn cu29_runtime::simulation::CuSimSinkTask<I>::type_ident() -> core::option::Option<&'static str>
 pub fn cu29_runtime::simulation::CuSimSinkTask<I>::type_path() -> &'static str
+impl<O: 'static> cu29_runtime::reflect::TypePath for cu29_runtime::simulation::CuSimSrcTaskPack<O>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::crate_name() -> core::option::Option<&'static str>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::module_path() -> core::option::Option<&'static str>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::short_type_path() -> &'static str
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::type_ident() -> core::option::Option<&'static str>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::type_path() -> &'static str
 impl<T, M> cu29_runtime::reflect::TypePath for cu29_runtime::cutask::CuStampedData<T, M> where T: cu29_runtime::cutask::CuMsgPayload, M: cu29_traits::Metadata
 pub fn cu29_runtime::cutask::CuStampedData<T, M>::crate_name() -> core::option::Option<&'static str>
 pub fn cu29_runtime::cutask::CuStampedData<T, M>::module_path() -> core::option::Option<&'static str>
@@ -2000,6 +2021,30 @@ pub fn cu29_runtime::simulation::CuSimSrcTask<T>::with_debug_state<R>(&self, f: 
 impl<T> cu29_runtime::cutask::Freezable for cu29_runtime::simulation::CuSimSrcTask<T>
 pub fn cu29_runtime::simulation::CuSimSrcTask<T>::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
 pub fn cu29_runtime::simulation::CuSimSrcTask<T>::thaw<D: cu_bincode::de::Decoder>(&mut self, decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
+pub struct cu29_runtime::simulation::CuSimSrcTaskPack<O>
+impl<O> cu29_runtime::simulation::CuSimSrcTaskPack<O>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::sim_tick(&mut self)
+impl<O: 'static> cu29_runtime::reflect::TypePath for cu29_runtime::simulation::CuSimSrcTaskPack<O>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::crate_name() -> core::option::Option<&'static str>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::module_path() -> core::option::Option<&'static str>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::short_type_path() -> &'static str
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::type_ident() -> core::option::Option<&'static str>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::type_path() -> &'static str
+impl<O: cu29_runtime::cutask::CuMsgPayload + 'static> cu29_runtime::cutask::CuSrcTask for cu29_runtime::simulation::CuSimSrcTaskPack<O>
+pub type cu29_runtime::simulation::CuSimSrcTaskPack<O>::Output<'m> = O
+pub type cu29_runtime::simulation::CuSimSrcTaskPack<O>::Resources<'r> = ()
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::debug_state_type_path() -> &'static str where Self: cu29_runtime::reflect::TypePath + core::marker::Sized
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::new(_config: core::option::Option<&cu29_runtime::config::ComponentConfig>, _resources: Self::Resources) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::postprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::preprocess(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::process(&mut self, _ctx: &cu29_runtime::context::CuContext, _new_msg: &mut Self::Output) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::register_debug_state_types(registry: &mut cu29_runtime::reflect::TypeRegistry) where Self: cu29_runtime::reflect::GetTypeRegistration + core::marker::Sized
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::start(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::stop(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
+impl<O> cu29_runtime::cutask::Freezable for cu29_runtime::simulation::CuSimSrcTaskPack<O>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::freeze<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
+pub fn cu29_runtime::simulation::CuSimSrcTaskPack<O>::thaw<D: cu_bincode::de::Decoder>(&mut self, decoder: &mut D) -> core::result::Result<(), cu_bincode::error::DecodeError>
 pub trait cu29_runtime::simulation::CuSimSinkInput
 pub type cu29_runtime::simulation::CuSimSinkInput::With<'m> where Self: 'm: cu29_runtime::cutask::CuMsgPack
 impl<T1: cu29_runtime::cutask::CuMsgPayload, T2: cu29_runtime::cutask::CuMsgPayload, T3: cu29_runtime::cutask::CuMsgPayload, T4: cu29_runtime::cutask::CuMsgPayload, T5: cu29_runtime::cutask::CuMsgPayload, T6: cu29_runtime::cutask::CuMsgPayload, T7: cu29_runtime::cutask::CuMsgPayload, T8: cu29_runtime::cutask::CuMsgPayload, T9: cu29_runtime::cutask::CuMsgPayload, T10: cu29_runtime::cutask::CuMsgPayload, T11: cu29_runtime::cutask::CuMsgPayload, T12: cu29_runtime::cutask::CuMsgPayload> cu29_runtime::simulation::CuSimSinkInput for (T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12)

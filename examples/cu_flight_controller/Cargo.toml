@@ -31,31 +31,31 @@ bevy_ecs = { version = "0.19.0", default-features = false }
 ## Flight controller components
 
 ### Hardware
-cu-bdshot = { path = "../../components/bridges/cu_bdshot", version = "1.0.0", default-features = false, optional = true }
-cu-crsf = { path = "../../components/bridges/cu_crsf", version = "1.0.0", default-features = false, features = [
+cu-bdshot = { path = "../../components/bridges/cu_bdshot", version = "1.0.1", default-features = false, optional = true }
+cu-crsf = { path = "../../components/bridges/cu_crsf", version = "1.0.1", default-features = false, features = [
   "alloc",
 ], optional = true }
-cu-msp-bridge = { path = "../../components/bridges/cu_msp_bridge", version = "1.0.0", default-features = false, features = [
+cu-msp-bridge = { path = "../../components/bridges/cu_msp_bridge", version = "1.0.1", default-features = false, features = [
   "alloc",
 ], optional = true }
-cu-msp-lib = { path = "../../components/libs/cu_msp_lib", version = "1.0.0", default-features = false, features = [
+cu-msp-lib = { path = "../../components/libs/cu_msp_lib", version = "1.0.1", default-features = false, features = [
   "bincode",
 ] }
 cu-sdlogger = { workspace = true, optional = true }
 cu-micoairh743 = { workspace = true, optional = true }
-cu-logmon = { path = "../../components/monitors/cu_logmon", version = "1.0.0", default-features = false, features = [
+cu-logmon = { path = "../../components/monitors/cu_logmon", version = "1.0.1", default-features = false, features = [
   "color_log",
 ], optional = true }
-cu-ahrs = { path = "../../components/tasks/cu_ahrs", version = "1.0.0", default-features = false, optional = true }
-cu-bmi088 = { path = "../../components/sources/cu_bmi088", version = "1.0.0", default-features = false, optional = true }
-cu-dps310 = { path = "../../components/sources/cu_dps310", version = "1.0.0", default-features = false, optional = true }
-cu-ist8310 = { path = "../../components/sources/cu_ist8310", version = "1.0.0", default-features = false, optional = true }
-cu-gnss-payloads = { path = "../../components/payloads/cu_gnss_payloads", version = "1.0.0", default-features = false, optional = true }
-cu-gnss-ublox = { path = "../../components/sources/cu_gnss_ublox", version = "1.0.0", default-features = false, optional = true }
+cu-ahrs = { path = "../../components/tasks/cu_ahrs", version = "1.0.1", default-features = false, optional = true }
+cu-bmi088 = { path = "../../components/sources/cu_bmi088", version = "1.0.1", default-features = false, optional = true }
+cu-dps310 = { path = "../../components/sources/cu_dps310", version = "1.0.1", default-features = false, optional = true }
+cu-ist8310 = { path = "../../components/sources/cu_ist8310", version = "1.0.1", default-features = false, optional = true }
+cu-gnss-payloads = { path = "../../components/payloads/cu_gnss_payloads", version = "1.0.1", default-features = false, optional = true }
+cu-gnss-ublox = { path = "../../components/sources/cu_gnss_ublox", version = "1.0.1", default-features = false, optional = true }
 
 ### Algos
-cu-pid = { path = "../../components/tasks/cu_pid", version = "1.0.0", default-features = false }
-cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", version = "1.0.0", default-features = false }
+cu-pid = { path = "../../components/tasks/cu_pid", version = "1.0.1", default-features = false }
+cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", version = "1.0.1", default-features = false }
 bincode = { workspace = true }
 serde = { workspace = true }
 spin = { workspace = true }
@@ -81,7 +81,7 @@ avian3d = { workspace = true, default-features = false, features = [
   "parry-f32",
 ], optional = true }
 
-cu29 = { path = "../../core/cu29", version = "1.0.0", default-features = false, features = [
+cu29 = { path = "../../core/cu29", version = "1.0.1", default-features = false, features = [
   "log-level-debug",
   "units",
 ], optional = true }
@@ -107,7 +107,7 @@ cortex-m = { workspace = true, features = [
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 cu-consolemon = { workspace = true, optional = true }
 cu-bevymon = { workspace = true, optional = true }
-cu-memmon = { path = "../../components/monitors/cu_memmon", version = "1.0.0", default-features = false, features = [
+cu-memmon = { path = "../../components/monitors/cu_memmon", version = "1.0.1", default-features = false, features = [
   "std",
   "memory_monitoring",
 ], optional = true }
@@ -144,7 +144,7 @@ evdev = { version = "0.13.2", optional = true }
 winit = { version = "=0.30.13", default-features = false, optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "1.0.0", default-features = false, optional = true }
+cu-bevymon = { path = "../../components/monitors/cu_bevymon", version = "1.0.1", default-features = false, optional = true }
 bevy = { workspace = true, default-features = false, features = [
   "default_font",
   "bevy_render",

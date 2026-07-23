@@ -4075,14 +4075,19 @@ fn validate_multi_config_representation(
 /// Read a copper configuration from a file.
 #[cfg(feature = "std")]
 pub fn read_configuration(config_filename: &str) -> CuResult<CuConfig> {
-    let config_content = read_to_string(config_filename).map_err(|e| {
+    let config_content = read_configuration_content(config_filename)?;
+    read_configuration_str(config_content, Some(config_filename))
+}
+
+#[cfg(feature = "std")]
+fn read_configuration_content(config_filename: &str) -> CuResult<String> {
+    read_to_string(config_filename).map_err(|e| {
         CuError::from(format!(
             "Failed to read configuration file: {:?}",
-            &config_filename
+            config_filename
         ))
         .add_cause(e.to_string().as_str())
-    })?;
-    read_configuration_str(config_content, Some(config_filename))
+    })
 }
 
 /// Read a copper configuration from a String.
@@ -4119,12 +4124,12 @@ fn config_representation_to_config(representation: CuConfigRepresentation) -> Cu
 }
 
 #[allow(unused_variables)]
-pub fn read_configuration_str(
-    config_content: String,
+fn resolve_configuration_representation(
+    config_content: &str,
     file_path: Option<&str>,
-) -> CuResult<CuConfig> {
+) -> CuResult<CuConfigRepresentation> {
     // Parse the configuration string
-    let representation = parse_config_string(&config_content)?;
+    let representation = parse_config_string(config_content)?;
 
     // Process includes and generate a merged configuration if a file path is provided
     // includes are only available with std.
@@ -4134,6 +4139,33 @@ pub fn read_configuration_str(
     } else {
         representation
     };
+
+    Ok(representation)
+}
+
+/// Read a Copper configuration and return the include-expanded RON used by proc-macro bundling.
+///
+/// The RON is serialized from the ordered source representation before it is lowered into
+/// mission graph hash maps. This keeps task ordering aligned with generated runtime code.
+#[cfg(feature = "std")]
+#[doc(hidden)]
+#[allow(dead_code)]
+pub fn read_configuration_with_resolved_ron(config_filename: &str) -> CuResult<(CuConfig, String)> {
+    let config_content = read_configuration_content(config_filename)?;
+    let representation =
+        resolve_configuration_representation(&config_content, Some(config_filename))?;
+    let resolved_ron = CuConfig::get_options()
+        .to_string_pretty(&representation, ron::ser::PrettyConfig::default())
+        .map_err(|e| CuError::from(format!("Error serializing configuration: {e}")))?;
+    let config = config_representation_to_config(representation)?;
+    Ok((config, resolved_ron))
+}
+
+pub fn read_configuration_str(
+    config_content: String,
+    file_path: Option<&str>,
+) -> CuResult<CuConfig> {
+    let representation = resolve_configuration_representation(&config_content, file_path)?;
 
     // Convert the representation to a CuConfig and validate
     config_representation_to_config(representation)
@@ -4146,7 +4178,7 @@ pub fn read_multi_configuration(config_filename: &str) -> CuResult<MultiCopperCo
     let config_content = read_to_string(config_filename).map_err(|e| {
         CuError::from(format!(
             "Failed to read multi-Copper configuration file: {:?}",
-            &config_filename
+            config_filename
         ))
         .add_cause(e.to_string().as_str())
     })?;

@@ -15,7 +15,7 @@ publish = false
 [dependencies]
 cu29 = { workspace = true }
 serde = { workspace = true }
-cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "1.0.0" }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "1.0.1" }
 
 [package.metadata.cargo-shear]
 ignored = ["serde"]

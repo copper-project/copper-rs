@@ -18,8 +18,8 @@ domains = ["sensor/imu"]
 environments = ["host", "embedded"]
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version = "1.0.0", default-features = false }
-cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "1.0.0", default-features = false }
+cu29 = { path = "../../../core/cu29", version = "1.0.1", default-features = false }
+cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "1.0.1", default-features = false }
 serde = { workspace = true }
 embedded-hal = { version = "0.2.7", default-features = false }
 

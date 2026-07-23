@@ -19,6 +19,6 @@ path = "src/main.rs"
 
 [dependencies]
 cu29 = { workspace = true }
-cu-peer-range-accumulator = { path = "../../components/tasks/cu_peer_range_accumulator", version = "1.0.0" }
-cu-peer-triangulation = { path = "../../components/tasks/cu_peer_triangulation", version = "1.0.0" }
+cu-peer-range-accumulator = { path = "../../components/tasks/cu_peer_range_accumulator", version = "1.0.1" }
+cu-peer-triangulation = { path = "../../components/tasks/cu_peer_triangulation", version = "1.0.1" }
 cu-sensor-payloads = { workspace = true }

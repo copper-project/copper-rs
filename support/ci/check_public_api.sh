@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="${ROOT:-$(git rev-parse --show-toplevel)}"
 BASELINE_DIR="${ROOT}/api/v1"
 UPDATE="${UPDATE_PUBLIC_API:-0}"
-PUBLIC_API_TOOLCHAIN="${PUBLIC_API_TOOLCHAIN:-nightly}"
+PUBLIC_API_TOOLCHAIN="${PUBLIC_API_TOOLCHAIN:-nightly-2026-06-25}"
 CARGO_PUBLIC_API=(cargo "+${PUBLIC_API_TOOLCHAIN}" public-api)
 
 CRATES=(

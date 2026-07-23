@@ -33,3 +33,6 @@ cdr = { version = "0.2.4" }
 
 [features]
 humble = ["cu-ros2-payloads/humble"]
+
+[dev-dependencies]
+bincode = { workspace = true }

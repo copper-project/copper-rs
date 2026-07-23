@@ -4,6 +4,8 @@ set -euo pipefail
 changed=()
 
 while IFS= read -r -d '' f; do
+    [[ -f "$f" ]] || continue
+
     tmp=$(mktemp)
     cp "$f" "$tmp"
     fmtron --input "$tmp" >/dev/null

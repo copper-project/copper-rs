@@ -1,7 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{ToTokens, format_ident, quote};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::fs::read_to_string;
 use std::path::Path;
 use std::process::Command;
 use syn::Fields::{Named, Unnamed};
@@ -17,7 +16,7 @@ use crate::utils::{config_id_to_bridge_const, config_id_to_enum, config_id_to_st
 use cu29_runtime::config::CuConfig;
 use cu29_runtime::config::{
     BridgeChannelConfigRepresentation, ConfigGraphs, CuGraph, Flavor, HandleContent, Node, NodeId,
-    RT_POOL, ResourceBundleConfig, read_configuration,
+    RT_POOL, ResourceBundleConfig, read_configuration, read_configuration_with_resolved_ron,
 };
 use cu29_runtime::curuntime::{
     CuExecutionLoop, CuExecutionStep, CuExecutionUnit, CuTaskType, compute_runtime_plan,
@@ -5413,6 +5412,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::simulation::SimOverride;
                 use cu29::simulation::CuTaskCallbackState;
                 use cu29::simulation::CuSimSrcTask;
+                use cu29::simulation::CuSimSrcTaskPack;
                 use cu29::simulation::CuSimSinkTask;
                 use cu29::simulation::CuSimBridge;
                 use cu29::prelude::app::CuSimApplication;
@@ -5744,30 +5744,29 @@ fn resolve_runtime_config_with_root(
                 args.config_path
             ))
         })?;
-        let bundled_local_config_content = read_to_string(&subsystem.config_path).map_err(|e| {
-            CuError::from(format!(
-                "Failed to read bundled local configuration for subsystem '{subsystem_id}' from '{}'.",
-                subsystem.config_path
-            ))
-            .add_cause(e.to_string().as_str())
-        })?;
+        // Bundle the include-expanded source representation. Serializing the lowered
+        // mission graphs would lose the source task order because missions use hash maps.
+        let (local_config, bundled_local_config_content) =
+            read_configuration_with_resolved_ron(&subsystem.config_path).map_err(|e| {
+                CuError::from(format!(
+                    "Failed to prepare bundled local configuration for subsystem '{subsystem_id}' from '{}'.",
+                    subsystem.config_path
+                ))
+                .add_cause(e.to_string().as_str())
+            })?;
 
         Ok(ResolvedRuntimeConfig {
-            local_config: subsystem.config.clone(),
+            local_config,
             bundled_local_config_content,
             subsystem_id: Some(subsystem_id.to_string()),
             subsystem_code: subsystem.subsystem_code,
         })
     } else {
+        let (local_config, bundled_local_config_content) =
+            read_configuration_with_resolved_ron(filename.as_str())?;
         Ok(ResolvedRuntimeConfig {
-            local_config: read_configuration(filename.as_str())?,
-            bundled_local_config_content: read_to_string(&filename).map_err(|e| {
-                CuError::from(format!(
-                    "Could not read the configuration file '{}'.",
-                    args.config_path
-                ))
-                .add_cause(e.to_string().as_str())
-            })?,
+            local_config,
+            bundled_local_config_content,
             subsystem_id: None,
             subsystem_code: 0,
         })
@@ -9350,12 +9349,23 @@ fn runtime_task_type_for_index(
     match task_specs.cutypes[index] {
         CuTaskType::Source => {
             if sim_mode && !run_in_sim {
-                let msg_type = graph.get_node_output_msg_type(task_id.as_str()).unwrap_or_else(|| {
-                    panic!(
-                        "CuSrcTask {task_id} should have an outgoing connection with a valid output msg type"
-                    )
-                });
-                let sim_task_name = format!("CuSimSrcTask<{msg_type}>");
+                let msg_types = graph
+                    .get_node_output_msg_types(task_id.as_str())
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "CuSrcTask {task_id} should have an outgoing connection with a valid output msg type"
+                        )
+                    });
+                let sim_task_name = if msg_types.len() == 1 {
+                    format!("CuSimSrcTask<{}>", msg_types[0])
+                } else {
+                    let messages = msg_types
+                        .iter()
+                        .map(|msg_type| format!("cu29::prelude::CuMsg<{msg_type}>"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!("CuSimSrcTaskPack<({messages})>")
+                };
                 parse_str(sim_task_name.as_str()).unwrap_or_else(|_| {
                     panic!("Could not build the placeholder for simulation: {sim_task_name}")
                 })
@@ -9702,6 +9712,7 @@ mod tests {
 
         let root = unique_test_dir("multi_runtime_resolve");
         let alpha_config = root.join("alpha.ron");
+        let beta_base_config = root.join("beta_base.ron");
         let beta_config = root.join("beta.ron");
         let network_config = root.join("multi.ron");
 
@@ -9720,11 +9731,23 @@ mod tests {
 "#,
         );
         write_file(
-            &beta_config,
+            &beta_base_config,
             r#"
 (
     tasks: [
         (id: "src", type: "BetaSource", run_in_sim: true),
+    ],
+)
+"#,
+        );
+        write_file(
+            &beta_config,
+            r#"
+(
+    includes: [
+        (path: "beta_base.ron", params: {}),
+    ],
+    tasks: [
         (id: "sink", type: "BetaSink", run_in_sim: true),
     ],
     cnx: [
@@ -9764,6 +9787,149 @@ mod tests {
             .expect("resolved local config graph");
         assert!(graph.get_node_id_by_name("src").is_some());
         assert!(resolved.bundled_local_config_content.contains("BetaSource"));
+        assert!(
+            !resolved
+                .bundled_local_config_content
+                .contains("beta_base.ron")
+        );
+
+        let bundled = CuConfig::deserialize_ron(&resolved.bundled_local_config_content)
+            .expect("bundled subsystem config must not need include path resolution");
+        let bundled_graph = bundled.get_graph(None).expect("bundled graph");
+        assert!(bundled_graph.get_node_id_by_name("src").is_some());
+        assert!(bundled_graph.get_node_id_by_name("sink").is_some());
+        assert_eq!(bundled_graph.edge_count(), 1);
+    }
+
+    #[test]
+    fn resolve_runtime_config_bundles_resolved_single_config() {
+        use super::*;
+
+        let root = unique_test_dir("single_runtime_resolve");
+        let base_config = root.join("base.ron");
+        let app_config = root.join("app.ron");
+
+        write_file(
+            &base_config,
+            r#"
+(
+    tasks: [
+        (id: "src", type: "IncludedSource", run_in_sim: true),
+    ],
+)
+"#,
+        );
+        write_file(
+            &app_config,
+            r#"
+(
+    includes: [
+        (path: "base.ron", params: {}),
+    ],
+    tasks: [
+        (id: "sink", type: "LocalSink", run_in_sim: true),
+    ],
+    cnx: [
+        (src: "src", dst: "sink", msg: "u32"),
+    ],
+)
+"#,
+        );
+
+        let args = CopperRuntimeArgs {
+            config_path: "app.ron".to_string(),
+            subsystem_id: None,
+            sim_mode: false,
+            ignore_resources: false,
+        };
+
+        let resolved =
+            resolve_runtime_config_with_root(&args, &root).expect("resolve single runtime config");
+
+        assert!(
+            resolved
+                .bundled_local_config_content
+                .contains("IncludedSource")
+        );
+        assert!(!resolved.bundled_local_config_content.contains("base.ron"));
+        let bundled = CuConfig::deserialize_ron(&resolved.bundled_local_config_content)
+            .expect("bundled config must not need include path resolution");
+        let graph = bundled.get_graph(None).expect("bundled graph");
+        assert!(graph.get_node_id_by_name("src").is_some());
+        assert!(graph.get_node_id_by_name("sink").is_some());
+        assert_eq!(graph.edge_count(), 1);
+    }
+
+    #[test]
+    fn resolve_runtime_config_preserves_mission_task_order_in_bundle() {
+        use super::*;
+
+        let root = unique_test_dir("mission_runtime_resolve_order");
+        let base_config = root.join("base.ron");
+        let app_config = root.join("app.ron");
+
+        write_file(
+            &base_config,
+            r#"
+(
+    tasks: [
+        (id: "c", type: "TaskC", missions: ["one", "two"]),
+    ],
+)
+"#,
+        );
+        write_file(
+            &app_config,
+            r#"
+(
+    includes: [
+        (path: "base.ron", params: {}),
+    ],
+    missions: [
+        (id: "one"),
+        (id: "two"),
+    ],
+    tasks: [
+        (id: "a", type: "TaskA", missions: ["two"]),
+        (id: "b", type: "TaskB", missions: ["one"]),
+    ],
+)
+"#,
+        );
+
+        let args = CopperRuntimeArgs {
+            config_path: "app.ron".to_string(),
+            subsystem_id: None,
+            sim_mode: false,
+            ignore_resources: false,
+        };
+        let resolved = resolve_runtime_config_with_root(&args, &root)
+            .expect("resolve mission config with includes");
+        let bundled = CuConfig::deserialize_ron(&resolved.bundled_local_config_content)
+            .expect("bundled mission config");
+
+        let task_order = |config: &CuConfig, mission: &str| {
+            config
+                .get_graph(Some(mission))
+                .expect("mission graph")
+                .get_all_nodes()
+                .into_iter()
+                .filter(|(_, node)| node.get_flavor() == Flavor::Task)
+                .map(|(_, node)| node.get_id())
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(task_order(&resolved.local_config, "one"), vec!["b", "c"]);
+        assert_eq!(task_order(&resolved.local_config, "two"), vec!["a", "c"]);
+        assert_eq!(
+            task_order(&bundled, "one"),
+            task_order(&resolved.local_config, "one")
+        );
+        assert_eq!(
+            task_order(&bundled, "two"),
+            task_order(&resolved.local_config, "two")
+        );
+        assert!(!resolved.bundled_local_config_content.contains("base.ron"));
     }
 
     #[test]

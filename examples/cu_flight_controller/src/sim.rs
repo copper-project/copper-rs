@@ -1330,11 +1330,14 @@ fn apply_joystick_frame(frame: &RcFrame, rc_input: &mut SimRcInput) {
     rc_input.yaw = (-frame.yaw).clamp(-1.0, 1.0);
     rc_input.throttle = frame.throttle.clamp(0.0, 1.0);
 
+    let armed_from_axis = frame.arm.map(|arm| arm > 0.5);
     let armed_from_switch = arm_from_switches(frame);
-    let arm_uses_sa_axis = armed_from_switch.is_none();
-    rc_input.armed = armed_from_switch.unwrap_or(frame.knob_sa > 0.5);
+    let arm_uses_aux_axis = armed_from_axis.is_some() || armed_from_switch.is_none();
+    rc_input.armed = armed_from_axis
+        .or(armed_from_switch)
+        .unwrap_or(frame.knob_sa > 0.5);
 
-    let mode_axis = if arm_uses_sa_axis {
+    let mode_axis = if arm_uses_aux_axis {
         frame.knob_sb
     } else {
         frame.knob_sa
@@ -1802,13 +1805,15 @@ fn connected_help_values(view_label: &str, joystick: &RcJoystick) -> String {
     let arm_switch = find_arm_switch(&frame);
     let device_name = joystick.device_name();
 
-    let arm_line = if let Some(sw) = arm_switch {
+    let arm_line = if frame.arm.is_some() {
+        format!("arm {} > 0.5", axis_or_unmapped(axes.arm.as_ref()))
+    } else if let Some(sw) = arm_switch {
         format!("switch {}", sw.name)
     } else {
         format!("knob_sa {} > 0.5", axis_or_unmapped(axes.knob_sa.as_ref()))
     };
 
-    let mode_line = if arm_switch.is_some() {
+    let mode_line = if frame.arm.is_none() && arm_switch.is_some() {
         format!(
             "knob_sa {} (3-pos)",
             axis_or_unmapped(axes.knob_sa.as_ref())
@@ -2372,6 +2377,28 @@ mod tests {
             err.abs() < 1.0e-3,
             "heading mismatch: actual={actual} expected={expected} err={err}"
         );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn elrs_arm_axis_takes_precedence_over_hid_buttons() {
+        let mut rc_input = SimRcInput::default();
+        let mut frame = RcFrame {
+            arm: Some(1.0),
+            switches: vec![rc_joystick::SwitchState {
+                name: "ch9".to_string(),
+                on: false,
+            }],
+            ..RcFrame::default()
+        };
+
+        apply_joystick_frame(&frame, &mut rc_input);
+        assert!(rc_input.armed);
+
+        frame.arm = Some(-1.0);
+        frame.switches[0].on = true;
+        apply_joystick_frame(&frame, &mut rc_input);
+        assert!(!rc_input.armed);
     }
 
     #[cfg(not(target_arch = "wasm32"))]
