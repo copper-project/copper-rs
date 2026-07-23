@@ -10,9 +10,12 @@
 /catalog/generated/catalog.md
 /catalog/generated/index.html
 /support/cu_catalog/target/
+/benchmarks/dora_caterpillar/target/
+/benchmarks/horus_caterpillar/target/
 
 *.copper
 *.mcap
+*.profraw
 cu29_logstats.json
 Cargo.lock
 /examples/**/logs/*

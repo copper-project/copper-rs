@@ -23,9 +23,21 @@ checkout_dependency() {
 checkout_dependency zed master zed
 checkout_dependency cu-vitfly main cu-vitfly
 
-if rg -n --glob Cargo.toml \
-    '(^|[,{[:space:]])(git|branch|rev|tag)[[:space:]]*=|\[patch\."https?://' \
-    "$workspace_root" "${projects_root}/zed" "${projects_root}/cu-vitfly"; then
-    echo "Cargo Git dependencies are forbidden; use local path dependencies." >&2
+# Copper-owned development dependencies must use the sibling checkouts above.
+# Third-party release pins remain remote.
+found_copper_git_dependency=0
+for repository_root in \
+    "$workspace_root" \
+    "${projects_root}/zed" \
+    "${projects_root}/cu-vitfly"; do
+    if git -c safe.directory="$repository_root" -C "$repository_root" grep -nE \
+        'git[[:space:]]*=[[:space:]]*"https://github\.com/copper-project/|\[patch\."https://github\.com/copper-project/' \
+        -- Cargo.toml ':(glob)**/Cargo.toml'; then
+        found_copper_git_dependency=1
+    fi
+done
+
+if [[ "$found_copper_git_dependency" -ne 0 ]]; then
+    echo "Copper-owned Cargo Git dependencies are forbidden; use local path dependencies." >&2
     exit 1
 fi
