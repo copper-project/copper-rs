@@ -14,8 +14,8 @@ repository.workspace = true
 publish = false
 [dependencies]
 cu29 = { workspace = true }
-cu-caterpillar = { path = "../cu_caterpillar", version = "1.0.0" }
-cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio", version = "1.0.0" }
+cu-caterpillar = { path = "../cu_caterpillar", version = "1.1.0-dev" }
+cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio", version = "1.1.0-dev" }
 serde = { workspace = true }
 
 [package.metadata.cargo-shear]

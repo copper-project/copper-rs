@@ -24,7 +24,7 @@ velodyne-lidar = { version = "0.3.0", features = ["pcap", "parallel"] }
 # remove `nmea` for `velodyne-lidar` since it has conflicts for `dep:serde_with` with `dep:zenoh-config`
 
 [dev-dependencies]
-cu-udp-inject = { path = "../../testing/cu_udp_inject", version = "1.0.0" }
+cu-udp-inject = { path = "../../testing/cu_udp_inject", version = "1.1.0-dev" }
 
 [build-dependencies]
 cu29-build = { workspace = true }

@@ -1,6 +1,6 @@
 [package]
 name = "cu-rp2350-skeleton"
-version = "1.0.0"
+version = "1.1.0-dev"
 edition = "2024"
 rust-version = "1.95"
 description = "A minimal example of using Copper on a RP2350 microcontroller"
@@ -20,14 +20,14 @@ default-run = "main"
 
 publish = false
 [dependencies]
-cu29 = { path = "../../core/cu29", version = "1.0.0", default-features = false, features = [
+cu29 = { path = "../../core/cu29", version = "1.1.0-dev", default-features = false, features = [
   "log-level-debug",
   "textlogs",
 ] } # pick it up directly to build it no-std
 cu-sdlogger = { path = "../../components/libs/cu_sdlogger", default-features = false, features = [
   "eh1",
-], optional = true, version = "1.0.0" }
-cu29-export = { path = "../../core/cu29_export", version = "1.0.0", optional = true, default-features = false }
+], optional = true, version = "1.1.0-dev" }
+cu29-export = { path = "../../core/cu29_export", version = "1.1.0-dev", optional = true, default-features = false }
 bincode = { version = "2.0", default-features = false, features = ["derive"] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 
@@ -103,4 +103,4 @@ firmware = [
 host = ["dep:cu29-export", "cu29/std", "bincode/std", "serde/std"]
 
 [build-dependencies]
-cu29-build = { path = "../../core/cu29_build", version = "1.0.0" }
+cu29-build = { path = "../../core/cu29_build", version = "1.1.0-dev" }
