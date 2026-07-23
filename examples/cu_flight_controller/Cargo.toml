@@ -64,7 +64,7 @@ libm = { version = "0.2", default-features = false }
 # --> host dependencies <--
 
 ## End-to-end compute dependencies
-cu-zed = { git = "https://github.com/copper-project/zed.git", branch = "master", optional = true }
+cu-zed = { path = "../../../zed/components/sources/cu_zed", optional = true }
 cu-zenoh-bridge = { path = "../../components/bridges/cu_zenoh_bridge", version = "1.1.0-dev", optional = true }
 cu-ratelimit = { path = "../../components/tasks/cu_ratelimit", version = "1.1.0-dev", optional = true }
 
@@ -110,7 +110,7 @@ cortex-m = { workspace = true, features = [
 ], optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-cu-vitfly = { git = "https://github.com/copper-project/cu-vitfly.git", default-features = false, optional = true }
+cu-vitfly = { path = "../../../cu-vitfly", default-features = false, optional = true }
 cu-consolemon = { workspace = true, optional = true }
 cu-bevymon = { workspace = true, optional = true }
 cu-memmon = { path = "../../components/monitors/cu_memmon", version = "1.1.0-dev", default-features = false, features = [
