@@ -64,7 +64,7 @@ libm = { version = "0.2", default-features = false }
 # --> host dependencies <--
 
 ## End-to-end compute dependencies
-cu-zed = { version = "1.0.0", optional = true }
+cu-zed = { git = "https://github.com/copper-project/zed.git", branch = "master", optional = true }
 cu-zenoh-bridge = { path = "../../components/bridges/cu_zenoh_bridge", version = "1.1.0-dev", optional = true }
 cu-ratelimit = { path = "../../components/tasks/cu_ratelimit", version = "1.1.0-dev", optional = true }
 

@@ -184,6 +184,12 @@ cu-transform = { path = "components/libs/cu_transform" }
 cu29 = { path = "core/cu29" }
 soft_ratatui = { path = "vendor/soft_ratatui" }
 
+[patch."https://github.com/copper-project/copper-rs.git"]
+cu-ahrs = { path = "components/tasks/cu_ahrs" }
+cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads" }
+cu-transform = { path = "components/libs/cu_transform" }
+cu29 = { path = "core/cu29" }
+
 [workspace.package]
 version = "1.1.0-dev"
 authors = ["Guillaume Binet <gbin@gootz.net>"]
