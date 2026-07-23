@@ -19,7 +19,7 @@ path = "src/main.rs"
 
 [dependencies]
 cu29 = { workspace = true, features = ["reflect"] }
-cu-python-task = { path = "../../components/tasks/cu_python_task", version = "1.0.0" }
+cu-python-task = { path = "../../components/tasks/cu_python_task", version = "1.1.0-dev" }
 serde = { workspace = true }
 bincode = { workspace = true }
 tempfile = { workspace = true }

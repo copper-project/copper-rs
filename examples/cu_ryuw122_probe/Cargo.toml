@@ -22,7 +22,7 @@ path = "src/main.rs"
 clap = { workspace = true }
 ctrlc = { workspace = true }
 cu-linux-resources = { workspace = true }
-cu-ryuw122 = { path = "../../components/sources/cu_ryuw122", version = "1.0.0" }
+cu-ryuw122 = { path = "../../components/sources/cu_ryuw122", version = "1.1.0-dev" }
 cu-sensor-payloads = { workspace = true }
 cu29 = { workspace = true }
 serialport = { workspace = true }

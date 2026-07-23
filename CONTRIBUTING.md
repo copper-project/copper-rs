@@ -171,6 +171,9 @@ cargo nextest run --workspace --all-targets --features mock,image,kornia,python,
 
 ## Contribution Workflow
 
+Release branching, versioning, tagging, and backporting conventions are
+documented in [RELEASING.md](RELEASING.md).
+
 1. **Fork the Repository**: Create your own fork of the copper-rs repository on GitHub.
 
 2. **Clone Your Fork**: Clone your forked repository to your local machine.
