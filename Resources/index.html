@@ -722,6 +722,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#cuda-pools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CUDA pools
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#examples" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1306,6 +1317,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#cuda-pools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CUDA pools
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#examples" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1422,6 +1444,23 @@ impl ResourceBundle for BoardBundle {
 }
 </code></pre>
 <p>Embedded note: if you need to build resources from handles created in <code>main</code> (for example, HAL peripherals), use <code>ResourceManager::add_bundle_prebuilt</code> to insert them during runtime setup.</p>
+<h2 id="cuda-pools">CUDA pools<a class="headerlink" href="#cuda-pools" title="Permanent link">&para;</a></h2>
+<p><strong>Since v1.1:</strong> On supported host platforms, enable <code>cu29</code>'s <code>cuda</code> feature to expose
+<code>cu29::pool::cuda::{CuCudaPool, CudaSliceWrapper}</code>. <code>CuCudaPool::new</code> returns a
+registered <code>Arc</code> pool whose <code>acquire</code> method produces
+<code>CuHandle&lt;CudaSliceWrapper&lt;T&gt;&gt;</code>. Tasks can forward clones of that handle through
+the graph and use <code>as_cuda_slice</code> or <code>as_cuda_slice_mut</code> when calling CUDA-aware
+libraries.</p>
+<p>A resource bundle is the preferred place to create the shared <code>CudaContext</code> and
+device pool. Give each task its own stream unless stream sharing is an explicit
+part of the component contract. Cudarc tracks accesses to a <code>CudaSlice</code> across
+streams, so consumers should obtain pointers through its <code>DevicePtr</code> and
+<code>DevicePtrMut</code> APIs rather than caching raw pointers across task boundaries.</p>
+<p>CUDA allocations are process-local and do not currently have a replayable wire
+representation. Configure nodes producing CUDA handles with
+<code>logging: (handle_content: none)</code> so Copper records message metadata without
+trying to serialize device contents. Use <code>CuHandle::storage_id</code> as a diagnostic
+when validating that adjacent tasks forwarded the same allocation.</p>
 <h2 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h2>
 <ul>
 <li><code>https://github.com/copper-project/copper-rs/tree/master/examples/cu_resources_test</code> - End-to-end example with owned vs shared resources, mission-specific bundles, and bridge bindings.</li>

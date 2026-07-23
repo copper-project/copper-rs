@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#v100-2026-07-02" class="md-skip">
+        <a href="#v101-2026-07-22" class="md-skip">
           Skip to content
         </a>
       
@@ -1030,43 +1030,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#final-v1-surface-polish" class="md-nav__link">
+  <a href="#fixes" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Final V1 Surface Polish
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#replay-debugging-and-observability" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Replay, Debugging, And Observability
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#new-robotics-components-and-examples" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        New Robotics Components And Examples
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#fixes-since-rc2" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Fixes Since rc2
+        Fixes
       
     </span>
   </a>
@@ -1293,43 +1260,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#final-v1-surface-polish" class="md-nav__link">
+  <a href="#fixes" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Final V1 Surface Polish
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#replay-debugging-and-observability" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Replay, Debugging, And Observability
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#new-robotics-components-and-examples" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        New Robotics Components And Examples
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#fixes-since-rc2" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Fixes Since rc2
+        Fixes
       
     </span>
   </a>
@@ -1356,8 +1290,23 @@
   
 
 
-<h1 id="v100-2026-07-02">v1.0.0 - 2026-07-02<a class="headerlink" href="#v100-2026-07-02" title="Permanent link">&para;</a></h1>
+<h1 id="v101-2026-07-22">v1.0.1 - 2026-07-22<a class="headerlink" href="#v101-2026-07-22" title="Permanent link">&para;</a></h1>
 <h2 id="high-level">High Level<a class="headerlink" href="#high-level" title="Permanent link">&para;</a></h2>
+<p>Copper v1.0.1 fixes simulation code generation, resolved configuration bundling, rate limiting, ROS 2 Humble image interoperability, ExpressLRS BLE channel mapping, RON formatting, dependency resolution, and Rust 1.97 lint compatibility.</p>
+<h2 id="fixes">Fixes<a class="headerlink" href="#fixes" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Multi-output sources can be excluded cleanly in simulation.</strong> Generated simulation placeholders now preserve the complete output tuple instead of selecting only one output type, allowing <code>run_in_sim: false</code> on multi-output sources. (<a href="https://github.com/copper-project/copper-rs/pull/1187">#1187</a>)</li>
+<li><strong>ExpressLRS BLE arming follows current EdgeTX channel mappings.</strong> The flight-controller simulator reads CH5 as the arm axis and CH6 as the flight-mode axis, while retaining the existing HID-button fallback. (<a href="https://github.com/copper-project/copper-rs/pull/1192">#1192</a>)</li>
+<li><strong>RON formatting tolerates deleted tracked files.</strong> Local formatting and CI skip <code>.ron</code> paths that Git still reports after the file has been removed. (<a href="https://github.com/copper-project/copper-rs/pull/1193">#1193</a>)</li>
+<li><strong>Bundled runtime configuration preserves the resolved source order.</strong> Include-expanded standalone and multi-Copper configurations are embedded without losing mission task order, keeping generated task configuration aligned with runtime code. (<a href="https://github.com/copper-project/copper-rs/pull/1196">#1196</a>)</li>
+<li><strong>Fresh dependency resolution respects Copper's Rust 1.95 MSRV.</strong> Cargo resolver 3 now prefers dependency releases compatible with the workspace <code>rust-version</code>. (<a href="https://github.com/copper-project/copper-rs/pull/1198">#1198</a>)</li>
+<li><strong><code>CuRateLimit</code> no longer drifts off phase.</strong> The limiter preserves the requested output phase across mismatched input cadences, propagates input timestamps, rejects invalid rates, and re-anchors after replay or simulation time rewinds. (<a href="https://github.com/copper-project/copper-rs/pull/1201">#1201</a>)</li>
+<li><strong>ROS 2 Humble image encoding is compatible with <code>cv_bridge</code>.</strong> The Humble feature uses the legacy YUV422 encoding names, accepts common packed pixel aliases, and rejects planar formats Humble cannot consume before publishing them. (<a href="https://github.com/copper-project/copper-rs/pull/1218">#1218</a>)</li>
+<li><strong>Release checks are stable on current toolchains.</strong> Rust 1.97 Clippy findings are fixed and public API snapshots use a pinned nightly. (<a href="https://github.com/copper-project/copper-rs/pull/1182">#1182</a>, <a href="https://github.com/copper-project/copper-rs/pull/1183">#1183</a>)</li>
+</ul>
+<!-- v1.0.1 links -->
+<h1 id="v100-2026-07-02">v1.0.0 - 2026-07-02<a class="headerlink" href="#v100-2026-07-02" title="Permanent link">&para;</a></h1>
+<h2 id="high-level_1">High Level<a class="headerlink" href="#high-level_1" title="Permanent link">&para;</a></h2>
 <p>Copper V1 is the point where the application-facing runtime contract becomes something users can build on without expecting churn every few weeks. Since <code>v1.0.0-rc2</code>, the work is less about adding another big graph abstraction and more about finishing the last user-facing edges before calling the surface stable: named execution pools, handle-aware logging, clearer resource ownership, typed debug state, structured log access from the debugger, memory-allocation monitoring, and a much stronger replay/keyframe story.</p>
 <p>The theme is: V1 should feel static, inspectable, and replayable in the places robotics users actually care about. A control pipeline can declare which work is background, a camera pipeline can avoid logging frames nobody consumed, a debugger can inspect task state as typed data instead of opaque JSON, a CI job can fail if realtime lifecycle code allocates, and replay should preserve real task/controller state instead of replaying through conveniently empty defaults.</p>
 <h2 id="final-v1-surface-polish">Final V1 Surface Polish<a class="headerlink" href="#final-v1-surface-polish" title="Permanent link">&para;</a></h2>
@@ -1496,7 +1445,7 @@
 </ul>
 <!-- v1.0.0 links -->
 <h1 id="v100-rc2-2026-05-10">v1.0.0-rc2 - 2026-05-10<a class="headerlink" href="#v100-rc2-2026-05-10" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_1">High Level<a class="headerlink" href="#high-level_1" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_2">High Level<a class="headerlink" href="#high-level_2" title="Permanent link">&para;</a></h2>
 <p>Between <code>v1.0.0-rc1</code> on 2026-05-01 and <code>v1.0.0-rc2</code> on 2026-05-10, Copper did not add a new major runtime capability or open up a new configuration surface. This release is mostly about stabilizing the V1 contract: keeping the public API delta intentionally small, fixing places where the runtime contract was still looser than the implementation, and making one more part of the engineering process explicit and reviewable.</p>
 <p>If <code>rc1</code> was the point where Copper declared its first V1 application-facing surface, <code>rc2</code> is the point where we start sanding down the edges on that surface instead of expanding it.</p>
 <h2 id="api-changes-since-rc1">API Changes Since rc1<a class="headerlink" href="#api-changes-since-rc1" title="Permanent link">&para;</a></h2>
@@ -1533,7 +1482,7 @@
 </ul>
 <!-- v1.0.0-rc2 PR links -->
 <h1 id="v100-rc1-2026-05-01">v1.0.0-rc1 - 2026-05-01<a class="headerlink" href="#v100-rc1-2026-05-01" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_2">High Level<a class="headerlink" href="#high-level_2" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_3">High Level<a class="headerlink" href="#high-level_3" title="Permanent link">&para;</a></h2>
 <p>The <code>0.x</code> line is where Copper explored the runtime design space we did not want to lock down too early: deterministic replay, bridges, missions/subsystems, distributed replay, optional parallel execution, structured logging, and remote debugging. <code>v1.0.0-rc1</code> uses that experience to define the first stable application-facing contract and to begin specifying, more clearly, the responsibilities of Copper-the-compiler/codegen and Copper-the-runtime.</p>
 <p>A second theme of the release is typed logging codecs. Copper can now choose a log compression strategy based on payload semantics instead of forcing every robotics workload through one generic representation. The first shipped examples are lossless image codecs, but the mechanism is meant for a wider class of robotics data such as floating-point matrices, skinny matrices, point clouds, and other structured payloads.</p>
 <h2 id="breaking-api-changes">Breaking API Changes<a class="headerlink" href="#breaking-api-changes" title="Permanent link">&para;</a></h2>
@@ -1634,7 +1583,7 @@
 </ul>
 <!-- v1.0.0-rc1 PR links -->
 <h1 id="v0150-2026-03-31">v0.15.0 - 2026-03-31<a class="headerlink" href="#v0150-2026-03-31" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_3">High Level<a class="headerlink" href="#high-level_3" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_4">High Level<a class="headerlink" href="#high-level_4" title="Permanent link">&para;</a></h2>
 <p>This release pushes Copper from "deterministic robot runtime" toward "deterministic distributed runtime". The big theme is distributed Copper: not only as a multi-subsystem configuration (sub components of one robot) but also we can now describe a whole swarm-style deployment by stamping out many robot instances with per-instance overrides, and replay the resulting distributed logs deterministically.</p>
 <p>On the runtime side, CopperList I/O can now move off the main loop, an optional parallel execution path keeps multiple CopperLists in flight boosting the general throughput while preserving ordered commit/logging, and host-side cadence control got a tighter high-precision limiter if you need to controlled minimum tick generation.</p>
 <h2 id="breaking-api-changes_1">Breaking API Changes<a class="headerlink" href="#breaking-api-changes_1" title="Permanent link">&para;</a></h2>
@@ -1748,7 +1697,7 @@
 </ul>
 <!-- v0.15.0 PR links -->
 <h1 id="v0140-2026-03-19">v0.14.0 - 2026-03-19<a class="headerlink" href="#v0140-2026-03-19" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_4">High Level<a class="headerlink" href="#high-level_4" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_5">High Level<a class="headerlink" href="#high-level_5" title="Permanent link">&para;</a></h2>
 <p>This release makes Copper much easier to explore and debug without relaxing its realtime design center. The headline feature is Python: Copper now has a Python task bridge for rapidly prototyping one task (and a smooth path towards a Rust migration).
 Monitoring also gets a v1 redesign with multi-monitor composition and a dedicated safety monitor, while the web assembly (runtime in browser) demo path, ROS2 bridge support, and reference components all moved forward.</p>
 <h2 id="breaking-api-changes_2">Breaking API Changes<a class="headerlink" href="#breaking-api-changes_2" title="Permanent link">&para;</a></h2>
@@ -1875,7 +1824,7 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
 </ul>
 <!-- v0.14.0 PR links -->
 <h1 id="v0130-2026-02-13">v0.13.0 - 2026-02-13<a class="headerlink" href="#v0130-2026-02-13" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_5">High Level<a class="headerlink" href="#high-level_5" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_6">High Level<a class="headerlink" href="#high-level_6" title="Permanent link">&para;</a></h2>
 <p>This release focuses on developer experience and runtime observability: Reflection/Schema support, remote and time-travel debugging APIs, richer MCAP exports, and a new Rerun-based visualization path. On the runtime side, Linux/std resource wiring is now centralized, the units stack is standardized through <code>cu29-units</code>, and simulation/determinism tooling has been strengthened.</p>
 <h2 id="breaking-api-changes_3">Breaking API Changes<a class="headerlink" href="#breaking-api-changes_3" title="Permanent link">&para;</a></h2>
 <ul>
@@ -1932,7 +1881,7 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
 </ul>
 <!-- v0.13.0 PR links -->
 <h1 id="v0120-2026-01-15">v0.12.0 - 2026-01-15<a class="headerlink" href="#v0120-2026-01-15" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_6">High Level<a class="headerlink" href="#high-level_6" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_7">High Level<a class="headerlink" href="#high-level_7" title="Permanent link">&para;</a></h2>
 <p>Resources are now first-class in Copper: you can describe hardware endpoints and shared system services in config, then bind them to tasks/bridges without rewriting code. Multi-output tasks land, mission/DAG rendering is clearer, and the flight controller stack is now a solid base for autonomous flying machines on off-the-shelf hardware.</p>
 <h2 id="breaking-api-changes_4">Breaking API Changes<a class="headerlink" href="#breaking-api-changes_4" title="Permanent link">&para;</a></h2>
 <ul>
@@ -2067,7 +2016,7 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
 <!-- v0.12.0 PR links -->
 <hr />
 <h1 id="v0110-2025-11-26">v0.11.0 - 2025-11-26<a class="headerlink" href="#v0110-2025-11-26" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_7">High Level<a class="headerlink" href="#high-level_7" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_8">High Level<a class="headerlink" href="#high-level_8" title="Permanent link">&para;</a></h2>
 <p>In this release we are introducing a new type of tasks: Bridges to help users implement multi-channel transports (serial, CAN, ELRS radios, ESC buses…). Technically they are like a set of our existing sources and sinks bundled into one logical component, it makes it easier to manage state from external systems and Copper.</p>
 <p>This release also delivers the minimum viable set of crates to build a Copper-native flight controller!</p>
 <p>MSP messaging, PID control, ELRS/CRSF radio links, and bidirectional DSHOT ESCs all run in <code>no_std</code>.</p>
@@ -2140,7 +2089,7 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
 <!-- v0.11.0 PR/issue links -->
 <hr />
 <h1 id="v0100-2025-10-19">v0.10.0 - 2025-10-19<a class="headerlink" href="#v0100-2025-10-19" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_8">High Level<a class="headerlink" href="#high-level_8" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_9">High Level<a class="headerlink" href="#high-level_9" title="Permanent link">&para;</a></h2>
 <p>Major milestone: <strong>baremetal</strong> support lands across the stack, SD/eMMC logging backends, CMSIS-DAP probe workflow. RP2350 is the reference platform; examples and scripts are included.</p>
 <h2 id="new-features_6">New Features<a class="headerlink" href="#new-features_6" title="Permanent link">&para;</a></h2>
 <ul>
@@ -2181,7 +2130,7 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
 <!-- v0.10.0 PR/issue links -->
 <hr />
 <h1 id="v091-2025-09-12">v0.9.1 - 2025-09-12<a class="headerlink" href="#v091-2025-09-12" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_9">High Level<a class="headerlink" href="#high-level_9" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_10">High Level<a class="headerlink" href="#high-level_10" title="Permanent link">&para;</a></h2>
 <p>Point release improving simulation control, fixing task indexing bugs, and refreshing several dependencies for long-term maintenance.</p>
 <h2 id="new-features_7">New Features<a class="headerlink" href="#new-features_7" title="Permanent link">&para;</a></h2>
 <ul>
@@ -2220,7 +2169,7 @@ Monitoring also gets a v1 redesign with multi-monitor composition and a dedicate
 <!-- v0.9.1 PR/issue links -->
 <hr />
 <h1 id="v090-2025-07-31">v0.9.0 - 2025-07-31<a class="headerlink" href="#v090-2025-07-31" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_10">High Level<a class="headerlink" href="#high-level_10" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_11">High Level<a class="headerlink" href="#high-level_11" title="Permanent link">&para;</a></h2>
 <p>This release is primarily driven by user requests. It introduces a full transform library (à la tf2 for ROS), new keyframes in the logs, background tasks, a log checker, and a set of runtime and logging tuning parameters to better adapt to constrained environments.</p>
 <h2 id="api-change">API Change<a class="headerlink" href="#api-change" title="Permanent link">&para;</a></h2>
 <p>The task API now uses finer-grained lifetimes for input and output types. This provides greater flexibility when testing tasks and was necessary to support the implementation of background tasks:</p>
@@ -2416,7 +2365,7 @@ type MyTemporalData = CuStampData&lt;f64, ()&gt;;
 <!-- v0.9.0 PR/issue links -->
 <hr />
 <h1 id="v080-2025-05-26">v0.8.0 - 2025-05-26<a class="headerlink" href="#v080-2025-05-26" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_11">High level<a class="headerlink" href="#high-level_11" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_12">High level<a class="headerlink" href="#high-level_12" title="Permanent link">&para;</a></h2>
 <p>This release has been focused on Zenoh and ROS2 interoperability, modular configuration for larger robots with a new support for the notion of "mission" (aka mode like autonomy mode, datacollect mode etc..)</p>
 <h2 id="new-features_9">New Features<a class="headerlink" href="#new-features_9" title="Permanent link">&para;</a></h2>
 <ul>
@@ -2488,7 +2437,7 @@ cu29 = { version = &quot;0.7.0&quot;, features = [&quot;log-level-debug&quot;] }
 
 <hr />
 <h1 id="v070-2025-03-14">v0.7.0 - 2025-03-14<a class="headerlink" href="#v070-2025-03-14" title="Permanent link">&para;</a></h1>
-<h2 id="high-level_12">High level<a class="headerlink" href="#high-level_12" title="Permanent link">&para;</a></h2>
+<h2 id="high-level_13">High level<a class="headerlink" href="#high-level_13" title="Permanent link">&para;</a></h2>
 <p>This release added a set of feature useful to develop autonomy algorithms on Drone (MSP).
 We also have a solid set of quality of life improvements derived from real usage.</p>
 <h2 id="notable-regression">Notable regression<a class="headerlink" href="#notable-regression" title="Permanent link">&para;</a></h2>
@@ -2971,7 +2920,7 @@ impl CuMonitor for ExampleMonitor {
     pub fn jitter_stddev(&amp;self) -&gt; CuDuration;
     pub fn jitter_percentile(&amp;self, percentile: f64) -&gt; CuDuration;
 </code></pre>
-<h3 id="fixes">Fixes<a class="headerlink" href="#fixes" title="Permanent link">&para;</a></h3>
+<h3 id="fixes_1">Fixes<a class="headerlink" href="#fixes_1" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>Serialization / Deserialization Bug on Value</strong> (#42). A code reformat shuffled the serialization IDs Oo.</li>
 </ul>

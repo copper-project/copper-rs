@@ -1555,7 +1555,7 @@
 <li><code>resources</code> <em>(optional)</em> – map of task-local resource bindings to <code>bundle.resource</code> references.</li>
 <li><code>missions</code> <em>(optional)</em> – list of mission ids in which this task is active.</li>
 <li><code>background</code> <em>(optional)</em> – boolean. <code>true</code> runs an eligible source or regular task on the background thread pool. Omit it or set <code>false</code> for foreground execution.</li>
-<li><code>run_in_sim</code> <em>(optional)</em> – boolean controlling whether a source or sink uses the real implementation in simulation mode instead of a generated stub. It is ignored for regular tasks.</li>
+<li><code>run_in_sim</code> <em>(optional)</em> – boolean controlling whether a source or sink uses the real implementation in simulation mode instead of a generated stub. <strong>Since v1.1:</strong> generated source stubs preserve the complete output pack for multi-output sources, so the simulation callback can fill every port in place. It is ignored for regular tasks.</li>
 <li><code>logging</code> <em>(optional)</em> – per-task message logging settings:</li>
 <li><code>enabled</code> – boolean, defaults to <code>true</code>.</li>
 <li><code>codec</code> – default logging codec id for this task's outputs.</li>
@@ -1718,6 +1718,25 @@ for higher-rate loops.</p>
 ]
 </code></pre>
 <p>Included files are processed recursively. Parameters are substituted in the included text using the <code>{{param}}</code> syntax. Merging behaviour and further details are described in the <a href="../Modular-Configuration/">Modular Configuration guide</a>.</p>
+<p><strong>Since v1.1:</strong> An include can be selected by Cargo features at compile time:</p>
+<pre><code class="language-ron">includes: [
+    (
+        path: &quot;graph/jetson_mipi.ron&quot;,
+        when: Feature(&quot;jetson-mipi&quot;),
+    ),
+]
+</code></pre>
+<p>Supported predicates are <code>Feature("name")</code>, <code>Not(predicate)</code>, <code>All([predicates])</code>, and
+<code>Any([predicates])</code>. A rejected include is skipped before its file is read, parsed, or
+validated, so its tasks, connections, and message types do not enter generated Rust.</p>
+<p>Applications using feature predicates must forward their Cargo feature set from <code>build.rs</code>:</p>
+<pre><code class="language-rust">fn main() {
+    cu29_build::emit_cargo_features();
+}
+</code></pre>
+<p>Add <code>cu29-build</code> under <code>[build-dependencies]</code>. Keep the matching component dependency
+optional in <code>Cargo.toml</code>; target-specific dependencies can additionally be placed under a
+<code>[target.'cfg(...)'.dependencies]</code> table. See <code>examples/cu_feature_gated_camera</code>.</p>
 <h2 id="multi-copper-instance-overrides">Multi-Copper Instance Overrides<a class="headerlink" href="#multi-copper-instance-overrides" title="Permanent link">&para;</a></h2>
 <p>Multi-Copper umbrella configs may declare an optional <code>instance_overrides_root</code>:</p>
 <pre><code class="language-ron">(
