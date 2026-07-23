@@ -28,6 +28,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+      - name: Check out local Copper dependencies
+        run: support/ci/checkout_local_dependencies.sh
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@nightly
       - name: Install dependencies

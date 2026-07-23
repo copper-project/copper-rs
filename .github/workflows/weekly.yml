@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Check out local Copper dependencies
+        run: support/ci/checkout_local_dependencies.sh
       - uses: dtolnay/rust-toolchain@beta
         with:
           components: clippy, rustfmt

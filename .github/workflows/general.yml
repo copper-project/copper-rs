@@ -448,6 +448,8 @@ jobs:
       PUBLIC_API_TOOLCHAIN: nightly-2026-06-25
     steps:
       - uses: actions/checkout@v7
+      - name: Check out local Copper dependencies
+        run: support/ci/checkout_local_dependencies.sh
       - uses: dtolnay/rust-toolchain@stable
       - name: Install public API Rust toolchain
         run: rustup toolchain install "${PUBLIC_API_TOOLCHAIN}" --profile minimal
