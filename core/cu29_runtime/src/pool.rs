@@ -11,6 +11,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::SmallVec;
 use std::alloc::{Layout, alloc, dealloc};
 use std::cell::Cell;
+#[cfg(feature = "remote-debug")]
+use std::cell::RefCell;
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 use std::fs::OpenOptions;
@@ -133,6 +135,231 @@ pub fn enable_shared_handle_serialization() -> SharedHandleSerializationGuard {
 
 fn shared_handle_serialization_enabled() -> bool {
     SHARED_HANDLE_SERIALIZATION_ENABLED.with(Cell::get)
+}
+
+#[cfg(feature = "remote-debug")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DebugHandleEncoding {
+    RawLittleEndian,
+    Cbor,
+}
+
+#[cfg(feature = "remote-debug")]
+#[derive(Clone, Debug)]
+pub(crate) struct CollectedDebugHandleAttachment {
+    pub id: u32,
+    pub encoding: DebugHandleEncoding,
+    pub element_type: Option<CuSharedMemoryElementType>,
+    pub len_elements: Option<usize>,
+    pub data: Vec<u8>,
+}
+
+#[cfg(feature = "remote-debug")]
+#[derive(Serialize)]
+struct DebugHandleDescriptor {
+    #[serde(rename = "__cu_handle__")]
+    marker: bool,
+    attachment_id: Option<u32>,
+    encoding: DebugHandleEncoding,
+    element_type: Option<CuSharedMemoryElementType>,
+    len_elements: Option<usize>,
+    byte_len: Option<usize>,
+}
+
+#[cfg(feature = "remote-debug")]
+#[derive(Default)]
+struct DebugHandleSerializationState {
+    include_contents: bool,
+    attachments: Vec<CollectedDebugHandleAttachment>,
+}
+
+#[cfg(feature = "remote-debug")]
+thread_local! {
+    static DEBUG_HANDLE_SERIALIZATION_STATE: RefCell<Option<DebugHandleSerializationState>> =
+        const { RefCell::new(None) };
+}
+
+/// Runs debugger payload serialization with handle contents deferred by default.
+///
+/// This function and all state it uses are compiled only for `remote-debug`. It is
+/// deliberately independent from Copper's `Encode` path so unified logging and task
+/// execution never consult debugger policy.
+#[cfg(feature = "remote-debug")]
+pub(crate) fn collect_debug_handle_attachments<R>(
+    f: impl FnOnce() -> R,
+) -> (R, Vec<CollectedDebugHandleAttachment>) {
+    let previous = DEBUG_HANDLE_SERIALIZATION_STATE
+        .with(|state| state.replace(Some(DebugHandleSerializationState::default())));
+    let result = f();
+    let collected = DEBUG_HANDLE_SERIALIZATION_STATE.with(|state| {
+        let current = state.replace(previous);
+        current
+            .map(|current| current.attachments)
+            .unwrap_or_default()
+    });
+    (result, collected)
+}
+
+#[cfg(feature = "remote-debug")]
+pub(crate) fn with_debug_handle_contents<R>(include_contents: bool, f: impl FnOnce() -> R) -> R {
+    let previous = DEBUG_HANDLE_SERIALIZATION_STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        state.as_mut().map(|state| {
+            let previous = state.include_contents;
+            state.include_contents = include_contents;
+            previous
+        })
+    });
+    let result = f();
+    if let Some(previous) = previous {
+        DEBUG_HANDLE_SERIALIZATION_STATE.with(|state| {
+            if let Some(state) = state.borrow_mut().as_mut() {
+                state.include_contents = previous;
+            }
+        });
+    }
+    result
+}
+
+#[cfg(feature = "remote-debug")]
+fn primitive_slice_bytes<U: ElementType + 'static>(
+    values: &[U],
+    element_type: CuSharedMemoryElementType,
+) -> Vec<u8> {
+    macro_rules! cast_slice {
+        ($ty:ty) => {{
+            // SAFETY: `element_type` was obtained from `TypeId::of::<U>()`, so
+            // `U` and the selected primitive are the same type.
+            unsafe { core::slice::from_raw_parts(values.as_ptr().cast::<$ty>(), values.len()) }
+        }};
+    }
+
+    match element_type {
+        CuSharedMemoryElementType::U8 => cast_slice!(u8).to_vec(),
+        CuSharedMemoryElementType::I8 => cast_slice!(i8).iter().map(|value| *value as u8).collect(),
+        CuSharedMemoryElementType::U16 => cast_slice!(u16)
+            .iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect(),
+        CuSharedMemoryElementType::U32 => cast_slice!(u32)
+            .iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect(),
+        CuSharedMemoryElementType::U64 => cast_slice!(u64)
+            .iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect(),
+        CuSharedMemoryElementType::I16 => cast_slice!(i16)
+            .iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect(),
+        CuSharedMemoryElementType::I32 => cast_slice!(i32)
+            .iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect(),
+        CuSharedMemoryElementType::I64 => cast_slice!(i64)
+            .iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect(),
+        CuSharedMemoryElementType::F32 => cast_slice!(f32)
+            .iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect(),
+        CuSharedMemoryElementType::F64 => cast_slice!(f64)
+            .iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect(),
+    }
+}
+
+#[cfg(feature = "remote-debug")]
+fn debug_handle_descriptor<U>(values: &[U]) -> Result<Option<DebugHandleDescriptor>, String>
+where
+    U: ElementType + Serialize + 'static,
+{
+    DEBUG_HANDLE_SERIALIZATION_STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        let Some(state) = state.as_mut() else {
+            return Ok(None);
+        };
+
+        let element_type = CuSharedMemoryElementType::of::<U>();
+        let encoding = if element_type.is_some() {
+            DebugHandleEncoding::RawLittleEndian
+        } else {
+            DebugHandleEncoding::Cbor
+        };
+        let mut byte_len = None;
+        let attachment_id = if state.include_contents {
+            let data = match element_type {
+                Some(element_type) => primitive_slice_bytes(values, element_type),
+                None => minicbor_serde::to_vec(values)
+                    .map_err(|err| format!("failed to encode debug handle contents: {err}"))?,
+            };
+            byte_len = Some(data.len());
+            let id = state.attachments.len() as u32;
+            state.attachments.push(CollectedDebugHandleAttachment {
+                id,
+                encoding,
+                element_type,
+                len_elements: Some(values.len()),
+                data,
+            });
+            Some(id)
+        } else {
+            None
+        };
+
+        Ok(Some(DebugHandleDescriptor {
+            marker: true,
+            attachment_id,
+            encoding,
+            element_type,
+            len_elements: Some(values.len()),
+            byte_len,
+        }))
+    })
+}
+
+#[cfg(feature = "remote-debug")]
+fn debug_handle_value_descriptor<T>(value: &T) -> Result<Option<DebugHandleDescriptor>, String>
+where
+    T: Serialize,
+{
+    DEBUG_HANDLE_SERIALIZATION_STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        let Some(state) = state.as_mut() else {
+            return Ok(None);
+        };
+
+        let mut byte_len = None;
+        let attachment_id = if state.include_contents {
+            let data = minicbor_serde::to_vec(value)
+                .map_err(|err| format!("failed to encode debug handle contents: {err}"))?;
+            byte_len = Some(data.len());
+            let id = state.attachments.len() as u32;
+            state.attachments.push(CollectedDebugHandleAttachment {
+                id,
+                encoding: DebugHandleEncoding::Cbor,
+                element_type: None,
+                len_elements: None,
+                data,
+            });
+            Some(id)
+        } else {
+            None
+        };
+
+        Ok(Some(DebugHandleDescriptor {
+            marker: true,
+            attachment_id,
+            encoding: DebugHandleEncoding::Cbor,
+            element_type: None,
+            len_elements: None,
+            byte_len,
+        }))
+    })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -569,6 +796,30 @@ impl<T: Debug + Send + Sync> CuHandle<T> {
         f(&mut *lock)
     }
 
+    /// Serialize a handle-backed value while allowing the remote debugger to replace
+    /// the value with a deferred descriptor.
+    ///
+    /// Outside a `remote-debug` build this compiles down to normal inner-value
+    /// serialization. Handle-backed payload wrappers should use this instead of
+    /// locking and serializing the inner value themselves.
+    pub fn serialize_value<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        T: Serialize,
+        S: Serializer,
+    {
+        let inner = lock_unpoison(&self.0.inner);
+        let value = inner.inner_ref();
+
+        #[cfg(feature = "remote-debug")]
+        if let Some(descriptor) =
+            debug_handle_value_descriptor(value).map_err(<S::Error as serde::ser::Error>::custom)?
+        {
+            return descriptor.serialize(serializer);
+        }
+
+        value.serialize(serializer)
+    }
+
     /// Returns the number of handles sharing this payload storage.
     pub fn strong_count(&self) -> usize {
         Arc::strong_count(&self.0)
@@ -685,7 +936,16 @@ where
 {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let inner = lock_unpoison(&self.0.inner);
-        inner.inner_ref().serialize(serializer)
+        let values = inner.inner_ref();
+
+        #[cfg(feature = "remote-debug")]
+        if let Some(descriptor) = debug_handle_descriptor(values.as_slice())
+            .map_err(<S::Error as serde::ser::Error>::custom)?
+        {
+            return descriptor.serialize(serializer);
+        }
+
+        values.serialize(serializer)
     }
 }
 
@@ -705,6 +965,13 @@ where
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let inner = lock_unpoison(&self.0.inner);
         let buffer = inner.inner_ref();
+
+        #[cfg(feature = "remote-debug")]
+        if let Some(descriptor) = debug_handle_descriptor(buffer.deref())
+            .map_err(<S::Error as serde::ser::Error>::custom)?
+        {
+            return descriptor.serialize(serializer);
+        }
 
         if shared_handle_serialization_enabled()
             && let Some(descriptor) = buffer.descriptor()
@@ -1450,6 +1717,51 @@ mod tests {
         let v: u64 = 42;
         v.apply_handle_content_policy(HandleContent::TouchedOnly);
         // No observable change; the test just proves the call compiles and returns.
+    }
+
+    #[cfg(feature = "remote-debug")]
+    #[test]
+    fn debug_handle_contents_are_deferred_until_explicitly_included() {
+        let handle = CuHandle::new_detached(vec![1.25_f32, -2.5_f32]);
+
+        let (deferred, attachments) = collect_debug_handle_attachments(|| {
+            with_debug_handle_contents(false, || {
+                minicbor_serde::to_vec(&handle).expect("serialize deferred handle")
+            })
+        });
+        let deferred: serde_json::Value =
+            minicbor_serde::from_slice(&deferred).expect("decode deferred descriptor");
+        assert_eq!(
+            deferred.get("__cu_handle__"),
+            Some(&serde_json::json!(true))
+        );
+        assert_eq!(
+            deferred.get("attachment_id"),
+            Some(&serde_json::Value::Null)
+        );
+        assert!(attachments.is_empty());
+
+        let (included, attachments) = collect_debug_handle_attachments(|| {
+            with_debug_handle_contents(true, || {
+                minicbor_serde::to_vec(&handle).expect("serialize included handle")
+            })
+        });
+        let included: serde_json::Value =
+            minicbor_serde::from_slice(&included).expect("decode included descriptor");
+        assert_eq!(included.get("attachment_id"), Some(&serde_json::json!(0)));
+        assert_eq!(attachments.len(), 1);
+        assert_eq!(
+            attachments[0].encoding,
+            DebugHandleEncoding::RawLittleEndian
+        );
+        assert_eq!(
+            attachments[0].element_type,
+            Some(CuSharedMemoryElementType::F32)
+        );
+        assert_eq!(
+            attachments[0].data,
+            [1.25_f32.to_le_bytes(), (-2.5_f32).to_le_bytes()].concat()
+        );
     }
 
     #[test]

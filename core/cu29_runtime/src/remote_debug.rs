@@ -37,6 +37,12 @@
 //! - Request decoding is tolerant: server tries `CBOR` first, then `JSON`.
 //! - Response encoding matches the request codec used for that call.
 //! - `session.open` also returns a `wire_codec` field after codec negotiation.
+//! - Handle-backed payload contents are never embedded in `result`. They are
+//!   deferred by default and, when explicitly requested over CBOR, returned as
+//!   out-of-line CBOR byte strings in `attachments`.
+//! - There is no byte-size threshold: ordinary payloads are always serialized,
+//!   while every [`CuHandle`](crate::pool::CuHandle) follows the explicit handle
+//!   content policy.
 //!
 //! Default constructor transport profile:
 //!
@@ -68,6 +74,16 @@
 //! | `error` | [`DebugRpcError`] | `ok == false` | `{ code, message, details? }`. |
 //! | `cursor_rev` | `u64` | cursor-aware methods | Monotonic cursor revision for a session. |
 //! | `resolved_at` | [`ResolvedAt`] | target-resolving methods | Concrete `(cl, ts_ns?, idx)` resolution outcome. |
+//! | `attachments` | [`DebugRpcAttachment`] array | explicitly requested handle contents | Binary attachment metadata and CBOR byte strings. |
+//!
+//! A serialized handle in `result` is a small descriptor containing
+//! `__cu_handle__`, `attachment_id`, `encoding`, `element_type`, `len_elements`,
+//! and `byte_len`. With `include_handle_contents=false` (the default),
+//! `attachment_id` is null and no bytes are read or copied. With
+//! `include_handle_contents=true`, `attachment_id` references an entry in
+//! `attachments`. Primitive buffers use raw little-endian bytes; other
+//! handle-backed values use CBOR bytes. Binary attachments require the CBOR wire
+//! codec; requesting them over JSON returns `BinaryAttachmentsRequireCbor`.
 //!
 //! ## Session and Cursor State Model
 //!
@@ -131,7 +147,7 @@
 //! | `nav.seek` | yes | `{ target, resolve? }` | yes |
 //! | `nav.run_until` | yes | `{ target, resolve?, max_steps?, timeout_ms?, progress_every_n_steps? }` | yes |
 //! | `nav.step` | yes | `{ delta }` | yes |
-//! | `nav.replay` | yes | `{ at?, limit?, include_cl_snapshot?, include_payloads?, include_metadata?, include_raw?, include_replayed_cl?, include_state? }` | yes (replays current step/page; optional pre-seek) |
+//! | `nav.replay` | yes | `{ at?, limit?, include_cl_snapshot?, include_payloads?, include_handle_contents?, output_indices?, include_metadata?, include_raw?, include_replayed_cl?, include_state? }` | yes (replays current step/page; optional pre-seek) |
 //!
 //! Notes:
 //!
@@ -144,8 +160,8 @@
 //! | Method | Session required | Params | Result |
 //! | --- | --- | --- | --- |
 //! | `timeline.get_cursor` | yes | `{}` | current cursor snapshot |
-//! | `timeline.get_cl` | yes | `{ at?, include_payloads?, include_metadata?, include_raw? }` | `cl_snapshot`, `query_cursor` (+ optional resolution) |
-//! | `timeline.list` | yes | `{ from, to, page? }` | list of timeline rows with CL snapshots and keyframe metadata + `next_offset` |
+//! | `timeline.get_cl` | yes | `{ at?, include_payloads?, include_handle_contents?, output_indices?, include_metadata?, include_raw? }` | `cl_snapshot`, `query_cursor` (+ optional resolution) |
+//! | `timeline.list` | yes | `{ from, to, page?, include_handle_contents?, output_indices? }` | list of timeline rows with CL snapshots and keyframe metadata + `next_offset` |
 //!
 //! ### Logs
 //!
@@ -236,6 +252,10 @@
 use crate::app::{CuSimApplication, CurrentRuntimeCopperList};
 use crate::config::{BridgeChannelConfigRepresentation, Flavor, read_configuration_str};
 use crate::debug::{CuDebugSession, IndexedResolveMode, JumpOutcome};
+use crate::pool::{
+    CollectedDebugHandleAttachment, CuSharedMemoryElementType, DebugHandleEncoding,
+    collect_debug_handle_attachments, with_debug_handle_contents,
+};
 use crate::reflect::{
     EnumInfo, Reflect, ReflectTaskIntrospection, StructInfo, TupleInfo, TupleStructInfo, Type,
     TypeInfo, TypeRegistry, VariantInfo, serde::SerializationData,
@@ -396,6 +416,32 @@ pub struct DebugRpcResponse {
     pub cursor_rev: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resolved_at: Option<ResolvedAt>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<DebugRpcAttachment>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DebugRpcAttachment {
+    pub id: u32,
+    pub encoding: DebugHandleEncoding,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub element_type: Option<CuSharedMemoryElementType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub len_elements: Option<usize>,
+    #[serde(with = "serde_bytes")]
+    pub data: Vec<u8>,
+}
+
+impl From<CollectedDebugHandleAttachment> for DebugRpcAttachment {
+    fn from(attachment: CollectedDebugHandleAttachment) -> Self {
+        Self {
+            id: attachment.id,
+            encoding: attachment.encoding,
+            element_type: attachment.element_type,
+            len_elements: attachment.len_elements,
+            data: attachment.data,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -529,6 +575,10 @@ struct NavReplayParams {
     #[serde(default)]
     include_payloads: bool,
     #[serde(default)]
+    include_handle_contents: bool,
+    #[serde(default)]
+    output_indices: Option<Vec<usize>>,
+    #[serde(default)]
     include_metadata: bool,
     #[serde(default)]
     include_raw: bool,
@@ -545,6 +595,10 @@ struct TimelineGetClParams {
     #[serde(default)]
     include_payloads: bool,
     #[serde(default)]
+    include_handle_contents: bool,
+    #[serde(default)]
+    output_indices: Option<Vec<usize>>,
+    #[serde(default)]
     include_metadata: bool,
     #[serde(default)]
     include_raw: bool,
@@ -556,6 +610,10 @@ struct TimelineListParams {
     to: Target,
     #[serde(default)]
     page: Option<Page>,
+    #[serde(default)]
+    include_handle_contents: bool,
+    #[serde(default)]
+    output_indices: Option<Vec<usize>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1177,7 +1235,7 @@ where
             }
         };
 
-        let response = self.handle_request(request.clone());
+        let response = self.handle_request(request.clone(), codec);
         if let Err(err) = self.publish_reply(&request.reply_to, &response, codec) {
             eprintln!(
                 "RemoteDebug: failed to publish reply to '{}': {err}",
@@ -1210,7 +1268,7 @@ where
                 return Ok(true);
             }
         };
-        let response = self.handle_request(request.clone());
+        let response = self.handle_request(request.clone(), codec);
         if let Err(err) = self.publish_reply(&request.reply_to, &response, codec) {
             eprintln!(
                 "RemoteDebug: failed to publish reply to '{}': {err}",
@@ -1221,7 +1279,7 @@ where
         Ok(true)
     }
 
-    fn handle_request(&mut self, request: DebugRpcRequest) -> DebugRpcResponse {
+    fn handle_request(&mut self, request: DebugRpcRequest, codec: WireCodec) -> DebugRpcResponse {
         let request_id = request.request_id.clone();
 
         if request.api != API_VERSION {
@@ -1240,8 +1298,27 @@ where
             return ok_response(request_id, json!({"stopping": true}), None, None);
         }
 
+        let include_handle_contents = request
+            .params
+            .get("include_handle_contents")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        if include_handle_contents && codec != WireCodec::Cbor {
+            return err_response(
+                request_id,
+                "BinaryAttachmentsRequireCbor",
+                "handle contents are available only with the CBOR wire codec",
+            );
+        }
+
         self.cleanup_expired_sessions();
-        self.dispatch_request(&request)
+        let (mut response, attachments) =
+            collect_debug_handle_attachments(|| self.dispatch_request(&request));
+        response.attachments = attachments
+            .into_iter()
+            .map(DebugRpcAttachment::from)
+            .collect();
+        response
     }
 
     fn dispatch_request(&mut self, request: &DebugRpcRequest) -> DebugRpcResponse {
@@ -1786,6 +1863,7 @@ where
         };
 
         let include_payloads = parsed.include_payloads;
+        let include_handle_contents = parsed.include_handle_contents;
         let include_metadata = parsed.include_metadata;
         let include_raw = parsed.include_raw;
 
@@ -1842,6 +1920,8 @@ where
             include_payloads,
             include_metadata,
             include_raw,
+            include_handle_contents,
+            parsed.output_indices.as_deref(),
         ) {
             Ok(v) => v,
             Err(e) => return err_response(request_id, "GetClFailed", &e.to_string()),
@@ -1936,8 +2016,15 @@ where
                 Ok(None) => break,
                 Err(e) => return err_response(request_id, "TimelineListFailed", &e.to_string()),
             };
-            let mut item = match copperlist_snapshot::<P>(cl.as_ref(), &time_of, true, false, false)
-            {
+            let mut item = match copperlist_snapshot::<P>(
+                cl.as_ref(),
+                &time_of,
+                true,
+                false,
+                false,
+                parsed.include_handle_contents,
+                parsed.output_indices.as_deref(),
+            ) {
                 Ok(v) => v,
                 Err(e) => return err_response(request_id, "TimelineListFailed", &e.to_string()),
             };
@@ -2679,6 +2766,7 @@ fn ok_response(
         error: None,
         cursor_rev,
         resolved_at,
+        attachments: Vec::new(),
     }
 }
 
@@ -2694,6 +2782,7 @@ fn err_response(request_id: String, code: &str, message: &str) -> DebugRpcRespon
         }),
         cursor_rev: None,
         resolved_at: None,
+        attachments: Vec::new(),
     }
 }
 
@@ -2836,6 +2925,12 @@ fn capabilities_json(session_lifecycle: SessionLifecycleLimits) -> Value {
     json!({
         "version": API_VERSION,
         "wire_codecs": ["cbor", "json"],
+        "handle_contents": {
+            "deferred_by_default": true,
+            "binary_attachments": true,
+            "binary_attachment_codec": "cbor",
+            "output_index_filtering": true,
+        },
         "supports_targets": ["cl", "ts"],
         "max_replay_batch_limit": MAX_REPLAY_BATCH_LIMIT,
         "session_lifecycle": {
@@ -3193,6 +3288,8 @@ where
                 params.include_payloads,
                 params.include_metadata,
                 params.include_raw,
+                params.include_handle_contents,
+                params.output_indices.as_deref(),
             )?,
             None => Value::Null,
         };
@@ -3206,6 +3303,8 @@ where
             params.include_payloads,
             params.include_metadata,
             params.include_raw,
+            params.include_handle_contents,
+            params.output_indices.as_deref(),
         )?;
         item.insert("replayed_cl".to_string(), replayed_cl);
     }
@@ -3334,6 +3433,8 @@ fn copperlist_snapshot<P: CopperListTuple + 'static>(
     include_payloads: bool,
     include_metadata: bool,
     include_raw: bool,
+    include_handle_contents: bool,
+    output_indices: Option<&[usize]>,
 ) -> CuResult<Value> {
     let task_ids = P::get_all_task_ids();
     let msgs = cl.cumsgs();
@@ -3342,10 +3443,14 @@ fn copperlist_snapshot<P: CopperListTuple + 'static>(
     for (i, msg) in msgs.iter().enumerate() {
         let task_id = task_ids.get(i).copied().unwrap_or("<?>");
         let payload = if include_payloads {
-            msg.payload()
-                .map(erased_serialize_to_json)
-                .transpose()?
-                .unwrap_or(Value::Null)
+            let include_message_handle_contents = include_handle_contents
+                && output_indices.is_none_or(|indices| indices.contains(&i));
+            with_debug_handle_contents(include_message_handle_contents, || {
+                msg.payload()
+                    .map(erased_serialize_to_value)
+                    .transpose()
+                    .map(|payload| payload.unwrap_or(Value::Null))
+            })?
         } else {
             Value::Null
         };
@@ -3394,15 +3499,15 @@ fn metadata_to_json(metadata: &dyn CuMsgMetadataTrait, tov: Tov) -> Value {
         .unwrap_or_else(|_| Value::String("metadata serialization failed".to_string()))
 }
 
-fn erased_serialize_to_json(value: &dyn erased_serde::Serialize) -> CuResult<Value> {
+fn erased_serialize_to_value(value: &dyn erased_serde::Serialize) -> CuResult<Value> {
     let mut bytes = Vec::new();
     {
-        let mut serializer = serde_json::Serializer::new(&mut bytes);
+        let mut serializer = minicbor_serde::Serializer::new(&mut bytes);
         erased_serde::serialize(value, &mut serializer)
             .map_err(|e| CuError::from(format!("Failed to serialize erased payload: {e}")))?;
     }
-    serde_json::from_slice(&bytes)
-        .map_err(|e| CuError::new_with_cause("Failed to parse serialized payload JSON", e))
+    minicbor_serde::from_slice(&bytes)
+        .map_err(|e| CuError::new_with_cause("Failed to decode serialized payload CBOR", e))
 }
 
 fn build_tasks_json<App, P, CB, TF, S, L>(
@@ -3443,6 +3548,8 @@ fn replayed_copperlist_snapshot<App, P, CB, TF, S, L>(
     include_payloads: bool,
     include_metadata: bool,
     include_raw: bool,
+    include_handle_contents: bool,
+    output_indices: Option<&[usize]>,
 ) -> CuResult<Value>
 where
     App: CuSimApplication<S, L> + CurrentRuntimeCopperList<P>,
@@ -3475,6 +3582,8 @@ where
                         include_payloads,
                         include_metadata,
                         include_raw,
+                        include_handle_contents,
+                        output_indices,
                     )
                 })
             })
@@ -3504,12 +3613,13 @@ where
     let tasks = build_tasks_json::<App, P, CB, TF, S, L>(state)?;
 
     let current_cl = match state.session.current_cl()? {
-        Some(cl) => copperlist_snapshot::<P>(cl.as_ref(), time_of, true, true, false)?,
+        Some(cl) => copperlist_snapshot::<P>(cl.as_ref(), time_of, true, true, false, false, None)?,
         None => Value::Null,
     };
 
-    let replayed_cl =
-        replayed_copperlist_snapshot::<App, P, CB, TF, S, L>(state, time_of, true, true, false)?;
+    let replayed_cl = replayed_copperlist_snapshot::<App, P, CB, TF, S, L>(
+        state, time_of, true, true, false, false, None,
+    )?;
 
     let cursor = cursor_snapshot(state, time_of)
         .map(|c| serde_json::to_value(c).unwrap_or(Value::Null))
@@ -4538,12 +4648,14 @@ fn hex_digit(n: u8) -> char {
 #[cfg(all(test, feature = "std"))]
 mod tests {
     use super::{
-        build_message_metadata_field_descriptors, build_output_schema_entries, build_stack_schema,
-        metadata_to_json, reflect_value_to_json, register_debug_support_types,
+        DebugRpcAttachment, DebugRpcResponse, WireCodec, build_message_metadata_field_descriptors,
+        build_output_schema_entries, build_stack_schema, encode_payload, metadata_to_json,
+        reflect_value_to_json, register_debug_support_types,
     };
     use crate::app::CuSimApplication;
     use crate::curuntime::KeyFrame;
     use crate::cutask::CuMsgMetadata;
+    use crate::pool::{CuSharedMemoryElementType, DebugHandleEncoding};
     use crate::reflect::{Reflect, ReflectTaskIntrospection, TypePath, TypeRegistry};
     use crate::simulation::SimOverride;
     use compact_str::CompactString;
@@ -4712,6 +4824,46 @@ mod tests {
         fn restore_keyframe(&mut self, _freezer: &KeyFrame) -> CuResult<()> {
             Ok(())
         }
+    }
+
+    #[test]
+    fn cbor_handle_attachments_are_encoded_as_byte_strings() -> CuResult<()> {
+        let data = vec![0xde, 0xad, 0xbe, 0xef];
+        let response = DebugRpcResponse {
+            request_id: "binary-attachment".to_owned(),
+            ok: true,
+            result: Some(serde_json::json!({
+                "handle": {
+                    "__cu_handle__": true,
+                    "attachment_id": 0,
+                    "encoding": "raw_little_endian",
+                    "element_type": "u8",
+                    "len_elements": 4,
+                    "byte_len": 4,
+                }
+            })),
+            error: None,
+            cursor_rev: None,
+            resolved_at: None,
+            attachments: vec![DebugRpcAttachment {
+                id: 0,
+                encoding: DebugHandleEncoding::RawLittleEndian,
+                element_type: Some(CuSharedMemoryElementType::U8),
+                len_elements: Some(data.len()),
+                data: data.clone(),
+            }],
+        };
+
+        let encoded = encode_payload(&response, WireCodec::Cbor, "encode test response")?;
+        let expected_byte_string = [vec![0x44], data].concat();
+        assert!(
+            encoded
+                .windows(expected_byte_string.len())
+                .any(|window| window == expected_byte_string),
+            "the attachment must use CBOR major type 2 (byte string), not an integer array"
+        );
+
+        Ok(())
     }
 
     #[test]

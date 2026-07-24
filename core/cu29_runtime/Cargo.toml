@@ -65,6 +65,7 @@ zenoh = { workspace = true, default-features = false, features = [
 minicbor-serde = { workspace = true, default-features = false, features = [
   "alloc",
 ], optional = true }
+serde_bytes = { workspace = true, optional = true }
 
 # std only dependencies
 clap = { workspace = true, optional = true }       # CLI
@@ -115,6 +116,7 @@ remote-debug = [
   "reflect",
   "dep:cu29-intern-strs",
   "dep:serde_json",
+  "dep:serde_bytes",
   "dep:zenoh",
   "dep:minicbor-serde",
   "cu29-units/reflect",

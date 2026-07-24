@@ -52,6 +52,12 @@ impl WriteStream<CuLogEntry> for DummyWriteStream {
 }
 type LogWriter = Box<dyn WriteStream<CuLogEntry> + Send + 'static>;
 
+struct LoggerDestination {
+    id: usize,
+    writer: LogWriter,
+    clock: RobotClock,
+}
+
 /// Callback signature: receives the structured entry plus its format string and param names.
 pub type LiveLogListener = Box<dyn Fn(&CuLogEntry, &str, &[&str]) + Send + Sync + 'static>;
 
@@ -137,21 +143,21 @@ pub fn format_message_only(
 
 /// Shared logging state reachable from the macro-generated calls.
 struct LoggerState {
-    writer: Mutex<LogWriter>,
-    clock: RobotClock,
+    destinations: Mutex<Vec<LoggerDestination>>,
     live_listeners: Mutex<LiveLogListeners>,
 }
 
 impl core::fmt::Debug for LoggerState {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("LoggerState")
-            .field("clock", &self.clock)
+            .field("destination_count", &lock_mutex(&self.destinations).len())
             .finish_non_exhaustive()
     }
 }
 
 static LOGGER_STATE: OnceLock<LoggerState> = OnceLock::new();
 static STRUCTURED_LOG_BYTES: AtomicUsize = AtomicUsize::new(0);
+static NEXT_LOGGER_RUNTIME_ID: AtomicUsize = AtomicUsize::new(1);
 
 fn init_logger_state(state: LoggerState) {
     init_once(&LOGGER_STATE, state);
@@ -168,7 +174,9 @@ impl Log for NullLog {
 }
 
 /// The lifetime of this struct is the lifetime of the logger.
-pub struct LoggerRuntime {}
+pub struct LoggerRuntime {
+    id: usize,
+}
 
 impl LoggerRuntime {
     /// destination is the binary stream in which we will log the structured log.
@@ -179,14 +187,20 @@ impl LoggerRuntime {
         #[allow(unused_variables)] extra_text_logger: Option<impl Log + 'static>,
     ) -> Self {
         STRUCTURED_LOG_BYTES.store(0, Ordering::Relaxed);
+        let id = NEXT_LOGGER_RUNTIME_ID.fetch_add(1, Ordering::Relaxed);
+        let destination = LoggerDestination {
+            id,
+            writer: Box::new(destination),
+            clock,
+        };
 
         if let Some(state) = LOGGER_STATE.get() {
-            let mut writer_guard = lock_mutex(&state.writer);
-            *writer_guard = Box::new(destination);
+            lock_mutex(&state.destinations).push(destination);
         } else {
+            let mut destinations = Vec::new();
+            destinations.push(destination);
             let state = LoggerState {
-                writer: Mutex::new(Box::new(destination)),
-                clock,
+                destinations: Mutex::new(destinations),
                 live_listeners: Mutex::new(LiveLogListeners::default()),
             };
             init_logger_state(state);
@@ -230,14 +244,19 @@ impl LoggerRuntime {
             });
         }
 
-        LoggerRuntime {}
+        LoggerRuntime { id }
     }
 
     pub fn flush(&self) {
         // no op in no_std TODO(gbin): check if it will be needed in no_std at some point.
         if let Some(state) = LOGGER_STATE.get() {
-            let mut writer = lock_mutex(&state.writer);
-            let _ = writer.flush(); // ignore errors in no_std
+            let mut destinations = lock_mutex(&state.destinations);
+            if let Some(destination) = destinations
+                .iter_mut()
+                .find(|destination| destination.id == self.id)
+            {
+                let _ = destination.writer.flush(); // ignore errors in no_std
+            }
         } else {
             #[cfg(feature = "std")]
             eprintln!("cu29_log: Logger not initialized.");
@@ -248,10 +267,9 @@ impl LoggerRuntime {
 impl Drop for LoggerRuntime {
     fn drop(&mut self) {
         self.flush();
-        // Assume on no-std that there is no buffering. TODO(gbin): check if this hold true.
+        // Assume on no-std that there is no buffering. TODO(gbin): check if this holds true.
         if let Some(state) = LOGGER_STATE.get() {
-            let mut writer_guard = lock_mutex(&state.writer);
-            *writer_guard = Box::new(DummyWriteStream);
+            lock_mutex(&state.destinations).retain(|destination| destination.id != self.id);
         }
     }
 }
@@ -268,13 +286,17 @@ fn log_inner(
     let Some(state) = LOGGER_STATE.get() else {
         return Err("Logger not initialized.".into());
     };
-    entry.time = state.clock.now();
-
-    let mut guard = lock_mutex(&state.writer);
-    guard.log(entry)?;
-    if let Some(bytes) = guard.last_log_bytes() {
+    let mut destinations = lock_mutex(&state.destinations);
+    let Some(destination) = destinations.last_mut() else {
+        let mut dummy = DummyWriteStream;
+        return dummy.log(entry);
+    };
+    entry.time = destination.clock.now();
+    destination.writer.log(entry)?;
+    if let Some(bytes) = destination.writer.last_log_bytes() {
         STRUCTURED_LOG_BYTES.fetch_add(bytes, Ordering::Relaxed);
     }
+    drop(destinations);
 
     // Basic notification; richer context added in log_debug_mode.
     if notify {
@@ -496,11 +518,15 @@ impl WriteStream<CuLogEntry> for SimpleFileWriter {
 
 #[cfg(test)]
 mod tests {
-    use crate::CuLogEntry;
+    use crate::{CuLogEntry, LoggerRuntime, NullLog};
     use bincode::config::standard;
+    use cu29_clock::RobotClock;
     use cu29_log::{CuLogLevel, CuLogOrigin};
+    use cu29_traits::{CuResult, WriteStream};
     use cu29_value::Value;
     use smallvec::smallvec;
+    #[cfg(feature = "std")]
+    use std::sync::{Arc, Mutex};
 
     #[cfg(not(feature = "std"))]
     use alloc::string::ToString;
@@ -519,6 +545,79 @@ mod tests {
         let decoded_tuple: (CuLogEntry, usize) =
             bincode::decode_from_slice(&encoded, standard()).unwrap();
         assert_eq!(log_entry, decoded_tuple.0);
+    }
+
+    #[cfg(feature = "std")]
+    #[derive(Debug)]
+    struct CaptureStream(Arc<Mutex<Vec<u32>>>);
+
+    #[cfg(feature = "std")]
+    impl WriteStream<CuLogEntry> for CaptureStream {
+        fn log(&mut self, entry: &CuLogEntry) -> CuResult<()> {
+            self.0
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner())
+                .push(entry.msg_index);
+            Ok(())
+        }
+    }
+
+    #[cfg(feature = "std")]
+    fn test_log_entry(msg_index: u32) -> CuLogEntry {
+        CuLogEntry {
+            time: 0.into(),
+            level: CuLogLevel::Debug,
+            origin: CuLogOrigin::default(),
+            msg_index,
+            paramname_indexes: smallvec![],
+            params: smallvec![],
+        }
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn logger_runtime_drop_preserves_other_live_destinations() {
+        let captured_a = Arc::new(Mutex::new(Vec::new()));
+        let captured_b = Arc::new(Mutex::new(Vec::new()));
+        let runtime_a = LoggerRuntime::init(
+            RobotClock::default(),
+            CaptureStream(Arc::clone(&captured_a)),
+            None::<NullLog>,
+        );
+        let runtime_b = LoggerRuntime::init(
+            RobotClock::default(),
+            CaptureStream(Arc::clone(&captured_b)),
+            None::<NullLog>,
+        );
+
+        crate::log(&mut test_log_entry(1)).unwrap();
+        drop(runtime_a);
+        crate::log(&mut test_log_entry(2)).unwrap();
+        drop(runtime_b);
+
+        assert!(captured_a.lock().unwrap().is_empty());
+        assert_eq!(*captured_b.lock().unwrap(), vec![1, 2]);
+
+        let captured_c = Arc::new(Mutex::new(Vec::new()));
+        let captured_d = Arc::new(Mutex::new(Vec::new()));
+        let runtime_c = LoggerRuntime::init(
+            RobotClock::default(),
+            CaptureStream(Arc::clone(&captured_c)),
+            None::<NullLog>,
+        );
+        let runtime_d = LoggerRuntime::init(
+            RobotClock::default(),
+            CaptureStream(Arc::clone(&captured_d)),
+            None::<NullLog>,
+        );
+
+        crate::log(&mut test_log_entry(3)).unwrap();
+        drop(runtime_d);
+        crate::log(&mut test_log_entry(4)).unwrap();
+        drop(runtime_c);
+
+        assert_eq!(*captured_c.lock().unwrap(), vec![4]);
+        assert_eq!(*captured_d.lock().unwrap(), vec![3]);
     }
 
     #[cfg(all(feature = "std", debug_assertions))]

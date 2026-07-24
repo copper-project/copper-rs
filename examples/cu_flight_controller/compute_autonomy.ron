@@ -9,7 +9,7 @@
             id: "vitfly_depth_rate",
             type: "cu_ratelimit::CuRateLimit<cu_zed::ZedDepthMap<Vec<f32>>>",
             config: {"rate": 30.0},
-            logging: (enabled: false),
+            logging: (enabled: true),
         ),
         (
             id: "vitfly",

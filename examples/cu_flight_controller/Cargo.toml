@@ -346,6 +346,11 @@ path = "src/resim.rs"
 required-features = ["sim-debug"]
 
 [[bin]]
+name = "quad-compute-resim"
+path = "src/compute_resim.rs"
+required-features = ["sim-debug"]
+
+[[bin]]
 name = "quad-bevymon"
 path = "src/bevymon.rs"
 required-features = ["bevymon"]

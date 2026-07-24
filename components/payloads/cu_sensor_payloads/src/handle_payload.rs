@@ -138,7 +138,7 @@ where
     M: CuHandlePayloadMeta + 'static,
 {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.with_inner(|inner| inner.serialize(serializer))
+        self.handle.serialize_value(serializer)
     }
 }
 

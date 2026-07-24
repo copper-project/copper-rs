@@ -114,6 +114,26 @@ resim-debug debug_base="copper/examples/cu_flight_controller/debug/v1" log="logs
     --log-base "$log" \
     --replay-log-base "$replay_log"
 
+# Run the replay-backed debugger for the compute log, including the depth
+# images that were actually presented to ViTFly.
+compute-resim debug_base="copper/examples/cu_flight_controller/compute/debug/v1" log="logs/flight_compute_sim.copper" replay_log="logs/flight_compute_resim.copper":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  example_dir="{{justfile_directory()}}"
+  log="{{log}}"
+  replay_log="{{replay_log}}"
+  if [[ "$log" != /* ]]; then
+    log="${example_dir}/${log}"
+  fi
+  if [[ "$replay_log" != /* ]]; then
+    replay_log="${example_dir}/${replay_log}"
+  fi
+  cd "{{ROOT}}"
+  cargo --config examples/cu_flight_controller/.cargo/config.toml run -p cu-flight-controller --no-default-features --features sim-debug --bin quad-compute-resim -- \
+    --debug-base "{{debug_base}}" \
+    --log-base "$log" \
+    --replay-log-base "$replay_log"
+
 # Run the Bevy + Copper simulation loop with cu_bevymon embedded in the window.
 bevy:
   #!/usr/bin/env bash
