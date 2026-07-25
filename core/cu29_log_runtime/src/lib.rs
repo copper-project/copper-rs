@@ -197,10 +197,8 @@ impl LoggerRuntime {
         if let Some(state) = LOGGER_STATE.get() {
             lock_mutex(&state.destinations).push(destination);
         } else {
-            let mut destinations = Vec::new();
-            destinations.push(destination);
             let state = LoggerState {
-                destinations: Mutex::new(destinations),
+                destinations: Mutex::new(Vec::from([destination])),
                 live_listeners: Mutex::new(LiveLogListeners::default()),
             };
             init_logger_state(state);
