@@ -824,32 +824,9 @@ fn gen_culist_support(
             ::core::ptr::addr_of_mut!((*ptr).0.#slot_index)
                 .write(::core::default::Default::default());
         });
-        let pack = output_packs
-            .get(*idx)
-            .unwrap_or_else(|| panic!("Missing output pack for index {idx}"));
-        if pack.is_multi() {
-            for port_idx in 0..pack.msg_types.len() {
-                let port_index = syn::Index::from(port_idx);
-                runtime_reset_tokens.push(quote! {
-                    self.0.#slot_index.#port_index.metadata.status_txt =
-                        CuCompactString::default();
-                    self.0.#slot_index.#port_index.metadata.process_time.start =
-                        cu29::clock::OptionCuTime::none();
-                    self.0.#slot_index.#port_index.metadata.process_time.end =
-                        cu29::clock::OptionCuTime::none();
-                    self.0.#slot_index.#port_index.metadata.origin = None;
-                });
-            }
-        } else {
-            runtime_reset_tokens.push(quote! {
-                self.0.#slot_index.metadata.status_txt = CuCompactString::default();
-                self.0.#slot_index.metadata.process_time.start =
-                    cu29::clock::OptionCuTime::none();
-                self.0.#slot_index.metadata.process_time.end =
-                    cu29::clock::OptionCuTime::none();
-                self.0.#slot_index.metadata.origin = None;
-            });
-        }
+        runtime_reset_tokens.push(quote! {
+            self.0.#slot_index = ::core::default::Default::default();
+        });
     }
     let collect_metadata_function = quote! {
         pub fn collect_metadata<'a>(culist: &'a CuList) -> [&'a CuMsgMetadata; #culist_size] {

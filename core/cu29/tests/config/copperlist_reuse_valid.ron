@@ -1,0 +1,17 @@
+(
+    tasks: [
+        (
+            id: "src",
+            type: "ReuseSource",
+            kind: source,
+            run_in_sim: true,
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "__nc__",
+            msg: "u32",
+        ),
+    ],
+)

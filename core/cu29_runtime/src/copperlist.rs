@@ -84,9 +84,8 @@ impl<P: CopperListTuple> CopperList<P> {
         self.state
     }
 
-    /// Restores the lifecycle state expected at allocation time and reruns
-    /// payload-container fixups before the list is reused. This does not imply
-    /// a full `P::default()` payload reset.
+    /// Restores the lifecycle state expected at allocation time and asks the
+    /// generated message tuple to clear every payload slot before reuse.
     #[doc(hidden)]
     pub fn reset_for_runtime_use(&mut self, id: u64)
     where
@@ -149,8 +148,7 @@ pub trait CuListZeroedInit: CopperListTuple {
         }
     }
 
-    /// Restores runtime invariants on a fully initialized copper list before it
-    /// is reused.
+    /// Clears a fully initialized copper list before it is reused.
     ///
     /// Unlike [`init_uninit`](Self::init_uninit), this method may safely drop
     /// values left in the previous iteration.
@@ -341,6 +339,7 @@ mod tests {
     use super::*;
     use cu29_traits::{ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks};
     use serde::{Deserialize, Serialize, Serializer};
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[derive(Debug, Encode, Decode, PartialEq, Clone, Copy, Serialize, Deserialize, Default)]
     struct CuStampedDataSet(i32);
@@ -358,6 +357,83 @@ mod tests {
     }
 
     impl CuListZeroedInit for CuStampedDataSet {}
+
+    static DROPPED_REUSED_PAYLOADS: AtomicUsize = AtomicUsize::new(0);
+
+    #[derive(Debug, Encode, Decode, Serialize)]
+    struct DropTrackedPayload;
+
+    impl Drop for DropTrackedPayload {
+        fn drop(&mut self) {
+            DROPPED_REUSED_PAYLOADS.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    #[derive(Debug, Encode, Decode, Serialize, Default)]
+    struct ResettingDataSet(Option<DropTrackedPayload>);
+
+    impl ErasedCuStampedDataSet for ResettingDataSet {
+        fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
+            Vec::new()
+        }
+    }
+
+    impl MatchingTasks for ResettingDataSet {
+        fn get_all_task_ids() -> &'static [&'static str] {
+            &[]
+        }
+    }
+
+    impl CuListZeroedInit for ResettingDataSet {
+        fn reset_for_runtime_use(&mut self) {
+            *self = Self::default();
+        }
+    }
+
+    #[test]
+    fn reused_slot_reset_drops_stale_payload() {
+        DROPPED_REUSED_PAYLOADS.store(0, Ordering::SeqCst);
+        let mut q = CuListsManager::<ResettingDataSet, 1>::new();
+
+        q.create().unwrap().msgs.0 = Some(DropTrackedPayload);
+        let _ = q.pop().unwrap();
+        let reused = q.create().unwrap();
+
+        assert!(reused.msgs.0.is_none());
+        assert_eq!(DROPPED_REUSED_PAYLOADS.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    #[ignore = "manual microbenchmark; run in release mode with --ignored --nocapture"]
+    fn benchmark_reused_slot_reset_cost() {
+        const ITERATIONS: u32 = 5_000_000;
+
+        let mut preserved = CuListsManager::<CuStampedDataSet, 1>::new();
+        let started = std::time::Instant::now();
+        for _ in 0..ITERATIONS {
+            let cl = preserved.create().unwrap();
+            std::hint::black_box(&mut cl.msgs);
+            let _ = preserved.pop().unwrap();
+        }
+        let preserved_elapsed = started.elapsed();
+
+        let mut reset = CuListsManager::<ResettingDataSet, 1>::new();
+        let started = std::time::Instant::now();
+        for _ in 0..ITERATIONS {
+            let cl = reset.create().unwrap();
+            std::hint::black_box(&mut cl.msgs);
+            let _ = reset.pop().unwrap();
+        }
+        let reset_elapsed = started.elapsed();
+
+        eprintln!(
+            "reuse preserve={:.2} ns/op reset={:.2} ns/op delta={:.2} ns/op",
+            preserved_elapsed.as_nanos() as f64 / f64::from(ITERATIONS),
+            reset_elapsed.as_nanos() as f64 / f64::from(ITERATIONS),
+            reset_elapsed.saturating_sub(preserved_elapsed).as_nanos() as f64
+                / f64::from(ITERATIONS),
+        );
+    }
 
     #[test]
     fn empty_queue() {
