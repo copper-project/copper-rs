@@ -3,7 +3,7 @@
         (
             id: "attitude",
             type: "tasks::AttitudeController",
-            logging: (enabled: false),
+            logging: (enabled: true),
             config: {
                 "angle_limit_deg": 60.0,
                 "rate_limit_dps": 210.0,

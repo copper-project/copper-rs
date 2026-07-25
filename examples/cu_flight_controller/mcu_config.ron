@@ -146,7 +146,7 @@
         (
             id: "imu_cal",
             type: "tasks::ImuCalibrator",
-            logging: (enabled: false),
+            logging: (enabled: true),
             config: {"cal_ms": 500},
         ),
         (
@@ -157,7 +157,7 @@
         (
             id: "rate",
             type: "tasks::RateController",
-            logging: (enabled: false),
+            logging: (enabled: true),
             config: {
                 "kp": 0.05,
                 "ki": 0.0,
@@ -212,7 +212,7 @@
         (
             id: "mapper",
             type: "tasks::RcMapper",
-            logging: (enabled: false),
+            logging: (enabled: true),
             config: {
                 "arm_channel": 4,
                 "arm_min": 1700,
@@ -229,13 +229,13 @@
             id: "act_led",
             type: "tasks::activity_led::ActivityLed",
             run_in_sim: true,
-            logging: (enabled: false),
+            logging: (enabled: true),
             resources: {"led": "fc.green_led"},
         ),
         (
             id: "vtx_osd",
             type: "tasks::vtx::VtxOsd",
-            logging: (enabled: false),
+            logging: (enabled: true),
             config: {
                 "cols": 53,
                 "row": 13,
@@ -255,7 +255,7 @@
             type: "tasks::flow_msp::FlowMspLogger",
             missions: ["flow"],
             run_in_sim: true,
-            logging: (enabled: false),
+            logging: (enabled: true),
         ),
         (
             id: "gnss_ublox",
@@ -295,7 +295,7 @@
             id: "vtx_msp",
             type: "cu_msp_bridge::CuMspBridge<cu_micoairh743::Uart2Port, cu_micoairh743::SerialPortError>",
             run_in_sim: false,
-            logging: (enabled: false),
+            logging: (enabled: true),
             resources: {"serial": "fc.uart2"},
             channels: [
                 Tx(id: "requests"),
@@ -308,7 +308,7 @@
             type: "cu_msp_bridge::CuMspBridge<cu_micoairh743::Uart4Port, cu_micoairh743::SerialPortError>",
             missions: ["flow"],
             run_in_sim: false,
-            logging: (enabled: false),
+            logging: (enabled: true),
             resources: {"serial": "fc.uart4"},
             channels: [
                 Tx(id: "requests"),

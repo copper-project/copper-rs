@@ -34,7 +34,7 @@
             id: "zed",
             type: "cu_zed::Zed",
             run_in_sim: false,
-            logging: (enabled: false),
+            logging: (enabled: true),
         ),
     ],
     runtime: (rate_target_hz: 30),
