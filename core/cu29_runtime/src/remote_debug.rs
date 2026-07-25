@@ -102,12 +102,14 @@
 //! - Non-mutating `state.*` queries with `at` perform temporary seek/restore internally
 //!   while preserving `cursor_rev`.
 //!
-//! Session lifecycle limits (default):
+//! Session lease:
 //!
-//! - Idle timeout: 15 minutes since last request touching the session.
-//! - Maximum active sessions: 64.
-//! - Cleanup policy: stale sessions are evicted opportunistically on incoming requests
-//!   and on server receive-timeout ticks.
+//! - Exactly one replay session may be active at a time.
+//! - The client should send a session-scoped `health.ping` every second while otherwise idle.
+//! - Any request carrying the active `session_id` renews its lease.
+//! - The session is automatically closed after 3 seconds without session activity.
+//! - Expired sessions are evicted on incoming requests and server receive-timeout ticks, allowing
+//!   another debugger to reconnect without restarting the replay process.
 //!
 //! ## Target and Resolution Semantics
 //!
@@ -193,7 +195,7 @@
 //!
 //! | Method | Session required | Params | Result |
 //! | --- | --- | --- | --- |
-//! | `health.ping` | no (or valid session if provided) | `{}` | `now_ns`, `status` |
+//! | `health.ping` | no (or valid session if provided) | `{}` | `now_ns`, `status`; renews the lease when session-scoped |
 //! | `health.stats` | yes | `{}` | uptime, replay perf, watch count, cursor revision |
 //!
 //! ## Expected Call Flows
@@ -231,7 +233,7 @@
 //! | `UnknownMethod` | Method not in dispatch table. |
 //! | `MissingSession` | Session-required call omitted `session_id`. |
 //! | `SessionNotFound` | Unknown session id. |
-//! | `SessionLimitReached` | `session.open` denied because active session cap is reached. |
+//! | `SessionBusy` | `session.open` denied because another replay session holds the lease. |
 //! | `InvalidParams` | JSON decode error for method params. |
 //! | `ResolveFailed` | Target could not be resolved with requested mode. |
 //! | `SeekFailed` / `StepFailed` / `ReplayFailed` / `RunUntilFailed` | Navigation/replay operation failed. |
@@ -295,8 +297,9 @@ const API_VERSION: &str = "debug.v1";
 // common 8 MiB RLIMIT_MEMLOCK defaults.
 const LOCAL_SHM_POOL_BYTES: u64 = 4 * 1024 * 1024;
 const LOCAL_SHM_MESSAGE_THRESHOLD_BYTES: u64 = 3 * 1024;
-const DEFAULT_SESSION_IDLE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
-const DEFAULT_MAX_ACTIVE_SESSIONS: usize = 64;
+const SESSION_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(1);
+const SESSION_LEASE_TIMEOUT: Duration = Duration::from_secs(3);
+const MAX_ACTIVE_SESSIONS: usize = 1;
 const MAX_PAGE_LIMIT: u32 = 1000;
 const MAX_REPLAY_BATCH_LIMIT: u32 = 128;
 const MAX_LOG_PAGE_LIMIT: usize = 5000;
@@ -780,16 +783,26 @@ where
 
 #[derive(Debug, Clone, Copy)]
 struct SessionLifecycleLimits {
-    idle_timeout: Duration,
+    lease_timeout: Duration,
     max_sessions: usize,
 }
 
 impl Default for SessionLifecycleLimits {
     fn default() -> Self {
         Self {
-            idle_timeout: DEFAULT_SESSION_IDLE_TIMEOUT,
-            max_sessions: DEFAULT_MAX_ACTIVE_SESSIONS,
+            lease_timeout: SESSION_LEASE_TIMEOUT,
+            max_sessions: MAX_ACTIVE_SESSIONS,
         }
+    }
+}
+
+impl SessionLifecycleLimits {
+    fn is_expired(self, last_touched_at: Instant, now: Instant) -> bool {
+        now.saturating_duration_since(last_touched_at) >= self.lease_timeout
+    }
+
+    fn can_open(self, active_sessions: usize) -> bool {
+        active_sessions < self.max_sessions
     }
 }
 
@@ -1314,6 +1327,11 @@ where
         self.cleanup_expired_sessions();
         let (mut response, attachments) =
             collect_debug_handle_attachments(|| self.dispatch_request(&request));
+        if let Some(session_id) = request.session_id.as_deref()
+            && let Some(state) = self.sessions.get_mut(session_id)
+        {
+            state.last_touched_at = Instant::now();
+        }
         response.attachments = attachments
             .into_iter()
             .map(DebugRpcAttachment::from)
@@ -1430,14 +1448,11 @@ where
             Err(err) => return param_err_response(request_id, err),
         };
         self.cleanup_expired_sessions();
-        if self.sessions.len() >= self.session_lifecycle.max_sessions {
+        if !self.session_lifecycle.can_open(self.sessions.len()) {
             return err_response(
                 request_id,
-                "SessionLimitReached",
-                &format!(
-                    "Maximum active sessions ({}) reached",
-                    self.session_lifecycle.max_sessions
-                ),
+                "SessionBusy",
+                "Another replay session is active; retry after its lease is closed or expires",
             );
         }
         let wire_codec = negotiate_codec(parsed.codecs.as_deref()).unwrap_or(WireCodec::Cbor);
@@ -2792,10 +2807,9 @@ where
 
     fn cleanup_expired_sessions(&mut self) {
         let now = Instant::now();
-        let idle_timeout = self.session_lifecycle.idle_timeout;
-        self.sessions.retain(|_, state| {
-            now.saturating_duration_since(state.last_touched_at) <= idle_timeout
-        });
+        let session_lifecycle = self.session_lifecycle;
+        self.sessions
+            .retain(|_, state| !session_lifecycle.is_expired(state.last_touched_at, now));
     }
 
     fn handle_process_describe(
@@ -3002,7 +3016,10 @@ fn capabilities_json(session_lifecycle: SessionLifecycleLimits) -> Value {
         "supports_targets": ["cl", "ts"],
         "max_replay_batch_limit": MAX_REPLAY_BATCH_LIMIT,
         "session_lifecycle": {
-            "idle_timeout_ms": session_lifecycle.idle_timeout.as_millis() as u64,
+            "idle_timeout_ms": session_lifecycle.lease_timeout.as_millis() as u64,
+            "lease_timeout_ms": session_lifecycle.lease_timeout.as_millis() as u64,
+            "heartbeat_interval_ms": SESSION_HEARTBEAT_INTERVAL.as_millis() as u64,
+            "heartbeat_required": true,
             "max_sessions": session_lifecycle.max_sessions,
             "cleanup_policy": "on_each_request_or_timeout_tick",
         },
@@ -4894,9 +4911,11 @@ fn hex_digit(n: u8) -> char {
 #[cfg(all(test, feature = "std"))]
 mod tests {
     use super::{
-        DebugRpcAttachment, DebugRpcResponse, WireCodec, build_message_metadata_field_descriptors,
-        build_output_schema_entries, build_stack_schema, debug_value_to_json, encode_payload,
-        metadata_to_json, reflect_value_to_json, register_debug_support_types,
+        DebugRpcAttachment, DebugRpcResponse, MAX_ACTIVE_SESSIONS, SESSION_HEARTBEAT_INTERVAL,
+        SESSION_LEASE_TIMEOUT, SessionLifecycleLimits, WireCodec,
+        build_message_metadata_field_descriptors, build_output_schema_entries, build_stack_schema,
+        capabilities_json, debug_value_to_json, encode_payload, metadata_to_json,
+        reflect_value_to_json, register_debug_support_types,
     };
     use crate::app::CuSimApplication;
     use crate::curuntime::KeyFrame;
@@ -4913,6 +4932,7 @@ mod tests {
     use cu29_unifiedlog::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
     use cu29_units::si::f32::Ratio;
     use std::collections::BTreeMap;
+    use std::time::{Duration, Instant};
 
     struct MissionStackApp;
 
@@ -5085,6 +5105,58 @@ mod tests {
         fn restore_keyframe(&mut self, _freezer: &KeyFrame) -> CuResult<()> {
             Ok(())
         }
+    }
+
+    #[test]
+    fn replay_session_lease_allows_only_one_active_session() {
+        let lifecycle = SessionLifecycleLimits::default();
+
+        assert_eq!(lifecycle.max_sessions, MAX_ACTIVE_SESSIONS);
+        assert_eq!(lifecycle.max_sessions, 1);
+        assert!(lifecycle.can_open(0));
+        assert!(!lifecycle.can_open(1));
+    }
+
+    #[test]
+    fn replay_session_lease_expires_three_seconds_after_last_heartbeat() {
+        let lifecycle = SessionLifecycleLimits::default();
+        let opened_at = Instant::now();
+        let heartbeat_at = opened_at + SESSION_HEARTBEAT_INTERVAL;
+
+        assert_eq!(lifecycle.lease_timeout, SESSION_LEASE_TIMEOUT);
+        assert!(!lifecycle.is_expired(
+            heartbeat_at,
+            heartbeat_at + SESSION_LEASE_TIMEOUT - Duration::from_millis(1)
+        ));
+        assert!(
+            lifecycle.is_expired(heartbeat_at, heartbeat_at + SESSION_LEASE_TIMEOUT),
+            "the lease must expire at the advertised timeout boundary"
+        );
+    }
+
+    #[test]
+    fn expired_replay_session_allows_immediate_reconnect() {
+        let lifecycle = SessionLifecycleLimits::default();
+        let opened_at = Instant::now();
+        let mut active_sessions = vec![opened_at];
+
+        active_sessions.retain(|last_touched_at| {
+            !lifecycle.is_expired(*last_touched_at, opened_at + SESSION_LEASE_TIMEOUT)
+        });
+
+        assert!(active_sessions.is_empty());
+        assert!(lifecycle.can_open(active_sessions.len()));
+    }
+
+    #[test]
+    fn capabilities_advertise_single_session_heartbeat_lease() {
+        let capabilities = capabilities_json(SessionLifecycleLimits::default());
+        let lifecycle = &capabilities["session_lifecycle"];
+
+        assert_eq!(lifecycle["max_sessions"], serde_json::json!(1));
+        assert_eq!(lifecycle["lease_timeout_ms"], serde_json::json!(3_000));
+        assert_eq!(lifecycle["heartbeat_interval_ms"], serde_json::json!(1_000));
+        assert_eq!(lifecycle["heartbeat_required"], serde_json::json!(true));
     }
 
     #[test]
