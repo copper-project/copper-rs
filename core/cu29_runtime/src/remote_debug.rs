@@ -177,7 +177,7 @@
 //! | `schema.get_stack` | yes | `{}` | stack config schema JSON |
 //! | `schema.list_types` | yes | `{ filter? }` | `type_paths[]` |
 //! | `schema.get_type` | yes | `{ type_path, format? }` | schema/reflect dump |
-//! | `schema.get_outputs` | yes | `{}` | output index -> task/message/payload field metadata |
+//! | `schema.get_outputs` | yes | `{ page?: { offset, limit }, field_page?: { offset, limit } }` | paged output index -> task/message/payload field metadata |
 //!
 //! ### State
 //!
@@ -270,8 +270,8 @@ use cu29_log::CuLogEntry;
 use cu29_log_runtime::capture_live_logs;
 use cu29_traits::{
     CopperListTuple, CuCompactString, CuError, CuMsgMetadataTrait, CuMsgOrigin, CuResult,
-    DebugFieldDescriptor, DebugFieldKind, DebugFieldSemantics, DebugScalarKind,
-    ErasedCuStampedDataSet, UnifiedLogType,
+    DebugEnumVariantDescriptor, DebugEnumVariantKind, DebugFieldDescriptor, DebugFieldKind,
+    DebugFieldSemantics, DebugScalarKind, ErasedCuStampedDataSet, UnifiedLogType,
 };
 use cu29_unifiedlog::{
     SectionStorage, UnifiedLogWrite, UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader,
@@ -1379,9 +1379,11 @@ where
                 request.session_id.as_deref(),
                 &request.params,
             ),
-            "schema.get_outputs" => {
-                self.handle_schema_get_outputs(request_id, request.session_id.as_deref())
-            }
+            "schema.get_outputs" => self.handle_schema_get_outputs(
+                request_id,
+                request.session_id.as_deref(),
+                &request.params,
+            ),
             "state.inspect" => self.handle_state_inspect(
                 request_id,
                 request.session_id.as_deref(),
@@ -2283,6 +2285,7 @@ where
         &mut self,
         request_id: String,
         session_id: Option<&str>,
+        params: &Value,
     ) -> DebugRpcResponse {
         if let Err(e) = self.session_mut(session_id) {
             return err_response(request_id, "SessionNotFound", &e.to_string());
@@ -2291,8 +2294,73 @@ where
         let mut registry = TypeRegistry::default();
         populate_debug_type_registry::<App>(&mut registry);
 
-        match build_output_schema_entries::<P>(&registry) {
-            Ok(outputs) => ok_response(request_id, json!({ "outputs": outputs }), None, None),
+        let offset = params
+            .get("page")
+            .and_then(|page| page.get("offset"))
+            .and_then(Value::as_u64)
+            .unwrap_or(0) as usize;
+        let limit = params
+            .get("page")
+            .and_then(|page| page.get("limit"))
+            .and_then(Value::as_u64)
+            .and_then(|limit| usize::try_from(limit).ok())
+            .unwrap_or(usize::MAX)
+            .max(1);
+        let total = P::get_output_specs().len();
+
+        match build_output_schema_entries_page::<P>(&registry, offset, limit) {
+            Ok(mut outputs) => {
+                let consumed = outputs.len();
+                let next_offset = offset
+                    .saturating_add(consumed)
+                    .lt(&total)
+                    .then_some(offset.saturating_add(consumed));
+                let field_offset = params
+                    .get("field_page")
+                    .and_then(|page| page.get("offset"))
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0) as usize;
+                let field_limit = params
+                    .get("field_page")
+                    .and_then(|page| page.get("limit"))
+                    .and_then(Value::as_u64)
+                    .and_then(|limit| usize::try_from(limit).ok())
+                    .unwrap_or(usize::MAX)
+                    .max(1);
+                let mut total_fields = None;
+                let mut next_field_offset = None;
+                if params.get("field_page").is_some()
+                    && let Some(fields) = outputs
+                        .first_mut()
+                        .and_then(|output| output.get_mut("payload_fields"))
+                        .and_then(Value::as_array_mut)
+                {
+                    total_fields = Some(fields.len());
+                    let page = fields
+                        .iter()
+                        .skip(field_offset)
+                        .take(field_limit)
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    next_field_offset = field_offset
+                        .saturating_add(page.len())
+                        .lt(&fields.len())
+                        .then_some(field_offset.saturating_add(page.len()));
+                    *fields = page;
+                }
+                ok_response(
+                    request_id,
+                    json!({
+                        "outputs": outputs,
+                        "total": total,
+                        "next_offset": next_offset,
+                        "total_fields": total_fields,
+                        "next_field_offset": next_field_offset,
+                    }),
+                    None,
+                    None,
+                )
+            }
             Err(err) => err_response(request_id, "SchemaFailed", &err.to_string()),
         }
     }
@@ -3495,19 +3563,84 @@ fn metadata_to_json(metadata: &dyn CuMsgMetadataTrait, tov: Tov) -> Value {
         origin: metadata.origin().cloned(),
     };
 
-    serde_json::to_value(view)
+    cu29_value::to_value(view)
+        .map(debug_value_to_json)
         .unwrap_or_else(|_| Value::String("metadata serialization failed".to_string()))
 }
 
 fn erased_serialize_to_value(value: &dyn erased_serde::Serialize) -> CuResult<Value> {
-    let mut bytes = Vec::new();
-    {
-        let mut serializer = minicbor_serde::Serializer::new(&mut bytes);
-        erased_serde::serialize(value, &mut serializer)
-            .map_err(|e| CuError::from(format!("Failed to serialize erased payload: {e}")))?;
+    let value = cu29_value::to_value(value)
+        .map_err(|e| CuError::from(format!("Failed to serialize erased payload: {e}")))?;
+    Ok(debug_value_to_json(value))
+}
+
+fn debug_value_to_json(value: cu29_value::Value) -> Value {
+    use cu29_value::Value as DebugValue;
+
+    match value {
+        DebugValue::Bool(value) => Value::Bool(value),
+        DebugValue::U8(value) => json!(value),
+        DebugValue::U16(value) => json!(value),
+        DebugValue::U32(value) => json!(value),
+        DebugValue::U64(value) => json!(value),
+        DebugValue::U128(value) => json!({"__cu_u128__": value.to_string()}),
+        DebugValue::I8(value) => json!(value),
+        DebugValue::I16(value) => json!(value),
+        DebugValue::I32(value) => json!(value),
+        DebugValue::I64(value) => json!(value),
+        DebugValue::I128(value) => json!({"__cu_i128__": value.to_string()}),
+        DebugValue::F32(value) => debug_float_to_json(f64::from(value)),
+        DebugValue::F64(value) => debug_float_to_json(value),
+        DebugValue::Char(value) => Value::String(value.to_string()),
+        DebugValue::String(value) => Value::String(value),
+        DebugValue::Unit | DebugValue::Option(None) => Value::Null,
+        DebugValue::Option(Some(value)) | DebugValue::Newtype(value) => debug_value_to_json(*value),
+        DebugValue::Seq(values) => {
+            Value::Array(values.into_iter().map(debug_value_to_json).collect())
+        }
+        DebugValue::Map(values)
+            if values
+                .keys()
+                .all(|key| matches!(key, DebugValue::String(_))) =>
+        {
+            Value::Object(
+                values
+                    .into_iter()
+                    .filter_map(|(key, value)| match key {
+                        DebugValue::String(key) => Some((key, debug_value_to_json(value))),
+                        _ => None,
+                    })
+                    .collect(),
+            )
+        }
+        DebugValue::Map(values) => json!({
+            "__cu_map__": values
+                .into_iter()
+                .map(|(key, value)| {
+                    json!({
+                        "key": debug_value_to_json(key),
+                        "value": debug_value_to_json(value),
+                    })
+                })
+                .collect::<Vec<_>>()
+        }),
+        DebugValue::Bytes(values) => {
+            Value::Array(values.into_iter().map(|value| json!(value)).collect())
+        }
+        DebugValue::CuTime(value) => json!(value.as_nanos()),
     }
-    minicbor_serde::from_slice(&bytes)
-        .map_err(|e| CuError::new_with_cause("Failed to decode serialized payload CBOR", e))
+}
+
+fn debug_float_to_json(value: f64) -> Value {
+    if value.is_nan() {
+        json!({"__cu_float__": "nan"})
+    } else if value == f64::INFINITY {
+        json!({"__cu_float__": "positive_infinity"})
+    } else if value == f64::NEG_INFINITY {
+        json!({"__cu_float__": "negative_infinity"})
+    } else {
+        json!(value)
+    }
 }
 
 fn build_tasks_json<App, P, CB, TF, S, L>(
@@ -4028,7 +4161,19 @@ fn simple_jsonschema_for_type(info: &'static TypeInfo) -> Value {
     })
 }
 
+#[cfg(test)]
 fn build_output_schema_entries<P>(registry: &TypeRegistry) -> CuResult<Vec<Value>>
+where
+    P: CopperListTuple + 'static,
+{
+    build_output_schema_entries_page::<P>(registry, 0, usize::MAX)
+}
+
+fn build_output_schema_entries_page<P>(
+    registry: &TypeRegistry,
+    offset: usize,
+    limit: usize,
+) -> CuResult<Vec<Value>>
 where
     P: CopperListTuple + 'static,
 {
@@ -4037,6 +4182,8 @@ where
     P::get_output_specs()
         .iter()
         .enumerate()
+        .skip(offset)
+        .take(limit)
         .map(|(index, spec)| {
             let payload_type_path = spec.payload_type_path();
             let payload_type =
@@ -4294,18 +4441,43 @@ fn build_type_node(
                 nullable,
             ),
         ),
-        TypeInfo::Map(_) => debug_field_descriptor(
-            display_path,
-            binding_name,
-            value_type_path,
-            DebugFieldShape {
-                semantics: debug_type_semantics(value_type_path),
-                scalar_kind: None,
+        TypeInfo::Map(info) => {
+            let mut descriptor = debug_field_descriptor(
+                display_path,
+                binding_name,
+                value_type_path,
+                DebugFieldShape {
+                    semantics: debug_type_semantics(value_type_path),
+                    scalar_kind: None,
+                    nullable,
+                    kind: DebugFieldKind::Map,
+                },
+                Vec::new(),
+            );
+            let key_ty = info.key_ty();
+            let value_ty = info.value_ty();
+            descriptor.map_key = Some(Box::new(build_field_node(
+                registry,
+                info.key_info(),
+                &key_ty,
+                &format!("{}{{key}}", path_or_value(display_path)),
+                binding_name
+                    .map(|name| format!("{}{{key}}", path_or_value(name)))
+                    .as_deref(),
                 nullable,
-                kind: DebugFieldKind::Map,
-            },
-            Vec::new(),
-        ),
+            )));
+            descriptor.map_value = Some(Box::new(build_field_node(
+                registry,
+                info.value_info(),
+                &value_ty,
+                &format!("{}{{value}}", path_or_value(display_path)),
+                binding_name
+                    .map(|name| format!("{}{{value}}", path_or_value(name)))
+                    .as_deref(),
+                nullable,
+            )));
+            descriptor
+        }
         TypeInfo::Set(info) => debug_field_descriptor(
             display_path,
             binding_name,
@@ -4337,7 +4509,7 @@ fn build_type_node(
                 );
             }
 
-            debug_field_descriptor(
+            let mut descriptor = debug_field_descriptor(
                 display_path,
                 binding_name,
                 value_type_path,
@@ -4348,7 +4520,10 @@ fn build_type_node(
                     kind: DebugFieldKind::Enum,
                 },
                 Vec::new(),
-            )
+            );
+            descriptor.enum_variants =
+                enum_variant_descriptors(registry, info, display_path, binding_name, nullable);
+            descriptor
         }
         TypeInfo::Opaque(info) => debug_field_descriptor(
             display_path,
@@ -4461,6 +4636,73 @@ fn indexed_children(
     )]
 }
 
+fn enum_variant_descriptors(
+    registry: &TypeRegistry,
+    info: &EnumInfo,
+    display_path: &str,
+    binding_name: Option<&str>,
+    nullable: bool,
+) -> Vec<DebugEnumVariantDescriptor> {
+    info.iter()
+        .map(|variant| {
+            let variant_display =
+                join_field_path(path_or_value(display_path).as_str(), variant.name());
+            let variant_binding = binding_name
+                .map(|name| join_field_path(path_or_value(name).as_str(), variant.name()));
+            match variant {
+                VariantInfo::Unit(_) => DebugEnumVariantDescriptor {
+                    name: variant.name().to_owned(),
+                    kind: DebugEnumVariantKind::Unit,
+                    fields: Vec::new(),
+                },
+                VariantInfo::Tuple(tuple) => DebugEnumVariantDescriptor {
+                    name: variant.name().to_owned(),
+                    kind: DebugEnumVariantKind::Tuple,
+                    fields: tuple
+                        .iter()
+                        .enumerate()
+                        .map(|(index, field)| {
+                            let field_display = indexed_path(&variant_display, Some(index));
+                            let field_binding = variant_binding
+                                .as_deref()
+                                .map(|name| indexed_path(name, Some(index)));
+                            build_field_node(
+                                registry,
+                                field.type_info(),
+                                field.ty(),
+                                &field_display,
+                                field_binding.as_deref(),
+                                nullable,
+                            )
+                        })
+                        .collect(),
+                },
+                VariantInfo::Struct(struct_variant) => DebugEnumVariantDescriptor {
+                    name: variant.name().to_owned(),
+                    kind: DebugEnumVariantKind::Struct,
+                    fields: struct_variant
+                        .iter()
+                        .map(|field| {
+                            let field_display = join_field_path(&variant_display, field.name());
+                            let field_binding = variant_binding
+                                .as_deref()
+                                .map(|name| join_field_path(name, field.name()));
+                            build_field_node(
+                                registry,
+                                field.type_info(),
+                                field.ty(),
+                                &field_display,
+                                field_binding.as_deref(),
+                                nullable,
+                            )
+                        })
+                        .collect(),
+                },
+            }
+        })
+        .collect()
+}
+
 fn skipped_indices(registry: &TypeRegistry, type_id: core::any::TypeId) -> BTreeSet<usize> {
     registry
         .get_type_data::<SerializationData>(type_id)
@@ -4526,6 +4768,9 @@ fn debug_field_descriptor(
         nullable: shape.nullable,
         kind: shape.kind,
         children,
+        map_key: None,
+        map_value: None,
+        enum_variants: Vec::new(),
     }
 }
 
@@ -4580,7 +4825,8 @@ fn primitive_scalar_kind(type_path: &str) -> Option<DebugScalarKind> {
 #[cfg(feature = "reflect")]
 fn reflect_value_to_json(value: &dyn crate::reflect::Reflect, registry: &TypeRegistry) -> Value {
     let serializer = crate::reflect::serde::TypedReflectSerializer::new(value, registry);
-    serde_json::to_value(serializer)
+    cu29_value::to_value(serializer)
+        .map(debug_value_to_json)
         .unwrap_or_else(|_| Value::String("reflect serialization failed".to_string()))
 }
 
@@ -4649,8 +4895,8 @@ fn hex_digit(n: u8) -> char {
 mod tests {
     use super::{
         DebugRpcAttachment, DebugRpcResponse, WireCodec, build_message_metadata_field_descriptors,
-        build_output_schema_entries, build_stack_schema, encode_payload, metadata_to_json,
-        reflect_value_to_json, register_debug_support_types,
+        build_output_schema_entries, build_stack_schema, debug_value_to_json, encode_payload,
+        metadata_to_json, reflect_value_to_json, register_debug_support_types,
     };
     use crate::app::CuSimApplication;
     use crate::curuntime::KeyFrame;
@@ -4666,6 +4912,8 @@ mod tests {
     };
     use cu29_unifiedlog::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
     use cu29_units::si::f32::Ratio;
+    use std::collections::BTreeMap;
+
     struct MissionStackApp;
 
     #[derive(Reflect, bincode::Encode, bincode::Decode, serde::Serialize, Default, Debug)]
@@ -4716,6 +4964,19 @@ mod tests {
     #[derive(Reflect)]
     struct CustomDebugState {
         visible: Ratio,
+    }
+
+    #[derive(Reflect, serde::Serialize)]
+    enum FidelityEnum {
+        Unit,
+        Tuple(u16, String),
+        Struct { code: u8, valid: bool },
+    }
+
+    #[derive(Reflect, serde::Serialize)]
+    struct FidelityPayload {
+        numeric_map: BTreeMap<u16, String>,
+        mode: FidelityEnum,
     }
 
     struct CustomDebugStateApp;
@@ -5087,6 +5348,93 @@ mod tests {
                     "cl_id": 42,
                 }
             })
+        );
+    }
+
+    #[test]
+    fn debug_json_preserves_wide_integers_nonfinite_floats_and_numeric_map_keys() {
+        #[derive(serde::Serialize)]
+        struct LosslessValues {
+            i128_min: i128,
+            u128_max: u128,
+            nan: f32,
+            positive_infinity: f64,
+            negative_infinity: f64,
+            numeric_map: BTreeMap<u16, String>,
+        }
+
+        let encoded = cu29_value::to_value(LosslessValues {
+            i128_min: i128::MIN,
+            u128_max: u128::MAX,
+            nan: f32::NAN,
+            positive_infinity: f64::INFINITY,
+            negative_infinity: f64::NEG_INFINITY,
+            numeric_map: BTreeMap::from([(7, "seven".to_owned())]),
+        })
+        .map(debug_value_to_json)
+        .expect("debug value");
+
+        assert_eq!(
+            encoded["i128_min"],
+            serde_json::json!({"__cu_i128__": i128::MIN.to_string()})
+        );
+        assert_eq!(
+            encoded["u128_max"],
+            serde_json::json!({"__cu_u128__": u128::MAX.to_string()})
+        );
+        assert_eq!(encoded["nan"], serde_json::json!({"__cu_float__": "nan"}));
+        assert_eq!(
+            encoded["positive_infinity"],
+            serde_json::json!({"__cu_float__": "positive_infinity"})
+        );
+        assert_eq!(
+            encoded["negative_infinity"],
+            serde_json::json!({"__cu_float__": "negative_infinity"})
+        );
+        assert_eq!(
+            encoded["numeric_map"],
+            serde_json::json!({
+                "__cu_map__": [{"key": 7, "value": "seven"}]
+            })
+        );
+    }
+
+    #[test]
+    fn field_catalog_describes_map_key_value_and_every_enum_variant_shape() {
+        let mut registry = TypeRegistry::default();
+        registry.register::<FidelityPayload>();
+        register_debug_support_types(&mut registry);
+        let info = registry
+            .get_with_type_path(<FidelityPayload as TypePath>::type_path())
+            .expect("fidelity payload registration")
+            .type_info();
+        let fields = super::build_field_catalog(&registry, info, None);
+
+        let map = fields
+            .iter()
+            .find(|field| field.display_path == "numeric_map")
+            .expect("numeric map field");
+        assert_eq!(map.kind, DebugFieldKind::Map);
+        assert_eq!(
+            map.map_key.as_deref().and_then(|field| field.scalar_kind),
+            Some(DebugScalarKind::U16)
+        );
+        assert_eq!(
+            map.map_value.as_deref().and_then(|field| field.scalar_kind),
+            Some(DebugScalarKind::String)
+        );
+
+        let mode = fields
+            .iter()
+            .find(|field| field.display_path == "mode")
+            .expect("enum field");
+        assert_eq!(mode.kind, DebugFieldKind::Enum);
+        assert_eq!(
+            mode.enum_variants
+                .iter()
+                .map(|variant| (variant.name.as_str(), variant.fields.len()))
+                .collect::<Vec<_>>(),
+            vec![("Unit", 0), ("Tuple", 2), ("Struct", 2)]
         );
     }
 

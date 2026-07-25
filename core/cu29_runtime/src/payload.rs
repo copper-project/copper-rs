@@ -115,10 +115,11 @@ where
 /// need to avoid heap allocations while supporting varying lengths of data up to a maximum.
 ///
 /// Unlike standard Vec, CuArrayVec will never reallocate or use the heap for the elements storage.
-#[derive(Debug, Clone)]
-pub struct CuArrayVec<T, const N: usize>(pub ArrayVec<T, N>);
+#[derive(Debug, Clone, Serialize, Deserialize, Reflect)]
+#[reflect(opaque, from_reflect = false, no_field_bounds)]
+pub struct CuArrayVec<T: Clone, const N: usize>(pub ArrayVec<T, N>);
 
-impl<T, const N: usize> Default for CuArrayVec<T, N> {
+impl<T: Clone, const N: usize> Default for CuArrayVec<T, N> {
     fn default() -> Self {
         Self(ArrayVec::new())
     }
@@ -126,7 +127,7 @@ impl<T, const N: usize> Default for CuArrayVec<T, N> {
 
 impl<T, const N: usize> Encode for CuArrayVec<T, N>
 where
-    T: Encode + 'static,
+    T: Clone + Encode + 'static,
 {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         let CuArrayVec(inner) = self;
@@ -136,7 +137,7 @@ where
 
 impl<T, const N: usize> Decode<()> for CuArrayVec<T, N>
 where
-    T: Decode<()> + 'static,
+    T: Clone + Decode<()> + 'static,
 {
     fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let inner = Vec::<T>::decode(decoder)?;
@@ -158,7 +159,7 @@ where
 
 impl<'de, T, const N: usize> BorrowDecode<'de, ()> for CuArrayVec<T, N>
 where
-    T: BorrowDecode<'de, ()> + 'static,
+    T: Clone + BorrowDecode<'de, ()> + 'static,
 {
     fn borrow_decode<D: BorrowDecoder<'de, Context = ()>>(
         decoder: &mut D,
