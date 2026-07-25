@@ -510,7 +510,8 @@ pub fn cu29_runtime::copperlist::CuListsManager<P, N>::fmt(&self, f: &mut core::
 impl<P: cu29_traits::CopperListTuple + cu29_runtime::copperlist::CuListZeroedInit, const N: usize> core::default::Default for cu29_runtime::copperlist::CuListsManager<P, N>
 pub fn cu29_runtime::copperlist::CuListsManager<P, N>::default() -> Self
 pub trait cu29_runtime::copperlist::CuListZeroedInit: cu29_traits::CopperListTuple
-pub fn cu29_runtime::copperlist::CuListZeroedInit::init_zeroed(&mut self)
+pub unsafe fn cu29_runtime::copperlist::CuListZeroedInit::init_uninit(ptr: *mut Self)
+pub fn cu29_runtime::copperlist::CuListZeroedInit::reset_for_runtime_use(&mut self)
 pub type cu29_runtime::copperlist::AscIter<'a, T> = core::iter::adapters::chain::Chain<core::slice::iter::Iter<'a, T>, core::slice::iter::Iter<'a, T>>
 pub type cu29_runtime::copperlist::AscIterMut<'a, T> = core::iter::adapters::chain::Chain<core::slice::iter::IterMut<'a, T>, core::slice::iter::IterMut<'a, T>>
 pub type cu29_runtime::copperlist::Iter<'a, T> = core::iter::adapters::chain::Chain<core::iter::adapters::rev::Rev<core::slice::iter::Iter<'a, T>>, core::iter::adapters::rev::Rev<core::slice::iter::Iter<'a, T>>>

@@ -3,10 +3,8 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-use alloc::alloc::{alloc_zeroed, handle_alloc_error};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::alloc::Layout;
 
 use bincode::{Decode, Encode};
 use core::fmt;
@@ -87,8 +85,8 @@ impl<P: CopperListTuple> CopperList<P> {
     }
 
     /// Restores the lifecycle state expected at allocation time and reruns
-    /// zero-memory fixups for payload containers that cannot remain valid after
-    /// raw zeroing. This does not imply a full `P::default()` payload reset.
+    /// payload-container fixups before the list is reused. This does not imply
+    /// a full `P::default()` payload reset.
     #[doc(hidden)]
     pub fn reset_for_runtime_use(&mut self, id: u64)
     where
@@ -96,7 +94,7 @@ impl<P: CopperListTuple> CopperList<P> {
     {
         self.id = id;
         self.state = CopperListState::Initialized;
-        self.msgs.init_zeroed();
+        self.msgs.reset_for_runtime_use();
     }
 }
 
@@ -132,12 +130,31 @@ pub type IterMut<'a, T> = Chain<Rev<SliceIterMut<'a, T>>, Rev<SliceIterMut<'a, T
 pub type AscIter<'a, T> = Chain<SliceIter<'a, T>, SliceIter<'a, T>>;
 pub type AscIterMut<'a, T> = Chain<SliceIterMut<'a, T>, SliceIterMut<'a, T>>;
 
-/// Initializes fields that cannot be zeroed after allocating a zeroed
-/// [`CopperList`].
+/// Initializes a Copper-list message tuple directly in uninitialized heap storage.
 pub trait CuListZeroedInit: CopperListTuple {
-    /// Fixes up a zero-initialized copper list so that all internal fields are
-    /// in a valid state.
-    fn init_zeroed(&mut self);
+    /// Initializes `ptr` without first creating a reference to its uninitialized value.
+    ///
+    /// Generated Copper message tuples override this to initialize each field in place,
+    /// avoiding a potentially very large temporary on the stack.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must be non-null, aligned, and valid for writes of one `Self`. It must point
+    /// to uninitialized storage, and the implementation must leave a fully initialized
+    /// `Self` behind.
+    unsafe fn init_uninit(ptr: *mut Self) {
+        // SAFETY: upheld by the caller and the method contract above.
+        unsafe {
+            ptr.write(Self::default());
+        }
+    }
+
+    /// Restores runtime invariants on a fully initialized copper list before it
+    /// is reused.
+    ///
+    /// Unlike [`init_uninit`](Self::init_uninit), this method may safely drop
+    /// values left in the previous iteration.
+    fn reset_for_runtime_use(&mut self) {}
 }
 
 impl<P: CopperListTuple + CuListZeroedInit, const N: usize> Default for CuListsManager<P, N> {
@@ -151,27 +168,26 @@ impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
     where
         P: CuListZeroedInit,
     {
-        // SAFETY: We allocate zeroed memory and immediately initialize required fields.
-        let data = unsafe {
-            let layout = Layout::new::<[CopperList<P>; N]>();
-            let ptr = alloc_zeroed(layout) as *mut [CopperList<P>; N];
-            if ptr.is_null() {
-                handle_alloc_error(layout);
+        let mut data = Box::<[CopperList<P>; N]>::new_uninit();
+        let first = data.as_mut_ptr().cast::<CopperList<P>>();
+        for index in 0..N {
+            // SAFETY: each pointer addresses one distinct element of the allocated array.
+            // Every CopperList field is initialized before the array is assumed initialized.
+            unsafe {
+                let cl = first.add(index);
+                core::ptr::addr_of_mut!((*cl).id).write(0);
+                core::ptr::addr_of_mut!((*cl).state).write(CopperListState::Free);
+                P::init_uninit(core::ptr::addr_of_mut!((*cl).msgs));
             }
-            Box::from_raw(ptr)
-        };
-        let mut manager = CuListsManager {
+        }
+        // SAFETY: the loop above initialized every element and every field.
+        let data = unsafe { data.assume_init() };
+        CuListsManager {
             data,
             length: 0,
             insertion_index: 0,
             current_cl_id: 0,
-        };
-
-        for cl in manager.data.iter_mut() {
-            cl.msgs.init_zeroed();
         }
-
-        manager
     }
 
     /// Returns the current number of elements in the queue.
@@ -341,9 +357,7 @@ mod tests {
         }
     }
 
-    impl CuListZeroedInit for CuStampedDataSet {
-        fn init_zeroed(&mut self) {}
-    }
+    impl CuListZeroedInit for CuStampedDataSet {}
 
     #[test]
     fn empty_queue() {
@@ -717,7 +731,13 @@ mod tests {
     }
 
     impl CuListZeroedInit for TestStruct {
-        fn init_zeroed(&mut self) {}
+        unsafe fn init_uninit(ptr: *mut Self) {
+            // SAFETY: the caller provides writable storage and every bit pattern is valid
+            // for this byte-array-only test type.
+            unsafe {
+                ptr.write_bytes(0, 1);
+            }
+        }
     }
 
     #[test]
