@@ -61,6 +61,7 @@ zenoh = { workspace = true, default-features = false, features = [
   "shared-memory",
   "transport_tcp",
   "transport_unixsock-stream",
+  "unstable",
 ], optional = true }
 minicbor-serde = { workspace = true, default-features = false, features = [
   "alloc",
@@ -114,6 +115,7 @@ mmap-fsync = ["std", "cu29-unifiedlog/mmap-fsync"]
 remote-debug = [
   "std",
   "reflect",
+  "dep:libc",
   "dep:cu29-intern-strs",
   "dep:serde_json",
   "dep:serde_bytes",
