@@ -37,6 +37,12 @@
 //! - Request decoding is tolerant: server tries `CBOR` first, then `JSON`.
 //! - Response encoding matches the request codec used for that call.
 //! - `session.open` also returns a `wire_codec` field after codec negotiation.
+//! - Handle-backed payload contents are never embedded in `result`. They are
+//!   deferred by default and, when explicitly requested over CBOR, returned as
+//!   out-of-line CBOR byte strings in `attachments`.
+//! - There is no byte-size threshold: ordinary payloads are always serialized,
+//!   while every [`CuHandle`](crate::pool::CuHandle) follows the explicit handle
+//!   content policy.
 //!
 //! Default constructor transport profile:
 //!
@@ -68,6 +74,16 @@
 //! | `error` | [`DebugRpcError`] | `ok == false` | `{ code, message, details? }`. |
 //! | `cursor_rev` | `u64` | cursor-aware methods | Monotonic cursor revision for a session. |
 //! | `resolved_at` | [`ResolvedAt`] | target-resolving methods | Concrete `(cl, ts_ns?, idx)` resolution outcome. |
+//! | `attachments` | [`DebugRpcAttachment`] array | explicitly requested handle contents | Binary attachment metadata and CBOR byte strings. |
+//!
+//! A serialized handle in `result` is a small descriptor containing
+//! `__cu_handle__`, `attachment_id`, `encoding`, `element_type`, `len_elements`,
+//! and `byte_len`. With `include_handle_contents=false` (the default),
+//! `attachment_id` is null and no bytes are read or copied. With
+//! `include_handle_contents=true`, `attachment_id` references an entry in
+//! `attachments`. Primitive buffers use raw little-endian bytes; other
+//! handle-backed values use CBOR bytes. Binary attachments require the CBOR wire
+//! codec; requesting them over JSON returns `BinaryAttachmentsRequireCbor`.
 //!
 //! ## Session and Cursor State Model
 //!
@@ -131,7 +147,7 @@
 //! | `nav.seek` | yes | `{ target, resolve? }` | yes |
 //! | `nav.run_until` | yes | `{ target, resolve?, max_steps?, timeout_ms?, progress_every_n_steps? }` | yes |
 //! | `nav.step` | yes | `{ delta }` | yes |
-//! | `nav.replay` | yes | `{ at?, limit?, include_cl_snapshot?, include_payloads?, include_metadata?, include_raw?, include_replayed_cl?, include_state? }` | yes (replays current step/page; optional pre-seek) |
+//! | `nav.replay` | yes | `{ at?, limit?, include_cl_snapshot?, include_payloads?, include_handle_contents?, output_indices?, include_metadata?, include_raw?, include_replayed_cl?, include_state? }` | yes (replays current step/page; optional pre-seek) |
 //!
 //! Notes:
 //!
@@ -144,8 +160,8 @@
 //! | Method | Session required | Params | Result |
 //! | --- | --- | --- | --- |
 //! | `timeline.get_cursor` | yes | `{}` | current cursor snapshot |
-//! | `timeline.get_cl` | yes | `{ at?, include_payloads?, include_metadata?, include_raw? }` | `cl_snapshot`, `query_cursor` (+ optional resolution) |
-//! | `timeline.list` | yes | `{ from, to, page? }` | list of timeline rows with CL snapshots and keyframe metadata + `next_offset` |
+//! | `timeline.get_cl` | yes | `{ at?, include_payloads?, include_handle_contents?, output_indices?, include_metadata?, include_raw? }` | `cl_snapshot`, `query_cursor` (+ optional resolution) |
+//! | `timeline.list` | yes | `{ from, to, page?, include_handle_contents?, output_indices? }` | list of timeline rows with CL snapshots and keyframe metadata + `next_offset` |
 //!
 //! ### Logs
 //!
@@ -161,7 +177,7 @@
 //! | `schema.get_stack` | yes | `{}` | stack config schema JSON |
 //! | `schema.list_types` | yes | `{ filter? }` | `type_paths[]` |
 //! | `schema.get_type` | yes | `{ type_path, format? }` | schema/reflect dump |
-//! | `schema.get_outputs` | yes | `{}` | output index -> task/message/payload field metadata |
+//! | `schema.get_outputs` | yes | `{ page?: { offset, limit }, field_page?: { offset, limit } }` | paged output index -> task/message/payload field metadata |
 //!
 //! ### State
 //!
@@ -236,6 +252,10 @@
 use crate::app::{CuSimApplication, CurrentRuntimeCopperList};
 use crate::config::{BridgeChannelConfigRepresentation, Flavor, read_configuration_str};
 use crate::debug::{CuDebugSession, IndexedResolveMode, JumpOutcome};
+use crate::pool::{
+    CollectedDebugHandleAttachment, CuSharedMemoryElementType, DebugHandleEncoding,
+    collect_debug_handle_attachments, with_debug_handle_contents,
+};
 use crate::reflect::{
     EnumInfo, Reflect, ReflectTaskIntrospection, StructInfo, TupleInfo, TupleStructInfo, Type,
     TypeInfo, TypeRegistry, VariantInfo, serde::SerializationData,
@@ -250,8 +270,8 @@ use cu29_log::CuLogEntry;
 use cu29_log_runtime::capture_live_logs;
 use cu29_traits::{
     CopperListTuple, CuCompactString, CuError, CuMsgMetadataTrait, CuMsgOrigin, CuResult,
-    DebugFieldDescriptor, DebugFieldKind, DebugFieldSemantics, DebugScalarKind,
-    ErasedCuStampedDataSet, UnifiedLogType,
+    DebugEnumVariantDescriptor, DebugEnumVariantKind, DebugFieldDescriptor, DebugFieldKind,
+    DebugFieldSemantics, DebugScalarKind, ErasedCuStampedDataSet, UnifiedLogType,
 };
 use cu29_unifiedlog::{
     SectionStorage, UnifiedLogWrite, UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader,
@@ -396,6 +416,32 @@ pub struct DebugRpcResponse {
     pub cursor_rev: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resolved_at: Option<ResolvedAt>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<DebugRpcAttachment>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DebugRpcAttachment {
+    pub id: u32,
+    pub encoding: DebugHandleEncoding,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub element_type: Option<CuSharedMemoryElementType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub len_elements: Option<usize>,
+    #[serde(with = "serde_bytes")]
+    pub data: Vec<u8>,
+}
+
+impl From<CollectedDebugHandleAttachment> for DebugRpcAttachment {
+    fn from(attachment: CollectedDebugHandleAttachment) -> Self {
+        Self {
+            id: attachment.id,
+            encoding: attachment.encoding,
+            element_type: attachment.element_type,
+            len_elements: attachment.len_elements,
+            data: attachment.data,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -529,6 +575,10 @@ struct NavReplayParams {
     #[serde(default)]
     include_payloads: bool,
     #[serde(default)]
+    include_handle_contents: bool,
+    #[serde(default)]
+    output_indices: Option<Vec<usize>>,
+    #[serde(default)]
     include_metadata: bool,
     #[serde(default)]
     include_raw: bool,
@@ -545,6 +595,10 @@ struct TimelineGetClParams {
     #[serde(default)]
     include_payloads: bool,
     #[serde(default)]
+    include_handle_contents: bool,
+    #[serde(default)]
+    output_indices: Option<Vec<usize>>,
+    #[serde(default)]
     include_metadata: bool,
     #[serde(default)]
     include_raw: bool,
@@ -556,6 +610,10 @@ struct TimelineListParams {
     to: Target,
     #[serde(default)]
     page: Option<Page>,
+    #[serde(default)]
+    include_handle_contents: bool,
+    #[serde(default)]
+    output_indices: Option<Vec<usize>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1177,7 +1235,7 @@ where
             }
         };
 
-        let response = self.handle_request(request.clone());
+        let response = self.handle_request(request.clone(), codec);
         if let Err(err) = self.publish_reply(&request.reply_to, &response, codec) {
             eprintln!(
                 "RemoteDebug: failed to publish reply to '{}': {err}",
@@ -1210,7 +1268,7 @@ where
                 return Ok(true);
             }
         };
-        let response = self.handle_request(request.clone());
+        let response = self.handle_request(request.clone(), codec);
         if let Err(err) = self.publish_reply(&request.reply_to, &response, codec) {
             eprintln!(
                 "RemoteDebug: failed to publish reply to '{}': {err}",
@@ -1221,7 +1279,7 @@ where
         Ok(true)
     }
 
-    fn handle_request(&mut self, request: DebugRpcRequest) -> DebugRpcResponse {
+    fn handle_request(&mut self, request: DebugRpcRequest, codec: WireCodec) -> DebugRpcResponse {
         let request_id = request.request_id.clone();
 
         if request.api != API_VERSION {
@@ -1240,8 +1298,27 @@ where
             return ok_response(request_id, json!({"stopping": true}), None, None);
         }
 
+        let include_handle_contents = request
+            .params
+            .get("include_handle_contents")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        if include_handle_contents && codec != WireCodec::Cbor {
+            return err_response(
+                request_id,
+                "BinaryAttachmentsRequireCbor",
+                "handle contents are available only with the CBOR wire codec",
+            );
+        }
+
         self.cleanup_expired_sessions();
-        self.dispatch_request(&request)
+        let (mut response, attachments) =
+            collect_debug_handle_attachments(|| self.dispatch_request(&request));
+        response.attachments = attachments
+            .into_iter()
+            .map(DebugRpcAttachment::from)
+            .collect();
+        response
     }
 
     fn dispatch_request(&mut self, request: &DebugRpcRequest) -> DebugRpcResponse {
@@ -1302,9 +1379,11 @@ where
                 request.session_id.as_deref(),
                 &request.params,
             ),
-            "schema.get_outputs" => {
-                self.handle_schema_get_outputs(request_id, request.session_id.as_deref())
-            }
+            "schema.get_outputs" => self.handle_schema_get_outputs(
+                request_id,
+                request.session_id.as_deref(),
+                &request.params,
+            ),
             "state.inspect" => self.handle_state_inspect(
                 request_id,
                 request.session_id.as_deref(),
@@ -1786,6 +1865,7 @@ where
         };
 
         let include_payloads = parsed.include_payloads;
+        let include_handle_contents = parsed.include_handle_contents;
         let include_metadata = parsed.include_metadata;
         let include_raw = parsed.include_raw;
 
@@ -1842,6 +1922,8 @@ where
             include_payloads,
             include_metadata,
             include_raw,
+            include_handle_contents,
+            parsed.output_indices.as_deref(),
         ) {
             Ok(v) => v,
             Err(e) => return err_response(request_id, "GetClFailed", &e.to_string()),
@@ -1936,8 +2018,15 @@ where
                 Ok(None) => break,
                 Err(e) => return err_response(request_id, "TimelineListFailed", &e.to_string()),
             };
-            let mut item = match copperlist_snapshot::<P>(cl.as_ref(), &time_of, true, false, false)
-            {
+            let mut item = match copperlist_snapshot::<P>(
+                cl.as_ref(),
+                &time_of,
+                true,
+                false,
+                false,
+                parsed.include_handle_contents,
+                parsed.output_indices.as_deref(),
+            ) {
                 Ok(v) => v,
                 Err(e) => return err_response(request_id, "TimelineListFailed", &e.to_string()),
             };
@@ -2196,6 +2285,7 @@ where
         &mut self,
         request_id: String,
         session_id: Option<&str>,
+        params: &Value,
     ) -> DebugRpcResponse {
         if let Err(e) = self.session_mut(session_id) {
             return err_response(request_id, "SessionNotFound", &e.to_string());
@@ -2204,8 +2294,73 @@ where
         let mut registry = TypeRegistry::default();
         populate_debug_type_registry::<App>(&mut registry);
 
-        match build_output_schema_entries::<P>(&registry) {
-            Ok(outputs) => ok_response(request_id, json!({ "outputs": outputs }), None, None),
+        let offset = params
+            .get("page")
+            .and_then(|page| page.get("offset"))
+            .and_then(Value::as_u64)
+            .unwrap_or(0) as usize;
+        let limit = params
+            .get("page")
+            .and_then(|page| page.get("limit"))
+            .and_then(Value::as_u64)
+            .and_then(|limit| usize::try_from(limit).ok())
+            .unwrap_or(usize::MAX)
+            .max(1);
+        let total = P::get_output_specs().len();
+
+        match build_output_schema_entries_page::<P>(&registry, offset, limit) {
+            Ok(mut outputs) => {
+                let consumed = outputs.len();
+                let next_offset = offset
+                    .saturating_add(consumed)
+                    .lt(&total)
+                    .then_some(offset.saturating_add(consumed));
+                let field_offset = params
+                    .get("field_page")
+                    .and_then(|page| page.get("offset"))
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0) as usize;
+                let field_limit = params
+                    .get("field_page")
+                    .and_then(|page| page.get("limit"))
+                    .and_then(Value::as_u64)
+                    .and_then(|limit| usize::try_from(limit).ok())
+                    .unwrap_or(usize::MAX)
+                    .max(1);
+                let mut total_fields = None;
+                let mut next_field_offset = None;
+                if params.get("field_page").is_some()
+                    && let Some(fields) = outputs
+                        .first_mut()
+                        .and_then(|output| output.get_mut("payload_fields"))
+                        .and_then(Value::as_array_mut)
+                {
+                    total_fields = Some(fields.len());
+                    let page = fields
+                        .iter()
+                        .skip(field_offset)
+                        .take(field_limit)
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    next_field_offset = field_offset
+                        .saturating_add(page.len())
+                        .lt(&fields.len())
+                        .then_some(field_offset.saturating_add(page.len()));
+                    *fields = page;
+                }
+                ok_response(
+                    request_id,
+                    json!({
+                        "outputs": outputs,
+                        "total": total,
+                        "next_offset": next_offset,
+                        "total_fields": total_fields,
+                        "next_field_offset": next_field_offset,
+                    }),
+                    None,
+                    None,
+                )
+            }
             Err(err) => err_response(request_id, "SchemaFailed", &err.to_string()),
         }
     }
@@ -2679,6 +2834,7 @@ fn ok_response(
         error: None,
         cursor_rev,
         resolved_at,
+        attachments: Vec::new(),
     }
 }
 
@@ -2694,6 +2850,7 @@ fn err_response(request_id: String, code: &str, message: &str) -> DebugRpcRespon
         }),
         cursor_rev: None,
         resolved_at: None,
+        attachments: Vec::new(),
     }
 }
 
@@ -2836,6 +2993,12 @@ fn capabilities_json(session_lifecycle: SessionLifecycleLimits) -> Value {
     json!({
         "version": API_VERSION,
         "wire_codecs": ["cbor", "json"],
+        "handle_contents": {
+            "deferred_by_default": true,
+            "binary_attachments": true,
+            "binary_attachment_codec": "cbor",
+            "output_index_filtering": true,
+        },
         "supports_targets": ["cl", "ts"],
         "max_replay_batch_limit": MAX_REPLAY_BATCH_LIMIT,
         "session_lifecycle": {
@@ -3193,6 +3356,8 @@ where
                 params.include_payloads,
                 params.include_metadata,
                 params.include_raw,
+                params.include_handle_contents,
+                params.output_indices.as_deref(),
             )?,
             None => Value::Null,
         };
@@ -3206,6 +3371,8 @@ where
             params.include_payloads,
             params.include_metadata,
             params.include_raw,
+            params.include_handle_contents,
+            params.output_indices.as_deref(),
         )?;
         item.insert("replayed_cl".to_string(), replayed_cl);
     }
@@ -3334,6 +3501,8 @@ fn copperlist_snapshot<P: CopperListTuple + 'static>(
     include_payloads: bool,
     include_metadata: bool,
     include_raw: bool,
+    include_handle_contents: bool,
+    output_indices: Option<&[usize]>,
 ) -> CuResult<Value> {
     let task_ids = P::get_all_task_ids();
     let msgs = cl.cumsgs();
@@ -3342,10 +3511,14 @@ fn copperlist_snapshot<P: CopperListTuple + 'static>(
     for (i, msg) in msgs.iter().enumerate() {
         let task_id = task_ids.get(i).copied().unwrap_or("<?>");
         let payload = if include_payloads {
-            msg.payload()
-                .map(erased_serialize_to_json)
-                .transpose()?
-                .unwrap_or(Value::Null)
+            let include_message_handle_contents = include_handle_contents
+                && output_indices.is_none_or(|indices| indices.contains(&i));
+            with_debug_handle_contents(include_message_handle_contents, || {
+                msg.payload()
+                    .map(erased_serialize_to_value)
+                    .transpose()
+                    .map(|payload| payload.unwrap_or(Value::Null))
+            })?
         } else {
             Value::Null
         };
@@ -3390,19 +3563,84 @@ fn metadata_to_json(metadata: &dyn CuMsgMetadataTrait, tov: Tov) -> Value {
         origin: metadata.origin().cloned(),
     };
 
-    serde_json::to_value(view)
+    cu29_value::to_value(view)
+        .map(debug_value_to_json)
         .unwrap_or_else(|_| Value::String("metadata serialization failed".to_string()))
 }
 
-fn erased_serialize_to_json(value: &dyn erased_serde::Serialize) -> CuResult<Value> {
-    let mut bytes = Vec::new();
-    {
-        let mut serializer = serde_json::Serializer::new(&mut bytes);
-        erased_serde::serialize(value, &mut serializer)
-            .map_err(|e| CuError::from(format!("Failed to serialize erased payload: {e}")))?;
+fn erased_serialize_to_value(value: &dyn erased_serde::Serialize) -> CuResult<Value> {
+    let value = cu29_value::to_value(value)
+        .map_err(|e| CuError::from(format!("Failed to serialize erased payload: {e}")))?;
+    Ok(debug_value_to_json(value))
+}
+
+fn debug_value_to_json(value: cu29_value::Value) -> Value {
+    use cu29_value::Value as DebugValue;
+
+    match value {
+        DebugValue::Bool(value) => Value::Bool(value),
+        DebugValue::U8(value) => json!(value),
+        DebugValue::U16(value) => json!(value),
+        DebugValue::U32(value) => json!(value),
+        DebugValue::U64(value) => json!(value),
+        DebugValue::U128(value) => json!({"__cu_u128__": value.to_string()}),
+        DebugValue::I8(value) => json!(value),
+        DebugValue::I16(value) => json!(value),
+        DebugValue::I32(value) => json!(value),
+        DebugValue::I64(value) => json!(value),
+        DebugValue::I128(value) => json!({"__cu_i128__": value.to_string()}),
+        DebugValue::F32(value) => debug_float_to_json(f64::from(value)),
+        DebugValue::F64(value) => debug_float_to_json(value),
+        DebugValue::Char(value) => Value::String(value.to_string()),
+        DebugValue::String(value) => Value::String(value),
+        DebugValue::Unit | DebugValue::Option(None) => Value::Null,
+        DebugValue::Option(Some(value)) | DebugValue::Newtype(value) => debug_value_to_json(*value),
+        DebugValue::Seq(values) => {
+            Value::Array(values.into_iter().map(debug_value_to_json).collect())
+        }
+        DebugValue::Map(values)
+            if values
+                .keys()
+                .all(|key| matches!(key, DebugValue::String(_))) =>
+        {
+            Value::Object(
+                values
+                    .into_iter()
+                    .filter_map(|(key, value)| match key {
+                        DebugValue::String(key) => Some((key, debug_value_to_json(value))),
+                        _ => None,
+                    })
+                    .collect(),
+            )
+        }
+        DebugValue::Map(values) => json!({
+            "__cu_map__": values
+                .into_iter()
+                .map(|(key, value)| {
+                    json!({
+                        "key": debug_value_to_json(key),
+                        "value": debug_value_to_json(value),
+                    })
+                })
+                .collect::<Vec<_>>()
+        }),
+        DebugValue::Bytes(values) => {
+            Value::Array(values.into_iter().map(|value| json!(value)).collect())
+        }
+        DebugValue::CuTime(value) => json!(value.as_nanos()),
     }
-    serde_json::from_slice(&bytes)
-        .map_err(|e| CuError::new_with_cause("Failed to parse serialized payload JSON", e))
+}
+
+fn debug_float_to_json(value: f64) -> Value {
+    if value.is_nan() {
+        json!({"__cu_float__": "nan"})
+    } else if value == f64::INFINITY {
+        json!({"__cu_float__": "positive_infinity"})
+    } else if value == f64::NEG_INFINITY {
+        json!({"__cu_float__": "negative_infinity"})
+    } else {
+        json!(value)
+    }
 }
 
 fn build_tasks_json<App, P, CB, TF, S, L>(
@@ -3443,6 +3681,8 @@ fn replayed_copperlist_snapshot<App, P, CB, TF, S, L>(
     include_payloads: bool,
     include_metadata: bool,
     include_raw: bool,
+    include_handle_contents: bool,
+    output_indices: Option<&[usize]>,
 ) -> CuResult<Value>
 where
     App: CuSimApplication<S, L> + CurrentRuntimeCopperList<P>,
@@ -3475,6 +3715,8 @@ where
                         include_payloads,
                         include_metadata,
                         include_raw,
+                        include_handle_contents,
+                        output_indices,
                     )
                 })
             })
@@ -3504,12 +3746,13 @@ where
     let tasks = build_tasks_json::<App, P, CB, TF, S, L>(state)?;
 
     let current_cl = match state.session.current_cl()? {
-        Some(cl) => copperlist_snapshot::<P>(cl.as_ref(), time_of, true, true, false)?,
+        Some(cl) => copperlist_snapshot::<P>(cl.as_ref(), time_of, true, true, false, false, None)?,
         None => Value::Null,
     };
 
-    let replayed_cl =
-        replayed_copperlist_snapshot::<App, P, CB, TF, S, L>(state, time_of, true, true, false)?;
+    let replayed_cl = replayed_copperlist_snapshot::<App, P, CB, TF, S, L>(
+        state, time_of, true, true, false, false, None,
+    )?;
 
     let cursor = cursor_snapshot(state, time_of)
         .map(|c| serde_json::to_value(c).unwrap_or(Value::Null))
@@ -3918,7 +4161,19 @@ fn simple_jsonschema_for_type(info: &'static TypeInfo) -> Value {
     })
 }
 
+#[cfg(test)]
 fn build_output_schema_entries<P>(registry: &TypeRegistry) -> CuResult<Vec<Value>>
+where
+    P: CopperListTuple + 'static,
+{
+    build_output_schema_entries_page::<P>(registry, 0, usize::MAX)
+}
+
+fn build_output_schema_entries_page<P>(
+    registry: &TypeRegistry,
+    offset: usize,
+    limit: usize,
+) -> CuResult<Vec<Value>>
 where
     P: CopperListTuple + 'static,
 {
@@ -3927,6 +4182,8 @@ where
     P::get_output_specs()
         .iter()
         .enumerate()
+        .skip(offset)
+        .take(limit)
         .map(|(index, spec)| {
             let payload_type_path = spec.payload_type_path();
             let payload_type =
@@ -4184,18 +4441,43 @@ fn build_type_node(
                 nullable,
             ),
         ),
-        TypeInfo::Map(_) => debug_field_descriptor(
-            display_path,
-            binding_name,
-            value_type_path,
-            DebugFieldShape {
-                semantics: debug_type_semantics(value_type_path),
-                scalar_kind: None,
+        TypeInfo::Map(info) => {
+            let mut descriptor = debug_field_descriptor(
+                display_path,
+                binding_name,
+                value_type_path,
+                DebugFieldShape {
+                    semantics: debug_type_semantics(value_type_path),
+                    scalar_kind: None,
+                    nullable,
+                    kind: DebugFieldKind::Map,
+                },
+                Vec::new(),
+            );
+            let key_ty = info.key_ty();
+            let value_ty = info.value_ty();
+            descriptor.map_key = Some(Box::new(build_field_node(
+                registry,
+                info.key_info(),
+                &key_ty,
+                &format!("{}{{key}}", path_or_value(display_path)),
+                binding_name
+                    .map(|name| format!("{}{{key}}", path_or_value(name)))
+                    .as_deref(),
                 nullable,
-                kind: DebugFieldKind::Map,
-            },
-            Vec::new(),
-        ),
+            )));
+            descriptor.map_value = Some(Box::new(build_field_node(
+                registry,
+                info.value_info(),
+                &value_ty,
+                &format!("{}{{value}}", path_or_value(display_path)),
+                binding_name
+                    .map(|name| format!("{}{{value}}", path_or_value(name)))
+                    .as_deref(),
+                nullable,
+            )));
+            descriptor
+        }
         TypeInfo::Set(info) => debug_field_descriptor(
             display_path,
             binding_name,
@@ -4227,7 +4509,7 @@ fn build_type_node(
                 );
             }
 
-            debug_field_descriptor(
+            let mut descriptor = debug_field_descriptor(
                 display_path,
                 binding_name,
                 value_type_path,
@@ -4238,7 +4520,10 @@ fn build_type_node(
                     kind: DebugFieldKind::Enum,
                 },
                 Vec::new(),
-            )
+            );
+            descriptor.enum_variants =
+                enum_variant_descriptors(registry, info, display_path, binding_name, nullable);
+            descriptor
         }
         TypeInfo::Opaque(info) => debug_field_descriptor(
             display_path,
@@ -4351,6 +4636,73 @@ fn indexed_children(
     )]
 }
 
+fn enum_variant_descriptors(
+    registry: &TypeRegistry,
+    info: &EnumInfo,
+    display_path: &str,
+    binding_name: Option<&str>,
+    nullable: bool,
+) -> Vec<DebugEnumVariantDescriptor> {
+    info.iter()
+        .map(|variant| {
+            let variant_display =
+                join_field_path(path_or_value(display_path).as_str(), variant.name());
+            let variant_binding = binding_name
+                .map(|name| join_field_path(path_or_value(name).as_str(), variant.name()));
+            match variant {
+                VariantInfo::Unit(_) => DebugEnumVariantDescriptor {
+                    name: variant.name().to_owned(),
+                    kind: DebugEnumVariantKind::Unit,
+                    fields: Vec::new(),
+                },
+                VariantInfo::Tuple(tuple) => DebugEnumVariantDescriptor {
+                    name: variant.name().to_owned(),
+                    kind: DebugEnumVariantKind::Tuple,
+                    fields: tuple
+                        .iter()
+                        .enumerate()
+                        .map(|(index, field)| {
+                            let field_display = indexed_path(&variant_display, Some(index));
+                            let field_binding = variant_binding
+                                .as_deref()
+                                .map(|name| indexed_path(name, Some(index)));
+                            build_field_node(
+                                registry,
+                                field.type_info(),
+                                field.ty(),
+                                &field_display,
+                                field_binding.as_deref(),
+                                nullable,
+                            )
+                        })
+                        .collect(),
+                },
+                VariantInfo::Struct(struct_variant) => DebugEnumVariantDescriptor {
+                    name: variant.name().to_owned(),
+                    kind: DebugEnumVariantKind::Struct,
+                    fields: struct_variant
+                        .iter()
+                        .map(|field| {
+                            let field_display = join_field_path(&variant_display, field.name());
+                            let field_binding = variant_binding
+                                .as_deref()
+                                .map(|name| join_field_path(name, field.name()));
+                            build_field_node(
+                                registry,
+                                field.type_info(),
+                                field.ty(),
+                                &field_display,
+                                field_binding.as_deref(),
+                                nullable,
+                            )
+                        })
+                        .collect(),
+                },
+            }
+        })
+        .collect()
+}
+
 fn skipped_indices(registry: &TypeRegistry, type_id: core::any::TypeId) -> BTreeSet<usize> {
     registry
         .get_type_data::<SerializationData>(type_id)
@@ -4416,6 +4768,9 @@ fn debug_field_descriptor(
         nullable: shape.nullable,
         kind: shape.kind,
         children,
+        map_key: None,
+        map_value: None,
+        enum_variants: Vec::new(),
     }
 }
 
@@ -4470,7 +4825,8 @@ fn primitive_scalar_kind(type_path: &str) -> Option<DebugScalarKind> {
 #[cfg(feature = "reflect")]
 fn reflect_value_to_json(value: &dyn crate::reflect::Reflect, registry: &TypeRegistry) -> Value {
     let serializer = crate::reflect::serde::TypedReflectSerializer::new(value, registry);
-    serde_json::to_value(serializer)
+    cu29_value::to_value(serializer)
+        .map(debug_value_to_json)
         .unwrap_or_else(|_| Value::String("reflect serialization failed".to_string()))
 }
 
@@ -4538,12 +4894,14 @@ fn hex_digit(n: u8) -> char {
 #[cfg(all(test, feature = "std"))]
 mod tests {
     use super::{
-        build_message_metadata_field_descriptors, build_output_schema_entries, build_stack_schema,
+        DebugRpcAttachment, DebugRpcResponse, WireCodec, build_message_metadata_field_descriptors,
+        build_output_schema_entries, build_stack_schema, debug_value_to_json, encode_payload,
         metadata_to_json, reflect_value_to_json, register_debug_support_types,
     };
     use crate::app::CuSimApplication;
     use crate::curuntime::KeyFrame;
     use crate::cutask::CuMsgMetadata;
+    use crate::pool::{CuSharedMemoryElementType, DebugHandleEncoding};
     use crate::reflect::{Reflect, ReflectTaskIntrospection, TypePath, TypeRegistry};
     use crate::simulation::SimOverride;
     use compact_str::CompactString;
@@ -4554,6 +4912,8 @@ mod tests {
     };
     use cu29_unifiedlog::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
     use cu29_units::si::f32::Ratio;
+    use std::collections::BTreeMap;
+
     struct MissionStackApp;
 
     #[derive(Reflect, bincode::Encode, bincode::Decode, serde::Serialize, Default, Debug)]
@@ -4604,6 +4964,19 @@ mod tests {
     #[derive(Reflect)]
     struct CustomDebugState {
         visible: Ratio,
+    }
+
+    #[derive(Reflect, serde::Serialize)]
+    enum FidelityEnum {
+        Unit,
+        Tuple(u16, String),
+        Struct { code: u8, valid: bool },
+    }
+
+    #[derive(Reflect, serde::Serialize)]
+    struct FidelityPayload {
+        numeric_map: BTreeMap<u16, String>,
+        mode: FidelityEnum,
     }
 
     struct CustomDebugStateApp;
@@ -4712,6 +5085,46 @@ mod tests {
         fn restore_keyframe(&mut self, _freezer: &KeyFrame) -> CuResult<()> {
             Ok(())
         }
+    }
+
+    #[test]
+    fn cbor_handle_attachments_are_encoded_as_byte_strings() -> CuResult<()> {
+        let data = vec![0xde, 0xad, 0xbe, 0xef];
+        let response = DebugRpcResponse {
+            request_id: "binary-attachment".to_owned(),
+            ok: true,
+            result: Some(serde_json::json!({
+                "handle": {
+                    "__cu_handle__": true,
+                    "attachment_id": 0,
+                    "encoding": "raw_little_endian",
+                    "element_type": "u8",
+                    "len_elements": 4,
+                    "byte_len": 4,
+                }
+            })),
+            error: None,
+            cursor_rev: None,
+            resolved_at: None,
+            attachments: vec![DebugRpcAttachment {
+                id: 0,
+                encoding: DebugHandleEncoding::RawLittleEndian,
+                element_type: Some(CuSharedMemoryElementType::U8),
+                len_elements: Some(data.len()),
+                data: data.clone(),
+            }],
+        };
+
+        let encoded = encode_payload(&response, WireCodec::Cbor, "encode test response")?;
+        let expected_byte_string = [vec![0x44], data].concat();
+        assert!(
+            encoded
+                .windows(expected_byte_string.len())
+                .any(|window| window == expected_byte_string),
+            "the attachment must use CBOR major type 2 (byte string), not an integer array"
+        );
+
+        Ok(())
     }
 
     #[test]
@@ -4935,6 +5348,93 @@ mod tests {
                     "cl_id": 42,
                 }
             })
+        );
+    }
+
+    #[test]
+    fn debug_json_preserves_wide_integers_nonfinite_floats_and_numeric_map_keys() {
+        #[derive(serde::Serialize)]
+        struct LosslessValues {
+            i128_min: i128,
+            u128_max: u128,
+            nan: f32,
+            positive_infinity: f64,
+            negative_infinity: f64,
+            numeric_map: BTreeMap<u16, String>,
+        }
+
+        let encoded = cu29_value::to_value(LosslessValues {
+            i128_min: i128::MIN,
+            u128_max: u128::MAX,
+            nan: f32::NAN,
+            positive_infinity: f64::INFINITY,
+            negative_infinity: f64::NEG_INFINITY,
+            numeric_map: BTreeMap::from([(7, "seven".to_owned())]),
+        })
+        .map(debug_value_to_json)
+        .expect("debug value");
+
+        assert_eq!(
+            encoded["i128_min"],
+            serde_json::json!({"__cu_i128__": i128::MIN.to_string()})
+        );
+        assert_eq!(
+            encoded["u128_max"],
+            serde_json::json!({"__cu_u128__": u128::MAX.to_string()})
+        );
+        assert_eq!(encoded["nan"], serde_json::json!({"__cu_float__": "nan"}));
+        assert_eq!(
+            encoded["positive_infinity"],
+            serde_json::json!({"__cu_float__": "positive_infinity"})
+        );
+        assert_eq!(
+            encoded["negative_infinity"],
+            serde_json::json!({"__cu_float__": "negative_infinity"})
+        );
+        assert_eq!(
+            encoded["numeric_map"],
+            serde_json::json!({
+                "__cu_map__": [{"key": 7, "value": "seven"}]
+            })
+        );
+    }
+
+    #[test]
+    fn field_catalog_describes_map_key_value_and_every_enum_variant_shape() {
+        let mut registry = TypeRegistry::default();
+        registry.register::<FidelityPayload>();
+        register_debug_support_types(&mut registry);
+        let info = registry
+            .get_with_type_path(<FidelityPayload as TypePath>::type_path())
+            .expect("fidelity payload registration")
+            .type_info();
+        let fields = super::build_field_catalog(&registry, info, None);
+
+        let map = fields
+            .iter()
+            .find(|field| field.display_path == "numeric_map")
+            .expect("numeric map field");
+        assert_eq!(map.kind, DebugFieldKind::Map);
+        assert_eq!(
+            map.map_key.as_deref().and_then(|field| field.scalar_kind),
+            Some(DebugScalarKind::U16)
+        );
+        assert_eq!(
+            map.map_value.as_deref().and_then(|field| field.scalar_kind),
+            Some(DebugScalarKind::String)
+        );
+
+        let mode = fields
+            .iter()
+            .find(|field| field.display_path == "mode")
+            .expect("enum field");
+        assert_eq!(mode.kind, DebugFieldKind::Enum);
+        assert_eq!(
+            mode.enum_variants
+                .iter()
+                .map(|variant| (variant.name.as_str(), variant.fields.len()))
+                .collect::<Vec<_>>(),
+            vec![("Unit", 0), ("Tuple", 2), ("Struct", 2)]
         );
     }
 

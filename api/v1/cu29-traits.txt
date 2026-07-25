@@ -1,4 +1,8 @@
 pub mod cu29_traits
+pub enum cu29_traits::DebugEnumVariantKind
+pub cu29_traits::DebugEnumVariantKind::Struct
+pub cu29_traits::DebugEnumVariantKind::Tuple
+pub cu29_traits::DebugEnumVariantKind::Unit
 pub enum cu29_traits::DebugFieldKind
 pub cu29_traits::DebugFieldKind::Array
 pub cu29_traits::DebugFieldKind::Enum
@@ -94,11 +98,18 @@ impl<'__de, __Context> cu_bincode::de::BorrowDecode<'__de, __Context> for cu29_t
 pub fn cu29_traits::CuMsgOrigin::borrow_decode<__D: cu_bincode::de::BorrowDecoder<'__de, Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
 impl<__Context> cu_bincode::de::Decode<__Context> for cu29_traits::CuMsgOrigin
 pub fn cu29_traits::CuMsgOrigin::decode<__D: cu_bincode::de::Decoder<Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+pub struct cu29_traits::DebugEnumVariantDescriptor
+pub cu29_traits::DebugEnumVariantDescriptor::fields: alloc::vec::Vec<cu29_traits::DebugFieldDescriptor>
+pub cu29_traits::DebugEnumVariantDescriptor::kind: cu29_traits::DebugEnumVariantKind
+pub cu29_traits::DebugEnumVariantDescriptor::name: alloc::string::String
 pub struct cu29_traits::DebugFieldDescriptor
 pub cu29_traits::DebugFieldDescriptor::binding_name: core::option::Option<alloc::string::String>
 pub cu29_traits::DebugFieldDescriptor::children: alloc::vec::Vec<cu29_traits::DebugFieldDescriptor>
 pub cu29_traits::DebugFieldDescriptor::display_path: alloc::string::String
+pub cu29_traits::DebugFieldDescriptor::enum_variants: alloc::vec::Vec<cu29_traits::DebugEnumVariantDescriptor>
 pub cu29_traits::DebugFieldDescriptor::kind: cu29_traits::DebugFieldKind
+pub cu29_traits::DebugFieldDescriptor::map_key: core::option::Option<alloc::boxed::Box<cu29_traits::DebugFieldDescriptor>>
+pub cu29_traits::DebugFieldDescriptor::map_value: core::option::Option<alloc::boxed::Box<cu29_traits::DebugFieldDescriptor>>
 pub cu29_traits::DebugFieldDescriptor::nullable: bool
 pub cu29_traits::DebugFieldDescriptor::scalar_kind: core::option::Option<cu29_traits::DebugScalarKind>
 pub cu29_traits::DebugFieldDescriptor::semantics: core::option::Option<cu29_traits::DebugFieldSemantics>

@@ -1506,15 +1506,21 @@ pub fn cu29_runtime::payload::CuArray<T, N>::module_path() -> core::option::Opti
 pub fn cu29_runtime::payload::CuArray<T, N>::short_type_path() -> &'static str
 pub fn cu29_runtime::payload::CuArray<T, N>::type_ident() -> core::option::Option<&'static str>
 pub fn cu29_runtime::payload::CuArray<T, N>::type_path() -> &'static str
-pub struct cu29_runtime::payload::CuArrayVec<T, const N: usize>(pub arrayvec::arrayvec::ArrayVec<T, N>)
-impl<'de, T, const N: usize> cu_bincode::de::BorrowDecode<'de, ()> for cu29_runtime::payload::CuArrayVec<T, N> where T: cu_bincode::de::BorrowDecode<'de, ()> + 'static
+pub struct cu29_runtime::payload::CuArrayVec<T: core::clone::Clone, const N: usize>(pub arrayvec::arrayvec::ArrayVec<T, N>)
+impl<'de, T, const N: usize> cu_bincode::de::BorrowDecode<'de, ()> for cu29_runtime::payload::CuArrayVec<T, N> where T: core::clone::Clone + cu_bincode::de::BorrowDecode<'de, ()> + 'static
 pub fn cu29_runtime::payload::CuArrayVec<T, N>::borrow_decode<D: cu_bincode::de::BorrowDecoder<'de, Context = ()>>(decoder: &mut D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
-impl<T, const N: usize> core::default::Default for cu29_runtime::payload::CuArrayVec<T, N>
-pub fn cu29_runtime::payload::CuArrayVec<T, N>::default() -> Self
-impl<T, const N: usize> cu_bincode::de::Decode<()> for cu29_runtime::payload::CuArrayVec<T, N> where T: cu_bincode::de::Decode<()> + 'static
+impl<T, const N: usize> cu_bincode::de::Decode<()> for cu29_runtime::payload::CuArrayVec<T, N> where T: core::clone::Clone + cu_bincode::de::Decode<()> + 'static
 pub fn cu29_runtime::payload::CuArrayVec<T, N>::decode<D: cu_bincode::de::Decoder<Context = ()>>(decoder: &mut D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
-impl<T, const N: usize> cu_bincode::enc::Encode for cu29_runtime::payload::CuArrayVec<T, N> where T: cu_bincode::enc::Encode + 'static
+impl<T, const N: usize> cu_bincode::enc::Encode for cu29_runtime::payload::CuArrayVec<T, N> where T: core::clone::Clone + cu_bincode::enc::Encode + 'static
 pub fn cu29_runtime::payload::CuArrayVec<T, N>::encode<E: cu_bincode::enc::Encoder>(&self, encoder: &mut E) -> core::result::Result<(), cu_bincode::error::EncodeError>
+impl<T: core::clone::Clone, const N: usize> core::default::Default for cu29_runtime::payload::CuArrayVec<T, N>
+pub fn cu29_runtime::payload::CuArrayVec<T, N>::default() -> Self
+impl<T: core::clone::Clone, const N: usize> cu29_runtime::reflect::TypePath for cu29_runtime::payload::CuArrayVec<T, N>
+pub fn cu29_runtime::payload::CuArrayVec<T, N>::crate_name() -> core::option::Option<&'static str>
+pub fn cu29_runtime::payload::CuArrayVec<T, N>::module_path() -> core::option::Option<&'static str>
+pub fn cu29_runtime::payload::CuArrayVec<T, N>::short_type_path() -> &'static str
+pub fn cu29_runtime::payload::CuArrayVec<T, N>::type_ident() -> core::option::Option<&'static str>
+pub fn cu29_runtime::payload::CuArrayVec<T, N>::type_path() -> &'static str
 pub mod cu29_runtime::pool
 pub enum cu29_runtime::pool::CuHandleInner<T: core::fmt::Debug + core::marker::Send + core::marker::Sync>
 pub cu29_runtime::pool::CuHandleInner::Detached(alloc::boxed::Box<T>)
@@ -1569,6 +1575,7 @@ pub fn cu29_runtime::pool::CuHandle<T>::new_detached(inner: T) -> Self
 pub fn cu29_runtime::pool::CuHandle<T>::new_detached_box(inner: alloc::boxed::Box<T>) -> Self
 pub fn cu29_runtime::pool::CuHandle<T>::new_detached_with_mode(inner: T, mode: cu29_runtime::config::HandleContent) -> Self
 pub fn cu29_runtime::pool::CuHandle<T>::payload_should_log(&self) -> bool
+pub fn cu29_runtime::pool::CuHandle<T>::serialize_value<S>(&self, serializer: S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where T: serde_core::ser::Serialize, S: serde_core::ser::Serializer
 pub fn cu29_runtime::pool::CuHandle<T>::storage_id(&self) -> usize
 pub fn cu29_runtime::pool::CuHandle<T>::strong_count(&self) -> usize
 pub fn cu29_runtime::pool::CuHandle<T>::was_touched(&self) -> bool
@@ -1877,6 +1884,12 @@ pub fn cu29_runtime::payload::CuArray<T, N>::module_path() -> core::option::Opti
 pub fn cu29_runtime::payload::CuArray<T, N>::short_type_path() -> &'static str
 pub fn cu29_runtime::payload::CuArray<T, N>::type_ident() -> core::option::Option<&'static str>
 pub fn cu29_runtime::payload::CuArray<T, N>::type_path() -> &'static str
+impl<T: core::clone::Clone, const N: usize> cu29_runtime::reflect::TypePath for cu29_runtime::payload::CuArrayVec<T, N>
+pub fn cu29_runtime::payload::CuArrayVec<T, N>::crate_name() -> core::option::Option<&'static str>
+pub fn cu29_runtime::payload::CuArrayVec<T, N>::module_path() -> core::option::Option<&'static str>
+pub fn cu29_runtime::payload::CuArrayVec<T, N>::short_type_path() -> &'static str
+pub fn cu29_runtime::payload::CuArrayVec<T, N>::type_ident() -> core::option::Option<&'static str>
+pub fn cu29_runtime::payload::CuArrayVec<T, N>::type_path() -> &'static str
 impl<T: core::clone::Clone> cu29_runtime::reflect::TypePath for cu29_runtime::payload::CuLatchedState<T>
 pub fn cu29_runtime::payload::CuLatchedState<T>::crate_name() -> core::option::Option<&'static str>
 pub fn cu29_runtime::payload::CuLatchedState<T>::module_path() -> core::option::Option<&'static str>
