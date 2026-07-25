@@ -817,31 +817,16 @@ fn gen_culist_support(
         })
         .collect();
     let mut zeroed_init_tokens: Vec<proc_macro2::TokenStream> = Vec::new();
+    let mut runtime_reset_tokens: Vec<proc_macro2::TokenStream> = Vec::new();
     for idx in culist_indices_in_plan_order {
         let slot_index = syn::Index::from(*idx);
-        let pack = output_packs
-            .get(*idx)
-            .unwrap_or_else(|| panic!("Missing output pack for index {idx}"));
-        if pack.is_multi() {
-            for port_idx in 0..pack.msg_types.len() {
-                let port_index = syn::Index::from(port_idx);
-                zeroed_init_tokens.push(quote! {
-                    self.0.#slot_index.#port_index.metadata.status_txt = CuCompactString::default();
-                    self.0.#slot_index.#port_index.metadata.process_time.start =
-                        cu29::clock::OptionCuTime::none();
-                    self.0.#slot_index.#port_index.metadata.process_time.end =
-                        cu29::clock::OptionCuTime::none();
-                    self.0.#slot_index.#port_index.metadata.origin = None;
-                });
-            }
-        } else {
-            zeroed_init_tokens.push(quote! {
-                self.0.#slot_index.metadata.status_txt = CuCompactString::default();
-                self.0.#slot_index.metadata.process_time.start = cu29::clock::OptionCuTime::none();
-                self.0.#slot_index.metadata.process_time.end = cu29::clock::OptionCuTime::none();
-                self.0.#slot_index.metadata.origin = None;
-            });
-        }
+        zeroed_init_tokens.push(quote! {
+            ::core::ptr::addr_of_mut!((*ptr).0.#slot_index)
+                .write(::core::default::Default::default());
+        });
+        runtime_reset_tokens.push(quote! {
+            self.0.#slot_index = ::core::default::Default::default();
+        });
     }
     let collect_metadata_function = quote! {
         pub fn collect_metadata<'a>(culist: &'a CuList) -> [&'a CuMsgMetadata; #culist_size] {
@@ -1157,9 +1142,20 @@ fn gen_culist_support(
         #erasedmsg_trait_impl
 
         impl CuListZeroedInit for CuStampedDataSet {
-            fn init_zeroed(&mut self) {
+            unsafe fn init_uninit(ptr: *mut Self) {
+                // Initialize directly in the surrounding CopperList's uninitialized
+                // heap storage. This avoids both large stack temporaries and references
+                // to invalid `Option<Payload>` bit patterns.
+                unsafe {
+                    ::core::ptr::addr_of_mut!((*ptr).1)
+                        .write(::core::default::Default::default());
+                    #(#zeroed_init_tokens)*
+                }
+            }
+
+            fn reset_for_runtime_use(&mut self) {
                 self.1.clear();
-                #(#zeroed_init_tokens)*
+                #(#runtime_reset_tokens)*
             }
         }
     }

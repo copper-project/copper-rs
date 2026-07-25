@@ -48,8 +48,12 @@
 //!
 //! - local Unix socket endpoint derived from `paths.base`
 //! - multicast + gossip scouting disabled
-//! - shared-memory enabled
-//! - shared-memory transport optimization enabled with threshold `1` byte
+//! - shared memory is mandatory on both ends
+//! - server transport optimization uses a 1 GiB pool and a 256 KiB threshold
+//! - startup refuses to continue unless `RLIMIT_MEMLOCK` and `/dev/shm` can
+//!   support the configured pool
+//! - large replies are explicitly allocated in SHM; allocation failure is
+//!   returned as an RPC error instead of silently copying over the socket
 //!
 //! ## Envelope Schema
 //!
@@ -177,7 +181,7 @@
 //! | `schema.get_stack` | yes | `{}` | stack config schema JSON |
 //! | `schema.list_types` | yes | `{ filter? }` | `type_paths[]` |
 //! | `schema.get_type` | yes | `{ type_path, format? }` | schema/reflect dump |
-//! | `schema.get_outputs` | yes | `{}` | output index -> task/message/payload field metadata |
+//! | `schema.get_outputs` | yes | `{ page?: { offset, limit }, field_page?: { offset, limit } }` | paged output index -> task/message/payload field metadata |
 //!
 //! ### State
 //!
@@ -270,8 +274,8 @@ use cu29_log::CuLogEntry;
 use cu29_log_runtime::capture_live_logs;
 use cu29_traits::{
     CopperListTuple, CuCompactString, CuError, CuMsgMetadataTrait, CuMsgOrigin, CuResult,
-    DebugFieldDescriptor, DebugFieldKind, DebugFieldSemantics, DebugScalarKind,
-    ErasedCuStampedDataSet, UnifiedLogType,
+    DebugEnumVariantDescriptor, DebugEnumVariantKind, DebugFieldDescriptor, DebugFieldKind,
+    DebugFieldSemantics, DebugScalarKind, ErasedCuStampedDataSet, UnifiedLogType,
 };
 use cu29_unifiedlog::{
     SectionStorage, UnifiedLogWrite, UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader,
@@ -283,24 +287,89 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use zenoh::bytes::Encoding;
 use zenoh::key_expr::KeyExpr;
+use zenoh::shm::{PosixShmProviderBackend, ShmProvider, ShmProviderState, ZShmMut};
 use zenoh::{Config as ZenohConfig, Error as ZenohError};
 
 const API_VERSION: &str = "debug.v1";
-// Zenoh mlocks the whole transport-optimization pool, so keep this below
-// common 8 MiB RLIMIT_MEMLOCK defaults.
-const LOCAL_SHM_POOL_BYTES: u64 = 4 * 1024 * 1024;
-const LOCAL_SHM_MESSAGE_THRESHOLD_BYTES: u64 = 3 * 1024;
 const DEFAULT_SESSION_IDLE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const DEFAULT_MAX_ACTIVE_SESSIONS: usize = 64;
 const MAX_PAGE_LIMIT: u32 = 1000;
 const MAX_REPLAY_BATCH_LIMIT: u32 = 128;
 const MAX_LOG_PAGE_LIMIT: usize = 5000;
 const SERVER_RECV_POLL_TIMEOUT: Duration = Duration::from_millis(250);
+const SHM_PROVIDER_INIT_TIMEOUT: Duration = Duration::from_secs(10);
+const SHM_PROVIDER_INIT_POLL_INTERVAL: Duration = Duration::from_millis(10);
+const SHM_REPLY_ALLOC_TIMEOUT: Duration = Duration::from_secs(2);
+const SHM_REPLY_ALLOC_POLL_INTERVAL: Duration = Duration::from_millis(1);
+const REMOTE_DEBUG_SHM_MEMLOCK_OVERHEAD_BYTES: usize = 2 * 1024 * 1024;
+
+/// Shared-memory requirements for the local remote-debug transport.
+///
+/// The default reserves a 1 GiB Zenoh pool for large TimeTraveler replies.
+/// Both processes need enough `RLIMIT_MEMLOCK` to map that pool. The client
+/// does not create a second transport-optimization pool; it only advertises
+/// SHM support and maps the server's pool.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RemoteDebugShmConfig {
+    pub pool_size_bytes: usize,
+    pub message_size_threshold_bytes: usize,
+}
+
+impl RemoteDebugShmConfig {
+    pub const DEFAULT_POOL_SIZE_BYTES: usize = 1024 * 1024 * 1024;
+    pub const DEFAULT_MESSAGE_SIZE_THRESHOLD_BYTES: usize = 256 * 1024;
+
+    pub const fn new(pool_size_bytes: usize, message_size_threshold_bytes: usize) -> Self {
+        Self {
+            pool_size_bytes,
+            message_size_threshold_bytes,
+        }
+    }
+
+    fn validate(self) -> CuResult<Self> {
+        if self.pool_size_bytes == 0 {
+            return Err(CuError::from(
+                "RemoteDebug shared-memory configuration requires a non-zero pool",
+            ));
+        }
+        if self.message_size_threshold_bytes == 0 {
+            return Err(CuError::from(
+                "RemoteDebug shared-memory configuration requires a non-zero message threshold",
+            ));
+        }
+        if self.message_size_threshold_bytes > self.pool_size_bytes {
+            return Err(CuError::from(format!(
+                "RemoteDebug shared-memory threshold ({}) exceeds its pool size ({})",
+                format_bytes(self.message_size_threshold_bytes),
+                format_bytes(self.pool_size_bytes),
+            )));
+        }
+        Ok(self)
+    }
+
+    fn required_memlock_bytes(self) -> CuResult<usize> {
+        self.pool_size_bytes
+            .checked_add(REMOTE_DEBUG_SHM_MEMLOCK_OVERHEAD_BYTES)
+            .ok_or_else(|| CuError::from("RemoteDebug shared-memory size overflow"))
+    }
+}
+
+impl Default for RemoteDebugShmConfig {
+    fn default() -> Self {
+        Self::new(
+            Self::DEFAULT_POOL_SIZE_BYTES,
+            Self::DEFAULT_MESSAGE_SIZE_THRESHOLD_BYTES,
+        )
+    }
+}
+
+type RemoteDebugShmProvider = ShmProvider<PosixShmProviderBackend>;
 
 #[derive(Clone, Debug, Serialize, Reflect)]
 struct DebugMessageMetadataView {
@@ -1015,7 +1084,200 @@ fn set_config_json5(config: &mut ZenohConfig, key: &str, value: &str) -> CuResul
         .map_err(|e| CuError::from(format!("RemoteDebug: invalid zenoh config '{key}': {e}")))
 }
 
-fn local_server_zenoh_config(paths: &RemoteDebugPaths) -> CuResult<ZenohConfig> {
+#[derive(Debug, Clone, Copy)]
+enum RemoteDebugShmRole {
+    Server,
+    Client,
+}
+
+impl RemoteDebugShmRole {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Server => "server",
+            Self::Client => "client",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RemoteDebugShmSystemLimits {
+    memlock_soft_bytes: u64,
+    memlock_hard_bytes: u64,
+    shm_available_bytes: u64,
+}
+
+fn format_bytes(bytes: usize) -> String {
+    const KIB: f64 = 1024.0;
+    const MIB: f64 = KIB * 1024.0;
+    const GIB: f64 = MIB * 1024.0;
+    let bytes = bytes as f64;
+    if bytes >= GIB {
+        format!("{:.2} GiB", bytes / GIB)
+    } else if bytes >= MIB {
+        format!("{:.2} MiB", bytes / MIB)
+    } else if bytes >= KIB {
+        format!("{:.2} KiB", bytes / KIB)
+    } else {
+        format!("{bytes:.0} B")
+    }
+}
+
+fn format_limit_bytes(bytes: u64) -> String {
+    if bytes == libc::RLIM_INFINITY {
+        "unlimited".to_owned()
+    } else {
+        usize::try_from(bytes)
+            .map(format_bytes)
+            .unwrap_or_else(|_| format!("{bytes} bytes"))
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn remote_debug_shm_system_limits() -> CuResult<RemoteDebugShmSystemLimits> {
+    let mut memlock = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    // SAFETY: `memlock` points to valid writable storage for getrlimit.
+    if unsafe { libc::getrlimit(libc::RLIMIT_MEMLOCK, &mut memlock) } != 0 {
+        return Err(CuError::new_with_cause(
+            "RemoteDebug shared-memory preflight could not read RLIMIT_MEMLOCK",
+            io::Error::last_os_error(),
+        ));
+    }
+
+    let shm_path = b"/dev/shm\0";
+    let mut stats = std::mem::MaybeUninit::<libc::statvfs>::uninit();
+    // SAFETY: the path is NUL-terminated and `stats` points to writable storage.
+    if unsafe { libc::statvfs(shm_path.as_ptr().cast::<libc::c_char>(), stats.as_mut_ptr()) } != 0 {
+        return Err(CuError::new_with_cause(
+            "RemoteDebug shared-memory preflight could not inspect /dev/shm",
+            io::Error::last_os_error(),
+        ));
+    }
+    // SAFETY: statvfs succeeded and initialized `stats`.
+    let stats = unsafe { stats.assume_init() };
+    let shm_available_bytes = (stats.f_bavail as u64).saturating_mul(stats.f_frsize as u64);
+
+    Ok(RemoteDebugShmSystemLimits {
+        memlock_soft_bytes: memlock.rlim_cur,
+        memlock_hard_bytes: memlock.rlim_max,
+        shm_available_bytes,
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn remote_debug_shm_system_limits() -> CuResult<RemoteDebugShmSystemLimits> {
+    Err(CuError::from(
+        "RemoteDebug's mandatory shared-memory preflight currently supports Linux only",
+    ))
+}
+
+fn validate_remote_debug_shm_limits(
+    shm: RemoteDebugShmConfig,
+    role: RemoteDebugShmRole,
+    limits: RemoteDebugShmSystemLimits,
+) -> CuResult<()> {
+    let shm = shm.validate()?;
+    let required = shm.required_memlock_bytes()?;
+    let required_u64 = u64::try_from(required).map_err(|_| {
+        CuError::from("RemoteDebug shared-memory size is unsupported on this target")
+    })?;
+    let memlock_ok = limits.memlock_soft_bytes == libc::RLIM_INFINITY
+        || limits.memlock_soft_bytes >= required_u64;
+    let shm_ok = limits.shm_available_bytes >= shm.pool_size_bytes as u64;
+    if memlock_ok && shm_ok {
+        return Ok(());
+    }
+
+    let recommended_kib = 2 * 1024 * 1024;
+    let mut failures = Vec::new();
+    if !memlock_ok {
+        failures.push(format!(
+            "RLIMIT_MEMLOCK soft/hard is {}/{}; this profile requires at least {} \
+             ({} pool + {} Zenoh metadata headroom)",
+            format_limit_bytes(limits.memlock_soft_bytes),
+            format_limit_bytes(limits.memlock_hard_bytes),
+            format_bytes(required),
+            format_bytes(shm.pool_size_bytes),
+            format_bytes(REMOTE_DEBUG_SHM_MEMLOCK_OVERHEAD_BYTES),
+        ));
+    }
+    if !shm_ok {
+        failures.push(format!(
+            "/dev/shm has {} available; this profile requires at least {}",
+            format_limit_bytes(limits.shm_available_bytes),
+            format_bytes(shm.pool_size_bytes),
+        ));
+    }
+
+    Err(CuError::from(format!(
+        "RemoteDebug shared-memory preflight failed for the {}: {}. \
+         Refusing to start because Zenoh can otherwise silently copy large TimeTraveler \
+         replies over the socket. Configure BOTH the Copper server and TimeTraveler process \
+         before launch. Recommended interactive-shell setting: \
+         `sudo prlimit --pid $$ --memlock=2147483648:2147483648`, then verify \
+         `ulimit -l {recommended_kib}` (2 GiB, value is KiB). A plain `ulimit` cannot exceed \
+         the current hard limit. For systemd use `LimitMEMLOCK=2G`; for Docker also use \
+         `--ulimit memlock=2147483648:2147483648 --shm-size=2g`. Verify with `ulimit -l` \
+         and `df -h /dev/shm`.",
+        role.label(),
+        failures.join("; "),
+    )))
+}
+
+/// Validate the host resources required by the default local remote-debug SHM
+/// transport before opening Zenoh.
+///
+/// This performs only local configuration/resource checks; it sends no probe
+/// message and does not require the other endpoint to be running.
+pub fn remote_debug_shm_preflight(shm: RemoteDebugShmConfig) -> CuResult<()> {
+    validate_remote_debug_shm_limits(
+        shm,
+        RemoteDebugShmRole::Client,
+        remote_debug_shm_system_limits()?,
+    )
+}
+
+fn preflight_remote_debug_shm(shm: RemoteDebugShmConfig, role: RemoteDebugShmRole) -> CuResult<()> {
+    validate_remote_debug_shm_limits(shm, role, remote_debug_shm_system_limits()?)
+}
+
+fn validate_server_zenoh_shm_config(config: &ZenohConfig) -> CuResult<RemoteDebugShmConfig> {
+    let shared_memory = &config.transport.shared_memory;
+    if !*shared_memory.enabled() {
+        return Err(CuError::from(
+            "RemoteDebug server requires Zenoh transport/shared_memory/enabled=true",
+        ));
+    }
+    if !*shared_memory.transport_optimization.enabled() {
+        return Err(CuError::from(
+            "RemoteDebug server requires Zenoh shared-memory transport optimization",
+        ));
+    }
+    RemoteDebugShmConfig::new(
+        shared_memory.transport_optimization.pool_size().get(),
+        *shared_memory
+            .transport_optimization
+            .message_size_threshold(),
+    )
+    .validate()
+}
+
+fn validate_client_zenoh_shm_config(config: &ZenohConfig) -> CuResult<()> {
+    if !*config.transport.shared_memory.enabled() {
+        return Err(CuError::from(
+            "RemoteDebug client requires Zenoh transport/shared_memory/enabled=true",
+        ));
+    }
+    Ok(())
+}
+
+fn local_server_zenoh_config(
+    paths: &RemoteDebugPaths,
+    shm: RemoteDebugShmConfig,
+) -> CuResult<ZenohConfig> {
+    let shm = shm.validate()?;
     let endpoint = local_endpoint(&paths.base);
     let endpoint_json = serde_json::to_string(&endpoint)
         .map_err(|e| CuError::new_with_cause("RemoteDebug: endpoint encoding failed", e))?;
@@ -1031,6 +1293,7 @@ fn local_server_zenoh_config(paths: &RemoteDebugPaths) -> CuResult<ZenohConfig> 
         &format!("[{endpoint_json}]"),
     )?;
     set_config_json5(&mut config, "transport/shared_memory/enabled", "true")?;
+    set_config_json5(&mut config, "transport/shared_memory/mode", "\"init\"")?;
     set_config_json5(
         &mut config,
         "transport/shared_memory/transport_optimization/enabled",
@@ -1039,17 +1302,21 @@ fn local_server_zenoh_config(paths: &RemoteDebugPaths) -> CuResult<ZenohConfig> 
     set_config_json5(
         &mut config,
         "transport/shared_memory/transport_optimization/pool_size",
-        &LOCAL_SHM_POOL_BYTES.to_string(),
+        &shm.pool_size_bytes.to_string(),
     )?;
     set_config_json5(
         &mut config,
         "transport/shared_memory/transport_optimization/message_size_threshold",
-        &LOCAL_SHM_MESSAGE_THRESHOLD_BYTES.to_string(),
+        &shm.message_size_threshold_bytes.to_string(),
     )?;
     Ok(config)
 }
 
-fn local_client_zenoh_config(paths: &RemoteDebugPaths) -> CuResult<ZenohConfig> {
+fn local_client_zenoh_config(
+    paths: &RemoteDebugPaths,
+    shm: RemoteDebugShmConfig,
+) -> CuResult<ZenohConfig> {
+    let shm = shm.validate()?;
     let endpoint = local_endpoint(&paths.base);
     let endpoint_json = serde_json::to_string(&endpoint)
         .map_err(|e| CuError::new_with_cause("RemoteDebug: endpoint encoding failed", e))?;
@@ -1065,22 +1332,58 @@ fn local_client_zenoh_config(paths: &RemoteDebugPaths) -> CuResult<ZenohConfig> 
         &format!("[{endpoint_json}]"),
     )?;
     set_config_json5(&mut config, "transport/shared_memory/enabled", "true")?;
+    set_config_json5(&mut config, "transport/shared_memory/mode", "\"init\"")?;
+    // The client maps server-owned reply buffers but does not need a second
+    // 1 GiB provider for its small control requests.
     set_config_json5(
         &mut config,
         "transport/shared_memory/transport_optimization/enabled",
-        "true",
+        "false",
     )?;
     set_config_json5(
         &mut config,
         "transport/shared_memory/transport_optimization/pool_size",
-        &LOCAL_SHM_POOL_BYTES.to_string(),
+        &shm.pool_size_bytes.to_string(),
     )?;
     set_config_json5(
         &mut config,
         "transport/shared_memory/transport_optimization/message_size_threshold",
-        &LOCAL_SHM_MESSAGE_THRESHOLD_BYTES.to_string(),
+        &shm.message_size_threshold_bytes.to_string(),
     )?;
     Ok(config)
+}
+
+fn initialize_remote_debug_shm_provider(
+    session: &zenoh::Session,
+) -> CuResult<Arc<RemoteDebugShmProvider>> {
+    let started = Instant::now();
+    loop {
+        match session.get_shm_provider() {
+            ShmProviderState::Ready(provider) => return Ok(provider),
+            ShmProviderState::Initializing if started.elapsed() < SHM_PROVIDER_INIT_TIMEOUT => {
+                std::thread::sleep(SHM_PROVIDER_INIT_POLL_INTERVAL);
+            }
+            ShmProviderState::Initializing => {
+                return Err(CuError::from(format!(
+                    "RemoteDebug server timed out after {:?} initializing its mandatory \
+                     shared-memory provider",
+                    SHM_PROVIDER_INIT_TIMEOUT
+                )));
+            }
+            ShmProviderState::Disabled => {
+                return Err(CuError::from(
+                    "RemoteDebug server's mandatory Zenoh shared-memory provider is disabled",
+                ));
+            }
+            ShmProviderState::Error => {
+                return Err(CuError::from(
+                    "RemoteDebug server failed to allocate and lock its mandatory Zenoh \
+                     shared-memory pool; check `ulimit -l`, `df -h /dev/shm`, and the startup \
+                     preflight values",
+                ));
+            }
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -1109,7 +1412,10 @@ where
 {
     paths: RemoteDebugPaths,
     session: zenoh::Session,
+    shm_provider: Arc<RemoteDebugShmProvider>,
+    shm_config: RemoteDebugShmConfig,
     request_sub: ZenohSubscriber,
+    reply_publishers: HashMap<String, zenoh::pubsub::Publisher<'static>>,
     event_publishers: EventPublishers,
     app_factory: AF,
     build_callback: CB,
@@ -1146,7 +1452,23 @@ where
         build_callback: CB,
         time_of: TF,
     ) -> CuResult<Self> {
-        let zenoh_config = local_server_zenoh_config(&paths)?;
+        Self::new_with_shm_config(
+            paths,
+            app_factory,
+            build_callback,
+            time_of,
+            RemoteDebugShmConfig::default(),
+        )
+    }
+
+    pub fn new_with_shm_config(
+        paths: RemoteDebugPaths,
+        app_factory: AF,
+        build_callback: CB,
+        time_of: TF,
+        shm_config: RemoteDebugShmConfig,
+    ) -> CuResult<Self> {
+        let zenoh_config = local_server_zenoh_config(&paths, shm_config)?;
         Self::new_with_config(zenoh_config, paths, app_factory, build_callback, time_of)
     }
 
@@ -1157,8 +1479,11 @@ where
         build_callback: CB,
         time_of: TF,
     ) -> CuResult<Self> {
+        let shm_config = validate_server_zenoh_shm_config(&zenoh_config)?;
+        preflight_remote_debug_shm(shm_config, RemoteDebugShmRole::Server)?;
         let session = zenoh::Wait::wait(zenoh::open(zenoh_config))
             .map_err(cu_error_map("RemoteDebug: failed to open Zenoh session"))?;
+        let shm_provider = initialize_remote_debug_shm_provider(&session)?;
 
         let request_sub =
             zenoh::Wait::wait(session.declare_subscriber(keyexpr(&paths.rpc_request)?)).map_err(
@@ -1194,7 +1519,10 @@ where
         Ok(Self {
             paths,
             session,
+            shm_provider,
+            shm_config,
             request_sub,
+            reply_publishers: HashMap::new(),
             event_publishers: EventPublishers {
                 cursor: cursor_pub,
                 run: run_pub,
@@ -1379,9 +1707,11 @@ where
                 request.session_id.as_deref(),
                 &request.params,
             ),
-            "schema.get_outputs" => {
-                self.handle_schema_get_outputs(request_id, request.session_id.as_deref())
-            }
+            "schema.get_outputs" => self.handle_schema_get_outputs(
+                request_id,
+                request.session_id.as_deref(),
+                &request.params,
+            ),
             "state.inspect" => self.handle_state_inspect(
                 request_id,
                 request.session_id.as_deref(),
@@ -2283,6 +2613,7 @@ where
         &mut self,
         request_id: String,
         session_id: Option<&str>,
+        params: &Value,
     ) -> DebugRpcResponse {
         if let Err(e) = self.session_mut(session_id) {
             return err_response(request_id, "SessionNotFound", &e.to_string());
@@ -2291,8 +2622,73 @@ where
         let mut registry = TypeRegistry::default();
         populate_debug_type_registry::<App>(&mut registry);
 
-        match build_output_schema_entries::<P>(&registry) {
-            Ok(outputs) => ok_response(request_id, json!({ "outputs": outputs }), None, None),
+        let offset = params
+            .get("page")
+            .and_then(|page| page.get("offset"))
+            .and_then(Value::as_u64)
+            .unwrap_or(0) as usize;
+        let limit = params
+            .get("page")
+            .and_then(|page| page.get("limit"))
+            .and_then(Value::as_u64)
+            .and_then(|limit| usize::try_from(limit).ok())
+            .unwrap_or(usize::MAX)
+            .max(1);
+        let total = P::get_output_specs().len();
+
+        match build_output_schema_entries_page::<P>(&registry, offset, limit) {
+            Ok(mut outputs) => {
+                let consumed = outputs.len();
+                let next_offset = offset
+                    .saturating_add(consumed)
+                    .lt(&total)
+                    .then_some(offset.saturating_add(consumed));
+                let field_offset = params
+                    .get("field_page")
+                    .and_then(|page| page.get("offset"))
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0) as usize;
+                let field_limit = params
+                    .get("field_page")
+                    .and_then(|page| page.get("limit"))
+                    .and_then(Value::as_u64)
+                    .and_then(|limit| usize::try_from(limit).ok())
+                    .unwrap_or(usize::MAX)
+                    .max(1);
+                let mut total_fields = None;
+                let mut next_field_offset = None;
+                if params.get("field_page").is_some()
+                    && let Some(fields) = outputs
+                        .first_mut()
+                        .and_then(|output| output.get_mut("payload_fields"))
+                        .and_then(Value::as_array_mut)
+                {
+                    total_fields = Some(fields.len());
+                    let page = fields
+                        .iter()
+                        .skip(field_offset)
+                        .take(field_limit)
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    next_field_offset = field_offset
+                        .saturating_add(page.len())
+                        .lt(&fields.len())
+                        .then_some(field_offset.saturating_add(page.len()));
+                    *fields = page;
+                }
+                ok_response(
+                    request_id,
+                    json!({
+                        "outputs": outputs,
+                        "total": total,
+                        "next_offset": next_offset,
+                        "total_fields": total_fields,
+                        "next_field_offset": next_field_offset,
+                    }),
+                    None,
+                    None,
+                )
+            }
             Err(err) => err_response(request_id, "SchemaFailed", &err.to_string()),
         }
     }
@@ -2616,23 +3012,84 @@ where
         )
     }
 
+    fn allocate_shm_reply(&self, size: usize) -> Result<ZShmMut, String> {
+        if size >= self.shm_config.pool_size_bytes {
+            return Err(format!(
+                "{} reply is not smaller than the configured {} SHM pool",
+                format_bytes(size),
+                format_bytes(self.shm_config.pool_size_bytes),
+            ));
+        }
+
+        let started = Instant::now();
+        loop {
+            self.shm_provider.garbage_collect();
+            self.shm_provider.defragment();
+            match zenoh::Wait::wait(self.shm_provider.alloc(size)) {
+                Ok(buffer) => return Ok(buffer),
+                Err(_) if started.elapsed() < SHM_REPLY_ALLOC_TIMEOUT => {
+                    std::thread::sleep(SHM_REPLY_ALLOC_POLL_INTERVAL);
+                }
+                Err(err) => {
+                    return Err(format!(
+                        "allocation remained unavailable for {:?}: {err}",
+                        SHM_REPLY_ALLOC_TIMEOUT
+                    ));
+                }
+            }
+        }
+    }
+
     fn publish_reply(
-        &self,
+        &mut self,
         topic: &str,
         response: &DebugRpcResponse,
         codec: WireCodec,
     ) -> CuResult<()> {
         let payload = encode_payload(response, codec, "RemoteDebug: failed to serialize response")?;
-        let publisher = zenoh::Wait::wait(self.session.declare_publisher(keyexpr(topic)?))
-            .map_err(cu_error_map(
-                "RemoteDebug: failed to declare reply publisher",
-            ))?;
-        zenoh::Wait::wait(publisher.put(payload).encoding(codec.encoding()))
-            .map_err(cu_error_map("RemoteDebug: failed to publish reply"))?;
-        zenoh::Wait::wait(publisher.undeclare()).map_err(cu_error_map(
-            "RemoteDebug: failed to undeclare reply publisher",
-        ))?;
-        Ok(())
+        if !self.reply_publishers.contains_key(topic) {
+            let publisher = zenoh::Wait::wait(self.session.declare_publisher(keyexpr(topic)?))
+                .map_err(cu_error_map(
+                    "RemoteDebug: failed to declare reply publisher",
+                ))?;
+            self.reply_publishers.insert(topic.to_owned(), publisher);
+        }
+        let publisher = self
+            .reply_publishers
+            .get(topic)
+            .ok_or_else(|| CuError::from("RemoteDebug: reply publisher cache miss"))?;
+        if payload.len() < self.shm_config.message_size_threshold_bytes {
+            return zenoh::Wait::wait(publisher.put(payload).encoding(codec.encoding()))
+                .map_err(cu_error_map("RemoteDebug: failed to publish reply"));
+        }
+
+        let mut shm_payload = match self.allocate_shm_reply(payload.len()) {
+            Ok(shm_payload) => shm_payload,
+            Err(err) => {
+                let allocation_error = err_response(
+                    response.request_id.clone(),
+                    "SharedMemoryCapacity",
+                    &format!(
+                        "RemoteDebug refused to copy a {} reply over the socket because its \
+                         mandatory {} SHM pool could not allocate it: {err}",
+                        format_bytes(payload.len()),
+                        format_bytes(self.shm_config.pool_size_bytes),
+                    ),
+                );
+                let error_payload = encode_payload(
+                    &allocation_error,
+                    codec,
+                    "RemoteDebug: failed to serialize SHM allocation error",
+                )?;
+                return zenoh::Wait::wait(publisher.put(error_payload).encoding(codec.encoding()))
+                    .map_err(cu_error_map(
+                        "RemoteDebug: failed to publish SHM allocation error",
+                    ));
+            }
+        };
+        shm_payload[..].copy_from_slice(&payload);
+        zenoh::Wait::wait(publisher.put(shm_payload).encoding(codec.encoding()))
+            .map_err(cu_error_map("RemoteDebug: failed to publish SHM reply"))
     }
 
     #[allow(dead_code)]
@@ -2798,6 +3255,7 @@ pub struct RemoteDebugZenohClient {
     reply_topic: String,
     next_request_id: AtomicU64,
     codec: WireCodec,
+    shm_config: RemoteDebugShmConfig,
 }
 
 pub struct RemoteDebugZenohClientBuilder {
@@ -2805,6 +3263,7 @@ pub struct RemoteDebugZenohClientBuilder {
     client_id: String,
     codec: WireCodec,
     zenoh_config: Option<ZenohConfig>,
+    shm_config: RemoteDebugShmConfig,
 }
 
 impl RemoteDebugZenohClientBuilder {
@@ -2818,12 +3277,24 @@ impl RemoteDebugZenohClientBuilder {
         self
     }
 
+    pub fn shm_config(mut self, shm_config: RemoteDebugShmConfig) -> Self {
+        self.shm_config = shm_config;
+        self
+    }
+
     pub fn build(self) -> CuResult<RemoteDebugZenohClient> {
+        let shm_config = self.shm_config.validate()?;
         let zenoh_config = match self.zenoh_config {
             Some(config) => config,
-            None => local_client_zenoh_config(&self.paths)?,
+            None => local_client_zenoh_config(&self.paths, shm_config)?,
         };
-        RemoteDebugZenohClient::open(zenoh_config, self.paths, &self.client_id, self.codec)
+        RemoteDebugZenohClient::open(
+            zenoh_config,
+            self.paths,
+            &self.client_id,
+            self.codec,
+            shm_config,
+        )
     }
 }
 
@@ -2838,6 +3309,7 @@ impl RemoteDebugZenohClient {
             client_id: client_id.to_string(),
             codec: WireCodec::Cbor,
             zenoh_config: None,
+            shm_config: RemoteDebugShmConfig::default(),
         }
     }
 
@@ -2846,7 +3318,10 @@ impl RemoteDebugZenohClient {
         paths: RemoteDebugPaths,
         client_id: &str,
         codec: WireCodec,
+        shm_config: RemoteDebugShmConfig,
     ) -> CuResult<Self> {
+        validate_client_zenoh_shm_config(&zenoh_config)?;
+        preflight_remote_debug_shm(shm_config, RemoteDebugShmRole::Client)?;
         let session = zenoh::Wait::wait(zenoh::open(zenoh_config)).map_err(cu_error_map(
             "RemoteDebugClient: failed to open Zenoh session",
         ))?;
@@ -2870,6 +3345,7 @@ impl RemoteDebugZenohClient {
             reply_topic,
             next_request_id: AtomicU64::new(1),
             codec,
+            shm_config,
         })
     }
 
@@ -2884,6 +3360,26 @@ impl RemoteDebugZenohClient {
         session_id: Option<&str>,
         method: &str,
         params: Value,
+    ) -> CuResult<DebugRpcResponse> {
+        self.call_inner(session_id, method, params, None)
+    }
+
+    pub fn call_timeout(
+        &self,
+        session_id: Option<&str>,
+        method: &str,
+        params: Value,
+        timeout: Duration,
+    ) -> CuResult<DebugRpcResponse> {
+        self.call_inner(session_id, method, params, Some(timeout))
+    }
+
+    fn call_inner(
+        &self,
+        session_id: Option<&str>,
+        method: &str,
+        params: Value,
+        timeout: Option<Duration>,
     ) -> CuResult<DebugRpcResponse> {
         let request_id = format!("req{}", self.next_request_id.fetch_add(1, Ordering::SeqCst));
         let request = DebugRpcRequest {
@@ -2908,13 +3404,36 @@ impl RemoteDebugZenohClient {
         .map_err(cu_error_map("RemoteDebugClient: failed to send request"))?;
 
         loop {
-            let sample = self.reply_sub.recv().map_err(|e| {
-                CuError::from(format!("RemoteDebugClient: failed receiving reply: {e}"))
-            })?;
+            let sample = match timeout {
+                Some(timeout) => self
+                    .reply_sub
+                    .recv_timeout(timeout)
+                    .map_err(|e| {
+                        CuError::from(format!("RemoteDebugClient: failed receiving reply: {e}"))
+                    })?
+                    .ok_or_else(|| {
+                        CuError::from(format!(
+                            "RemoteDebugClient: timed out after {timeout:?} waiting for {method}"
+                        ))
+                    })?,
+                None => self.reply_sub.recv().map_err(|e| {
+                    CuError::from(format!("RemoteDebugClient: failed receiving reply: {e}"))
+                })?,
+            };
+            let payload_len = sample.payload().len();
+            let payload_is_shm = sample.payload().as_shm().is_some();
             let payload = sample.payload().to_bytes();
             let response = decode_response(payload.as_ref(), self.codec)?;
 
             if response.request_id == request_id {
+                if payload_len >= self.shm_config.message_size_threshold_bytes && !payload_is_shm {
+                    return Err(CuError::from(format!(
+                        "RemoteDebugClient refused a {} reply delivered outside shared memory. \
+                         Both endpoints must have SHM enabled and enough RLIMIT_MEMLOCK; \
+                         refusing silent Unix-socket fallback.",
+                        format_bytes(payload_len),
+                    )));
+                }
                 return Ok(response);
             }
         }
@@ -3495,19 +4014,84 @@ fn metadata_to_json(metadata: &dyn CuMsgMetadataTrait, tov: Tov) -> Value {
         origin: metadata.origin().cloned(),
     };
 
-    serde_json::to_value(view)
+    cu29_value::to_value(view)
+        .map(debug_value_to_json)
         .unwrap_or_else(|_| Value::String("metadata serialization failed".to_string()))
 }
 
 fn erased_serialize_to_value(value: &dyn erased_serde::Serialize) -> CuResult<Value> {
-    let mut bytes = Vec::new();
-    {
-        let mut serializer = minicbor_serde::Serializer::new(&mut bytes);
-        erased_serde::serialize(value, &mut serializer)
-            .map_err(|e| CuError::from(format!("Failed to serialize erased payload: {e}")))?;
+    let value = cu29_value::to_value(value)
+        .map_err(|e| CuError::from(format!("Failed to serialize erased payload: {e}")))?;
+    Ok(debug_value_to_json(value))
+}
+
+fn debug_value_to_json(value: cu29_value::Value) -> Value {
+    use cu29_value::Value as DebugValue;
+
+    match value {
+        DebugValue::Bool(value) => Value::Bool(value),
+        DebugValue::U8(value) => json!(value),
+        DebugValue::U16(value) => json!(value),
+        DebugValue::U32(value) => json!(value),
+        DebugValue::U64(value) => json!(value),
+        DebugValue::U128(value) => json!({"__cu_u128__": value.to_string()}),
+        DebugValue::I8(value) => json!(value),
+        DebugValue::I16(value) => json!(value),
+        DebugValue::I32(value) => json!(value),
+        DebugValue::I64(value) => json!(value),
+        DebugValue::I128(value) => json!({"__cu_i128__": value.to_string()}),
+        DebugValue::F32(value) => debug_float_to_json(f64::from(value)),
+        DebugValue::F64(value) => debug_float_to_json(value),
+        DebugValue::Char(value) => Value::String(value.to_string()),
+        DebugValue::String(value) => Value::String(value),
+        DebugValue::Unit | DebugValue::Option(None) => Value::Null,
+        DebugValue::Option(Some(value)) | DebugValue::Newtype(value) => debug_value_to_json(*value),
+        DebugValue::Seq(values) => {
+            Value::Array(values.into_iter().map(debug_value_to_json).collect())
+        }
+        DebugValue::Map(values)
+            if values
+                .keys()
+                .all(|key| matches!(key, DebugValue::String(_))) =>
+        {
+            Value::Object(
+                values
+                    .into_iter()
+                    .filter_map(|(key, value)| match key {
+                        DebugValue::String(key) => Some((key, debug_value_to_json(value))),
+                        _ => None,
+                    })
+                    .collect(),
+            )
+        }
+        DebugValue::Map(values) => json!({
+            "__cu_map__": values
+                .into_iter()
+                .map(|(key, value)| {
+                    json!({
+                        "key": debug_value_to_json(key),
+                        "value": debug_value_to_json(value),
+                    })
+                })
+                .collect::<Vec<_>>()
+        }),
+        DebugValue::Bytes(values) => {
+            Value::Array(values.into_iter().map(|value| json!(value)).collect())
+        }
+        DebugValue::CuTime(value) => json!(value.as_nanos()),
     }
-    minicbor_serde::from_slice(&bytes)
-        .map_err(|e| CuError::new_with_cause("Failed to decode serialized payload CBOR", e))
+}
+
+fn debug_float_to_json(value: f64) -> Value {
+    if value.is_nan() {
+        json!({"__cu_float__": "nan"})
+    } else if value == f64::INFINITY {
+        json!({"__cu_float__": "positive_infinity"})
+    } else if value == f64::NEG_INFINITY {
+        json!({"__cu_float__": "negative_infinity"})
+    } else {
+        json!(value)
+    }
 }
 
 fn build_tasks_json<App, P, CB, TF, S, L>(
@@ -4028,7 +4612,19 @@ fn simple_jsonschema_for_type(info: &'static TypeInfo) -> Value {
     })
 }
 
+#[cfg(test)]
 fn build_output_schema_entries<P>(registry: &TypeRegistry) -> CuResult<Vec<Value>>
+where
+    P: CopperListTuple + 'static,
+{
+    build_output_schema_entries_page::<P>(registry, 0, usize::MAX)
+}
+
+fn build_output_schema_entries_page<P>(
+    registry: &TypeRegistry,
+    offset: usize,
+    limit: usize,
+) -> CuResult<Vec<Value>>
 where
     P: CopperListTuple + 'static,
 {
@@ -4037,6 +4633,8 @@ where
     P::get_output_specs()
         .iter()
         .enumerate()
+        .skip(offset)
+        .take(limit)
         .map(|(index, spec)| {
             let payload_type_path = spec.payload_type_path();
             let payload_type =
@@ -4294,18 +4892,43 @@ fn build_type_node(
                 nullable,
             ),
         ),
-        TypeInfo::Map(_) => debug_field_descriptor(
-            display_path,
-            binding_name,
-            value_type_path,
-            DebugFieldShape {
-                semantics: debug_type_semantics(value_type_path),
-                scalar_kind: None,
+        TypeInfo::Map(info) => {
+            let mut descriptor = debug_field_descriptor(
+                display_path,
+                binding_name,
+                value_type_path,
+                DebugFieldShape {
+                    semantics: debug_type_semantics(value_type_path),
+                    scalar_kind: None,
+                    nullable,
+                    kind: DebugFieldKind::Map,
+                },
+                Vec::new(),
+            );
+            let key_ty = info.key_ty();
+            let value_ty = info.value_ty();
+            descriptor.map_key = Some(Box::new(build_field_node(
+                registry,
+                info.key_info(),
+                &key_ty,
+                &format!("{}{{key}}", path_or_value(display_path)),
+                binding_name
+                    .map(|name| format!("{}{{key}}", path_or_value(name)))
+                    .as_deref(),
                 nullable,
-                kind: DebugFieldKind::Map,
-            },
-            Vec::new(),
-        ),
+            )));
+            descriptor.map_value = Some(Box::new(build_field_node(
+                registry,
+                info.value_info(),
+                &value_ty,
+                &format!("{}{{value}}", path_or_value(display_path)),
+                binding_name
+                    .map(|name| format!("{}{{value}}", path_or_value(name)))
+                    .as_deref(),
+                nullable,
+            )));
+            descriptor
+        }
         TypeInfo::Set(info) => debug_field_descriptor(
             display_path,
             binding_name,
@@ -4337,7 +4960,7 @@ fn build_type_node(
                 );
             }
 
-            debug_field_descriptor(
+            let mut descriptor = debug_field_descriptor(
                 display_path,
                 binding_name,
                 value_type_path,
@@ -4348,7 +4971,10 @@ fn build_type_node(
                     kind: DebugFieldKind::Enum,
                 },
                 Vec::new(),
-            )
+            );
+            descriptor.enum_variants =
+                enum_variant_descriptors(registry, info, display_path, binding_name, nullable);
+            descriptor
         }
         TypeInfo::Opaque(info) => debug_field_descriptor(
             display_path,
@@ -4461,6 +5087,73 @@ fn indexed_children(
     )]
 }
 
+fn enum_variant_descriptors(
+    registry: &TypeRegistry,
+    info: &EnumInfo,
+    display_path: &str,
+    binding_name: Option<&str>,
+    nullable: bool,
+) -> Vec<DebugEnumVariantDescriptor> {
+    info.iter()
+        .map(|variant| {
+            let variant_display =
+                join_field_path(path_or_value(display_path).as_str(), variant.name());
+            let variant_binding = binding_name
+                .map(|name| join_field_path(path_or_value(name).as_str(), variant.name()));
+            match variant {
+                VariantInfo::Unit(_) => DebugEnumVariantDescriptor {
+                    name: variant.name().to_owned(),
+                    kind: DebugEnumVariantKind::Unit,
+                    fields: Vec::new(),
+                },
+                VariantInfo::Tuple(tuple) => DebugEnumVariantDescriptor {
+                    name: variant.name().to_owned(),
+                    kind: DebugEnumVariantKind::Tuple,
+                    fields: tuple
+                        .iter()
+                        .enumerate()
+                        .map(|(index, field)| {
+                            let field_display = indexed_path(&variant_display, Some(index));
+                            let field_binding = variant_binding
+                                .as_deref()
+                                .map(|name| indexed_path(name, Some(index)));
+                            build_field_node(
+                                registry,
+                                field.type_info(),
+                                field.ty(),
+                                &field_display,
+                                field_binding.as_deref(),
+                                nullable,
+                            )
+                        })
+                        .collect(),
+                },
+                VariantInfo::Struct(struct_variant) => DebugEnumVariantDescriptor {
+                    name: variant.name().to_owned(),
+                    kind: DebugEnumVariantKind::Struct,
+                    fields: struct_variant
+                        .iter()
+                        .map(|field| {
+                            let field_display = join_field_path(&variant_display, field.name());
+                            let field_binding = variant_binding
+                                .as_deref()
+                                .map(|name| join_field_path(name, field.name()));
+                            build_field_node(
+                                registry,
+                                field.type_info(),
+                                field.ty(),
+                                &field_display,
+                                field_binding.as_deref(),
+                                nullable,
+                            )
+                        })
+                        .collect(),
+                },
+            }
+        })
+        .collect()
+}
+
 fn skipped_indices(registry: &TypeRegistry, type_id: core::any::TypeId) -> BTreeSet<usize> {
     registry
         .get_type_data::<SerializationData>(type_id)
@@ -4526,6 +5219,9 @@ fn debug_field_descriptor(
         nullable: shape.nullable,
         kind: shape.kind,
         children,
+        map_key: None,
+        map_value: None,
+        enum_variants: Vec::new(),
     }
 }
 
@@ -4580,7 +5276,8 @@ fn primitive_scalar_kind(type_path: &str) -> Option<DebugScalarKind> {
 #[cfg(feature = "reflect")]
 fn reflect_value_to_json(value: &dyn crate::reflect::Reflect, registry: &TypeRegistry) -> Value {
     let serializer = crate::reflect::serde::TypedReflectSerializer::new(value, registry);
-    serde_json::to_value(serializer)
+    cu29_value::to_value(serializer)
+        .map(debug_value_to_json)
         .unwrap_or_else(|_| Value::String("reflect serialization failed".to_string()))
 }
 
@@ -4648,9 +5345,11 @@ fn hex_digit(n: u8) -> char {
 #[cfg(all(test, feature = "std"))]
 mod tests {
     use super::{
-        DebugRpcAttachment, DebugRpcResponse, WireCodec, build_message_metadata_field_descriptors,
-        build_output_schema_entries, build_stack_schema, encode_payload, metadata_to_json,
-        reflect_value_to_json, register_debug_support_types,
+        DebugRpcAttachment, DebugRpcResponse, RemoteDebugShmConfig, RemoteDebugShmRole,
+        RemoteDebugShmSystemLimits, WireCodec, build_message_metadata_field_descriptors,
+        build_output_schema_entries, build_stack_schema, debug_value_to_json, encode_payload,
+        metadata_to_json, reflect_value_to_json, register_debug_support_types,
+        validate_remote_debug_shm_limits,
     };
     use crate::app::CuSimApplication;
     use crate::curuntime::KeyFrame;
@@ -4666,6 +5365,43 @@ mod tests {
     };
     use cu29_unifiedlog::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
     use cu29_units::si::f32::Ratio;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn shm_preflight_rejects_default_pool_under_eight_mib_memlock() {
+        let error = validate_remote_debug_shm_limits(
+            RemoteDebugShmConfig::default(),
+            RemoteDebugShmRole::Server,
+            RemoteDebugShmSystemLimits {
+                memlock_soft_bytes: 8 * 1024 * 1024,
+                memlock_hard_bytes: 8 * 1024 * 1024,
+                shm_available_bytes: 32 * 1024 * 1024 * 1024,
+            },
+        )
+        .expect_err("8 MiB must not satisfy the production SHM contract")
+        .to_string();
+
+        assert!(error.contains("preflight failed for the server"));
+        assert!(error.contains("8.00 MiB/8.00 MiB"));
+        assert!(error.contains("1.00 GiB pool"));
+        assert!(error.contains("ulimit -l 2097152"));
+        assert!(error.contains("Refusing to start"));
+    }
+
+    #[test]
+    fn shm_preflight_accepts_explicit_small_test_profile() {
+        validate_remote_debug_shm_limits(
+            RemoteDebugShmConfig::new(4 * 1024 * 1024, 256 * 1024),
+            RemoteDebugShmRole::Client,
+            RemoteDebugShmSystemLimits {
+                memlock_soft_bytes: 8 * 1024 * 1024,
+                memlock_hard_bytes: 8 * 1024 * 1024,
+                shm_available_bytes: 32 * 1024 * 1024,
+            },
+        )
+        .expect("4 MiB pool plus 2 MiB headroom fits an 8 MiB memlock limit");
+    }
+
     struct MissionStackApp;
 
     #[derive(Reflect, bincode::Encode, bincode::Decode, serde::Serialize, Default, Debug)]
@@ -4716,6 +5452,19 @@ mod tests {
     #[derive(Reflect)]
     struct CustomDebugState {
         visible: Ratio,
+    }
+
+    #[derive(Reflect, serde::Serialize)]
+    enum FidelityEnum {
+        Unit,
+        Tuple(u16, String),
+        Struct { code: u8, valid: bool },
+    }
+
+    #[derive(Reflect, serde::Serialize)]
+    struct FidelityPayload {
+        numeric_map: BTreeMap<u16, String>,
+        mode: FidelityEnum,
     }
 
     struct CustomDebugStateApp;
@@ -5087,6 +5836,93 @@ mod tests {
                     "cl_id": 42,
                 }
             })
+        );
+    }
+
+    #[test]
+    fn debug_json_preserves_wide_integers_nonfinite_floats_and_numeric_map_keys() {
+        #[derive(serde::Serialize)]
+        struct LosslessValues {
+            i128_min: i128,
+            u128_max: u128,
+            nan: f32,
+            positive_infinity: f64,
+            negative_infinity: f64,
+            numeric_map: BTreeMap<u16, String>,
+        }
+
+        let encoded = cu29_value::to_value(LosslessValues {
+            i128_min: i128::MIN,
+            u128_max: u128::MAX,
+            nan: f32::NAN,
+            positive_infinity: f64::INFINITY,
+            negative_infinity: f64::NEG_INFINITY,
+            numeric_map: BTreeMap::from([(7, "seven".to_owned())]),
+        })
+        .map(debug_value_to_json)
+        .expect("debug value");
+
+        assert_eq!(
+            encoded["i128_min"],
+            serde_json::json!({"__cu_i128__": i128::MIN.to_string()})
+        );
+        assert_eq!(
+            encoded["u128_max"],
+            serde_json::json!({"__cu_u128__": u128::MAX.to_string()})
+        );
+        assert_eq!(encoded["nan"], serde_json::json!({"__cu_float__": "nan"}));
+        assert_eq!(
+            encoded["positive_infinity"],
+            serde_json::json!({"__cu_float__": "positive_infinity"})
+        );
+        assert_eq!(
+            encoded["negative_infinity"],
+            serde_json::json!({"__cu_float__": "negative_infinity"})
+        );
+        assert_eq!(
+            encoded["numeric_map"],
+            serde_json::json!({
+                "__cu_map__": [{"key": 7, "value": "seven"}]
+            })
+        );
+    }
+
+    #[test]
+    fn field_catalog_describes_map_key_value_and_every_enum_variant_shape() {
+        let mut registry = TypeRegistry::default();
+        registry.register::<FidelityPayload>();
+        register_debug_support_types(&mut registry);
+        let info = registry
+            .get_with_type_path(<FidelityPayload as TypePath>::type_path())
+            .expect("fidelity payload registration")
+            .type_info();
+        let fields = super::build_field_catalog(&registry, info, None);
+
+        let map = fields
+            .iter()
+            .find(|field| field.display_path == "numeric_map")
+            .expect("numeric map field");
+        assert_eq!(map.kind, DebugFieldKind::Map);
+        assert_eq!(
+            map.map_key.as_deref().and_then(|field| field.scalar_kind),
+            Some(DebugScalarKind::U16)
+        );
+        assert_eq!(
+            map.map_value.as_deref().and_then(|field| field.scalar_kind),
+            Some(DebugScalarKind::String)
+        );
+
+        let mode = fields
+            .iter()
+            .find(|field| field.display_path == "mode")
+            .expect("enum field");
+        assert_eq!(mode.kind, DebugFieldKind::Enum);
+        assert_eq!(
+            mode.enum_variants
+                .iter()
+                .map(|variant| (variant.name.as_str(), variant.fields.len()))
+                .collect::<Vec<_>>(),
+            vec![("Unit", 0), ("Tuple", 2), ("Struct", 2)]
         );
     }
 
