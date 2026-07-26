@@ -71,6 +71,12 @@ Session and control:
 - `session.close`
 - `admin.stop`
 
+The server grants a single replay-session lease. While the debugger is otherwise idle, it must
+send `health.ping` with the active `session_id` every second. Any session-scoped request renews the
+same lease. If no such request arrives for 3 seconds, the server closes the session automatically
+so another debugger can reconnect. A `health.ping` without a `session_id` checks server readiness
+but does not renew the replay-session lease.
+
 Navigation and replay:
 
 - `nav.seek` (CL and timestamp targets)
