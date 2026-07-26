@@ -48,8 +48,16 @@
 //!
 //! - local Unix socket endpoint derived from `paths.base`
 //! - multicast + gossip scouting disabled
-//! - shared-memory enabled
-//! - shared-memory transport optimization enabled with threshold `1` byte
+//! - on Linux, shared memory is mandatory on both ends
+//! - on Linux, server transport optimization uses a 1 GiB pool and a 256 KiB
+//!   threshold
+//! - on Linux, startup refuses to continue unless `RLIMIT_MEMLOCK` and
+//!   `/dev/shm` can support the configured pool
+//! - on Linux, large replies are explicitly allocated in SHM; allocation
+//!   failure is returned as an RPC error instead of silently copying over the
+//!   socket
+//! - other platforms retain the existing 4 MiB pool and 3 KiB transport
+//!   optimization threshold without Linux-specific preflight
 //!
 //! ## Envelope Schema
 //!
@@ -285,18 +293,18 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io;
 use std::path::{Path, PathBuf};
+#[cfg(target_os = "linux")]
+use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use zenoh::bytes::Encoding;
 use zenoh::key_expr::KeyExpr;
+#[cfg(target_os = "linux")]
+use zenoh::shm::{PosixShmProviderBackend, ShmProvider, ShmProviderState, ZShmMut};
 use zenoh::{Config as ZenohConfig, Error as ZenohError};
 
 const API_VERSION: &str = "debug.v1";
-// Zenoh mlocks the whole transport-optimization pool, so keep this below
-// common 8 MiB RLIMIT_MEMLOCK defaults.
-const LOCAL_SHM_POOL_BYTES: u64 = 4 * 1024 * 1024;
-const LOCAL_SHM_MESSAGE_THRESHOLD_BYTES: u64 = 3 * 1024;
 const SESSION_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(1);
 const SESSION_LEASE_TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_ACTIVE_SESSIONS: usize = 1;
@@ -304,6 +312,91 @@ const MAX_PAGE_LIMIT: u32 = 1000;
 const MAX_REPLAY_BATCH_LIMIT: u32 = 128;
 const MAX_LOG_PAGE_LIMIT: usize = 5000;
 const SERVER_RECV_POLL_TIMEOUT: Duration = Duration::from_millis(250);
+#[cfg(target_os = "linux")]
+const SHM_PROVIDER_INIT_TIMEOUT: Duration = Duration::from_secs(10);
+#[cfg(target_os = "linux")]
+const SHM_PROVIDER_INIT_POLL_INTERVAL: Duration = Duration::from_millis(10);
+#[cfg(target_os = "linux")]
+const SHM_REPLY_ALLOC_TIMEOUT: Duration = Duration::from_secs(2);
+#[cfg(target_os = "linux")]
+const SHM_REPLY_ALLOC_POLL_INTERVAL: Duration = Duration::from_millis(1);
+#[cfg(any(target_os = "linux", test))]
+const REMOTE_DEBUG_SHM_MEMLOCK_OVERHEAD_BYTES: usize = 2 * 1024 * 1024;
+#[cfg(any(target_os = "linux", test))]
+const REMOTE_DEBUG_SHM_UNLIMITED: u64 = u64::MAX;
+
+/// Shared-memory requirements for the local remote-debug transport.
+///
+/// On Linux, the default reserves a 1 GiB Zenoh pool for large TimeTraveler
+/// replies. Both processes need enough `RLIMIT_MEMLOCK` to map that pool. The
+/// client does not create a second transport-optimization pool; it only
+/// advertises SHM support and maps the server's pool.
+///
+/// Other platforms retain the previous 4 MiB pool and 3 KiB optimization
+/// threshold without Linux-specific resource preflight.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RemoteDebugShmConfig {
+    pub pool_size_bytes: usize,
+    pub message_size_threshold_bytes: usize,
+}
+
+impl RemoteDebugShmConfig {
+    #[cfg(target_os = "linux")]
+    pub const DEFAULT_POOL_SIZE_BYTES: usize = 1024 * 1024 * 1024;
+    #[cfg(not(target_os = "linux"))]
+    pub const DEFAULT_POOL_SIZE_BYTES: usize = 4 * 1024 * 1024;
+    #[cfg(target_os = "linux")]
+    pub const DEFAULT_MESSAGE_SIZE_THRESHOLD_BYTES: usize = 256 * 1024;
+    #[cfg(not(target_os = "linux"))]
+    pub const DEFAULT_MESSAGE_SIZE_THRESHOLD_BYTES: usize = 3 * 1024;
+
+    pub const fn new(pool_size_bytes: usize, message_size_threshold_bytes: usize) -> Self {
+        Self {
+            pool_size_bytes,
+            message_size_threshold_bytes,
+        }
+    }
+
+    fn validate(self) -> CuResult<Self> {
+        if self.pool_size_bytes == 0 {
+            return Err(CuError::from(
+                "RemoteDebug shared-memory configuration requires a non-zero pool",
+            ));
+        }
+        if self.message_size_threshold_bytes == 0 {
+            return Err(CuError::from(
+                "RemoteDebug shared-memory configuration requires a non-zero message threshold",
+            ));
+        }
+        if self.message_size_threshold_bytes > self.pool_size_bytes {
+            return Err(CuError::from(format!(
+                "RemoteDebug shared-memory threshold ({}) exceeds its pool size ({})",
+                format_bytes(self.message_size_threshold_bytes),
+                format_bytes(self.pool_size_bytes),
+            )));
+        }
+        Ok(self)
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    fn required_memlock_bytes(self) -> CuResult<usize> {
+        self.pool_size_bytes
+            .checked_add(REMOTE_DEBUG_SHM_MEMLOCK_OVERHEAD_BYTES)
+            .ok_or_else(|| CuError::from("RemoteDebug shared-memory size overflow"))
+    }
+}
+
+impl Default for RemoteDebugShmConfig {
+    fn default() -> Self {
+        Self::new(
+            Self::DEFAULT_POOL_SIZE_BYTES,
+            Self::DEFAULT_MESSAGE_SIZE_THRESHOLD_BYTES,
+        )
+    }
+}
+
+#[cfg(target_os = "linux")]
+type RemoteDebugShmProvider = ShmProvider<PosixShmProviderBackend>;
 
 #[derive(Clone, Debug, Serialize, Reflect)]
 struct DebugMessageMetadataView {
@@ -1028,7 +1121,212 @@ fn set_config_json5(config: &mut ZenohConfig, key: &str, value: &str) -> CuResul
         .map_err(|e| CuError::from(format!("RemoteDebug: invalid zenoh config '{key}': {e}")))
 }
 
-fn local_server_zenoh_config(paths: &RemoteDebugPaths) -> CuResult<ZenohConfig> {
+#[derive(Debug, Clone, Copy)]
+enum RemoteDebugShmRole {
+    Server,
+    Client,
+}
+
+impl RemoteDebugShmRole {
+    #[cfg(any(target_os = "linux", test))]
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Server => "server",
+            Self::Client => "client",
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Debug, Clone, Copy)]
+struct RemoteDebugShmSystemLimits {
+    memlock_soft_bytes: u64,
+    memlock_hard_bytes: u64,
+    shm_available_bytes: u64,
+}
+
+fn format_bytes(bytes: usize) -> String {
+    const KIB: f64 = 1024.0;
+    const MIB: f64 = KIB * 1024.0;
+    const GIB: f64 = MIB * 1024.0;
+    let bytes = bytes as f64;
+    if bytes >= GIB {
+        format!("{:.2} GiB", bytes / GIB)
+    } else if bytes >= MIB {
+        format!("{:.2} MiB", bytes / MIB)
+    } else if bytes >= KIB {
+        format!("{:.2} KiB", bytes / KIB)
+    } else {
+        format!("{bytes:.0} B")
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn format_limit_bytes(bytes: u64) -> String {
+    if bytes == REMOTE_DEBUG_SHM_UNLIMITED {
+        "unlimited".to_owned()
+    } else {
+        usize::try_from(bytes)
+            .map(format_bytes)
+            .unwrap_or_else(|_| format!("{bytes} bytes"))
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn remote_debug_shm_system_limits() -> CuResult<RemoteDebugShmSystemLimits> {
+    let mut memlock = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    // SAFETY: `memlock` points to valid writable storage for getrlimit.
+    if unsafe { libc::getrlimit(libc::RLIMIT_MEMLOCK, &mut memlock) } != 0 {
+        return Err(CuError::new_with_cause(
+            "RemoteDebug shared-memory preflight could not read RLIMIT_MEMLOCK",
+            io::Error::last_os_error(),
+        ));
+    }
+
+    let shm_path = b"/dev/shm\0";
+    let mut stats = std::mem::MaybeUninit::<libc::statvfs>::uninit();
+    // SAFETY: the path is NUL-terminated and `stats` points to writable storage.
+    if unsafe { libc::statvfs(shm_path.as_ptr().cast::<libc::c_char>(), stats.as_mut_ptr()) } != 0 {
+        return Err(CuError::new_with_cause(
+            "RemoteDebug shared-memory preflight could not inspect /dev/shm",
+            io::Error::last_os_error(),
+        ));
+    }
+    // SAFETY: statvfs succeeded and initialized `stats`.
+    let stats = unsafe { stats.assume_init() };
+    let shm_available_bytes = stats.f_bavail.saturating_mul(stats.f_frsize);
+
+    Ok(RemoteDebugShmSystemLimits {
+        memlock_soft_bytes: memlock.rlim_cur,
+        memlock_hard_bytes: memlock.rlim_max,
+        shm_available_bytes,
+    })
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn validate_remote_debug_shm_limits(
+    shm: RemoteDebugShmConfig,
+    role: RemoteDebugShmRole,
+    limits: RemoteDebugShmSystemLimits,
+) -> CuResult<()> {
+    let shm = shm.validate()?;
+    let required = shm.required_memlock_bytes()?;
+    let required_u64 = u64::try_from(required).map_err(|_| {
+        CuError::from("RemoteDebug shared-memory size is unsupported on this target")
+    })?;
+    let memlock_ok = limits.memlock_soft_bytes == REMOTE_DEBUG_SHM_UNLIMITED
+        || limits.memlock_soft_bytes >= required_u64;
+    let shm_ok = limits.shm_available_bytes >= shm.pool_size_bytes as u64;
+    if memlock_ok && shm_ok {
+        return Ok(());
+    }
+
+    let recommended_kib = 2 * 1024 * 1024;
+    let mut failures = Vec::new();
+    if !memlock_ok {
+        failures.push(format!(
+            "RLIMIT_MEMLOCK soft/hard is {}/{}; this profile requires at least {} \
+             ({} pool + {} Zenoh metadata headroom)",
+            format_limit_bytes(limits.memlock_soft_bytes),
+            format_limit_bytes(limits.memlock_hard_bytes),
+            format_bytes(required),
+            format_bytes(shm.pool_size_bytes),
+            format_bytes(REMOTE_DEBUG_SHM_MEMLOCK_OVERHEAD_BYTES),
+        ));
+    }
+    if !shm_ok {
+        failures.push(format!(
+            "/dev/shm has {} available; this profile requires at least {}",
+            format_limit_bytes(limits.shm_available_bytes),
+            format_bytes(shm.pool_size_bytes),
+        ));
+    }
+
+    Err(CuError::from(format!(
+        "RemoteDebug shared-memory preflight failed for the {}: {}. \
+         Refusing to start because Zenoh can otherwise silently copy large TimeTraveler \
+         replies over the socket. Configure BOTH the Copper server and TimeTraveler process \
+         before launch. Recommended interactive-shell setting: \
+         `sudo prlimit --pid $$ --memlock=2147483648:2147483648`, then verify \
+         `ulimit -l {recommended_kib}` (2 GiB, value is KiB). A plain `ulimit` cannot exceed \
+         the current hard limit. For systemd use `LimitMEMLOCK=2G`; for Docker also use \
+         `--ulimit memlock=2147483648:2147483648 --shm-size=2g`. Verify with `ulimit -l` \
+         and `df -h /dev/shm`.",
+        role.label(),
+        failures.join("; "),
+    )))
+}
+
+/// Validate the host resources required by the default local remote-debug SHM
+/// transport before opening Zenoh.
+///
+/// This performs only local configuration/resource checks; it sends no probe
+/// message and does not require the other endpoint to be running.
+pub fn remote_debug_shm_preflight(shm: RemoteDebugShmConfig) -> CuResult<()> {
+    #[cfg(not(target_os = "linux"))]
+    {
+        shm.validate()?;
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    validate_remote_debug_shm_limits(
+        shm,
+        RemoteDebugShmRole::Client,
+        remote_debug_shm_system_limits()?,
+    )
+}
+
+fn preflight_remote_debug_shm(shm: RemoteDebugShmConfig, role: RemoteDebugShmRole) -> CuResult<()> {
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = role;
+        shm.validate()?;
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    validate_remote_debug_shm_limits(shm, role, remote_debug_shm_system_limits()?)
+}
+
+fn validate_server_zenoh_shm_config(config: &ZenohConfig) -> CuResult<RemoteDebugShmConfig> {
+    let shared_memory = &config.transport.shared_memory;
+    if !*shared_memory.enabled() {
+        return Err(CuError::from(
+            "RemoteDebug server requires Zenoh transport/shared_memory/enabled=true",
+        ));
+    }
+    if !*shared_memory.transport_optimization.enabled() {
+        return Err(CuError::from(
+            "RemoteDebug server requires Zenoh shared-memory transport optimization",
+        ));
+    }
+    RemoteDebugShmConfig::new(
+        shared_memory.transport_optimization.pool_size().get(),
+        *shared_memory
+            .transport_optimization
+            .message_size_threshold(),
+    )
+    .validate()
+}
+
+fn validate_client_zenoh_shm_config(config: &ZenohConfig) -> CuResult<()> {
+    if !*config.transport.shared_memory.enabled() {
+        return Err(CuError::from(
+            "RemoteDebug client requires Zenoh transport/shared_memory/enabled=true",
+        ));
+    }
+    Ok(())
+}
+
+fn local_server_zenoh_config(
+    paths: &RemoteDebugPaths,
+    shm: RemoteDebugShmConfig,
+) -> CuResult<ZenohConfig> {
+    let shm = shm.validate()?;
     let endpoint = local_endpoint(&paths.base);
     let endpoint_json = serde_json::to_string(&endpoint)
         .map_err(|e| CuError::new_with_cause("RemoteDebug: endpoint encoding failed", e))?;
@@ -1044,6 +1342,8 @@ fn local_server_zenoh_config(paths: &RemoteDebugPaths) -> CuResult<ZenohConfig> 
         &format!("[{endpoint_json}]"),
     )?;
     set_config_json5(&mut config, "transport/shared_memory/enabled", "true")?;
+    #[cfg(target_os = "linux")]
+    set_config_json5(&mut config, "transport/shared_memory/mode", "\"init\"")?;
     set_config_json5(
         &mut config,
         "transport/shared_memory/transport_optimization/enabled",
@@ -1052,17 +1352,21 @@ fn local_server_zenoh_config(paths: &RemoteDebugPaths) -> CuResult<ZenohConfig> 
     set_config_json5(
         &mut config,
         "transport/shared_memory/transport_optimization/pool_size",
-        &LOCAL_SHM_POOL_BYTES.to_string(),
+        &shm.pool_size_bytes.to_string(),
     )?;
     set_config_json5(
         &mut config,
         "transport/shared_memory/transport_optimization/message_size_threshold",
-        &LOCAL_SHM_MESSAGE_THRESHOLD_BYTES.to_string(),
+        &shm.message_size_threshold_bytes.to_string(),
     )?;
     Ok(config)
 }
 
-fn local_client_zenoh_config(paths: &RemoteDebugPaths) -> CuResult<ZenohConfig> {
+fn local_client_zenoh_config(
+    paths: &RemoteDebugPaths,
+    shm: RemoteDebugShmConfig,
+) -> CuResult<ZenohConfig> {
+    let shm = shm.validate()?;
     let endpoint = local_endpoint(&paths.base);
     let endpoint_json = serde_json::to_string(&endpoint)
         .map_err(|e| CuError::new_with_cause("RemoteDebug: endpoint encoding failed", e))?;
@@ -1078,22 +1382,64 @@ fn local_client_zenoh_config(paths: &RemoteDebugPaths) -> CuResult<ZenohConfig> 
         &format!("[{endpoint_json}]"),
     )?;
     set_config_json5(&mut config, "transport/shared_memory/enabled", "true")?;
+    #[cfg(target_os = "linux")]
+    set_config_json5(&mut config, "transport/shared_memory/mode", "\"init\"")?;
+    // The client maps server-owned reply buffers but does not need a second
+    // 1 GiB provider for its small control requests.
     set_config_json5(
         &mut config,
         "transport/shared_memory/transport_optimization/enabled",
-        "true",
+        if cfg!(target_os = "linux") {
+            "false"
+        } else {
+            "true"
+        },
     )?;
     set_config_json5(
         &mut config,
         "transport/shared_memory/transport_optimization/pool_size",
-        &LOCAL_SHM_POOL_BYTES.to_string(),
+        &shm.pool_size_bytes.to_string(),
     )?;
     set_config_json5(
         &mut config,
         "transport/shared_memory/transport_optimization/message_size_threshold",
-        &LOCAL_SHM_MESSAGE_THRESHOLD_BYTES.to_string(),
+        &shm.message_size_threshold_bytes.to_string(),
     )?;
     Ok(config)
+}
+
+#[cfg(target_os = "linux")]
+fn initialize_remote_debug_shm_provider(
+    session: &zenoh::Session,
+) -> CuResult<Arc<RemoteDebugShmProvider>> {
+    let started = Instant::now();
+    loop {
+        match session.get_shm_provider() {
+            ShmProviderState::Ready(provider) => return Ok(provider),
+            ShmProviderState::Initializing if started.elapsed() < SHM_PROVIDER_INIT_TIMEOUT => {
+                std::thread::sleep(SHM_PROVIDER_INIT_POLL_INTERVAL);
+            }
+            ShmProviderState::Initializing => {
+                return Err(CuError::from(format!(
+                    "RemoteDebug server timed out after {:?} initializing its mandatory \
+                     shared-memory provider",
+                    SHM_PROVIDER_INIT_TIMEOUT
+                )));
+            }
+            ShmProviderState::Disabled => {
+                return Err(CuError::from(
+                    "RemoteDebug server's mandatory Zenoh shared-memory provider is disabled",
+                ));
+            }
+            ShmProviderState::Error => {
+                return Err(CuError::from(
+                    "RemoteDebug server failed to allocate and lock its mandatory Zenoh \
+                     shared-memory pool; check `ulimit -l`, `df -h /dev/shm`, and the startup \
+                     preflight values",
+                ));
+            }
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -1122,7 +1468,13 @@ where
 {
     paths: RemoteDebugPaths,
     session: zenoh::Session,
+    #[cfg(target_os = "linux")]
+    shm_provider: Arc<RemoteDebugShmProvider>,
+    #[cfg(target_os = "linux")]
+    shm_config: RemoteDebugShmConfig,
     request_sub: ZenohSubscriber,
+    #[cfg(target_os = "linux")]
+    reply_publishers: HashMap<String, zenoh::pubsub::Publisher<'static>>,
     event_publishers: EventPublishers,
     app_factory: AF,
     build_callback: CB,
@@ -1159,7 +1511,23 @@ where
         build_callback: CB,
         time_of: TF,
     ) -> CuResult<Self> {
-        let zenoh_config = local_server_zenoh_config(&paths)?;
+        Self::new_with_shm_config(
+            paths,
+            app_factory,
+            build_callback,
+            time_of,
+            RemoteDebugShmConfig::default(),
+        )
+    }
+
+    pub fn new_with_shm_config(
+        paths: RemoteDebugPaths,
+        app_factory: AF,
+        build_callback: CB,
+        time_of: TF,
+        shm_config: RemoteDebugShmConfig,
+    ) -> CuResult<Self> {
+        let zenoh_config = local_server_zenoh_config(&paths, shm_config)?;
         Self::new_with_config(zenoh_config, paths, app_factory, build_callback, time_of)
     }
 
@@ -1170,8 +1538,12 @@ where
         build_callback: CB,
         time_of: TF,
     ) -> CuResult<Self> {
+        let shm_config = validate_server_zenoh_shm_config(&zenoh_config)?;
+        preflight_remote_debug_shm(shm_config, RemoteDebugShmRole::Server)?;
         let session = zenoh::Wait::wait(zenoh::open(zenoh_config))
             .map_err(cu_error_map("RemoteDebug: failed to open Zenoh session"))?;
+        #[cfg(target_os = "linux")]
+        let shm_provider = initialize_remote_debug_shm_provider(&session)?;
 
         let request_sub =
             zenoh::Wait::wait(session.declare_subscriber(keyexpr(&paths.rpc_request)?)).map_err(
@@ -1207,7 +1579,13 @@ where
         Ok(Self {
             paths,
             session,
+            #[cfg(target_os = "linux")]
+            shm_provider,
+            #[cfg(target_os = "linux")]
+            shm_config,
             request_sub,
+            #[cfg(target_os = "linux")]
+            reply_publishers: HashMap::new(),
             event_publishers: EventPublishers {
                 cursor: cursor_pub,
                 run: run_pub,
@@ -2699,23 +3077,105 @@ where
         )
     }
 
+    #[cfg(target_os = "linux")]
+    fn allocate_shm_reply(&self, size: usize) -> Result<ZShmMut, String> {
+        if size >= self.shm_config.pool_size_bytes {
+            return Err(format!(
+                "{} reply is not smaller than the configured {} SHM pool",
+                format_bytes(size),
+                format_bytes(self.shm_config.pool_size_bytes),
+            ));
+        }
+
+        let started = Instant::now();
+        loop {
+            self.shm_provider.garbage_collect();
+            self.shm_provider.defragment();
+            match zenoh::Wait::wait(self.shm_provider.alloc(size)) {
+                Ok(buffer) => return Ok(buffer),
+                Err(_) if started.elapsed() < SHM_REPLY_ALLOC_TIMEOUT => {
+                    std::thread::sleep(SHM_REPLY_ALLOC_POLL_INTERVAL);
+                }
+                Err(err) => {
+                    return Err(format!(
+                        "allocation remained unavailable for {:?}: {err}",
+                        SHM_REPLY_ALLOC_TIMEOUT
+                    ));
+                }
+            }
+        }
+    }
+
     fn publish_reply(
-        &self,
+        &mut self,
         topic: &str,
         response: &DebugRpcResponse,
         codec: WireCodec,
     ) -> CuResult<()> {
         let payload = encode_payload(response, codec, "RemoteDebug: failed to serialize response")?;
-        let publisher = zenoh::Wait::wait(self.session.declare_publisher(keyexpr(topic)?))
-            .map_err(cu_error_map(
-                "RemoteDebug: failed to declare reply publisher",
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let publisher = zenoh::Wait::wait(self.session.declare_publisher(keyexpr(topic)?))
+                .map_err(cu_error_map(
+                    "RemoteDebug: failed to declare reply publisher",
+                ))?;
+            zenoh::Wait::wait(publisher.put(payload).encoding(codec.encoding()))
+                .map_err(cu_error_map("RemoteDebug: failed to publish reply"))?;
+            zenoh::Wait::wait(publisher.undeclare()).map_err(cu_error_map(
+                "RemoteDebug: failed to undeclare reply publisher",
             ))?;
-        zenoh::Wait::wait(publisher.put(payload).encoding(codec.encoding()))
-            .map_err(cu_error_map("RemoteDebug: failed to publish reply"))?;
-        zenoh::Wait::wait(publisher.undeclare()).map_err(cu_error_map(
-            "RemoteDebug: failed to undeclare reply publisher",
-        ))?;
-        Ok(())
+            Ok(())
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            if !self.reply_publishers.contains_key(topic) {
+                let publisher = zenoh::Wait::wait(self.session.declare_publisher(keyexpr(topic)?))
+                    .map_err(cu_error_map(
+                        "RemoteDebug: failed to declare reply publisher",
+                    ))?;
+                self.reply_publishers.insert(topic.to_owned(), publisher);
+            }
+            let publisher = self
+                .reply_publishers
+                .get(topic)
+                .ok_or_else(|| CuError::from("RemoteDebug: reply publisher cache miss"))?;
+            if payload.len() < self.shm_config.message_size_threshold_bytes {
+                return zenoh::Wait::wait(publisher.put(payload).encoding(codec.encoding()))
+                    .map_err(cu_error_map("RemoteDebug: failed to publish reply"));
+            }
+
+            let mut shm_payload = match self.allocate_shm_reply(payload.len()) {
+                Ok(shm_payload) => shm_payload,
+                Err(err) => {
+                    let allocation_error = err_response(
+                        response.request_id.clone(),
+                        "SharedMemoryCapacity",
+                        &format!(
+                            "RemoteDebug refused to copy a {} reply over the socket because its \
+                             mandatory {} SHM pool could not allocate it: {err}",
+                            format_bytes(payload.len()),
+                            format_bytes(self.shm_config.pool_size_bytes),
+                        ),
+                    );
+                    let error_payload = encode_payload(
+                        &allocation_error,
+                        codec,
+                        "RemoteDebug: failed to serialize SHM allocation error",
+                    )?;
+                    return zenoh::Wait::wait(
+                        publisher.put(error_payload).encoding(codec.encoding()),
+                    )
+                    .map_err(cu_error_map(
+                        "RemoteDebug: failed to publish SHM allocation error",
+                    ));
+                }
+            };
+            shm_payload[..].copy_from_slice(&payload);
+            zenoh::Wait::wait(publisher.put(shm_payload).encoding(codec.encoding()))
+                .map_err(cu_error_map("RemoteDebug: failed to publish SHM reply"))
+        }
     }
 
     #[allow(dead_code)]
@@ -2880,6 +3340,8 @@ pub struct RemoteDebugZenohClient {
     reply_topic: String,
     next_request_id: AtomicU64,
     codec: WireCodec,
+    #[cfg(target_os = "linux")]
+    shm_config: RemoteDebugShmConfig,
 }
 
 pub struct RemoteDebugZenohClientBuilder {
@@ -2887,6 +3349,7 @@ pub struct RemoteDebugZenohClientBuilder {
     client_id: String,
     codec: WireCodec,
     zenoh_config: Option<ZenohConfig>,
+    shm_config: RemoteDebugShmConfig,
 }
 
 impl RemoteDebugZenohClientBuilder {
@@ -2900,12 +3363,24 @@ impl RemoteDebugZenohClientBuilder {
         self
     }
 
+    pub fn shm_config(mut self, shm_config: RemoteDebugShmConfig) -> Self {
+        self.shm_config = shm_config;
+        self
+    }
+
     pub fn build(self) -> CuResult<RemoteDebugZenohClient> {
+        let shm_config = self.shm_config.validate()?;
         let zenoh_config = match self.zenoh_config {
             Some(config) => config,
-            None => local_client_zenoh_config(&self.paths)?,
+            None => local_client_zenoh_config(&self.paths, shm_config)?,
         };
-        RemoteDebugZenohClient::open(zenoh_config, self.paths, &self.client_id, self.codec)
+        RemoteDebugZenohClient::open(
+            zenoh_config,
+            self.paths,
+            &self.client_id,
+            self.codec,
+            shm_config,
+        )
     }
 }
 
@@ -2920,6 +3395,7 @@ impl RemoteDebugZenohClient {
             client_id: client_id.to_string(),
             codec: WireCodec::Cbor,
             zenoh_config: None,
+            shm_config: RemoteDebugShmConfig::default(),
         }
     }
 
@@ -2928,7 +3404,10 @@ impl RemoteDebugZenohClient {
         paths: RemoteDebugPaths,
         client_id: &str,
         codec: WireCodec,
+        shm_config: RemoteDebugShmConfig,
     ) -> CuResult<Self> {
+        validate_client_zenoh_shm_config(&zenoh_config)?;
+        preflight_remote_debug_shm(shm_config, RemoteDebugShmRole::Client)?;
         let session = zenoh::Wait::wait(zenoh::open(zenoh_config)).map_err(cu_error_map(
             "RemoteDebugClient: failed to open Zenoh session",
         ))?;
@@ -2952,6 +3431,8 @@ impl RemoteDebugZenohClient {
             reply_topic,
             next_request_id: AtomicU64::new(1),
             codec,
+            #[cfg(target_os = "linux")]
+            shm_config,
         })
     }
 
@@ -2993,10 +3474,23 @@ impl RemoteDebugZenohClient {
             let sample = self.reply_sub.recv().map_err(|e| {
                 CuError::from(format!("RemoteDebugClient: failed receiving reply: {e}"))
             })?;
+            #[cfg(target_os = "linux")]
+            let payload_len = sample.payload().len();
+            #[cfg(target_os = "linux")]
+            let payload_is_shm = sample.payload().as_shm().is_some();
             let payload = sample.payload().to_bytes();
             let response = decode_response(payload.as_ref(), self.codec)?;
 
             if response.request_id == request_id {
+                #[cfg(target_os = "linux")]
+                if payload_len >= self.shm_config.message_size_threshold_bytes && !payload_is_shm {
+                    return Err(CuError::from(format!(
+                        "RemoteDebugClient refused a {} reply delivered outside shared memory. \
+                         Both endpoints must have SHM enabled and enough RLIMIT_MEMLOCK; \
+                         refusing silent Unix-socket fallback.",
+                        format_bytes(payload_len),
+                    )));
+                }
                 return Ok(response);
             }
         }
@@ -4911,11 +5405,12 @@ fn hex_digit(n: u8) -> char {
 #[cfg(all(test, feature = "std"))]
 mod tests {
     use super::{
-        DebugRpcAttachment, DebugRpcResponse, MAX_ACTIVE_SESSIONS, SESSION_HEARTBEAT_INTERVAL,
+        DebugRpcAttachment, DebugRpcResponse, MAX_ACTIVE_SESSIONS, RemoteDebugShmConfig,
+        RemoteDebugShmRole, RemoteDebugShmSystemLimits, SESSION_HEARTBEAT_INTERVAL,
         SESSION_LEASE_TIMEOUT, SessionLifecycleLimits, WireCodec,
         build_message_metadata_field_descriptors, build_output_schema_entries, build_stack_schema,
         capabilities_json, debug_value_to_json, encode_payload, metadata_to_json,
-        reflect_value_to_json, register_debug_support_types,
+        reflect_value_to_json, register_debug_support_types, validate_remote_debug_shm_limits,
     };
     use crate::app::CuSimApplication;
     use crate::curuntime::KeyFrame;
@@ -4933,6 +5428,66 @@ mod tests {
     use cu29_units::si::f32::Ratio;
     use std::collections::BTreeMap;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn shm_preflight_rejects_production_pool_under_eight_mib_memlock() {
+        let error = validate_remote_debug_shm_limits(
+            RemoteDebugShmConfig::new(1024 * 1024 * 1024, 256 * 1024),
+            RemoteDebugShmRole::Server,
+            RemoteDebugShmSystemLimits {
+                memlock_soft_bytes: 8 * 1024 * 1024,
+                memlock_hard_bytes: 8 * 1024 * 1024,
+                shm_available_bytes: 32 * 1024 * 1024 * 1024,
+            },
+        )
+        .expect_err("8 MiB must not satisfy the production SHM contract")
+        .to_string();
+
+        assert!(error.contains("preflight failed for the server"));
+        assert!(error.contains("8.00 MiB/8.00 MiB"));
+        assert!(error.contains("1.00 GiB pool"));
+        assert!(error.contains("ulimit -l 2097152"));
+        assert!(error.contains("Refusing to start"));
+    }
+
+    #[test]
+    fn shm_preflight_rejects_insufficient_dev_shm() {
+        let error = validate_remote_debug_shm_limits(
+            RemoteDebugShmConfig::new(4 * 1024 * 1024, 256 * 1024),
+            RemoteDebugShmRole::Server,
+            RemoteDebugShmSystemLimits {
+                memlock_soft_bytes: 8 * 1024 * 1024,
+                memlock_hard_bytes: 8 * 1024 * 1024,
+                shm_available_bytes: 2 * 1024 * 1024,
+            },
+        )
+        .expect_err("the pool must fit in /dev/shm")
+        .to_string();
+
+        assert!(error.contains("/dev/shm has 2.00 MiB available"));
+        assert!(error.contains("requires at least 4.00 MiB"));
+    }
+
+    #[test]
+    fn shm_preflight_accepts_explicit_small_test_profile() {
+        validate_remote_debug_shm_limits(
+            RemoteDebugShmConfig::new(4 * 1024 * 1024, 256 * 1024),
+            RemoteDebugShmRole::Client,
+            RemoteDebugShmSystemLimits {
+                memlock_soft_bytes: 8 * 1024 * 1024,
+                memlock_hard_bytes: 8 * 1024 * 1024,
+                shm_available_bytes: 32 * 1024 * 1024,
+            },
+        )
+        .expect("4 MiB pool plus 2 MiB headroom fits an 8 MiB memlock limit");
+    }
+
+    #[test]
+    fn shm_config_rejects_impossible_profiles() {
+        assert!(RemoteDebugShmConfig::new(0, 1).validate().is_err());
+        assert!(RemoteDebugShmConfig::new(1, 0).validate().is_err());
+        assert!(RemoteDebugShmConfig::new(1, 2).validate().is_err());
+    }
 
     struct MissionStackApp;
 

@@ -135,6 +135,20 @@ just resim
 just resim-debug
 ```
 
+To inspect the compute-side log in Time Traveler—including the depth raster
+that was actually passed to ViTFly—run:
+
+```bash
+# Generate a flight_compute_sim.copper log, then exit the simulator.
+just sim
+
+# Serve that compute-side log to Time Traveler.
+just compute-resim
+```
+
+Then attach Time Traveler to
+`copper/examples/cu_flight_controller/compute/debug/v1`.
+
 The replay target uses the standardized replay contract:
 
 - `--debug-base` selects the remote debug namespace
