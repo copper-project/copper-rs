@@ -1003,9 +1003,10 @@ pub fn cu29_runtime::cutask_anytime::AnytimeJob<Q, P>::check(&self, now: cu29_cl
 pub fn cu29_runtime::cutask_anytime::AnytimeJob<Q, P>::finish<O: cu29_runtime::cutask::CuMsgPayload>(self, now: cu29_clock::CuTime, cause: cu29_runtime::cutask_anytime::AnytimeStopCause, iterations: u32, output: &mut cu29_runtime::cutask::CuMsg<O>) -> cu29_runtime::cutask_anytime::AnytimeOutcome
 pub fn cu29_runtime::cutask_anytime::AnytimeJob<Q, P>::new(t0: cu29_clock::CuTime, anchor: cu29_clock::CuTime, quality: Q) -> Self
 pub fn cu29_runtime::cutask_anytime::AnytimeJob<Q, P>::record(&mut self, quality: Q)
+impl<Q: core::fmt::Debug, P> core::fmt::Debug for cu29_runtime::cutask_anytime::AnytimeJob<Q, P>
+pub fn cu29_runtime::cutask_anytime::AnytimeJob<Q, P>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<Q: core::marker::Copy, P> core::clone::Clone for cu29_runtime::cutask_anytime::AnytimeJob<Q, P>
 pub fn cu29_runtime::cutask_anytime::AnytimeJob<Q, P>::clone(&self) -> Self
-impl<Q: core::marker::Copy, P> core::marker::Copy for cu29_runtime::cutask_anytime::AnytimeJob<Q, P>
 pub struct cu29_runtime::cutask_anytime::AnytimeOutcome
 pub cu29_runtime::cutask_anytime::AnytimeOutcome::elapsed: cu29_clock::CuDuration
 pub cu29_runtime::cutask_anytime::AnytimeOutcome::iterations: u32
@@ -1033,7 +1034,7 @@ pub fn cu29_runtime::cutask_anytime::CuAnytimeTask::register_debug_state_types(r
 pub fn cu29_runtime::cutask_anytime::CuAnytimeTask::start(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask_anytime::CuAnytimeTask::stop(&mut self, _ctx: &cu29_runtime::context::CuContext) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::cutask_anytime::CuAnytimeTask::with_debug_state<R>(&self, f: impl core::ops::function::FnOnce(&dyn cu29_runtime::reflect::Reflect) -> R) -> R where Self: core::marker::Sized
-pub fn cu29_runtime::cutask_anytime::abort_at_base<O: cu29_runtime::cutask::CuMsgPayload>(output: &mut cu29_runtime::cutask::CuMsg<O>) -> cu29_runtime::cutask_anytime::AnytimeOutcome
+pub fn cu29_runtime::cutask_anytime::abort_at_base<O: cu29_runtime::cutask::CuMsgPayload>(t0: cu29_clock::CuTime, now: cu29_clock::CuTime, output: &mut cu29_runtime::cutask::CuMsg<O>) -> cu29_runtime::cutask_anytime::AnytimeOutcome
 pub fn cu29_runtime::cutask_anytime::quality_from_f32(value: f32) -> cu29_runtime::cutask_anytime::Quality
 pub fn cu29_runtime::cutask_anytime::quality_to_f32(quality: cu29_runtime::cutask_anytime::Quality) -> f32
 pub fn cu29_runtime::cutask_anytime::skip_stale<O: cu29_runtime::cutask::CuMsgPayload>(output: &mut cu29_runtime::cutask::CuMsg<O>) -> cu29_runtime::cutask_anytime::AnytimeOutcome

@@ -12,9 +12,10 @@ use crate::context::CuContext;
 use crate::cutask::{CuMsg, CuMsgPack, CuMsgPayload, Freezable};
 use crate::reflect::{GetTypeRegistration, Reflect, TypePath, TypeRegistry};
 use compact_str::format_compact;
+use core::fmt::{Debug, Formatter, Result as FmtResult};
 use core::marker::PhantomData;
 use cu29_clock::{CuDuration, CuTime};
-use cu29_traits::CuResult;
+use cu29_traits::{CuCompactString, CuResult};
 use cu29_units::si::f32::Ratio;
 use cu29_units::si::ratio::ratio;
 
@@ -40,11 +41,12 @@ pub enum AnytimeStatus<Q> {
     /// The output holds the best result so far; further refinement may help.
     Improved(Q),
     /// Proactive yield: no further improvement is possible for this job. The output
-    /// holds the final result.
+    /// holds the final result, published unless the quality floor rejects it.
     Converged(Q),
     /// Proactive give-up: the algorithm diverged or reached an unrecoverable state
-    /// for this job. Refinement stops; the output is published as-is, so a task that
-    /// can no longer vouch even for its base result must clear the payload before
+    /// for this job. Refinement stops; the output is published as-is — subject to
+    /// the quality floor once a quality has been reported — so a task that can no
+    /// longer vouch even for its base result must clear the payload before
     /// returning this. The next copperlist starts a fresh job.
     Aborted,
 }
@@ -199,7 +201,9 @@ pub trait AnytimePolicy<Q> {
     fn target_met(_q: Q) -> bool {
         false
     }
-    /// Codegen override: `q < floor`. Default false.
+    /// Codegen override: `q < floor`, NaN counting as below the floor
+    /// (emitted as `q.partial_cmp(&floor).is_none_or(Ordering::is_lt)`).
+    /// Default false.
     #[inline(always)]
     fn below_floor(_q: Q) -> bool {
         false
@@ -220,7 +224,8 @@ pub enum AnytimeStopCause {
     TargetMet,
     /// The wall-clock time budget elapsed.
     BudgetExhausted,
-    /// The input's validity horizon passed between quanta; best-so-far published.
+    /// The input's validity horizon passed between quanta; best-so-far published
+    /// (subject to the quality floor).
     AgeExceeded,
     /// The validity horizon had already passed before `base()`; the job never ran.
     SkippedStale,
@@ -228,7 +233,7 @@ pub enum AnytimeStopCause {
     MaxRefines,
     /// Too many quanta without the best quality improving.
     Stalled,
-    /// The task gave up on this job.
+    /// The task gave up on this job; a base-site abort skips the floor gate.
     Aborted,
 }
 
@@ -237,8 +242,8 @@ impl AnytimeStopCause {
     pub fn label(self) -> &'static str {
         match self {
             AnytimeStopCause::Converged => "conv",
-            AnytimeStopCause::TargetMet => "target",
-            AnytimeStopCause::BudgetExhausted => "budget",
+            AnytimeStopCause::TargetMet => "tgt",
+            AnytimeStopCause::BudgetExhausted => "bdgt",
             AnytimeStopCause::AgeExceeded => "age",
             AnytimeStopCause::SkippedStale => "stale",
             AnytimeStopCause::MaxRefines => "max",
@@ -253,8 +258,7 @@ impl AnytimeStopCause {
 pub struct AnytimeOutcome {
     /// Refinement quanta that ran (the base computation is iteration 0).
     pub iterations: u32,
-    /// Wall-clock span from job start to the stop point (zero when the job
-    /// never started).
+    /// Wall-clock span from job start to the stop point (zero when nothing ran).
     pub elapsed: CuDuration,
     /// Why the job stopped.
     pub stop: AnytimeStopCause,
@@ -282,12 +286,28 @@ pub struct AnytimeJob<Q, P> {
 }
 
 // Manual impls: derives would demand bounds on the policy ZST it doesn't need.
+// No `Copy`: `finish(self)` is a single-use guard.
 impl<Q: Copy, P> Clone for AnytimeJob<Q, P> {
     fn clone(&self) -> Self {
-        *self
+        Self {
+            t0: self.t0,
+            anchor: self.anchor,
+            best: self.best,
+            stall: self.stall,
+            _policy: PhantomData,
+        }
     }
 }
-impl<Q: Copy, P> Copy for AnytimeJob<Q, P> {}
+impl<Q: Debug, P> Debug for AnytimeJob<Q, P> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.debug_struct("AnytimeJob")
+            .field("t0", &self.t0)
+            .field("anchor", &self.anchor)
+            .field("best", &self.best)
+            .field("stall", &self.stall)
+            .finish()
+    }
+}
 
 impl<Q: Copy + PartialOrd, P: AnytimePolicy<Q>> AnytimeJob<Q, P> {
     /// Starts a job at `t0` with the quality `base()` reported.
@@ -302,8 +322,11 @@ impl<Q: Copy + PartialOrd, P: AnytimePolicy<Q>> AnytimeJob<Q, P> {
     }
 
     /// Records the quality one refine quantum reported.
+    ///
+    /// An unordered `best` (NaN) is displaced by the next report — NaN never
+    /// wins a comparison, so it would otherwise pin `best` for the whole job.
     pub fn record(&mut self, quality: Q) {
-        if quality > self.best {
+        if quality > self.best || self.best.partial_cmp(&self.best).is_none() {
             self.best = quality;
             self.stall = 0;
         } else if P::MAX_STALL.is_some() {
@@ -351,40 +374,52 @@ impl<Q: Copy + PartialOrd, P: AnytimePolicy<Q>> AnytimeJob<Q, P> {
         } else {
             output.payload().is_some()
         };
-        let outcome = AnytimeOutcome {
+        stamp(
+            output,
+            iterations,
+            P::quality_ratio(self.best),
+            cause,
+            published,
+        );
+        AnytimeOutcome {
             iterations,
             elapsed: now - self.t0,
             stop: cause,
             published,
-        };
-        let not_published = if published { "" } else { " !pub" };
-        match P::quality_ratio(self.best) {
-            Some(quality) => output.metadata.set_status(format_compact!(
-                "any: {}it q={:.2} {}{}",
-                iterations,
-                quality,
-                cause.label(),
-                not_published
-            )),
-            None => output.metadata.set_status(format_compact!(
-                "any: {}it {}{}",
-                iterations,
-                cause.label(),
-                not_published
-            )),
         }
-        outcome
     }
+}
+
+/// Writes the `"any: {N}it [q=X.XX ]{label}[ !p]"` status stamp shared by every
+/// terminal site, moving the built string straight into `status_txt`.
+fn stamp<O: CuMsgPayload>(
+    output: &mut CuMsg<O>,
+    iterations: u32,
+    quality: Option<f32>,
+    cause: AnytimeStopCause,
+    published: bool,
+) {
+    let not_published = if published { "" } else { " !p" };
+    output.metadata.status_txt = CuCompactString(match quality {
+        Some(q) => format_compact!(
+            "any: {}it q={:.2} {}{}",
+            iterations,
+            q,
+            cause.label(),
+            not_published
+        ),
+        None => format_compact!("any: {}it {}{}", iterations, cause.label(), not_published),
+    });
 }
 
 /// Terminal outcome when the age limit passed before `base()`: the job is
 /// skipped and nothing is published.
 pub fn skip_stale<O: CuMsgPayload>(output: &mut CuMsg<O>) -> AnytimeOutcome {
     output.clear_payload();
-    output.metadata.set_status("any: skip stale");
+    stamp(output, 0, None, AnytimeStopCause::SkippedStale, false);
     AnytimeOutcome {
         iterations: 0,
-        elapsed: CuDuration(0),
+        elapsed: CuDuration::default(),
         stop: AnytimeStopCause::SkippedStale,
         published: false,
     }
@@ -392,20 +427,20 @@ pub fn skip_stale<O: CuMsgPayload>(output: &mut CuMsg<O>) -> AnytimeOutcome {
 
 /// Terminal outcome when `base()` returns `Aborted`: no quality was reported
 /// so the floor gate does not apply; `published` reflects whether the task
-/// left a payload it still vouches for.
-pub fn abort_at_base<O: CuMsgPayload>(output: &mut CuMsg<O>) -> AnytimeOutcome {
+/// left a payload it still vouches for. `t0`/`now` bracket the base computation.
+pub fn abort_at_base<O: CuMsgPayload>(
+    t0: CuTime,
+    now: CuTime,
+    output: &mut CuMsg<O>,
+) -> AnytimeOutcome {
     let published = output.payload().is_some();
-    let outcome = AnytimeOutcome {
+    stamp(output, 0, None, AnytimeStopCause::Aborted, published);
+    AnytimeOutcome {
         iterations: 0,
-        elapsed: CuDuration(0),
+        elapsed: now - t0,
         stop: AnytimeStopCause::Aborted,
         published,
-    };
-    let not_published = if published { "" } else { " !pub" };
-    output
-        .metadata
-        .set_status(format_compact!("any: 0it abort{not_published}"));
-    outcome
+    }
 }
 
 #[cfg(test)]
@@ -512,7 +547,8 @@ mod tests {
             q >= quality_from_f32(0.9)
         }
         fn below_floor(q: Quality) -> bool {
-            q < quality_from_f32(0.3)
+            q.partial_cmp(&quality_from_f32(0.3))
+                .is_none_or(core::cmp::Ordering::is_lt)
         }
         fn quality_ratio(q: Quality) -> Option<f32> {
             Some(quality_to_f32(q))
@@ -582,7 +618,7 @@ mod tests {
         assert_eq!(output.payload(), Some(&42));
         assert_eq!(
             output.metadata.status_txt.0.as_str(),
-            "any: 3it q=0.50 budget"
+            "any: 3it q=0.50 bdgt"
         );
 
         // Below the floor: payload cleared, not published.
@@ -593,8 +629,35 @@ mod tests {
         assert_eq!(output.payload(), None);
         assert_eq!(
             output.metadata.status_txt.0.as_str(),
-            "any: 2it q=0.10 max !pub"
+            "any: 2it q=0.10 max !p"
         );
+    }
+
+    #[test]
+    fn nan_quality_fails_closed() {
+        let t0 = CuTime::from_millis(1);
+
+        // A NaN best is below the floor: payload cleared, not published.
+        let mut output: CuMsg<u32> = CuMsg::new(Some(1));
+        let job = AnytimeJob::<Quality, FullPolicy>::new(t0, t0, q(f32::NAN));
+        let outcome = job.finish(t0, AnytimeStopCause::MaxRefines, 1, &mut output);
+        assert!(!outcome.published);
+        assert_eq!(output.payload(), None);
+
+        // A NaN best is displaced by the next report.
+        let mut job = AnytimeJob::<Quality, FullPolicy>::new(t0, t0, q(f32::NAN));
+        job.record(q(0.4));
+        let mut output: CuMsg<u32> = CuMsg::new(Some(1));
+        let outcome = job.finish(t0, AnytimeStopCause::MaxRefines, 1, &mut output);
+        assert!(outcome.published);
+
+        // A NaN refine never displaces a real best.
+        let mut job = AnytimeJob::<Quality, FullPolicy>::new(t0, t0, q(0.5));
+        job.record(q(f32::NAN));
+        let mut output: CuMsg<u32> = CuMsg::new(Some(1));
+        let outcome = job.finish(t0, AnytimeStopCause::MaxRefines, 1, &mut output);
+        assert!(outcome.published);
+        assert_eq!(output.metadata.status_txt.0.as_str(), "any: 1it q=0.50 max");
     }
 
     #[test]
@@ -610,23 +673,28 @@ mod tests {
 
     #[test]
     fn base_site_terminal_outcomes() {
+        let t0 = CuTime::from_millis(1);
+        let now = t0 + CuDuration::from_micros(80);
+
         let mut output: CuMsg<u32> = CuMsg::new(Some(9));
         let outcome = skip_stale(&mut output);
         assert_eq!(outcome.stop, AnytimeStopCause::SkippedStale);
         assert!(!outcome.published);
+        assert_eq!(outcome.elapsed, CuDuration::default());
         assert_eq!(output.payload(), None);
-        assert_eq!(output.metadata.status_txt.0.as_str(), "any: skip stale");
+        assert_eq!(output.metadata.status_txt.0.as_str(), "any: 0it stale !p");
 
         // Aborted with a payload the task still vouches for: published.
         let mut output: CuMsg<u32> = CuMsg::new(Some(9));
-        let outcome = abort_at_base(&mut output);
+        let outcome = abort_at_base(t0, now, &mut output);
         assert!(outcome.published);
+        assert_eq!(outcome.elapsed, CuDuration::from_micros(80));
         assert_eq!(output.payload(), Some(&9));
 
         // Task-cleared abort: not published.
         let mut output: CuMsg<u32> = CuMsg::new(None);
-        let outcome = abort_at_base(&mut output);
+        let outcome = abort_at_base(t0, now, &mut output);
         assert!(!outcome.published);
-        assert_eq!(output.metadata.status_txt.0.as_str(), "any: 0it abort !pub");
+        assert_eq!(output.metadata.status_txt.0.as_str(), "any: 0it abort !p");
     }
 }
