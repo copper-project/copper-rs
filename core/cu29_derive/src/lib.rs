@@ -2412,7 +2412,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 }
                             }
                         } else {
-                            let regular_trait = regular_task_trait_tokens(&task_specs, index);
+                            let regular_trait = task_trait_for_specs(&task_specs, index);
                             quote! {
                                 {
                                     let resources = <<#ty as #regular_trait>::Resources<'_> as ResourceBindings>::from_bindings(
@@ -2516,7 +2516,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 }
                             }
                         } else {
-                            let regular_trait = regular_task_trait_tokens(&task_specs, index);
+                            let regular_trait = task_trait_for_specs(&task_specs, index);
                             quote! {
                                 {
                                     let resources = <<#task_type as #regular_trait>::Resources<'_> as ResourceBindings>::from_bindings(
@@ -3393,7 +3393,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         })
                                         .collect();
                                     let (parallel_pre, parallel_post) = parallel_task_lifecycle_tokens(
-                                        step.task_type,
+                                        task_trait_for_specs(&task_specs, *task_index),
                                         &task_specs.task_types[*task_index],
                                         *task_index,
                                         &mission_mod,
@@ -3401,7 +3401,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         parallel_lifecycle_placements
                                             .as_ref()
                                             .expect("parallel lifecycle placements missing")[step_index],
-                                        true,
                                     );
                                     let job_local = anytime_job_local_tokens(&task_specs, *task_index);
                                     let body = quote! {
@@ -6117,7 +6116,12 @@ fn read_config(config_file: &str) -> CuResult<CuConfig> {
     read_configuration_with_features(filename.as_str(), &active_feature_refs)
 }
 
-fn inferred_single_output_payload_type(task_type: &Type, task_kind: CuTaskType) -> Type {
+fn inferred_single_output_payload_type(task_type: &Type, task_kind: CuTaskType, is_anytime: bool) -> Type {
+    if is_anytime {
+        return parse_quote! {
+            <<#task_type as cu29::cutask_anytime::CuAnytimeTask>::Output<'static> as cu29::cutask::CuSingleOutputMsg>::Payload
+        };
+    }
     match task_kind {
         CuTaskType::Source => parse_quote! {
             <<#task_type as cu29::cutask::CuSrcTask>::Output<'static> as cu29::cutask::CuSingleOutputMsg>::Payload
@@ -6165,12 +6169,17 @@ fn task_output_payload_type(
         );
     }
 
-    node.get_declared_task_kind()
-        .map(|_| inferred_single_output_payload_type(task_type, task_kind))
+    node.get_declared_task_kind().map(|_| {
+        inferred_single_output_payload_type(task_type, task_kind, node.anytime().is_some())
+    })
 }
 
-fn synthesized_single_output_msg_name(task_type: &Type, task_kind: CuTaskType) -> String {
-    inferred_single_output_payload_type(task_type, task_kind)
+fn synthesized_single_output_msg_name(
+    task_type: &Type,
+    task_kind: CuTaskType,
+    is_anytime: bool,
+) -> String {
+    inferred_single_output_payload_type(task_type, task_kind, is_anytime)
         .to_token_stream()
         .to_string()
 }
@@ -7841,11 +7850,7 @@ fn build_task_resource_mappings(
             &task_specs.task_types[idx]
         };
 
-        let binding_trait = match task_specs.cutypes[idx] {
-            CuTaskType::Source => quote! { CuSrcTask },
-            CuTaskType::Regular => quote! { CuTask },
-            CuTaskType::Sink => quote! { CuSinkTask },
-        };
+        let binding_trait = task_trait_for_specs(task_specs, idx);
 
         let entries_ident = format_ident!("TASK{}_RES_ENTRIES", idx);
         let map_ident = format_ident!("TASK{}_RES_MAPPING", idx);
@@ -8004,7 +8009,11 @@ fn build_execution_plan(
                     task_specs.type_names[task_index]
                 )
             });
-        let msg_type = synthesized_single_output_msg_name(&task_type, task_kind);
+        let msg_type = synthesized_single_output_msg_name(
+            &task_type,
+            task_kind,
+            task_specs.anytime_configs[task_index].is_some(),
+        );
         plan_graph
             .get_node_mut(plan_node_id)
             .unwrap_or_else(|| panic!("Plan node '{}' missing from mirrored graph", node.get_id()))
@@ -8382,25 +8391,15 @@ fn abort_process_step_tokens(wrap_process_step: bool) -> proc_macro2::TokenStrea
 }
 
 fn parallel_task_lifecycle_tokens(
-    task_kind: CuTaskType,
+    task_trait: proc_macro2::TokenStream,
     task_type: &Type,
     component_index: usize,
     mission_mod: &Ident,
     task_instance: &proc_macro2::TokenStream,
     placement: ParallelLifecyclePlacement,
-    is_anytime: bool,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let rt_guard = rtsan_guard_tokens();
     let abort_process_step = abort_process_step_tokens(true);
-    let task_trait = if is_anytime {
-        quote! { cu29::cutask_anytime::CuAnytimeTask }
-    } else {
-        match task_kind {
-            CuTaskType::Source => quote! { cu29::cutask::CuSrcTask },
-            CuTaskType::Sink => quote! { cu29::cutask::CuSinkTask },
-            CuTaskType::Regular => quote! { cu29::cutask::CuTask },
-        }
-    };
 
     let preprocess_alloc_open = alloc_scope_open_tokens();
     let preprocess_alloc_close = alloc_scope_close_tokens(
@@ -8646,17 +8645,6 @@ fn parallel_bridge_lifecycle_tokens(
     };
 
     (preprocess, postprocess)
-}
-
-/// Trait an in-tuple regular task is called through: `CuTask` normally,
-/// `CuAnytimeTask` when the node carries an `anytime:` policy (the tuple keeps
-/// the raw task type either way — there is no anytime wrapper).
-fn regular_task_trait_tokens(task_specs: &CuTaskSpecSet, index: usize) -> proc_macro2::TokenStream {
-    if task_specs.anytime_configs[index].is_some() {
-        quote! { cu29::cutask_anytime::CuAnytimeTask }
-    } else {
-        quote! { CuTask }
-    }
 }
 
 /// Mission-module name of the `AnytimePolicy` ZST emitted for one anytime node.
@@ -9326,13 +9314,12 @@ fn generate_task_execution_tokens(
     let rt_guard = rtsan_guard_tokens();
     let run_in_sim_flag = task_specs.run_in_sim_flags[tid];
     let (parallel_task_preprocess, parallel_task_postprocess) = parallel_task_lifecycle_tokens(
-        step.task_type,
+        task_trait_for_specs(task_specs, tid),
         runtime_task_type,
         tid,
         mission_mod,
         &task_instance,
         lifecycle_placement,
-        false, // anytime steps route to the dedicated base/refine emitters
     );
     let maybe_sim_tick = if sim_mode && !run_in_sim_flag {
         quote! {
@@ -11008,10 +10995,12 @@ mod tests {
         let src_ty: Type = parse_quote!(SingleSource);
         let regular_ty: Type = parse_quote!(RegularTask);
 
-        let src_name = synthesized_single_output_msg_name(&src_ty, CuTaskType::Source);
-        let regular_name = synthesized_single_output_msg_name(&regular_ty, CuTaskType::Regular);
+        let src_name = synthesized_single_output_msg_name(&src_ty, CuTaskType::Source, false);
+        let regular_name = synthesized_single_output_msg_name(&regular_ty, CuTaskType::Regular, false);
+        let anytime_name = synthesized_single_output_msg_name(&regular_ty, CuTaskType::Regular, true);
 
         parse_str::<Type>(src_name.as_str()).expect("source payload type should parse");
         parse_str::<Type>(regular_name.as_str()).expect("regular payload type should parse");
+        parse_str::<Type>(anytime_name.as_str()).expect("anytime payload type should parse");
     }
 }
