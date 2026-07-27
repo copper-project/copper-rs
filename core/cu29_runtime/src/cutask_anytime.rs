@@ -216,7 +216,8 @@ impl AnytimeQuality for () {}
 pub trait AnytimePolicy<Q> {
     /// Wall-clock refinement window per job, from job start.
     const TIME_BUDGET: Option<CuDuration>;
-    /// Validity horizon, from the input's Tov anchor.
+    /// Validity horizon, from the input's earliest Tov (the `start` of a
+    /// `Tov::Range`).
     const MAX_AGE: Option<CuDuration>;
     /// Stop after this many quanta without the best quality improving.
     const MAX_STALL: Option<u32>;
@@ -296,7 +297,7 @@ pub struct AnytimeOutcome {
 pub struct AnytimeJob<Q, P> {
     /// Job start: time-budget anchor and elapsed origin.
     t0: CuTime,
-    /// Age anchor: the input's Tov (falls back to `t0`).
+    /// Age anchor: the input's earliest Tov (falls back to `t0`).
     anchor: CuTime,
     /// Best quality reported so far (== the published quality).
     best: Q,
@@ -404,8 +405,13 @@ impl<Q: AnytimeQuality, P: AnytimePolicy<Q>> AnytimeJob<Q, P> {
     }
 }
 
-/// Writes the `"any: {N}it [q=X.XX ]{label}[ !p]"` status stamp shared by every
+/// Writes the `"any:{N}it [q=X.XX ]{label}[!]"` status stamp shared by every
 /// terminal site, moving the built string straight into `status_txt`.
+///
+/// The format is kept short on purpose: a `CompactString` holds up to 24 bytes
+/// inline, and going over that allocates on the real-time path. The widest
+/// stamp is `"any:" + 4 iteration digits + "it q=X.XX " + a 5-char label + "!"`,
+/// which is exactly 24 bytes (`stamp_stays_inline` pins it).
 fn stamp<O: CuMsgPayload>(
     output: &mut CuMsg<O>,
     iterations: u32,
@@ -413,16 +419,16 @@ fn stamp<O: CuMsgPayload>(
     cause: AnytimeStopCause,
     published: bool,
 ) {
-    let not_published = if published { "" } else { " !p" };
+    let not_published = if published { "" } else { "!" };
     output.metadata.status_txt = CuCompactString(match quality {
         Some(q) => format_compact!(
-            "any: {}it q={:.2} {}{}",
+            "any:{}it q={:.2} {}{}",
             iterations,
             q,
             cause.label(),
             not_published
         ),
-        None => format_compact!("any: {}it {}{}", iterations, cause.label(), not_published),
+        None => format_compact!("any:{}it {}{}", iterations, cause.label(), not_published),
     });
 }
 
@@ -635,10 +641,7 @@ mod tests {
         assert_eq!(outcome.iterations, 3);
         assert_eq!(outcome.elapsed, CuDuration::from_micros(250));
         assert_eq!(output.payload(), Some(&42));
-        assert_eq!(
-            output.metadata.status_txt.0.as_str(),
-            "any: 3it q=0.50 bdgt"
-        );
+        assert_eq!(output.metadata.status_txt.0.as_str(), "any:3it q=0.50 bdgt");
 
         // Below the floor: payload cleared, not published.
         let mut output: CuMsg<u32> = CuMsg::new(Some(42));
@@ -646,10 +649,40 @@ mod tests {
         let outcome = job.finish(now, AnytimeStopCause::MaxRefines, 2, &mut output);
         assert!(!outcome.published);
         assert_eq!(output.payload(), None);
-        assert_eq!(
-            output.metadata.status_txt.0.as_str(),
-            "any: 2it q=0.10 max !p"
-        );
+        assert_eq!(output.metadata.status_txt.0.as_str(), "any:2it q=0.10 max!");
+    }
+
+    /// The stamp is written on the real-time path, so it must stay within
+    /// `CompactString`'s inline capacity for every cause and a four-digit
+    /// iteration count.
+    #[test]
+    fn stamp_stays_inline() {
+        const CAUSES: [AnytimeStopCause; 8] = [
+            AnytimeStopCause::Converged,
+            AnytimeStopCause::TargetMet,
+            AnytimeStopCause::BudgetExhausted,
+            AnytimeStopCause::AgeExceeded,
+            AnytimeStopCause::SkippedStale,
+            AnytimeStopCause::MaxRefines,
+            AnytimeStopCause::Stalled,
+            AnytimeStopCause::Aborted,
+        ];
+
+        for cause in CAUSES {
+            for published in [true, false] {
+                // Quality is a normalized ratio, so `{:.2}` is always 4 chars.
+                for quality in [None, Some(0.0), Some(1.0)] {
+                    let mut output: CuMsg<u32> = CuMsg::new(Some(1));
+                    stamp(&mut output, 9999, quality, cause, published);
+                    let stamped = &output.metadata.status_txt.0;
+                    assert!(
+                        !stamped.is_heap_allocated(),
+                        "stamp allocates on the real-time path: {stamped:?} ({} bytes)",
+                        stamped.len()
+                    );
+                }
+            }
+        }
     }
 
     #[test]
@@ -676,7 +709,7 @@ mod tests {
         let mut output: CuMsg<u32> = CuMsg::new(Some(1));
         let outcome = job.finish(t0, AnytimeStopCause::MaxRefines, 1, &mut output);
         assert!(outcome.published);
-        assert_eq!(output.metadata.status_txt.0.as_str(), "any: 1it q=0.50 max");
+        assert_eq!(output.metadata.status_txt.0.as_str(), "any:1it q=0.50 max");
     }
 
     #[test]
@@ -688,10 +721,7 @@ mod tests {
         let job = AnytimeJob::<Quality, NoKnobPolicy>::new(t0, t0, q(0.75));
         let outcome = job.finish(t0, AnytimeStopCause::BudgetExhausted, 3, &mut output);
         assert!(outcome.published);
-        assert_eq!(
-            output.metadata.status_txt.0.as_str(),
-            "any: 3it q=0.75 bdgt"
-        );
+        assert_eq!(output.metadata.status_txt.0.as_str(), "any:3it q=0.75 bdgt");
     }
 
     #[test]
@@ -702,7 +732,7 @@ mod tests {
         assert_eq!(job.check(t0 + CuDuration::from_secs(1)), None); // nothing configured
         let outcome = job.finish(t0, AnytimeStopCause::MaxRefines, 4, &mut output);
         assert!(outcome.published);
-        assert_eq!(output.metadata.status_txt.0.as_str(), "any: 4it max");
+        assert_eq!(output.metadata.status_txt.0.as_str(), "any:4it max");
     }
 
     #[test]
@@ -716,7 +746,7 @@ mod tests {
         assert!(!outcome.published);
         assert_eq!(outcome.elapsed, CuDuration::default());
         assert_eq!(output.payload(), None);
-        assert_eq!(output.metadata.status_txt.0.as_str(), "any: 0it stale !p");
+        assert_eq!(output.metadata.status_txt.0.as_str(), "any:0it stale!");
 
         // Aborted with a payload the task still vouches for: published.
         let mut output: CuMsg<u32> = CuMsg::new(Some(9));
@@ -729,6 +759,6 @@ mod tests {
         let mut output: CuMsg<u32> = CuMsg::new(None);
         let outcome = abort_at_base(t0, now, &mut output);
         assert!(!outcome.published);
-        assert_eq!(output.metadata.status_txt.0.as_str(), "any: 0it abort !p");
+        assert_eq!(output.metadata.status_txt.0.as_str(), "any:0it abort!");
     }
 }

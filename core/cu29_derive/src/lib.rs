@@ -1743,31 +1743,25 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         // Per-node refine totals and each refine step's 1-based ordinal: the
         // emitter bakes `k` and last-ness in as literals while walking the
         // plan — the runtime carries no counter.
-        let anytime_refine_totals: HashMap<NodeId, u32> = {
-            let mut totals = HashMap::new();
-            for unit in &culist_plan.steps {
-                if let CuExecutionUnit::Step(step) = unit
-                    && step.phase == CuStepPhase::AnytimeRefine
-                {
-                    *totals.entry(step.node_id).or_insert(0u32) += 1;
-                }
-            }
-            totals
-        };
-        let anytime_refine_ordinals: Vec<Option<u32>> = {
+        // One walk: the running counter's final value per node is that node's total.
+        let (anytime_refine_ordinals, anytime_refine_totals): (
+            Vec<Option<u32>>,
+            HashMap<NodeId, u32>,
+        ) = {
             let mut running: HashMap<NodeId, u32> = HashMap::new();
-            culist_plan
+            let ordinals = culist_plan
                 .steps
                 .iter()
                 .map(|unit| match unit {
                     CuExecutionUnit::Step(step) if step.phase == CuStepPhase::AnytimeRefine => {
-                        let ordinal = running.entry(step.node_id).or_insert(0);
+                        let ordinal = running.entry(step.node_id).or_insert(0u32);
                         *ordinal += 1;
                         Some(*ordinal)
                     }
                     _ => None,
                 })
-                .collect()
+                .collect();
+            (ordinals, running)
         };
 
         let task_names = collect_task_names(graph);
@@ -8639,6 +8633,19 @@ fn anytime_ms_to_nanos(ms: f64) -> u64 {
     (ms * 1_000_000.0).round() as u64
 }
 
+/// The `__cu_any_now` binding shared by the base and refine emitters: one clock
+/// read per base call and per refine quantum. Without a time knob every timed
+/// check const-folds away and `now` only feeds the debug-only elapsed, so the
+/// read is skipped entirely (`CuTime` subtraction saturates, so the zero
+/// stand-in is safe).
+fn anytime_now_binding_tokens(anytime: &AnytimeConfig) -> proc_macro2::TokenStream {
+    if anytime.time_budget_ms.is_some() || anytime.max_age_ms.is_some() {
+        quote! { let __cu_any_now = clock.now(); }
+    } else {
+        quote! { let __cu_any_now = cu29::clock::CuTime::default(); }
+    }
+}
+
 fn anytime_option_duration_tokens(ms: Option<f64>) -> proc_macro2::TokenStream {
     match ms {
         Some(ms) => {
@@ -8880,31 +8887,17 @@ fn process_sim_callback_tokens(
     }
 }
 
-/// Anytime flavor of [`process_monitoring_action_tokens`]: single output
-/// slot, and the job local needs no explicit kill — a job is only (re)stored
-/// on an `Ok` status, so an erroring block leaves it `None`/taken and later
-/// quanta no-op.
-fn anytime_monitoring_action_tokens(
-    tid: usize,
-    mission_mod: &Ident,
-    output_culist_index: &syn::Index,
-    wrap_process_step: bool,
-) -> proc_macro2::TokenStream {
-    process_monitoring_action_tokens(
-        tid,
-        mission_mod,
-        output_culist_index,
-        &quote! { cumsg_output.clear_payload(); },
-        wrap_process_step,
-    )
-}
-
 /// Emits the `[base <node>]` block of a foreground anytime node: the standard
 /// step wrapper (probe, keyframe freeze, sim callback, monitoring, alloc
 /// scopes) around the DOA age check — emitted only when `max_age_ms` is
 /// configured — and one `base()` call. On `Improved` the job lands in the
 /// node's hoisted local; `Converged`/`Aborted` finish on the spot and the
 /// local stays `None`, so every refine block no-ops through its liveness test.
+///
+/// An anytime node is single-output, so the monitoring clear is the one-slot
+/// form. The job local needs no explicit kill on error: a job is only
+/// (re)stored on an `Ok` status, so an erroring block leaves it `None`/taken
+/// and later quanta no-op.
 ///
 /// Returns the block plus the payload-drop logging tokens (same contract as
 /// `generate_task_execution_tokens`).
@@ -8919,6 +8912,7 @@ fn generate_anytime_base_block(
     let anytime = task_specs.anytime_configs[tid]
         .as_ref()
         .expect("anytime base block emitted for a task without an anytime policy");
+    let now_binding = anytime_now_binding_tokens(anytime);
     let task_id = &task_specs.ids[tid];
     let policy_ident = anytime_policy_ident(task_id);
     let job_ident = anytime_job_ident(task_id);
@@ -8946,10 +8940,11 @@ fn generate_anytime_base_block(
         .as_ref()
         .expect("Anytime task should have an output message pack.");
     let output_culist_index = int2sliceindex(output_pack.culist_index);
-    let monitoring_action = anytime_monitoring_action_tokens(
+    let monitoring_action = process_monitoring_action_tokens(
         tid,
         mission_mod,
         &output_culist_index,
+        &quote! { cumsg_output.clear_payload(); },
         ctx.wrap_process_step,
     );
 
@@ -8985,8 +8980,10 @@ fn generate_anytime_base_block(
             Ok(cu29::cutask_anytime::AnytimeStatus::Converged(q)) => {
                 let __cu_any_job: cu29::cutask_anytime::AnytimeJob<_, #policy_ident> =
                     cu29::cutask_anytime::AnytimeJob::new(__cu_any_now, __cu_any_anchor, q);
+                // The job's clock read is reused: `finish` spends `now` only on
+                // the debug-only elapsed, so a terminal base pays no second read.
                 let __cu_any_outcome = __cu_any_job.finish(
-                    clock.now(),
+                    __cu_any_now,
                     cu29::cutask_anytime::AnytimeStopCause::Converged,
                     0u32,
                     cumsg_output,
@@ -8995,7 +8992,7 @@ fn generate_anytime_base_block(
                 Ok(())
             }
             Ok(cu29::cutask_anytime::AnytimeStatus::Aborted) => {
-                let __cu_any_outcome = cu29::cutask_anytime::abort_at_base(__cu_any_now, clock.now(), cumsg_output);
+                let __cu_any_outcome = cu29::cutask_anytime::abort_at_base(__cu_any_now, __cu_any_now, cumsg_output);
                 debug!(ctx, "Anytime task {}: {} after {} refinement(s).", #task_id, __cu_any_outcome.stop.label(), __cu_any_outcome.iterations);
                 Ok(())
             }
@@ -9007,10 +9004,9 @@ fn generate_anytime_base_block(
         quote! {
             let __cu_any_anchor: cu29::clock::CuTime = match cumsg_input.tov {
                 cu29::clock::Tov::Time(tov_time) => tov_time,
-                // A Range anchors on its newest data: anchoring on `start`
-                // would declare any input whose span exceeds max_age (e.g. a
-                // full lidar sweep) dead on arrival forever.
-                cu29::clock::Tov::Range(tov_range) => tov_range.end,
+                // A Range anchors on its earliest data: the entire input
+                // window must remain within max_age.
+                cu29::clock::Tov::Range(tov_range) => tov_range.start,
                 cu29::clock::Tov::None => __cu_any_now,
             };
             if __cu_any_now >= __cu_any_anchor + cu29::clock::CuDuration(#max_age_nanos) {
@@ -9061,7 +9057,7 @@ fn generate_anytime_base_block(
                     let cumsg_output = #slot_cast_fn(&#task_instance, cumsg_output);
                     #rt_guard
                     ctx.set_current_task(#tid);
-                    let __cu_any_now = clock.now();
+                    #now_binding
                     #base_dispatch
                 };
                 // A live job means a refine block runs and stamps `end`; only
@@ -9132,10 +9128,11 @@ fn generate_anytime_refine_block(
         .as_ref()
         .expect("Anytime refine step should carry the base step's output pack.");
     let output_culist_index = int2sliceindex(output_pack.culist_index);
-    let monitoring_action = anytime_monitoring_action_tokens(
+    let monitoring_action = process_monitoring_action_tokens(
         tid,
         ctx.mission_mod,
         &output_culist_index,
+        &quote! { cumsg_output.clear_payload(); },
         ctx.wrap_process_step,
     );
 
@@ -9146,18 +9143,10 @@ fn generate_anytime_refine_block(
     let finish_log = quote! {
         debug!(ctx, "Anytime task {}: {} after {} refinement(s).", #task_id, __cu_any_outcome.stop.label(), __cu_any_outcome.iterations);
     };
-    // One clock read per quantum, shared by check() and finish(). Without a
-    // time knob every timed check const-folds away and finish() only feeds
-    // the debug-only elapsed, so the read is skipped entirely (CuTime
-    // subtraction saturates, so the zero stand-in is safe).
     let anytime = task_specs.anytime_configs[tid]
         .as_ref()
         .expect("anytime refine block emitted for a task without an anytime policy");
-    let now_binding = if anytime.time_budget_ms.is_some() || anytime.max_age_ms.is_some() {
-        quote! { let __cu_any_now = clock.now(); }
-    } else {
-        quote! { let __cu_any_now = cu29::clock::CuTime::default(); }
-    };
+    let now_binding = anytime_now_binding_tokens(anytime);
     // Only the Improved tail differs between blocks: put the job back while
     // the plan has more quanta; the LAST block stops a still-live job with
     // MaxRefines BY POSITION — the plan has no more quanta for it.
