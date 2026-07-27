@@ -16,13 +16,13 @@ use crate::utils::{config_id_to_bridge_const, config_id_to_enum, config_id_to_st
 use cu29_build::COPPER_CFG_FEATURES_ENV;
 use cu29_runtime::config::CuConfig;
 use cu29_runtime::config::{
-    BridgeChannelConfigRepresentation, ConfigGraphs, CuGraph, Flavor, HandleContent, Node, NodeId,
-    RT_POOL, ResourceBundleConfig, read_configuration_with_features,
+    AnytimeConfig, BridgeChannelConfigRepresentation, ConfigGraphs, CuGraph, Flavor, HandleContent,
+    Node, NodeId, RT_POOL, ResourceBundleConfig, read_configuration_with_features,
     read_configuration_with_resolved_ron_and_features,
 };
 use cu29_runtime::curuntime::{
-    CuExecutionLoop, CuExecutionStep, CuExecutionUnit, CuTaskType, compute_runtime_plan,
-    find_task_type_for_id,
+    CuExecutionLoop, CuExecutionStep, CuExecutionUnit, CuStepPhase, CuTaskType,
+    compute_runtime_plan, expand_anytime_steps, find_task_type_for_id,
 };
 use cu29_traits::{CuError, CuResult};
 use proc_macro2::{Ident, Span};
@@ -1175,6 +1175,11 @@ fn gen_sim_support(
     let plan_enum: Vec<proc_macro2::TokenStream> = runtime_plan
         .steps
         .iter()
+        .filter(|unit| {
+            // The sim callback fires once per node, in the base step; refine
+            // steps get no SimStep variant of their own.
+            !matches!(unit, CuExecutionUnit::Step(step) if step.phase == CuStepPhase::AnytimeRefine)
+        })
         .map(|unit| match unit {
             CuExecutionUnit::Step(step) => match &exec_entities[step.node_id as usize].kind {
                 ExecutionEntityKind::Task { .. } => {
@@ -1297,6 +1302,10 @@ fn gen_recorded_replay_support(
     let replay_arms: Vec<proc_macro2::TokenStream> = runtime_plan
         .steps
         .iter()
+        .filter(|unit| {
+            // One replay arm per node: refine steps have no SimStep variant.
+            !matches!(unit, CuExecutionUnit::Step(step) if step.phase == CuStepPhase::AnytimeRefine)
+        })
         .filter_map(|unit| match unit {
             CuExecutionUnit::Step(step) => match &exec_entities[step.node_id as usize].kind {
                 ExecutionEntityKind::Task { .. } => {
@@ -1718,6 +1727,76 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 Ok(plan) => plan,
                 Err(e) => return return_error(format!("Could not compute copperlist plan: {e}")),
             };
+
+        // Anytime restrictions the runner imposes on top of config validation.
+        for (index, anytime) in task_specs.anytime_configs.iter().enumerate() {
+            if anytime.is_some() && task_specs.background_flags[index] {
+                return return_error(format!(
+                    "Anytime task '{}' cannot use background: true yet: the background anytime runner is not implemented. Run it in the foreground for now.",
+                    task_specs.ids[index]
+                ));
+            }
+        }
+        for unit in &culist_plan.steps {
+            let CuExecutionUnit::Step(step) = unit else {
+                continue;
+            };
+            if step.phase != CuStepPhase::AnytimeBase {
+                continue;
+            }
+            // Same restriction backgrounding imposes (house wrapper style):
+            // the runner reads the anchor from the single input's Tov, and
+            // base()/refine() write one stable output slot.
+            if step.input_msg_indices_types.len() != 1 {
+                return return_error(format!(
+                    "Anytime task '{}' must have exactly one input connection (found {}): the runner anchors the job on the input's Tov.",
+                    step.node.get_id(),
+                    step.input_msg_indices_types.len()
+                ));
+            }
+            if step
+                .output_msg_pack
+                .as_ref()
+                .map(|pack| pack.msg_types.len())
+                != Some(1)
+            {
+                return return_error(format!(
+                    "Anytime task '{}' must have exactly one output message type: base() and every refine() write the same output slot.",
+                    step.node.get_id()
+                ));
+            }
+        }
+
+        // Per-node refine totals and each refine step's 1-based ordinal: the
+        // emitter bakes `k` and last-ness in as literals while walking the
+        // plan — the runtime carries no counter.
+        let anytime_refine_totals: HashMap<NodeId, u32> = {
+            let mut totals = HashMap::new();
+            for unit in &culist_plan.steps {
+                if let CuExecutionUnit::Step(step) = unit
+                    && step.phase == CuStepPhase::AnytimeRefine
+                {
+                    *totals.entry(step.node_id).or_insert(0u32) += 1;
+                }
+            }
+            totals
+        };
+        let anytime_refine_ordinals: Vec<Option<u32>> = {
+            let mut running: HashMap<NodeId, u32> = HashMap::new();
+            culist_plan
+                .steps
+                .iter()
+                .map(|unit| match unit {
+                    CuExecutionUnit::Step(step) if step.phase == CuStepPhase::AnytimeRefine => {
+                        let ordinal = running.entry(step.node_id).or_insert(0);
+                        *ordinal += 1;
+                        Some(*ordinal)
+                    }
+                    _ => None,
+                })
+                .collect()
+        };
+
         let task_names = collect_task_names(graph);
         let (culist_call_order, node_output_positions) = collect_culist_metadata(
             &culist_plan,
@@ -1929,10 +2008,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             .ids
             .iter()
             .zip(runtime_task_types.iter())
-            .zip(task_specs.cutypes.iter())
-            .map(|((task_id, task_type), task_kind)| {
+            .enumerate()
+            .map(|(index, (task_id, task_type))| {
                 let task_id_lit = LitStr::new(task_id, Span::call_site());
-                let task_trait = task_trait_for_kind(*task_kind);
+                let task_trait = task_trait_for_specs(&task_specs, index);
                 quote! {
                     #task_id_lit => Some(<#task_type as #task_trait>::debug_state_type_path()),
                 }
@@ -1943,12 +2022,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             .ids
             .iter()
             .zip(runtime_task_types.iter())
-            .zip(task_specs.cutypes.iter())
             .enumerate()
-            .map(|(index, ((task_id, task_type), task_kind))| {
+            .map(|(index, (task_id, task_type))| {
                 let task_index = syn::Index::from(index);
                 let task_id_lit = LitStr::new(task_id, Span::call_site());
-                let task_trait = task_trait_for_kind(*task_kind);
+                let task_trait = task_trait_for_specs(&task_specs, index);
                 quote! {
                     #task_id_lit => Some(
                         <#task_type as #task_trait>::with_debug_state(
@@ -1964,10 +2042,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             .ids
             .iter()
             .enumerate()
-            .map(|(index, _)| &runtime_task_types[index])
-            .zip(task_specs.cutypes.iter())
-            .map(|(task_type, task_kind)| {
-                let task_trait = task_trait_for_kind(*task_kind);
+            .map(|(index, _)| {
+                let task_type = &runtime_task_types[index];
+                let task_trait = task_trait_for_specs(&task_specs, index);
                 quote! {
                     <#task_type as #task_trait>::register_debug_state_types(registry);
                 }
@@ -2335,13 +2412,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 }
                             }
                         } else {
+                            let regular_trait = regular_task_trait_tokens(&task_specs, index);
                             quote! {
                                 {
-                                    let resources = <<#ty as CuTask>::Resources<'_> as ResourceBindings>::from_bindings(
+                                    let resources = <<#ty as #regular_trait>::Resources<'_> as ResourceBindings>::from_bindings(
                                         resources,
                                         #mapping_ref,
                                     ).map_err(|e| e.add_cause(#additional_error_info))?;
-                                    <#ty as CuTask>::new(all_instances_configs[#index], resources)
+                                    <#ty as #regular_trait>::new(all_instances_configs[#index], resources)
                                         .map_err(|e| e.add_cause(#additional_error_info))?
                                 }
                             }
@@ -2438,13 +2516,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 }
                             }
                         } else {
+                            let regular_trait = regular_task_trait_tokens(&task_specs, index);
                             quote! {
                                 {
-                                    let resources = <<#task_type as CuTask>::Resources<'_> as ResourceBindings>::from_bindings(
+                                    let resources = <<#task_type as #regular_trait>::Resources<'_> as ResourceBindings>::from_bindings(
                                         resources,
                                         #mapping_ref,
                                     ).map_err(|e| e.add_cause(#additional_error_info))?;
-                                    <#task_type as CuTask>::new(all_instances_configs[#index], resources)
+                                    <#task_type as #regular_trait>::new(all_instances_configs[#index], resources)
                                         .map_err(|e| e.add_cause(#additional_error_info))?
                                 }
                             }
@@ -3126,26 +3205,24 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         )> = culist_plan
             .steps
             .iter()
-            .map(|unit| match unit {
+            .enumerate()
+            .map(|(step_index, unit)| match unit {
                 CuExecutionUnit::Step(step) => {
                     #[cfg(feature = "macro_debug")]
                     eprintln!(
-                        "{} -> {} as {:?}. task_id: {} Input={:?}, Output={:?}",
+                        "{} -> {} as {:?}/{:?}. task_id: {} Input={:?}, Output={:?}",
                         step.node.get_id(),
                         step.node.get_type(),
                         step.task_type,
+                        step.phase,
                         step.node_id,
                         step.input_msg_indices_types,
                         step.output_msg_pack
                     );
 
                     match &culist_exec_entities[step.node_id as usize].kind {
-                        ExecutionEntityKind::Task { task_index } => generate_task_execution_tokens(
-                            step,
-                            *task_index,
-                            &task_specs,
-                            &runtime_task_types[*task_index],
-                            StepGenerationContext::new(
+                        ExecutionEntityKind::Task { task_index } => {
+                            let step_ctx = StepGenerationContext::new(
                                 &output_pack_sizes,
                                 &task_input_layouts,
                                 mission.as_str(),
@@ -3153,12 +3230,46 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 &mission_mod,
                                 ParallelLifecyclePlacement::default(),
                                 false,
-                            ),
-                            TaskExecutionTokens::new(quote! {}, {
+                            );
+                            let task_instance = {
                                 let node_index = int2sliceindex(*task_index as u32);
                                 quote! { tasks.#node_index }
-                            }),
-                        ),
+                            };
+                            match step.phase {
+                                CuStepPhase::Whole => generate_task_execution_tokens(
+                                    step,
+                                    *task_index,
+                                    &task_specs,
+                                    &runtime_task_types[*task_index],
+                                    step_ctx,
+                                    TaskExecutionTokens::new(quote! {}, task_instance),
+                                ),
+                                CuStepPhase::AnytimeBase => generate_anytime_base_block(
+                                    step,
+                                    *task_index,
+                                    &task_specs,
+                                    &step_ctx,
+                                    &task_instance,
+                                ),
+                                CuStepPhase::AnytimeRefine => {
+                                    let ordinal = anytime_refine_ordinals[step_index]
+                                        .expect("refine step without a precomputed ordinal");
+                                    let total = anytime_refine_totals[&step.node_id];
+                                    (
+                                        generate_anytime_refine_block(
+                                            step,
+                                            *task_index,
+                                            &task_specs,
+                                            &step_ctx,
+                                            &task_instance,
+                                            ordinal,
+                                            total,
+                                        ),
+                                        quote! {},
+                                    )
+                                }
+                            }
+                        }
                         ExecutionEntityKind::BridgeRx {
                             bridge_index,
                             channel_index,
@@ -3232,14 +3343,79 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     .steps
                     .iter()
                     .enumerate()
-                    .map(|(step_index, unit)| match unit {
+                    .filter_map(|(step_index, unit)| match unit {
                         CuExecutionUnit::Step(step) => match &culist_exec_entities
                             [step.node_id as usize]
                             .kind
                         {
                             ExecutionEntityKind::Task { task_index } => {
                                 let task_index_ts = int2sliceindex(*task_index as u32);
-                                generate_task_execution_tokens(
+                                // The simple first parallel-rt placement for an
+                                // anytime node: ONE stage running base and every
+                                // refine quantum contiguously, so the whole job
+                                // stays on the same worker thread (the quanta
+                                // touch the same task state and output slot —
+                                // memory locality). Refine steps therefore emit
+                                // no stage of their own.
+                                if step.phase == CuStepPhase::AnytimeRefine {
+                                    return None;
+                                }
+                                if step.phase == CuStepPhase::AnytimeBase {
+                                    let step_ctx = StepGenerationContext::new(
+                                        &output_pack_sizes,
+                                        &task_input_layouts,
+                                        mission.as_str(),
+                                        false,
+                                        &mission_mod,
+                                        ParallelLifecyclePlacement::default(),
+                                        true,
+                                    );
+                                    let task_instance = quote! { (*task) };
+                                    let (base_block, logging) = generate_anytime_base_block(
+                                        step,
+                                        *task_index,
+                                        &task_specs,
+                                        &step_ctx,
+                                        &task_instance,
+                                    );
+                                    let total = anytime_refine_totals[&step.node_id];
+                                    let refine_blocks: Vec<proc_macro2::TokenStream> = (1..=total)
+                                        .map(|ordinal| {
+                                            generate_anytime_refine_block(
+                                                step,
+                                                *task_index,
+                                                &task_specs,
+                                                &step_ctx,
+                                                &task_instance,
+                                                ordinal,
+                                                total,
+                                            )
+                                        })
+                                        .collect();
+                                    let (parallel_pre, parallel_post) = parallel_task_lifecycle_tokens(
+                                        step.task_type,
+                                        &task_specs.task_types[*task_index],
+                                        *task_index,
+                                        &mission_mod,
+                                        &task_instance,
+                                        parallel_lifecycle_placements
+                                            .as_ref()
+                                            .expect("parallel lifecycle placements missing")[step_index],
+                                        true,
+                                    );
+                                    let job_local = anytime_job_local_tokens(&task_specs, *task_index);
+                                    let body = quote! {
+                                        let _task_lock = step_rt.task_locks.#task_index_ts.lock().expect("parallel task lock poisoned");
+                                        let task = unsafe { step_rt.task_ptrs.#task_index_ts.as_mut() };
+                                        #parallel_pre
+                                        #job_local
+                                        #base_block
+                                        #(#refine_blocks)*
+                                        #parallel_post
+                                    };
+                                    return Some((wrap_process_step_tokens(true, body), logging));
+                                }
+                                Some(generate_task_execution_tokens(
                                     step,
                                     *task_index,
                                     &task_specs,
@@ -3259,7 +3435,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         let _task_lock = step_rt.task_locks.#task_index_ts.lock().expect("parallel task lock poisoned");
                                         let task = unsafe { step_rt.task_ptrs.#task_index_ts.as_mut() };
                                     }, quote! { (*task) }),
-                                )
+                                ))
                             }
                             ExecutionEntityKind::BridgeRx {
                                 bridge_index,
@@ -3267,7 +3443,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             } => {
                                 let spec = &culist_bridge_specs[*bridge_index];
                                 let bridge_index_ts = int2sliceindex(spec.tuple_index as u32);
-                                generate_bridge_rx_execution_tokens(
+                                Some(generate_bridge_rx_execution_tokens(
                                     step,
                                     spec,
                                     *channel_index,
@@ -3287,7 +3463,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         let _bridge_lock = step_rt.bridge_locks.#bridge_index_ts.lock().expect("parallel bridge lock poisoned");
                                         let bridge = unsafe { step_rt.bridge_ptrs.#bridge_index_ts.as_mut() };
                                     },
-                                )
+                                ))
                             }
                             ExecutionEntityKind::BridgeTx {
                                 bridge_index,
@@ -3295,7 +3471,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             } => {
                                 let spec = &culist_bridge_specs[*bridge_index];
                                 let bridge_index_ts = int2sliceindex(spec.tuple_index as u32);
-                                generate_bridge_tx_execution_tokens(
+                                Some(generate_bridge_tx_execution_tokens(
                                     step,
                                     spec,
                                     *channel_index,
@@ -3314,7 +3490,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         let _bridge_lock = step_rt.bridge_locks.#bridge_index_ts.lock().expect("parallel bridge lock poisoned");
                                         let bridge = unsafe { step_rt.bridge_ptrs.#bridge_index_ts.as_mut() };
                                     },
-                                )
+                                ))
                             }
                         },
                         CuExecutionUnit::Loop(_) => {
@@ -3428,6 +3604,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             None
         };
 
+        let anytime_job_locals = build_anytime_job_locals(&task_specs);
+        let anytime_policy_defs = build_anytime_policy_defs(&task_specs);
         let (runtime_plan_code, preprocess_logging_calls): (Vec<_>, Vec<_>) =
             itertools::multiunzip(runtime_plan_code_and_logging);
         let process_step_tasks_type = if sim_mode {
@@ -4449,6 +4627,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 );
                 {
                     let msgs = &mut culist.msgs.0;
+                    // One hoisted local per anytime node — the only value
+                    // crossing that node's base/refine steps (is the job
+                    // still live). Step bodies can be wrapped in closures, so
+                    // it cannot live inside a step.
+                    #(#anytime_job_locals)*
                     '__cu_process_steps: {
                     #(#runtime_plan_code)*
                     }
@@ -5595,6 +5778,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::cutask::CuSrcTask;
                 use cu29::cutask::CuSinkTask;
                 use cu29::cutask::CuTask;
+                // Anytime tasks keep their raw type in the tuple; lifecycle
+                // calls resolve through this trait import.
+                #[allow(unused_imports)]
+                use cu29::cutask_anytime::CuAnytimeTask;
                 use cu29::cutask::CuMsg;
                 use cu29::cutask::CuMsgMetadata;
                 use cu29::copperlist::CopperList;
@@ -5627,6 +5814,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #task_mapping_defs
                 #bridge_mapping_defs
                 #(#autogenerated_output_warnings)*
+
+                // One ZST per anytime node carrying its RON policy into the
+                // type system; unset knobs const-fold away in AnytimeJob::check.
+                #(#anytime_policy_defs)*
 
                 #sim_tasks
                 #sim_support
@@ -5946,6 +6137,17 @@ fn task_trait_for_kind(task_kind: CuTaskType) -> proc_macro2::TokenStream {
     }
 }
 
+/// Like [`task_trait_for_kind`], but resolves anytime nodes to
+/// `CuAnytimeTask` (they stay `Regular` in the graph but implement the
+/// anytime trait instead of `CuTask`).
+fn task_trait_for_specs(task_specs: &CuTaskSpecSet, index: usize) -> proc_macro2::TokenStream {
+    if task_specs.anytime_configs[index].is_some() {
+        quote! { cu29::cutask_anytime::CuAnytimeTask }
+    } else {
+        task_trait_for_kind(task_specs.cutypes[index])
+    }
+}
+
 fn task_output_payload_type(
     graph: &CuGraph,
     node: &Node,
@@ -5980,6 +6182,11 @@ struct CuTaskSpecSet {
     /// Thread pool name each task runs on when backgrounded (defaults to the
     /// `"background"` pool). Only meaningful where `background_flags` is true.
     pub background_pools: Vec<String>,
+    /// The `anytime:` policy of each task, if any. An anytime task keeps its
+    /// raw `CuAnytimeTask` type in the tuple (no wrapper); the policy values
+    /// are baked into a per-node `AnytimePolicy` ZST and the emitted
+    /// base/refine steps.
+    pub anytime_configs: Vec<Option<AnytimeConfig>>,
     pub logging_enabled: Vec<bool>,
     pub type_names: Vec<String>,
     pub task_types: Vec<Type>,
@@ -6018,6 +6225,11 @@ impl CuTaskSpecSet {
         let background_pools: Vec<String> = all_id_nodes
             .iter()
             .map(|(_, node)| node.background_pool().to_string())
+            .collect();
+
+        let anytime_configs: Vec<Option<AnytimeConfig>> = all_id_nodes
+            .iter()
+            .map(|(_, node)| node.anytime().cloned())
             .collect();
 
         let logging_enabled: Vec<bool> = all_id_nodes
@@ -6142,6 +6354,7 @@ impl CuTaskSpecSet {
             cutypes,
             background_flags,
             background_pools,
+            anytime_configs,
             logging_enabled,
             type_names,
             task_types,
@@ -6251,6 +6464,10 @@ fn extract_output_packs(runtime_plan: &CuExecutionLoop) -> Vec<OutputPack> {
         .iter()
         .filter_map(|unit| match unit {
             CuExecutionUnit::Step(step) => {
+                // Refine steps reuse the base step's slot: one slot per node.
+                if step.phase == CuStepPhase::AnytimeRefine {
+                    return None;
+                }
                 let output_pack = step.output_msg_pack.as_ref()?;
                 let msg_types: Vec<Type> = output_pack
                     .msg_types
@@ -6440,10 +6657,15 @@ fn collect_output_pack_sizes(runtime_plan: &CuExecutionLoop) -> Vec<usize> {
         .steps
         .iter()
         .filter_map(|unit| match unit {
-            CuExecutionUnit::Step(step) => step
-                .output_msg_pack
-                .as_ref()
-                .map(|output_pack| (output_pack.culist_index, output_pack.msg_types.len())),
+            CuExecutionUnit::Step(step) => {
+                // Refine steps reuse the base step's slot: one slot per node.
+                if step.phase == CuStepPhase::AnytimeRefine {
+                    return None;
+                }
+                step.output_msg_pack
+                    .as_ref()
+                    .map(|output_pack| (output_pack.culist_index, output_pack.msg_types.len()))
+            }
             CuExecutionUnit::Loop(_) => todo!("Needs to be implemented"),
         })
         .collect();
@@ -7897,7 +8119,8 @@ fn build_execution_plan(
             .map_err(|e| CuError::from(e.to_string()))?;
     }
 
-    let runtime_plan = compute_runtime_plan(&plan_graph)?;
+    let mut runtime_plan = compute_runtime_plan(&plan_graph)?;
+    expand_anytime_steps(&mut runtime_plan)?;
     Ok((runtime_plan, exec_entities, plan_to_original))
 }
 
@@ -7912,6 +8135,7 @@ fn collect_culist_metadata(
 
     for unit in &runtime_plan.steps {
         if let CuExecutionUnit::Step(step) = unit
+            && step.phase != CuStepPhase::AnytimeRefine // refine steps reuse the base step's slot
             && let Some(output_pack) = &step.output_msg_pack
         {
             let output_idx = output_pack.culist_index;
@@ -7951,6 +8175,7 @@ fn build_monitor_culist_component_mapping(
     let mut mapping = Vec::new();
     for unit in &runtime_plan.steps {
         if let CuExecutionUnit::Step(step) = unit
+            && step.phase != CuStepPhase::AnytimeRefine // refine steps reuse the base step's slot
             && step.output_msg_pack.is_some()
         {
             let Some(entity) = exec_entities.get(step.node_id as usize) else {
@@ -8006,6 +8231,13 @@ fn build_parallel_rt_stage_entries(
         let CuExecutionUnit::Step(step) = unit else {
             todo!("parallel runtime metadata for nested loops is not implemented yet")
         };
+
+        // An anytime node is one parallel-rt stage: its base and refine steps
+        // all run inside the base step's stage, on the same worker thread
+        // (memory locality), so refine steps produce no stage of their own.
+        if step.phase == CuStepPhase::AnytimeRefine {
+            continue;
+        }
 
         let entity = exec_entities.get(step.node_id as usize).ok_or_else(|| {
             CuError::from(format!(
@@ -8156,13 +8388,18 @@ fn parallel_task_lifecycle_tokens(
     mission_mod: &Ident,
     task_instance: &proc_macro2::TokenStream,
     placement: ParallelLifecyclePlacement,
+    is_anytime: bool,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let rt_guard = rtsan_guard_tokens();
     let abort_process_step = abort_process_step_tokens(true);
-    let task_trait = match task_kind {
-        CuTaskType::Source => quote! { cu29::cutask::CuSrcTask },
-        CuTaskType::Sink => quote! { cu29::cutask::CuSinkTask },
-        CuTaskType::Regular => quote! { cu29::cutask::CuTask },
+    let task_trait = if is_anytime {
+        quote! { cu29::cutask_anytime::CuAnytimeTask }
+    } else {
+        match task_kind {
+            CuTaskType::Source => quote! { cu29::cutask::CuSrcTask },
+            CuTaskType::Sink => quote! { cu29::cutask::CuSinkTask },
+            CuTaskType::Regular => quote! { cu29::cutask::CuTask },
+        }
     };
 
     let preprocess_alloc_open = alloc_scope_open_tokens();
@@ -8411,6 +8648,581 @@ fn parallel_bridge_lifecycle_tokens(
     (preprocess, postprocess)
 }
 
+/// Trait an in-tuple regular task is called through: `CuTask` normally,
+/// `CuAnytimeTask` when the node carries an `anytime:` policy (the tuple keeps
+/// the raw task type either way — there is no anytime wrapper).
+fn regular_task_trait_tokens(task_specs: &CuTaskSpecSet, index: usize) -> proc_macro2::TokenStream {
+    if task_specs.anytime_configs[index].is_some() {
+        quote! { cu29::cutask_anytime::CuAnytimeTask }
+    } else {
+        quote! { CuTask }
+    }
+}
+
+/// Mission-module name of the `AnytimePolicy` ZST emitted for one anytime node.
+fn anytime_policy_ident(task_id: &str) -> Ident {
+    format_ident!("__CuAnytimePolicy_{}", config_id_to_struct_member(task_id))
+}
+
+/// Name of the hoisted `Option<AnytimeJob>` local for one anytime node — the
+/// only value crossing its base/refine steps (is the job still live).
+fn anytime_job_ident(task_id: &str) -> Ident {
+    format_ident!("__cu_anytime_job_{}", config_id_to_struct_member(task_id))
+}
+
+fn anytime_ms_to_nanos(ms: f64) -> u64 {
+    (ms * 1_000_000.0).round() as u64
+}
+
+fn anytime_option_duration_tokens(ms: Option<f64>) -> proc_macro2::TokenStream {
+    match ms {
+        Some(ms) => {
+            let nanos = anytime_ms_to_nanos(ms);
+            quote! { Some(cu29::clock::CuDuration(#nanos)) }
+        }
+        None => quote! { None },
+    }
+}
+
+/// One `AnytimePolicy` ZST per anytime node, its RON policy baked in as
+/// consts and overrides so every unset knob const-folds away.
+///
+/// A quality knob (`quality_target`/`quality_floor`/`max_stall`) pins the
+/// implementation to the shared `Quality` scale, which is the compile-time
+/// gate rejecting those knobs on `Quality = ()` tasks (the job's
+/// `AnytimePolicy<T::Quality>` bound fails). Without quality knobs the
+/// implementation is generic over any comparable quality.
+fn build_anytime_policy_defs(task_specs: &CuTaskSpecSet) -> Vec<proc_macro2::TokenStream> {
+    task_specs
+        .anytime_configs
+        .iter()
+        .enumerate()
+        .filter_map(|(index, anytime)| {
+            let anytime = anytime.as_ref()?;
+            let policy_ident = anytime_policy_ident(&task_specs.ids[index]);
+            let time_budget = anytime_option_duration_tokens(anytime.time_budget_ms);
+            let max_age = anytime_option_duration_tokens(anytime.max_age_ms);
+            let max_stall = match anytime.max_stall {
+                Some(stall) => quote! { Some(#stall) },
+                None => quote! { None },
+            };
+            let consts = quote! {
+                const TIME_BUDGET: Option<cu29::clock::CuDuration> = #time_budget;
+                const MAX_AGE: Option<cu29::clock::CuDuration> = #max_age;
+                const MAX_STALL: Option<u32> = #max_stall;
+            };
+            let has_quality_knob = anytime.quality_target.is_some()
+                || anytime.quality_floor.is_some()
+                || anytime.max_stall.is_some();
+            let policy_impl = if has_quality_knob {
+                let target_met = anytime.quality_target.map(|target| {
+                    quote! {
+                        #[inline(always)]
+                        fn target_met(q: cu29::cutask_anytime::Quality) -> bool {
+                            q >= cu29::cutask_anytime::quality_from_f32(#target)
+                        }
+                    }
+                });
+                let below_floor = anytime.quality_floor.map(|floor| {
+                    quote! {
+                        #[inline(always)]
+                        fn below_floor(q: cu29::cutask_anytime::Quality) -> bool {
+                            // NaN fails closed: an unordered quality counts as below the floor.
+                            q.partial_cmp(&cu29::cutask_anytime::quality_from_f32(#floor))
+                                .is_none_or(core::cmp::Ordering::is_lt)
+                        }
+                    }
+                });
+                quote! {
+                    impl cu29::cutask_anytime::AnytimePolicy<cu29::cutask_anytime::Quality>
+                        for #policy_ident
+                    {
+                        #consts
+                        #target_met
+                        #below_floor
+                        #[inline(always)]
+                        fn quality_ratio(q: cu29::cutask_anytime::Quality) -> Option<f32> {
+                            Some(cu29::cutask_anytime::quality_to_f32(q))
+                        }
+                    }
+                }
+            } else {
+                quote! {
+                    impl<Q: Copy + PartialOrd> cu29::cutask_anytime::AnytimePolicy<Q>
+                        for #policy_ident
+                    {
+                        #consts
+                    }
+                }
+            };
+            Some(quote! {
+                #[allow(non_camel_case_types)]
+                pub struct #policy_ident;
+                #policy_impl
+            })
+        })
+        .collect()
+}
+
+/// The hoisted per-node job local, declared above the plan splice: step bodies
+/// can be wrapped in closures, so the local cannot live inside a step. The
+/// `Option` answers the single genuinely dynamic cross-step question — is the
+/// job still live; nothing else crosses steps.
+fn anytime_job_local_tokens(task_specs: &CuTaskSpecSet, index: usize) -> proc_macro2::TokenStream {
+    let task_type = &task_specs.task_types[index];
+    let policy_ident = anytime_policy_ident(&task_specs.ids[index]);
+    let job_ident = anytime_job_ident(&task_specs.ids[index]);
+    quote! {
+        #[allow(non_snake_case, unused_mut)]
+        let mut #job_ident: Option<
+            cu29::cutask_anytime::AnytimeJob<
+                <#task_type as cu29::cutask_anytime::CuAnytimeTask>::Quality,
+                #policy_ident,
+            >,
+        > = None;
+    }
+}
+
+fn build_anytime_job_locals(task_specs: &CuTaskSpecSet) -> Vec<proc_macro2::TokenStream> {
+    task_specs
+        .anytime_configs
+        .iter()
+        .enumerate()
+        .filter(|(_, anytime)| anytime.is_some())
+        .map(|(index, _)| anytime_job_local_tokens(task_specs, index))
+        .collect()
+}
+
+/// The output-slot cast helper shared by an anytime node's base and refine
+/// blocks: same shape as the regular task one, with the `CuAnytimeTask` bound.
+/// Each emitted block is its own scope, so the fixed names never collide.
+fn anytime_slot_cast_tokens(task_hint: &str) -> (proc_macro2::TokenStream, Ident) {
+    let trait_ident = format_ident!(
+        "__CuOutputSlotMustMatchTaskOutput__AnytimeTask_{}__Add_dst___nc___connections_for_unused_outputs",
+        task_hint
+    );
+    let fn_ident = format_ident!(
+        "__cu_anytime_output_slot_or_add_dst___nc___for_unused_outputs__task_{}",
+        task_hint
+    );
+    let defs = quote! {
+        #[allow(non_camel_case_types)]
+        trait #trait_ident<Expected> {
+            fn __cu_cast_output_slot(slot: &mut Self) -> &mut Expected;
+        }
+        impl<T> #trait_ident<T> for T {
+            fn __cu_cast_output_slot(slot: &mut Self) -> &mut T {
+                slot
+            }
+        }
+
+        fn #fn_ident<'a, Task, Slot>(
+            _task: &Task,
+            slot: &'a mut Slot,
+        ) -> &'a mut Task::Output<'static>
+        where
+            Task: cu29::cutask_anytime::CuAnytimeTask,
+            Slot: #trait_ident<Task::Output<'static>>,
+        {
+            <Slot as #trait_ident<Task::Output<'static>>>::__cu_cast_output_slot(slot)
+        }
+    };
+    (defs, fn_ident)
+}
+
+/// The process-error monitoring match shared by an anytime node's blocks.
+/// Identical to the regular task one; the job local needs no explicit kill
+/// here because a job is only (re)stored on an `Ok` status — an erroring
+/// block leaves it `None`/taken, so later quanta no-op.
+fn anytime_monitoring_action_tokens(
+    tid: usize,
+    mission_mod: &Ident,
+    output_culist_index: &syn::Index,
+    wrap_process_step: bool,
+) -> proc_macro2::TokenStream {
+    let abort_process_step = abort_process_step_tokens(wrap_process_step);
+    quote! {
+        debug!(ctx, "Component {}: Error during process: {}", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)), &error);
+        let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#tid), CuComponentState::Process, &error);
+        match decision {
+            Decision::Abort => {
+                debug!(ctx, "Process: ABORT decision from monitoring. Component '{}' errored out \
+                        during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)), clid);
+                #abort_process_step
+            }
+            Decision::Ignore => {
+                debug!(ctx, "Process: IGNORE decision from monitoring. Component '{}' errored out \
+                        during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)));
+                let cumsg_output = &mut msgs.#output_culist_index;
+                cumsg_output.clear_payload();
+            }
+            Decision::Shutdown => {
+                debug!(ctx, "Process: SHUTDOWN decision from monitoring. Component '{}' errored out \
+                        during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)));
+                return Err(CuError::new_with_cause("Component errored out during process.", error));
+            }
+        }
+    }
+}
+
+/// Emits the `[base <node>]` block of a foreground anytime node: the standard
+/// step wrapper (probe, keyframe freeze, sim callback, monitoring, alloc
+/// scopes) around the DOA age check — emitted only when `max_age_ms` is
+/// configured — and one `base()` call. On `Improved` the job lands in the
+/// node's hoisted local; `Converged`/`Aborted` finish on the spot and the
+/// local stays `None`, so every refine block no-ops through its liveness test.
+///
+/// Returns the block plus the payload-drop logging tokens (same contract as
+/// `generate_task_execution_tokens`).
+fn generate_anytime_base_block(
+    step: &CuExecutionStep,
+    task_index: usize,
+    task_specs: &CuTaskSpecSet,
+    ctx: &StepGenerationContext<'_>,
+    task_instance: &proc_macro2::TokenStream,
+) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    let tid = task_index;
+    let anytime = task_specs.anytime_configs[tid]
+        .as_ref()
+        .expect("anytime base block emitted for a task without an anytime policy");
+    let task_id = &task_specs.ids[tid];
+    let policy_ident = anytime_policy_ident(task_id);
+    let job_ident = anytime_job_ident(task_id);
+    let enum_name = Ident::new(&config_id_to_enum(task_id), Span::call_site());
+    let task_hint = config_id_to_struct_member(task_id);
+    let (slot_cast_defs, slot_cast_fn) = anytime_slot_cast_tokens(&task_hint);
+    let rt_guard = rtsan_guard_tokens();
+    let mission_mod = ctx.mission_mod;
+
+    let comment_str = format!(
+        "DEBUG ->> {} ({:?}/{:?}) Id:{} I:{:?} O:{:?}",
+        step.node.get_id(),
+        step.task_type,
+        step.phase,
+        step.node_id,
+        step.input_msg_indices_types,
+        step.output_msg_pack
+    );
+    let comment_tokens = quote! {{
+        let _ = stringify!(#comment_str);
+    }};
+
+    let output_pack = step
+        .output_msg_pack
+        .as_ref()
+        .expect("Anytime task should have an output message pack.");
+    let output_culist_index = int2sliceindex(output_pack.culist_index);
+    let monitoring_action = anytime_monitoring_action_tokens(
+        tid,
+        mission_mod,
+        &output_culist_index,
+        ctx.wrap_process_step,
+    );
+
+    let GeneratedTaskInput {
+        setup: task_input_setup,
+        expr: task_input_expr,
+    } = generate_task_input_binding(
+        step,
+        ctx.mission_name,
+        ctx.output_pack_sizes,
+        ctx.task_input_layouts,
+    );
+
+    // The sim callback fires once per node, here in the base block, with the
+    // standard Process state. On ExecutedBySim the job local simply stays
+    // `None` — no refine-side sim machinery exists or is needed.
+    let call_sim_callback = if ctx.sim_mode {
+        quote! {
+            let doit = {
+                let cumsg_input = #task_input_expr;
+                let cumsg_output = &mut msgs.#output_culist_index;
+                let state = CuTaskCallbackState::Process(cumsg_input, cumsg_output);
+                let ovr = sim_callback(SimStep::#enum_name(state));
+
+                if let SimOverride::Errored(reason) = ovr  {
+                    let error: CuError = reason.into();
+                    #monitoring_action
+                    false
+                }
+                else {
+                    ovr == SimOverride::ExecuteByRuntime
+                }
+            };
+        }
+    } else {
+        quote! { let doit = true; }
+    };
+
+    // Anchor extraction and the DOA skip exist in the text only when max_age
+    // is configured; otherwise the anchor degenerates to the budget anchor.
+    let base_call = quote! {
+        match #task_instance.base(&ctx, cumsg_input, cumsg_output) {
+            Ok(cu29::cutask_anytime::AnytimeStatus::Improved(q)) => {
+                #job_ident = Some(cu29::cutask_anytime::AnytimeJob::new(__cu_any_now, __cu_any_anchor, q));
+                Ok(())
+            }
+            Ok(cu29::cutask_anytime::AnytimeStatus::Converged(q)) => {
+                let __cu_any_job: cu29::cutask_anytime::AnytimeJob<_, #policy_ident> =
+                    cu29::cutask_anytime::AnytimeJob::new(__cu_any_now, __cu_any_anchor, q);
+                let __cu_any_outcome = __cu_any_job.finish(
+                    clock.now(),
+                    cu29::cutask_anytime::AnytimeStopCause::Converged,
+                    0u32,
+                    cumsg_output,
+                );
+                debug!(ctx, "Anytime task {}: {} after {} refinement(s).", #task_id, __cu_any_outcome.stop.label(), __cu_any_outcome.iterations);
+                Ok(())
+            }
+            Ok(cu29::cutask_anytime::AnytimeStatus::Aborted) => {
+                let __cu_any_outcome = cu29::cutask_anytime::abort_at_base(__cu_any_now, clock.now(), cumsg_output);
+                debug!(ctx, "Anytime task {}: {} after {} refinement(s).", #task_id, __cu_any_outcome.stop.label(), __cu_any_outcome.iterations);
+                Ok(())
+            }
+            Err(error) => Err(error),
+        }
+    };
+    let base_dispatch = if let Some(max_age_ms) = anytime.max_age_ms {
+        let max_age_nanos = anytime_ms_to_nanos(max_age_ms);
+        quote! {
+            let __cu_any_anchor: cu29::clock::CuTime = match cumsg_input.tov {
+                cu29::clock::Tov::Time(tov_time) => tov_time,
+                cu29::clock::Tov::Range(tov_range) => tov_range.start,
+                cu29::clock::Tov::None => __cu_any_now,
+            };
+            if __cu_any_now >= __cu_any_anchor + cu29::clock::CuDuration(#max_age_nanos) {
+                let __cu_any_outcome = cu29::cutask_anytime::skip_stale(cumsg_output);
+                debug!(ctx, "Anytime task {}: input dead on arrival, job skipped.", #task_id);
+                let _ = __cu_any_outcome;
+                Ok(())
+            } else {
+                #base_call
+            }
+        }
+    } else {
+        quote! {
+            let __cu_any_anchor = __cu_any_now;
+            #base_call
+        }
+    };
+
+    let alloc_open = alloc_scope_open_tokens();
+    let alloc_close = alloc_scope_close_tokens(
+        quote! { monitor },
+        quote! { #tid },
+        quote! { CuComponentState::Process },
+    );
+
+    let block = quote! {
+        {
+            #comment_tokens
+            // One snapshot per copperlist, before the job: refine blocks must
+            // not re-freeze.
+            kf_manager.freeze_task(clid, &#task_instance)?;
+            #task_input_setup
+            #call_sim_callback
+            let cumsg_input = #task_input_expr;
+            let cumsg_output = &mut msgs.#output_culist_index;
+            let maybe_error = if doit {
+                execution_probe.record(cu29::monitoring::ExecutionMarker {
+                    component_id: cu29::monitoring::ComponentId::new(#tid),
+                    step: CuComponentState::Process,
+                    culistid: Some(clid),
+                });
+                #slot_cast_defs
+                if cumsg_output.metadata.process_time.start.is_none() {
+                    cumsg_output.metadata.process_time.start = cu29::curuntime::perf_now(clock).into();
+                }
+                #alloc_open
+                let result = {
+                    let cumsg_output = #slot_cast_fn(&#task_instance, cumsg_output);
+                    #rt_guard
+                    ctx.set_current_task(#tid);
+                    let __cu_any_now = clock.now();
+                    #base_dispatch
+                };
+                // Overwritten by every later block that runs a quantum, so
+                // `end` lands on the job's last quantum.
+                cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
+                #alloc_close
+                result
+            } else {
+                Ok(())
+            };
+            if let Err(error) = maybe_error {
+                #monitoring_action
+            }
+        }
+    };
+
+    let logging_tokens = if !task_specs.logging_enabled[tid] {
+        quote! {
+            let cumsg_output = &mut culist.msgs.0.#output_culist_index;
+            cumsg_output.clear_payload();
+        }
+    } else {
+        quote!()
+    };
+
+    (block, logging_tokens)
+}
+
+/// Emits the `k`-th of `total` refine blocks of a foreground anytime node:
+/// liveness test on the hoisted local, then the configured between-quanta
+/// `check()`, then one `refine()` quantum. `k` and last-ness are generation
+/// time facts — the runtime carries no counter; the LAST block never puts the
+/// job back and stops a still-live job with `MaxRefines` purely by position.
+fn generate_anytime_refine_block(
+    step: &CuExecutionStep,
+    task_index: usize,
+    task_specs: &CuTaskSpecSet,
+    ctx: &StepGenerationContext<'_>,
+    task_instance: &proc_macro2::TokenStream,
+    k: u32,
+    total: u32,
+) -> proc_macro2::TokenStream {
+    let tid = task_index;
+    let task_id = &task_specs.ids[tid];
+    let job_ident = anytime_job_ident(task_id);
+    let task_hint = config_id_to_struct_member(task_id);
+    let (slot_cast_defs, slot_cast_fn) = anytime_slot_cast_tokens(&task_hint);
+    let rt_guard = rtsan_guard_tokens();
+
+    let comment_str = format!(
+        "DEBUG ->> {} ({:?}/{:?} {}/{}) Id:{} O:{:?}",
+        step.node.get_id(),
+        step.task_type,
+        step.phase,
+        k,
+        total,
+        step.node_id,
+        step.output_msg_pack
+    );
+    let comment_tokens = quote! {{
+        let _ = stringify!(#comment_str);
+    }};
+
+    let output_pack = step
+        .output_msg_pack
+        .as_ref()
+        .expect("Anytime refine step should carry the base step's output pack.");
+    let output_culist_index = int2sliceindex(output_pack.culist_index);
+    let monitoring_action = anytime_monitoring_action_tokens(
+        tid,
+        ctx.mission_mod,
+        &output_culist_index,
+        ctx.wrap_process_step,
+    );
+
+    // A live job at block k has run exactly k-1 quanta — every earlier block
+    // either ran its quantum or killed the job — so these are plain literals.
+    let iters_on_check_stop = k - 1;
+    let iters_with_quantum = k;
+    let finish_log = quote! {
+        debug!(ctx, "Anytime task {}: {} after {} refinement(s).", #task_id, __cu_any_outcome.stop.label(), __cu_any_outcome.iterations);
+    };
+    let quantum = if k < total {
+        quote! {
+            if let Some(__cu_any_cause) = __cu_any_job.check(clock.now()) {
+                let __cu_any_outcome = __cu_any_job.finish(clock.now(), __cu_any_cause, #iters_on_check_stop, cumsg_output);
+                #finish_log
+                Ok(())
+            } else {
+                match #task_instance.refine(&ctx, cumsg_output) {
+                    Ok(cu29::cutask_anytime::AnytimeStatus::Improved(q)) => {
+                        __cu_any_job.record(q);
+                        #job_ident = Some(__cu_any_job); // still live: put it back
+                        Ok(())
+                    }
+                    Ok(cu29::cutask_anytime::AnytimeStatus::Converged(q)) => {
+                        __cu_any_job.record(q);
+                        let __cu_any_outcome = __cu_any_job.finish(clock.now(), cu29::cutask_anytime::AnytimeStopCause::Converged, #iters_with_quantum, cumsg_output);
+                        #finish_log
+                        Ok(())
+                    }
+                    Ok(cu29::cutask_anytime::AnytimeStatus::Aborted) => {
+                        let __cu_any_outcome = __cu_any_job.finish(clock.now(), cu29::cutask_anytime::AnytimeStopCause::Aborted, #iters_with_quantum, cumsg_output);
+                        #finish_log
+                        Ok(())
+                    }
+                    Err(error) => Err(error),
+                }
+            }
+        }
+    } else {
+        // The last block: a job surviving its quantum stops with MaxRefines
+        // BY POSITION — the plan has no more quanta for it.
+        quote! {
+            match __cu_any_job.check(clock.now()) {
+                Some(__cu_any_cause) => {
+                    let __cu_any_outcome = __cu_any_job.finish(clock.now(), __cu_any_cause, #iters_on_check_stop, cumsg_output);
+                    #finish_log
+                    Ok(())
+                }
+                None => match #task_instance.refine(&ctx, cumsg_output) {
+                    Ok(__cu_any_status) => {
+                        let (__cu_any_cause, __cu_any_iters) = match __cu_any_status {
+                            cu29::cutask_anytime::AnytimeStatus::Improved(q) => {
+                                __cu_any_job.record(q);
+                                (cu29::cutask_anytime::AnytimeStopCause::MaxRefines, #iters_with_quantum)
+                            }
+                            cu29::cutask_anytime::AnytimeStatus::Converged(q) => {
+                                __cu_any_job.record(q);
+                                (cu29::cutask_anytime::AnytimeStopCause::Converged, #iters_with_quantum)
+                            }
+                            cu29::cutask_anytime::AnytimeStatus::Aborted => {
+                                (cu29::cutask_anytime::AnytimeStopCause::Aborted, #iters_with_quantum)
+                            }
+                        };
+                        let __cu_any_outcome = __cu_any_job.finish(clock.now(), __cu_any_cause, __cu_any_iters, cumsg_output);
+                        #finish_log
+                        Ok(())
+                    }
+                    Err(error) => Err(error),
+                },
+            }
+        }
+    };
+
+    let alloc_open = alloc_scope_open_tokens();
+    let alloc_close = alloc_scope_close_tokens(
+        quote! { monitor },
+        quote! { #tid },
+        quote! { CuComponentState::Process },
+    );
+
+    quote! {
+        {
+            #comment_tokens
+            // Liveness test: an earlier block that finished (or errored) the
+            // job left the local empty, so this quantum no-ops.
+            if let Some(mut __cu_any_job) = #job_ident.take() {
+                execution_probe.record(cu29::monitoring::ExecutionMarker {
+                    component_id: cu29::monitoring::ComponentId::new(#tid),
+                    step: CuComponentState::Process,
+                    culistid: Some(clid),
+                });
+                let cumsg_output = &mut msgs.#output_culist_index;
+                #slot_cast_defs
+                #alloc_open
+                let maybe_error = {
+                    let cumsg_output = #slot_cast_fn(&#task_instance, cumsg_output);
+                    #rt_guard
+                    ctx.set_current_task(#tid);
+                    #quantum
+                };
+                cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
+                #alloc_close
+                if let Err(error) = maybe_error {
+                    // No explicit job kill needed: the job was taken and is
+                    // only put back on Ok(Improved), so later quanta no-op.
+                    #monitoring_action
+                }
+            }
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 struct StepGenerationContext<'a> {
     output_pack_sizes: &'a [usize],
@@ -8517,6 +9329,7 @@ fn generate_task_execution_tokens(
         mission_mod,
         &task_instance,
         lifecycle_placement,
+        false, // anytime steps route to the dedicated base/refine emitters
     );
     let maybe_sim_tick = if sim_mode && !run_in_sim_flag {
         quote! {
@@ -9324,6 +10137,12 @@ fn build_parallel_lifecycle_placements(
         .iter()
         .map(|unit| match unit {
             CuExecutionUnit::Step(step) => {
+                // Anytime refine steps emit no parallel stage (they run inside
+                // the base step's stage), so they must not claim the task's
+                // postprocess placement.
+                if step.phase == CuStepPhase::AnytimeRefine {
+                    return None;
+                }
                 match &culist_exec_entities[step.node_id as usize].kind {
                     ExecutionEntityKind::Task { task_index } => {
                         Some(ParallelLifecycleKey::Task(*task_index))
