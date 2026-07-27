@@ -4,12 +4,12 @@
         (
             id: "unscored",
             type: "UnscoredAnytime",
-            anytime: (max_refines: 2, max_stall: 1),
+            anytime: (
+                max_refines: 2,
+                max_stall: 1,
+            ),
         ),
-        (
-            id: "sink",
-            type: "IntSink",
-        ),
+        (id: "sink", type: "IntSink"),
     ],
     cnx: [
         (

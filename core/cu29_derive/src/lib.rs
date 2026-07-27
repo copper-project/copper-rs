@@ -6089,7 +6089,11 @@ fn read_config(config_file: &str) -> CuResult<CuConfig> {
     read_configuration_with_features(filename.as_str(), &active_feature_refs)
 }
 
-fn inferred_single_output_payload_type(task_type: &Type, task_kind: CuTaskType, is_anytime: bool) -> Type {
+fn inferred_single_output_payload_type(
+    task_type: &Type,
+    task_kind: CuTaskType,
+    is_anytime: bool,
+) -> Type {
     if is_anytime {
         return parse_quote! {
             <<#task_type as cu29::cutask_anytime::CuAnytimeTask>::Output<'static> as cu29::cutask::CuSingleOutputMsg>::Payload
@@ -10895,8 +10899,10 @@ mod tests {
         let regular_ty: Type = parse_quote!(RegularTask);
 
         let src_name = synthesized_single_output_msg_name(&src_ty, CuTaskType::Source, false);
-        let regular_name = synthesized_single_output_msg_name(&regular_ty, CuTaskType::Regular, false);
-        let anytime_name = synthesized_single_output_msg_name(&regular_ty, CuTaskType::Regular, true);
+        let regular_name =
+            synthesized_single_output_msg_name(&regular_ty, CuTaskType::Regular, false);
+        let anytime_name =
+            synthesized_single_output_msg_name(&regular_ty, CuTaskType::Regular, true);
 
         parse_str::<Type>(src_name.as_str()).expect("source payload type should parse");
         parse_str::<Type>(regular_name.as_str()).expect("regular payload type should parse");
