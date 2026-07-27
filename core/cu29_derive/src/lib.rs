@@ -9001,9 +9001,11 @@ fn generate_anytime_base_block(
                     let __cu_any_now = clock.now();
                     #base_dispatch
                 };
-                // Overwritten by every later block that runs a quantum, so
-                // `end` lands on the job's last quantum.
-                cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
+                // A live job means a refine block runs and stamps `end`; only
+                // a job that terminated at the base site stamps it here.
+                if #job_ident.is_none() {
+                    cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
+                }
                 #alloc_close
                 result
             } else {
@@ -9081,65 +9083,57 @@ fn generate_anytime_refine_block(
     let finish_log = quote! {
         debug!(ctx, "Anytime task {}: {} after {} refinement(s).", #task_id, __cu_any_outcome.stop.label(), __cu_any_outcome.iterations);
     };
-    let quantum = if k < total {
+    // One clock read per quantum, shared by check() and finish(). Without a
+    // time knob every timed check const-folds away and finish() only feeds
+    // the debug-only elapsed, so the read is skipped entirely (CuTime
+    // subtraction saturates, so the zero stand-in is safe).
+    let anytime = task_specs.anytime_configs[tid]
+        .as_ref()
+        .expect("anytime refine block emitted for a task without an anytime policy");
+    let now_binding = if anytime.time_budget_ms.is_some() || anytime.max_age_ms.is_some() {
+        quote! { let __cu_any_now = clock.now(); }
+    } else {
+        quote! { let __cu_any_now = cu29::clock::CuTime::default(); }
+    };
+    // Only the Improved tail differs between blocks: put the job back while
+    // the plan has more quanta; the LAST block stops a still-live job with
+    // MaxRefines BY POSITION — the plan has no more quanta for it.
+    let improved_tail = if k < total {
         quote! {
-            if let Some(__cu_any_cause) = __cu_any_job.check(clock.now()) {
-                let __cu_any_outcome = __cu_any_job.finish(clock.now(), __cu_any_cause, #iters_on_check_stop, cumsg_output);
-                #finish_log
-                Ok(())
-            } else {
-                match #task_instance.refine(&ctx, cumsg_output) {
-                    Ok(cu29::cutask_anytime::AnytimeStatus::Improved(q)) => {
-                        __cu_any_job.record(q);
-                        #job_ident = Some(__cu_any_job); // still live: put it back
-                        Ok(())
-                    }
-                    Ok(cu29::cutask_anytime::AnytimeStatus::Converged(q)) => {
-                        __cu_any_job.record(q);
-                        let __cu_any_outcome = __cu_any_job.finish(clock.now(), cu29::cutask_anytime::AnytimeStopCause::Converged, #iters_with_quantum, cumsg_output);
-                        #finish_log
-                        Ok(())
-                    }
-                    Ok(cu29::cutask_anytime::AnytimeStatus::Aborted) => {
-                        let __cu_any_outcome = __cu_any_job.finish(clock.now(), cu29::cutask_anytime::AnytimeStopCause::Aborted, #iters_with_quantum, cumsg_output);
-                        #finish_log
-                        Ok(())
-                    }
-                    Err(error) => Err(error),
-                }
-            }
+            #job_ident = Some(__cu_any_job); // still live: put it back
+            Ok(())
         }
     } else {
-        // The last block: a job surviving its quantum stops with MaxRefines
-        // BY POSITION — the plan has no more quanta for it.
         quote! {
-            match __cu_any_job.check(clock.now()) {
-                Some(__cu_any_cause) => {
-                    let __cu_any_outcome = __cu_any_job.finish(clock.now(), __cu_any_cause, #iters_on_check_stop, cumsg_output);
+            let __cu_any_outcome = __cu_any_job.finish(__cu_any_now, cu29::cutask_anytime::AnytimeStopCause::MaxRefines, #iters_with_quantum, cumsg_output);
+            #finish_log
+            Ok(())
+        }
+    };
+    let quantum = quote! {
+        #now_binding
+        if let Some(__cu_any_cause) = __cu_any_job.check(__cu_any_now) {
+            let __cu_any_outcome = __cu_any_job.finish(__cu_any_now, __cu_any_cause, #iters_on_check_stop, cumsg_output);
+            #finish_log
+            Ok(())
+        } else {
+            match #task_instance.refine(&ctx, cumsg_output) {
+                Ok(cu29::cutask_anytime::AnytimeStatus::Improved(q)) => {
+                    __cu_any_job.record(q);
+                    #improved_tail
+                }
+                Ok(cu29::cutask_anytime::AnytimeStatus::Converged(q)) => {
+                    __cu_any_job.record(q);
+                    let __cu_any_outcome = __cu_any_job.finish(__cu_any_now, cu29::cutask_anytime::AnytimeStopCause::Converged, #iters_with_quantum, cumsg_output);
                     #finish_log
                     Ok(())
                 }
-                None => match #task_instance.refine(&ctx, cumsg_output) {
-                    Ok(__cu_any_status) => {
-                        let (__cu_any_cause, __cu_any_iters) = match __cu_any_status {
-                            cu29::cutask_anytime::AnytimeStatus::Improved(q) => {
-                                __cu_any_job.record(q);
-                                (cu29::cutask_anytime::AnytimeStopCause::MaxRefines, #iters_with_quantum)
-                            }
-                            cu29::cutask_anytime::AnytimeStatus::Converged(q) => {
-                                __cu_any_job.record(q);
-                                (cu29::cutask_anytime::AnytimeStopCause::Converged, #iters_with_quantum)
-                            }
-                            cu29::cutask_anytime::AnytimeStatus::Aborted => {
-                                (cu29::cutask_anytime::AnytimeStopCause::Aborted, #iters_with_quantum)
-                            }
-                        };
-                        let __cu_any_outcome = __cu_any_job.finish(clock.now(), __cu_any_cause, __cu_any_iters, cumsg_output);
-                        #finish_log
-                        Ok(())
-                    }
-                    Err(error) => Err(error),
-                },
+                Ok(cu29::cutask_anytime::AnytimeStatus::Aborted) => {
+                    let __cu_any_outcome = __cu_any_job.finish(__cu_any_now, cu29::cutask_anytime::AnytimeStopCause::Aborted, #iters_with_quantum, cumsg_output);
+                    #finish_log
+                    Ok(())
+                }
+                Err(error) => Err(error),
             }
         }
     };
@@ -9171,7 +9165,11 @@ fn generate_anytime_refine_block(
                     ctx.set_current_task(#tid);
                     #quantum
                 };
-                cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
+                // A still-live job means a later block runs and stamps `end`;
+                // only the job's terminal quantum pays the clock read.
+                if #job_ident.is_none() {
+                    cumsg_output.metadata.process_time.end = cu29::curuntime::perf_now(clock).into();
+                }
                 #alloc_close
                 if let Err(error) = maybe_error {
                     // No explicit job kill needed: the job was taken and is
