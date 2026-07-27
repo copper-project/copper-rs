@@ -8701,10 +8701,6 @@ fn build_anytime_policy_defs(task_specs: &CuTaskSpecSet) -> Vec<proc_macro2::Tok
                         #consts
                         #target_met
                         #below_floor
-                        #[inline(always)]
-                        fn quality_ratio(q: cu29::cutask_anytime::Quality) -> Option<f32> {
-                            Some(cu29::cutask_anytime::quality_to_f32(q))
-                        }
                     }
                 }
             } else {

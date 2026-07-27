@@ -1005,7 +1005,7 @@ pub cu29_runtime::cutask_anytime::AnytimeStopCause::TargetMet
 impl cu29_runtime::cutask_anytime::AnytimeStopCause
 pub fn cu29_runtime::cutask_anytime::AnytimeStopCause::label(self) -> &'static str
 pub struct cu29_runtime::cutask_anytime::AnytimeJob<Q, P>
-impl<Q: core::marker::Copy + core::cmp::PartialOrd, P: cu29_runtime::cutask_anytime::AnytimePolicy<Q>> cu29_runtime::cutask_anytime::AnytimeJob<Q, P>
+impl<Q: cu29_runtime::cutask_anytime::AnytimeQuality, P: cu29_runtime::cutask_anytime::AnytimePolicy<Q>> cu29_runtime::cutask_anytime::AnytimeJob<Q, P>
 pub fn cu29_runtime::cutask_anytime::AnytimeJob<Q, P>::check(&self, now: cu29_clock::CuTime) -> core::option::Option<cu29_runtime::cutask_anytime::AnytimeStopCause>
 pub fn cu29_runtime::cutask_anytime::AnytimeJob<Q, P>::finish<O: cu29_runtime::cutask::CuMsgPayload>(self, now: cu29_clock::CuTime, cause: cu29_runtime::cutask_anytime::AnytimeStopCause, iterations: u32, output: &mut cu29_runtime::cutask::CuMsg<O>) -> cu29_runtime::cutask_anytime::AnytimeOutcome
 pub fn cu29_runtime::cutask_anytime::AnytimeJob<Q, P>::new(t0: cu29_clock::CuTime, anchor: cu29_clock::CuTime, quality: Q) -> Self
@@ -1024,12 +1024,17 @@ pub const cu29_runtime::cutask_anytime::AnytimePolicy::MAX_AGE: core::option::Op
 pub const cu29_runtime::cutask_anytime::AnytimePolicy::MAX_STALL: core::option::Option<u32>
 pub const cu29_runtime::cutask_anytime::AnytimePolicy::TIME_BUDGET: core::option::Option<cu29_clock::CuDuration>
 pub fn cu29_runtime::cutask_anytime::AnytimePolicy::below_floor(_q: Q) -> bool
-pub fn cu29_runtime::cutask_anytime::AnytimePolicy::quality_ratio(_q: Q) -> core::option::Option<f32>
 pub fn cu29_runtime::cutask_anytime::AnytimePolicy::target_met(_q: Q) -> bool
+pub trait cu29_runtime::cutask_anytime::AnytimeQuality: core::marker::Copy + core::cmp::PartialOrd
+pub fn cu29_runtime::cutask_anytime::AnytimeQuality::ratio(self) -> core::option::Option<f32>
+impl cu29_runtime::cutask_anytime::AnytimeQuality for ()
+pub fn ()::ratio(self) -> core::option::Option<f32>
+impl cu29_runtime::cutask_anytime::AnytimeQuality for cu29_runtime::cutask_anytime::Quality
+pub fn cu29_runtime::cutask_anytime::Quality::ratio(self) -> core::option::Option<f32>
 pub trait cu29_runtime::cutask_anytime::CuAnytimeTask: cu29_runtime::cutask::Freezable + cu29_runtime::reflect::Reflect
 pub type cu29_runtime::cutask_anytime::CuAnytimeTask::Input<'m>: cu29_runtime::cutask::CuMsgPack
 pub type cu29_runtime::cutask_anytime::CuAnytimeTask::Output<'m>: cu29_runtime::cutask::CuMsgPayload
-pub type cu29_runtime::cutask_anytime::CuAnytimeTask::Quality: core::marker::Copy + core::cmp::PartialOrd
+pub type cu29_runtime::cutask_anytime::CuAnytimeTask::Quality: cu29_runtime::cutask_anytime::AnytimeQuality
 pub type cu29_runtime::cutask_anytime::CuAnytimeTask::Resources<'r>
 pub fn cu29_runtime::cutask_anytime::CuAnytimeTask::base<'i, 'o>(&mut self, ctx: &cu29_runtime::context::CuContext, input: &Self::Input, output: &mut Self::Output) -> cu29_traits::CuResult<cu29_runtime::cutask_anytime::AnytimeStatus<Self::Quality>>
 pub fn cu29_runtime::cutask_anytime::CuAnytimeTask::debug_state_type_path() -> &'static str where Self: cu29_runtime::reflect::TypePath + core::marker::Sized

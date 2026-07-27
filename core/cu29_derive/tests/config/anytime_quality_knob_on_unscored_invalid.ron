@@ -1,0 +1,26 @@
+(
+    tasks: [
+        (id: "src", type: "IntSource"),
+        (
+            id: "unscored",
+            type: "UnscoredAnytime",
+            anytime: (max_refines: 2, max_stall: 1),
+        ),
+        (
+            id: "sink",
+            type: "IntSink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "unscored",
+            msg: "u32",
+        ),
+        (
+            src: "unscored",
+            dst: "sink",
+            msg: "u32",
+        ),
+    ],
+)

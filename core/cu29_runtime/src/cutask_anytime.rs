@@ -66,7 +66,7 @@ pub trait CuAnytimeTask: Freezable + Reflect {
     /// score their result, `()` for tasks that cannot. A quality target can only be
     /// configured for tasks whose `Quality` is comparable to it, so a target on a
     /// `()` task is rejected at compile time.
-    type Quality: Copy + PartialOrd;
+    type Quality: AnytimeQuality;
 
     /// Registers the reflected type used as this task's debug-state contract.
     ///
@@ -182,12 +182,37 @@ pub fn quality_to_f32(quality: Quality) -> f32 {
     quality.get::<ratio>()
 }
 
+/// Bound on [`CuAnytimeTask::Quality`]: comparability for the policy checks,
+/// plus how a quality reads back for the status stamp. A custom quality type
+/// needs only `impl AnytimeQuality for MyQuality {}` (unscored in stamps) or
+/// an override of [`ratio`](Self::ratio).
+pub trait AnytimeQuality: Copy + PartialOrd {
+    /// Normalized quality for the status stamp; `None` leaves it out.
+    #[inline(always)]
+    fn ratio(self) -> Option<f32> {
+        None
+    }
+}
+
+impl AnytimeQuality for Quality {
+    #[inline(always)]
+    fn ratio(self) -> Option<f32> {
+        Some(quality_to_f32(self))
+    }
+}
+
+impl AnytimeQuality for () {}
+
 /// A node's `anytime:` RON policy, carried as compile-time constants.
 ///
 /// Codegen emits one zero-sized impl per anytime node; `Q` is the task's
 /// [`CuAnytimeTask::Quality`]. An unset knob is `None` and its check in
 /// [`AnytimeJob::check`] const-folds away. `max_refines` does not appear here:
 /// it is consumed while emitting the execution plan and never read at run time.
+#[diagnostic::on_unimplemented(
+    message = "the anytime policy `{Self}` is pinned to the shared quality scale, but this task's `Quality` is `{Q}`",
+    note = "quality knobs (quality_target/quality_floor/max_stall) require `type Quality = cu29::cutask_anytime::Quality` on the task; remove the knob or score the task's results"
+)]
 pub trait AnytimePolicy<Q> {
     /// Wall-clock refinement window per job, from job start.
     const TIME_BUDGET: Option<CuDuration>;
@@ -207,11 +232,6 @@ pub trait AnytimePolicy<Q> {
     #[inline(always)]
     fn below_floor(_q: Q) -> bool {
         false
-    }
-    /// Normalized quality for the status stamp; `None` when `Quality = ()`.
-    #[inline(always)]
-    fn quality_ratio(_q: Q) -> Option<f32> {
-        None
     }
 }
 
@@ -309,7 +329,7 @@ impl<Q: Debug, P> Debug for AnytimeJob<Q, P> {
     }
 }
 
-impl<Q: Copy + PartialOrd, P: AnytimePolicy<Q>> AnytimeJob<Q, P> {
+impl<Q: AnytimeQuality, P: AnytimePolicy<Q>> AnytimeJob<Q, P> {
     /// Starts a job at `t0` with the quality `base()` reported.
     pub fn new(t0: CuTime, anchor: CuTime, quality: Q) -> Self {
         Self {
@@ -374,13 +394,7 @@ impl<Q: Copy + PartialOrd, P: AnytimePolicy<Q>> AnytimeJob<Q, P> {
         } else {
             output.payload().is_some()
         };
-        stamp(
-            output,
-            iterations,
-            P::quality_ratio(self.best),
-            cause,
-            published,
-        );
+        stamp(output, iterations, self.best.ratio(), cause, published);
         AnytimeOutcome {
             iterations,
             elapsed: now - self.t0,
@@ -550,9 +564,14 @@ mod tests {
             q.partial_cmp(&quality_from_f32(0.3))
                 .is_none_or(core::cmp::Ordering::is_lt)
         }
-        fn quality_ratio(q: Quality) -> Option<f32> {
-            Some(quality_to_f32(q))
-        }
+    }
+
+    /// Mirrors the codegen fallback for a node with no quality knob set.
+    struct NoKnobPolicy;
+    impl<Q: Copy + PartialOrd> AnytimePolicy<Q> for NoKnobPolicy {
+        const TIME_BUDGET: Option<CuDuration> = None;
+        const MAX_AGE: Option<CuDuration> = None;
+        const MAX_STALL: Option<u32> = None;
     }
 
     /// Mirrors a quality-less node (`Quality = ()`, no knobs set).
@@ -658,6 +677,21 @@ mod tests {
         let outcome = job.finish(t0, AnytimeStopCause::MaxRefines, 1, &mut output);
         assert!(outcome.published);
         assert_eq!(output.metadata.status_txt.0.as_str(), "any: 1it q=0.50 max");
+    }
+
+    #[test]
+    fn quality_reaches_stamp_without_quality_knobs() {
+        // Quality comes from the Quality type, not the policy: a task scoring
+        // its results keeps q= in the stamp even under a knob-less policy.
+        let t0 = CuTime::from_millis(1);
+        let mut output: CuMsg<u32> = CuMsg::new(Some(7));
+        let job = AnytimeJob::<Quality, NoKnobPolicy>::new(t0, t0, q(0.75));
+        let outcome = job.finish(t0, AnytimeStopCause::BudgetExhausted, 3, &mut output);
+        assert!(outcome.published);
+        assert_eq!(
+            output.metadata.status_txt.0.as_str(),
+            "any: 3it q=0.75 bdgt"
+        );
     }
 
     #[test]

@@ -1,0 +1,77 @@
+error[E0277]: the anytime policy `__CuAnytimePolicy_unscored` is pinned to the shared quality scale, but this task's `Quality` is `()`
+  --> tests/compile_fail/copper_runtime/anytime_quality_knob_on_unscored_task.rs:81:1
+   |
+81 | #[copper_runtime(config = "config/anytime_quality_knob_on_unscored_invalid.ron")]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unsatisfied trait bound
+   |
+   = note: quality knobs (quality_target/quality_floor/max_stall) require `type Quality = cu29::cutask_anytime::Quality` on the task; remove the knob or score the task's results
+help: the trait `AnytimePolicy<()>` is not implemented for `__CuAnytimePolicy_unscored`
+      but trait `AnytimePolicy<cu29::cu29_units::si::f32::Ratio>` is implemented for it
+  --> tests/compile_fail/copper_runtime/anytime_quality_knob_on_unscored_task.rs:81:1
+   |
+81 | #[copper_runtime(config = "config/anytime_quality_knob_on_unscored_invalid.ron")]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: for that trait implementation, expected `cu29::cu29_units::si::f32::Ratio`, found `()`
+note: required by a bound in `AnytimeJob::<Q, P>::new`
+  --> $WORKSPACE/core/cu29_runtime/src/cutask_anytime.rs
+   |
+   | impl<Q: AnytimeQuality, P: AnytimePolicy<Q>> AnytimeJob<Q, P> {
+   |                            ^^^^^^^^^^^^^^^^ required by this bound in `AnytimeJob::<Q, P>::new`
+   |     /// Starts a job at `t0` with the quality `base()` reported.
+   |     pub fn new(t0: CuTime, anchor: CuTime, quality: Q) -> Self {
+   |            --- required by a bound in this associated function
+   = note: this error originates in the attribute macro `copper_runtime` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0599]: the method `finish` exists for struct `AnytimeJob<(), __CuAnytimePolicy_unscored>`, but its trait bounds were not satisfied
+  --> tests/compile_fail/copper_runtime/anytime_quality_knob_on_unscored_task.rs:81:1
+   |
+81 | #[copper_runtime(config = "config/anytime_quality_knob_on_unscored_invalid.ron")]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   | |
+   | method cannot be called on `AnytimeJob<(), __CuAnytimePolicy_unscored>` due to unsatisfied trait bounds
+   | doesn't satisfy `__CuAnytimePolicy_unscored: AnytimePolicy<()>`
+   |
+   = note: the following trait bounds were not satisfied:
+           `__CuAnytimePolicy_unscored: AnytimePolicy<()>`
+note: the trait `AnytimePolicy` must be implemented
+  --> $WORKSPACE/core/cu29_runtime/src/cutask_anytime.rs
+   |
+   | pub trait AnytimePolicy<Q> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: this error originates in the attribute macro `copper_runtime` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0599]: the method `check` exists for struct `AnytimeJob<(), __CuAnytimePolicy_unscored>`, but its trait bounds were not satisfied
+  --> tests/compile_fail/copper_runtime/anytime_quality_knob_on_unscored_task.rs:81:1
+   |
+81 | #[copper_runtime(config = "config/anytime_quality_knob_on_unscored_invalid.ron")]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   | |
+   | method cannot be called on `AnytimeJob<(), __CuAnytimePolicy_unscored>` due to unsatisfied trait bounds
+   | doesn't satisfy `__CuAnytimePolicy_unscored: AnytimePolicy<()>`
+   |
+   = note: the following trait bounds were not satisfied:
+           `__CuAnytimePolicy_unscored: AnytimePolicy<()>`
+note: the trait `AnytimePolicy` must be implemented
+  --> $WORKSPACE/core/cu29_runtime/src/cutask_anytime.rs
+   |
+   | pub trait AnytimePolicy<Q> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: this error originates in the attribute macro `copper_runtime` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0599]: the method `record` exists for struct `AnytimeJob<(), __CuAnytimePolicy_unscored>`, but its trait bounds were not satisfied
+  --> tests/compile_fail/copper_runtime/anytime_quality_knob_on_unscored_task.rs:81:1
+   |
+81 | #[copper_runtime(config = "config/anytime_quality_knob_on_unscored_invalid.ron")]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   | |
+   | method cannot be called on `AnytimeJob<(), __CuAnytimePolicy_unscored>` due to unsatisfied trait bounds
+   | doesn't satisfy `__CuAnytimePolicy_unscored: AnytimePolicy<()>`
+   |
+   = note: the following trait bounds were not satisfied:
+           `__CuAnytimePolicy_unscored: AnytimePolicy<()>`
+note: the trait `AnytimePolicy` must be implemented
+  --> $WORKSPACE/core/cu29_runtime/src/cutask_anytime.rs
+   |
+   | pub trait AnytimePolicy<Q> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: this error originates in the attribute macro `copper_runtime` (in Nightly builds, run with -Z macro-backtrace for more info)
