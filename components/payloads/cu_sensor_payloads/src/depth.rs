@@ -157,6 +157,29 @@ where
         self.get(x, y).map(|depth| depth.get::<meter>())
     }
 
+    /// Accesses all samples under a single buffer lock.
+    ///
+    /// The slice covers exactly [`CuDepthMapFormat::required_elements`], including
+    /// any row padding described by [`CuDepthMapFormat::stride`].
+    pub fn with_samples<R>(&self, f: impl FnOnce(&[Length], CuDepthMapFormat) -> R) -> R {
+        let format = self.format;
+        self.buffer_handle
+            .with_inner(|inner| f(&inner[..format.required_elements()], format))
+    }
+
+    /// Mutably accesses all samples under a single buffer lock.
+    ///
+    /// The slice covers exactly [`CuDepthMapFormat::required_elements`], including
+    /// any row padding described by [`CuDepthMapFormat::stride`].
+    pub fn with_samples_mut<R>(
+        &mut self,
+        f: impl FnOnce(&mut [Length], CuDepthMapFormat) -> R,
+    ) -> R {
+        let format = self.format;
+        self.buffer_handle
+            .with_inner_mut(|inner| f(&mut inner[..format.required_elements()], format))
+    }
+
     pub fn payload_should_log(&self) -> bool {
         self.buffer_handle.payload_should_log()
     }
@@ -201,6 +224,40 @@ mod tests {
         assert!(depth.get_meters(2, 0).expect("in bounds").is_nan());
         assert_eq!(depth.get(3, 0), None);
         assert_eq!(depth.get(0, 2), None);
+    }
+
+    #[test]
+    fn sample_slice_covers_the_declared_layout_under_one_access() {
+        let depth = CuDepthMap::new(
+            FORMAT,
+            CuHandle::new_detached(
+                [1.0, 1.5, 2.0, 99.0, 2.5, 3.0, 3.5, 99.0, 100.0]
+                    .map(Length::new::<meter>)
+                    .to_vec(),
+            ),
+        );
+
+        depth.with_samples(|samples, format| {
+            assert_eq!(format, FORMAT);
+            assert_eq!(samples.len(), FORMAT.required_elements());
+            assert_eq!(samples[format.stride as usize], Length::new::<meter>(2.5));
+            assert_eq!(samples[3], Length::new::<meter>(99.0));
+        });
+    }
+
+    #[test]
+    fn sample_slice_can_be_mutated_under_one_access() {
+        let mut depth = CuDepthMap::new(
+            FORMAT,
+            CuHandle::new_detached(vec![Length::new::<meter>(0.0); FORMAT.required_elements()]),
+        );
+
+        depth.with_samples_mut(|samples, format| {
+            let index = format.stride as usize + 1;
+            samples[index] = Length::new::<meter>(4.25);
+        });
+
+        assert_eq!(depth.get_meters(1, 1), Some(4.25));
     }
 
     #[test]
