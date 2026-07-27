@@ -669,7 +669,7 @@ pub enum BackgroundConfig {
 /// - **Utility** — whether the result is *worth having* at all: `max_age_ms`
 ///   (worthless because too old) and `quality_floor` (worthless because too
 ///   crude).
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct AnytimeConfig {
     /// Wall-clock window for one job in milliseconds, measured from the start of
     /// the base computation and checked *between* refinement quanta.
@@ -932,6 +932,12 @@ impl Node {
     #[allow(dead_code)]
     pub fn anytime(&self) -> Option<&AnytimeConfig> {
         self.anytime.as_ref()
+    }
+
+    /// Sets the anytime refinement policy for this node.
+    #[allow(dead_code)]
+    pub fn set_anytime(&mut self, anytime: Option<AnytimeConfig>) {
+        self.anytime = anytime;
     }
 
     #[allow(dead_code)]
@@ -3008,7 +3014,11 @@ impl CuConfig {
     /// 1. node-local bounds and ranges (see [`AnytimeConfig`]);
     /// 2. `anytime:` is only supported on regular tasks — refinement needs both
     ///    an input and an output;
-    /// 3. fit the period: a *foreground* anytime task in a rate-limited config
+    /// 3. a *foreground* anytime task needs `max_refines`: the execution plan
+    ///    is static (the node compiles to a base step plus `max_refines` refine
+    ///    steps, see `curuntime::expand_anytime_steps`), so the refine count
+    ///    must be known at compile time;
+    /// 4. fit the period: a *foreground* anytime task in a rate-limited config
     ///    must set a time bound (`time_budget_ms` or `max_age_ms`), and the
     ///    worst-case window — `min` of the ones set — must be smaller than the
     ///    loop period. Background nodes and configs without a rate target skip
@@ -3050,6 +3060,17 @@ fn validate_anytime_graph(graph: &CuGraph, rate_target_hz: Option<u64>) -> CuRes
         if node.is_background() {
             continue;
         }
+
+        // Foreground placement compiles to a static plan: the node's step is
+        // followed by exactly max_refines refine steps, so the count must be
+        // known here — a time-only hard bound cannot produce a static plan.
+        if anytime.max_refines.is_none() {
+            return Err(CuError::from(format!(
+                "Task '{}' is a foreground anytime task and needs anytime.max_refines: the execution plan is static, so the refine step count must be known at compile time. time_budget_ms/max_age_ms remain early-stop conditions within those quanta.",
+                node.id
+            )));
+        }
+
         let Some(rate_target_hz) = rate_target_hz else {
             continue;
         };
@@ -5713,8 +5734,13 @@ mod tests {
 
     #[test]
     fn test_anytime_typical_perception_config_is_accepted() {
-        // The doc's typical two-field config: max_age_ms is the hard bound.
-        let txt = anytime_config_txt("max_age_ms: 100.0, quality_target: 0.9", "", "");
+        // The doc's typical perception config; foreground placement compiles to
+        // a static plan, so max_refines is part of the minimum foreground set.
+        let txt = anytime_config_txt(
+            "max_age_ms: 100.0, quality_target: 0.9, max_refines: 22",
+            "",
+            "",
+        );
         let config = read_configuration_str(txt, None).unwrap();
         let graph = config.get_graph(None).unwrap();
         let node = graph
@@ -5723,7 +5749,20 @@ mod tests {
         let anytime = node.anytime().unwrap();
         assert_eq!(anytime.max_age_ms, Some(100.0));
         assert_eq!(anytime.quality_target, Some(0.9));
+        assert_eq!(anytime.max_refines, Some(22));
         assert_eq!(anytime.time_budget_ms, None);
+    }
+
+    #[test]
+    fn test_anytime_foreground_needs_max_refines() {
+        // A time-only hard bound cannot produce a static plan in the foreground.
+        expect_anytime_error(
+            anytime_config_txt("max_age_ms: 100.0, quality_target: 0.9", "", ""),
+            "needs anytime.max_refines",
+        );
+        // Background placement has no static refine schedule to emit.
+        let background = anytime_config_txt("max_age_ms: 100.0", ", background: true", "");
+        read_configuration_str(background, None).unwrap();
     }
 
     #[test]
@@ -5796,7 +5835,11 @@ mod tests {
     #[test]
     fn test_anytime_quality_ranges() {
         // target is (0.0, 1.0]: exactly 1.0 is fine, 0.0 is not.
-        let ok = anytime_config_txt("time_budget_ms: 8.0, quality_target: 1.0", "", "");
+        let ok = anytime_config_txt(
+            "time_budget_ms: 8.0, quality_target: 1.0, max_refines: 4",
+            "",
+            "",
+        );
         read_configuration_str(ok, None).unwrap();
         expect_anytime_error(
             anytime_config_txt("time_budget_ms: 8.0, quality_target: 0.0", "", ""),
@@ -5854,7 +5897,7 @@ mod tests {
     fn test_anytime_foreground_window_must_fit_period() {
         expect_anytime_error(
             anytime_config_txt(
-                "time_budget_ms: 12.0",
+                "time_budget_ms: 12.0, max_refines: 8",
                 "",
                 "runtime: (rate_target_hz: 100),",
             ),
@@ -5862,7 +5905,7 @@ mod tests {
         );
         // The worst-case window is min(time_budget_ms, max_age_ms).
         let ok = anytime_config_txt(
-            "time_budget_ms: 20.0, max_age_ms: 5.0",
+            "time_budget_ms: 20.0, max_age_ms: 5.0, max_refines: 8",
             "",
             "runtime: (rate_target_hz: 100),",
         );

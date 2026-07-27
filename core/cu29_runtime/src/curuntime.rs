@@ -1608,6 +1608,25 @@ pub struct CuInputMsg {
     pub connection_order: usize,
 }
 
+/// Which part of its node's job one plan step runs.
+///
+/// This is deliberately not folded into [`CuTaskType`]: that enum encodes the
+/// graph role (Source/Regular/Sink) and drives call-shape decisions everywhere,
+/// while the phase is orthogonal — an anytime node stays `Regular` and appears
+/// as one base step plus `max_refines` refine steps (see
+/// [`expand_anytime_steps`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CuStepPhase {
+    /// The whole `process()` of a non-anytime task.
+    #[default]
+    Whole,
+    /// The dead-on-arrival age check plus `base()`, at the node's topological
+    /// position.
+    AnytimeBase,
+    /// Exactly one `refine()` quantum.
+    AnytimeRefine,
+}
+
 /// This structure represents a step in the execution plan.
 pub struct CuExecutionStep {
     /// NodeId: node id of the task to execute
@@ -1616,11 +1635,16 @@ pub struct CuExecutionStep {
     pub node: Node,
     /// CuTaskType: type of the task
     pub task_type: CuTaskType,
+    /// Which part of the node's job this step runs (anytime nodes span several
+    /// steps; everything else is a single `Whole` step).
+    pub phase: CuStepPhase,
 
     /// the indices in the copper list of the input messages and their types
+    /// (empty for anytime refine steps: refinement reads no input)
     pub input_msg_indices_types: Vec<CuInputMsg>,
 
     /// the index in the copper list of the output message and its type
+    /// (an anytime node's refine steps carry the same pack as its base step)
     pub output_msg_pack: Option<CuOutputPack>,
 }
 
@@ -1629,6 +1653,7 @@ impl Debug for CuExecutionStep {
         f.write_str(format!("   CuExecutionStep: Node Id: {}\n", self.node_id).as_str())?;
         f.write_str(format!("                  task_type: {:?}\n", self.node.get_type()).as_str())?;
         f.write_str(format!("                       task: {:?}\n", self.task_type).as_str())?;
+        f.write_str(format!("                      phase: {:?}\n", self.phase).as_str())?;
         f.write_str(
             format!(
                 "              input_msg_types: {:?}\n",
@@ -1883,6 +1908,7 @@ fn plan_tasks_tree_branch(
                 node_id: id,
                 node: node_ref.clone(),
                 task_type,
+                phase: CuStepPhase::default(),
                 input_msg_indices_types,
                 output_msg_pack,
             };
@@ -1980,6 +2006,112 @@ pub fn compute_runtime_plan(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
         steps: plan,
         loop_count: None,
     })
+}
+
+/// Expands every foreground anytime node of an already-computed plan into its
+/// chunked steps.
+///
+/// The node's single `Whole` step becomes an [`CuStepPhase::AnytimeBase`] step
+/// at its topological position, and `max_refines` [`CuStepPhase::AnytimeRefine`]
+/// steps (one `refine()` quantum each) are woven between it and the earliest
+/// step consuming the node's output: one immediately after the base step, one
+/// after each subsequent independent step, and the remainder contiguously
+/// before the consumer. If `max_refines` is smaller than the gap, later gap
+/// steps get no quantum between them; if the node has no consumer in this
+/// plan, every refine step sits right after the base step.
+///
+/// The refine count must be known here — the emission count *is* the iteration
+/// bound — which is why `max_refines` is mandatory for foreground anytime
+/// nodes. How many quanta run and where they sit between other steps is
+/// entirely this compile-time scheduling decision; the generated code carries
+/// no counter.
+pub fn expand_anytime_steps(plan: &mut CuExecutionLoop) -> CuResult<()> {
+    loop {
+        // One node at a time: expanded steps get a non-`Whole` phase, so the
+        // scan converges even though insertions shift positions.
+        let Some(base_pos) = plan.steps.iter().position(|unit| {
+            matches!(
+                unit,
+                CuExecutionUnit::Step(step) if step.phase == CuStepPhase::Whole
+                    && step.node.anytime().is_some()
+                    && !step.node.is_background()
+            )
+        }) else {
+            return Ok(());
+        };
+
+        let CuExecutionUnit::Step(base_step) = &mut plan.steps[base_pos] else {
+            unreachable!("position() only matches steps");
+        };
+        let anytime = base_step
+            .node
+            .anytime()
+            .expect("position() only matches anytime nodes");
+        let Some(max_refines) = anytime.max_refines else {
+            return Err(CuError::from(format!(
+                "Task '{}': a foreground anytime task needs anytime.max_refines: the execution plan is static, so the refine step count must be known at compile time. time_budget_ms/max_age_ms remain early-stop conditions within those quanta.",
+                base_step.node.get_id()
+            )));
+        };
+        base_step.phase = CuStepPhase::AnytimeBase;
+        let output_pack = base_step.output_msg_pack.clone().ok_or_else(|| {
+            CuError::from(format!(
+                "Task '{}': an anytime task needs an output to refine.",
+                base_step.node.get_id()
+            ))
+        })?;
+        let output_index = output_pack.culist_index;
+        let node_id = base_step.node_id;
+        let node = base_step.node.clone();
+        let task_type = base_step.task_type;
+
+        let refine_step = || {
+            CuExecutionUnit::Step(Box::new(CuExecutionStep {
+                node_id,
+                node: node.clone(),
+                task_type,
+                phase: CuStepPhase::AnytimeRefine,
+                input_msg_indices_types: Vec::new(),
+                output_msg_pack: Some(output_pack.clone()),
+            }))
+        };
+
+        // Earliest step consuming the node's output; refine steps never match
+        // (their inputs are empty), so already-expanded nodes stay inert here.
+        let consumer_pos = plan.steps[base_pos + 1..]
+            .iter()
+            .position(|unit| {
+                matches!(
+                    unit,
+                    CuExecutionUnit::Step(step) if step
+                        .input_msg_indices_types
+                        .iter()
+                        .any(|input| input.culist_index == output_index)
+                )
+            })
+            .map(|offset| base_pos + 1 + offset)
+            .unwrap_or(base_pos + 1);
+
+        let mut tail = plan.steps.split_off(base_pos + 1);
+        let suffix = tail.split_off(consumer_pos - base_pos - 1);
+        let gap = tail;
+
+        // max_refines >= 1 is enforced by AnytimeConfig::validate.
+        let mut remaining = max_refines.max(1);
+        remaining -= 1;
+        plan.steps.push(refine_step());
+        for gap_unit in gap {
+            plan.steps.push(gap_unit);
+            if remaining > 0 {
+                remaining -= 1;
+                plan.steps.push(refine_step());
+            }
+        }
+        for _ in 0..remaining {
+            plan.steps.push(refine_step());
+        }
+        plan.steps.extend(suffix);
+    }
 }
 
 //tests
@@ -2969,5 +3101,223 @@ mod tests {
 
         assert_eq!(broadcast_step.input_msg_indices_types[0].msg_type, "i32");
         assert_eq!(broadcast_step.input_msg_indices_types[1].msg_type, "f32");
+    }
+
+    // --- anytime plan expansion ---
+
+    use crate::config::AnytimeConfig;
+
+    fn anytime_node(id: &str, max_refines: Option<u32>) -> Node {
+        let mut node = Node::new(id, "tasks::AnytimeTask");
+        node.set_anytime(Some(AnytimeConfig {
+            max_refines,
+            ..Default::default()
+        }));
+        node
+    }
+
+    /// Renders the plan as `(node_id, phase)` pairs for compact assertions.
+    fn plan_shape(plan: &CuExecutionLoop) -> Vec<(NodeId, CuStepPhase)> {
+        plan.steps
+            .iter()
+            .map(|unit| match unit {
+                CuExecutionUnit::Step(step) => (step.node_id, step.phase),
+                CuExecutionUnit::Loop(_) => panic!("no loops expected"),
+            })
+            .collect()
+    }
+
+    /// A manual step, bypassing the planner heuristic so gap placement is
+    /// deterministic: `inputs`/`output` are copperlist indices.
+    fn manual_step(node: Node, node_id: NodeId, inputs: &[u32], output: u32) -> CuExecutionUnit {
+        CuExecutionUnit::Step(Box::new(CuExecutionStep {
+            node_id,
+            node,
+            task_type: CuTaskType::Regular,
+            phase: CuStepPhase::default(),
+            input_msg_indices_types: inputs
+                .iter()
+                .map(|&culist_index| CuInputMsg {
+                    culist_index,
+                    msg_type: "msg::A".to_string(),
+                    src_port: 0,
+                    edge_id: 0,
+                    connection_order: 0,
+                })
+                .collect(),
+            output_msg_pack: Some(CuOutputPack {
+                culist_index: output,
+                msg_types: vec!["msg::A".to_string()],
+            }),
+        }))
+    }
+
+    #[test]
+    fn test_anytime_expansion_contiguous_without_gap() {
+        // src -> any -> sink through the real planner: no independent steps
+        // between the node and its consumer, so every refine sits before it.
+        let mut config = CuConfig::default();
+        let graph = config.get_graph_mut(None).unwrap();
+        let src_id = graph.add_node(Node::new("src", "tasks::Src")).unwrap();
+        let any_id = graph.add_node(anytime_node("any", Some(3))).unwrap();
+        let sink_id = graph.add_node(Node::new("sink", "tasks::Sink")).unwrap();
+        graph.connect(src_id, any_id, "msg::A").unwrap();
+        graph.connect(any_id, sink_id, "msg::B").unwrap();
+
+        let mut plan = compute_runtime_plan(graph).unwrap();
+        expand_anytime_steps(&mut plan).unwrap();
+
+        assert_eq!(
+            plan_shape(&plan),
+            vec![
+                (src_id, CuStepPhase::Whole),
+                (any_id, CuStepPhase::AnytimeBase),
+                (any_id, CuStepPhase::AnytimeRefine),
+                (any_id, CuStepPhase::AnytimeRefine),
+                (any_id, CuStepPhase::AnytimeRefine),
+                (sink_id, CuStepPhase::Whole),
+            ]
+        );
+
+        // Refine steps read no input and write the base step's output slot.
+        let (base_pack, refine_steps): (Option<CuOutputPack>, Vec<&CuExecutionStep>) = {
+            let mut base_pack = None;
+            let mut refines = Vec::new();
+            for unit in &plan.steps {
+                if let CuExecutionUnit::Step(step) = unit {
+                    match step.phase {
+                        CuStepPhase::AnytimeBase => base_pack = step.output_msg_pack.clone(),
+                        CuStepPhase::AnytimeRefine => refines.push(step.as_ref()),
+                        CuStepPhase::Whole => {}
+                    }
+                }
+            }
+            (base_pack, refines)
+        };
+        let base_pack = base_pack.unwrap();
+        for refine in refine_steps {
+            assert!(refine.input_msg_indices_types.is_empty());
+            let pack = refine.output_msg_pack.as_ref().unwrap();
+            assert_eq!(pack.culist_index, base_pack.culist_index);
+        }
+    }
+
+    #[test]
+    fn test_anytime_expansion_interleaves_with_gap_steps() {
+        // Manual plan: [any(base at 1), gapA, gapB, consumer], R = 4.
+        // Expected: base, r, gapA, r, gapB, r, r, consumer.
+        let mut plan = CuExecutionLoop {
+            steps: vec![
+                manual_step(anytime_node("any", Some(4)), 0, &[], 0),
+                manual_step(Node::new("gap_a", "t"), 1, &[], 1),
+                manual_step(Node::new("gap_b", "t"), 2, &[], 2),
+                manual_step(Node::new("consumer", "t"), 3, &[0], 3),
+            ],
+            loop_count: None,
+        };
+        expand_anytime_steps(&mut plan).unwrap();
+        assert_eq!(
+            plan_shape(&plan),
+            vec![
+                (0, CuStepPhase::AnytimeBase),
+                (0, CuStepPhase::AnytimeRefine),
+                (1, CuStepPhase::Whole),
+                (0, CuStepPhase::AnytimeRefine),
+                (2, CuStepPhase::Whole),
+                (0, CuStepPhase::AnytimeRefine),
+                (0, CuStepPhase::AnytimeRefine),
+                (3, CuStepPhase::Whole),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_anytime_expansion_fewer_refines_than_gaps() {
+        // R = 2 with two gap steps: later gap steps get no quantum after them.
+        let mut plan = CuExecutionLoop {
+            steps: vec![
+                manual_step(anytime_node("any", Some(2)), 0, &[], 0),
+                manual_step(Node::new("gap_a", "t"), 1, &[], 1),
+                manual_step(Node::new("gap_b", "t"), 2, &[], 2),
+                manual_step(Node::new("consumer", "t"), 3, &[0], 3),
+            ],
+            loop_count: None,
+        };
+        expand_anytime_steps(&mut plan).unwrap();
+        assert_eq!(
+            plan_shape(&plan),
+            vec![
+                (0, CuStepPhase::AnytimeBase),
+                (0, CuStepPhase::AnytimeRefine),
+                (1, CuStepPhase::Whole),
+                (0, CuStepPhase::AnytimeRefine),
+                (2, CuStepPhase::Whole),
+                (3, CuStepPhase::Whole),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_anytime_expansion_without_consumer() {
+        // No step consumes the node's output: refines sit right after the base.
+        let mut plan = CuExecutionLoop {
+            steps: vec![
+                manual_step(anytime_node("any", Some(2)), 0, &[], 0),
+                manual_step(Node::new("other", "t"), 1, &[], 1),
+            ],
+            loop_count: None,
+        };
+        expand_anytime_steps(&mut plan).unwrap();
+        assert_eq!(
+            plan_shape(&plan),
+            vec![
+                (0, CuStepPhase::AnytimeBase),
+                (0, CuStepPhase::AnytimeRefine),
+                (0, CuStepPhase::AnytimeRefine),
+                (1, CuStepPhase::Whole),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_anytime_expansion_two_nodes_interleave() {
+        // Two anytime nodes: each expands independently; the second node's base
+        // and quanta land in the first node's gap and vice versa.
+        let mut plan = CuExecutionLoop {
+            steps: vec![
+                manual_step(anytime_node("any_a", Some(2)), 0, &[], 0),
+                manual_step(anytime_node("any_b", Some(2)), 1, &[], 1),
+                manual_step(Node::new("consumer", "t"), 2, &[0, 1], 2),
+            ],
+            loop_count: None,
+        };
+        expand_anytime_steps(&mut plan).unwrap();
+        // A expands first: base_a, r_a, [b], r_a, consumer. B then expands in
+        // place, treating A's second quantum as its gap step.
+        assert_eq!(
+            plan_shape(&plan),
+            vec![
+                (0, CuStepPhase::AnytimeBase),
+                (0, CuStepPhase::AnytimeRefine),
+                (1, CuStepPhase::AnytimeBase),
+                (1, CuStepPhase::AnytimeRefine),
+                (0, CuStepPhase::AnytimeRefine),
+                (1, CuStepPhase::AnytimeRefine),
+                (2, CuStepPhase::Whole),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_anytime_expansion_requires_max_refines() {
+        let mut plan = CuExecutionLoop {
+            steps: vec![
+                manual_step(anytime_node("any", None), 0, &[], 0),
+                manual_step(Node::new("consumer", "t"), 1, &[0], 1),
+            ],
+            loop_count: None,
+        };
+        let err = expand_anytime_steps(&mut plan).unwrap_err();
+        assert!(err.to_string().contains("needs anytime.max_refines"));
     }
 }
