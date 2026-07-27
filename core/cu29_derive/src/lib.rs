@@ -8750,16 +8750,25 @@ fn build_anytime_job_locals(task_specs: &CuTaskSpecSet) -> Vec<proc_macro2::Toke
         .collect()
 }
 
-/// The output-slot cast helper shared by an anytime node's base and refine
-/// blocks: same shape as the regular task one, with the `CuAnytimeTask` bound.
-/// Each emitted block is its own scope, so the fixed names never collide.
-fn anytime_slot_cast_tokens(task_hint: &str) -> (proc_macro2::TokenStream, Ident) {
+/// The output-slot cast trait/fn pair shared by the source, regular, and
+/// anytime step emitters: `kind_label`/`fn_prefix` keep each emitter's
+/// diagnostic idents, `task_trait` is the trait whose `Output` the slot must
+/// match. Each emitted block is its own scope, so the fixed names never
+/// collide.
+fn output_slot_cast_tokens(
+    task_hint: &str,
+    kind_label: &str,
+    fn_prefix: &str,
+    task_trait: &proc_macro2::TokenStream,
+) -> (proc_macro2::TokenStream, Ident) {
     let trait_ident = format_ident!(
-        "__CuOutputSlotMustMatchTaskOutput__AnytimeTask_{}__Add_dst___nc___connections_for_unused_outputs",
+        "__CuOutputSlotMustMatchTaskOutput__{}_{}__Add_dst___nc___connections_for_unused_outputs",
+        kind_label,
         task_hint
     );
     let fn_ident = format_ident!(
-        "__cu_anytime_output_slot_or_add_dst___nc___for_unused_outputs__task_{}",
+        "__cu_{}_output_slot_or_add_dst___nc___for_unused_outputs__task_{}",
+        fn_prefix,
         task_hint
     );
     let defs = quote! {
@@ -8778,7 +8787,7 @@ fn anytime_slot_cast_tokens(task_hint: &str) -> (proc_macro2::TokenStream, Ident
             slot: &'a mut Slot,
         ) -> &'a mut Task::Output<'static>
         where
-            Task: cu29::cutask_anytime::CuAnytimeTask,
+            Task: #task_trait,
             Slot: #trait_ident<Task::Output<'static>>,
         {
             <Slot as #trait_ident<Task::Output<'static>>>::__cu_cast_output_slot(slot)
@@ -8787,14 +8796,23 @@ fn anytime_slot_cast_tokens(task_hint: &str) -> (proc_macro2::TokenStream, Ident
     (defs, fn_ident)
 }
 
-/// The process-error monitoring match shared by an anytime node's blocks.
-/// Identical to the regular task one; the job local needs no explicit kill
-/// here because a job is only (re)stored on an `Ok` status — an erroring
-/// block leaves it `None`/taken, so later quanta no-op.
-fn anytime_monitoring_action_tokens(
+/// Anytime flavor of [`output_slot_cast_tokens`].
+fn anytime_slot_cast_tokens(task_hint: &str) -> (proc_macro2::TokenStream, Ident) {
+    output_slot_cast_tokens(
+        task_hint,
+        "AnytimeTask",
+        "anytime",
+        &quote! { cu29::cutask_anytime::CuAnytimeTask },
+    )
+}
+
+/// The process-error monitoring match shared by every task step emitter
+/// (source, sink, regular, and anytime base/refine blocks).
+fn process_monitoring_action_tokens(
     tid: usize,
     mission_mod: &Ident,
     output_culist_index: &syn::Index,
+    output_clear_payload: &proc_macro2::TokenStream,
     wrap_process_step: bool,
 ) -> proc_macro2::TokenStream {
     let abort_process_step = abort_process_step_tokens(wrap_process_step);
@@ -8811,7 +8829,7 @@ fn anytime_monitoring_action_tokens(
                 debug!(ctx, "Process: IGNORE decision from monitoring. Component '{}' errored out \
                         during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)));
                 let cumsg_output = &mut msgs.#output_culist_index;
-                cumsg_output.clear_payload();
+                #output_clear_payload
             }
             Decision::Shutdown => {
                 debug!(ctx, "Process: SHUTDOWN decision from monitoring. Component '{}' errored out \
@@ -8820,6 +8838,25 @@ fn anytime_monitoring_action_tokens(
             }
         }
     }
+}
+
+/// Anytime flavor of [`process_monitoring_action_tokens`]: single output
+/// slot, and the job local needs no explicit kill — a job is only (re)stored
+/// on an `Ok` status, so an erroring block leaves it `None`/taken and later
+/// quanta no-op.
+fn anytime_monitoring_action_tokens(
+    tid: usize,
+    mission_mod: &Ident,
+    output_culist_index: &syn::Index,
+    wrap_process_step: bool,
+) -> proc_macro2::TokenStream {
+    process_monitoring_action_tokens(
+        tid,
+        mission_mod,
+        output_culist_index,
+        &quote! { cumsg_output.clear_payload(); },
+        wrap_process_step,
+    )
 }
 
 /// Emits the `[base <node>]` block of a foreground anytime node: the standard
@@ -9246,7 +9283,6 @@ fn generate_task_execution_tokens(
         setup: task_setup,
         instance: task_instance,
     } = task_tokens;
-    let abort_process_step = abort_process_step_tokens(wrap_process_step);
     let comment_str = format!(
         "DEBUG ->> {} ({:?}) Id:{} I:{:?} O:{:?}",
         step.node.get_id(),
@@ -9262,22 +9298,6 @@ fn generate_task_execution_tokens(
     let task_enum_name = config_id_to_enum(&task_specs.ids[tid]);
     let enum_name = Ident::new(&task_enum_name, Span::call_site());
     let task_hint = config_id_to_struct_member(&task_specs.ids[tid]);
-    let source_slot_match_trait_ident = format_ident!(
-        "__CuOutputSlotMustMatchTaskOutput__Task_{}__Add_dst___nc___connections_for_unused_outputs",
-        task_hint
-    );
-    let source_slot_match_fn_ident = format_ident!(
-        "__cu_source_output_slot_or_add_dst___nc___for_unused_outputs__task_{}",
-        task_hint
-    );
-    let regular_slot_match_trait_ident = format_ident!(
-        "__CuOutputSlotMustMatchTaskOutput__Task_{}__Add_dst___nc___connections_for_unused_outputs",
-        task_hint
-    );
-    let regular_slot_match_fn_ident = format_ident!(
-        "__cu_task_output_slot_or_add_dst___nc___for_unused_outputs__task_{}",
-        task_hint
-    );
     let rt_guard = rtsan_guard_tokens();
     let run_in_sim_flag = task_specs.run_in_sim_flags[tid];
     let (parallel_task_preprocess, parallel_task_postprocess) = parallel_task_lifecycle_tokens(
@@ -9342,28 +9362,13 @@ fn generate_task_execution_tokens(
 
     match step.task_type {
         CuTaskType::Source => {
-            let monitoring_action = quote! {
-                debug!(ctx, "Component {}: Error during process: {}", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)), &error);
-                let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#tid), CuComponentState::Process, &error);
-                match decision {
-                    Decision::Abort => {
-                        debug!(ctx, "Process: ABORT decision from monitoring. Component '{}' errored out \
-                                during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)), clid);
-                        #abort_process_step
-                    }
-                    Decision::Ignore => {
-                        debug!(ctx, "Process: IGNORE decision from monitoring. Component '{}' errored out \
-                                during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)));
-                        let cumsg_output = &mut msgs.#output_culist_index;
-                        #output_clear_payload
-                    }
-                    Decision::Shutdown => {
-                        debug!(ctx, "Process: SHUTDOWN decision from monitoring. Component '{}' errored out \
-                                during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)));
-                        return Err(CuError::new_with_cause("Component errored out during process.", error));
-                    }
-                }
-            };
+            let monitoring_action = process_monitoring_action_tokens(
+                tid,
+                mission_mod,
+                &output_culist_index,
+                &output_clear_payload,
+                wrap_process_step,
+            );
 
             let call_sim_callback = if sim_mode {
                 quote! {
@@ -9399,27 +9404,14 @@ fn generate_task_execution_tokens(
                 quote! { #tid },
                 quote! { CuComponentState::Process },
             );
+            let (slot_cast_defs, source_slot_match_fn_ident) = output_slot_cast_tokens(
+                &task_hint,
+                "Task",
+                "source",
+                &quote! { cu29::cutask::CuSrcTask },
+            );
             let source_process_tokens = quote! {
-                #[allow(non_camel_case_types)]
-                trait #source_slot_match_trait_ident<Expected> {
-                    fn __cu_cast_output_slot(slot: &mut Self) -> &mut Expected;
-                }
-                impl<T> #source_slot_match_trait_ident<T> for T {
-                    fn __cu_cast_output_slot(slot: &mut Self) -> &mut T {
-                        slot
-                    }
-                }
-
-                fn #source_slot_match_fn_ident<'a, Task, Slot>(
-                    _task: &Task,
-                    slot: &'a mut Slot,
-                ) -> &'a mut Task::Output<'static>
-                where
-                    Task: cu29::cutask::CuSrcTask,
-                    Slot: #source_slot_match_trait_ident<Task::Output<'static>>,
-                {
-                    <Slot as #source_slot_match_trait_ident<Task::Output<'static>>>::__cu_cast_output_slot(slot)
-                }
+                #slot_cast_defs
 
                 #output_start_time
                 #alloc_open
@@ -9478,28 +9470,13 @@ fn generate_task_execution_tokens(
                 task_input_layouts,
             );
 
-            let monitoring_action = quote! {
-                debug!(ctx, "Component {}: Error during process: {}", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)), &error);
-                let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#tid), CuComponentState::Process, &error);
-                match decision {
-                    Decision::Abort => {
-                        debug!(ctx, "Process: ABORT decision from monitoring. Component '{}' errored out \
-                                during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)), clid);
-                        #abort_process_step
-                    }
-                    Decision::Ignore => {
-                        debug!(ctx, "Process: IGNORE decision from monitoring. Component '{}' errored out \
-                                during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)));
-                        let cumsg_output = &mut msgs.#output_culist_index;
-                        #output_clear_payload
-                    }
-                    Decision::Shutdown => {
-                        debug!(ctx, "Process: SHUTDOWN decision from monitoring. Component '{}' errored out \
-                                during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)));
-                        return Err(CuError::new_with_cause("Component errored out during process.", error));
-                    }
-                }
-            };
+            let monitoring_action = process_monitoring_action_tokens(
+                tid,
+                mission_mod,
+                &output_culist_index,
+                &output_clear_payload,
+                wrap_process_step,
+            );
 
             let call_sim_callback = if sim_mode {
                 quote! {
@@ -9579,28 +9556,13 @@ fn generate_task_execution_tokens(
                 task_input_layouts,
             );
 
-            let monitoring_action = quote! {
-                debug!(ctx, "Component {}: Error during process: {}", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)), &error);
-                let decision = monitor.process_error(cu29::monitoring::ComponentId::new(#tid), CuComponentState::Process, &error);
-                match decision {
-                    Decision::Abort => {
-                        debug!(ctx, "Process: ABORT decision from monitoring. Component '{}' errored out \
-                                during process. Skipping the processing of CL {}.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)), clid);
-                        #abort_process_step
-                    }
-                    Decision::Ignore => {
-                        debug!(ctx, "Process: IGNORE decision from monitoring. Component '{}' errored out \
-                                during process. The runtime will continue with a forced empty message.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)));
-                        let cumsg_output = &mut msgs.#output_culist_index;
-                        #output_clear_payload
-                    }
-                    Decision::Shutdown => {
-                        debug!(ctx, "Process: SHUTDOWN decision from monitoring. Component '{}' errored out \
-                                during process. The runtime cannot continue.", #mission_mod::monitor_component_label(cu29::monitoring::ComponentId::new(#tid)));
-                        return Err(CuError::new_with_cause("Component errored out during process.", error));
-                    }
-                }
-            };
+            let monitoring_action = process_monitoring_action_tokens(
+                tid,
+                mission_mod,
+                &output_culist_index,
+                &output_clear_payload,
+                wrap_process_step,
+            );
 
             let call_sim_callback = if sim_mode {
                 quote! {
@@ -9638,27 +9600,14 @@ fn generate_task_execution_tokens(
                 quote! { #tid },
                 quote! { CuComponentState::Process },
             );
+            let (slot_cast_defs, regular_slot_match_fn_ident) = output_slot_cast_tokens(
+                &task_hint,
+                "Task",
+                "task",
+                &quote! { cu29::cutask::CuTask },
+            );
             let regular_process_tokens = quote! {
-                #[allow(non_camel_case_types)]
-                trait #regular_slot_match_trait_ident<Expected> {
-                    fn __cu_cast_output_slot(slot: &mut Self) -> &mut Expected;
-                }
-                impl<T> #regular_slot_match_trait_ident<T> for T {
-                    fn __cu_cast_output_slot(slot: &mut Self) -> &mut T {
-                        slot
-                    }
-                }
-
-                fn #regular_slot_match_fn_ident<'a, Task, Slot>(
-                    _task: &Task,
-                    slot: &'a mut Slot,
-                ) -> &'a mut Task::Output<'static>
-                where
-                    Task: cu29::cutask::CuTask,
-                    Slot: #regular_slot_match_trait_ident<Task::Output<'static>>,
-                {
-                    <Slot as #regular_slot_match_trait_ident<Task::Output<'static>>>::__cu_cast_output_slot(slot)
-                }
+                #slot_cast_defs
 
                 #output_start_time
                 #alloc_open
