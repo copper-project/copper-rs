@@ -2047,9 +2047,11 @@ pub fn expand_anytime_steps(plan: &mut CuExecutionLoop) -> CuResult<()> {
             .node
             .anytime()
             .expect("position() only matches anytime nodes");
+        // Defense in depth for direct API callers: the macro pipeline rejects
+        // this at configuration time (config.rs validate_anytime_graph).
         let Some(max_refines) = anytime.max_refines else {
             return Err(CuError::from(format!(
-                "Task '{}': a foreground anytime task needs anytime.max_refines: the execution plan is static, so the refine step count must be known at compile time. time_budget_ms/max_age_ms remain early-stop conditions within those quanta.",
+                "Task '{}': a foreground anytime task needs anytime.max_refines to expand into a static plan.",
                 base_step.node.get_id()
             )));
         };

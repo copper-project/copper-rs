@@ -1737,35 +1737,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 ));
             }
         }
-        for unit in &culist_plan.steps {
-            let CuExecutionUnit::Step(step) = unit else {
-                continue;
-            };
-            if step.phase != CuStepPhase::AnytimeBase {
-                continue;
-            }
-            // Same restriction backgrounding imposes (house wrapper style):
-            // the runner reads the anchor from the single input's Tov, and
-            // base()/refine() write one stable output slot.
-            if step.input_msg_indices_types.len() != 1 {
-                return return_error(format!(
-                    "Anytime task '{}' must have exactly one input connection (found {}): the runner anchors the job on the input's Tov.",
-                    step.node.get_id(),
-                    step.input_msg_indices_types.len()
-                ));
-            }
-            if step
-                .output_msg_pack
-                .as_ref()
-                .map(|pack| pack.msg_types.len())
-                != Some(1)
-            {
-                return return_error(format!(
-                    "Anytime task '{}' must have exactly one output message type: base() and every refine() write the same output slot.",
-                    step.node.get_id()
-                ));
-            }
-        }
+        // Single-input/single-output arity is validated at configuration time
+        // (config.rs validate_anytime_graph), before the plan is built.
 
         // Per-node refine totals and each refine step's 1-based ordinal: the
         // emitter bakes `k` and last-ness in as literals while walking the

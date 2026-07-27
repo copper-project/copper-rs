@@ -3014,11 +3014,14 @@ impl CuConfig {
     /// 1. node-local bounds and ranges (see [`AnytimeConfig`]);
     /// 2. `anytime:` is only supported on regular tasks — refinement needs both
     ///    an input and an output;
-    /// 3. a *foreground* anytime task needs `max_refines`: the execution plan
+    /// 3. an anytime task has exactly one input connection (the runner anchors
+    ///    the job on the input's Tov) and at most one output message type
+    ///    (`base()` and every `refine()` write the same output slot);
+    /// 4. a *foreground* anytime task needs `max_refines`: the execution plan
     ///    is static (the node compiles to a base step plus `max_refines` refine
     ///    steps, see `curuntime::expand_anytime_steps`), so the refine count
     ///    must be known at compile time;
-    /// 4. fit the period: a *foreground* anytime task in a rate-limited config
+    /// 5. fit the period: a *foreground* anytime task in a rate-limited config
     ///    must set a time bound (`time_budget_ms` or `max_age_ms`), and the
     ///    worst-case window — `min` of the ones set — must be smaller than the
     ///    loop period. Background nodes and configs without a rate target skip
@@ -3038,7 +3041,8 @@ impl CuConfig {
 }
 
 /// Checks every `anytime:` node of one graph: local bounds, regular-task kind,
-/// and the foreground fit-the-period rule (see [`CuConfig::validate_anytime_configs`]).
+/// single-input/single-output arity, and the foreground fit-the-period rule
+/// (see [`CuConfig::validate_anytime_configs`]).
 fn validate_anytime_graph(graph: &CuGraph, rate_target_hz: Option<u64>) -> CuResult<()> {
     for (node_id, node) in graph.get_all_nodes() {
         let Some(anytime) = node.anytime() else {
@@ -3052,6 +3056,25 @@ fn validate_anytime_graph(graph: &CuGraph, rate_target_hz: Option<u64>) -> CuRes
                 "Task '{}' is declared with an anytime: policy but resolves to kind '{}'. Anytime refinement needs both an input and an output, so it is only supported on regular tasks.",
                 node.id,
                 kind.as_str()
+            )));
+        }
+
+        // Foreground and background alike: the runner reads the job anchor
+        // from the single input's Tov, and base()/refine() write one stable
+        // output slot. Zero declared outputs is fine when the kind is
+        // declared — the macro synthesizes exactly one nc output.
+        let input_count = graph.get_dst_edges(node_id)?.len();
+        if input_count != 1 {
+            return Err(CuError::from(format!(
+                "Task '{}' is an anytime task and must have exactly one input connection (found {input_count}): the runner anchors the job on the input's Tov.",
+                node.id
+            )));
+        }
+        let output_count = graph.get_node_output_msg_types_by_id(node_id)?.len();
+        if output_count > 1 {
+            return Err(CuError::from(format!(
+                "Task '{}' is an anytime task and must have exactly one output message type (found {output_count}): base() and every refine() write the same output slot.",
+                node.id
             )));
         }
 
@@ -5751,6 +5774,63 @@ mod tests {
         assert_eq!(anytime.quality_target, Some(0.9));
         assert_eq!(anytime.max_refines, Some(22));
         assert_eq!(anytime.time_budget_ms, None);
+    }
+
+    #[test]
+    fn test_anytime_arity_is_one_input_one_output() {
+        // Two inputs: the runner cannot pick a Tov anchor.
+        let two_inputs = r#"(
+            tasks: [
+                (id: "src_a", type: "a"),
+                (id: "src_b", type: "a"),
+                (id: "any", type: "b", anytime: (max_refines: 2)),
+                (id: "sink", type: "c"),
+            ],
+            cnx: [
+                (src: "src_a", dst: "any", msg: "msg::A"),
+                (src: "src_b", dst: "any", msg: "msg::A"),
+                (src: "any", dst: "sink", msg: "msg::B"),
+            ],
+        )"#;
+        expect_anytime_error(
+            two_inputs.to_string(),
+            "exactly one input connection (found 2)",
+        );
+
+        // Two output message types: refine() has no single slot to rewrite.
+        let two_outputs = r#"(
+            tasks: [
+                (id: "src", type: "a"),
+                (id: "any", type: "b", anytime: (max_refines: 2)),
+                (id: "sink_a", type: "c"),
+                (id: "sink_b", type: "c"),
+            ],
+            cnx: [
+                (src: "src", dst: "any", msg: "msg::A"),
+                (src: "any", dst: "sink_a", msg: "msg::B"),
+                (src: "any", dst: "sink_b", msg: "msg::C"),
+            ],
+        )"#;
+        expect_anytime_error(
+            two_outputs.to_string(),
+            "exactly one output message type (found 2)",
+        );
+
+        // Fan-out of ONE output type to two consumers stays legal.
+        let fan_out = r#"(
+            tasks: [
+                (id: "src", type: "a"),
+                (id: "any", type: "b", anytime: (max_refines: 2)),
+                (id: "sink_a", type: "c"),
+                (id: "sink_b", type: "c"),
+            ],
+            cnx: [
+                (src: "src", dst: "any", msg: "msg::A"),
+                (src: "any", dst: "sink_a", msg: "msg::B"),
+                (src: "any", dst: "sink_b", msg: "msg::B"),
+            ],
+        )"#;
+        read_configuration_str(fan_out.to_string(), None).unwrap();
     }
 
     #[test]
