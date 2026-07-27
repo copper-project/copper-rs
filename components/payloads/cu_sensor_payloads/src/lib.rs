@@ -4,6 +4,8 @@ extern crate alloc;
 
 mod barometer;
 #[cfg(feature = "std")]
+mod depth;
+#[cfg(feature = "std")]
 mod handle_payload;
 #[cfg(feature = "std")]
 mod image;
@@ -15,6 +17,8 @@ mod ranging;
 mod rerun_components;
 
 pub use barometer::*;
+#[cfg(feature = "std")]
+pub use depth::*;
 #[cfg(feature = "std")]
 pub use handle_payload::*;
 #[cfg(feature = "std")]
