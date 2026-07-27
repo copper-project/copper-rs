@@ -8987,7 +8987,10 @@ fn generate_anytime_base_block(
         quote! {
             let __cu_any_anchor: cu29::clock::CuTime = match cumsg_input.tov {
                 cu29::clock::Tov::Time(tov_time) => tov_time,
-                cu29::clock::Tov::Range(tov_range) => tov_range.start,
+                // A Range anchors on its newest data: anchoring on `start`
+                // would declare any input whose span exceeds max_age (e.g. a
+                // full lidar sweep) dead on arrival forever.
+                cu29::clock::Tov::Range(tov_range) => tov_range.end,
                 cu29::clock::Tov::None => __cu_any_now,
             };
             if __cu_any_now >= __cu_any_anchor + cu29::clock::CuDuration(#max_age_nanos) {
