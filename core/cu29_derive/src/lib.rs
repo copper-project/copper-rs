@@ -8840,6 +8840,42 @@ fn process_monitoring_action_tokens(
     }
 }
 
+/// The sim-callback `doit` gate shared by the sink, regular, and anytime-base
+/// step emitters. `input_binding` is the `let cumsg_input = <expr>;` line;
+/// sources have none and pass `()` to the callback state.
+fn process_sim_callback_tokens(
+    sim_mode: bool,
+    enum_name: &Ident,
+    input_binding: Option<&proc_macro2::TokenStream>,
+    output_culist_index: &syn::Index,
+    monitoring_action: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    if !sim_mode {
+        return quote! { let doit = true; };
+    }
+    let (input_line, state_input) = match input_binding {
+        Some(binding) => ((*binding).clone(), quote! { cumsg_input }),
+        None => (quote! {}, quote! { () }),
+    };
+    quote! {
+        let doit = {
+            #input_line
+            let cumsg_output = &mut msgs.#output_culist_index;
+            let state = CuTaskCallbackState::Process(#state_input, cumsg_output);
+            let ovr = sim_callback(SimStep::#enum_name(state));
+
+            if let SimOverride::Errored(reason) = ovr  {
+                let error: CuError = reason.into();
+                #monitoring_action
+                false
+            }
+            else {
+                ovr == SimOverride::ExecuteByRuntime
+            }
+        };
+    }
+}
+
 /// Anytime flavor of [`process_monitoring_action_tokens`]: single output
 /// slot, and the job local needs no explicit kill — a job is only (re)stored
 /// on an `Ok` status, so an erroring block leaves it `None`/taken and later
@@ -8926,27 +8962,13 @@ fn generate_anytime_base_block(
     // The sim callback fires once per node, here in the base block, with the
     // standard Process state. On ExecutedBySim the job local simply stays
     // `None` — no refine-side sim machinery exists or is needed.
-    let call_sim_callback = if ctx.sim_mode {
-        quote! {
-            let doit = {
-                let cumsg_input = #task_input_expr;
-                let cumsg_output = &mut msgs.#output_culist_index;
-                let state = CuTaskCallbackState::Process(cumsg_input, cumsg_output);
-                let ovr = sim_callback(SimStep::#enum_name(state));
-
-                if let SimOverride::Errored(reason) = ovr  {
-                    let error: CuError = reason.into();
-                    #monitoring_action
-                    false
-                }
-                else {
-                    ovr == SimOverride::ExecuteByRuntime
-                }
-            };
-        }
-    } else {
-        quote! { let doit = true; }
-    };
+    let call_sim_callback = process_sim_callback_tokens(
+        ctx.sim_mode,
+        &enum_name,
+        Some(&quote! { let cumsg_input = #task_input_expr; }),
+        &output_culist_index,
+        &monitoring_action,
+    );
 
     // Anchor extraction and the DOA skip exist in the text only when max_age
     // is configured; otherwise the anchor degenerates to the budget anchor.
@@ -9370,25 +9392,13 @@ fn generate_task_execution_tokens(
                 wrap_process_step,
             );
 
-            let call_sim_callback = if sim_mode {
-                quote! {
-                    let doit = {
-                        let cumsg_output = &mut msgs.#output_culist_index;
-                        let state = CuTaskCallbackState::Process((), cumsg_output);
-                        let ovr = sim_callback(SimStep::#enum_name(state));
-
-                        if let SimOverride::Errored(reason) = ovr  {
-                            let error: CuError = reason.into();
-                            #monitoring_action
-                            false
-                        } else {
-                            ovr == SimOverride::ExecuteByRuntime
-                        }
-                    };
-                }
-            } else {
-                quote! { let doit = true; }
-            };
+            let call_sim_callback = process_sim_callback_tokens(
+                sim_mode,
+                &enum_name,
+                None,
+                &output_culist_index,
+                &monitoring_action,
+            );
 
             let logging_tokens = if !task_specs.logging_enabled[tid] {
                 quote! {
@@ -9478,26 +9488,13 @@ fn generate_task_execution_tokens(
                 wrap_process_step,
             );
 
-            let call_sim_callback = if sim_mode {
-                quote! {
-                    let doit = {
-                        let cumsg_input = #task_input_expr;
-                        let cumsg_output = &mut msgs.#output_culist_index;
-                        let state = CuTaskCallbackState::Process(cumsg_input, cumsg_output);
-                        let ovr = sim_callback(SimStep::#enum_name(state));
-
-                        if let SimOverride::Errored(reason) = ovr  {
-                            let error: CuError = reason.into();
-                            #monitoring_action
-                            false
-                        } else {
-                            ovr == SimOverride::ExecuteByRuntime
-                        }
-                    };
-                }
-            } else {
-                quote! { let doit = true; }
-            };
+            let call_sim_callback = process_sim_callback_tokens(
+                sim_mode,
+                &enum_name,
+                Some(&quote! { let cumsg_input = #task_input_expr; }),
+                &output_culist_index,
+                &monitoring_action,
+            );
 
             let alloc_open = alloc_scope_open_tokens();
             let alloc_close = alloc_scope_close_tokens(
@@ -9564,27 +9561,13 @@ fn generate_task_execution_tokens(
                 wrap_process_step,
             );
 
-            let call_sim_callback = if sim_mode {
-                quote! {
-                    let doit = {
-                        let cumsg_input = #task_input_expr;
-                        let cumsg_output = &mut msgs.#output_culist_index;
-                        let state = CuTaskCallbackState::Process(cumsg_input, cumsg_output);
-                        let ovr = sim_callback(SimStep::#enum_name(state));
-
-                        if let SimOverride::Errored(reason) = ovr  {
-                            let error: CuError = reason.into();
-                            #monitoring_action
-                            false
-                        }
-                        else {
-                            ovr == SimOverride::ExecuteByRuntime
-                        }
-                    };
-                }
-            } else {
-                quote! { let doit = true; }
-            };
+            let call_sim_callback = process_sim_callback_tokens(
+                sim_mode,
+                &enum_name,
+                Some(&quote! { let cumsg_input = #task_input_expr; }),
+                &output_culist_index,
+                &monitoring_action,
+            );
 
             let logging_tokens = if !task_specs.logging_enabled[tid] {
                 quote! {
