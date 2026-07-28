@@ -209,6 +209,7 @@ impl AnytimeQuality for () {}
 /// [`CuAnytimeTask::Quality`]. An unset knob is `None` and its check in
 /// [`AnytimeJob::check`] const-folds away. `max_refines` does not appear here:
 /// it is consumed while emitting the execution plan and never read at run time.
+#[doc(hidden)]
 #[diagnostic::on_unimplemented(
     message = "the anytime policy `{Self}` is pinned to the shared quality scale, but this task's `Quality` is `{Q}`",
     note = "quality knobs (quality_target/quality_floor/max_stall) require `type Quality = cu29::cutask_anytime::Quality` on the task; remove the knob or score the task's results"
@@ -237,6 +238,7 @@ pub trait AnytimePolicy<Q> {
 }
 
 /// Why a job stopped refining (or never started).
+#[doc(hidden)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AnytimeStopCause {
     /// The task reported no further improvement is possible.
@@ -275,6 +277,7 @@ impl AnytimeStopCause {
 }
 
 /// What one job amounted to, recorded at its stop point.
+#[doc(hidden)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AnytimeOutcome {
     /// Refinement quanta that ran (the base computation is iteration 0).
@@ -294,6 +297,7 @@ pub struct AnytimeOutcome {
 /// quantum this is, whether more remain) is fixed by the emitted plan.
 /// Constructed once `base()` has reported a quality, so `best` needs no
 /// `Option` (it is `()` for quality-less tasks).
+#[doc(hidden)]
 pub struct AnytimeJob<Q, P> {
     /// Job start: time-budget anchor and elapsed origin.
     t0: CuTime,
@@ -434,6 +438,7 @@ fn stamp<O: CuMsgPayload>(
 
 /// Terminal outcome when the age limit passed before `base()`: the job is
 /// skipped and nothing is published.
+#[doc(hidden)]
 pub fn skip_stale<O: CuMsgPayload>(output: &mut CuMsg<O>) -> AnytimeOutcome {
     output.clear_payload();
     stamp(output, 0, None, AnytimeStopCause::SkippedStale, false);
@@ -448,6 +453,7 @@ pub fn skip_stale<O: CuMsgPayload>(output: &mut CuMsg<O>) -> AnytimeOutcome {
 /// Terminal outcome when `base()` returns `Aborted`: no quality was reported
 /// so the floor gate does not apply; `published` reflects whether the task
 /// left a payload it still vouches for. `t0`/`now` bracket the base computation.
+#[doc(hidden)]
 pub fn abort_at_base<O: CuMsgPayload>(
     t0: CuTime,
     now: CuTime,
