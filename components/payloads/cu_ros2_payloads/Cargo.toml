@@ -25,7 +25,8 @@ cu-sensor-payloads = { workspace = true }
 cu29 = { workspace = true }
 
 [features]
-humble = [] # Activate for ROS2 Humble, disable for later versions
+humble = [] # Activate for ROS 2 Humble compatibility
+jazzy = []  # Activate for ROS 2 Jazzy compatibility
 
 [dev-dependencies]
 cdr = { version = "0.2.4" }

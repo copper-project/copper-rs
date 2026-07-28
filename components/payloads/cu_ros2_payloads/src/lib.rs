@@ -2,6 +2,9 @@ pub mod builtin;
 pub mod sensor_msgs;
 pub mod std_msgs;
 
+#[cfg(all(feature = "humble", feature = "jazzy"))]
+compile_error!("features `humble` and `jazzy` are mutually exclusive");
+
 use core::fmt::Display;
 use serde::Serialize;
 use serde::de::DeserializeOwned;

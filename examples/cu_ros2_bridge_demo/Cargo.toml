@@ -21,7 +21,7 @@ serde = { workspace = true }
 
 [features]
 humble = ["cu-ros2-bridge/humble"]
-
+jazzy = ["cu-ros2-bridge/jazzy"]
 
 [package.metadata.cargo-shear]
 ignored = ["serde"]
