@@ -496,6 +496,10 @@ pub fn abort_at_base<O: CuMsgPayload>(
 /// in `CuAsyncTask`. A worker thread has no copperlist steps to interleave
 /// quanta with, so the refinement loop lives here instead of in the emitted
 /// plan; a foreground node keeps its chunked steps and never uses this type.
+///
+/// Every lifecycle call forwards to the task, but `CuAsyncTask` currently calls
+/// neither `preprocess` nor `postprocess` on what it wraps, so a backgrounded
+/// anytime task does not see them either.
 #[doc(hidden)]
 #[derive(Reflect)]
 #[reflect(no_field_bounds, from_reflect = false, type_path = false)]

@@ -2307,7 +2307,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let inner_task_type = &background_inner_type(
                     &task_specs.sim_task_types[index],
                     task_specs.ids[index].as_str(),
-                    task_specs.anytime_configs[index].is_some(),
+                    background && task_specs.anytime_configs[index].is_some(),
                 );
                 match task_specs.cutypes[index] {
                     CuTaskType::Source => {
@@ -2415,7 +2415,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let inner_task_type = &background_inner_type(
                     &task_specs.sim_task_types[index],
                     task_specs.ids[index].as_str(),
-                    task_specs.anytime_configs[index].is_some(),
+                    *background && task_specs.anytime_configs[index].is_some(),
                 );
                 match task_specs.cutypes[index] {
                     CuTaskType::Source => {
@@ -6118,9 +6118,9 @@ fn task_trait_for_kind(task_kind: CuTaskType) -> proc_macro2::TokenStream {
 /// Background comes first: a backgrounded node is driven through the
 /// `CuAsyncTask` wrapper, which is a plain `CuTask` whatever it wraps.
 fn task_trait_for_specs(task_specs: &CuTaskSpecSet, index: usize) -> proc_macro2::TokenStream {
-    if task_specs.background_flags[index] {
-        task_trait_for_kind(task_specs.cutypes[index])
-    } else if task_specs.anytime_configs[index].is_some() {
+    let foreground_anytime =
+        task_specs.anytime_configs[index].is_some() && !task_specs.background_flags[index];
+    if foreground_anytime {
         quote! { cu29::cutask_anytime::CuAnytimeTask }
     } else {
         task_trait_for_kind(task_specs.cutypes[index])
