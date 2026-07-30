@@ -669,7 +669,7 @@ pub enum BackgroundConfig {
 /// - **Utility** — whether the result is *worth having* at all: `max_age_ms`
 ///   (worthless because too old) and `quality_floor` (worthless because too
 ///   crude).
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct AnytimeConfig {
     /// Wall-clock window for one job in milliseconds, measured from the start of
     /// the base computation and checked *between* refinement quanta.
@@ -932,6 +932,12 @@ impl Node {
     #[allow(dead_code)]
     pub fn anytime(&self) -> Option<&AnytimeConfig> {
         self.anytime.as_ref()
+    }
+
+    /// Sets the anytime refinement policy for this node.
+    #[allow(dead_code)]
+    pub fn set_anytime(&mut self, anytime: Option<AnytimeConfig>) {
+        self.anytime = anytime;
     }
 
     #[allow(dead_code)]
@@ -3008,7 +3014,14 @@ impl CuConfig {
     /// 1. node-local bounds and ranges (see [`AnytimeConfig`]);
     /// 2. `anytime:` is only supported on regular tasks — refinement needs both
     ///    an input and an output;
-    /// 3. fit the period: a *foreground* anytime task in a rate-limited config
+    /// 3. an anytime task has exactly one input connection (the runner anchors
+    ///    the job on the input's Tov) and at most one output message type
+    ///    (`base()` and every `refine()` write the same output slot);
+    /// 4. a *foreground* anytime task needs `max_refines`: the execution plan
+    ///    is static (the node compiles to a base step plus `max_refines` refine
+    ///    steps, see `curuntime::expand_anytime_steps`), so the refine count
+    ///    must be known at compile time;
+    /// 5. fit the period: a *foreground* anytime task in a rate-limited config
     ///    must set a time bound (`time_budget_ms` or `max_age_ms`), and the
     ///    worst-case window — `min` of the ones set — must be smaller than the
     ///    loop period. Background nodes and configs without a rate target skip
@@ -3028,7 +3041,8 @@ impl CuConfig {
 }
 
 /// Checks every `anytime:` node of one graph: local bounds, regular-task kind,
-/// and the foreground fit-the-period rule (see [`CuConfig::validate_anytime_configs`]).
+/// single-input/single-output arity, and the foreground fit-the-period rule
+/// (see [`CuConfig::validate_anytime_configs`]).
 fn validate_anytime_graph(graph: &CuGraph, rate_target_hz: Option<u64>) -> CuResult<()> {
     for (node_id, node) in graph.get_all_nodes() {
         let Some(anytime) = node.anytime() else {
@@ -3045,11 +3059,41 @@ fn validate_anytime_graph(graph: &CuGraph, rate_target_hz: Option<u64>) -> CuRes
             )));
         }
 
+        // Foreground and background alike: the runner reads the job anchor
+        // from the single input's Tov, and base()/refine() write one stable
+        // output slot. Zero declared outputs is fine when the kind is
+        // declared — the macro synthesizes exactly one nc output.
+        let input_count = graph.get_dst_edges(node_id)?.len();
+        if input_count != 1 {
+            return Err(CuError::from(format!(
+                "Task '{}' is an anytime task and must have exactly one input connection (found {input_count}): the runner anchors the job on the input's Tov.",
+                node.id
+            )));
+        }
+        let output_count = graph.get_node_output_msg_types_by_id(node_id)?.len();
+        if output_count > 1 {
+            return Err(CuError::from(format!(
+                "Task '{}' is an anytime task and must have exactly one output message type (found {output_count}): base() and every refine() write the same output slot.",
+                node.id
+            )));
+        }
+
         // Background placement: the refinement window runs on a worker thread
         // and may exceed the copperlist period — that is the point of it.
         if node.is_background() {
             continue;
         }
+
+        // Foreground placement compiles to a static plan: the node's step is
+        // followed by exactly max_refines refine steps, so the count must be
+        // known here — a time-only hard bound cannot produce a static plan.
+        if anytime.max_refines.is_none() {
+            return Err(CuError::from(format!(
+                "Task '{}' is a foreground anytime task and needs anytime.max_refines: the execution plan is static, so the refine step count must be known at compile time. time_budget_ms/max_age_ms remain early-stop conditions within those quanta.",
+                node.id
+            )));
+        }
+
         let Some(rate_target_hz) = rate_target_hz else {
             continue;
         };
@@ -5713,8 +5757,13 @@ mod tests {
 
     #[test]
     fn test_anytime_typical_perception_config_is_accepted() {
-        // The doc's typical two-field config: max_age_ms is the hard bound.
-        let txt = anytime_config_txt("max_age_ms: 100.0, quality_target: 0.9", "", "");
+        // The doc's typical perception config; foreground placement compiles to
+        // a static plan, so max_refines is part of the minimum foreground set.
+        let txt = anytime_config_txt(
+            "max_age_ms: 100.0, quality_target: 0.9, max_refines: 22",
+            "",
+            "",
+        );
         let config = read_configuration_str(txt, None).unwrap();
         let graph = config.get_graph(None).unwrap();
         let node = graph
@@ -5723,7 +5772,77 @@ mod tests {
         let anytime = node.anytime().unwrap();
         assert_eq!(anytime.max_age_ms, Some(100.0));
         assert_eq!(anytime.quality_target, Some(0.9));
+        assert_eq!(anytime.max_refines, Some(22));
         assert_eq!(anytime.time_budget_ms, None);
+    }
+
+    #[test]
+    fn test_anytime_arity_is_one_input_one_output() {
+        // Two inputs: the runner cannot pick a Tov anchor.
+        let two_inputs = r#"(
+            tasks: [
+                (id: "src_a", type: "a"),
+                (id: "src_b", type: "a"),
+                (id: "any", type: "b", anytime: (max_refines: 2)),
+                (id: "sink", type: "c"),
+            ],
+            cnx: [
+                (src: "src_a", dst: "any", msg: "msg::A"),
+                (src: "src_b", dst: "any", msg: "msg::A"),
+                (src: "any", dst: "sink", msg: "msg::B"),
+            ],
+        )"#;
+        expect_anytime_error(
+            two_inputs.to_string(),
+            "exactly one input connection (found 2)",
+        );
+
+        // Two output message types: refine() has no single slot to rewrite.
+        let two_outputs = r#"(
+            tasks: [
+                (id: "src", type: "a"),
+                (id: "any", type: "b", anytime: (max_refines: 2)),
+                (id: "sink_a", type: "c"),
+                (id: "sink_b", type: "c"),
+            ],
+            cnx: [
+                (src: "src", dst: "any", msg: "msg::A"),
+                (src: "any", dst: "sink_a", msg: "msg::B"),
+                (src: "any", dst: "sink_b", msg: "msg::C"),
+            ],
+        )"#;
+        expect_anytime_error(
+            two_outputs.to_string(),
+            "exactly one output message type (found 2)",
+        );
+
+        // Fan-out of ONE output type to two consumers stays legal.
+        let fan_out = r#"(
+            tasks: [
+                (id: "src", type: "a"),
+                (id: "any", type: "b", anytime: (max_refines: 2)),
+                (id: "sink_a", type: "c"),
+                (id: "sink_b", type: "c"),
+            ],
+            cnx: [
+                (src: "src", dst: "any", msg: "msg::A"),
+                (src: "any", dst: "sink_a", msg: "msg::B"),
+                (src: "any", dst: "sink_b", msg: "msg::B"),
+            ],
+        )"#;
+        read_configuration_str(fan_out.to_string(), None).unwrap();
+    }
+
+    #[test]
+    fn test_anytime_foreground_needs_max_refines() {
+        // A time-only hard bound cannot produce a static plan in the foreground.
+        expect_anytime_error(
+            anytime_config_txt("max_age_ms: 100.0, quality_target: 0.9", "", ""),
+            "needs anytime.max_refines",
+        );
+        // Background placement has no static refine schedule to emit.
+        let background = anytime_config_txt("max_age_ms: 100.0", ", background: true", "");
+        read_configuration_str(background, None).unwrap();
     }
 
     #[test]
@@ -5796,7 +5915,11 @@ mod tests {
     #[test]
     fn test_anytime_quality_ranges() {
         // target is (0.0, 1.0]: exactly 1.0 is fine, 0.0 is not.
-        let ok = anytime_config_txt("time_budget_ms: 8.0, quality_target: 1.0", "", "");
+        let ok = anytime_config_txt(
+            "time_budget_ms: 8.0, quality_target: 1.0, max_refines: 4",
+            "",
+            "",
+        );
         read_configuration_str(ok, None).unwrap();
         expect_anytime_error(
             anytime_config_txt("time_budget_ms: 8.0, quality_target: 0.0", "", ""),
@@ -5854,7 +5977,7 @@ mod tests {
     fn test_anytime_foreground_window_must_fit_period() {
         expect_anytime_error(
             anytime_config_txt(
-                "time_budget_ms: 12.0",
+                "time_budget_ms: 12.0, max_refines: 8",
                 "",
                 "runtime: (rate_target_hz: 100),",
             ),
@@ -5862,7 +5985,7 @@ mod tests {
         );
         // The worst-case window is min(time_budget_ms, max_age_ms).
         let ok = anytime_config_txt(
-            "time_budget_ms: 20.0, max_age_ms: 5.0",
+            "time_budget_ms: 20.0, max_age_ms: 5.0, max_refines: 8",
             "",
             "runtime: (rate_target_hz: 100),",
         );

@@ -286,6 +286,7 @@ pub fn cu29_runtime::config::Node::nc_outputs(&self) -> &[alloc::string::String]
 pub fn cu29_runtime::config::Node::nc_outputs_with_order(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&alloc::string::String, usize)>
 pub fn cu29_runtime::config::Node::new(id: &str, ptype: &str) -> Self
 pub fn cu29_runtime::config::Node::new_with_flavor(id: &str, ptype: &str, flavor: cu29_runtime::config::Flavor) -> Self
+pub fn cu29_runtime::config::Node::set_anytime(&mut self, anytime: core::option::Option<cu29_runtime::config::AnytimeConfig>)
 pub fn cu29_runtime::config::Node::set_flavor(&mut self, flavor: cu29_runtime::config::Flavor)
 pub fn cu29_runtime::config::Node::set_param<T: core::convert::Into<cu29_runtime::config::Value>>(&mut self, key: &str, value: T)
 pub fn cu29_runtime::config::Node::set_resources<I>(&mut self, resources: core::option::Option<I>) where I: core::iter::traits::collect::IntoIterator<Item = (alloc::string::String, alloc::string::String)>
@@ -645,6 +646,10 @@ pub mod cu29_runtime::curuntime
 pub enum cu29_runtime::curuntime::CuExecutionUnit
 pub cu29_runtime::curuntime::CuExecutionUnit::Loop(cu29_runtime::curuntime::CuExecutionLoop)
 pub cu29_runtime::curuntime::CuExecutionUnit::Step(alloc::boxed::Box<cu29_runtime::curuntime::CuExecutionStep>)
+pub enum cu29_runtime::curuntime::CuStepPhase
+pub cu29_runtime::curuntime::CuStepPhase::AnytimeBase
+pub cu29_runtime::curuntime::CuStepPhase::AnytimeRefine
+pub cu29_runtime::curuntime::CuStepPhase::Whole
 pub enum cu29_runtime::curuntime::CuTaskType
 pub cu29_runtime::curuntime::CuTaskType::Regular
 pub cu29_runtime::curuntime::CuTaskType::Sink
@@ -693,6 +698,7 @@ pub cu29_runtime::curuntime::CuExecutionStep::input_msg_indices_types: alloc::ve
 pub cu29_runtime::curuntime::CuExecutionStep::node: cu29_runtime::config::Node
 pub cu29_runtime::curuntime::CuExecutionStep::node_id: cu29_runtime::config::NodeId
 pub cu29_runtime::curuntime::CuExecutionStep::output_msg_pack: core::option::Option<cu29_runtime::curuntime::CuOutputPack>
+pub cu29_runtime::curuntime::CuExecutionStep::phase: cu29_runtime::curuntime::CuStepPhase
 pub cu29_runtime::curuntime::CuExecutionStep::task_type: cu29_runtime::curuntime::CuTaskType
 impl core::fmt::Debug for cu29_runtime::curuntime::CuExecutionStep
 pub fn cu29_runtime::curuntime::CuExecutionStep::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -771,6 +777,7 @@ pub fn cu29_runtime::curuntime::RuntimeLifecycleStackInfo::borrow_decode<__D: cu
 impl<__Context> cu_bincode::de::Decode<__Context> for cu29_runtime::curuntime::RuntimeLifecycleStackInfo
 pub fn cu29_runtime::curuntime::RuntimeLifecycleStackInfo::decode<__D: cu_bincode::de::Decoder<Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
 pub fn cu29_runtime::curuntime::compute_runtime_plan(graph: &cu29_runtime::config::CuGraph) -> cu29_traits::CuResult<cu29_runtime::curuntime::CuExecutionLoop>
+pub fn cu29_runtime::curuntime::expand_anytime_steps(plan: &mut cu29_runtime::curuntime::CuExecutionLoop) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::curuntime::find_task_type_for_id(graph: &cu29_runtime::config::CuGraph, node_id: cu29_runtime::config::NodeId) -> cu29_traits::CuResult<cu29_runtime::curuntime::CuTaskType>
 pub fn cu29_runtime::curuntime::perf_now(_clock: &cu29_clock::RobotClock) -> cu29_clock::CuTime
 pub fn cu29_runtime::curuntime::rate_target_period(rate_target_hz: u64) -> cu29_traits::CuResult<cu29_clock::CuDuration>
@@ -986,10 +993,16 @@ pub enum cu29_runtime::cutask_anytime::AnytimeStatus<Q>
 pub cu29_runtime::cutask_anytime::AnytimeStatus::Aborted
 pub cu29_runtime::cutask_anytime::AnytimeStatus::Converged(Q)
 pub cu29_runtime::cutask_anytime::AnytimeStatus::Improved(Q)
+pub trait cu29_runtime::cutask_anytime::AnytimeQuality: core::marker::Copy + core::cmp::PartialOrd
+pub fn cu29_runtime::cutask_anytime::AnytimeQuality::ratio(self) -> core::option::Option<f32>
+impl cu29_runtime::cutask_anytime::AnytimeQuality for ()
+pub fn ()::ratio(self) -> core::option::Option<f32>
+impl cu29_runtime::cutask_anytime::AnytimeQuality for cu29_runtime::cutask_anytime::Quality
+pub fn cu29_runtime::cutask_anytime::Quality::ratio(self) -> core::option::Option<f32>
 pub trait cu29_runtime::cutask_anytime::CuAnytimeTask: cu29_runtime::cutask::Freezable + cu29_runtime::reflect::Reflect
 pub type cu29_runtime::cutask_anytime::CuAnytimeTask::Input<'m>: cu29_runtime::cutask::CuMsgPack
 pub type cu29_runtime::cutask_anytime::CuAnytimeTask::Output<'m>: cu29_runtime::cutask::CuMsgPayload
-pub type cu29_runtime::cutask_anytime::CuAnytimeTask::Quality: core::marker::Copy + core::cmp::PartialOrd
+pub type cu29_runtime::cutask_anytime::CuAnytimeTask::Quality: cu29_runtime::cutask_anytime::AnytimeQuality
 pub type cu29_runtime::cutask_anytime::CuAnytimeTask::Resources<'r>
 pub fn cu29_runtime::cutask_anytime::CuAnytimeTask::base<'i, 'o>(&mut self, ctx: &cu29_runtime::context::CuContext, input: &Self::Input, output: &mut Self::Output) -> cu29_traits::CuResult<cu29_runtime::cutask_anytime::AnytimeStatus<Self::Quality>>
 pub fn cu29_runtime::cutask_anytime::CuAnytimeTask::debug_state_type_path() -> &'static str where Self: cu29_runtime::reflect::TypePath + core::marker::Sized
