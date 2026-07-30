@@ -28,8 +28,12 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-deny
-      - name: Run cargo-deny audit
-        run: just weekly-audit
+      - name: Run deny bans
+        run: cargo deny --config .config/deny.toml check bans
+      - name: Run deny sources
+        run: cargo deny --config .config/deny.toml check sources
+      - name: Run deny advisories
+        run: cargo deny --config .config/deny.toml check advisories
       - name: Check formatting
         run: cargo +beta fmt --all -- --check
 
