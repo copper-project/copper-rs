@@ -28,8 +28,8 @@ end2end:
   cd "{{ROOT}}"
   cargo run -p cu-flight-controller --no-default-features --features end2end --bin quad-compute
 
-# Render the complete two-subsystem deployment by default.
-dag config="flight_controller.ron" mission="":
+# Render the simulated default mission across the complete two-subsystem deployment.
+dag config="flight_controller.ron" mission="default" features="sim":
   #!/usr/bin/env bash
   set -euo pipefail
 
@@ -42,11 +42,15 @@ dag config="flight_controller.ron" mission="":
 
   cd "{{ROOT}}"
   mission_value="{{mission}}"
+  features_value="{{features}}"
+  args=()
   if [[ -n "$mission_value" ]]; then
-    cargo run -p cu29-runtime --bin cu29-rendercfg -- --mission "$mission_value" --open "$cfg_path"
-  else
-    cargo run -p cu29-runtime --bin cu29-rendercfg -- --open "$cfg_path"
+    args+=(--mission "$mission_value")
   fi
+  if [[ -n "$features_value" ]]; then
+    args+=(--features "$features_value")
+  fi
+  cargo run -p cu29-runtime --bin cu29-rendercfg -- "${args[@]}" --open "$cfg_path"
 
 # A quick test to see if the sim can pick up your RC.
 rc:
