@@ -1,0 +1,52 @@
+(
+    logging: (
+        enable_task_logging: true,
+        slab_size_mib: 16,
+        keyframe_interval: 1,
+    ),
+    tasks: [
+        (
+            id: "src",
+            type: "TargetSrc",
+            run_in_sim: true,
+        ),
+        (
+            id: "planner",
+            type: "IncrementalPlanner",
+            run_in_sim: true,
+            anytime: (
+                max_age_ms: 500.0,
+                quality_target: 0.9,
+                max_refines: 4,
+            ),
+        ),
+        (
+            id: "smoother",
+            type: "CountingSmoother",
+            run_in_sim: true,
+            anytime: (max_refines: 2),
+        ),
+        (
+            id: "sink",
+            type: "SpySink",
+            run_in_sim: true,
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "planner",
+            msg: "u32",
+        ),
+        (
+            src: "planner",
+            dst: "smoother",
+            msg: "u32",
+        ),
+        (
+            src: "smoother",
+            dst: "sink",
+            msg: "u32",
+        ),
+    ],
+)
