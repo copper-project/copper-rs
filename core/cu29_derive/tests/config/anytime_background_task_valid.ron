@@ -1,8 +1,6 @@
 (
     runtime: (
-        thread_pools: [
-            (id: "planner", threads: 1),
-        ],
+        thread_pools: [(id: "planner", threads: 1)],
     ),
     resources: [
         (
@@ -12,8 +10,6 @@
     ],
     tasks: [
         (id: "src", type: "AnytimeSrc"),
-        // Background placement: a time bound alone is enough, the quanta count
-        // is not needed to build the plan.
         (
             id: "refiner",
             type: "AnytimeRefiner",
@@ -26,7 +22,6 @@
                 max_stall: 3,
             ),
         ),
-        // Background on a named pool, with resources and a quanta bound.
         (
             id: "counter",
             type: "AnytimeCounter",
@@ -38,7 +33,6 @@
             id: "sink",
             type: "AnytimeSink",
         ),
-        // Foreground anytime in the same application: both placements coexist.
         (
             id: "tail",
             type: "AnytimeTail",

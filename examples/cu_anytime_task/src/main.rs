@@ -157,8 +157,9 @@ pub mod tasks {
             Ok(())
         }
     }
-    /// Sink of a backgrounded node: most copperlists carry no payload because
-    /// the job is still running on its worker thread.
+    /// Sink of the `tracker` node, which runs the same anytime task as
+    /// `planner` but with `background: true`: most copperlists carry no payload
+    /// because the job is still running on its worker thread.
     #[derive(Reflect)]
     pub struct BackgroundSink;
 

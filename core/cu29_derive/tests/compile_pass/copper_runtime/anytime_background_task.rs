@@ -1,6 +1,11 @@
 //! Background placement of anytime nodes: `anytime:` + `background: true`
 //! compiles to `CuAsyncTask<CuAnytimeRunner<T, Policy>, O>`, so the node keeps
 //! one `Whole` step in the plan and runs its whole job on a worker thread.
+//!
+//! The config covers, in one application: a background node bounded by time
+//! alone (no `max_refines`, which only a foreground plan needs), a background
+//! node on a named pool that also binds resources, and a foreground anytime
+//! node alongside them.
 use cu29::cutask_anytime::{AnytimeStatus, CuAnytimeTask, Quality};
 use cu29::prelude::*;
 use cu29::resource::{BundleContext, ResourceBundle, ResourceManager};

@@ -1,5 +1,7 @@
 //! Sim-mode expansion of a backgrounded anytime node: it is indistinguishable
 //! from any other backgrounded task — one sim callback, one poll step.
+//!
+//! Same config as `anytime_background_task`, expanded with `sim_mode = true`.
 use cu29::cutask_anytime::{AnytimeStatus, CuAnytimeTask, Quality};
 use cu29::prelude::*;
 use cu29::resource::{BundleContext, ResourceBundle, ResourceManager};

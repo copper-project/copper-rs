@@ -22,9 +22,6 @@
             id: "recorder",
             type: "tasks::RecordingSink",
         ),
-        // Background placement: the same task type, run to completion on a
-        // worker thread. A time bound alone is enough here - the copperlist
-        // plan does not need the quanta count.
         (
             id: "tracker",
             type: "tasks::IncrementalPlanner",
