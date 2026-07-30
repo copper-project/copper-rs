@@ -105,10 +105,25 @@ runtime, then records messages, timing, and state into one replayable log.
 
 ## Explore Copper
 
-| | |
-| --- | --- |
-| **Learn** | [Book](https://copper-project.github.io/copper-rs-book/) · [Runtime overview](https://copper-project.github.io/copper-rs/Copper-Runtime-Overview) · [API docs](https://docs.rs/cu29) |
-| **Build** | [Project templates](https://copper-project.github.io/copper-rs/Project-Templates) · [RON reference](https://copper-project.github.io/copper-rs/Copper-RON-Configuration-Reference) · [Component catalog](https://cdn.copper-robotics.com/catalog/index.html) |
-| **Go deeper** | [Examples](examples/) · [Logging and replay](https://copper-project.github.io/copper-rs-book/logging-replay.html) · [Python support](https://copper-project.github.io/copper-rs/Python-Support) |
-| **Project** | [Supported platforms](https://copper-project.github.io/copper-rs/Supported-Platforms) · [Roadmap](https://copper-project.github.io/copper-rs/Roadmap) · [Release notes](https://copper-project.github.io/copper-rs/Copper-Release-Notes) |
-| **Community** | [Contributing](CONTRIBUTING.md) · [GitHub Discussions](https://github.com/copper-project/copper-rs/discussions) · [Discord](https://discord.gg/VkCG7Sb9Kw) |
+<table>
+  <tr>
+    <td><strong>Learn</strong></td>
+    <td><a href="https://copper-project.github.io/copper-rs-book/">Book</a> · <a href="https://copper-project.github.io/copper-rs/Copper-Runtime-Overview">Runtime overview</a> · <a href="https://docs.rs/cu29">API docs</a></td>
+  </tr>
+  <tr>
+    <td><strong>Build</strong></td>
+    <td><a href="https://copper-project.github.io/copper-rs/Project-Templates">Project templates</a> · <a href="https://copper-project.github.io/copper-rs/Copper-RON-Configuration-Reference">RON reference</a> · <a href="https://cdn.copper-robotics.com/catalog/index.html">Component catalog</a></td>
+  </tr>
+  <tr>
+    <td><strong>Go deeper</strong></td>
+    <td><a href="examples/">Examples</a> · <a href="https://copper-project.github.io/copper-rs-book/logging-replay.html">Logging and replay</a> · <a href="https://copper-project.github.io/copper-rs/Python-Support">Python support</a></td>
+  </tr>
+  <tr>
+    <td><strong>Project</strong></td>
+    <td><a href="https://copper-project.github.io/copper-rs/Supported-Platforms">Supported platforms</a> · <a href="https://copper-project.github.io/copper-rs/Roadmap">Roadmap</a> · <a href="https://copper-project.github.io/copper-rs/Copper-Release-Notes">Release notes</a></td>
+  </tr>
+  <tr>
+    <td><strong>Community</strong></td>
+    <td><a href="CONTRIBUTING.md">Contributing</a> · <a href="https://github.com/copper-project/copper-rs/discussions">GitHub Discussions</a> · <a href="https://discord.gg/VkCG7Sb9Kw">Discord</a></td>
+  </tr>
+</table>
