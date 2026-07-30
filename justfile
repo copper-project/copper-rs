@@ -25,6 +25,21 @@ pr-check:
 	just api-check
 	just test
 
+# Reproduce the scheduled weekly audit and beta checks on the local host.
+weekly: weekly-audit
+	cargo +beta fmt --all -- --check
+	just std-ci toolchain=beta
+	just nostd-ci toolchain=beta
+
+# Run the cargo-deny portion of the weekly workflow.
+weekly-audit:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	for check in bans sources advisories; do
+		cargo deny --config .config/deny.toml check "$check"
+	done
+
 # Formatting, typo, and clippy checks.
 lint:
 	just fmt-check
@@ -197,20 +212,20 @@ msrv-check:
 	cargo +{{MSRV}} check --no-default-features
 
 # Run the no_std/embedded CI flow locally.
-nostd-ci:
+nostd-ci toolchain="stable":
 	just fmt-check
 	just typos
-	cargo +stable build --no-default-features
-	cargo +stable nextest run --no-default-features
-	python3 support/ci/embedded_crates.py run --action clippy --toolchain stable
-	python3 support/ci/embedded_crates.py run --action build --toolchain stable
-	cd examples/cu_rp2350_skeleton && cargo +stable clippy --target thumbv8m.main-none-eabihf --bin cu-blinky --features firmware
-	cd examples/cu_rp2350_skeleton && cargo +stable clippy --no-default-features --features host --bins --target={{host_target}}
-	cd examples/cu_rp2350_skeleton && cargo +stable build-arm
-	cd examples/cu_rp2350_skeleton && cargo +stable build --target={{host_target}} --no-default-features --features host --bin blinky-logreader
+	cargo +{{toolchain}} build --no-default-features
+	cargo +{{toolchain}} nextest run --no-default-features
+	python3 support/ci/embedded_crates.py run --action clippy --toolchain {{toolchain}}
+	python3 support/ci/embedded_crates.py run --action build --toolchain {{toolchain}}
+	cd examples/cu_rp2350_skeleton && cargo +{{toolchain}} clippy --target thumbv8m.main-none-eabihf --bin cu-blinky --features firmware
+	cd examples/cu_rp2350_skeleton && cargo +{{toolchain}} clippy --no-default-features --features host --bins --target=`rustc +{{toolchain}} -vV | sed -n 's/^host: //p'`
+	cd examples/cu_rp2350_skeleton && cargo +{{toolchain}} build-arm
+	cd examples/cu_rp2350_skeleton && cargo +{{toolchain}} build --target=`rustc +{{toolchain}} -vV | sed -n 's/^host: //p'` --no-default-features --features host --bin blinky-logreader
 
 # Std-specific CI flow (local, CI-aligned). Use mode=release or mode=cuda-release as needed.
-std-ci mode="debug":
+std-ci mode="debug" toolchain="stable":
 	#!/usr/bin/env bash
 	set -euo pipefail
 	just fmt-check
@@ -234,34 +249,34 @@ std-ci mode="debug":
 		features="${features},cuda"
 	fi
 	features_flag="--features $features"
-	workspace_excludes="{{WORKSPACE_EXCLUDES}}"
+	workspace_excludes="$(python3 support/ci/workspace_excludes.py excludes --toolchain {{toolchain}})"
 
-	cargo +stable clippy $release_flag --workspace --all-targets $workspace_excludes -- --deny warnings
-	cargo +stable clippy $release_flag --workspace --all-targets $features_flag $workspace_excludes -- --deny warnings
-	cargo +stable build $release_flag --workspace --all-targets $features_flag $workspace_excludes
+	cargo +{{toolchain}} clippy $release_flag --workspace --all-targets $workspace_excludes -- --deny warnings
+	cargo +{{toolchain}} clippy $release_flag --workspace --all-targets $features_flag $workspace_excludes -- --deny warnings
+	cargo +{{toolchain}} build $release_flag --workspace --all-targets $features_flag $workspace_excludes
 
 	if [[ "$mode" == "debug" ]]; then
-		cargo +stable test --doc --workspace $workspace_excludes --quiet
+		cargo +{{toolchain}} test --doc --workspace $workspace_excludes --quiet
 	fi
 
-	cargo +stable nextest run $release_flag --all-targets --workspace $workspace_excludes
-	cargo +stable nextest run $release_flag --all-targets --workspace $features_flag $workspace_excludes
+	cargo +{{toolchain}} nextest run $release_flag --all-targets --workspace $workspace_excludes
+	cargo +{{toolchain}} nextest run $release_flag --all-targets --workspace $features_flag $workspace_excludes
 
 	RAYON_NUM_THREADS=1 COPPER_DETERMINISM_ITERS=256 COPPER_DETERMINISM_DT_TICKS=1000 \
-		cargo +stable test $release_flag -p cu-caterpillar --features determinism_ci \
+		cargo +{{toolchain}} test $release_flag -p cu-caterpillar --features determinism_ci \
 		-- determinism_record_and_resim --test-threads=1
 
 	if [[ "$mode" == "debug" ]]; then
 		rm -rf support/cargo_cunew/templates/test_project support/cargo_cunew/templates/test_workspace
-		cargo +stable run -p cargo-cunew -- support/cargo_cunew/templates/test_project --template project --source local --copper-root .
-		cargo +stable run -p cargo-cunew -- support/cargo_cunew/templates/test_workspace --template workspace --source local --copper-root .
+		cargo +{{toolchain}} run -p cargo-cunew -- support/cargo_cunew/templates/test_project --template project --source local --copper-root .
+		cargo +{{toolchain}} run -p cargo-cunew -- support/cargo_cunew/templates/test_workspace --template workspace --source local --copper-root .
 		(
 			cd support/cargo_cunew/templates/test_project
-			cargo +stable build
+			cargo +{{toolchain}} build
 		)
 		(
 			cd support/cargo_cunew/templates/test_workspace
-			cargo +stable build
+			cargo +{{toolchain}} build
 		)
 	fi
 
