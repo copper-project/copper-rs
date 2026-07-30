@@ -546,8 +546,12 @@ mod tests {
     use crate::config::ComponentConfig;
     use crate::cutask::CuMsg;
     use crate::cutask::Freezable;
+    use crate::cutask_anytime::{
+        AnytimePolicy, AnytimeStatus, CuAnytimeRunner, CuAnytimeTask, Quality, quality_from_f32,
+    };
     use crate::input_msg;
     use crate::output_msg;
+    use cu29_clock::CuDuration;
     use cu29_traits::CuResult;
     use rayon::ThreadPoolBuilder;
     use std::borrow::BorrowMut;
@@ -1059,6 +1063,85 @@ mod tests {
         // Allow the background worker spawned by the last poll to complete so the thread pool shuts down cleanly.
         ready_tx.send(CuTime::from(40u64)).unwrap();
         let _ = done_rx.recv_timeout(Duration::from_secs(1));
+    }
+
+    /// Anytime task under the wrapper: one increment per quantum, quality
+    /// climbing toward the input target.
+    #[derive(Reflect)]
+    struct IncrementalPlanner {
+        target: u32,
+        acc: u32,
+    }
+
+    impl Freezable for IncrementalPlanner {}
+
+    impl CuAnytimeTask for IncrementalPlanner {
+        type Input<'m> = input_msg!(u32);
+        type Output<'m> = output_msg!(u32);
+        type Resources<'r> = ();
+        type Quality = Quality;
+
+        fn new(_config: Option<&ComponentConfig>, _resources: ()) -> CuResult<Self> {
+            Ok(Self { target: 0, acc: 0 })
+        }
+
+        fn base(
+            &mut self,
+            _ctx: &CuContext,
+            input: &Self::Input<'_>,
+            output: &mut Self::Output<'_>,
+        ) -> CuResult<AnytimeStatus<Quality>> {
+            self.target = input.payload().copied().ok_or("planner: no input")?;
+            self.acc = 0;
+            output.set_payload(self.acc);
+            Ok(AnytimeStatus::Improved(quality_from_f32(0.0)))
+        }
+
+        fn refine(
+            &mut self,
+            _ctx: &CuContext,
+            output: &mut Self::Output<'_>,
+        ) -> CuResult<AnytimeStatus<Quality>> {
+            self.acc += 1;
+            output.set_payload(self.acc);
+            Ok(AnytimeStatus::Improved(quality_from_f32(
+                self.acc as f32 / self.target as f32,
+            )))
+        }
+    }
+
+    /// Mirrors codegen for `anytime: (max_refines: 3)` on a background node.
+    struct ThreeQuantaPolicy;
+    impl<Q: Copy + PartialOrd> AnytimePolicy<Q> for ThreeQuantaPolicy {
+        const TIME_BUDGET: Option<CuDuration> = None;
+        const MAX_AGE: Option<CuDuration> = None;
+        const MAX_STALL: Option<u32> = None;
+        const MAX_REFINES: Option<u32> = Some(3);
+    }
+
+    #[test]
+    fn background_anytime_job_lands_with_its_status_stamp() {
+        let tp = Arc::new(ThreadPoolBuilder::new().num_threads(1).build().unwrap());
+        let context = CuContext::new_with_clock();
+        let mut task: CuAsyncTask<CuAnytimeRunner<IncrementalPlanner, ThreeQuantaPolicy>, u32> =
+            CuAsyncTask::new(Some(&ComponentConfig::default()), (), tp).unwrap();
+
+        let input = CuMsg::new(Some(5u32));
+        let mut output = CuMsg::new(None);
+
+        // Poll until the worker's job comes back through the buffered output.
+        for _ in 0..1000 {
+            task.process(&context, &input, &mut output).unwrap();
+            if output.payload().is_some() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+
+        // Three quanta of a job needing five: stopped by the quanta bound, and
+        // the stamp the runner wrote survived the buffered-output copy.
+        assert_eq!(output.payload(), Some(&3));
+        assert_eq!(output.metadata.status_txt.0.as_str(), "any:3it q=0.60 max");
     }
 
     #[test]

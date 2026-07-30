@@ -9,12 +9,15 @@
 
 use crate::config::ComponentConfig;
 use crate::context::CuContext;
-use crate::cutask::{CuMsg, CuMsgPack, CuMsgPayload, Freezable};
+use crate::cutask::{CuMsg, CuMsgPack, CuMsgPayload, CuTask, Freezable};
 use crate::reflect::{GetTypeRegistration, Reflect, TypePath, TypeRegistry};
+use bincode::de::Decoder;
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
 use compact_str::format_compact;
 use core::fmt::{Debug, Formatter, Result as FmtResult};
 use core::marker::PhantomData;
-use cu29_clock::{CuDuration, CuTime};
+use cu29_clock::{CuDuration, CuTime, Tov};
 use cu29_traits::{CuCompactString, CuResult};
 use cu29_units::si::f32::Ratio;
 use cu29_units::si::ratio::ratio;
@@ -207,8 +210,7 @@ impl AnytimeQuality for () {}
 ///
 /// Codegen emits one zero-sized impl per anytime node; `Q` is the task's
 /// [`CuAnytimeTask::Quality`]. An unset knob is `None` and its check in
-/// [`AnytimeJob::check`] const-folds away. `max_refines` does not appear here:
-/// it is consumed while emitting the execution plan and never read at run time.
+/// [`AnytimeJob::check`] const-folds away.
 #[doc(hidden)]
 #[diagnostic::on_unimplemented(
     message = "the anytime policy `{Self}` is pinned to the shared quality scale, but this task's `Quality` is `{Q}`",
@@ -222,6 +224,10 @@ pub trait AnytimePolicy<Q> {
     const MAX_AGE: Option<CuDuration>;
     /// Stop after this many quanta without the best quality improving.
     const MAX_STALL: Option<u32>;
+    /// Hard quanta bound per job, read only by [`CuAnytimeRunner`]: a
+    /// foreground node encodes the count as the number of refine steps its
+    /// plan carries and never reads this.
+    const MAX_REFINES: Option<u32>;
 
     /// Codegen override: `q >= target` (never satisfied by NaN). Default false.
     #[inline(always)]
@@ -436,6 +442,21 @@ fn stamp<O: CuMsgPayload>(
     });
 }
 
+/// Age anchor of one job: the input's time of validity, falling back to `now`.
+///
+/// A range anchors on its newest data (`end`); anchoring on `start` would
+/// declare any input whose span exceeds the age limit (a full lidar sweep, say)
+/// dead on arrival forever.
+#[doc(hidden)]
+#[inline(always)]
+pub fn anchor_from_tov(tov: Tov, now: CuTime) -> CuTime {
+    match tov {
+        Tov::Time(time) => time,
+        Tov::Range(range) => range.end,
+        Tov::None => now,
+    }
+}
+
 /// Terminal outcome when the age limit passed before `base()`: the job is
 /// skipped and nothing is published.
 #[doc(hidden)]
@@ -469,12 +490,190 @@ pub fn abort_at_base<O: CuMsgPayload>(
     }
 }
 
+/// Runs one whole anytime job per `CuTask::process` call: the age check,
+/// `base()`, then refine quanta under `P` until a stop cause fires.
+///
+/// An `anytime:` node with `background: true` compiles to this runner wrapped
+/// in `CuAsyncTask`. A worker thread has no copperlist steps to interleave
+/// quanta with, so the refinement loop lives here instead of in the emitted
+/// plan; a foreground node keeps its chunked steps and never uses this type.
+#[doc(hidden)]
+#[derive(Reflect)]
+#[reflect(no_field_bounds, from_reflect = false, type_path = false)]
+pub struct CuAnytimeRunner<T, P>
+where
+    T: Reflect + Send + Sync + 'static,
+    P: Send + Sync + 'static,
+{
+    #[reflect(ignore)]
+    task: T,
+    #[reflect(ignore)]
+    _policy: PhantomData<P>,
+}
+
+impl<T, P> TypePath for CuAnytimeRunner<T, P>
+where
+    T: Reflect + Send + Sync + 'static,
+    P: Send + Sync + 'static,
+{
+    fn type_path() -> &'static str {
+        "cu29_runtime::cutask_anytime::CuAnytimeRunner"
+    }
+
+    fn short_type_path() -> &'static str {
+        "CuAnytimeRunner"
+    }
+
+    fn type_ident() -> Option<&'static str> {
+        Some("CuAnytimeRunner")
+    }
+
+    fn crate_name() -> Option<&'static str> {
+        Some("cu29_runtime")
+    }
+
+    fn module_path() -> Option<&'static str> {
+        Some("cutask_anytime")
+    }
+}
+
+impl<T, P> Freezable for CuAnytimeRunner<T, P>
+where
+    T: Reflect + Freezable + Send + Sync + 'static,
+    P: Send + Sync + 'static,
+{
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        self.task.freeze(encoder)
+    }
+
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        self.task.thaw(decoder)
+    }
+}
+
+impl<T, I, O, P> CuTask for CuAnytimeRunner<T, P>
+where
+    T: for<'i, 'o> CuAnytimeTask<Input<'i> = CuMsg<I>, Output<'o> = CuMsg<O>>
+        + Send
+        + Sync
+        + 'static,
+    I: CuMsgPayload,
+    O: CuMsgPayload,
+    P: AnytimePolicy<T::Quality> + Send + Sync + 'static,
+{
+    type Resources<'r> = T::Resources<'r>;
+    type Input<'m> = T::Input<'m>;
+    type Output<'m> = T::Output<'m>;
+
+    fn new(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        Ok(Self {
+            task: T::new(config, resources)?,
+            _policy: PhantomData,
+        })
+    }
+
+    fn start(&mut self, ctx: &CuContext) -> CuResult<()> {
+        self.task.start(ctx)
+    }
+
+    fn preprocess(&mut self, ctx: &CuContext) -> CuResult<()> {
+        self.task.preprocess(ctx)
+    }
+
+    fn process<'i, 'o>(
+        &mut self,
+        ctx: &CuContext,
+        input: &Self::Input<'i>,
+        output: &mut Self::Output<'o>,
+    ) -> CuResult<()> {
+        let start = ctx.now();
+        let anchor = anchor_from_tov(input.tov, start);
+        if let Some(max_age) = P::MAX_AGE
+            && start >= anchor + max_age
+        {
+            skip_stale(output);
+            return Ok(());
+        }
+
+        // The job clock starts when this worker picks the job up, so queueing
+        // delay counts against the age limit above but not against the budget.
+        let mut job = match self.task.base(ctx, input, output)? {
+            AnytimeStatus::Improved(quality) => AnytimeJob::<_, P>::new(start, anchor, quality),
+            AnytimeStatus::Converged(quality) => {
+                AnytimeJob::<_, P>::new(start, anchor, quality).finish(
+                    ctx.now(),
+                    AnytimeStopCause::Converged,
+                    0,
+                    output,
+                );
+                return Ok(());
+            }
+            AnytimeStatus::Aborted => {
+                abort_at_base(start, ctx.now(), output);
+                return Ok(());
+            }
+        };
+
+        let mut ran = 0u32;
+        loop {
+            // One clock read per quantum, shared by check() and finish(); it is
+            // skipped entirely without a time knob, exactly as the foreground
+            // refine block does (CuTime subtraction saturates).
+            let now = if P::TIME_BUDGET.is_some() || P::MAX_AGE.is_some() {
+                ctx.now()
+            } else {
+                CuTime::default()
+            };
+            if let Some(cause) = job.check(now) {
+                job.finish(now, cause, ran, output);
+                return Ok(());
+            }
+            // An error surfaces at the next poll of the wrapper, like any other
+            // backgrounded task's.
+            let status = self.task.refine(ctx, output)?;
+            ran += 1;
+            match status {
+                AnytimeStatus::Improved(quality) => {
+                    job.record(quality);
+                    if let Some(max_refines) = P::MAX_REFINES
+                        && ran >= max_refines
+                    {
+                        job.finish(now, AnytimeStopCause::MaxRefines, ran, output);
+                        return Ok(());
+                    }
+                }
+                AnytimeStatus::Converged(quality) => {
+                    job.record(quality);
+                    job.finish(now, AnytimeStopCause::Converged, ran, output);
+                    return Ok(());
+                }
+                AnytimeStatus::Aborted => {
+                    job.finish(now, AnytimeStopCause::Aborted, ran, output);
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    fn postprocess(&mut self, ctx: &CuContext) -> CuResult<()> {
+        self.task.postprocess(ctx)
+    }
+
+    fn stop(&mut self, ctx: &CuContext) -> CuResult<()> {
+        self.task.stop(ctx)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::cutask::CuMsg;
     use crate::input_msg;
     use crate::output_msg;
+    use cu29_clock::RobotClockMock;
 
     fn q(v: f32) -> Quality {
         quality_from_f32(v)
@@ -568,6 +767,7 @@ mod tests {
         const TIME_BUDGET: Option<CuDuration> = Some(CuDuration(1_000_000));
         const MAX_AGE: Option<CuDuration> = Some(CuDuration(2_000_000));
         const MAX_STALL: Option<u32> = Some(2);
+        const MAX_REFINES: Option<u32> = Some(8);
 
         fn target_met(q: Quality) -> bool {
             q >= quality_from_f32(0.9)
@@ -584,6 +784,7 @@ mod tests {
         const TIME_BUDGET: Option<CuDuration> = None;
         const MAX_AGE: Option<CuDuration> = None;
         const MAX_STALL: Option<u32> = None;
+        const MAX_REFINES: Option<u32> = None;
     }
 
     /// Mirrors a quality-less node (`Quality = ()`, no knobs set).
@@ -592,6 +793,7 @@ mod tests {
         const TIME_BUDGET: Option<CuDuration> = None;
         const MAX_AGE: Option<CuDuration> = None;
         const MAX_STALL: Option<u32> = None;
+        const MAX_REFINES: Option<u32> = None;
     }
 
     #[test]
@@ -766,5 +968,224 @@ mod tests {
         let outcome = abort_at_base(t0, now, &mut output);
         assert!(!outcome.published);
         assert_eq!(output.metadata.status_txt.0.as_str(), "any:0it abort!");
+    }
+
+    // --- background runner: one whole job per process() call ---
+
+    /// Mirrors codegen for `anytime: (max_refines: 2)`.
+    struct MaxRefinesPolicy;
+    impl<Q: Copy + PartialOrd> AnytimePolicy<Q> for MaxRefinesPolicy {
+        const TIME_BUDGET: Option<CuDuration> = None;
+        const MAX_AGE: Option<CuDuration> = None;
+        const MAX_STALL: Option<u32> = None;
+        const MAX_REFINES: Option<u32> = Some(2);
+    }
+
+    /// Mirrors codegen for `anytime: (time_budget_ms: 1.0)`: no quanta bound,
+    /// so only the budget closes the loop.
+    struct BudgetOnlyPolicy;
+    impl<Q: Copy + PartialOrd> AnytimePolicy<Q> for BudgetOnlyPolicy {
+        const TIME_BUDGET: Option<CuDuration> = Some(CuDuration(1_000_000));
+        const MAX_AGE: Option<CuDuration> = None;
+        const MAX_STALL: Option<u32> = None;
+        const MAX_REFINES: Option<u32> = None;
+    }
+
+    /// Advances the mock clock by one step per quantum, so a time-bounded
+    /// policy fires deterministically.
+    #[derive(Reflect)]
+    #[reflect(no_field_bounds, from_reflect = false)]
+    struct TickingTask {
+        #[reflect(ignore)]
+        clock: RobotClockMock,
+        step: CuDuration,
+        elapsed: CuDuration,
+    }
+
+    impl TickingTask {
+        fn tick(&mut self) {
+            self.elapsed += self.step;
+            self.clock.set_value(self.elapsed.0);
+        }
+    }
+
+    impl Freezable for TickingTask {}
+
+    impl CuAnytimeTask for TickingTask {
+        type Input<'m> = input_msg!(u32);
+        type Output<'m> = output_msg!(u32);
+        type Resources<'r> = RobotClockMock;
+        type Quality = Quality;
+
+        fn new(_config: Option<&ComponentConfig>, clock: RobotClockMock) -> CuResult<Self> {
+            Ok(Self {
+                clock,
+                step: CuDuration::from_millis(1),
+                elapsed: CuDuration::default(),
+            })
+        }
+
+        fn base<'i, 'o>(
+            &mut self,
+            _ctx: &CuContext,
+            _input: &Self::Input<'i>,
+            output: &mut Self::Output<'o>,
+        ) -> CuResult<AnytimeStatus<Quality>> {
+            self.tick();
+            output.set_payload(0);
+            Ok(AnytimeStatus::Improved(q(0.5)))
+        }
+
+        fn refine<'o>(
+            &mut self,
+            _ctx: &CuContext,
+            output: &mut Self::Output<'o>,
+        ) -> CuResult<AnytimeStatus<Quality>> {
+            self.tick();
+            output.set_payload(output.payload().copied().unwrap_or(0) + 1);
+            Ok(AnytimeStatus::Improved(q(0.5)))
+        }
+    }
+
+    /// Gives up before producing anything and says so by clearing the payload.
+    #[derive(Reflect)]
+    struct AbortingTask;
+
+    impl Freezable for AbortingTask {}
+
+    impl CuAnytimeTask for AbortingTask {
+        type Input<'m> = input_msg!(u32);
+        type Output<'m> = output_msg!(u32);
+        type Resources<'r> = ();
+        type Quality = Quality;
+
+        fn new(_config: Option<&ComponentConfig>, _resources: ()) -> CuResult<Self> {
+            Ok(Self)
+        }
+
+        fn base<'i, 'o>(
+            &mut self,
+            _ctx: &CuContext,
+            _input: &Self::Input<'i>,
+            output: &mut Self::Output<'o>,
+        ) -> CuResult<AnytimeStatus<Quality>> {
+            output.clear_payload();
+            Ok(AnytimeStatus::Aborted)
+        }
+
+        fn refine<'o>(
+            &mut self,
+            _ctx: &CuContext,
+            _output: &mut Self::Output<'o>,
+        ) -> CuResult<AnytimeStatus<Quality>> {
+            unreachable!("refine after an abort at base")
+        }
+    }
+
+    /// Drives one job and returns the output the runner published.
+    fn run_job<T, P>(runner: &mut CuAnytimeRunner<T, P>, ctx: &CuContext, tov: Tov) -> CuMsg<u32>
+    where
+        T: for<'i, 'o> CuAnytimeTask<Input<'i> = CuMsg<u32>, Output<'o> = CuMsg<u32>>
+            + Send
+            + Sync
+            + 'static,
+        P: AnytimePolicy<T::Quality> + Send + Sync + 'static,
+    {
+        let mut input = CuMsg::new(Some(3u32));
+        input.tov = tov;
+        let mut output = CuMsg::new(None);
+        runner.process(ctx, &input, &mut output).unwrap();
+        output
+    }
+
+    #[test]
+    fn runner_stops_at_the_quanta_bound() {
+        let ctx = CuContext::new_mock_clock().0;
+        let mut runner: CuAnytimeRunner<IncrementalSum, MaxRefinesPolicy> =
+            CuAnytimeRunner::new(None, ()).unwrap();
+
+        let output = run_job(&mut runner, &ctx, Tov::None);
+        // Two quanta of a job needing three: stopped by the bound, not by the task.
+        assert_eq!(output.payload(), Some(&2));
+        assert_eq!(output.metadata.status_txt.0.as_str(), "any:2it q=0.67 max");
+    }
+
+    #[test]
+    fn runner_stops_when_the_task_converges() {
+        let ctx = CuContext::new_mock_clock().0;
+        let mut runner: CuAnytimeRunner<IncrementalSum, FullPolicy> =
+            CuAnytimeRunner::new(None, ()).unwrap();
+
+        // Three quanta reach the input, quality 1.0 >= the 0.9 target, so the
+        // check before the fourth quantum stops the job.
+        let output = run_job(&mut runner, &ctx, Tov::None);
+        assert_eq!(output.payload(), Some(&3));
+        assert_eq!(output.metadata.status_txt.0.as_str(), "any:3it q=1.00 tgt");
+    }
+
+    #[test]
+    fn runner_stops_when_the_budget_is_exhausted() {
+        let (ctx, clock) = CuContext::new_mock_clock();
+        let mut runner: CuAnytimeRunner<TickingTask, BudgetOnlyPolicy> =
+            CuAnytimeRunner::new(None, clock).unwrap();
+
+        // base() alone burns the 1 ms budget, so no quantum runs.
+        let output = run_job(&mut runner, &ctx, Tov::None);
+        assert_eq!(output.payload(), Some(&0));
+        assert_eq!(output.metadata.status_txt.0.as_str(), "any:0it q=0.50 bdgt");
+    }
+
+    #[test]
+    fn runner_skips_a_dead_on_arrival_input() {
+        let (ctx, clock) = CuContext::new_mock_clock();
+        clock.set_value(CuDuration::from_millis(5).0);
+        let mut runner: CuAnytimeRunner<IncrementalSum, FullPolicy> =
+            CuAnytimeRunner::new(None, ()).unwrap();
+
+        // The input is 5 ms old against a 2 ms horizon: base() never runs.
+        let output = run_job(&mut runner, &ctx, Tov::Time(CuTime::default()));
+        assert_eq!(output.payload(), None);
+        assert_eq!(output.metadata.status_txt.0.as_str(), "any:0it stale!");
+    }
+
+    #[test]
+    fn runner_reports_an_abort_at_base() {
+        let ctx = CuContext::new_mock_clock().0;
+        let mut runner: CuAnytimeRunner<AbortingTask, FullPolicy> =
+            CuAnytimeRunner::new(None, ()).unwrap();
+
+        let output = run_job(&mut runner, &ctx, Tov::None);
+        assert_eq!(output.payload(), None);
+        assert_eq!(output.metadata.status_txt.0.as_str(), "any:0it abort!");
+    }
+
+    #[test]
+    fn runner_drops_a_result_below_the_quality_floor() {
+        let (ctx, clock) = CuContext::new_mock_clock();
+        // FullPolicy floors at 0.3 and budgets 1 ms; the ticking task reports
+        // 0.5 but the DOA-free job stops on the budget with that best quality.
+        let mut runner: CuAnytimeRunner<TickingTask, FloorPolicy> =
+            CuAnytimeRunner::new(None, clock).unwrap();
+
+        let output = run_job(&mut runner, &ctx, Tov::None);
+        assert_eq!(output.payload(), None, "below the floor: nothing published");
+        assert_eq!(
+            output.metadata.status_txt.0.as_str(),
+            "any:0it q=0.50 bdgt!"
+        );
+    }
+
+    /// Mirrors codegen for `anytime: (time_budget_ms: 1.0, quality_floor: 0.8)`.
+    struct FloorPolicy;
+    impl AnytimePolicy<Quality> for FloorPolicy {
+        const TIME_BUDGET: Option<CuDuration> = Some(CuDuration(1_000_000));
+        const MAX_AGE: Option<CuDuration> = None;
+        const MAX_STALL: Option<u32> = None;
+        const MAX_REFINES: Option<u32> = None;
+
+        fn below_floor(q: Quality) -> bool {
+            q.partial_cmp(&quality_from_f32(0.8))
+                .is_none_or(core::cmp::Ordering::is_lt)
+        }
     }
 }
