@@ -507,3 +507,30 @@ jobs:
     with:
       toolchain: stable
       linux_runner_label: ubuntu-latest
+
+  ci-status:
+    name: CI Status
+    if: ${{ always() }}
+    needs:
+      - linux-ci-image
+      - linux-cuda-ci-image
+      - msrv-container
+      - msrv-host
+      - Unit-Tests-Other
+      - Unit-Tests-Linux
+      - Unit-Tests-CUDA
+      - extra-examples-container
+      - extra-examples-host
+      - benchmarks-container
+      - benchmarks-host
+      - coverage
+      - api
+      - fmt
+      - embedded
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if a CI job failed or was cancelled
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: exit 1
+      - name: Confirm CI succeeded
+        run: echo "All CI jobs succeeded or were intentionally skipped."

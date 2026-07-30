@@ -1,6 +1,6 @@
 <h1 style="color: #b87333;"><img src="https://github.com/copper-project/copper-rs/blob/master/doc/static/cu29.png?raw=true" width="60" /> &nbsp;&nbsp;&nbsp;&nbsp; Copper Runtime & SDK</h1>
 
-[![CI/CD](https://img.shields.io/github/check-runs/copper-project/copper-rs/master?label=CI%2FCD)](https://github.com/copper-project/copper-rs/actions/workflows/general.yml)
+[![CI/CD](https://img.shields.io/github/check-runs/copper-project/copper-rs/master?nameFilter=CI%20Status&label=CI%2FCD)](https://github.com/copper-project/copper-rs/actions/workflows/general.yml)
 ![GitHub last commit](https://img.shields.io/github/last-commit/copper-project/copper-rs)
 ![](https://img.shields.io/badge/Rust-1.95+-orange.svg)
 [![crates.io](https://img.shields.io/crates/v/cu29.svg)](https://crates.io/crates/cu29)
