@@ -9,4 +9,6 @@ ignore = [
   "RUSTSEC-2025-0134", # rustls-pemfile is unmaintained. https://rustsec.org/advisories/RUSTSEC-2025-0134
   "RUSTSEC-2026-0110", # bare-metal is deprecated; stm32h7xx-hal 0.16.0 still depends on it and no safe upgrade is available.
   "RUSTSEC-2025-0140", # gix-date UB advisory via cargo-cunew -> cargo-generate; no upstream release fixes it yet.
+  "RUSTSEC-2026-0173", # proc-macro-error2 is unmaintained; pio 0.3.0 still depends on it and no safe upgrade is available.
+  "RUSTSEC-2026-0192", # ttf-parser is unmaintained; current UI dependencies still require it and no safe upgrade is available.
 ]
