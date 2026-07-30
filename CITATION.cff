@@ -1,9 +1,13 @@
-@misc{copperrs2026,
-  author       = {Guillaume Binet and Copper Project contributors},
-  title        = {Copper-rs: A deterministic runtime and SDK for robotics},
-  year         = {2026},
-  howpublished = {GitHub repository},
-  url          = {https://github.com/copper-project/copper-rs},
-  note         = {Version v0.13 or latest}
-}
-
+cff-version: 1.2.0
+message: "If you use Copper-rs in your research, please cite it using this metadata."
+title: "Copper-rs: A deterministic runtime and SDK for robotics"
+type: software
+authors:
+  - family-names: Binet
+    given-names: Guillaume
+  - name: Copper Project contributors
+repository-code: "https://github.com/copper-project/copper-rs"
+url: "https://github.com/copper-project/copper-rs"
+license: Apache-2.0
+version: "1.0.0"
+date-released: 2026-07-02
