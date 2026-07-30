@@ -444,15 +444,14 @@ fn stamp<O: CuMsgPayload>(
 
 /// Age anchor of one job: the input's time of validity, falling back to `now`.
 ///
-/// A range anchors on its newest data (`end`); anchoring on `start` would
-/// declare any input whose span exceeds the age limit (a full lidar sweep, say)
-/// dead on arrival forever.
+/// A range anchors on its earliest data: the entire input window must remain
+/// within the age limit.
 #[doc(hidden)]
 #[inline(always)]
 pub fn anchor_from_tov(tov: Tov, now: CuTime) -> CuTime {
     match tov {
         Tov::Time(time) => time,
-        Tov::Range(range) => range.end,
+        Tov::Range(range) => range.start,
         Tov::None => now,
     }
 }

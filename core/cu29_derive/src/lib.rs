@@ -1726,15 +1726,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 Err(e) => return return_error(format!("Could not compute copperlist plan: {e}")),
             };
 
-        // Anytime restrictions the runner imposes on top of config validation.
-        for (index, anytime) in task_specs.anytime_configs.iter().enumerate() {
-            if anytime.is_some() && task_specs.background_flags[index] {
-                return return_error(format!(
-                    "Anytime task '{}' cannot use background: true yet: the background anytime runner is not implemented. Run it in the foreground for now.",
-                    task_specs.ids[index]
-                ));
-            }
-        }
         // Single-input/single-output arity is validated at configuration time
         // (config.rs validate_anytime_graph), before the plan is built.
 
@@ -2311,7 +2302,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     && !(sim_mode
                         && task_specs.cutypes[index] == CuTaskType::Source
                         && !task_specs.run_in_sim_flags[index]);
-                let inner_task_type = &task_specs.sim_task_types[index];
+                // What the wrapper wraps: the anytime runner for an anytime
+                // node, the declared task otherwise.
+                let inner_task_type = &background_inner_type(
+                    &task_specs.sim_task_types[index],
+                    task_specs.ids[index].as_str(),
+                    task_specs.anytime_configs[index].is_some(),
+                );
                 match task_specs.cutypes[index] {
                     CuTaskType::Source => {
                         if background {
@@ -2415,7 +2412,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     task_specs.type_names[index], index
                 );
                 let mapping_ref = task_resource_mappings.refs[index].clone();
-                let inner_task_type = &task_specs.sim_task_types[index];
+                let inner_task_type = &background_inner_type(
+                    &task_specs.sim_task_types[index],
+                    task_specs.ids[index].as_str(),
+                    task_specs.anytime_configs[index].is_some(),
+                );
                 match task_specs.cutypes[index] {
                     CuTaskType::Source => {
                         if *background {
@@ -6113,12 +6114,31 @@ fn task_trait_for_kind(task_kind: CuTaskType) -> proc_macro2::TokenStream {
 /// Like [`task_trait_for_kind`], but resolves anytime nodes to
 /// `CuAnytimeTask` (they stay `Regular` in the graph but implement the
 /// anytime trait instead of `CuTask`).
+///
+/// Background comes first: a backgrounded node is driven through the
+/// `CuAsyncTask` wrapper, which is a plain `CuTask` whatever it wraps.
 fn task_trait_for_specs(task_specs: &CuTaskSpecSet, index: usize) -> proc_macro2::TokenStream {
-    if task_specs.anytime_configs[index].is_some() {
+    if task_specs.background_flags[index] {
+        task_trait_for_kind(task_specs.cutypes[index])
+    } else if task_specs.anytime_configs[index].is_some() {
         quote! { cu29::cutask_anytime::CuAnytimeTask }
     } else {
         task_trait_for_kind(task_specs.cutypes[index])
     }
+}
+
+/// The task a backgrounded node hands to `CuAsyncTask`: an anytime node goes
+/// through [`CuAnytimeRunner`], which turns one whole job — age check, `base()`,
+/// refine quanta under the policy — into a single `CuTask::process` call.
+///
+/// `policy` names the node's `AnytimePolicy` ZST, emitted in the mission module
+/// alongside every type built here.
+fn background_inner_type(task_type: &Type, task_id: &str, is_anytime: bool) -> Type {
+    if !is_anytime {
+        return task_type.clone();
+    }
+    let policy_ident = anytime_policy_ident(task_id);
+    parse_quote!(cu29::cutask_anytime::CuAnytimeRunner<#task_type, #policy_ident>)
 }
 
 fn task_output_payload_type(
@@ -6186,7 +6206,7 @@ impl CuTaskSpecSet {
             .filter(|(_, node)| node.get_flavor() == Flavor::Task)
             .collect();
 
-        let ids = all_id_nodes
+        let ids: Vec<String> = all_id_nodes
             .iter()
             .map(|(_, node)| node.get_id().to_string())
             .collect();
@@ -6258,8 +6278,16 @@ impl CuTaskSpecSet {
             .zip(cutypes.iter())
             .zip(background_flags.iter())
             .zip(output_types.iter())
-            .map(|((((name_type, name), cutype), &background), output_type)| {
+            .enumerate()
+            .map(|(index, ((((name_type, name), cutype), &background), output_type))| {
                 if background {
+                    // A foreground anytime node keeps its raw type in the tuple;
+                    // a backgrounded one is driven through the anytime runner.
+                    let name_type = &background_inner_type(
+                        name_type,
+                        ids[index].as_str(),
+                        anytime_configs[index].is_some(),
+                    );
                     if let Some(output_type) = output_type {
                         match cutype {
                             CuTaskType::Source => {
@@ -6290,8 +6318,14 @@ impl CuTaskSpecSet {
             .zip(cutypes.iter())
             .zip(background_flags.iter())
             .zip(output_types.iter())
-            .map(|((((name_type, name), cutype), &background), output_type)| {
+            .enumerate()
+            .map(|(index, ((((name_type, name), cutype), &background), output_type))| {
                 if background {
+                    let name_type = &background_inner_type(
+                        name_type,
+                        ids[index].as_str(),
+                        anytime_configs[index].is_some(),
+                    );
                     if let Some(output_type) = output_type {
                         match cutype {
                             CuTaskType::Source => {
@@ -7814,10 +7848,16 @@ fn build_task_resource_mappings(
             continue;
         }
 
+        // A backgrounded task binds the resources of what the wrapper wraps —
+        // the runner for an anytime node, the task itself otherwise.
         let binding_task_type = if task_specs.background_flags[idx] {
-            &task_specs.sim_task_types[idx]
+            background_inner_type(
+                &task_specs.sim_task_types[idx],
+                task_specs.ids[idx].as_str(),
+                task_specs.anytime_configs[idx].is_some(),
+            )
         } else {
-            &task_specs.task_types[idx]
+            task_specs.task_types[idx].clone()
         };
 
         let binding_trait = task_trait_for_specs(task_specs, idx);
@@ -8561,10 +8601,17 @@ fn build_anytime_policy_defs(task_specs: &CuTaskSpecSet) -> Vec<proc_macro2::Tok
                 Some(stall) => quote! { Some(#stall) },
                 None => quote! { None },
             };
+            // Only the background runner reads MAX_REFINES: a foreground node
+            // carries the count as the number of refine steps in its plan.
+            let max_refines = match anytime.max_refines {
+                Some(refines) => quote! { Some(#refines) },
+                None => quote! { None },
+            };
             let consts = quote! {
                 const TIME_BUDGET: Option<cu29::clock::CuDuration> = #time_budget;
                 const MAX_AGE: Option<cu29::clock::CuDuration> = #max_age;
                 const MAX_STALL: Option<u32> = #max_stall;
+                const MAX_REFINES: Option<u32> = #max_refines;
             };
             let has_quality_knob = anytime.quality_target.is_some()
                 || anytime.quality_floor.is_some()
@@ -8639,7 +8686,9 @@ fn build_anytime_job_locals(task_specs: &CuTaskSpecSet) -> Vec<proc_macro2::Toke
         .anytime_configs
         .iter()
         .enumerate()
-        .filter(|(_, anytime)| anytime.is_some())
+        // A background anytime node keeps its single `Whole` step and runs its
+        // job inside the runner, so it has no plan-level job to carry.
+        .filter(|(index, anytime)| anytime.is_some() && !task_specs.background_flags[*index])
         .map(|(index, _)| anytime_job_local_tokens(task_specs, index))
         .collect()
 }
@@ -8885,13 +8934,7 @@ fn generate_anytime_base_block(
     let base_dispatch = if let Some(max_age_ms) = anytime.max_age_ms {
         let max_age_nanos = anytime_ms_to_nanos(max_age_ms);
         quote! {
-            let __cu_any_anchor: cu29::clock::CuTime = match cumsg_input.tov {
-                cu29::clock::Tov::Time(tov_time) => tov_time,
-                // A Range anchors on its earliest data: the entire input
-                // window must remain within max_age.
-                cu29::clock::Tov::Range(tov_range) => tov_range.start,
-                cu29::clock::Tov::None => __cu_any_now,
-            };
+            let __cu_any_anchor = cu29::cutask_anytime::anchor_from_tov(cumsg_input.tov, __cu_any_now);
             if __cu_any_now >= __cu_any_anchor + cu29::clock::CuDuration(#max_age_nanos) {
                 let __cu_any_outcome = cu29::cutask_anytime::skip_stale(cumsg_output);
                 debug!(ctx, "Anytime task {}: input dead on arrival, job skipped.", #task_id);
@@ -10023,7 +10066,12 @@ fn runtime_task_type_for_index(
         CuTaskType::Regular => {
             if background {
                 if let Some(out_ty) = output_type {
-                    parse_quote!(CuAsyncTask<#declared_task_type, #out_ty>)
+                    let inner = background_inner_type(
+                        declared_task_type,
+                        task_id,
+                        task_specs.anytime_configs[index].is_some(),
+                    );
+                    parse_quote!(CuAsyncTask<#inner, #out_ty>)
                 } else {
                     panic!("{task_id}: If a task is background, it has to have an output");
                 }
