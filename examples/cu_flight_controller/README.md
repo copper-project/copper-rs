@@ -81,6 +81,15 @@ RC Input -> RC Mapper -------------------------------> mode supervisor -> attitu
 
 ## Building
 
+### Task graph
+
+```bash
+just dag
+```
+
+This renders the complete simulated deployment using the `default` mission. Both selectors remain
+overridable, for example with `just dag mission=flow` or `just dag features=end2end`.
+
 ### Distributed subsystem compile check
 
 ```bash

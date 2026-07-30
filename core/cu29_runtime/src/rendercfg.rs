@@ -1,7 +1,9 @@
 mod config;
 use clap::Parser;
 use config::{
-    ConfigGraphs, PortLookup, build_render_topology, read_configuration, read_multi_configuration,
+    ConfigGraphs, PortLookup, build_render_topology, read_configuration,
+    read_configuration_with_features, read_multi_configuration,
+    read_multi_configuration_with_features,
 };
 pub use cu29_traits::*;
 use hashbrown::HashMap;
@@ -175,9 +177,12 @@ struct Args {
     /// Log statistics JSON file to enrich the DAG
     #[clap(long)]
     logstats: Option<PathBuf>,
-    /// Mission id to render (omit to render every mission)
+    /// Mission id to render (omit to render every mission in a single-Copper config)
     #[clap(long)]
     mission: Option<String>,
+    /// Comma-separated Cargo feature names used to resolve conditional config fragments
+    #[clap(long, value_delimiter = ',')]
+    features: Vec<String>,
     /// List missions contained in the configuration and exit
     #[clap(long, action)]
     list_missions: bool,
@@ -206,7 +211,8 @@ struct InterconnectRender {
 fn main() -> std::io::Result<()> {
     // Parse command line arguments
     let args = Args::parse();
-    let input = match load_render_input(&args.config) {
+    let active_features = args.features.iter().map(String::as_str).collect::<Vec<_>>();
+    let input = match load_render_input(&args.config, &active_features) {
         Ok(input) => input,
         Err(err) => {
             eprintln!("{err}");
@@ -250,21 +256,15 @@ fn main() -> std::io::Result<()> {
         }
         RenderInput::Multi(config) => {
             if args.list_missions {
-                println!("default");
+                print_multi_mission_list(&config);
                 return Ok(());
-            }
-            if let Some(mission) = args.mission.as_deref() {
-                eprintln!(
-                    "Multi-Copper DAG rendering does not support --mission (received '{mission}')."
-                );
-                std::process::exit(1);
             }
             if args.logstats.is_some() {
                 eprintln!("Multi-Copper DAG rendering does not support --logstats yet.");
                 std::process::exit(1);
             }
 
-            match render_multi_config_svg(&config) {
+            match render_multi_config_svg(&config, args.mission.as_deref()) {
                 Ok(svg) => svg,
                 Err(err) => {
                     eprintln!("{err}");
@@ -292,7 +292,7 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-fn load_render_input(path: &Path) -> CuResult<RenderInput> {
+fn load_render_input(path: &Path, active_features: &[&str]) -> CuResult<RenderInput> {
     let path_str = path.to_str().ok_or_else(|| {
         CuError::from(format!(
             "Config path '{}' is not valid UTF-8",
@@ -300,9 +300,19 @@ fn load_render_input(path: &Path) -> CuResult<RenderInput> {
         ))
     })?;
 
-    match read_multi_configuration(path_str) {
+    let multi_config = if active_features.is_empty() {
+        read_multi_configuration(path_str)
+    } else {
+        read_multi_configuration_with_features(path_str, active_features)
+    };
+
+    match multi_config {
         Ok(config) => Ok(RenderInput::Multi(config)),
-        Err(multi_err) => match read_configuration(path_str) {
+        Err(multi_err) => match if active_features.is_empty() {
+            read_configuration(path_str)
+        } else {
+            read_configuration_with_features(path_str, active_features)
+        } {
             Ok(config) => Ok(RenderInput::Single(config)),
             Err(single_err) => Err(CuError::from(format!(
                 "Failed to read '{}' as either a Copper config or a multi-Copper config.\nCopper config: {single_err}\nMulti-Copper config: {multi_err}",
@@ -361,20 +371,24 @@ fn render_config_svg(
     Ok(render_sections_to_svg(&layouts, &[])?.into_bytes())
 }
 
-fn render_multi_config_svg(config: &config::MultiCopperConfig) -> CuResult<Vec<u8>> {
+fn render_multi_config_svg(
+    config: &config::MultiCopperConfig,
+    mission_id: Option<&str>,
+) -> CuResult<Vec<u8>> {
     let mut layouts = Vec::new();
 
     for subsystem in &config.subsystems {
-        let graph = subsystem.config.graphs.get_default_mission_graph().map_err(|e| {
-            CuError::from(format!(
-                "Distributed DAG rendering expects one local graph per subsystem. Subsystem '{}' is not renderable as a single graph: {e}",
-                subsystem.id
-            ))
-        })?;
+        let (selected_mission, graph) = select_multi_subsystem_graph(&subsystem.config, mission_id)
+            .map_err(|e| {
+                CuError::from(format!(
+                    "Cannot render subsystem '{}' in the distributed DAG: {e}",
+                    subsystem.id
+                ))
+            })?;
         let section = SectionRef {
             section_id: subsystem.id.clone(),
             title: Some(format!("Subsystem: {}", subsystem.id)),
-            mission_id: None,
+            mission_id: selected_mission,
             graph,
         };
         let resource_catalog = collect_resource_catalog(&subsystem.config)?;
@@ -411,6 +425,35 @@ fn render_multi_config_svg(config: &config::MultiCopperConfig) -> CuResult<Vec<u
         .collect::<Vec<_>>();
 
     Ok(render_sections_to_svg(&layouts, &interconnects)?.into_bytes())
+}
+
+/// Select one local graph for a subsystem while treating simple graphs as mission-agnostic.
+fn select_multi_subsystem_graph<'a>(
+    config: &'a config::CuConfig,
+    requested_mission: Option<&str>,
+) -> CuResult<(Option<String>, &'a config::CuGraph)> {
+    match &config.graphs {
+        ConfigGraphs::Simple(graph) => Ok((None, graph)),
+        ConfigGraphs::Missions(graphs) => {
+            let mission = match requested_mission {
+                Some(mission) => mission,
+                None if graphs.len() == 1 => graphs.keys().next().unwrap(),
+                None => {
+                    return Err(CuError::from(format!(
+                        "mission selection is required. Available missions: {}",
+                        format_mission_list(graphs)
+                    )));
+                }
+            };
+            let graph = graphs.get(mission).ok_or_else(|| {
+                CuError::from(format!(
+                    "mission '{mission}' was not found. Available missions: {}",
+                    format_mission_list(graphs)
+                ))
+            })?;
+            Ok((Some(mission.to_string()), graph))
+        }
+    }
 }
 
 fn load_logstats(
@@ -2135,6 +2178,30 @@ fn print_mission_list(config: &config::CuConfig) {
                 println!("{mission}");
             }
         }
+    }
+}
+
+/// List deployment-wide mission ids accepted by every mission-based subsystem.
+fn print_multi_mission_list(config: &config::MultiCopperConfig) {
+    let mut common_missions: Option<BTreeSet<String>> = None;
+    for subsystem in &config.subsystems {
+        let ConfigGraphs::Missions(graphs) = &subsystem.config.graphs else {
+            continue;
+        };
+        let missions = graphs.keys().cloned().collect::<BTreeSet<_>>();
+        common_missions = Some(match common_missions {
+            Some(common) => common.intersection(&missions).cloned().collect(),
+            None => missions,
+        });
+    }
+
+    match common_missions {
+        Some(missions) => {
+            for mission in missions {
+                println!("{mission}");
+            }
+        }
+        None => println!("default"),
     }
 }
 
@@ -4607,18 +4674,73 @@ mod tests {
         )
         .expect("write network config");
 
-        let input = load_render_input(network_path.as_path()).expect("multi config should load");
+        let input =
+            load_render_input(network_path.as_path(), &[]).expect("multi config should load");
         let multi = match input {
             RenderInput::Multi(config) => config,
             RenderInput::Single(_) => panic!("expected multi-Copper config"),
         };
 
-        let svg = String::from_utf8(render_multi_config_svg(&multi).expect("render svg"))
+        let svg = String::from_utf8(render_multi_config_svg(&multi, None).expect("render svg"))
             .expect("svg should be utf8");
 
         assert!(svg.contains("Subsystem: alpha"));
         assert!(svg.contains("Subsystem: beta"));
         assert!(svg.contains("stroke-dasharray=\"5,5\""));
         assert!(svg.contains("demo::Ping"));
+    }
+
+    #[test]
+    fn multi_copper_render_selects_a_mission_for_mission_based_subsystems() {
+        let dir = tempdir().expect("temp dir");
+        let mission_path = dir.path().join("mission.ron");
+        let simple_path = dir.path().join("simple.ron");
+        let network_path = dir.path().join("network.ron");
+
+        fs::write(
+            &mission_path,
+            r#"(
+                missions: [(id: "default"), (id: "diagnostic")],
+                tasks: [(id: "mission_task", type: "demo::MissionTask")],
+                cnx: [(src: "mission_task", dst: "__nc__", msg: "demo::Message")],
+            )"#,
+        )
+        .expect("write mission config");
+        fs::write(
+            &simple_path,
+            r#"(
+                tasks: [(id: "simple_task", type: "demo::SimpleTask")],
+                cnx: [(src: "simple_task", dst: "__nc__", msg: "demo::Message")],
+            )"#,
+        )
+        .expect("write simple config");
+        fs::write(
+            &network_path,
+            r#"(
+                subsystems: [
+                    (id: "mission", config: "mission.ron"),
+                    (id: "simple", config: "simple.ron"),
+                ],
+                interconnects: [],
+            )"#,
+        )
+        .expect("write network config");
+
+        let input =
+            load_render_input(network_path.as_path(), &[]).expect("multi config should load");
+        let multi = match input {
+            RenderInput::Multi(config) => config,
+            RenderInput::Single(_) => panic!("expected multi-Copper config"),
+        };
+
+        let svg = String::from_utf8(
+            render_multi_config_svg(&multi, Some("default")).expect("render svg"),
+        )
+        .expect("svg should be utf8");
+
+        assert!(svg.contains("Subsystem: mission"));
+        assert!(svg.contains("Subsystem: simple"));
+        assert!(svg.contains("mission_task"));
+        assert!(svg.contains("simple_task"));
     }
 }
