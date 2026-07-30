@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["AnytimeStatus"],"trait":["CuAnytimeTask"],"type":["Quality"]};
+window.SIDEBAR_ITEMS = {"enum":["AnytimeStatus"],"fn":["quality_from_f32","quality_to_f32"],"trait":["AnytimeQuality","CuAnytimeTask"],"type":["Quality"]};
