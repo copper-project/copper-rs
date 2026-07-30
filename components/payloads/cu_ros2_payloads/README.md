@@ -22,6 +22,13 @@ Types that are supported are:
 - `sensor_msgs/Imu` <-> `ImuPayload` (accel/gyro mapped; temperature defaults to `0°C` when decoding from ROS)
 - `sensor_msgs/MagneticField` <-> `MagnetometerPayload`
 
+## ROS 2 compatibility features
+
+Enable the mutually exclusive `humble` or `jazzy` feature when targeting that ROS 2 distribution.
+Both profiles use the legacy image encoding names supported by their released `cv_bridge`
+versions and reject image layouts those versions cannot consume. Only the `humble` profile
+disables ROS type hashes.
+
 ## Adding new payloads (feel free to contribute!)
 
 To add a new payload, we pregenerated all the RIHS01 in the [RIHS payloads](all_rihs.md) file from Jazzy.

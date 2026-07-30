@@ -35,7 +35,7 @@ logreader = ["ffv1", "dep:cu29-export"]
 
 [dependencies]
 cu-ffv1-codec = { workspace = true, optional = true, features = ["ffmpeg"] }
-cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "1.0.0", optional = true }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "1.1.0-dev", optional = true }
 cu-png-codec = { workspace = true, optional = true }
 cu-sensor-payloads = { workspace = true }
 cu29 = { workspace = true }

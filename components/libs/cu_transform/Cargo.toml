@@ -22,7 +22,7 @@ cu29 = { workspace = true }
 bincode = { workspace = true }
 serde = { workspace = true }
 
-cu-spatial-payloads = { path = "../../payloads/cu_spatial_payloads", version = "1.0.0", features = [
+cu-spatial-payloads = { path = "../../payloads/cu_spatial_payloads", version = "1.1.0-dev", features = [
   "glam",
 ] }
 

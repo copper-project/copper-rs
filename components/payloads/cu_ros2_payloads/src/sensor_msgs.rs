@@ -19,6 +19,11 @@ const DATATYPE_FLOAT32: u8 = 7;
 const UT_TO_TESLA: f64 = 1e-6;
 const TESLA_TO_UT: f64 = 1e6;
 
+#[cfg(feature = "humble")]
+const ROS2_IMAGE_COMPAT_DISTRO: &str = "Humble";
+#[cfg(all(not(feature = "humble"), feature = "jazzy"))]
+const ROS2_IMAGE_COMPAT_DISTRO: &str = "Jazzy";
+
 // sensor_msgs/PointField
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct PointField {
@@ -133,6 +138,19 @@ impl<const N: usize> RosMsgAdapter<'static> for PointCloudSoaHandle<N> {
 
 impl RosMsgAdapter<'static> for CuImage<Vec<u8>> {
     type Output = Image;
+
+    #[cfg(any(feature = "humble", feature = "jazzy"))]
+    fn validate_ros_message(&self) -> Result<(), String> {
+        match &self.format.pixel_format {
+            b"GRAY" | b"Y800" | b"RGB3" | b"RGB " | b"BGR3" | b"BGR " | b"RGBA" | b"BGRA"
+            | b"YUYV" | b"UYVY" => Ok(()),
+            pixel_format => Err(format!(
+                "CuImage pixel format '{}' is not supported by ROS 2 {} cv_bridge",
+                String::from_utf8_lossy(pixel_format),
+                ROS2_IMAGE_COMPAT_DISTRO
+            )),
+        }
+    }
 
     fn namespace() -> &'static str {
         "sensor_msgs"
@@ -572,16 +590,22 @@ fn read_u32(data: &[u8], offset: usize) -> Result<u32, String> {
 
 fn pixel_format_to_encoding(pixel_format: [u8; 4]) -> String {
     match &pixel_format {
-        b"GRAY" => "mono8".to_string(),
-        b"RGB3" => "rgb8".to_string(),
-        b"BGR3" => "bgr8".to_string(),
+        b"GRAY" | b"Y800" => "mono8".to_string(),
+        b"RGB3" | b"RGB " => "rgb8".to_string(),
+        b"BGR3" | b"BGR " => "bgr8".to_string(),
         b"RGBA" => "rgba8".to_string(),
         b"BGRA" => "bgra8".to_string(),
         b"NV12" => "nv12".to_string(),
         b"NV21" => "nv21".to_string(),
         b"I420" => "i420".to_string(),
         b"YV12" => "yv12".to_string(),
+        #[cfg(any(feature = "humble", feature = "jazzy"))]
+        b"YUYV" => "yuv422_yuy2".to_string(),
+        #[cfg(not(any(feature = "humble", feature = "jazzy")))]
         b"YUYV" => "yuyv".to_string(),
+        #[cfg(any(feature = "humble", feature = "jazzy"))]
+        b"UYVY" => "yuv422".to_string(),
+        #[cfg(not(any(feature = "humble", feature = "jazzy")))]
         b"UYVY" => "uyvy".to_string(),
         _ => {
             let end = pixel_format
@@ -604,8 +628,8 @@ fn encoding_to_pixel_format(encoding: &str) -> [u8; 4] {
         "nv21" | "NV21" => *b"NV21",
         "i420" | "I420" => *b"I420",
         "yv12" | "YV12" => *b"YV12",
-        "yuyv" | "YUYV" => *b"YUYV",
-        "uyvy" | "UYVY" => *b"UYVY",
+        "yuyv" | "YUYV" | "yuv422_yuy2" | "YUV422_YUY2" => *b"YUYV",
+        "uyvy" | "UYVY" | "yuv422" | "YUV422" => *b"UYVY",
         _ => {
             let mut out = [0u8; 4];
             let bytes = encoding.as_bytes();
@@ -732,6 +756,101 @@ mod tests {
         assert_eq!(recovered.format.required_bytes(), 12);
         let recovered_bytes = recovered.buffer_handle.with_inner(|inner| inner.to_vec());
         assert_eq!(recovered_bytes, bytes);
+    }
+
+    #[test]
+    fn image_packed_aliases_use_standard_ros_encodings() {
+        let cases = [
+            (*b"GRAY", "mono8"),
+            (*b"Y800", "mono8"),
+            (*b"RGB3", "rgb8"),
+            (*b"RGB ", "rgb8"),
+            (*b"BGR3", "bgr8"),
+            (*b"BGR ", "bgr8"),
+            (*b"RGBA", "rgba8"),
+            (*b"BGRA", "bgra8"),
+        ];
+
+        for (pixel_format, expected) in cases {
+            assert_eq!(pixel_format_to_encoding(pixel_format), expected);
+        }
+    }
+
+    #[test]
+    fn image_yuv422_encoding_matches_ros_profile() {
+        #[cfg(any(feature = "humble", feature = "jazzy"))]
+        let expected = [(b"YUYV", "yuv422_yuy2"), (b"UYVY", "yuv422")];
+        #[cfg(not(any(feature = "humble", feature = "jazzy")))]
+        let expected = [(b"YUYV", "yuyv"), (b"UYVY", "uyvy")];
+
+        for (pixel_format, encoding) in expected {
+            assert_eq!(pixel_format_to_encoding(*pixel_format), encoding);
+        }
+    }
+
+    #[test]
+    fn image_yuv422_input_accepts_modern_and_legacy_encodings() {
+        for encoding in ["yuyv", "YUYV", "yuv422_yuy2", "YUV422_YUY2"] {
+            assert_eq!(encoding_to_pixel_format(encoding), *b"YUYV");
+        }
+        for encoding in ["uyvy", "UYVY", "yuv422", "YUV422"] {
+            assert_eq!(encoding_to_pixel_format(encoding), *b"UYVY");
+        }
+    }
+
+    #[test]
+    fn image_type_hash_matches_ros_profile() {
+        #[cfg(feature = "humble")]
+        let expected = "TypeHashNotSupported";
+        #[cfg(not(feature = "humble"))]
+        let expected = "RIHS01_d31d41a9a4c4bc8eae9be757b0beed306564f7526c88ea6a4588fb9582527d47";
+
+        assert_eq!(
+            <CuImage<Vec<u8>> as RosBridgeAdapter>::type_hash(),
+            expected
+        );
+    }
+
+    #[cfg(any(feature = "humble", feature = "jazzy"))]
+    #[test]
+    fn image_validation_rejects_formats_unsupported_by_legacy_cv_bridge() {
+        for pixel_format in [b"NV12", b"NV21", b"I420", b"YV12", b"MJPG"] {
+            let image = CuImage::new(
+                CuImageBufferFormat {
+                    width: 4,
+                    height: 2,
+                    stride: 4,
+                    pixel_format: *pixel_format,
+                },
+                CuHandle::new_detached(vec![0; 64]),
+            );
+
+            let error = <CuImage<Vec<u8>> as RosBridgeAdapter>::validate_ros_message(&image)
+                .expect_err("unsupported image format should be rejected");
+            assert!(error.contains(String::from_utf8_lossy(pixel_format).as_ref()));
+        }
+    }
+
+    #[cfg(any(feature = "humble", feature = "jazzy"))]
+    #[test]
+    fn image_validation_accepts_legacy_cv_bridge_formats() {
+        for pixel_format in [
+            b"GRAY", b"Y800", b"RGB3", b"RGB ", b"BGR3", b"BGR ", b"RGBA", b"BGRA", b"YUYV",
+            b"UYVY",
+        ] {
+            let image = CuImage::new(
+                CuImageBufferFormat {
+                    width: 4,
+                    height: 2,
+                    stride: 16,
+                    pixel_format: *pixel_format,
+                },
+                CuHandle::new_detached(vec![0; 64]),
+            );
+
+            <CuImage<Vec<u8>> as RosBridgeAdapter>::validate_ros_message(&image)
+                .expect("supported image format should pass validation");
+        }
     }
 
     #[test]

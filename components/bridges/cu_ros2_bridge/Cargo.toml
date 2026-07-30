@@ -33,6 +33,10 @@ cdr = { version = "0.2.4" }
 
 [features]
 humble = ["cu-ros2-payloads/humble"]
+jazzy = ["cu-ros2-payloads/jazzy"]
+
+[dev-dependencies]
+bincode = { workspace = true }
 
 [build-dependencies]
 cu29-build = { workspace = true }

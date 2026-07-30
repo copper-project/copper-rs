@@ -62,6 +62,8 @@ pub use cu29::prelude::CuMsgOrigin
 pub use cu29::prelude::CuPayloadRawBytes
 pub use cu29::prelude::CuResult
 pub use cu29::prelude::CuRuntime
+pub use cu29::prelude::DebugEnumVariantDescriptor
+pub use cu29::prelude::DebugEnumVariantKind
 pub use cu29::prelude::DebugFieldDescriptor
 pub use cu29::prelude::DebugFieldKind
 pub use cu29::prelude::DebugFieldSemantics

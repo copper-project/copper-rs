@@ -19,7 +19,7 @@ environments = ["host"]
 host_os = ["linux"]
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version = "1.0.0", default-features = false, features = [
+cu29 = { path = "../../../core/cu29", version = "1.1.0-dev", default-features = false, features = [
   "std",
   "textlogs",
   "units",

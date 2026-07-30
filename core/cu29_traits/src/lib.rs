@@ -618,6 +618,22 @@ impl DebugScalarKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DebugEnumVariantKind {
+    Unit,
+    Tuple,
+    Struct,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DebugEnumVariantDescriptor {
+    pub name: String,
+    pub kind: DebugEnumVariantKind,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<DebugFieldDescriptor>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DebugFieldDescriptor {
     pub display_path: String,
     #[serde(
@@ -635,6 +651,12 @@ pub struct DebugFieldDescriptor {
     pub kind: DebugFieldKind,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<DebugFieldDescriptor>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub map_key: Option<Box<DebugFieldDescriptor>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub map_value: Option<Box<DebugFieldDescriptor>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub enum_variants: Vec<DebugEnumVariantDescriptor>,
 }
 
 fn deserialize_debug_binding_name<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
@@ -992,6 +1014,9 @@ mod std_tests {
             nullable: true,
             kind: DebugFieldKind::Scalar,
             children: Vec::new(),
+            map_key: None,
+            map_value: None,
+            enum_variants: Vec::new(),
         };
 
         let encoded = serde_json::to_value(&descriptor).unwrap();

@@ -25,7 +25,7 @@ sysinfo = ["cu-tuimon/sysinfo_pane"]
 
 [dependencies]
 cu29 = { workspace = true }
-cu-tuimon = { path = "../../libs/cu_tuimon", version = "1.0.0", default-features = false }
+cu-tuimon = { path = "../../libs/cu_tuimon", version = "1.1.0-dev", default-features = false }
 compact_str = { workspace = true }
 ratatui = "0.30"
 ansi-to-tui = { version = "8.0.0", default-features = false }
