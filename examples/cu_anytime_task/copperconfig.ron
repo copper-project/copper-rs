@@ -1,0 +1,69 @@
+(
+    tasks: [
+        (
+            id: "camera",
+            type: "tasks::TargetSrc",
+        ),
+        (
+            id: "planner",
+            type: "tasks::IncrementalPlanner",
+            anytime: (
+                max_age_ms: 500.0,
+                quality_target: 0.9,
+                max_refines: 8,
+            ),
+        ),
+        (
+            id: "smoother",
+            type: "tasks::CountingSmoother",
+            anytime: (max_refines: 2),
+        ),
+        (
+            id: "recorder",
+            type: "tasks::RecordingSink",
+        ),
+        // Background placement: the same task type, run to completion on a
+        // worker thread. A time bound alone is enough here - the copperlist
+        // plan does not need the quanta count.
+        (
+            id: "tracker",
+            type: "tasks::IncrementalPlanner",
+            background: true,
+            anytime: (
+                time_budget_ms: 50.0,
+                quality_target: 0.9,
+            ),
+        ),
+        (
+            id: "tracker_recorder",
+            type: "tasks::BackgroundSink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "camera",
+            dst: "planner",
+            msg: "u32",
+        ),
+        (
+            src: "planner",
+            dst: "smoother",
+            msg: "u32",
+        ),
+        (
+            src: "smoother",
+            dst: "recorder",
+            msg: "u32",
+        ),
+        (
+            src: "camera",
+            dst: "tracker",
+            msg: "u32",
+        ),
+        (
+            src: "tracker",
+            dst: "tracker_recorder",
+            msg: "u32",
+        ),
+    ],
+)

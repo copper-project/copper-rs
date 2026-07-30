@@ -76,6 +76,7 @@ members = [
   "benchmarks/cu_async_cl_io_bench",
   "benchmarks/cu_dorabench",
   "benchmarks/cu_zenoh_bridge_bench",
+  "examples/cu_anytime_task",
   "examples/cu_background_task",
   "examples/cu_baremetal_safety",
   "examples/cu_bridge_test",
