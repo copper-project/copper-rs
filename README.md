@@ -6,7 +6,7 @@
 
 <p align="center">
   A Rust runtime for building, running, recording, and deterministically replaying
-  static robot task graphs—from Linux to bare metal.
+  static robot task graphs, from Linux to bare metal.
 </p>
 
 <p align="center">
@@ -29,9 +29,9 @@
 
 | Built for robots | Built to ship |
 | --- | --- |
-| **Static by design** — task graphs are declared in RON and wired at compile time. | **Runs anywhere** — Linux, macOS, SBCs, and bare-metal microcontrollers. |
-| **Realtime first** — zero-allocation, data-oriented execution on the hot path. | **Deterministic replay** — record a run, reproduce it, and inspect it offline. |
-| **Rust-first** — ergonomic task APIs with compile-time guarantees. | **Interoperable** — connect to ROS 2 through Zenoh and migrate progressively. |
+| **Static by design:** task graphs are declared in RON and wired at compile time. | **Runs anywhere:** Linux, macOS, SBCs, and bare-metal microcontrollers. |
+| **Realtime first:** zero-allocation, data-oriented execution on the hot path. | **Deterministic replay:** record a run, reproduce it, and inspect it offline. |
+| **Rust-first:** ergonomic task APIs with compile-time guarantees. | **Interoperable:** connect to ROS 2 through Zenoh and migrate progressively. |
 
 Already flying, driving, swimming, spacefaring, and powering humanoids.
 
