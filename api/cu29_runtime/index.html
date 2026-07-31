@@ -1,22 +1,36 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="CI/CD GitHub last commit  crates.io dependency status Discord Book Documentation"><title>cu29_runtime - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-650bd49d.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="cu29_runtime" data-themes="" data-resource-suffix="" data-rustdoc-version="1.99.0-nightly (1a833e165 2026-07-29)" data-channel="nightly" data-search-js="search-cf4fc35e.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-170eb4bf.js" ><script src="../static.files/storage-41dd4d93.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-d4bd101e.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate cu29_runtime</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../cu29_runtime/index.html">cu29_<wbr>runtime</a><span class="version">1.1.0-dev</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#why-copper" title="Why Copper">Why Copper</a></li><li><a href="#try-copper-in-one-click-in-your-browser" title="Try Copper In One Click In Your Browser">Try Copper In One Click In Your Browser</a></li><li><a href="#get-started" title="Get Started">Get Started</a><ul><li><a href="#zero-to-your-first-copper-app-in-30-seconds" title="Zero To Your First Copper App in 30 Seconds">Zero To Your First Copper App in 30 Seconds</a></li></ul></li><li><a href="#documentation" title="Documentation">Documentation</a></li><li><a href="#python-support" title="Python Support">Python Support</a></li><li><a href="#citation" title="Citation">Citation</a></li><li><a href="#project" title="Project">Project</a></li></ul><h3><a href="#modules">Crate Items</a></h3><ul class="block"><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#macros" title="Macros">Macros</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1>Crate <span>cu29_<wbr>runtime</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/cu29_runtime/lib.rs.html#1-49">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h1 style="color: #b87333;"><img src="https://github.com/copper-project/copper-rs/blob/master/doc/static/cu29.png?raw=true" width="60" /> &nbsp;&nbsp;&nbsp;&nbsp; Copper Runtime & SDK</h1>
-<p><a href="https://github.com/copper-project/copper-rs/actions/workflows/general.yml"><img src="https://img.shields.io/github/check-runs/copper-project/copper-rs/master?nameFilter=CI%20Status&amp;label=CI%2FCD" alt="CI/CD" /></a>
-<img src="https://img.shields.io/github/last-commit/copper-project/copper-rs" alt="GitHub last commit" />
-<img src="https://img.shields.io/badge/Rust-1.95+-orange.svg" alt="" />
-<a href="https://crates.io/crates/cu29"><img src="https://img.shields.io/crates/v/cu29.svg" alt="crates.io" /></a>
-<a href="https://deps.rs/repo/github/copper-project/copper-rs"><img src="https://deps.rs/repo/github/copper-project/copper-rs/status.svg" alt="dependency status" /></a>
-<a href="https://discord.gg/VkCG7Sb9Kw"><img src="https://img.shields.io/discord/1305916875741597826?logo=discord" alt="Discord" /></a>
-<a href="https://copper-project.github.io/copper-rs-book/"><img src="https://img.shields.io/badge/book-Docs-blue" alt="Book" /></a>
-<a href="https://copper-project.github.io/copper-rs"><img src="https://img.shields.io/badge/docs-available-brightgreen" alt="Documentation" /></a></p>
-<h4 id="why-copper"><a class="doc-anchor" href="#why-copper">§</a>Why Copper</h4><p><strong style="color: #b87333;">Rust-first</strong> – ergonomic & safe</p>
-<p><strong style="color: #b87333;">Sub-microsecond latency</strong> – zero-alloc, data-oriented runtime</p>
-<p><strong style="color: #b87333;">Deterministic replay</strong> – every run, bit-for-bit identical</p>
-<p><strong style="color: #b87333;">Interoperable with ROS2</strong> – bridges via Zenoh opening the path for a progressive migration.</p>
-<p><strong style="color: #b87333;">Runs anywhere</strong> – from Linux servers, workstations, SBC to bare-metal MPUs</p>
-<p><strong style="color: #b87333;">Built to ship</strong> – one stack from simulation to production</p>
-<p>Already showing up in: ✈️ Flying | 🚗 Driving | 🌊 Swimming | 🚀 Spacefaring | 🤖 Humanoids</p>
-<h4 id="try-copper-in-one-click-in-your-browser"><a class="doc-anchor" href="#try-copper-in-one-click-in-your-browser">§</a>Try Copper In One Click In Your Browser</h4>
-<p>No setup required. Open one of the live demos in your browser: the simulator runs on the left and the live Copper monitor runs on the right.</p>
-<p>These are not mockups: BalanceBot is the exact same application that runs on a Raspberry Pi physical robot, and Flight Controller is the same control stack we run on a microcontroller (STM32H7) on real drones. Copper lets that same graph be recompiled for embedded hardware, a local workstation, or the browser.</p>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Why Copper"><title>cu29_runtime - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-650bd49d.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="cu29_runtime" data-themes="" data-resource-suffix="" data-rustdoc-version="1.99.0-nightly (8ab9fdff5 2026-07-30)" data-channel="nightly" data-search-js="search-cf4fc35e.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-170eb4bf.js" ><script src="../static.files/storage-41dd4d93.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-d4bd101e.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate cu29_runtime</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../cu29_runtime/index.html">cu29_<wbr>runtime</a><span class="version">1.1.0-dev</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#why-copper" title="Why Copper">Why Copper</a></li><li><a href="#see-it-run" title="See It Run">See It Run</a></li><li><a href="#build-your-first-copper-app" title="Build Your First Copper App">Build Your First Copper App</a></li><li><a href="#how-copper-fits-together" title="How Copper Fits Together">How Copper Fits Together</a></li><li><a href="#explore-copper" title="Explore Copper">Explore Copper</a></li></ul><h3><a href="#modules">Crate Items</a></h3><ul class="block"><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#macros" title="Macros">Macros</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1>Crate <span>cu29_<wbr>runtime</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/cu29_runtime/lib.rs.html#1-49">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h1 align="center">
+  <img src="https://github.com/copper-project/copper-rs/blob/master/doc/static/cu29.png?raw=true" width="60" alt="Copper logo" />
+  <br />
+  Copper Runtime &amp; SDK
+</h1>
+<p align="center">
+  A Rust runtime for building, running, recording, and deterministically replaying
+  static robot task graphs, from Linux to bare metal.
+</p>
+<p align="center">
+  <a href="https://github.com/copper-project/copper-rs/actions/workflows/general.yml"><img src="https://img.shields.io/github/check-runs/copper-project/copper-rs/master?nameFilter=CI%20Status&amp;label=CI%2FCD" alt="CI/CD status" /></a>
+  <a href="https://crates.io/crates/cu29"><img src="https://img.shields.io/crates/v/cu29.svg" alt="cu29 on crates.io" /></a>
+  <img src="https://img.shields.io/badge/Rust-1.95+-orange.svg" alt="Rust 1.95 or newer" />
+  <a href="https://copper-project.github.io/copper-rs/"><img src="https://img.shields.io/badge/docs-read-blue" alt="Copper documentation" /></a>
+  <a href="https://discord.gg/VkCG7Sb9Kw"><img src="https://img.shields.io/discord/1305916875741597826?logo=discord" alt="Copper Discord" /></a>
+</p>
+<p align="center">
+  <strong><a href="https://cdn.copper-robotics.com/demo/balancebot/index.html">▶ Try Copper in your browser</a></strong>
+  &nbsp;·&nbsp;
+  <strong><a href="#build-your-first-copper-app">Build your first app</a></strong>
+  &nbsp;·&nbsp;
+  <strong><a href="https://copper-project.github.io/copper-rs-book/">Read the book</a></strong>
+</p>
+<h3 id="why-copper"><a class="doc-anchor" href="#why-copper">§</a>Why Copper</h3><div><table><thead><tr><th>Built for robots</th><th>Built to ship</th></tr></thead><tbody>
+<tr><td><strong>Static by design:</strong> task graphs are declared in RON and wired at compile time.</td><td><strong>Runs anywhere:</strong> Linux, macOS, SBCs, and bare-metal microcontrollers.</td></tr>
+<tr><td><strong>Realtime first:</strong> zero-allocation, data-oriented execution on the hot path.</td><td><strong>Deterministic replay:</strong> record a run, reproduce it, and inspect it offline.</td></tr>
+<tr><td><strong>Rust-first:</strong> ergonomic task APIs with compile-time guarantees.</td><td><strong>Interoperable:</strong> connect to ROS 2 through Zenoh and migrate progressively.</td></tr>
+</tbody></table>
+</div>
+<p>Already flying, driving, swimming, spacefaring, and powering humanoids.</p>
+<h3 id="see-it-run"><a class="doc-anchor" href="#see-it-run">§</a>See It Run</h3>
+<p>These are the same Copper applications used on physical robots, recompiled for the
+browser. The simulator runs beside a live view of the Copper task graph and latency.</p>
 <table>
   <tr>
     <td width="50%" valign="top">
@@ -26,7 +40,7 @@
       <br />
       <strong><a href="https://cdn.copper-robotics.com/demo/balancebot/index.html">BalanceBot</a></strong>
       <br />
-      Self-balancing robot sim with a live Copper DAG and latency monitor.
+      A self-balancing robot simulation using the application that runs on Raspberry Pi hardware.
       <br />
       <a href="examples/cu_rp_balancebot">Source code</a>
     </td>
@@ -37,96 +51,57 @@
       <br />
       <strong><a href="https://cdn.copper-robotics.com/demo/flight-controller/index.html">Flight Controller</a></strong>
       <br />
-      Quadcopter flight sim with the same live Copper monitor.
+      A quadcopter simulation using the control stack deployed on STM32H7 flight hardware.
       <br />
       <a href="examples/cu_flight_controller">Source code</a>
     </td>
   </tr>
 </table>
-<p>Prefer a native app instead of the browser? Install the published demo crates from crates.io:</p>
-<div class="example-wrap"><pre class="language-bash"><code>cargo install cu-rp-balancebot
-balancebot-sim
-
-cargo install cu-flight-controller
-quad-sim</code></pre></div>
-<p>The source for the published demo crates above lives in <code>examples/</code>.
-Cross-framework comparison benchmarks live in <code>benchmarks/</code>.</p>
-<p>Want to see more Copper in action? Watch the <a href="https://youtu.be/weV_JYaUsmo">community showcase video</a>.</p>
-<p align="center">
-  <a href="https://youtu.be/weV_JYaUsmo">
-    <img src="https://github.com/user-attachments/assets/27ab8b08-ef17-4283-a1cf-8d4271595ef6" alt="Copper community showcase video" width="520" />
-  </a>
-</p>
-<h3 id="get-started"><a class="doc-anchor" href="#get-started">§</a>Get Started</h3>
-<ul>
-<li>Requires Rust 1.95 or newer. The latest stable Rust toolchain is recommended.</li>
-</ul>
-<h4 id="zero-to-your-first-copper-app-in-30-seconds"><a class="doc-anchor" href="#zero-to-your-first-copper-app-in-30-seconds">§</a>Zero To Your First Copper App in 30 Seconds</h4><div class="example-wrap"><pre class="language-bash"><code>cargo install cargo-cunew
+<p>Watch more robots built with Copper in the
+<a href="https://youtu.be/weV_JYaUsmo">community showcase</a>, or explore the
+<a href="benchmarks/">cross-framework benchmarks</a>.</p>
+<h3 id="build-your-first-copper-app"><a class="doc-anchor" href="#build-your-first-copper-app">§</a>Build Your First Copper App</h3>
+<p>Install the latest stable Rust toolchain, then:</p>
+<div class="example-wrap"><pre class="language-bash"><code>cargo install cargo-cunew
 cargo cunew hello_copper
 cd hello_copper
 cargo run</code></pre></div>
-<p><code>cargo cunew</code> is the primary Copper bootstrap path. It generates a minimal
-source -&gt; task -&gt; sink application. <code>cargo run</code> starts the app, prints the
-first messages (<code>Received message: 42</code>, then <code>Sink Received message: 43</code>), and
-records to <code>logs/hello-copper.copper</code>; stop it with <code>Ctrl-C</code> when you’ve seen
-enough. If you have <code>just</code> installed, the generated project also includes
-helpers like <code>just log</code>, <code>just cl</code>, and <code>just resim</code>. To get situated, open
-<code>copperconfig.ron</code>, <code>src/main.rs</code>, <code>src/tasks.rs</code>, and <code>justfile</code>.</p>
-<ul>
-<li>Start a new project from templates: <a href="https://copper-project.github.io/copper-rs/Project-Templates">Project Templates</a></li>
-<li>Browse the live component catalog: <a href="https://cdn.copper-robotics.com/catalog/index.html">Copper Component Catalog</a>
-Community components are welcome there too; if you build a reusable Copper component, prefer publishing it as its own crate and adding it to the catalog.</li>
-<li>See a full task graph + runtime walkthrough: <a href="https://copper-project.github.io/copper-rs/Copper-Application-Overview">Copper Application Overview</a></li>
-<li>Build and deploy an application: <a href="https://copper-project.github.io/copper-rs/Build-and-Deploy-a-Copper-Application">Build and Deploy a Copper Application</a></li>
-<li>RON configuration reference: <a href="https://copper-project.github.io/copper-rs/Copper-RON-Configuration-Reference">Copper RON Configuration Reference</a></li>
-</ul>
-<h3 id="documentation"><a class="doc-anchor" href="#documentation">§</a>Documentation</h3>
-<p><a href="https://copper-project.github.io/copper-rs/">Link to the full documentation</a></p>
-<ul>
-<li>Runtime concepts and SDK features: <a href="https://copper-project.github.io/copper-rs/Copper-Runtime-Overview">Copper Runtime Overview</a></li>
-<li>Task lifecycle: <a href="https://copper-project.github.io/copper-rs/Task-Lifecycle">Task Lifecycle</a></li>
-<li>Modular configuration: <a href="https://copper-project.github.io/copper-rs/Modular-Configuration">Modular Configuration</a></li>
-<li>Task automation: <a href="https://copper-project.github.io/copper-rs/Task-Automation-with-Just">Task Automation with just</a></li>
-<li>Coverage report: <a href="https://copper-project.github.io/copper-rs/coverage/">Coverage Report</a></li>
-<li>Supported platforms: <a href="https://copper-project.github.io/copper-rs/Supported-Platforms">Supported Platforms</a></li>
-<li>Bare-metal development: <a href="https://copper-project.github.io/copper-rs/Baremetal-Development">Baremetal Development</a></li>
-<li>Component catalog: <a href="https://cdn.copper-robotics.com/catalog/index.html">Copper Component Catalog</a></li>
-<li>FAQ: <a href="https://copper-project.github.io/copper-rs/FAQ">FAQ</a></li>
-<li>Release notes: <a href="https://copper-project.github.io/copper-rs/Copper-Release-Notes">Copper Release Notes</a></li>
-<li>Roadmap: <a href="https://copper-project.github.io/copper-rs/Roadmap">Roadmap</a></li>
-</ul>
-<h3 id="python-support"><a class="doc-anchor" href="#python-support">§</a>Python Support</h3>
-<p>Copper has two very different Python stories:</p>
-<ul>
-<li>Offline Python log analysis: use <code>cu29-export</code> and app-specific PyO3 modules in
-the application crates that expose them. This is a reasonable workflow because
-Python stays off the runtime hot path.</li>
-<li>Runtime Python task prototyping: use
-<a href="components/tasks/cu_python_task">components/tasks/cu_python_task</a> and
-<a href="examples/cu_python_task_demo">examples/cu_python_task_demo</a>. This is for
-experimentation only and is strongly not recommended for production or realtime
-robots.</li>
-</ul>
-<p>Putting Python inside a Copper task defeats the performance model Copper is built
-for: it adds allocations, latency, jitter, and middleware overhead, and it ruins
-the realtime characteristics of the stack. The intended use is to sketch one task
-in Python, get the behavior right, then rewrite it in Rust.</p>
-<h3 id="citation"><a class="doc-anchor" href="#citation">§</a>Citation</h3>
-<p>If you use Copper-rs in your research, please cite it as:</p>
-<div class="example-wrap"><pre class="language-bibtex"><code>@misc{copperrs2026,
-  author       = {Guillaume Binet and Copper Project contributors},
-  title        = {Copper-rs: A deterministic runtime and SDK for robotics},
-  year         = {2026},
-  howpublished = {GitHub repository},
-  url          = {https://github.com/copper-project/copper-rs},
-  note         = {Version v1.0.0 or latest}
-}</code></pre></div><h3 id="project"><a class="doc-anchor" href="#project">§</a>Project</h3>
-<blockquote>
-<p>[!NOTE]
-We are looking for contributors to help us build the best robotics framework possible. If you are interested, please
-join us on <a href="https://discord.gg/VkCG7Sb9Kw">Discord</a> or open an issue.</p>
-</blockquote>
-</div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="app/index.html" title="mod cu29_runtime::app">app</a></dt><dt><a class="mod" href="config/index.html" title="mod cu29_runtime::config">config</a></dt><dd>This module defines the configuration of the copper runtime.
+<p>In about 30 seconds, you have a typed <code>source → task → sink</code> graph that prints its
+first messages and records <code>logs/hello-copper.copper</code>. Start with
+<code>copperconfig.ron</code>, <code>src/main.rs</code>, and <code>src/tasks.rs</code>; the generated <code>justfile</code>
+also provides helpers for logs, CopperLists, graph rendering, and replay.</p>
+<h3 id="how-copper-fits-together"><a class="doc-anchor" href="#how-copper-fits-together">§</a>How Copper Fits Together</h3><div class="example-wrap"><pre class="language-mermaid"><code>flowchart LR
+    Config[&quot;copperconfig.ron&lt;br/&gt;Static task graph&quot;]
+    Generate[&quot;#[copper_runtime]&lt;br/&gt;Compile-time generation&quot;]
+    Runtime[&quot;Deterministic runtime&lt;br/&gt;Zero-alloc hot path&quot;]
+    Log[&quot;Unified .copper log&quot;]
+    Tools[&quot;Replay · Export · Inspect&quot;]
+
+    Config --&gt; Generate --&gt; Runtime --&gt; Log --&gt; Tools</code></pre></div>
+<p>The robot is a static thing: Copper turns its declared graph into a purpose-built
+runtime, then records messages, timing, and state into one replayable log.</p>
+<h3 id="explore-copper"><a class="doc-anchor" href="#explore-copper">§</a>Explore Copper</h3><table>
+  <tr>
+    <td><strong>Learn</strong></td>
+    <td><a href="https://copper-project.github.io/copper-rs-book/">Book</a> · <a href="https://copper-project.github.io/copper-rs/Copper-Runtime-Overview">Runtime overview</a> · <a href="https://docs.rs/cu29">API docs</a></td>
+  </tr>
+  <tr>
+    <td><strong>Build</strong></td>
+    <td><a href="https://copper-project.github.io/copper-rs/Project-Templates">Project templates</a> · <a href="https://copper-project.github.io/copper-rs/Copper-RON-Configuration-Reference">RON reference</a> · <a href="https://cdn.copper-robotics.com/catalog/index.html">Component catalog</a></td>
+  </tr>
+  <tr>
+    <td><strong>Go deeper</strong></td>
+    <td><a href="examples/">Examples</a> · <a href="https://copper-project.github.io/copper-rs-book/logging-replay.html">Logging and replay</a> · <a href="https://copper-project.github.io/copper-rs/Python-Support">Python support</a></td>
+  </tr>
+  <tr>
+    <td><strong>Project</strong></td>
+    <td><a href="https://copper-project.github.io/copper-rs/Supported-Platforms">Supported platforms</a> · <a href="https://copper-project.github.io/copper-rs/Roadmap">Roadmap</a> · <a href="https://copper-project.github.io/copper-rs/Copper-Release-Notes">Release notes</a></td>
+  </tr>
+  <tr>
+    <td><strong>Community</strong></td>
+    <td><a href="CONTRIBUTING.md">Contributing</a> · <a href="https://github.com/copper-project/copper-rs/discussions">GitHub Discussions</a> · <a href="https://discord.gg/VkCG7Sb9Kw">Discord</a></td>
+  </tr>
+</table></div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="app/index.html" title="mod cu29_runtime::app">app</a></dt><dt><a class="mod" href="config/index.html" title="mod cu29_runtime::config">config</a></dt><dd>This module defines the configuration of the copper runtime.
 The configuration is a directed graph where nodes are tasks and edges are connections between tasks.
 The configuration is serialized in the RON format.
 The configuration is used to generate the runtime code at compile time.</dd><dt><a class="mod" href="context/index.html" title="mod cu29_runtime::context">context</a></dt><dd>User-facing execution context passed to task and bridge process callbacks.</dd><dt><a class="mod" href="copperlist/index.html" title="mod cu29_runtime::copperlist">copperlist</a></dt><dd>CopperList is the main data structure used by Copper to communicate between tasks.
