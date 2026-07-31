@@ -61,6 +61,8 @@ const BRIDGE_HEADER_BG: &str = "#f7d7e4";
 const SOURCE_HEADER_BG: &str = "#ddefc7";
 const SINK_HEADER_BG: &str = "#cce0ff";
 const TASK_HEADER_BG: &str = "#fde7c2";
+const ANYTIME_BORDER_COLOR: &str = "#7c3aed";
+const ANYTIME_BORDER_DASH: &str = "4,3";
 const RESOURCE_TITLE_BG: &str = "#eef1f6";
 const RESOURCE_EXCLUSIVE_BG: &str = "#e3f4e7";
 const RESOURCE_SHARED_BG: &str = "#fff0d9";
@@ -151,11 +153,12 @@ const LEGEND_BOTTOM_PADDING: f64 = 6.0;
 const LEGEND_LOGO_SIZE: f64 = 16.0;
 const LEGEND_TEXT_WIDTH_FACTOR: f64 = 0.52;
 const COPPER_GITHUB_URL: &str = "https://github.com/copper-project/copper-rs";
-const LEGEND_ITEMS: [(&str, &str); 4] = [
-    ("Source", SOURCE_HEADER_BG),
-    ("Task", TASK_HEADER_BG),
-    ("Sink", SINK_HEADER_BG),
-    ("Bridge", BRIDGE_HEADER_BG),
+const LEGEND_ITEMS: [LegendItem; 5] = [
+    LegendItem::new("Source", SOURCE_HEADER_BG),
+    LegendItem::new("Task", TASK_HEADER_BG),
+    LegendItem::anytime(),
+    LegendItem::new("Sink", SINK_HEADER_BG),
+    LegendItem::new("Bridge", BRIDGE_HEADER_BG),
 ];
 const RESOURCE_LEGEND_TITLE: &str = "Resources";
 const RESOURCE_LEGEND_ITEMS: [(&str, &str); 3] = [
@@ -602,7 +605,11 @@ fn build_section_layout(
 
         node_handles.insert(node.id.clone(), handle);
         port_lookups.insert(node.id.clone(), port_lookup);
-        nodes.push(NodeRender { handle, table });
+        nodes.push(NodeRender {
+            handle,
+            table,
+            is_anytime: node_weight.is_anytime(),
+        });
     }
 
     let mut edges = Vec::new();
@@ -1825,14 +1832,25 @@ fn draw_node_table(svg: &mut SvgWriter, node: &NodeRender, element: &Element, of
         size,
         &mut renderer,
     );
-    svg.draw_rect(
-        top_left,
-        size,
-        Some(BORDER_COLOR),
-        OUTER_BORDER_WIDTH,
-        None,
-        0.0,
-    );
+    if node.is_anytime {
+        svg.draw_dashed_rect(
+            top_left,
+            size,
+            ANYTIME_BORDER_COLOR,
+            OUTER_BORDER_WIDTH + 0.7,
+            ANYTIME_BORDER_DASH,
+            "anytime-node",
+        );
+    } else {
+        svg.draw_rect(
+            top_left,
+            size,
+            Some(BORDER_COLOR),
+            OUTER_BORDER_WIDTH,
+            None,
+            0.0,
+        );
+    }
 }
 
 fn draw_resource_table(svg: &mut SvgWriter, table: &ResourceTable, top_left: Point) {
@@ -1911,22 +1929,41 @@ fn draw_legend(svg: &mut SvgWriter, top_y: f64, content_right: f64) -> f64 {
 
     let mut cursor_y = top_left.y + LEGEND_PADDING + LEGEND_TITLE_SIZE as f64 + LEGEND_ROW_GAP;
     let item_height = LEGEND_SWATCH_SIZE.max(LEGEND_FONT_SIZE as f64);
-    for (label, color) in LEGEND_ITEMS {
+    for item in LEGEND_ITEMS {
         let center_y = cursor_y + item_height / 2.0;
         let swatch_top = center_y - LEGEND_SWATCH_SIZE / 2.0;
         let swatch_left = top_left.x + LEGEND_PADDING;
-        svg.draw_rect(
-            Point::new(swatch_left, swatch_top),
-            Point::new(LEGEND_SWATCH_SIZE, LEGEND_SWATCH_SIZE),
-            Some(BORDER_COLOR),
-            0.6,
-            Some(color),
-            2.0,
-        );
+        if item.dashed {
+            svg.draw_rect(
+                Point::new(swatch_left, swatch_top),
+                Point::new(LEGEND_SWATCH_SIZE, LEGEND_SWATCH_SIZE),
+                None,
+                0.0,
+                Some(item.fill),
+                2.0,
+            );
+            svg.draw_dashed_rect(
+                Point::new(swatch_left, swatch_top),
+                Point::new(LEGEND_SWATCH_SIZE, LEGEND_SWATCH_SIZE),
+                ANYTIME_BORDER_COLOR,
+                1.2,
+                ANYTIME_BORDER_DASH,
+                "anytime-legend",
+            );
+        } else {
+            svg.draw_rect(
+                Point::new(swatch_left, swatch_top),
+                Point::new(LEGEND_SWATCH_SIZE, LEGEND_SWATCH_SIZE),
+                Some(BORDER_COLOR),
+                0.6,
+                Some(item.fill),
+                2.0,
+            );
+        }
         let text_x = swatch_left + LEGEND_SWATCH_SIZE + 4.0;
         svg.draw_text(
             Point::new(text_x, center_y),
-            label,
+            item.label,
             LEGEND_FONT_SIZE,
             "black",
             false,
@@ -2079,8 +2116,8 @@ fn measure_legend() -> LegendMetrics {
     let title_width = get_size_for_str("Legend", LEGEND_TITLE_SIZE).x;
     let mut max_line_width = title_width;
 
-    for (label, _) in LEGEND_ITEMS {
-        let label_width = get_size_for_str(label, LEGEND_FONT_SIZE).x;
+    for item in LEGEND_ITEMS {
+        let label_width = get_size_for_str(item.label, LEGEND_FONT_SIZE).x;
         let line_width = LEGEND_SWATCH_SIZE + 4.0 + label_width;
         max_line_width = max_line_width.max(line_width);
     }
@@ -2241,6 +2278,32 @@ struct PlacedSection<'a> {
 struct NodeRender {
     handle: NodeHandle,
     table: TableNode,
+    is_anytime: bool,
+}
+
+#[derive(Clone, Copy)]
+struct LegendItem {
+    label: &'static str,
+    fill: &'static str,
+    dashed: bool,
+}
+
+impl LegendItem {
+    const fn new(label: &'static str, fill: &'static str) -> Self {
+        Self {
+            label,
+            fill,
+            dashed: false,
+        }
+    }
+
+    const fn anytime() -> Self {
+        Self {
+            label: "Anytime task",
+            fill: TASK_HEADER_BG,
+            dashed: true,
+        }
+    }
 }
 
 struct ResourceTable {
@@ -2760,6 +2823,31 @@ impl SvgWriter {
         if rounded > 0.0 {
             rect = rect.set("rx", rounded).set("ry", rounded);
         }
+        self.content.append(rect);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn draw_dashed_rect(
+        &mut self,
+        top_left: Point,
+        size: Point,
+        stroke: &str,
+        stroke_width: f64,
+        dash_pattern: &str,
+        class: &str,
+    ) {
+        self.grow_window(top_left, size);
+
+        let rect = Rectangle::new()
+            .set("class", class)
+            .set("x", top_left.x)
+            .set("y", top_left.y)
+            .set("width", size.x)
+            .set("height", size.y)
+            .set("fill", "none")
+            .set("stroke", stroke)
+            .set("stroke-width", stroke_width)
+            .set("stroke-dasharray", dash_pattern);
         self.content.append(rect);
     }
 
