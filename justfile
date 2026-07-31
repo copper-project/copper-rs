@@ -1,10 +1,14 @@
 # CI-aligned helpers mirroring .github/workflows/general.yml
+import "support/just/plan.just"
+
 BASE_FEATURES := "mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug"
 WINDOWS_BASE_FEATURES := "mock,cu-sensor-payloads/image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode"
 MSRV := "1.95.0"
 PUBLIC_API_VERSION := "0.51.0"
 PUBLIC_API_TOOLCHAIN := "nightly-2026-06-25"
-export ROOT := justfile_directory()
+# Imported example justfiles make `justfile_directory()` point at the caller.
+# Resolve the containing worktree so root recipes keep finding repo tooling.
+export ROOT := shell('git -C "$1" rev-parse --show-toplevel', justfile_directory())
 WORKSPACE_EXCLUDES := shell('python3 $1/support/ci/workspace_excludes.py excludes --toolchain stable', ROOT)
 PREK_FMT_FIX_HOOKS := "trailing-whitespace mixed-line-ending"
 PREK_FMT_CHECK_HOOKS := "trailing-whitespace check-merge-conflict detect-private-key check-case-conflict check-added-large-files check-yaml check-json check-xml check-symlinks mixed-line-ending"

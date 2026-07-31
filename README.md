@@ -85,7 +85,8 @@ cargo run
 In about 30 seconds, you have a typed `source → task → sink` graph that prints its
 first messages and records `logs/hello-copper.copper`. Start with
 `copperconfig.ron`, `src/main.rs`, and `src/tasks.rs`; the generated `justfile`
-also provides helpers for logs, CopperLists, graph rendering, and replay.
+also provides helpers for logs, CopperLists, topology (`just dag`), the exact
+generated process schedule (`just plan`), and replay.
 
 ## How Copper Fits Together
 

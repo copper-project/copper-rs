@@ -1,3 +1,5 @@
+import "../../support/just/plan.just"
+
 package := "cu-remote-debug-session"
 debug_base := "copper/examples/cu_remote_debug_session/debug/v1"
 log := "logs/cu_remote_debug_session.copper"
