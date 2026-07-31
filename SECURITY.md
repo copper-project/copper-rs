@@ -16,7 +16,8 @@ Users should upgrade to a supported version before reporting issues when possibl
 
 **Do not open public issues for security vulnerabilities.**
 
-In case you found or suspect a security vulnerabilities which can be directly exploited, please report to security@copper-robotics.com
+If you find or suspect an exploitable security vulnerability, report it to
+security@copper-robotics.com.
 
 **Do not use other channels or contact project contributors directly.**
 
@@ -52,4 +53,3 @@ Out of scope:
 ## Safe Harbor
 
 We support good-faith security research conducted responsibly and in accordance with this policy. We will not pursue legal action for compliant research.
-
