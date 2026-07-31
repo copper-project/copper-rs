@@ -1,0 +1,22 @@
+[package]
+name = "cu-anytime-rrt-star"
+description = "Example for the Copper project showing an anytime task: an RRT* planner that publishes a first path, then improves it quantum by quantum."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+publish = false
+
+[dependencies]
+bincode = { workspace = true }
+cu29 = { workspace = true }
+serde = { workspace = true }
+
+[build-dependencies]
+cu29-build = { workspace = true }
