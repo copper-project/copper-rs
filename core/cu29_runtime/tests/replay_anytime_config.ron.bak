@@ -2,6 +2,7 @@
     logging: (
         enable_task_logging: true,
         slab_size_mib: 16,
+        // One keyframe every 8 copperlists: the resim has to reproduce them too.
         keyframe_interval: 8,
     ),
     tasks: [
