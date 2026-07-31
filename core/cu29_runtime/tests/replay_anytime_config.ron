@@ -2,8 +2,7 @@
     logging: (
         enable_task_logging: true,
         slab_size_mib: 16,
-        // Above 1 on purpose: with an interval of 1 every keyframe holds the
-        // state the copperlist started from, so a resim cannot drift.
+        // One keyframe every 8 copperlists: the resim has to reproduce them too.
         keyframe_interval: 8,
     ),
     tasks: [

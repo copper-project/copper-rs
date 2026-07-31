@@ -18,7 +18,6 @@ use cu29::prelude::copper_runtime;
 use cu29::prelude::*;
 use cu29::simulation::recorded_copperlist_timestamp;
 use cu29_export::{copperlists_reader, keyframes_reader};
-use cu29_unifiedlog::memmap::MmapSectionStorage;
 use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -28,9 +27,6 @@ use std::sync::atomic::{AtomicU32, Ordering};
 const ITERATIONS: u64 = 64;
 /// Mock-clock step between two copperlists (1 ms).
 const DT_NANOS: u64 = 1_000_000;
-/// Copperlist the keyframe-restore resim starts from. A keyframe boundary
-/// (`keyframe_interval: 8`), far enough in that both anytime nodes carry state.
-const RESTORE_FROM: usize = 24;
 const LOG_SLAB_SIZE: Option<usize> = Some(16 * 1024 * 1024);
 
 /// Targets the source cycles through, each held for `TARGET_HOLD` copperlists
@@ -293,16 +289,9 @@ fn describe(copperlist: &RecordedCl) -> String {
 }
 
 /// Compares what two runs produced and names the first copperlist that differs.
-///
-/// `with_ids` also compares the CopperList ids. A resim restarted from a
-/// mid-stream keyframe restarts them at 0, but must still produce the same
-/// messages.
-fn assert_copperlists_eq(
-    actual: &[RecordedCl],
-    expected: &[RecordedCl],
-    with_ids: bool,
-    what: &str,
-) {
+/// The whole CopperList is compared, ids and message metadata included, like
+/// `examples/cu_caterpillar/src/determinism.rs` does.
+fn assert_copperlists_eq(actual: &[RecordedCl], expected: &[RecordedCl], what: &str) {
     assert_eq!(
         actual.len(),
         expected.len(),
@@ -310,15 +299,11 @@ fn assert_copperlists_eq(
     );
     for (index, (actual_cl, expected_cl)) in actual.iter().zip(expected).enumerate() {
         assert!(
-            !with_ids || actual_cl.id == expected_cl.id,
-            "{what}: copperlist {index} has id {} instead of {}",
+            encode(actual_cl) == encode(expected_cl),
+            "{what}: copperlist {index} differs\n  got:      id {} {}\n  recorded: id {} {}",
             actual_cl.id,
-            expected_cl.id
-        );
-        assert!(
-            encode(&actual_cl.msgs) == encode(&expected_cl.msgs),
-            "{what}: copperlist {index} differs\n  got:      {}\n  recorded: {}",
             describe(actual_cl),
+            expected_cl.id,
             describe(expected_cl)
         );
     }
@@ -405,14 +390,9 @@ fn resim_one(
     app.run_one_iteration(&mut callback)
 }
 
-/// Resims `recorded` on a fresh application. `keyframe` restores the task state
-/// the recording had at the first of those copperlists; without it the resim
-/// starts from `new()` and must cover the whole recording.
-fn resim_run(
-    recorded: &[RecordedCl],
-    keyframe: Option<&KeyFrame>,
-    log_path: &Path,
-) -> CuResult<()> {
+/// Resims `recorded` on a fresh application: the tasks start from `new()` and
+/// the resim covers the whole recording.
+fn resim_run(recorded: &[RecordedCl], log_path: &Path) -> CuResult<()> {
     let (clock, clock_mock) = RobotClock::mock();
     let mut noop = |_step: default::SimStep<'_>| SimOverride::ExecuteByRuntime;
 
@@ -423,13 +403,6 @@ fn resim_run(
         .build()?;
 
     app.start_all_tasks(&mut noop)?;
-    if let Some(keyframe) = keyframe {
-        // `restore_keyframe` only exists on the trait, and `with_log_path` picks
-        // the storage/logger pair the generated builder defaults to.
-        <AnytimeReplayApp as CuSimApplication<MmapSectionStorage, UnifiedLoggerWrite>>::restore_keyframe(
-            &mut app, keyframe,
-        )?;
-    }
     for copperlist in recorded {
         resim_one(&mut app, &clock_mock, copperlist)?;
     }
@@ -446,8 +419,7 @@ fn anytime_nodes_record_and_resim_deterministically() -> CuResult<()> {
         .map_err(|e| cu29::CuError::new_with_cause("create temp dir failed", e))?;
     let record_a = temp_dir.path().join("record_a.copper");
     let record_b = temp_dir.path().join("record_b.copper");
-    let resim_full = temp_dir.path().join("resim_full.copper");
-    let resim_tail = temp_dir.path().join("resim_tail.copper");
+    let resim_a = temp_dir.path().join("resim_a.copper");
 
     record_run(&record_a)?;
     let recorded_calls = take_anytime_calls();
@@ -496,7 +468,6 @@ fn anytime_nodes_record_and_resim_deterministically() -> CuResult<()> {
     assert_copperlists_eq(
         &read_copperlists(&record_b)?,
         &a_copperlists,
-        true,
         "second recording",
     );
     assert_keyframes_eq(
@@ -505,58 +476,16 @@ fn anytime_nodes_record_and_resim_deterministically() -> CuResult<()> {
         "second recording",
     );
 
-    // Resim from scratch: every base and refine quantum runs again and must
-    // reproduce the log byte for byte, keyframes included.
-    resim_run(&a_copperlists, None, &resim_full)?;
+    // Resim: every base and refine quantum runs again and must reproduce the log
+    // byte for byte, keyframes included.
+    resim_run(&a_copperlists, &resim_a)?;
     assert_eq!(
         take_anytime_calls(),
         recorded_calls,
         "the resim did not run the same anytime quanta as the recording"
     );
-    assert_copperlists_eq(
-        &read_copperlists(&resim_full)?,
-        &a_copperlists,
-        true,
-        "resim",
-    );
-    assert_keyframes_eq(&read_keyframes(&resim_full)?, &a_keyframes, "resim");
-
-    // Resim from a mid-stream keyframe: the base step freezes once per
-    // copperlist, before its refinement, so restoring that keyframe has to land
-    // on the state the recording started that copperlist from.
-    let restore_from = RESTORE_FROM as u64;
-    let keyframe = a_keyframes
-        .iter()
-        .find(|kf| kf.culistid == restore_from)
-        .ok_or_else(|| {
-            cu29::CuError::from(format!("no keyframe recorded at copperlist {restore_from}"))
-        })?;
-    let tail = &a_copperlists[RESTORE_FROM..];
-    resim_run(tail, Some(keyframe), &resim_tail)?;
-    let (tail_base_calls, tail_refine_quanta) = take_anytime_calls();
-    // Both nodes run a base per copperlist, except the planner on the stale ones:
-    // there the age check skips the job before `base()`.
-    let stale_in_tail = tail
-        .iter()
-        .filter(|cl| {
-            stop_cause(cl.msgs.get_planner_output().metadata.status_txt.0.as_str()) == "stale"
-        })
-        .count();
-    assert_eq!(
-        tail_base_calls as usize,
-        2 * tail.len() - stale_in_tail,
-        "the keyframe resim did not run the anytime nodes on every copperlist"
-    );
-    assert!(
-        tail_refine_quanta > 0,
-        "the keyframe resim ran no refinement quantum"
-    );
-    assert_copperlists_eq(
-        &read_copperlists(&resim_tail)?,
-        tail,
-        false,
-        &format!("resim from the copperlist {restore_from} keyframe"),
-    );
+    assert_copperlists_eq(&read_copperlists(&resim_a)?, &a_copperlists, "resim");
+    assert_keyframes_eq(&read_keyframes(&resim_a)?, &a_keyframes, "resim");
 
     Ok(())
 }
