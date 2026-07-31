@@ -2,7 +2,9 @@
     logging: (
         enable_task_logging: true,
         slab_size_mib: 16,
-        keyframe_interval: 1,
+        // Above 1 on purpose: with an interval of 1 every keyframe holds the
+        // state the copperlist started from, so a resim cannot drift.
+        keyframe_interval: 8,
     ),
     tasks: [
         (
@@ -15,7 +17,7 @@
             type: "IncrementalPlanner",
             run_in_sim: true,
             anytime: (
-                max_age_ms: 500.0,
+                max_age_ms: 2.0,
                 quality_target: 0.9,
                 max_refines: 4,
             ),
