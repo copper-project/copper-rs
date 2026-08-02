@@ -606,6 +606,9 @@ mod tests {
         assert!(!manifest.contains("\n[workspace]\n"));
         assert!(justfile.contains("cargo install --locked cu29-runtime --version \"9.9.9\""));
         assert!(justfile.contains("dag:"));
+        assert!(justfile.contains("[positional-arguments]"));
+        assert!(justfile.contains("plan *options:"));
+        assert!(justfile.contains("--bin cu29-plan"));
     }
 
     #[test]
@@ -644,6 +647,7 @@ mod tests {
         assert!(manifest.contains("core/cu29_export"));
         assert!(app_manifest.contains("edition = \"2024\""));
         assert!(justfile.contains("cu29-rendercfg"));
+        assert!(justfile.contains("cu29-plan"));
         assert!(!project.join(".git").exists());
     }
 

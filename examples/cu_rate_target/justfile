@@ -1,3 +1,5 @@
+import "../../support/just/plan.just"
+
 ROOT := shell('cd "$1/../.." && pwd', justfile_directory())
 RT_PRIO := "80"
 

@@ -18,6 +18,11 @@ name = "cu29-rendercfg"
 path = "src/rendercfg.rs"
 required-features = ["std"]
 
+[[bin]]
+name = "cu29-plan"
+path = "src/plan.rs"
+required-features = ["std"]
+
 [dependencies]
 cu29-clock = { workspace = true }
 cu29-intern-strs = { workspace = true, optional = true }

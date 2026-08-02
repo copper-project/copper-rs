@@ -62,3 +62,41 @@ dag:
 
 # Compatibility alias for older template docs.
 rcfg: dag
+
+# Render the exact generated per-CopperList process schedule.
+[positional-arguments]
+plan *options:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  args=(copperconfig.ron --output plan.svg --open)
+  mission_value=""
+  features_value=""
+  for option in "$@"; do
+    case "$option" in
+      mission=*) mission_value="${option#mission=}" ;;
+      features=*) features_value="${option#features=}" ;;
+      *)
+        echo "Unknown plan option '$option'; expected mission=<id> or features=<a,b>." >&2
+        exit 2
+        ;;
+    esac
+  done
+  [[ -z "$mission_value" ]] || args+=(--mission "$mission_value")
+  [[ -z "$features_value" ]] || args+=(--features "$features_value")
+  {% if copper_source == "local" %}
+  cargo run --manifest-path "{{copper_root_path}}/Cargo.toml" -p cu29-runtime --bin cu29-plan -- "${args[@]}"
+  {% else %}
+  planner="$(command -v cu29-plan || true)"
+  if [[ -z "$planner" ]]; then
+    echo "cu29-plan not found on PATH; installing it now..." >&2
+    {% if copper_source == "crates.io" %}
+    cargo install --locked cu29-runtime --version "{{copper_version}}" --bin cu29-plan
+    {% elsif copper_source == "git" %}
+    cargo install --locked --git "{{copper_git_url}}" {% if copper_git_branch != "__none__" %}--branch "{{copper_git_branch}}" {% elsif copper_git_tag != "__none__" %}--tag "{{copper_git_tag}}" {% elsif copper_git_rev != "__none__" %}--rev "{{copper_git_rev}}" {% endif %} --bin cu29-plan cu29-runtime
+    {% endif %}
+    planner="$(command -v cu29-plan || true)"
+    [[ -n "$planner" ]] || planner="${CARGO_HOME:-$HOME/.cargo}/bin/cu29-plan"
+  fi
+  [[ -x "$planner" ]] || { echo "Failed to find cu29-plan after installation." >&2; exit 1; }
+  "$planner" "${args[@]}"
+  {% endif %}
