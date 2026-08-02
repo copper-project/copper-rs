@@ -1,0 +1,99 @@
+(
+    runtime: (rate_target_hz: 20),
+    logging: (
+        enable_task_logging: true,
+        slab_size_mib: 16,
+        section_size_mib: 4,
+        keyframe_interval: 10,
+    ),
+    tasks: [
+        (
+            id: "stereo_camera",
+            type: "robot::sensors::StereoCamera",
+            config: {
+                "device": "/dev/video0",
+                "width": 1280,
+                "height": 720,
+                "fps": 20,
+            },
+        ),
+        (
+            id: "obstacle_detector",
+            type: "robot::perception::AnytimeObstacleDetector",
+            anytime: (
+                time_budget_ms: 12.0,
+                max_age_ms: 75.0,
+                quality_target: 0.92,
+                quality_floor: 0.55,
+                max_refines: 4,
+                max_stall: 2,
+            ),
+            config: {
+                "minimum_range_m": 0.4,
+                "maximum_range_m": 18.0,
+            },
+        ),
+        (
+            id: "local_mapper",
+            type: "robot::mapping::LocalMapper",
+            config: {
+                "map_radius_m": 15.0,
+                "resolution_m": 0.1,
+            },
+        ),
+        (
+            id: "local_planner",
+            type: "robot::planning::AnytimeLocalPlanner",
+            anytime: (
+                time_budget_ms: 18.0,
+                max_age_ms: 100.0,
+                quality_target: 0.88,
+                max_refines: 6,
+                max_stall: 3,
+            ),
+            config: {
+                "planning_horizon_s": 3.0,
+                "clearance_m": 0.35,
+            },
+        ),
+        (
+            id: "velocity_controller",
+            type: "robot::control::VelocityController",
+            config: {
+                "maximum_linear_speed_mps": 1.5,
+                "maximum_angular_speed_rps": 1.2,
+            },
+        ),
+        (
+            id: "motor_driver",
+            type: "robot::actuators::DifferentialDrive",
+        ),
+    ],
+    cnx: [
+        (
+            src: "stereo_camera",
+            dst: "obstacle_detector",
+            msg: "robot::messages::StereoFrame",
+        ),
+        (
+            src: "obstacle_detector",
+            dst: "local_mapper",
+            msg: "robot::messages::ObstacleCloud",
+        ),
+        (
+            src: "local_mapper",
+            dst: "local_planner",
+            msg: "robot::messages::LocalCostmap",
+        ),
+        (
+            src: "local_planner",
+            dst: "velocity_controller",
+            msg: "robot::messages::LocalTrajectory",
+        ),
+        (
+            src: "velocity_controller",
+            dst: "motor_driver",
+            msg: "robot::messages::VelocityCommand",
+        ),
+    ],
+)
