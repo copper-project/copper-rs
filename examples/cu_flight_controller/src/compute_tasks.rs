@@ -225,7 +225,7 @@ impl CuTask for NoopVitFlyTask {
     type Input<'m> = input_msg!(
         'm,
         cu_zed::ZedStereoImages,
-        cu_zed::ZedDepthMap<Vec<f32>>
+        cu_zed::ZedDepthMap
     );
     type Output<'m> = output_msg!(());
 

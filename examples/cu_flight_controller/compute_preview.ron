@@ -16,7 +16,7 @@
         (
             src: "zed",
             dst: "vitfly",
-            msg: "cu_zed::ZedDepthMap<Vec<f32>>",
+            msg: "cu_zed::ZedDepthMap",
         ),
         (
             src: "zed",
