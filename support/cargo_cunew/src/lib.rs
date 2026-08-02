@@ -606,7 +606,8 @@ mod tests {
         assert!(!manifest.contains("\n[workspace]\n"));
         assert!(justfile.contains("cargo install --locked cu29-runtime --version \"9.9.9\""));
         assert!(justfile.contains("dag:"));
-        assert!(justfile.contains("plan mission=\"\" features=\"\":"));
+        assert!(justfile.contains("[positional-arguments]"));
+        assert!(justfile.contains("plan *options:"));
         assert!(justfile.contains("--bin cu29-plan"));
     }
 

@@ -30,17 +30,26 @@ dag:
 rcfg: dag
 
 # Render the exact generated per-CopperList process schedule.
-plan mission="" features="":
+[positional-arguments]
+plan *options:
   #!/usr/bin/env bash
   set -euo pipefail
   APP_DIR="${APP_DIR:-cu_example_app}"
   config="apps/${APP_DIR}/copperconfig.ron"
   output="apps/${APP_DIR}/plan.svg"
   args=("$config" --output "$output" --open)
-  mission_value="{% raw %}{{mission}}{% endraw %}"
-  mission_value="${mission_value#mission=}"
-  features_value="{% raw %}{{features}}{% endraw %}"
-  features_value="${features_value#features=}"
+  mission_value=""
+  features_value=""
+  for option in "$@"; do
+    case "$option" in
+      mission=*) mission_value="${option#mission=}" ;;
+      features=*) features_value="${option#features=}" ;;
+      *)
+        echo "Unknown plan option '$option'; expected mission=<id> or features=<a,b>." >&2
+        exit 2
+        ;;
+    esac
+  done
   [[ -z "$mission_value" ]] || args+=(--mission "$mission_value")
   [[ -z "$features_value" ]] || args+=(--features "$features_value")
   {% if copper_source == "local" %}

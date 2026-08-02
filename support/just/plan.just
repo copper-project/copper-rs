@@ -1,14 +1,28 @@
 # Shared schedule visualizer used by the workspace and example-local Justfiles.
-PLAN_WORKSPACE_ROOT := shell('git -C "$1" rev-parse --show-toplevel', justfile_directory())
+PLAN_WORKSPACE_ROOT := source_directory() + "/../.."
 
 # Render the generated schedule for a config in the invocation directory.
-plan mission="" features="" config="":
+[positional-arguments]
+plan *options:
   #!/usr/bin/env bash
   set -euo pipefail
 
   invocation_dir="{{invocation_directory()}}"
-  config_value="{{config}}"
-  config_value="${config_value#config=}"
+  mission_value=""
+  features_value=""
+  config_value=""
+  for option in "$@"; do
+    case "$option" in
+      mission=*) mission_value="${option#mission=}" ;;
+      features=*) features_value="${option#features=}" ;;
+      config=*) config_value="${option#config=}" ;;
+      *)
+        echo "Unknown plan option '$option'; expected mission=<id>, features=<a,b>, or config=<file>." >&2
+        exit 2
+        ;;
+    esac
+  done
+
   if [[ -n "$config_value" ]]; then
     if [[ "$config_value" = /* ]]; then
       cfg_path="$config_value"
@@ -43,10 +57,6 @@ plan mission="" features="" config="":
 
   output_dir="$(dirname "$cfg_path")"
   args=("$cfg_path" --output "${output_dir}/plan.svg" --open)
-  mission_value="{{mission}}"
-  mission_value="${mission_value#mission=}"
-  features_value="{{features}}"
-  features_value="${features_value#features=}"
   if [[ -n "$mission_value" ]]; then
     args+=(--mission "$mission_value")
   fi
