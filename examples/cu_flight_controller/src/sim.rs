@@ -78,6 +78,7 @@ use cu29::prelude::*;
 use cu29::units::si::angle::radian;
 #[cfg(all(feature = "sim", test))]
 use cu29::units::si::f32::Angle;
+use cu29::units::si::length::meter;
 #[cfg(feature = "sim")]
 use cu29::units::si::velocity::meter_per_second;
 
@@ -408,12 +409,12 @@ mod compute_copper {
                     }
                     #[cfg(not(feature = "sim"))]
                     default::SimStep::Vitfly(CuTaskCallbackState::Process(input, _)) => {
-                        zed_store.publish_vitfly_depth(input.1.payload());
+                        zed_store.publish_vitfly_depth(input.1.tov, input.1.payload());
                         SimOverride::ExecuteByRuntime
                     }
                     #[cfg(feature = "sim")]
                     default::SimStep::Vitfly(CuTaskCallbackState::Process(input, _)) => {
-                        zed_store.publish_vitfly_depth(input.0.payload());
+                        zed_store.publish_vitfly_depth(input.0.tov, input.0.payload());
                         SimOverride::ExecuteByRuntime
                     }
                     #[cfg(feature = "sim")]
@@ -718,7 +719,7 @@ impl ExtractResource for ZedDepthTexture {
 #[derive(Resource)]
 struct ZedDepthPreview {
     image: Handle<Image>,
-    last_seq: Option<u64>,
+    last_tov: Option<Tov>,
     last_prediction_seq: u64,
 }
 
@@ -1512,7 +1513,11 @@ fn capture_zed_depth(event: On<ReadbackComplete>, store: Res<sim_zed::SimZedFram
         let reverse_z = f32::from_ne_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
         let distance = zed_reverse_z_to_distance(reverse_z);
         let valid = distance.is_finite() && distance <= sim_zed::ZED_SIM_MAX_DEPTH_M;
-        depth.push(if valid { distance } else { f32::NAN });
+        depth.push(if valid {
+            sim_zed::encode_depth_meters(distance)
+        } else {
+            0
+        });
         confidence.push(if valid { 0.0 } else { 100.0 });
     }
 
@@ -1547,17 +1552,20 @@ fn update_zed_depth_preview(
     mut preview: ResMut<ZedDepthPreview>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    let Some(depth) = store.published_depth() else {
+    let Some((depth_tov, depth)) = store.published_depth() else {
         return;
     };
     let (prediction_seq, prediction) = store.vitfly_prediction();
-    if preview.last_seq == Some(depth.seq) && preview.last_prediction_seq == prediction_seq {
+    if preview.last_tov == Some(depth_tov) && preview.last_prediction_seq == prediction_seq {
         return;
     }
 
-    let mut preview_pixels = depth.buffer_handle.with_inner(|values| {
+    let mut preview_pixels = depth.with_samples(|values, _format| {
         let mut pixels = Vec::with_capacity(values.len() * 4);
-        for &distance in values.iter() {
+        for &sample in values {
+            let distance = cu_zed::ZedDepthMap::decode_sample(sample)
+                .map(|depth| depth.get::<meter>())
+                .unwrap_or(f32::NAN);
             pixels.extend_from_slice(&depth_preview_color(distance));
         }
         pixels
@@ -1580,7 +1588,7 @@ fn update_zed_depth_preview(
         return;
     }
     pixels.copy_from_slice(&preview_pixels);
-    preview.last_seq = Some(depth.seq);
+    preview.last_tov = Some(depth_tov);
     preview.last_prediction_seq = prediction_seq;
 }
 
@@ -1772,7 +1780,7 @@ fn setup_world(
     commands.insert_resource(ZedDepthTexture(depth_texture.clone()));
     commands.insert_resource(ZedDepthPreview {
         image: depth_preview,
-        last_seq: None,
+        last_tov: None,
         last_prediction_seq: 0,
     });
     commands.spawn((
@@ -3682,7 +3690,7 @@ mod tests {
         let pixel_count = (sim_zed::ZED_SIM_WIDTH * sim_zed::ZED_SIM_HEIGHT) as usize;
         zed_store.set_left_image(vec![1; pixel_count * 4]);
         zed_store.set_right_image(vec![2; pixel_count * 4]);
-        zed_store.set_depth(vec![3.5; pixel_count], vec![0.0; pixel_count]);
+        zed_store.set_depth(vec![3_500; pixel_count], vec![0.0; pixel_count]);
 
         let mut compute = compute_copper::Runtime::new(&clock, zed_store.clone());
         compute.start().expect("failed to start compute tasks");
@@ -3707,16 +3715,14 @@ mod tests {
             "inactive inference must not produce an MCU command"
         );
 
-        let published = zed_store
+        let (published_tov, published) = zed_store
             .published_depth()
             .expect("VitFly input should observe simulated ZED depth");
-        assert_eq!(published.seq, 1);
+        assert_eq!(published_tov, Tov::Time(clock.now()));
         assert_eq!(published.format.width, sim_zed::ZED_SIM_WIDTH);
         assert_eq!(published.format.height, sim_zed::ZED_SIM_HEIGHT);
-        published.buffer_handle.with_inner(|depth| {
-            assert_eq!(depth.len(), pixel_count);
-            assert_eq!(depth[0], 3.5);
-        });
+        published.with_samples(|depth, _format| assert_eq!(depth.len(), pixel_count));
+        assert_eq!(published.get_meters(0, 0), Some(3.5));
         #[cfg(feature = "sim")]
         {
             let (first_prediction_seq, prediction) = zed_store.vitfly_prediction();
@@ -3783,7 +3789,7 @@ mod tests {
         let (clock, clock_mock) = RobotClock::mock();
         let zed_store = sim_zed::SimZedFrameStore::default();
         let pixel_count = (sim_zed::ZED_SIM_WIDTH * sim_zed::ZED_SIM_HEIGHT) as usize;
-        zed_store.set_depth(vec![6.0; pixel_count], vec![0.0; pixel_count]);
+        zed_store.set_depth(vec![6_000; pixel_count], vec![0.0; pixel_count]);
 
         let mut compute = compute_copper::Runtime::new(&clock, zed_store.clone());
         compute.start().expect("failed to start compute tasks");
@@ -3845,7 +3851,7 @@ mod tests {
         let compute_log_base = temp_dir.path().join("flight_compute_sim.copper");
         let zed_store = sim_zed::SimZedFrameStore::default();
         let pixel_count = (sim_zed::ZED_SIM_WIDTH * sim_zed::ZED_SIM_HEIGHT) as usize;
-        zed_store.set_depth(vec![3.5; pixel_count], vec![0.0; pixel_count]);
+        zed_store.set_depth(vec![3_500; pixel_count], vec![0.0; pixel_count]);
 
         let mut copper = build_sim_copper_state(
             &mcu_log_base,

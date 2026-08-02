@@ -2,7 +2,8 @@
 
 use bevy::prelude::Resource;
 use cu_sensor_payloads::{
-    BarometerPayload, CuImage, CuImageBufferFormat, ImuPayload, MagnetometerPayload,
+    BarometerPayload, CuDepthMapFormat, CuImage, CuImageBufferFormat, ImuPayload,
+    MagnetometerPayload,
 };
 use cu_zed::{
     ZedCalibrationBundle, ZedCameraIntrinsics, ZedConfidenceMap, ZedCoordinateSystem,
@@ -36,10 +37,10 @@ struct SimZedFrame {
     seq: u64,
     left: Option<CuHandle<Vec<u8>>>,
     right: Option<CuHandle<Vec<u8>>>,
-    depth: Option<CuHandle<Vec<f32>>>,
+    depth: Option<CuHandle<Vec<u16>>>,
     confidence: Option<CuHandle<Vec<f32>>>,
     sensors: Option<SimZedSensors>,
-    published_depth: Option<ZedDepthMap<Vec<f32>>>,
+    published_depth: Option<(Tov, ZedDepthMap)>,
     vitfly_prediction_seq: u64,
     vitfly_prediction_mps: Option<[f32; 3]>,
 }
@@ -71,7 +72,7 @@ impl SimZedFrameStore {
         self.lock().right = Some(CuHandle::new_detached(pixels));
     }
 
-    pub(crate) fn set_depth(&self, depth: Vec<f32>, confidence: Vec<f32>) {
+    pub(crate) fn set_depth(&self, depth: Vec<u16>, confidence: Vec<f32>) {
         let mut frame = self.lock();
         frame.seq = frame.seq.wrapping_add(1);
         frame.depth = Some(CuHandle::new_detached(depth));
@@ -82,11 +83,11 @@ impl SimZedFrameStore {
         self.lock().sensors = Some(sensors);
     }
 
-    pub(crate) fn publish_vitfly_depth(&self, depth: Option<&ZedDepthMap<Vec<f32>>>) {
-        self.lock().published_depth = depth.cloned();
+    pub(crate) fn publish_vitfly_depth(&self, tov: Tov, depth: Option<&ZedDepthMap>) {
+        self.lock().published_depth = depth.cloned().map(|depth| (tov, depth));
     }
 
-    pub(crate) fn published_depth(&self) -> Option<ZedDepthMap<Vec<f32>>> {
+    pub(crate) fn published_depth(&self) -> Option<(Tov, ZedDepthMap)> {
         self.lock().published_depth.clone()
     }
 
@@ -147,9 +148,7 @@ pub(crate) fn write_source_outputs(
     stereo.tov = tov;
 
     if let Some(depth_handle) = frame.depth {
-        let mut payload = ZedDepthMap::new(raster_format(), depth_handle);
-        payload.seq = frame.seq;
-        depth.set_payload(payload);
+        depth.set_payload(ZedDepthMap::from_integer(depth_format(), depth_handle));
     } else {
         depth.clear_payload();
     }
@@ -218,6 +217,21 @@ fn raster_format() -> ZedRasterFormat {
         height: ZED_SIM_HEIGHT,
         stride: ZED_SIM_WIDTH,
     }
+}
+
+fn depth_format() -> CuDepthMapFormat {
+    CuDepthMapFormat {
+        width: ZED_SIM_WIDTH,
+        height: ZED_SIM_HEIGHT,
+        stride: ZED_SIM_WIDTH,
+    }
+}
+
+pub(crate) fn encode_depth_meters(distance: f32) -> u16 {
+    if !distance.is_finite() || distance <= 0.0 {
+        return 0;
+    }
+    (distance * 1_000.0).round().clamp(1.0, u16::MAX as f32) as u16
 }
 
 fn calibration_bundle() -> ZedCalibrationBundle {
@@ -310,6 +324,13 @@ mod tests {
         assert_eq!(format.stride, ZED_SIM_WIDTH * 4);
     }
 
+    #[test]
+    fn simulated_depth_uses_millimeter_encoding() {
+        assert_eq!(encode_depth_meters(3.5), 3_500);
+        assert_eq!(encode_depth_meters(f32::NAN), 0);
+        assert_eq!(encode_depth_meters(0.0), 0);
+    }
+
     #[cfg(feature = "sim")]
     #[test]
     fn vitfly_prediction_persists_between_publications() {
@@ -330,7 +351,7 @@ mod tests {
         let store = SimZedFrameStore::default();
         store.set_left_image(vec![1; 4]);
         store.set_right_image(vec![2; 4]);
-        store.set_depth(vec![3.0], vec![0.0]);
+        store.set_depth(vec![3_000], vec![0.0]);
         store.publish_vitfly_prediction([1.0, 2.0, 3.0]);
 
         store.reset_dynamic();
