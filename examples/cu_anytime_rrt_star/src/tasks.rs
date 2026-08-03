@@ -20,11 +20,13 @@ use std::sync::Mutex;
 /// Where the robot starts, in free space on the depot map.
 const START: Point2 = Point2::new(0.5, 0.5);
 
-/// The corners the robot patrols, all in free space on the depot map.
+/// The goals the robot patrols, all in free space on the depot map. They are
+/// placed so a pillar blocks the straight line of every leg: each leg needs a
+/// detour, and refinement has visible work on every trajectory.
 const PATROL: [Point2; 3] = [
     Point2::new(9.5, 9.5),
-    Point2::new(0.5, 9.0),
-    Point2::new(9.0, 0.8),
+    Point2::new(0.5, 7.0),
+    Point2::new(6.5, 0.5),
 ];
 
 /// The newest path the viewer saw, followed by the simulator one cycle later.
