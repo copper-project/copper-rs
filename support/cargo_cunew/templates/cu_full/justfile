@@ -40,18 +40,30 @@ plan *options:
   args=("$config" --output "$output" --open)
   mission_value=""
   features_value=""
+  log_value=""
   for option in "$@"; do
     case "$option" in
       mission=*) mission_value="${option#mission=}" ;;
       features=*) features_value="${option#features=}" ;;
+      log=*) log_value="${option#log=}" ;;
       *)
-        echo "Unknown plan option '$option'; expected mission=<id> or features=<a,b>." >&2
+        echo "Unknown plan option '$option'; expected mission=<id>, features=<a,b>, or log=<file>." >&2
         exit 2
         ;;
     esac
   done
   [[ -z "$mission_value" ]] || args+=(--mission "$mission_value")
   [[ -z "$features_value" ]] || args+=(--features "$features_value")
+  if [[ -n "$log_value" ]]; then
+    APP_NAME="${APP_NAME:-${APP_DIR}}"
+    [[ "$log_value" != *_0.copper ]] || log_value="${log_value%_0.copper}.copper"
+    stats="apps/${APP_DIR}/target/cu29_plan_logstats.json"
+    mkdir -p "$(dirname "$stats")"
+    logreader_args=(-p "$APP_NAME" --features=logreader --bin "${APP_NAME}-logreader" -- "$log_value" log-stats --config "$config" --output "$stats" --features logreader)
+    [[ -z "$mission_value" ]] || logreader_args+=(--mission "$mission_value")
+    cargo run "${logreader_args[@]}"
+    args+=(--logstats "$stats")
+  fi
   {% if copper_source == "local" %}
   cargo run --manifest-path "{{copper_root_path}}/Cargo.toml" -p cu29-runtime --bin cu29-plan -- "${args[@]}"
   {% else %}
@@ -69,6 +81,13 @@ plan *options:
   [[ -x "$planner" ]] || { echo "Failed to find cu29-plan after installation." >&2; exit 1; }
   "$planner" "${args[@]}"
   {% endif %}
+
+# Render observed timing from the selected app's default Copper log.
+plan-log:
+  #!/usr/bin/env bash
+  APP_DIR="${APP_DIR:-cu_example_app}"
+  APP_NAME="${APP_NAME:-${APP_DIR}}"
+  just plan "log=apps/${APP_DIR}/logs/${APP_NAME}.copper" features=logreader
 
 # Extract the structured log via the log reader.
 log:
