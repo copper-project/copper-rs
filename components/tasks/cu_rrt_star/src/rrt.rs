@@ -376,7 +376,13 @@ impl RrtStar {
         if !self.has_solution() {
             return 0.0;
         }
-        (self.lower_bound() / self.best_cost).clamp(0.0, 1.0)
+        let lower_bound = self.lower_bound();
+        if self.best_cost <= lower_bound {
+            // Covers the degenerate job with the start on the goal, where the
+            // ratio would divide zero by zero.
+            return 1.0;
+        }
+        (lower_bound / self.best_cost).clamp(0.0, 1.0)
     }
 
     /// Nodes on the best path before shortcutting, the goal included. Zero
@@ -529,8 +535,9 @@ impl RrtStar {
         )
     }
 
-    /// Index of the tree node closest to `point`. Linear on purpose: a real
-    /// planner would index the tree, but a flat scan keeps the example short.
+    /// Index of the tree node closest to `point`. Linear on purpose: a flat
+    /// scan is simple and fast enough at `max_nodes` scale; a spatial index
+    /// would only pay off on much larger trees.
     fn nearest(&self, point: Point2) -> u32 {
         let mut best = 0u32;
         let mut best_distance = f32::INFINITY;
@@ -800,6 +807,16 @@ mod tests {
             cost_at(0.0) < cost_at(3.0),
             "the derived gamma should refine to a shorter path than a small one"
         );
+    }
+
+    /// A job with the start on the goal is solved by definition: quality 1.0,
+    /// never NaN from the zero-by-zero ratio.
+    #[test]
+    fn degenerate_job_reports_full_quality() {
+        let mut planner = RrtStar::new(&World::depot(), RrtParams::default(), START, START, 3);
+        planner.grow(400);
+        assert!(planner.has_solution());
+        assert_eq!(planner.quality(), 1.0);
     }
 
     #[test]

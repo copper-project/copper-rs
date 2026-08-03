@@ -199,7 +199,15 @@ impl CuAnytimeTask for RrtStarPlanner {
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<AnytimeStatus<Quality>> {
-        let request = input.payload().ok_or("rrt*: no plan request")?;
+        let Some(request) = input.payload() else {
+            // A source may publish nothing in a copperlist: skip the job
+            // instead of failing the application. The recycled output must
+            // not keep the previous job's path.
+            output.clear_payload();
+            self.published_cost = f32::INFINITY;
+            self.published_quality = 0.0;
+            return Ok(AnytimeStatus::Aborted);
+        };
         let planner = match self.planner.as_mut() {
             // Restart on the previous job's memory instead of a fresh tree.
             Some(planner) => {
@@ -220,9 +228,15 @@ impl CuAnytimeTask for RrtStarPlanner {
         // Output messages are recycled: with no path yet the message must not
         // still carry the previous job's path.
         output.clear_payload();
+        let quality = self.publish(output);
+        if self.published_quality >= CONVERGED_QUALITY {
+            // The base path already matches the straight line: no refinement
+            // can beat it.
+            return Ok(AnytimeStatus::Converged(quality));
+        }
         // Even with no path found the job goes on: refinement is what usually
         // finds one, and a quality of 0.0 stays under any configured floor.
-        Ok(AnytimeStatus::Improved(self.publish(output)))
+        Ok(AnytimeStatus::Improved(quality))
     }
 
     fn refine(
@@ -296,5 +310,54 @@ mod tests {
         assert!(state.best_cost <= state.published_cost);
         assert!(state.published_quality > 0.0);
         assert!(state.iterations > 0 && state.tree_size > 0);
+    }
+
+    /// A copperlist without a request skips the job instead of failing the
+    /// application, and must not leak the previous job's path.
+    #[test]
+    fn missing_request_skips_the_job() {
+        let ctx = CuContext::new_with_clock();
+        let mut task = RrtStarPlanner::new(None, ()).unwrap();
+        let input = CuMsg::new(Some(PlanRequest {
+            world: World::depot(),
+            start: START,
+            goal: GOAL,
+            seed: 42,
+        }));
+        let mut output = CuMsg::new(None);
+
+        task.start(&ctx).unwrap();
+        task.base(&ctx, &input, &mut output).unwrap();
+        for _ in 0..24 {
+            task.refine(&ctx, &mut output).unwrap();
+        }
+        assert!(output.payload().is_some(), "no path to leak");
+
+        let empty = CuMsg::new(None);
+        let status = task.base(&ctx, &empty, &mut output).unwrap();
+        assert!(matches!(status, AnytimeStatus::Aborted));
+        assert!(output.payload().is_none(), "the old path leaked");
+        assert_eq!(task.debug_state().published_quality, 0.0);
+    }
+
+    /// A request with the start on the goal is solved by definition: `base()`
+    /// converges at once with quality 1.0, never NaN.
+    #[test]
+    fn start_on_goal_converges_immediately() {
+        let ctx = CuContext::new_with_clock();
+        let mut task = RrtStarPlanner::new(None, ()).unwrap();
+        let input = CuMsg::new(Some(PlanRequest {
+            world: World::depot(),
+            start: START,
+            goal: START,
+            seed: 3,
+        }));
+        let mut output = CuMsg::new(None);
+
+        task.start(&ctx).unwrap();
+        let status = task.base(&ctx, &input, &mut output).unwrap();
+        assert!(matches!(status, AnytimeStatus::Converged(_)));
+        assert!(output.payload().is_some(), "a trivial path is still a path");
+        assert_eq!(task.debug_state().published_quality, 1.0);
     }
 }

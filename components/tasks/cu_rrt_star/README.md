@@ -61,7 +61,9 @@ as the world allows, so a `quality_target` is portable between maps.
 
 A job that found no path reports quality 0.0, which stays under any
 configured `quality_floor`: the node then publishes nothing for that
-copperlist.
+copperlist. A copperlist without a request also publishes nothing, and a
+request whose start already lies on the goal converges at once with
+quality 1.0.
 
 ### Determinism and debugging
 
