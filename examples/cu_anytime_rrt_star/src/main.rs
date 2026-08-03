@@ -10,7 +10,7 @@
 //!
 //! | node | policy | meaning |
 //! |---|---|---|
-//! | `quick_planner` | `max_refines: 2`, `time_budget_ms: 50`, `quality_target: 0.85` | two quanta at most, and stop early once the path is within 15% of the straight line |
+//! | `quick_planner` | `max_refines: 2`, `time_budget_ms: 50`, `quality_target: 0.93` | two quanta at most, and stop early once the path is within 7% of the straight line |
 //! | `thorough_planner` | `max_refines: 24`, `time_budget_ms: 250`, `max_stall: 4` | up to 24 quanta, but give up after 4 that improved nothing |
 //!
 //! Both carry `quality_floor: 0.05`, which drops a job that found no path at
@@ -20,6 +20,10 @@
 //! tree plus more iterations, so its path is never longer - that is the anytime
 //! trade-off, measured. Keeping the two `config:` blocks identical is what
 //! makes the comparison below valid.
+//!
+//! The RRT* `gamma` is `0.0` in the RON, which asks the planner to derive the
+//! rewiring radius constant from the map. Pinning it to an arbitrary smaller
+//! number is what makes an RRT* implementation quietly stop converging.
 
 mod rrt;
 mod tasks;
@@ -34,8 +38,9 @@ struct App {}
 const SLAB_SIZE: Option<usize> = Some(16 * 1024 * 1024);
 const ITERATIONS: usize = 10;
 
-fn main() {
-    let logger_path = "logs/anytime_rrt_star.copper";
+/// Runs the whole application once and returns what the sink saw, one entry
+/// per copperlist.
+fn run(logger_path: &str) -> Vec<tasks::PlanReport> {
     if let Some(parent) = Path::new(logger_path).parent()
         && !parent.exists()
     {
@@ -57,21 +62,40 @@ fn main() {
     application
         .stop_all_tasks()
         .expect("Failed to stop application.");
+    tasks::take_reports()
+}
 
-    let reports = tasks::REPORTS.lock().expect("reports poisoned");
+/// Checks the anytime contract on what the sink saw and returns how many jobs
+/// both planners published.
+fn check(reports: &[tasks::PlanReport]) -> usize {
     assert_eq!(reports.len(), ITERATIONS, "one report per copperlist");
-
+    let world = rrt::World::depot();
     let lower_bound = tasks::START.distance(tasks::GOAL);
-    println!("straight line start -> goal: {lower_bound:.2} m (quality 1.0)");
-    println!("{:<5} {:>28}   {:>28}", "job", "quick", "thorough");
     let mut compared = 0;
+
     for (index, report) in reports.iter().enumerate() {
-        println!(
-            "{:<5} {:>28}   {:>28}",
-            index,
-            describe(&report.quick, &report.quick_status, lower_bound),
-            describe(&report.thorough, &report.thorough_status, lower_bound),
-        );
+        for path in [&report.quick, &report.thorough].into_iter().flatten() {
+            assert!(path.len >= 2, "job {index}: a path needs two waypoints");
+            assert_eq!(path.waypoints[0], tasks::START, "job {index}");
+            assert_eq!(
+                path.waypoints[(path.len - 1) as usize],
+                tasks::GOAL,
+                "job {index}"
+            );
+            // A published path must be drivable as published, whichever stop
+            // point the policy picked.
+            for pair in path.waypoints[..path.len as usize].windows(2) {
+                assert!(
+                    world.is_free_segment(pair[0], pair[1]),
+                    "job {index}: published path crosses an obstacle"
+                );
+            }
+            assert!(
+                path.cost >= lower_bound,
+                "job {index}: path shorter than the straight line"
+            );
+        }
+
         let (Some(quick), Some(thorough)) = (&report.quick, &report.thorough) else {
             continue;
         };
@@ -83,16 +107,31 @@ fn main() {
             thorough.cost,
             quick.cost
         );
-        assert!(
-            thorough.cost >= lower_bound,
-            "job {index}: path shorter than the straight line"
-        );
-        assert!(thorough.len >= 2, "job {index}: a path needs two waypoints");
     }
+
     assert!(
         compared >= ITERATIONS / 2,
         "both planners published in only {compared} of {ITERATIONS} jobs"
     );
+    compared
+}
+
+fn main() {
+    let reports = run("logs/anytime_rrt_star.copper");
+
+    let lower_bound = tasks::START.distance(tasks::GOAL);
+    println!("straight line start -> goal: {lower_bound:.2} m (quality 1.0)");
+    println!("{:<5} {:>28}   {:>28}", "job", "quick", "thorough");
+    for (index, report) in reports.iter().enumerate() {
+        println!(
+            "{:<5} {:>28}   {:>28}",
+            index,
+            describe(&report.quick, &report.quick_status, lower_bound),
+            describe(&report.thorough, &report.thorough_status, lower_bound),
+        );
+    }
+
+    let compared = check(&reports);
     println!("anytime RRT* example OK: {compared}/{ITERATIONS} jobs compared");
 }
 
@@ -106,5 +145,19 @@ fn describe(path: &Option<tasks::PlanPath>, status: &str, lower_bound: f32) -> S
             status
         ),
         None => format!("no path [{status}]"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The self-check of `main`, as a test: CI only builds the examples, so
+    /// without this nothing ever runs the anytime path.
+    #[test]
+    fn both_policies_publish_drivable_paths() {
+        let logger_path = std::env::temp_dir().join("cu_anytime_rrt_star_test.copper");
+        let reports = run(logger_path.to_str().expect("non-utf8 temp dir"));
+        check(&reports);
     }
 }

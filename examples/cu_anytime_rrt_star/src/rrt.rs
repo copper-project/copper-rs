@@ -3,6 +3,13 @@
 //! The planner knows nothing about Copper: it only exposes [`RrtStar::grow`],
 //! one bounded block of iterations. `tasks.rs` calls it once from `base()` and
 //! once per anytime refinement quantum.
+//!
+//! The steps follow Karaman and Frazzoli: sample with goal bias, nearest,
+//! steer, choose the cheapest parent, rewire the neighborhood, and prune by
+//! branch and bound. Three points are stricter here than in a textbook write-up:
+//! the final leg to the goal is collision checked and counted in the path cost,
+//! rewiring refuses an ancestor so rounding cannot close a cycle, and the cost
+//! shift after a rewire is iterative instead of recursive.
 
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
@@ -102,6 +109,28 @@ impl World {
             .iter()
             .all(|o| distance_to_segment(a, b, o.center) > o.radius)
     }
+
+    /// Area left free by the obstacles. Assumes every obstacle lies inside the
+    /// bounds and none overlap, which holds for [`World::depot`].
+    pub fn free_area(&self) -> f32 {
+        let blocked: f32 = self
+            .obstacles
+            .iter()
+            .map(|o| core::f32::consts::PI * o.radius * o.radius)
+            .sum();
+        (self.width * self.height - blocked).max(f32::EPSILON)
+    }
+
+    /// The RRT* radius constant of Karaman and Frazzoli:
+    /// `gamma* = 2 * (1 + 1/d)^(1/d) * (free_area / zeta_d)^(1/d)`, here with
+    /// `d = 2` and `zeta_2 = pi`.
+    ///
+    /// A smaller constant shrinks the rewiring neighborhood below what
+    /// asymptotic optimality needs, and the planner degrades toward plain RRT
+    /// as the tree grows.
+    pub fn rrt_star_gamma(&self) -> f32 {
+        2.0 * 1.5f32.sqrt() * (self.free_area() / core::f32::consts::PI).sqrt()
+    }
 }
 
 /// Distance from `point` to the segment `a`-`b`.
@@ -124,7 +153,9 @@ pub struct RrtParams {
     pub goal_bias: f32,
     /// A node this close to the goal closes a path.
     pub goal_threshold: f32,
-    /// Gamma of the RRT* rewiring radius `gamma * sqrt(ln n / n)`.
+    /// Gamma of the RRT* rewiring radius `gamma * sqrt(ln n / n)`. `0.0`
+    /// derives it from the world through [`World::rrt_star_gamma`], which is
+    /// the value RRT* needs to converge to the optimum.
     pub gamma: f32,
     /// Branch-and-bound prune every N iterations; 0 disables pruning.
     pub prune_interval: u32,
@@ -138,7 +169,7 @@ impl Default for RrtParams {
             step_size: 0.8,
             goal_bias: 0.05,
             goal_threshold: 0.5,
-            gamma: 3.0,
+            gamma: 0.0,
             prune_interval: 512,
             max_nodes: 4000,
         }
@@ -213,7 +244,16 @@ impl RrtStar {
     /// Starts a search rooted at `start`. An unreachable or blocked `start`
     /// simply never grows a tree; the caller sees "no path" and the anytime
     /// quality floor drops the result.
-    pub fn new(world: World, params: RrtParams, start: Point2, goal: Point2, seed: u64) -> Self {
+    pub fn new(
+        world: World,
+        mut params: RrtParams,
+        start: Point2,
+        goal: Point2,
+        seed: u64,
+    ) -> Self {
+        if params.gamma <= 0.0 {
+            params.gamma = world.rrt_star_gamma();
+        }
         let mut planner = Self {
             world,
             params,
@@ -306,15 +346,36 @@ impl RrtStar {
         (self.lower_bound() / self.best_cost).clamp(0.0, 1.0)
     }
 
-    /// Copies the best path into `out` and returns `(waypoints, truncated)`.
-    ///
-    /// A path longer than [`MAX_WAYPOINTS`] is cut after its head and still
-    /// ends on the goal; `truncated` says so, and the reported cost always
-    /// describes the whole path.
-    pub fn write_path(&self, out: &mut [Point2; MAX_WAYPOINTS]) -> (u32, bool) {
+    /// Nodes on the best path before shortcutting, the goal included. Zero
+    /// while no path is known.
+    pub fn tree_path_len(&self) -> usize {
         let Some(goal_node) = self.best_goal else {
-            return (0, false);
+            return 0;
         };
+        let mut len = 1; // the goal itself, which is not a tree node
+        let mut cursor = Some(goal_node);
+        while let Some(index) = cursor {
+            len += 1;
+            cursor = self.tree[index as usize].parent;
+        }
+        len
+    }
+
+    /// Writes the best path into `out` and returns how many waypoints it used.
+    ///
+    /// The tree path routinely holds more nodes than [`MAX_WAYPOINTS`], so it
+    /// is shortcut first: from each waypoint the path jumps to the furthest
+    /// later one still reachable in a straight free line. Shortcutting is what
+    /// a planner publishes anyway, and it keeps every published segment
+    /// collision free - dropping the tail instead would publish a straight
+    /// jump across the map.
+    ///
+    /// The shortcut path is never longer than the tree path, so the reported
+    /// cost stays an upper bound on what the robot drives. `None` means even
+    /// the shortcut path does not fit; the caller then publishes nothing
+    /// rather than a path that cuts through an obstacle.
+    pub fn write_path(&self, out: &mut [Point2; MAX_WAYPOINTS]) -> Option<u32> {
+        let goal_node = self.best_goal?;
         let mut chain = Vec::new();
         let mut cursor = Some(goal_node);
         while let Some(index) = cursor {
@@ -325,13 +386,27 @@ impl RrtStar {
         chain.reverse();
         chain.push(self.goal);
 
-        let truncated = chain.len() > MAX_WAYPOINTS;
-        let len = chain.len().min(MAX_WAYPOINTS);
-        out[..len].copy_from_slice(&chain[..len]);
-        if truncated {
-            out[len - 1] = self.goal;
+        let mut len = 0usize;
+        let mut at = 0usize;
+        loop {
+            if len == MAX_WAYPOINTS {
+                return None;
+            }
+            out[len] = chain[at];
+            len += 1;
+            if at == chain.len() - 1 {
+                return Some(len as u32);
+            }
+            // The next tree node is always reachable - it is a tree edge - so
+            // the scan only looks for something further.
+            let mut next = at + 1;
+            for candidate in (at + 2)..chain.len() {
+                if self.world.is_free_segment(chain[at], chain[candidate]) {
+                    next = candidate;
+                }
+            }
+            at = next;
         }
-        (len as u32, truncated)
     }
 
     /// One RRT* iteration: sample, steer, choose the cheapest parent, rewire
@@ -602,24 +677,89 @@ mod tests {
         assert!(planner.best_cost() >= planner.lower_bound());
     }
 
+    /// Every published path must be drivable, at every stop point the anytime
+    /// policy could pick.
+    ///
+    /// A small `gamma` is included on purpose: it barely rewires, so its tree
+    /// paths grow past [`MAX_WAYPOINTS`] and the shortcut is exercised rather
+    /// than skipped.
     #[test]
-    fn published_path_is_valid() {
-        let mut planner = planner(7);
-        planner.grow(2000);
-        let mut waypoints = [Point2::default(); MAX_WAYPOINTS];
-        let (len, truncated) = planner.write_path(&mut waypoints);
-        assert!(len >= 2, "a path has at least a start and a goal");
-        assert_eq!(waypoints[0], START);
-        assert_eq!(waypoints[(len - 1) as usize], GOAL);
-        if !truncated {
-            let world = World::depot();
-            for pair in waypoints[..len as usize].windows(2) {
+    fn published_path_is_valid_at_every_stop_point() {
+        let world = World::depot();
+        let mut longest_tree_path = 0;
+        for (seed, gamma) in (1..40u64).flat_map(|seed| [(seed, 0.0f32), (seed, 3.0)]) {
+            let params = RrtParams {
+                gamma,
+                ..Default::default()
+            };
+            let mut planner = RrtStar::new(World::depot(), params, START, GOAL, seed);
+            planner.grow(400);
+            for _ in 0..24 {
+                planner.grow(256);
+                let mut waypoints = [Point2::default(); MAX_WAYPOINTS];
+                let Some(len) = planner.write_path(&mut waypoints) else {
+                    panic!("seed {seed}: the shortcut path did not fit");
+                };
+                longest_tree_path = longest_tree_path.max(planner.tree_path_len());
+                assert!(len >= 2, "a path has at least a start and a goal");
+                assert_eq!(waypoints[0], START);
+                assert_eq!(waypoints[(len - 1) as usize], GOAL);
+                for pair in waypoints[..len as usize].windows(2) {
+                    assert!(
+                        world.is_free_segment(pair[0], pair[1]),
+                        "seed {seed}: published path crosses an obstacle"
+                    );
+                }
+                // The shortcut only removes waypoints it can bypass in a
+                // straight free line, so it never lengthens the path.
+                let published: f32 = waypoints[..len as usize]
+                    .windows(2)
+                    .map(|pair| pair[0].distance(pair[1]))
+                    .sum();
                 assert!(
-                    world.is_free_segment(pair[0], pair[1]),
-                    "published path crosses an obstacle"
+                    published <= planner.best_cost() + 1e-3,
+                    "seed {seed}: shortcut path {published} longer than the cost {}",
+                    planner.best_cost()
                 );
             }
         }
+        assert!(
+            longest_tree_path > MAX_WAYPOINTS,
+            "the tree path never outgrew MAX_WAYPOINTS, so the shortcut was never exercised"
+        );
+    }
+
+    /// A gamma below the value the free area implies shrinks the rewiring
+    /// neighborhood, and refinement then converges to a worse path.
+    #[test]
+    fn derived_gamma_beats_an_arbitrary_one() {
+        let world = World::depot();
+        let derived = world.rrt_star_gamma();
+        assert!(
+            (12.0..13.0).contains(&derived),
+            "gamma for the depot map should be near 12.4, got {derived}"
+        );
+
+        let cost_at = |gamma: f32| {
+            let mut total = 0.0;
+            for seed in 1..40u64 {
+                let params = RrtParams {
+                    gamma,
+                    ..Default::default()
+                };
+                let mut planner = RrtStar::new(World::depot(), params, START, GOAL, seed);
+                planner.grow(400);
+                for _ in 0..24 {
+                    planner.grow(256);
+                }
+                total += planner.best_cost();
+            }
+            total
+        };
+        assert!(
+            cost_at(0.0) < cost_at(3.0),
+            "the derived gamma should refine to a shorter path than a small one"
+        );
     }
 
     #[test]

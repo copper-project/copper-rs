@@ -17,7 +17,12 @@ pub const GOAL: Point2 = Point2::new(9.5, 9.5);
 const CONVERGED_QUALITY: f32 = 0.999;
 
 /// What the sink saw, one entry per copperlist, for the checks in `main`.
-pub static REPORTS: Mutex<Vec<PlanReport>> = Mutex::new(Vec::new());
+static REPORTS: Mutex<Vec<PlanReport>> = Mutex::new(Vec::new());
+
+/// Takes the reports collected so far, leaving the sink ready for a new run.
+pub fn take_reports() -> Vec<PlanReport> {
+    core::mem::take(&mut *REPORTS.lock().expect("reports poisoned"))
+}
 
 /// One copperlist as the sink saw it. A `None` path means the node published
 /// nothing: no path yet, or a quality below the configured floor.
@@ -39,14 +44,17 @@ pub struct PlanRequest {
 }
 
 /// The best path known when the refinement window closed.
+///
+/// Every consecutive pair of waypoints is collision free, so the path can be
+/// driven as published.
 #[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
 pub struct PlanPath {
     pub waypoints: [Point2; MAX_WAYPOINTS],
     /// Waypoints actually used in `waypoints`.
     pub len: u32,
-    /// True when the path had more than [`MAX_WAYPOINTS`] waypoints and only
-    /// its head plus the goal is carried; `cost` still covers the whole path.
-    pub truncated: bool,
+    /// Cost of the RRT* tree path, which is what the anytime quality scores.
+    /// The published waypoints are a shortcut of it, so this is an upper bound
+    /// on the distance actually driven.
     pub cost: f32,
     /// RRT* iterations spent on this path, base block included.
     pub iterations: u32,
@@ -80,10 +88,30 @@ impl CuSrcTask for GoalSrc {
             goal: GOAL,
             seed: self.seed,
         });
-        // A fresh Tov: the anytime policy anchors max_age_ms on it.
+        // A fresh Tov per job. An anytime node reads it as the age anchor when
+        // its policy sets max_age_ms; neither planner here does, so both
+        // anchor on their own job start instead.
         new_msg.tov = Tov::Time(ctx.clock.now());
         Ok(())
     }
+}
+
+/// What a remote debugger sees of a planner node: the progress of the job,
+/// not the thousands of tree nodes behind it.
+///
+/// The fields are read through `Reflect`, which the compiler cannot see.
+#[allow(dead_code)]
+#[derive(Default, Debug, Reflect)]
+pub struct PlannerDebugState {
+    pub iterations: u32,
+    pub tree_size: u32,
+    /// Nodes on the best path before it is shortcut for publication.
+    pub tree_path_len: u32,
+    /// Cost of the best path in the tree, `f32::INFINITY` while there is none.
+    pub best_cost: f32,
+    /// Cost of the path currently in the output.
+    pub published_cost: f32,
+    pub published_quality: f32,
 }
 
 /// An RRT* planner as an anytime task.
@@ -118,18 +146,35 @@ impl RrtStarPlanner {
             && planner.has_solution()
             && planner.best_cost() < self.published_cost
         {
-            let mut path = PlanPath {
-                cost: planner.best_cost(),
-                iterations: planner.iterations(),
-                tree_size: planner.tree_size(),
-                ..Default::default()
-            };
-            (path.len, path.truncated) = planner.write_path(&mut path.waypoints);
-            output.set_payload(path);
-            self.published_cost = planner.best_cost();
-            self.published_quality = planner.quality();
+            let mut waypoints = [Point2::default(); MAX_WAYPOINTS];
+            // A path too long to represent is not published: the output keeps
+            // the last valid one and a later quantum tries again.
+            if let Some(len) = planner.write_path(&mut waypoints) {
+                output.set_payload(PlanPath {
+                    waypoints,
+                    len,
+                    cost: planner.best_cost(),
+                    iterations: planner.iterations(),
+                    tree_size: planner.tree_size(),
+                });
+                self.published_cost = planner.best_cost();
+                self.published_quality = planner.quality();
+            }
         }
         quality_from_f32(self.published_quality)
+    }
+
+    /// The projected view a debug session gets instead of the whole tree.
+    fn debug_state(&self) -> PlannerDebugState {
+        let planner = self.planner.as_ref();
+        PlannerDebugState {
+            iterations: planner.map_or(0, RrtStar::iterations),
+            tree_size: planner.map_or(0, RrtStar::tree_size),
+            tree_path_len: planner.map_or(0, |p| p.tree_path_len() as u32),
+            best_cost: planner.map_or(f32::INFINITY, RrtStar::best_cost),
+            published_cost: self.published_cost,
+            published_quality: self.published_quality,
+        }
     }
 }
 
@@ -138,6 +183,21 @@ impl CuAnytimeTask for RrtStarPlanner {
     type Output<'m> = output_msg!(PlanPath);
     type Resources<'r> = ();
     type Quality = Quality;
+
+    // The task struct holds a whole RRT* tree, up to `max_nodes` entries. The
+    // default hooks would ship all of it on every debug read, so the node
+    // exposes a small view instead.
+    fn register_debug_state_types(registry: &mut TypeRegistry) {
+        registry.register::<PlannerDebugState>();
+    }
+
+    fn debug_state_type_path() -> &'static str {
+        PlannerDebugState::type_path()
+    }
+
+    fn with_debug_state<R>(&self, f: impl FnOnce(&dyn bevy_reflect::Reflect) -> R) -> R {
+        f(&self.debug_state())
+    }
 
     fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
         let mut params = RrtParams::default();
@@ -259,5 +319,51 @@ impl CuSinkTask for ComparisonSink {
             thorough_status: thorough.metadata.status_txt.0.to_string(),
         });
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The anytime contract driven by hand: `base()` publishes a first path,
+    /// every `refine()` leaves the output holding the best path so far, and
+    /// the debug state tracks the job instead of exposing the whole tree.
+    #[test]
+    fn refinement_only_commits_improvements() {
+        let ctx = CuContext::new_with_clock();
+        let mut task = RrtStarPlanner::new(None, ()).unwrap();
+        let input = CuMsg::new(Some(PlanRequest {
+            start: START,
+            goal: GOAL,
+            seed: 42,
+        }));
+        let mut output = CuMsg::new(None);
+
+        task.start(&ctx).unwrap();
+        let status = task.base(&ctx, &input, &mut output).unwrap();
+        assert!(matches!(status, AnytimeStatus::Improved(_)));
+
+        let mut best = f32::INFINITY;
+        for _ in 0..24 {
+            if let AnytimeStatus::Aborted = task.refine(&ctx, &mut output).unwrap() {
+                panic!("the planner should not abort on a solvable map");
+            }
+            if let Some(path) = output.payload() {
+                assert!(
+                    path.cost <= best + 1e-4,
+                    "the output regressed: {best} then {}",
+                    path.cost
+                );
+                best = path.cost;
+            }
+        }
+        assert!(output.payload().is_some(), "no path after 24 quanta");
+
+        let state = task.debug_state();
+        assert_eq!(state.published_cost, best);
+        assert!(state.best_cost <= state.published_cost);
+        assert!(state.published_quality > 0.0);
+        assert!(state.iterations > 0 && state.tree_size > 0);
     }
 }
