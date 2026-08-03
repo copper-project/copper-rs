@@ -8,7 +8,10 @@ refinement quanta run.
 
 ### Input and output
 
-- Input: `cu_rrt_star::PlanRequest` — start, goal and the RNG seed of the job.
+- Input: `cu_rrt_star::PlanRequest` — the world (up to `MAX_OBSTACLES` (16)
+  round obstacles in a rectangle), start, goal and the RNG seed of the job.
+  The map travels with the job: the planner has no map of its own, so the
+  source may change the map between jobs.
 - Output: `cu_rrt_star::PlanPath` — up to `MAX_WAYPOINTS` (32) waypoints.
   Every consecutive pair of waypoints is collision free, so the path can be
   driven as published, whichever stop point the policy picked. `cost` is the

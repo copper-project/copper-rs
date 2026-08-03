@@ -19,6 +19,11 @@ use serde::{Deserialize, Serialize};
 /// array impls up to that size.
 pub const MAX_WAYPOINTS: usize = 32;
 
+/// Obstacles carried by a [`World`]. Bounded so the map can travel inside a
+/// [`crate::PlanRequest`] without allocating; must stay at or under 32 for
+/// the same serde reason as [`MAX_WAYPOINTS`].
+pub const MAX_OBSTACLES: usize = 16;
+
 /// A point of the planar world, in meters.
 #[derive(
     Default, Debug, Clone, Copy, PartialEq, Encode, Decode, Serialize, Deserialize, Reflect,
@@ -42,52 +47,78 @@ impl Point2 {
 
 /// A round obstacle: the planner rejects any point or segment within `radius`
 /// of `center`.
-#[derive(Debug, Clone, Copy, Reflect)]
+#[derive(
+    Default, Debug, Clone, Copy, PartialEq, Encode, Decode, Serialize, Deserialize, Reflect,
+)]
 pub struct Obstacle {
     pub center: Point2,
     pub radius: f32,
 }
 
+impl Obstacle {
+    pub const fn new(center: Point2, radius: f32) -> Self {
+        Self { center, radius }
+    }
+}
+
 /// The rectangular world `0..width` x `0..height` and its obstacles.
-#[derive(Debug, Clone, Reflect)]
+///
+/// The obstacle storage is a fixed array so the map can travel inside a
+/// [`crate::PlanRequest`]: the planner has no map of its own, every job
+/// carries the one it must solve.
+#[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
 pub struct World {
     pub width: f32,
     pub height: f32,
-    pub obstacles: Vec<Obstacle>,
+    pub obstacles: [Obstacle; MAX_OBSTACLES],
+    /// Obstacles actually used in `obstacles`.
+    pub obstacle_count: u32,
 }
 
 impl World {
-    /// The map every planner node of the example runs on: a 10x10 m depot with
-    /// five pillars, placed so the straight line from start to goal is blocked.
-    /// A first path is therefore always a detour, and refinement has real work
-    /// to do.
-    pub fn depot() -> Self {
-        Self {
-            width: 10.0,
-            height: 10.0,
-            obstacles: vec![
-                Obstacle {
-                    center: Point2::new(3.0, 3.0),
-                    radius: 1.2,
-                },
-                Obstacle {
-                    center: Point2::new(6.0, 6.0),
-                    radius: 1.5,
-                },
-                Obstacle {
-                    center: Point2::new(7.0, 2.5),
-                    radius: 1.0,
-                },
-                Obstacle {
-                    center: Point2::new(2.5, 7.0),
-                    radius: 1.0,
-                },
-                Obstacle {
-                    center: Point2::new(5.0, 1.5),
-                    radius: 0.8,
-                },
-            ],
+    /// A world from a list of obstacles. Errors when the list exceeds
+    /// [`MAX_OBSTACLES`].
+    pub fn new(width: f32, height: f32, obstacles: &[Obstacle]) -> CuResult<Self> {
+        if obstacles.len() > MAX_OBSTACLES {
+            return Err(format!(
+                "rrt*: {} obstacles, the world holds at most {MAX_OBSTACLES}",
+                obstacles.len()
+            )
+            .into());
         }
+        let mut world = Self {
+            width,
+            height,
+            obstacles: [Obstacle::default(); MAX_OBSTACLES],
+            obstacle_count: obstacles.len() as u32,
+        };
+        world.obstacles[..obstacles.len()].copy_from_slice(obstacles);
+        Ok(world)
+    }
+
+    /// The map the demo and the tests run on: a 10x10 m depot with five
+    /// pillars, placed so the straight line between opposite corners is
+    /// blocked. A first path is therefore always a detour, and refinement has
+    /// real work to do.
+    pub fn depot() -> Self {
+        Self::new(
+            10.0,
+            10.0,
+            &[
+                Obstacle::new(Point2::new(3.0, 3.0), 1.2),
+                Obstacle::new(Point2::new(6.0, 6.0), 1.5),
+                Obstacle::new(Point2::new(7.0, 2.5), 1.0),
+                Obstacle::new(Point2::new(2.5, 7.0), 1.0),
+                Obstacle::new(Point2::new(5.0, 1.5), 0.8),
+            ],
+        )
+        .expect("the depot obstacles fit MAX_OBSTACLES")
+    }
+
+    /// The obstacles in use, with a count out of range clamped rather than
+    /// trusted: a hand-built `World` must not be able to cause a panic here.
+    fn obstacle_slice(&self) -> &[Obstacle] {
+        &self.obstacles[..(self.obstacle_count as usize).min(MAX_OBSTACLES)]
     }
 
     /// True when `point` is inside the bounds and outside every obstacle.
@@ -95,7 +126,7 @@ impl World {
         if point.x < 0.0 || point.y < 0.0 || point.x > self.width || point.y > self.height {
             return false;
         }
-        self.obstacles
+        self.obstacle_slice()
             .iter()
             .all(|o| point.distance(o.center) > o.radius)
     }
@@ -105,7 +136,7 @@ impl World {
         if !self.is_free(a) || !self.is_free(b) {
             return false;
         }
-        self.obstacles
+        self.obstacle_slice()
             .iter()
             .all(|o| distance_to_segment(a, b, o.center) > o.radius)
     }
@@ -114,7 +145,7 @@ impl World {
     /// bounds and none overlap, which holds for [`World::depot`].
     pub fn free_area(&self) -> f32 {
         let blocked: f32 = self
-            .obstacles
+            .obstacle_slice()
             .iter()
             .map(|o| core::f32::consts::PI * o.radius * o.radius)
             .sum();
@@ -226,6 +257,9 @@ struct TreeNode {
 pub struct RrtStar {
     world: World,
     params: RrtParams,
+    /// The rewiring gamma in effect for the current job: the configured one,
+    /// or the one derived from the job's world when the config left it at 0.
+    gamma: f32,
     start: Point2,
     goal: Point2,
     tree: Vec<TreeNode>,
@@ -244,19 +278,11 @@ impl RrtStar {
     /// Starts a search rooted at `start`. An unreachable or blocked `start`
     /// simply never grows a tree; the caller sees "no path" and the anytime
     /// quality floor drops the result.
-    pub fn new(
-        world: World,
-        mut params: RrtParams,
-        start: Point2,
-        goal: Point2,
-        seed: u64,
-    ) -> Self {
-        if params.gamma <= 0.0 {
-            params.gamma = world.rrt_star_gamma();
-        }
+    pub fn new(world: &World, params: RrtParams, start: Point2, goal: Point2, seed: u64) -> Self {
         let mut planner = Self {
-            world,
+            world: world.clone(),
             params,
+            gamma: 0.0,
             start,
             goal,
             tree: Vec::new(),
@@ -267,14 +293,21 @@ impl RrtStar {
             scratch_near: Vec::new(),
             scratch_stack: Vec::new(),
         };
-        planner.reset(start, goal, seed);
+        planner.reset(world, start, goal, seed);
         planner
     }
 
     /// Restarts the search on a new problem, keeping the capacity the previous
     /// job grew: after the first job the planner asks the allocator for much
     /// less.
-    pub fn reset(&mut self, start: Point2, goal: Point2, seed: u64) {
+    pub fn reset(&mut self, world: &World, start: Point2, goal: Point2, seed: u64) {
+        self.world = world.clone();
+        // The map can change between jobs, so a derived gamma must follow it.
+        self.gamma = if self.params.gamma > 0.0 {
+            self.params.gamma
+        } else {
+            world.rrt_star_gamma()
+        };
         self.start = start;
         self.goal = goal;
         self.tree.clear();
@@ -514,7 +547,7 @@ impl RrtStar {
     /// RRT* rewiring radius `gamma * sqrt(ln n / n)`, capped at one step.
     fn near_radius(&self) -> f32 {
         let n = (self.tree.len() as f32).max(2.0);
-        (self.params.gamma * (n.ln() / n).sqrt()).min(self.params.step_size)
+        (self.gamma * (n.ln() / n).sqrt()).min(self.params.step_size)
     }
 
     /// True when `candidate` sits on the path from `node` up to the root.
@@ -642,7 +675,14 @@ mod tests {
     const GOAL: Point2 = Point2::new(9.5, 9.5);
 
     fn planner(seed: u64) -> RrtStar {
-        RrtStar::new(World::depot(), RrtParams::default(), START, GOAL, seed)
+        RrtStar::new(&World::depot(), RrtParams::default(), START, GOAL, seed)
+    }
+
+    #[test]
+    fn world_rejects_too_many_obstacles() {
+        let too_many = [Obstacle::new(Point2::new(1.0, 1.0), 0.1); MAX_OBSTACLES + 1];
+        assert!(World::new(10.0, 10.0, &too_many).is_err());
+        assert!(World::new(10.0, 10.0, &too_many[..MAX_OBSTACLES]).is_ok());
     }
 
     #[test]
@@ -692,7 +732,7 @@ mod tests {
                 gamma,
                 ..Default::default()
             };
-            let mut planner = RrtStar::new(World::depot(), params, START, GOAL, seed);
+            let mut planner = RrtStar::new(&World::depot(), params, START, GOAL, seed);
             planner.grow(400);
             for _ in 0..24 {
                 planner.grow(256);
@@ -747,7 +787,7 @@ mod tests {
                     gamma,
                     ..Default::default()
                 };
-                let mut planner = RrtStar::new(World::depot(), params, START, GOAL, seed);
+                let mut planner = RrtStar::new(&World::depot(), params, START, GOAL, seed);
                 planner.grow(400);
                 for _ in 0..24 {
                     planner.grow(256);

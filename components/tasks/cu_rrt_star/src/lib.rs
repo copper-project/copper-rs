@@ -19,10 +19,12 @@ use serde::{Deserialize, Serialize};
 /// nothing left to refine.
 const CONVERGED_QUALITY: f32 = 0.999;
 
-/// One planning problem. A different seed per job makes each job a fresh RRT*
-/// run rather than a replay of the previous one.
+/// One planning problem. The map travels with the job, so the source owns it
+/// and may change it between jobs. A different seed per job makes each job a
+/// fresh RRT* run rather than a replay of the previous one.
 #[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
 pub struct PlanRequest {
+    pub world: World,
     pub start: Point2,
     pub goal: Point2,
     pub seed: u64,
@@ -201,11 +203,11 @@ impl CuAnytimeTask for RrtStarPlanner {
         let planner = match self.planner.as_mut() {
             // Restart on the previous job's memory instead of a fresh tree.
             Some(planner) => {
-                planner.reset(request.start, request.goal, request.seed);
+                planner.reset(&request.world, request.start, request.goal, request.seed);
                 planner
             }
             None => self.planner.insert(RrtStar::new(
-                World::depot(),
+                &request.world,
                 self.params,
                 request.start,
                 request.goal,
@@ -262,6 +264,7 @@ mod tests {
         let ctx = CuContext::new_with_clock();
         let mut task = RrtStarPlanner::new(None, ()).unwrap();
         let input = CuMsg::new(Some(PlanRequest {
+            world: World::depot(),
             start: START,
             goal: GOAL,
             seed: 42,
