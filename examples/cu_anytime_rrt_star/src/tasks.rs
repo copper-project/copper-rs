@@ -1,369 +1,290 @@
-//! The Copper side of the example: a goal source, two RRT* anytime planners
-//! under different policies, and a sink comparing what they published.
+//! The Copper side of the demo: a navigation simulator ahead of the planner
+//! and a Rerun viewer behind it.
+//!
+//! The feedback loop closes outside the graph: the viewer stores the newest
+//! published path in [`LATEST_PATH`], and the simulator follows it one cycle
+//! later. Foreground execution runs nav -> planner -> viewer in order within
+//! one copperlist, so the hand-off is deterministic.
 
-use crate::rrt::{MAX_WAYPOINTS, Point2, RrtParams, RrtStar, World};
+use bincode::de::Decoder;
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
-use cu29::cutask_anytime::{AnytimeStatus, CuAnytimeTask, Quality, quality_from_f32};
+use cu_rrt_star::{PlanPath, PlanRequest, Point2, World};
 use cu29::prelude::*;
-use serde::{Deserialize, Serialize};
+use rerun::{
+    Color, LineStrips2D, Points2D, Radius, RecordingStream, RecordingStreamBuilder, Scalars,
+};
 use std::sync::Mutex;
 
-/// Start and goal of every planning job.
-pub const START: Point2 = Point2::new(0.5, 0.5);
-pub const GOAL: Point2 = Point2::new(9.5, 9.5);
+/// Where the robot starts, in free space on the depot map.
+const START: Point2 = Point2::new(0.5, 0.5);
 
-/// Quality at which the path matches the straight-line lower bound: there is
-/// nothing left to refine.
-const CONVERGED_QUALITY: f32 = 0.999;
+/// The corners the robot patrols, all in free space on the depot map.
+const PATROL: [Point2; 3] = [
+    Point2::new(9.5, 9.5),
+    Point2::new(0.5, 9.0),
+    Point2::new(9.0, 0.8),
+];
 
-/// What the sink saw, one entry per copperlist, for the checks in `main`.
-static REPORTS: Mutex<Vec<PlanReport>> = Mutex::new(Vec::new());
+/// The newest path the viewer saw, followed by the simulator one cycle later.
+static LATEST_PATH: Mutex<Option<PlanPath>> = Mutex::new(None);
 
-/// Takes the reports collected so far, leaving the sink ready for a new run.
-pub fn take_reports() -> Vec<PlanReport> {
-    core::mem::take(&mut *REPORTS.lock().expect("reports poisoned"))
-}
-
-/// One copperlist as the sink saw it. A `None` path means the node published
-/// nothing: no path yet, or a quality below the configured floor.
-#[derive(Debug, Clone)]
-pub struct PlanReport {
-    pub quick: Option<PlanPath>,
-    pub quick_status: String,
-    pub thorough: Option<PlanPath>,
-    pub thorough_status: String,
-}
-
-/// One planning problem. The seed changes every copperlist, so each job is a
-/// fresh RRT* run rather than a replay of the previous one.
-#[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
-pub struct PlanRequest {
-    pub start: Point2,
-    pub goal: Point2,
-    pub seed: u64,
-}
-
-/// The best path known when the refinement window closed.
+/// A point robot that replans while it drives.
 ///
-/// Every consecutive pair of waypoints is collision free, so the path can be
-/// driven as published.
-#[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
-pub struct PlanPath {
-    pub waypoints: [Point2; MAX_WAYPOINTS],
-    /// Waypoints actually used in `waypoints`.
-    pub len: u32,
-    /// Cost of the RRT* tree path, which is what the anytime quality scores.
-    /// The published waypoints are a shortcut of it, so this is an upper bound
-    /// on the distance actually driven.
-    pub cost: f32,
-    /// RRT* iterations spent on this path, base block included.
-    pub iterations: u32,
-    pub tree_size: u32,
-}
-
-/// Emits one planning problem per copperlist.
-#[derive(Default, Reflect)]
-pub struct GoalSrc {
+/// Each copperlist it advances along the newest published path, then asks for
+/// a fresh plan from wherever it is now. When it reaches the current patrol
+/// goal it picks the next one. While no path is published - the first cycle,
+/// or a job under the quality floor - it holds position and retries with a
+/// new seed.
+#[derive(Reflect)]
+pub struct NavSim {
+    pose: Point2,
+    goal_index: u32,
     seed: u64,
+    speed_mps: f32,
+    goal_threshold: f32,
+    #[reflect(ignore)]
+    last_now: Option<CuTime>,
 }
 
-impl Freezable for GoalSrc {}
+impl Freezable for NavSim {
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&self.pose, encoder)?;
+        Encode::encode(&self.goal_index, encoder)?;
+        Encode::encode(&self.seed, encoder)
+    }
 
-impl CuSrcTask for GoalSrc {
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        self.pose = Decode::decode(decoder)?;
+        self.goal_index = Decode::decode(decoder)?;
+        self.seed = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
+
+impl NavSim {
+    /// Advances the pose by `budget` meters along `path`. Waypoint 0 is where
+    /// the path was planned from - last cycle's pose - so the walk starts at
+    /// waypoint 1.
+    fn follow(&mut self, path: &PlanPath, mut budget: f32) {
+        let len = path.len as usize;
+        let mut next = 1;
+        while budget > 0.0 && next < len {
+            let target = path.waypoints[next];
+            let distance = self.pose.distance(target);
+            if distance <= budget {
+                self.pose = target;
+                budget -= distance;
+                next += 1;
+            } else {
+                let ratio = budget / distance;
+                self.pose = Point2::new(
+                    self.pose.x + ratio * (target.x - self.pose.x),
+                    self.pose.y + ratio * (target.y - self.pose.y),
+                );
+                break;
+            }
+        }
+    }
+}
+
+impl CuSrcTask for NavSim {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(PlanRequest);
 
     fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
-        let seed = match config {
-            Some(config) => config.get::<u32>("seed")?.unwrap_or(1) as u64,
-            None => 1,
-        };
-        Ok(Self { seed })
-    }
-
-    fn process(&mut self, ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
-        self.seed = self.seed.wrapping_add(1);
-        new_msg.set_payload(PlanRequest {
-            start: START,
-            goal: GOAL,
-            seed: self.seed,
-        });
-        // A fresh Tov per job. An anytime node reads it as the age anchor when
-        // its policy sets max_age_ms; neither planner here does, so both
-        // anchor on their own job start instead.
-        new_msg.tov = Tov::Time(ctx.clock.now());
-        Ok(())
-    }
-}
-
-/// What a remote debugger sees of a planner node: the progress of the job,
-/// not the thousands of tree nodes behind it.
-///
-/// The fields are read through `Reflect`, which the compiler cannot see.
-#[allow(dead_code)]
-#[derive(Default, Debug, Reflect)]
-pub struct PlannerDebugState {
-    pub iterations: u32,
-    pub tree_size: u32,
-    /// Nodes on the best path before it is shortcut for publication.
-    pub tree_path_len: u32,
-    /// Cost of the best path in the tree, `f32::INFINITY` while there is none.
-    pub best_cost: f32,
-    /// Cost of the path currently in the output.
-    pub published_cost: f32,
-    pub published_quality: f32,
-}
-
-/// An RRT* planner as an anytime task.
-///
-/// `base()` runs the first block of iterations and publishes the first path it
-/// finds; each `refine()` runs one more block and republishes only when the
-/// path got shorter. How many blocks run is the policy's call, not the task's.
-#[derive(Reflect)]
-pub struct RrtStarPlanner {
-    params: RrtParams,
-    /// Iterations of the base block, aiming at a first path.
-    base_iterations: u32,
-    /// Iterations of one refinement quantum.
-    block_iterations: u32,
-    /// The current job, `None` before the first `base()`.
-    planner: Option<RrtStar>,
-    /// Cost of the path currently in the output; infinite while none was
-    /// published for this job.
-    published_cost: f32,
-    published_quality: f32,
-}
-
-impl Freezable for RrtStarPlanner {}
-
-impl RrtStarPlanner {
-    /// Commits the best path of the tree when it beats the published one, and
-    /// returns the published quality. Leaving the output alone when nothing
-    /// improved is what the anytime contract asks for: the output always holds
-    /// the best result so far, so the runtime can publish it at any stop point.
-    fn publish(&mut self, output: &mut CuMsg<PlanPath>) -> Quality {
-        if let Some(planner) = self.planner.as_ref()
-            && planner.has_solution()
-            && planner.best_cost() < self.published_cost
-        {
-            let mut waypoints = [Point2::default(); MAX_WAYPOINTS];
-            // A path too long to represent is not published: the output keeps
-            // the last valid one and a later quantum tries again.
-            if let Some(len) = planner.write_path(&mut waypoints) {
-                output.set_payload(PlanPath {
-                    waypoints,
-                    len,
-                    cost: planner.best_cost(),
-                    iterations: planner.iterations(),
-                    tree_size: planner.tree_size(),
-                });
-                self.published_cost = planner.best_cost();
-                self.published_quality = planner.quality();
-            }
-        }
-        quality_from_f32(self.published_quality)
-    }
-
-    /// The projected view a debug session gets instead of the whole tree.
-    fn debug_state(&self) -> PlannerDebugState {
-        let planner = self.planner.as_ref();
-        PlannerDebugState {
-            iterations: planner.map_or(0, RrtStar::iterations),
-            tree_size: planner.map_or(0, RrtStar::tree_size),
-            tree_path_len: planner.map_or(0, |p| p.tree_path_len() as u32),
-            best_cost: planner.map_or(f32::INFINITY, RrtStar::best_cost),
-            published_cost: self.published_cost,
-            published_quality: self.published_quality,
-        }
-    }
-}
-
-impl CuAnytimeTask for RrtStarPlanner {
-    type Input<'m> = input_msg!(PlanRequest);
-    type Output<'m> = output_msg!(PlanPath);
-    type Resources<'r> = ();
-    type Quality = Quality;
-
-    // The task struct holds a whole RRT* tree, up to `max_nodes` entries. The
-    // default hooks would ship all of it on every debug read, so the node
-    // exposes a small view instead.
-    fn register_debug_state_types(registry: &mut TypeRegistry) {
-        registry.register::<PlannerDebugState>();
-    }
-
-    fn debug_state_type_path() -> &'static str {
-        PlannerDebugState::type_path()
-    }
-
-    fn with_debug_state<R>(&self, f: impl FnOnce(&dyn bevy_reflect::Reflect) -> R) -> R {
-        f(&self.debug_state())
-    }
-
-    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
-        let mut params = RrtParams::default();
-        let mut base_iterations = 400u32;
-        let mut block_iterations = 256u32;
+        let mut seed = 1u64;
+        let mut speed_mps = 1.5f32;
+        let mut goal_threshold = 0.3f32;
         if let Some(config) = config {
-            if let Some(value) = config.get::<f32>("step_size")? {
-                params.step_size = value;
+            if let Some(value) = config.get::<u32>("seed")? {
+                seed = value as u64;
             }
-            if let Some(value) = config.get::<f32>("goal_bias")? {
-                params.goal_bias = value;
+            if let Some(value) = config.get::<f32>("speed_mps")? {
+                speed_mps = value;
             }
             if let Some(value) = config.get::<f32>("goal_threshold")? {
-                params.goal_threshold = value;
-            }
-            if let Some(value) = config.get::<f32>("gamma")? {
-                params.gamma = value;
-            }
-            if let Some(value) = config.get::<u32>("prune_interval")? {
-                params.prune_interval = value;
-            }
-            if let Some(value) = config.get::<u32>("max_nodes")? {
-                params.max_nodes = value;
-            }
-            if let Some(value) = config.get::<u32>("base_iterations")? {
-                base_iterations = value;
-            }
-            if let Some(value) = config.get::<u32>("block_iterations")? {
-                block_iterations = value;
+                goal_threshold = value;
             }
         }
         Ok(Self {
-            params,
-            base_iterations,
-            block_iterations,
-            planner: None,
-            published_cost: f32::INFINITY,
-            published_quality: 0.0,
+            pose: START,
+            goal_index: 0,
+            seed,
+            speed_mps,
+            goal_threshold,
+            last_now: None,
         })
     }
 
-    fn base(
-        &mut self,
-        _ctx: &CuContext,
-        input: &Self::Input<'_>,
-        output: &mut Self::Output<'_>,
-    ) -> CuResult<AnytimeStatus<Quality>> {
-        let request = input.payload().ok_or("rrt*: no plan request")?;
-        let planner = match self.planner.as_mut() {
-            // Restart on the previous job's memory instead of a fresh tree.
-            Some(planner) => {
-                planner.reset(request.start, request.goal, request.seed);
-                planner
+    fn process(&mut self, ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+        let now = ctx.clock.now();
+        let dt = match self.last_now {
+            Some(last) => {
+                let CuDuration(nanos) = now - last;
+                nanos as f32 / 1e9
             }
-            None => self.planner.insert(RrtStar::new(
-                World::depot(),
-                self.params,
-                request.start,
-                request.goal,
-                request.seed,
-            )),
+            None => 0.0,
         };
-        planner.grow(self.base_iterations);
-        self.published_cost = f32::INFINITY;
-        self.published_quality = 0.0;
-        // Output messages are recycled: with no path yet the message must not
-        // still carry the previous job's path.
-        output.clear_payload();
-        // Even with no path found the job goes on: refinement is what usually
-        // finds one, and a quality of 0.0 stays under any configured floor.
-        Ok(AnytimeStatus::Improved(self.publish(output)))
-    }
+        self.last_now = Some(now);
 
-    fn refine(
-        &mut self,
-        _ctx: &CuContext,
-        output: &mut Self::Output<'_>,
-    ) -> CuResult<AnytimeStatus<Quality>> {
-        let planner = self
-            .planner
-            .as_mut()
-            .ok_or("rrt*: refine() without a job from base()")?;
-        if planner.is_exhausted() {
-            return Ok(AnytimeStatus::Converged(quality_from_f32(
-                self.published_quality,
-            )));
+        let path = LATEST_PATH.lock().expect("path poisoned").clone();
+        if let Some(path) = path {
+            self.follow(&path, self.speed_mps * dt);
         }
-        planner.grow(self.block_iterations);
-        let quality = self.publish(output);
-        if self.published_quality >= CONVERGED_QUALITY {
-            // The path matches the straight line: no iteration can beat it.
-            return Ok(AnytimeStatus::Converged(quality));
+
+        if self.pose.distance(PATROL[self.goal_index as usize]) <= self.goal_threshold {
+            self.goal_index = (self.goal_index + 1) % PATROL.len() as u32;
+            // A path toward the old goal must not be driven.
+            *LATEST_PATH.lock().expect("path poisoned") = None;
         }
-        Ok(AnytimeStatus::Improved(quality))
-    }
-}
 
-/// Records what both planners published in the same copperlist.
-#[derive(Default, Reflect)]
-pub struct ComparisonSink;
-
-impl Freezable for ComparisonSink {}
-
-impl CuSinkTask for ComparisonSink {
-    type Resources<'r> = ();
-    type Input<'m> = input_msg!('m, PlanPath, PlanPath);
-
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
-        Ok(Self)
-    }
-
-    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
-        // Input order follows the cnx order in the RON: quick first.
-        let (quick, thorough): (&CuMsg<PlanPath>, &CuMsg<PlanPath>) = *input;
-        REPORTS.lock().expect("reports poisoned").push(PlanReport {
-            quick: quick.payload().cloned(),
-            quick_status: quick.metadata.status_txt.0.to_string(),
-            thorough: thorough.payload().cloned(),
-            thorough_status: thorough.metadata.status_txt.0.to_string(),
+        self.seed = self.seed.wrapping_add(1);
+        new_msg.set_payload(PlanRequest {
+            world: World::depot(),
+            start: self.pose,
+            goal: PATROL[self.goal_index as usize],
+            seed: self.seed,
         });
+        new_msg.tov = Tov::Time(now);
         Ok(())
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// Draws the world, the robot and the published path into a Rerun viewer,
+/// and stores the path for [`NavSim`] to follow.
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
+pub struct RerunViewer {
+    #[reflect(ignore)]
+    rec: RecordingStream,
+    cycle: i64,
+    world_logged: bool,
+    trail: Vec<Point2>,
+}
 
-    /// The anytime contract driven by hand: `base()` publishes a first path,
-    /// every `refine()` leaves the output holding the best path so far, and
-    /// the debug state tracks the job instead of exposing the whole tree.
-    #[test]
-    fn refinement_only_commits_improvements() {
-        let ctx = CuContext::new_with_clock();
-        let mut task = RrtStarPlanner::new(None, ()).unwrap();
-        let input = CuMsg::new(Some(PlanRequest {
-            start: START,
-            goal: GOAL,
-            seed: 42,
-        }));
-        let mut output = CuMsg::new(None);
+impl Freezable for RerunViewer {}
 
-        task.start(&ctx).unwrap();
-        let status = task.base(&ctx, &input, &mut output).unwrap();
-        assert!(matches!(status, AnytimeStatus::Improved(_)));
+impl CuSinkTask for RerunViewer {
+    type Resources<'r> = ();
+    type Input<'m> = input_msg!('m, PlanRequest, PlanPath);
 
-        let mut best = f32::INFINITY;
-        for _ in 0..24 {
-            if let AnytimeStatus::Aborted = task.refine(&ctx, &mut output).unwrap() {
-                panic!("the planner should not abort on a solvable map");
-            }
-            if let Some(path) = output.payload() {
-                assert!(
-                    path.cost <= best + 1e-4,
-                    "the output regressed: {best} then {}",
-                    path.cost
-                );
-                best = path.cost;
-            }
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
+        let builder = RecordingStreamBuilder::new("cu-anytime-rrt-star");
+        // `rrd` writes the recording to a file instead of spawning a viewer,
+        // for headless runs.
+        let rec = match config.and_then(|c| c.get::<String>("rrd").transpose()) {
+            Some(path) => builder.save(path?),
+            None => builder.spawn(),
         }
-        assert!(output.payload().is_some(), "no path after 24 quanta");
-
-        let state = task.debug_state();
-        assert_eq!(state.published_cost, best);
-        assert!(state.best_cost <= state.published_cost);
-        assert!(state.published_quality > 0.0);
-        assert!(state.iterations > 0 && state.tree_size > 0);
+        .map_err(|e| CuError::new_with_cause("Failed to open the Rerun stream", e))?;
+        Ok(Self {
+            rec,
+            cycle: 0,
+            world_logged: false,
+            trail: Vec::new(),
+        })
     }
+
+    fn process(&mut self, _ctx: &CuContext, input: &Self::Input<'_>) -> CuResult<()> {
+        // Input order follows the cnx order in the RON: the request first.
+        let (request_msg, path_msg): (&CuMsg<PlanRequest>, &CuMsg<PlanPath>) = *input;
+        let Some(request) = request_msg.payload() else {
+            return Ok(());
+        };
+
+        self.cycle += 1;
+        self.rec.set_time_sequence("copperlist", self.cycle);
+        apply_tov(&self.rec, &request_msg.tov);
+
+        if !self.world_logged {
+            log_world(&self.rec, &request.world)?;
+            self.world_logged = true;
+        }
+
+        self.trail.push(request.start);
+        log(
+            &self.rec,
+            "world/robot",
+            &Points2D::new([(request.start.x, request.start.y)])
+                .with_radii([Radius::new_scene_units(0.15)])
+                .with_colors([Color::from([255, 140, 0])]),
+        )?;
+        log(
+            &self.rec,
+            "world/trail",
+            &LineStrips2D::new([self.trail.iter().map(|p| (p.x, p.y)).collect::<Vec<_>>()])
+                .with_colors([Color::from([255, 200, 120])]),
+        )?;
+        log(
+            &self.rec,
+            "world/goal",
+            &Points2D::new([(request.goal.x, request.goal.y)])
+                .with_radii([Radius::new_scene_units(0.2)])
+                .with_colors([Color::from([0, 200, 0])]),
+        )?;
+
+        // An empty strip when nothing was published: a job under the quality
+        // floor visibly clears the path.
+        let strip: Vec<(f32, f32)> = path_msg.payload().map_or_else(Vec::new, |path| {
+            path.waypoints[..path.len as usize]
+                .iter()
+                .map(|p| (p.x, p.y))
+                .collect()
+        });
+        log(
+            &self.rec,
+            "world/path",
+            &LineStrips2D::new([strip]).with_colors([Color::from([0, 128, 255])]),
+        )?;
+
+        // The same quality definition as the planner: straight line over cost.
+        let quality = path_msg.payload().map_or(0.0, |path| {
+            (request.start.distance(request.goal) / path.cost) as f64
+        });
+        log(&self.rec, "curves/quality", &Scalars::single(quality))?;
+        let iterations = path_msg
+            .payload()
+            .map_or(0.0, |path| path.iterations as f64);
+        log(&self.rec, "curves/iterations", &Scalars::single(iterations))?;
+
+        if let Some(path) = path_msg.payload() {
+            *LATEST_PATH.lock().expect("path poisoned") = Some(path.clone());
+        }
+        Ok(())
+    }
+}
+
+fn apply_tov(rec: &RecordingStream, tov: &Tov) {
+    match tov {
+        Tov::Time(t) => rec.set_duration_secs("tov", t.0 as f64 / 1e9),
+        Tov::Range(r) => rec.set_duration_secs("tov", r.start.0 as f64 / 1e9),
+        Tov::None => rec.reset_time(),
+    }
+}
+
+fn log(rec: &RecordingStream, path: &str, entity: &impl rerun::AsComponents) -> CuResult<()> {
+    rec.log(path, entity)
+        .map_err(|e| CuError::new_with_cause("Failed to log to Rerun", e))
+}
+
+/// The static part of the scene: the world bounds and the obstacles.
+fn log_world(rec: &RecordingStream, world: &World) -> CuResult<()> {
+    let (w, h) = (world.width, world.height);
+    rec.log_static(
+        "world/bounds",
+        &LineStrips2D::new([[(0.0, 0.0), (w, 0.0), (w, h), (0.0, h), (0.0, 0.0)]])
+            .with_colors([Color::from([180, 180, 180])]),
+    )
+    .map_err(|e| CuError::new_with_cause("Failed to log the world bounds", e))?;
+
+    let obstacles = &world.obstacles[..world.obstacle_count as usize];
+    rec.log_static(
+        "world/obstacles",
+        &Points2D::new(obstacles.iter().map(|o| (o.center.x, o.center.y)))
+            .with_radii(obstacles.iter().map(|o| Radius::new_scene_units(o.radius)))
+            .with_colors([Color::from([100, 100, 100])]),
+    )
+    .map_err(|e| CuError::new_with_cause("Failed to log the obstacles", e))
 }

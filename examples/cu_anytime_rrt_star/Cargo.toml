@@ -1,6 +1,6 @@
 [package]
 name = "cu-anytime-rrt-star"
-description = "Example for the Copper project showing an anytime task: an RRT* planner that publishes a first path, then improves it quantum by quantum."
+description = "Example for the Copper project: closed-loop navigation on the cu-rrt-star anytime planner, visualized with Rerun."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -15,8 +15,9 @@ publish = false
 
 [dependencies]
 bincode = { workspace = true }
+cu-rrt-star = { workspace = true }
 cu29 = { workspace = true }
-serde = { workspace = true }
+rerun = { workspace = true }
 
 [build-dependencies]
 cu29-build = { workspace = true }
