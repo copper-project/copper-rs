@@ -9,6 +9,7 @@ use cu29_runtime::planner::{
     mission_graphs, step_key,
 };
 use cu29_traits::{CuError, CuResult};
+use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write as _;
 use std::fs;
@@ -55,6 +56,9 @@ struct Args {
     /// Output SVG path.
     #[arg(long, default_value = "plan.svg")]
     output: PathBuf,
+    /// Log-derived statistics produced by an application logreader.
+    #[arg(long)]
+    logstats: Option<PathBuf>,
 }
 
 fn main() {
@@ -74,8 +78,20 @@ fn run(args: Args) -> CuResult<()> {
         return Ok(());
     }
 
-    let sections = selected_graphs(&config, args.mission.as_deref())?;
-    let svg = render_document(&config, &sections)?;
+    let logstats = args
+        .logstats
+        .as_deref()
+        .map(load_observed_logstats)
+        .transpose()?;
+    let selected_mission = args
+        .mission
+        .as_deref()
+        .or_else(|| logstats.as_ref().and_then(|stats| stats.mission.as_deref()));
+    let sections = selected_graphs(&config, selected_mission)?;
+    if let Some(logstats) = &logstats {
+        validate_observed_logstats(logstats, &config, selected_mission);
+    }
+    let svg = render_document(&config, &sections, logstats.as_ref())?;
     fs::write(&args.output, svg).map_err(|error| {
         CuError::new_with_cause(
             &format!("Failed to write plan SVG '{}'.", args.output.display()),
@@ -137,7 +153,11 @@ fn selected_graphs<'a>(
         })
 }
 
-fn render_document(config: &CuConfig, sections: &[(String, &CuGraph)]) -> CuResult<String> {
+fn render_document(
+    config: &CuConfig,
+    sections: &[(String, &CuGraph)],
+    logstats: Option<&ObservedLogStats>,
+) -> CuResult<String> {
     let mut rendered = Vec::new();
     let mut total_height = MARGIN;
     for (mission, graph) in sections {
@@ -146,7 +166,10 @@ fn render_document(config: &CuConfig, sections: &[(String, &CuGraph)]) -> CuResu
                 "Could not compute scheduling plan for mission '{mission}': {error}"
             ))
         })?;
-        let section = render_mission(config, mission, &plan)?;
+        let observed = logstats
+            .filter(|stats| mission_key(stats.mission.as_deref()) == mission_key(Some(mission)))
+            .and_then(|stats| stats.schedule.as_ref());
+        let section = render_mission(config, mission, &plan, observed)?;
         total_height += section.height + SECTION_GAP;
         rendered.push(section);
     }
@@ -183,6 +206,7 @@ text { font-family: 'Noto Sans', sans-serif; fill: #18212b; }
 .job { fill: #eef4ff; stroke: #528bcd; stroke-width: 1; }
 .job-flow { fill: none; stroke: #528bcd; stroke-width: 3; stroke-dasharray: 7 4; marker-end: url(#arrow); }
 .bg-trigger { fill: none; stroke: #7f56d9; stroke-width: 2; stroke-dasharray: 4 3; opacity: 0.55; marker-end: url(#arrow); }
+.observed-segment { cursor: help; }
 </style>
 <rect width="100%" height="100%" fill="#ffffff"/>
 "##,
@@ -203,10 +227,179 @@ struct RenderedSection {
     height: f64,
 }
 
+#[derive(Debug, Deserialize)]
+struct ObservedLogStats {
+    schema_version: u32,
+    config_signature: String,
+    mission: Option<String>,
+    #[serde(default)]
+    schedule: Option<ObservedSchedule>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ObservedSchedule {
+    #[serde(default)]
+    stages: Vec<ObservedStage>,
+    #[serde(default)]
+    traces: Vec<ObservedTrace>,
+    #[serde(default)]
+    residual_before: ObservedDurationStats,
+    #[serde(default)]
+    resource_overlaps: Vec<ObservedResourceOverlap>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ObservedStage {
+    origin: String,
+    samples: u64,
+    durations: ObservedDurationStats,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct ObservedDurationStats {
+    p50_ns: Option<u64>,
+    p95_ns: Option<u64>,
+    max_ns: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ObservedTrace {
+    kind: String,
+    culist_id: u64,
+    #[serde(default)]
+    wall_span_ns: u64,
+    #[serde(default)]
+    excluded_intervals: u32,
+    residual_before_ns: Option<u64>,
+    intervals: Vec<ObservedInterval>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ObservedInterval {
+    origin: String,
+    start_ns: u64,
+    end_ns: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct ObservedResourceOverlap {
+    resource: String,
+    left: String,
+    right: String,
+    occurrences: u64,
+}
+
+fn load_observed_logstats(path: &Path) -> CuResult<ObservedLogStats> {
+    let contents = fs::read_to_string(path).map_err(|error| {
+        CuError::new_with_cause(
+            &format!("Failed to read logstats '{}'.", path.display()),
+            error,
+        )
+    })?;
+    let stats: ObservedLogStats = serde_json::from_str(&contents).map_err(|error| {
+        CuError::new_with_cause(
+            &format!("Failed to parse logstats '{}'.", path.display()),
+            error,
+        )
+    })?;
+    if stats.schema_version < 2 {
+        eprintln!(
+            "Warning: logstats schema {} has no observed schedule data; regenerate it with the current logreader.",
+            stats.schema_version
+        );
+    } else if stats.schema_version != 2 {
+        eprintln!(
+            "Warning: logstats schema {} is newer than the supported schema 2.",
+            stats.schema_version
+        );
+    }
+    Ok(stats)
+}
+
+fn validate_observed_logstats(
+    stats: &ObservedLogStats,
+    config: &CuConfig,
+    requested_mission: Option<&str>,
+) {
+    if requested_mission.is_some()
+        && mission_key(requested_mission) != mission_key(stats.mission.as_deref())
+    {
+        eprintln!(
+            "Warning: logstats mission '{}' does not match requested mission '{}'.",
+            stats.mission.as_deref().unwrap_or("default"),
+            requested_mission.unwrap_or("default")
+        );
+    }
+    match build_logstats_signature(config, stats.mission.as_deref()) {
+        Ok(signature) if signature != stats.config_signature => eprintln!(
+            "Warning: logstats signature mismatch (expected {}, got {}).",
+            signature, stats.config_signature
+        ),
+        Err(error) => eprintln!("Warning: unable to validate logstats signature: {error}"),
+        _ => {}
+    }
+}
+
+fn build_logstats_signature(config: &CuConfig, mission: Option<&str>) -> CuResult<String> {
+    let graph = config.get_graph(mission)?;
+    let mut parts = vec![format!("mission={}", mission.unwrap_or("default"))];
+    let mut nodes = graph.get_all_nodes();
+    nodes.sort_by_key(|(_, node)| node.get_id());
+    for (_, node) in nodes {
+        parts.push(format!(
+            "node|{}|{}|{}",
+            node.get_id(),
+            node.get_type(),
+            match node.get_flavor() {
+                cu29_runtime::config::Flavor::Task => "task",
+                cu29_runtime::config::Flavor::Bridge => "bridge",
+            }
+        ));
+    }
+    let mut edges = graph
+        .edges()
+        .map(|connection| {
+            format!(
+                "edge|{}|{}|{}",
+                format_endpoint_for_signature(&connection.src, connection.src_channel.as_deref()),
+                format_endpoint_for_signature(&connection.dst, connection.dst_channel.as_deref()),
+                connection.msg
+            )
+        })
+        .collect::<Vec<_>>();
+    edges.sort();
+    parts.extend(edges);
+    Ok(format!(
+        "fnv1a64:{:016x}",
+        fnv1a64(parts.join("\n").as_bytes())
+    ))
+}
+
+fn format_endpoint_for_signature(node: &str, channel: Option<&str>) -> String {
+    channel.map_or_else(|| node.to_string(), |channel| format!("{node}/{channel}"))
+}
+
+fn fnv1a64(data: &[u8]) -> u64 {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in data {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
+fn mission_key(mission: Option<&str>) -> &str {
+    match mission {
+        Some(value) if value != "default" => value,
+        _ => "default",
+    }
+}
+
 fn render_mission(
     config: &CuConfig,
     mission: &str,
     plan: &AssembledPlan,
+    observed: Option<&ObservedSchedule>,
 ) -> CuResult<RenderedSection> {
     let steps = plan
         .execution
@@ -306,6 +499,13 @@ fn render_mission(
     );
     svg.push_str(&parallel.svg);
     y += parallel.height;
+
+    if let Some(observed) = observed {
+        y += 28.0;
+        let section = render_observed(config, &stages, &plan.entities, observed, y);
+        svg.push_str(&section.svg);
+        y += section.height;
+    }
 
     Ok(RenderedSection {
         svg,
@@ -517,6 +717,335 @@ fn render_parallel(
         rt_pool,
         top,
     )
+}
+
+struct ObservedStageView {
+    label: String,
+    resources: Vec<String>,
+}
+
+fn render_observed(
+    config: &CuConfig,
+    stages: &[&CuExecutionStep],
+    entities: &[PlanEntity],
+    observed: &ObservedSchedule,
+    top: f64,
+) -> RenderedSection {
+    let mut svg = String::new();
+    let stage_views = stages
+        .iter()
+        .map(|step| {
+            let entity = &entities[step.node_id as usize];
+            let origin = observed_origin(entity);
+            let resources = entity_resource_bindings(config, entity, step)
+                .into_iter()
+                .map(|(_, target)| target)
+                .collect();
+            (
+                origin,
+                ObservedStageView {
+                    label: entity.label.clone(),
+                    resources,
+                },
+            )
+        })
+        .collect::<HashMap<_, _>>();
+    let aggregates = observed
+        .stages
+        .iter()
+        .map(|stage| (stage.origin.as_str(), stage))
+        .collect::<HashMap<_, _>>();
+
+    writeln!(
+        svg,
+        r#"<text class="subtitle" x="0" y="{}">Observed execution · proportional recorded process intervals</text>"#,
+        top + 14.0
+    )
+    .unwrap();
+    writeln!(
+        svg,
+        r#"<text class="meta" x="0" y="{}">Recorded task durations are packed back-to-back; hover any segment for its task and timing details.</text>"#,
+        top + 33.0
+    )
+    .unwrap();
+
+    let mut y = top + 55.0;
+    if observed.traces.is_empty() {
+        writeln!(
+            svg,
+            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="44" rx="8" fill="#fff7e6" stroke="#f0a04b"/><text class="blocking" x="12" y="{}">No complete process intervals were found in the CopperList log.</text>"##,
+            y + 27.0
+        )
+        .unwrap();
+        y += 44.0;
+    }
+
+    for trace in &observed.traces {
+        let timeline_width = PARALLEL_WIDTH - LABEL_WIDTH;
+        let collisions = observed_trace_collisions(trace, &stage_views);
+        let active_ns: u64 = trace
+            .intervals
+            .iter()
+            .map(|interval| interval.end_ns.saturating_sub(interval.start_ns))
+            .sum();
+        let trace_start = trace
+            .intervals
+            .iter()
+            .map(|interval| interval.start_ns)
+            .min()
+            .unwrap_or(0);
+        let trace_end = trace
+            .intervals
+            .iter()
+            .map(|interval| interval.end_ns)
+            .max()
+            .unwrap_or(trace_start);
+        let wall_span_ns = if trace.wall_span_ns == 0 {
+            trace_end.saturating_sub(trace_start)
+        } else {
+            trace.wall_span_ns
+        };
+        let excluded_note = if trace.excluded_intervals == 0 {
+            String::new()
+        } else {
+            format!(
+                " · {} carried-forward slot(s) excluded",
+                trace.excluded_intervals
+            )
+        };
+
+        writeln!(
+            svg,
+            r#"<text class="card-title" x="0" y="{y}">{} · CL #{} · {} active · {} wall{}</text>"#,
+            xml(&trace.kind.to_uppercase()),
+            trace.culist_id,
+            xml(&format_duration_ns(active_ns as f64)),
+            xml(&format_duration_ns(wall_span_ns as f64)),
+            xml(&excluded_note),
+        )
+        .unwrap();
+        y += 17.0;
+        for tick in 0..=4 {
+            let x = LABEL_WIDTH + timeline_width * tick as f64 / 4.0;
+            let elapsed = active_ns as f64 * tick as f64 / 4.0;
+            let (label_x, anchor) = if tick == 4 {
+                (x - 3.0, "end")
+            } else {
+                (x + 3.0, "start")
+            };
+            writeln!(
+                svg,
+                r#"<line class="grid" x1="{x}" y1="{y}" x2="{x}" y2="{}"/><text class="ordinal mono" text-anchor="{anchor}" x="{label_x}" y="{}">{}</text>"#,
+                y + 48.0,
+                y + 10.0,
+                xml(&format_duration_ns(elapsed)),
+            )
+            .unwrap();
+        }
+        y += 15.0;
+
+        let minimum_width = 5.0;
+        let minimum_total = minimum_width * trace.intervals.len() as f64;
+        let proportional_width = (timeline_width - minimum_total).max(0.0);
+        let mut x = LABEL_WIDTH;
+        writeln!(
+            svg,
+            r#"<text class="lane mono" x="0" y="{}">process</text>"#,
+            y + 21.0
+        )
+        .unwrap();
+        for interval in &trace.intervals {
+            let view = stage_views.get(&interval.origin);
+            let label = view
+                .map(|view| view.label.as_str())
+                .unwrap_or(interval.origin.as_str());
+            let fill = observed_interval_fill(&interval.origin);
+            let duration_ns = interval.end_ns.saturating_sub(interval.start_ns);
+            let width = if active_ns == 0 {
+                timeline_width / trace.intervals.len().max(1) as f64
+            } else {
+                minimum_width + proportional_width * duration_ns as f64 / active_ns as f64
+            };
+            let aggregate = aggregates.get(interval.origin.as_str());
+            let collision_resources = collisions.get(&interval.origin);
+            let tooltip = format!(
+                "{}\norigin: {} · CL #{}\nrecorded process: {}\noriginal start: +{}\nest. p50: {} · est. p95: {} · max: {} · samples: {}\nresources: {}{}",
+                label,
+                interval.origin,
+                trace.culist_id,
+                format_duration_ns(duration_ns as f64),
+                format_duration_ns(interval.start_ns.saturating_sub(trace_start) as f64),
+                aggregate
+                    .and_then(|stage| stage.durations.p50_ns)
+                    .map_or_else(
+                        || "n/a".to_string(),
+                        |value| format_duration_ns(value as f64)
+                    ),
+                aggregate
+                    .and_then(|stage| stage.durations.p95_ns)
+                    .map_or_else(
+                        || "n/a".to_string(),
+                        |value| format_duration_ns(value as f64)
+                    ),
+                aggregate
+                    .and_then(|stage| stage.durations.max_ns)
+                    .map_or_else(
+                        || "n/a".to_string(),
+                        |value| format_duration_ns(value as f64)
+                    ),
+                aggregate.map_or(0, |stage| stage.samples),
+                view.filter(|view| !view.resources.is_empty())
+                    .map_or_else(|| "—".to_string(), |view| view.resources.join(", ")),
+                collision_resources.map_or_else(String::new, |resources| format!(
+                    "\nobserved overlap risk: {}",
+                    resources.join(", ")
+                )),
+            );
+            let inside_label = if width >= 68.0 {
+                format!(
+                    r#"<text class="ordinal" x="{}" y="{}">{}</text>"#,
+                    x + 5.0,
+                    y + 19.0,
+                    xml(&truncate(label, 10))
+                )
+            } else {
+                String::new()
+            };
+            writeln!(
+                svg,
+                r##"<g class="observed-segment" data-observed-origin="{}"><title>{}</title><rect x="{x}" y="{y}" width="{width}" height="30" rx="3" fill="{fill}" stroke="{}" stroke-width="{}"/>{inside_label}</g>"##,
+                xml_attr(&interval.origin),
+                xml(&tooltip),
+                if collision_resources.is_some() { "#d92d20" } else { "#475467" },
+                if collision_resources.is_some() { 2 } else { 1 },
+            )
+            .unwrap();
+            x += width;
+        }
+        y += 39.0;
+        if let Some(residual) = trace.residual_before_ns {
+            writeln!(
+                svg,
+                r##"<text class="lane mono" x="0" y="{}">between CLs</text><rect x="{LABEL_WIDTH}" y="{y}" width="120" height="13" rx="3" fill="#d7dce2"/><text class="meta mono" x="{}" y="{}">{} before this CL · unclassified, not on the process scale</text>"##,
+                y + 11.0,
+                LABEL_WIDTH + 127.0,
+                y + 11.0,
+                xml(&format_duration_ns(residual as f64)),
+            )
+            .unwrap();
+            y += 24.0;
+        }
+        y += 18.0;
+    }
+
+    writeln!(
+        svg,
+        r#"<text class="subtitle" x="0" y="{y}">Observed declared-resource overlap across the full log</text>"#
+    )
+    .unwrap();
+    y += 14.0;
+    if observed.resource_overlaps.is_empty() {
+        writeln!(
+            svg,
+            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="38" rx="8" fill="#ecfdf3" stroke="#75c58f"/><text class="blocking" x="12" y="{}">No simultaneous recorded process intervals shared a declared resource target.</text>"##,
+            y + 24.0
+        )
+        .unwrap();
+        y += 38.0;
+    } else {
+        let panel_height = 34.0 + observed.resource_overlaps.len() as f64 * 18.0;
+        writeln!(
+            svg,
+            r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="{panel_height}" rx="8" fill="#fff1f0" stroke="#d92d20"/><text class="blocking" x="12" y="{}">Overlap is a contention risk signal, not proof that either task waited.</text>"##,
+            y + 20.0
+        )
+        .unwrap();
+        for (index, overlap) in observed.resource_overlaps.iter().enumerate() {
+            writeln!(
+                svg,
+                r#"<text class="card-line mono" x="12" y="{}">⚠ {}: {} ↔ {} · {} overlap(s)</text>"#,
+                y + 40.0 + index as f64 * 18.0,
+                xml(&truncate(&overlap.resource, 28)),
+                xml(&truncate(&overlap.left, 28)),
+                xml(&truncate(&overlap.right, 28)),
+                overlap.occurrences,
+            )
+            .unwrap();
+        }
+        y += panel_height;
+    }
+
+    y += 18.0;
+    let residual_p50 = observed.residual_before.p50_ns.map_or_else(
+        || "n/a".to_string(),
+        |value| format_duration_ns(value as f64),
+    );
+    let residual_p95 = observed.residual_before.p95_ns.map_or_else(
+        || "n/a".to_string(),
+        |value| format_duration_ns(value as f64),
+    );
+    writeln!(
+        svg,
+        r##"<rect x="0" y="{y}" width="{PARALLEL_WIDTH}" height="58" rx="8" fill="#f8fafc" stroke="#98a2b3"/><text class="blocking" x="12" y="{}">Recorded process intervals exclude queueing, keyframes, logging overhead, and serialization.</text><text class="meta" x="12" y="{}">Residual gaps may include serialization, rate limiting, scheduling, and I/O; est. p50 {}, est. p95 {}. Anytime bars span base through final refine.</text>"##,
+        y + 22.0,
+        y + 43.0,
+        xml(&residual_p50),
+        xml(&residual_p95),
+    )
+    .unwrap();
+    y += 58.0;
+
+    RenderedSection {
+        svg,
+        height: y - top,
+    }
+}
+
+fn observed_origin(entity: &PlanEntity) -> String {
+    match entity.kind {
+        PlanEntityKind::Task { .. } => entity.label.clone(),
+        PlanEntityKind::BridgeRx { .. } | PlanEntityKind::BridgeTx { .. } => {
+            format!("bridge::{}", entity.label)
+        }
+    }
+}
+
+fn observed_interval_fill(origin: &str) -> &'static str {
+    const COLORS: [&str; 12] = [
+        "#bde3ff", "#ffd6a5", "#cdeac0", "#e2cfea", "#ffcad4", "#b8f2e6", "#f1e3a4", "#cddafd",
+        "#d8f3dc", "#f7c6c7", "#c9e4de", "#dec9e9",
+    ];
+    COLORS[(fnv1a64(origin.as_bytes()) as usize) % COLORS.len()]
+}
+
+fn observed_trace_collisions(
+    trace: &ObservedTrace,
+    stages: &HashMap<String, ObservedStageView>,
+) -> HashMap<String, Vec<String>> {
+    let mut collisions = HashMap::<String, Vec<String>>::new();
+    for (index, left) in trace.intervals.iter().enumerate() {
+        for right in &trace.intervals[..index] {
+            if left.start_ns >= right.end_ns || right.start_ns >= left.end_ns {
+                continue;
+            }
+            let (Some(left_stage), Some(right_stage)) =
+                (stages.get(&left.origin), stages.get(&right.origin))
+            else {
+                continue;
+            };
+            for resource in &left_stage.resources {
+                if right_stage.resources.contains(resource) {
+                    for origin in [&left.origin, &right.origin] {
+                        let targets = collisions.entry(origin.clone()).or_default();
+                        if !targets.contains(resource) {
+                            targets.push(resource.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    collisions
 }
 
 fn render_staggered_wavefront(
@@ -1251,6 +1780,18 @@ fn truncate(value: &str, max_chars: usize) -> String {
     }
 }
 
+fn format_duration_ns(nanos: f64) -> String {
+    if nanos >= 1_000_000_000.0 {
+        format!("{:.3} s", nanos / 1_000_000_000.0)
+    } else if nanos >= 1_000_000.0 {
+        format!("{:.3} ms", nanos / 1_000_000.0)
+    } else if nanos >= 1_000.0 {
+        format!("{:.3} us", nanos / 1_000.0)
+    } else {
+        format!("{nanos:.0} ns")
+    }
+}
+
 fn xml(value: &str) -> String {
     value
         .replace('&', "&amp;")
@@ -1311,8 +1852,8 @@ mod tests {
             )"#,
         );
         let sections = selected_graphs(&config, None).unwrap();
-        let first = render_document(&config, &sections).unwrap();
-        let second = render_document(&config, &sections).unwrap();
+        let first = render_document(&config, &sections, None).unwrap();
+        let second = render_document(&config, &sections, None).unwrap();
         assert_eq!(first, second);
         assert!(first.contains("Serial projection"));
         assert!(first.contains("Parallel projection"));
@@ -1340,7 +1881,7 @@ mod tests {
                 ],
             )"#,
         );
-        let svg = render_document(&config, &selected_graphs(&config, None).unwrap()).unwrap();
+        let svg = render_document(&config, &selected_graphs(&config, None).unwrap(), None).unwrap();
         assert!(svg.contains("refine 1/3"));
         assert!(svg.contains("refine 3/3"));
         assert!(svg.contains("base + 3 refine"));
@@ -1366,11 +1907,18 @@ mod tests {
 
     #[test]
     fn cli_defaults_to_plan_svg_and_parses_features() {
-        let args =
-            Args::try_parse_from(["cu29-plan", "copperconfig.ron", "--features", "camera,mock"])
-                .unwrap();
+        let args = Args::try_parse_from([
+            "cu29-plan",
+            "copperconfig.ron",
+            "--features",
+            "camera,mock",
+            "--logstats",
+            "stats.json",
+        ])
+        .unwrap();
         assert_eq!(args.output, PathBuf::from("plan.svg"));
         assert_eq!(args.features, ["camera", "mock"]);
+        assert_eq!(args.logstats, Some(PathBuf::from("stats.json")));
     }
 
     #[test]
@@ -1393,7 +1941,7 @@ mod tests {
                 ],
             )"#,
         );
-        let svg = render_document(&config, &selected_graphs(&config, None).unwrap()).unwrap();
+        let svg = render_document(&config, &selected_graphs(&config, None).unwrap(), None).unwrap();
         assert!(svg.contains("POLL / DISPATCH?"));
         assert!(svg.contains("BACKGROUND POOL WORKER THREADS"));
         assert!(svg.contains("RT GATEWAY ONLY"));
@@ -1434,7 +1982,7 @@ mod tests {
                 ],
             )"#,
         );
-        let svg = render_document(&config, &selected_graphs(&config, None).unwrap()).unwrap();
+        let svg = render_document(&config, &selected_graphs(&config, None).unwrap(), None).unwrap();
         assert!(svg.contains("FIFO queue"));
         assert!(svg.contains("2 task jobs share 1 workers"));
         assert!(svg.contains("excess jobs can wait here"));
@@ -1465,7 +2013,7 @@ mod tests {
                 ],
             )"#,
         );
-        let svg = render_document(&config, &selected_graphs(&config, None).unwrap()).unwrap();
+        let svg = render_document(&config, &selected_graphs(&config, None).unwrap(), None).unwrap();
         assert!(svg.contains("Configured in-flight depth: 6"));
         assert!(svg.contains("CL n+5"));
         assert!(svg.contains(r#"data-cl-offset="5""#));
@@ -1496,7 +2044,7 @@ mod tests {
                 ],
             )"#,
         );
-        let svg = render_document(&config, &selected_graphs(&config, None).unwrap()).unwrap();
+        let svg = render_document(&config, &selected_graphs(&config, None).unwrap(), None).unwrap();
         assert!(svg.contains("Showing CL n through CL n+5 (6 of 7 active pipeline positions)"));
         assert!(svg.contains(r#"data-cl-offset="5""#));
         assert!(!svg.contains(r#"data-cl-offset="6""#));
@@ -1520,11 +2068,90 @@ mod tests {
                 ],
             )"#,
         );
-        let svg = render_document(&config, &selected_graphs(&config, None).unwrap()).unwrap();
+        let svg = render_document(&config, &selected_graphs(&config, None).unwrap(), None).unwrap();
         assert!(svg.contains("Staggered concurrency formations"));
         assert!(svg.contains("POTENTIAL CONTENTION in this formation: gpu0"));
         assert!(svg.contains("⚠ gpu0: S02 detect ↔ S03 refine"));
         assert!(svg.contains(r##"stroke="#d92d20" stroke-width="3""##));
+    }
+
+    #[test]
+    fn observed_schedule_is_proportional_and_labels_inference_limits() {
+        let config = config(
+            r#"(
+                resources: [(id: "gpu0", provider: "demo::Gpu")],
+                tasks: [
+                    (id: "left", type: "demo::Left", kind: source, resources: { "gpu": "gpu0" }),
+                    (id: "right", type: "demo::Right", kind: source, resources: { "gpu": "gpu0" }),
+                ],
+                cnx: [
+                    (src: "left", dst: "__nc__", msg: "demo::A"),
+                    (src: "right", dst: "__nc__", msg: "demo::B"),
+                ],
+            )"#,
+        );
+        let duration = ObservedDurationStats {
+            p50_ns: Some(100),
+            p95_ns: Some(200),
+            max_ns: Some(250),
+        };
+        let stats = ObservedLogStats {
+            schema_version: 2,
+            config_signature: build_logstats_signature(&config, None).unwrap(),
+            mission: None,
+            schedule: Some(ObservedSchedule {
+                stages: vec![ObservedStage {
+                    origin: "left".to_string(),
+                    samples: 4,
+                    durations: duration,
+                }],
+                traces: vec![ObservedTrace {
+                    kind: "typical".to_string(),
+                    culist_id: 7,
+                    wall_span_ns: 300,
+                    excluded_intervals: 1,
+                    residual_before_ns: Some(50),
+                    intervals: vec![
+                        ObservedInterval {
+                            origin: "left".to_string(),
+                            start_ns: 1_000,
+                            end_ns: 1_200,
+                        },
+                        ObservedInterval {
+                            origin: "right".to_string(),
+                            start_ns: 1_100,
+                            end_ns: 1_300,
+                        },
+                    ],
+                }],
+                residual_before: ObservedDurationStats {
+                    p50_ns: Some(50),
+                    p95_ns: Some(75),
+                    max_ns: Some(90),
+                },
+                resource_overlaps: vec![ObservedResourceOverlap {
+                    resource: "gpu0".to_string(),
+                    left: "left".to_string(),
+                    right: "right".to_string(),
+                    occurrences: 3,
+                }],
+            }),
+        };
+        let svg = render_document(
+            &config,
+            &selected_graphs(&config, None).unwrap(),
+            Some(&stats),
+        )
+        .unwrap();
+        assert!(svg.contains("Observed execution"));
+        assert!(svg.contains("packed back-to-back"));
+        assert!(svg.contains("CL #7"));
+        assert!(svg.contains("1 carried-forward slot(s) excluded"));
+        assert!(svg.contains("max: 250 ns"));
+        assert!(svg.contains("observed overlap risk: gpu0"));
+        assert!(svg.contains("3 overlap(s)"));
+        assert!(svg.contains("Residual gaps may include serialization"));
+        assert!(svg.contains(r#"data-observed-origin="left""#));
     }
 
     #[test]
@@ -1547,6 +2174,7 @@ mod tests {
             list_missions: false,
             open: false,
             output: output_path.clone(),
+            logstats: None,
         })
         .unwrap();
         assert!(output_path.is_file());
@@ -1563,8 +2191,51 @@ mod tests {
             list_missions: false,
             open: false,
             output: temp.path().join("missing.svg"),
+            logstats: None,
         });
         assert!(missing.is_err());
+    }
+
+    #[test]
+    fn logstats_mission_becomes_the_default_plan_selection() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("copperconfig.ron");
+        let logstats_path = temp.path().join("logstats.json");
+        let output_path = temp.path().join("plan.svg");
+        fs::write(
+            &config_path,
+            r#"(
+                missions: [(id: "default"), (id: "flow")],
+                tasks: [(id: "src", type: "demo::Src", kind: source)],
+                cnx: [],
+            )"#,
+        )
+        .unwrap();
+        fs::write(
+            &logstats_path,
+            r#"{
+                "schema_version": 2,
+                "config_signature": "test",
+                "mission": "default",
+                "schedule": null
+            }"#,
+        )
+        .unwrap();
+
+        run(Args {
+            config: config_path,
+            mission: None,
+            features: Vec::new(),
+            list_missions: false,
+            open: false,
+            output: output_path.clone(),
+            logstats: Some(logstats_path),
+        })
+        .unwrap();
+
+        let svg = fs::read_to_string(output_path).unwrap();
+        assert!(svg.contains("Mission: default"));
+        assert!(!svg.contains("Mission: flow"));
     }
 
     #[test]
