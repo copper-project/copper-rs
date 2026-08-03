@@ -41,6 +41,7 @@ pub cu29_export::Command::Fsck::dump_runtime_lifecycle: bool
 pub cu29_export::Command::Fsck::verbose: u8
 pub cu29_export::Command::LogStats
 pub cu29_export::Command::LogStats::config: std::path::PathBuf
+pub cu29_export::Command::LogStats::features: alloc::vec::Vec<alloc::string::String>
 pub cu29_export::Command::LogStats::mission: core::option::Option<alloc::string::String>
 pub cu29_export::Command::LogStats::output: std::path::PathBuf
 pub enum cu29_export::ExportFormat
