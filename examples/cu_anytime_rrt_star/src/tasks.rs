@@ -32,6 +32,10 @@ const PATROL: [Point2; 3] = [
 /// The newest path the viewer saw, followed by the simulator one cycle later.
 static LATEST_PATH: Mutex<Option<PlanPath>> = Mutex::new(None);
 
+/// Points kept in the drawn trail, so a run left going for hours cannot grow
+/// it without bound.
+const MAX_TRAIL: usize = 2048;
+
 /// A point robot that replans while it drives.
 ///
 /// Each copperlist it advances along the newest published path, then asks for
@@ -61,6 +65,9 @@ impl Freezable for NavSim {
         self.pose = Decode::decode(decoder)?;
         self.goal_index = Decode::decode(decoder)?;
         self.seed = Decode::decode(decoder)?;
+        // The clock anchor is not part of the snapshot: a stale one would turn
+        // the whole replay gap into one huge dt.
+        self.last_now = None;
         Ok(())
     }
 }
@@ -206,6 +213,9 @@ impl CuSinkTask for RerunViewer {
         }
 
         self.trail.push(request.start);
+        if self.trail.len() > MAX_TRAIL {
+            self.trail.remove(0);
+        }
         log(
             &self.rec,
             "world/robot",
