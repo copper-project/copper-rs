@@ -721,7 +721,7 @@ jobs:
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
       - name: Install cargo-generate on (${{ inputs.linux_light_runner_label }} | debug)
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@v2.85.5
         with:
           tool: cargo-generate
       - name: Generate new templates on (${{ inputs.linux_light_runner_label }} | debug)
@@ -770,7 +770,7 @@ jobs:
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
       - name: Install cargo-generate on (${{ inputs.linux_light_runner_label }} | debug)
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@v2.85.5
         with:
           tool: cargo-generate
       - name: Generate new templates on (${{ inputs.linux_light_runner_label }} | debug)
@@ -819,7 +819,7 @@ jobs:
           cache_shared_key: rust-macos-latest
           install_nextest: "false"
       - name: Install cargo-generate on (macos-latest | debug)
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@v2.85.5
         with:
           tool: cargo-generate
       - name: Generate new templates on (macos-latest | debug)
