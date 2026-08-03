@@ -48,7 +48,7 @@
 <a href=#48 id=48 data-nosnippet>48</a><span class="kw">const </span>MODULE_SEPARATOR: <span class="kw-2">&amp;</span>str = <span class="string">"⠶"</span>;
 <a href=#49 id=49 data-nosnippet>49</a><span class="kw">const </span>PLACEHOLDER_TEXT: <span class="kw-2">&amp;</span>str = <span class="string">"\u{2014}"</span>;
 <a href=#50 id=50 data-nosnippet>50</a><span class="kw">const </span>COPPER_LOGO_SVG: <span class="kw-2">&amp;</span>str = <span class="macro">include_str!</span>(<span class="string">"../assets/cu29.svg"</span>);
-<a href=#51 id=51 data-nosnippet>51</a><span class="kw">const </span>LOGSTATS_SCHEMA_VERSION: u32 = <span class="number">1</span>;
+<a href=#51 id=51 data-nosnippet>51</a><span class="kw">const </span>LOGSTATS_SCHEMA_VERSION: u32 = <span class="number">2</span>;
 <a href=#52 id=52 data-nosnippet>52</a>
 <a href=#53 id=53 data-nosnippet>53</a><span class="comment">// Color palette and fills.
 <a href=#54 id=54 data-nosnippet>54</a></span><span class="kw">const </span>BORDER_COLOR: <span class="kw-2">&amp;</span>str = <span class="string">"#999999"</span>;
@@ -469,7 +469,7 @@
 <a href=#469 id=469 data-nosnippet>469</a>    <span class="kw">let </span>logstats: LogStats = serde_json::from_str(<span class="kw-2">&amp;</span>contents)
 <a href=#470 id=470 data-nosnippet>470</a>        .map_err(|e| CuError::new_with_cause(<span class="string">"Failed to parse logstats JSON"</span>, e))<span class="question-mark">?</span>;
 <a href=#471 id=471 data-nosnippet>471</a>
-<a href=#472 id=472 data-nosnippet>472</a>    <span class="kw">if </span>logstats.schema_version != LOGSTATS_SCHEMA_VERSION {
+<a href=#472 id=472 data-nosnippet>472</a>    <span class="kw">if </span>!(<span class="number">1</span>..=LOGSTATS_SCHEMA_VERSION).contains(<span class="kw-2">&amp;</span>logstats.schema_version) {
 <a href=#473 id=473 data-nosnippet>473</a>        <span class="macro">eprintln!</span>(
 <a href=#474 id=474 data-nosnippet>474</a>            <span class="string">"Warning: logstats schema version {} does not match renderer {}"</span>,
 <a href=#475 id=475 data-nosnippet>475</a>            logstats.schema_version, LOGSTATS_SCHEMA_VERSION
@@ -4591,245 +4591,241 @@
 <a href=#4591 id=4591 data-nosnippet>4591</a>
 <a href=#4592 id=4592 data-nosnippet>4592</a>    <span class="kw">let </span><span class="kw-2">mut </span>nodes: Vec&lt;<span class="kw">_</span>&gt; = graph.get_all_nodes();
 <a href=#4593 id=4593 data-nosnippet>4593</a>    nodes.sort_by_key(|a| a.<span class="number">1</span>.get_id());
-<a href=#4594 id=4594 data-nosnippet>4594</a>    <span class="kw">for </span>(node_id, node) <span class="kw">in </span>nodes {
+<a href=#4594 id=4594 data-nosnippet>4594</a>    <span class="kw">for </span>(<span class="kw">_</span>, node) <span class="kw">in </span>nodes {
 <a href=#4595 id=4595 data-nosnippet>4595</a>        <span class="kw">let </span>flavor = <span class="kw">match </span>node.get_flavor() {
 <a href=#4596 id=4596 data-nosnippet>4596</a>            config::Flavor::Bridge =&gt; <span class="string">"bridge"</span>,
-<a href=#4597 id=4597 data-nosnippet>4597</a>            config::Flavor::Task =&gt; <span class="kw">match </span>config::resolve_task_kind_for_id(graph, node_id)<span class="question-mark">? </span>{
-<a href=#4598 id=4598 data-nosnippet>4598</a>                config::TaskKind::Source =&gt; <span class="string">"source"</span>,
-<a href=#4599 id=4599 data-nosnippet>4599</a>                config::TaskKind::Regular =&gt; <span class="string">"task"</span>,
-<a href=#4600 id=4600 data-nosnippet>4600</a>                config::TaskKind::Sink =&gt; <span class="string">"sink"</span>,
-<a href=#4601 id=4601 data-nosnippet>4601</a>            },
-<a href=#4602 id=4602 data-nosnippet>4602</a>        };
-<a href=#4603 id=4603 data-nosnippet>4603</a>        parts.push(<span class="macro">format!</span>(
-<a href=#4604 id=4604 data-nosnippet>4604</a>            <span class="string">"node|{}|{}|{}"</span>,
-<a href=#4605 id=4605 data-nosnippet>4605</a>            node.get_id(),
-<a href=#4606 id=4606 data-nosnippet>4606</a>            node.get_type(),
-<a href=#4607 id=4607 data-nosnippet>4607</a>            flavor
-<a href=#4608 id=4608 data-nosnippet>4608</a>        ));
-<a href=#4609 id=4609 data-nosnippet>4609</a>    }
-<a href=#4610 id=4610 data-nosnippet>4610</a>
-<a href=#4611 id=4611 data-nosnippet>4611</a>    <span class="kw">let </span><span class="kw-2">mut </span>edges: Vec&lt;String&gt; = graph
-<a href=#4612 id=4612 data-nosnippet>4612</a>        .edges()
-<a href=#4613 id=4613 data-nosnippet>4613</a>        .map(|cnx| {
-<a href=#4614 id=4614 data-nosnippet>4614</a>            <span class="macro">format!</span>(
-<a href=#4615 id=4615 data-nosnippet>4615</a>                <span class="string">"edge|{}|{}|{}"</span>,
-<a href=#4616 id=4616 data-nosnippet>4616</a>                format_endpoint(cnx.src.as_str(), cnx.src_channel.as_deref()),
-<a href=#4617 id=4617 data-nosnippet>4617</a>                format_endpoint(cnx.dst.as_str(), cnx.dst_channel.as_deref()),
-<a href=#4618 id=4618 data-nosnippet>4618</a>                cnx.msg
-<a href=#4619 id=4619 data-nosnippet>4619</a>            )
-<a href=#4620 id=4620 data-nosnippet>4620</a>        })
-<a href=#4621 id=4621 data-nosnippet>4621</a>        .collect();
-<a href=#4622 id=4622 data-nosnippet>4622</a>    edges.sort();
-<a href=#4623 id=4623 data-nosnippet>4623</a>    parts.extend(edges);
+<a href=#4597 id=4597 data-nosnippet>4597</a>            config::Flavor::Task =&gt; <span class="string">"task"</span>,
+<a href=#4598 id=4598 data-nosnippet>4598</a>        };
+<a href=#4599 id=4599 data-nosnippet>4599</a>        parts.push(<span class="macro">format!</span>(
+<a href=#4600 id=4600 data-nosnippet>4600</a>            <span class="string">"node|{}|{}|{}"</span>,
+<a href=#4601 id=4601 data-nosnippet>4601</a>            node.get_id(),
+<a href=#4602 id=4602 data-nosnippet>4602</a>            node.get_type(),
+<a href=#4603 id=4603 data-nosnippet>4603</a>            flavor
+<a href=#4604 id=4604 data-nosnippet>4604</a>        ));
+<a href=#4605 id=4605 data-nosnippet>4605</a>    }
+<a href=#4606 id=4606 data-nosnippet>4606</a>
+<a href=#4607 id=4607 data-nosnippet>4607</a>    <span class="kw">let </span><span class="kw-2">mut </span>edges: Vec&lt;String&gt; = graph
+<a href=#4608 id=4608 data-nosnippet>4608</a>        .edges()
+<a href=#4609 id=4609 data-nosnippet>4609</a>        .map(|cnx| {
+<a href=#4610 id=4610 data-nosnippet>4610</a>            <span class="macro">format!</span>(
+<a href=#4611 id=4611 data-nosnippet>4611</a>                <span class="string">"edge|{}|{}|{}"</span>,
+<a href=#4612 id=4612 data-nosnippet>4612</a>                format_endpoint(cnx.src.as_str(), cnx.src_channel.as_deref()),
+<a href=#4613 id=4613 data-nosnippet>4613</a>                format_endpoint(cnx.dst.as_str(), cnx.dst_channel.as_deref()),
+<a href=#4614 id=4614 data-nosnippet>4614</a>                cnx.msg
+<a href=#4615 id=4615 data-nosnippet>4615</a>            )
+<a href=#4616 id=4616 data-nosnippet>4616</a>        })
+<a href=#4617 id=4617 data-nosnippet>4617</a>        .collect();
+<a href=#4618 id=4618 data-nosnippet>4618</a>    edges.sort();
+<a href=#4619 id=4619 data-nosnippet>4619</a>    parts.extend(edges);
+<a href=#4620 id=4620 data-nosnippet>4620</a>
+<a href=#4621 id=4621 data-nosnippet>4621</a>    <span class="kw">let </span>joined = parts.join(<span class="string">"\n"</span>);
+<a href=#4622 id=4622 data-nosnippet>4622</a>    <span class="prelude-val">Ok</span>(<span class="macro">format!</span>(<span class="string">"fnv1a64:{:016x}"</span>, fnv1a64(joined.as_bytes())))
+<a href=#4623 id=4623 data-nosnippet>4623</a>}
 <a href=#4624 id=4624 data-nosnippet>4624</a>
-<a href=#4625 id=4625 data-nosnippet>4625</a>    <span class="kw">let </span>joined = parts.join(<span class="string">"\n"</span>);
-<a href=#4626 id=4626 data-nosnippet>4626</a>    <span class="prelude-val">Ok</span>(<span class="macro">format!</span>(<span class="string">"fnv1a64:{:016x}"</span>, fnv1a64(joined.as_bytes())))
-<a href=#4627 id=4627 data-nosnippet>4627</a>}
-<a href=#4628 id=4628 data-nosnippet>4628</a>
-<a href=#4629 id=4629 data-nosnippet>4629</a><span class="kw">fn </span>format_endpoint(node: <span class="kw-2">&amp;</span>str, channel: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;) -&gt; String {
-<a href=#4630 id=4630 data-nosnippet>4630</a>    <span class="kw">match </span>channel {
-<a href=#4631 id=4631 data-nosnippet>4631</a>        <span class="prelude-val">Some</span>(ch) =&gt; <span class="macro">format!</span>(<span class="string">"{node}/{ch}"</span>),
-<a href=#4632 id=4632 data-nosnippet>4632</a>        <span class="prelude-val">None </span>=&gt; node.to_string(),
-<a href=#4633 id=4633 data-nosnippet>4633</a>    }
-<a href=#4634 id=4634 data-nosnippet>4634</a>}
-<a href=#4635 id=4635 data-nosnippet>4635</a>
-<a href=#4636 id=4636 data-nosnippet>4636</a><span class="kw">fn </span>fnv1a64(data: <span class="kw-2">&amp;</span>[u8]) -&gt; u64 {
-<a href=#4637 id=4637 data-nosnippet>4637</a>    <span class="kw">const </span>OFFSET_BASIS: u64 = <span class="number">0xcbf29ce484222325</span>;
-<a href=#4638 id=4638 data-nosnippet>4638</a>    <span class="kw">const </span>PRIME: u64 = <span class="number">0x100000001b3</span>;
-<a href=#4639 id=4639 data-nosnippet>4639</a>    <span class="kw">let </span><span class="kw-2">mut </span>hash = OFFSET_BASIS;
-<a href=#4640 id=4640 data-nosnippet>4640</a>    <span class="kw">for </span>byte <span class="kw">in </span>data {
-<a href=#4641 id=4641 data-nosnippet>4641</a>        hash ^= u64::from(<span class="kw-2">*</span>byte);
-<a href=#4642 id=4642 data-nosnippet>4642</a>        hash = hash.wrapping_mul(PRIME);
-<a href=#4643 id=4643 data-nosnippet>4643</a>    }
-<a href=#4644 id=4644 data-nosnippet>4644</a>    hash
-<a href=#4645 id=4645 data-nosnippet>4645</a>}
-<a href=#4646 id=4646 data-nosnippet>4646</a>
-<a href=#4647 id=4647 data-nosnippet>4647</a><span class="attr">#[cfg(test)]
-<a href=#4648 id=4648 data-nosnippet>4648</a></span><span class="kw">mod </span>tests {
-<a href=#4649 id=4649 data-nosnippet>4649</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#4650 id=4650 data-nosnippet>4650</a>    <span class="kw">use </span>std::fs;
-<a href=#4651 id=4651 data-nosnippet>4651</a>    <span class="kw">use </span>tempfile::tempdir;
-<a href=#4652 id=4652 data-nosnippet>4652</a>
-<a href=#4653 id=4653 data-nosnippet>4653</a>    <span class="attr">#[test]
-<a href=#4654 id=4654 data-nosnippet>4654</a>    </span><span class="kw">fn </span>tooltip_formats_missing_values() {
-<a href=#4655 id=4655 data-nosnippet>4655</a>        <span class="kw">let </span>stats = EdgeLogStats {
-<a href=#4656 id=4656 data-nosnippet>4656</a>            src: <span class="string">"a"</span>.to_string(),
-<a href=#4657 id=4657 data-nosnippet>4657</a>            src_channel: <span class="prelude-val">None</span>,
-<a href=#4658 id=4658 data-nosnippet>4658</a>            dst: <span class="string">"b"</span>.to_string(),
-<a href=#4659 id=4659 data-nosnippet>4659</a>            dst_channel: <span class="prelude-val">None</span>,
-<a href=#4660 id=4660 data-nosnippet>4660</a>            msg: <span class="string">"Msg"</span>.to_string(),
-<a href=#4661 id=4661 data-nosnippet>4661</a>            samples: <span class="number">0</span>,
-<a href=#4662 id=4662 data-nosnippet>4662</a>            none_samples: <span class="number">0</span>,
-<a href=#4663 id=4663 data-nosnippet>4663</a>            valid_time_samples: <span class="number">0</span>,
-<a href=#4664 id=4664 data-nosnippet>4664</a>            total_raw_bytes: <span class="number">0</span>,
-<a href=#4665 id=4665 data-nosnippet>4665</a>            avg_raw_bytes: <span class="prelude-val">None</span>,
-<a href=#4666 id=4666 data-nosnippet>4666</a>            rate_hz: <span class="prelude-val">None</span>,
-<a href=#4667 id=4667 data-nosnippet>4667</a>            throughput_bytes_per_sec: <span class="prelude-val">None</span>,
-<a href=#4668 id=4668 data-nosnippet>4668</a>        };
-<a href=#4669 id=4669 data-nosnippet>4669</a>        <span class="kw">let </span>tooltip = format_edge_tooltip(<span class="kw-2">&amp;</span>stats);
-<a href=#4670 id=4670 data-nosnippet>4670</a>        <span class="macro">assert!</span>(tooltip.contains(<span class="string">"Message size (avg): n/a"</span>));
-<a href=#4671 id=4671 data-nosnippet>4671</a>        <span class="macro">assert!</span>(tooltip.contains(<span class="string">"Rate: n/a"</span>));
-<a href=#4672 id=4672 data-nosnippet>4672</a>        <span class="macro">assert!</span>(tooltip.contains(<span class="string">"None: n/a"</span>));
-<a href=#4673 id=4673 data-nosnippet>4673</a>    }
-<a href=#4674 id=4674 data-nosnippet>4674</a>
-<a href=#4675 id=4675 data-nosnippet>4675</a>    <span class="attr">#[test]
-<a href=#4676 id=4676 data-nosnippet>4676</a>    </span><span class="kw">fn </span>provider_slot_matching_handles_type_params() {
+<a href=#4625 id=4625 data-nosnippet>4625</a><span class="kw">fn </span>format_endpoint(node: <span class="kw-2">&amp;</span>str, channel: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;) -&gt; String {
+<a href=#4626 id=4626 data-nosnippet>4626</a>    <span class="kw">match </span>channel {
+<a href=#4627 id=4627 data-nosnippet>4627</a>        <span class="prelude-val">Some</span>(ch) =&gt; <span class="macro">format!</span>(<span class="string">"{node}/{ch}"</span>),
+<a href=#4628 id=4628 data-nosnippet>4628</a>        <span class="prelude-val">None </span>=&gt; node.to_string(),
+<a href=#4629 id=4629 data-nosnippet>4629</a>    }
+<a href=#4630 id=4630 data-nosnippet>4630</a>}
+<a href=#4631 id=4631 data-nosnippet>4631</a>
+<a href=#4632 id=4632 data-nosnippet>4632</a><span class="kw">fn </span>fnv1a64(data: <span class="kw-2">&amp;</span>[u8]) -&gt; u64 {
+<a href=#4633 id=4633 data-nosnippet>4633</a>    <span class="kw">const </span>OFFSET_BASIS: u64 = <span class="number">0xcbf29ce484222325</span>;
+<a href=#4634 id=4634 data-nosnippet>4634</a>    <span class="kw">const </span>PRIME: u64 = <span class="number">0x100000001b3</span>;
+<a href=#4635 id=4635 data-nosnippet>4635</a>    <span class="kw">let </span><span class="kw-2">mut </span>hash = OFFSET_BASIS;
+<a href=#4636 id=4636 data-nosnippet>4636</a>    <span class="kw">for </span>byte <span class="kw">in </span>data {
+<a href=#4637 id=4637 data-nosnippet>4637</a>        hash ^= u64::from(<span class="kw-2">*</span>byte);
+<a href=#4638 id=4638 data-nosnippet>4638</a>        hash = hash.wrapping_mul(PRIME);
+<a href=#4639 id=4639 data-nosnippet>4639</a>    }
+<a href=#4640 id=4640 data-nosnippet>4640</a>    hash
+<a href=#4641 id=4641 data-nosnippet>4641</a>}
+<a href=#4642 id=4642 data-nosnippet>4642</a>
+<a href=#4643 id=4643 data-nosnippet>4643</a><span class="attr">#[cfg(test)]
+<a href=#4644 id=4644 data-nosnippet>4644</a></span><span class="kw">mod </span>tests {
+<a href=#4645 id=4645 data-nosnippet>4645</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#4646 id=4646 data-nosnippet>4646</a>    <span class="kw">use </span>std::fs;
+<a href=#4647 id=4647 data-nosnippet>4647</a>    <span class="kw">use </span>tempfile::tempdir;
+<a href=#4648 id=4648 data-nosnippet>4648</a>
+<a href=#4649 id=4649 data-nosnippet>4649</a>    <span class="attr">#[test]
+<a href=#4650 id=4650 data-nosnippet>4650</a>    </span><span class="kw">fn </span>tooltip_formats_missing_values() {
+<a href=#4651 id=4651 data-nosnippet>4651</a>        <span class="kw">let </span>stats = EdgeLogStats {
+<a href=#4652 id=4652 data-nosnippet>4652</a>            src: <span class="string">"a"</span>.to_string(),
+<a href=#4653 id=4653 data-nosnippet>4653</a>            src_channel: <span class="prelude-val">None</span>,
+<a href=#4654 id=4654 data-nosnippet>4654</a>            dst: <span class="string">"b"</span>.to_string(),
+<a href=#4655 id=4655 data-nosnippet>4655</a>            dst_channel: <span class="prelude-val">None</span>,
+<a href=#4656 id=4656 data-nosnippet>4656</a>            msg: <span class="string">"Msg"</span>.to_string(),
+<a href=#4657 id=4657 data-nosnippet>4657</a>            samples: <span class="number">0</span>,
+<a href=#4658 id=4658 data-nosnippet>4658</a>            none_samples: <span class="number">0</span>,
+<a href=#4659 id=4659 data-nosnippet>4659</a>            valid_time_samples: <span class="number">0</span>,
+<a href=#4660 id=4660 data-nosnippet>4660</a>            total_raw_bytes: <span class="number">0</span>,
+<a href=#4661 id=4661 data-nosnippet>4661</a>            avg_raw_bytes: <span class="prelude-val">None</span>,
+<a href=#4662 id=4662 data-nosnippet>4662</a>            rate_hz: <span class="prelude-val">None</span>,
+<a href=#4663 id=4663 data-nosnippet>4663</a>            throughput_bytes_per_sec: <span class="prelude-val">None</span>,
+<a href=#4664 id=4664 data-nosnippet>4664</a>        };
+<a href=#4665 id=4665 data-nosnippet>4665</a>        <span class="kw">let </span>tooltip = format_edge_tooltip(<span class="kw-2">&amp;</span>stats);
+<a href=#4666 id=4666 data-nosnippet>4666</a>        <span class="macro">assert!</span>(tooltip.contains(<span class="string">"Message size (avg): n/a"</span>));
+<a href=#4667 id=4667 data-nosnippet>4667</a>        <span class="macro">assert!</span>(tooltip.contains(<span class="string">"Rate: n/a"</span>));
+<a href=#4668 id=4668 data-nosnippet>4668</a>        <span class="macro">assert!</span>(tooltip.contains(<span class="string">"None: n/a"</span>));
+<a href=#4669 id=4669 data-nosnippet>4669</a>    }
+<a href=#4670 id=4670 data-nosnippet>4670</a>
+<a href=#4671 id=4671 data-nosnippet>4671</a>    <span class="attr">#[test]
+<a href=#4672 id=4672 data-nosnippet>4672</a>    </span><span class="kw">fn </span>provider_slot_matching_handles_type_params() {
+<a href=#4673 id=4673 data-nosnippet>4673</a>        <span class="macro">assert_eq!</span>(
+<a href=#4674 id=4674 data-nosnippet>4674</a>            provider_resource_slots(<span class="string">"cu_linux_resources::LinuxResources"</span>),
+<a href=#4675 id=4675 data-nosnippet>4675</a>            <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>LINUX_RESOURCE_SLOT_NAMES[..])
+<a href=#4676 id=4676 data-nosnippet>4676</a>        );
 <a href=#4677 id=4677 data-nosnippet>4677</a>        <span class="macro">assert_eq!</span>(
-<a href=#4678 id=4678 data-nosnippet>4678</a>            provider_resource_slots(<span class="string">"cu_linux_resources::LinuxResources"</span>),
+<a href=#4678 id=4678 data-nosnippet>4678</a>            provider_resource_slots(<span class="string">" crate::x::cu_linux_resources::LinuxResources &lt; Foo&lt;Bar&gt; &gt; "</span>),
 <a href=#4679 id=4679 data-nosnippet>4679</a>            <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>LINUX_RESOURCE_SLOT_NAMES[..])
 <a href=#4680 id=4680 data-nosnippet>4680</a>        );
-<a href=#4681 id=4681 data-nosnippet>4681</a>        <span class="macro">assert_eq!</span>(
-<a href=#4682 id=4682 data-nosnippet>4682</a>            provider_resource_slots(<span class="string">" crate::x::cu_linux_resources::LinuxResources &lt; Foo&lt;Bar&gt; &gt; "</span>),
-<a href=#4683 id=4683 data-nosnippet>4683</a>            <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>LINUX_RESOURCE_SLOT_NAMES[..])
-<a href=#4684 id=4684 data-nosnippet>4684</a>        );
-<a href=#4685 id=4685 data-nosnippet>4685</a>        <span class="macro">assert!</span>(provider_resource_slots(<span class="string">"board::MicoAirH743"</span>).is_none());
-<a href=#4686 id=4686 data-nosnippet>4686</a>    }
-<a href=#4687 id=4687 data-nosnippet>4687</a>
-<a href=#4688 id=4688 data-nosnippet>4688</a>    <span class="attr">#[test]
-<a href=#4689 id=4689 data-nosnippet>4689</a>    </span><span class="kw">fn </span>linux_bundle_catalog_includes_known_slots_without_bindings() {
-<a href=#4690 id=4690 data-nosnippet>4690</a>        <span class="kw">let </span>config = config::CuConfig {
-<a href=#4691 id=4691 data-nosnippet>4691</a>            monitors: Vec::new(),
-<a href=#4692 id=4692 data-nosnippet>4692</a>            logging: <span class="prelude-val">None</span>,
-<a href=#4693 id=4693 data-nosnippet>4693</a>            runtime: <span class="prelude-val">None</span>,
-<a href=#4694 id=4694 data-nosnippet>4694</a>            resources: <span class="macro">vec!</span>[config::ResourceBundleConfig {
-<a href=#4695 id=4695 data-nosnippet>4695</a>                id: <span class="string">"linux"</span>.to_string(),
-<a href=#4696 id=4696 data-nosnippet>4696</a>                provider: <span class="string">"cu_linux_resources::LinuxResources"</span>.to_string(),
-<a href=#4697 id=4697 data-nosnippet>4697</a>                config: <span class="prelude-val">None</span>,
-<a href=#4698 id=4698 data-nosnippet>4698</a>                missions: <span class="prelude-val">None</span>,
-<a href=#4699 id=4699 data-nosnippet>4699</a>            }],
-<a href=#4700 id=4700 data-nosnippet>4700</a>            bridges: Vec::new(),
-<a href=#4701 id=4701 data-nosnippet>4701</a>            graphs: ConfigGraphs::Simple(config::CuGraph::default()),
-<a href=#4702 id=4702 data-nosnippet>4702</a>        };
-<a href=#4703 id=4703 data-nosnippet>4703</a>
-<a href=#4704 id=4704 data-nosnippet>4704</a>        <span class="kw">let </span>catalog = collect_resource_catalog(<span class="kw-2">&amp;</span>config).expect(<span class="string">"catalog should build"</span>);
-<a href=#4705 id=4705 data-nosnippet>4705</a>        <span class="kw">let </span>linux_slots = catalog
-<a href=#4706 id=4706 data-nosnippet>4706</a>            .get(<span class="string">"linux"</span>)
-<a href=#4707 id=4707 data-nosnippet>4707</a>            .expect(<span class="string">"linux bundle should expose slot catalog"</span>);
-<a href=#4708 id=4708 data-nosnippet>4708</a>        <span class="macro">assert_eq!</span>(linux_slots.len(), LINUX_RESOURCE_SLOT_NAMES.len());
-<a href=#4709 id=4709 data-nosnippet>4709</a>        <span class="kw">for </span>slot <span class="kw">in </span>LINUX_RESOURCE_SLOT_NAMES {
-<a href=#4710 id=4710 data-nosnippet>4710</a>            <span class="macro">assert!</span>(linux_slots.contains(slot), <span class="string">"missing slot {slot}"</span>);
-<a href=#4711 id=4711 data-nosnippet>4711</a>        }
-<a href=#4712 id=4712 data-nosnippet>4712</a>    }
-<a href=#4713 id=4713 data-nosnippet>4713</a>
-<a href=#4714 id=4714 data-nosnippet>4714</a>    <span class="attr">#[test]
-<a href=#4715 id=4715 data-nosnippet>4715</a>    </span><span class="kw">fn </span>multi_copper_render_outputs_subsystems_and_dashed_interconnects() {
-<a href=#4716 id=4716 data-nosnippet>4716</a>        <span class="kw">let </span>dir = tempdir().expect(<span class="string">"temp dir"</span>);
-<a href=#4717 id=4717 data-nosnippet>4717</a>        <span class="kw">let </span>alpha_path = dir.path().join(<span class="string">"alpha.ron"</span>);
-<a href=#4718 id=4718 data-nosnippet>4718</a>        <span class="kw">let </span>beta_path = dir.path().join(<span class="string">"beta.ron"</span>);
-<a href=#4719 id=4719 data-nosnippet>4719</a>        <span class="kw">let </span>network_path = dir.path().join(<span class="string">"network.ron"</span>);
-<a href=#4720 id=4720 data-nosnippet>4720</a>
-<a href=#4721 id=4721 data-nosnippet>4721</a>        fs::write(
-<a href=#4722 id=4722 data-nosnippet>4722</a>            <span class="kw-2">&amp;</span>alpha_path,
-<a href=#4723 id=4723 data-nosnippet>4723</a>            <span class="string">r#"(
-<a href=#4724 id=4724 data-nosnippet>4724</a>                tasks: [(id: "src", type: "demo::Src")],
-<a href=#4725 id=4725 data-nosnippet>4725</a>                bridges: [
-<a href=#4726 id=4726 data-nosnippet>4726</a>                    (
-<a href=#4727 id=4727 data-nosnippet>4727</a>                        id: "zenoh",
-<a href=#4728 id=4728 data-nosnippet>4728</a>                        type: "demo::ZenohBridge",
-<a href=#4729 id=4729 data-nosnippet>4729</a>                        channels: [Tx(id: "ping")],
-<a href=#4730 id=4730 data-nosnippet>4730</a>                    ),
-<a href=#4731 id=4731 data-nosnippet>4731</a>                ],
-<a href=#4732 id=4732 data-nosnippet>4732</a>                cnx: [(src: "src", dst: "zenoh/ping", msg: "demo::Ping")],
-<a href=#4733 id=4733 data-nosnippet>4733</a>            )"#</span>,
-<a href=#4734 id=4734 data-nosnippet>4734</a>        )
-<a href=#4735 id=4735 data-nosnippet>4735</a>        .expect(<span class="string">"write alpha config"</span>);
-<a href=#4736 id=4736 data-nosnippet>4736</a>        fs::write(
-<a href=#4737 id=4737 data-nosnippet>4737</a>            <span class="kw-2">&amp;</span>beta_path,
-<a href=#4738 id=4738 data-nosnippet>4738</a>            <span class="string">r#"(
-<a href=#4739 id=4739 data-nosnippet>4739</a>                tasks: [(id: "sink", type: "demo::Sink")],
-<a href=#4740 id=4740 data-nosnippet>4740</a>                bridges: [
-<a href=#4741 id=4741 data-nosnippet>4741</a>                    (
-<a href=#4742 id=4742 data-nosnippet>4742</a>                        id: "zenoh",
-<a href=#4743 id=4743 data-nosnippet>4743</a>                        type: "demo::ZenohBridge",
-<a href=#4744 id=4744 data-nosnippet>4744</a>                        channels: [Rx(id: "ping")],
-<a href=#4745 id=4745 data-nosnippet>4745</a>                    ),
-<a href=#4746 id=4746 data-nosnippet>4746</a>                ],
-<a href=#4747 id=4747 data-nosnippet>4747</a>                cnx: [(src: "zenoh/ping", dst: "sink", msg: "demo::Ping")],
-<a href=#4748 id=4748 data-nosnippet>4748</a>            )"#</span>,
-<a href=#4749 id=4749 data-nosnippet>4749</a>        )
-<a href=#4750 id=4750 data-nosnippet>4750</a>        .expect(<span class="string">"write beta config"</span>);
-<a href=#4751 id=4751 data-nosnippet>4751</a>        fs::write(
-<a href=#4752 id=4752 data-nosnippet>4752</a>            <span class="kw-2">&amp;</span>network_path,
-<a href=#4753 id=4753 data-nosnippet>4753</a>            <span class="string">r#"(
-<a href=#4754 id=4754 data-nosnippet>4754</a>                subsystems: [
-<a href=#4755 id=4755 data-nosnippet>4755</a>                    (id: "alpha", config: "alpha.ron"),
-<a href=#4756 id=4756 data-nosnippet>4756</a>                    (id: "beta", config: "beta.ron"),
-<a href=#4757 id=4757 data-nosnippet>4757</a>                ],
-<a href=#4758 id=4758 data-nosnippet>4758</a>                interconnects: [
-<a href=#4759 id=4759 data-nosnippet>4759</a>                    (from: "alpha/zenoh/ping", to: "beta/zenoh/ping", msg: "demo::Ping"),
-<a href=#4760 id=4760 data-nosnippet>4760</a>                ],
-<a href=#4761 id=4761 data-nosnippet>4761</a>            )"#</span>,
-<a href=#4762 id=4762 data-nosnippet>4762</a>        )
-<a href=#4763 id=4763 data-nosnippet>4763</a>        .expect(<span class="string">"write network config"</span>);
-<a href=#4764 id=4764 data-nosnippet>4764</a>
-<a href=#4765 id=4765 data-nosnippet>4765</a>        <span class="kw">let </span>input =
-<a href=#4766 id=4766 data-nosnippet>4766</a>            load_render_input(network_path.as_path(), <span class="kw-2">&amp;</span>[]).expect(<span class="string">"multi config should load"</span>);
-<a href=#4767 id=4767 data-nosnippet>4767</a>        <span class="kw">let </span>multi = <span class="kw">match </span>input {
-<a href=#4768 id=4768 data-nosnippet>4768</a>            RenderInput::Multi(config) =&gt; config,
-<a href=#4769 id=4769 data-nosnippet>4769</a>            RenderInput::Single(<span class="kw">_</span>) =&gt; <span class="macro">panic!</span>(<span class="string">"expected multi-Copper config"</span>),
-<a href=#4770 id=4770 data-nosnippet>4770</a>        };
-<a href=#4771 id=4771 data-nosnippet>4771</a>
-<a href=#4772 id=4772 data-nosnippet>4772</a>        <span class="kw">let </span>svg = String::from_utf8(render_multi_config_svg(<span class="kw-2">&amp;</span>multi, <span class="prelude-val">None</span>).expect(<span class="string">"render svg"</span>))
-<a href=#4773 id=4773 data-nosnippet>4773</a>            .expect(<span class="string">"svg should be utf8"</span>);
-<a href=#4774 id=4774 data-nosnippet>4774</a>
-<a href=#4775 id=4775 data-nosnippet>4775</a>        <span class="macro">assert!</span>(svg.contains(<span class="string">"Subsystem: alpha"</span>));
-<a href=#4776 id=4776 data-nosnippet>4776</a>        <span class="macro">assert!</span>(svg.contains(<span class="string">"Subsystem: beta"</span>));
-<a href=#4777 id=4777 data-nosnippet>4777</a>        <span class="macro">assert!</span>(svg.contains(<span class="string">"stroke-dasharray=\"5,5\""</span>));
-<a href=#4778 id=4778 data-nosnippet>4778</a>        <span class="macro">assert!</span>(svg.contains(<span class="string">"demo::Ping"</span>));
-<a href=#4779 id=4779 data-nosnippet>4779</a>    }
-<a href=#4780 id=4780 data-nosnippet>4780</a>
-<a href=#4781 id=4781 data-nosnippet>4781</a>    <span class="attr">#[test]
-<a href=#4782 id=4782 data-nosnippet>4782</a>    </span><span class="kw">fn </span>multi_copper_render_selects_a_mission_for_mission_based_subsystems() {
-<a href=#4783 id=4783 data-nosnippet>4783</a>        <span class="kw">let </span>dir = tempdir().expect(<span class="string">"temp dir"</span>);
-<a href=#4784 id=4784 data-nosnippet>4784</a>        <span class="kw">let </span>mission_path = dir.path().join(<span class="string">"mission.ron"</span>);
-<a href=#4785 id=4785 data-nosnippet>4785</a>        <span class="kw">let </span>simple_path = dir.path().join(<span class="string">"simple.ron"</span>);
-<a href=#4786 id=4786 data-nosnippet>4786</a>        <span class="kw">let </span>network_path = dir.path().join(<span class="string">"network.ron"</span>);
-<a href=#4787 id=4787 data-nosnippet>4787</a>
-<a href=#4788 id=4788 data-nosnippet>4788</a>        fs::write(
-<a href=#4789 id=4789 data-nosnippet>4789</a>            <span class="kw-2">&amp;</span>mission_path,
-<a href=#4790 id=4790 data-nosnippet>4790</a>            <span class="string">r#"(
-<a href=#4791 id=4791 data-nosnippet>4791</a>                missions: [(id: "default"), (id: "diagnostic")],
-<a href=#4792 id=4792 data-nosnippet>4792</a>                tasks: [(id: "mission_task", type: "demo::MissionTask")],
-<a href=#4793 id=4793 data-nosnippet>4793</a>                cnx: [(src: "mission_task", dst: "__nc__", msg: "demo::Message")],
-<a href=#4794 id=4794 data-nosnippet>4794</a>            )"#</span>,
-<a href=#4795 id=4795 data-nosnippet>4795</a>        )
-<a href=#4796 id=4796 data-nosnippet>4796</a>        .expect(<span class="string">"write mission config"</span>);
-<a href=#4797 id=4797 data-nosnippet>4797</a>        fs::write(
-<a href=#4798 id=4798 data-nosnippet>4798</a>            <span class="kw-2">&amp;</span>simple_path,
-<a href=#4799 id=4799 data-nosnippet>4799</a>            <span class="string">r#"(
-<a href=#4800 id=4800 data-nosnippet>4800</a>                tasks: [(id: "simple_task", type: "demo::SimpleTask")],
-<a href=#4801 id=4801 data-nosnippet>4801</a>                cnx: [(src: "simple_task", dst: "__nc__", msg: "demo::Message")],
-<a href=#4802 id=4802 data-nosnippet>4802</a>            )"#</span>,
-<a href=#4803 id=4803 data-nosnippet>4803</a>        )
-<a href=#4804 id=4804 data-nosnippet>4804</a>        .expect(<span class="string">"write simple config"</span>);
-<a href=#4805 id=4805 data-nosnippet>4805</a>        fs::write(
-<a href=#4806 id=4806 data-nosnippet>4806</a>            <span class="kw-2">&amp;</span>network_path,
-<a href=#4807 id=4807 data-nosnippet>4807</a>            <span class="string">r#"(
-<a href=#4808 id=4808 data-nosnippet>4808</a>                subsystems: [
-<a href=#4809 id=4809 data-nosnippet>4809</a>                    (id: "mission", config: "mission.ron"),
-<a href=#4810 id=4810 data-nosnippet>4810</a>                    (id: "simple", config: "simple.ron"),
-<a href=#4811 id=4811 data-nosnippet>4811</a>                ],
-<a href=#4812 id=4812 data-nosnippet>4812</a>                interconnects: [],
-<a href=#4813 id=4813 data-nosnippet>4813</a>            )"#</span>,
-<a href=#4814 id=4814 data-nosnippet>4814</a>        )
-<a href=#4815 id=4815 data-nosnippet>4815</a>        .expect(<span class="string">"write network config"</span>);
-<a href=#4816 id=4816 data-nosnippet>4816</a>
-<a href=#4817 id=4817 data-nosnippet>4817</a>        <span class="kw">let </span>input =
-<a href=#4818 id=4818 data-nosnippet>4818</a>            load_render_input(network_path.as_path(), <span class="kw-2">&amp;</span>[]).expect(<span class="string">"multi config should load"</span>);
-<a href=#4819 id=4819 data-nosnippet>4819</a>        <span class="kw">let </span>multi = <span class="kw">match </span>input {
-<a href=#4820 id=4820 data-nosnippet>4820</a>            RenderInput::Multi(config) =&gt; config,
-<a href=#4821 id=4821 data-nosnippet>4821</a>            RenderInput::Single(<span class="kw">_</span>) =&gt; <span class="macro">panic!</span>(<span class="string">"expected multi-Copper config"</span>),
-<a href=#4822 id=4822 data-nosnippet>4822</a>        };
-<a href=#4823 id=4823 data-nosnippet>4823</a>
-<a href=#4824 id=4824 data-nosnippet>4824</a>        <span class="kw">let </span>svg = String::from_utf8(
-<a href=#4825 id=4825 data-nosnippet>4825</a>            render_multi_config_svg(<span class="kw-2">&amp;</span>multi, <span class="prelude-val">Some</span>(<span class="string">"default"</span>)).expect(<span class="string">"render svg"</span>),
-<a href=#4826 id=4826 data-nosnippet>4826</a>        )
-<a href=#4827 id=4827 data-nosnippet>4827</a>        .expect(<span class="string">"svg should be utf8"</span>);
-<a href=#4828 id=4828 data-nosnippet>4828</a>
-<a href=#4829 id=4829 data-nosnippet>4829</a>        <span class="macro">assert!</span>(svg.contains(<span class="string">"Subsystem: mission"</span>));
-<a href=#4830 id=4830 data-nosnippet>4830</a>        <span class="macro">assert!</span>(svg.contains(<span class="string">"Subsystem: simple"</span>));
-<a href=#4831 id=4831 data-nosnippet>4831</a>        <span class="macro">assert!</span>(svg.contains(<span class="string">"mission_task"</span>));
-<a href=#4832 id=4832 data-nosnippet>4832</a>        <span class="macro">assert!</span>(svg.contains(<span class="string">"simple_task"</span>));
-<a href=#4833 id=4833 data-nosnippet>4833</a>    }
-<a href=#4834 id=4834 data-nosnippet>4834</a>}
+<a href=#4681 id=4681 data-nosnippet>4681</a>        <span class="macro">assert!</span>(provider_resource_slots(<span class="string">"board::MicoAirH743"</span>).is_none());
+<a href=#4682 id=4682 data-nosnippet>4682</a>    }
+<a href=#4683 id=4683 data-nosnippet>4683</a>
+<a href=#4684 id=4684 data-nosnippet>4684</a>    <span class="attr">#[test]
+<a href=#4685 id=4685 data-nosnippet>4685</a>    </span><span class="kw">fn </span>linux_bundle_catalog_includes_known_slots_without_bindings() {
+<a href=#4686 id=4686 data-nosnippet>4686</a>        <span class="kw">let </span>config = config::CuConfig {
+<a href=#4687 id=4687 data-nosnippet>4687</a>            monitors: Vec::new(),
+<a href=#4688 id=4688 data-nosnippet>4688</a>            logging: <span class="prelude-val">None</span>,
+<a href=#4689 id=4689 data-nosnippet>4689</a>            runtime: <span class="prelude-val">None</span>,
+<a href=#4690 id=4690 data-nosnippet>4690</a>            resources: <span class="macro">vec!</span>[config::ResourceBundleConfig {
+<a href=#4691 id=4691 data-nosnippet>4691</a>                id: <span class="string">"linux"</span>.to_string(),
+<a href=#4692 id=4692 data-nosnippet>4692</a>                provider: <span class="string">"cu_linux_resources::LinuxResources"</span>.to_string(),
+<a href=#4693 id=4693 data-nosnippet>4693</a>                config: <span class="prelude-val">None</span>,
+<a href=#4694 id=4694 data-nosnippet>4694</a>                missions: <span class="prelude-val">None</span>,
+<a href=#4695 id=4695 data-nosnippet>4695</a>            }],
+<a href=#4696 id=4696 data-nosnippet>4696</a>            bridges: Vec::new(),
+<a href=#4697 id=4697 data-nosnippet>4697</a>            graphs: ConfigGraphs::Simple(config::CuGraph::default()),
+<a href=#4698 id=4698 data-nosnippet>4698</a>        };
+<a href=#4699 id=4699 data-nosnippet>4699</a>
+<a href=#4700 id=4700 data-nosnippet>4700</a>        <span class="kw">let </span>catalog = collect_resource_catalog(<span class="kw-2">&amp;</span>config).expect(<span class="string">"catalog should build"</span>);
+<a href=#4701 id=4701 data-nosnippet>4701</a>        <span class="kw">let </span>linux_slots = catalog
+<a href=#4702 id=4702 data-nosnippet>4702</a>            .get(<span class="string">"linux"</span>)
+<a href=#4703 id=4703 data-nosnippet>4703</a>            .expect(<span class="string">"linux bundle should expose slot catalog"</span>);
+<a href=#4704 id=4704 data-nosnippet>4704</a>        <span class="macro">assert_eq!</span>(linux_slots.len(), LINUX_RESOURCE_SLOT_NAMES.len());
+<a href=#4705 id=4705 data-nosnippet>4705</a>        <span class="kw">for </span>slot <span class="kw">in </span>LINUX_RESOURCE_SLOT_NAMES {
+<a href=#4706 id=4706 data-nosnippet>4706</a>            <span class="macro">assert!</span>(linux_slots.contains(slot), <span class="string">"missing slot {slot}"</span>);
+<a href=#4707 id=4707 data-nosnippet>4707</a>        }
+<a href=#4708 id=4708 data-nosnippet>4708</a>    }
+<a href=#4709 id=4709 data-nosnippet>4709</a>
+<a href=#4710 id=4710 data-nosnippet>4710</a>    <span class="attr">#[test]
+<a href=#4711 id=4711 data-nosnippet>4711</a>    </span><span class="kw">fn </span>multi_copper_render_outputs_subsystems_and_dashed_interconnects() {
+<a href=#4712 id=4712 data-nosnippet>4712</a>        <span class="kw">let </span>dir = tempdir().expect(<span class="string">"temp dir"</span>);
+<a href=#4713 id=4713 data-nosnippet>4713</a>        <span class="kw">let </span>alpha_path = dir.path().join(<span class="string">"alpha.ron"</span>);
+<a href=#4714 id=4714 data-nosnippet>4714</a>        <span class="kw">let </span>beta_path = dir.path().join(<span class="string">"beta.ron"</span>);
+<a href=#4715 id=4715 data-nosnippet>4715</a>        <span class="kw">let </span>network_path = dir.path().join(<span class="string">"network.ron"</span>);
+<a href=#4716 id=4716 data-nosnippet>4716</a>
+<a href=#4717 id=4717 data-nosnippet>4717</a>        fs::write(
+<a href=#4718 id=4718 data-nosnippet>4718</a>            <span class="kw-2">&amp;</span>alpha_path,
+<a href=#4719 id=4719 data-nosnippet>4719</a>            <span class="string">r#"(
+<a href=#4720 id=4720 data-nosnippet>4720</a>                tasks: [(id: "src", type: "demo::Src")],
+<a href=#4721 id=4721 data-nosnippet>4721</a>                bridges: [
+<a href=#4722 id=4722 data-nosnippet>4722</a>                    (
+<a href=#4723 id=4723 data-nosnippet>4723</a>                        id: "zenoh",
+<a href=#4724 id=4724 data-nosnippet>4724</a>                        type: "demo::ZenohBridge",
+<a href=#4725 id=4725 data-nosnippet>4725</a>                        channels: [Tx(id: "ping")],
+<a href=#4726 id=4726 data-nosnippet>4726</a>                    ),
+<a href=#4727 id=4727 data-nosnippet>4727</a>                ],
+<a href=#4728 id=4728 data-nosnippet>4728</a>                cnx: [(src: "src", dst: "zenoh/ping", msg: "demo::Ping")],
+<a href=#4729 id=4729 data-nosnippet>4729</a>            )"#</span>,
+<a href=#4730 id=4730 data-nosnippet>4730</a>        )
+<a href=#4731 id=4731 data-nosnippet>4731</a>        .expect(<span class="string">"write alpha config"</span>);
+<a href=#4732 id=4732 data-nosnippet>4732</a>        fs::write(
+<a href=#4733 id=4733 data-nosnippet>4733</a>            <span class="kw-2">&amp;</span>beta_path,
+<a href=#4734 id=4734 data-nosnippet>4734</a>            <span class="string">r#"(
+<a href=#4735 id=4735 data-nosnippet>4735</a>                tasks: [(id: "sink", type: "demo::Sink")],
+<a href=#4736 id=4736 data-nosnippet>4736</a>                bridges: [
+<a href=#4737 id=4737 data-nosnippet>4737</a>                    (
+<a href=#4738 id=4738 data-nosnippet>4738</a>                        id: "zenoh",
+<a href=#4739 id=4739 data-nosnippet>4739</a>                        type: "demo::ZenohBridge",
+<a href=#4740 id=4740 data-nosnippet>4740</a>                        channels: [Rx(id: "ping")],
+<a href=#4741 id=4741 data-nosnippet>4741</a>                    ),
+<a href=#4742 id=4742 data-nosnippet>4742</a>                ],
+<a href=#4743 id=4743 data-nosnippet>4743</a>                cnx: [(src: "zenoh/ping", dst: "sink", msg: "demo::Ping")],
+<a href=#4744 id=4744 data-nosnippet>4744</a>            )"#</span>,
+<a href=#4745 id=4745 data-nosnippet>4745</a>        )
+<a href=#4746 id=4746 data-nosnippet>4746</a>        .expect(<span class="string">"write beta config"</span>);
+<a href=#4747 id=4747 data-nosnippet>4747</a>        fs::write(
+<a href=#4748 id=4748 data-nosnippet>4748</a>            <span class="kw-2">&amp;</span>network_path,
+<a href=#4749 id=4749 data-nosnippet>4749</a>            <span class="string">r#"(
+<a href=#4750 id=4750 data-nosnippet>4750</a>                subsystems: [
+<a href=#4751 id=4751 data-nosnippet>4751</a>                    (id: "alpha", config: "alpha.ron"),
+<a href=#4752 id=4752 data-nosnippet>4752</a>                    (id: "beta", config: "beta.ron"),
+<a href=#4753 id=4753 data-nosnippet>4753</a>                ],
+<a href=#4754 id=4754 data-nosnippet>4754</a>                interconnects: [
+<a href=#4755 id=4755 data-nosnippet>4755</a>                    (from: "alpha/zenoh/ping", to: "beta/zenoh/ping", msg: "demo::Ping"),
+<a href=#4756 id=4756 data-nosnippet>4756</a>                ],
+<a href=#4757 id=4757 data-nosnippet>4757</a>            )"#</span>,
+<a href=#4758 id=4758 data-nosnippet>4758</a>        )
+<a href=#4759 id=4759 data-nosnippet>4759</a>        .expect(<span class="string">"write network config"</span>);
+<a href=#4760 id=4760 data-nosnippet>4760</a>
+<a href=#4761 id=4761 data-nosnippet>4761</a>        <span class="kw">let </span>input =
+<a href=#4762 id=4762 data-nosnippet>4762</a>            load_render_input(network_path.as_path(), <span class="kw-2">&amp;</span>[]).expect(<span class="string">"multi config should load"</span>);
+<a href=#4763 id=4763 data-nosnippet>4763</a>        <span class="kw">let </span>multi = <span class="kw">match </span>input {
+<a href=#4764 id=4764 data-nosnippet>4764</a>            RenderInput::Multi(config) =&gt; config,
+<a href=#4765 id=4765 data-nosnippet>4765</a>            RenderInput::Single(<span class="kw">_</span>) =&gt; <span class="macro">panic!</span>(<span class="string">"expected multi-Copper config"</span>),
+<a href=#4766 id=4766 data-nosnippet>4766</a>        };
+<a href=#4767 id=4767 data-nosnippet>4767</a>
+<a href=#4768 id=4768 data-nosnippet>4768</a>        <span class="kw">let </span>svg = String::from_utf8(render_multi_config_svg(<span class="kw-2">&amp;</span>multi, <span class="prelude-val">None</span>).expect(<span class="string">"render svg"</span>))
+<a href=#4769 id=4769 data-nosnippet>4769</a>            .expect(<span class="string">"svg should be utf8"</span>);
+<a href=#4770 id=4770 data-nosnippet>4770</a>
+<a href=#4771 id=4771 data-nosnippet>4771</a>        <span class="macro">assert!</span>(svg.contains(<span class="string">"Subsystem: alpha"</span>));
+<a href=#4772 id=4772 data-nosnippet>4772</a>        <span class="macro">assert!</span>(svg.contains(<span class="string">"Subsystem: beta"</span>));
+<a href=#4773 id=4773 data-nosnippet>4773</a>        <span class="macro">assert!</span>(svg.contains(<span class="string">"stroke-dasharray=\"5,5\""</span>));
+<a href=#4774 id=4774 data-nosnippet>4774</a>        <span class="macro">assert!</span>(svg.contains(<span class="string">"demo::Ping"</span>));
+<a href=#4775 id=4775 data-nosnippet>4775</a>    }
+<a href=#4776 id=4776 data-nosnippet>4776</a>
+<a href=#4777 id=4777 data-nosnippet>4777</a>    <span class="attr">#[test]
+<a href=#4778 id=4778 data-nosnippet>4778</a>    </span><span class="kw">fn </span>multi_copper_render_selects_a_mission_for_mission_based_subsystems() {
+<a href=#4779 id=4779 data-nosnippet>4779</a>        <span class="kw">let </span>dir = tempdir().expect(<span class="string">"temp dir"</span>);
+<a href=#4780 id=4780 data-nosnippet>4780</a>        <span class="kw">let </span>mission_path = dir.path().join(<span class="string">"mission.ron"</span>);
+<a href=#4781 id=4781 data-nosnippet>4781</a>        <span class="kw">let </span>simple_path = dir.path().join(<span class="string">"simple.ron"</span>);
+<a href=#4782 id=4782 data-nosnippet>4782</a>        <span class="kw">let </span>network_path = dir.path().join(<span class="string">"network.ron"</span>);
+<a href=#4783 id=4783 data-nosnippet>4783</a>
+<a href=#4784 id=4784 data-nosnippet>4784</a>        fs::write(
+<a href=#4785 id=4785 data-nosnippet>4785</a>            <span class="kw-2">&amp;</span>mission_path,
+<a href=#4786 id=4786 data-nosnippet>4786</a>            <span class="string">r#"(
+<a href=#4787 id=4787 data-nosnippet>4787</a>                missions: [(id: "default"), (id: "diagnostic")],
+<a href=#4788 id=4788 data-nosnippet>4788</a>                tasks: [(id: "mission_task", type: "demo::MissionTask")],
+<a href=#4789 id=4789 data-nosnippet>4789</a>                cnx: [(src: "mission_task", dst: "__nc__", msg: "demo::Message")],
+<a href=#4790 id=4790 data-nosnippet>4790</a>            )"#</span>,
+<a href=#4791 id=4791 data-nosnippet>4791</a>        )
+<a href=#4792 id=4792 data-nosnippet>4792</a>        .expect(<span class="string">"write mission config"</span>);
+<a href=#4793 id=4793 data-nosnippet>4793</a>        fs::write(
+<a href=#4794 id=4794 data-nosnippet>4794</a>            <span class="kw-2">&amp;</span>simple_path,
+<a href=#4795 id=4795 data-nosnippet>4795</a>            <span class="string">r#"(
+<a href=#4796 id=4796 data-nosnippet>4796</a>                tasks: [(id: "simple_task", type: "demo::SimpleTask")],
+<a href=#4797 id=4797 data-nosnippet>4797</a>                cnx: [(src: "simple_task", dst: "__nc__", msg: "demo::Message")],
+<a href=#4798 id=4798 data-nosnippet>4798</a>            )"#</span>,
+<a href=#4799 id=4799 data-nosnippet>4799</a>        )
+<a href=#4800 id=4800 data-nosnippet>4800</a>        .expect(<span class="string">"write simple config"</span>);
+<a href=#4801 id=4801 data-nosnippet>4801</a>        fs::write(
+<a href=#4802 id=4802 data-nosnippet>4802</a>            <span class="kw-2">&amp;</span>network_path,
+<a href=#4803 id=4803 data-nosnippet>4803</a>            <span class="string">r#"(
+<a href=#4804 id=4804 data-nosnippet>4804</a>                subsystems: [
+<a href=#4805 id=4805 data-nosnippet>4805</a>                    (id: "mission", config: "mission.ron"),
+<a href=#4806 id=4806 data-nosnippet>4806</a>                    (id: "simple", config: "simple.ron"),
+<a href=#4807 id=4807 data-nosnippet>4807</a>                ],
+<a href=#4808 id=4808 data-nosnippet>4808</a>                interconnects: [],
+<a href=#4809 id=4809 data-nosnippet>4809</a>            )"#</span>,
+<a href=#4810 id=4810 data-nosnippet>4810</a>        )
+<a href=#4811 id=4811 data-nosnippet>4811</a>        .expect(<span class="string">"write network config"</span>);
+<a href=#4812 id=4812 data-nosnippet>4812</a>
+<a href=#4813 id=4813 data-nosnippet>4813</a>        <span class="kw">let </span>input =
+<a href=#4814 id=4814 data-nosnippet>4814</a>            load_render_input(network_path.as_path(), <span class="kw-2">&amp;</span>[]).expect(<span class="string">"multi config should load"</span>);
+<a href=#4815 id=4815 data-nosnippet>4815</a>        <span class="kw">let </span>multi = <span class="kw">match </span>input {
+<a href=#4816 id=4816 data-nosnippet>4816</a>            RenderInput::Multi(config) =&gt; config,
+<a href=#4817 id=4817 data-nosnippet>4817</a>            RenderInput::Single(<span class="kw">_</span>) =&gt; <span class="macro">panic!</span>(<span class="string">"expected multi-Copper config"</span>),
+<a href=#4818 id=4818 data-nosnippet>4818</a>        };
+<a href=#4819 id=4819 data-nosnippet>4819</a>
+<a href=#4820 id=4820 data-nosnippet>4820</a>        <span class="kw">let </span>svg = String::from_utf8(
+<a href=#4821 id=4821 data-nosnippet>4821</a>            render_multi_config_svg(<span class="kw-2">&amp;</span>multi, <span class="prelude-val">Some</span>(<span class="string">"default"</span>)).expect(<span class="string">"render svg"</span>),
+<a href=#4822 id=4822 data-nosnippet>4822</a>        )
+<a href=#4823 id=4823 data-nosnippet>4823</a>        .expect(<span class="string">"svg should be utf8"</span>);
+<a href=#4824 id=4824 data-nosnippet>4824</a>
+<a href=#4825 id=4825 data-nosnippet>4825</a>        <span class="macro">assert!</span>(svg.contains(<span class="string">"Subsystem: mission"</span>));
+<a href=#4826 id=4826 data-nosnippet>4826</a>        <span class="macro">assert!</span>(svg.contains(<span class="string">"Subsystem: simple"</span>));
+<a href=#4827 id=4827 data-nosnippet>4827</a>        <span class="macro">assert!</span>(svg.contains(<span class="string">"mission_task"</span>));
+<a href=#4828 id=4828 data-nosnippet>4828</a>        <span class="macro">assert!</span>(svg.contains(<span class="string">"simple_task"</span>));
+<a href=#4829 id=4829 data-nosnippet>4829</a>    }
+<a href=#4830 id=4830 data-nosnippet>4830</a>}
 </code></pre></div></section></main></body></html>

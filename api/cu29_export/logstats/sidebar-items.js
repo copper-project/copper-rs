@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["compute_logstats","write_logstats"],"struct":["DurationStats","EdgeLogStats","LogStats","PerfStats"]};
+window.SIDEBAR_ITEMS = {"fn":["compute_logstats","write_logstats"],"struct":["DurationStats","EdgeLogStats","ExecutionInterval","ExecutionTrace","LogStats","PerfStats","ResourceOverlapStats","ScheduleLogStats","StageLogStats"]};

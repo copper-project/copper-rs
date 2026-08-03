@@ -70,7 +70,8 @@ cargo run</code></pre></div>
 first messages and records <code>logs/hello-copper.copper</code>. Start with
 <code>copperconfig.ron</code>, <code>src/main.rs</code>, and <code>src/tasks.rs</code>; the generated <code>justfile</code>
 also provides helpers for logs, CopperLists, topology (<code>just dag</code>), the exact
-generated process schedule (<code>just plan</code>), and replay.</p>
+generated process schedule (<code>just plan</code>), post-execution timing from the default
+Copper log (<code>just plan-log</code>), and replay.</p>
 <h3 id="how-copper-fits-together"><a class="doc-anchor" href="#how-copper-fits-together">§</a>How Copper Fits Together</h3><div class="example-wrap"><pre class="language-mermaid"><code>flowchart LR
     Config[&quot;copperconfig.ron&lt;br/&gt;Static task graph&quot;]
     Generate[&quot;#[copper_runtime]&lt;br/&gt;Compile-time generation&quot;]
