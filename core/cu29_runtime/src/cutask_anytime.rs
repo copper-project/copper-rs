@@ -505,7 +505,7 @@ pub fn abort_at_base<O: CuMsgPayload>(
 #[reflect(no_field_bounds, from_reflect = false, type_path = false)]
 pub struct CuAnytimeRunner<T, P>
 where
-    T: Reflect + Send + Sync + 'static,
+    T: Send + Sync + 'static,
     P: Send + Sync + 'static,
 {
     #[reflect(ignore)]
@@ -516,7 +516,7 @@ where
 
 impl<T, P> TypePath for CuAnytimeRunner<T, P>
 where
-    T: Reflect + Send + Sync + 'static,
+    T: Send + Sync + 'static,
     P: Send + Sync + 'static,
 {
     fn type_path() -> &'static str {
@@ -542,7 +542,7 @@ where
 
 impl<T, P> Freezable for CuAnytimeRunner<T, P>
 where
-    T: Reflect + Freezable + Send + Sync + 'static,
+    T: Freezable + Send + Sync + 'static,
     P: Send + Sync + 'static,
 {
     fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
@@ -1165,8 +1165,8 @@ mod tests {
     #[test]
     fn runner_drops_a_result_below_the_quality_floor() {
         let (ctx, clock) = CuContext::new_mock_clock();
-        // FullPolicy floors at 0.3 and budgets 1 ms; the ticking task reports
-        // 0.5 but the DOA-free job stops on the budget with that best quality.
+        // FloorPolicy budgets 1 ms and floors at 0.8: base() alone burns the
+        // budget reporting 0.5, below the floor, so nothing is published.
         let mut runner: CuAnytimeRunner<TickingTask, FloorPolicy> =
             CuAnytimeRunner::new(None, clock).unwrap();
 
