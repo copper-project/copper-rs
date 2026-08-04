@@ -85,6 +85,13 @@ pub struct CuRng {
     inner: ChaCha8Rng,
 }
 
+// Opaque on purpose: the stream state is not meaningful to print.
+impl core::fmt::Debug for CuRng {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("CuRng(ChaCha8)")
+    }
+}
+
 impl CuRng {
     /// Build a fresh RNG from the given 64-bit seed.
     pub fn from_seed(seed: u64) -> Self {
