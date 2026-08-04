@@ -3,26 +3,13 @@ use core::fmt;
 use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
 
-/// Maximum number of distortion coefficients carried by [`CuCameraDistortion`].
-///
-/// Four coefficients cover equidistant fisheye models, five cover the common
-/// Brown-Conrady model, and eight cover OpenCV's rational polynomial model.
-pub const CAMERA_DISTORTION_COEFFICIENT_CAPACITY: usize = 8;
-
 /// Errors found while validating a camera model.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CuCameraModelError {
     ZeroImageDimension,
     NonFiniteIntrinsic,
     NonPositiveFocalLength,
-    InvalidDistortionCoefficientCount {
-        model: CuCameraDistortionModel,
-        expected: usize,
-        found: usize,
-    },
-    NonFiniteDistortionCoefficient {
-        index: usize,
-    },
+    NonFiniteDistortionCoefficient { index: usize },
 }
 
 impl fmt::Display for CuCameraModelError {
@@ -33,14 +20,6 @@ impl fmt::Display for CuCameraModelError {
             Self::NonPositiveFocalLength => {
                 write!(f, "camera focal lengths must be positive")
             }
-            Self::InvalidDistortionCoefficientCount {
-                model,
-                expected,
-                found,
-            } => write!(
-                f,
-                "{model:?} distortion expects {expected} coefficients, found {found}"
-            ),
             Self::NonFiniteDistortionCoefficient { index } => {
                 write!(f, "camera distortion coefficient {index} is not finite")
             }
@@ -131,7 +110,7 @@ impl CuCameraIntrinsics {
     /// Convert a rectified pixel coordinate into an unnormalized camera-frame ray.
     ///
     /// The result is `[x, y, 1]`. Lens distortion is intentionally not applied;
-    /// callers should rectify the pixel according to [`CuCameraDistortion`] first.
+    /// callers should rectify the pixel according to the model's distortion type first.
     pub fn rectified_pixel_ray(&self, pixel: [f32; 2]) -> Result<[f32; 3], CuCameraModelError> {
         self.validate()?;
         let y = (pixel[1] - self.cy) / self.fy;
@@ -140,74 +119,16 @@ impl CuCameraIntrinsics {
     }
 }
 
-/// Standard distortion models used by common camera drivers and ROS CameraInfo.
-#[derive(
-    Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
-)]
-pub enum CuCameraDistortionModel {
-    #[default]
-    None,
-    /// Brown-Conrady / ROS `plumb_bob`: `[k1, k2, t1, t2, k3]`.
-    PlumbBob,
-    /// OpenCV rational polynomial: `[k1, k2, t1, t2, k3, k4, k5, k6]`.
-    RationalPolynomial,
-    /// OpenCV fisheye / ROS `equidistant`: `[k1, k2, k3, k4]`.
-    Equidistant,
-}
+/// Compile-time lens-distortion model for a camera.
+///
+/// The concrete distortion type is part of [`CuCameraModel`]'s Rust type. A
+/// running robot may update the coefficients of its chosen calibration model,
+/// but it cannot silently switch from (for example) `plumb_bob` to `equidistant`.
+pub trait CuCameraDistortion {
+    fn coefficients(&self) -> &[f32];
 
-impl CuCameraDistortionModel {
-    pub const fn coefficient_count(self) -> usize {
-        match self {
-            Self::None => 0,
-            Self::PlumbBob => 5,
-            Self::RationalPolynomial => 8,
-            Self::Equidistant => 4,
-        }
-    }
-}
-
-/// Fixed-capacity, allocation-free lens distortion parameters.
-#[derive(
-    Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect,
-)]
-pub struct CuCameraDistortion {
-    pub model: CuCameraDistortionModel,
-    coefficients: [f32; CAMERA_DISTORTION_COEFFICIENT_CAPACITY],
-}
-
-impl CuCameraDistortion {
-    pub fn new(
-        model: CuCameraDistortionModel,
-        coefficients: &[f32],
-    ) -> Result<Self, CuCameraModelError> {
-        let expected = model.coefficient_count();
-        if coefficients.len() != expected {
-            return Err(CuCameraModelError::InvalidDistortionCoefficientCount {
-                model,
-                expected,
-                found: coefficients.len(),
-            });
-        }
-
-        let mut storage = [0.0; CAMERA_DISTORTION_COEFFICIENT_CAPACITY];
-        for (index, coefficient) in coefficients.iter().copied().enumerate() {
-            if !coefficient.is_finite() {
-                return Err(CuCameraModelError::NonFiniteDistortionCoefficient { index });
-            }
-            storage[index] = coefficient;
-        }
-        Ok(Self {
-            model,
-            coefficients: storage,
-        })
-    }
-
-    pub fn coefficients(&self) -> &[f32] {
-        &self.coefficients[..self.model.coefficient_count()]
-    }
-
-    pub fn validate(&self) -> Result<(), CuCameraModelError> {
-        for (index, coefficient) in self.coefficients.iter().enumerate() {
+    fn validate(&self) -> Result<(), CuCameraModelError> {
+        for (index, coefficient) in self.coefficients().iter().enumerate() {
             if !coefficient.is_finite() {
                 return Err(CuCameraModelError::NonFiniteDistortionCoefficient { index });
             }
@@ -216,26 +137,97 @@ impl CuCameraDistortion {
     }
 }
 
+/// Camera without a lens-distortion correction model.
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
+)]
+pub struct CuNoDistortion;
+
+impl CuCameraDistortion for CuNoDistortion {
+    fn coefficients(&self) -> &[f32] {
+        &[]
+    }
+}
+
+macro_rules! define_camera_distortion {
+    ($(#[$meta:meta])* $name:ident, $coefficient_count:literal) => {
+        $(#[$meta])*
+        ///
+        /// The coefficient count is encoded in the constructor's array type, so
+        /// an invalid count is rejected by the Rust compiler rather than at runtime.
+        #[derive(
+            Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect,
+        )]
+        pub struct $name {
+            coefficients: [f32; $coefficient_count],
+        }
+
+        impl $name {
+            pub fn new(
+                coefficients: [f32; $coefficient_count],
+            ) -> Result<Self, CuCameraModelError> {
+                let distortion = Self { coefficients };
+                distortion.validate()?;
+                Ok(distortion)
+            }
+
+            pub const fn coefficients(&self) -> &[f32; $coefficient_count] {
+                &self.coefficients
+            }
+        }
+
+        impl CuCameraDistortion for $name {
+            fn coefficients(&self) -> &[f32] {
+                &self.coefficients
+            }
+        }
+    };
+}
+
+define_camera_distortion!(
+    /// Brown-Conrady / ROS `plumb_bob`: `[k1, k2, t1, t2, k3]`.
+    ///
+    /// ```compile_fail
+    /// use cu_sensor_payloads::CuPlumbBobDistortion;
+    /// let _ = CuPlumbBobDistortion::new([0.0; 4]);
+    /// ```
+    CuPlumbBobDistortion,
+    5
+);
+
+define_camera_distortion!(
+    /// OpenCV rational polynomial: `[k1, k2, t1, t2, k3, k4, k5, k6]`.
+    CuRationalPolynomialDistortion,
+    8
+);
+
+define_camera_distortion!(
+    /// OpenCV fisheye / ROS `equidistant`: `[k1, k2, k3, k4]`.
+    CuEquidistantDistortion,
+    4
+);
+
 /// Standard camera geometry shared by image and depth-map producers.
 ///
-/// A source should publish this as [`CuCameraModelUpdate::Set`] when the model
-/// first becomes available or changes, then publish `NoChange` on later cycles.
-/// Consumers keep a [`CuCameraModelState`] cache. This transmits the full model
-/// only on state transitions while keeping calibration changes in Copper's
-/// deterministic log and replay stream.
+/// `D` fixes the distortion model at compile time. A source performing dynamic
+/// calibration should publish this as [`CuCameraModelUpdate::Set`] when its
+/// intrinsics or coefficients first become available or change, then publish
+/// `NoChange` on later cycles. Consumers keep a [`CuCameraModelState`] cache.
+/// This transmits the full calibration only on state transitions while keeping
+/// every change in Copper's deterministic log and replay stream.
 #[derive(
     Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, Encode, Decode, Reflect,
 )]
-pub struct CuCameraModel {
+pub struct CuCameraModel<D = CuNoDistortion> {
     pub intrinsics: CuCameraIntrinsics,
-    pub distortion: CuCameraDistortion,
+    pub distortion: D,
 }
 
-impl CuCameraModel {
-    pub fn new(
-        intrinsics: CuCameraIntrinsics,
-        distortion: CuCameraDistortion,
-    ) -> Result<Self, CuCameraModelError> {
+impl<D> CuCameraModel<D>
+where
+    D: CuCameraDistortion,
+{
+    pub fn new(intrinsics: CuCameraIntrinsics, distortion: D) -> Result<Self, CuCameraModelError> {
         let model = Self {
             intrinsics,
             distortion,
@@ -250,11 +242,11 @@ impl CuCameraModel {
     }
 }
 
-/// Producer-side camera model update carried on a dedicated Copper output.
-pub type CuCameraModelUpdate = CuLatchedStateUpdate<CuCameraModel>;
+/// Producer-side dynamic calibration update carried on a dedicated Copper output.
+pub type CuCameraModelUpdate<D = CuNoDistortion> = CuLatchedStateUpdate<CuCameraModel<D>>;
 
-/// Consumer-side cache for the latest camera model.
-pub type CuCameraModelState = CuLatchedState<CuCameraModel>;
+/// Consumer-side cache for the latest dynamic calibration.
+pub type CuCameraModelState<D = CuNoDistortion> = CuLatchedState<CuCameraModel<D>>;
 
 #[cfg(test)]
 mod tests {
@@ -301,43 +293,45 @@ mod tests {
     }
 
     #[test]
-    fn distortion_uses_model_specific_coefficient_counts() {
-        let distortion = CuCameraDistortion::new(
-            CuCameraDistortionModel::PlumbBob,
-            &[0.1, -0.02, 0.001, -0.001, 0.0],
-        )
-        .unwrap();
-        assert_eq!(distortion.coefficients().len(), 5);
+    fn distortion_models_have_compile_time_coefficient_counts() {
+        let plumb_bob = CuPlumbBobDistortion::new([0.1, -0.02, 0.001, -0.001, 0.0]).unwrap();
+        let rational = CuRationalPolynomialDistortion::new([0.0; 8]).unwrap();
+        let equidistant = CuEquidistantDistortion::new([0.0; 4]).unwrap();
+
+        assert_eq!(plumb_bob.coefficients().len(), 5);
+        assert_eq!(rational.coefficients().len(), 8);
+        assert_eq!(equidistant.coefficients().len(), 4);
         assert_eq!(
-            CuCameraDistortion::new(CuCameraDistortionModel::Equidistant, &[0.1; 3]),
-            Err(CuCameraModelError::InvalidDistortionCoefficientCount {
-                model: CuCameraDistortionModel::Equidistant,
-                expected: 4,
-                found: 3,
-            })
+            CuEquidistantDistortion::new([0.0, f32::NAN, 0.0, 0.0]),
+            Err(CuCameraModelError::NonFiniteDistortionCoefficient { index: 1 })
         );
     }
 
     #[test]
     fn camera_model_round_trips_through_bincode() {
-        let model =
-            CuCameraModel::new(centered_intrinsics(), CuCameraDistortion::default()).unwrap();
+        let model = CuCameraModel::new(centered_intrinsics(), CuNoDistortion).unwrap();
         let cfg = config::standard();
         let mut buffer = [0_u8; 256];
         let len = bincode::encode_into_slice(model, &mut buffer, cfg).unwrap();
         let (decoded, used) =
-            bincode::decode_from_slice::<CuCameraModel, _>(&buffer[..len], cfg).unwrap();
+            bincode::decode_from_slice::<CuCameraModel<CuNoDistortion>, _>(&buffer[..len], cfg)
+                .unwrap();
         assert_eq!(used, len);
         assert_eq!(decoded, model);
     }
 
     #[test]
     fn latched_updates_send_full_model_only_on_change() {
-        let model =
-            CuCameraModel::new(centered_intrinsics(), CuCameraDistortion::default()).unwrap();
+        let model = CuCameraModel::new(
+            centered_intrinsics(),
+            CuPlumbBobDistortion::new([0.1, -0.02, 0.001, -0.001, 0.0]).unwrap(),
+        )
+        .unwrap();
         let cfg = config::standard();
         let set = bincode::encode_to_vec(CuCameraModelUpdate::Set(model), cfg).unwrap();
-        let no_change = bincode::encode_to_vec(CuCameraModelUpdate::NoChange, cfg).unwrap();
+        let no_change =
+            bincode::encode_to_vec(CuCameraModelUpdate::<CuPlumbBobDistortion>::NoChange, cfg)
+                .unwrap();
         assert!(no_change.len() < set.len());
 
         let mut state = CuCameraModelState::default();
