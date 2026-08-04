@@ -48,7 +48,7 @@ const MODULE_TRUNC_MARKER: &str = "…";
 const MODULE_SEPARATOR: &str = "⠶";
 const PLACEHOLDER_TEXT: &str = "\u{2014}";
 const COPPER_LOGO_SVG: &str = include_str!("../assets/cu29.svg");
-const LOGSTATS_SCHEMA_VERSION: u32 = 1;
+const LOGSTATS_SCHEMA_VERSION: u32 = 2;
 
 // Color palette and fills.
 const BORDER_COLOR: &str = "#999999";
@@ -469,7 +469,7 @@ fn load_logstats(
     let logstats: LogStats = serde_json::from_str(&contents)
         .map_err(|e| CuError::new_with_cause("Failed to parse logstats JSON", e))?;
 
-    if logstats.schema_version != LOGSTATS_SCHEMA_VERSION {
+    if !(1..=LOGSTATS_SCHEMA_VERSION).contains(&logstats.schema_version) {
         eprintln!(
             "Warning: logstats schema version {} does not match renderer {}",
             logstats.schema_version, LOGSTATS_SCHEMA_VERSION
@@ -4591,14 +4591,10 @@ fn build_graph_signature(config: &config::CuConfig, mission: Option<&str>) -> Cu
 
     let mut nodes: Vec<_> = graph.get_all_nodes();
     nodes.sort_by_key(|a| a.1.get_id());
-    for (node_id, node) in nodes {
+    for (_, node) in nodes {
         let flavor = match node.get_flavor() {
             config::Flavor::Bridge => "bridge",
-            config::Flavor::Task => match config::resolve_task_kind_for_id(graph, node_id)? {
-                config::TaskKind::Source => "source",
-                config::TaskKind::Regular => "task",
-                config::TaskKind::Sink => "sink",
-            },
+            config::Flavor::Task => "task",
         };
         parts.push(format!(
             "node|{}|{}|{}",

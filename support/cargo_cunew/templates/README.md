@@ -90,7 +90,8 @@ The generated project includes helper commands in its `justfile`:
 * `just resim`: Replay the recorded log once into a fresh replay log.
 * `just resim-debug`: Start the replay-backed remote debug server manually.
 * `just dag`: Render the application's execution Directed Acyclic Graph (DAG). Local-checkout templates run the tool from the Copper repo; crates.io and git templates use `cu29-rendercfg` from `PATH` or install the matching `cu29-runtime` on demand. `just rcfg` remains as a compatibility alias.
-* `just plan`: Render the exact generated per-CopperList process order as `plan.svg`, with serial and `parallel-rt` projections. Pass `mission=<id>` or `features=<a,b>` when needed. Templates use the local `cu29-plan` binary or install the matching `cu29-runtime` on demand.
+* `just plan`: Render the exact generated per-CopperList process order as `plan.svg`, with serial and `parallel-rt` projections. Pass `log=logs/<app>.copper` to append packed typical/slowest timelines whose back-to-back segments remain proportional to recorded task duration, or `mission=<id>` / `features=<a,b>` when needed. Templates use the local `cu29-plan` binary or install the matching `cu29-runtime` on demand.
+* `just plan-log`: Render the same SVG with observed timing from the project's default Copper log.
 
 Set `APP_NAME=test-workspace-demo APP_DIR=test_workspace-demo` to target the demo app (for example, `APP_NAME=test-workspace-demo APP_DIR=test_workspace-demo just log`).
 
