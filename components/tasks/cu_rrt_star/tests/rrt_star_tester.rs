@@ -1,18 +1,18 @@
 //! The planner under two refinement policies, in a full application.
 //!
-//! Both planner nodes are the same task type with the default RRT* config, so
-//! they run the same tree from the same seed. Only the `anytime:` policy
-//! differs:
+//! Both planner nodes are the same task type with the default RRT* config,
+//! and both RNG resources carry the same seed, so they run the same tree.
+//! Only the `anytime:` policy differs:
 //!
 //! | node | policy |
 //! |---|---|
 //! | `quick_planner` | `max_refines: 2`, `time_budget_ms: 50`, `quality_target: 0.93` |
 //! | `thorough_planner` | `max_refines: 24`, `time_budget_ms: 250`, `max_stall: 4` |
 //!
-//! Because both nodes start from the same seed, the thorough tree is the quick
-//! tree plus more iterations, so its path is never longer - that is the anytime
-//! trade-off, measured. Keeping the planner config identical is what makes the
-//! comparison valid.
+//! Because both nodes run job N on the same stream, the thorough tree is the
+//! quick tree plus more iterations, so its path is never longer - that is the
+//! anytime trade-off, measured. Keeping the planner config identical is what
+//! makes the comparison valid.
 
 use cu_rrt_star::{PlanPath, PlanRequest, Point2, World};
 use cu29::prelude::*;
@@ -46,9 +46,7 @@ struct PlanReport {
 
 /// Emits one planning problem per copperlist, always on the depot map.
 #[derive(Default, Reflect)]
-pub struct GoalSrc {
-    seed: u64,
-}
+pub struct GoalSrc;
 
 impl Freezable for GoalSrc {}
 
@@ -56,21 +54,15 @@ impl CuSrcTask for GoalSrc {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(PlanRequest);
 
-    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
-        let seed = match config {
-            Some(config) => config.get::<u32>("seed")?.unwrap_or(1) as u64,
-            None => 1,
-        };
-        Ok(Self { seed })
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
+        Ok(Self)
     }
 
     fn process(&mut self, ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
-        self.seed = self.seed.wrapping_add(1);
         new_msg.set_payload(PlanRequest {
             world: World::depot(),
             start: START,
             goal: GOAL,
-            seed: self.seed,
         });
         // A fresh Tov per job. An anytime node reads it as the age anchor when
         // its policy sets max_age_ms; neither planner here does, so both
@@ -149,7 +141,7 @@ fn check(reports: &[PlanReport]) -> usize {
                 );
             }
             assert!(
-                path.cost >= lower_bound,
+                path.cost.raw() >= lower_bound,
                 "job {index}: path shorter than the straight line"
             );
         }
@@ -158,12 +150,12 @@ fn check(reports: &[PlanReport]) -> usize {
             continue;
         };
         compared += 1;
-        // More quanta on the same seed can only shorten the path.
+        // More quanta on the same stream can only shorten the path.
         assert!(
-            thorough.cost <= quick.cost + 1e-3,
+            thorough.cost.raw() <= quick.cost.raw() + 1e-3,
             "job {index}: the thorough policy published a longer path ({} vs {})",
-            thorough.cost,
-            quick.cost
+            thorough.cost.raw(),
+            quick.cost.raw()
         );
     }
 

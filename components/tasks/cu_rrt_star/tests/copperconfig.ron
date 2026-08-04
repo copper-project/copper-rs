@@ -1,13 +1,22 @@
 (
-    tasks: [
+    resources: [
         (
-            id: "goal",
-            type: "GoalSrc",
-            config: {"seed": 1},
+            id: "quick_rng",
+            provider: "cu_rng::CuRngBundle",
+            config: {"seed": 7},
         ),
+        (
+            id: "thorough_rng",
+            provider: "cu_rng::CuRngBundle",
+            config: {"seed": 7},
+        ),
+    ],
+    tasks: [
+        (id: "goal", type: "GoalSrc"),
         (
             id: "quick_planner",
             type: "cu_rrt_star::RrtStarPlanner",
+            resources: {"rng": "quick_rng.rng"},
             anytime: (
                 max_refines: 2,
                 time_budget_ms: 50.0,
@@ -18,6 +27,7 @@
         (
             id: "thorough_planner",
             type: "cu_rrt_star::RrtStarPlanner",
+            resources: {"rng": "thorough_rng.rng"},
             anytime: (
                 max_refines: 24,
                 time_budget_ms: 250.0,

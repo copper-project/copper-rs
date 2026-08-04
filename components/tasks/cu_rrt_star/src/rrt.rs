@@ -1,4 +1,7 @@
-//! Seeded RRT* over a 2D world of round obstacles.
+//! Seeded RRT* over an [`RrtSpace`]: anything that can sample a candidate
+//! point and answer segment collision queries. The bundled space is
+//! [`World`], a rectangle of round obstacles; the algorithm itself never
+//! depends on the obstacle shape.
 //!
 //! The planner knows nothing about Copper: it only exposes [`RrtStar::grow`],
 //! one bounded block of iterations. [`crate::RrtStarPlanner`] calls it once
@@ -12,7 +15,11 @@
 //! shift after a rewire is iterative instead of recursive.
 
 use bincode::{Decode, Encode};
+use cu_rng::prelude::*;
 use cu29::prelude::*;
+use cu29::units::si::area::square_meter;
+use cu29::units::si::f32::{Area, Length};
+use cu29::units::si::length::meter;
 use serde::{Deserialize, Serialize};
 
 /// Waypoints carried by a published path. Kept at 32 because serde derives
@@ -52,11 +59,11 @@ impl Point2 {
 )]
 pub struct Obstacle {
     pub center: Point2,
-    pub radius: f32,
+    pub radius: Length,
 }
 
 impl Obstacle {
-    pub const fn new(center: Point2, radius: f32) -> Self {
+    pub const fn new(center: Point2, radius: Length) -> Self {
         Self { center, radius }
     }
 }
@@ -68,8 +75,8 @@ impl Obstacle {
 /// carries the one it must solve.
 #[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
 pub struct World {
-    pub width: f32,
-    pub height: f32,
+    pub width: Length,
+    pub height: Length,
     pub obstacles: [Obstacle; MAX_OBSTACLES],
     /// Obstacles actually used in `obstacles`.
     pub obstacle_count: u32,
@@ -78,7 +85,7 @@ pub struct World {
 impl World {
     /// A world from a list of obstacles. Errors when the list exceeds
     /// [`MAX_OBSTACLES`].
-    pub fn new(width: f32, height: f32, obstacles: &[Obstacle]) -> CuResult<Self> {
+    pub fn new(width: Length, height: Length, obstacles: &[Obstacle]) -> CuResult<Self> {
         if obstacles.len() > MAX_OBSTACLES {
             return Err(format!(
                 "rrt*: {} obstacles, the world holds at most {MAX_OBSTACLES}",
@@ -101,15 +108,16 @@ impl World {
     /// blocked. A first path is therefore always a detour, and refinement has
     /// real work to do.
     pub fn depot() -> Self {
+        let meters = Length::new::<meter>;
         Self::new(
-            10.0,
-            10.0,
+            meters(10.0),
+            meters(10.0),
             &[
-                Obstacle::new(Point2::new(3.0, 3.0), 1.2),
-                Obstacle::new(Point2::new(6.0, 6.0), 1.5),
-                Obstacle::new(Point2::new(7.0, 2.5), 1.0),
-                Obstacle::new(Point2::new(2.5, 7.0), 1.0),
-                Obstacle::new(Point2::new(5.0, 1.5), 0.8),
+                Obstacle::new(Point2::new(3.0, 3.0), meters(1.2)),
+                Obstacle::new(Point2::new(6.0, 6.0), meters(1.5)),
+                Obstacle::new(Point2::new(7.0, 2.5), meters(1.0)),
+                Obstacle::new(Point2::new(2.5, 7.0), meters(1.0)),
+                Obstacle::new(Point2::new(5.0, 1.5), meters(0.8)),
             ],
         )
         .expect("the depot obstacles fit MAX_OBSTACLES")
@@ -123,12 +131,16 @@ impl World {
 
     /// True when `point` is inside the bounds and outside every obstacle.
     pub fn is_free(&self, point: Point2) -> bool {
-        if point.x < 0.0 || point.y < 0.0 || point.x > self.width || point.y > self.height {
+        if point.x < 0.0
+            || point.y < 0.0
+            || point.x > self.width.raw()
+            || point.y > self.height.raw()
+        {
             return false;
         }
         self.obstacle_slice()
             .iter()
-            .all(|o| point.distance(o.center) > o.radius)
+            .all(|o| point.distance(o.center) > o.radius.raw())
     }
 
     /// True when the whole segment `a`-`b` is free.
@@ -138,29 +150,60 @@ impl World {
         }
         self.obstacle_slice()
             .iter()
-            .all(|o| distance_to_segment(a, b, o.center) > o.radius)
+            .all(|o| distance_to_segment(a, b, o.center) > o.radius.raw())
     }
 
     /// Area left free by the obstacles. Assumes every obstacle lies inside the
     /// bounds and none overlap, which holds for [`World::depot`].
-    pub fn free_area(&self) -> f32 {
+    pub fn free_area(&self) -> Area {
         let blocked: f32 = self
             .obstacle_slice()
             .iter()
-            .map(|o| core::f32::consts::PI * o.radius * o.radius)
+            .map(|o| core::f32::consts::PI * o.radius.raw() * o.radius.raw())
             .sum();
-        (self.width * self.height - blocked).max(f32::EPSILON)
+        Area::new::<square_meter>(
+            (self.width.raw() * self.height.raw() - blocked).max(f32::EPSILON),
+        )
     }
+}
+
+/// What RRT* needs from the space it searches. The algorithm never depends
+/// on the obstacle shape: any space that can sample a candidate point and
+/// answer segment collision queries can plug in. [`World`] is the bundled
+/// implementation.
+pub trait RrtSpace {
+    /// A uniform random point inside the bounds of the space.
+    fn sample(&self, rng: &mut CuRng) -> Point2;
+
+    /// True when the whole segment `a`-`b` is collision free.
+    fn is_free_segment(&self, a: Point2, b: Point2) -> bool;
 
     /// The RRT* radius constant of Karaman and Frazzoli:
-    /// `gamma* = 2 * (1 + 1/d)^(1/d) * (free_area / zeta_d)^(1/d)`, here with
-    /// `d = 2` and `zeta_2 = pi`.
+    /// `gamma* = 2 * (1 + 1/d)^(1/d) * (free_measure / zeta_d)^(1/d)`.
     ///
     /// A smaller constant shrinks the rewiring neighborhood below what
     /// asymptotic optimality needs, and the planner degrades toward plain RRT
     /// as the tree grows.
-    pub fn rrt_star_gamma(&self) -> f32 {
-        2.0 * 1.5f32.sqrt() * (self.free_area() / core::f32::consts::PI).sqrt()
+    fn rrt_star_gamma(&self) -> Length;
+}
+
+impl RrtSpace for World {
+    fn sample(&self, rng: &mut CuRng) -> Point2 {
+        Point2::new(
+            rng.random::<f32>() * self.width.raw(),
+            rng.random::<f32>() * self.height.raw(),
+        )
+    }
+
+    fn is_free_segment(&self, a: Point2, b: Point2) -> bool {
+        World::is_free_segment(self, a, b)
+    }
+
+    /// The 2D instance of the constant: `d = 2` and `zeta_2 = pi`.
+    fn rrt_star_gamma(&self) -> Length {
+        Length::new::<meter>(
+            2.0 * 1.5f32.sqrt() * (self.free_area().raw() / core::f32::consts::PI).sqrt(),
+        )
     }
 }
 
@@ -185,7 +228,7 @@ pub struct RrtParams {
     /// A node this close to the goal closes a path.
     pub goal_threshold: f32,
     /// Gamma of the RRT* rewiring radius `gamma * sqrt(ln n / n)`. `0.0`
-    /// derives it from the world through [`World::rrt_star_gamma`], which is
+    /// derives it from the space through [`RrtSpace::rrt_star_gamma`], which is
     /// the value RRT* needs to converge to the optimum.
     pub gamma: f32,
     /// Branch-and-bound prune every N iterations; 0 disables pruning.
@@ -207,39 +250,8 @@ impl Default for RrtParams {
     }
 }
 
-/// xorshift64*, so a given seed always replays the same tree.
-#[derive(Debug, Clone, Reflect)]
-pub struct Rng(u64);
-
-impl Rng {
-    pub fn new(seed: u64) -> Self {
-        // splitmix64 finalizer: consecutive seeds must not start on neighboring
-        // states, otherwise consecutive jobs explore almost the same tree.
-        let mut state = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
-        state = (state ^ (state >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-        state = (state ^ (state >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-        state ^= state >> 31;
-        // xorshift64* must never start at zero.
-        Self(if state == 0 { 1 } else { state })
-    }
-
-    fn next_u64(&mut self) -> u64 {
-        let mut x = self.0;
-        x ^= x >> 12;
-        x ^= x << 25;
-        x ^= x >> 27;
-        self.0 = x;
-        x.wrapping_mul(0x2545_F491_4F6C_DD1D)
-    }
-
-    /// Uniform in `[0.0, 1.0)`.
-    pub fn next_f32(&mut self) -> f32 {
-        (self.next_u64() >> 40) as f32 / (1u32 << 24) as f32
-    }
-}
-
 /// One vertex of the tree.
-#[derive(Debug, Clone, Reflect)]
+#[derive(Debug, Clone)]
 struct TreeNode {
     pos: Point2,
     /// `None` for the root only.
@@ -249,16 +261,17 @@ struct TreeNode {
     children: Vec<u32>,
 }
 
-/// An RRT* search for one start/goal pair.
+/// An RRT* search for one start/goal pair over a space `S`.
 ///
 /// The tree only ever improves: `best_cost` is monotone non-increasing over
 /// iterations, which is what makes the algorithm a good anytime task.
-#[derive(Debug, Reflect)]
-pub struct RrtStar {
-    world: World,
+#[derive(Debug)]
+pub struct RrtStar<S: RrtSpace = World> {
+    space: S,
     params: RrtParams,
-    /// The rewiring gamma in effect for the current job: the configured one,
-    /// or the one derived from the job's world when the config left it at 0.
+    /// The rewiring gamma in effect for the current job, in meters: the
+    /// configured one, or the one derived from the job's space when the
+    /// config left it at 0.
     gamma: f32,
     start: Point2,
     goal: Point2,
@@ -268,19 +281,19 @@ pub struct RrtStar {
     /// Cost of the best path found so far, infinite until one is found.
     best_cost: f32,
     iterations: u32,
-    rng: Rng,
+    rng: CuRng,
     /// Reused between iterations to keep the search allocation-free.
     scratch_near: Vec<u32>,
     scratch_stack: Vec<u32>,
 }
 
-impl RrtStar {
+impl<S: RrtSpace> RrtStar<S> {
     /// Starts a search rooted at `start`. An unreachable or blocked `start`
     /// simply never grows a tree; the caller sees "no path" and the anytime
     /// quality floor drops the result.
-    pub fn new(world: &World, params: RrtParams, start: Point2, goal: Point2, seed: u64) -> Self {
+    pub fn new(space: S, params: RrtParams, start: Point2, goal: Point2, seed: u64) -> Self {
         let mut planner = Self {
-            world: world.clone(),
+            space,
             params,
             gamma: 0.0,
             start,
@@ -289,24 +302,28 @@ impl RrtStar {
             best_goal: None,
             best_cost: f32::INFINITY,
             iterations: 0,
-            rng: Rng::new(seed),
+            rng: CuRng::from_seed(seed),
             scratch_near: Vec::new(),
             scratch_stack: Vec::new(),
         };
-        planner.reset(world, start, goal, seed);
+        planner.restart(start, goal, seed);
         planner
     }
 
     /// Restarts the search on a new problem, keeping the capacity the previous
     /// job grew: after the first job the planner asks the allocator for much
     /// less.
-    pub fn reset(&mut self, world: &World, start: Point2, goal: Point2, seed: u64) {
-        self.world = world.clone();
+    pub fn reset(&mut self, space: S, start: Point2, goal: Point2, seed: u64) {
+        self.space = space;
+        self.restart(start, goal, seed);
+    }
+
+    fn restart(&mut self, start: Point2, goal: Point2, seed: u64) {
         // The map can change between jobs, so a derived gamma must follow it.
         self.gamma = if self.params.gamma > 0.0 {
             self.params.gamma
         } else {
-            world.rrt_star_gamma()
+            self.space.rrt_star_gamma().raw()
         };
         self.start = start;
         self.goal = goal;
@@ -320,7 +337,7 @@ impl RrtStar {
         self.best_goal = None;
         self.best_cost = f32::INFINITY;
         self.iterations = 0;
-        self.rng = Rng::new(seed);
+        self.rng = CuRng::from_seed(seed);
     }
 
     /// Runs one bounded block of `iterations` RRT* iterations.
@@ -440,7 +457,7 @@ impl RrtStar {
             // the scan only looks for something further.
             let mut next = at + 1;
             for candidate in (at + 2)..chain.len() {
-                if self.world.is_free_segment(chain[at], chain[candidate]) {
+                if self.space.is_free_segment(chain[at], chain[candidate]) {
                     next = candidate;
                 }
             }
@@ -455,7 +472,7 @@ impl RrtStar {
         let nearest = self.nearest(sample);
         let from = self.tree[nearest as usize].pos;
         let new_pos = steer(from, sample, self.params.step_size);
-        if !self.world.is_free_segment(from, new_pos) {
+        if !self.space.is_free_segment(from, new_pos) {
             return;
         }
 
@@ -474,7 +491,7 @@ impl RrtStar {
         for &index in near.iter() {
             let candidate = &self.tree[index as usize];
             let candidate_cost = candidate.cost + candidate.pos.distance(new_pos);
-            if candidate_cost < cost && self.world.is_free_segment(candidate.pos, new_pos) {
+            if candidate_cost < cost && self.space.is_free_segment(candidate.pos, new_pos) {
                 parent = index;
                 cost = candidate_cost;
             }
@@ -501,7 +518,7 @@ impl RrtStar {
             let rewired_cost = cost + neighbor_pos.distance(new_pos);
             if rewired_cost < neighbor_cost
                 && !self.is_ancestor(index, new_index)
-                && self.world.is_free_segment(new_pos, neighbor_pos)
+                && self.space.is_free_segment(new_pos, neighbor_pos)
             {
                 self.reparent(index, new_index, rewired_cost);
             }
@@ -511,7 +528,7 @@ impl RrtStar {
         // Does the new node close a better path?
         let to_goal = new_pos.distance(self.goal);
         if to_goal <= self.params.goal_threshold
-            && self.world.is_free_segment(new_pos, self.goal)
+            && self.space.is_free_segment(new_pos, self.goal)
             && cost + to_goal < self.best_cost
         {
             self.best_cost = cost + to_goal;
@@ -524,15 +541,12 @@ impl RrtStar {
         }
     }
 
-    /// A random point of the world, biased toward the goal.
+    /// A random point of the space, biased toward the goal.
     fn sample(&mut self) -> Point2 {
-        if self.rng.next_f32() < self.params.goal_bias {
+        if self.rng.random::<f32>() < self.params.goal_bias {
             return self.goal;
         }
-        Point2::new(
-            self.rng.next_f32() * self.world.width,
-            self.rng.next_f32() * self.world.height,
-        )
+        self.space.sample(&mut self.rng)
     }
 
     /// Index of the tree node closest to `point`. Linear on purpose: a flat
@@ -682,14 +696,16 @@ mod tests {
     const GOAL: Point2 = Point2::new(9.5, 9.5);
 
     fn planner(seed: u64) -> RrtStar {
-        RrtStar::new(&World::depot(), RrtParams::default(), START, GOAL, seed)
+        RrtStar::new(World::depot(), RrtParams::default(), START, GOAL, seed)
     }
 
     #[test]
     fn world_rejects_too_many_obstacles() {
-        let too_many = [Obstacle::new(Point2::new(1.0, 1.0), 0.1); MAX_OBSTACLES + 1];
-        assert!(World::new(10.0, 10.0, &too_many).is_err());
-        assert!(World::new(10.0, 10.0, &too_many[..MAX_OBSTACLES]).is_ok());
+        let radius = Length::new::<meter>(0.1);
+        let side = Length::new::<meter>(10.0);
+        let too_many = [Obstacle::new(Point2::new(1.0, 1.0), radius); MAX_OBSTACLES + 1];
+        assert!(World::new(side, side, &too_many).is_err());
+        assert!(World::new(side, side, &too_many[..MAX_OBSTACLES]).is_ok());
     }
 
     #[test]
@@ -735,10 +751,10 @@ mod tests {
     #[test]
     fn published_path_is_valid_at_every_stop_point() {
         let world = World::depot();
-        let derived = world.rrt_star_gamma();
+        let derived = world.rrt_star_gamma().raw();
         assert!(
             (12.0..13.0).contains(&derived),
-            "gamma for the depot map should be near 12.4, got {derived}"
+            "gamma for the depot map should be near 12.4 m, got {derived}"
         );
 
         let mut longest_tree_path = 0;
@@ -749,7 +765,7 @@ mod tests {
                 gamma: [0.0, 3.0][index],
                 ..Default::default()
             };
-            let mut planner = RrtStar::new(&World::depot(), params, START, GOAL, seed);
+            let mut planner = RrtStar::new(World::depot(), params, START, GOAL, seed);
             planner.grow(400);
             for _ in 0..24 {
                 planner.grow(256);
@@ -795,7 +811,7 @@ mod tests {
     /// never NaN from the zero-by-zero ratio.
     #[test]
     fn degenerate_job_reports_full_quality() {
-        let mut planner = RrtStar::new(&World::depot(), RrtParams::default(), START, START, 3);
+        let mut planner = RrtStar::new(World::depot(), RrtParams::default(), START, START, 3);
         planner.grow(400);
         assert!(planner.has_solution());
         assert_eq!(planner.quality(), 1.0);

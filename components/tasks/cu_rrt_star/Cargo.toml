@@ -19,6 +19,7 @@ environments = ["host"]
 
 [dependencies]
 bincode = { workspace = true }
+cu-rng = { workspace = true }
 cu29 = { workspace = true }
 serde = { workspace = true }
 

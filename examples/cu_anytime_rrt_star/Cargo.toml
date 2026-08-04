@@ -15,6 +15,7 @@ publish = false
 
 [dependencies]
 bincode = { workspace = true }
+cu-rng = { workspace = true }
 cu-rrt-star = { workspace = true }
 cu29 = { workspace = true }
 rerun = { workspace = true }

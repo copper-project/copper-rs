@@ -41,13 +41,12 @@ const MAX_TRAIL: usize = 2048;
 /// Each copperlist it advances along the newest published path, then asks for
 /// a fresh plan from wherever it is now. When it reaches the current patrol
 /// goal it picks the next one. While no path is published - the first cycle,
-/// or a job under the quality floor - it holds position and retries with a
-/// new seed.
+/// or a job under the quality floor - it holds position and retries; the
+/// planner runs every job on a fresh stream of its RNG resource.
 #[derive(Reflect)]
 pub struct NavSim {
     pose: Point2,
     goal_index: u32,
-    seed: u64,
     speed_mps: f32,
     goal_threshold: f32,
     #[reflect(ignore)]
@@ -57,14 +56,12 @@ pub struct NavSim {
 impl Freezable for NavSim {
     fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         Encode::encode(&self.pose, encoder)?;
-        Encode::encode(&self.goal_index, encoder)?;
-        Encode::encode(&self.seed, encoder)
+        Encode::encode(&self.goal_index, encoder)
     }
 
     fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
         self.pose = Decode::decode(decoder)?;
         self.goal_index = Decode::decode(decoder)?;
-        self.seed = Decode::decode(decoder)?;
         // The clock anchor is not part of the snapshot: a stale one would turn
         // the whole replay gap into one huge dt.
         self.last_now = None;
@@ -103,13 +100,9 @@ impl CuSrcTask for NavSim {
     type Output<'m> = output_msg!(PlanRequest);
 
     fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
-        let mut seed = 1u64;
         let mut speed_mps = 1.5f32;
         let mut goal_threshold = 0.3f32;
         if let Some(config) = config {
-            if let Some(value) = config.get::<u32>("seed")? {
-                seed = value as u64;
-            }
             if let Some(value) = config.get::<f32>("speed_mps")? {
                 speed_mps = value;
             }
@@ -120,7 +113,6 @@ impl CuSrcTask for NavSim {
         Ok(Self {
             pose: START,
             goal_index: 0,
-            seed,
             speed_mps,
             goal_threshold,
             last_now: None,
@@ -149,12 +141,10 @@ impl CuSrcTask for NavSim {
             *LATEST_PATH.lock().expect("path poisoned") = None;
         }
 
-        self.seed = self.seed.wrapping_add(1);
         new_msg.set_payload(PlanRequest {
             world: World::depot(),
             start: self.pose,
             goal: PATROL[self.goal_index as usize],
-            seed: self.seed,
         });
         new_msg.tov = Tov::Time(now);
         Ok(())
@@ -253,7 +243,7 @@ impl CuSinkTask for RerunViewer {
 
         // The same quality definition as the planner: straight line over cost.
         let quality = path_msg.payload().map_or(0.0, |path| {
-            (request.start.distance(request.goal) / path.cost) as f64
+            (request.start.distance(request.goal) / path.cost.raw()) as f64
         });
         log(&self.rec, "curves/quality", &Scalars::single(quality))?;
         let iterations = path_msg
@@ -283,7 +273,7 @@ fn log(rec: &RecordingStream, path: &str, entity: &impl rerun::AsComponents) -> 
 
 /// The static part of the scene: the world bounds and the obstacles.
 fn log_world(rec: &RecordingStream, world: &World) -> CuResult<()> {
-    let (w, h) = (world.width, world.height);
+    let (w, h) = (world.width.raw(), world.height.raw());
     rec.log_static(
         "world/bounds",
         &LineStrips2D::new([[(0.0, 0.0), (w, 0.0), (w, h), (0.0, h), (0.0, 0.0)]])
@@ -295,7 +285,11 @@ fn log_world(rec: &RecordingStream, world: &World) -> CuResult<()> {
     rec.log_static(
         "world/obstacles",
         &Points2D::new(obstacles.iter().map(|o| (o.center.x, o.center.y)))
-            .with_radii(obstacles.iter().map(|o| Radius::new_scene_units(o.radius)))
+            .with_radii(
+                obstacles
+                    .iter()
+                    .map(|o| Radius::new_scene_units(o.radius.raw())),
+            )
             .with_colors([Color::from([100, 100, 100])]),
     )
     .map_err(|e| CuError::new_with_cause("Failed to log the obstacles", e))

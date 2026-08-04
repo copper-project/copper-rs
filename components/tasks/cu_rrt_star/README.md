@@ -9,32 +9,44 @@ refinement quanta run.
 ### Input and output
 
 - Input: `cu_rrt_star::PlanRequest` — the world (up to `MAX_OBSTACLES` (16)
-  round obstacles in a rectangle), start, goal and the RNG seed of the job.
-  The map travels with the job: the planner has no map of its own, so the
-  source may change the map between jobs.
+  round obstacles in a rectangle), start and goal. The map travels with the
+  job: the planner has no map of its own, so the source may change the map
+  between jobs. Internally the algorithm only sees a sampling and collision
+  trait, so the round-obstacle world is one implementation, not a mandate.
 - Output: `cu_rrt_star::PlanPath` — up to `MAX_WAYPOINTS` (32) waypoints.
   Every consecutive pair of waypoints is collision free, so the path can be
   driven as published, whichever stop point the policy picked. `cost` is the
   RRT* tree path cost, an upper bound on the distance actually driven.
+- Distances and costs are `cu29-units` lengths in meters; the quality is a
+  `Ratio`.
 
 ### Usage
 
+The planner draws its randomness from a `cu_rng::CuRngBundle` resource, so
+the node needs a resource and a binding:
+
 ```ron
-(
-    id: "planner",
-    type: "cu_rrt_star::RrtStarPlanner",
-    config: {
-        "base_iterations": 400,
-        "block_iterations": 256,
-        "gamma": 0.0,
-    },
-    anytime: (
-        max_refines: 16,
-        time_budget_ms: 30.0,
-        max_stall: 4,
-        quality_floor: 0.05,
+resources: [
+    ( id: "planner_rng", provider: "cu_rng::CuRngBundle", config: {"seed": 1} ),
+],
+tasks: [
+    (
+        id: "planner",
+        type: "cu_rrt_star::RrtStarPlanner",
+        resources: { "rng": "planner_rng.rng" },
+        config: {
+            "base_iterations": 400,
+            "block_iterations": 256,
+            "gamma": 0.0,
+        },
+        anytime: (
+            max_refines: 16,
+            time_budget_ms: 30.0,
+            max_stall: 4,
+            quality_floor: 0.05,
+        ),
     ),
-),
+],
 ```
 
 ### Configuration
@@ -67,10 +79,11 @@ quality 1.0.
 
 ### Determinism and debugging
 
-The planner uses a seeded xorshift64* generator: the same seed replays the
-same tree. A remote debug session sees a small `PlannerDebugState` projection
-(iterations, tree size, best cost, published quality) instead of the whole
-tree.
+Randomness comes from the `CuRng` resource (ChaCha8): job N's stream is a
+pure function of the resource seed and N, and the job counter is part of the
+frozen task state, so replay reruns every job on the stream it used live. A
+remote debug session sees a small `PlannerDebugState` projection (iterations,
+tree size, best cost, published quality) instead of the whole tree.
 
 ### See also
 

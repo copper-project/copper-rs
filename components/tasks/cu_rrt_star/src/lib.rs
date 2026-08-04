@@ -11,9 +11,15 @@ mod rrt;
 pub use rrt::{MAX_OBSTACLES, MAX_WAYPOINTS, Obstacle, Point2, World};
 
 use crate::rrt::{RrtParams, RrtStar};
+use bincode::de::Decoder;
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
+use cu_rng::prelude::*;
 use cu29::cutask_anytime::{AnytimeStatus, CuAnytimeTask, Quality, quality_from_f32};
 use cu29::prelude::*;
+use cu29::units::si::f32::Length;
+use cu29::units::si::length::meter;
 use serde::{Deserialize, Serialize};
 
 /// Quality at which the path matches the straight-line lower bound: there is
@@ -21,14 +27,12 @@ use serde::{Deserialize, Serialize};
 const CONVERGED_QUALITY: f32 = 0.999;
 
 /// One planning problem. The map travels with the job, so the source owns it
-/// and may change it between jobs. A different seed per job makes each job a
-/// fresh RRT* run rather than a replay of the previous one.
+/// and may change it between jobs.
 #[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
 pub struct PlanRequest {
     pub world: World,
     pub start: Point2,
     pub goal: Point2,
-    pub seed: u64,
 }
 
 /// The best path known when the refinement window closed.
@@ -43,7 +47,7 @@ pub struct PlanPath {
     /// Cost of the RRT* tree path, which is what the anytime quality scores.
     /// The published waypoints are a shortcut of it, so this is an upper bound
     /// on the distance actually driven.
-    pub cost: f32,
+    pub cost: Length,
     /// RRT* iterations spent on this path, base block included.
     pub iterations: u32,
 }
@@ -59,11 +63,16 @@ pub struct PlannerDebugState {
     pub tree_size: u32,
     /// Nodes on the best path before it is shortcut for publication.
     pub tree_path_len: u32,
-    /// Cost of the best path in the tree, `f32::INFINITY` while there is none.
-    pub best_cost: f32,
+    /// Cost of the best path in the tree, infinite while there is none.
+    pub best_cost: Length,
     /// Cost of the path currently in the output.
-    pub published_cost: f32,
-    pub published_quality: f32,
+    pub published_cost: Length,
+    pub published_quality: Quality,
+}
+
+mod planner_resources {
+    use super::*;
+    resources!({ rng => Owned<CuRng> });
 }
 
 /// An RRT* planner as an anytime task.
@@ -71,6 +80,10 @@ pub struct PlannerDebugState {
 /// `base()` runs the first block of iterations and publishes the first path it
 /// finds; each `refine()` runs one more block and republishes only when the
 /// path got shorter. How many blocks run is the policy's call, not the task's.
+///
+/// Randomness comes from a `cu_rng::CuRngBundle` resource: job N's stream is
+/// a pure function of the resource seed and N, so the same seed replays the
+/// same trees.
 #[derive(Reflect)]
 pub struct RrtStarPlanner {
     params: RrtParams,
@@ -78,7 +91,14 @@ pub struct RrtStarPlanner {
     base_iterations: u32,
     /// Iterations of one refinement quantum.
     block_iterations: u32,
+    /// One draw from the node's RNG resource, taken at construction; every
+    /// job's stream derives from it.
+    base_seed: u64,
+    /// Jobs started so far, part of the frozen state: replay reruns job N on
+    /// the stream job N used live.
+    job_counter: u64,
     /// The current job, `None` before the first `base()`.
+    #[reflect(ignore)]
     planner: Option<RrtStar>,
     /// Cost of the path currently in the output; infinite while none was
     /// published for this job.
@@ -86,9 +106,20 @@ pub struct RrtStarPlanner {
     published_quality: f32,
 }
 
-// All mutable state is per-job and re-initialized by `base()` at the start of
-// every copperlist, so there is nothing to snapshot for a foreground node.
-impl Freezable for RrtStarPlanner {}
+// The search state is per-job and re-initialized by `base()` at the start of
+// every copperlist; what must survive a keyframe is the seeding state.
+impl Freezable for RrtStarPlanner {
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&self.base_seed, encoder)?;
+        Encode::encode(&self.job_counter, encoder)
+    }
+
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        self.base_seed = Decode::decode(decoder)?;
+        self.job_counter = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 
 impl RrtStarPlanner {
     /// Commits the best path of the tree when it beats the published one, and
@@ -107,7 +138,7 @@ impl RrtStarPlanner {
                 output.set_payload(PlanPath {
                     waypoints,
                     len,
-                    cost: planner.best_cost(),
+                    cost: Length::new::<meter>(planner.best_cost()),
                     iterations: planner.iterations(),
                 });
                 self.published_cost = planner.best_cost();
@@ -124,9 +155,9 @@ impl RrtStarPlanner {
             iterations: planner.map_or(0, RrtStar::iterations),
             tree_size: planner.map_or(0, RrtStar::tree_size),
             tree_path_len: planner.map_or(0, |p| p.tree_path_len() as u32),
-            best_cost: planner.map_or(f32::INFINITY, RrtStar::best_cost),
-            published_cost: self.published_cost,
-            published_quality: self.published_quality,
+            best_cost: Length::new::<meter>(planner.map_or(f32::INFINITY, RrtStar::best_cost)),
+            published_cost: Length::new::<meter>(self.published_cost),
+            published_quality: quality_from_f32(self.published_quality),
         }
     }
 }
@@ -134,7 +165,7 @@ impl RrtStarPlanner {
 impl CuAnytimeTask for RrtStarPlanner {
     type Input<'m> = input_msg!(PlanRequest);
     type Output<'m> = output_msg!(PlanPath);
-    type Resources<'r> = ();
+    type Resources<'r> = planner_resources::Resources;
     type Quality = Quality;
 
     // The task struct holds a whole RRT* tree, up to `max_nodes` entries. The
@@ -152,7 +183,7 @@ impl CuAnytimeTask for RrtStarPlanner {
         f(&self.debug_state())
     }
 
-    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
+    fn new(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self> {
         let mut params = RrtParams::default();
         let mut base_iterations = 400u32;
         let mut block_iterations = 256u32;
@@ -182,10 +213,13 @@ impl CuAnytimeTask for RrtStarPlanner {
                 block_iterations = value;
             }
         }
+        let Owned(mut rng) = resources.rng;
         Ok(Self {
             params,
             base_iterations,
             block_iterations,
+            base_seed: rng.random::<u64>(),
+            job_counter: 0,
             planner: None,
             published_cost: f32::INFINITY,
             published_quality: 0.0,
@@ -207,18 +241,22 @@ impl CuAnytimeTask for RrtStarPlanner {
             self.published_quality = 0.0;
             return Ok(AnytimeStatus::Aborted);
         };
+        self.job_counter = self.job_counter.wrapping_add(1);
+        // ChaCha8 seeding decorrelates consecutive seed values, so a plain
+        // add is enough to give every job an independent stream.
+        let seed = self.base_seed.wrapping_add(self.job_counter);
         let planner = match self.planner.as_mut() {
             // Restart on the previous job's memory instead of a fresh tree.
             Some(planner) => {
-                planner.reset(&request.world, request.start, request.goal, request.seed);
+                planner.reset(request.world.clone(), request.start, request.goal, seed);
                 planner
             }
             None => self.planner.insert(RrtStar::new(
-                &request.world,
+                request.world.clone(),
                 self.params,
                 request.start,
                 request.goal,
-                request.seed,
+                seed,
             )),
         };
         planner.grow(self.base_iterations);
@@ -269,18 +307,24 @@ mod tests {
     const START: Point2 = Point2::new(0.5, 0.5);
     const GOAL: Point2 = Point2::new(9.5, 9.5);
 
+    /// The resource binding as the generated runtime would hand it over.
+    fn test_resources(seed: u64) -> planner_resources::Resources {
+        planner_resources::Resources {
+            rng: Owned(CuRng::from_seed(seed)),
+        }
+    }
+
     /// The anytime contract driven by hand: `base()` publishes a first path,
     /// every `refine()` leaves the output holding the best path so far, and
     /// the debug state tracks the job instead of exposing the whole tree.
     #[test]
     fn refinement_only_commits_improvements() {
         let ctx = CuContext::new_with_clock();
-        let mut task = RrtStarPlanner::new(None, ()).unwrap();
+        let mut task = RrtStarPlanner::new(None, test_resources(42)).unwrap();
         let input = CuMsg::new(Some(PlanRequest {
             world: World::depot(),
             start: START,
             goal: GOAL,
-            seed: 42,
         }));
         let mut output = CuMsg::new(None);
 
@@ -295,19 +339,19 @@ mod tests {
             }
             if let Some(path) = output.payload() {
                 assert!(
-                    path.cost <= best + 1e-4,
+                    path.cost.raw() <= best + 1e-4,
                     "the output regressed: {best} then {}",
-                    path.cost
+                    path.cost.raw()
                 );
-                best = path.cost;
+                best = path.cost.raw();
             }
         }
         assert!(output.payload().is_some(), "no path after 24 quanta");
 
         let state = task.debug_state();
-        assert_eq!(state.published_cost, best);
+        assert_eq!(state.published_cost.raw(), best);
         assert!(state.best_cost <= state.published_cost);
-        assert!(state.published_quality > 0.0);
+        assert!(state.published_quality.raw() > 0.0);
         assert!(state.iterations > 0 && state.tree_size > 0);
     }
 
@@ -316,12 +360,11 @@ mod tests {
     #[test]
     fn missing_request_skips_the_job() {
         let ctx = CuContext::new_with_clock();
-        let mut task = RrtStarPlanner::new(None, ()).unwrap();
+        let mut task = RrtStarPlanner::new(None, test_resources(42)).unwrap();
         let input = CuMsg::new(Some(PlanRequest {
             world: World::depot(),
             start: START,
             goal: GOAL,
-            seed: 42,
         }));
         let mut output = CuMsg::new(None);
 
@@ -336,7 +379,7 @@ mod tests {
         let status = task.base(&ctx, &empty, &mut output).unwrap();
         assert!(matches!(status, AnytimeStatus::Aborted));
         assert!(output.payload().is_none(), "the old path leaked");
-        assert_eq!(task.debug_state().published_quality, 0.0);
+        assert_eq!(task.debug_state().published_quality.raw(), 0.0);
     }
 
     /// A request with the start on the goal is solved by definition: `base()`
@@ -344,12 +387,11 @@ mod tests {
     #[test]
     fn start_on_goal_converges_immediately() {
         let ctx = CuContext::new_with_clock();
-        let mut task = RrtStarPlanner::new(None, ()).unwrap();
+        let mut task = RrtStarPlanner::new(None, test_resources(3)).unwrap();
         let input = CuMsg::new(Some(PlanRequest {
             world: World::depot(),
             start: START,
             goal: START,
-            seed: 3,
         }));
         let mut output = CuMsg::new(None);
 
@@ -357,6 +399,6 @@ mod tests {
         let status = task.base(&ctx, &input, &mut output).unwrap();
         assert!(matches!(status, AnytimeStatus::Converged(_)));
         assert!(output.payload().is_some(), "a trivial path is still a path");
-        assert_eq!(task.debug_state().published_quality, 1.0);
+        assert_eq!(task.debug_state().published_quality.raw(), 1.0);
     }
 }

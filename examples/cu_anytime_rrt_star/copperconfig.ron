@@ -1,17 +1,22 @@
 (
     runtime: (rate_target_hz: 20),
+    resources: [
+        (
+            id: "planner_rng",
+            provider: "cu_rng::CuRngBundle",
+            config: {"seed": 1},
+        ),
+    ],
     tasks: [
         (
             id: "nav",
             type: "tasks::NavSim",
-            config: {
-                "seed": 1,
-                "speed_mps": 1.5,
-            },
+            config: {"speed_mps": 1.5},
         ),
         (
             id: "planner",
             type: "cu_rrt_star::RrtStarPlanner",
+            resources: {"rng": "planner_rng.rng"},
             anytime: (
                 max_refines: 16,
                 time_budget_ms: 30.0,
