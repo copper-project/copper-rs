@@ -729,14 +729,24 @@ mod tests {
     ///
     /// A small `gamma` is included on purpose: it barely rewires, so its tree
     /// paths grow past [`MAX_WAYPOINTS`] and the shortcut is exercised rather
-    /// than skipped.
+    /// than skipped. The same sweep doubles as the gamma comparison: a gamma
+    /// below the value the free area implies shrinks the rewiring
+    /// neighborhood, and refinement then converges to a worse path.
     #[test]
     fn published_path_is_valid_at_every_stop_point() {
         let world = World::depot();
+        let derived = world.rrt_star_gamma();
+        assert!(
+            (12.0..13.0).contains(&derived),
+            "gamma for the depot map should be near 12.4, got {derived}"
+        );
+
         let mut longest_tree_path = 0;
-        for (seed, gamma) in (1..40u64).flat_map(|seed| [(seed, 0.0f32), (seed, 3.0)]) {
+        // Total refined cost over all seeds, per gamma: the derived one first.
+        let mut total_cost = [0.0f32; 2];
+        for (seed, index) in (1..40u64).flat_map(|seed| [(seed, 0usize), (seed, 1)]) {
             let params = RrtParams {
-                gamma,
+                gamma: [0.0, 3.0][index],
                 ..Default::default()
             };
             let mut planner = RrtStar::new(&World::depot(), params, START, GOAL, seed);
@@ -769,42 +779,14 @@ mod tests {
                     planner.best_cost()
                 );
             }
+            total_cost[index] += planner.best_cost();
         }
         assert!(
             longest_tree_path > MAX_WAYPOINTS,
             "the tree path never outgrew MAX_WAYPOINTS, so the shortcut was never exercised"
         );
-    }
-
-    /// A gamma below the value the free area implies shrinks the rewiring
-    /// neighborhood, and refinement then converges to a worse path.
-    #[test]
-    fn derived_gamma_beats_an_arbitrary_one() {
-        let world = World::depot();
-        let derived = world.rrt_star_gamma();
         assert!(
-            (12.0..13.0).contains(&derived),
-            "gamma for the depot map should be near 12.4, got {derived}"
-        );
-
-        let cost_at = |gamma: f32| {
-            let mut total = 0.0;
-            for seed in 1..40u64 {
-                let params = RrtParams {
-                    gamma,
-                    ..Default::default()
-                };
-                let mut planner = RrtStar::new(&World::depot(), params, START, GOAL, seed);
-                planner.grow(400);
-                for _ in 0..24 {
-                    planner.grow(256);
-                }
-                total += planner.best_cost();
-            }
-            total
-        };
-        assert!(
-            cost_at(0.0) < cost_at(3.0),
+            total_cost[0] < total_cost[1],
             "the derived gamma should refine to a shorter path than a small one"
         );
     }

@@ -12,11 +12,6 @@
         (
             id: "planner",
             type: "cu_rrt_star::RrtStarPlanner",
-            config: {
-                "base_iterations": 400,
-                "block_iterations": 256,
-                "gamma": 0.0,
-            },
             anytime: (
                 max_refines: 16,
                 time_budget_ms: 30.0,

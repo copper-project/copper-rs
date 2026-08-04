@@ -1,6 +1,6 @@
 //! The planner under two refinement policies, in a full application.
 //!
-//! Both planner nodes are the same task type with the same RRT* `config:`, so
+//! Both planner nodes are the same task type with the default RRT* config, so
 //! they run the same tree from the same seed. Only the `anytime:` policy
 //! differs:
 //!
@@ -11,8 +11,8 @@
 //!
 //! Because both nodes start from the same seed, the thorough tree is the quick
 //! tree plus more iterations, so its path is never longer - that is the anytime
-//! trade-off, measured. Keeping the two `config:` blocks identical is what
-//! makes the comparison valid.
+//! trade-off, measured. Keeping the planner config identical is what makes the
+//! comparison valid.
 
 use cu_rrt_star::{PlanPath, PlanRequest, Point2, World};
 use cu29::prelude::*;

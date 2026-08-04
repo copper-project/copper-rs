@@ -8,8 +8,9 @@
 
 mod rrt;
 
-pub use rrt::*;
+pub use rrt::{MAX_OBSTACLES, MAX_WAYPOINTS, Obstacle, Point2, World};
 
+use crate::rrt::{RrtParams, RrtStar};
 use bincode::{Decode, Encode};
 use cu29::cutask_anytime::{AnytimeStatus, CuAnytimeTask, Quality, quality_from_f32};
 use cu29::prelude::*;
@@ -45,7 +46,6 @@ pub struct PlanPath {
     pub cost: f32,
     /// RRT* iterations spent on this path, base block included.
     pub iterations: u32,
-    pub tree_size: u32,
 }
 
 /// What a remote debugger sees of a planner node: the progress of the job,
@@ -109,7 +109,6 @@ impl RrtStarPlanner {
                     len,
                     cost: planner.best_cost(),
                     iterations: planner.iterations(),
-                    tree_size: planner.tree_size(),
                 });
                 self.published_cost = planner.best_cost();
                 self.published_quality = planner.quality();

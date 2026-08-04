@@ -8,16 +8,6 @@
         (
             id: "quick_planner",
             type: "cu_rrt_star::RrtStarPlanner",
-            config: {
-                "base_iterations": 400,
-                "block_iterations": 256,
-                "step_size": 0.8,
-                "goal_bias": 0.05,
-                "goal_threshold": 0.5,
-                "gamma": 0.0,
-                "prune_interval": 512,
-                "max_nodes": 4000,
-            },
             anytime: (
                 max_refines: 2,
                 time_budget_ms: 50.0,
@@ -28,16 +18,6 @@
         (
             id: "thorough_planner",
             type: "cu_rrt_star::RrtStarPlanner",
-            config: {
-                "base_iterations": 400,
-                "block_iterations": 256,
-                "step_size": 0.8,
-                "goal_bias": 0.05,
-                "goal_threshold": 0.5,
-                "gamma": 0.0,
-                "prune_interval": 512,
-                "max_nodes": 4000,
-            },
             anytime: (
                 max_refines: 24,
                 time_budget_ms: 250.0,
