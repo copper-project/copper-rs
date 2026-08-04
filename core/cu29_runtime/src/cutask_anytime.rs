@@ -497,9 +497,10 @@ pub fn abort_at_base<O: CuMsgPayload>(
 /// quanta with, so the refinement loop lives here instead of in the emitted
 /// plan; a foreground node keeps its chunked steps and never uses this type.
 ///
-/// Every lifecycle call forwards to the task, but `CuAsyncTask` currently calls
-/// neither `preprocess` nor `postprocess` on what it wraps, so a backgrounded
-/// anytime task does not see them either.
+/// The runner drives the per-job hooks documented on [`CuAnytimeTask`] itself:
+/// `preprocess` right before the job and `postprocess` once it settles, both on
+/// the worker. Its own `CuTask` hook slots stay no-ops so a wrapper that one
+/// day forwards per-cycle hooks cannot double-call the task.
 #[doc(hidden)]
 #[derive(Reflect)]
 #[reflect(no_field_bounds, from_reflect = false, type_path = false)]
@@ -582,91 +583,107 @@ where
         self.task.start(ctx)
     }
 
-    fn preprocess(&mut self, ctx: &CuContext) -> CuResult<()> {
-        self.task.preprocess(ctx)
-    }
-
     fn process<'i, 'o>(
         &mut self,
         ctx: &CuContext,
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
-        let start = ctx.now();
-        let anchor = anchor_from_tov(input.tov, start);
-        if let Some(max_age) = P::MAX_AGE
-            && start >= anchor + max_age
-        {
-            skip_stale(output);
-            return Ok(());
-        }
-
-        // The job clock starts when this worker picks the job up, so queueing
-        // delay counts against the age limit above but not against the budget.
-        let mut job = match self.task.base(ctx, input, output)? {
-            AnytimeStatus::Improved(quality) => AnytimeJob::<_, P>::new(start, anchor, quality),
-            AnytimeStatus::Converged(quality) => {
-                AnytimeJob::<_, P>::new(start, anchor, quality).finish(
-                    ctx.now(),
-                    AnytimeStopCause::Converged,
-                    0,
-                    output,
-                );
-                return Ok(());
-            }
-            AnytimeStatus::Aborted => {
-                abort_at_base(start, ctx.now(), output);
-                return Ok(());
-            }
-        };
-
-        let mut ran = 0u32;
-        loop {
-            // One clock read per quantum, shared by check() and finish(); it is
-            // skipped entirely without a time knob, exactly as the foreground
-            // refine block does (CuTime subtraction saturates).
-            let now = if P::TIME_BUDGET.is_some() || P::MAX_AGE.is_some() {
-                ctx.now()
-            } else {
-                CuTime::default()
-            };
-            if let Some(cause) = job.check(now) {
-                job.finish(now, cause, ran, output);
-                return Ok(());
-            }
-            // An error surfaces at the next poll of the wrapper, like any other
-            // backgrounded task's.
-            let status = self.task.refine(ctx, output)?;
-            ran += 1;
-            match status {
-                AnytimeStatus::Improved(quality) => {
-                    job.record(quality);
-                    if let Some(max_refines) = P::MAX_REFINES
-                        && ran >= max_refines
-                    {
-                        job.finish(now, AnytimeStopCause::MaxRefines, ran, output);
-                        return Ok(());
-                    }
-                }
-                AnytimeStatus::Converged(quality) => {
-                    job.record(quality);
-                    job.finish(now, AnytimeStopCause::Converged, ran, output);
-                    return Ok(());
-                }
-                AnytimeStatus::Aborted => {
-                    job.finish(now, AnytimeStopCause::Aborted, ran, output);
-                    return Ok(());
-                }
-            }
-        }
-    }
-
-    fn postprocess(&mut self, ctx: &CuContext) -> CuResult<()> {
-        self.task.postprocess(ctx)
+        // The per-job bracket CuAnytimeTask documents; the worker has no
+        // copperlist bracket to hang the hooks on, so the runner drives them.
+        // Both run outside the job clock, as in the foreground placement.
+        self.task.preprocess(ctx)?;
+        let job = run_job::<T, I, O, P>(&mut self.task, ctx, input, output);
+        let post = self.task.postprocess(ctx);
+        job.and(post)
     }
 
     fn stop(&mut self, ctx: &CuContext) -> CuResult<()> {
         self.task.stop(ctx)
+    }
+}
+
+/// One whole job: the age check, `base()`, then refine quanta under `P` until
+/// a stop cause fires. Split out of `process` so the per-job hooks can bracket
+/// every exit path.
+fn run_job<T, I, O, P>(
+    task: &mut T,
+    ctx: &CuContext,
+    input: &CuMsg<I>,
+    output: &mut CuMsg<O>,
+) -> CuResult<()>
+where
+    T: for<'i, 'o> CuAnytimeTask<Input<'i> = CuMsg<I>, Output<'o> = CuMsg<O>>,
+    I: CuMsgPayload,
+    O: CuMsgPayload,
+    P: AnytimePolicy<T::Quality>,
+{
+    let start = ctx.now();
+    let anchor = anchor_from_tov(input.tov, start);
+    if let Some(max_age) = P::MAX_AGE
+        && start >= anchor + max_age
+    {
+        skip_stale(output);
+        return Ok(());
+    }
+
+    // The job clock starts when this worker picks the job up, so queueing
+    // delay counts against the age limit above but not against the budget.
+    let mut job = match task.base(ctx, input, output)? {
+        AnytimeStatus::Improved(quality) => AnytimeJob::<_, P>::new(start, anchor, quality),
+        AnytimeStatus::Converged(quality) => {
+            AnytimeJob::<_, P>::new(start, anchor, quality).finish(
+                ctx.now(),
+                AnytimeStopCause::Converged,
+                0,
+                output,
+            );
+            return Ok(());
+        }
+        AnytimeStatus::Aborted => {
+            abort_at_base(start, ctx.now(), output);
+            return Ok(());
+        }
+    };
+
+    let mut ran = 0u32;
+    loop {
+        // One clock read per quantum, shared by check() and finish(); it is
+        // skipped entirely without a time knob, exactly as the foreground
+        // refine block does (CuTime subtraction saturates).
+        let now = if P::TIME_BUDGET.is_some() || P::MAX_AGE.is_some() {
+            ctx.now()
+        } else {
+            CuTime::default()
+        };
+        if let Some(cause) = job.check(now) {
+            job.finish(now, cause, ran, output);
+            return Ok(());
+        }
+        // An error surfaces at the next poll of the wrapper, like any other
+        // backgrounded task's.
+        let status = task.refine(ctx, output)?;
+        ran += 1;
+        match status {
+            AnytimeStatus::Improved(quality) => {
+                job.record(quality);
+                if let Some(max_refines) = P::MAX_REFINES
+                    && ran >= max_refines
+                {
+                    job.finish(now, AnytimeStopCause::MaxRefines, ran, output);
+                    return Ok(());
+                }
+            }
+            AnytimeStatus::Converged(quality) => {
+                job.record(quality);
+                job.finish(now, AnytimeStopCause::Converged, ran, output);
+                return Ok(());
+            }
+            AnytimeStatus::Aborted => {
+                job.finish(now, AnytimeStopCause::Aborted, ran, output);
+                return Ok(());
+            }
+        }
     }
 }
 
@@ -676,6 +693,8 @@ mod tests {
     use crate::cutask::CuMsg;
     use crate::input_msg;
     use crate::output_msg;
+    use alloc::sync::Arc;
+    use core::sync::atomic::{AtomicU32, Ordering};
     use cu29_clock::RobotClockMock;
 
     fn q(v: f32) -> Quality {
@@ -1085,8 +1104,101 @@ mod tests {
         }
     }
 
+    /// Appends a digit per lifecycle call so per-job hook order reads back as
+    /// one number: 1 preprocess, 2 base, 3 refine, 4 postprocess.
+    #[derive(Reflect)]
+    #[reflect(no_field_bounds, from_reflect = false)]
+    struct HookOrderTask {
+        #[reflect(ignore)]
+        seq: Arc<AtomicU32>,
+    }
+
+    impl HookOrderTask {
+        fn tag(&self, digit: u32) {
+            let seq = self.seq.load(Ordering::SeqCst);
+            self.seq.store(seq * 10 + digit, Ordering::SeqCst);
+        }
+    }
+
+    impl Freezable for HookOrderTask {}
+
+    impl CuAnytimeTask for HookOrderTask {
+        type Input<'m> = input_msg!(u32);
+        type Output<'m> = output_msg!(u32);
+        type Resources<'r> = Arc<AtomicU32>;
+        type Quality = Quality;
+
+        fn new(_config: Option<&ComponentConfig>, seq: Arc<AtomicU32>) -> CuResult<Self> {
+            Ok(Self { seq })
+        }
+
+        fn preprocess(&mut self, _ctx: &CuContext) -> CuResult<()> {
+            self.tag(1);
+            Ok(())
+        }
+
+        fn base<'i, 'o>(
+            &mut self,
+            _ctx: &CuContext,
+            _input: &Self::Input<'i>,
+            output: &mut Self::Output<'o>,
+        ) -> CuResult<AnytimeStatus<Quality>> {
+            self.tag(2);
+            output.set_payload(0);
+            Ok(AnytimeStatus::Improved(q(0.5)))
+        }
+
+        fn refine<'o>(
+            &mut self,
+            _ctx: &CuContext,
+            _output: &mut Self::Output<'o>,
+        ) -> CuResult<AnytimeStatus<Quality>> {
+            self.tag(3);
+            Ok(AnytimeStatus::Converged(q(1.0)))
+        }
+
+        fn postprocess(&mut self, _ctx: &CuContext) -> CuResult<()> {
+            self.tag(4);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn runner_drives_the_per_job_hooks_in_order() {
+        let ctx = CuContext::new_mock_clock().0;
+        let seq = Arc::new(AtomicU32::new(0));
+        let mut runner: CuAnytimeRunner<HookOrderTask, NoKnobPolicy> =
+            CuAnytimeRunner::new(None, seq.clone()).unwrap();
+
+        process_job(&mut runner, &ctx, Tov::None);
+        assert_eq!(seq.load(Ordering::SeqCst), 1234, "pre, base, refine, post");
+
+        // The bracket repeats per job, not per run.
+        process_job(&mut runner, &ctx, Tov::None);
+        assert_eq!(seq.load(Ordering::SeqCst), 12_341_234);
+    }
+
+    #[test]
+    fn per_job_hooks_bracket_even_a_skipped_job() {
+        let (ctx, clock) = CuContext::new_mock_clock();
+        clock.set_value(CuDuration::from_millis(5).0);
+        let seq = Arc::new(AtomicU32::new(0));
+        let mut runner: CuAnytimeRunner<HookOrderTask, FullPolicy> =
+            CuAnytimeRunner::new(None, seq.clone()).unwrap();
+
+        // A 5 ms old input against a 2 ms horizon: no job runs, but the hooks
+        // still bracket it — the foreground per-cycle pair is unconditional too.
+        let output = process_job(&mut runner, &ctx, Tov::Time(CuTime::default()));
+        assert_eq!(output.payload(), None);
+        assert_eq!(seq.load(Ordering::SeqCst), 14, "pre, post only");
+    }
+
     /// Drives one job and returns the output the runner published.
-    fn run_job<T, P>(runner: &mut CuAnytimeRunner<T, P>, ctx: &CuContext, tov: Tov) -> CuMsg<u32>
+    fn process_job<T, P>(
+        runner: &mut CuAnytimeRunner<T, P>,
+        ctx: &CuContext,
+        tov: Tov,
+    ) -> CuMsg<u32>
     where
         T: for<'i, 'o> CuAnytimeTask<Input<'i> = CuMsg<u32>, Output<'o> = CuMsg<u32>>
             + Send
@@ -1107,7 +1219,7 @@ mod tests {
         let mut runner: CuAnytimeRunner<IncrementalSum, MaxRefinesPolicy> =
             CuAnytimeRunner::new(None, ()).unwrap();
 
-        let output = run_job(&mut runner, &ctx, Tov::None);
+        let output = process_job(&mut runner, &ctx, Tov::None);
         // Two quanta of a job needing three: stopped by the bound, not by the task.
         assert_eq!(output.payload(), Some(&2));
         assert_eq!(output.metadata.status_txt.0.as_str(), "any:2it q=0.67 max");
@@ -1121,7 +1233,7 @@ mod tests {
 
         // Three quanta reach the input, quality 1.0 >= the 0.9 target, so the
         // check before the fourth quantum stops the job.
-        let output = run_job(&mut runner, &ctx, Tov::None);
+        let output = process_job(&mut runner, &ctx, Tov::None);
         assert_eq!(output.payload(), Some(&3));
         assert_eq!(output.metadata.status_txt.0.as_str(), "any:3it q=1.00 tgt");
     }
@@ -1133,7 +1245,7 @@ mod tests {
             CuAnytimeRunner::new(None, clock).unwrap();
 
         // base() alone burns the 1 ms budget, so no quantum runs.
-        let output = run_job(&mut runner, &ctx, Tov::None);
+        let output = process_job(&mut runner, &ctx, Tov::None);
         assert_eq!(output.payload(), Some(&0));
         assert_eq!(output.metadata.status_txt.0.as_str(), "any:0it q=0.50 bdgt");
     }
@@ -1146,7 +1258,7 @@ mod tests {
             CuAnytimeRunner::new(None, ()).unwrap();
 
         // The input is 5 ms old against a 2 ms horizon: base() never runs.
-        let output = run_job(&mut runner, &ctx, Tov::Time(CuTime::default()));
+        let output = process_job(&mut runner, &ctx, Tov::Time(CuTime::default()));
         assert_eq!(output.payload(), None);
         assert_eq!(output.metadata.status_txt.0.as_str(), "any:0it stale!");
     }
@@ -1157,7 +1269,7 @@ mod tests {
         let mut runner: CuAnytimeRunner<AbortingTask, FullPolicy> =
             CuAnytimeRunner::new(None, ()).unwrap();
 
-        let output = run_job(&mut runner, &ctx, Tov::None);
+        let output = process_job(&mut runner, &ctx, Tov::None);
         assert_eq!(output.payload(), None);
         assert_eq!(output.metadata.status_txt.0.as_str(), "any:0it abort!");
     }
@@ -1170,7 +1282,7 @@ mod tests {
         let mut runner: CuAnytimeRunner<TickingTask, FloorPolicy> =
             CuAnytimeRunner::new(None, clock).unwrap();
 
-        let output = run_job(&mut runner, &ctx, Tov::None);
+        let output = process_job(&mut runner, &ctx, Tov::None);
         assert_eq!(output.payload(), None, "below the floor: nothing published");
         assert_eq!(
             output.metadata.status_txt.0.as_str(),
