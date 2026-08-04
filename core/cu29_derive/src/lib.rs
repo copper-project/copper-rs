@@ -2302,13 +2302,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     && !(sim_mode
                         && task_specs.cutypes[index] == CuTaskType::Source
                         && !task_specs.run_in_sim_flags[index]);
-                // What the wrapper wraps: the anytime runner for an anytime
-                // node, the declared task otherwise.
-                let inner_task_type = &background_inner_type(
-                    &task_specs.sim_task_types[index],
-                    task_specs.ids[index].as_str(),
-                    background && task_specs.anytime_configs[index].is_some(),
-                );
+                let inner_task_type = &task_specs.inner_task_types[index];
                 match task_specs.cutypes[index] {
                     CuTaskType::Source => {
                         if background {
@@ -2412,11 +2406,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     task_specs.type_names[index], index
                 );
                 let mapping_ref = task_resource_mappings.refs[index].clone();
-                let inner_task_type = &background_inner_type(
-                    &task_specs.sim_task_types[index],
-                    task_specs.ids[index].as_str(),
-                    *background && task_specs.anytime_configs[index].is_some(),
-                );
+                let inner_task_type = &task_specs.inner_task_types[index];
                 match task_specs.cutypes[index] {
                     CuTaskType::Source => {
                         if *background {
@@ -6127,20 +6117,6 @@ fn task_trait_for_specs(task_specs: &CuTaskSpecSet, index: usize) -> proc_macro2
     }
 }
 
-/// The task a backgrounded node hands to `CuAsyncTask`: an anytime node goes
-/// through [`CuAnytimeRunner`], which turns one whole job — age check, `base()`,
-/// refine quanta under the policy — into a single `CuTask::process` call.
-///
-/// `policy` names the node's `AnytimePolicy` ZST, emitted in the mission module
-/// alongside every type built here.
-fn background_inner_type(task_type: &Type, task_id: &str, is_anytime: bool) -> Type {
-    if !is_anytime {
-        return task_type.clone();
-    }
-    let policy_ident = anytime_policy_ident(task_id);
-    parse_quote!(cu29::cutask_anytime::CuAnytimeRunner<#task_type, #policy_ident>)
-}
-
 fn task_output_payload_type(
     graph: &CuGraph,
     node: &Node,
@@ -6186,6 +6162,10 @@ struct CuTaskSpecSet {
     /// are baked into a per-node `AnytimePolicy` ZST and the emitted
     /// base/refine steps.
     pub anytime_configs: Vec<Option<AnytimeConfig>>,
+    /// The task type inside the optional async wrapper: the anytime runner
+    /// for a background anytime node, the declared task type for everything
+    /// else — including every foreground task, where nothing wraps it.
+    pub inner_task_types: Vec<Type>,
     pub logging_enabled: Vec<bool>,
     pub type_names: Vec<String>,
     pub task_types: Vec<Type>,
@@ -6272,29 +6252,39 @@ impl CuTaskSpecSet {
             })
             .collect();
 
+        // A background anytime node is handed to `CuAsyncTask` wrapped in the
+        // runner, which turns one whole job into a single `process` call.
+        let inner_task_types: Vec<Type> = parsed_task_types
+            .iter()
+            .zip(ids.iter())
+            .zip(background_flags.iter())
+            .zip(anytime_configs.iter())
+            .map(|(((task_type, id), &background), anytime)| {
+                if background && anytime.is_some() {
+                    let policy_ident = anytime_policy_ident(id.as_str());
+                    parse_quote!(cu29::cutask_anytime::CuAnytimeRunner<#task_type, #policy_ident>)
+                } else {
+                    task_type.clone()
+                }
+            })
+            .collect();
+
         let task_types = parsed_task_types
             .iter()
             .zip(type_names.iter())
             .zip(cutypes.iter())
             .zip(background_flags.iter())
             .zip(output_types.iter())
-            .enumerate()
-            .map(|(index, ((((name_type, name), cutype), &background), output_type))| {
+            .zip(inner_task_types.iter())
+            .map(|(((((name_type, name), cutype), &background), output_type), inner_type)| {
                 if background {
-                    // A foreground anytime node keeps its raw type in the tuple;
-                    // a backgrounded one is driven through the anytime runner.
-                    let name_type = &background_inner_type(
-                        name_type,
-                        ids[index].as_str(),
-                        anytime_configs[index].is_some(),
-                    );
                     if let Some(output_type) = output_type {
                         match cutype {
                             CuTaskType::Source => {
-                                parse_quote!(CuAsyncSrcTask<#name_type, #output_type>)
+                                parse_quote!(CuAsyncSrcTask<#inner_type, #output_type>)
                             }
                             CuTaskType::Regular => {
-                                parse_quote!(CuAsyncTask<#name_type, #output_type>)
+                                parse_quote!(CuAsyncTask<#inner_type, #output_type>)
                             }
                             CuTaskType::Sink => {
                                 panic!("CuSinkTask {name} cannot be a background task, it should be a regular task.");
@@ -6318,21 +6308,16 @@ impl CuTaskSpecSet {
             .zip(cutypes.iter())
             .zip(background_flags.iter())
             .zip(output_types.iter())
-            .enumerate()
-            .map(|(index, ((((name_type, name), cutype), &background), output_type))| {
+            .zip(inner_task_types.iter())
+            .map(|(((((name_type, name), cutype), &background), output_type), inner_type)| {
                 if background {
-                    let name_type = &background_inner_type(
-                        name_type,
-                        ids[index].as_str(),
-                        anytime_configs[index].is_some(),
-                    );
                     if let Some(output_type) = output_type {
                         match cutype {
                             CuTaskType::Source => {
-                                parse_quote!(CuAsyncSrcTask::<#name_type, #output_type>)
+                                parse_quote!(CuAsyncSrcTask::<#inner_type, #output_type>)
                             }
                             CuTaskType::Regular => {
-                                parse_quote!(CuAsyncTask::<#name_type, #output_type>)
+                                parse_quote!(CuAsyncTask::<#inner_type, #output_type>)
                             }
                             CuTaskType::Sink => {
                                 panic!("CuSinkTask {name} cannot be a background task, it should be a regular task.");
@@ -6368,6 +6353,7 @@ impl CuTaskSpecSet {
             background_flags,
             background_pools,
             anytime_configs,
+            inner_task_types,
             logging_enabled,
             type_names,
             task_types,
@@ -7850,15 +7836,7 @@ fn build_task_resource_mappings(
 
         // A backgrounded task binds the resources of what the wrapper wraps —
         // the runner for an anytime node, the task itself otherwise.
-        let binding_task_type = if task_specs.background_flags[idx] {
-            background_inner_type(
-                &task_specs.sim_task_types[idx],
-                task_specs.ids[idx].as_str(),
-                task_specs.anytime_configs[idx].is_some(),
-            )
-        } else {
-            task_specs.task_types[idx].clone()
-        };
+        let binding_task_type = &task_specs.inner_task_types[idx];
 
         let binding_trait = task_trait_for_specs(task_specs, idx);
 
@@ -10066,11 +10044,7 @@ fn runtime_task_type_for_index(
         CuTaskType::Regular => {
             if background {
                 if let Some(out_ty) = output_type {
-                    let inner = background_inner_type(
-                        declared_task_type,
-                        task_id,
-                        task_specs.anytime_configs[index].is_some(),
-                    );
+                    let inner = &task_specs.inner_task_types[index];
                     parse_quote!(CuAsyncTask<#inner, #out_ty>)
                 } else {
                     panic!("{task_id}: If a task is background, it has to have an output");
