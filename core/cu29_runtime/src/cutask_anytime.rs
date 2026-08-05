@@ -472,7 +472,8 @@ pub fn skip_stale<O: CuMsgPayload>(output: &mut CuMsg<O>) -> AnytimeOutcome {
 
 /// Terminal outcome when `base()` returns `Aborted`: no quality was reported
 /// so the floor gate does not apply; `published` reflects whether the task
-/// left a payload it still vouches for. `t0`/`now` bracket the base computation.
+/// left a payload it still vouches for. Both placements reuse the job's single
+/// clock read for `t0` and `now`, so the debug-only elapsed reads zero.
 #[doc(hidden)]
 pub fn abort_at_base<O: CuMsgPayload>(
     t0: CuTime,
@@ -618,8 +619,20 @@ where
     O: CuMsgPayload,
     P: AnytimePolicy<T::Quality>,
 {
-    let start = ctx.now();
-    let anchor = anchor_from_tov(input.tov, start);
+    // One clock read per job, skipped without a time knob exactly as the
+    // foreground base block does; the terminal base paths below reuse it, so
+    // a terminal base pays no second read (`now` only feeds the debug-only
+    // elapsed there).
+    let start = if P::TIME_BUDGET.is_some() || P::MAX_AGE.is_some() {
+        ctx.now()
+    } else {
+        CuTime::default()
+    };
+    let anchor = if P::MAX_AGE.is_some() {
+        anchor_from_tov(input.tov, start)
+    } else {
+        start
+    };
     if let Some(max_age) = P::MAX_AGE
         && start >= anchor + max_age
     {
@@ -633,7 +646,7 @@ where
         AnytimeStatus::Improved(quality) => AnytimeJob::<_, P>::new(start, anchor, quality),
         AnytimeStatus::Converged(quality) => {
             AnytimeJob::<_, P>::new(start, anchor, quality).finish(
-                ctx.now(),
+                start,
                 AnytimeStopCause::Converged,
                 0,
                 output,
@@ -641,7 +654,7 @@ where
             return Ok(());
         }
         AnytimeStatus::Aborted => {
-            abort_at_base(start, ctx.now(), output);
+            abort_at_base(start, start, output);
             return Ok(());
         }
     };
