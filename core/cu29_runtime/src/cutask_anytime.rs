@@ -559,6 +559,8 @@ where
 impl<T, I, O, P> CuTask for CuAnytimeRunner<T, P>
 where
     T: for<'i, 'o> CuAnytimeTask<Input<'i> = CuMsg<I>, Output<'o> = CuMsg<O>>
+        + GetTypeRegistration
+        + TypePath
         + Send
         + Sync
         + 'static,
@@ -569,6 +571,29 @@ where
     type Resources<'r> = T::Resources<'r>;
     type Input<'m> = T::Input<'m>;
     type Output<'m> = T::Output<'m>;
+
+    // The runner's own fields are reflect-ignored, so its debug-state view
+    // forwards to the wrapped task; the runner adds no hidden state of its own.
+    fn register_debug_state_types(registry: &mut TypeRegistry)
+    where
+        Self: GetTypeRegistration + Sized,
+    {
+        T::register_debug_state_types(registry);
+    }
+
+    fn debug_state_type_path() -> &'static str
+    where
+        Self: TypePath + Sized,
+    {
+        T::debug_state_type_path()
+    }
+
+    fn with_debug_state<R>(&self, f: impl FnOnce(&dyn Reflect) -> R) -> R
+    where
+        Self: Sized,
+    {
+        self.task.with_debug_state(f)
+    }
 
     fn new(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
     where
@@ -1206,6 +1231,23 @@ mod tests {
         assert_eq!(seq.load(Ordering::SeqCst), 14, "pre, post only");
     }
 
+    #[test]
+    fn runner_debug_state_forwards_to_the_wrapped_task() {
+        let seq = Arc::new(AtomicU32::new(0));
+        let runner: CuAnytimeRunner<HookOrderTask, NoKnobPolicy> =
+            CuAnytimeRunner::new(None, seq).unwrap();
+
+        // The runner's own fields are reflect-ignored: its debug-state schema
+        // and view must be the wrapped task's, not the runner's.
+        assert_eq!(
+            <CuAnytimeRunner<HookOrderTask, NoKnobPolicy> as CuTask>::debug_state_type_path(),
+            HookOrderTask::type_path()
+        );
+        let task_addr = core::ptr::from_ref(&runner.task).cast::<()>();
+        let view_addr = runner.with_debug_state(|state| (state as *const dyn Reflect).cast::<()>());
+        assert_eq!(view_addr, task_addr);
+    }
+
     /// Drives one job and returns the output the runner published.
     fn process_job<T, P>(
         runner: &mut CuAnytimeRunner<T, P>,
@@ -1214,6 +1256,8 @@ mod tests {
     ) -> CuMsg<u32>
     where
         T: for<'i, 'o> CuAnytimeTask<Input<'i> = CuMsg<u32>, Output<'o> = CuMsg<u32>>
+            + GetTypeRegistration
+            + TypePath
             + Send
             + Sync
             + 'static,
