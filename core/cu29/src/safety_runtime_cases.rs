@@ -25,9 +25,7 @@ impl MatchingTasks for IntMsgs {
     }
 }
 
-impl CuListZeroedInit for IntMsgs {
-    fn init_zeroed(&mut self) {}
-}
+impl CuListZeroedInit for IntMsgs {}
 
 #[derive(Debug)]
 struct RecordingSyncWriter {

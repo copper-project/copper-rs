@@ -47,8 +47,6 @@ use cu29_log_runtime::log_debug_mode;
 #[allow(unused_imports)]
 use cu29_value::to_value;
 
-#[cfg(all(feature = "std", any(feature = "async-cl-io", feature = "parallel-rt")))]
-use alloc::alloc::{alloc_zeroed, handle_alloc_error};
 use alloc::boxed::Box;
 use alloc::collections::{BTreeSet, VecDeque};
 use alloc::format;
@@ -58,8 +56,6 @@ use bincode::enc::EncoderImpl;
 use bincode::enc::write::{SizeWriter, SliceWriter};
 use bincode::error::EncodeError;
 use bincode::{Decode, Encode};
-#[cfg(all(feature = "std", any(feature = "async-cl-io", feature = "parallel-rt")))]
-use core::alloc::Layout;
 use core::fmt::Result as FmtResult;
 use core::fmt::{Debug, Formatter};
 use core::marker::PhantomData;
@@ -610,17 +606,15 @@ fn allocate_zeroed_copperlist<P>() -> Box<CopperList<P>>
 where
     P: CopperListTuple + CuListZeroedInit,
 {
-    // SAFETY: We allocate zeroed memory and immediately initialize required fields.
-    let mut culist = unsafe {
-        let layout = Layout::new::<CopperList<P>>();
-        let ptr = alloc_zeroed(layout) as *mut CopperList<P>;
-        if ptr.is_null() {
-            handle_alloc_error(layout);
-        }
-        Box::from_raw(ptr)
-    };
-    culist.msgs.init_zeroed();
-    culist
+    let mut culist = Box::<CopperList<P>>::new_uninit();
+    let ptr = culist.as_mut_ptr();
+    // SAFETY: every CopperList field is initialized before the box is assumed initialized.
+    unsafe {
+        core::ptr::addr_of_mut!((*ptr).id).write(0);
+        core::ptr::addr_of_mut!((*ptr).state).write(CopperListState::Free);
+        P::init_uninit(core::ptr::addr_of_mut!((*ptr).msgs));
+        culist.assume_init()
+    }
 }
 
 #[cfg(all(feature = "std", feature = "parallel-rt"))]
@@ -2193,9 +2187,7 @@ mod tests {
         }
     }
 
-    impl CuListZeroedInit for Msgs {
-        fn init_zeroed(&mut self) {}
-    }
+    impl CuListZeroedInit for Msgs {}
 
     #[derive(Debug, Encode, Decode, Serialize, Deserialize, Default)]
     struct IntMsgs(i32);
@@ -2212,9 +2204,7 @@ mod tests {
         }
     }
 
-    impl CuListZeroedInit for IntMsgs {
-        fn init_zeroed(&mut self) {}
-    }
+    impl CuListZeroedInit for IntMsgs {}
 
     #[cfg(feature = "std")]
     fn tasks_instanciator(
