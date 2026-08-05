@@ -142,9 +142,12 @@ pub enum Command {
         /// Config file used to map outputs to edges
         #[arg(long, default_value = "copperconfig.ron")]
         config: PathBuf,
-        /// Mission id to use when reading the config
+        /// Mission id override; defaults to the mission recorded in the log
         #[arg(long)]
         mission: Option<String>,
+        /// Comma-separated Cargo features used by conditional config fragments
+        #[arg(long, value_delimiter = ',')]
+        features: Vec<String>,
     },
     /// Export copperlists to MCAP format (requires 'mcap' feature)
     #[cfg(feature = "mcap")]
@@ -295,8 +298,9 @@ where
             output,
             config,
             mission,
+            features,
         } => {
-            run_logstats::<P>(dl, output, config, mission)?;
+            run_logstats::<P>(&unifiedlog_base, dl, output, config, mission, &features)?;
         }
         #[cfg(feature = "mcap")]
         Command::ExportMcap {
@@ -412,8 +416,9 @@ where
             output,
             config,
             mission,
+            features,
         } => {
-            run_logstats::<P>(dl, output, config, mission)?;
+            run_logstats::<P>(&unifiedlog_base, dl, output, config, mission, &features)?;
         }
     }
 
@@ -421,10 +426,12 @@ where
 }
 
 fn run_logstats<P>(
+    unifiedlog_base: &Path,
     dl: UnifiedLoggerRead,
     output: PathBuf,
     config: PathBuf,
     mission: Option<String>,
+    features: &[String],
 ) -> CuResult<()>
 where
     P: CopperListTuple + CuPayloadRawBytes,
@@ -432,11 +439,41 @@ where
     let config_path = config
         .to_str()
         .ok_or_else(|| CuError::from("Config path is not valid UTF-8"))?;
-    let cfg = read_configuration(config_path)
+    let feature_refs = features.iter().map(String::as_str).collect::<Vec<_>>();
+    let cfg = cu29::config::read_configuration_with_features(config_path, &feature_refs)
         .map_err(|e| CuError::new_with_cause("Failed to read configuration", e))?;
+    let logged_mission =
+        if mission.is_none() && matches!(&cfg.graphs, cu29::config::ConfigGraphs::Missions(_)) {
+            unified_log_mission(unifiedlog_base)?
+        } else {
+            None
+        };
+    let mission = resolve_logstats_mission(&cfg, mission, logged_mission);
     let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
     let stats = compute_logstats::<P>(reader, &cfg, mission.as_deref())?;
     write_logstats(&stats, &output)
+}
+
+fn resolve_logstats_mission(
+    config: &CuConfig,
+    requested: Option<String>,
+    logged: Option<String>,
+) -> Option<String> {
+    if requested.is_some() {
+        return requested;
+    }
+    let cu29::config::ConfigGraphs::Missions(graphs) = &config.graphs else {
+        return None;
+    };
+    if let Some(logged) = logged
+        && graphs.contains_key(&logged)
+    {
+        return Some(logged);
+    }
+    if graphs.contains_key("default") {
+        return Some("default".to_string());
+    }
+    graphs.keys().min().cloned()
 }
 
 /// Helper function for MCAP export.
@@ -1537,5 +1574,42 @@ mod tests {
                 _ => None,
             });
         assert_eq!(mission.as_deref(), Some("gnss"));
+    }
+
+    #[test]
+    fn logstats_mission_defaults_to_log_then_named_default_then_first() {
+        let config = CuConfig::deserialize_ron(
+            r#"(
+                missions: [(id: "zeta"), (id: "default"), (id: "alpha")],
+                tasks: [],
+                cnx: [],
+            )"#,
+        )
+        .unwrap();
+        assert_eq!(
+            resolve_logstats_mission(&config, None, Some("zeta".to_string())).as_deref(),
+            Some("zeta")
+        );
+        assert_eq!(
+            resolve_logstats_mission(&config, None, Some("missing".to_string())).as_deref(),
+            Some("default")
+        );
+        assert_eq!(
+            resolve_logstats_mission(&config, Some("alpha".to_string()), None).as_deref(),
+            Some("alpha")
+        );
+
+        let config = CuConfig::deserialize_ron(
+            r#"(
+                missions: [(id: "zeta"), (id: "alpha")],
+                tasks: [],
+                cnx: [],
+            )"#,
+        )
+        .unwrap();
+        assert_eq!(
+            resolve_logstats_mission(&config, None, None).as_deref(),
+            Some("alpha")
+        );
     }
 }

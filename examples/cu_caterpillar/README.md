@@ -12,3 +12,4 @@ See the crate cu29 for more information about the Copper project.
 - `just resim` — rerun the logged mission from `logs/caterpillar.copper`.
 - `just resim-debug` — start the replay-backed remote debug server for `logs/caterpillar.copper`.
 - `just dag-logstats` — generate logstats and open an annotated DAG SVG for the current `copperconfig.ron`.
+- `just plan-log` — auto-detect the default log and logreader, then append packed, proportional observed task timing to `plan.svg`.

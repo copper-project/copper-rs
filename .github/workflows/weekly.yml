@@ -25,7 +25,7 @@ jobs:
         with:
           components: clippy, rustfmt
       - name: Install audit
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@v2.85.5
         with:
           tool: cargo-deny
       - name: Run deny bans

@@ -608,6 +608,8 @@ mod tests {
         assert!(justfile.contains("dag:"));
         assert!(justfile.contains("[positional-arguments]"));
         assert!(justfile.contains("plan *options:"));
+        assert!(justfile.contains("plan-log:"));
+        assert!(justfile.contains("log-stats"));
         assert!(justfile.contains("--bin cu29-plan"));
     }
 
@@ -648,6 +650,8 @@ mod tests {
         assert!(app_manifest.contains("edition = \"2024\""));
         assert!(justfile.contains("cu29-rendercfg"));
         assert!(justfile.contains("cu29-plan"));
+        assert!(justfile.contains("plan-log:"));
+        assert!(justfile.contains("log-stats"));
         assert!(!project.join(".git").exists());
     }
 

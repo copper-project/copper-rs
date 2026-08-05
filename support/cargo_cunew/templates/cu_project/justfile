@@ -71,18 +71,28 @@ plan *options:
   args=(copperconfig.ron --output plan.svg --open)
   mission_value=""
   features_value=""
+  log_value=""
   for option in "$@"; do
     case "$option" in
       mission=*) mission_value="${option#mission=}" ;;
       features=*) features_value="${option#features=}" ;;
+      log=*) log_value="${option#log=}" ;;
       *)
-        echo "Unknown plan option '$option'; expected mission=<id> or features=<a,b>." >&2
+        echo "Unknown plan option '$option'; expected mission=<id>, features=<a,b>, or log=<file>." >&2
         exit 2
         ;;
     esac
   done
   [[ -z "$mission_value" ]] || args+=(--mission "$mission_value")
   [[ -z "$features_value" ]] || args+=(--features "$features_value")
+  if [[ -n "$log_value" ]]; then
+    mkdir -p target
+    [[ "$log_value" != *_0.copper ]] || log_value="${log_value%_0.copper}.copper"
+    logreader_args=(--features=logreader --bin {{project-name|kebab_case}}-logreader -- "$log_value" log-stats --config copperconfig.ron --output target/cu29_plan_logstats.json --features logreader)
+    [[ -z "$mission_value" ]] || logreader_args+=(--mission "$mission_value")
+    cargo run "${logreader_args[@]}"
+    args+=(--logstats target/cu29_plan_logstats.json)
+  fi
   {% if copper_source == "local" %}
   cargo run --manifest-path "{{copper_root_path}}/Cargo.toml" -p cu29-runtime --bin cu29-plan -- "${args[@]}"
   {% else %}
@@ -100,3 +110,7 @@ plan *options:
   [[ -x "$planner" ]] || { echo "Failed to find cu29-plan after installation." >&2; exit 1; }
   "$planner" "${args[@]}"
   {% endif %}
+
+# Render observed timing from the project's default Copper log.
+plan-log:
+  just plan log=logs/{{project-name|kebab_case}}.copper features=logreader

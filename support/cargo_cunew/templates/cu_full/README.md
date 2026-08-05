@@ -9,7 +9,7 @@ This template bootstraps a Copper workspace with an app crate and a shared-compo
 - `components/bridges/cu_example_shared_bridge/`: shared bridge example crate.
 - `components/`: shared components by category (placeholders to extend).
 - `doc/`: design notes and project docs.
-- `justfile`: automation helpers like `just dag` for topology, `just plan` for generated process order, `just log`, `just cl`, `just resim`, and `just resim-debug` (`just rcfg` remains as a compatibility alias).
+- `justfile`: automation helpers like `just dag` for topology, `just plan` for generated or log-observed process timing, `just log`, `just cl`, `just resim`, and `just resim-debug` (`just rcfg` remains as a compatibility alias).
 
 ## Quick start
 
