@@ -17,7 +17,13 @@ use cu29::units::si::length::meter;
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "glam")]
-use glam::{Affine3A, DAffine3, DMat4, Mat4};
+use glam::{Affine3A, DAffine3, DMat4, DVec3, Mat4, Vec3};
+
+mod geometry;
+pub use geometry::{
+    Aabb, Aabb2d, Aabb2f, Aabb3d, Aabb3f, Clearance, Point2, Point2d, Point2f, Point3, Point3d,
+    Point3f,
+};
 
 #[cfg(feature = "rerun")]
 mod rerun_components;
@@ -266,6 +272,107 @@ impl<T: Copy + Debug + Default + 'static> TransformInner<T> {
 
 impl_transform_accessors!(f32, Length32, Angle32);
 impl_transform_accessors!(f64, Length64, Angle64);
+
+macro_rules! impl_transform_points {
+    ($ty:ty, $len:ty, $variant:ident, $vec:ty) => {
+        impl Transform3D<$ty> {
+            /// The translation as a point: where the pose sits in its parent
+            /// frame.
+            pub fn position(&self) -> Point3<$len> {
+                #[cfg(feature = "glam")]
+                {
+                    match &self.inner {
+                        TransformInner::$variant(affine) => {
+                            let t = affine.translation;
+                            Point3::new(
+                                <$len>::new::<meter>(t.x as $ty),
+                                <$len>::new::<meter>(t.y as $ty),
+                                <$len>::new::<meter>(t.z as $ty),
+                            )
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                #[cfg(not(feature = "glam"))]
+                {
+                    Point3::new(
+                        <$len>::new::<meter>(self.mat[0][3]),
+                        <$len>::new::<meter>(self.mat[1][3]),
+                        <$len>::new::<meter>(self.mat[2][3]),
+                    )
+                }
+            }
+
+            /// `p` mapped through the transform: rotation, then translation.
+            pub fn transform_point(&self, p: Point3<$len>) -> Point3<$len> {
+                #[cfg(feature = "glam")]
+                {
+                    match &self.inner {
+                        TransformInner::$variant(affine) => {
+                            let out = affine.transform_point3(<$vec>::new(
+                                p.x.raw(),
+                                p.y.raw(),
+                                p.z.raw(),
+                            ));
+                            Point3::new(
+                                <$len>::new::<meter>(out.x),
+                                <$len>::new::<meter>(out.y),
+                                <$len>::new::<meter>(out.z),
+                            )
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                #[cfg(not(feature = "glam"))]
+                {
+                    let m = &self.mat;
+                    let (x, y, z) = (p.x.raw(), p.y.raw(), p.z.raw());
+                    Point3::new(
+                        <$len>::new::<meter>(m[0][0] * x + m[0][1] * y + m[0][2] * z + m[0][3]),
+                        <$len>::new::<meter>(m[1][0] * x + m[1][1] * y + m[1][2] * z + m[1][3]),
+                        <$len>::new::<meter>(m[2][0] * x + m[2][1] * y + m[2][2] * z + m[2][3]),
+                    )
+                }
+            }
+
+            /// `v` mapped through the rotation only, for directions and
+            /// offsets.
+            pub fn transform_vector(&self, v: Point3<$len>) -> Point3<$len> {
+                #[cfg(feature = "glam")]
+                {
+                    match &self.inner {
+                        TransformInner::$variant(affine) => {
+                            let out = affine.transform_vector3(<$vec>::new(
+                                v.x.raw(),
+                                v.y.raw(),
+                                v.z.raw(),
+                            ));
+                            Point3::new(
+                                <$len>::new::<meter>(out.x),
+                                <$len>::new::<meter>(out.y),
+                                <$len>::new::<meter>(out.z),
+                            )
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                #[cfg(not(feature = "glam"))]
+                {
+                    let m = &self.mat;
+                    let (x, y, z) = (v.x.raw(), v.y.raw(), v.z.raw());
+                    Point3::new(
+                        <$len>::new::<meter>(m[0][0] * x + m[0][1] * y + m[0][2] * z),
+                        <$len>::new::<meter>(m[1][0] * x + m[1][1] * y + m[1][2] * z),
+                        <$len>::new::<meter>(m[2][0] * x + m[2][1] * y + m[2][2] * z),
+                    )
+                }
+            }
+        }
+    };
+}
+
+impl_transform_points!(f32, Length32, F32, Vec3);
+impl_transform_points!(f64, Length64, F64, DVec3);
 
 impl<T: Copy + Debug + Default + 'static> Default for Transform3D<T> {
     fn default() -> Self {
@@ -946,6 +1053,70 @@ mod tests {
         assert_eq!(mat_transposed.w_axis.x, 5.0);
         assert_eq!(mat_transposed.w_axis.y, 6.0);
         assert_eq!(mat_transposed.w_axis.z, 7.0);
+    }
+
+    /// 90 degrees around z plus a (2, 3, 4) translation, in the layout the
+    /// active backend expects: glam stores column-major, the fallback
+    /// row-major.
+    fn quarter_turn_and_shift() -> Transform3D<f32> {
+        #[cfg(feature = "glam")]
+        {
+            Transform3D::from_matrix([
+                [0.0, 1.0, 0.0, 0.0],
+                [-1.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [2.0, 3.0, 4.0, 1.0],
+            ])
+        }
+        #[cfg(not(feature = "glam"))]
+        {
+            Transform3D::from_matrix([
+                [0.0, -1.0, 0.0, 2.0],
+                [1.0, 0.0, 0.0, 3.0],
+                [0.0, 0.0, 1.0, 4.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ])
+        }
+    }
+
+    fn assert_point_close(lhs: Point3f, rhs: Point3f, eps: f32) {
+        assert!(
+            (lhs.x - rhs.x).raw().abs() <= eps
+                && (lhs.y - rhs.y).raw().abs() <= eps
+                && (lhs.z - rhs.z).raw().abs() <= eps,
+            "{lhs:?} differs from {rhs:?}"
+        );
+    }
+
+    #[test]
+    fn transform_point_rotates_and_translates() {
+        let t = quarter_turn_and_shift();
+        let p = Point3f::from_meters(1.0, 0.0, 0.0);
+        assert_point_close(
+            t.transform_point(p),
+            Point3f::from_meters(2.0, 4.0, 4.0),
+            1e-5,
+        );
+        assert_point_close(
+            t.transform_vector(p),
+            Point3f::from_meters(0.0, 1.0, 0.0),
+            1e-5,
+        );
+        assert_point_close(t.position(), Point3f::from_meters(2.0, 3.0, 4.0), 1e-5);
+    }
+
+    #[test]
+    fn transform_point_identity_is_a_fixed_point() {
+        let identity = Transform3D::<f32>::from_matrix([
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]);
+        let p = Point3f::from_meters(1.5, -2.0, 0.25);
+        assert_eq!(identity.transform_point(p), p);
+        assert_eq!(identity.transform_vector(p), p);
+        assert_eq!(identity.position(), Point3f::default());
     }
 
     #[test]
