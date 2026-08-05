@@ -4,18 +4,23 @@
 use bincode::{Decode, Encode};
 use core::fmt::Debug;
 use cu29::prelude::*;
+use cu29::units::si::area::square_meter;
+use cu29::units::si::f32::Area as Area32;
 use cu29::units::si::f32::Length as Length32;
+use cu29::units::si::f64::Area as Area64;
 use cu29::units::si::f64::Length as Length64;
 use cu29::units::si::length::meter;
+use cu29_soa_derive::Soa;
 use serde::{Deserialize, Serialize};
 
 /// A 2D point with unit-typed coordinates.
 ///
-/// This is a scalar type; for large batches consider an SoA layout so bulk
-/// operations vectorize (see `cu29_soa_derive`).
+/// This is a scalar type; for large batches use [`Point2Soa`] so bulk
+/// operations vectorize.
 #[derive(
-    Default, Debug, Clone, Copy, PartialEq, Encode, Decode, Serialize, Deserialize, Reflect,
+    Default, Debug, Clone, Copy, PartialEq, Encode, Decode, Serialize, Deserialize, Reflect, Soa,
 )]
+#[reflect(from_reflect = false)]
 pub struct Point2<L: Copy + Debug + 'static> {
     pub x: L,
     pub y: L,
@@ -23,11 +28,12 @@ pub struct Point2<L: Copy + Debug + 'static> {
 
 /// A 3D point with unit-typed coordinates.
 ///
-/// This is a scalar type; for large batches consider an SoA layout so bulk
-/// operations vectorize (see `cu29_soa_derive`).
+/// This is a scalar type; for large batches use [`Point3Soa`] so bulk
+/// operations vectorize.
 #[derive(
-    Default, Debug, Clone, Copy, PartialEq, Encode, Decode, Serialize, Deserialize, Reflect,
+    Default, Debug, Clone, Copy, PartialEq, Encode, Decode, Serialize, Deserialize, Reflect, Soa,
 )]
+#[reflect(from_reflect = false)]
 pub struct Point3<L: Copy + Debug + 'static> {
     pub x: L,
     pub y: L,
@@ -43,6 +49,13 @@ pub type Point3d = Point3<Length64>;
 pub type Point2u = Point2<u32>;
 /// A 2D point in signed pixel coordinates, for image-space offsets.
 pub type Point2i = Point2<i32>;
+
+pub type Point2fSoa<const N: usize> = Point2Soa<Length32, N>;
+pub type Point2dSoa<const N: usize> = Point2Soa<Length64, N>;
+pub type Point3fSoa<const N: usize> = Point3Soa<Length32, N>;
+pub type Point3dSoa<const N: usize> = Point3Soa<Length64, N>;
+pub type Point2uSoa<const N: usize> = Point2Soa<u32, N>;
+pub type Point2iSoa<const N: usize> = Point2Soa<i32, N>;
 
 impl<L: Copy + Debug + 'static> Point2<L> {
     pub const fn new(x: L, y: L) -> Self {
@@ -67,7 +80,7 @@ impl<L: Copy + Debug + 'static> Point3<L> {
 }
 
 macro_rules! impl_point_metrics {
-    ($len:ty, $scalar:ty, $sqrt:path) => {
+    ($len:ty, $area:ty, $scalar:ty, $sqrt:path) => {
         impl Point2<$len> {
             pub fn from_meters(x: $scalar, y: $scalar) -> Self {
                 Self::new(<$len>::new::<meter>(x), <$len>::new::<meter>(y))
@@ -118,11 +131,84 @@ macro_rules! impl_point_metrics {
                 )
             }
         }
+
+        impl<const N: usize> Point2Soa<$len, N> {
+            /// Squared distance from every point to `target`, written to
+            /// `out[..len]`. Sqrt-free, so the loop vectorizes; enough for
+            /// nearest-neighbor style comparisons.
+            pub fn distances_squared(&self, target: Point2<$len>, out: &mut [$area]) {
+                let n = self.len();
+                let (xs, ys, out) = (&self.x[..n], &self.y[..n], &mut out[..n]);
+                let (tx, ty) = (target.x.raw(), target.y.raw());
+                for i in 0..n {
+                    let (dx, dy) = (xs[i].raw() - tx, ys[i].raw() - ty);
+                    out[i] = <$area>::new::<square_meter>(dx * dx + dy * dy);
+                }
+            }
+
+            /// Distance from every point to `target`, written to `out[..len]`.
+            pub fn distances(&self, target: Point2<$len>, out: &mut [$len]) {
+                let n = self.len();
+                let (xs, ys, out) = (&self.x[..n], &self.y[..n], &mut out[..n]);
+                let (tx, ty) = (target.x.raw(), target.y.raw());
+                for i in 0..n {
+                    let (dx, dy) = (xs[i].raw() - tx, ys[i].raw() - ty);
+                    out[i] = <$len>::new::<meter>($sqrt(dx * dx + dy * dy));
+                }
+            }
+
+            /// Every point moved `ratio` of the way toward `target`, in place.
+            pub fn lerp_toward(&mut self, target: Point2<$len>, ratio: $scalar) {
+                let n = self.len();
+                for i in 0..n {
+                    self.x[i] = self.x[i] + (target.x - self.x[i]) * ratio;
+                    self.y[i] = self.y[i] + (target.y - self.y[i]) * ratio;
+                }
+            }
+        }
+
+        impl<const N: usize> Point3Soa<$len, N> {
+            /// Squared distance from every point to `target`, written to
+            /// `out[..len]`. Sqrt-free, so the loop vectorizes; enough for
+            /// nearest-neighbor style comparisons.
+            pub fn distances_squared(&self, target: Point3<$len>, out: &mut [$area]) {
+                let n = self.len();
+                let (xs, ys, zs) = (&self.x[..n], &self.y[..n], &self.z[..n]);
+                let out = &mut out[..n];
+                let (tx, ty, tz) = (target.x.raw(), target.y.raw(), target.z.raw());
+                for i in 0..n {
+                    let (dx, dy, dz) = (xs[i].raw() - tx, ys[i].raw() - ty, zs[i].raw() - tz);
+                    out[i] = <$area>::new::<square_meter>(dx * dx + dy * dy + dz * dz);
+                }
+            }
+
+            /// Distance from every point to `target`, written to `out[..len]`.
+            pub fn distances(&self, target: Point3<$len>, out: &mut [$len]) {
+                let n = self.len();
+                let (xs, ys, zs) = (&self.x[..n], &self.y[..n], &self.z[..n]);
+                let out = &mut out[..n];
+                let (tx, ty, tz) = (target.x.raw(), target.y.raw(), target.z.raw());
+                for i in 0..n {
+                    let (dx, dy, dz) = (xs[i].raw() - tx, ys[i].raw() - ty, zs[i].raw() - tz);
+                    out[i] = <$len>::new::<meter>($sqrt(dx * dx + dy * dy + dz * dz));
+                }
+            }
+
+            /// Every point moved `ratio` of the way toward `target`, in place.
+            pub fn lerp_toward(&mut self, target: Point3<$len>, ratio: $scalar) {
+                let n = self.len();
+                for i in 0..n {
+                    self.x[i] = self.x[i] + (target.x - self.x[i]) * ratio;
+                    self.y[i] = self.y[i] + (target.y - self.y[i]) * ratio;
+                    self.z[i] = self.z[i] + (target.z - self.z[i]) * ratio;
+                }
+            }
+        }
     };
 }
 
-impl_point_metrics!(Length32, f32, libm::sqrtf);
-impl_point_metrics!(Length64, f64, libm::sqrt);
+impl_point_metrics!(Length32, Area32, f32, libm::sqrtf);
+impl_point_metrics!(Length64, Area64, f64, libm::sqrt);
 
 /// An axis-aligned bounding box; the point type carries the dimension.
 ///
@@ -156,6 +242,20 @@ impl<L: Copy + Debug + PartialOrd + 'static> BBox<Point2<L>> {
     /// True when `p` lies inside the box, boundary included.
     pub fn contains(&self, p: Point2<L>) -> bool {
         self.min.x <= p.x && p.x <= self.max.x && self.min.y <= p.y && p.y <= self.max.y
+    }
+}
+
+impl<L: Copy + Debug + PartialOrd + Default + 'static> BBox<Point2<L>> {
+    /// `contains` for every point in the set, written to `out[..len]`.
+    pub fn contains_points<const N: usize>(&self, points: &Point2Soa<L, N>, out: &mut [bool]) {
+        let n = points.len();
+        let (xs, ys, out) = (&points.x[..n], &points.y[..n], &mut out[..n]);
+        for i in 0..n {
+            out[i] = (self.min.x <= xs[i])
+                & (xs[i] <= self.max.x)
+                & (self.min.y <= ys[i])
+                & (ys[i] <= self.max.y);
+        }
     }
 }
 
@@ -223,5 +323,71 @@ mod tests {
         assert!(b.contains(Point2u::new(60, 120)));
         assert!(!b.contains(Point2u::new(9, 120)));
         assert!(!b.contains(Point2u::new(60, 221)));
+    }
+
+    #[test]
+    fn soa_distances_match_scalar() {
+        let mut set = Point2fSoa::<8>::default();
+        let target = Point2f::from_meters(1.0, -2.0);
+        let points = [(0.0, 0.0), (3.0, 2.0), (-1.5, 4.0)];
+        for (x, y) in points {
+            set.push(Point2f::from_meters(x, y));
+        }
+
+        let mut d = [Length32::default(); 3];
+        let mut d2 = [Area32::default(); 3];
+        set.distances(target, &mut d);
+        set.distances_squared(target, &mut d2);
+        for i in 0..set.len() {
+            let scalar = set.get(i).distance(target);
+            assert!((d[i] - scalar).raw().abs() < 1e-6);
+            assert!((d2[i].raw() - scalar.raw() * scalar.raw()).abs() < 1e-5);
+        }
+
+        let mut set3 = Point3dSoa::<4>::default();
+        set3.push(Point3d::from_meters(1.0, 2.0, 3.0));
+        set3.push(Point3d::from_meters(-2.0, 0.5, 1.0));
+        let target3 = Point3d::from_meters(0.0, 1.0, -1.0);
+        let mut d3 = [Length64::default(); 2];
+        set3.distances(target3, &mut d3);
+        for (i, d) in d3.iter().enumerate() {
+            assert!((*d - set3.get(i).distance(target3)).raw().abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn soa_lerp_toward_matches_scalar() {
+        let mut set = Point2fSoa::<4>::default();
+        set.push(Point2f::from_meters(0.0, 0.0));
+        set.push(Point2f::from_meters(4.0, -2.0));
+        let target = Point2f::from_meters(2.0, 2.0);
+
+        let expected: [Point2f; 2] = [set.get(0).lerp(target, 0.25), set.get(1).lerp(target, 0.25)];
+        set.lerp_toward(target, 0.25);
+        assert_eq!(set.get(0), expected[0]);
+        assert_eq!(set.get(1), expected[1]);
+    }
+
+    #[test]
+    fn bbox_contains_points_bulk() {
+        let b = BBox2f::new(
+            Point2f::from_meters(0.0, 0.0),
+            Point2f::from_meters(2.0, 2.0),
+        );
+        let mut set = Point2fSoa::<4>::default();
+        set.push(Point2f::from_meters(1.0, 1.0));
+        set.push(Point2f::from_meters(0.0, 2.0));
+        set.push(Point2f::from_meters(-0.1, 1.0));
+        let mut out = [false; 3];
+        b.contains_points(&set, &mut out);
+        assert_eq!(out, [true, true, false]);
+
+        let pix = BBox2u::new(Point2u::new(10, 20), Point2u::new(110, 220));
+        let mut pixels = Point2uSoa::<4>::default();
+        pixels.push(Point2u::new(60, 120));
+        pixels.push(Point2u::new(9, 120));
+        let mut out = [false; 2];
+        pix.contains_points(&pixels, &mut out);
+        assert_eq!(out, [true, false]);
     }
 }
