@@ -21,8 +21,8 @@ use glam::{Affine3A, DAffine3, DMat4, DVec3, Mat4, Vec3};
 
 mod geometry;
 pub use geometry::{
-    Aabb, Aabb2d, Aabb2f, Aabb3d, Aabb3f, Clearance, Point2, Point2d, Point2f, Point3, Point3d,
-    Point3f,
+    BBox, BBox2d, BBox2f, BBox2i, BBox2u, BBox3d, BBox3f, Point2, Point2d, Point2f, Point2i,
+    Point2u, Point3, Point3d, Point3f,
 };
 
 #[cfg(feature = "rerun")]

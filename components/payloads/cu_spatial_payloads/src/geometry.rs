@@ -1,5 +1,5 @@
-//! The shared point vocabulary: unit-typed points, axis-aligned boxes, and
-//! the clearance query trait spatial components implement against.
+//! The shared point vocabulary: unit-typed points and axis-aligned bounding
+//! boxes spatial components compose over.
 
 use bincode::{Decode, Encode};
 use core::fmt::Debug;
@@ -10,6 +10,9 @@ use cu29::units::si::length::meter;
 use serde::{Deserialize, Serialize};
 
 /// A 2D point with unit-typed coordinates.
+///
+/// This is a scalar type; for large batches consider an SoA layout so bulk
+/// operations vectorize (see `cu29_soa_derive`).
 #[derive(
     Default, Debug, Clone, Copy, PartialEq, Encode, Decode, Serialize, Deserialize, Reflect,
 )]
@@ -19,6 +22,9 @@ pub struct Point2<L: Copy + Debug + 'static> {
 }
 
 /// A 3D point with unit-typed coordinates.
+///
+/// This is a scalar type; for large batches consider an SoA layout so bulk
+/// operations vectorize (see `cu29_soa_derive`).
 #[derive(
     Default, Debug, Clone, Copy, PartialEq, Encode, Decode, Serialize, Deserialize, Reflect,
 )]
@@ -32,6 +38,11 @@ pub type Point2f = Point2<Length32>;
 pub type Point2d = Point2<Length64>;
 pub type Point3f = Point3<Length32>;
 pub type Point3d = Point3<Length64>;
+
+/// A 2D point in pixel coordinates, for image-space geometry.
+pub type Point2u = Point2<u32>;
+/// A 2D point in signed pixel coordinates, for image-space offsets.
+pub type Point2i = Point2<i32>;
 
 impl<L: Copy + Debug + 'static> Point2<L> {
     pub const fn new(x: L, y: L) -> Self {
@@ -113,34 +124,42 @@ macro_rules! impl_point_metrics {
 impl_point_metrics!(Length32, f32, libm::sqrtf);
 impl_point_metrics!(Length64, f64, libm::sqrt);
 
-/// An axis-aligned box; the point type carries the dimension.
+/// An axis-aligned bounding box; the point type carries the dimension.
+///
+/// This is a scalar type; for large batches (e.g. detection anchors) consider
+/// an SoA layout so bulk operations vectorize (see `cu29_soa_derive`).
 #[derive(
     Default, Debug, Clone, Copy, PartialEq, Encode, Decode, Serialize, Deserialize, Reflect,
 )]
-pub struct Aabb<P: Copy + Debug + 'static> {
+pub struct BBox<P: Copy + Debug + 'static> {
     pub min: P,
     pub max: P,
 }
 
-pub type Aabb2f = Aabb<Point2f>;
-pub type Aabb2d = Aabb<Point2d>;
-pub type Aabb3f = Aabb<Point3f>;
-pub type Aabb3d = Aabb<Point3d>;
+pub type BBox2f = BBox<Point2f>;
+pub type BBox2d = BBox<Point2d>;
+pub type BBox3f = BBox<Point3f>;
+pub type BBox3d = BBox<Point3d>;
 
-impl<P: Copy + Debug + 'static> Aabb<P> {
+/// A 2D bounding box in pixel coordinates, for image-space geometry.
+pub type BBox2u = BBox<Point2u>;
+/// A 2D bounding box in signed pixel coordinates.
+pub type BBox2i = BBox<Point2i>;
+
+impl<P: Copy + Debug + 'static> BBox<P> {
     pub const fn new(min: P, max: P) -> Self {
         Self { min, max }
     }
 }
 
-impl<L: Copy + Debug + PartialOrd + 'static> Aabb<Point2<L>> {
+impl<L: Copy + Debug + PartialOrd + 'static> BBox<Point2<L>> {
     /// True when `p` lies inside the box, boundary included.
     pub fn contains(&self, p: Point2<L>) -> bool {
         self.min.x <= p.x && p.x <= self.max.x && self.min.y <= p.y && p.y <= self.max.y
     }
 }
 
-impl<L: Copy + Debug + PartialOrd + 'static> Aabb<Point3<L>> {
+impl<L: Copy + Debug + PartialOrd + 'static> BBox<Point3<L>> {
     /// True when `p` lies inside the box, boundary included.
     pub fn contains(&self, p: Point3<L>) -> bool {
         self.min.x <= p.x
@@ -150,23 +169,6 @@ impl<L: Copy + Debug + PartialOrd + 'static> Aabb<Point3<L>> {
             && self.min.z <= p.z
             && p.z <= self.max.z
     }
-}
-
-/// Clearance queries against the occupied geometry of a space.
-///
-/// The clearance is a signed distance: positive in free space, zero on a
-/// surface, negative inside an obstacle or out of bounds. What is free is the
-/// caller's predicate - `clearance(p) > robot_radius` - so one space serves
-/// robots of any size.
-pub trait Clearance {
-    /// The point type of the space, which fixes its dimension.
-    type Point: Copy;
-
-    /// Signed distance from `p` to the nearest occupied geometry.
-    fn clearance(&self, p: Self::Point) -> Length32;
-
-    /// Smallest clearance anywhere along the segment `a`-`b`.
-    fn clearance_segment(&self, a: Self::Point, b: Self::Point) -> Length32;
 }
 
 #[cfg(test)]
@@ -196,8 +198,8 @@ mod tests {
     }
 
     #[test]
-    fn aabb_contains_boundary_included() {
-        let b = Aabb2f::new(
+    fn bbox_contains_boundary_included() {
+        let b = BBox2f::new(
             Point2f::from_meters(0.0, 0.0),
             Point2f::from_meters(2.0, 2.0),
         );
@@ -206,11 +208,20 @@ mod tests {
         assert!(!b.contains(Point2f::from_meters(-0.1, 1.0)));
         assert!(!b.contains(Point2f::from_meters(1.0, 2.1)));
 
-        let b = Aabb3f::new(
+        let b = BBox3f::new(
             Point3f::from_meters(0.0, 0.0, 0.0),
             Point3f::from_meters(1.0, 1.0, 1.0),
         );
         assert!(b.contains(Point3f::from_meters(0.5, 0.5, 1.0)));
         assert!(!b.contains(Point3f::from_meters(0.5, 0.5, 1.1)));
+    }
+
+    #[test]
+    fn pixel_bbox_contains() {
+        let b = BBox2u::new(Point2u::new(10, 20), Point2u::new(110, 220));
+        assert!(b.contains(Point2u::new(10, 220)));
+        assert!(b.contains(Point2u::new(60, 120)));
+        assert!(!b.contains(Point2u::new(9, 120)));
+        assert!(!b.contains(Point2u::new(60, 221)));
     }
 }
