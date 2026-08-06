@@ -14,16 +14,22 @@
 //! anytime trade-off, measured. Keeping the planner config identical is what
 //! makes the comparison valid.
 
-use cu_rrt_star::{PlanPath, PlanRequest, Point2, World};
+use cu_rrt_star::{Clearance, PlanPath, PlanRequest, Point2f, World};
 use cu29::prelude::*;
 use std::sync::Mutex;
 
 #[copper_runtime(config = "tests/copperconfig.ron")]
 struct DualPolicyTester {}
 
-/// Start and goal of every planning job.
-const START: Point2 = Point2::new(0.5, 0.5);
-const GOAL: Point2 = Point2::new(9.5, 9.5);
+/// Start of every planning job.
+fn start() -> Point2f {
+    Point2f::from_meters(0.5, 0.5)
+}
+
+/// Goal of every planning job.
+fn goal() -> Point2f {
+    Point2f::from_meters(9.5, 9.5)
+}
 
 const SLAB_SIZE: Option<usize> = Some(16 * 1024 * 1024);
 const ITERATIONS: usize = 10;
@@ -61,8 +67,8 @@ impl CuSrcTask for GoalSrc {
     fn process(&mut self, ctx: &CuContext, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         new_msg.set_payload(PlanRequest {
             world: World::depot(),
-            start: START,
-            goal: GOAL,
+            start: start(),
+            goal: goal(),
         });
         // A fresh Tov per job. An anytime node reads it as the age anchor when
         // its policy sets max_age_ms; neither planner here does, so both
@@ -124,19 +130,23 @@ fn run(logger_path: &std::path::Path) -> Vec<PlanReport> {
 fn check(reports: &[PlanReport]) -> usize {
     assert_eq!(reports.len(), ITERATIONS, "one report per copperlist");
     let world = World::depot();
-    let lower_bound = START.distance(GOAL);
+    let lower_bound = start().distance(goal()).raw();
     let mut compared = 0;
 
     for (index, report) in reports.iter().enumerate() {
         for path in [&report.quick, &report.thorough].into_iter().flatten() {
             assert!(path.len >= 2, "job {index}: a path needs two waypoints");
-            assert_eq!(path.waypoints[0], START, "job {index}");
-            assert_eq!(path.waypoints[(path.len - 1) as usize], GOAL, "job {index}");
+            assert_eq!(path.waypoints[0], start(), "job {index}");
+            assert_eq!(
+                path.waypoints[(path.len - 1) as usize],
+                goal(),
+                "job {index}"
+            );
             // A published path must be drivable as published, whichever stop
             // point the policy picked.
             for pair in path.waypoints[..path.len as usize].windows(2) {
                 assert!(
-                    world.is_free_segment(pair[0], pair[1]),
+                    world.clearance_segment(pair[0], pair[1]).raw() > 0.0,
                     "job {index}: published path crosses an obstacle"
                 );
             }

@@ -8,7 +8,8 @@
 
 mod rrt;
 
-pub use rrt::{MAX_OBSTACLES, MAX_WAYPOINTS, Obstacle, Point2, World};
+pub use cu_spatial_payloads::{BBox2f, Point2f};
+pub use rrt::{Clearance, MAX_OBSTACLES, MAX_WAYPOINTS, Obstacle, World};
 
 use crate::rrt::{RrtParams, RrtStar};
 use bincode::de::Decoder;
@@ -31,8 +32,8 @@ const CONVERGED_QUALITY: f32 = 0.999;
 #[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
 pub struct PlanRequest {
     pub world: World,
-    pub start: Point2,
-    pub goal: Point2,
+    pub start: Point2f,
+    pub goal: Point2f,
 }
 
 /// The best path known when the refinement window closed.
@@ -41,7 +42,7 @@ pub struct PlanRequest {
 /// driven as published.
 #[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
 pub struct PlanPath {
-    pub waypoints: [Point2; MAX_WAYPOINTS],
+    pub waypoints: [Point2f; MAX_WAYPOINTS],
     /// Waypoints actually used in `waypoints`.
     pub len: u32,
     /// Cost of the RRT* tree path, which is what the anytime quality scores.
@@ -131,7 +132,7 @@ impl RrtStarPlanner {
             && planner.has_solution()
             && planner.best_cost() < self.published_cost
         {
-            let mut waypoints = [Point2::default(); MAX_WAYPOINTS];
+            let mut waypoints = [Point2f::default(); MAX_WAYPOINTS];
             // A path too long to represent is not published: the output keeps
             // the last valid one and a later quantum tries again.
             if let Some(len) = planner.write_path(&mut waypoints) {
@@ -304,8 +305,13 @@ impl CuAnytimeTask for RrtStarPlanner {
 mod tests {
     use super::*;
 
-    const START: Point2 = Point2::new(0.5, 0.5);
-    const GOAL: Point2 = Point2::new(9.5, 9.5);
+    fn start() -> Point2f {
+        Point2f::from_meters(0.5, 0.5)
+    }
+
+    fn goal() -> Point2f {
+        Point2f::from_meters(9.5, 9.5)
+    }
 
     /// The resource binding as the generated runtime would hand it over.
     fn test_resources(seed: u64) -> planner_resources::Resources {
@@ -323,8 +329,8 @@ mod tests {
         let mut task = RrtStarPlanner::new(None, test_resources(42)).unwrap();
         let input = CuMsg::new(Some(PlanRequest {
             world: World::depot(),
-            start: START,
-            goal: GOAL,
+            start: start(),
+            goal: goal(),
         }));
         let mut output = CuMsg::new(None);
 
@@ -363,8 +369,8 @@ mod tests {
         let mut task = RrtStarPlanner::new(None, test_resources(42)).unwrap();
         let input = CuMsg::new(Some(PlanRequest {
             world: World::depot(),
-            start: START,
-            goal: GOAL,
+            start: start(),
+            goal: goal(),
         }));
         let mut output = CuMsg::new(None);
 
@@ -390,8 +396,8 @@ mod tests {
         let mut task = RrtStarPlanner::new(None, test_resources(3)).unwrap();
         let input = CuMsg::new(Some(PlanRequest {
             world: World::depot(),
-            start: START,
-            goal: START,
+            start: start(),
+            goal: start(),
         }));
         let mut output = CuMsg::new(None);
 

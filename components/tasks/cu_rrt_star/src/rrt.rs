@@ -1,7 +1,7 @@
 //! Seeded RRT* over an [`RrtSpace`]: anything that can sample a candidate
-//! point and answer segment collision queries. The bundled space is
-//! [`World`], a rectangle of round obstacles; the algorithm itself never
-//! depends on the obstacle shape.
+//! point and answer clearance queries. The bundled space is [`World`], a
+//! rectangle of round obstacles; the algorithm itself never depends on the
+//! obstacle shape.
 //!
 //! The planner knows nothing about Copper: it only exposes [`RrtStar::grow`],
 //! one bounded block of iterations. [`crate::RrtStarPlanner`] calls it once
@@ -16,6 +16,7 @@
 
 use bincode::{Decode, Encode};
 use cu_rng::prelude::*;
+use cu_spatial_payloads::{BBox2f, Point2f};
 use cu29::prelude::*;
 use cu29::units::si::area::square_meter;
 use cu29::units::si::f32::{Area, Length};
@@ -31,61 +32,55 @@ pub const MAX_WAYPOINTS: usize = 32;
 /// the same serde reason as [`MAX_WAYPOINTS`].
 pub const MAX_OBSTACLES: usize = 16;
 
-/// A point of the planar world, in meters.
-#[derive(
-    Default, Debug, Clone, Copy, PartialEq, Encode, Decode, Serialize, Deserialize, Reflect,
-)]
-pub struct Point2 {
-    pub x: f32,
-    pub y: f32,
-}
-
-impl Point2 {
-    pub const fn new(x: f32, y: f32) -> Self {
-        Self { x, y }
-    }
-
-    /// Euclidean distance to `other`.
-    pub fn distance(self, other: Self) -> f32 {
-        let (dx, dy) = (self.x - other.x, self.y - other.y);
-        (dx * dx + dy * dy).sqrt()
-    }
-}
-
-/// A round obstacle: the planner rejects any point or segment within `radius`
-/// of `center`.
+/// A round obstacle: anything within `radius` of `center` is occupied.
 #[derive(
     Default, Debug, Clone, Copy, PartialEq, Encode, Decode, Serialize, Deserialize, Reflect,
 )]
 pub struct Obstacle {
-    pub center: Point2,
+    pub center: Point2f,
     pub radius: Length,
 }
 
 impl Obstacle {
-    pub const fn new(center: Point2, radius: Length) -> Self {
+    pub const fn new(center: Point2f, radius: Length) -> Self {
         Self { center, radius }
     }
 }
 
-/// The rectangular world `0..width` x `0..height` and its obstacles.
+/// A space that can answer how far a point is from the nearest obstacle.
+///
+/// The clearance is a signed distance: positive in free space, zero on a
+/// surface, negative inside an obstacle or out of bounds. What counts as free
+/// is the caller's predicate - `clearance(p) > robot_radius` - so one space
+/// serves robots of any size.
+pub trait Clearance {
+    /// The point type of the space, which fixes its dimension.
+    type Point: Copy;
+
+    /// Signed distance from `p` to the nearest occupied geometry.
+    fn clearance(&self, p: Self::Point) -> Length;
+
+    /// Smallest clearance anywhere along the segment `a`-`b`.
+    fn clearance_segment(&self, a: Self::Point, b: Self::Point) -> Length;
+}
+
+/// A rectangular world and its obstacles.
 ///
 /// The obstacle storage is a fixed array so the map can travel inside a
 /// [`crate::PlanRequest`]: the planner has no map of its own, every job
 /// carries the one it must solve.
 #[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
 pub struct World {
-    pub width: Length,
-    pub height: Length,
+    pub bounds: BBox2f,
     pub obstacles: [Obstacle; MAX_OBSTACLES],
     /// Obstacles actually used in `obstacles`.
     pub obstacle_count: u32,
 }
 
 impl World {
-    /// A world from a list of obstacles. Errors when the list exceeds
-    /// [`MAX_OBSTACLES`].
-    pub fn new(width: Length, height: Length, obstacles: &[Obstacle]) -> CuResult<Self> {
+    /// A world from its bounds and a list of obstacles. Errors when the list
+    /// exceeds [`MAX_OBSTACLES`].
+    pub fn new(bounds: BBox2f, obstacles: &[Obstacle]) -> CuResult<Self> {
         if obstacles.len() > MAX_OBSTACLES {
             return Err(format!(
                 "rrt*: {} obstacles, the world holds at most {MAX_OBSTACLES}",
@@ -94,8 +89,7 @@ impl World {
             .into());
         }
         let mut world = Self {
-            width,
-            height,
+            bounds,
             obstacles: [Obstacle::default(); MAX_OBSTACLES],
             obstacle_count: obstacles.len() as u32,
         };
@@ -109,15 +103,15 @@ impl World {
     /// real work to do.
     pub fn depot() -> Self {
         let meters = Length::new::<meter>;
+        let point = Point2f::from_meters;
         Self::new(
-            meters(10.0),
-            meters(10.0),
+            BBox2f::new(point(0.0, 0.0), point(10.0, 10.0)),
             &[
-                Obstacle::new(Point2::new(3.0, 3.0), meters(1.2)),
-                Obstacle::new(Point2::new(6.0, 6.0), meters(1.5)),
-                Obstacle::new(Point2::new(7.0, 2.5), meters(1.0)),
-                Obstacle::new(Point2::new(2.5, 7.0), meters(1.0)),
-                Obstacle::new(Point2::new(5.0, 1.5), meters(0.8)),
+                Obstacle::new(point(3.0, 3.0), meters(1.2)),
+                Obstacle::new(point(6.0, 6.0), meters(1.5)),
+                Obstacle::new(point(7.0, 2.5), meters(1.0)),
+                Obstacle::new(point(2.5, 7.0), meters(1.0)),
+                Obstacle::new(point(5.0, 1.5), meters(0.8)),
             ],
         )
         .expect("the depot obstacles fit MAX_OBSTACLES")
@@ -129,30 +123,6 @@ impl World {
         &self.obstacles[..(self.obstacle_count as usize).min(MAX_OBSTACLES)]
     }
 
-    /// True when `point` is inside the bounds and outside every obstacle.
-    pub fn is_free(&self, point: Point2) -> bool {
-        if point.x < 0.0
-            || point.y < 0.0
-            || point.x > self.width.raw()
-            || point.y > self.height.raw()
-        {
-            return false;
-        }
-        self.obstacle_slice()
-            .iter()
-            .all(|o| point.distance(o.center) > o.radius.raw())
-    }
-
-    /// True when the whole segment `a`-`b` is free.
-    pub fn is_free_segment(&self, a: Point2, b: Point2) -> bool {
-        if !self.is_free(a) || !self.is_free(b) {
-            return false;
-        }
-        self.obstacle_slice()
-            .iter()
-            .all(|o| distance_to_segment(a, b, o.center) > o.radius.raw())
-    }
-
     /// Area left free by the obstacles. Assumes every obstacle lies inside the
     /// bounds and none overlap, which holds for [`World::depot`].
     pub fn free_area(&self) -> Area {
@@ -161,22 +131,45 @@ impl World {
             .iter()
             .map(|o| core::f32::consts::PI * o.radius.raw() * o.radius.raw())
             .sum();
-        Area::new::<square_meter>(
-            (self.width.raw() * self.height.raw() - blocked).max(f32::EPSILON),
-        )
+        let width = (self.bounds.max.x - self.bounds.min.x).raw();
+        let height = (self.bounds.max.y - self.bounds.min.y).raw();
+        Area::new::<square_meter>((width * height - blocked).max(f32::EPSILON))
     }
 }
 
-/// What RRT* needs from the space it searches. The algorithm never depends
-/// on the obstacle shape: any space that can sample a candidate point and
-/// answer segment collision queries can plug in. [`World`] is the bundled
-/// implementation.
-pub trait RrtSpace {
-    /// A uniform random point inside the bounds of the space.
-    fn sample(&self, rng: &mut CuRng) -> Point2;
+impl Clearance for World {
+    type Point = Point2f;
 
-    /// True when the whole segment `a`-`b` is collision free.
-    fn is_free_segment(&self, a: Point2, b: Point2) -> bool;
+    fn clearance(&self, p: Point2f) -> Length {
+        let b = &self.bounds;
+        let mut clearance = (p.x - b.min.x)
+            .raw()
+            .min((b.max.x - p.x).raw())
+            .min((p.y - b.min.y).raw())
+            .min((b.max.y - p.y).raw());
+        for o in self.obstacle_slice() {
+            clearance = clearance.min(p.distance(o.center).raw() - o.radius.raw());
+        }
+        Length::new::<meter>(clearance)
+    }
+
+    fn clearance_segment(&self, a: Point2f, b: Point2f) -> Length {
+        // The wall terms are linear along the segment, so their minimum sits
+        // at an endpoint; the obstacle terms need the true segment distance.
+        let mut clearance = self.clearance(a).raw().min(self.clearance(b).raw());
+        for o in self.obstacle_slice() {
+            clearance = clearance.min(distance_to_segment(a, b, o.center) - o.radius.raw());
+        }
+        Length::new::<meter>(clearance)
+    }
+}
+
+/// What RRT* needs from the space it searches: the clearance queries of
+/// [`Clearance`], a sampler, and the rewiring constant. The algorithm never
+/// depends on the obstacle shape; [`World`] is the bundled implementation.
+pub trait RrtSpace: Clearance<Point = Point2f> {
+    /// A uniform random point inside the bounds of the space.
+    fn sample(&self, rng: &mut CuRng) -> Point2f;
 
     /// The RRT* radius constant of Karaman and Frazzoli:
     /// `gamma* = 2 * (1 + 1/d)^(1/d) * (free_measure / zeta_d)^(1/d)`.
@@ -188,15 +181,12 @@ pub trait RrtSpace {
 }
 
 impl RrtSpace for World {
-    fn sample(&self, rng: &mut CuRng) -> Point2 {
-        Point2::new(
-            rng.random::<f32>() * self.width.raw(),
-            rng.random::<f32>() * self.height.raw(),
+    fn sample(&self, rng: &mut CuRng) -> Point2f {
+        let b = &self.bounds;
+        Point2f::new(
+            b.min.x + (b.max.x - b.min.x) * rng.random::<f32>(),
+            b.min.y + (b.max.y - b.min.y) * rng.random::<f32>(),
         )
-    }
-
-    fn is_free_segment(&self, a: Point2, b: Point2) -> bool {
-        World::is_free_segment(self, a, b)
     }
 
     /// The 2D instance of the constant: `d = 2` and `zeta_2 = pi`.
@@ -207,15 +197,20 @@ impl RrtSpace for World {
     }
 }
 
-/// Distance from `point` to the segment `a`-`b`.
-fn distance_to_segment(a: Point2, b: Point2, point: Point2) -> f32 {
-    let (abx, aby) = (b.x - a.x, b.y - a.y);
+/// Euclidean distance in meters, the planner's cost metric.
+fn dist(a: Point2f, b: Point2f) -> f32 {
+    a.distance(b).raw()
+}
+
+/// Distance in meters from `point` to the segment `a`-`b`.
+fn distance_to_segment(a: Point2f, b: Point2f, point: Point2f) -> f32 {
+    let (abx, aby) = ((b.x - a.x).raw(), (b.y - a.y).raw());
     let len_sq = abx * abx + aby * aby;
     if len_sq <= f32::EPSILON {
-        return a.distance(point);
+        return dist(a, point);
     }
-    let t = (((point.x - a.x) * abx + (point.y - a.y) * aby) / len_sq).clamp(0.0, 1.0);
-    Point2::new(a.x + t * abx, a.y + t * aby).distance(point)
+    let t = (((point.x - a.x).raw() * abx + (point.y - a.y).raw() * aby) / len_sq).clamp(0.0, 1.0);
+    dist(a.lerp(b, t), point)
 }
 
 /// Tuning knobs of the planner, all read from the node's RON `config:`.
@@ -253,7 +248,7 @@ impl Default for RrtParams {
 /// One vertex of the tree.
 #[derive(Debug, Clone)]
 struct TreeNode {
-    pos: Point2,
+    pos: Point2f,
     /// `None` for the root only.
     parent: Option<u32>,
     /// Path cost from the start to this node.
@@ -273,8 +268,8 @@ pub struct RrtStar<S: RrtSpace = World> {
     /// configured one, or the one derived from the job's space when the
     /// config left it at 0.
     gamma: f32,
-    start: Point2,
-    goal: Point2,
+    start: Point2f,
+    goal: Point2f,
     tree: Vec<TreeNode>,
     /// Node closing the best path found so far.
     best_goal: Option<u32>,
@@ -291,7 +286,7 @@ impl<S: RrtSpace> RrtStar<S> {
     /// Starts a search rooted at `start`. An unreachable or blocked `start`
     /// simply never grows a tree; the caller sees "no path" and the anytime
     /// quality floor drops the result.
-    pub fn new(space: S, params: RrtParams, start: Point2, goal: Point2, seed: u64) -> Self {
+    pub fn new(space: S, params: RrtParams, start: Point2f, goal: Point2f, seed: u64) -> Self {
         let mut planner = Self {
             space,
             params,
@@ -313,12 +308,12 @@ impl<S: RrtSpace> RrtStar<S> {
     /// Restarts the search on a new problem, keeping the capacity the previous
     /// job grew: after the first job the planner asks the allocator for much
     /// less.
-    pub fn reset(&mut self, space: S, start: Point2, goal: Point2, seed: u64) {
+    pub fn reset(&mut self, space: S, start: Point2f, goal: Point2f, seed: u64) {
         self.space = space;
         self.restart(start, goal, seed);
     }
 
-    fn restart(&mut self, start: Point2, goal: Point2, seed: u64) {
+    fn restart(&mut self, start: Point2f, goal: Point2f, seed: u64) {
         // The map can change between jobs, so a derived gamma must follow it.
         self.gamma = if self.params.gamma > 0.0 {
             self.params.gamma
@@ -383,7 +378,7 @@ impl<S: RrtSpace> RrtStar<S> {
 
     /// Shortest conceivable path: the straight line, obstacles ignored.
     pub fn lower_bound(&self) -> f32 {
-        self.start.distance(self.goal)
+        dist(self.start, self.goal)
     }
 
     /// Normalized quality in `0.0..=1.0`: how close the best path is to the
@@ -430,7 +425,7 @@ impl<S: RrtSpace> RrtStar<S> {
     /// cost stays an upper bound on what the robot drives. `None` means even
     /// the shortcut path does not fit; the caller then publishes nothing
     /// rather than a path that cuts through an obstacle.
-    pub fn write_path(&self, out: &mut [Point2; MAX_WAYPOINTS]) -> Option<u32> {
+    pub fn write_path(&self, out: &mut [Point2f; MAX_WAYPOINTS]) -> Option<u32> {
         let goal_node = self.best_goal?;
         let mut chain = Vec::new();
         let mut cursor = Some(goal_node);
@@ -457,12 +452,17 @@ impl<S: RrtSpace> RrtStar<S> {
             // the scan only looks for something further.
             let mut next = at + 1;
             for candidate in (at + 2)..chain.len() {
-                if self.space.is_free_segment(chain[at], chain[candidate]) {
+                if self.segment_free(chain[at], chain[candidate]) {
                     next = candidate;
                 }
             }
             at = next;
         }
+    }
+
+    /// True when the whole segment keeps positive clearance.
+    fn segment_free(&self, a: Point2f, b: Point2f) -> bool {
+        self.space.clearance_segment(a, b).raw() > 0.0
     }
 
     /// One RRT* iteration: sample, steer, choose the cheapest parent, rewire
@@ -472,7 +472,7 @@ impl<S: RrtSpace> RrtStar<S> {
         let nearest = self.nearest(sample);
         let from = self.tree[nearest as usize].pos;
         let new_pos = steer(from, sample, self.params.step_size);
-        if !self.space.is_free_segment(from, new_pos) {
+        if !self.segment_free(from, new_pos) {
             return;
         }
 
@@ -480,18 +480,18 @@ impl<S: RrtSpace> RrtStar<S> {
         let mut near = core::mem::take(&mut self.scratch_near);
         near.clear();
         for (index, node) in self.tree.iter().enumerate() {
-            if node.pos.distance(new_pos) <= radius {
+            if dist(node.pos, new_pos) <= radius {
                 near.push(index as u32);
             }
         }
 
         // Choose the parent that gives the cheapest path to the new node.
         let mut parent = nearest;
-        let mut cost = self.tree[nearest as usize].cost + from.distance(new_pos);
+        let mut cost = self.tree[nearest as usize].cost + dist(from, new_pos);
         for &index in near.iter() {
             let candidate = &self.tree[index as usize];
-            let candidate_cost = candidate.cost + candidate.pos.distance(new_pos);
-            if candidate_cost < cost && self.space.is_free_segment(candidate.pos, new_pos) {
+            let candidate_cost = candidate.cost + dist(candidate.pos, new_pos);
+            if candidate_cost < cost && self.segment_free(candidate.pos, new_pos) {
                 parent = index;
                 cost = candidate_cost;
             }
@@ -515,10 +515,10 @@ impl<S: RrtSpace> RrtStar<S> {
                 let neighbor = &self.tree[index as usize];
                 (neighbor.pos, neighbor.cost)
             };
-            let rewired_cost = cost + neighbor_pos.distance(new_pos);
+            let rewired_cost = cost + dist(neighbor_pos, new_pos);
             if rewired_cost < neighbor_cost
                 && !self.is_ancestor(index, new_index)
-                && self.space.is_free_segment(new_pos, neighbor_pos)
+                && self.segment_free(new_pos, neighbor_pos)
             {
                 self.reparent(index, new_index, rewired_cost);
             }
@@ -526,9 +526,9 @@ impl<S: RrtSpace> RrtStar<S> {
         self.scratch_near = near;
 
         // Does the new node close a better path?
-        let to_goal = new_pos.distance(self.goal);
+        let to_goal = dist(new_pos, self.goal);
         if to_goal <= self.params.goal_threshold
-            && self.space.is_free_segment(new_pos, self.goal)
+            && self.segment_free(new_pos, self.goal)
             && cost + to_goal < self.best_cost
         {
             self.best_cost = cost + to_goal;
@@ -537,12 +537,12 @@ impl<S: RrtSpace> RrtStar<S> {
         // Rewiring may have shortened the current best path too.
         if let Some(goal_node) = self.best_goal {
             let node = &self.tree[goal_node as usize];
-            self.best_cost = self.best_cost.min(node.cost + node.pos.distance(self.goal));
+            self.best_cost = self.best_cost.min(node.cost + dist(node.pos, self.goal));
         }
     }
 
     /// A random point of the space, biased toward the goal.
-    fn sample(&mut self) -> Point2 {
+    fn sample(&mut self) -> Point2f {
         if self.rng.random::<f32>() < self.params.goal_bias {
             return self.goal;
         }
@@ -552,11 +552,11 @@ impl<S: RrtSpace> RrtStar<S> {
     /// Index of the tree node closest to `point`. Linear on purpose: a flat
     /// scan is simple and fast enough at `max_nodes` scale; a spatial index
     /// would only pay off on much larger trees.
-    fn nearest(&self, point: Point2) -> u32 {
+    fn nearest(&self, point: Point2f) -> u32 {
         let mut best = 0u32;
         let mut best_distance = f32::INFINITY;
         for (index, node) in self.tree.iter().enumerate() {
-            let distance = node.pos.distance(point);
+            let distance = dist(node.pos, point);
             if distance < best_distance {
                 best_distance = distance;
                 best = index as u32;
@@ -640,7 +640,7 @@ impl<S: RrtSpace> RrtStar<S> {
                 let child = self.tree[index as usize].children[i];
                 let node = &self.tree[child as usize];
                 if protected[child as usize]
-                    || node.cost + node.pos.distance(self.goal) <= self.best_cost
+                    || node.cost + dist(node.pos, self.goal) <= self.best_cost
                 {
                     keep[child as usize] = true;
                     stack.push(child);
@@ -676,47 +676,64 @@ impl<S: RrtSpace> RrtStar<S> {
 }
 
 /// Point at most `step_size` away from `from` in the direction of `to`.
-fn steer(from: Point2, to: Point2, step_size: f32) -> Point2 {
-    let distance = from.distance(to);
+fn steer(from: Point2f, to: Point2f, step_size: f32) -> Point2f {
+    let distance = dist(from, to);
     if distance <= step_size {
         return to;
     }
-    let ratio = step_size / distance;
-    Point2::new(
-        from.x + ratio * (to.x - from.x),
-        from.y + ratio * (to.y - from.y),
-    )
+    from.lerp(to, step_size / distance)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const START: Point2 = Point2::new(0.5, 0.5);
-    const GOAL: Point2 = Point2::new(9.5, 9.5);
+    fn start() -> Point2f {
+        Point2f::from_meters(0.5, 0.5)
+    }
+
+    fn goal() -> Point2f {
+        Point2f::from_meters(9.5, 9.5)
+    }
 
     fn planner(seed: u64) -> RrtStar {
-        RrtStar::new(World::depot(), RrtParams::default(), START, GOAL, seed)
+        RrtStar::new(World::depot(), RrtParams::default(), start(), goal(), seed)
     }
 
     #[test]
     fn world_rejects_too_many_obstacles() {
         let radius = Length::new::<meter>(0.1);
-        let side = Length::new::<meter>(10.0);
-        let too_many = [Obstacle::new(Point2::new(1.0, 1.0), radius); MAX_OBSTACLES + 1];
-        assert!(World::new(side, side, &too_many).is_err());
-        assert!(World::new(side, side, &too_many[..MAX_OBSTACLES]).is_ok());
+        let bounds = BBox2f::new(
+            Point2f::from_meters(0.0, 0.0),
+            Point2f::from_meters(10.0, 10.0),
+        );
+        let too_many = [Obstacle::new(Point2f::from_meters(1.0, 1.0), radius); MAX_OBSTACLES + 1];
+        assert!(World::new(bounds, &too_many).is_err());
+        assert!(World::new(bounds, &too_many[..MAX_OBSTACLES]).is_ok());
     }
 
     #[test]
-    fn segment_collision_is_detected() {
+    fn clearance_signs_match_the_geometry() {
         let world = World::depot();
+        let point = Point2f::from_meters;
         // Straight through the pillar at (3, 3).
-        assert!(!world.is_free_segment(Point2::new(1.0, 1.0), Point2::new(5.0, 5.0)));
+        assert!(
+            world
+                .clearance_segment(point(1.0, 1.0), point(5.0, 5.0))
+                .raw()
+                <= 0.0
+        );
         // Along the free bottom edge.
-        assert!(world.is_free_segment(Point2::new(0.2, 0.2), Point2::new(0.2, 9.8)));
-        // Endpoints out of bounds.
-        assert!(!world.is_free_segment(START, Point2::new(11.0, 0.5)));
+        assert!(
+            world
+                .clearance_segment(point(0.2, 0.2), point(0.2, 9.8))
+                .raw()
+                > 0.0
+        );
+        // An endpoint out of bounds.
+        assert!(world.clearance_segment(start(), point(11.0, 0.5)).raw() <= 0.0);
+        // Inside a pillar the clearance goes negative.
+        assert!(world.clearance(point(3.0, 3.0)).raw() < 0.0);
     }
 
     #[test]
@@ -765,21 +782,21 @@ mod tests {
                 gamma: [0.0, 3.0][index],
                 ..Default::default()
             };
-            let mut planner = RrtStar::new(World::depot(), params, START, GOAL, seed);
+            let mut planner = RrtStar::new(World::depot(), params, start(), goal(), seed);
             planner.grow(400);
             for _ in 0..24 {
                 planner.grow(256);
-                let mut waypoints = [Point2::default(); MAX_WAYPOINTS];
+                let mut waypoints = [Point2f::default(); MAX_WAYPOINTS];
                 let Some(len) = planner.write_path(&mut waypoints) else {
                     panic!("seed {seed}: the shortcut path did not fit");
                 };
                 longest_tree_path = longest_tree_path.max(planner.tree_path_len());
                 assert!(len >= 2, "a path has at least a start and a goal");
-                assert_eq!(waypoints[0], START);
-                assert_eq!(waypoints[(len - 1) as usize], GOAL);
+                assert_eq!(waypoints[0], start());
+                assert_eq!(waypoints[(len - 1) as usize], goal());
                 for pair in waypoints[..len as usize].windows(2) {
                     assert!(
-                        world.is_free_segment(pair[0], pair[1]),
+                        world.clearance_segment(pair[0], pair[1]).raw() > 0.0,
                         "seed {seed}: published path crosses an obstacle"
                     );
                 }
@@ -787,7 +804,7 @@ mod tests {
                 // straight free line, so it never lengthens the path.
                 let published: f32 = waypoints[..len as usize]
                     .windows(2)
-                    .map(|pair| pair[0].distance(pair[1]))
+                    .map(|pair| dist(pair[0], pair[1]))
                     .sum();
                 assert!(
                     published <= planner.best_cost() + 1e-3,
@@ -811,7 +828,7 @@ mod tests {
     /// never NaN from the zero-by-zero ratio.
     #[test]
     fn degenerate_job_reports_full_quality() {
-        let mut planner = RrtStar::new(World::depot(), RrtParams::default(), START, START, 3);
+        let mut planner = RrtStar::new(World::depot(), RrtParams::default(), start(), start(), 3);
         planner.grow(400);
         assert!(planner.has_solution());
         assert_eq!(planner.quality(), 1.0);

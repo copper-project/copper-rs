@@ -10,7 +10,7 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
-use cu_rrt_star::{PlanPath, PlanRequest, Point2, World};
+use cu_rrt_star::{PlanPath, PlanRequest, Point2f, World};
 use cu29::prelude::*;
 use rerun::{
     Color, LineStrips2D, Points2D, Radius, RecordingStream, RecordingStreamBuilder, Scalars,
@@ -18,16 +18,20 @@ use rerun::{
 use std::sync::Mutex;
 
 /// Where the robot starts, in free space on the depot map.
-const START: Point2 = Point2::new(0.5, 0.5);
+fn start() -> Point2f {
+    Point2f::from_meters(0.5, 0.5)
+}
 
 /// The goals the robot patrols, all in free space on the depot map. They are
 /// placed so a pillar blocks the straight line of every leg: each leg needs a
 /// detour, and refinement has visible work on every trajectory.
-const PATROL: [Point2; 3] = [
-    Point2::new(9.5, 9.5),
-    Point2::new(0.5, 7.0),
-    Point2::new(6.5, 0.5),
-];
+fn patrol() -> [Point2f; 3] {
+    [
+        Point2f::from_meters(9.5, 9.5),
+        Point2f::from_meters(0.5, 7.0),
+        Point2f::from_meters(6.5, 0.5),
+    ]
+}
 
 /// The newest path the viewer saw, followed by the simulator one cycle later.
 static LATEST_PATH: Mutex<Option<PlanPath>> = Mutex::new(None);
@@ -45,7 +49,7 @@ const MAX_TRAIL: usize = 2048;
 /// planner runs every job on a fresh stream of its RNG resource.
 #[derive(Reflect)]
 pub struct NavSim {
-    pose: Point2,
+    pose: Point2f,
     goal_index: u32,
     speed_mps: f32,
     goal_threshold: f32,
@@ -78,17 +82,13 @@ impl NavSim {
         let mut next = 1;
         while budget > 0.0 && next < len {
             let target = path.waypoints[next];
-            let distance = self.pose.distance(target);
+            let distance = self.pose.distance(target).raw();
             if distance <= budget {
                 self.pose = target;
                 budget -= distance;
                 next += 1;
             } else {
-                let ratio = budget / distance;
-                self.pose = Point2::new(
-                    self.pose.x + ratio * (target.x - self.pose.x),
-                    self.pose.y + ratio * (target.y - self.pose.y),
-                );
+                self.pose = self.pose.lerp(target, budget / distance);
                 break;
             }
         }
@@ -111,7 +111,7 @@ impl CuSrcTask for NavSim {
             }
         }
         Ok(Self {
-            pose: START,
+            pose: start(),
             goal_index: 0,
             speed_mps,
             goal_threshold,
@@ -135,8 +135,8 @@ impl CuSrcTask for NavSim {
             self.follow(&path, self.speed_mps * dt);
         }
 
-        if self.pose.distance(PATROL[self.goal_index as usize]) <= self.goal_threshold {
-            self.goal_index = (self.goal_index + 1) % PATROL.len() as u32;
+        if self.pose.distance(patrol()[self.goal_index as usize]).raw() <= self.goal_threshold {
+            self.goal_index = (self.goal_index + 1) % patrol().len() as u32;
             // A path toward the old goal must not be driven.
             *LATEST_PATH.lock().expect("path poisoned") = None;
         }
@@ -144,7 +144,7 @@ impl CuSrcTask for NavSim {
         new_msg.set_payload(PlanRequest {
             world: World::depot(),
             start: self.pose,
-            goal: PATROL[self.goal_index as usize],
+            goal: patrol()[self.goal_index as usize],
         });
         new_msg.tov = Tov::Time(now);
         Ok(())
@@ -160,7 +160,7 @@ pub struct RerunViewer {
     rec: RecordingStream,
     cycle: i64,
     world_logged: bool,
-    trail: Vec<Point2>,
+    trail: Vec<Point2f>,
 }
 
 impl Freezable for RerunViewer {}
@@ -209,20 +209,24 @@ impl CuSinkTask for RerunViewer {
         log(
             &self.rec,
             "world/robot",
-            &Points2D::new([(request.start.x, request.start.y)])
+            &Points2D::new([(request.start.x.raw(), request.start.y.raw())])
                 .with_radii([Radius::new_scene_units(0.15)])
                 .with_colors([Color::from([255, 140, 0])]),
         )?;
         log(
             &self.rec,
             "world/trail",
-            &LineStrips2D::new([self.trail.iter().map(|p| (p.x, p.y)).collect::<Vec<_>>()])
-                .with_colors([Color::from([255, 200, 120])]),
+            &LineStrips2D::new([self
+                .trail
+                .iter()
+                .map(|p| (p.x.raw(), p.y.raw()))
+                .collect::<Vec<_>>()])
+            .with_colors([Color::from([255, 200, 120])]),
         )?;
         log(
             &self.rec,
             "world/goal",
-            &Points2D::new([(request.goal.x, request.goal.y)])
+            &Points2D::new([(request.goal.x.raw(), request.goal.y.raw())])
                 .with_radii([Radius::new_scene_units(0.2)])
                 .with_colors([Color::from([0, 200, 0])]),
         )?;
@@ -232,7 +236,7 @@ impl CuSinkTask for RerunViewer {
         let strip: Vec<(f32, f32)> = path_msg.payload().map_or_else(Vec::new, |path| {
             path.waypoints[..path.len as usize]
                 .iter()
-                .map(|p| (p.x, p.y))
+                .map(|p| (p.x.raw(), p.y.raw()))
                 .collect()
         });
         log(
@@ -243,7 +247,7 @@ impl CuSinkTask for RerunViewer {
 
         // The same quality definition as the planner: straight line over cost.
         let quality = path_msg.payload().map_or(0.0, |path| {
-            (request.start.distance(request.goal) / path.cost.raw()) as f64
+            (request.start.distance(request.goal).raw() / path.cost.raw()) as f64
         });
         log(&self.rec, "curves/quality", &Scalars::single(quality))?;
         let iterations = path_msg
@@ -273,10 +277,12 @@ fn log(rec: &RecordingStream, path: &str, entity: &impl rerun::AsComponents) -> 
 
 /// The static part of the scene: the world bounds and the obstacles.
 fn log_world(rec: &RecordingStream, world: &World) -> CuResult<()> {
-    let (w, h) = (world.width.raw(), world.height.raw());
+    let b = &world.bounds;
+    let (x0, y0) = (b.min.x.raw(), b.min.y.raw());
+    let (x1, y1) = (b.max.x.raw(), b.max.y.raw());
     rec.log_static(
         "world/bounds",
-        &LineStrips2D::new([[(0.0, 0.0), (w, 0.0), (w, h), (0.0, h), (0.0, 0.0)]])
+        &LineStrips2D::new([[(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)]])
             .with_colors([Color::from([180, 180, 180])]),
     )
     .map_err(|e| CuError::new_with_cause("Failed to log the world bounds", e))?;
@@ -284,13 +290,17 @@ fn log_world(rec: &RecordingStream, world: &World) -> CuResult<()> {
     let obstacles = &world.obstacles[..world.obstacle_count as usize];
     rec.log_static(
         "world/obstacles",
-        &Points2D::new(obstacles.iter().map(|o| (o.center.x, o.center.y)))
-            .with_radii(
-                obstacles
-                    .iter()
-                    .map(|o| Radius::new_scene_units(o.radius.raw())),
-            )
-            .with_colors([Color::from([100, 100, 100])]),
+        &Points2D::new(
+            obstacles
+                .iter()
+                .map(|o| (o.center.x.raw(), o.center.y.raw())),
+        )
+        .with_radii(
+            obstacles
+                .iter()
+                .map(|o| Radius::new_scene_units(o.radius.raw())),
+        )
+        .with_colors([Color::from([100, 100, 100])]),
     )
     .map_err(|e| CuError::new_with_cause("Failed to log the obstacles", e))
 }
