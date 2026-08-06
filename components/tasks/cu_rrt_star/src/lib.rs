@@ -22,12 +22,16 @@ use cu_rng::prelude::*;
 use cu29::cutask_anytime::{AnytimeStatus, CuAnytimeTask, Quality, quality_from_f32};
 use cu29::prelude::*;
 use cu29::units::si::f32::Length;
-use cu29::units::si::length::meter;
 use serde::{Deserialize, Serialize};
 
 /// Quality at which the path matches the straight-line lower bound: there is
 /// nothing left to refine.
 const CONVERGED_QUALITY: f32 = 0.999;
+
+/// True once the published quality leaves nothing to refine.
+fn converged(quality: Quality) -> bool {
+    quality.raw() >= CONVERGED_QUALITY
+}
 
 /// One planning problem. The map travels with the job, so the source owns it
 /// and may change it between jobs.
@@ -105,8 +109,8 @@ pub struct RrtStarPlanner {
     planner: Option<RrtStar>,
     /// Cost of the path currently in the output; infinite while none was
     /// published for this job.
-    published_cost: f32,
-    published_quality: f32,
+    published_cost: Length,
+    published_quality: Quality,
 }
 
 // The search state is per-job and re-initialized by `base()` at the start of
@@ -141,14 +145,14 @@ impl RrtStarPlanner {
                 output.set_payload(PlanPath {
                     waypoints,
                     len,
-                    cost: Length::new::<meter>(planner.best_cost()),
+                    cost: planner.best_cost(),
                     iterations: planner.iterations(),
                 });
                 self.published_cost = planner.best_cost();
                 self.published_quality = planner.quality();
             }
         }
-        quality_from_f32(self.published_quality)
+        self.published_quality
     }
 
     /// The projected view a debug session gets instead of the whole tree.
@@ -158,9 +162,9 @@ impl RrtStarPlanner {
             iterations: planner.map_or(0, RrtStar::iterations),
             tree_size: planner.map_or(0, RrtStar::tree_size),
             tree_path_len: planner.map_or(0, |p| p.tree_path_len() as u32),
-            best_cost: Length::new::<meter>(planner.map_or(f32::INFINITY, RrtStar::best_cost)),
-            published_cost: Length::new::<meter>(self.published_cost),
-            published_quality: quality_from_f32(self.published_quality),
+            best_cost: planner.map_or(rrt::meters(f32::INFINITY), RrtStar::best_cost),
+            published_cost: self.published_cost,
+            published_quality: self.published_quality,
         }
     }
 }
@@ -192,16 +196,16 @@ impl CuAnytimeTask for RrtStarPlanner {
         let mut block_iterations = 256u32;
         if let Some(config) = config {
             if let Some(value) = config.get::<f32>("step_size")? {
-                params.step_size = value;
+                params.step_size = rrt::meters(value);
             }
             if let Some(value) = config.get::<f32>("goal_bias")? {
-                params.goal_bias = value;
+                params.goal_bias = rrt::ratio_of(value);
             }
             if let Some(value) = config.get::<f32>("goal_threshold")? {
-                params.goal_threshold = value;
+                params.goal_threshold = rrt::meters(value);
             }
             if let Some(value) = config.get::<f32>("gamma")? {
-                params.gamma = value;
+                params.gamma = rrt::meters(value);
             }
             if let Some(value) = config.get::<u32>("prune_interval")? {
                 params.prune_interval = value;
@@ -231,8 +235,8 @@ impl CuAnytimeTask for RrtStarPlanner {
             base_seed: rng.random::<u64>(),
             job_counter: 0,
             planner: None,
-            published_cost: f32::INFINITY,
-            published_quality: 0.0,
+            published_cost: rrt::meters(f32::INFINITY),
+            published_quality: quality_from_f32(0.0),
         })
     }
 
@@ -247,8 +251,8 @@ impl CuAnytimeTask for RrtStarPlanner {
             // instead of failing the application. The recycled output must
             // not keep the previous job's path.
             output.clear_payload();
-            self.published_cost = f32::INFINITY;
-            self.published_quality = 0.0;
+            self.published_cost = rrt::meters(f32::INFINITY);
+            self.published_quality = quality_from_f32(0.0);
             return Ok(AnytimeStatus::Aborted);
         };
         self.job_counter = self.job_counter.wrapping_add(1);
@@ -270,13 +274,13 @@ impl CuAnytimeTask for RrtStarPlanner {
             )),
         };
         planner.grow(self.base_iterations);
-        self.published_cost = f32::INFINITY;
-        self.published_quality = 0.0;
+        self.published_cost = rrt::meters(f32::INFINITY);
+        self.published_quality = quality_from_f32(0.0);
         // Output messages are recycled: with no path yet the message must not
         // still carry the previous job's path.
         output.clear_payload();
         let quality = self.publish(output);
-        if self.published_quality >= CONVERGED_QUALITY {
+        if converged(self.published_quality) {
             // The base path already matches the straight line: no refinement
             // can beat it.
             return Ok(AnytimeStatus::Converged(quality));
@@ -296,13 +300,11 @@ impl CuAnytimeTask for RrtStarPlanner {
             .as_mut()
             .ok_or("rrt*: refine() without a job from base()")?;
         if planner.is_exhausted() {
-            return Ok(AnytimeStatus::Converged(quality_from_f32(
-                self.published_quality,
-            )));
+            return Ok(AnytimeStatus::Converged(self.published_quality));
         }
         planner.grow(self.block_iterations);
         let quality = self.publish(output);
-        if self.published_quality >= CONVERGED_QUALITY {
+        if converged(self.published_quality) {
             // The path matches the straight line: no iteration can beat it.
             return Ok(AnytimeStatus::Converged(quality));
         }

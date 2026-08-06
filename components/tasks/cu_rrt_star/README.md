@@ -66,6 +66,10 @@ tasks: [
 
 ### Configuration
 
+RON values are plain numbers — meters for lengths, a 0..1 fraction for
+`goal_bias`. `RrtParams` holds them as `cu29-units` `Length` and `Ratio`, so
+the Rust API cannot mix a length with a count.
+
 - `base_iterations` (default 400): iterations of the base block, aiming at a
   first path.
 - `block_iterations` (default 256): iterations of one refinement quantum.

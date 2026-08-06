@@ -283,7 +283,7 @@ impl Clearance for World {
         // at an endpoint; the obstacle terms need the true segment distance.
         let mut clearance = self.clearance(a).raw().min(self.clearance(b).raw());
         for o in self.obstacles() {
-            clearance = clearance.min(distance_to_segment(a, b, o.center) - o.radius.raw());
+            clearance = clearance.min(distance_to_segment(a, b, o.center).raw() - o.radius.raw());
         }
         Length::new::<meter>(clearance)
     }
@@ -323,39 +323,45 @@ impl RrtSpace for World {
     }
 }
 
-/// Euclidean distance in meters, the planner's cost metric.
-fn dist<P: PlanPoint>(a: P, b: P) -> f32 {
-    a.distance(b).raw()
-}
-
-/// Distance in meters from `point` to the segment `a`-`b`.
-fn distance_to_segment<P: PlanPoint>(a: P, b: P, point: P) -> f32 {
+/// Distance from `point` to the segment `a`-`b`.
+fn distance_to_segment<P: PlanPoint>(a: P, b: P, point: P) -> Length {
     let (dot, len_sq) = P::project(a, b, point);
     if len_sq.raw() <= f32::EPSILON {
-        return dist(a, point);
+        return a.distance(point);
     }
     let along = ratio_of((dot.raw() / len_sq.raw()).clamp(0.0, 1.0));
-    dist(a.lerp(b, along), point)
+    a.lerp(b, along).distance(point)
+}
+
+/// A length in meters.
+pub(crate) fn meters(value: f32) -> Length {
+    Length::new::<meter>(value)
 }
 
 /// A dimensionless ratio from a normalized scalar.
-fn ratio_of(value: f32) -> Ratio {
+pub(crate) fn ratio_of(value: f32) -> Ratio {
     Ratio::new::<cu29::units::si::ratio::ratio>(value)
+}
+
+/// The smaller of two lengths. cu29-units quantities carry `PartialOrd` but
+/// no `min`, since they are not `Ord`.
+fn shorter(a: Length, b: Length) -> Length {
+    if b < a { b } else { a }
 }
 
 /// Tuning knobs of the planner, all read from the node's RON `config:`.
 #[derive(Debug, Clone, Copy, Reflect)]
 pub struct RrtParams {
-    /// Longest edge the planner adds in one extension, in meters.
-    pub step_size: f32,
+    /// Longest edge the planner adds in one extension.
+    pub step_size: Length,
     /// Probability of sampling the goal instead of a random point.
-    pub goal_bias: f32,
+    pub goal_bias: Ratio,
     /// A node this close to the goal closes a path.
-    pub goal_threshold: f32,
-    /// Gamma of the RRT* rewiring radius `gamma * sqrt(ln n / n)`. `0.0`
+    pub goal_threshold: Length,
+    /// Gamma of the RRT* rewiring radius `gamma * sqrt(ln n / n)`. Zero
     /// derives it from the space through [`RrtSpace::rrt_star_gamma`], which is
     /// the value RRT* needs to converge to the optimum.
-    pub gamma: f32,
+    pub gamma: Length,
     /// Branch-and-bound prune every N iterations; 0 disables pruning.
     pub prune_interval: u32,
     /// Hard cap on the tree size, so one job cannot grow without bound.
@@ -366,10 +372,10 @@ pub struct RrtParams {
 impl Default for RrtParams {
     fn default() -> Self {
         Self {
-            step_size: 0.8,
-            goal_bias: 0.05,
-            goal_threshold: 0.5,
-            gamma: 0.0,
+            step_size: meters(0.8),
+            goal_bias: ratio_of(0.05),
+            goal_threshold: meters(0.5),
+            gamma: meters(0.0),
             prune_interval: 512,
             max_nodes: 4000,
         }
@@ -383,7 +389,7 @@ struct TreeNode {
     /// `None` for the root only.
     parent: Option<u32>,
     /// Path cost from the start to this node.
-    cost: f32,
+    cost: Length,
     children: Vec<u32>,
 }
 
@@ -394,10 +400,9 @@ struct TreeNode {
 pub struct RrtStar<S: RrtSpace = World> {
     space: S,
     params: RrtParams,
-    /// The rewiring gamma in effect for the current job, in meters: the
-    /// configured one, or the one derived from the job's space when the
-    /// config left it at 0.
-    gamma: f32,
+    /// The rewiring gamma in effect for the current job: the configured one,
+    /// or the one derived from the job's space when the config left it at 0.
+    gamma: Length,
     start: S::Point,
     goal: S::Point,
     /// Node positions, kept apart from the topology so the two scans every
@@ -410,7 +415,7 @@ pub struct RrtStar<S: RrtSpace = World> {
     /// Node closing the best path found so far.
     best_goal: Option<u32>,
     /// Cost of the best path found so far, infinite until one is found.
-    best_cost: f32,
+    best_cost: Length,
     iterations: u32,
     rng: CuRng,
     /// Reused between iterations so the scans stay off the allocator. The tree
@@ -434,13 +439,13 @@ impl<S: RrtSpace> RrtStar<S> {
                 max_nodes: params.max_nodes.min(MAX_NODES as u32),
                 ..params
             },
-            gamma: 0.0,
+            gamma: meters(0.0),
             start,
             goal,
             positions: <S::Point as PlanPoint>::Set::default(),
             tree: Vec::new(),
             best_goal: None,
-            best_cost: f32::INFINITY,
+            best_cost: meters(f32::INFINITY),
             iterations: 0,
             rng: CuRng::from_seed(seed),
             // Sized once so the per-iteration scans never touch the allocator.
@@ -462,10 +467,10 @@ impl<S: RrtSpace> RrtStar<S> {
 
     fn restart(&mut self, start: S::Point, goal: S::Point, seed: u64) {
         // The map can change between jobs, so a derived gamma must follow it.
-        self.gamma = if self.params.gamma > 0.0 {
+        self.gamma = if self.params.gamma > meters(0.0) {
             self.params.gamma
         } else {
-            self.space.rrt_star_gamma().raw()
+            self.space.rrt_star_gamma()
         };
         self.start = start;
         self.goal = goal;
@@ -474,11 +479,11 @@ impl<S: RrtSpace> RrtStar<S> {
         self.positions.push(start);
         self.tree.push(TreeNode {
             parent: None,
-            cost: 0.0,
+            cost: meters(0.0),
             children: Vec::new(),
         });
         self.best_goal = None;
-        self.best_cost = f32::INFINITY;
+        self.best_cost = meters(f32::INFINITY);
         self.iterations = 0;
         self.rng = CuRng::from_seed(seed);
     }
@@ -500,7 +505,7 @@ impl<S: RrtSpace> RrtStar<S> {
     }
 
     /// Cost of the best path so far, infinite while no path is known.
-    pub fn best_cost(&self) -> f32 {
+    pub fn best_cost(&self) -> Length {
         self.best_cost
     }
 
@@ -525,24 +530,24 @@ impl<S: RrtSpace> RrtStar<S> {
     }
 
     /// Shortest conceivable path: the straight line, obstacles ignored.
-    pub fn lower_bound(&self) -> f32 {
-        dist(self.start, self.goal)
+    pub fn lower_bound(&self) -> Length {
+        self.start.distance(self.goal)
     }
 
     /// Normalized quality in `0.0..=1.0`: how close the best path is to the
     /// straight-line lower bound. 0.0 means no path yet, 1.0 means the path is
     /// as short as the world allows.
-    pub fn quality(&self) -> f32 {
+    pub fn quality(&self) -> Ratio {
         if !self.has_solution() {
-            return 0.0;
+            return ratio_of(0.0);
         }
         let lower_bound = self.lower_bound();
         if self.best_cost <= lower_bound {
             // Covers the degenerate job with the start on the goal, where the
             // ratio would divide zero by zero.
-            return 1.0;
+            return ratio_of(1.0);
         }
-        (lower_bound / self.best_cost).clamp(0.0, 1.0)
+        ratio_of((lower_bound.raw() / self.best_cost.raw()).clamp(0.0, 1.0))
     }
 
     /// Nodes on the best path before shortcutting, the goal included. Zero
@@ -609,7 +614,7 @@ impl<S: RrtSpace> RrtStar<S> {
 
     /// True when the whole segment keeps positive clearance.
     fn segment_free(&self, a: S::Point, b: S::Point) -> bool {
-        self.space.clearance_segment(a, b).raw() > 0.0
+        self.space.clearance_segment(a, b) > meters(0.0)
     }
 
     /// One RRT* iteration: sample, steer, choose the cheapest parent, rewire
@@ -626,7 +631,7 @@ impl<S: RrtSpace> RrtStar<S> {
         // Squared radius against squared distances: the whole neighborhood
         // scan then stays sqrt-free, which is what lets it vectorize.
         let radius = self.near_radius();
-        let radius_sq = Area::new::<square_meter>(radius * radius);
+        let radius_sq = Area::new::<square_meter>(radius.raw() * radius.raw());
         let n = self.positions.len();
         self.positions
             .distances_squared(new_pos, &mut self.scratch_d2);
@@ -640,10 +645,10 @@ impl<S: RrtSpace> RrtStar<S> {
 
         // Choose the parent that gives the cheapest path to the new node.
         let mut parent = nearest;
-        let mut cost = self.tree[nearest as usize].cost + dist(from, new_pos);
+        let mut cost = self.tree[nearest as usize].cost + from.distance(new_pos);
         for &index in near.iter() {
             let candidate_pos = self.positions.get(index as usize);
-            let candidate_cost = self.tree[index as usize].cost + dist(candidate_pos, new_pos);
+            let candidate_cost = self.tree[index as usize].cost + candidate_pos.distance(new_pos);
             if candidate_cost < cost && self.segment_free(candidate_pos, new_pos) {
                 parent = index;
                 cost = candidate_cost;
@@ -666,7 +671,7 @@ impl<S: RrtSpace> RrtStar<S> {
             }
             let neighbor_pos = self.positions.get(index as usize);
             let neighbor_cost = self.tree[index as usize].cost;
-            let rewired_cost = cost + dist(neighbor_pos, new_pos);
+            let rewired_cost = cost + neighbor_pos.distance(new_pos);
             if rewired_cost < neighbor_cost
                 && !self.is_ancestor(index, new_index)
                 && self.segment_free(new_pos, neighbor_pos)
@@ -677,7 +682,7 @@ impl<S: RrtSpace> RrtStar<S> {
         self.scratch_near = near;
 
         // Does the new node close a better path?
-        let to_goal = dist(new_pos, self.goal);
+        let to_goal = new_pos.distance(self.goal);
         if to_goal <= self.params.goal_threshold
             && self.segment_free(new_pos, self.goal)
             && cost + to_goal < self.best_cost
@@ -689,13 +694,13 @@ impl<S: RrtSpace> RrtStar<S> {
         if let Some(goal_node) = self.best_goal {
             let cost = self.tree[goal_node as usize].cost;
             let pos = self.positions.get(goal_node as usize);
-            self.best_cost = self.best_cost.min(cost + dist(pos, self.goal));
+            self.best_cost = shorter(self.best_cost, cost + pos.distance(self.goal));
         }
     }
 
     /// A random point of the space, biased toward the goal.
     fn sample(&mut self) -> S::Point {
-        if self.rng.random::<f32>() < self.params.goal_bias {
+        if self.rng.random::<f32>() < self.params.goal_bias.raw() {
             return self.goal;
         }
         self.space.sample(&mut self.rng)
@@ -710,9 +715,9 @@ impl<S: RrtSpace> RrtStar<S> {
         self.positions
             .distances_squared(point, &mut self.scratch_d2);
         let mut best = 0u32;
-        let mut best_distance = f32::INFINITY;
+        let mut best_distance = Area::new::<square_meter>(f32::INFINITY);
         for index in 0..n {
-            let distance = self.scratch_d2[index].raw();
+            let distance = self.scratch_d2[index];
             if distance < best_distance {
                 best_distance = distance;
                 best = index as u32;
@@ -722,9 +727,9 @@ impl<S: RrtSpace> RrtStar<S> {
     }
 
     /// RRT* rewiring radius `gamma * sqrt(ln n / n)`, capped at one step.
-    fn near_radius(&self) -> f32 {
+    fn near_radius(&self) -> Length {
         let n = (self.tree.len() as f32).max(2.0);
-        (self.gamma * (n.ln() / n).sqrt()).min(self.params.step_size)
+        shorter(self.gamma * (n.ln() / n).sqrt(), self.params.step_size)
     }
 
     /// True when `candidate` sits on the path from `node` up to the root.
@@ -747,7 +752,7 @@ impl<S: RrtSpace> RrtStar<S> {
 
     /// Moves `node` under `new_parent` and shifts the cost of its whole
     /// subtree by the same delta.
-    fn reparent(&mut self, node: u32, new_parent: u32, new_cost: f32) {
+    fn reparent(&mut self, node: u32, new_parent: u32, new_cost: Length) {
         if let Some(old_parent) = self.tree[node as usize].parent {
             self.tree[old_parent as usize]
                 .children
@@ -796,7 +801,7 @@ impl<S: RrtSpace> RrtStar<S> {
                 let child = self.tree[index as usize].children[i];
                 let cost = self.tree[child as usize].cost;
                 let pos = self.positions.get(child as usize);
-                if protected[child as usize] || cost + dist(pos, self.goal) <= self.best_cost {
+                if protected[child as usize] || cost + pos.distance(self.goal) <= self.best_cost {
                     keep[child as usize] = true;
                     stack.push(child);
                 }
@@ -835,12 +840,12 @@ impl<S: RrtSpace> RrtStar<S> {
 }
 
 /// Point at most `step_size` away from `from` in the direction of `to`.
-fn steer<P: PlanPoint>(from: P, to: P, step_size: f32) -> P {
-    let distance = dist(from, to);
+fn steer<P: PlanPoint>(from: P, to: P, step_size: Length) -> P {
+    let distance = from.distance(to);
     if distance <= step_size {
         return to;
     }
-    from.lerp(to, ratio_of(step_size / distance))
+    from.lerp(to, ratio_of(step_size.raw() / distance.raw()))
 }
 
 #[cfg(test)]
@@ -901,8 +906,8 @@ mod tests {
 
         fn clearance_segment(&self, a: Point3f, b: Point3f) -> Length {
             let ends = self.clearance(a).raw().min(self.clearance(b).raw());
-            let sphere = distance_to_segment(a, b, self.center) - self.radius.raw();
-            Length::new::<meter>(ends.min(sphere))
+            let sphere = distance_to_segment(a, b, self.center).raw() - self.radius.raw();
+            meters(ends.min(sphere))
         }
     }
 
@@ -936,12 +941,12 @@ mod tests {
         let start = Point3f::from_meters(0.5, 0.5, 0.5);
         let goal = Point3f::from_meters(9.5, 9.5, 9.5);
         assert!(
-            room.clearance_segment(start, goal).raw() <= 0.0,
+            room.clearance_segment(start, goal) <= meters(0.0),
             "the straight line should be blocked, or the job is trivial"
         );
 
         let params = RrtParams {
-            step_size: 1.2,
+            step_size: meters(1.2),
             ..Default::default()
         };
         let mut planner = RrtStar::new(room.clone(), params, start, goal, 5);
@@ -956,7 +961,7 @@ mod tests {
         assert_eq!(waypoints[(len - 1) as usize], goal);
         for pair in waypoints[..len as usize].windows(2) {
             assert!(
-                room.clearance_segment(pair[0], pair[1]).raw() > 0.0,
+                room.clearance_segment(pair[0], pair[1]) > meters(0.0),
                 "the published 3D path crosses the sphere"
             );
         }
@@ -980,23 +985,13 @@ mod tests {
         let world = World::depot();
         let point = Point2f::from_meters;
         // Straight through the pillar at (3, 3).
-        assert!(
-            world
-                .clearance_segment(point(1.0, 1.0), point(5.0, 5.0))
-                .raw()
-                <= 0.0
-        );
+        assert!(world.clearance_segment(point(1.0, 1.0), point(5.0, 5.0)) <= meters(0.0));
         // Along the free bottom edge.
-        assert!(
-            world
-                .clearance_segment(point(0.2, 0.2), point(0.2, 9.8))
-                .raw()
-                > 0.0
-        );
+        assert!(world.clearance_segment(point(0.2, 0.2), point(0.2, 9.8)) > meters(0.0));
         // An endpoint out of bounds.
-        assert!(world.clearance_segment(start(), point(11.0, 0.5)).raw() <= 0.0);
+        assert!(world.clearance_segment(start(), point(11.0, 0.5)) <= meters(0.0));
         // Inside a pillar the clearance goes negative.
-        assert!(world.clearance(point(3.0, 3.0)).raw() < 0.0);
+        assert!(world.clearance(point(3.0, 3.0)) < meters(0.0));
     }
 
     #[test]
@@ -1009,14 +1004,14 @@ mod tests {
         for _ in 0..16 {
             planner.grow(256);
             assert!(
-                planner.best_cost() <= previous + 1e-4,
-                "cost went up: {} then {}",
+                planner.best_cost() <= previous + meters(1e-4),
+                "cost went up: {:?} then {:?}",
                 previous,
                 planner.best_cost()
             );
             previous = planner.best_cost();
         }
-        assert!(planner.quality() > 0.0 && planner.quality() <= 1.0);
+        assert!(planner.quality() > ratio_of(0.0) && planner.quality() <= ratio_of(1.0));
         assert!(planner.best_cost() >= planner.lower_bound());
     }
 
@@ -1039,10 +1034,10 @@ mod tests {
 
         let mut longest_tree_path = 0;
         // Total refined cost over all seeds, per gamma: the derived one first.
-        let mut total_cost = [0.0f32; 2];
+        let mut total_cost = [meters(0.0); 2];
         for (seed, index) in (1..40u64).flat_map(|seed| [(seed, 0usize), (seed, 1)]) {
             let params = RrtParams {
-                gamma: [0.0, 3.0][index],
+                gamma: [meters(0.0), meters(3.0)][index],
                 ..Default::default()
             };
             let mut planner = RrtStar::new(World::depot(), params, start(), goal(), seed);
@@ -1059,19 +1054,19 @@ mod tests {
                 assert_eq!(waypoints[(len - 1) as usize], goal());
                 for pair in waypoints[..len as usize].windows(2) {
                     assert!(
-                        world.clearance_segment(pair[0], pair[1]).raw() > 0.0,
+                        world.clearance_segment(pair[0], pair[1]) > meters(0.0),
                         "seed {seed}: published path crosses an obstacle"
                     );
                 }
                 // The shortcut only removes waypoints it can bypass in a
                 // straight free line, so it never lengthens the path.
-                let published: f32 = waypoints[..len as usize]
+                let published = waypoints[..len as usize]
                     .windows(2)
-                    .map(|pair| dist(pair[0], pair[1]))
-                    .sum();
+                    .fold(meters(0.0), |sum, pair| sum + pair[0].distance(pair[1]));
                 assert!(
-                    published <= planner.best_cost() + 1e-3,
-                    "seed {seed}: shortcut path {published} longer than the cost {}",
+                    published <= planner.best_cost() + meters(1e-3),
+                    "seed {seed}: shortcut path {:?} longer than the cost {:?}",
+                    published,
                     planner.best_cost()
                 );
             }
@@ -1094,7 +1089,7 @@ mod tests {
         let mut planner = RrtStar::new(World::depot(), RrtParams::default(), start(), start(), 3);
         planner.grow(400);
         assert!(planner.has_solution());
-        assert_eq!(planner.quality(), 1.0);
+        assert_eq!(planner.quality(), ratio_of(1.0));
     }
 
     #[test]
