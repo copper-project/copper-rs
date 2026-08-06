@@ -880,7 +880,11 @@ mod tests {
         let mut planner = planner(3);
         planner.grow(1500);
         let cost_before = planner.best_cost();
+        // Positions and topology are indexed together, so they must stay the
+        // same length across a compaction.
+        assert_eq!(planner.positions.len(), planner.tree.len());
         planner.prune();
+        assert_eq!(planner.positions.len(), planner.tree.len());
         assert!(planner.has_solution(), "pruning dropped the goal node");
         // The tree stays consistent: every node still reaches the root.
         for index in 0..planner.tree.len() {
@@ -893,5 +897,26 @@ mod tests {
             }
         }
         assert_eq!(planner.best_cost(), cost_before);
+    }
+
+    /// A config asking for more nodes than the position set holds must cap,
+    /// not overrun the fixed capacity.
+    #[test]
+    fn max_nodes_is_clamped_to_the_soa_capacity() {
+        let params = RrtParams {
+            max_nodes: MAX_NODES as u32 * 4,
+            // No pruning, so the tree can only grow into the cap.
+            prune_interval: 0,
+            ..Default::default()
+        };
+        let mut planner = RrtStar::new(World::depot(), params, start(), goal(), 7);
+        assert_eq!(planner.params.max_nodes, MAX_NODES as u32);
+        planner.grow(MAX_NODES as u32 * 2);
+        assert!(planner.tree.len() <= MAX_NODES);
+        assert_eq!(planner.positions.len(), planner.tree.len());
+        assert!(
+            planner.is_exhausted(),
+            "the tree should have filled the cap"
+        );
     }
 }
