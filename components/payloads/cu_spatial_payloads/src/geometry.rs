@@ -20,7 +20,6 @@ use serde::{Deserialize, Serialize};
 #[derive(
     Default, Debug, Clone, Copy, PartialEq, Encode, Decode, Serialize, Deserialize, Reflect, Soa,
 )]
-#[reflect(from_reflect = false)]
 pub struct Point2<L: Copy + Debug + 'static> {
     pub x: L,
     pub y: L,
@@ -33,7 +32,6 @@ pub struct Point2<L: Copy + Debug + 'static> {
 #[derive(
     Default, Debug, Clone, Copy, PartialEq, Encode, Decode, Serialize, Deserialize, Reflect, Soa,
 )]
-#[reflect(from_reflect = false)]
 pub struct Point3<L: Copy + Debug + 'static> {
     pub x: L,
     pub y: L,
