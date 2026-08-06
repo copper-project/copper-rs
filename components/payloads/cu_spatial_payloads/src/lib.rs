@@ -21,9 +21,9 @@ use glam::{Affine3A, DAffine3, DMat4, DVec3, Mat4, Vec3};
 
 mod geometry;
 pub use geometry::{
-    BBox, BBox2d, BBox2f, BBox2i, BBox2u, BBox3d, BBox3f, Point2, Point2Soa, Point2d, Point2dSoa,
-    Point2f, Point2fSoa, Point2i, Point2iSoa, Point2u, Point2uSoa, Point3, Point3Soa, Point3d,
-    Point3dSoa, Point3f, Point3fSoa,
+    BBox, BBox2d, BBox2f, BBox2i, BBox2u, BBox3d, BBox3f, Point2, Point2Iterator, Point2Soa,
+    Point2d, Point2dSoa, Point2f, Point2fSoa, Point2i, Point2iSoa, Point2u, Point2uSoa, Point3,
+    Point3Iterator, Point3Soa, Point3d, Point3dSoa, Point3f, Point3fSoa,
 };
 
 #[cfg(feature = "rerun")]
@@ -370,6 +370,8 @@ macro_rules! impl_transform_points {
             }
 
             /// Every point in the set mapped through the transform, in place.
+            ///
+            /// May differ from [`Self::transform_point`] by a rounding step.
             pub fn transform_points<const N: usize>(&self, points: &mut Point3Soa<$len, N>) {
                 #[cfg(feature = "glam")]
                 let m = match &self.inner {

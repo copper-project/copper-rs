@@ -177,6 +177,15 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
         })
         .collect();
     let ty_idents: Vec<syn::Ident> = ty_params.iter().map(|param| param.ident.clone()).collect();
+    // `N` is the generated capacity parameter.
+    if let Some(clashing) = ty_idents.iter().find(|ident| *ident == "N") {
+        return syn::Error::new_spanned(
+            clashing,
+            "a type parameter named `N` collides with the generated capacity parameter; rename it",
+        )
+        .to_compile_error()
+        .into();
+    }
     let has_type_params = !ty_params.is_empty();
 
     // Generic parameter lists for the generated items. With no type params on
@@ -793,6 +802,12 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                     decoder: &mut D,
                     len: usize,
                 ) -> Result<Self, DecodeError> {
+                    if len > N {
+                        return Err(DecodeError::ArrayLengthMismatch {
+                            required: N,
+                            found: len,
+                        });
+                    }
                     let mut result = Self::default();
                     #(#storage_decode_fields)*
                     Ok(result)
@@ -869,6 +884,18 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                 #(#field_decls,)*
             }
 
+            // Kept free of the field bounds so callers don't inherit them
+            // just to ask for a length.
+            impl #soa_decl #soa_struct_name #soa_use {
+                pub fn len(&self) -> usize {
+                    self.len
+                }
+
+                pub fn is_empty(&self) -> bool {
+                    self.len == 0
+                }
+            }
+
             impl #soa_decl #soa_struct_name #soa_use
             #methods_where
             {
@@ -877,14 +904,6 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                         #(#new_inits,)*
                         len: 0,
                     }
-                }
-
-                pub fn len(&self) -> usize {
-                    self.len
-                }
-
-                pub fn is_empty(&self) -> bool {
-                    self.len == 0
                 }
 
                 pub fn push(&mut self, value: #orig_ty) {
@@ -954,6 +973,13 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                 fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
                     let mut result = Self::default();
                     result.len = Decode::decode(decoder)?;
+                    // `len` comes off the wire; check it before indexing.
+                    if result.len > N {
+                        return Err(DecodeError::ArrayLengthMismatch {
+                            required: N,
+                            found: result.len,
+                        });
+                    }
                     #(#soa_decode_fields)*
                     Ok(result)
                 }
@@ -1034,6 +1060,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
         #visibility use #module_name::#soa_struct_name;
         #visibility use #module_name::#soa_storage_name;
         #visibility use #module_name::#soa_storage_wire_name;
+        #visibility use #module_name::#soa_struct_name_iterator;
     };
 
     let tokens: TokenStream = expanded.into();

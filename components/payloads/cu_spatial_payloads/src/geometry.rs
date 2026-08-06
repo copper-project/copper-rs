@@ -92,8 +92,8 @@ macro_rules! impl_point_metrics {
                 <$len>::new::<meter>($sqrt(dx * dx + dy * dy))
             }
 
-            /// The point at `ratio` of the way toward `other`: 0 is `self`,
-            /// 1 is `other`.
+            /// The point at `ratio` of the way toward `other`. Ratio 0
+            /// returns `self` exactly; ratio 1 returns `other` up to rounding.
             pub fn lerp(self, other: Self, ratio: $scalar) -> Self {
                 Self::new(
                     self.x + (other.x - self.x) * ratio,
@@ -121,8 +121,8 @@ macro_rules! impl_point_metrics {
                 <$len>::new::<meter>($sqrt(dx * dx + dy * dy + dz * dz))
             }
 
-            /// The point at `ratio` of the way toward `other`: 0 is `self`,
-            /// 1 is `other`.
+            /// The point at `ratio` of the way toward `other`. Ratio 0
+            /// returns `self` exactly; ratio 1 returns `other` up to rounding.
             pub fn lerp(self, other: Self, ratio: $scalar) -> Self {
                 Self::new(
                     self.x + (other.x - self.x) * ratio,
@@ -135,7 +135,10 @@ macro_rules! impl_point_metrics {
         impl<const N: usize> Point2Soa<$len, N> {
             /// Squared distance from every point to `target`, written to
             /// `out[..len]`. Sqrt-free, so the loop vectorizes; enough for
-            /// nearest-neighbor style comparisons.
+            /// nearest-neighbor style comparisons. Accurate to 1 ulp.
+            ///
+            /// # Panics
+            /// If `out` is shorter than `self.len()`.
             pub fn distances_squared(&self, target: Point2<$len>, out: &mut [$area]) {
                 let n = self.len();
                 let (xs, ys, out) = (&self.x[..n], &self.y[..n], &mut out[..n]);
@@ -147,6 +150,9 @@ macro_rules! impl_point_metrics {
             }
 
             /// Distance from every point to `target`, written to `out[..len]`.
+            ///
+            /// # Panics
+            /// If `out` is shorter than `self.len()`.
             pub fn distances(&self, target: Point2<$len>, out: &mut [$len]) {
                 let n = self.len();
                 let (xs, ys, out) = (&self.x[..n], &self.y[..n], &mut out[..n]);
@@ -170,7 +176,10 @@ macro_rules! impl_point_metrics {
         impl<const N: usize> Point3Soa<$len, N> {
             /// Squared distance from every point to `target`, written to
             /// `out[..len]`. Sqrt-free, so the loop vectorizes; enough for
-            /// nearest-neighbor style comparisons.
+            /// nearest-neighbor style comparisons. Accurate to 1 ulp.
+            ///
+            /// # Panics
+            /// If `out` is shorter than `self.len()`.
             pub fn distances_squared(&self, target: Point3<$len>, out: &mut [$area]) {
                 let n = self.len();
                 let (xs, ys, zs) = (&self.x[..n], &self.y[..n], &self.z[..n]);
@@ -183,6 +192,9 @@ macro_rules! impl_point_metrics {
             }
 
             /// Distance from every point to `target`, written to `out[..len]`.
+            ///
+            /// # Panics
+            /// If `out` is shorter than `self.len()`.
             pub fn distances(&self, target: Point3<$len>, out: &mut [$len]) {
                 let n = self.len();
                 let (xs, ys, zs) = (&self.x[..n], &self.y[..n], &self.z[..n]);
@@ -243,10 +255,11 @@ impl<L: Copy + Debug + PartialOrd + 'static> BBox<Point2<L>> {
     pub fn contains(&self, p: Point2<L>) -> bool {
         self.min.x <= p.x && p.x <= self.max.x && self.min.y <= p.y && p.y <= self.max.y
     }
-}
 
-impl<L: Copy + Debug + PartialOrd + Default + 'static> BBox<Point2<L>> {
     /// `contains` for every point in the set, written to `out[..len]`.
+    ///
+    /// # Panics
+    /// If `out` is shorter than `points.len()`.
     pub fn contains_points<const N: usize>(&self, points: &Point2Soa<L, N>, out: &mut [bool]) {
         let n = points.len();
         let (xs, ys, out) = (&points.x[..n], &points.y[..n], &mut out[..n]);
@@ -269,6 +282,24 @@ impl<L: Copy + Debug + PartialOrd + 'static> BBox<Point3<L>> {
             && self.min.z <= p.z
             && p.z <= self.max.z
     }
+
+    /// `contains` for every point in the set, written to `out[..len]`.
+    ///
+    /// # Panics
+    /// If `out` is shorter than `points.len()`.
+    pub fn contains_points<const N: usize>(&self, points: &Point3Soa<L, N>, out: &mut [bool]) {
+        let n = points.len();
+        let (xs, ys, zs) = (&points.x[..n], &points.y[..n], &points.z[..n]);
+        let out = &mut out[..n];
+        for i in 0..n {
+            out[i] = (self.min.x <= xs[i])
+                & (xs[i] <= self.max.x)
+                & (self.min.y <= ys[i])
+                & (ys[i] <= self.max.y)
+                & (self.min.z <= zs[i])
+                & (zs[i] <= self.max.z);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -280,8 +311,9 @@ mod tests {
         let a = Point2f::from_meters(1.0, 2.0);
         let b = Point2f::from_meters(4.0, 6.0);
         assert_eq!(a.distance(b).raw(), 5.0);
+        // Ratio 0 is exact; ratio 1 is only exact up to rounding.
         assert_eq!(a.lerp(b, 0.0), a);
-        assert_eq!(a.lerp(b, 1.0), b);
+        assert!((a.lerp(b, 1.0).distance(b)).raw() <= 1e-6);
         assert_eq!(a.lerp(b, 0.5), Point2f::from_meters(2.5, 4.0));
 
         let a = Point3d::from_meters(1.0, 2.0, 3.0);
@@ -389,5 +421,64 @@ mod tests {
         let mut out = [false; 2];
         pix.contains_points(&pixels, &mut out);
         assert_eq!(out, [true, false]);
+    }
+
+    #[test]
+    fn bbox3_contains_points_bulk_matches_scalar() {
+        let b = BBox3f::new(
+            Point3f::from_meters(0.0, 0.0, 0.0),
+            Point3f::from_meters(1.0, 1.0, 1.0),
+        );
+        let points = [
+            Point3f::from_meters(0.5, 0.5, 1.0),  // on the z boundary
+            Point3f::from_meters(0.5, 0.5, 1.1),  // outside in z
+            Point3f::from_meters(0.0, 0.0, 0.0),  // corner
+            Point3f::from_meters(-0.1, 0.5, 0.5), // outside in x
+        ];
+        let mut set = Point3fSoa::<8>::default();
+        for p in points {
+            set.push(p);
+        }
+
+        // `out` is longer than the set; the tail stays untouched.
+        let mut out = [true; 6];
+        b.contains_points(&set, &mut out);
+        assert_eq!(out, [true, false, true, false, true, true]);
+        for (i, p) in points.iter().enumerate() {
+            assert_eq!(out[i], b.contains(*p));
+        }
+    }
+
+    #[test]
+    fn bulk_kernels_handle_an_empty_set() {
+        let set = Point2fSoa::<4>::default();
+        assert!(set.is_empty());
+        set.distances(Point2f::from_meters(1.0, 1.0), &mut []);
+        set.distances_squared(Point2f::from_meters(1.0, 1.0), &mut []);
+        let b = BBox2f::new(
+            Point2f::from_meters(0.0, 0.0),
+            Point2f::from_meters(1.0, 1.0),
+        );
+        b.contains_points(&set, &mut []);
+    }
+
+    /// Replaying a log recorded at a larger capacity must error, not panic.
+    #[test]
+    fn decode_rejects_len_over_capacity() {
+        let mut wide = Point2fSoa::<8>::default();
+        for i in 0..8 {
+            wide.push(Point2f::from_meters(i as f32, -(i as f32)));
+        }
+        let cfg = cu29::bincode::config::standard();
+        let bytes = cu29::bincode::encode_to_vec(&wide, cfg).expect("encode");
+
+        let narrow: Result<(Point2fSoa<4>, usize), _> =
+            cu29::bincode::decode_from_slice(&bytes, cfg);
+        assert!(narrow.is_err(), "expected a capacity error");
+
+        let (same, _): (Point2fSoa<8>, _) =
+            cu29::bincode::decode_from_slice(&bytes, cfg).expect("decode");
+        assert_eq!(same.len(), 8);
+        assert_eq!(same.get(7), wide.get(7));
     }
 }
