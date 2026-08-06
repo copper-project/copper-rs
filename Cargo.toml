@@ -90,6 +90,7 @@ members = [
   "examples/cu_feature_gated_camera",
   "examples/cu_flight_controller",
   "examples/cu_config_gen",
+  "examples/cu_config_constants",
   "examples/cu_config_variation",
   "examples/cu_gnss_ublox_demo",
   "examples/cu_human_pose",

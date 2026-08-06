@@ -16,9 +16,9 @@ use crate::utils::{config_id_to_bridge_const, config_id_to_enum, config_id_to_st
 use cu29_build::COPPER_CFG_FEATURES_ENV;
 use cu29_runtime::config::CuConfig;
 use cu29_runtime::config::{
-    AnytimeConfig, BridgeChannelConfigRepresentation, ConfigGraphs, CuGraph, Flavor, HandleContent,
-    Node, NodeId, RT_POOL, ResourceBundleConfig, read_configuration_with_features,
-    read_configuration_with_resolved_ron_and_features,
+    AnytimeConfig, BridgeChannelConfigRepresentation, ConfigGraphs, ConstantConfig, ConstantNumber,
+    ConstantStorage, CuGraph, Flavor, HandleContent, Node, NodeId, RT_POOL, ResourceBundleConfig,
+    read_configuration_with_features, read_configuration_with_resolved_ron_and_features,
 };
 use cu29_runtime::curuntime::{
     CuExecutionLoop, CuExecutionStep, CuExecutionUnit, CuStepPhase, CuTaskType,
@@ -52,6 +52,158 @@ fn rtsan_guard_tokens() -> proc_macro2::TokenStream {
     } else {
         quote! {}
     }
+}
+
+fn primitive_constant_number_tokens(
+    storage: ConstantStorage,
+    number: ConstantNumber,
+) -> CuResult<proc_macro2::TokenStream> {
+    if storage == ConstantStorage::F32 {
+        let bits = proc_macro2::Literal::u32_suffixed((number.as_f64() as f32).to_bits());
+        return Ok(quote! { ::core::primitive::f32::from_bits(#bits) });
+    }
+    if storage == ConstantStorage::F64 {
+        let bits = proc_macro2::Literal::u64_suffixed(number.as_f64().to_bits());
+        return Ok(quote! { ::core::primitive::f64::from_bits(#bits) });
+    }
+    let source = match (storage, number) {
+        (storage, ConstantNumber::Signed(value)) => {
+            format!("{value}{}", storage.rust_type())
+        }
+        (storage, ConstantNumber::Unsigned(value)) => {
+            format!("{value}{}", storage.rust_type())
+        }
+        (storage, ConstantNumber::Float(value)) => {
+            return Err(CuError::from(format!(
+                "Floating-point value {value:?} cannot be emitted as {}",
+                storage.rust_type()
+            )));
+        }
+    };
+    let expression = parse_str::<Expr>(&source).map_err(|error| {
+        CuError::from(format!(
+            "Could not generate constant expression '{source}': {error}"
+        ))
+    })?;
+    Ok(quote! { #expression })
+}
+
+fn build_constant_defs(constants: &[ConstantConfig]) -> CuResult<Vec<proc_macro2::TokenStream>> {
+    constants
+        .iter()
+        .map(|constant| {
+            let id = parse_str::<Ident>(constant.id()).map_err(|error| {
+                CuError::from(format!(
+                    "Constant id '{}' is not a valid Rust identifier: {error}",
+                    constant.id()
+                ))
+            })?;
+
+            if let Some(quantity) = constant.quantity() {
+                let definition = cu29_units::constant::definition(quantity).ok_or_else(|| {
+                    CuError::from(format!(
+                        "Constant '{}' quantity '{}' is missing from the unit catalogue",
+                        constant.id(),
+                        quantity.name()
+                    ))
+                })?;
+                let (constant_type, values): (Type, Vec<proc_macro2::TokenStream>) = match constant
+                    .storage()
+                {
+                    ConstantStorage::F32 => {
+                        let ty = parse_str::<Type>(definition.rust_type_f32).map_err(|error| {
+                            CuError::from(format!(
+                                "Invalid f32 type metadata for quantity '{}': {error}",
+                                quantity.name()
+                            ))
+                        })?;
+                        let (_, values) = constant.normalized_f32().map_err(CuError::from)?;
+                        let values = values
+                            .into_iter()
+                            .map(|value| {
+                                let bits = proc_macro2::Literal::u32_suffixed(value.to_bits());
+                                quote! {
+                                    #ty {
+                                        value: ::core::primitive::f32::from_bits(#bits),
+                                    }
+                                }
+                            })
+                            .collect();
+                        (ty, values)
+                    }
+                    ConstantStorage::F64 => {
+                        let ty = parse_str::<Type>(definition.rust_type_f64).map_err(|error| {
+                            CuError::from(format!(
+                                "Invalid f64 type metadata for quantity '{}': {error}",
+                                quantity.name()
+                            ))
+                        })?;
+                        let (_, values) = constant.normalized_f64().map_err(CuError::from)?;
+                        let values = values
+                            .into_iter()
+                            .map(|value| {
+                                let bits = proc_macro2::Literal::u64_suffixed(value.to_bits());
+                                quote! {
+                                    #ty {
+                                        value: ::core::primitive::f64::from_bits(#bits),
+                                    }
+                                }
+                            })
+                            .collect();
+                        (ty, values)
+                    }
+                    storage => {
+                        return Err(CuError::from(format!(
+                            "Constant '{}' quantity '{}' cannot use storage {}",
+                            constant.id(),
+                            quantity.name(),
+                            storage.rust_type()
+                        )));
+                    }
+                };
+                let (is_array, _) = constant.numbers().map_err(CuError::from)?;
+                if is_array {
+                    let length = values.len();
+                    Ok(quote! {
+                        pub const #id: [#constant_type; #length] = [#(#values),*];
+                    })
+                } else {
+                    let value = values.into_iter().next().ok_or_else(|| {
+                        CuError::from(format!("Constant '{}' has no scalar value", constant.id()))
+                    })?;
+                    Ok(quote! {
+                        pub const #id: #constant_type = #value;
+                    })
+                }
+            } else {
+                let constant_type =
+                    parse_str::<Type>(constant.storage().rust_type()).map_err(|error| {
+                        CuError::from(format!(
+                            "Invalid primitive storage type '{}': {error}",
+                            constant.storage().rust_type()
+                        ))
+                    })?;
+                let (is_array, numbers) = constant.numbers().map_err(CuError::from)?;
+                let values = numbers
+                    .into_iter()
+                    .map(|number| primitive_constant_number_tokens(constant.storage(), number))
+                    .collect::<CuResult<Vec<_>>>()?;
+                if is_array {
+                    let length = values.len();
+                    Ok(quote! {
+                        pub const #id: [#constant_type; #length] = [#(#values),*];
+                    })
+                } else {
+                    let value = values.into_iter().next().ok_or_else(|| {
+                        CuError::from(format!("Constant '{}' has no scalar value", constant.id()))
+                    })?;
+                    Ok(quote! {
+                        pub const #id: #constant_type = #value;
+                    })
+                }
+            }
+        })
+        .collect()
 }
 
 /// Opens a heap-allocation accounting scope (binds `__cu_alloc_scope`) iff the
@@ -1699,6 +1851,23 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     let all_missions = sorted_mission_graphs(&copper_config);
+    let constant_defs = match build_constant_defs(&copper_config.constants) {
+        Ok(definitions) => definitions,
+        Err(error) => return return_error(error.to_string()),
+    };
+    let constant_fingerprints = match copper_config
+        .constants
+        .iter()
+        .map(|constant| {
+            constant
+                .semantic_fingerprint()
+                .map(|fingerprint| (constant.id().to_string(), fingerprint))
+        })
+        .collect::<Result<Vec<_>, _>>()
+    {
+        Ok(fingerprints) => fingerprints,
+        Err(error) => return return_error(error),
+    };
     let task_input_layouts = match collect_task_input_layouts(&all_missions) {
         Ok(layouts) => layouts,
         Err(e) => return return_error(e.to_string()),
@@ -3988,6 +4157,29 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             subsystem_id.as_deref(),
             &config_features,
         );
+        let constant_override_warning = if std {
+            let comparisons = constant_fingerprints.iter().map(|(id, fingerprint)| {
+                quote! { #id => fingerprint != #fingerprint, }
+            });
+            Some(quote! {
+                for constant in &config.constants {
+                    let changed = constant
+                        .semantic_fingerprint()
+                        .map_or(true, |fingerprint| match constant.id() {
+                            #(#comparisons)*
+                            _ => true,
+                        });
+                    if changed {
+                        ::cu29::prelude::warning!(
+                            "Runtime configuration tried to override compile-time constant '{}'; the value baked into this binary will be used.",
+                            constant.id()
+                        );
+                    }
+                }
+            })
+        } else {
+            None
+        };
 
         let copperlist_count_check = quote! {
             let configured_copperlist_count = config
@@ -4745,6 +4937,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp init: loading config");
                 #config_load_stmt
+                #constant_override_warning
                 #copperlist_count_check
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp init: config loaded");
@@ -5860,6 +6053,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     let result: proc_macro2::TokenStream = quote! {
+        #(#constant_defs)*
         #(#all_missions_tokens)*
         #default_application_tokens
     };

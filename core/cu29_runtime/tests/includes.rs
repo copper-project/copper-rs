@@ -64,6 +64,45 @@ mod tests {
     }
 
     #[test]
+    fn test_constants_merge_from_includes_with_root_precedence() {
+        let temp_dir = tempdir().unwrap();
+        let config_dir = temp_dir.path().join("config");
+        create_dir_all(&config_dir).unwrap();
+
+        write(
+            config_dir.join("included.ron"),
+            r#"(
+                constants: [
+                    (id: "ROOT_WINS", storage: usize, value: 99),
+                    (id: "FROM_INCLUDE", quantity: length, unit: millimeter, value: 250.0),
+                ],
+                tasks: [],
+                cnx: [],
+            )"#,
+        )
+        .unwrap();
+        let main_path = config_dir.join("main.ron");
+        write(
+            &main_path,
+            r#"(
+                constants: [(id: "ROOT_WINS", storage: usize, value: 7)],
+                tasks: [],
+                cnx: [],
+                includes: [(path: "included.ron")],
+            )"#,
+        )
+        .unwrap();
+
+        let config = read_configuration(main_path.to_str().unwrap()).unwrap();
+        let constants = &config.constants;
+        assert_eq!(constants.len(), 2);
+        assert_eq!(constants[0].id(), "ROOT_WINS");
+        assert_eq!(constants[0].numbers().unwrap().1[0].as_f64(), 7.0);
+        assert_eq!(constants[1].id(), "FROM_INCLUDE");
+        assert_eq!(constants[1].normalized_f32().unwrap().1, vec![0.25]);
+    }
+
+    #[test]
     fn test_feature_predicate_combinations() {
         let temp_dir = tempdir().unwrap();
         let config_dir = temp_dir.path().join("config");

@@ -507,12 +507,166 @@ pub mod si {
     }
 }
 
+/// Metadata and compile-time normalization support for constants declared in Copper RON files.
+#[doc(hidden)]
+pub mod constant {
+    /// Storage-independent metadata for a supported physical quantity.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct QuantityDefinition {
+        pub quantity: Quantity,
+        pub quantity_name: &'static str,
+        pub rust_type_f32: &'static str,
+        pub rust_type_f64: &'static str,
+        pub coherent_unit: &'static str,
+        pub preferred_display_unit: &'static str,
+        pub compatible_units: &'static [&'static str],
+    }
+
+    macro_rules! define_constant_catalogue {
+        ($(($unit_mod:ident, $quantity:ident, $coherent_unit:ident, $display_unit:ident,
+            [$($alternative_unit:ident),* $(,)?])),+ $(,)?) => {
+            /// Physical quantities accepted by the top-level `constants:` configuration.
+            #[allow(non_camel_case_types)]
+            #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+            pub enum Quantity {
+                $($unit_mod,)+
+            }
+
+            impl Quantity {
+                pub const fn name(self) -> &'static str {
+                    match self {
+                        $(Self::$unit_mod => stringify!($unit_mod),)+
+                    }
+                }
+            }
+
+            /// Unit names accepted by the top-level `constants:` configuration.
+            #[allow(non_camel_case_types)]
+            #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+            pub enum Unit {
+                $($coherent_unit, $($alternative_unit,)*)+
+            }
+
+            impl Unit {
+                pub const fn name(self) -> &'static str {
+                    match self {
+                        $(
+                            Self::$coherent_unit => stringify!($coherent_unit),
+                            $(Self::$alternative_unit => stringify!($alternative_unit),)*
+                        )+
+                    }
+                }
+
+                pub fn from_name(name: &str) -> Option<Self> {
+                    match name {
+                        $(
+                            stringify!($coherent_unit) => Some(Self::$coherent_unit),
+                            $(stringify!($alternative_unit) => Some(Self::$alternative_unit),)*
+                        )+
+                        _ => None,
+                    }
+                }
+            }
+
+            pub const DEFINITIONS: &[QuantityDefinition] = &[
+                $(QuantityDefinition {
+                    quantity: Quantity::$unit_mod,
+                    quantity_name: stringify!($unit_mod),
+                    rust_type_f32: concat!("cu29::units::si::f32::", stringify!($quantity)),
+                    rust_type_f64: concat!("cu29::units::si::f64::", stringify!($quantity)),
+                    coherent_unit: stringify!($coherent_unit),
+                    preferred_display_unit: stringify!($display_unit),
+                    compatible_units: &[
+                        stringify!($coherent_unit),
+                        $(stringify!($alternative_unit),)*
+                    ],
+                },)+
+            ];
+
+            pub fn definition(quantity: Quantity) -> Option<&'static QuantityDefinition> {
+                DEFINITIONS
+                    .iter()
+                    .find(|definition| definition.quantity == quantity)
+            }
+
+            pub fn normalize_f32(quantity: Quantity, unit: Unit, value: f32) -> Option<f32> {
+                match quantity {
+                    $(Quantity::$unit_mod => match unit {
+                        Unit::$coherent_unit => Some(
+                            crate::si::f32::$quantity::new::<
+                                crate::uom::si::$unit_mod::$coherent_unit
+                            >(value).raw()
+                        ),
+                        $(Unit::$alternative_unit => Some(
+                            crate::si::f32::$quantity::new::<
+                                crate::uom::si::$unit_mod::$alternative_unit
+                            >(value).raw()
+                        ),)*
+                        _ => None,
+                    },)+
+                }
+            }
+
+            pub fn normalize_f64(quantity: Quantity, unit: Unit, value: f64) -> Option<f64> {
+                match quantity {
+                    $(Quantity::$unit_mod => match unit {
+                        Unit::$coherent_unit => Some(
+                            crate::si::f64::$quantity::new::<
+                                crate::uom::si::$unit_mod::$coherent_unit
+                            >(value).raw()
+                        ),
+                        $(Unit::$alternative_unit => Some(
+                            crate::si::f64::$quantity::new::<
+                                crate::uom::si::$unit_mod::$alternative_unit
+                            >(value).raw()
+                        ),)*
+                        _ => None,
+                    },)+
+                }
+            }
+        };
+
+    }
+
+    // This is deliberately distinct from the debugger's preferred display-unit list below.
+    // Every coherent unit here maps one input unit to one unit in uom's underlying SI storage.
+    define_constant_catalogue! {
+        (length, Length, meter, meter,
+            [millimeter, centimeter, kilometer, inch, foot]),
+        (angle, Angle, radian, radian, [degree, revolution]),
+        (mass, Mass, kilogram, gram, [gram, milligram, pound]),
+        (time, Time, second, second, [millisecond, microsecond, minute, hour]),
+        (thermodynamic_temperature, ThermodynamicTemperature, kelvin, kelvin,
+            [degree_celsius, degree_fahrenheit, degree_rankine]),
+        (velocity, Velocity, meter_per_second, meter_per_second,
+            [kilometer_per_hour, foot_per_second, knot]),
+        (acceleration, Acceleration, meter_per_second_squared, meter_per_second_squared,
+            [standard_gravity, foot_per_second_squared]),
+        (angular_velocity, AngularVelocity, radian_per_second, radian_per_second,
+            [degree_per_second, revolution_per_minute]),
+        (angular_acceleration, AngularAcceleration, radian_per_second_squared,
+            radian_per_second_squared, [degree_per_second_squared]),
+        (frequency, Frequency, hertz, hertz, [kilohertz, megahertz]),
+        (force, Force, newton, newton, [kilonewton, pound_force]),
+        (pressure, Pressure, pascal, pascal,
+            [kilopascal, bar, pound_force_per_square_inch]),
+        (energy, Energy, joule, joule, [kilojoule, watt_hour]),
+        (power, Power, watt, watt, [kilowatt, horsepower]),
+        (electric_potential, ElectricPotential, volt, volt, [millivolt]),
+        (electric_current, ElectricCurrent, ampere, ampere, [milliampere]),
+        (ratio, Ratio, ratio, ratio, [percent]),
+        (area, Area, square_meter, square_meter,
+            [square_millimeter, square_centimeter]),
+        (volume, Volume, cubic_meter, cubic_meter, [liter, milliliter]),
+    }
+}
+
 use alloc::string::ToString;
 use alloc::vec::Vec;
 use cu29_traits::{DebugFieldSemantics, DebugScalarKind, DebugScalarRegistration, DebugScalarType};
 
 macro_rules! impl_debug_scalar_units {
-    ($(($unit_mod:ident, $quantity:ident, $base_unit:ident),)+) => {
+    ($(($unit_mod:ident, $quantity:ident, $display_unit:ident),)+) => {
         macro_rules! impl_storage_debug_scalar_units {
             ($storage_mod:ident, $storage_ty:ty) => {
                 $(
@@ -527,7 +681,7 @@ macro_rules! impl_debug_scalar_units {
                                 },
                                 semantics: DebugFieldSemantics::Quantity {
                                     quantity_name: stringify!($quantity).to_string(),
-                                    unit_symbol: <uom::si::$unit_mod::$base_unit as uom::si::Unit>::abbreviation()
+                                    unit_symbol: <uom::si::$unit_mod::$display_unit as uom::si::Unit>::abbreviation()
                                         .to_string(),
                                 },
                             }

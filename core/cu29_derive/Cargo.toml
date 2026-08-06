@@ -19,6 +19,7 @@ proc-macro = true
 cu29-build = { workspace = true }
 cu29-runtime = { workspace = true, features = ["std"] }
 cu29-traits = { workspace = true }
+cu29-units = { workspace = true }
 convert_case = "0.11"
 itertools = { version = "0.15", default-features = false }
 quote = { workspace = true }

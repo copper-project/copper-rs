@@ -227,6 +227,285 @@ fn ron_value_to_cu_value(value: &RonValue) -> Result<CuValue, ConfigError> {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Value(RonValue);
 
+/// Scalar representation used by compile-time constants after RON parsing.
+#[doc(hidden)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ConstantNumber {
+    Signed(i64),
+    Unsigned(u64),
+    Float(f64),
+}
+
+impl ConstantNumber {
+    pub fn as_f64(self) -> f64 {
+        match self {
+            Self::Signed(value) => value as f64,
+            Self::Unsigned(value) => value as f64,
+            Self::Float(value) => value,
+        }
+    }
+}
+
+/// Rust scalar storage selected for a compile-time constant.
+#[doc(hidden)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ConstantStorage {
+    I8,
+    I16,
+    I32,
+    I64,
+    Isize,
+    U8,
+    U16,
+    U32,
+    U64,
+    Usize,
+    #[default]
+    F32,
+    F64,
+}
+
+impl ConstantStorage {
+    pub const fn rust_type(self) -> &'static str {
+        match self {
+            Self::I8 => "i8",
+            Self::I16 => "i16",
+            Self::I32 => "i32",
+            Self::I64 => "i64",
+            Self::Isize => "isize",
+            Self::U8 => "u8",
+            Self::U16 => "u16",
+            Self::U32 => "u32",
+            Self::U64 => "u64",
+            Self::Usize => "usize",
+            Self::F32 => "f32",
+            Self::F64 => "f64",
+        }
+    }
+
+    pub const fn supports_quantity(self) -> bool {
+        matches!(self, Self::F32 | Self::F64)
+    }
+}
+
+/// One top-level `constants:` declaration.
+#[doc(hidden)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ConstantConfig {
+    id: String,
+    #[serde(default)]
+    storage: ConstantStorage,
+    quantity: Option<cu29_units::constant::Quantity>,
+    unit: Option<cu29_units::constant::Unit>,
+    value: Value,
+}
+
+impl ConstantConfig {
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub const fn storage(&self) -> ConstantStorage {
+        self.storage
+    }
+
+    pub const fn quantity(&self) -> Option<cu29_units::constant::Quantity> {
+        self.quantity
+    }
+
+    pub const fn explicit_unit(&self) -> Option<cu29_units::constant::Unit> {
+        self.unit
+    }
+
+    pub fn resolved_unit(&self) -> Result<Option<cu29_units::constant::Unit>, String> {
+        let Some(quantity) = self.quantity else {
+            return Ok(None);
+        };
+        if let Some(unit) = self.unit {
+            return Ok(Some(unit));
+        }
+        let definition = cu29_units::constant::definition(quantity).ok_or_else(|| {
+            format!(
+                "Constant '{}' uses quantity '{}' which is missing from the unit catalogue",
+                self.id,
+                quantity.name()
+            )
+        })?;
+        cu29_units::constant::Unit::from_name(definition.coherent_unit)
+            .map(Some)
+            .ok_or_else(|| {
+                format!(
+                    "Constant '{}' quantity '{}' has invalid coherent unit metadata '{}'",
+                    self.id,
+                    quantity.name(),
+                    definition.coherent_unit
+                )
+            })
+    }
+
+    pub fn numbers(&self) -> Result<(bool, Vec<ConstantNumber>), String> {
+        fn number(value: &RonValue) -> Result<ConstantNumber, String> {
+            match value {
+                RonValue::Number(number) => match number {
+                    Number::I8(value) => Ok(ConstantNumber::Signed(i64::from(*value))),
+                    Number::I16(value) => Ok(ConstantNumber::Signed(i64::from(*value))),
+                    Number::I32(value) => Ok(ConstantNumber::Signed(i64::from(*value))),
+                    Number::I64(value) => Ok(ConstantNumber::Signed(*value)),
+                    Number::U8(value) => Ok(ConstantNumber::Unsigned(u64::from(*value))),
+                    Number::U16(value) => Ok(ConstantNumber::Unsigned(u64::from(*value))),
+                    Number::U32(value) => Ok(ConstantNumber::Unsigned(u64::from(*value))),
+                    Number::U64(value) => Ok(ConstantNumber::Unsigned(*value)),
+                    Number::F32(value) => Ok(ConstantNumber::Float(f64::from(value.0))),
+                    Number::F64(value) => Ok(ConstantNumber::Float(value.0)),
+                    _ => Err("unsupported numeric representation".to_string()),
+                },
+                _ => Err("expected a number".to_string()),
+            }
+        }
+
+        match &self.value.0 {
+            RonValue::Seq(values) => values
+                .iter()
+                .map(number)
+                .collect::<Result<Vec<_>, _>>()
+                .map(|values| (true, values)),
+            value => number(value).map(|value| (false, vec![value])),
+        }
+        .map_err(|error| format!("Constant '{}': {error}", self.id))
+    }
+
+    pub fn normalized_f32(&self) -> Result<(bool, Vec<f32>), String> {
+        let quantity = self.quantity.ok_or_else(|| {
+            format!(
+                "Constant '{}' does not declare a physical quantity",
+                self.id
+            )
+        })?;
+        let unit = self
+            .resolved_unit()?
+            .ok_or_else(|| format!("Constant '{}' has no resolved unit", self.id))?;
+        let (is_array, numbers) = self.numbers()?;
+        numbers
+            .into_iter()
+            .map(|number| {
+                let value = number.as_f64() as f32;
+                if !value.is_finite() {
+                    return Err(format!("Constant '{}' values must be finite", self.id));
+                }
+                cu29_units::constant::normalize_f32(quantity, unit, value).ok_or_else(|| {
+                    format!(
+                        "Constant '{}' unit '{}' is not compatible with quantity '{}'",
+                        self.id,
+                        unit.name(),
+                        quantity.name()
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map(|values| (is_array, values))
+    }
+
+    pub fn normalized_f64(&self) -> Result<(bool, Vec<f64>), String> {
+        let quantity = self.quantity.ok_or_else(|| {
+            format!(
+                "Constant '{}' does not declare a physical quantity",
+                self.id
+            )
+        })?;
+        let unit = self
+            .resolved_unit()?
+            .ok_or_else(|| format!("Constant '{}' has no resolved unit", self.id))?;
+        let (is_array, numbers) = self.numbers()?;
+        numbers
+            .into_iter()
+            .map(|number| {
+                let value = number.as_f64();
+                if !value.is_finite() {
+                    return Err(format!("Constant '{}' values must be finite", self.id));
+                }
+                cu29_units::constant::normalize_f64(quantity, unit, value).ok_or_else(|| {
+                    format!(
+                        "Constant '{}' unit '{}' is not compatible with quantity '{}'",
+                        self.id,
+                        unit.name(),
+                        quantity.name()
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map(|values| (is_array, values))
+    }
+
+    /// Stable comparison key for detecting runtime attempts to change a baked constant.
+    #[allow(dead_code)]
+    pub fn semantic_fingerprint(&self) -> Result<u64, String> {
+        const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+        const PRIME: u64 = 0x0000_0100_0000_01b3;
+
+        fn hash_bytes(hash: &mut u64, bytes: &[u8]) {
+            for byte in bytes {
+                *hash ^= u64::from(*byte);
+                *hash = hash.wrapping_mul(PRIME);
+            }
+        }
+
+        let mut hash = OFFSET;
+        hash_bytes(&mut hash, self.storage.rust_type().as_bytes());
+        hash_bytes(
+            &mut hash,
+            self.quantity
+                .map_or("primitive", |quantity| quantity.name())
+                .as_bytes(),
+        );
+
+        if self.quantity.is_some() {
+            match self.storage {
+                ConstantStorage::F32 => {
+                    let (is_array, values) = self.normalized_f32()?;
+                    hash_bytes(&mut hash, &[u8::from(is_array)]);
+                    for value in values {
+                        hash_bytes(&mut hash, &value.to_bits().to_le_bytes());
+                    }
+                }
+                ConstantStorage::F64 => {
+                    let (is_array, values) = self.normalized_f64()?;
+                    hash_bytes(&mut hash, &[u8::from(is_array)]);
+                    for value in values {
+                        hash_bytes(&mut hash, &value.to_bits().to_le_bytes());
+                    }
+                }
+                _ => {
+                    return Err(format!(
+                        "Constant '{}' quantity storage must be f32 or f64",
+                        self.id
+                    ));
+                }
+            }
+            return Ok(hash);
+        }
+
+        let (is_array, numbers) = self.numbers()?;
+        hash_bytes(&mut hash, &[u8::from(is_array)]);
+        for number in numbers {
+            match (self.storage, number) {
+                (ConstantStorage::F32, number) => {
+                    hash_bytes(&mut hash, &(number.as_f64() as f32).to_bits().to_le_bytes())
+                }
+                (ConstantStorage::F64, number) => {
+                    hash_bytes(&mut hash, &number.as_f64().to_bits().to_le_bytes())
+                }
+                (_, ConstantNumber::Signed(value)) => hash_bytes(&mut hash, &value.to_le_bytes()),
+                (_, ConstantNumber::Unsigned(value)) => hash_bytes(&mut hash, &value.to_le_bytes()),
+                (_, ConstantNumber::Float(value)) => {
+                    hash_bytes(&mut hash, &value.to_bits().to_le_bytes())
+                }
+            }
+        }
+        Ok(hash)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConfigError {
     message: String,
@@ -1849,6 +2128,9 @@ impl ConfigGraphs {
 /// or a collection of mission-specific graphs. The graph structure is based on petgraph.
 #[derive(Debug, Clone)]
 pub struct CuConfig {
+    /// Values baked into the application by `#[copper_runtime]`.
+    #[doc(hidden)]
+    pub constants: Vec<ConstantConfig>,
     /// Monitoring configuration list.
     pub monitors: Vec<MonitorConfig>,
     /// Optional logging configuration
@@ -2371,6 +2653,7 @@ enum InstanceConfigTargetKind {
 /// This is the main Copper configuration representation.
 #[derive(Serialize, Deserialize, Default)]
 struct CuConfigRepresentation {
+    constants: Option<Vec<ConstantConfig>>,
     tasks: Option<Vec<Node>>,
     resources: Option<Vec<ResourceBundleConfig>>,
     bridges: Option<Vec<BridgeConfig>>,
@@ -2600,6 +2883,7 @@ where
     }
 
     cuconfig.monitors = representation.monitors.clone().unwrap_or_default();
+    cuconfig.constants = representation.constants.clone().unwrap_or_default();
     cuconfig.logging = representation.logging.clone();
     cuconfig.runtime = representation.runtime.clone();
     cuconfig.resources = representation.resources.clone().unwrap_or_default();
@@ -2696,6 +2980,7 @@ impl Serialize for CuConfig {
                     .collect();
 
                 CuConfigRepresentation {
+                    constants: (!self.constants.is_empty()).then_some(self.constants.clone()),
                     tasks: Some(tasks),
                     bridges: bridges.clone(),
                     cnx: Some(cnx),
@@ -2801,6 +3086,7 @@ impl Serialize for CuConfig {
                     .collect();
 
                 CuConfigRepresentation {
+                    constants: (!self.constants.is_empty()).then_some(self.constants.clone()),
                     tasks: Some(tasks),
                     resources: resources.clone(),
                     bridges,
@@ -2820,6 +3106,7 @@ impl Serialize for CuConfig {
 impl Default for CuConfig {
     fn default() -> Self {
         CuConfig {
+            constants: Vec::new(),
             graphs: Simple(CuGraph(StableDiGraph::new())),
             monitors: Vec::new(),
             logging: None,
@@ -2841,6 +3128,7 @@ impl CuConfig {
     #[allow(dead_code)]
     pub fn new_mission_type() -> Self {
         CuConfig {
+            constants: Vec::new(),
             graphs: Missions(HashMap::new()),
             monitors: Vec::new(),
             logging: None,
@@ -2987,6 +3275,113 @@ impl CuConfig {
             .codecs
             .iter()
             .find(|spec| spec.id == codec_id)
+    }
+
+    /// Validate compile-time constant names, shapes, scalar ranges, and unit compatibility.
+    pub fn validate_constants(&self) -> CuResult<()> {
+        fn validate_integer(
+            id: &str,
+            storage: ConstantStorage,
+            number: ConstantNumber,
+        ) -> CuResult<()> {
+            let valid = match (storage, number) {
+                (ConstantStorage::I8, ConstantNumber::Signed(value)) => i8::try_from(value).is_ok(),
+                (ConstantStorage::I16, ConstantNumber::Signed(value)) => {
+                    i16::try_from(value).is_ok()
+                }
+                (ConstantStorage::I32, ConstantNumber::Signed(value)) => {
+                    i32::try_from(value).is_ok()
+                }
+                (ConstantStorage::I64, ConstantNumber::Signed(_)) => true,
+                (ConstantStorage::Isize, ConstantNumber::Signed(value)) => {
+                    isize::try_from(value).is_ok()
+                }
+                (ConstantStorage::U8, ConstantNumber::Unsigned(value)) => {
+                    u8::try_from(value).is_ok()
+                }
+                (ConstantStorage::U16, ConstantNumber::Unsigned(value)) => {
+                    u16::try_from(value).is_ok()
+                }
+                (ConstantStorage::U32, ConstantNumber::Unsigned(value)) => {
+                    u32::try_from(value).is_ok()
+                }
+                (ConstantStorage::U64, ConstantNumber::Unsigned(_)) => true,
+                (ConstantStorage::Usize, ConstantNumber::Unsigned(value)) => {
+                    usize::try_from(value).is_ok()
+                }
+                _ => false,
+            };
+            if valid {
+                Ok(())
+            } else {
+                Err(CuError::from(format!(
+                    "Constant '{id}' value {number:?} cannot be represented as {}",
+                    storage.rust_type()
+                )))
+            }
+        }
+
+        let mut ids = HashMap::new();
+        for constant in &self.constants {
+            if constant.id().is_empty() {
+                return Err(CuError::from("Constant ids cannot be empty"));
+            }
+            if ids.insert(constant.id(), ()).is_some() {
+                return Err(CuError::from(format!(
+                    "Duplicate constant id '{}'. Constant ids must be unique.",
+                    constant.id()
+                )));
+            }
+
+            if constant.quantity().is_none() && constant.explicit_unit().is_some() {
+                return Err(CuError::from(format!(
+                    "Constant '{}' declares a unit without a quantity",
+                    constant.id()
+                )));
+            }
+
+            if constant.quantity().is_some() {
+                if !constant.storage().supports_quantity() {
+                    return Err(CuError::from(format!(
+                        "Constant '{}' quantity '{}' requires storage f32 or f64, not {}",
+                        constant.id(),
+                        constant.quantity().map_or("", |quantity| quantity.name()),
+                        constant.storage().rust_type()
+                    )));
+                }
+                let normalized = match constant.storage() {
+                    ConstantStorage::F32 => constant.normalized_f32().map(|_| ()),
+                    ConstantStorage::F64 => constant.normalized_f64().map(|_| ()),
+                    _ => unreachable!("quantity storage was checked above"),
+                };
+                normalized.map_err(CuError::from)?;
+                continue;
+            }
+
+            let (_, numbers) = constant.numbers().map_err(CuError::from)?;
+            for number in numbers {
+                match constant.storage() {
+                    ConstantStorage::F32 => {
+                        if !(number.as_f64() as f32).is_finite() {
+                            return Err(CuError::from(format!(
+                                "Constant '{}' values must be finite",
+                                constant.id()
+                            )));
+                        }
+                    }
+                    ConstantStorage::F64 => {
+                        if !number.as_f64().is_finite() {
+                            return Err(CuError::from(format!(
+                                "Constant '{}' values must be finite",
+                                constant.id()
+                            )));
+                        }
+                    }
+                    storage => validate_integer(constant.id(), storage, number)?,
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Validate the logging configuration to ensure section pre-allocation sizes do not exceed slab sizes.
@@ -3696,6 +4091,23 @@ fn process_includes(
                 processed_files,
                 active_features,
             )?;
+
+            if let Some(included_constants) = included_representation.constants {
+                if result.constants.is_none() {
+                    result.constants = Some(included_constants);
+                } else {
+                    let mut constants = result.constants.take().unwrap();
+                    for included_constant in included_constants {
+                        if !constants
+                            .iter()
+                            .any(|constant| constant.id == included_constant.id)
+                        {
+                            constants.push(included_constant);
+                        }
+                    }
+                    result.constants = Some(constants);
+                }
+            }
 
             if let Some(included_tasks) = included_representation.tasks {
                 if result.tasks.is_none() {
@@ -4444,6 +4856,7 @@ fn config_representation_to_config(representation: CuConfigRepresentation) -> Cu
     cuconfig.validate_logging_config()?;
     cuconfig.validate_runtime_config()?;
     cuconfig.validate_anytime_configs()?;
+    cuconfig.validate_constants()?;
 
     Ok(cuconfig)
 }
@@ -4771,6 +5184,77 @@ mod tests {
                 .contains("Syntax Error in config: Expected opening `[` at position 1:9-1:10")
         );
     }
+
+    #[test]
+    fn test_compile_time_constant_defaults_and_normalization() {
+        let config = read_configuration_str(
+            r#"(
+                constants: [
+                    (id: "COUNT", storage: usize, value: 12),
+                    (id: "LENGTH_DEFAULT", quantity: length, value: [0.18, 0.0, 0.31]),
+                    (id: "LENGTH_EXPLICIT", quantity: length, unit: meter, storage: f32,
+                        value: [0.18, 0.0, 0.31]),
+                    (id: "LENGTH_MM", quantity: length, unit: millimeter,
+                        value: [180.0, 0.0, 310.0]),
+                    (id: "ANGLE_DEG", quantity: angle, unit: degree, value: 180.0),
+                    (id: "MASS_DEFAULT", quantity: mass, value: 1.0),
+                    (id: "TEMPERATURE_C", quantity: thermodynamic_temperature,
+                        unit: degree_celsius, storage: f64, value: 20.0),
+                ],
+                tasks: [],
+                cnx: [],
+            )"#
+            .to_string(),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(config.constants[0].storage(), ConstantStorage::Usize);
+        let (_, default_length) = config.constants[1].normalized_f32().unwrap();
+        let (_, explicit_length) = config.constants[2].normalized_f32().unwrap();
+        let (_, millimeters) = config.constants[3].normalized_f32().unwrap();
+        assert_eq!(default_length[0].to_bits(), explicit_length[0].to_bits());
+        assert_eq!(default_length[2].to_bits(), explicit_length[2].to_bits());
+        assert_eq!(default_length, millimeters);
+        assert_eq!(
+            config.constants[1].semantic_fingerprint().unwrap(),
+            config.constants[2].semantic_fingerprint().unwrap()
+        );
+        assert_eq!(
+            config.constants[1].semantic_fingerprint().unwrap(),
+            config.constants[3].semantic_fingerprint().unwrap()
+        );
+
+        let (_, angle) = config.constants[4].normalized_f32().unwrap();
+        assert_eq!(angle[0].to_bits(), core::f32::consts::PI.to_bits());
+
+        let mass = &config.constants[5];
+        assert_eq!(mass.resolved_unit().unwrap().unwrap().name(), "kilogram");
+        assert_eq!(mass.normalized_f32().unwrap().1, vec![1.0]);
+
+        let temperature = config.constants[6].normalized_f64().unwrap().1[0];
+        assert!((temperature - 293.15).abs() < f64::EPSILON * 4.0);
+    }
+
+    #[test]
+    fn test_compile_time_constant_rejects_incompatible_unit() {
+        let error = read_configuration_str(
+            r#"(
+                constants: [(id: "BAD", quantity: length, unit: degree, value: 1.0)],
+                tasks: [],
+                cnx: [],
+            )"#
+            .to_string(),
+            None,
+        )
+        .expect_err("length in degrees must fail");
+        assert!(
+            error
+                .to_string()
+                .contains("unit 'degree' is not compatible with quantity 'length'")
+        );
+    }
+
     #[test]
     fn test_missions() {
         let txt = r#"( missions: [ (id: "data_collection"), (id: "autonomous")])"#;

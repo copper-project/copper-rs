@@ -195,7 +195,7 @@ struct Args {
 }
 
 enum RenderInput {
-    Single(config::CuConfig),
+    Single(Box<config::CuConfig>),
     Multi(config::MultiCopperConfig),
 }
 
@@ -316,7 +316,7 @@ fn load_render_input(path: &Path, active_features: &[&str]) -> CuResult<RenderIn
         } else {
             read_configuration_with_features(path_str, active_features)
         } {
-            Ok(config) => Ok(RenderInput::Single(config)),
+            Ok(config) => Ok(RenderInput::Single(Box::new(config))),
             Err(single_err) => Err(CuError::from(format!(
                 "Failed to read '{}' as either a Copper config or a multi-Copper config.\nCopper config: {single_err}\nMulti-Copper config: {multi_err}",
                 path.display()
@@ -4684,6 +4684,7 @@ mod tests {
     #[test]
     fn linux_bundle_catalog_includes_known_slots_without_bindings() {
         let config = config::CuConfig {
+            constants: Vec::new(),
             monitors: Vec::new(),
             logging: None,
             runtime: None,

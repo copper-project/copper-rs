@@ -1,0 +1,46 @@
+(
+    constants: [
+        (
+            id: "COUNT",
+            storage: usize,
+            value: 8,
+        ),
+        (
+            id: "LENGTH_DEFAULT",
+            quantity: length,
+            value: [0.18, 0.0, 0.31],
+        ),
+        (
+            id: "LENGTH_MM",
+            quantity: length,
+            unit: millimeter,
+            value: [180.0, 0.0, 310.0],
+        ),
+        (
+            id: "MASS_KG",
+            quantity: mass,
+            value: 1.0,
+        ),
+        (
+            id: "TEMPERATURE_C",
+            quantity: thermodynamic_temperature,
+            unit: degree_celsius,
+            storage: f64,
+            value: 20.0,
+        ),
+    ],
+    tasks: [
+        (
+            id: "src",
+            type: "ConstantSource",
+            kind: source,
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "__nc__",
+            msg: "()",
+        ),
+    ],
+)

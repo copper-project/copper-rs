@@ -1,0 +1,44 @@
+(
+    constants: [
+        (
+            id: "MAX_DETECTIONS",
+            storage: usize,
+            value: 64,
+        ),
+        (
+            id: "CAMERA_TRANSLATION",
+            quantity: length,
+            value: [0.18, 0.0, 0.31],
+        ),
+        (
+            id: "CAMERA_ROTATION",
+            quantity: angle,
+            value: [0.0, -0.2, 0.0],
+        ),
+        (
+            id: "ROBOT_TRANSLATION",
+            quantity: length,
+            value: [1.0, 2.0, 0.0],
+        ),
+        (
+            id: "ROBOT_ROTATION",
+            quantity: angle,
+            value: [0.0, 0.0, 0.5],
+        ),
+    ],
+    tasks: [
+        (
+            id: "constants_demo",
+            type: "ConstantsDemo",
+            kind: source,
+        ),
+    ],
+    cnx: [
+        (
+            src: "constants_demo",
+            dst: "__nc__",
+            msg: "()",
+        ),
+    ],
+    includes: [(path: "constants-extra.ron")],
+)

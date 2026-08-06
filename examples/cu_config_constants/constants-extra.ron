@@ -1,0 +1,23 @@
+(
+    constants: [
+        (
+            id: "CAMERA_OFFSET",
+            quantity: length,
+            unit: millimeter,
+            value: [180.0, 0.0, 310.0],
+        ),
+        (
+            id: "CONTROL_PERIOD",
+            quantity: time,
+            storage: f64,
+            value: 0.005,
+        ),
+        (
+            id: "YAW_LIMIT",
+            quantity: angle,
+            unit: degree,
+            storage: f64,
+            value: 45.0,
+        ),
+    ],
+)

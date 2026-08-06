@@ -1,0 +1,12 @@
+(
+    constants: [
+        (
+            id: "BAD_LENGTH",
+            quantity: length,
+            unit: degree,
+            value: 1.0,
+        ),
+    ],
+    tasks: [],
+    cnx: [],
+)
