@@ -11,14 +11,16 @@ refinement quanta run.
 - Input: `cu_rrt_star::PlanRequest` — the world (up to `MAX_OBSTACLES` (16)
   round obstacles in a rectangle), start and goal. The map travels with the
   job: the planner has no map of its own, so the source may change the map
-  between jobs. Internally the algorithm only sees a sampling and collision
+  between jobs. Internally the algorithm only sees a sampling and clearance
   trait, so the round-obstacle world is one implementation, not a mandate.
 - Output: `cu_rrt_star::PlanPath` — up to `MAX_WAYPOINTS` (32) waypoints.
   Every consecutive pair of waypoints is collision free, so the path can be
   driven as published, whichever stop point the policy picked. `cost` is the
   RRT* tree path cost, an upper bound on the distance actually driven.
-- Distances and costs are `cu29-units` lengths in meters; the quality is a
-  `Ratio`.
+- Points and bounds are `Point2f` and `BBox2f` from `cu-spatial-payloads`.
+  Distances and costs are `cu29-units` lengths in meters; the quality is a
+  `Ratio`. The tree keeps its positions in a `Point2fSoa`, so the two scans
+  every iteration runs vectorize.
 
 ### Usage
 
@@ -61,7 +63,8 @@ tasks: [
   map, which is the value RRT* needs to converge to the optimum.
 - `prune_interval` (default 512): branch-and-bound prune every N iterations;
   0 disables pruning.
-- `max_nodes` (default 4000): hard cap on the tree size.
+- `max_nodes` (default 4000): hard cap on the tree size, clamped to
+  `MAX_NODES` (4096) — the capacity of the SoA position set.
 
 ### Anytime policy
 

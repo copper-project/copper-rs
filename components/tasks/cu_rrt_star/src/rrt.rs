@@ -578,7 +578,8 @@ impl<S: RrtSpace> RrtStar<S> {
     /// on much larger trees. Squared distance has the same argmin as distance.
     fn nearest(&mut self, point: Point2f) -> u32 {
         let n = self.positions.len();
-        self.positions.distances_squared(point, &mut self.scratch_d2);
+        self.positions
+            .distances_squared(point, &mut self.scratch_d2);
         let mut best = 0u32;
         let mut best_distance = f32::INFINITY;
         for index in 0..n {
