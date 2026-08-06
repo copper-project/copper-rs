@@ -151,6 +151,79 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
     };
 
     let name = &input.ident;
+    if let Some(lifetime) = input.generics.lifetimes().next() {
+        return syn::Error::new_spanned(lifetime, "lifetime parameters are not supported")
+            .to_compile_error()
+            .into();
+    }
+    if let Some(const_param) = input.generics.const_params().next() {
+        return syn::Error::new_spanned(const_param, "const parameters are not supported")
+            .to_compile_error()
+            .into();
+    }
+    if let Some(where_clause) = &input.generics.where_clause {
+        return syn::Error::new_spanned(where_clause, "where clauses are not supported")
+            .to_compile_error()
+            .into();
+    }
+    let ty_params: Vec<syn::TypeParam> = input
+        .generics
+        .type_params()
+        .cloned()
+        .map(|mut param| {
+            param.attrs.clear();
+            param.default = None;
+            param
+        })
+        .collect();
+    let ty_idents: Vec<syn::Ident> = ty_params.iter().map(|param| param.ident.clone()).collect();
+    // `N` is the generated capacity parameter.
+    if let Some(clashing) = ty_idents.iter().find(|ident| *ident == "N") {
+        return syn::Error::new_spanned(
+            clashing,
+            "a type parameter named `N` collides with the generated capacity parameter; rename it",
+        )
+        .to_compile_error()
+        .into();
+    }
+    let has_type_params = !ty_params.is_empty();
+
+    // Generic parameter lists for the generated items. With no type params on
+    // the input these collapse to today's `<const N: usize>` / `<N>` forms.
+    let soa_decl = quote!(<#(#ty_params,)* const N: usize>);
+    let soa_use = quote!(<#(#ty_idents,)* N>);
+    let iter_decl = quote!(<'a, #(#ty_params,)* const N: usize>);
+    let iter_use = quote!(<'a, #(#ty_idents,)* N>);
+    let iter_use_elided = quote!(<#(#ty_idents,)* N>);
+    let serde_decl = quote!(<'a, #(#ty_params,)* const N: usize>);
+    let serde_use = quote!(<'a, #(#ty_idents,)* N>);
+    let serde_use_anon = quote!(<'_, #(#ty_idents,)* N>);
+    let de_decl = quote!(<'de, #(#ty_params,)* const N: usize>);
+    let wire_decl = if has_type_params {
+        quote!(<#(#ty_params),*>)
+    } else {
+        quote!()
+    };
+    let wire_use = if has_type_params {
+        quote!(<#(#ty_idents),*>)
+    } else {
+        quote!()
+    };
+    let orig_ty = if has_type_params {
+        quote!(super::#name<#(#ty_idents),*>)
+    } else {
+        quote!(super::#name)
+    };
+    // Bounds on the input struct (e.g. `L: Copy + Debug`) may reference names
+    // from the parent scope, so pull that scope into the generated module.
+    let parent_scope_import = if has_type_params {
+        quote!(
+            #[allow(unused_imports)]
+            use super::*;
+        )
+    } else {
+        quote!()
+    };
     let module_name = format_ident!("{}_soa", name.to_string().to_lowercase());
     let soa_struct_name = format_ident!("{}Soa", name);
     let soa_storage_name = format_ident!("{}SoaStorage", name);
@@ -297,6 +370,14 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
             Ok(value) => value,
             Err(err) => return err.to_compile_error().into(),
         };
+        if nested && has_type_params {
+            return syn::Error::new_spanned(
+                field,
+                "#[soa(nested)] is not supported on generic structs",
+            )
+            .to_compile_error()
+            .into();
+        }
         let (storage_path, storage_wire_path) = if nested {
             match storage_paths(&field_type) {
                 Ok((storage_path, storage_wire_path)) => {
@@ -316,8 +397,14 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
             };
             let type_name = last_segment.ident.to_string();
             let path_str = path.to_token_stream().to_string();
+            let is_type_param = path.segments.len() == 1
+                && path.leading_colon.is_none()
+                && ty_idents.contains(&last_segment.ident);
 
-            if !is_primitive(&type_name) && !unique_import_names.contains(&path_str) {
+            if !is_primitive(&type_name)
+                && !is_type_param
+                && !unique_import_names.contains(&path_str)
+            {
                 unique_imports.push(path.clone());
                 unique_import_names.push(path_str);
             }
@@ -338,36 +425,6 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
     let soa_struct_name_iterator = format_ident!("{}Iterator", name);
     let storage_field_count = field_names.len();
     let field_count = storage_field_count + 1; // +1 for the len field
-
-    let iterator = quote! {
-        pub struct #soa_struct_name_iterator<'a, const N: usize> {
-            soa_struct: &'a #soa_struct_name<N>,
-            current: usize,
-        }
-
-        impl<'a, const N: usize> #soa_struct_name_iterator<'a, N> {
-            pub fn new(soa_struct: &'a #soa_struct_name<N>) -> Self {
-                Self {
-                    soa_struct,
-                    current: 0,
-                }
-            }
-        }
-
-        impl<'a, const N: usize> Iterator for #soa_struct_name_iterator<'a, N> {
-            type Item = super::#name;
-
-            fn next(&mut self) -> Option<Self::Item> {
-                if self.current < self.soa_struct.len {
-                    let item = self.soa_struct.get(self.current); // Reuse `get` method
-                    self.current += 1;
-                    Some(item)
-                } else {
-                    None
-                }
-            }
-        }
-    };
 
     // Shared between storage and soa (identical generated code)
     let mut field_decls = Vec::new();
@@ -390,6 +447,13 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
     let mut soa_wire_fields = Vec::new();
     let mut soa_wire_checks = Vec::new();
     let mut soa_wire_assignments = Vec::new();
+
+    // Bounds the generated impls need on generic field types; empty for
+    // non-generic inputs so their output is unchanged.
+    let mut generic_method_bounds = Vec::new();
+    let mut generic_encode_bounds = Vec::new();
+    let mut generic_decode_bounds = Vec::new();
+    let mut generic_default_bounds = Vec::new();
 
     // Storage-only fields
     let mut storage_encode_fields = Vec::new();
@@ -485,6 +549,12 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
             new_inits.push(quote!(#name: from_fn(|_| default.#name.clone())));
             default_inits.push(quote!(#name: from_fn(|_| #ty::default())));
             storage_clone_bounds.push(quote!(#ty: Clone,));
+            if has_type_params {
+                generic_method_bounds.push(quote!(#ty: Clone + Default,));
+                generic_encode_bounds.push(quote!(#ty: Encode,));
+                generic_decode_bounds.push(quote!(#ty: Decode<()> + Default,));
+                generic_default_bounds.push(quote!(#ty: Default,));
+            }
 
             accessors.push(quote! {
                 pub fn #name(&self) -> &[#ty] {
@@ -495,11 +565,11 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                     &mut self.#name
                 }
 
-                pub fn #name_range(&self, range: std::ops::Range<usize>) -> &[#ty] {
+                pub fn #name_range(&self, range: core::ops::Range<usize>) -> &[#ty] {
                     &self.#name[range]
                 }
 
-                pub fn #name_range_mut(&mut self, range: std::ops::Range<usize>) -> &mut [#ty] {
+                pub fn #name_range_mut(&mut self, range: core::ops::Range<usize>) -> &mut [#ty] {
                     &mut self.#name[range]
                 }
             });
@@ -515,7 +585,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
 
             storage_encode_fields.push(quote! {
                 for _idx in 0..len {
-                    self.#name[_idx].encode(encoder)?;
+                    Encode::encode(&self.#name[_idx], encoder)?;
                 }
             });
             storage_decode_fields.push(quote! {
@@ -526,7 +596,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
 
             soa_encode_fields.push(quote! {
                 for _idx in 0..self.len {
-                    self.#name[_idx].encode(encoder)?;
+                    Encode::encode(&self.#name[_idx], encoder)?;
                 }
             });
             soa_decode_fields.push(quote! {
@@ -602,9 +672,72 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
     } else {
         quote!(where #(#soa_deserialize_bounds)*)
     };
+    let methods_where = if generic_method_bounds.is_empty() {
+        quote!()
+    } else {
+        quote!(where #(#generic_method_bounds)*)
+    };
+    let storage_methods_where = if generic_method_bounds.is_empty() {
+        quote!()
+    } else {
+        quote!(where #(#generic_method_bounds)* #(#generic_encode_bounds)* #(#generic_decode_bounds)*)
+    };
+    let encode_where = if generic_encode_bounds.is_empty() {
+        quote!()
+    } else {
+        quote!(where #(#generic_encode_bounds)*)
+    };
+    let decode_where = if generic_decode_bounds.is_empty() {
+        quote!()
+    } else {
+        quote!(where #(#generic_decode_bounds)*)
+    };
+    let default_where = if generic_default_bounds.is_empty() {
+        quote!()
+    } else {
+        quote!(where #(#generic_default_bounds)*)
+    };
+
+    let iterator = quote! {
+        pub struct #soa_struct_name_iterator #iter_decl {
+            soa_struct: &'a #soa_struct_name #soa_use,
+            current: usize,
+        }
+
+        impl #iter_decl #soa_struct_name_iterator #iter_use
+        #methods_where
+        {
+            pub fn new(soa_struct: &'a #soa_struct_name #soa_use) -> Self {
+                Self {
+                    soa_struct,
+                    current: 0,
+                }
+            }
+        }
+
+        impl #iter_decl Iterator for #soa_struct_name_iterator #iter_use
+        #methods_where
+        {
+            type Item = #orig_ty;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                if self.current < self.soa_struct.len {
+                    let item = self.soa_struct.get(self.current); // Reuse `get` method
+                    self.current += 1;
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+        }
+    };
 
     let expanded = quote! {
         #visibility mod #module_name {
+            extern crate alloc;
+            use self::alloc::format;
+            use self::alloc::string::String;
+            use self::alloc::vec::Vec;
             use bincode::{Decode, Encode};
             use bincode::enc::Encoder;
             use bincode::de::Decoder;
@@ -613,41 +746,43 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
             use serde::Serialize;
             use serde::Serializer;
             use serde::ser::SerializeStruct;
-            use std::ops::{Index, IndexMut};
+            #parent_scope_import
             #( use super::#unique_imports; )*
             #reflect_import
             use core::array::from_fn;
 
             #[derive(Debug)]
-            #visibility struct #soa_storage_name<const N: usize> {
+            #visibility struct #soa_storage_name #soa_decl {
                 #(#field_decls,)*
             }
 
             #[doc(hidden)]
             #[derive(Deserialize)]
-            #visibility struct #soa_storage_wire_name {
+            #visibility struct #soa_storage_wire_name #wire_decl {
                 #(#storage_wire_fields)*
             }
 
             #[doc(hidden)]
-            #visibility struct #soa_storage_serde_name<'a, const N: usize> {
-                storage: &'a #soa_storage_name<N>,
+            #visibility struct #soa_storage_serde_name #serde_decl {
+                storage: &'a #soa_storage_name #soa_use,
                 len: usize,
             }
 
-            impl<const N: usize> #soa_storage_name<N> {
-                pub fn new(default: super::#name) -> Self {
+            impl #soa_decl #soa_storage_name #soa_use
+            #storage_methods_where
+            {
+                pub fn new(default: #orig_ty) -> Self {
                     Self {
                         #(#new_inits,)*
                     }
                 }
 
-                pub fn set(&mut self, index: usize, value: super::#name) {
+                pub fn set(&mut self, index: usize, value: #orig_ty) {
                     assert!(index < N, "Index out of bounds");
                     #(#set_fields)*
                 }
 
-                pub fn get(&self, index: usize) -> super::#name {
+                pub fn get(&self, index: usize) -> #orig_ty {
                     assert!(index < N, "Index out of bounds");
                     super::#name {
                         #(#get_fields)*
@@ -667,19 +802,25 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                     decoder: &mut D,
                     len: usize,
                 ) -> Result<Self, DecodeError> {
+                    if len > N {
+                        return Err(DecodeError::ArrayLengthMismatch {
+                            required: N,
+                            found: len,
+                        });
+                    }
                     let mut result = Self::default();
                     #(#storage_decode_fields)*
                     Ok(result)
                 }
 
-                pub fn serialize_len(&self, len: usize) -> #soa_storage_serde_name<'_, N> {
+                pub fn serialize_len(&self, len: usize) -> #soa_storage_serde_name #serde_use_anon {
                     #soa_storage_serde_name {
                         storage: self,
                         len,
                     }
                 }
 
-                pub fn from_wire(wire: #soa_storage_wire_name, len: usize) -> Result<Self, String> {
+                pub fn from_wire(wire: #soa_storage_wire_name #wire_use, len: usize) -> Result<Self, String> {
                     let #soa_storage_wire_name { #( #field_names ),* } = wire;
 
                     if len > N {
@@ -700,7 +841,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                 #(#accessors)*
             }
 
-            impl<'a, const N: usize> Serialize for #soa_storage_serde_name<'a, N>
+            impl #serde_decl Serialize for #soa_storage_serde_name #serde_use
             #storage_serialize_where
             {
                 fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -716,7 +857,9 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl<const N: usize> Default for #soa_storage_name<N> {
+            impl #soa_decl Default for #soa_storage_name #soa_use
+            #default_where
+            {
                 fn default() -> Self {
                     Self {
                         #(#default_inits,)*
@@ -724,7 +867,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl<const N: usize> Clone for #soa_storage_name<N>
+            impl #soa_decl Clone for #soa_storage_name #soa_use
             #storage_clone_where
             {
                 fn clone(&self) -> Self {
@@ -736,19 +879,14 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
 
             #[derive(Debug)]
             #soa_reflect_attrs
-            #visibility struct #soa_struct_name<const N: usize> {
+            #visibility struct #soa_struct_name #soa_decl {
                 pub len: usize,
                 #(#field_decls,)*
             }
 
-            impl<const N: usize> #soa_struct_name<N> {
-                pub fn new(default: super::#name) -> Self {
-                    Self {
-                        #(#new_inits,)*
-                        len: 0,
-                    }
-                }
-
+            // Kept free of the field bounds so callers don't inherit them
+            // just to ask for a length.
+            impl #soa_decl #soa_struct_name #soa_use {
                 pub fn len(&self) -> usize {
                     self.len
                 }
@@ -756,8 +894,19 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                 pub fn is_empty(&self) -> bool {
                     self.len == 0
                 }
+            }
 
-                pub fn push(&mut self, value: super::#name) {
+            impl #soa_decl #soa_struct_name #soa_use
+            #methods_where
+            {
+                pub fn new(default: #orig_ty) -> Self {
+                    Self {
+                        #(#new_inits,)*
+                        len: 0,
+                    }
+                }
+
+                pub fn push(&mut self, value: #orig_ty) {
                     if self.len < N {
                         #(#soa_push_fields)*
                         self.len += 1;
@@ -766,7 +915,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                     }
                 }
 
-                pub fn pop(&mut self) -> Option<super::#name> {
+                pub fn pop(&mut self) -> Option<#orig_ty> {
                     if self.len == 0 {
                         None
                     } else {
@@ -777,12 +926,12 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                     }
                 }
 
-                pub fn set(&mut self, index: usize, value: super::#name) {
+                pub fn set(&mut self, index: usize, value: #orig_ty) {
                     assert!(index < self.len, "Index out of bounds");
                     #(#set_fields)*
                 }
 
-                pub fn get(&self, index: usize) -> super::#name {
+                pub fn get(&self, index: usize) -> #orig_ty {
                     assert!(index < self.len, "Index out of bounds");
                     super::#name {
                         #(#get_fields)*
@@ -801,31 +950,44 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                     }
                 }
 
-                pub fn iter(&self) -> #soa_struct_name_iterator<N> {
+                pub fn iter(&self) -> #soa_struct_name_iterator #iter_use_elided {
                     #soa_struct_name_iterator::new(self)
                 }
 
                 #(#accessors)*
             }
 
-            impl<const N: usize> Encode for #soa_struct_name<N> {
+            impl #soa_decl Encode for #soa_struct_name #soa_use
+            #encode_where
+            {
                 fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-                    self.len.encode(encoder)?;
+                    Encode::encode(&self.len, encoder)?;
                     #(#soa_encode_fields)*
                     Ok(())
                 }
             }
 
-            impl<const N: usize> Decode<()> for #soa_struct_name<N> {
+            impl #soa_decl Decode<()> for #soa_struct_name #soa_use
+            #decode_where
+            {
                 fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
                     let mut result = Self::default();
                     result.len = Decode::decode(decoder)?;
+                    // `len` comes off the wire; check it before indexing.
+                    if result.len > N {
+                        return Err(DecodeError::ArrayLengthMismatch {
+                            required: N,
+                            found: result.len,
+                        });
+                    }
                     #(#soa_decode_fields)*
                     Ok(result)
                 }
             }
 
-            impl<const N: usize> Default for #soa_struct_name<N> {
+            impl #soa_decl Default for #soa_struct_name #soa_use
+            #default_where
+            {
                 fn default() -> Self {
                     Self {
                         #(#default_inits,)*
@@ -834,7 +996,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl<const N: usize> Clone for #soa_struct_name<N>
+            impl #soa_decl Clone for #soa_struct_name #soa_use
             #storage_clone_where
             {
                 fn clone(&self) -> Self {
@@ -845,7 +1007,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl<const N: usize> Serialize for #soa_struct_name<N>
+            impl #soa_decl Serialize for #soa_struct_name #soa_use
             #soa_serialize_where
             {
                 fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -860,7 +1022,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl<'de, const N: usize> Deserialize<'de> for #soa_struct_name<N>
+            impl #de_decl Deserialize<'de> for #soa_struct_name #soa_use
             #soa_deserialize_where
             {
                 fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -868,7 +1030,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                     D: serde::Deserializer<'de>,
                 {
                     #[derive(Deserialize)]
-                    struct #soa_struct_wire_name {
+                    struct #soa_struct_wire_name #wire_decl {
                         len: usize,
                         #(#soa_wire_fields)*
                     }
@@ -898,6 +1060,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
         #visibility use #module_name::#soa_struct_name;
         #visibility use #module_name::#soa_storage_name;
         #visibility use #module_name::#soa_storage_wire_name;
+        #visibility use #module_name::#soa_struct_name_iterator;
     };
 
     let tokens: TokenStream = expanded.into();

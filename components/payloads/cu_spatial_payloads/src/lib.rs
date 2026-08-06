@@ -21,8 +21,9 @@ use glam::{Affine3A, DAffine3, DMat4, DVec3, Mat4, Vec3};
 
 mod geometry;
 pub use geometry::{
-    BBox, BBox2d, BBox2f, BBox2i, BBox2u, BBox3d, BBox3f, Point2, Point2d, Point2f, Point2i,
-    Point2u, Point3, Point3d, Point3f,
+    BBox, BBox2d, BBox2f, BBox2i, BBox2u, BBox3d, BBox3f, Point2, Point2Iterator, Point2Soa,
+    Point2d, Point2dSoa, Point2f, Point2fSoa, Point2i, Point2iSoa, Point2u, Point2uSoa, Point3,
+    Point3Iterator, Point3Soa, Point3d, Point3dSoa, Point3f, Point3fSoa,
 };
 
 #[cfg(feature = "rerun")]
@@ -365,6 +366,38 @@ macro_rules! impl_transform_points {
                         <$len>::new::<meter>(m[1][0] * x + m[1][1] * y + m[1][2] * z),
                         <$len>::new::<meter>(m[2][0] * x + m[2][1] * y + m[2][2] * z),
                     )
+                }
+            }
+
+            /// Every point in the set mapped through the transform, in place.
+            ///
+            /// May differ from [`Self::transform_point`] by a rounding step.
+            pub fn transform_points<const N: usize>(&self, points: &mut Point3Soa<$len, N>) {
+                #[cfg(feature = "glam")]
+                let m = match &self.inner {
+                    TransformInner::$variant(affine) => {
+                        let r = &affine.matrix3;
+                        let t = affine.translation;
+                        [
+                            [r.x_axis.x, r.y_axis.x, r.z_axis.x, t.x],
+                            [r.x_axis.y, r.y_axis.y, r.z_axis.y, t.y],
+                            [r.x_axis.z, r.y_axis.z, r.z_axis.z, t.z],
+                        ]
+                    }
+                    _ => unreachable!(),
+                };
+                #[cfg(not(feature = "glam"))]
+                let m = [self.mat[0], self.mat[1], self.mat[2]];
+
+                let n = points.len();
+                for i in 0..n {
+                    let (x, y, z) = (points.x[i].raw(), points.y[i].raw(), points.z[i].raw());
+                    points.x[i] =
+                        <$len>::new::<meter>(m[0][0] * x + m[0][1] * y + m[0][2] * z + m[0][3]);
+                    points.y[i] =
+                        <$len>::new::<meter>(m[1][0] * x + m[1][1] * y + m[1][2] * z + m[1][3]);
+                    points.z[i] =
+                        <$len>::new::<meter>(m[2][0] * x + m[2][1] * y + m[2][2] * z + m[2][3]);
                 }
             }
         }
@@ -1117,6 +1150,25 @@ mod tests {
         assert_eq!(identity.transform_point(p), p);
         assert_eq!(identity.transform_vector(p), p);
         assert_eq!(identity.position(), Point3f::default());
+    }
+
+    #[test]
+    fn transform_points_matches_transform_point() {
+        let t = quarter_turn_and_shift();
+        let points = [
+            Point3f::from_meters(1.0, 0.0, 0.0),
+            Point3f::from_meters(-1.5, 2.0, 0.25),
+            Point3f::from_meters(0.0, 0.0, 0.0),
+        ];
+        let mut set = Point3fSoa::<4>::default();
+        for p in points {
+            set.push(p);
+        }
+
+        t.transform_points(&mut set);
+        for (i, p) in points.iter().enumerate() {
+            assert_point_close(set.get(i), t.transform_point(*p), 1e-5);
+        }
     }
 
     #[test]
