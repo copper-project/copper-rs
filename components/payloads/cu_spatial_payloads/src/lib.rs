@@ -8,8 +8,6 @@ use core::fmt::Debug;
 use core::ops::Mul;
 use cu29::prelude::*;
 use cu29::units::si::angle::degree;
-use cu29::units::si::angle::radian;
-use cu29::units::si::f32::Angle as Angle32;
 use cu29::units::si::f32::Length as Length32;
 use cu29::units::si::f64::Angle as Angle64;
 use cu29::units::si::f64::Length as Length64;
@@ -87,36 +85,38 @@ enum TransformInner<T: Copy + Debug + 'static> {
 pub type Pose<T> = Transform3D<T>;
 
 macro_rules! impl_transform_accessors {
-    ($ty:ty, $len:ty, $ang:ty) => {
+    ($ty:ty, $len:ty, $variant:ident) => {
         impl Transform3D<$ty> {
+            /// The translation component, in meters.
             pub fn translation(&self) -> [$len; 3] {
-                let mat = self.to_matrix();
-                [
-                    <$len>::new::<meter>(mat[0][3]),
-                    <$len>::new::<meter>(mat[1][3]),
-                    <$len>::new::<meter>(mat[2][3]),
-                ]
+                let position = self.position();
+                [position.x, position.y, position.z]
             }
 
-            pub fn rotation(&self) -> [[$ang; 3]; 3] {
-                let mat = self.to_matrix();
-                [
+            /// The dimensionless rotation matrix, represented as rows.
+            pub fn rotation(&self) -> [[$ty; 3]; 3] {
+                #[cfg(feature = "glam")]
+                {
+                    match &self.inner {
+                        TransformInner::$variant(affine) => {
+                            let r = &affine.matrix3;
+                            [
+                                [r.x_axis.x, r.y_axis.x, r.z_axis.x],
+                                [r.x_axis.y, r.y_axis.y, r.z_axis.y],
+                                [r.x_axis.z, r.y_axis.z, r.z_axis.z],
+                            ]
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                #[cfg(not(feature = "glam"))]
+                {
                     [
-                        <$ang>::new::<radian>(mat[0][0]),
-                        <$ang>::new::<radian>(mat[0][1]),
-                        <$ang>::new::<radian>(mat[0][2]),
-                    ],
-                    [
-                        <$ang>::new::<radian>(mat[1][0]),
-                        <$ang>::new::<radian>(mat[1][1]),
-                        <$ang>::new::<radian>(mat[1][2]),
-                    ],
-                    [
-                        <$ang>::new::<radian>(mat[2][0]),
-                        <$ang>::new::<radian>(mat[2][1]),
-                        <$ang>::new::<radian>(mat[2][2]),
-                    ],
-                ]
+                        [self.mat[0][0], self.mat[0][1], self.mat[0][2]],
+                        [self.mat[1][0], self.mat[1][1], self.mat[1][2]],
+                        [self.mat[2][0], self.mat[2][1], self.mat[2][2]],
+                    ]
+                }
             }
         }
     };
@@ -271,8 +271,8 @@ impl<T: Copy + Debug + Default + 'static> TransformInner<T> {
     }
 }
 
-impl_transform_accessors!(f32, Length32, Angle32);
-impl_transform_accessors!(f64, Length64, Angle64);
+impl_transform_accessors!(f32, Length32, F32);
+impl_transform_accessors!(f64, Length64, F64);
 
 macro_rules! impl_transform_points {
     ($ty:ty, $len:ty, $variant:ident, $vec:ty) => {
@@ -1136,6 +1136,24 @@ mod tests {
             1e-5,
         );
         assert_point_close(t.position(), Point3f::from_meters(2.0, 3.0, 4.0), 1e-5);
+    }
+
+    #[test]
+    fn transform_accessors_are_backend_independent() {
+        let t = quarter_turn_and_shift();
+
+        assert_eq!(
+            t.translation(),
+            [
+                Length32::new::<meter>(2.0),
+                Length32::new::<meter>(3.0),
+                Length32::new::<meter>(4.0),
+            ]
+        );
+        assert_eq!(
+            t.rotation(),
+            [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
+        );
     }
 
     #[test]
