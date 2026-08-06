@@ -20,7 +20,7 @@ use cu_rng::prelude::*;
 use cu_spatial_payloads::{BBox2f, Point2f, Point2fSoa, Point3f, Point3fSoa};
 use cu29::prelude::*;
 use cu29::units::si::area::square_meter;
-use cu29::units::si::f32::{Area, Length};
+use cu29::units::si::f32::{Area, Length, Ratio};
 use cu29::units::si::length::meter;
 use serde::{Deserialize, Serialize};
 
@@ -97,12 +97,14 @@ pub trait PlanPoint: Copy + Debug + PartialEq + 'static {
     /// Euclidean distance to `other`.
     fn distance(self, other: Self) -> Length;
 
-    /// The point at `ratio` of the way toward `other`.
-    fn lerp(self, other: Self, ratio: f32) -> Self;
+    /// The point at `ratio` of the way toward `other`. Ratio 0 returns
+    /// `self`, ratio 1 returns `other`.
+    fn lerp(self, other: Self, ratio: Ratio) -> Self;
 
-    /// `((p - a) . (b - a), |b - a|^2)` in meters, the two products the
-    /// point-to-segment distance needs.
-    fn project(a: Self, b: Self, p: Self) -> (f32, f32);
+    /// `((p - a) . (b - a), |b - a|^2)`, the two products the point-to-segment
+    /// distance needs. Both are areas; their quotient is the projection
+    /// parameter along the segment.
+    fn project(a: Self, b: Self, p: Self) -> (Area, Area);
 }
 
 macro_rules! impl_plan_point {
@@ -146,19 +148,22 @@ macro_rules! impl_plan_point {
                 <$point>::distance(self, other)
             }
 
-            fn lerp(self, other: Self, ratio: f32) -> Self {
-                <$point>::lerp(self, other, ratio)
+            fn lerp(self, other: Self, ratio: Ratio) -> Self {
+                <$point>::lerp(self, other, ratio.raw())
             }
 
-            fn project(a: Self, b: Self, p: Self) -> (f32, f32) {
-                let (mut dot, mut len_sq) = (0.0, 0.0);
+            fn project(a: Self, b: Self, p: Self) -> (Area, Area) {
+                let (mut dot, mut len_sq) = (0.0f32, 0.0f32);
                 $(
                     let along = (b.$axis - a.$axis).raw();
                     let to_point = (p.$axis - a.$axis).raw();
                     dot += to_point * along;
                     len_sq += along * along;
                 )+
-                (dot, len_sq)
+                (
+                    Area::new::<square_meter>(dot),
+                    Area::new::<square_meter>(len_sq),
+                )
             }
         }
     };
@@ -326,10 +331,16 @@ fn dist<P: PlanPoint>(a: P, b: P) -> f32 {
 /// Distance in meters from `point` to the segment `a`-`b`.
 fn distance_to_segment<P: PlanPoint>(a: P, b: P, point: P) -> f32 {
     let (dot, len_sq) = P::project(a, b, point);
-    if len_sq <= f32::EPSILON {
+    if len_sq.raw() <= f32::EPSILON {
         return dist(a, point);
     }
-    dist(a.lerp(b, (dot / len_sq).clamp(0.0, 1.0)), point)
+    let along = ratio_of((dot.raw() / len_sq.raw()).clamp(0.0, 1.0));
+    dist(a.lerp(b, along), point)
+}
+
+/// A dimensionless ratio from a normalized scalar.
+fn ratio_of(value: f32) -> Ratio {
+    Ratio::new::<cu29::units::si::ratio::ratio>(value)
 }
 
 /// Tuning knobs of the planner, all read from the node's RON `config:`.
@@ -829,7 +840,7 @@ fn steer<P: PlanPoint>(from: P, to: P, step_size: f32) -> P {
     if distance <= step_size {
         return to;
     }
-    from.lerp(to, step_size / distance)
+    from.lerp(to, ratio_of(step_size / distance))
 }
 
 #[cfg(test)]
