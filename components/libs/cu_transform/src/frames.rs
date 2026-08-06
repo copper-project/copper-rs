@@ -24,7 +24,7 @@ pub struct FramePair<Parent: FrameId, Child: FrameId> {
 }
 
 impl<Parent: FrameId, Child: FrameId> FramePair<Parent, Child> {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             parent: std::marker::PhantomData,
             child: std::marker::PhantomData,

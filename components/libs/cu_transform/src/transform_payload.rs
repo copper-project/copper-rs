@@ -11,6 +11,10 @@ use cu29::bevy_reflect;
 use cu29::clock::{CuTime, CuTimeRange, Tov};
 use cu29::cutask::CuStampedData;
 use cu29::prelude::{CuMsgPayload, Reflect};
+use cu29::units::si::f32::Angle as Angle32;
+use cu29::units::si::f32::Length as Length32;
+use cu29::units::si::f64::Angle as Angle64;
+use cu29::units::si::f64::Length as Length64;
 use num_traits;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -121,6 +125,145 @@ where
 
 /// Transforms are timestamped Relative transforms.
 pub type TypedStampedFrameTransform<T> = CuStampedData<Transform3D<T>, ()>;
+
+/// An unstamped transform with a frame relationship checked at compile time.
+///
+/// Unlike [`TypedTransform`], this type can be built and composed in constants. Add the time of
+/// validity at runtime with [`Self::at`].
+///
+/// # Example
+///
+/// ```
+/// use cu_transform::{RobotFrame, TypedTransform3D, WorldFrame};
+/// use cu29::units::si::f32::{Angle, Length};
+///
+/// const WORLD_TO_ROBOT: TypedTransform3D<f32, WorldFrame, RobotFrame> =
+///     TypedTransform3D::<f32, WorldFrame, RobotFrame>::from_translation_euler_xyz(
+///         [Length { value: 0.0 }; 3],
+///         [
+///             Angle { value: 0.0 },
+///             Angle { value: 0.0 },
+///             Angle {
+///                 value: core::f32::consts::FRAC_PI_2,
+///             },
+///         ],
+///     );
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub struct TypedTransform3D<T, Parent, Child>
+where
+    T: Copy + Debug + 'static,
+    Parent: FrameId,
+    Child: FrameId,
+{
+    transform: Transform3D<T>,
+    /// Frame relationship (zero-sized at runtime).
+    pub frames: FramePair<Parent, Child>,
+}
+
+impl<T, Parent, Child> TypedTransform3D<T, Parent, Child>
+where
+    T: Copy + Debug + 'static,
+    Parent: FrameId,
+    Child: FrameId,
+{
+    /// Wraps a transform with a compile-time frame relationship.
+    pub const fn new(transform: Transform3D<T>) -> Self {
+        Self {
+            transform,
+            frames: FramePair::new(),
+        }
+    }
+
+    /// Returns the underlying transform.
+    pub const fn transform(&self) -> &Transform3D<T> {
+        &self.transform
+    }
+
+    /// Adds a time of validity and creates the existing stamped transform message.
+    pub fn at(self, time: CuTime) -> TypedTransform<T, Parent, Child>
+    where
+        T: CuMsgPayload,
+    {
+        TypedTransform::new(self.transform, time)
+    }
+
+    /// Returns the parent frame ID.
+    pub const fn parent_id(&self) -> u32 {
+        Parent::ID
+    }
+
+    /// Returns the child frame ID.
+    pub const fn child_id(&self) -> u32 {
+        Child::ID
+    }
+
+    /// Returns the parent frame name.
+    pub const fn parent_name(&self) -> &'static str {
+        Parent::NAME
+    }
+
+    /// Returns the child frame name.
+    pub const fn child_name(&self) -> &'static str {
+        Child::NAME
+    }
+}
+
+macro_rules! impl_const_typed_transform {
+    ($ty:ty, $len:ty, $ang:ty) => {
+        impl<Parent, Child> TypedTransform3D<$ty, Parent, Child>
+        where
+            Parent: FrameId,
+            Child: FrameId,
+        {
+            /// Creates a typed transform from translation and XYZ Euler angles.
+            ///
+            /// `rotation` is `[roll_x, pitch_y, yaw_z]`. Rotations are applied X, then Y, then Z.
+            pub const fn from_translation_euler_xyz(
+                translation: [$len; 3],
+                rotation: [$ang; 3],
+            ) -> Self {
+                Self::new(Transform3D::<$ty>::from_translation_euler_xyz(
+                    translation,
+                    rotation,
+                ))
+            }
+
+            /// Composes this transform with the next frame relationship.
+            ///
+            /// The child frame of `self` must be the parent frame of `next`; incompatible frame
+            /// chains fail to compile.
+            ///
+            /// ```compile_fail
+            /// use cu_transform::{
+            ///     CameraFrame, RobotFrame, Transform3D, TypedTransform3D, WorldFrame,
+            /// };
+            ///
+            /// let world_to_robot =
+            ///     TypedTransform3D::<f32, WorldFrame, RobotFrame>::new(
+            ///         Transform3D::<f32>::identity(),
+            ///     );
+            /// let camera_to_robot =
+            ///     TypedTransform3D::<f32, CameraFrame, RobotFrame>::new(
+            ///         Transform3D::<f32>::identity(),
+            ///     );
+            /// let _ = world_to_robot.then(camera_to_robot);
+            /// ```
+            pub const fn then<Next>(
+                self,
+                next: TypedTransform3D<$ty, Child, Next>,
+            ) -> TypedTransform3D<$ty, Parent, Next>
+            where
+                Next: FrameId,
+            {
+                TypedTransform3D::new(self.transform.compose(next.transform))
+            }
+        }
+    };
+}
+
+impl_const_typed_transform!(f32, Length32, Angle32);
+impl_const_typed_transform!(f64, Length64, Angle64);
 
 /// A typed transform message that carries frame relationship information at compile time
 #[derive(Debug, Clone)]
@@ -422,7 +565,34 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::frames::{RobotFrame, WorldFrame};
+    use crate::frames::{BaseFrame, RobotFrame, WorldFrame};
+
+    const WORLD_TO_BASE: TypedTransform3D<f32, WorldFrame, BaseFrame> =
+        TypedTransform3D::<f32, WorldFrame, BaseFrame>::from_translation_euler_xyz(
+            [
+                Length32 { value: 1.0 },
+                Length32 { value: 2.0 },
+                Length32 { value: 0.0 },
+            ],
+            [
+                Angle32 { value: 0.0 },
+                Angle32 { value: 0.0 },
+                Angle32 {
+                    value: core::f32::consts::FRAC_PI_2,
+                },
+            ],
+        );
+    const BASE_TO_ROBOT: TypedTransform3D<f32, BaseFrame, RobotFrame> =
+        TypedTransform3D::<f32, BaseFrame, RobotFrame>::from_translation_euler_xyz(
+            [
+                Length32 { value: 1.0 },
+                Length32 { value: 0.0 },
+                Length32 { value: 0.0 },
+            ],
+            [Angle32 { value: 0.0 }; 3],
+        );
+    const WORLD_TO_ROBOT: TypedTransform3D<f32, WorldFrame, RobotFrame> =
+        WORLD_TO_BASE.then(BASE_TO_ROBOT);
     // Helper function to replace assert_relative_eq
     fn assert_approx_eq(actual: f32, expected: f32, epsilon: f32) {
         let diff = (actual - expected).abs();
@@ -435,6 +605,25 @@ mod tests {
 
     type WorldToRobotFrameTransform = TypedTransform<f32, WorldFrame, RobotFrame>;
     type WorldToRobotBuffer = TypedTransformBuffer<f32, WorldFrame, RobotFrame, 10>;
+
+    #[test]
+    fn test_const_typed_transform_composition_and_stamping() {
+        assert_eq!(
+            std::mem::size_of::<TypedTransform3D<f32, WorldFrame, RobotFrame>>(),
+            std::mem::size_of::<Transform3D<f32>>(),
+        );
+
+        let position = WORLD_TO_ROBOT.transform().position();
+        assert_approx_eq(position.x.raw(), 1.0, 1e-5);
+        assert_approx_eq(position.y.raw(), 3.0, 1e-5);
+        assert_approx_eq(position.z.raw(), 0.0, 1e-5);
+        assert_eq!(WORLD_TO_ROBOT.parent_id(), WorldFrame::ID);
+        assert_eq!(WORLD_TO_ROBOT.child_id(), RobotFrame::ID);
+
+        let stamped = WORLD_TO_ROBOT.at(CuTime::from_nanos(42));
+        assert_eq!(stamped.timestamp(), Some(CuTime::from_nanos(42)));
+        assert_approx_eq(stamped.transform().unwrap().position().y.raw(), 3.0, 1e-5);
+    }
 
     #[test]
     fn test_typed_transform_msg_creation() {
