@@ -1,0 +1,23 @@
+[package]
+name = "cu-anytime-task"
+description = "This is an example for the Copper project to show how to set up anytime tasks (base computation plus bounded refinement quanta), in both foreground and background placements."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+publish = false
+[dependencies]
+cu29 = { workspace = true }
+serde = { workspace = true }
+
+[package.metadata.cargo-shear]
+ignored = ["serde"]
+
+[build-dependencies]
+cu29-build = { workspace = true }
