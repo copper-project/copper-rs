@@ -1,0 +1,65 @@
+(
+    runtime: (
+        thread_pools: [(id: "planner", threads: 1)],
+    ),
+    resources: [
+        (
+            id: "board",
+            provider: "TestBundle",
+        ),
+    ],
+    tasks: [
+        (id: "src", type: "AnytimeSrc"),
+        (
+            id: "refiner",
+            type: "AnytimeRefiner",
+            background: true,
+            anytime: (
+                time_budget_ms: 5.0,
+                max_age_ms: 100.0,
+                quality_target: 0.9,
+                quality_floor: 0.1,
+                max_stall: 3,
+            ),
+        ),
+        (
+            id: "counter",
+            type: "AnytimeCounter",
+            background: (pool: "planner"),
+            anytime: (max_refines: 2),
+            resources: {"scratch": "board.scratch"},
+        ),
+        (
+            id: "sink",
+            type: "AnytimeSink",
+        ),
+        (
+            id: "tail",
+            type: "AnytimeTail",
+            kind: task,
+            anytime: (max_refines: 1),
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "refiner",
+            msg: "u32",
+        ),
+        (
+            src: "refiner",
+            dst: "counter",
+            msg: "u32",
+        ),
+        (
+            src: "counter",
+            dst: "sink",
+            msg: "u32",
+        ),
+        (
+            src: "counter",
+            dst: "tail",
+            msg: "u32",
+        ),
+    ],
+)

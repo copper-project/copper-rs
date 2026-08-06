@@ -1,8 +1,89 @@
 #[cfg(test)]
 mod tests {
     use bincode::{Decode, Encode, config::standard, decode_from_slice, encode_to_vec};
+    use core::fmt::Debug;
     use cu29_soa_derive::Soa;
     use serde_derive::{Deserialize, Serialize};
+
+    #[derive(
+        Debug, Clone, Copy, Default, PartialEq, Soa, Encode, Decode, Serialize, Deserialize,
+    )]
+    pub struct GXy<L: Copy + Debug + 'static> {
+        x: L,
+        y: L,
+    }
+
+    #[test]
+    fn test_generic_soa_roundtrips() {
+        let mut soa = GXySoa::<f32, 4>::default();
+        soa.push(GXy { x: 1.0, y: 2.0 });
+        soa.push(GXy { x: 3.0, y: 4.0 });
+        assert_eq!(soa.len(), 2);
+        assert_eq!(soa.x()[..2], [1.0, 3.0]);
+        assert_eq!(soa.get(1), GXy { x: 3.0, y: 4.0 });
+
+        soa.apply(|x, y| (x + 1.0, y + 1.0));
+        assert_eq!(soa.get(0), GXy { x: 2.0, y: 3.0 });
+
+        let items: Vec<GXy<f32>> = soa.iter().collect();
+        assert_eq!(items.len(), 2);
+
+        let json = serde_json::to_string(&soa).expect("serialize GXySoa");
+        let from_json: GXySoa<f32, 4> = serde_json::from_str(&json).expect("deserialize GXySoa");
+        assert_eq!(from_json.get(0), soa.get(0));
+
+        let encoded = encode_to_vec(&soa, standard()).expect("encode GXySoa");
+        let (decoded, _): (GXySoa<f32, 4>, _) =
+            decode_from_slice(&encoded, standard()).expect("decode GXySoa");
+        assert_eq!(decoded.len(), soa.len());
+        assert_eq!(decoded.get(1), soa.get(1));
+
+        let int_soa = GXySoa::<u32, 3>::new(GXy { x: 7, y: 8 });
+        assert_eq!(int_soa.x(), &[7, 7, 7]);
+    }
+
+    /// Decoding a blob recorded at a larger capacity must error, not panic.
+    #[test]
+    fn test_decode_rejects_len_over_capacity() {
+        let mut wide = GXySoa::<f32, 8>::default();
+        for i in 0..8 {
+            wide.push(GXy {
+                x: i as f32,
+                y: -(i as f32),
+            });
+        }
+        let encoded = encode_to_vec(&wide, standard()).expect("encode GXySoa");
+
+        let narrow: Result<(GXySoa<f32, 4>, usize), _> = decode_from_slice(&encoded, standard());
+        assert!(
+            matches!(
+                narrow,
+                Err(bincode::error::DecodeError::ArrayLengthMismatch {
+                    required: 4,
+                    found: 8
+                })
+            ),
+            "expected a capacity error, got {narrow:?}"
+        );
+
+        // Same length, same capacity: still fine.
+        let (same, _): (GXySoa<f32, 8>, _) =
+            decode_from_slice(&encoded, standard()).expect("decode GXySoa");
+        assert_eq!(same.len(), 8);
+        assert_eq!(same.get(7), wide.get(7));
+    }
+
+    /// `len()` must not require the field bounds the mutating methods need.
+    #[test]
+    fn test_len_is_free_of_field_bounds() {
+        fn len_of<T: Copy + Debug + 'static, const N: usize>(soa: &GXySoa<T, N>) -> usize {
+            soa.len()
+        }
+
+        let mut soa = GXySoa::<f32, 4>::default();
+        soa.push(GXy { x: 1.0, y: 2.0 });
+        assert_eq!(len_of(&soa), 1);
+    }
 
     #[derive(Debug, Clone, Default, PartialEq, Soa, Encode, Decode, Serialize, Deserialize)]
     pub struct Xyz {
