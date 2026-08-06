@@ -20,7 +20,20 @@ refinement quanta run.
 - Points and bounds are `Point2f` and `BBox2f` from `cu-spatial-payloads`.
   Distances and costs are `cu29-units` lengths in meters; the quality is a
   `Ratio`. The tree keeps its positions in a `Point2fSoa`, so the two scans
-  every iteration runs vectorize.
+  every iteration runs are one vectorized pass.
+
+### 2D and 3D
+
+`RrtStar` is generic over its space, and the dimension comes from the space's
+point type: implement `Clearance` and `RrtSpace` with `Point = Point3f` and
+the same planner solves 3D jobs, `Point3fSoa` storage and all. `PlanPoint` is
+implemented for `Point2f` and `Point3f`; `tests` drives the planner through a
+3D room to keep that honest.
+
+The shipped task is 2D because a Copper node names one concrete type in RON:
+`PlanRequest`/`PlanPath` carry `Point2f` and `World` is a rectangle of round
+obstacles. A 3D node is a second space plus a second task over the same
+`RrtStar`.
 
 ### Usage
 
@@ -64,7 +77,8 @@ tasks: [
 - `prune_interval` (default 512): branch-and-bound prune every N iterations;
   0 disables pruning.
 - `max_nodes` (default 4000): hard cap on the tree size, clamped to
-  `MAX_NODES` (4096) — the capacity of the SoA position set.
+  `MAX_NODES` (4096) — the capacity of the SoA position set. A larger value
+  is capped with a warning.
 
 ### Anytime policy
 

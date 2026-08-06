@@ -6,12 +6,14 @@
 //! got shorter. The task reports how good the path is; the RON `anytime:`
 //! policy decides how long to keep going.
 
-mod rrt;
+pub mod rrt;
 
 pub use cu_spatial_payloads::{BBox2f, Point2f};
-pub use rrt::{Clearance, MAX_OBSTACLES, MAX_WAYPOINTS, Obstacle, World};
+pub use rrt::{
+    Clearance, MAX_NODES, MAX_OBSTACLES, MAX_WAYPOINTS, Obstacle, PlanPoint, PointSet, RrtParams,
+    RrtSpace, RrtStar, World,
+};
 
-use crate::rrt::{RrtParams, RrtStar};
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
@@ -56,8 +58,8 @@ pub struct PlanPath {
 /// What a remote debugger sees of a planner node: the progress of the job,
 /// not the thousands of tree nodes behind it.
 ///
-/// The fields are read through `Reflect`, which the compiler cannot see.
-#[allow(dead_code)]
+/// Always built, not only under a debug feature: the anytime task's debug
+/// hooks are plain trait methods with no `cfg` on them.
 #[derive(Default, Debug, Reflect)]
 pub struct PlannerDebugState {
     pub iterations: u32,
@@ -205,6 +207,13 @@ impl CuAnytimeTask for RrtStarPlanner {
                 params.prune_interval = value;
             }
             if let Some(value) = config.get::<u32>("max_nodes")? {
+                if value as usize > MAX_NODES {
+                    warning!(
+                        "rrt*: max_nodes {} exceeds the capacity {}, capping it",
+                        value,
+                        MAX_NODES as u32
+                    );
+                }
                 params.max_nodes = value;
             }
             if let Some(value) = config.get::<u32>("base_iterations")? {

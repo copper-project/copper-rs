@@ -287,7 +287,7 @@ fn log_world(rec: &RecordingStream, world: &World) -> CuResult<()> {
     )
     .map_err(|e| CuError::new_with_cause("Failed to log the world bounds", e))?;
 
-    let obstacles = &world.obstacles[..world.obstacle_count as usize];
+    let obstacles = world.obstacles();
     rec.log_static(
         "world/obstacles",
         &Points2D::new(
