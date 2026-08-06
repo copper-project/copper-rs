@@ -16,7 +16,7 @@
 
 use bincode::{Decode, Encode};
 use cu_rng::prelude::*;
-use cu_spatial_payloads::{BBox2f, Point2f};
+use cu_spatial_payloads::{BBox2f, Point2f, Point2fSoa};
 use cu29::prelude::*;
 use cu29::units::si::area::square_meter;
 use cu29::units::si::f32::{Area, Length};
@@ -26,6 +26,10 @@ use serde::{Deserialize, Serialize};
 /// Waypoints carried by a published path. Kept at 32 because serde derives
 /// array impls up to that size.
 pub const MAX_WAYPOINTS: usize = 32;
+
+/// Tree nodes one job can hold. This is the capacity of the SoA position set,
+/// so it is fixed at compile time; [`RrtParams::max_nodes`] is clamped to it.
+pub const MAX_NODES: usize = 4096;
 
 /// Obstacles carried by a [`World`]. Bounded so the map can travel inside a
 /// [`crate::PlanRequest`] without allocating; must stay at or under 32 for
@@ -229,6 +233,7 @@ pub struct RrtParams {
     /// Branch-and-bound prune every N iterations; 0 disables pruning.
     pub prune_interval: u32,
     /// Hard cap on the tree size, so one job cannot grow without bound.
+    /// Clamped to [`MAX_NODES`] by [`RrtStar::new`].
     pub max_nodes: u32,
 }
 
@@ -245,10 +250,10 @@ impl Default for RrtParams {
     }
 }
 
-/// One vertex of the tree.
+/// The topology of one vertex. Its position lives in [`RrtStar::positions`] at
+/// the same index.
 #[derive(Debug, Clone)]
 struct TreeNode {
-    pos: Point2f,
     /// `None` for the root only.
     parent: Option<u32>,
     /// Path cost from the start to this node.
@@ -260,7 +265,6 @@ struct TreeNode {
 ///
 /// The tree only ever improves: `best_cost` is monotone non-increasing over
 /// iterations, which is what makes the algorithm a good anytime task.
-#[derive(Debug)]
 pub struct RrtStar<S: RrtSpace = World> {
     space: S,
     params: RrtParams,
@@ -270,6 +274,11 @@ pub struct RrtStar<S: RrtSpace = World> {
     gamma: f32,
     start: Point2f,
     goal: Point2f,
+    /// Node positions, kept apart from the topology so the two scans every
+    /// iteration runs - nearest and the rewiring neighborhood - are one
+    /// vectorized pass over packed coordinates.
+    positions: Point2fSoa<MAX_NODES>,
+    /// Parent, cost and children, indexed like `positions`.
     tree: Vec<TreeNode>,
     /// Node closing the best path found so far.
     best_goal: Option<u32>,
@@ -278,6 +287,7 @@ pub struct RrtStar<S: RrtSpace = World> {
     iterations: u32,
     rng: CuRng,
     /// Reused between iterations to keep the search allocation-free.
+    scratch_d2: Vec<Area>,
     scratch_near: Vec<u32>,
     scratch_stack: Vec<u32>,
 }
@@ -289,15 +299,23 @@ impl<S: RrtSpace> RrtStar<S> {
     pub fn new(space: S, params: RrtParams, start: Point2f, goal: Point2f, seed: u64) -> Self {
         let mut planner = Self {
             space,
-            params,
+            params: RrtParams {
+                // The position set has a compile-time capacity, so a config
+                // asking for more nodes than it holds is capped, not honored.
+                max_nodes: params.max_nodes.min(MAX_NODES as u32),
+                ..params
+            },
             gamma: 0.0,
             start,
             goal,
+            positions: Point2fSoa::default(),
             tree: Vec::new(),
             best_goal: None,
             best_cost: f32::INFINITY,
             iterations: 0,
             rng: CuRng::from_seed(seed),
+            // Sized once so the per-iteration scans never touch the allocator.
+            scratch_d2: vec![Area::default(); MAX_NODES],
             scratch_near: Vec::new(),
             scratch_stack: Vec::new(),
         };
@@ -323,8 +341,9 @@ impl<S: RrtSpace> RrtStar<S> {
         self.start = start;
         self.goal = goal;
         self.tree.clear();
+        self.positions.len = 0;
+        self.positions.push(start);
         self.tree.push(TreeNode {
-            pos: start,
             parent: None,
             cost: 0.0,
             children: Vec::new(),
@@ -430,9 +449,8 @@ impl<S: RrtSpace> RrtStar<S> {
         let mut chain = Vec::new();
         let mut cursor = Some(goal_node);
         while let Some(index) = cursor {
-            let node = &self.tree[index as usize];
-            chain.push(node.pos);
-            cursor = node.parent;
+            chain.push(self.positions.get(index as usize));
+            cursor = self.tree[index as usize].parent;
         }
         chain.reverse();
         chain.push(self.goal);
@@ -470,17 +488,23 @@ impl<S: RrtSpace> RrtStar<S> {
     fn step(&mut self) {
         let sample = self.sample();
         let nearest = self.nearest(sample);
-        let from = self.tree[nearest as usize].pos;
+        let from = self.positions.get(nearest as usize);
         let new_pos = steer(from, sample, self.params.step_size);
         if !self.segment_free(from, new_pos) {
             return;
         }
 
+        // Squared radius against squared distances: the whole neighborhood
+        // scan then stays sqrt-free, which is what lets it vectorize.
         let radius = self.near_radius();
+        let radius_sq = radius * radius;
+        let n = self.positions.len();
+        self.positions
+            .distances_squared(new_pos, &mut self.scratch_d2);
         let mut near = core::mem::take(&mut self.scratch_near);
         near.clear();
-        for (index, node) in self.tree.iter().enumerate() {
-            if dist(node.pos, new_pos) <= radius {
+        for index in 0..n {
+            if self.scratch_d2[index].raw() <= radius_sq {
                 near.push(index as u32);
             }
         }
@@ -489,17 +513,17 @@ impl<S: RrtSpace> RrtStar<S> {
         let mut parent = nearest;
         let mut cost = self.tree[nearest as usize].cost + dist(from, new_pos);
         for &index in near.iter() {
-            let candidate = &self.tree[index as usize];
-            let candidate_cost = candidate.cost + dist(candidate.pos, new_pos);
-            if candidate_cost < cost && self.segment_free(candidate.pos, new_pos) {
+            let candidate_pos = self.positions.get(index as usize);
+            let candidate_cost = self.tree[index as usize].cost + dist(candidate_pos, new_pos);
+            if candidate_cost < cost && self.segment_free(candidate_pos, new_pos) {
                 parent = index;
                 cost = candidate_cost;
             }
         }
 
         let new_index = self.tree.len() as u32;
+        self.positions.push(new_pos);
         self.tree.push(TreeNode {
-            pos: new_pos,
             parent: Some(parent),
             cost,
             children: Vec::new(),
@@ -511,10 +535,8 @@ impl<S: RrtSpace> RrtStar<S> {
             if index == parent {
                 continue;
             }
-            let (neighbor_pos, neighbor_cost) = {
-                let neighbor = &self.tree[index as usize];
-                (neighbor.pos, neighbor.cost)
-            };
+            let neighbor_pos = self.positions.get(index as usize);
+            let neighbor_cost = self.tree[index as usize].cost;
             let rewired_cost = cost + dist(neighbor_pos, new_pos);
             if rewired_cost < neighbor_cost
                 && !self.is_ancestor(index, new_index)
@@ -536,8 +558,9 @@ impl<S: RrtSpace> RrtStar<S> {
         }
         // Rewiring may have shortened the current best path too.
         if let Some(goal_node) = self.best_goal {
-            let node = &self.tree[goal_node as usize];
-            self.best_cost = self.best_cost.min(node.cost + dist(node.pos, self.goal));
+            let cost = self.tree[goal_node as usize].cost;
+            let pos = self.positions.get(goal_node as usize);
+            self.best_cost = self.best_cost.min(cost + dist(pos, self.goal));
         }
     }
 
@@ -549,14 +572,17 @@ impl<S: RrtSpace> RrtStar<S> {
         self.space.sample(&mut self.rng)
     }
 
-    /// Index of the tree node closest to `point`. Linear on purpose: a flat
-    /// scan is simple and fast enough at `max_nodes` scale; a spatial index
-    /// would only pay off on much larger trees.
-    fn nearest(&self, point: Point2f) -> u32 {
+    /// Index of the tree node closest to `point`. Linear on purpose: over the
+    /// packed SoA coordinates the scan is one vectorized sqrt-free pass, which
+    /// is fast enough at `max_nodes` scale; a spatial index would only pay off
+    /// on much larger trees. Squared distance has the same argmin as distance.
+    fn nearest(&mut self, point: Point2f) -> u32 {
+        let n = self.positions.len();
+        self.positions.distances_squared(point, &mut self.scratch_d2);
         let mut best = 0u32;
         let mut best_distance = f32::INFINITY;
-        for (index, node) in self.tree.iter().enumerate() {
-            let distance = dist(node.pos, point);
+        for index in 0..n {
+            let distance = self.scratch_d2[index].raw();
             if distance < best_distance {
                 best_distance = distance;
                 best = index as u32;
@@ -638,10 +664,9 @@ impl<S: RrtSpace> RrtStar<S> {
         while let Some(index) = stack.pop() {
             for i in 0..self.tree[index as usize].children.len() {
                 let child = self.tree[index as usize].children[i];
-                let node = &self.tree[child as usize];
-                if protected[child as usize]
-                    || node.cost + dist(node.pos, self.goal) <= self.best_cost
-                {
+                let cost = self.tree[child as usize].cost;
+                let pos = self.positions.get(child as usize);
+                if protected[child as usize] || cost + dist(pos, self.goal) <= self.best_cost {
                     keep[child as usize] = true;
                     stack.push(child);
                 }
@@ -651,17 +676,22 @@ impl<S: RrtSpace> RrtStar<S> {
 
         let mut remap = vec![u32::MAX; self.tree.len()];
         let mut kept = Vec::with_capacity(self.tree.len());
-        for (index, node) in self.tree.iter().enumerate() {
+        for index in 0..self.tree.len() {
             if keep[index] {
-                remap[index] = kept.len() as u32;
+                // The positions compact in place: a kept node never moves to a
+                // higher slot, so the copy never overwrites a slot still to read.
+                let destination = kept.len();
+                remap[index] = destination as u32;
+                self.positions.x[destination] = self.positions.x[index];
+                self.positions.y[destination] = self.positions.y[index];
                 kept.push(TreeNode {
-                    pos: node.pos,
-                    parent: node.parent,
-                    cost: node.cost,
+                    parent: self.tree[index].parent,
+                    cost: self.tree[index].cost,
                     children: Vec::new(),
                 });
             }
         }
+        self.positions.len = kept.len();
         for node in kept.iter_mut() {
             node.parent = node.parent.map(|parent| remap[parent as usize]);
         }
