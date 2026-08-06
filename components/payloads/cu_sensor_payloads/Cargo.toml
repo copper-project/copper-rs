@@ -25,6 +25,7 @@ cu29-clock = { path = "../../../core/cu29_clock", version = "1.1.0-dev", default
 cu29 = { path = "../../../core/cu29", version = "1.1.0-dev", default-features = false, features = [
   "units",
 ] }
+libm = { version = "0.2", default-features = false }
 rerun = { workspace = true, optional = true }
 image = { workspace = true, default-features = false, optional = true }
 kornia-image = { version = "0.1.10", optional = true }

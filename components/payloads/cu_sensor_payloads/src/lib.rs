@@ -3,6 +3,7 @@
 extern crate alloc;
 
 mod barometer;
+mod camera;
 #[cfg(feature = "std")]
 mod depth;
 #[cfg(feature = "std")]
@@ -17,6 +18,7 @@ mod ranging;
 mod rerun_components;
 
 pub use barometer::*;
+pub use camera::*;
 #[cfg(feature = "std")]
 pub use depth::*;
 #[cfg(feature = "std")]
