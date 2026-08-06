@@ -6,6 +6,21 @@
 //! - `reflect`: enables `bevy_reflect` support on wrapper types
 //! - `textlogs`: compatibility no-op for downstream feature forwarding
 //!
+//! # Const construction
+//!
+//! Common robotics motion quantities support a deliberately limited set of units during const
+//! evaluation:
+//!
+//! ```
+//! use cu29_units::si::f32::Length;
+//! use cu29_units::si::length::meter;
+//!
+//! const SENSOR_OFFSET: Length = Length::new_const::<meter>(0.12);
+//! ```
+//!
+//! Use [`Length::new`](si::f32::Length::new) and the other runtime constructors for the complete
+//! `uom` unit surface.
+//!
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
@@ -49,7 +64,7 @@ macro_rules! define_storage_wrappers {
                         }
 
                         #[inline]
-                        pub fn raw(&self) -> $storage_ty {
+                        pub const fn raw(&self) -> $storage_ty {
                             self.value
                         }
 
@@ -262,6 +277,84 @@ pub mod si {
         volumetric_number_rate, volumetric_power_density,
     };
 
+    mod const_unit_private {
+        pub trait Sealed {}
+    }
+
+    macro_rules! define_const_unit_family {
+        ($trait_name:ident, $unit_mod:ident, [$(($unit:ident, $scale:expr),)+]) => {
+            #[doc(hidden)]
+            pub trait $trait_name: const_unit_private::Sealed {
+                const SCALE: f64;
+            }
+
+            $(
+                impl const_unit_private::Sealed for uom::si::$unit_mod::$unit {}
+
+                impl $trait_name for uom::si::$unit_mod::$unit {
+                    const SCALE: f64 = $scale;
+                }
+            )+
+        };
+    }
+
+    define_const_unit_family! {
+        ConstLengthUnit,
+        length,
+        [
+            (meter, 1.0),
+            (centimeter, 1.0e-2),
+            (millimeter, 1.0e-3),
+        ]
+    }
+
+    define_const_unit_family! {
+        ConstAngleUnit,
+        angle,
+        [
+            (radian, 1.0),
+            (degree, 1.745_329_251_994_329_5e-2),
+        ]
+    }
+
+    define_const_unit_family! {
+        ConstTimeUnit,
+        time,
+        [
+            (second, 1.0),
+            (millisecond, 1.0e-3),
+            (microsecond, 1.0e-6),
+            (nanosecond, 1.0e-9),
+        ]
+    }
+
+    define_const_unit_family! {
+        ConstVelocityUnit,
+        velocity,
+        [
+            (meter_per_second, 1.0),
+            (kilometer_per_hour, 2.777_777_777_777_778e-1),
+        ]
+    }
+
+    define_const_unit_family! {
+        ConstAngularVelocityUnit,
+        angular_velocity,
+        [
+            (radian_per_second, 1.0),
+            (degree_per_second, 1.745_329_251_994_329_5e-2),
+        ]
+    }
+
+    define_const_unit_family! {
+        ConstAccelerationUnit,
+        acceleration,
+        [
+            (meter_per_second_squared, 1.0),
+            (standard_gravity, 9.806_65),
+        ]
+    }
+
     define_storage_wrappers! {
         f32,
         f32,
@@ -505,6 +598,78 @@ pub mod si {
             (volumetric_power_density, VolumetricPowerDensity),
         ]
     }
+
+    macro_rules! impl_const_constructor {
+        ($storage_mod:ident, $storage_ty:ty, $quantity:ident, $unit_trait:ident, $units:literal) => {
+            impl $storage_mod::$quantity {
+                /// Creates a quantity in a supported unit during const evaluation.
+                ///
+                /// The deliberately limited set of supported units is:
+                #[doc = $units]
+                /// Runtime construction with [`Self::new`] remains available for every unit
+                /// supported by `uom`.
+                #[inline]
+                pub const fn new_const<U>(value: $storage_ty) -> Self
+                where
+                    U: $unit_trait,
+                {
+                    Self {
+                        value: value * U::SCALE as $storage_ty,
+                    }
+                }
+            }
+        };
+    }
+
+    macro_rules! impl_const_constructors {
+        ($storage_mod:ident, $storage_ty:ty) => {
+            impl_const_constructor!(
+                $storage_mod,
+                $storage_ty,
+                Length,
+                ConstLengthUnit,
+                "`meter`, `centimeter`, and `millimeter`."
+            );
+            impl_const_constructor!(
+                $storage_mod,
+                $storage_ty,
+                Angle,
+                ConstAngleUnit,
+                "`radian` and `degree`."
+            );
+            impl_const_constructor!(
+                $storage_mod,
+                $storage_ty,
+                Time,
+                ConstTimeUnit,
+                "`second`, `millisecond`, `microsecond`, and `nanosecond`."
+            );
+            impl_const_constructor!(
+                $storage_mod,
+                $storage_ty,
+                Velocity,
+                ConstVelocityUnit,
+                "`meter_per_second` and `kilometer_per_hour`."
+            );
+            impl_const_constructor!(
+                $storage_mod,
+                $storage_ty,
+                AngularVelocity,
+                ConstAngularVelocityUnit,
+                "`radian_per_second` and `degree_per_second`."
+            );
+            impl_const_constructor!(
+                $storage_mod,
+                $storage_ty,
+                Acceleration,
+                ConstAccelerationUnit,
+                "`meter_per_second_squared` and `standard_gravity`."
+            );
+        };
+    }
+
+    impl_const_constructors!(f32, f32);
+    impl_const_constructors!(f64, f64);
 }
 
 use alloc::string::ToString;
@@ -666,6 +831,134 @@ impl_debug_scalar_units! {
     (volumetric_number_density, VolumetricNumberDensity, per_cubic_kilometer),
     (volumetric_number_rate, VolumetricNumberRate, per_cubic_meter_second),
     (volumetric_power_density, VolumetricPowerDensity, watt_per_cubic_meter),
+}
+
+#[cfg(test)]
+mod const_tests {
+    use super::si::acceleration::{meter_per_second_squared, standard_gravity};
+    use super::si::angle::{degree, radian};
+    use super::si::angular_velocity::{degree_per_second, radian_per_second};
+    use super::si::f32 as units_f32;
+    use super::si::f64 as units_f64;
+    use super::si::length::{centimeter, meter, millimeter};
+    use super::si::time::{microsecond, millisecond, nanosecond, second};
+    use super::si::velocity::{kilometer_per_hour, meter_per_second};
+
+    const LENGTH_F32: [units_f32::Length; 3] = [
+        units_f32::Length::new_const::<meter>(1.25),
+        units_f32::Length::new_const::<centimeter>(1.25),
+        units_f32::Length::new_const::<millimeter>(1.25),
+    ];
+    const ANGLE_F32: [units_f32::Angle; 2] = [
+        units_f32::Angle::new_const::<radian>(1.25),
+        units_f32::Angle::new_const::<degree>(1.25),
+    ];
+    const TIME_F32: [units_f32::Time; 4] = [
+        units_f32::Time::new_const::<second>(1.25),
+        units_f32::Time::new_const::<millisecond>(1.25),
+        units_f32::Time::new_const::<microsecond>(1.25),
+        units_f32::Time::new_const::<nanosecond>(1.25),
+    ];
+    const VELOCITY_F32: [units_f32::Velocity; 2] = [
+        units_f32::Velocity::new_const::<meter_per_second>(1.25),
+        units_f32::Velocity::new_const::<kilometer_per_hour>(1.25),
+    ];
+    const ANGULAR_VELOCITY_F32: [units_f32::AngularVelocity; 2] = [
+        units_f32::AngularVelocity::new_const::<radian_per_second>(1.25),
+        units_f32::AngularVelocity::new_const::<degree_per_second>(1.25),
+    ];
+    const ACCELERATION_F32: [units_f32::Acceleration; 2] = [
+        units_f32::Acceleration::new_const::<meter_per_second_squared>(1.25),
+        units_f32::Acceleration::new_const::<standard_gravity>(1.25),
+    ];
+
+    macro_rules! assert_const_matches_runtime {
+        ($storage_mod:ident, $quantity:ident, [$(($unit:ident, $value:expr),)+]) => {
+            $(
+                assert_eq!(
+                    $storage_mod::$quantity::new_const::<$unit>($value),
+                    $storage_mod::$quantity::new::<$unit>($value),
+                );
+            )+
+        };
+    }
+
+    #[test]
+    fn f32_const_construction_matches_runtime_conversions() {
+        assert_const_matches_runtime!(
+            units_f32,
+            Length,
+            [(meter, 1.25), (centimeter, 1.25), (millimeter, 1.25),]
+        );
+        assert_const_matches_runtime!(units_f32, Angle, [(radian, 1.25), (degree, 1.25),]);
+        assert_const_matches_runtime!(
+            units_f32,
+            Time,
+            [
+                (second, 1.25),
+                (millisecond, 1.25),
+                (microsecond, 1.25),
+                (nanosecond, 1.25),
+            ]
+        );
+        assert_const_matches_runtime!(
+            units_f32,
+            Velocity,
+            [(meter_per_second, 1.25), (kilometer_per_hour, 1.25),]
+        );
+        assert_const_matches_runtime!(
+            units_f32,
+            AngularVelocity,
+            [(radian_per_second, 1.25), (degree_per_second, 1.25),]
+        );
+        assert_const_matches_runtime!(
+            units_f32,
+            Acceleration,
+            [(meter_per_second_squared, 1.25), (standard_gravity, 1.25),]
+        );
+
+        assert_eq!(LENGTH_F32[0].raw(), 1.25);
+        assert_eq!(ANGLE_F32[0].raw(), 1.25);
+        assert_eq!(TIME_F32[0].raw(), 1.25);
+        assert_eq!(VELOCITY_F32[0].raw(), 1.25);
+        assert_eq!(ANGULAR_VELOCITY_F32[0].raw(), 1.25);
+        assert_eq!(ACCELERATION_F32[0].raw(), 1.25);
+    }
+
+    #[test]
+    fn f64_const_construction_matches_runtime_conversions() {
+        assert_const_matches_runtime!(
+            units_f64,
+            Length,
+            [(meter, 1.25), (centimeter, 1.25), (millimeter, 1.25),]
+        );
+        assert_const_matches_runtime!(units_f64, Angle, [(radian, 1.25), (degree, 1.25),]);
+        assert_const_matches_runtime!(
+            units_f64,
+            Time,
+            [
+                (second, 1.25),
+                (millisecond, 1.25),
+                (microsecond, 1.25),
+                (nanosecond, 1.25),
+            ]
+        );
+        assert_const_matches_runtime!(
+            units_f64,
+            Velocity,
+            [(meter_per_second, 1.25), (kilometer_per_hour, 1.25),]
+        );
+        assert_const_matches_runtime!(
+            units_f64,
+            AngularVelocity,
+            [(radian_per_second, 1.25), (degree_per_second, 1.25),]
+        );
+        assert_const_matches_runtime!(
+            units_f64,
+            Acceleration,
+            [(meter_per_second_squared, 1.25), (standard_gravity, 1.25),]
+        );
+    }
 }
 
 #[cfg(all(test, feature = "reflect"))]
