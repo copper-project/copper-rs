@@ -8,6 +8,7 @@ use core::fmt::Debug;
 use core::ops::Mul;
 use cu29::prelude::*;
 use cu29::units::si::angle::degree;
+use cu29::units::si::f32::Angle as Angle32;
 use cu29::units::si::f32::Length as Length32;
 use cu29::units::si::f64::Angle as Angle64;
 use cu29::units::si::f64::Length as Length64;
@@ -15,7 +16,7 @@ use cu29::units::si::length::meter;
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "glam")]
-use glam::{Affine3A, DAffine3, DMat4, DVec3, Mat4, Vec3};
+use glam::{Affine3A, DAffine3, DMat4, DVec3, Mat4, Vec3, Vec3A};
 
 mod geometry;
 pub use geometry::{
@@ -81,6 +82,186 @@ enum TransformInner<T: Copy + Debug + 'static> {
     F64(DAffine3),
     _Phantom(core::marker::PhantomData<T>),
 }
+
+const fn const_sin_cos(mut angle: f64) -> (f64, f64) {
+    const PI: f64 = core::f64::consts::PI;
+    const FRAC_PI_2: f64 = core::f64::consts::FRAC_PI_2;
+    const TAU: f64 = core::f64::consts::TAU;
+
+    angle %= TAU;
+    if angle > PI {
+        angle -= TAU;
+    } else if angle < -PI {
+        angle += TAU;
+    }
+
+    let mut cos_sign = 1.0;
+    if angle > FRAC_PI_2 {
+        angle = PI - angle;
+        cos_sign = -1.0;
+    } else if angle < -FRAC_PI_2 {
+        angle = -PI - angle;
+        cos_sign = -1.0;
+    }
+
+    // After range reduction to [-pi/2, pi/2], Taylor terms through x^21 for sine and x^20 for
+    // cosine keep the approximation below the f64 regression tolerance used by this crate.
+    let x2 = angle * angle;
+    let mut sin_poly = 1.0 / 51_090_942_171_709_440_000.0;
+    sin_poly = -1.0 / 121_645_100_408_832_000.0 + x2 * sin_poly;
+    sin_poly = 1.0 / 355_687_428_096_000.0 + x2 * sin_poly;
+    sin_poly = -1.0 / 1_307_674_368_000.0 + x2 * sin_poly;
+    sin_poly = 1.0 / 6_227_020_800.0 + x2 * sin_poly;
+    sin_poly = -1.0 / 39_916_800.0 + x2 * sin_poly;
+    sin_poly = 1.0 / 362_880.0 + x2 * sin_poly;
+    sin_poly = -1.0 / 5_040.0 + x2 * sin_poly;
+    sin_poly = 1.0 / 120.0 + x2 * sin_poly;
+    sin_poly = -1.0 / 6.0 + x2 * sin_poly;
+    let sin = angle * (1.0 + x2 * sin_poly);
+
+    let mut cos_poly = 1.0 / 2_432_902_008_176_640_000.0;
+    cos_poly = -1.0 / 6_402_373_705_728_000.0 + x2 * cos_poly;
+    cos_poly = 1.0 / 20_922_789_888_000.0 + x2 * cos_poly;
+    cos_poly = -1.0 / 87_178_291_200.0 + x2 * cos_poly;
+    cos_poly = 1.0 / 479_001_600.0 + x2 * cos_poly;
+    cos_poly = -1.0 / 3_628_800.0 + x2 * cos_poly;
+    cos_poly = 1.0 / 40_320.0 + x2 * cos_poly;
+    cos_poly = -1.0 / 720.0 + x2 * cos_poly;
+    cos_poly = 1.0 / 24.0 + x2 * cos_poly;
+    cos_poly = -1.0 / 2.0 + x2 * cos_poly;
+    let cos = 1.0 + x2 * cos_poly;
+
+    (sin, cos_sign * cos)
+}
+
+macro_rules! impl_const_transform {
+    ($ty:ty, $len:ty, $ang:ty, $variant:ident, $affine:ty, $vec:ty) => {
+        impl Transform3D<$ty> {
+            const fn from_rows(rows: [[$ty; 4]; 3]) -> Self {
+                #[cfg(feature = "glam")]
+                {
+                    Self {
+                        inner: TransformInner::$variant(<$affine>::from_cols(
+                            <$vec>::new(rows[0][0], rows[1][0], rows[2][0]),
+                            <$vec>::new(rows[0][1], rows[1][1], rows[2][1]),
+                            <$vec>::new(rows[0][2], rows[1][2], rows[2][2]),
+                            <$vec>::new(rows[0][3], rows[1][3], rows[2][3]),
+                        )),
+                    }
+                }
+                #[cfg(not(feature = "glam"))]
+                {
+                    Self {
+                        mat: [
+                            rows[0],
+                            rows[1],
+                            rows[2],
+                            [0.0 as $ty, 0.0 as $ty, 0.0 as $ty, 1.0 as $ty],
+                        ],
+                    }
+                }
+            }
+
+            const fn rows(self) -> [[$ty; 4]; 3] {
+                #[cfg(feature = "glam")]
+                {
+                    match self.inner {
+                        TransformInner::$variant(affine) => {
+                            let r = affine.matrix3;
+                            let x = r.x_axis.to_array();
+                            let y = r.y_axis.to_array();
+                            let z = r.z_axis.to_array();
+                            let t = affine.translation.to_array();
+                            [
+                                [x[0], y[0], z[0], t[0]],
+                                [x[1], y[1], z[1], t[1]],
+                                [x[2], y[2], z[2], t[2]],
+                            ]
+                        }
+                        _ => panic!("invalid Transform3D storage variant"),
+                    }
+                }
+                #[cfg(not(feature = "glam"))]
+                {
+                    [self.mat[0], self.mat[1], self.mat[2]]
+                }
+            }
+
+            /// Creates the identity transform during const evaluation.
+            pub const fn identity() -> Self {
+                Self::from_rows([
+                    [1.0 as $ty, 0.0 as $ty, 0.0 as $ty, 0.0 as $ty],
+                    [0.0 as $ty, 1.0 as $ty, 0.0 as $ty, 0.0 as $ty],
+                    [0.0 as $ty, 0.0 as $ty, 1.0 as $ty, 0.0 as $ty],
+                ])
+            }
+
+            /// Creates a transform from unit-typed translation and XYZ Euler angles.
+            ///
+            /// `rotation` is `[roll_x, pitch_y, yaw_z]`. Rotations are applied X, then Y, then Z,
+            /// producing `Rz * Ry * Rx` for column vectors. Translation is applied last.
+            /// Const unit values use their SI base representation: meters and radians.
+            pub const fn from_translation_euler_xyz(
+                translation: [$len; 3],
+                rotation: [$ang; 3],
+            ) -> Self {
+                let (sx, cx) = const_sin_cos(rotation[0].value as f64);
+                let (sy, cy) = const_sin_cos(rotation[1].value as f64);
+                let (sz, cz) = const_sin_cos(rotation[2].value as f64);
+                let sx = sx as $ty;
+                let cx = cx as $ty;
+                let sy = sy as $ty;
+                let cy = cy as $ty;
+                let sz = sz as $ty;
+                let cz = cz as $ty;
+
+                Self::from_rows([
+                    [
+                        cy * cz,
+                        cz * sx * sy - cx * sz,
+                        sx * sz + cx * cz * sy,
+                        translation[0].value,
+                    ],
+                    [
+                        cy * sz,
+                        cx * cz + sx * sy * sz,
+                        cx * sy * sz - cz * sx,
+                        translation[1].value,
+                    ],
+                    [-sy, cy * sx, cx * cy, translation[2].value],
+                ])
+            }
+
+            /// Composes `self` with `rhs` during const evaluation.
+            ///
+            /// The returned transform applies `rhs` first and then `self`, matching `self * rhs`.
+            pub const fn compose(self, rhs: Self) -> Self {
+                let lhs = self.rows();
+                let rhs = rhs.rows();
+                let mut result = [[0.0 as $ty; 4]; 3];
+                let mut row = 0;
+                while row < 3 {
+                    let mut column = 0;
+                    while column < 3 {
+                        result[row][column] = lhs[row][0] * rhs[0][column]
+                            + lhs[row][1] * rhs[1][column]
+                            + lhs[row][2] * rhs[2][column];
+                        column += 1;
+                    }
+                    result[row][3] = lhs[row][0] * rhs[0][3]
+                        + lhs[row][1] * rhs[1][3]
+                        + lhs[row][2] * rhs[2][3]
+                        + lhs[row][3];
+                    row += 1;
+                }
+                Self::from_rows(result)
+            }
+        }
+    };
+}
+
+impl_const_transform!(f32, Length32, Angle32, F32, Affine3A, Vec3A);
+impl_const_transform!(f64, Length64, Angle64, F64, DAffine3, DVec3);
 
 pub type Pose<T> = Transform3D<T>;
 
@@ -750,6 +931,47 @@ pub use faer_integration::*;
 mod tests {
     use super::*;
 
+    const CONST_PARENT_TO_INTERMEDIATE: Transform3D<f32> =
+        Transform3D::<f32>::from_translation_euler_xyz(
+            [
+                Length32 { value: 1.0 },
+                Length32 { value: 2.0 },
+                Length32 { value: 3.0 },
+            ],
+            [
+                Angle32 { value: 0.0 },
+                Angle32 { value: 0.0 },
+                Angle32 {
+                    value: core::f32::consts::FRAC_PI_2,
+                },
+            ],
+        );
+    const CONST_INTERMEDIATE_TO_CHILD: Transform3D<f32> =
+        Transform3D::<f32>::from_translation_euler_xyz(
+            [
+                Length32 { value: 1.0 },
+                Length32 { value: 0.0 },
+                Length32 { value: 0.0 },
+            ],
+            [Angle32 { value: 0.0 }; 3],
+        );
+    const CONST_PARENT_TO_CHILD: Transform3D<f32> =
+        CONST_PARENT_TO_INTERMEDIATE.compose(CONST_INTERMEDIATE_TO_CHILD);
+    const CONST_TRANSFORM_F64: Transform3D<f64> = Transform3D::<f64>::from_translation_euler_xyz(
+        [Length64 { value: 0.0 }; 3],
+        [
+            Angle64 {
+                value: core::f64::consts::PI / 6.0,
+            },
+            Angle64 {
+                value: -core::f64::consts::PI / 9.0,
+            },
+            Angle64 {
+                value: core::f64::consts::PI / 18.0,
+            },
+        ],
+    );
+
     fn assert_matrix_close<const N: usize, T: Copy + Into<f64>>(
         lhs: [[T; N]; N],
         rhs: [[T; N]; N],
@@ -769,6 +991,41 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn const_sin_cos_matches_runtime_trigonometry() {
+        for step in -64..=64 {
+            let angle = f64::from(step) * core::f64::consts::PI / 8.0;
+            let (actual_sin, actual_cos) = const_sin_cos(angle);
+            let (expected_sin, expected_cos) = angle.sin_cos();
+            assert!((actual_sin - expected_sin).abs() <= 1e-14);
+            assert!((actual_cos - expected_cos).abs() <= 1e-14);
+        }
+    }
+
+    #[test]
+    fn const_transform_construction_and_composition_are_semantic() {
+        assert_point_close(
+            CONST_PARENT_TO_CHILD.position(),
+            Point3f::from_meters(1.0, 3.0, 3.0),
+            1e-5,
+        );
+        assert_point_close(
+            CONST_PARENT_TO_CHILD.transform_vector(Point3f::from_meters(1.0, 0.0, 0.0)),
+            Point3f::from_meters(0.0, 1.0, 0.0),
+            1e-5,
+        );
+
+        let point = Point3::new(
+            Length64::new::<meter>(1.0),
+            Length64::new::<meter>(2.0),
+            Length64::new::<meter>(3.0),
+        );
+        let transformed = CONST_TRANSFORM_F64.transform_vector(point);
+        assert!(transformed.x.raw().is_finite());
+        assert!(transformed.y.raw().is_finite());
+        assert!(transformed.z.raw().is_finite());
     }
 
     #[test]

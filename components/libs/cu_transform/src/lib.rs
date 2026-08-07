@@ -22,7 +22,9 @@ pub use frames::{
 pub use frames::{BaseToRobot, RobotToCamera, RobotToImu, RobotToLidar, WorldToBase, WorldToRobot};
 pub use interpolation::interpolate_transforms;
 pub use transform::{ConstTransformBuffer, StampedTransform, TransformBuffer, TransformStore};
-pub use transform_payload::{FrameTransform, TypedTransform, TypedTransformBuffer};
+pub use transform_payload::{
+    FrameTransform, TypedTransform, TypedTransform3D, TypedTransformBuffer,
+};
 pub use tree::TransformTree;
 pub use velocity::VelocityTransform;
 

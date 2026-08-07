@@ -15,6 +15,37 @@ orientation) transformations and velocity transformations.
 
 ## Usage
 
+### Const, frame-typed transforms
+
+Static robot geometry can be unit-checked and composed entirely at compile time. The XYZ angles
+are roll, pitch, and yaw; they are applied X, then Y, then Z. Add the timestamp only when publishing
+the transform at runtime. Direct unit values use SI base units (meters and radians):
+
+```rust
+use cu_transform::{BaseFrame, RobotFrame, TypedTransform3D, WorldFrame};
+use cu29::clock::CuTime;
+use cu29::units::si::f32::{Angle, Length};
+
+const WORLD_TO_BASE: TypedTransform3D<f32, WorldFrame, BaseFrame> =
+    TypedTransform3D::<f32, WorldFrame, BaseFrame>::from_translation_euler_xyz(
+        [Length { value: 0.0 }; 3],
+        [Angle { value: 0.0 }; 3],
+    );
+const BASE_TO_ROBOT: TypedTransform3D<f32, BaseFrame, RobotFrame> =
+    TypedTransform3D::<f32, BaseFrame, RobotFrame>::from_translation_euler_xyz(
+        [
+            Length { value: 0.12 },
+            Length { value: 0.0 },
+            Length { value: 0.0 },
+        ],
+        [Angle { value: 0.0 }; 3],
+    );
+const WORLD_TO_ROBOT: TypedTransform3D<f32, WorldFrame, RobotFrame> =
+    WORLD_TO_BASE.then(BASE_TO_ROBOT);
+
+let stamped = WORLD_TO_ROBOT.at(CuTime::from_nanos(1_000));
+```
+
 ### Transform Tree
 
 The transform tree maintains a hierarchical relationship between coordinate frames:
