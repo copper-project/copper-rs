@@ -21,6 +21,11 @@ pr-check:
 	just api-check
 	just test
 
+# Publish the current workspace versions to crates.io, pacing registry updates.
+[confirm("Publish all unpublished workspace crates to crates.io?")]
+publish:
+	cargo ws publish --publish-as-is --publish-interval 25
+
 # Formatting, typo, and clippy checks.
 lint:
 	just fmt-check
