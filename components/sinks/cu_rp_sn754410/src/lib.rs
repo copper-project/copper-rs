@@ -194,7 +194,7 @@ impl CuSinkTask for SN754410 {
 
         let power_ratio = power.power.get::<ratio>();
         let deadzone_compensated = if power_ratio != 0.0f32 {
-            // proportinally on the [deadzone, 1.0] range
+            // proportionally on the [deadzone, 1.0] range
             let deadzone = self.deadzone;
             if power_ratio > 0.0 {
                 deadzone + (1.0 - deadzone) * power_ratio
