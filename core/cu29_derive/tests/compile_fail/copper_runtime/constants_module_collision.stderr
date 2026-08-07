@@ -1,0 +1,8 @@
+error: Constant module 'robot::drive' conflicts with constant 'drive'
+          context:None
+ --> tests/compile_fail/copper_runtime/constants_module_collision.rs:3:1
+  |
+3 | #[copper_runtime(config = "config/constants_module_collision.ron")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `copper_runtime` (in Nightly builds, run with -Z macro-backtrace for more info)

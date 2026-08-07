@@ -1,0 +1,13 @@
+error[E0015]: cannot call non-const function `non_const` in constants
+  --> tests/compile_fail/copper_runtime/constants_non_const_expression.rs:27:1
+   |
+27 | #[copper_runtime(config = "config/constants_non_const_expression.ron")]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+note: function `non_const` is not const
+  --> tests/compile_fail/copper_runtime/constants_non_const_expression.rs:23:1
+   |
+23 | fn non_const() -> u32 {
+   | ^^^^^^^^^^^^^^^^^^^^^
+   = note: calls in constants are limited to constant functions, tuple structs and tuple variants
+   = note: this error originates in the attribute macro `copper_runtime` (in Nightly builds, run with -Z macro-backtrace for more info)

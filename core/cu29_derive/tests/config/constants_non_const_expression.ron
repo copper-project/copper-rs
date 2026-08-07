@@ -1,0 +1,23 @@
+(
+    constants: [
+        (
+            id: "NON_CONST",
+            type: "u32",
+            expression: "crate::non_const()",
+        ),
+    ],
+    tasks: [
+        (
+            id: "src",
+            type: "ConstantSource",
+            kind: source,
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "__nc__",
+            msg: "()",
+        ),
+    ],
+)

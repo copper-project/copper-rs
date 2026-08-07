@@ -1,0 +1,23 @@
+(
+    constants: [
+        (
+            id: "WRONG_TYPE",
+            type: "u32",
+            expression: "\"not a number\"",
+        ),
+    ],
+    tasks: [
+        (
+            id: "src",
+            type: "ConstantSource",
+            kind: source,
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "__nc__",
+            msg: "()",
+        ),
+    ],
+)

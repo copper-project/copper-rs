@@ -64,6 +64,74 @@ mod tests {
     }
 
     #[test]
+    fn test_constants_merge_from_includes_with_root_precedence() {
+        let temp_dir = tempdir().unwrap();
+        let config_dir = temp_dir.path().join("config");
+        create_dir_all(&config_dir).unwrap();
+
+        write(
+            config_dir.join("included.ron"),
+            r#"(
+                constants: [
+                    (
+                        id: "ROOT_WINS",
+                        module: "diagnostics::counters",
+                        storage: usize,
+                        value: 99,
+                    ),
+                    (id: "ROOT_WINS", module: "telemetry", storage: usize, value: 11),
+                    (id: "FROM_INCLUDE", quantity: length, unit: millimeter, value: 250.0),
+                    (
+                        id: "FROM_EXPRESSION",
+                        module: "geometry",
+                        type: "crate::Pair",
+                        expression: "crate::Pair::new()",
+                    ),
+                ],
+                tasks: [],
+                cnx: [],
+            )"#,
+        )
+        .unwrap();
+        let main_path = config_dir.join("main.ron");
+        write(
+            &main_path,
+            r#"(
+                constants: [
+                    (
+                        id: "ROOT_WINS",
+                        module: "diagnostics :: counters",
+                        storage: usize,
+                        value: 7,
+                    ),
+                ],
+                tasks: [],
+                cnx: [],
+                includes: [(path: "included.ron")],
+            )"#,
+        )
+        .unwrap();
+
+        let config = read_configuration(main_path.to_str().unwrap()).unwrap();
+        let constants = &config.constants;
+        assert_eq!(constants.len(), 4);
+        assert_eq!(
+            constants[0].qualified_id(),
+            "diagnostics::counters::ROOT_WINS"
+        );
+        assert_eq!(constants[0].numbers().unwrap().1[0].as_f64(), 7.0);
+        assert_eq!(constants[1].qualified_id(), "telemetry::ROOT_WINS");
+        assert_eq!(constants[1].numbers().unwrap().1[0].as_f64(), 11.0);
+        assert_eq!(constants[2].qualified_id(), "constants::FROM_INCLUDE");
+        assert_eq!(constants[2].normalized_f32().unwrap().1, vec![0.25]);
+        assert_eq!(constants[3].qualified_id(), "geometry::FROM_EXPRESSION");
+        assert_eq!(
+            constants[3].expression_definition(),
+            Some(("crate::Pair", "crate::Pair::new()"))
+        );
+    }
+
+    #[test]
     fn test_feature_predicate_combinations() {
         let temp_dir = tempdir().unwrap();
         let config_dir = temp_dir.path().join("config");

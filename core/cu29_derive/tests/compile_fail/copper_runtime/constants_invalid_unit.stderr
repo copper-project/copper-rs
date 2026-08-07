@@ -1,0 +1,8 @@
+error: Constant 'BAD_LENGTH' unit 'degree' is not compatible with quantity 'length'
+          context:None
+ --> tests/compile_fail/copper_runtime/constants_invalid_unit.rs:3:1
+  |
+3 | #[copper_runtime(config = "config/constants_invalid_unit.ron")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `copper_runtime` (in Nightly builds, run with -Z macro-backtrace for more info)

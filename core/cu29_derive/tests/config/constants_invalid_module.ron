@@ -1,0 +1,24 @@
+(
+    constants: [
+        (
+            id: "COUNT",
+            module: "::diagnostics",
+            storage: usize,
+            value: 1,
+        ),
+    ],
+    tasks: [
+        (
+            id: "src",
+            type: "ConstantSource",
+            kind: source,
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "__nc__",
+            msg: "()",
+        ),
+    ],
+)

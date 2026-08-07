@@ -161,6 +161,7 @@ pub fn cu29_runtime::config::CuConfig::new_simple_type() -> Self
 pub fn cu29_runtime::config::CuConfig::render(&self, output: &mut dyn std::io::Write, mission_id: core::option::Option<&str>) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::config::CuConfig::serialize_ron(&self) -> cu29_traits::CuResult<alloc::string::String>
 pub fn cu29_runtime::config::CuConfig::validate_anytime_configs(&self) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::config::CuConfig::validate_constants(&self) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::config::CuConfig::validate_logging_config(&self) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::config::CuConfig::validate_runtime_config(&self) -> cu29_traits::CuResult<()>
 impl core::default::Default for cu29_runtime::config::CuConfig

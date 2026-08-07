@@ -1,0 +1,76 @@
+(
+    constants: [
+        (
+            id: "COUNT",
+            storage: usize,
+            value: 8,
+        ),
+        (
+            id: "LENGTH_DEFAULT",
+            quantity: length,
+            value: [0.18, 0.0, 0.31],
+        ),
+        (
+            id: "LENGTH_MM",
+            quantity: length,
+            unit: millimeter,
+            value: [180.0, 0.0, 310.0],
+        ),
+        (
+            id: "MASS_KG",
+            quantity: mass,
+            value: 1.0,
+        ),
+        (
+            id: "TEMPERATURE_C",
+            quantity: thermodynamic_temperature,
+            unit: degree_celsius,
+            storage: f64,
+            value: 20.0,
+        ),
+        (
+            id: "MAX_RATE",
+            module: "robot::sensors",
+            storage: u32,
+            value: 200,
+        ),
+        (
+            id: "MISSION_LIMIT",
+            module: "A",
+            storage: u16,
+            value: 10,
+        ),
+        (
+            id: "MISSION_LIMIT",
+            module: "B",
+            storage: u16,
+            value: 20,
+        ),
+        (
+            id: "GAIN",
+            module: "A::drive",
+            value: 0.5,
+        ),
+        (
+            id: "PAIR",
+            module: "constructed",
+            type: "super::ConstPair",
+            expression: "super::ConstPair::new(super::constants::COUNT, super::robot::sensors::MAX_RATE)",
+        ),
+    ],
+    missions: [(id: "A"), (id: "B")],
+    tasks: [
+        (
+            id: "src",
+            type: "ConstantSource",
+            kind: source,
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "__nc__",
+            msg: "()",
+        ),
+    ],
+)

@@ -1,0 +1,66 @@
+(
+    constants: [
+        (
+            id: "MAX_DETECTIONS",
+            storage: usize,
+            value: 64,
+        ),
+        (
+            id: "CAMERA_TRANSLATION",
+            module: "frames::camera",
+            quantity: length,
+            value: [0.18, 0.0, 0.31],
+        ),
+        (
+            id: "CAMERA_ROTATION",
+            module: "frames::camera",
+            quantity: angle,
+            value: [0.0, -0.2, 0.0],
+        ),
+        (
+            id: "ROBOT_TRANSLATION",
+            module: "frames::robot",
+            quantity: length,
+            value: [1.0, 2.0, 0.0],
+        ),
+        (
+            id: "ROBOT_ROTATION",
+            module: "frames::robot",
+            quantity: angle,
+            value: [0.0, 0.0, 0.5],
+        ),
+        (
+            id: "WORLD_TO_ROBOT",
+            module: "transforms",
+            type: "cu_transform::TypedTransform3D<f32, cu_transform::WorldFrame, cu_transform::RobotFrame>",
+            expression: "cu_transform::TypedTransform3D::<f32, cu_transform::WorldFrame, cu_transform::RobotFrame>::from_translation_euler_xyz(crate::frames::robot::ROBOT_TRANSLATION, crate::frames::robot::ROBOT_ROTATION)",
+        ),
+        (
+            id: "ROBOT_TO_CAMERA",
+            module: "transforms",
+            type: "cu_transform::TypedTransform3D<f32, cu_transform::RobotFrame, cu_transform::CameraFrame>",
+            expression: "cu_transform::TypedTransform3D::<f32, cu_transform::RobotFrame, cu_transform::CameraFrame>::from_translation_euler_xyz(crate::frames::camera::CAMERA_TRANSLATION, crate::frames::camera::CAMERA_ROTATION)",
+        ),
+        (
+            id: "WORLD_TO_CAMERA",
+            module: "transforms",
+            type: "cu_transform::TypedTransform3D<f32, cu_transform::WorldFrame, cu_transform::CameraFrame>",
+            expression: "crate::transforms::WORLD_TO_ROBOT.then(crate::transforms::ROBOT_TO_CAMERA)",
+        ),
+    ],
+    tasks: [
+        (
+            id: "constants_demo",
+            type: "ConstantsDemo",
+            kind: source,
+        ),
+    ],
+    cnx: [
+        (
+            src: "constants_demo",
+            dst: "__nc__",
+            msg: "()",
+        ),
+    ],
+    includes: [(path: "constants-extra.ron")],
+)
