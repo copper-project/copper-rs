@@ -1,6 +1,6 @@
 [package]
 name = "cu-config-constants"
-description = "Compile-time primitive and SI quantity constants, including modular RON includes."
+description = "Compile-time primitive, SI quantity, and typed expression constants."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

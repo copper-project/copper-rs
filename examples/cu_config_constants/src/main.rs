@@ -29,19 +29,9 @@ const _: [cu29::units::si::f32::Angle; 3] = frames::camera::CAMERA_ROTATION;
 const _: [cu29::units::si::f32::Length; 3] = frames::camera::CAMERA_OFFSET;
 const _: cu29::units::si::f64::Time = control::CONTROL_PERIOD;
 const _: cu29::units::si::f64::Angle = control::YAW_LIMIT;
-
-const WORLD_TO_ROBOT: TypedTransform3D<f32, WorldFrame, RobotFrame> =
-    TypedTransform3D::<f32, WorldFrame, RobotFrame>::from_translation_euler_xyz(
-        frames::robot::ROBOT_TRANSLATION,
-        frames::robot::ROBOT_ROTATION,
-    );
-const ROBOT_TO_CAMERA: TypedTransform3D<f32, RobotFrame, CameraFrame> =
-    TypedTransform3D::<f32, RobotFrame, CameraFrame>::from_translation_euler_xyz(
-        frames::camera::CAMERA_TRANSLATION,
-        frames::camera::CAMERA_ROTATION,
-    );
-const WORLD_TO_CAMERA: TypedTransform3D<f32, WorldFrame, CameraFrame> =
-    WORLD_TO_ROBOT.then(ROBOT_TO_CAMERA);
+const _: TypedTransform3D<f32, WorldFrame, RobotFrame> = transforms::WORLD_TO_ROBOT;
+const _: TypedTransform3D<f32, RobotFrame, CameraFrame> = transforms::ROBOT_TO_CAMERA;
+const _: TypedTransform3D<f32, WorldFrame, CameraFrame> = transforms::WORLD_TO_CAMERA;
 
 fn main() {
     assert_eq!(constants::MAX_DETECTIONS, 64);
@@ -52,7 +42,7 @@ fn main() {
 
     // Construction and frame-checked composition happened at compile time. Only the timestamp is
     // runtime data.
-    let world_to_camera = WORLD_TO_CAMERA.at(CuTime::from_nanos(1_000));
+    let world_to_camera = transforms::WORLD_TO_CAMERA.at(CuTime::from_nanos(1_000));
     assert_eq!(world_to_camera.parent_name(), "world");
     assert_eq!(world_to_camera.child_name(), "camera");
 }

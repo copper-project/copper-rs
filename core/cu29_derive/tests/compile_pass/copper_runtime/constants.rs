@@ -1,6 +1,18 @@
 use cu29::prelude::*;
 use cu29_derive::copper_runtime;
 
+#[derive(Clone, Copy)]
+pub struct ConstPair {
+    pub count: usize,
+    pub rate: u32,
+}
+
+impl ConstPair {
+    pub const fn new(count: usize, rate: u32) -> Self {
+        Self { count, rate }
+    }
+}
+
 #[derive(Reflect)]
 struct ConstantSource;
 
@@ -36,6 +48,8 @@ const _: u32 = robot::sensors::MAX_RATE;
 const _: u16 = A::MISSION_LIMIT;
 const _: u16 = B::MISSION_LIMIT;
 const _: f32 = A::drive::GAIN;
+const _: ConstPair = constructed::PAIR;
+const _: [(); constants::COUNT] = [(); constructed::PAIR.count];
 
 mod task_family {
     const _: usize = super::constants::COUNT;

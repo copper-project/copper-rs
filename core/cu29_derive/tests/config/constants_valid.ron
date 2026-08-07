@@ -51,6 +51,12 @@
             module: "A::drive",
             value: 0.5,
         ),
+        (
+            id: "PAIR",
+            module: "constructed",
+            type: "super::ConstPair",
+            expression: "super::ConstPair::new(super::constants::COUNT, super::robot::sensors::MAX_RATE)",
+        ),
     ],
     missions: [(id: "A"), (id: "B")],
     tasks: [

@@ -297,10 +297,13 @@ pub struct ConstantConfig {
     #[serde(default, deserialize_with = "deserialize_constant_module")]
     module: Option<String>,
     #[serde(default)]
-    storage: ConstantStorage,
+    storage: Option<ConstantStorage>,
     quantity: Option<cu29_units::constant::Quantity>,
     unit: Option<cu29_units::constant::Unit>,
-    value: Value,
+    value: Option<Value>,
+    #[serde(rename = "type")]
+    rust_type: Option<String>,
+    expression: Option<String>,
 }
 
 fn deserialize_constant_module<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
@@ -333,7 +336,10 @@ impl ConstantConfig {
     }
 
     pub const fn storage(&self) -> ConstantStorage {
-        self.storage
+        match self.storage {
+            Some(storage) => storage,
+            None => ConstantStorage::F32,
+        }
     }
 
     pub const fn quantity(&self) -> Option<cu29_units::constant::Quantity> {
@@ -342,6 +348,10 @@ impl ConstantConfig {
 
     pub const fn explicit_unit(&self) -> Option<cu29_units::constant::Unit> {
         self.unit
+    }
+
+    pub fn expression_definition(&self) -> Option<(&str, &str)> {
+        self.rust_type.as_deref().zip(self.expression.as_deref())
     }
 
     pub fn resolved_unit(&self) -> Result<Option<cu29_units::constant::Unit>, String> {
@@ -390,7 +400,11 @@ impl ConstantConfig {
             }
         }
 
-        match &self.value.0 {
+        let value = self
+            .value
+            .as_ref()
+            .ok_or_else(|| format!("Constant '{}' does not declare a numeric value", self.id))?;
+        match &value.0 {
             RonValue::Seq(values) => values
                 .iter()
                 .map(number)
@@ -477,7 +491,17 @@ impl ConstantConfig {
         }
 
         let mut hash = OFFSET;
-        hash_bytes(&mut hash, self.storage.rust_type().as_bytes());
+        if let Some((rust_type, expression)) = self.expression_definition() {
+            hash_bytes(&mut hash, b"expression");
+            hash_bytes(&mut hash, rust_type.as_bytes());
+            hash_bytes(&mut hash, &[0]);
+            hash_bytes(&mut hash, expression.as_bytes());
+            return Ok(hash);
+        }
+
+        let storage = self.storage();
+        hash_bytes(&mut hash, b"numeric");
+        hash_bytes(&mut hash, storage.rust_type().as_bytes());
         hash_bytes(
             &mut hash,
             self.quantity
@@ -486,7 +510,7 @@ impl ConstantConfig {
         );
 
         if self.quantity.is_some() {
-            match self.storage {
+            match storage {
                 ConstantStorage::F32 => {
                     let (is_array, values) = self.normalized_f32()?;
                     hash_bytes(&mut hash, &[u8::from(is_array)]);
@@ -514,7 +538,7 @@ impl ConstantConfig {
         let (is_array, numbers) = self.numbers()?;
         hash_bytes(&mut hash, &[u8::from(is_array)]);
         for number in numbers {
-            match (self.storage, number) {
+            match (storage, number) {
                 (ConstantStorage::F32, number) => {
                     hash_bytes(&mut hash, &(number.as_f64() as f32).to_bits().to_le_bytes())
                 }
@@ -3362,6 +3386,62 @@ impl CuConfig {
                 )));
             }
 
+            match (
+                constant.value.is_some(),
+                constant.rust_type.as_deref(),
+                constant.expression.as_deref(),
+            ) {
+                (true, None, None) => {}
+                (true, _, _) => {
+                    return Err(CuError::from(format!(
+                        "Constant '{}' cannot combine numeric 'value' with 'type' or 'expression'",
+                        constant.id()
+                    )));
+                }
+                (false, Some(rust_type), Some(expression)) => {
+                    if constant.storage.is_some()
+                        || constant.quantity.is_some()
+                        || constant.unit.is_some()
+                    {
+                        return Err(CuError::from(format!(
+                            "Constant '{}' cannot combine 'type' and 'expression' with numeric 'storage', 'quantity', or 'unit'",
+                            constant.id()
+                        )));
+                    }
+                    if rust_type.trim().is_empty() {
+                        return Err(CuError::from(format!(
+                            "Constant '{}' type cannot be empty",
+                            constant.id()
+                        )));
+                    }
+                    if expression.trim().is_empty() {
+                        return Err(CuError::from(format!(
+                            "Constant '{}' expression cannot be empty",
+                            constant.id()
+                        )));
+                    }
+                    continue;
+                }
+                (false, Some(_), None) => {
+                    return Err(CuError::from(format!(
+                        "Constant '{}' declares 'type' without 'expression'",
+                        constant.id()
+                    )));
+                }
+                (false, None, Some(_)) => {
+                    return Err(CuError::from(format!(
+                        "Constant '{}' declares 'expression' without 'type'",
+                        constant.id()
+                    )));
+                }
+                (false, None, None) => {
+                    return Err(CuError::from(format!(
+                        "Constant '{}' must declare either numeric 'value' or both 'type' and 'expression'",
+                        constant.id()
+                    )));
+                }
+            }
+
             if constant.quantity().is_none() && constant.explicit_unit().is_some() {
                 return Err(CuError::from(format!(
                     "Constant '{}' declares a unit without a quantity",
@@ -5230,6 +5310,12 @@ mod tests {
                     (id: "MASS_DEFAULT", quantity: mass, value: 1.0),
                     (id: "TEMPERATURE_C", quantity: thermodynamic_temperature,
                         unit: degree_celsius, storage: f64, value: 20.0),
+                    (id: "CONSTRUCTED", module: "geometry", type: "crate::ConstPair",
+                        expression: "crate::ConstPair::new(crate::constants::COUNT)"),
+                    (id: "CONSTRUCTED_COPY", module: "geometry", type: "crate::ConstPair",
+                        expression: "crate::ConstPair::new(crate::constants::COUNT)"),
+                    (id: "CONSTRUCTED_REWRITTEN", module: "geometry", type: "crate::ConstPair",
+                        expression: "crate::ConstPair::new( crate::constants::COUNT )"),
                 ],
                 tasks: [],
                 cnx: [],
@@ -5268,6 +5354,69 @@ mod tests {
 
         let temperature = config.constants[7].normalized_f64().unwrap().1[0];
         assert!((temperature - 293.15).abs() < f64::EPSILON * 4.0);
+
+        assert_eq!(
+            config.constants[8].expression_definition(),
+            Some((
+                "crate::ConstPair",
+                "crate::ConstPair::new(crate::constants::COUNT)"
+            ))
+        );
+        assert_eq!(
+            config.constants[8].semantic_fingerprint().unwrap(),
+            config.constants[9].semantic_fingerprint().unwrap()
+        );
+        assert_ne!(
+            config.constants[8].semantic_fingerprint().unwrap(),
+            config.constants[10].semantic_fingerprint().unwrap()
+        );
+
+        let serialized = config.serialize_ron().unwrap();
+        let reparsed = CuConfig::deserialize_ron(&serialized).unwrap();
+        assert_eq!(
+            reparsed.constants[8].expression_definition(),
+            config.constants[8].expression_definition()
+        );
+        assert_eq!(
+            reparsed.constants[8].semantic_fingerprint().unwrap(),
+            config.constants[8].semantic_fingerprint().unwrap()
+        );
+    }
+
+    #[test]
+    fn test_compile_time_constant_rejects_invalid_definition_shapes() {
+        let cases = [
+            (
+                r#"(id: "BAD", type: "crate::Pair")"#,
+                "declares 'type' without 'expression'",
+            ),
+            (
+                r#"(id: "BAD", expression: "crate::Pair::new()")"#,
+                "declares 'expression' without 'type'",
+            ),
+            (
+                r#"(id: "BAD", value: 1, type: "u32", expression: "1")"#,
+                "cannot combine numeric 'value' with 'type' or 'expression'",
+            ),
+            (
+                r#"(id: "BAD", storage: f32, type: "u32", expression: "1")"#,
+                "cannot combine 'type' and 'expression' with numeric 'storage', 'quantity', or 'unit'",
+            ),
+            (
+                r#"(id: "BAD")"#,
+                "must declare either numeric 'value' or both 'type' and 'expression'",
+            ),
+        ];
+
+        for (constant, expected) in cases {
+            let source = format!("(constants: [{constant}], tasks: [], cnx: [])");
+            let error = read_configuration_str(source, None)
+                .expect_err("invalid constant definition shape must fail");
+            assert!(
+                error.to_string().contains(expected),
+                "unexpected error: {error}"
+            );
+        }
     }
 
     #[test]

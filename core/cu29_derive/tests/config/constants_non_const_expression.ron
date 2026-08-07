@@ -1,16 +1,9 @@
 (
     constants: [
         (
-            id: "drive",
-            module: "robot",
-            storage: usize,
-            value: 1,
-        ),
-        (
-            id: "COUNT",
-            module: "robot::drive",
-            storage: usize,
-            value: 2,
+            id: "NON_CONST",
+            type: "u32",
+            expression: "crate::non_const()",
         ),
     ],
     tasks: [

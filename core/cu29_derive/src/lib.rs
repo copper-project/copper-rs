@@ -98,6 +98,25 @@ fn build_constant_def(constant: &ConstantConfig) -> CuResult<proc_macro2::TokenS
         ))
     })?;
 
+    if let Some((rust_type, expression)) = constant.expression_definition() {
+        let constant_type = parse_str::<Type>(rust_type).map_err(|error| {
+            CuError::from(format!(
+                "Constant '{}' type '{}' is not a valid Rust type: {error}",
+                constant.id(),
+                rust_type
+            ))
+        })?;
+        let expression = parse_str::<Expr>(expression).map_err(|error| {
+            CuError::from(format!(
+                "Constant '{}' expression is not a valid Rust expression: {error}",
+                constant.id()
+            ))
+        })?;
+        return Ok(quote! {
+            pub const #id: #constant_type = #expression;
+        });
+    }
+
     if let Some(quantity) = constant.quantity() {
         let definition = cu29_units::constant::definition(quantity).ok_or_else(|| {
             CuError::from(format!(

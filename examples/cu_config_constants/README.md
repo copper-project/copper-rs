@@ -12,6 +12,18 @@ merged from a normal Copper RON include. Constants without `module:` are generat
 - `control::CONTROL_PERIOD` selects `f64` while keeping the default coherent SI unit
   (seconds).
 - `control::YAW_LIMIT` selects both `f64` and degrees; the generated value stores radians.
+- `transforms::WORLD_TO_ROBOT` and `transforms::ROBOT_TO_CAMERA` use explicit Rust
+  `type:` and `expression:` fields to call `TypedTransform3D` const constructors.
+- `transforms::WORLD_TO_CAMERA` uses the same form to compose the first two transforms.
+
+A constant declaration uses exactly one of two forms. Numeric constants provide `value:`
+and may add `storage:`, `quantity:`, or `unit:`. Const-expression constants provide both
+`type:` and `expression:` and cannot use the numeric fields. The expression may call const
+constructors and methods, use struct literals, and reference other constants. Rust checks the
+declared type and rejects any operation that cannot run during const evaluation.
+
+Expression paths follow normal Rust rules in the generated module. Use dependency-qualified
+paths such as `cu_transform::...` and `crate::...` for application types or generated constants.
 
 The generated modules are owned by the macro. A configured module path therefore cannot
 name a module already declared by the application. Module placement only controls the Rust
@@ -23,7 +35,7 @@ file and an include declare the same `(module, id)`, the root declaration wins. 
 robot configuration changes a compiled constant, Copper emits a warning and keeps the baked
 value.
 
-`main.rs` also builds const `WorldFrame -> RobotFrame` and `RobotFrame -> CameraFrame`
+The RON configuration builds const `WorldFrame -> RobotFrame` and `RobotFrame -> CameraFrame`
 `TypedTransform3D`s directly from the generated translation/rotation quantities, then composes
 them into a const `WorldFrame -> CameraFrame` transform. The shared intermediate frame is a type
 parameter, so trying to compose transforms whose frames do not meet is a compile-time error. Only

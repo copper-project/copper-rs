@@ -1,0 +1,8 @@
+error: Constant 'BAD_EXPRESSION' expression is not a valid Rust expression: cannot parse string into token stream
+          context:None
+ --> tests/compile_fail/copper_runtime/constants_invalid_expression.rs:3:1
+  |
+3 | #[copper_runtime(config = "config/constants_invalid_expression.ron")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `copper_runtime` (in Nightly builds, run with -Z macro-backtrace for more info)

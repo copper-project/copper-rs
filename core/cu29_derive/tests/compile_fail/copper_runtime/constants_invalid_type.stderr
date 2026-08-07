@@ -1,0 +1,8 @@
+error: Constant 'BAD_TYPE' type 'crate::Pair<' is not a valid Rust type: unexpected end of input, expected one of: `for`, parentheses, `unsafe`, `fn`, `extern`, identifier, `::`, `<`, `dyn`, square brackets, `*`, `&`, `!`, `impl`, `_`, lifetime
+          context:None
+ --> tests/compile_fail/copper_runtime/constants_invalid_type.rs:3:1
+  |
+3 | #[copper_runtime(config = "config/constants_invalid_type.ron")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `copper_runtime` (in Nightly builds, run with -Z macro-backtrace for more info)

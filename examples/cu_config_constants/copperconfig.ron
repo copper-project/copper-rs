@@ -29,6 +29,24 @@
             quantity: angle,
             value: [0.0, 0.0, 0.5],
         ),
+        (
+            id: "WORLD_TO_ROBOT",
+            module: "transforms",
+            type: "cu_transform::TypedTransform3D<f32, cu_transform::WorldFrame, cu_transform::RobotFrame>",
+            expression: "cu_transform::TypedTransform3D::<f32, cu_transform::WorldFrame, cu_transform::RobotFrame>::from_translation_euler_xyz(crate::frames::robot::ROBOT_TRANSLATION, crate::frames::robot::ROBOT_ROTATION)",
+        ),
+        (
+            id: "ROBOT_TO_CAMERA",
+            module: "transforms",
+            type: "cu_transform::TypedTransform3D<f32, cu_transform::RobotFrame, cu_transform::CameraFrame>",
+            expression: "cu_transform::TypedTransform3D::<f32, cu_transform::RobotFrame, cu_transform::CameraFrame>::from_translation_euler_xyz(crate::frames::camera::CAMERA_TRANSLATION, crate::frames::camera::CAMERA_ROTATION)",
+        ),
+        (
+            id: "WORLD_TO_CAMERA",
+            module: "transforms",
+            type: "cu_transform::TypedTransform3D<f32, cu_transform::WorldFrame, cu_transform::CameraFrame>",
+            expression: "crate::transforms::WORLD_TO_ROBOT.then(crate::transforms::ROBOT_TO_CAMERA)",
+        ),
     ],
     tasks: [
         (

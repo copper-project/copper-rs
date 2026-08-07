@@ -81,6 +81,12 @@ mod tests {
                     ),
                     (id: "ROOT_WINS", module: "telemetry", storage: usize, value: 11),
                     (id: "FROM_INCLUDE", quantity: length, unit: millimeter, value: 250.0),
+                    (
+                        id: "FROM_EXPRESSION",
+                        module: "geometry",
+                        type: "crate::Pair",
+                        expression: "crate::Pair::new()",
+                    ),
                 ],
                 tasks: [],
                 cnx: [],
@@ -108,7 +114,7 @@ mod tests {
 
         let config = read_configuration(main_path.to_str().unwrap()).unwrap();
         let constants = &config.constants;
-        assert_eq!(constants.len(), 3);
+        assert_eq!(constants.len(), 4);
         assert_eq!(
             constants[0].qualified_id(),
             "diagnostics::counters::ROOT_WINS"
@@ -118,6 +124,11 @@ mod tests {
         assert_eq!(constants[1].numbers().unwrap().1[0].as_f64(), 11.0);
         assert_eq!(constants[2].qualified_id(), "constants::FROM_INCLUDE");
         assert_eq!(constants[2].normalized_f32().unwrap().1, vec![0.25]);
+        assert_eq!(constants[3].qualified_id(), "geometry::FROM_EXPRESSION");
+        assert_eq!(
+            constants[3].expression_definition(),
+            Some(("crate::Pair", "crate::Pair::new()"))
+        );
     }
 
     #[test]
