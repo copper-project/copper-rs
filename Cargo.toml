@@ -72,10 +72,12 @@ members = [
   "components/tasks/cu_pid",
   "components/tasks/cu_python_task",
   "components/tasks/cu_ratelimit",
+  "components/tasks/cu_rrt_star",
   "components/testing/cu_udp_inject",
   "benchmarks/cu_async_cl_io_bench",
   "benchmarks/cu_dorabench",
   "benchmarks/cu_zenoh_bridge_bench",
+  "examples/cu_anytime_rrt_star",
   "examples/cu_anytime_task",
   "examples/cu_background_task",
   "examples/cu_baremetal_safety",
@@ -245,6 +247,7 @@ cu-msp-bridge = { path = "components/bridges/cu_msp_bridge", version = "1.1.0-de
 cu-msp-lib = { path = "components/libs/cu_msp_lib", version = "1.1.0-dev" }
 cu-rp-encoder = { path = "components/sources/cu_rp_encoder", version = "1.1.0-dev" }
 cu-rp-sn754410-new = { path = "components/sinks/cu_rp_sn754410", version = "1.1.0-dev" }
+cu-rrt-star = { path = "components/tasks/cu_rrt_star", version = "1.1.0-dev" }
 cu-sdlogger = { path = "components/libs/cu_sdlogger", version = "1.1.0-dev" }
 cu-zenoh-bridge = { path = "components/bridges/cu_zenoh_bridge", version = "1.1.0-dev" }
 

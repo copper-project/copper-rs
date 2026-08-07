@@ -1,0 +1,65 @@
+(
+    resources: [
+        (
+            id: "quick_rng",
+            provider: "cu_rng::CuRngBundle",
+            config: {"seed": 7},
+        ),
+        (
+            id: "thorough_rng",
+            provider: "cu_rng::CuRngBundle",
+            config: {"seed": 7},
+        ),
+    ],
+    tasks: [
+        (id: "goal", type: "GoalSrc"),
+        (
+            id: "quick_planner",
+            type: "cu_rrt_star::RrtStarPlanner",
+            resources: {"rng": "quick_rng.rng"},
+            anytime: (
+                max_refines: 2,
+                time_budget_ms: 50.0,
+                quality_target: 0.93,
+                quality_floor: 0.05,
+            ),
+        ),
+        (
+            id: "thorough_planner",
+            type: "cu_rrt_star::RrtStarPlanner",
+            resources: {"rng": "thorough_rng.rng"},
+            anytime: (
+                max_refines: 24,
+                time_budget_ms: 250.0,
+                max_stall: 4,
+                quality_floor: 0.05,
+            ),
+        ),
+        (
+            id: "monitor",
+            type: "ComparisonSink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "goal",
+            dst: "quick_planner",
+            msg: "cu_rrt_star::PlanRequest",
+        ),
+        (
+            src: "goal",
+            dst: "thorough_planner",
+            msg: "cu_rrt_star::PlanRequest",
+        ),
+        (
+            src: "quick_planner",
+            dst: "monitor",
+            msg: "cu_rrt_star::PlanPath",
+        ),
+        (
+            src: "thorough_planner",
+            dst: "monitor",
+            msg: "cu_rrt_star::PlanPath",
+        ),
+    ],
+)
