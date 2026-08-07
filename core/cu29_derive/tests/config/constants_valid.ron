@@ -28,7 +28,31 @@
             storage: f64,
             value: 20.0,
         ),
+        (
+            id: "MAX_RATE",
+            module: "robot::sensors",
+            storage: u32,
+            value: 200,
+        ),
+        (
+            id: "MISSION_LIMIT",
+            module: "A",
+            storage: u16,
+            value: 10,
+        ),
+        (
+            id: "MISSION_LIMIT",
+            module: "B",
+            storage: u16,
+            value: 20,
+        ),
+        (
+            id: "GAIN",
+            module: "A::drive",
+            value: 0.5,
+        ),
     ],
+    missions: [(id: "A"), (id: "B")],
     tasks: [
         (
             id: "src",

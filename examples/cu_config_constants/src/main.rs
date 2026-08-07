@@ -23,29 +23,32 @@ impl CuSrcTask for ConstantsDemo {
 #[copper_runtime(config = "copperconfig.ron")]
 struct App {}
 
-const _: usize = MAX_DETECTIONS;
-const _: [cu29::units::si::f32::Length; 3] = CAMERA_TRANSLATION;
-const _: [cu29::units::si::f32::Angle; 3] = CAMERA_ROTATION;
-const _: [cu29::units::si::f32::Length; 3] = CAMERA_OFFSET;
-const _: cu29::units::si::f64::Time = CONTROL_PERIOD;
-const _: cu29::units::si::f64::Angle = YAW_LIMIT;
+const _: usize = constants::MAX_DETECTIONS;
+const _: [cu29::units::si::f32::Length; 3] = frames::camera::CAMERA_TRANSLATION;
+const _: [cu29::units::si::f32::Angle; 3] = frames::camera::CAMERA_ROTATION;
+const _: [cu29::units::si::f32::Length; 3] = frames::camera::CAMERA_OFFSET;
+const _: cu29::units::si::f64::Time = control::CONTROL_PERIOD;
+const _: cu29::units::si::f64::Angle = control::YAW_LIMIT;
 
 const WORLD_TO_ROBOT: TypedTransform3D<f32, WorldFrame, RobotFrame> =
     TypedTransform3D::<f32, WorldFrame, RobotFrame>::from_translation_euler_xyz(
-        ROBOT_TRANSLATION,
-        ROBOT_ROTATION,
+        frames::robot::ROBOT_TRANSLATION,
+        frames::robot::ROBOT_ROTATION,
     );
 const ROBOT_TO_CAMERA: TypedTransform3D<f32, RobotFrame, CameraFrame> =
     TypedTransform3D::<f32, RobotFrame, CameraFrame>::from_translation_euler_xyz(
-        CAMERA_TRANSLATION,
-        CAMERA_ROTATION,
+        frames::camera::CAMERA_TRANSLATION,
+        frames::camera::CAMERA_ROTATION,
     );
 const WORLD_TO_CAMERA: TypedTransform3D<f32, WorldFrame, CameraFrame> =
     WORLD_TO_ROBOT.then(ROBOT_TO_CAMERA);
 
 fn main() {
-    assert_eq!(MAX_DETECTIONS, 64);
-    assert_eq!(CAMERA_OFFSET[0].raw(), CAMERA_TRANSLATION[0].raw());
+    assert_eq!(constants::MAX_DETECTIONS, 64);
+    assert_eq!(
+        frames::camera::CAMERA_OFFSET[0].raw(),
+        frames::camera::CAMERA_TRANSLATION[0].raw()
+    );
 
     // Construction and frame-checked composition happened at compile time. Only the timestamp is
     // runtime data.

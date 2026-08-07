@@ -294,6 +294,8 @@ impl ConstantStorage {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ConstantConfig {
     id: String,
+    #[serde(default, deserialize_with = "deserialize_constant_module")]
+    module: Option<String>,
     #[serde(default)]
     storage: ConstantStorage,
     quantity: Option<cu29_units::constant::Quantity>,
@@ -301,9 +303,33 @@ pub struct ConstantConfig {
     value: Value,
 }
 
+fn deserialize_constant_module<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<String>::deserialize(deserializer).map(|module| {
+        module.map(|module| {
+            module
+                .chars()
+                .filter(|character| !character.is_whitespace())
+                .collect()
+        })
+    })
+}
+
 impl ConstantConfig {
+    pub const DEFAULT_MODULE: &'static str = "constants";
+
     pub fn id(&self) -> &str {
         &self.id
+    }
+
+    pub fn module_path(&self) -> &str {
+        self.module.as_deref().unwrap_or(Self::DEFAULT_MODULE)
+    }
+
+    pub fn qualified_id(&self) -> String {
+        format!("{}::{}", self.module_path(), self.id)
     }
 
     pub const fn storage(&self) -> ConstantStorage {
@@ -3326,10 +3352,13 @@ impl CuConfig {
             if constant.id().is_empty() {
                 return Err(CuError::from("Constant ids cannot be empty"));
             }
-            if ids.insert(constant.id(), ()).is_some() {
+            if ids
+                .insert((constant.module_path(), constant.id()), ())
+                .is_some()
+            {
                 return Err(CuError::from(format!(
-                    "Duplicate constant id '{}'. Constant ids must be unique.",
-                    constant.id()
+                    "Duplicate constant '{}'. Constant ids must be unique within a module.",
+                    constant.qualified_id()
                 )));
             }
 
@@ -4098,10 +4127,10 @@ fn process_includes(
                 } else {
                     let mut constants = result.constants.take().unwrap();
                     for included_constant in included_constants {
-                        if !constants
-                            .iter()
-                            .any(|constant| constant.id == included_constant.id)
-                        {
+                        if !constants.iter().any(|constant| {
+                            constant.id == included_constant.id
+                                && constant.module_path() == included_constant.module_path()
+                        }) {
                             constants.push(included_constant);
                         }
                     }
@@ -5191,6 +5220,7 @@ mod tests {
             r#"(
                 constants: [
                     (id: "COUNT", storage: usize, value: 12),
+                    (id: "COUNT", module: "diagnostics", storage: usize, value: 24),
                     (id: "LENGTH_DEFAULT", quantity: length, value: [0.18, 0.0, 0.31]),
                     (id: "LENGTH_EXPLICIT", quantity: length, unit: meter, storage: f32,
                         value: [0.18, 0.0, 0.31]),
@@ -5209,31 +5239,57 @@ mod tests {
         )
         .unwrap();
 
+        assert_eq!(config.constants[0].module_path(), "constants");
+        assert_eq!(config.constants[0].qualified_id(), "constants::COUNT");
         assert_eq!(config.constants[0].storage(), ConstantStorage::Usize);
-        let (_, default_length) = config.constants[1].normalized_f32().unwrap();
-        let (_, explicit_length) = config.constants[2].normalized_f32().unwrap();
-        let (_, millimeters) = config.constants[3].normalized_f32().unwrap();
+        assert_eq!(config.constants[1].module_path(), "diagnostics");
+        assert_eq!(config.constants[1].qualified_id(), "diagnostics::COUNT");
+        let (_, default_length) = config.constants[2].normalized_f32().unwrap();
+        let (_, explicit_length) = config.constants[3].normalized_f32().unwrap();
+        let (_, millimeters) = config.constants[4].normalized_f32().unwrap();
         assert_eq!(default_length[0].to_bits(), explicit_length[0].to_bits());
         assert_eq!(default_length[2].to_bits(), explicit_length[2].to_bits());
         assert_eq!(default_length, millimeters);
         assert_eq!(
-            config.constants[1].semantic_fingerprint().unwrap(),
-            config.constants[2].semantic_fingerprint().unwrap()
-        );
-        assert_eq!(
-            config.constants[1].semantic_fingerprint().unwrap(),
+            config.constants[2].semantic_fingerprint().unwrap(),
             config.constants[3].semantic_fingerprint().unwrap()
         );
+        assert_eq!(
+            config.constants[2].semantic_fingerprint().unwrap(),
+            config.constants[4].semantic_fingerprint().unwrap()
+        );
 
-        let (_, angle) = config.constants[4].normalized_f32().unwrap();
+        let (_, angle) = config.constants[5].normalized_f32().unwrap();
         assert_eq!(angle[0].to_bits(), core::f32::consts::PI.to_bits());
 
-        let mass = &config.constants[5];
+        let mass = &config.constants[6];
         assert_eq!(mass.resolved_unit().unwrap().unwrap().name(), "kilogram");
         assert_eq!(mass.normalized_f32().unwrap().1, vec![1.0]);
 
-        let temperature = config.constants[6].normalized_f64().unwrap().1[0];
+        let temperature = config.constants[7].normalized_f64().unwrap().1[0];
         assert!((temperature - 293.15).abs() < f64::EPSILON * 4.0);
+    }
+
+    #[test]
+    fn test_compile_time_constant_rejects_duplicate_qualified_id() {
+        let error = read_configuration_str(
+            r#"(
+                constants: [
+                    (id: "COUNT", module: "diagnostics", value: 1),
+                    (id: "COUNT", module: "diagnostics", value: 2),
+                ],
+                tasks: [],
+                cnx: [],
+            )"#
+            .to_string(),
+            None,
+        )
+        .expect_err("duplicate qualified constant id must fail");
+        assert!(
+            error
+                .to_string()
+                .contains("Duplicate constant 'diagnostics::COUNT'")
+        );
     }
 
     #[test]

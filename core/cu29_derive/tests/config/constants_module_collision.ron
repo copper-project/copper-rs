@@ -1,0 +1,30 @@
+(
+    constants: [
+        (
+            id: "drive",
+            module: "robot",
+            storage: usize,
+            value: 1,
+        ),
+        (
+            id: "COUNT",
+            module: "robot::drive",
+            storage: usize,
+            value: 2,
+        ),
+    ],
+    tasks: [
+        (
+            id: "src",
+            type: "ConstantSource",
+            kind: source,
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "__nc__",
+            msg: "()",
+        ),
+    ],
+)

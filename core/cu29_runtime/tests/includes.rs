@@ -73,7 +73,13 @@ mod tests {
             config_dir.join("included.ron"),
             r#"(
                 constants: [
-                    (id: "ROOT_WINS", storage: usize, value: 99),
+                    (
+                        id: "ROOT_WINS",
+                        module: "diagnostics::counters",
+                        storage: usize,
+                        value: 99,
+                    ),
+                    (id: "ROOT_WINS", module: "telemetry", storage: usize, value: 11),
                     (id: "FROM_INCLUDE", quantity: length, unit: millimeter, value: 250.0),
                 ],
                 tasks: [],
@@ -85,7 +91,14 @@ mod tests {
         write(
             &main_path,
             r#"(
-                constants: [(id: "ROOT_WINS", storage: usize, value: 7)],
+                constants: [
+                    (
+                        id: "ROOT_WINS",
+                        module: "diagnostics :: counters",
+                        storage: usize,
+                        value: 7,
+                    ),
+                ],
                 tasks: [],
                 cnx: [],
                 includes: [(path: "included.ron")],
@@ -95,11 +108,16 @@ mod tests {
 
         let config = read_configuration(main_path.to_str().unwrap()).unwrap();
         let constants = &config.constants;
-        assert_eq!(constants.len(), 2);
-        assert_eq!(constants[0].id(), "ROOT_WINS");
+        assert_eq!(constants.len(), 3);
+        assert_eq!(
+            constants[0].qualified_id(),
+            "diagnostics::counters::ROOT_WINS"
+        );
         assert_eq!(constants[0].numbers().unwrap().1[0].as_f64(), 7.0);
-        assert_eq!(constants[1].id(), "FROM_INCLUDE");
-        assert_eq!(constants[1].normalized_f32().unwrap().1, vec![0.25]);
+        assert_eq!(constants[1].qualified_id(), "telemetry::ROOT_WINS");
+        assert_eq!(constants[1].numbers().unwrap().1[0].as_f64(), 11.0);
+        assert_eq!(constants[2].qualified_id(), "constants::FROM_INCLUDE");
+        assert_eq!(constants[2].normalized_f32().unwrap().1, vec![0.25]);
     }
 
     #[test]

@@ -7,21 +7,25 @@
         ),
         (
             id: "CAMERA_TRANSLATION",
+            module: "frames::camera",
             quantity: length,
             value: [0.18, 0.0, 0.31],
         ),
         (
             id: "CAMERA_ROTATION",
+            module: "frames::camera",
             quantity: angle,
             value: [0.0, -0.2, 0.0],
         ),
         (
             id: "ROBOT_TRANSLATION",
+            module: "frames::robot",
             quantity: length,
             value: [1.0, 2.0, 0.0],
         ),
         (
             id: "ROBOT_ROTATION",
+            module: "frames::robot",
             quantity: angle,
             value: [0.0, 0.0, 0.5],
         ),

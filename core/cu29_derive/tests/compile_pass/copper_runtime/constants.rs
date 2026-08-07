@@ -27,10 +27,19 @@ impl CuSrcTask for ConstantSource {
 )]
 struct App {}
 
-const _: usize = COUNT;
-const _: [cu29::units::si::f32::Length; 3] = LENGTH_DEFAULT;
-const _: [cu29::units::si::f32::Length; 3] = LENGTH_MM;
-const _: cu29::units::si::f32::Mass = MASS_KG;
-const _: cu29::units::si::f64::ThermodynamicTemperature = TEMPERATURE_C;
+const _: usize = constants::COUNT;
+const _: [cu29::units::si::f32::Length; 3] = constants::LENGTH_DEFAULT;
+const _: [cu29::units::si::f32::Length; 3] = constants::LENGTH_MM;
+const _: cu29::units::si::f32::Mass = constants::MASS_KG;
+const _: cu29::units::si::f64::ThermodynamicTemperature = constants::TEMPERATURE_C;
+const _: u32 = robot::sensors::MAX_RATE;
+const _: u16 = A::MISSION_LIMIT;
+const _: u16 = B::MISSION_LIMIT;
+const _: f32 = A::drive::GAIN;
+
+mod task_family {
+    const _: usize = super::constants::COUNT;
+    const _: u32 = super::robot::sensors::MAX_RATE;
+}
 
 fn main() {}
