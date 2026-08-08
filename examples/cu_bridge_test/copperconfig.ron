@@ -11,12 +11,16 @@
         (
             id: "src_to_bridge",
             type: "tasks::SourceToBridge",
-            missions: ["SourceToBridge"],
+            missions: [
+                "SourceToBridge",
+            ],
         ),
         (
             id: "passthrough",
             type: "tasks::PassthroughChain",
-            missions: ["BridgeTaskSame"],
+            missions: [
+                "BridgeTaskSame",
+            ],
         ),
         (
             id: "sink_from_bridge",
@@ -109,13 +113,17 @@
             src: "alpha/loop_in",
             dst: "alpha/loop_out",
             msg: "messages::LoopbackMsg",
-            missions: ["BridgeLoopback"],
+            missions: [
+                "BridgeLoopback",
+            ],
         ),
         (
             src: "src_to_bridge",
             dst: "beta/from_src",
             msg: "messages::FromSource",
-            missions: ["SourceToBridge"],
+            missions: [
+                "SourceToBridge",
+            ],
         ),
         (
             src: "alpha/to_sink",
@@ -127,13 +135,17 @@
             src: "alpha/chain_in",
             dst: "passthrough",
             msg: "messages::ChainPayload",
-            missions: ["BridgeTaskSame"],
+            missions: [
+                "BridgeTaskSame",
+            ],
         ),
         (
             src: "passthrough",
             dst: "alpha/chain_out",
             msg: "messages::ChainPayload",
-            missions: ["BridgeTaskSame"],
+            missions: [
+                "BridgeTaskSame",
+            ],
         ),
         (
             src: "alpha/ingress",
