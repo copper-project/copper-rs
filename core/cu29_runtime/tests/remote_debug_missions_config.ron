@@ -1,5 +1,8 @@
 (
-    missions: [(id: "Alpha"), (id: "Beta")],
+    missions: [
+        (id: "Alpha"),
+        (id: "Beta"),
+    ],
     tasks: [
         (
             id: "alpha_src",

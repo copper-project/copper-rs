@@ -3,24 +3,32 @@
         (
             id: "responder_bin",
             type: "tasks::PongResponder",
-            config: {"label": "pong-bincode"},
+            config: {
+                "label": "pong-bincode",
+            },
         ),
         (
             id: "responder_json",
             type: "tasks::PongResponder",
-            config: {"label": "pong-json"},
+            config: {
+                "label": "pong-json",
+            },
         ),
         (
             id: "responder_cbor",
             type: "tasks::PongResponder",
-            config: {"label": "pong-cbor"},
+            config: {
+                "label": "pong-cbor",
+            },
         ),
     ],
     bridges: [
         (
             id: "zenoh",
             type: "bridges::DemoZenohBridge",
-            config: {"wire_format": "bincode"},
+            config: {
+                "wire_format": "bincode",
+            },
             channels: [
                 Rx(
                     id: "ping_bin",

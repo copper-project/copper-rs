@@ -1,5 +1,7 @@
 (
-    logging: (enable_task_logging: false),
+    logging: (
+        enable_task_logging: false,
+    ),
     tasks: [
         (
             id: "source",
