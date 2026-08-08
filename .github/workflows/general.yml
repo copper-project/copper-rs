@@ -2,9 +2,9 @@ name: "CI/CD"
 
 on:
   push:
-    branches: ["master", "release/**"]
+    branches: ["master"]
   pull_request:
-    branches: ["master", "release/**"]
+    branches: ["master", "release/*"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
