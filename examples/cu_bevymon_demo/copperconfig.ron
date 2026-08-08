@@ -3,7 +3,9 @@
         (
             id: "clock",
             type: "tasks::ClockSource",
-            config: {"phase_step": 0.17},
+            config: {
+                "phase_step": 0.17,
+            },
         ),
         (
             id: "planner",
@@ -63,5 +65,7 @@
         section_size_mib: 8,
         keyframe_interval: 90,
     ),
-    monitor: (type: "cu_bevymon::CuBevyMon"),
+    monitor: (
+        type: "cu_bevymon::CuBevyMon",
+    ),
 )

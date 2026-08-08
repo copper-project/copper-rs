@@ -1,6 +1,11 @@
 (
     missions: [(id: "A"), (id: "B")],
-    tasks: [(id: "src", type: "tasks::Source")],
+    tasks: [
+        (
+            id: "src",
+            type: "tasks::Source",
+        ),
+    ],
     cnx: [
         (
             src: "src",

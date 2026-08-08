@@ -62,7 +62,9 @@
         (
             id: "otm_left_bg",
             type: "tasks::TransformTask",
-            missions: ["OneToManyBackground"],
+            missions: [
+                "OneToManyBackground",
+            ],
             background: true,
             config: {
                 "stage_id": 11,
@@ -73,7 +75,9 @@
         (
             id: "otm_right_bg",
             type: "tasks::TransformTask",
-            missions: ["OneToManyBackground"],
+            missions: [
+                "OneToManyBackground",
+            ],
             background: true,
             config: {
                 "stage_id": 12,
@@ -129,7 +133,9 @@
         (
             id: "mto_join_bg",
             type: "tasks::JoinTask",
-            missions: ["ManyToOneBackground"],
+            missions: [
+                "ManyToOneBackground",
+            ],
             config: {
                 "stage_id": 21,
                 "logical_delay_ticks": 0,
@@ -139,7 +145,9 @@
         (
             id: "mto_delay_bg",
             type: "tasks::JoinDelayTask",
-            missions: ["ManyToOneBackground"],
+            missions: [
+                "ManyToOneBackground",
+            ],
             background: true,
             config: {
                 "stage_id": 21,
@@ -205,7 +213,9 @@
         (
             id: "mtm_join_left_bg",
             type: "tasks::JoinTask",
-            missions: ["ManyToManyBackground"],
+            missions: [
+                "ManyToManyBackground",
+            ],
             config: {
                 "stage_id": 31,
                 "logical_delay_ticks": 0,
@@ -215,7 +225,9 @@
         (
             id: "mtm_join_right_bg",
             type: "tasks::JoinTask",
-            missions: ["ManyToManyBackground"],
+            missions: [
+                "ManyToManyBackground",
+            ],
             config: {
                 "stage_id": 32,
                 "logical_delay_ticks": 0,
@@ -225,7 +237,9 @@
         (
             id: "mtm_delay_left_bg",
             type: "tasks::JoinDelayTask",
-            missions: ["ManyToManyBackground"],
+            missions: [
+                "ManyToManyBackground",
+            ],
             background: true,
             config: {
                 "stage_id": 31,
@@ -236,7 +250,9 @@
         (
             id: "mtm_delay_right_bg",
             type: "tasks::JoinDelayTask",
-            missions: ["ManyToManyBackground"],
+            missions: [
+                "ManyToManyBackground",
+            ],
             background: true,
             config: {
                 "stage_id": 32,
@@ -276,7 +292,9 @@
         (
             id: "bridge_task_left_bg",
             type: "tasks::BridgeStampTask",
-            missions: ["BridgeFanoutBackground"],
+            missions: [
+                "BridgeFanoutBackground",
+            ],
             background: true,
             config: {
                 "stage_id": 41,
@@ -287,7 +305,9 @@
         (
             id: "bridge_task_right_bg",
             type: "tasks::BridgeStampTask",
-            missions: ["BridgeFanoutBackground"],
+            missions: [
+                "BridgeFanoutBackground",
+            ],
             background: true,
             config: {
                 "stage_id": 42,
@@ -363,25 +383,33 @@
             src: "otm_src",
             dst: "otm_left_bg",
             msg: "SeqPayload",
-            missions: ["OneToManyBackground"],
+            missions: [
+                "OneToManyBackground",
+            ],
         ),
         (
             src: "otm_src",
             dst: "otm_right_bg",
             msg: "SeqPayload",
-            missions: ["OneToManyBackground"],
+            missions: [
+                "OneToManyBackground",
+            ],
         ),
         (
             src: "otm_left_bg",
             dst: "otm_sink",
             msg: "SeqPayload",
-            missions: ["OneToManyBackground"],
+            missions: [
+                "OneToManyBackground",
+            ],
         ),
         (
             src: "otm_right_bg",
             dst: "otm_sink",
             msg: "SeqPayload",
-            missions: ["OneToManyBackground"],
+            missions: [
+                "OneToManyBackground",
+            ],
         ),
         (
             src: "mto_src_a",
@@ -405,25 +433,33 @@
             src: "mto_src_a",
             dst: "mto_join_bg",
             msg: "SeqPayload",
-            missions: ["ManyToOneBackground"],
+            missions: [
+                "ManyToOneBackground",
+            ],
         ),
         (
             src: "mto_src_b",
             dst: "mto_join_bg",
             msg: "SeqPayload",
-            missions: ["ManyToOneBackground"],
+            missions: [
+                "ManyToOneBackground",
+            ],
         ),
         (
             src: "mto_join_bg",
             dst: "mto_delay_bg",
             msg: "JoinPayload",
-            missions: ["ManyToOneBackground"],
+            missions: [
+                "ManyToOneBackground",
+            ],
         ),
         (
             src: "mto_delay_bg",
             dst: "mto_sink",
             msg: "JoinPayload",
-            missions: ["ManyToOneBackground"],
+            missions: [
+                "ManyToOneBackground",
+            ],
         ),
         (
             src: "mtm_src_a",
@@ -465,49 +501,65 @@
             src: "mtm_src_a",
             dst: "mtm_join_left_bg",
             msg: "SeqPayload",
-            missions: ["ManyToManyBackground"],
+            missions: [
+                "ManyToManyBackground",
+            ],
         ),
         (
             src: "mtm_src_b",
             dst: "mtm_join_left_bg",
             msg: "SeqPayload",
-            missions: ["ManyToManyBackground"],
+            missions: [
+                "ManyToManyBackground",
+            ],
         ),
         (
             src: "mtm_src_a",
             dst: "mtm_join_right_bg",
             msg: "SeqPayload",
-            missions: ["ManyToManyBackground"],
+            missions: [
+                "ManyToManyBackground",
+            ],
         ),
         (
             src: "mtm_src_b",
             dst: "mtm_join_right_bg",
             msg: "SeqPayload",
-            missions: ["ManyToManyBackground"],
+            missions: [
+                "ManyToManyBackground",
+            ],
         ),
         (
             src: "mtm_join_left_bg",
             dst: "mtm_delay_left_bg",
             msg: "JoinPayload",
-            missions: ["ManyToManyBackground"],
+            missions: [
+                "ManyToManyBackground",
+            ],
         ),
         (
             src: "mtm_join_right_bg",
             dst: "mtm_delay_right_bg",
             msg: "JoinPayload",
-            missions: ["ManyToManyBackground"],
+            missions: [
+                "ManyToManyBackground",
+            ],
         ),
         (
             src: "mtm_delay_left_bg",
             dst: "mtm_sink",
             msg: "JoinPayload",
-            missions: ["ManyToManyBackground"],
+            missions: [
+                "ManyToManyBackground",
+            ],
         ),
         (
             src: "mtm_delay_right_bg",
             dst: "mtm_sink",
             msg: "JoinPayload",
-            missions: ["ManyToManyBackground"],
+            missions: [
+                "ManyToManyBackground",
+            ],
         ),
         (
             src: "alpha/ingress",
@@ -537,25 +589,33 @@
             src: "alpha/ingress",
             dst: "bridge_task_left_bg",
             msg: "SeqPayload",
-            missions: ["BridgeFanoutBackground"],
+            missions: [
+                "BridgeFanoutBackground",
+            ],
         ),
         (
             src: "alpha/ingress",
             dst: "bridge_task_right_bg",
             msg: "SeqPayload",
-            missions: ["BridgeFanoutBackground"],
+            missions: [
+                "BridgeFanoutBackground",
+            ],
         ),
         (
             src: "bridge_task_left_bg",
             dst: "beta/left",
             msg: "SeqPayload",
-            missions: ["BridgeFanoutBackground"],
+            missions: [
+                "BridgeFanoutBackground",
+            ],
         ),
         (
             src: "bridge_task_right_bg",
             dst: "beta/right",
             msg: "SeqPayload",
-            missions: ["BridgeFanoutBackground"],
+            missions: [
+                "BridgeFanoutBackground",
+            ],
         ),
     ],
 )

@@ -7,7 +7,9 @@
         (
             path: "graph/jetson_mipi.ron",
             params: {},
-            when: Feature("jetson-mipi"),
+            when: Feature(
+                "jetson-mipi",
+            ),
         ),
     ],
     logging: (
