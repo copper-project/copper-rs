@@ -517,6 +517,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#visualize-topology-and-schedule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Visualize topology and schedule
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#where-to-run-just" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1284,6 +1295,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#visualize-topology-and-schedule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Visualize topology and schedule
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#where-to-run-just" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1321,6 +1343,16 @@
 <h2 id="discover-commands">Discover commands<a class="headerlink" href="#discover-commands" title="Permanent link">&para;</a></h2>
 <pre><code class="language-bash">just -l
 </code></pre>
+<h2 id="visualize-topology-and-schedule">Visualize topology and schedule<a class="headerlink" href="#visualize-topology-and-schedule" title="Permanent link">&para;</a></h2>
+<p>Run <code>just dag</code> to see the declared task-graph topology. Run <code>just plan</code> to produce and open <code>plan.svg</code> with the exact generated per-CopperList process schedule, including separate serial and <code>parallel-rt</code> projections.</p>
+<p>For mission or conditional-feature configs:</p>
+<pre><code class="language-bash">just plan mission=autonomous
+just plan features=camera,mock
+just plan-log
+just plan log=logs/my-robot.copper bin=my-robot-logreader
+</code></pre>
+<p>The plan's equal-width columns show order, not elapsed time. Serial uses one main-executor lane; parallel staggers in-flight CopperLists across generated stage workers. Background gateway arrows feed the same named-pool worker lanes in both views, so pool capacity and possible overlap remain visible. Resource bindings are annotations; they are not scheduler reservations.</p>
+<p>With <code>log=...</code>, the app-specific logreader adds typical and slowest CopperList timelines. Task segments are packed back-to-back but remain proportional to recorded <code>process_time</code> duration, and hover identifies every segment. Carried-forward message slots outside the current execution cluster are excluded so stale timestamps cannot flatten the chart. <code>just plan-log</code> discovers an example/project's default local log, typed logreader, required features, and recorded mission automatically. Shared declared resources whose intervals overlap are flagged as potential contention, not proven waiting. Serialization is not timestamped; grey residual gaps remain explicitly unclassified because they can also include rate limiting, scheduling, and I/O.</p>
 <h2 id="where-to-run-just">Where to run <code>just</code><a class="headerlink" href="#where-to-run-just" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Repo root: CI and lint helpers.</li>

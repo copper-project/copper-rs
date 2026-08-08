@@ -1428,6 +1428,7 @@ cargo run -p cu_example_app
 <li><code>cd support/cargo_cunew/templates &amp;&amp; just gen-project</code></li>
 <li><code>cd support/cargo_cunew/templates &amp;&amp; just gen-workspace</code></li>
 </ul>
+<p>Generated projects include <code>just dag</code> for graph topology and <code>just plan</code> for the exact generated process order. <code>just plan-log</code> uses the default Copper log, while <code>just plan log=logs/&lt;app&gt;.copper</code> selects one explicitly; both add packed, proportional observed task timing through the generated typed logreader. Local and published/git dependency modes resolve the matching first-party renderer automatically.</p>
 
 
 

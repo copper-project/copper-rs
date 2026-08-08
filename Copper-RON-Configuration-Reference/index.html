@@ -478,6 +478,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#compile-time-constants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Compile-Time Constants
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#tasks" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1383,6 +1394,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#compile-time-constants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Compile-Time Constants
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#tasks" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1544,6 +1566,44 @@
 )
 </code></pre>
 <p>Most examples name the file <code>copperconfig.ron</code> and reference it with the <code>#[copper_runtime(config = "...")]</code> attribute.</p>
+<h2 id="compile-time-constants">Compile-Time Constants<a class="headerlink" href="#compile-time-constants" title="Permanent link">&para;</a></h2>
+<p>The optional top-level <code>constants</code> array generates Rust constants as part of
+<code>#[copper_runtime]</code>. A numeric constant has a required <code>id</code> and <code>value</code>, plus optional
+placement and representation fields:</p>
+<pre><code class="language-ron">constants: [
+    (id: &quot;MAX_DETECTIONS&quot;, storage: usize, value: 64),
+    (
+        id: &quot;CAMERA_OFFSET&quot;,
+        module: &quot;frames::camera&quot;,
+        quantity: length,
+        unit: millimeter,
+        value: [180.0, 0.0, 310.0],
+    ),
+]
+</code></pre>
+<ul>
+<li><code>module</code> defaults to <code>constants</code>; an explicit relative Rust module path creates a
+  generated module tree.</li>
+<li><code>storage</code> defaults to <code>f32</code> and accepts Rust integer types, <code>f32</code>, or <code>f64</code>.</li>
+<li><code>quantity</code> selects an SI quantity type. <code>unit</code> defaults to that quantity's coherent SI
+  unit, and configured values are normalized when compiled.</li>
+</ul>
+<p>A typed expression constant replaces <code>value</code> and all numeric representation fields with
+both <code>type</code> and <code>expression</code>:</p>
+<pre><code class="language-ron">(
+    id: &quot;WORLD_TO_ROBOT&quot;,
+    module: &quot;transforms&quot;,
+    type: &quot;cu_transform::TypedTransform3D&lt;f32, cu_transform::WorldFrame, cu_transform::RobotFrame&gt;&quot;,
+    expression: &quot;cu_transform::TypedTransform3D::&lt;f32, cu_transform::WorldFrame, cu_transform::RobotFrame&gt;::from_translation_euler_xyz(crate::frames::robot::TRANSLATION, crate::frames::robot::ROTATION)&quot;,
+)
+</code></pre>
+<p>The expression may call const constructors and methods, use struct literals, and reference
+other constants. Rust checks the declared type and const-evaluability. Paths use normal Rust
+scope in the generated module; prefer dependency-qualified paths and <code>crate::...</code> for
+application or generated items.</p>
+<p>Constants are baked into the binary and merge through <code>includes</code> with root-first
+precedence on <code>(module, id)</code>. A runtime configuration that changes a compiled constant
+produces a warning and does not replace the baked value.</p>
 <h2 id="tasks">Tasks<a class="headerlink" href="#tasks" title="Permanent link">&para;</a></h2>
 <p>Tasks are declared under the <code>tasks</code> array. Each task entry is a tuple with the following fields:</p>
 <ul>
