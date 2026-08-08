@@ -22,7 +22,10 @@
         (
             id: "bool_sink",
             type: "tasks::BoolSink",
-            missions: ["default", "loopback"],
+            missions: [
+                "default",
+                "loopback",
+            ],
         ),
         (
             id: "loopback",

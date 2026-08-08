@@ -10,7 +10,9 @@
             type: "cu_peer_range_accumulator::PeerRangeAccumulatorTask<4>",
             config: {
                 "min_samples": 4,
-                "sample_retention": MaxAgeMs(50),
+                "sample_retention": MaxAgeMs(
+                    50,
+                ),
             },
         ),
         (

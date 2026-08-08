@@ -1,6 +1,8 @@
 (
     runtime: (
-        thread_pools: [(id: "planner", threads: 1)],
+        thread_pools: [
+            (id: "planner", threads: 1),
+        ],
     ),
     resources: [
         (
@@ -25,9 +27,13 @@
         (
             id: "counter",
             type: "AnytimeCounter",
-            background: (pool: "planner"),
+            background: (
+                pool: "planner",
+            ),
             anytime: (max_refines: 2),
-            resources: {"scratch": "board.scratch"},
+            resources: {
+                "scratch": "board.scratch",
+            },
         ),
         (
             id: "sink",
