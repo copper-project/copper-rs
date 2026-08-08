@@ -4,7 +4,7 @@
 
 ```text
 Development:
-  master -> 1.1.0-dev
+  master -> 1.2.0-dev
 
 Release:
   tag v1.1.0
