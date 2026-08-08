@@ -21,7 +21,9 @@
             id: "sen0682",
             type: "cu_sen0682::Sen0682SerialSource",
             logging: (enabled: false),
-            resources: {"serial": "linux.serial0"},
+            resources: {
+                "serial": "linux.serial0",
+            },
             config: {
                 "configure_device": true,
                 "row_id": 0,
