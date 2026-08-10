@@ -67,7 +67,7 @@ jobs:
       - name: Install llvm-tools-preview
         run: rustup component add llvm-tools-preview --toolchain ${{ inputs.toolchain }}
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@v2.85.5
+        uses: taiki-e/install-action@v2.85.10
         with:
           tool: cargo-llvm-cov
       - name: Generate coverage report
@@ -115,7 +115,7 @@ jobs:
       - name: Install llvm-tools-preview
         run: rustup component add llvm-tools-preview --toolchain ${{ inputs.toolchain }}
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@v2.85.5
+        uses: taiki-e/install-action@v2.85.10
         with:
           tool: cargo-llvm-cov
       - name: Generate coverage report
