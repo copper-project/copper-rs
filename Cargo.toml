@@ -65,6 +65,7 @@ members = [
   "components/sources/cu_sen0682",
   "components/tasks/cu_aligner",
   "components/tasks/cu_ahrs",
+  "components/tasks/cu_anynet",
   "components/tasks/cu_apriltag",
   "components/tasks/cu_dynthreshold",
   "components/tasks/cu_peer_range_accumulator",
@@ -77,6 +78,7 @@ members = [
   "benchmarks/cu_async_cl_io_bench",
   "benchmarks/cu_dorabench",
   "benchmarks/cu_zenoh_bridge_bench",
+  "examples/cu_anytime_anynet",
   "examples/cu_anytime_rrt_star",
   "examples/cu_anytime_task",
   "examples/cu_background_task",
@@ -232,6 +234,7 @@ cu-rng = { path = "components/res/cu_rng", version = "1.2.0-dev" }
 # Copper components
 cu-ads7883-new = { path = "components/sources/cu_ads7883", version = "1.2.0-dev" }
 cu-ahrs = { path = "components/tasks/cu_ahrs", version = "1.2.0-dev" }
+cu-anynet = { path = "components/tasks/cu_anynet", version = "1.2.0-dev" }
 cu-bdshot = { path = "components/bridges/cu_bdshot", version = "1.2.0-dev" }
 cu-bevymon = { path = "components/monitors/cu_bevymon", version = "1.2.0-dev" }
 cu-bmi088 = { path = "components/sources/cu_bmi088", version = "1.2.0-dev" }
