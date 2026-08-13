@@ -17,6 +17,7 @@ use syn::{
 use crate::utils::{config_id_to_bridge_const, config_id_to_enum, config_id_to_struct_member};
 use cu29_build::COPPER_CFG_FEATURES_ENV;
 use cu29_runtime::config::CuConfig;
+use cu29_runtime::config::DEFAULT_MISSION_ID;
 use cu29_runtime::config::{
     AnytimeConfig, BridgeChannelConfigRepresentation, ConfigGraphs, ConstantConfig, ConstantNumber,
     ConstantStorage, CuGraph, Flavor, HandleContent, Node, NodeId, RT_POOL, ResourceBundleConfig,
@@ -26,7 +27,7 @@ use cu29_runtime::curuntime::{
     CuExecutionLoop, CuExecutionStep, CuExecutionUnit, CuStepPhase, CuTaskType,
     find_task_type_for_id,
 };
-use cu29_runtime::planner::{DEFAULT_COPPERLIST_COUNT, PlanEntityKind, assemble_runtime_plan};
+use cu29_runtime::planner::{DEFAULT_COPPERLIST_COUNT, PlanEntityKind, assemble_runtime_plan_with};
 use cu29_traits::{CuError, CuResult};
 use proc_macro2::{Ident, Span};
 
@@ -1001,16 +1002,21 @@ fn build_gen_cumsgs_support(
 ) -> CuResult<proc_macro2::TokenStream> {
     let channel_usage = collect_bridge_channel_usage(graph);
     let mut bridge_specs = build_bridge_specs(cuconfig, graph, &channel_usage);
-    let (culist_plan, exec_entities, plan_to_original) =
-        build_execution_plan(cuconfig, graph, &mut bridge_specs).map_err(|e| {
-            if let Some(mission) = mission_label {
-                CuError::from(format!(
-                    "Could not compute copperlist plan for mission '{mission}': {e}"
-                ))
-            } else {
-                CuError::from(format!("Could not compute copperlist plan: {e}"))
-            }
-        })?;
+    let (culist_plan, exec_entities, plan_to_original) = build_execution_plan(
+        cuconfig,
+        graph,
+        mission_label.unwrap_or(DEFAULT_MISSION_ID),
+        &mut bridge_specs,
+    )
+    .map_err(|e| {
+        if let Some(mission) = mission_label {
+            CuError::from(format!(
+                "Could not compute copperlist plan for mission '{mission}': {e}"
+            ))
+        } else {
+            CuError::from(format!("Could not compute copperlist plan: {e}"))
+        }
+    })?;
     let task_names = collect_task_names(graph);
     let (culist_order, node_output_positions) = collect_culist_metadata(
         &culist_plan,
@@ -2068,7 +2074,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let mut culist_bridge_specs =
             build_bridge_specs(&copper_config, graph, &culist_channel_usage);
         let (culist_plan, culist_exec_entities, culist_plan_to_original) =
-            match build_execution_plan(&copper_config, graph, &mut culist_bridge_specs) {
+            match build_execution_plan(&copper_config, graph, mission, &mut culist_bridge_specs) {
                 Ok(plan) => plan,
                 Err(e) => return return_error(format!("Could not compute copperlist plan: {e}")),
             };
@@ -8327,13 +8333,16 @@ fn build_bridge_resource_mappings(
 fn build_execution_plan(
     config: &CuConfig,
     graph: &CuGraph,
+    mission: &str,
     bridge_specs: &mut [BridgeSpec],
 ) -> CuResult<(
     CuExecutionLoop,
     Vec<ExecutionEntity>,
     HashMap<NodeId, NodeId>,
 )> {
-    let assembled = assemble_runtime_plan(config, graph)?;
+    // Resolution owns the mission context here; `planner` stays alloc-only.
+    let heuristic = config.plan_heuristic_for(mission);
+    let assembled = assemble_runtime_plan_with(config, graph, &heuristic, mission)?;
     let mut exec_entities = Vec::with_capacity(assembled.entities.len());
     for (plan_node_id, entity) in assembled.entities.iter().enumerate() {
         let kind = match entity.kind {
@@ -10663,7 +10672,8 @@ mod tests {
         let channel_usage = collect_bridge_channel_usage(graph);
         let mut bridge_specs = build_bridge_specs(&config, graph, &channel_usage);
         let (runtime_plan, exec_entities, plan_to_original) =
-            build_execution_plan(&config, graph, &mut bridge_specs).expect("runtime plan failed");
+            build_execution_plan(&config, graph, DEFAULT_MISSION_ID, &mut bridge_specs)
+                .expect("runtime plan failed");
         let output_packs = extract_output_packs(&runtime_plan);
         let task_names = collect_task_names(graph);
         let (_, node_output_positions) = collect_culist_metadata(

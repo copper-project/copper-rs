@@ -1,8 +1,9 @@
 use crate::copperlists_reader;
 use cu29::clock::{CuDuration, OptionCuTime};
-use cu29::config::{CuConfig, CuGraph, Flavor};
-use cu29::curuntime::{CuExecutionLoop, CuExecutionUnit, compute_runtime_plan};
+use cu29::config::{CuConfig, CuGraph, DEFAULT_MISSION_ID, Flavor};
+use cu29::curuntime::{CuExecutionUnit, CuStepPhase};
 use cu29::monitoring::CuDurationStatistics;
+use cu29::planner::{PlanEntityKind, assemble_runtime_plan_with};
 use cu29::prelude::{CopperListTuple, CuMsgMetadataTrait, CuPayloadRawBytes};
 use cu29::{CuError, CuResult};
 use serde::{Deserialize, Serialize};
@@ -307,7 +308,7 @@ where
 {
     let graph = config.get_graph(mission)?;
     let signature = build_graph_signature(graph, mission);
-    let output_slots = build_output_slots::<P>(graph)?;
+    let output_slots = build_output_slots::<P>(config, graph, mission)?;
     let mut edge_accumulators = build_edge_accumulators(graph);
     let mut perf = PerfAccumulator::new();
     let resource_bindings = build_resource_bindings::<P>(config, graph);
@@ -638,10 +639,14 @@ pub fn write_logstats(stats: &LogStats, path: &Path) -> CuResult<()> {
     Ok(())
 }
 
-fn build_output_slots<P: CopperListTuple>(graph: &CuGraph) -> CuResult<Vec<OutputSlot>> {
+fn build_output_slots<P: CopperListTuple>(
+    config: &CuConfig,
+    graph: &CuGraph,
+    mission: Option<&str>,
+) -> CuResult<Vec<OutputSlot>> {
     let specs = P::get_output_specs();
     if specs.is_empty() {
-        return build_output_slots_from_plan(graph);
+        return build_output_slots_from_plan(config, graph, mission);
     }
     Ok(specs
         .iter()
@@ -681,56 +686,58 @@ fn edge_key_from_connection(cnx: &cu29::config::Cnx) -> EdgeKey {
     }
 }
 
-fn build_output_slots_from_plan(graph: &CuGraph) -> CuResult<Vec<OutputSlot>> {
-    let mut packs = Vec::new();
-    collect_output_packs_from_loop(&compute_runtime_plan(graph)?, graph, &mut packs)?;
-    packs.sort_by_key(|pack| pack.culist_index);
+fn build_output_slots_from_plan(
+    config: &CuConfig,
+    graph: &CuGraph,
+    mission: Option<&str>,
+) -> CuResult<Vec<OutputSlot>> {
+    // Share the generated-runtime construction path (bridge stages, slot
+    // indices) so this cannot drift from the compiled plan; honor the mission's
+    // configured plan heuristic.
+    let mission = mission.unwrap_or(DEFAULT_MISSION_ID);
+    let heuristic = config.plan_heuristic_for(mission);
+    let plan = assemble_runtime_plan_with(config, graph, &heuristic, mission)?;
+
+    let mut packs: Vec<(u32, String, Vec<String>)> = Vec::new();
+    for unit in &plan.execution.steps {
+        let CuExecutionUnit::Step(step) = unit else {
+            continue;
+        };
+        // Anytime refine steps reuse their base step's culist slot; counting
+        // them would emit duplicate slots and misalign every later slot.
+        if step.phase == CuStepPhase::AnytimeRefine {
+            continue;
+        }
+        let Some(output_pack) = &step.output_msg_pack else {
+            continue;
+        };
+        let entity = &plan.entities[step.node_id as usize];
+        let origin = match entity.kind {
+            PlanEntityKind::Task { .. } => entity.label.clone(),
+            PlanEntityKind::BridgeRx { .. } | PlanEntityKind::BridgeTx { .. } => {
+                format!("bridge::{}", entity.label)
+            }
+        };
+        packs.push((
+            output_pack.culist_index,
+            origin,
+            output_pack.msg_types.clone(),
+        ));
+    }
+
+    packs.sort_by_key(|(culist_index, _, _)| *culist_index);
     Ok(packs
         .into_iter()
-        .flat_map(|pack| {
-            pack.msg_types.into_iter().map(move |msg| OutputSlot {
+        .flat_map(|(_, origin, msg_types)| {
+            msg_types.into_iter().map(move |msg| OutputSlot {
                 edges: graph
                     .edges()
-                    .filter(|edge| edge.src == pack.src && edge.msg == msg)
+                    .filter(|edge| edge.msg == msg && edge_matches_origin(edge, &origin))
                     .map(edge_key_from_connection)
                     .collect(),
             })
         })
         .collect())
-}
-
-#[derive(Debug)]
-struct OutputPackInfo {
-    culist_index: u32,
-    src: String,
-    msg_types: Vec<String>,
-}
-
-fn collect_output_packs_from_loop(
-    loop_unit: &CuExecutionLoop,
-    graph: &CuGraph,
-    packs: &mut Vec<OutputPackInfo>,
-) -> CuResult<()> {
-    for step in &loop_unit.steps {
-        match step {
-            CuExecutionUnit::Step(step) => {
-                if let Some(output_pack) = &step.output_msg_pack {
-                    let node = graph
-                        .get_node(step.node_id)
-                        .ok_or_else(|| CuError::from("Missing node for output pack"))?;
-                    packs.push(OutputPackInfo {
-                        culist_index: output_pack.culist_index,
-                        src: node.get_id(),
-                        msg_types: output_pack.msg_types.clone(),
-                    });
-                }
-            }
-            CuExecutionUnit::Loop(inner) => {
-                collect_output_packs_from_loop(inner, graph, packs)?;
-            }
-        }
-    }
-    Ok(())
 }
 
 fn build_edge_accumulators(graph: &CuGraph) -> HashMap<EdgeKey, EdgeAccumulator> {
@@ -861,6 +868,63 @@ fn fnv1a64(data: &[u8]) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plan_output_slots_skip_anytime_refine_duplicates() {
+        // A foreground anytime task (max_refines: 2) expands into one base step
+        // plus refine steps that reuse the base's culist slot.
+        let config = CuConfig::deserialize_ron(
+            r#"(
+                tasks: [
+                    (id: "src", type: "demo::Src"),
+                    (id: "any", type: "demo::Any", anytime: (max_refines: 2)),
+                    (id: "sink", type: "demo::Sink"),
+                ],
+                cnx: [
+                    (src: "src", dst: "any", msg: "u32"),
+                    (src: "any", dst: "sink", msg: "u32"),
+                ],
+            )"#,
+        )
+        .expect("valid anytime config");
+        let graph = config.get_graph(None).unwrap();
+
+        let plan = assemble_runtime_plan_with(
+            &config,
+            graph,
+            &config.plan_heuristic_for(DEFAULT_MISSION_ID),
+            DEFAULT_MISSION_ID,
+        )
+        .unwrap();
+        // The regression can only trigger if refine steps are actually present.
+        assert!(
+            plan.execution.steps.iter().any(|unit| matches!(
+                unit,
+                CuExecutionUnit::Step(step) if step.phase == CuStepPhase::AnytimeRefine
+            )),
+            "config must exercise anytime refine steps"
+        );
+        // One slot per emitted culist slot: sum of msg types over non-refine
+        // steps, and each culist index appears exactly once.
+        let mut expected_indices = Vec::new();
+        let mut expected_slots = 0usize;
+        for unit in &plan.execution.steps {
+            if let CuExecutionUnit::Step(step) = unit
+                && step.phase != CuStepPhase::AnytimeRefine
+                && let Some(pack) = &step.output_msg_pack
+            {
+                expected_indices.push(pack.culist_index);
+                expected_slots += pack.msg_types.len();
+            }
+        }
+        let mut deduped = expected_indices.clone();
+        deduped.sort_unstable();
+        deduped.dedup();
+        assert_eq!(deduped.len(), expected_indices.len(), "culist indices dup");
+
+        let slots = build_output_slots_from_plan(&config, graph, None).unwrap();
+        assert_eq!(slots.len(), expected_slots);
+    }
 
     fn edge_key() -> EdgeKey {
         EdgeKey {
