@@ -1,0 +1,13 @@
+error[E0599]: the method `start_all_tasks` exists for struct `CuAppLifecycle<MmapSectionStorage, MmapUnifiedLoggerWrite, A, cu29::prelude::Running>`, but its trait bounds were not satisfied
+ --> tests/compile_fail/lifecycle/start_running_app.rs:8:17
+  |
+8 |     let _ = app.start_all_tasks();
+  |                 ^^^^^^^^^^^^^^^
+  |
+ ::: $WORKSPACE/core/cu29_runtime/src/app.rs
+  |
+  | pub struct Running;
+  | ------------------ doesn't satisfy `cu29::prelude::Running: Startable`
+  |
+  = note: the following trait bounds were not satisfied:
+          `cu29::prelude::Running: Startable`

@@ -1,6 +1,8 @@
 use crate::curuntime::KeyFrame;
+use core::fmt;
+use core::marker::PhantomData;
 use cu29_traits::CopperListTuple;
-use cu29_traits::CuResult;
+use cu29_traits::{CuError, CuResult};
 use cu29_unifiedlog::{SectionStorage, UnifiedLogWrite};
 
 #[cfg(feature = "std")]
@@ -265,4 +267,369 @@ pub trait CuDistributedReplayApplication<S: SectionStorage, L: UnifiedLogWrite<S
     ) -> CuResult<Self>
     where
         Self: Sized;
+}
+
+/// Typestate marker: the application is built but its tasks have not been started yet.
+pub struct Initialized;
+
+/// Typestate marker: tasks are started and iterations can be executed.
+pub struct Running;
+
+/// Typestate marker: tasks are stopped. The application can be started again,
+/// which is useful to chain missions within the same process.
+pub struct Stopped;
+
+/// Typestate marker: a lifecycle transition failed and the application may be
+/// partially started or partially stopped. The only way forward is a
+/// best-effort cleanup through `stop_all_tasks`.
+pub struct Faulted;
+
+mod sealed {
+    /// Seals the lifecycle state traits so external code cannot add new states
+    /// and bypass the transitions enforced by [`CuAppLifecycle`](super::CuAppLifecycle).
+    pub trait Sealed {}
+    impl Sealed for super::Initialized {}
+    impl Sealed for super::Running {}
+    impl Sealed for super::Stopped {}
+    impl Sealed for super::Faulted {}
+}
+
+/// Lifecycle states from which the application tasks can be started (`Initialized`, `Stopped`).
+#[diagnostic::on_unimplemented(
+    message = "the application cannot be started from the `{Self}` lifecycle state",
+    label = "`start_all_tasks` and `run` require an `Initialized` or `Stopped` application",
+    note = "a `Running` application is already started and a `Faulted` application must first be cleaned up with `stop_all_tasks`"
+)]
+pub trait Startable: sealed::Sealed {}
+impl Startable for Initialized {}
+impl Startable for Stopped {}
+
+/// Lifecycle states from which the application tasks can be stopped (`Running`, `Faulted`).
+#[diagnostic::on_unimplemented(
+    message = "the application cannot be stopped from the `{Self}` lifecycle state",
+    label = "`stop_all_tasks` requires a `Running` or `Faulted` application",
+    note = "start the application first with `start_all_tasks`"
+)]
+pub trait Stoppable: sealed::Sealed {}
+impl Stoppable for Running {}
+impl Stoppable for Faulted {}
+
+/// Compile-time enforced lifecycle for a [`CuApplication`].
+///
+/// Wrapping an application moves lifecycle mistakes (double start, iterating
+/// before start, mixing `start_all_tasks` with `run`...) from runtime surprises
+/// to compile errors: each state is a distinct type exposing only the
+/// transitions that are legal from it.
+///
+/// ```text
+///                 start_all_tasks
+///   Initialized ------------------> Running <---+
+///        |                            |  |      | run_one_iteration
+///        | run                        |  +------+
+///        |                            | stop_all_tasks
+///        +--------> Stopped <---------+
+///                    |   ^
+///                    |   | stop_all_tasks (cleanup)
+///        (restart)   |  Faulted <--- any failed transition
+///                    +---> start_all_tasks / run again
+/// ```
+///
+/// Transitions consume the wrapper and return it typed with the new state, so
+/// a stale pre-transition handle cannot be reused. When a transition fails,
+/// the application is handed back inside [`LifecycleError`], typed [`Faulted`],
+/// so cleanup is still possible and nothing is lost.
+///
+/// This wrapper is opt-in: the underlying [`CuApplication`] methods remain
+/// available on the unwrapped application for existing code.
+pub struct CuAppLifecycle<S, L, A, State = Initialized> {
+    app: A,
+    _lifecycle: PhantomData<(S, L, State)>,
+}
+
+impl<S, L, A, State> fmt::Debug for CuAppLifecycle<S, L, A, State> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CuAppLifecycle")
+            .field("state", &core::any::type_name::<State>())
+            .finish_non_exhaustive()
+    }
+}
+
+/// Convenience alias for applications using the default std unified logger,
+/// mirroring [`CuStdApplication`].
+#[cfg(feature = "std")]
+pub type CuStdAppLifecycle<A, State = Initialized> =
+    CuAppLifecycle<MmapSectionStorage, cu29_unifiedlog::UnifiedLoggerWrite, A, State>;
+
+/// Result of a lifecycle transition: on success the application typed with its
+/// new state, on failure [`LifecycleError`] carrying the application typed [`Faulted`].
+pub type TransitionResult<S, L, A, Next> =
+    Result<CuAppLifecycle<S, L, A, Next>, LifecycleError<S, L, A>>;
+
+/// A failed lifecycle transition.
+///
+/// Because transitions consume the application by value, the failure path hands
+/// it back typed as [`Faulted`]: `app` only exposes `stop_all_tasks` for
+/// best-effort cleanup.
+pub struct LifecycleError<S, L, A> {
+    /// The error reported by the underlying application.
+    pub error: CuError,
+    /// The application, in the `Faulted` state. Call `stop_all_tasks` on it to clean up.
+    pub app: CuAppLifecycle<S, L, A, Faulted>,
+}
+
+impl<S, L, A> fmt::Debug for LifecycleError<S, L, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LifecycleError")
+            .field("error", &self.error)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<S, L, A> fmt::Display for LifecycleError<S, L, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "lifecycle transition failed: {}", self.error)
+    }
+}
+
+impl<S, L, A> core::error::Error for LifecycleError<S, L, A> {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        Some(&self.error)
+    }
+}
+
+/// Allows `?` in functions returning `CuResult` when the faulted application
+/// does not need to be recovered.
+impl<S, L, A> From<LifecycleError<S, L, A>> for CuError {
+    fn from(value: LifecycleError<S, L, A>) -> Self {
+        value.error
+    }
+}
+
+impl<S, L, A, State> CuAppLifecycle<S, L, A, State> {
+    /// Rewraps the application under a new typestate. Private: state changes
+    /// only happen through the lifecycle transitions.
+    fn into_state<Next>(self) -> CuAppLifecycle<S, L, A, Next> {
+        CuAppLifecycle {
+            app: self.app,
+            _lifecycle: PhantomData,
+        }
+    }
+
+    /// Read-only access to the wrapped application.
+    pub fn inner(&self) -> &A {
+        &self.app
+    }
+
+    /// Consumes the wrapper and returns the application, dropping the
+    /// compile-time lifecycle tracking.
+    pub fn into_inner(self) -> A {
+        self.app
+    }
+}
+
+impl<S, L, A> CuAppLifecycle<S, L, A, Initialized>
+where
+    S: SectionStorage,
+    L: UnifiedLogWrite<S> + 'static,
+    A: CuApplication<S, L>,
+{
+    /// Wraps a freshly built application in the `Initialized` state.
+    pub fn new(app: A) -> Self {
+        CuAppLifecycle {
+            app,
+            _lifecycle: PhantomData,
+        }
+    }
+}
+
+impl<S, L, A, State> CuAppLifecycle<S, L, A, State>
+where
+    S: SectionStorage,
+    L: UnifiedLogWrite<S> + 'static,
+    A: CuApplication<S, L>,
+    State: Startable,
+{
+    /// Starts all tasks, transitioning to `Running`.
+    ///
+    /// On failure the application may be partially started; it is returned
+    /// typed `Faulted` inside the error so it can be cleaned up.
+    pub fn start_all_tasks(mut self) -> TransitionResult<S, L, A, Running> {
+        match self.app.start_all_tasks() {
+            Ok(()) => Ok(self.into_state()),
+            Err(error) => Err(LifecycleError {
+                error,
+                app: self.into_state(),
+            }),
+        }
+    }
+
+    /// Runs the full lifecycle (start, iterate until shutdown, stop),
+    /// transitioning to `Stopped` on success.
+    pub fn run(mut self) -> TransitionResult<S, L, A, Stopped> {
+        match self.app.run() {
+            Ok(()) => Ok(self.into_state()),
+            Err(error) => Err(LifecycleError {
+                error,
+                app: self.into_state(),
+            }),
+        }
+    }
+}
+
+impl<S, L, A> CuAppLifecycle<S, L, A, Running>
+where
+    S: SectionStorage,
+    L: UnifiedLogWrite<S> + 'static,
+    A: CuApplication<S, L>,
+{
+    /// Executes one iteration of the runtime. An iteration error does not
+    /// change the lifecycle state: the caller decides whether to keep
+    /// iterating or stop.
+    pub fn run_one_iteration(&mut self) -> CuResult<()> {
+        self.app.run_one_iteration()
+    }
+}
+
+impl<S, L, A, State> CuAppLifecycle<S, L, A, State>
+where
+    S: SectionStorage,
+    L: UnifiedLogWrite<S> + 'static,
+    A: CuApplication<S, L>,
+    State: Stoppable,
+{
+    /// Stops all tasks, transitioning to `Stopped`. From `Faulted` this is a
+    /// best-effort cleanup. On failure the application is handed back typed
+    /// `Faulted` again.
+    pub fn stop_all_tasks(mut self) -> TransitionResult<S, L, A, Stopped> {
+        match self.app.stop_all_tasks() {
+            Ok(()) => Ok(self.into_state()),
+            Err(error) => Err(LifecycleError {
+                error,
+                app: self.into_state(),
+            }),
+        }
+    }
+}
+
+#[cfg(all(test, feature = "std"))]
+mod lifecycle_tests {
+    use super::*;
+
+    #[derive(Default)]
+    struct MockApp {
+        started: u32,
+        stopped: u32,
+        iterations: u32,
+        runs: u32,
+        fail_start: bool,
+        fail_stop: bool,
+    }
+
+    impl<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> CuApplication<S, L> for MockApp {
+        fn get_original_config() -> String {
+            String::new()
+        }
+
+        fn start_all_tasks(&mut self) -> CuResult<()> {
+            if self.fail_start {
+                return Err("mock start failure".into());
+            }
+            self.started += 1;
+            Ok(())
+        }
+
+        fn run_one_iteration(&mut self) -> CuResult<()> {
+            self.iterations += 1;
+            Ok(())
+        }
+
+        fn run(&mut self) -> CuResult<()> {
+            if self.fail_start {
+                return Err("mock run failure".into());
+            }
+            self.runs += 1;
+            Ok(())
+        }
+
+        fn stop_all_tasks(&mut self) -> CuResult<()> {
+            if self.fail_stop {
+                return Err("mock stop failure".into());
+            }
+            self.stopped += 1;
+            Ok(())
+        }
+
+        fn restore_keyframe(&mut self, _freezer: &KeyFrame) -> CuResult<()> {
+            Ok(())
+        }
+    }
+
+    type Lifecycle = CuStdAppLifecycle<MockApp>;
+
+    #[test]
+    fn full_cycle_with_restart() {
+        let app = Lifecycle::new(MockApp::default());
+        let mut running = app.start_all_tasks().unwrap();
+        running.run_one_iteration().unwrap();
+        running.run_one_iteration().unwrap();
+        let stopped = running.stop_all_tasks().unwrap();
+
+        // Restarting a stopped application is legal (mission chaining).
+        let running = stopped.start_all_tasks().unwrap();
+        let stopped = running.stop_all_tasks().unwrap();
+
+        let mock = stopped.into_inner();
+        assert_eq!(mock.started, 2);
+        assert_eq!(mock.iterations, 2);
+        assert_eq!(mock.stopped, 2);
+    }
+
+    #[test]
+    fn run_transitions_to_stopped_and_can_run_again() {
+        let app = Lifecycle::new(MockApp::default());
+        let stopped = app.run().unwrap();
+        let stopped = stopped.run().unwrap();
+        assert_eq!(stopped.inner().runs, 2);
+    }
+
+    #[test]
+    fn failed_start_hands_back_a_faulted_app_for_cleanup() {
+        let app = Lifecycle::new(MockApp {
+            fail_start: true,
+            ..Default::default()
+        });
+        let err = app.start_all_tasks().unwrap_err();
+        assert!(err.error.to_string().contains("mock start failure"));
+
+        // The only legal transition from Faulted is the cleanup.
+        let stopped = err.app.stop_all_tasks().unwrap();
+        let mock = stopped.into_inner();
+        assert_eq!(mock.started, 0);
+        assert_eq!(mock.stopped, 1);
+    }
+
+    #[test]
+    fn failed_stop_hands_back_a_faulted_app() {
+        let app = Lifecycle::new(MockApp {
+            fail_stop: true,
+            ..Default::default()
+        });
+        let running = app.start_all_tasks().unwrap();
+        let err = running.stop_all_tasks().unwrap_err();
+        assert!(err.error.to_string().contains("mock stop failure"));
+    }
+
+    #[test]
+    fn lifecycle_error_propagates_with_question_mark() {
+        fn drive() -> CuResult<()> {
+            let app = Lifecycle::new(MockApp {
+                fail_start: true,
+                ..Default::default()
+            });
+            let _running = app.start_all_tasks()?;
+            Ok(())
+        }
+        let error = drive().unwrap_err();
+        assert!(error.to_string().contains("mock start failure"));
+    }
 }
