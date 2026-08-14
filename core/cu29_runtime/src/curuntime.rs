@@ -1504,6 +1504,28 @@ pub struct RuntimeLifecycleStackInfo {
     pub instance_id: u32,
 }
 
+/// Exact Cargo target that contained the generated Copper application.
+#[derive(Clone, Encode, Decode, Debug, PartialEq, Eq)]
+pub enum RuntimeCargoTarget {
+    Bin(String),
+    Lib,
+}
+
+/// Versioned build identity required to reconstruct an application's build context.
+#[derive(Clone, Encode, Decode, Debug, PartialEq, Eq)]
+pub struct RuntimeBuildIdentityV1 {
+    pub git_repository: Option<String>,
+    pub git_commit: Option<String>,
+    pub git_dirty: Option<bool>,
+    pub source_archive_hash: Option<String>,
+    pub cargo_manifest_path: Option<String>,
+    pub cargo_target: RuntimeCargoTarget,
+    pub cargo_features: Vec<String>,
+    pub rust_target: Option<String>,
+    pub rust_toolchain: Option<String>,
+    pub dependency_resolution: Option<String>,
+}
+
 /// Runtime lifecycle events emitted in the dedicated lifecycle section.
 #[derive(Clone, Encode, Decode, Debug, PartialEq, Eq)]
 pub enum RuntimeLifecycleEvent {
@@ -1529,6 +1551,10 @@ pub enum RuntimeLifecycleEvent {
         column: Option<u32>,
     },
     ShutdownCompleted,
+    /// Reproducibility metadata emitted separately to preserve the V0 `Instantiated` wire shape.
+    BuildIdentityRecorded {
+        identity: RuntimeBuildIdentityV1,
+    },
 }
 
 /// One event record persisted in the `UnifiedLogType::RuntimeLifecycle` section.

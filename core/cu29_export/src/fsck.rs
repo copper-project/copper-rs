@@ -76,6 +76,10 @@ fn print_runtime_lifecycle_record(index: usize, entry: &RuntimeLifecycleRecord) 
         RuntimeLifecycleEvent::ShutdownCompleted => {
             println!("      event: ShutdownCompleted");
         }
+        RuntimeLifecycleEvent::BuildIdentityRecorded { identity } => {
+            println!("      event: BuildIdentityRecorded");
+            println!("      identity: {identity:?}");
+        }
     }
 }
 
