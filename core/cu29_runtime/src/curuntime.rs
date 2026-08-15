@@ -20,6 +20,7 @@ use crate::monitoring::{
 };
 #[cfg(all(feature = "std", feature = "parallel-rt"))]
 use crate::parallel_rt::{ParallelRt, ParallelRtMetadata};
+use crate::planner::{ResolvedPlanHeuristic, check_order, plan_from_order};
 use crate::resource::ResourceManager;
 #[cfg(feature = "std")]
 use alloc::sync::Arc;
@@ -1724,7 +1725,6 @@ pub fn find_task_type_for_id(graph: &CuGraph, node_id: NodeId) -> CuResult<CuTas
 /// `order` + `check_order` + `plan_from_order` pipeline in `planner`, kept here
 /// so direct callers (tests, tooling) keep a one-call entry point.
 pub fn compute_runtime_plan(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
-    use crate::planner::{ResolvedPlanHeuristic, check_order, plan_from_order};
     let order = ResolvedPlanHeuristic::TopoBfs.order(graph)?;
     check_order(graph, &order)?;
     plan_from_order(graph, &order)
