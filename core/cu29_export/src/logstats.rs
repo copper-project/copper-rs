@@ -696,7 +696,8 @@ fn build_output_slots_from_plan(
     // configured plan heuristic.
     let mission = mission.unwrap_or(DEFAULT_MISSION_ID);
     let heuristic = config.plan_heuristic_for(mission);
-    let plan = assemble_runtime_plan_with(config, graph, &heuristic, mission)?;
+    let plan = assemble_runtime_plan_with(config, graph, &heuristic)
+        .map_err(|e| CuError::from(format!("mission '{mission}': {e}")))?;
 
     let mut packs: Vec<(u32, String, Vec<String>)> = Vec::new();
     for unit in &plan.execution.steps {
@@ -893,7 +894,6 @@ mod tests {
             &config,
             graph,
             &config.plan_heuristic_for(DEFAULT_MISSION_ID),
-            DEFAULT_MISSION_ID,
         )
         .unwrap();
         // The regression can only trigger if refine steps are actually present.

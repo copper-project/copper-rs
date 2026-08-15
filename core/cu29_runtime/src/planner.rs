@@ -5,8 +5,8 @@
 //! not a stable application-facing scheduler API.
 
 use crate::config::{
-    BridgeChannelConfigRepresentation, ConfigGraphs, CuConfig, CuDirection, CuGraph,
-    DEFAULT_MISSION_ID, Flavor, Node, NodeId, PlanHeuristic,
+    BridgeChannelConfigRepresentation, ConfigGraphs, CuConfig, CuDirection, CuGraph, Flavor, Node,
+    NodeId, PlanHeuristic,
 };
 use crate::curuntime::{
     CuExecutionLoop, CuExecutionStep, CuExecutionUnit, CuInputMsg, CuOutputPack, CuStepPhase,
@@ -88,15 +88,11 @@ impl ResolvedPlanHeuristic {
     /// Map a config-level [`PlanHeuristic`] onto `plan_graph`, turning task RON
     /// ids into plan node ids. All id errors surface here, before ordering.
     #[doc(hidden)]
-    pub fn resolve(
-        heuristic: &PlanHeuristic,
-        plan_graph: &CuGraph,
-        mission: &str,
-    ) -> CuResult<Self> {
+    pub fn resolve(heuristic: &PlanHeuristic, plan_graph: &CuGraph) -> CuResult<Self> {
         match heuristic {
             PlanHeuristic::TopoBfs => Ok(ResolvedPlanHeuristic::TopoBfs),
             PlanHeuristic::Pinned(ids) => Ok(ResolvedPlanHeuristic::Pinned(resolve_pinned_ids(
-                plan_graph, ids, mission,
+                plan_graph, ids,
             )?)),
         }
     }
@@ -111,7 +107,7 @@ impl ResolvedPlanHeuristic {
     }
 }
 
-fn resolve_pinned_ids(graph: &CuGraph, ids: &[String], mission: &str) -> CuResult<Vec<NodeId>> {
+fn resolve_pinned_ids(graph: &CuGraph, ids: &[String]) -> CuResult<Vec<NodeId>> {
     let mut task_ids: BTreeMap<String, NodeId> = BTreeMap::new();
     let mut bridge_labels: BTreeSet<String> = BTreeSet::new();
     for (node_id, node) in graph.get_all_nodes() {
@@ -136,18 +132,18 @@ fn resolve_pinned_ids(graph: &CuGraph, ids: &[String], mission: &str) -> CuResul
         if let Some(&node_id) = task_ids.get(id) {
             if !seen.insert(node_id) {
                 return Err(CuError::from(format!(
-                    "Mission '{mission}': Pinned plan lists task '{id}' more than once."
+                    "Pinned plan lists task '{id}' more than once."
                 )));
             }
             resolved.push(node_id);
         } else if bridge_labels.contains(id) {
             return Err(CuError::from(format!(
-                "Mission '{mission}': Pinned plan lists bridge stage '{id}'; pin only task ids: [{}].",
+                "Pinned plan lists bridge stage '{id}'; pin only task ids: [{}].",
                 valid_ids()
             )));
         } else {
             return Err(CuError::from(format!(
-                "Mission '{mission}': Pinned plan lists unknown task '{id}'; valid task ids: [{}].",
+                "Pinned plan lists unknown task '{id}'; valid task ids: [{}].",
                 valid_ids()
             )));
         }
@@ -161,7 +157,7 @@ fn resolve_pinned_ids(graph: &CuGraph, ids: &[String], mission: &str) -> CuResul
             .collect();
         missing.sort();
         return Err(CuError::from(format!(
-            "Mission '{mission}': Pinned plan must list every task exactly once; missing: [{}].",
+            "Pinned plan must list every task exactly once; missing: [{}].",
             missing.join(", ")
         )));
     }
@@ -328,20 +324,18 @@ fn pinned_order(graph: &CuGraph, pinned_tasks: &[NodeId]) -> CuResult<StepOrder>
 ///
 /// Rejects unknown ids, duplicate nodes, missing nodes, and precedence
 /// violations (a step scheduled before one of its inputs). Errors name the
-/// mission and the offending task ids.
+/// offending task ids; callers that own mission context wrap them.
 #[doc(hidden)]
-pub fn check_order(graph: &CuGraph, order: &StepOrder, mission: &str) -> CuResult<()> {
+pub fn check_order(graph: &CuGraph, order: &StepOrder) -> CuResult<()> {
     let mut position: Vec<Option<usize>> = vec![None; graph.node_count()];
 
     for (index, &node_id) in order.0.iter().enumerate() {
         let slot = position.get_mut(node_id as usize).ok_or_else(|| {
-            CuError::from(format!(
-                "Mission '{mission}': plan order references unknown node id {node_id}."
-            ))
+            CuError::from(format!("Plan order references unknown node id {node_id}."))
         })?;
         if slot.is_some() {
             return Err(CuError::from(format!(
-                "Mission '{mission}': task '{}' appears more than once in the plan order.",
+                "Task '{}' appears more than once in the plan order.",
                 node_name(graph, node_id)
             )));
         }
@@ -357,7 +351,7 @@ pub fn check_order(graph: &CuGraph, order: &StepOrder, mission: &str) -> CuResul
     if !missing.is_empty() {
         missing.sort();
         return Err(CuError::from(format!(
-            "Mission '{mission}': execution plan could not include all nodes. Missing: {}. Check for loopback or missing source connections.",
+            "Execution plan could not include all nodes. Missing: {}. Check for loopback or missing source connections.",
             missing.join(", ")
         )));
     }
@@ -371,7 +365,7 @@ pub fn check_order(graph: &CuGraph, order: &StepOrder, mission: &str) -> CuResul
         };
         if position[src as usize] >= position[dst as usize] {
             return Err(CuError::from(format!(
-                "Mission '{mission}': task '{}' is scheduled before its input '{}'.",
+                "Task '{}' is scheduled before its input '{}'.",
                 node_name(graph, dst),
                 node_name(graph, src)
             )));
@@ -572,21 +566,21 @@ fn inferred_output_name(node: &Node, task_type: CuTaskType) -> String {
     )
 }
 
-/// Assemble the generated plan for the default mission with the default
-/// (`TopoBfs`) heuristic. Kept for tooling that reads a single graph.
+/// Assemble the generated plan with the default (`TopoBfs`) heuristic. Kept
+/// for tooling that reads a single graph.
 #[doc(hidden)]
 pub fn assemble_runtime_plan(config: &CuConfig, graph: &CuGraph) -> CuResult<AssembledPlan> {
-    assemble_runtime_plan_with(config, graph, &PlanHeuristic::TopoBfs, DEFAULT_MISSION_ID)
+    assemble_runtime_plan_with(config, graph, &PlanHeuristic::TopoBfs)
 }
 
 /// Assemble the same synthetic task/bridge graph used by generated runtimes,
-/// ordering it with the given (config-level) heuristic for `mission`.
+/// ordering it with the given (config-level) heuristic. Mission-agnostic:
+/// callers select the heuristic for their mission and wrap errors with it.
 #[doc(hidden)]
 pub fn assemble_runtime_plan_with(
     config: &CuConfig,
     graph: &CuGraph,
     heuristic: &PlanHeuristic,
-    mission: &str,
 ) -> CuResult<AssembledPlan> {
     let mut plan_graph = CuGraph::default();
     let mut entities = Vec::new();
@@ -747,9 +741,9 @@ pub fn assemble_runtime_plan_with(
 
     // Choice (order) then bookkeeping (materialize): one legality gate, one
     // shared materializer, for every heuristic and every consumer.
-    let resolved = ResolvedPlanHeuristic::resolve(heuristic, &plan_graph, mission)?;
+    let resolved = ResolvedPlanHeuristic::resolve(heuristic, &plan_graph)?;
     let order = resolved.order(&plan_graph)?;
-    check_order(&plan_graph, &order, mission)?;
+    check_order(&plan_graph, &order)?;
     let mut execution = plan_from_order(&plan_graph, &order)?;
     expand_anytime_steps(&mut execution)?;
     Ok(AssembledPlan {
@@ -961,7 +955,7 @@ mod tests {
             "ekf".to_string(),
             "motor".to_string(),
         ]);
-        let plan = assemble_runtime_plan_with(&config, graph, &heuristic, "nominal").unwrap();
+        let plan = assemble_runtime_plan_with(&config, graph, &heuristic).unwrap();
         assert_eq!(
             step_labels(&plan),
             [
@@ -980,11 +974,10 @@ mod tests {
         let graph = config.get_graph(None).unwrap();
 
         let missing = PlanHeuristic::Pinned(vec!["cam".to_string(), "ekf".to_string()]);
-        let err = assemble_runtime_plan_with(&config, graph, &missing, "nominal")
+        let err = assemble_runtime_plan_with(&config, graph, &missing)
             .err()
             .unwrap();
         assert!(err.to_string().contains("missing"), "{err}");
-        assert!(err.to_string().contains("nominal"), "{err}");
 
         let stage = PlanHeuristic::Pinned(vec![
             "radio::rx::incoming".to_string(),
@@ -992,7 +985,7 @@ mod tests {
             "ekf".to_string(),
             "motor".to_string(),
         ]);
-        let err = assemble_runtime_plan_with(&config, graph, &stage, "nominal")
+        let err = assemble_runtime_plan_with(&config, graph, &stage)
             .err()
             .unwrap();
         assert!(err.to_string().contains("bridge stage"), "{err}");
@@ -1003,7 +996,7 @@ mod tests {
             "motor".to_string(),
             "ghost".to_string(),
         ]);
-        let err = assemble_runtime_plan_with(&config, graph, &unknown, "nominal")
+        let err = assemble_runtime_plan_with(&config, graph, &unknown)
             .err()
             .unwrap();
         assert!(err.to_string().contains("unknown task 'ghost'"), "{err}");
@@ -1013,7 +1006,7 @@ mod tests {
             "cam".to_string(),
             "ekf".to_string(),
         ]);
-        let err = assemble_runtime_plan_with(&config, graph, &dup, "nominal")
+        let err = assemble_runtime_plan_with(&config, graph, &dup)
             .err()
             .unwrap();
         assert!(err.to_string().contains("more than once"), "{err}");
@@ -1027,14 +1020,14 @@ mod tests {
         let k = graph.get_node_id_by_name("k").unwrap();
 
         // Consumer before producer.
-        let err = check_order(graph, &StepOrder(vec![k, s]), "nominal").unwrap_err();
+        let err = check_order(graph, &StepOrder(vec![k, s])).unwrap_err();
         assert!(
             err.to_string().contains("scheduled before its input"),
             "{err}"
         );
 
         // A node left out of the order.
-        let err = check_order(graph, &StepOrder(vec![s]), "nominal").unwrap_err();
+        let err = check_order(graph, &StepOrder(vec![s])).unwrap_err();
         assert!(err.to_string().contains("Missing"), "{err}");
     }
 

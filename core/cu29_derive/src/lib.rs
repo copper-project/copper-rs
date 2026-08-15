@@ -2076,7 +2076,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let (culist_plan, culist_exec_entities, culist_plan_to_original) =
             match build_execution_plan(&copper_config, graph, mission, &mut culist_bridge_specs) {
                 Ok(plan) => plan,
-                Err(e) => return return_error(format!("Could not compute copperlist plan: {e}")),
+                Err(e) => {
+                    return return_error(format!(
+                        "Could not compute copperlist plan for mission '{mission}': {e}"
+                    ));
+                }
             };
 
         // Single-input/single-output arity is validated at configuration time
@@ -8340,9 +8344,10 @@ fn build_execution_plan(
     Vec<ExecutionEntity>,
     HashMap<NodeId, NodeId>,
 )> {
-    // Resolution owns the mission context here; `planner` stays alloc-only.
+    // Mission context stays here: it selects the heuristic; callers name the
+    // mission when wrapping errors. The planner is mission-agnostic.
     let heuristic = config.plan_heuristic_for(mission);
-    let assembled = assemble_runtime_plan_with(config, graph, &heuristic, mission)?;
+    let assembled = assemble_runtime_plan_with(config, graph, &heuristic)?;
     let mut exec_entities = Vec::with_capacity(assembled.entities.len());
     for (plan_node_id, entity) in assembled.entities.iter().enumerate() {
         let kind = match entity.kind {

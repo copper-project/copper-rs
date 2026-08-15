@@ -1724,10 +1724,9 @@ pub fn find_task_type_for_id(graph: &CuGraph, node_id: NodeId) -> CuResult<CuTas
 /// `order` + `check_order` + `plan_from_order` pipeline in `planner`, kept here
 /// so direct callers (tests, tooling) keep a one-call entry point.
 pub fn compute_runtime_plan(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
-    use crate::config::DEFAULT_MISSION_ID;
     use crate::planner::{ResolvedPlanHeuristic, check_order, plan_from_order};
     let order = ResolvedPlanHeuristic::TopoBfs.order(graph)?;
-    check_order(graph, &order, DEFAULT_MISSION_ID)?;
+    check_order(graph, &order)?;
     plan_from_order(graph, &order)
 }
 
