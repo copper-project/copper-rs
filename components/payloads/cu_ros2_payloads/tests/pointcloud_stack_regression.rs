@@ -4,7 +4,9 @@ use std::thread;
 use cu_ros2_payloads::RosBridgeAdapter;
 use cu_ros2_payloads::builtin::{Header, Time};
 use cu_ros2_payloads::sensor_msgs::{PointCloud2, PointField};
-use cu_sensor_payloads::{PointCloudSoa, PointCloudSoaHandle};
+#[cfg(target_os = "linux")]
+use cu_sensor_payloads::PointCloudSoa;
+use cu_sensor_payloads::PointCloudSoaHandle;
 
 const HELPER_ENV: &str = "CU_ROS2_POINTCLOUD_STACK_HELPER";
 const LARGE_POINTS: usize = 200_000;
