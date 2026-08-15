@@ -666,9 +666,12 @@ pub fn mcap_info(mcap_path: &Path, show_schemas: bool, sample_messages: usize) -
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "linux")]
     use bincode::de::Decoder;
+    #[cfg(target_os = "linux")]
     use bincode::error::DecodeError;
     use bincode::{Decode, Encode, config::standard, encode_into_slice};
+    #[cfg(target_os = "linux")]
     use cu_sensor_payloads::PointCloudSoaHandle;
     use cu29::prelude::{
         CopperList, CuMsgMetadata, CuStampedData, ErasedCuStampedData, ErasedCuStampedDataSet,
