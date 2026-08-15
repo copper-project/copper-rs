@@ -2225,14 +2225,14 @@ impl CuConfig {
         }
     }
 
-    /// Plan heuristic selected for `mission` (defaults to `TopoBfs`).
+    /// The configured plan heuristic (defaults to `TopoBfs`).
     // rendercfg.rs recompiles this file via `mod config;`, so pub helpers it
     // does not call are dead code in that bin under `clippy --deny warnings`.
     #[allow(dead_code)]
-    pub fn plan_heuristic_for(&self, mission: &str) -> PlanHeuristic {
+    pub fn plan_heuristic(&self) -> PlanHeuristic {
         self.runtime
             .as_ref()
-            .map(|runtime| runtime.plan.heuristic_for(mission))
+            .map(|runtime| runtime.plan.clone())
             .unwrap_or_default()
     }
 
@@ -2357,17 +2357,18 @@ pub struct RuntimeConfig {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub thread_pools: Vec<ThreadPoolConfig>,
 
-    /// Execution-plan heuristic, globally or per mission.
+    /// Execution-plan heuristic, one for the whole config.
     ///
     /// This is a codegen input: `#[copper_runtime]` bakes the resulting plan
     /// into the binary. Editing it in a deployed app's RON at startup does not
     /// change the compiled plan (same class as `logging.copperlist_count`); the
     /// RON must match the binary that wrote the log.
-    #[serde(default, skip_serializing_if = "PlanConfig::is_default")]
-    pub plan: PlanConfig,
+    #[serde(default, skip_serializing_if = "PlanHeuristic::is_default")]
+    pub plan: PlanHeuristic,
 }
 
-/// How the execution plan orders the steps of one mission graph.
+/// How the execution plan orders the steps of a mission graph. Applies to
+/// every mission; `Pinned` must be total over each mission's tasks.
 #[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq)]
 pub enum PlanHeuristic {
     /// Default order, kept bit-for-bit for existing apps.
@@ -2378,34 +2379,9 @@ pub enum PlanHeuristic {
     Pinned(Vec<String>),
 }
 
-/// Plan heuristic selection: one heuristic for every mission, or one per mission.
-///
-/// Unlisted missions default to [`PlanHeuristic::TopoBfs`]. A single-graph
-/// config uses [`PlanConfig::Global`] (its mission name is `default`).
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub enum PlanConfig {
-    Global(PlanHeuristic),
-    PerMission(BTreeMap<String, PlanHeuristic>),
-}
-
-impl Default for PlanConfig {
-    fn default() -> Self {
-        PlanConfig::Global(PlanHeuristic::TopoBfs)
-    }
-}
-
-impl PlanConfig {
+impl PlanHeuristic {
     fn is_default(&self) -> bool {
-        matches!(self, PlanConfig::Global(PlanHeuristic::TopoBfs))
-    }
-
-    /// Heuristic selected for `mission`, defaulting to `TopoBfs` when unlisted.
-    #[allow(dead_code)]
-    pub fn heuristic_for(&self, mission: &str) -> PlanHeuristic {
-        match self {
-            PlanConfig::Global(heuristic) => heuristic.clone(),
-            PlanConfig::PerMission(map) => map.get(mission).cloned().unwrap_or_default(),
-        }
+        matches!(self, PlanHeuristic::TopoBfs)
     }
 }
 
@@ -5186,11 +5162,7 @@ mod tests {
 
     #[test]
     fn test_plan_config_defaults_and_round_trips() {
-        // Default is Global(TopoBfs) and is omitted from the serialized RON.
-        assert_eq!(
-            PlanConfig::default(),
-            PlanConfig::Global(PlanHeuristic::TopoBfs)
-        );
+        // Default is TopoBfs and is omitted from the serialized RON.
         let mut config = CuConfig::default();
         config
             .get_graph_mut(None)
@@ -5198,29 +5170,15 @@ mod tests {
             .add_node(Node::new("a", "demo::A"))
             .unwrap();
         assert!(!config.serialize_ron().unwrap().contains("plan"));
-        assert_eq!(config.plan_heuristic_for("default"), PlanHeuristic::TopoBfs);
+        assert_eq!(config.plan_heuristic(), PlanHeuristic::TopoBfs);
 
-        // A non-default per-mission plan round-trips and resolves per mission.
+        // A non-default plan round-trips.
         let runtime = config.runtime.get_or_insert_with(RuntimeConfig::default);
-        runtime.plan = PlanConfig::PerMission(BTreeMap::from([
-            (
-                "nominal".to_string(),
-                PlanHeuristic::Pinned(vec!["a".to_string(), "b".to_string()]),
-            ),
-            ("degraded".to_string(), PlanHeuristic::TopoBfs),
-        ]));
+        runtime.plan = PlanHeuristic::Pinned(vec!["a".to_string(), "b".to_string()]);
         let reparsed = CuConfig::deserialize_ron(&config.serialize_ron().unwrap()).unwrap();
         assert_eq!(
-            reparsed.runtime.as_ref().unwrap().plan,
-            config.runtime.as_ref().unwrap().plan
-        );
-        assert_eq!(
-            reparsed.plan_heuristic_for("nominal"),
+            reparsed.plan_heuristic(),
             PlanHeuristic::Pinned(vec!["a".to_string(), "b".to_string()])
-        );
-        assert_eq!(
-            reparsed.plan_heuristic_for("unlisted"),
-            PlanHeuristic::TopoBfs
         );
     }
 

@@ -695,7 +695,7 @@ fn build_output_slots_from_plan(
     // indices) so this cannot drift from the compiled plan; honor the mission's
     // configured plan heuristic.
     let mission = mission.unwrap_or(DEFAULT_MISSION_ID);
-    let heuristic = config.plan_heuristic_for(mission);
+    let heuristic = config.plan_heuristic();
     let plan = assemble_runtime_plan_with(config, graph, &heuristic)
         .map_err(|e| CuError::from(format!("mission '{mission}': {e}")))?;
 
@@ -890,12 +890,7 @@ mod tests {
         .expect("valid anytime config");
         let graph = config.get_graph(None).unwrap();
 
-        let plan = assemble_runtime_plan_with(
-            &config,
-            graph,
-            &config.plan_heuristic_for(DEFAULT_MISSION_ID),
-        )
-        .unwrap();
+        let plan = assemble_runtime_plan_with(&config, graph, &config.plan_heuristic()).unwrap();
         // The regression can only trigger if refine steps are actually present.
         assert!(
             plan.execution.steps.iter().any(|unit| matches!(
