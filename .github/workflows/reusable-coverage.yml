@@ -78,6 +78,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: coverage-report
+          retention-days: 7
           if-no-files-found: error
           path: |
             target/llvm-cov/html/
@@ -126,6 +127,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: coverage-report
+          retention-days: 7
           if-no-files-found: error
           path: |
             target/llvm-cov/html/

@@ -9,7 +9,9 @@ updates:
         patterns:
           - "actions/*-artifact"
 
-  - package-ecosystem: "cargo"
-    directory: "/"
-    schedule:
-      interval: "weekly"
+# Cargo version updates are intentionally not managed by Dependabot. This
+# workspace contains members with path dependencies on sibling Copper
+# repositories (currently zed and cu-vitfly). CI prepares those repositories
+# with support/ci/checkout_local_dependencies.sh, but GitHub's managed
+# Dependabot runner cannot run that setup step and therefore cannot resolve the
+# workspace. The weekly workflow still checks Rust dependencies for advisories.
