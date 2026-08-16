@@ -14,20 +14,20 @@ fn main() {
     debug!("Logger created at {}.", path = &logger_path);
     debug!("Creating application...");
 
-    let mut application = ImageAlignerApp::builder()
+    let application = ImageAlignerApp::builder()
         .with_log_path(&logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
         .build()
         .expect("Failed to create runtime.");
     debug!("Running... starting clock: {}.", application.clock().now());
 
-    application
+    let mut running = CuStdAppLifecycle::new(application)
         .start_all_tasks()
         .expect("Failed to start tasks.");
     for _ in 0..ITERATIONS {
-        application
+        running
             .run_one_iteration()
             .expect("Failed to run iteration.");
     }
-    debug!("End of program: {}.", application.clock().now());
+    debug!("End of program: {}.", running.inner().clock().now());
 }

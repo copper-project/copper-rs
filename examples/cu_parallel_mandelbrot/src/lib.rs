@@ -99,7 +99,7 @@ pub fn run_log_only() -> CuResult<()> {
     let settings = load_benchmark_settings()?;
     let logger_path = benchmark_logger_path("parallel_mandelbrot_log_only.copper")?;
     let logger_path_display = logger_path.display().to_string();
-    let mut app = log_only::App::builder()
+    let app = log_only::App::builder()
         .with_log_path(&logger_path, SLAB_SIZE)?
         .build()
         .map_err(|err| CuError::from(format!("failed to build log_only mission: {err}")))?;
@@ -109,7 +109,7 @@ pub fn run_log_only() -> CuResult<()> {
         logger_path_display
     );
     let started = Instant::now();
-    app.run()?;
+    CuStdAppLifecycle::new(app).run()?;
     log_summary("log_only", &logger_path, settings, started.elapsed());
     Ok(())
 }
@@ -119,7 +119,7 @@ pub fn run_viewer_live() -> CuResult<()> {
     let settings = load_benchmark_settings()?;
     let logger_path = benchmark_logger_path("parallel_mandelbrot_viewer.copper")?;
     let logger_path_display = logger_path.display().to_string();
-    let mut app = viewer_live::App::builder()
+    let app = viewer_live::App::builder()
         .with_log_path(&logger_path, SLAB_SIZE)?
         .build()
         .map_err(|err| CuError::from(format!("failed to build viewer_live mission: {err}")))?;
@@ -129,7 +129,7 @@ pub fn run_viewer_live() -> CuResult<()> {
         logger_path_display
     );
     let started = Instant::now();
-    app.run()?;
+    CuStdAppLifecycle::new(app).run()?;
     log_summary("viewer_live", &logger_path, settings, started.elapsed());
     Ok(())
 }

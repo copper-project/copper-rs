@@ -57,12 +57,12 @@ fn main() {
     const PACKET_SIZE: usize = size_of::<Packet>();
     let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
     let logger_path = tmp_dir.path().join("ptclouds.copper");
-    let mut application = PtCloudsApplication::builder()
+    let application = PtCloudsApplication::builder()
         .with_log_path(&logger_path, SLAB_SIZE)
         .expect("Failed to setup copper.")
         .build()
         .expect("Failed to create application");
-    application
+    let mut application = CuStdAppLifecycle::new(application)
         .start_all_tasks()
         .expect("Failed to start all tasks.");
 

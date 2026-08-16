@@ -375,13 +375,14 @@ mod tests {
         let clock = RobotClock::default();
 
         events::reset();
-        let mut app = builder(&log_path, clock).expect("build app");
-        <App as CuApplication<MmapSectionStorage, UnifiedLoggerWrite>>::start_all_tasks(&mut app)
+        let app = builder(&log_path, clock).expect("build app");
+        // The lifecycle wrapper pins S/L, so the UFCS disambiguation the raw
+        // trait calls needed is no longer necessary.
+        let mut running = CuAppLifecycle::<MmapSectionStorage, UnifiedLoggerWrite, App>::new(app)
+            .start_all_tasks()
             .expect("start");
-        <App as CuApplication<MmapSectionStorage, UnifiedLoggerWrite>>::run_one_iteration(&mut app)
-            .expect("run");
-        <App as CuApplication<MmapSectionStorage, UnifiedLoggerWrite>>::stop_all_tasks(&mut app)
-            .expect("stop");
+        running.run_one_iteration().expect("run");
+        running.stop_all_tasks().expect("stop");
         events::take()
     }
 
@@ -485,15 +486,17 @@ mod tests {
         let clock = RobotClock::default();
 
         {
-            let mut app = super::BridgeTaskSameApp::builder()
+            let app = super::BridgeTaskSameApp::builder()
                 .with_clock(clock.clone())
                 .with_log_path(&log_path, Some(32 * 1024 * 1024))
                 .expect("logger")
                 .build()
                 .expect("build app");
-            app.start_all_tasks().expect("start");
-            app.run_one_iteration().expect("run");
-            app.stop_all_tasks().expect("stop");
+            let mut running = CuStdAppLifecycle::new(app)
+                .start_all_tasks()
+                .expect("start");
+            running.run_one_iteration().expect("run");
+            running.stop_all_tasks().expect("stop");
         }
 
         let UnifiedLogger::Read(read_logger) = UnifiedLoggerBuilder::new()
@@ -539,29 +542,29 @@ mod tests {
 
         events::reset();
         {
-            let mut app = super::BridgeOnlyABApp::builder()
+            let app = super::BridgeOnlyABApp::builder()
                 .with_clock(clock.clone())
                 .with_log_path(&log_path, Some(32 * 1024 * 1024))
                 .expect("logger")
                 .build()
                 .unwrap();
-            app.start_all_tasks().unwrap();
-            app.run_one_iteration().unwrap();
-            app.stop_all_tasks().unwrap();
+            let mut running = CuStdAppLifecycle::new(app).start_all_tasks().unwrap();
+            running.run_one_iteration().unwrap();
+            running.stop_all_tasks().unwrap();
         }
         let first = events::take();
         assert_eq!(first, vec!["alpha.rx.ingress", "beta.tx.egress"]);
 
         {
-            let mut app = super::BridgeLoopbackApp::builder()
+            let app = super::BridgeLoopbackApp::builder()
                 .with_clock(clock)
                 .with_log_path(&log_path, Some(32 * 1024 * 1024))
                 .expect("logger")
                 .build()
                 .unwrap();
-            app.start_all_tasks().unwrap();
-            app.run_one_iteration().unwrap();
-            app.stop_all_tasks().unwrap();
+            let mut running = CuStdAppLifecycle::new(app).start_all_tasks().unwrap();
+            running.run_one_iteration().unwrap();
+            running.stop_all_tasks().unwrap();
         }
         let second = events::take();
         assert_eq!(second, vec!["alpha.rx.loop", "alpha.tx.loop"]);

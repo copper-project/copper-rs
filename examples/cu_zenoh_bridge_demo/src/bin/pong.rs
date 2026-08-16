@@ -28,11 +28,11 @@ fn main() {
 
 fn drive() -> CuResult<()> {
     let options = parse_run_options("zenoh_pong.copper")?;
-    let mut app = PongApp::builder()
+    let app = PongApp::builder()
         .with_log_path(&options.log_path, SLAB_SIZE)?
         .with_instance_id(options.instance_id)
         .build()?;
-    app.start_all_tasks()?;
+    let mut app = CuStdAppLifecycle::new(app).start_all_tasks()?;
 
     if let Some(iterations) = options.iterations {
         for _ in 0..iterations {

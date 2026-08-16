@@ -30,10 +30,10 @@ fn drive() -> CuResult<()> {
     let tmp_dir = tempfile::TempDir::new().expect("could not create temp dir");
     let logger_path = tmp_dir.path().join("iceoryx2_pong.copper");
 
-    let mut app = PongApp::builder()
+    let app = PongApp::builder()
         .with_log_path(&logger_path, SLAB_SIZE)?
         .build()?;
-    app.start_all_tasks()?;
+    let mut app = CuStdAppLifecycle::new(app).start_all_tasks()?;
 
     loop {
         app.run_one_iteration()?;
