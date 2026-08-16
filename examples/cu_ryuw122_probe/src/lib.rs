@@ -200,7 +200,7 @@ fn run_probe(args: &ProbeArgs) -> CuResult<()> {
     );
 
     let log_path = prepare_log_path()?;
-    let mut app = Ryuw122ProbeApp::builder()
+    let app = Ryuw122ProbeApp::builder()
         .with_config(config)
         .with_log_path(&log_path, LOG_SLAB_SIZE)?
         .build()?;
