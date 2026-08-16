@@ -19,11 +19,12 @@ use leader_follower::FeetechDemoApp as LeaderFollowerApp;
 
 const SLAB_SIZE: Option<usize> = Some(64 * 1024 * 1024);
 
-fn run_mission<App>(app: &mut App) -> CuResult<()>
+fn run_mission<App>(app: App) -> CuResult<()>
 where
     App: CuApplication<memmap::MmapSectionStorage, UnifiedLoggerWrite>,
 {
-    app.run()
+    CuAppLifecycle::new(app).run()?;
+    Ok(())
 }
 
 fn main() {
@@ -44,7 +45,7 @@ fn main() {
     match mission.as_str() {
         "arm_publisher" => {
             debug!("Starting ARM_PUBLISHER mission – reading positions.");
-            let mut app = ArmPublisherApp::builder()
+            let app = ArmPublisherApp::builder()
                 .with_log_path(logger_path, SLAB_SIZE)
                 .expect("Failed to setup logger.")
                 .build()
@@ -52,13 +53,13 @@ fn main() {
                     print_setup_help(&e);
                     std::process::exit(1);
                 });
-            if let Err(e) = run_mission(&mut app) {
+            if let Err(e) = run_mission(app) {
                 debug!("Arm publisher ended: {}", e);
             }
         }
         "leader_follower" => {
             debug!("Starting LEADER_FOLLOWER mission – leader drives follower.");
-            let mut app = LeaderFollowerApp::builder()
+            let app = LeaderFollowerApp::builder()
                 .with_log_path(logger_path, SLAB_SIZE)
                 .expect("Failed to setup logger.")
                 .build()
@@ -66,7 +67,7 @@ fn main() {
                     print_setup_help(&e);
                     std::process::exit(1);
                 });
-            if let Err(e) = run_mission(&mut app) {
+            if let Err(e) = run_mission(app) {
                 debug!("Leader-follower ended: {}", e);
             }
         }

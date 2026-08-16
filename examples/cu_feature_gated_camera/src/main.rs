@@ -30,12 +30,13 @@ mod app {
                 .map_err(|error| CuError::new_with_cause("creating log directory", error))?;
         }
 
-        let mut app = CameraApp::builder()
+        let app = CameraApp::builder()
             .with_log_path(&log_path, Some(16 * 1024 * 1024))?
             .build()?;
-        app.start_all_tasks()?;
-        app.run_one_iteration()?;
-        app.stop_all_tasks()
+        let mut running = CuStdAppLifecycle::new(app).start_all_tasks()?;
+        running.run_one_iteration()?;
+        running.stop_all_tasks()?;
+        Ok(())
     }
 }
 

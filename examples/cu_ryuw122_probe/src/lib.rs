@@ -227,7 +227,7 @@ fn run_probe(args: &ProbeArgs) -> CuResult<()> {
     let started_at = Instant::now();
     let deadline = args.duration_s.map(Duration::from_secs);
 
-    app.start_all_tasks()?;
+    let mut app = CuStdAppLifecycle::new(app).start_all_tasks()?;
 
     let mut last_count = 0;
     let mut run_error = None;

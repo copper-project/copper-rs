@@ -255,17 +255,17 @@ pub fn config_for_mode(mode: PyTaskMode) -> CuConfig {
 pub fn run_demo(mode: PyTaskMode, iterations: usize) -> CuResult<()> {
     let temp_dir = tempfile::TempDir::new().map_err(|e| CuError::new_with_cause("temp dir", e))?;
     let log_path = temp_dir.path().join("python_task_demo.copper");
-    let mut app = PythonTaskDemoApp::builder()
+    let app = PythonTaskDemoApp::builder()
         .with_log_path(&log_path, Some(32 * 1024 * 1024))?
         .with_config(config_for_mode(mode))
         .build()?;
 
     reset_sinks();
-    app.start_all_tasks()?;
+    let mut running = CuStdAppLifecycle::new(app).start_all_tasks()?;
     for _ in 0..iterations {
-        app.run_one_iteration()?;
+        running.run_one_iteration()?;
     }
-    app.stop_all_tasks()?;
+    running.stop_all_tasks()?;
     Ok(())
 }
 

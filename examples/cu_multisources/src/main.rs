@@ -14,12 +14,14 @@ fn main() {
     let logger_path = tmp_dir.path().join("caterpillar.copper");
     debug!("Logger created at {}.", path = &logger_path);
     debug!("Creating application... ");
-    let mut application = MultiSourceApp::builder()
+    let application = MultiSourceApp::builder()
         .with_log_path(&logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
         .build()
         .expect("Failed to create runtime.");
 
-    application.run().expect("Failed to run application.");
+    CuStdAppLifecycle::new(application)
+        .run()
+        .expect("Failed to run application.");
     sleep(Duration::from_secs(1));
 }

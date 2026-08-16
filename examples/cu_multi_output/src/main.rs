@@ -171,18 +171,18 @@ fn main() {
     let tmp_dir = tempfile::TempDir::new().expect("Could not create temporary directory");
     let logger_path = tmp_dir.path().join("logger.copper");
 
-    let mut application = App::builder()
+    let application = App::builder()
         .with_log_path(&logger_path, None)
         .expect("Failed to setup logger.")
         .build()
         .expect("Failed to create application.");
-    application
+    let mut running = CuStdAppLifecycle::new(application)
         .start_all_tasks()
         .expect("Failed to start application.");
-    application
+    running
         .run_one_iteration()
         .expect("Failed to run application.");
-    application
+    running
         .stop_all_tasks()
         .expect("Failed to stop application.");
 

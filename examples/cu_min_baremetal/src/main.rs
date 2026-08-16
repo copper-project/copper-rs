@@ -93,12 +93,14 @@ pub extern "C" fn main() {
         },
     );
     let writer = Arc::new(Mutex::new(NoopLogger::new()));
-    let mut app = MinimalNoStdApp::builder()
+    let app = MinimalNoStdApp::builder()
         .with_clock(clock)
         .with_logger::<NoopSectionStorage, NoopLogger>(writer)
         .build()
         .unwrap();
-    let _ = <MinimalNoStdApp as CuApplication<NoopSectionStorage, NoopLogger>>::run(&mut app);
+    // CuAppLifecycle is no_std-compatible; naming S/L on the wrapper replaces
+    // the UFCS disambiguation the raw trait call needed.
+    let _ = CuAppLifecycle::<NoopSectionStorage, NoopLogger, _>::new(app).run();
 }
 
 #[cfg(feature = "std")]
@@ -116,13 +118,13 @@ fn main() {
         }
     }
 
-    let mut application = MinimalNoStdApp::builder()
+    let application = MinimalNoStdApp::builder()
         .with_log_path(&logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
         .build()
         .expect("Failed to create application.");
 
-    if let Err(error) = application.run() {
-        debug!("Application Ended: {}", error)
+    if let Err(error) = CuStdAppLifecycle::new(application).run() {
+        debug!("Application Ended: {}", error.error)
     }
 }

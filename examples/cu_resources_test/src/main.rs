@@ -31,13 +31,14 @@ enum MissionArg {
 
 const SLAB_SIZE: Option<usize> = None;
 
-fn run_once<App>(app: &mut App) -> CuResult<()>
+fn run_once<App>(app: App) -> CuResult<()>
 where
     App: CuApplication<MmapSectionStorage, UnifiedLoggerWrite>,
 {
-    app.start_all_tasks()?;
-    app.run()?;
-    app.stop_all_tasks()?;
+    // `run` drives the full start/iterate/stop cycle; the typestate wrapper
+    // makes the previous extra start_all_tasks/stop_all_tasks calls around it
+    // a compile error instead of a double start/stop at runtime.
+    CuAppLifecycle::new(app).run()?;
     Ok(())
 }
 
@@ -63,16 +64,16 @@ fn drive() -> CuResult<()> {
 
     match args.mission {
         MissionArg::A => {
-            let mut app = MissionAApp::builder()
+            let app = MissionAApp::builder()
                 .with_log_path(&logger_path, SLAB_SIZE)?
                 .build()?;
-            run_once(&mut app)?;
+            run_once(app)?;
         }
         MissionArg::B => {
-            let mut app = MissionBApp::builder()
+            let app = MissionBApp::builder()
                 .with_log_path(&logger_path, SLAB_SIZE)?
                 .build()?;
-            run_once(&mut app)?;
+            run_once(app)?;
         }
     }
 

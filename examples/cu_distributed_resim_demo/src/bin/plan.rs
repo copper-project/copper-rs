@@ -27,11 +27,11 @@ fn main() {
 
 fn drive() -> CuResult<()> {
     let options = parse_run_options("plan.copper", DEFAULT_PLAN_PERIOD_MS)?;
-    let mut app = PlanApp::builder()
+    let app = PlanApp::builder()
         .with_log_path(&options.log_path, LOG_SLAB_SIZE)?
         .with_instance_id(options.instance_id)
         .build()?;
-    app.start_all_tasks()?;
+    let mut app = CuStdAppLifecycle::new(app).start_all_tasks()?;
 
     if let Some(iterations) = options.iterations {
         for _ in 0..iterations {

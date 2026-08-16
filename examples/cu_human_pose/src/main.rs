@@ -44,18 +44,15 @@ fn main() {
     }
 
     // Build the application from RON config
-    let mut application = YoloPoseDemoApplication::builder()
+    let application = YoloPoseDemoApplication::builder()
         .with_log_path(logger_path, SLAB_SIZE)
         .expect("Failed to set up Copper logging")
         .build()
         .expect("Failed to build application");
 
-    // Start all tasks
-    application
-        .start_all_tasks()
-        .expect("Failed to start tasks");
-
-    if let Err(e) = application.run() {
-        error!("Error during iteration: {}", e.to_string());
+    // `run` starts the tasks itself; the typestate wrapper rejects the manual
+    // start_all_tasks call this example used to make before it.
+    if let Err(e) = CuStdAppLifecycle::new(application).run() {
+        error!("Error during iteration: {}", e.error.to_string());
     }
 }
