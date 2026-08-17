@@ -2225,11 +2225,11 @@ impl CuConfig {
         }
     }
 
-    /// The configured plan heuristic (defaults to `TopoBfs`).
+    /// The configured execution plan (defaults to the `Linearity` objective).
     // rendercfg.rs recompiles this file via `mod config;`, so pub helpers it
     // does not call are dead code in that bin under `clippy --deny warnings`.
     #[allow(dead_code)]
-    pub fn plan_heuristic(&self) -> PlanHeuristic {
+    pub fn plan(&self) -> PlanConfig {
         self.runtime
             .as_ref()
             .map(|runtime| runtime.plan.clone())
@@ -2357,31 +2357,47 @@ pub struct RuntimeConfig {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub thread_pools: Vec<ThreadPoolConfig>,
 
-    /// Execution-plan heuristic, one for the whole config.
+    /// Execution plan selection, one for the whole config.
     ///
     /// This is a codegen input: `#[copper_runtime]` bakes the resulting plan
     /// into the binary. Editing it in a deployed app's RON at startup does not
     /// change the compiled plan (same class as `logging.copperlist_count`); the
     /// RON must match the binary that wrote the log.
-    #[serde(default, skip_serializing_if = "PlanHeuristic::is_default")]
-    pub plan: PlanHeuristic,
+    #[serde(default, skip_serializing_if = "PlanConfig::is_default")]
+    pub plan: PlanConfig,
 }
 
-/// How the execution plan orders the steps of a mission graph. Applies to
-/// every mission; `Pinned` must be total over each mission's tasks.
+/// How the execution plan orders the steps of a mission graph. Applies to every
+/// mission.
+///
+/// Two layers: `objective` states what the plan optimizes for, the method used
+/// to reach it stays internal to the planner. `order` skips both by giving the
+/// answer directly.
 #[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq)]
-pub enum PlanHeuristic {
-    /// Default order, kept bit-for-bit for existing apps.
-    #[default]
-    TopoBfs,
-    /// Exact order by task RON id. Must list every task of the mission exactly
-    /// once; bridge stages are placed automatically next to their tasks.
-    Pinned(Vec<String>),
+pub struct PlanConfig {
+    /// What the plan optimizes for. Mutually exclusive with `order`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub objective: Option<PlanObjective>,
+
+    /// The order, given by task RON id. Must list every task of the mission
+    /// exactly once; bridge stages are placed automatically next to their
+    /// tasks. This is what an offline plan search writes back.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub order: Option<Vec<String>>,
 }
 
-impl PlanHeuristic {
+/// What the execution plan optimizes for.
+#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq)]
+pub enum PlanObjective {
+    /// Best-effort linearity: keep each source-to-sink chain contiguous.
+    /// Needs no measurements, and is bit-identical to the historical order.
+    #[default]
+    Linearity,
+}
+
+impl PlanConfig {
     fn is_default(&self) -> bool {
-        matches!(self, PlanHeuristic::TopoBfs)
+        self.objective.is_none() && self.order.is_none()
     }
 }
 
@@ -5162,7 +5178,7 @@ mod tests {
 
     #[test]
     fn test_plan_config_defaults_and_round_trips() {
-        // Default is TopoBfs and is omitted from the serialized RON.
+        // The default plan is empty and is omitted from the serialized RON.
         let mut config = CuConfig::default();
         config
             .get_graph_mut(None)
@@ -5170,16 +5186,16 @@ mod tests {
             .add_node(Node::new("a", "demo::A"))
             .unwrap();
         assert!(!config.serialize_ron().unwrap().contains("plan"));
-        assert_eq!(config.plan_heuristic(), PlanHeuristic::TopoBfs);
+        assert_eq!(config.plan(), PlanConfig::default());
 
         // A non-default plan round-trips.
         let runtime = config.runtime.get_or_insert_with(RuntimeConfig::default);
-        runtime.plan = PlanHeuristic::Pinned(vec!["a".to_string(), "b".to_string()]);
+        runtime.plan = PlanConfig {
+            objective: Some(PlanObjective::Linearity),
+            order: Some(vec!["a".to_string(), "b".to_string()]),
+        };
         let reparsed = CuConfig::deserialize_ron(&config.serialize_ron().unwrap()).unwrap();
-        assert_eq!(
-            reparsed.plan_heuristic(),
-            PlanHeuristic::Pinned(vec!["a".to_string(), "b".to_string()])
-        );
+        assert_eq!(reparsed.plan(), config.plan());
     }
 
     #[test]

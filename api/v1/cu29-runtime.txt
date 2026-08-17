@@ -83,9 +83,8 @@ pub fn cu29_runtime::config::HandleContent::from_u8(v: u8) -> Self
 pub enum cu29_runtime::config::OnError
 pub cu29_runtime::config::OnError::Strict
 pub cu29_runtime::config::OnError::Warn
-pub enum cu29_runtime::config::PlanHeuristic
-pub cu29_runtime::config::PlanHeuristic::Pinned(alloc::vec::Vec<alloc::string::String>)
-pub cu29_runtime::config::PlanHeuristic::TopoBfs
+pub enum cu29_runtime::config::PlanObjective
+pub cu29_runtime::config::PlanObjective::Linearity
 pub enum cu29_runtime::config::SchedulingPolicy
 pub cu29_runtime::config::SchedulingPolicy::Fair
 pub cu29_runtime::config::SchedulingPolicy::Fifo
@@ -168,7 +167,7 @@ pub fn cu29_runtime::config::CuConfig::validate_constants(&self) -> cu29_traits:
 pub fn cu29_runtime::config::CuConfig::validate_logging_config(&self) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::config::CuConfig::validate_runtime_config(&self) -> cu29_traits::CuResult<()>
 impl cu29_runtime::config::CuConfig
-pub fn cu29_runtime::config::CuConfig::plan_heuristic(&self) -> cu29_runtime::config::PlanHeuristic
+pub fn cu29_runtime::config::CuConfig::plan(&self) -> cu29_runtime::config::PlanConfig
 impl core::default::Default for cu29_runtime::config::CuConfig
 pub fn cu29_runtime::config::CuConfig::default() -> Self
 impl serde_core::ser::Serialize for cu29_runtime::config::CuConfig
@@ -307,13 +306,16 @@ pub fn cu29_runtime::config::NodeLogging::enabled(&self) -> bool
 pub fn cu29_runtime::config::NodeLogging::handle_content(&self) -> cu29_runtime::config::HandleContent
 impl core::default::Default for cu29_runtime::config::NodeLogging
 pub fn cu29_runtime::config::NodeLogging::default() -> Self
+pub struct cu29_runtime::config::PlanConfig
+pub cu29_runtime::config::PlanConfig::objective: core::option::Option<cu29_runtime::config::PlanObjective>
+pub cu29_runtime::config::PlanConfig::order: core::option::Option<alloc::vec::Vec<alloc::string::String>>
 pub struct cu29_runtime::config::ResourceBundleConfig
 pub cu29_runtime::config::ResourceBundleConfig::config: core::option::Option<cu29_runtime::config::ComponentConfig>
 pub cu29_runtime::config::ResourceBundleConfig::id: alloc::string::String
 pub cu29_runtime::config::ResourceBundleConfig::missions: core::option::Option<alloc::vec::Vec<alloc::string::String>>
 pub cu29_runtime::config::ResourceBundleConfig::provider: alloc::string::String
 pub struct cu29_runtime::config::RuntimeConfig
-pub cu29_runtime::config::RuntimeConfig::plan: cu29_runtime::config::PlanHeuristic
+pub cu29_runtime::config::RuntimeConfig::plan: cu29_runtime::config::PlanConfig
 pub cu29_runtime::config::RuntimeConfig::rate_target_hz: core::option::Option<u64>
 pub cu29_runtime::config::RuntimeConfig::thread_pools: alloc::vec::Vec<cu29_runtime::config::ThreadPoolConfig>
 impl cu29_runtime::config::RuntimeConfig

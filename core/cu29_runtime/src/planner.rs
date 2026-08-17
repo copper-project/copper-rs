@@ -6,7 +6,7 @@
 
 use crate::config::{
     BridgeChannelConfigRepresentation, ConfigGraphs, CuConfig, CuDirection, CuGraph, Flavor, Node,
-    NodeId, PlanHeuristic,
+    NodeId, PlanConfig, PlanObjective,
 };
 use crate::curuntime::{
     CuExecutionLoop, CuExecutionStep, CuExecutionUnit, CuInputMsg, CuOutputPack, CuStepPhase,
@@ -64,49 +64,53 @@ pub struct AssembledPlan {
     pub plan_to_original: Vec<Option<NodeId>>,
 }
 
-/// The only decision a heuristic makes: a total step order over plan `NodeId`s.
-#[doc(hidden)]
+/// The only decision the plan makes: a total step order over plan `NodeId`s.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct StepOrder(pub Vec<NodeId>);
+pub(crate) struct StepOrder(pub(crate) Vec<NodeId>);
 
-/// A plan heuristic after resolution: ids are already mapped to plan `NodeId`s.
+/// A plan selection after resolution: ids are already mapped to plan `NodeId`s.
 ///
 /// Two-stage on purpose ("parse, don't validate"): the serde-facing
-/// [`PlanHeuristic`] carries task names; this resolved form carries plan node
-/// ids, so invalid states are unrepresentable once [`ResolvedPlanHeuristic::resolve`]
-/// has run.
-#[doc(hidden)]
+/// [`PlanConfig`] carries task names; this resolved form carries plan node ids,
+/// so invalid states are unrepresentable once [`ResolvedPlan::resolve`] has run.
+///
+/// A future objective carries its own inputs in its variant (e.g. measured
+/// timings), so [`ResolvedPlan::order`] never needs another parameter.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ResolvedPlanHeuristic {
-    TopoBfs,
-    /// Task plan node ids in the pinned order (bridge stages are woven in by
-    /// [`ResolvedPlanHeuristic::order`]).
+pub(crate) enum ResolvedPlan {
+    Linearity,
+    /// Task plan node ids in the given order (bridge stages are woven in by
+    /// [`ResolvedPlan::order`]).
     Pinned(Vec<NodeId>),
 }
 
-impl ResolvedPlanHeuristic {
-    /// Map a config-level [`PlanHeuristic`] onto `plan_graph`, turning task RON
-    /// ids into plan node ids. All id errors surface here, before ordering.
-    #[doc(hidden)]
-    pub fn resolve(heuristic: &PlanHeuristic, plan_graph: &CuGraph) -> CuResult<Self> {
-        match heuristic {
-            PlanHeuristic::TopoBfs => Ok(ResolvedPlanHeuristic::TopoBfs),
-            PlanHeuristic::Pinned(ids) => Ok(ResolvedPlanHeuristic::Pinned(resolve_pinned_ids(
-                plan_graph, ids,
-            )?)),
+impl ResolvedPlan {
+    /// Map a config-level [`PlanConfig`] onto `plan_graph`, turning task RON ids
+    /// into plan node ids. All id errors surface here, before ordering.
+    pub(crate) fn resolve(plan: &PlanConfig, plan_graph: &CuGraph) -> CuResult<Self> {
+        match (&plan.objective, &plan.order) {
+            (Some(_), Some(_)) => Err(CuError::from(
+                "runtime.plan sets both `objective` and `order`; `order` already fixes the plan, remove one.",
+            )),
+            (_, Some(ids)) => Ok(ResolvedPlan::Pinned(resolve_pinned_ids(plan_graph, ids)?)),
+            (None | Some(PlanObjective::Linearity), None) => Ok(ResolvedPlan::Linearity),
         }
     }
 
     /// Produce the step order for `plan_graph`. The only pluggable point.
-    #[doc(hidden)]
-    pub fn order(&self, plan_graph: &CuGraph) -> CuResult<StepOrder> {
+    ///
+    /// This is where the two layers meet: the variant is the objective, the
+    /// function it delegates to is the method used to reach it.
+    pub(crate) fn order(&self, plan_graph: &CuGraph) -> CuResult<StepOrder> {
         match self {
-            ResolvedPlanHeuristic::TopoBfs => topo_bfs_order(plan_graph),
-            ResolvedPlanHeuristic::Pinned(tasks) => pinned_order(plan_graph, tasks),
+            ResolvedPlan::Linearity => topo_bfs_order(plan_graph),
+            ResolvedPlan::Pinned(tasks) => pinned_order(plan_graph, tasks),
         }
     }
 }
 
+/// Map the configured task ids onto plan node ids, rejecting duplicates,
+/// unknown ids, bridge stage labels, and lists that miss a task.
 fn resolve_pinned_ids(graph: &CuGraph, ids: &[String]) -> CuResult<Vec<NodeId>> {
     let mut task_ids: BTreeMap<String, NodeId> = BTreeMap::new();
     let mut bridge_labels: BTreeSet<String> = BTreeSet::new();
@@ -165,7 +169,8 @@ fn resolve_pinned_ids(graph: &CuGraph, ids: &[String]) -> CuResult<Vec<NodeId>> 
     Ok(resolved)
 }
 
-/// Today's plan walk reduced to a pure ordering decision.
+/// Method for the `Linearity` objective: today's plan walk reduced to a pure
+/// ordering decision.
 ///
 /// The order is not a textbook BFS: it emerges from an outer source queue in
 /// `node_ids` order, a per-node petgraph BFS, an early abort when a step's
@@ -173,6 +178,8 @@ fn resolve_pinned_ids(graph: &CuGraph, ids: &[String]) -> CuResult<Vec<NodeId>> 
 /// reproduces that walk exactly, minus the culist/input bookkeeping (which
 /// `plan_from_order` now performs).
 fn topo_bfs_order(graph: &CuGraph) -> CuResult<StepOrder> {
+    #[cfg(all(feature = "std", feature = "macro_debug"))]
+    eprintln!("[step order: Linearity]");
     let mut order: Vec<NodeId> = Vec::new();
     let mut planned: BTreeSet<NodeId> = BTreeSet::new();
 
@@ -182,8 +189,12 @@ fn topo_bfs_order(graph: &CuGraph) -> CuResult<StepOrder> {
             queue.push_back(node_id);
         }
     }
+    #[cfg(all(feature = "std", feature = "macro_debug"))]
+    eprintln!("Initial source nodes: {queue:?}");
 
     while let Some(start_node) = queue.pop_front() {
+        #[cfg(all(feature = "std", feature = "macro_debug"))]
+        eprintln!("→ Starting BFS from source {start_node}");
         for node_id in graph.bfs_nodes(start_node) {
             if planned.contains(&node_id) {
                 continue;
@@ -208,8 +219,12 @@ fn topo_bfs_branch(
     order: &mut Vec<NodeId>,
     planned: &mut BTreeSet<NodeId>,
 ) -> CuResult<bool> {
+    #[cfg(all(feature = "std", feature = "macro_debug"))]
+    eprintln!("-- starting branch from node {starting_point}");
     let mut handled = false;
     for id in graph.bfs_nodes(starting_point) {
+        #[cfg(all(feature = "std", feature = "macro_debug"))]
+        eprintln!("  Visiting node: {:?}", graph.get_node(id));
         if find_task_type_for_id(graph, id)? != CuTaskType::Source {
             let mut edge_ids = graph.get_dst_edges(id).unwrap_or_default();
             edge_ids.sort();
@@ -224,6 +239,8 @@ fn topo_bfs_branch(
                         panic!("Missing source node '{}' for edge {edge_id}", edge.src)
                     });
                 if !planned.contains(&pid) {
+                    #[cfg(all(feature = "std", feature = "macro_debug"))]
+                    eprintln!("      ✗ Input from {pid} not ready, returning");
                     ready = false;
                     break;
                 }
@@ -240,14 +257,19 @@ fn topo_bfs_branch(
         if planned.contains(&id) {
             unreachable!("plan re-visit path reached for node {id}");
         }
+        #[cfg(all(feature = "std", feature = "macro_debug"))]
+        eprintln!("    → Node {id} added to the order");
         order.push(id);
         planned.insert(id);
         handled = true;
     }
+    #[cfg(all(feature = "std", feature = "macro_debug"))]
+    eprintln!("-- finished branch from node {starting_point} with handled={handled}");
     Ok(handled)
 }
 
-/// Complete a pinned task order into a full step order.
+/// Method for an explicit `order`: complete a pinned task order into a full
+/// step order.
 ///
 /// Each bridge rx stage lands immediately before its earliest consumer task in
 /// the pinned order; each bridge tx stage immediately after the last producer
@@ -325,8 +347,7 @@ fn pinned_order(graph: &CuGraph, pinned_tasks: &[NodeId]) -> CuResult<StepOrder>
 /// Rejects unknown ids, duplicate nodes, missing nodes, and precedence
 /// violations (a step scheduled before one of its inputs). Errors name the
 /// offending task ids; callers that own mission context wrap them.
-#[doc(hidden)]
-pub fn check_order(graph: &CuGraph, order: &StepOrder) -> CuResult<()> {
+pub(crate) fn check_order(graph: &CuGraph, order: &StepOrder) -> CuResult<()> {
     let mut position: Vec<Option<usize>> = vec![None; graph.node_count()];
 
     for (index, &node_id) in order.0.iter().enumerate() {
@@ -379,8 +400,9 @@ pub fn check_order(graph: &CuGraph, order: &StepOrder) -> CuResult<()> {
 ///
 /// Walks the order once, assigning culist output indices in order and resolving
 /// each step's input pack from the already-materialized producers.
-#[doc(hidden)]
-pub fn plan_from_order(graph: &CuGraph, order: &StepOrder) -> CuResult<CuExecutionLoop> {
+pub(crate) fn plan_from_order(graph: &CuGraph, order: &StepOrder) -> CuResult<CuExecutionLoop> {
+    #[cfg(all(feature = "std", feature = "macro_debug"))]
+    eprintln!("[runtime plan]");
     let mut plan: Vec<CuExecutionUnit> = Vec::new();
     let mut next_culist_output_index = 0u32;
 
@@ -389,7 +411,15 @@ pub fn plan_from_order(graph: &CuGraph, order: &StepOrder) -> CuResult<CuExecuti
             .get_node(id)
             .ok_or_else(|| CuError::from(format!("Node id {id} not found")))?;
         let task_type = find_task_type_for_id(graph, id)?;
-        let mut input_msg_indices_types: Vec<CuInputMsg> = Vec::new();
+        let mut input_msg_indices_types = if task_type == CuTaskType::Source {
+            Vec::new()
+        } else {
+            collect_step_inputs(graph, id, &plan)?
+        };
+        #[cfg(all(feature = "std", feature = "macro_debug"))]
+        eprintln!(
+            "  {task_type:?} node {id} → output index {next_culist_output_index}, inputs {input_msg_indices_types:?}"
+        );
         let output_msg_pack: Option<CuOutputPack>;
 
         match task_type {
@@ -408,7 +438,6 @@ pub fn plan_from_order(graph: &CuGraph, order: &StepOrder) -> CuResult<CuExecuti
                 next_culist_output_index += 1;
             }
             CuTaskType::Sink => {
-                collect_step_inputs(graph, id, &plan, &mut input_msg_indices_types)?;
                 output_msg_pack = Some(CuOutputPack {
                     culist_index: next_culist_output_index,
                     msg_types: Vec::from(["()".to_string()]),
@@ -416,7 +445,6 @@ pub fn plan_from_order(graph: &CuGraph, order: &StepOrder) -> CuResult<CuExecuti
                 next_culist_output_index += 1;
             }
             CuTaskType::Regular => {
-                collect_step_inputs(graph, id, &plan, &mut input_msg_indices_types)?;
                 let msg_types = graph.get_node_output_msg_types_by_id(id)?;
                 if msg_types.is_empty() {
                     return Err(CuError::from(format!(
@@ -457,8 +485,8 @@ fn collect_step_inputs(
     graph: &CuGraph,
     id: NodeId,
     plan: &[CuExecutionUnit],
-    input_msg_indices_types: &mut Vec<CuInputMsg>,
-) -> CuResult<()> {
+) -> CuResult<Vec<CuInputMsg>> {
+    let mut inputs = Vec::new();
     let mut edge_ids = graph.get_dst_edges(id).unwrap_or_default();
     edge_ids.sort();
     for edge_id in edge_ids {
@@ -481,7 +509,7 @@ fn collect_step_inputs(
             .unwrap_or_else(|| {
                 panic!("Missing output port for message type '{msg_type}' on node {pid}")
             });
-        input_msg_indices_types.push(CuInputMsg {
+        inputs.push(CuInputMsg {
             culist_index: output_pack.culist_index,
             msg_type: msg_type.to_string(),
             src_port,
@@ -489,7 +517,7 @@ fn collect_step_inputs(
             connection_order: edge.order,
         });
     }
-    Ok(())
+    Ok(inputs)
 }
 
 fn find_output_pack_from_nodeid(
@@ -566,22 +594,11 @@ fn inferred_output_name(node: &Node, task_type: CuTaskType) -> String {
     )
 }
 
-/// Assemble the generated plan with the default (`TopoBfs`) heuristic. Kept
-/// for tooling that reads a single graph.
+/// Assemble the same synthetic task/bridge graph used by generated runtimes,
+/// ordering it with `config.plan()`. Mission-agnostic: `graph` selects the
+/// mission and callers wrap errors with its name.
 #[doc(hidden)]
 pub fn assemble_runtime_plan(config: &CuConfig, graph: &CuGraph) -> CuResult<AssembledPlan> {
-    assemble_runtime_plan_with(config, graph, &PlanHeuristic::TopoBfs)
-}
-
-/// Assemble the same synthetic task/bridge graph used by generated runtimes,
-/// ordering it with the given (config-level) heuristic. Mission-agnostic:
-/// callers select the heuristic for their mission and wrap errors with it.
-#[doc(hidden)]
-pub fn assemble_runtime_plan_with(
-    config: &CuConfig,
-    graph: &CuGraph,
-    heuristic: &PlanHeuristic,
-) -> CuResult<AssembledPlan> {
     let mut plan_graph = CuGraph::default();
     let mut entities = Vec::new();
     let mut plan_to_original = Vec::new();
@@ -740,8 +757,8 @@ pub fn assemble_runtime_plan_with(
     }
 
     // Choice (order) then bookkeeping (materialize): one legality gate, one
-    // shared materializer, for every heuristic and every consumer.
-    let resolved = ResolvedPlanHeuristic::resolve(heuristic, &plan_graph)?;
+    // shared materializer, for every objective and every consumer.
+    let resolved = ResolvedPlan::resolve(&config.plan(), &plan_graph)?;
     let order = resolved.order(&plan_graph)?;
     check_order(&plan_graph, &order)?;
     let mut execution = plan_from_order(&plan_graph, &order)?;
@@ -814,6 +831,7 @@ pub fn step_key(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::RuntimeConfig;
     use crate::curuntime::CuExecutionUnit;
 
     fn config(ron: &str) -> CuConfig {
@@ -922,9 +940,10 @@ mod tests {
 
     // ---- Pinned resolution and ordering ----
 
-    fn pinned_graph() -> CuConfig {
-        // radio(rx incoming, tx outgoing) feeding/consuming a small task chain.
-        config(
+    /// radio(rx incoming, tx outgoing) feeding/consuming a small task chain,
+    /// with `plan` as its `runtime.plan`.
+    fn pinned_graph(plan: PlanConfig) -> CuConfig {
+        let mut config = config(
             r#"(
                 tasks: [
                     (id: "cam", type: "demo::Cam"),
@@ -943,19 +962,26 @@ mod tests {
                     (src: "motor", dst: "radio/outgoing", msg: "demo::Cmd"),
                 ],
             )"#,
-        )
+        );
+        config
+            .runtime
+            .get_or_insert_with(RuntimeConfig::default)
+            .plan = plan;
+        config
+    }
+
+    fn pinned(ids: &[&str]) -> PlanConfig {
+        PlanConfig {
+            objective: None,
+            order: Some(ids.iter().map(|id| id.to_string()).collect()),
+        }
     }
 
     #[test]
     fn pinned_plan_weaves_bridge_stages_and_matches_task_order() {
-        let config = pinned_graph();
+        let config = pinned_graph(pinned(&["cam", "ekf", "motor"]));
         let graph = config.get_graph(None).unwrap();
-        let heuristic = PlanHeuristic::Pinned(vec![
-            "cam".to_string(),
-            "ekf".to_string(),
-            "motor".to_string(),
-        ]);
-        let plan = assemble_runtime_plan_with(&config, graph, &heuristic).unwrap();
+        let plan = assemble_runtime_plan(&config, graph).unwrap();
         assert_eq!(
             step_labels(&plan),
             [
@@ -970,46 +996,32 @@ mod tests {
 
     #[test]
     fn pinned_plan_rejects_bad_id_lists() {
-        let config = pinned_graph();
-        let graph = config.get_graph(None).unwrap();
+        let rejects = |plan: PlanConfig| {
+            let config = pinned_graph(plan);
+            let graph = config.get_graph(None).unwrap();
+            assemble_runtime_plan(&config, graph)
+                .err()
+                .unwrap()
+                .to_string()
+        };
 
-        let missing = PlanHeuristic::Pinned(vec!["cam".to_string(), "ekf".to_string()]);
-        let err = assemble_runtime_plan_with(&config, graph, &missing)
-            .err()
-            .unwrap();
-        assert!(err.to_string().contains("missing"), "{err}");
+        let err = rejects(pinned(&["cam", "ekf"]));
+        assert!(err.contains("missing"), "{err}");
 
-        let stage = PlanHeuristic::Pinned(vec![
-            "radio::rx::incoming".to_string(),
-            "cam".to_string(),
-            "ekf".to_string(),
-            "motor".to_string(),
-        ]);
-        let err = assemble_runtime_plan_with(&config, graph, &stage)
-            .err()
-            .unwrap();
-        assert!(err.to_string().contains("bridge stage"), "{err}");
+        let err = rejects(pinned(&["radio::rx::incoming", "cam", "ekf", "motor"]));
+        assert!(err.contains("bridge stage"), "{err}");
 
-        let unknown = PlanHeuristic::Pinned(vec![
-            "cam".to_string(),
-            "ekf".to_string(),
-            "motor".to_string(),
-            "ghost".to_string(),
-        ]);
-        let err = assemble_runtime_plan_with(&config, graph, &unknown)
-            .err()
-            .unwrap();
-        assert!(err.to_string().contains("unknown task 'ghost'"), "{err}");
+        let err = rejects(pinned(&["cam", "ekf", "motor", "ghost"]));
+        assert!(err.contains("unknown task 'ghost'"), "{err}");
 
-        let dup = PlanHeuristic::Pinned(vec![
-            "cam".to_string(),
-            "cam".to_string(),
-            "ekf".to_string(),
-        ]);
-        let err = assemble_runtime_plan_with(&config, graph, &dup)
-            .err()
-            .unwrap();
-        assert!(err.to_string().contains("more than once"), "{err}");
+        let err = rejects(pinned(&["cam", "cam", "ekf"]));
+        assert!(err.contains("more than once"), "{err}");
+
+        // An objective and an explicit order are mutually exclusive.
+        let mut both = pinned(&["cam", "ekf", "motor"]);
+        both.objective = Some(PlanObjective::Linearity);
+        let err = rejects(both);
+        assert!(err.contains("both `objective` and `order`"), "{err}");
     }
 
     #[test]
@@ -1033,6 +1045,7 @@ mod tests {
 
     // ---- Differential golden test: legacy walk vs new pipeline ----
 
+    /// Build a config from plain node ids and `(src, dst, msg)` edges.
     fn build_config(nodes: &[&str], edges: &[(&str, &str, &str)]) -> CuConfig {
         let mut config = CuConfig::default();
         let graph = config.get_graph_mut(None).unwrap();
@@ -1047,6 +1060,8 @@ mod tests {
         config
     }
 
+    /// Named DAGs the golden test replays: hand-written topologies (chain,
+    /// fan-out, diamond, multi-source) plus seeded layered graphs.
     fn corpus() -> Vec<(String, CuConfig)> {
         // Bridge stages are just synthetic source/sink nodes to the walk, so a
         // corpus of source/regular/sink DAGs covers the bridge case too.
@@ -1132,6 +1147,8 @@ mod tests {
         cases
     }
 
+    /// A 4-layer DAG whose edges are picked by a seeded LCG, so each seed gives
+    /// a different fan-in/fan-out shape and the corpus stays reproducible.
     fn layered_dag(seed: u64) -> CuConfig {
         let layers = [2usize, 3, 3, 2];
         let mut state = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
@@ -1183,6 +1200,8 @@ mod tests {
         build_config(&node_refs, &edge_refs)
     }
 
+    /// Assert the legacy walk and the new pipeline agree on every field of
+    /// every step: order, task type, culist indices, and input packs.
     fn assert_same_plan(name: &str, config: &CuConfig) {
         let graph = config.get_graph(None).unwrap();
         let legacy = compute_runtime_plan_legacy(graph).expect("legacy plan");
@@ -1407,6 +1426,8 @@ mod tests {
         Ok((next_culist_output_index, handled))
     }
 
+    /// The pre-refactor entry point: one walk that picked the order and did the
+    /// culist bookkeeping in the same pass. The golden test compares to this.
     fn compute_runtime_plan_legacy(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
         let mut plan = Vec::new();
         let mut next_culist_output_index = 0u32;

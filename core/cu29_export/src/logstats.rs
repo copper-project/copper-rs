@@ -3,7 +3,7 @@ use cu29::clock::{CuDuration, OptionCuTime};
 use cu29::config::{CuConfig, CuGraph, DEFAULT_MISSION_ID, Flavor};
 use cu29::curuntime::{CuExecutionUnit, CuStepPhase};
 use cu29::monitoring::CuDurationStatistics;
-use cu29::planner::{PlanEntityKind, assemble_runtime_plan_with};
+use cu29::planner::{PlanEntityKind, assemble_runtime_plan};
 use cu29::prelude::{CopperListTuple, CuMsgMetadataTrait, CuPayloadRawBytes};
 use cu29::{CuError, CuResult};
 use serde::{Deserialize, Serialize};
@@ -308,7 +308,12 @@ where
 {
     let graph = config.get_graph(mission)?;
     let signature = build_graph_signature(graph, mission);
-    let output_slots = build_output_slots::<P>(config, graph, mission)?;
+    let output_slots = build_output_slots::<P>(config, graph).map_err(|e| {
+        CuError::from(format!(
+            "mission '{}': {e}",
+            mission.unwrap_or(DEFAULT_MISSION_ID)
+        ))
+    })?;
     let mut edge_accumulators = build_edge_accumulators(graph);
     let mut perf = PerfAccumulator::new();
     let resource_bindings = build_resource_bindings::<P>(config, graph);
@@ -642,11 +647,10 @@ pub fn write_logstats(stats: &LogStats, path: &Path) -> CuResult<()> {
 fn build_output_slots<P: CopperListTuple>(
     config: &CuConfig,
     graph: &CuGraph,
-    mission: Option<&str>,
 ) -> CuResult<Vec<OutputSlot>> {
     let specs = P::get_output_specs();
     if specs.is_empty() {
-        return build_output_slots_from_plan(config, graph, mission);
+        return build_output_slots_from_plan(config, graph);
     }
     Ok(specs
         .iter()
@@ -686,18 +690,12 @@ fn edge_key_from_connection(cnx: &cu29::config::Cnx) -> EdgeKey {
     }
 }
 
-fn build_output_slots_from_plan(
-    config: &CuConfig,
-    graph: &CuGraph,
-    mission: Option<&str>,
-) -> CuResult<Vec<OutputSlot>> {
+/// Recover the culist slot layout from the config alone, for logs whose payload
+/// type carries no output specs. Each slot lists the graph edges feeding it.
+fn build_output_slots_from_plan(config: &CuConfig, graph: &CuGraph) -> CuResult<Vec<OutputSlot>> {
     // Share the generated-runtime construction path (bridge stages, slot
-    // indices) so this cannot drift from the compiled plan; honor the mission's
-    // configured plan heuristic.
-    let mission = mission.unwrap_or(DEFAULT_MISSION_ID);
-    let heuristic = config.plan_heuristic();
-    let plan = assemble_runtime_plan_with(config, graph, &heuristic)
-        .map_err(|e| CuError::from(format!("mission '{mission}': {e}")))?;
+    // indices) so this cannot drift from the compiled plan.
+    let plan = assemble_runtime_plan(config, graph)?;
 
     let mut packs: Vec<(u32, String, Vec<String>)> = Vec::new();
     for unit in &plan.execution.steps {
@@ -890,7 +888,7 @@ mod tests {
         .expect("valid anytime config");
         let graph = config.get_graph(None).unwrap();
 
-        let plan = assemble_runtime_plan_with(&config, graph, &config.plan_heuristic()).unwrap();
+        let plan = assemble_runtime_plan(&config, graph).unwrap();
         // The regression can only trigger if refine steps are actually present.
         assert!(
             plan.execution.steps.iter().any(|unit| matches!(
@@ -917,7 +915,7 @@ mod tests {
         deduped.dedup();
         assert_eq!(deduped.len(), expected_indices.len(), "culist indices dup");
 
-        let slots = build_output_slots_from_plan(&config, graph, None).unwrap();
+        let slots = build_output_slots_from_plan(&config, graph).unwrap();
         assert_eq!(slots.len(), expected_slots);
     }
 

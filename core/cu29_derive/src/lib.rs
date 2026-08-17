@@ -26,7 +26,7 @@ use cu29_runtime::curuntime::{
     CuExecutionLoop, CuExecutionStep, CuExecutionUnit, CuStepPhase, CuTaskType,
     find_task_type_for_id,
 };
-use cu29_runtime::planner::{DEFAULT_COPPERLIST_COUNT, PlanEntityKind, assemble_runtime_plan_with};
+use cu29_runtime::planner::{DEFAULT_COPPERLIST_COUNT, PlanEntityKind, assemble_runtime_plan};
 use cu29_traits::{CuError, CuResult};
 use proc_macro2::{Ident, Span};
 
@@ -8337,8 +8337,7 @@ fn build_execution_plan(
     Vec<ExecutionEntity>,
     HashMap<NodeId, NodeId>,
 )> {
-    let heuristic = config.plan_heuristic();
-    let assembled = assemble_runtime_plan_with(config, graph, &heuristic)?;
+    let assembled = assemble_runtime_plan(config, graph)?;
     let mut exec_entities = Vec::with_capacity(assembled.entities.len());
     for (plan_node_id, entity) in assembled.entities.iter().enumerate() {
         let kind = match entity.kind {
