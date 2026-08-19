@@ -1,3 +1,8 @@
+// Simulation engine: drives the raw (app-deprecated) lifecycle API on purpose.
+// It needs mid-flight runtime access that the lifecycle typestate
+// deliberately does not expose.
+#![allow(deprecated)]
+
 #[cfg(feature = "sim")]
 extern crate alloc;
 

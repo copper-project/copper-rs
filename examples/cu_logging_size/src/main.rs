@@ -79,10 +79,13 @@ fn main() {
     debug!("Creating application... ");
     let application = App::builder()
         .with_logger::<memmap::MmapSectionStorage, UnifiedLoggerWrite>(unified_logger.clone())
-        .build()
+        .build_app()
         .expect("Failed to create application.");
-    debug!("Running... starting clock: {}.", application.clock().now());
-    let mut running = CuStdAppLifecycle::new(application)
+    debug!(
+        "Running... starting clock: {}.",
+        application.inner().clock().now()
+    );
+    let mut running = application
         .start_all_tasks()
         .expect("Failed to start application.");
     running

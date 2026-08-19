@@ -1,3 +1,7 @@
+// Replay-primitive tests: drive the raw (app-deprecated) lifecycle API on
+// purpose, because replay interleaves recorded-copperlist injection with a
+// started app in ways the lifecycle typestate deliberately does not expose.
+#![allow(deprecated)]
 #![cfg(all(test, feature = "std"))]
 
 use bincode::{Decode, Encode, config::standard, encode_to_vec};

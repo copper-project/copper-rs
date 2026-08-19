@@ -64,14 +64,14 @@ mod tests {
         let logger_path = tmp_dir.path().join("caterpillar.copper");
         debug!("Logger created at {}.", &logger_path);
         debug!("Creating application... ");
-        let mut application = GStreamerTestApp::builder()
+        let application = GStreamerTestApp::builder()
             .with_log_path(&logger_path, None)
             .expect("Failed to setup logger.")
-            .build()
+            .build_app()
             .expect("Failed to create runtime.");
 
         debug!("Running...");
-        application
+        let mut application = application
             .start_all_tasks()
             .expect("Failed to start tasks.");
         for _ in 0..1000 {

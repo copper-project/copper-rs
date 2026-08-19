@@ -17,11 +17,14 @@ fn main() {
     let application = ImageAlignerApp::builder()
         .with_log_path(&logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
-        .build()
+        .build_app()
         .expect("Failed to create runtime.");
-    debug!("Running... starting clock: {}.", application.clock().now());
+    debug!(
+        "Running... starting clock: {}.",
+        application.inner().clock().now()
+    );
 
-    let mut running = CuStdAppLifecycle::new(application)
+    let mut running = application
         .start_all_tasks()
         .expect("Failed to start tasks.");
     for _ in 0..ITERATIONS {

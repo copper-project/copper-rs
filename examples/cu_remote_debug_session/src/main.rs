@@ -159,14 +159,14 @@ fn record_log() -> CuResult<()> {
     let mut sim_cb = |_step: default::SimStep| SimOverride::ExecuteByRuntime;
 
     println!("[record] Building debug app");
-    let mut app = DebugApp::builder()
+    let app = DebugApp::builder()
         .with_clock(clock.clone())
         .with_log_path(Path::new(LOG_PATH), LOG_SLAB_SIZE)?
         .with_sim_callback(&mut sim_cb)
-        .build()?;
+        .build_app()?;
 
     println!("[record] Starting tasks");
-    app.start_all_tasks(&mut sim_cb)?;
+    let mut app = app.start_all_tasks(&mut sim_cb)?;
     for i in 0..128u32 {
         clock_mock.increment(CuDuration::from_millis(10));
         app.run_one_iteration(&mut sim_cb)?;
@@ -208,9 +208,10 @@ fn app_factory(_params: &SessionOpenParams) -> CuResult<(DebugApp, RobotClock, R
         .with_clock(clock.clone())
         .with_log_path(Path::new(REPLAY_LOG_PATH), REPLAY_LOG_SLAB_SIZE)?
         .with_sim_callback(&mut sim_cb)
-        .build()?;
+        .build_app()?;
 
-    Ok((app, clock, clock_mock))
+    // The replay session engine drives the raw lifecycle itself.
+    Ok((app.into_inner(), clock, clock_mock))
 }
 
 fn call_ok(

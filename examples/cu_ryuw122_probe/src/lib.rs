@@ -203,7 +203,7 @@ fn run_probe(args: &ProbeArgs) -> CuResult<()> {
     let app = Ryuw122ProbeApp::builder()
         .with_config(config)
         .with_log_path(&log_path, LOG_SLAB_SIZE)?
-        .build()?;
+        .build_app()?;
 
     let running = Arc::new(AtomicBool::new(true));
     let running_for_signal = Arc::clone(&running);
@@ -227,7 +227,7 @@ fn run_probe(args: &ProbeArgs) -> CuResult<()> {
     let started_at = Instant::now();
     let deadline = args.duration_s.map(Duration::from_secs);
 
-    let mut app = CuStdAppLifecycle::new(app).start_all_tasks()?;
+    let mut app = app.start_all_tasks()?;
 
     let mut last_count = 0;
     let mut run_error = None;

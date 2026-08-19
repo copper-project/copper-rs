@@ -106,12 +106,12 @@ impl CuSinkTask for ComparisonSink {
 /// Runs the whole application once and returns what the sink saw, one entry
 /// per copperlist.
 fn run(logger_path: &std::path::Path) -> Vec<PlanReport> {
-    let mut application = DualPolicyTester::builder()
+    let application = DualPolicyTester::builder()
         .with_log_path(logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
-        .build()
+        .build_app()
         .expect("Failed to create application.");
-    application
+    let mut application = application
         .start_all_tasks()
         .expect("Failed to start application.");
     for _ in 0..ITERATIONS {

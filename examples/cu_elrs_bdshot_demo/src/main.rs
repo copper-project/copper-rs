@@ -226,17 +226,14 @@ fn main() -> ! {
         EMMCLogger::new(sd, blk_id, blk_len).expect("Could not create EMMC logger"),
     ));
 
-    let mut app = BdshotDemoApp::builder()
+    let app = BdshotDemoApp::builder()
         .with_clock(clock)
         .with_logger::<EMMCSectionStorage<TSPimodoriSdCard>, EMMCLogger<TSPimodoriSdCard>>(writer)
-        .build()
+        .build_app()
         .unwrap();
     info!("Starting cu-bdshot-demo...");
 
-    let _ = <BdshotDemoApp as CuApplication<
-        EMMCSectionStorage<TSPimodoriSdCard>,
-        EMMCLogger<TSPimodoriSdCard>,
-    >>::run(&mut app);
+    let _ = app.run();
     error!("Copper crashed.");
     #[allow(clippy::empty_loop)]
     loop {}

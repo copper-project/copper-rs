@@ -19,11 +19,13 @@ use leader_follower::FeetechDemoApp as LeaderFollowerApp;
 
 const SLAB_SIZE: Option<usize> = Some(64 * 1024 * 1024);
 
-fn run_mission<App>(app: App) -> CuResult<()>
+fn run_mission<App>(
+    app: CuAppLifecycle<memmap::MmapSectionStorage, UnifiedLoggerWrite, App>,
+) -> CuResult<()>
 where
     App: CuApplication<memmap::MmapSectionStorage, UnifiedLoggerWrite>,
 {
-    CuAppLifecycle::new(app).run()?;
+    app.run()?;
     Ok(())
 }
 
@@ -48,7 +50,7 @@ fn main() {
             let app = ArmPublisherApp::builder()
                 .with_log_path(logger_path, SLAB_SIZE)
                 .expect("Failed to setup logger.")
-                .build()
+                .build_app()
                 .unwrap_or_else(|e| {
                     print_setup_help(&e);
                     std::process::exit(1);
@@ -62,7 +64,7 @@ fn main() {
             let app = LeaderFollowerApp::builder()
                 .with_log_path(logger_path, SLAB_SIZE)
                 .expect("Failed to setup logger.")
-                .build()
+                .build_app()
                 .unwrap_or_else(|e| {
                     print_setup_help(&e);
                     std::process::exit(1);

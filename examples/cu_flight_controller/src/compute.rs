@@ -23,7 +23,7 @@ fn main() {
 fn drive() -> CuResult<()> {
     let app = ComputeApp::builder()
         .with_log_path("logs/compute.copper", LOG_SLAB_SIZE)?
-        .build()?;
-    CuStdAppLifecycle::new(app).run()?;
+        .build_app()?;
+    app.run()?;
     Ok(())
 }

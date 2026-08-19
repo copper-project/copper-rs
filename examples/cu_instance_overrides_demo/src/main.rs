@@ -133,8 +133,8 @@ fn drive() -> CuResult<()> {
     let app = App::builder()
         .with_log_path(&logger_path, None)?
         .with_instance_id(instance_id)
-        .build()?;
-    let mut running = CuStdAppLifecycle::new(app).start_all_tasks()?;
+        .build_app()?;
+    let mut running = app.start_all_tasks()?;
     running.run_one_iteration()?;
     running.stop_all_tasks()?;
     Ok(())

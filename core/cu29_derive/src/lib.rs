@@ -5561,7 +5561,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         } else {
                             builder
                         };
-                        builder.with_sim_callback(&mut noop).build()
+                        builder.with_sim_callback(&mut noop).build_impl()
                     }
                 }
             })
@@ -5788,15 +5788,31 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             // sim mode
             Some(quote! {
                         impl #application_name {
+                            #[deprecated(
+                                since = "1.2.0",
+                                note = "build with `build_app()` and use the lifecycle handle instead"
+                            )]
                             pub fn start_all_tasks(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()> {
                                 <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::start_all_tasks(self, sim_callback)
                             }
+                            #[deprecated(
+                                since = "1.2.0",
+                                note = "build with `build_app()` and use the lifecycle handle instead"
+                            )]
                             pub fn run_one_iteration(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()> {
                                 <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::run_one_iteration(self, sim_callback)
                             }
+                            #[deprecated(
+                                since = "1.2.0",
+                                note = "build with `build_app()` and use the lifecycle handle instead"
+                            )]
                             pub fn run(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()> {
                                 <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::run(self, sim_callback)
                             }
+                            #[deprecated(
+                                since = "1.2.0",
+                                note = "build with `build_app()` and use the lifecycle handle instead"
+                            )]
                             pub fn stop_all_tasks(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()> {
                                 <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::stop_all_tasks(self, sim_callback)
                             }
@@ -5819,15 +5835,31 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             // std and normal mode, we use the memory mapped starage for those
             Some(quote! {
                         impl #application_name {
+                            #[deprecated(
+                                since = "1.2.0",
+                                note = "build with `build_app()` and use the lifecycle handle instead"
+                            )]
                             pub fn start_all_tasks(&mut self) -> CuResult<()> {
                                 <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::start_all_tasks(self)
                             }
+                            #[deprecated(
+                                since = "1.2.0",
+                                note = "build with `build_app()` and use the lifecycle handle instead"
+                            )]
                             pub fn run_one_iteration(&mut self) -> CuResult<()> {
                                 <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::run_one_iteration(self)
                             }
+                            #[deprecated(
+                                since = "1.2.0",
+                                note = "build with `build_app()` and use the lifecycle handle instead"
+                            )]
                             pub fn run(&mut self) -> CuResult<()> {
                                 <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::run(self)
                             }
+                            #[deprecated(
+                                since = "1.2.0",
+                                note = "build with `build_app()` and use the lifecycle handle instead"
+                            )]
                             pub fn stop_all_tasks(&mut self) -> CuResult<()> {
                                 <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::stop_all_tasks(self)
                             }
@@ -5835,6 +5867,18 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             })
         } else {
             None // if no-std, let the user figure our the correct logger type they need to provide anyway.
+        };
+
+        let (builder_build_app_return, builder_build_app_wrap) = if sim_mode {
+            (
+                quote! { cu29::prelude::app::CuSimAppLifecycle<S, L, #application_name> },
+                quote! { cu29::prelude::app::CuSimAppLifecycle },
+            )
+        } else {
+            (
+                quote! { cu29::prelude::app::CuAppLifecycle<S, L, #application_name> },
+                quote! { cu29::prelude::app::CuAppLifecycle },
+            )
         };
 
         let application_builder = Some(quote! {
@@ -5895,8 +5939,25 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #builder_with_log_path_method
                 #builder_sim_callback_method
 
+                /// Builds the application without lifecycle tracking.
                 #[allow(dead_code)]
+                #[deprecated(
+                    since = "1.2.0",
+                    note = "use `build_app()` to get a lifecycle-checked application handle"
+                )]
                 pub fn build(self) -> CuResult<#application_name> {
+                    self.build_impl()
+                }
+
+                /// Builds the application wrapped in its compile-time checked
+                /// lifecycle, in the `Initialized` state: start it with
+                /// `start_all_tasks()` or drive the full cycle with `run()`.
+                #[allow(dead_code)]
+                pub fn build_app(self) -> CuResult<#builder_build_app_return> {
+                    Ok(#builder_build_app_wrap::new(self.build_impl()?))
+                }
+
+                fn build_impl(self) -> CuResult<#application_name> {
                     let clock = self
                         .clock
                         .ok_or(CuError::from("Clock missing from builder"))?;

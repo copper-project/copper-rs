@@ -458,10 +458,12 @@ pub mod harness {
         ) -> CuResult<(Vec<String>, Vec<String>)> {
             super::events::reset();
 
-            let app = App::builder().with_log_path(logger_path, None)?.build()?;
+            let app = App::builder()
+                .with_log_path(logger_path, None)?
+                .build_app()?;
             let build_events = super::events::snapshot();
 
-            let mut running = CuStdAppLifecycle::new(app).start_all_tasks()?;
+            let mut running = app.start_all_tasks()?;
             running.run_one_iteration()?;
             running.stop_all_tasks()?;
 
@@ -482,10 +484,12 @@ pub mod harness {
         ) -> CuResult<(Vec<String>, Vec<String>, Vec<String>, Vec<String>)> {
             super::events::reset();
 
-            let app = App::builder().with_log_path(logger_path, None)?.build()?;
+            let app = App::builder()
+                .with_log_path(logger_path, None)?
+                .build_app()?;
             let build_events = super::events::snapshot();
 
-            let mut running = CuStdAppLifecycle::new(app).start_all_tasks()?;
+            let mut running = app.start_all_tasks()?;
             let after_start = super::events::snapshot();
 
             running.run_one_iteration()?;

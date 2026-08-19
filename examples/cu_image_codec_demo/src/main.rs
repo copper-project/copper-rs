@@ -23,9 +23,9 @@ mod real {
         let application = ImageCodecDemoApp::builder()
             .with_log_path(&log_path, Some(64 * 1024 * 1024))
             .expect("Failed to setup Copper log")
-            .build()
+            .build_app()
             .expect("Failed to create application");
-        let mut running = CuStdAppLifecycle::new(application)
+        let mut running = application
             .start_all_tasks()
             .expect("Failed to start tasks");
 

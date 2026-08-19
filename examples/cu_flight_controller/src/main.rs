@@ -89,11 +89,11 @@ fn main() -> ! {
         .with_clock(clock)
         .with_logger::<LogStorage, Logger>(writer)
         .with_resources(move |_| Ok(resources.resources))
-        .build()
+        .build_app()
     {
-        Ok(mut app) => {
+        Ok(app) => {
             log_heap_stats("before-run");
-            let _ = <FlightControllerApp as CuApplication<LogStorage, Logger>>::run(&mut app);
+            let _ = app.run();
         }
         Err(err) => {
             error!("App init failed: {}", &err);

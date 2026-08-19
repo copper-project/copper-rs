@@ -31,8 +31,8 @@ fn drive() -> CuResult<()> {
     let app = PongApp::builder()
         .with_log_path(&options.log_path, SLAB_SIZE)?
         .with_instance_id(options.instance_id)
-        .build()?;
-    let mut app = CuStdAppLifecycle::new(app).start_all_tasks()?;
+        .build_app()?;
+    let mut app = app.start_all_tasks()?;
 
     if let Some(iterations) = options.iterations {
         for _ in 0..iterations {

@@ -101,7 +101,7 @@ pub fn run_log_only() -> CuResult<()> {
     let logger_path_display = logger_path.display().to_string();
     let app = log_only::App::builder()
         .with_log_path(&logger_path, SLAB_SIZE)?
-        .build()
+        .build_app()
         .map_err(|err| CuError::from(format!("failed to build log_only mission: {err}")))?;
 
     info!(
@@ -109,7 +109,7 @@ pub fn run_log_only() -> CuResult<()> {
         logger_path_display
     );
     let started = Instant::now();
-    CuStdAppLifecycle::new(app).run()?;
+    app.run()?;
     log_summary("log_only", &logger_path, settings, started.elapsed());
     Ok(())
 }
@@ -121,7 +121,7 @@ pub fn run_viewer_live() -> CuResult<()> {
     let logger_path_display = logger_path.display().to_string();
     let app = viewer_live::App::builder()
         .with_log_path(&logger_path, SLAB_SIZE)?
-        .build()
+        .build_app()
         .map_err(|err| CuError::from(format!("failed to build viewer_live mission: {err}")))?;
 
     info!(
@@ -129,7 +129,7 @@ pub fn run_viewer_live() -> CuResult<()> {
         logger_path_display
     );
     let started = Instant::now();
-    CuStdAppLifecycle::new(app).run()?;
+    app.run()?;
     log_summary("viewer_live", &logger_path, settings, started.elapsed());
     Ok(())
 }

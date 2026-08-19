@@ -20,10 +20,10 @@ fn main() {
     let application = CaterpillarApplication::builder()
         .with_log_path(logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
-        .build()
+        .build_app()
         .expect("Failed to create application.");
 
-    if let Err(error) = CuStdAppLifecycle::new(application).run() {
+    if let Err(error) = application.run() {
         debug!("Application Ended: {}", error.error)
     }
 }

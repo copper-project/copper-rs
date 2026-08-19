@@ -118,14 +118,15 @@ fn main() {
     let application = App::builder()
         .with_log_path(&logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
-        .build()
+        .build_app()
         .expect("Failed to create runtime");
-    debug!("Running... starting clock: {}.", application.clock().now());
+    debug!(
+        "Running... starting clock: {}.",
+        application.inner().clock().now()
+    );
     // `run` drives the full start/iterate/stop cycle; the typestate wrapper
     // makes the previous extra start_all_tasks/stop_all_tasks calls around it
     // a compile error instead of a double start/stop at runtime.
-    let stopped = CuStdAppLifecycle::new(application)
-        .run()
-        .expect("Failed to run application.");
+    let stopped = application.run().expect("Failed to run application.");
     debug!("End of program: {}.", stopped.inner().clock().now());
 }

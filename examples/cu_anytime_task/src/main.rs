@@ -204,9 +204,9 @@ fn main() {
     let application = App::builder()
         .with_log_path(logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
-        .build()
+        .build_app()
         .expect("Failed to create application.");
-    let mut running = CuStdAppLifecycle::new(application)
+    let mut running = application
         .start_all_tasks()
         .expect("Failed to start application.");
     // Three copperlists for the foreground chain; keep polling until the

@@ -207,17 +207,14 @@ fn main() -> ! {
         EMMCLogger::new(sd, blk_id, blk_len).expect("Could not create EMMCLogger"),
     ));
 
-    let mut app = BlinkyApp::builder()
+    let app = BlinkyApp::builder()
         .with_clock(clock)
         .with_logger::<EMMCSectionStorage<TSPimodoriSdCard>, EMMCLogger<TSPimodoriSdCard>>(writer)
-        .build()
+        .build_app()
         .unwrap();
     info!("Starting Copper...");
 
-    let _ = <BlinkyApp as CuApplication<
-        EMMCSectionStorage<TSPimodoriSdCard>,
-        EMMCLogger<TSPimodoriSdCard>,
-    >>::run(&mut app);
+    let _ = app.run();
     defmt::error!("Copper crashed.");
     #[allow(clippy::empty_loop)]
     loop {}

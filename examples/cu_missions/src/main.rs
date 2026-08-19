@@ -11,11 +11,13 @@ use B::App as MissionBApp;
 
 const SLAB_SIZE: Option<usize> = Some(10 * 1024 * 1024);
 
-fn run_once<App>(app: App) -> CuResult<()>
+fn run_once<App>(
+    app: CuAppLifecycle<memmap::MmapSectionStorage, UnifiedLoggerWrite, App>,
+) -> CuResult<()>
 where
     App: CuApplication<memmap::MmapSectionStorage, UnifiedLoggerWrite>,
 {
-    let mut running = CuAppLifecycle::new(app).start_all_tasks()?;
+    let mut running = app.start_all_tasks()?;
     running.run_one_iteration()?;
     running.stop_all_tasks()?;
     Ok(())
@@ -35,7 +37,7 @@ fn main() {
             .with_clock(clock.clone())
             .with_log_path(&logger_path, SLAB_SIZE)
             .expect("Failed to setup logger.")
-            .build()
+            .build_app()
             .expect("Failed to create runtime");
         run_once(application_a).expect("Failed to run mission A.");
     }
@@ -47,7 +49,7 @@ fn main() {
             .with_clock(clock.clone())
             .with_log_path(&logger_path, SLAB_SIZE)
             .expect("Failed to setup logger.")
-            .build()
+            .build_app()
             .expect("Failed to create runtime");
         run_once(application_b).expect("Failed to run mission B.");
     }

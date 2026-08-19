@@ -113,13 +113,13 @@ fn main() {
 
     info!("Logger created at {}", &logger_path);
 
-    let mut application = App::builder()
+    let application = App::builder()
         .with_log_path(&logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
-        .build()
+        .build_app()
         .expect("Failed to create runtime");
-    info!("Starting app at {}", application.clock().now());
-    application
+    info!("Starting app at {}", application.inner().clock().now());
+    let mut application = application
         .start_all_tasks()
         .expect("Failed to start application.");
 
@@ -132,8 +132,8 @@ fn main() {
         std::thread::sleep(Duration::from_millis(50));
     }
 
-    application
+    let application = application
         .stop_all_tasks()
         .expect("Failed to stop application.");
-    info!("App stopped at {}", application.clock().now());
+    info!("App stopped at {}", application.inner().clock().now());
 }

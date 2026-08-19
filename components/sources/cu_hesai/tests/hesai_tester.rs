@@ -104,14 +104,17 @@ fn main() {
         .with_clock(clock.clone())
         .with_log_path(&logger_path, None)
         .expect("Failed to setup logger.")
-        .build()
-        .expect("Failed to create runtime.");
+        .build_app()
+        .expect("Failed to create runtime.")
+        .start_all_tasks()
+        .expect("Failed to start tasks.");
     debug!("Running... starting clock: {}.", clock.now());
     for _ in 0..900 {
         application
             .run_one_iteration()
             .expect("Failed to run application.");
     }
+    application.stop_all_tasks().expect("Failed to stop tasks.");
     debug!("End of program: {}.", clock.now());
     thread::sleep(Duration::from_secs(1));
 }

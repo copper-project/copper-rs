@@ -96,11 +96,11 @@ pub extern "C" fn main() {
     let app = MinimalNoStdApp::builder()
         .with_clock(clock)
         .with_logger::<NoopSectionStorage, NoopLogger>(writer)
-        .build()
+        .build_app()
         .unwrap();
-    // CuAppLifecycle is no_std-compatible; naming S/L on the wrapper replaces
-    // the UFCS disambiguation the raw trait call needed.
-    let _ = CuAppLifecycle::<NoopSectionStorage, NoopLogger, _>::new(app).run();
+    // build_app works in no_std too: the lifecycle handle replaces the UFCS
+    // disambiguation the raw trait call needed.
+    let _ = app.run();
 }
 
 #[cfg(feature = "std")]
@@ -112,19 +112,19 @@ fn main() {
     const SLAB_SIZE: Option<usize> = Some(4096 * 1024 * 1024);
 
     let logger_path = PathBuf::from("logs/nostd.copper");
-    if let Some(parent) = logger_path.parent() {
-        if !parent.exists() {
-            fs::create_dir_all(parent).expect("Failed to create logs directory");
-        }
+    if let Some(parent) = logger_path.parent()
+        && !parent.exists()
+    {
+        fs::create_dir_all(parent).expect("Failed to create logs directory");
     }
 
     let application = MinimalNoStdApp::builder()
         .with_log_path(&logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
-        .build()
+        .build_app()
         .expect("Failed to create application.");
 
-    if let Err(error) = CuStdAppLifecycle::new(application).run() {
+    if let Err(error) = application.run() {
         debug!("Application Ended: {}", error.error)
     }
 }

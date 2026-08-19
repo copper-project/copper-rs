@@ -25,9 +25,9 @@ fn run() -> CuResult<()> {
 
     let app = CuGnssUbloxDemo::builder()
         .with_log_path(&log_path, Some(16 * 1024 * 1024))?
-        .build()?;
-    let clock = app.clock();
-    let mut app = CuStdAppLifecycle::new(app).start_all_tasks()?;
+        .build_app()?;
+    let clock = app.inner().clock();
+    let mut app = app.start_all_tasks()?;
 
     let running = Arc::new(AtomicBool::new(true));
     let running_for_signal = Arc::clone(&running);

@@ -133,18 +133,18 @@ fn record_log() -> CuResult<()> {
     let (clock, clock_mock) = RobotClock::mock();
 
     let mut sim_cb = |_step: default::SimStep| SimOverride::ExecuteByRuntime;
-    let mut app = ReflectDemo::builder()
+    let app = ReflectDemo::builder()
         .with_clock(clock.clone())
         .with_log_path(Path::new(LOG_PATH), LOG_SLAB_SIZE)?
         .with_sim_callback(&mut sim_cb)
-        .build()?;
+        .build_app()?;
 
-    app.start_all_tasks(&mut sim_cb)?;
+    let mut running = app.start_all_tasks(&mut sim_cb)?;
     for _ in 0..8 {
         clock_mock.increment(CuDuration::from_millis(10));
-        app.run_one_iteration(&mut sim_cb)?;
+        running.run_one_iteration(&mut sim_cb)?;
     }
-    app.stop_all_tasks(&mut sim_cb)?;
+    running.stop_all_tasks(&mut sim_cb)?;
     Ok(())
 }
 
@@ -152,11 +152,13 @@ fn run_reflect_debug_demo() -> CuResult<()> {
     let (clock, clock_mock) = RobotClock::mock();
 
     let mut sim_cb = |_step: default::SimStep| SimOverride::ExecuteByRuntime;
+    // The debug session engine drives the raw lifecycle itself.
     let app = ReflectDemo::builder()
         .with_clock(clock.clone())
         .with_log_path(Path::new(REPLAY_LOG_PATH), LOG_SLAB_SIZE)?
         .with_sim_callback(&mut sim_cb)
-        .build()?;
+        .build_app()?
+        .into_inner();
 
     fn time_of(cl: &CopperList<default::CuStampedDataSet>) -> Option<CuTime> {
         Option::<CuTime>::from(cl.msgs.get_src_output().metadata.process_time.start)

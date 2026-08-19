@@ -1,3 +1,8 @@
+// Replay harness: drives the raw (app-deprecated) lifecycle API on purpose.
+// Replay needs mid-flight runtime access (keyframe locking, forced
+// timestamps) that the lifecycle typestate deliberately does not expose.
+#![allow(deprecated)]
+
 mod messages;
 mod tasks;
 

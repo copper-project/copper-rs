@@ -167,11 +167,11 @@ fn bridge_tx_empty_messages_are_skipped_by_default() -> CuResult<()> {
     EMPTY_PAYLOAD_SENDS.store(0, Ordering::Relaxed);
 
     let (clock, _mock) = RobotClock::mock();
-    let mut app = BridgeEmptyTxApp::builder().with_clock(clock).build()?;
+    let app = BridgeEmptyTxApp::builder().with_clock(clock).build_app()?;
 
-    app.start_all_tasks()?;
-    app.run_one_iteration()?;
-    app.stop_all_tasks()?;
+    let mut running = app.start_all_tasks()?;
+    running.run_one_iteration()?;
+    running.stop_all_tasks()?;
 
     assert_eq!(EMPTY_DEFAULT_SENDS.load(Ordering::Relaxed), 0);
     assert_eq!(EMPTY_PUBLISH_SENDS.load(Ordering::Relaxed), 1);

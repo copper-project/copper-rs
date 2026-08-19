@@ -160,19 +160,19 @@ fn main() -> CuResult<()> {
         path = logger_path
     );
 
-    let mut copper_app = App::builder()
+    let copper_app = App::builder()
         .with_clock(robot_clock.clone())
         .with_log_path(logger_path, LOG_SLAB_SIZE)
         .expect("Failed to setup logger.")
         .with_sim_callback(&mut sim_callback)
-        .build()
+        .build_app()
         .expect("Failed to create runtime.");
 
     // Start and run a few iterations, then stop
-    copper_app.start_all_tasks(&mut sim_callback)?;
+    let mut running = copper_app.start_all_tasks(&mut sim_callback)?;
     for _ in 0..5 {
-        copper_app.run_one_iteration(&mut sim_callback)?;
+        running.run_one_iteration(&mut sim_callback)?;
     }
-    copper_app.stop_all_tasks(&mut sim_callback)?;
+    running.stop_all_tasks(&mut sim_callback)?;
     Ok(())
 }

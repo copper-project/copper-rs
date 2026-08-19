@@ -60,9 +60,9 @@ fn main() {
     let application = PtCloudsApplication::builder()
         .with_log_path(&logger_path, SLAB_SIZE)
         .expect("Failed to setup copper.")
-        .build()
+        .build_app()
         .expect("Failed to create application");
-    let mut application = CuStdAppLifecycle::new(application)
+    let mut application = application
         .start_all_tasks()
         .expect("Failed to start all tasks.");
 

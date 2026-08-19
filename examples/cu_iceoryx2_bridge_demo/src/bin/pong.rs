@@ -32,8 +32,8 @@ fn drive() -> CuResult<()> {
 
     let app = PongApp::builder()
         .with_log_path(&logger_path, SLAB_SIZE)?
-        .build()?;
-    let mut app = CuStdAppLifecycle::new(app).start_all_tasks()?;
+        .build_app()?;
+    let mut app = app.start_all_tasks()?;
 
     loop {
         app.run_one_iteration()?;

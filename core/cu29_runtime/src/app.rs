@@ -339,8 +339,11 @@ impl Stoppable for Faulted {}
 /// the application is handed back inside [`LifecycleError`], typed [`Faulted`],
 /// so cleanup is still possible and nothing is lost.
 ///
-/// This wrapper is opt-in: the underlying [`CuApplication`] methods remain
-/// available on the unwrapped application for existing code.
+/// This is the default construction path: the generated application builder
+/// hands one out from `build_app()`. The raw [`CuApplication`] methods remain
+/// available (deprecated on the generated application) for framework-level
+/// harnesses such as replay engines; [`into_inner`](CuAppLifecycle::into_inner)
+/// drops back to that level when needed.
 pub struct CuAppLifecycle<S, L, A, State = Initialized> {
     app: A,
     _lifecycle: PhantomData<(S, L, State)>,
@@ -440,6 +443,16 @@ where
             _lifecycle: PhantomData,
         }
     }
+
+    /// Mutable access to the wrapped application, only before it is started.
+    ///
+    /// This exists for pre-start configuration (attaching monitors,
+    /// inspecting the runtime...). Once started, only the read-only
+    /// [`inner`](CuAppLifecycle::inner) view remains available so the
+    /// lifecycle transitions cannot be bypassed mid-flight.
+    pub fn inner_mut(&mut self) -> &mut A {
+        &mut self.app
+    }
 }
 
 impl<S, L, A, State> CuAppLifecycle<S, L, A, State>
@@ -504,6 +517,204 @@ where
         match self.app.stop_all_tasks() {
             Ok(()) => Ok(self.into_state()),
             Err(error) => Err(LifecycleError {
+                error,
+                app: self.into_state(),
+            }),
+        }
+    }
+}
+
+/// Compile-time enforced lifecycle for a [`CuSimApplication`].
+///
+/// Simulation counterpart of [`CuAppLifecycle`]: same states and transitions,
+/// with each transition threading the `sim_callback` the simulation runtime
+/// requires. Replay primitives (`replay_recorded_copperlist`,
+/// `restore_keyframe`) are framework-level and stay on the raw traits.
+#[cfg(feature = "std")]
+pub struct CuSimAppLifecycle<S, L, A, State = Initialized> {
+    app: A,
+    _lifecycle: PhantomData<(S, L, State)>,
+}
+
+#[cfg(feature = "std")]
+impl<S, L, A, State> fmt::Debug for CuSimAppLifecycle<S, L, A, State> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CuSimAppLifecycle")
+            .field("state", &core::any::type_name::<State>())
+            .finish_non_exhaustive()
+    }
+}
+
+/// Convenience alias for simulation applications using the default std
+/// unified logger, mirroring [`CuStdAppLifecycle`].
+#[cfg(feature = "std")]
+pub type CuStdSimAppLifecycle<A, State = Initialized> =
+    CuSimAppLifecycle<MmapSectionStorage, cu29_unifiedlog::UnifiedLoggerWrite, A, State>;
+
+/// Result of a simulation lifecycle transition: on success the application
+/// typed with its new state, on failure [`SimLifecycleError`] carrying the
+/// application typed [`Faulted`].
+#[cfg(feature = "std")]
+pub type SimTransitionResult<S, L, A, Next> =
+    Result<CuSimAppLifecycle<S, L, A, Next>, SimLifecycleError<S, L, A>>;
+
+/// A failed simulation lifecycle transition, mirroring [`LifecycleError`].
+#[cfg(feature = "std")]
+pub struct SimLifecycleError<S, L, A> {
+    /// The error reported by the underlying application.
+    pub error: CuError,
+    /// The application, in the `Faulted` state. Call `stop_all_tasks` on it to clean up.
+    pub app: CuSimAppLifecycle<S, L, A, Faulted>,
+}
+
+#[cfg(feature = "std")]
+impl<S, L, A> fmt::Debug for SimLifecycleError<S, L, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SimLifecycleError")
+            .field("error", &self.error)
+            .finish_non_exhaustive()
+    }
+}
+
+#[cfg(feature = "std")]
+impl<S, L, A> fmt::Display for SimLifecycleError<S, L, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "lifecycle transition failed: {}", self.error)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<S, L, A> core::error::Error for SimLifecycleError<S, L, A> {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        Some(&self.error)
+    }
+}
+
+/// Allows `?` in functions returning `CuResult` when the faulted application
+/// does not need to be recovered.
+#[cfg(feature = "std")]
+impl<S, L, A> From<SimLifecycleError<S, L, A>> for CuError {
+    fn from(value: SimLifecycleError<S, L, A>) -> Self {
+        value.error
+    }
+}
+
+#[cfg(feature = "std")]
+impl<S, L, A, State> CuSimAppLifecycle<S, L, A, State> {
+    /// Rewraps the application under a new typestate. Private: state changes
+    /// only happen through the lifecycle transitions.
+    fn into_state<Next>(self) -> CuSimAppLifecycle<S, L, A, Next> {
+        CuSimAppLifecycle {
+            app: self.app,
+            _lifecycle: PhantomData,
+        }
+    }
+
+    /// Read-only access to the wrapped application.
+    pub fn inner(&self) -> &A {
+        &self.app
+    }
+
+    /// Consumes the wrapper and returns the application, dropping the
+    /// compile-time lifecycle tracking.
+    pub fn into_inner(self) -> A {
+        self.app
+    }
+}
+
+#[cfg(feature = "std")]
+impl<S, L, A> CuSimAppLifecycle<S, L, A, Initialized>
+where
+    S: SectionStorage,
+    L: UnifiedLogWrite<S> + 'static,
+    A: CuSimApplication<S, L>,
+{
+    /// Wraps a freshly built simulation application in the `Initialized` state.
+    pub fn new(app: A) -> Self {
+        CuSimAppLifecycle {
+            app,
+            _lifecycle: PhantomData,
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl<S, L, A, State> CuSimAppLifecycle<S, L, A, State>
+where
+    S: SectionStorage,
+    L: UnifiedLogWrite<S> + 'static,
+    A: CuSimApplication<S, L>,
+    State: Startable,
+{
+    /// Starts all tasks, transitioning to `Running`.
+    ///
+    /// On failure the application may be partially started; it is returned
+    /// typed `Faulted` inside the error so it can be cleaned up.
+    pub fn start_all_tasks(
+        mut self,
+        sim_callback: &mut impl for<'z> FnMut(<A as CuSimApplication<S, L>>::Step<'z>) -> SimOverride,
+    ) -> SimTransitionResult<S, L, A, Running> {
+        match self.app.start_all_tasks(sim_callback) {
+            Ok(()) => Ok(self.into_state()),
+            Err(error) => Err(SimLifecycleError {
+                error,
+                app: self.into_state(),
+            }),
+        }
+    }
+
+    /// Runs the full lifecycle (start, iterate until shutdown, stop),
+    /// transitioning to `Stopped` on success.
+    pub fn run(
+        mut self,
+        sim_callback: &mut impl for<'z> FnMut(<A as CuSimApplication<S, L>>::Step<'z>) -> SimOverride,
+    ) -> SimTransitionResult<S, L, A, Stopped> {
+        match self.app.run(sim_callback) {
+            Ok(()) => Ok(self.into_state()),
+            Err(error) => Err(SimLifecycleError {
+                error,
+                app: self.into_state(),
+            }),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl<S, L, A> CuSimAppLifecycle<S, L, A, Running>
+where
+    S: SectionStorage,
+    L: UnifiedLogWrite<S> + 'static,
+    A: CuSimApplication<S, L>,
+{
+    /// Executes one iteration of the runtime. An iteration error does not
+    /// change the lifecycle state: the caller decides whether to keep
+    /// iterating or stop.
+    pub fn run_one_iteration(
+        &mut self,
+        sim_callback: &mut impl for<'z> FnMut(<A as CuSimApplication<S, L>>::Step<'z>) -> SimOverride,
+    ) -> CuResult<()> {
+        self.app.run_one_iteration(sim_callback)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<S, L, A, State> CuSimAppLifecycle<S, L, A, State>
+where
+    S: SectionStorage,
+    L: UnifiedLogWrite<S> + 'static,
+    A: CuSimApplication<S, L>,
+    State: Stoppable,
+{
+    /// Stops all tasks, transitioning to `Stopped`. From `Faulted` this is a
+    /// best-effort cleanup. On failure the application is handed back typed
+    /// `Faulted` again.
+    pub fn stop_all_tasks(
+        mut self,
+        sim_callback: &mut impl for<'z> FnMut(<A as CuSimApplication<S, L>>::Step<'z>) -> SimOverride,
+    ) -> SimTransitionResult<S, L, A, Stopped> {
+        match self.app.stop_all_tasks(sim_callback) {
+            Ok(()) => Ok(self.into_state()),
+            Err(error) => Err(SimLifecycleError {
                 error,
                 app: self.into_state(),
             }),
@@ -631,5 +842,100 @@ mod lifecycle_tests {
         }
         let error = drive().unwrap_err();
         assert!(error.to_string().contains("mock start failure"));
+    }
+
+    #[derive(Default)]
+    struct MockSimApp {
+        started: u32,
+        stopped: u32,
+        iterations: u32,
+        fail_start: bool,
+    }
+
+    struct MockStep;
+
+    impl<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> CuSimApplication<S, L> for MockSimApp {
+        type Step<'z> = MockStep;
+
+        fn get_original_config() -> String {
+            String::new()
+        }
+
+        fn start_all_tasks(
+            &mut self,
+            sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
+        ) -> CuResult<()> {
+            if self.fail_start {
+                return Err("mock sim start failure".into());
+            }
+            let _ = sim_callback(MockStep);
+            self.started += 1;
+            Ok(())
+        }
+
+        fn run_one_iteration(
+            &mut self,
+            sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
+        ) -> CuResult<()> {
+            let _ = sim_callback(MockStep);
+            self.iterations += 1;
+            Ok(())
+        }
+
+        fn run(
+            &mut self,
+            sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
+        ) -> CuResult<()> {
+            let _ = sim_callback(MockStep);
+            Ok(())
+        }
+
+        fn stop_all_tasks(
+            &mut self,
+            sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
+        ) -> CuResult<()> {
+            let _ = sim_callback(MockStep);
+            self.stopped += 1;
+            Ok(())
+        }
+
+        fn restore_keyframe(&mut self, _freezer: &KeyFrame) -> CuResult<()> {
+            Ok(())
+        }
+    }
+
+    type SimLifecycle = CuStdSimAppLifecycle<MockSimApp>;
+
+    #[test]
+    fn sim_full_cycle_threads_the_callback() {
+        let mut callback_calls = 0u32;
+        let mut cb = |_step: MockStep| -> SimOverride {
+            callback_calls += 1;
+            SimOverride::ExecuteByRuntime
+        };
+
+        let app = SimLifecycle::new(MockSimApp::default());
+        let mut running = app.start_all_tasks(&mut cb).unwrap();
+        running.run_one_iteration(&mut cb).unwrap();
+        let stopped = running.stop_all_tasks(&mut cb).unwrap();
+
+        let mock = stopped.into_inner();
+        assert_eq!(mock.started, 1);
+        assert_eq!(mock.iterations, 1);
+        assert_eq!(mock.stopped, 1);
+        assert_eq!(callback_calls, 3);
+    }
+
+    #[test]
+    fn sim_failed_start_hands_back_a_faulted_app_for_cleanup() {
+        let mut cb = |_step: MockStep| -> SimOverride { SimOverride::ExecuteByRuntime };
+        let app = SimLifecycle::new(MockSimApp {
+            fail_start: true,
+            ..Default::default()
+        });
+        let err = app.start_all_tasks(&mut cb).unwrap_err();
+        assert!(err.error.to_string().contains("mock sim start failure"));
+        let stopped = err.app.stop_all_tasks(&mut cb).unwrap();
+        assert_eq!(stopped.inner().stopped, 1);
     }
 }

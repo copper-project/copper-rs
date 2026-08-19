@@ -80,9 +80,10 @@ fn app_factory(
         .with_clock(clock.clone())
         .with_log_path(replay_log_base, REPLAY_LOG_SLAB_SIZE)?
         .with_sim_callback(&mut default_callback)
-        .build()?;
+        .build_app()?;
 
-    Ok((app, clock, clock_mock))
+    // The replay session engine drives the raw lifecycle itself.
+    Ok((app.into_inner(), clock, clock_mock))
 }
 
 fn build_callback<'a>(

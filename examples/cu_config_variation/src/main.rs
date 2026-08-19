@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 #[copper_runtime(config = "copperconfig.ron")]
 struct MyApp {}
 
-fn run_once(app: MyApp) -> CuResult<()> {
-    let mut running = CuStdAppLifecycle::new(app).start_all_tasks()?;
+fn run_once(app: CuStdAppLifecycle<MyApp>) -> CuResult<()> {
+    let mut running = app.start_all_tasks()?;
     running.run_one_iteration()?;
     running.stop_all_tasks()?;
     Ok(())
@@ -29,7 +29,7 @@ fn main() {
             .with_log_path(&logger_path, None)
             .expect("Failed to setup logger.")
             .with_config(copperconfig.clone())
-            .build()
+            .build_app()
             .expect("Failed to create application.");
         run_once(application).expect("Failed to run application.");
 
@@ -49,7 +49,7 @@ fn main() {
             .with_log_path(&logger_path, None)
             .expect("Failed to setup logger.")
             .with_config(copperconfig.clone())
-            .build()
+            .build_app()
             .expect("Failed to create application.");
         run_once(application).expect("Failed to run application.");
     }

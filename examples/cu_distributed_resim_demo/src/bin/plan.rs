@@ -30,7 +30,7 @@ fn drive() -> CuResult<()> {
     let app = PlanApp::builder()
         .with_log_path(&options.log_path, LOG_SLAB_SIZE)?
         .with_instance_id(options.instance_id)
-        .build()?;
+        .build_app()?;
     let mut app = CuStdAppLifecycle::new(app).start_all_tasks()?;
 
     if let Some(iterations) = options.iterations {

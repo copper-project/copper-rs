@@ -174,9 +174,9 @@ fn main() {
     let application = App::builder()
         .with_log_path(&logger_path, None)
         .expect("Failed to setup logger.")
-        .build()
+        .build_app()
         .expect("Failed to create application.");
-    let mut running = CuStdAppLifecycle::new(application)
+    let mut running = application
         .start_all_tasks()
         .expect("Failed to start application.");
     running

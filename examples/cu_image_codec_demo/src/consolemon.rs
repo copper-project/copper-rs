@@ -27,10 +27,10 @@ pub fn main() {
     let application = ImageCodecDemoConsolemonApp::builder()
         .with_log_path(&log_path, Some(64 * 1024 * 1024))
         .expect("Failed to setup Copper log")
-        .build()
+        .build_app()
         .expect("Failed to create application");
 
-    if let Err(err) = CuStdAppLifecycle::new(application).run() {
+    if let Err(err) = application.run() {
         if err.error.message() != "Exiting..." {
             let err = err.error;
             error!("{err:?}");

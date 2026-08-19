@@ -32,8 +32,8 @@ mod app {
 
         let app = CameraApp::builder()
             .with_log_path(&log_path, Some(16 * 1024 * 1024))?
-            .build()?;
-        let mut running = CuStdAppLifecycle::new(app).start_all_tasks()?;
+            .build_app()?;
+        let mut running = app.start_all_tasks()?;
         running.run_one_iteration()?;
         running.stop_all_tasks()?;
         Ok(())

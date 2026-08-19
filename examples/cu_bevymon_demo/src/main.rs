@@ -153,15 +153,15 @@ fn build_copper_driver() -> (CopperDriver, MonitorModel) {
 
     let mut copper_app = BevyMonDemoApp::builder()
         .with_logger::<DemoSectionStorage, DemoUnifiedLogger>(unified_logger)
-        .build()
+        .build_app()
         .expect("Failed to create Copper runtime.");
 
-    // The lifecycle wrapper only hands out shared access to the wrapped app,
-    // so grab the monitor model before wrapping.
-    let monitor_model = copper_app.copper_runtime_mut().monitor.model();
+    // Pre-start configuration goes through inner_mut(), only available in the
+    // Initialized state.
+    let monitor_model = copper_app.inner_mut().copper_runtime_mut().monitor.model();
 
     let driver = CopperDriver {
-        state: CopperState::Initialized(CuAppLifecycle::new(copper_app)),
+        state: CopperState::Initialized(copper_app),
         iteration_timer: Timer::from_seconds(1.0 / COPPER_TICK_HZ, TimerMode::Repeating),
     };
     (driver, monitor_model)

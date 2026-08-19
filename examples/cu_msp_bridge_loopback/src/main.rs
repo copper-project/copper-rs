@@ -50,9 +50,9 @@ fn drive() -> CuResult<()> {
     let app = CuMspBridgeLoopbackApp::builder()
         .with_log_path(&logger_path, Some(16 * 1024 * 1024))?
         .with_config(config)
-        .build()?;
+        .build_app()?;
 
-    let mut running = CuStdAppLifecycle::new(app).start_all_tasks()?;
+    let mut running = app.start_all_tasks()?;
     for i in 0..3 {
         debug!("Running iteration {}", i);
         running.run_one_iteration()?;

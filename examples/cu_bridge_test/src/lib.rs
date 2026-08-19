@@ -367,7 +367,12 @@ mod tests {
 
     fn run_mission<AppBuilderFn, App>(builder: AppBuilderFn) -> Vec<&'static str>
     where
-        AppBuilderFn: FnOnce(&std::path::Path, RobotClock) -> CuResult<App>,
+        AppBuilderFn: FnOnce(
+            &std::path::Path,
+            RobotClock,
+        ) -> CuResult<
+            CuAppLifecycle<MmapSectionStorage, UnifiedLoggerWrite, App>,
+        >,
         App: CuApplication<MmapSectionStorage, UnifiedLoggerWrite>,
     {
         let temp_dir = TempDir::new().expect("temp dir");
@@ -376,11 +381,7 @@ mod tests {
 
         events::reset();
         let app = builder(&log_path, clock).expect("build app");
-        // The lifecycle wrapper pins S/L, so the UFCS disambiguation the raw
-        // trait calls needed is no longer necessary.
-        let mut running = CuAppLifecycle::<MmapSectionStorage, UnifiedLoggerWrite, App>::new(app)
-            .start_all_tasks()
-            .expect("start");
+        let mut running = app.start_all_tasks().expect("start");
         running.run_one_iteration().expect("run");
         running.stop_all_tasks().expect("stop");
         events::take()
@@ -414,7 +415,7 @@ mod tests {
                 .with_clock(clock)
                 .with_log_path(log_path, Some(32 * 1024 * 1024))
                 .expect("logger")
-                .build()
+                .build_app()
         });
         assert_eq!(events, vec!["alpha.rx.ingress", "beta.tx.egress"]);
     }
@@ -427,7 +428,7 @@ mod tests {
                 .with_clock(clock)
                 .with_log_path(log_path, Some(32 * 1024 * 1024))
                 .expect("logger")
-                .build()
+                .build_app()
         });
         assert_eq!(events, vec!["alpha.rx.loop", "alpha.tx.loop"]);
     }
@@ -440,7 +441,7 @@ mod tests {
                 .with_clock(clock)
                 .with_log_path(log_path, Some(32 * 1024 * 1024))
                 .expect("logger")
-                .build()
+                .build_app()
         });
         assert_eq!(events, vec!["source_to_bridge.process", "beta.tx.from_src"]);
     }
@@ -453,7 +454,7 @@ mod tests {
                 .with_clock(clock)
                 .with_log_path(log_path, Some(32 * 1024 * 1024))
                 .expect("logger")
-                .build()
+                .build_app()
         });
         assert_eq!(events, vec!["alpha.rx.to_sink", "sink_from_bridge.process"]);
     }
@@ -466,7 +467,7 @@ mod tests {
                 .with_clock(clock)
                 .with_log_path(log_path, Some(32 * 1024 * 1024))
                 .expect("logger")
-                .build()
+                .build_app()
         });
         assert_eq!(
             events,
@@ -490,11 +491,9 @@ mod tests {
                 .with_clock(clock.clone())
                 .with_log_path(&log_path, Some(32 * 1024 * 1024))
                 .expect("logger")
-                .build()
+                .build_app()
                 .expect("build app");
-            let mut running = CuStdAppLifecycle::new(app)
-                .start_all_tasks()
-                .expect("start");
+            let mut running = app.start_all_tasks().expect("start");
             running.run_one_iteration().expect("run");
             running.stop_all_tasks().expect("stop");
         }
@@ -546,9 +545,9 @@ mod tests {
                 .with_clock(clock.clone())
                 .with_log_path(&log_path, Some(32 * 1024 * 1024))
                 .expect("logger")
-                .build()
+                .build_app()
                 .unwrap();
-            let mut running = CuStdAppLifecycle::new(app).start_all_tasks().unwrap();
+            let mut running = app.start_all_tasks().unwrap();
             running.run_one_iteration().unwrap();
             running.stop_all_tasks().unwrap();
         }
@@ -560,9 +559,9 @@ mod tests {
                 .with_clock(clock)
                 .with_log_path(&log_path, Some(32 * 1024 * 1024))
                 .expect("logger")
-                .build()
+                .build_app()
                 .unwrap();
-            let mut running = CuStdAppLifecycle::new(app).start_all_tasks().unwrap();
+            let mut running = app.start_all_tasks().unwrap();
             running.run_one_iteration().unwrap();
             running.stop_all_tasks().unwrap();
         }
