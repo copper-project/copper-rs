@@ -387,7 +387,7 @@ simplelog = "0.12"
 socket2 = "0.6"
 stm32h7xx-hal = { version = "0.16.0", default-features = false }
 strfmt = "0.2"
-zenoh = { version = "1.7.0", default-features = false }
+zenoh = { version = "~1.10.0", default-features = false }
 
 [workspace.metadata.cargo-shear]
 ignored = ["cu-consolemon"]

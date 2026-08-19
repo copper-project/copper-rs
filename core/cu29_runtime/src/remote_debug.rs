@@ -1416,10 +1416,10 @@ fn initialize_remote_debug_shm_provider(
     loop {
         match session.get_shm_provider() {
             ShmProviderState::Ready(provider) => return Ok(provider),
-            ShmProviderState::Initializing if started.elapsed() < SHM_PROVIDER_INIT_TIMEOUT => {
+            ShmProviderState::Initializing(_) if started.elapsed() < SHM_PROVIDER_INIT_TIMEOUT => {
                 std::thread::sleep(SHM_PROVIDER_INIT_POLL_INTERVAL);
             }
-            ShmProviderState::Initializing => {
+            ShmProviderState::Initializing(_) => {
                 return Err(CuError::from(format!(
                     "RemoteDebug server timed out after {:?} initializing its mandatory \
                      shared-memory provider",
