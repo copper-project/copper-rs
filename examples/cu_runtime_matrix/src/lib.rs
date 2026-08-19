@@ -1,3 +1,9 @@
+// Benchmark/matrix harness: dispatches over the generated mission apps via a
+// plain enum, driving the raw (app-deprecated) lifecycle API on purpose. The
+// typestate handle would require the enum itself to implement CuApplication;
+// not worth it for a benchmark driver.
+#![allow(deprecated)]
+
 use bincode::{Decode, Encode};
 use clap::{Parser, ValueEnum};
 use cu29::prelude::*;

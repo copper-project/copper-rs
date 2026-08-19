@@ -158,11 +158,11 @@ fn main() -> CuResult<()> {
     logging.keyframe_interval = Some(args.keyframe_interval);
     let copperlist_count = logging.copperlist_count.unwrap_or(2);
 
-    let mut app = App::builder()
+    let app = App::builder()
         .with_log_path(&logger_path, Some((args.slab_mib as usize) * 1024 * 1024))?
         .with_config(config)
-        .build()?;
-    app.start_all_tasks()?;
+        .build_app()?;
+    let mut app = app.start_all_tasks()?;
 
     for _ in 0..args.warmup {
         app.run_one_iteration()?;

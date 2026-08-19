@@ -31,7 +31,7 @@ fn drive() -> CuResult<()> {
         .with_log_path(&options.log_path, LOG_SLAB_SIZE)?
         .with_instance_id(options.instance_id)
         .build_app()?;
-    let mut app = CuStdAppLifecycle::new(app).start_all_tasks()?;
+    let mut app = app.start_all_tasks()?;
 
     if let Some(iterations) = options.iterations {
         for _ in 0..iterations {
