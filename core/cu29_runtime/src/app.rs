@@ -16,6 +16,7 @@ use std::vec::Vec;
 
 #[cfg(not(feature = "std"))]
 mod imp {
+    pub use alloc::boxed::Box;
     pub use alloc::string::String;
 }
 
@@ -344,8 +345,13 @@ impl Stoppable for Faulted {}
 /// available (deprecated on the generated application) for framework-level
 /// harnesses such as replay engines; [`into_inner`](CuAppLifecycle::into_inner)
 /// drops back to that level when needed.
+///
+/// The application is boxed internally: generated applications embed their
+/// copperlist pools and can be megabytes, so the consuming transitions move a
+/// pointer instead of the application itself (which in debug builds would
+/// blow through a test thread's stack).
 pub struct CuAppLifecycle<S, L, A, State = Initialized> {
-    app: A,
+    app: Box<A>,
     _lifecycle: PhantomData<(S, L, State)>,
 }
 
@@ -426,7 +432,7 @@ impl<S, L, A, State> CuAppLifecycle<S, L, A, State> {
     /// Consumes the wrapper and returns the application, dropping the
     /// compile-time lifecycle tracking.
     pub fn into_inner(self) -> A {
-        self.app
+        *self.app
     }
 }
 
@@ -439,7 +445,7 @@ where
     /// Wraps a freshly built application in the `Initialized` state.
     pub fn new(app: A) -> Self {
         CuAppLifecycle {
-            app,
+            app: Box::new(app),
             _lifecycle: PhantomData,
         }
     }
@@ -532,7 +538,7 @@ where
 /// `restore_keyframe`) are framework-level and stay on the raw traits.
 #[cfg(feature = "std")]
 pub struct CuSimAppLifecycle<S, L, A, State = Initialized> {
-    app: A,
+    app: Box<A>,
     _lifecycle: PhantomData<(S, L, State)>,
 }
 
@@ -618,7 +624,7 @@ impl<S, L, A, State> CuSimAppLifecycle<S, L, A, State> {
     /// Consumes the wrapper and returns the application, dropping the
     /// compile-time lifecycle tracking.
     pub fn into_inner(self) -> A {
-        self.app
+        *self.app
     }
 }
 
@@ -632,7 +638,7 @@ where
     /// Wraps a freshly built simulation application in the `Initialized` state.
     pub fn new(app: A) -> Self {
         CuSimAppLifecycle {
-            app,
+            app: Box::new(app),
             _lifecycle: PhantomData,
         }
     }
