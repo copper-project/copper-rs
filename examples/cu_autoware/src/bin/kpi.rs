@@ -1,8 +1,9 @@
 //! Benchmark KPIs from one recorded run.
 //!
-//! `kpi [log base]`, default `<crate>/logs/autoware.copper`. One typed walk over the
-//! copperlists yields every KPI; `CuDurationStatistics` does the aggregation and
-//! `cu29_export`'s `compute_logstats` writes the per-edge view next to the CSVs.
+//! `kpi [log base] [out dir]`, defaults `<crate>/logs/autoware.copper` and
+//! `<crate>/analysis/data`; `KPI_EXPECT=<n>` also asserts the copperlist count. One typed
+//! walk over the copperlists yields every KPI; `CuDurationStatistics` does the aggregation
+//! and `cu29_export`'s `compute_logstats` writes the per-edge view next to the CSVs.
 //!
 //! Timings come from the recorded `process_time` and `tov`. A copperlist is one full
 //! pass over the graph, so a sample and everything it triggers share one list and the
@@ -10,8 +11,8 @@
 
 use cu_autoware::payload;
 use cu29::prelude::*;
-use cu29_export::copperlists_reader;
 use cu29_export::logstats::{compute_logstats, write_logstats};
+use cu29_export::{copperlists_reader, runtime_lifecycle_reader};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::fmt::Write as _;
@@ -30,6 +31,11 @@ const PLANNER_PERIOD_MS: u64 = 100;
 /// under std), so every series gets a ceiling on the order of its own values rather than
 /// one global ceiling that would quantize the small series away.
 const CEILING_FACTOR: u64 = 4;
+/// The RT1/RT2 chains run in tens of ms, so sizing their buckets off their 200/100ms
+/// deadlines would collapse the whole distribution into one bucket. Overshoot lands in
+/// the top bucket and `max()` stays exact.
+const RT1_CEILING_MS: u64 = 64;
+const RT2_CEILING_MS: u64 = 128;
 
 /// Fig. 4 cost model, in µs. Each entry is a callback the node can charge in one pass,
 /// gated by the copperlist slot whose payload says the callback ran: a node's own slot
@@ -203,17 +209,22 @@ fn alignment(samples: &[u64], updates: &HashMap<u64, u32>) -> (usize, usize, u32
     )
 }
 
-/// One latency series: the samples for the CSV and the statistics for the report.
+/// One latency series: the samples for the CSV, the statistics for the report, and the
+/// deadline the series is judged against.
 struct Series {
     rows: String,
     stats: CuDurationStatistics,
+    deadline_ns: u64,
+    late: u64,
 }
 
 impl Series {
-    fn new(header: &str, deadline_ms: u64) -> Self {
+    fn new(header: &str, ceiling_ms: u64, deadline_ms: u64) -> Self {
         Self {
             rows: format!("{header}\n"),
-            stats: CuDurationStatistics::new(CuDuration::from_millis(deadline_ms * CEILING_FACTOR)),
+            stats: CuDurationStatistics::new(CuDuration::from_millis(ceiling_ms)),
+            deadline_ns: deadline_ms * 1_000_000,
+            late: 0,
         }
     }
 
@@ -226,6 +237,9 @@ impl Series {
             value_ns as f64 / 1e6
         );
         self.stats.record(CuDuration(value_ns));
+        if value_ns > self.deadline_ns {
+            self.late += 1;
+        }
     }
 
     fn report(&self, name: &str) {
@@ -254,7 +268,6 @@ struct Kpis {
     measured: Vec<CuDurationStatistics>,
     modelled_us: Vec<f64>,
     culists: u64,
-    late: u64,
     /// Firings whose `tov` or `process_time` was not usable: a timing gap, not a miss.
     timing_gaps: u64,
     planner_ticks: u64,
@@ -273,17 +286,24 @@ impl Kpis {
                 .map(|(index, name)| (name, index))
                 .collect(),
             rt1_cache_ns: charge_ns("point_cloud_fusion", "points_transformer_rear"),
-            hot_path: Series::new("seq,t_ms,latency_ms", RT0_DEADLINE_MS),
-            rt1: Series::new("seq,t_ms,latency_ms", RT1_DEADLINE_MS),
-            rt2: Series::new("seq,t_ms,latency_ms", RT2_DEADLINE_MS),
-            planner_period: Series::new("seq,t_ms,period_ms", PLANNER_PERIOD_MS),
+            hot_path: Series::new(
+                "seq,t_ms,latency_ms",
+                RT0_DEADLINE_MS * CEILING_FACTOR,
+                RT0_DEADLINE_MS,
+            ),
+            rt1: Series::new("seq,t_ms,latency_ms", RT1_CEILING_MS, RT1_DEADLINE_MS),
+            rt2: Series::new("seq,t_ms,latency_ms", RT2_CEILING_MS, RT2_DEADLINE_MS),
+            planner_period: Series::new(
+                "seq,t_ms,period_ms",
+                PLANNER_PERIOD_MS * CEILING_FACTOR,
+                PLANNER_PERIOD_MS,
+            ),
             measured: NODES
                 .iter()
                 .map(|(_, charges)| CuDurationStatistics::new(ceiling(charges)))
                 .collect(),
             modelled_us: vec![0.0; NODES.len()],
             culists: 0,
-            late: 0,
             timing_gaps: 0,
             planner_ticks: 0,
             front_seqs: Vec::new(),
@@ -312,11 +332,7 @@ impl Kpis {
             *self.estimator_updates.entry(sample.seq).or_default() += 1;
             match (tov_ns(estimator.tov), span(estimator.metadata.process_time)) {
                 (Some(at), Some((_, end))) => {
-                    let latency = end.saturating_sub(at);
-                    self.hot_path.record(sample.seq, at, latency);
-                    if latency > RT0_DEADLINE_MS * 1_000_000 {
-                        self.late += 1;
-                    }
+                    self.hot_path.record(sample.seq, at, end.saturating_sub(at));
                 }
                 _ => self.timing_gaps += 1,
             }
@@ -398,10 +414,12 @@ impl Kpis {
             .collect()
     }
 
-    fn report(&self, log_base: &Path) {
+    fn report(&self, log_base: &Path, ids: (u64, u64)) {
         println!(
-            "cu_autoware KPIs — {} copperlists over {:.1}s ({})",
+            "cu_autoware KPIs — {} copperlists (ids {}..={}) over {:.1}s ({})",
             self.culists,
+            ids.0,
+            ids.1,
             self.span_ns as f64 / 1e9,
             log_base.display()
         );
@@ -426,9 +444,13 @@ impl Kpis {
             self.timing_gaps
         );
         println!(
-            "late       {} of {} hot-path samples over {RT0_DEADLINE_MS}ms",
-            self.late,
-            self.hot_path.stats.len()
+            "late       RT0 {}/{} over {RT0_DEADLINE_MS}ms, RT1 {}/{} over {RT1_DEADLINE_MS}ms, RT2 {}/{} over {RT2_DEADLINE_MS}ms",
+            self.hot_path.late,
+            self.hot_path.stats.len(),
+            self.rt1.late,
+            self.rt1.stats.len(),
+            self.rt2.late,
+            self.rt2.stats.len()
         );
 
         let period = &self.planner_period.stats;
@@ -472,7 +494,7 @@ fn fail(message: impl Display) -> ! {
     std::process::exit(1);
 }
 
-fn reader(log_base: &Path) -> CuResult<UnifiedLoggerIOReader> {
+fn reader(log_base: &Path, section: UnifiedLogType) -> CuResult<UnifiedLoggerIOReader> {
     let logger = UnifiedLoggerBuilder::new()
         .file_base_name(log_base)
         .build()
@@ -483,10 +505,46 @@ fn reader(log_base: &Path) -> CuResult<UnifiedLoggerIOReader> {
             log_base.display()
         )));
     };
-    Ok(UnifiedLoggerIOReader::new(
-        logger,
-        UnifiedLogType::CopperList,
-    ))
+    Ok(UnifiedLoggerIOReader::new(logger, section))
+}
+
+/// The run's own witnesses that the log is whole and belongs to this config: the RON the
+/// app was built from, and the shutdown record `cu_autoware::run` writes last. Without
+/// them a truncated log reports on its prefix and a stale one reports on the wrong graph.
+fn provenance(log_base: &Path) -> CuResult<(String, bool)> {
+    let source = reader(log_base, UnifiedLogType::RuntimeLifecycle)?;
+    let (mut config, mut complete) = (None, false);
+    for record in runtime_lifecycle_reader(source) {
+        match record.event {
+            RuntimeLifecycleEvent::Instantiated {
+                effective_config_ron,
+                ..
+            } => config = Some(effective_config_ron),
+            RuntimeLifecycleEvent::ShutdownCompleted => complete = true,
+            _ => {}
+        }
+    }
+    config
+        .map(|config| (config, complete))
+        .ok_or_else(|| CuError::from("no Instantiated record in the runtime lifecycle section"))
+}
+
+/// What decides which node lands in which copperlist slot. The recorded RON cannot be
+/// compared verbatim — `ComponentConfig` is a `HashMap`, so the two processes serialize
+/// its keys in different orders — and per-node values do not move slots anyway.
+fn layout_witness(config: &CuConfig) -> String {
+    let tasks: Vec<String> = config
+        .graphs
+        .get_default_mission_graph()
+        .map(|graph| {
+            graph
+                .get_all_nodes()
+                .into_iter()
+                .map(|(_, node)| node.get_id())
+                .collect()
+        })
+        .unwrap_or_else(|e| fail(e));
+    format!("{tasks:?}")
 }
 
 fn write(dir: &Path, name: &str, content: &str) {
@@ -499,23 +557,78 @@ fn write(dir: &Path, name: &str, content: &str) {
 
 fn main() {
     let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let log_base = std::env::args().nth(1).map_or_else(
+    let mut args = std::env::args().skip(1);
+    let log_base = args.next().map_or_else(
         || crate_dir.join("logs").join("autoware.copper"),
         PathBuf::from,
     );
+    let out_dir = args
+        .next()
+        .map_or_else(|| crate_dir.join("analysis").join("data"), PathBuf::from);
+
+    let config_path = crate_dir.join("copperconfig.ron");
+    let config = config_path
+        .to_str()
+        .ok_or_else(|| CuError::from("crate path is not UTF-8"))
+        .and_then(read_configuration)
+        .unwrap_or_else(|e| fail(e));
 
     let mut kpis = Kpis::new();
-    let source = reader(&log_base).unwrap_or_else(|e| fail(e));
+    let source = reader(&log_base, UnifiedLogType::CopperList).unwrap_or_else(|e| fail(e));
+    let (mut first, mut last, mut gaps) = (None, 0u64, 0u64);
     for culist in copperlists_reader::<CuMsgs>(source) {
+        match first {
+            None => first = Some(culist.id),
+            Some(_) if culist.id != last + 1 => gaps += 1,
+            _ => {}
+        }
+        last = culist.id;
         kpis.record_pass(&culist.msgs);
     }
-    if kpis.culists == 0 {
+
+    // `cu29_export`'s reader turns any decode failure into a silent end of iteration, so
+    // nothing below this point may run on a log that was not read whole: the report would
+    // be plausible and wrong. Three witnesses, cheapest first.
+    let Some(first) = first else {
         fail(format!("{}: no copperlists recorded", log_base.display()));
+    };
+    if first != 0 || gaps > 0 || kpis.culists != last + 1 {
+        fail(format!(
+            "{}: non-contiguous copperlists — {} of them, ids {first}..={last}, {gaps} gap(s)",
+            log_base.display(),
+            kpis.culists
+        ));
+    }
+    let (logged_ron, complete) = provenance(&log_base).unwrap_or_else(|e| fail(e));
+    if !complete {
+        fail(format!(
+            "{}: no shutdown record — the log is truncated or the run did not finish",
+            log_base.display()
+        ));
+    }
+    let logged = read_configuration_str(logged_ron, None).unwrap_or_else(|e| fail(e));
+    if layout_witness(&logged) != layout_witness(&config) {
+        fail(format!(
+            "{}: recorded under a different graph or plan order than {}",
+            log_base.display(),
+            config_path.display()
+        ));
+    }
+    if let Ok(expected) = std::env::var("KPI_EXPECT") {
+        let expected: u64 = expected
+            .parse()
+            .unwrap_or_else(|e| fail(format!("KPI_EXPECT: {e}")));
+        if kpis.culists != expected {
+            fail(format!(
+                "{}: {} copperlists, KPI_EXPECT says {expected}",
+                log_base.display(),
+                kpis.culists
+            ));
+        }
     }
 
-    kpis.report(&log_base);
+    kpis.report(&log_base, (first, last));
 
-    let out_dir = crate_dir.join("analysis").join("data");
     if let Err(e) = fs::create_dir_all(&out_dir) {
         fail(format!("{}: {e}", out_dir.display()));
     }
@@ -527,13 +640,7 @@ fn main() {
     write(&out_dir, "nodes.csv", &kpis.nodes_csv());
 
     // The per-edge / all-passes view is already a core feature; don't reimplement it.
-    let config_path = crate_dir.join("copperconfig.ron");
-    let config = config_path
-        .to_str()
-        .ok_or_else(|| CuError::from("crate path is not UTF-8"))
-        .and_then(read_configuration)
-        .unwrap_or_else(|e| fail(e));
-    let logstats = reader(&log_base)
+    let logstats = reader(&log_base, UnifiedLogType::CopperList)
         .and_then(|source| compute_logstats::<CuMsgs>(source, &config, None))
         .unwrap_or_else(|e| fail(e));
     let logstats_path = out_dir.join("logstats.json");
@@ -550,28 +657,119 @@ mod tests {
 
     const MS: u64 = 1_000_000;
 
-    fn sample(seq: u64) -> RefSample {
-        RefSample {
-            seq,
-            ..Default::default()
-        }
-    }
-
     fn t(ns: u64) -> CuTime {
         CuDuration(ns).into()
     }
 
-    /// A fired message: payload, time of validity, and the producer's process span.
-    fn fired<P: CuMsgPayload>(msg: &mut CuMsg<P>, payload: P, tov: u64, start: u64, end: u64) {
-        msg.set_payload(payload);
-        msg.tov = Tov::Time(t(tov));
-        timed(msg, start, end);
+    /// The payload a fixture synthesizes for a slot, whatever type that slot carries.
+    trait FixturePayload: CuMsgPayload {
+        fn of_seq(seq: u64) -> Self;
     }
 
-    /// A pass a node ran but produced nothing: the runtime still stamps the span.
-    fn timed<P: CuMsgPayload>(msg: &mut CuMsg<P>, start: u64, end: u64) {
-        msg.metadata.process_time.start = t(start).into();
-        msg.metadata.process_time.end = t(end).into();
+    impl FixturePayload for RefSample {
+        fn of_seq(seq: u64) -> Self {
+            RefSample {
+                seq,
+                ..Default::default()
+            }
+        }
+    }
+
+    impl FixturePayload for RefLaneSample {
+        fn of_seq(seq: u64) -> Self {
+            RefLaneSample(RefSample::of_seq(seq))
+        }
+    }
+
+    impl FixturePayload for () {
+        fn of_seq(_: u64) -> Self {}
+    }
+
+    /// One copperlist slot, written without naming its payload type: slot numbering follows
+    /// the execution plan, so a pinned `runtime.plan.order` moves types between slots.
+    trait Slot {
+        /// Payload, time of validity and process span. `tov: None` is a firing the log
+        /// could not time.
+        fn fire(&mut self, port: usize, seq: u64, tov: Option<u64>, start: u64, end: u64);
+        /// A pass the node ran without producing anything: the runtime still stamps the span.
+        fn timed(&mut self, port: usize, start: u64, end: u64);
+    }
+
+    impl<P: FixturePayload> Slot for CuMsg<P> {
+        fn fire(&mut self, port: usize, seq: u64, tov: Option<u64>, start: u64, end: u64) {
+            self.set_payload(P::of_seq(seq));
+            self.tov = tov.map_or(Tov::None, |ns| Tov::Time(t(ns)));
+            self.timed(port, start, end);
+        }
+
+        fn timed(&mut self, port: usize, start: u64, end: u64) {
+            assert_eq!(port, 0, "single-port slot");
+            self.metadata.process_time.start = t(start).into();
+            self.metadata.process_time.end = t(end).into();
+        }
+    }
+
+    impl<A: Slot, B: Slot> Slot for (A, B) {
+        fn fire(&mut self, port: usize, seq: u64, tov: Option<u64>, start: u64, end: u64) {
+            match port {
+                0 => self.0.fire(0, seq, tov, start, end),
+                1 => self.1.fire(0, seq, tov, start, end),
+                _ => panic!("no port {port}"),
+            }
+        }
+
+        fn timed(&mut self, port: usize, start: u64, end: u64) {
+            match port {
+                0 => self.0.timed(0, start, end),
+                1 => self.1.timed(0, start, end),
+                _ => panic!("no port {port}"),
+            }
+        }
+    }
+
+    /// `&mut msgs.0.N` for a runtime N. The tuple is heterogeneous, so the index has to be
+    /// a literal somewhere; this is the one place it is, and every arm coerces to `Slot`
+    /// whatever type the plan put there.
+    macro_rules! tuple_slots {
+        ($($index:tt)*) => {
+            fn tuple_slot(msgs: &mut CuMsgs, index: usize) -> &mut dyn Slot {
+                match index {
+                    $($index => &mut msgs.0.$index,)*
+                    _ => panic!("copperlist has no slot {index}"),
+                }
+            }
+        };
+    }
+    tuple_slots!(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23);
+
+    /// (tuple index, port) of the flat slot named `name`, e.g. `euclidean_cluster_detector#1`.
+    fn slot_of(name: &str) -> (usize, usize) {
+        let ids = CuMsgs::get_all_task_ids();
+        let (mut index, mut port) = (0, 0);
+        for (flat, slot) in slot_names().iter().enumerate() {
+            if flat > 0 {
+                if ids[flat] == ids[flat - 1] {
+                    port += 1;
+                } else {
+                    index += 1;
+                    port = 0;
+                }
+            }
+            if slot == name {
+                return (index, port);
+            }
+        }
+        panic!("no copperlist slot named '{name}'");
+    }
+
+    fn fire(msgs: &mut CuMsgs, slot: &str, seq: u64, tov: Option<u64>, start: u64, end: u64) {
+        let (index, port) = slot_of(slot);
+        tuple_slot(msgs, index).fire(port, seq, tov, start, end);
+    }
+
+    fn timed(msgs: &mut CuMsgs, slot: &str, start: u64, end: u64) {
+        let (index, port) = slot_of(slot);
+        tuple_slot(msgs, index).timed(port, start, end);
     }
 
     fn node_index(id: &str) -> usize {
@@ -581,39 +779,83 @@ mod tests {
             .unwrap_or_else(|| panic!("{id} is not in the cost table"))
     }
 
-    /// The pass where the lidar chain is fresh, times in ms. Tuple-field access needs
-    /// literal indices; `test_culist_slot_layout` pins the ones used here. Tuple index n
-    /// is flat slot n below the two-port node (17.0/17.1 = slots 17/18) and slot n+1 above.
+    /// The pass where the lidar chain is fresh, times in ms.
     fn fresh_pass() -> CuMsgs {
         let mut msgs = CuMsgs::default();
-        fired(
-            &mut msgs.0.0,
-            sample(7),
-            1000 * MS,
+        let m = &mut msgs;
+        fire(
+            m,
+            "front_lidar",
+            7,
+            Some(1000 * MS),
             1000 * MS,
             1000 * MS + 100_000,
         );
-        fired(&mut msgs.0.1, sample(7), 1000 * MS, 1000 * MS, 1010 * MS);
-        fired(
-            &mut msgs.0.2,
-            sample(5),
-            1002 * MS,
+        fire(
+            m,
+            "points_transformer_front",
+            7,
+            Some(1000 * MS),
+            1000 * MS,
+            1010 * MS,
+        );
+        fire(
+            m,
+            "rear_lidar",
+            5,
+            Some(1002 * MS),
             1002 * MS,
             1002 * MS + 100_000,
         );
-        fired(&mut msgs.0.3, sample(5), 1002 * MS, 1002 * MS, 1012 * MS);
-        fired(&mut msgs.0.4, sample(7), 1000 * MS, 1012 * MS, 1024 * MS);
-        fired(&mut msgs.0.17.0, sample(7), 1000 * MS, 1030 * MS, 1050 * MS);
-        fired(
-            &mut msgs.0.17.1,
-            RefLaneSample(sample(7)),
-            1000 * MS,
+        fire(
+            m,
+            "points_transformer_rear",
+            5,
+            Some(1002 * MS),
+            1002 * MS,
+            1012 * MS,
+        );
+        fire(
+            m,
+            "point_cloud_fusion",
+            7,
+            Some(1000 * MS),
+            1012 * MS,
+            1024 * MS,
+        );
+        fire(
+            m,
+            "euclidean_cluster_detector",
+            7,
+            Some(1000 * MS),
             1030 * MS,
             1050 * MS,
         );
-        fired(&mut msgs.0.19, sample(7), 1000 * MS, 1140 * MS, 1150 * MS);
-        fired(&mut msgs.0.20, sample(3), 1160 * MS, 1160 * MS, 1170 * MS);
-        timed(&mut msgs.0.23, 1190 * MS, 1191 * MS);
+        fire(
+            m,
+            "euclidean_cluster_detector#1",
+            7,
+            Some(1000 * MS),
+            1030 * MS,
+            1050 * MS,
+        );
+        fire(
+            m,
+            "object_collision_estimator",
+            7,
+            Some(1000 * MS),
+            1140 * MS,
+            1150 * MS,
+        );
+        fire(
+            m,
+            "behavior_planner",
+            3,
+            Some(1160 * MS),
+            1160 * MS,
+            1170 * MS,
+        );
+        timed(m, "vehicle_dbw", 1190 * MS, 1191 * MS);
         msgs
     }
 
@@ -621,51 +863,69 @@ mod tests {
     /// fire, and the gated nodes still carry a span.
     fn gated_pass() -> CuMsgs {
         let mut msgs = CuMsgs::default();
-        timed(&mut msgs.0.0, 1200 * MS, 1200 * MS);
-        timed(&mut msgs.0.1, 1200 * MS, 1200 * MS);
-        timed(&mut msgs.0.3, 1200 * MS, 1200 * MS);
-        timed(&mut msgs.0.4, 1200 * MS, 1200 * MS);
-        timed(&mut msgs.0.19, 1200 * MS, 1200 * MS);
-        fired(
-            &mut msgs.0.16,
-            sample(40),
-            1205 * MS,
+        let m = &mut msgs;
+        for node in [
+            "front_lidar",
+            "points_transformer_front",
+            "points_transformer_rear",
+            "point_cloud_fusion",
+            "object_collision_estimator",
+        ] {
+            timed(m, node, 1200 * MS, 1200 * MS);
+        }
+        fire(
+            m,
+            "euclidean_cluster_settings",
+            40,
+            Some(1205 * MS),
             1205 * MS,
             1205 * MS + 100_000,
         );
-        timed(&mut msgs.0.17.0, 1210 * MS, 1220 * MS);
-        fired(
-            &mut msgs.0.17.1,
-            RefLaneSample(sample(40)),
-            1205 * MS,
+        timed(m, "euclidean_cluster_detector", 1210 * MS, 1220 * MS);
+        fire(
+            m,
+            "euclidean_cluster_detector#1",
+            40,
+            Some(1205 * MS),
             1210 * MS,
             1220 * MS,
         );
-        fired(&mut msgs.0.20, sample(4), 1330 * MS, 1330 * MS, 1340 * MS);
-        timed(&mut msgs.0.23, 1360 * MS, 1361 * MS);
+        fire(
+            m,
+            "behavior_planner",
+            4,
+            Some(1330 * MS),
+            1330 * MS,
+            1340 * MS,
+        );
+        timed(m, "vehicle_dbw", 1360 * MS, 1361 * MS);
         msgs
     }
 
-    /// The fixtures above address the copperlist by literal tuple index; if the graph
-    /// ever renumbers its slots this is what catches it.
+    /// Slot numbering follows the execution plan, so nothing here may depend on a
+    /// particular one. What must hold under any legal order: one uniquely named flat slot
+    /// per task output, every one of them reachable through `tuple_slot`, and the
+    /// detector's two ports adjacent in the same tuple slot.
     #[test]
     fn test_culist_slot_layout() {
-        let slots = slot_names();
-        for (index, name) in [
-            (0, "front_lidar"),
-            (1, "points_transformer_front"),
-            (2, "rear_lidar"),
-            (3, "points_transformer_rear"),
-            (4, "point_cloud_fusion"),
-            (16, "euclidean_cluster_settings"),
-            (17, "euclidean_cluster_detector"),
-            (18, "euclidean_cluster_detector#1"),
-            (20, "object_collision_estimator"),
-            (21, "behavior_planner"),
-            (24, "vehicle_dbw"),
-        ] {
-            assert_eq!(slots[index], name, "slot {index}");
+        let names = slot_names();
+        let mut unique = names.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), names.len(), "duplicate slot name");
+
+        let mut msgs = CuMsgs::default();
+        let mut tuples = 0;
+        for name in &names {
+            let (index, port) = slot_of(name);
+            tuple_slot(&mut msgs, index).timed(port, 0, 0);
+            tuples = tuples.max(index + 1);
         }
+        assert_eq!(tuples, NODES.len(), "tuple_slots! must list every slot");
+
+        let (index, port) = slot_of("euclidean_cluster_detector#1");
+        assert_eq!(port, 1);
+        assert_eq!(slot_of("euclidean_cluster_detector"), (index, 0));
     }
 
     /// The cost model has to name real copperlist slots and cover every node, or a config
@@ -717,7 +977,7 @@ mod tests {
             kpis.planner_period.stats.is_empty(),
             "no period on one tick"
         );
-        assert_eq!(kpis.late, 0);
+        assert_eq!(kpis.hot_path.late, 0);
         assert_eq!(kpis.timing_gaps, 0);
         assert_eq!(
             alignment(&kpis.front_seqs, &kpis.estimator_updates),
@@ -765,7 +1025,14 @@ mod tests {
     #[test]
     fn test_untimed_firing_counts_as_a_gap_not_a_miss() {
         let mut msgs = fresh_pass();
-        msgs.0.19.tov = Tov::None;
+        fire(
+            &mut msgs,
+            "object_collision_estimator",
+            7,
+            None,
+            1140 * MS,
+            1150 * MS,
+        );
         let mut kpis = Kpis::new();
         kpis.record_pass(&msgs);
 

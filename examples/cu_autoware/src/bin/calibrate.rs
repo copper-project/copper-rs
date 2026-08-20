@@ -56,8 +56,11 @@ const TARGETS: &[(&str, &str, u64)] = &[
 
 /// Timed runs per candidate limit; the median is what the search steers on.
 const RUNS: usize = 15;
-/// The search aims at 1%; `--apply` refuses to write anything worse than the 5% bar.
-const TOLERANCE: f64 = 0.01;
+/// The search aims at 0.3%; `--apply` refuses to write anything worse than the 5% bar.
+/// 1% used to be the bar, which is the whole gap between the 10.1ms and 10.2ms classes:
+/// the search could stop early on either side of it and hand the wider class the smaller
+/// limit. It is only an early exit, so a tighter bar costs probes, not convergence.
+const TOLERANCE: f64 = 0.003;
 const APPLY_BAR: f64 = 5.0;
 const PROBE_LIMIT: u64 = 20_000;
 const WARMUP: Duration = Duration::from_millis(500);

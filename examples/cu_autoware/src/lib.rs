@@ -18,13 +18,17 @@ const SLAB_SIZE: Option<usize> = Some(64 * 1024 * 1024);
 /// Bounded so the example exits on its own. At the calibrated crunch limits one pass over
 /// the graph costs far more than the 5ms grid, so wall time per iteration is what the run
 /// measures rather than something to predict.
-pub const ITERATIONS: usize = 200;
+pub const ITERATIONS: usize = 400;
 
-pub fn run(iterations: usize) {
+/// `log_base` defaults to `<crate>/logs/autoware.copper`; give it a distinct base per
+/// variant so parallel or successive runs do not clobber each other's log.
+pub fn run(iterations: usize, log_base: Option<PathBuf>) {
     // Anchored to the crate, not the cwd: step 4's logreader needs a stable location.
-    let logger_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("logs")
-        .join("autoware.copper");
+    let logger_path = log_base.unwrap_or_else(|| {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("logs")
+            .join("autoware.copper")
+    });
     if let Some(parent) = logger_path.parent()
         && !parent.exists()
     {
@@ -55,4 +59,9 @@ pub fn run(iterations: usize) {
     application
         .stop_all_tasks()
         .expect("Failed to stop application.");
+    // The generated `run()` writes this; a manual loop has to. `kpi` refuses to report on
+    // a log that does not end with it, which is how a truncated log is caught.
+    application
+        .log_shutdown_completed()
+        .expect("Failed to record shutdown.");
 }
