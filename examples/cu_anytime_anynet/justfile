@@ -1,0 +1,41 @@
+ROOT := shell('cd "$1/../.." && pwd', justfile_directory())
+
+default: fg
+
+# Run the foreground anytime demo with pretrained weights on the CPU.
+fg: weights
+  cd "{{ROOT}}" && cargo run --release -p cu-anytime-anynet --bin anynet-fg
+
+# Run the background anytime demo with pretrained weights on the CPU.
+bg: weights
+  cd "{{ROOT}}" && cargo run --release -p cu-anytime-anynet --bin anynet-bg
+
+# Run the foreground wiring smoke test with random weights.
+smoketest:
+  cd "{{ROOT}}" && cargo run --release -p cu-anytime-anynet --bin anynet-fg --features smoketest
+
+# Prepare the mirrored KITTI checkpoint using installed Python dependencies.
+weights:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  mkdir -p target/cu_anytime_anynet
+  if [[ -f target/cu_anytime_anynet/anynet-kitti.safetensors ]]; then
+    echo "Using existing weights at {{ROOT}}/target/cu_anytime_anynet/anynet-kitti.safetensors"
+    exit 0
+  fi
+  if ! python3 -c 'import torch, safetensors, gdown' >/dev/null 2>&1; then
+    echo "Missing Python dependencies: torch, safetensors, and/or gdown." >&2
+    echo "Install them in your chosen Python environment, then rerun this recipe." >&2
+    exit 1
+  fi
+  python3 -m gdown 1tD_gZ-0YUHtS7-v5uPYtJN9v6PVBV8Dm \
+    -O target/cu_anytime_anynet/kitti2015_checkpoint.tar
+  python3 components/tasks/cu_anynet/tools/convert_checkpoint.py \
+    target/cu_anytime_anynet/kitti2015_checkpoint.tar \
+    target/cu_anytime_anynet/anynet-kitti.safetensors
+  echo "Weights written to {{ROOT}}/target/cu_anytime_anynet/anynet-kitti.safetensors"
+
+# Run the background anytime demo with pretrained weights and CUDA support.
+cuda: weights
+  cd "{{ROOT}}" && cargo run --release -p cu-anytime-anynet --bin anynet-bg --features cuda

@@ -17,6 +17,7 @@ environments = ["host"]
 
 [features]
 cuda = ["cu-anynet/cuda"]
+smoketest = []
 
 [[bin]]
 name = "anynet-fg"

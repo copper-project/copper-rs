@@ -4,7 +4,14 @@ use cu29::prelude::*;
 use std::fs;
 use std::path::Path;
 
-#[copper_runtime(config = "copperconfig.ron")]
+#[cfg_attr(
+    not(feature = "smoketest"),
+    copper_runtime(config = "copperconfig.ron")
+)]
+#[cfg_attr(
+    feature = "smoketest",
+    copper_runtime(config = "copperconfig_smoke.ron")
+)]
 struct App {}
 
 /// Must agree with `slab_size_mib` in `copperconfig.ron`: the writer only sees

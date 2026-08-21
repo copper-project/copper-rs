@@ -5,12 +5,19 @@ as a Copper `CuAnytimeTask`. `anynet-fg` refines in the foreground and can be
 recorded/resimulated; `anynet-bg` keeps the 5 Hz graph responsive while Candle
 inference runs on a background worker.
 
-With no `weights` key on the `anynet` task, both binaries use random weights as
-a wiring smoke test and synthesize a moving rectified stereo pair:
+The default command downloads and converts the pretrained KITTI checkpoint if
+needed, then runs the foreground demo on a moving synthetic stereo pair. The
+background variant uses the same checkpoint:
 
 ```sh
-cargo run --release -p cu-anytime-anynet --bin anynet-fg
-cargo run --release -p cu-anytime-anynet --bin anynet-bg
+just
+just bg
+```
+
+To test only the task-graph wiring, use random weights explicitly:
+
+```sh
+just smoketest
 ```
 
 ## What the viewer shows
@@ -86,7 +93,7 @@ stage, which is a different frame per pane.
 
 ### Smoke mode has nothing to show
 
-Without `weights`, every pane is a single flat color and the residuals are
+In `just smoketest`, every pane is a single flat color and the residuals are
 exactly zero. That is correct, not a broken viewer. Random weights make the cost
 volume uniform, so the disparity regression returns the midpoint of the search
 range for every pixel: a constant 88 px, which is a constant 4.427 m at the
@@ -147,14 +154,19 @@ metric are unaffected by this choice as long as the two nodes agree.
 The pretrained-model link in the AnyNet README (Google Drive) is dead as of
 2026. A working mirror lives in the
 [Stereo-3D-Detection](https://github.com/AmrElsersy/Stereo-3D-Detection) fork's
-Drive folder; its `kitti2015.tar` matches the reference architecture exactly:
+Drive folder; its `kitti2015.tar` matches the reference architecture exactly.
+Checkpoint conversion requires `torch`, `safetensors`, and `gdown` in the
+active Python environment. Install those dependencies using your preferred
+environment manager, then run:
 
 ```sh
-python3 -m pip install torch safetensors gdown
-python3 -m gdown 1tD_gZ-0YUHtS7-v5uPYtJN9v6PVBV8Dm -O kitti2015_checkpoint.tar
-python3 components/tasks/cu_anynet/tools/convert_checkpoint.py \
-  kitti2015_checkpoint.tar anynet-kitti.safetensors
+just weights
 ```
+
+This writes the converted checkpoint to
+`target/cu_anytime_anynet/anynet-kitti.safetensors`. The normal `just`, `just
+fg`, `just bg`, and `just cuda` recipes run this setup automatically when the
+converted checkpoint is missing.
 
 **Normalization caveat:** that mirror was trained on raw 0..255 pixels, not
 the `/255` ImageNet normalization of the original AnyNet dataloader (its first
@@ -172,7 +184,7 @@ config: {
     "focal_px": 721.5,
     "baseline_m": 0.54,
     "stage_snapshots": true,
-    "weights": "/path/to/anynet-kitti.safetensors",
+    "weights": "/path/to/copper-rs/target/cu_anytime_anynet/anynet-kitti.safetensors",
     "normalization": "raw",
 },
 ```
@@ -183,7 +195,7 @@ A tighter `time_budget_ms` publishes earlier stages; for example, a
 CUDA builds use Candle/cudarc:
 
 ```sh
-cargo run --release -p cu-anytime-anynet --bin anynet-bg --features cuda
+just cuda
 ```
 
 Jetson/aarch64 CUDA support must be verified on the target; CPU is the fallback.

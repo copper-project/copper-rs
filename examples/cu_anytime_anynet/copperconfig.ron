@@ -16,14 +16,13 @@
         (
             id: "anynet",
             type: "cu_anynet::AnyNetStereo",
-            // Without `"weights"` the task runs random smoke-mode weights and
-            // every stage is an identical flat map. Trained checkpoints also
-            // need `"normalization"` to match how they were trained.
             // KITTI's calibration; must match the viewer node.
             config: {
                 "focal_px": 721.5,
                 "baseline_m": 0.54,
                 "stage_snapshots": true,
+                "weights": "target/cu_anytime_anynet/anynet-kitti.safetensors",
+                "normalization": "raw",
             },
             anytime: (
                 max_refines: 2,
