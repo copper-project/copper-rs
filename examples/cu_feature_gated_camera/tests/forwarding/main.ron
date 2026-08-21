@@ -3,9 +3,7 @@
         (path: "base.ron"),
         (
             path: "feature.ron",
-            when: Feature(
-                "jetson-mipi",
-            ),
+            when: Feature("jetson-mipi"),
         ),
     ],
 )

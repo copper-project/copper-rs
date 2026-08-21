@@ -5,11 +5,7 @@
             type: "CalibrationReporter",
             config: {
                 "label": "base-robot",
-                "gyro_bias": [
-                    0.0,
-                    0.0,
-                    0.0,
-                ],
+                "gyro_bias": [0.0, 0.0, 0.0],
             },
         ),
     ],

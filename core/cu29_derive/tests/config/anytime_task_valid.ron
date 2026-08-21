@@ -23,9 +23,7 @@
             id: "counter",
             type: "AnytimeCounter",
             anytime: (max_refines: 2),
-            resources: {
-                "scratch": "board.scratch",
-            },
+            resources: {"scratch": "board.scratch"},
         ),
         (
             id: "sink",

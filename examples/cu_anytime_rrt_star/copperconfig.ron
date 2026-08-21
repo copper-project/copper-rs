@@ -16,9 +16,7 @@
         (
             id: "planner",
             type: "cu_rrt_star::RrtStarPlanner",
-            resources: {
-                "rng": "planner_rng.rng",
-            },
+            resources: {"rng": "planner_rng.rng"},
             anytime: (
                 max_refines: 16,
                 time_budget_ms: 30.0,

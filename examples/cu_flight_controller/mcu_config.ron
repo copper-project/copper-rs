@@ -8,9 +8,7 @@
             },
             when: Any(
                 [
-                    Feature(
-                        "sim-debug",
-                    ),
+                    Feature("sim-debug"),
                     Not(
                         Any(
                             [
@@ -114,27 +112,21 @@
             type: "tasks::Dps310Source",
             run_in_sim: true,
             logging: (enabled: true),
-            resources: {
-                "i2c": "fc.i2c2_dps310",
-            },
+            resources: {"i2c": "fc.i2c2_dps310"},
         ),
         (
             id: "ist8310",
             type: "tasks::Ist8310Source",
             run_in_sim: true,
             logging: (enabled: true),
-            resources: {
-                "i2c": "fc.i2c2_ist8310",
-            },
+            resources: {"i2c": "fc.i2c2_ist8310"},
         ),
         (
             id: "mag_heading",
             type: "tasks::MagneticTrueHeading",
             run_in_sim: true,
             logging: (enabled: true),
-            config: {
-                "declination_deg": 4.7,
-            },
+            config: {"declination_deg": 4.7},
         ),
         (
             id: "battery_adc",
@@ -238,9 +230,7 @@
             type: "tasks::activity_led::ActivityLed",
             run_in_sim: true,
             logging: (enabled: false),
-            resources: {
-                "led": "fc.green_led",
-            },
+            resources: {"led": "fc.green_led"},
         ),
         (
             id: "vtx_osd",
@@ -272,9 +262,7 @@
             type: "tasks::gnss::GnssSource",
             run_in_sim: true,
             logging: (enabled: true),
-            resources: {
-                "serial": "fc.uart3",
-            },
+            resources: {"serial": "fc.uart3"},
             config: {
                 "poll_nav_pvt_ms": 200,
                 "poll_nav_sat_ms": 1000,
@@ -297,9 +285,7 @@
             type: "cu_crsf::CrsfBridge<cu_micoairh743::Uart6Port, cu_micoairh743::SerialPortError>",
             run_in_sim: false,
             logging: (enabled: true),
-            resources: {
-                "serial": "fc.uart6",
-            },
+            resources: {"serial": "fc.uart6"},
             channels: [
                 Rx(id: "rc_rx"),
                 Tx(id: "lq_tx"),
@@ -310,9 +296,7 @@
             type: "cu_msp_bridge::CuMspBridge<cu_micoairh743::Uart2Port, cu_micoairh743::SerialPortError>",
             run_in_sim: false,
             logging: (enabled: false),
-            resources: {
-                "serial": "fc.uart2",
-            },
+            resources: {"serial": "fc.uart2"},
             channels: [
                 Tx(id: "requests"),
                 Rx(id: "responses"),
@@ -325,9 +309,7 @@
             missions: ["flow"],
             run_in_sim: false,
             logging: (enabled: false),
-            resources: {
-                "serial": "fc.uart4",
-            },
+            resources: {"serial": "fc.uart4"},
             channels: [
                 Tx(id: "requests"),
                 Rx(id: "responses"),

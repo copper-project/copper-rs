@@ -1,8 +1,5 @@
 (
-    missions: [
-        (id: "Alpha"),
-        (id: "Beta"),
-    ],
+    missions: [(id: "Alpha"), (id: "Beta")],
     resources: [
         (
             id: "board",
@@ -36,17 +33,13 @@
             id: "control",
             type: "tasks::Control",
             missions: ["Alpha"],
-            resources: {
-                "spi": "board.spi1",
-            },
+            resources: {"spi": "board.spi1"},
         ),
         (
             id: "logger",
             type: "tasks::Logger",
             missions: ["Beta"],
-            resources: {
-                "cfg": "memory.cfg",
-            },
+            resources: {"cfg": "memory.cfg"},
         ),
     ],
     bridges: [
@@ -54,13 +47,8 @@
             id: "telemetry",
             type: "bridges::Telemetry",
             missions: ["Beta"],
-            resources: {
-                "serial": "radio.uart1",
-            },
-            channels: [
-                Tx(id: "tx"),
-                Rx(id: "rx"),
-            ],
+            resources: {"serial": "radio.uart1"},
+            channels: [Tx(id: "tx"), Rx(id: "rx")],
         ),
     ],
     cnx: [

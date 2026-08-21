@@ -62,7 +62,5 @@
             msg: "()",
         ),
     ],
-    includes: [
-        (path: "constants-extra.ron"),
-    ],
+    includes: [(path: "constants-extra.ron")],
 )

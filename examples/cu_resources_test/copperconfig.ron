@@ -26,15 +26,11 @@
         (
             id: "extras_b",
             provider: "crate::resources::ExtraBundle",
-            config: {
-                "note": "mission-b-note",
-            },
+            config: {"note": "mission-b-note"},
             missions: ["B"],
         ),
     ],
-    logging: (
-        enable_task_logging: false,
-    ),
+    logging: (enable_task_logging: false),
     tasks: [
         (
             id: "sensor_a",

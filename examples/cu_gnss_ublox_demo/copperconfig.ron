@@ -14,9 +14,7 @@
         (
             id: "ublox",
             type: "cu_gnss_ublox::UbxSource",
-            resources: {
-                "serial": "linux.serial0",
-            },
+            resources: {"serial": "linux.serial0"},
             config: {
                 "poll_nav_pvt_ms": 200,
                 "poll_nav_sat_ms": 1000,

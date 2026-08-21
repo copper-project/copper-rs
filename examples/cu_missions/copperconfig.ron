@@ -8,17 +8,13 @@
         (
             id: "taskA",
             type: "tasks::ExampleTask",
-            config: {
-                "label": "Mission A",
-            },
+            config: {"label": "Mission A"},
             missions: ["A"],
         ),
         (
             id: "taskB",
             type: "tasks::ExampleTask",
-            config: {
-                "label": "Mission B",
-            },
+            config: {"label": "Mission B"},
             missions: ["B"],
         ),
     ],

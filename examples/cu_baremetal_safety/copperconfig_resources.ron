@@ -1,7 +1,5 @@
 (
-    logging: (
-        enable_task_logging: false,
-    ),
+    logging: (enable_task_logging: false),
     resources: [
         (
             id: "board",
@@ -34,9 +32,7 @@
         (
             id: "tap",
             type: "crate::harness::resource_bridges::ResourceBridge",
-            resources: {
-                "tag": "board.tag",
-            },
+            resources: {"tag": "board.tag"},
             channels: [
                 Rx(id: "probe_rx"),
                 Tx(id: "probe_tx"),

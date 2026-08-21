@@ -29,9 +29,7 @@
             id: "feetech",
             type: "cu_feetech::FeetechBridge",
             missions: ["arm_publisher"],
-            resources: {
-                "serial": "hw.serial0",
-            },
+            resources: {"serial": "hw.serial0"},
             config: {
                 "servo0": 1,
                 "servo1": 2,
@@ -40,19 +38,13 @@
                 "servo4": 5,
                 "servo5": 6,
             },
-            channels: [
-                Rx(id: "positions"),
-            ],
+            channels: [Rx(id: "positions")],
         ),
         (
             id: "leader",
             type: "cu_feetech::FeetechBridge",
-            missions: [
-                "leader_follower",
-            ],
-            resources: {
-                "serial": "hw.serial0",
-            },
+            missions: ["leader_follower"],
+            resources: {"serial": "hw.serial0"},
             config: {
                 "servo0": 1,
                 "servo1": 2,
@@ -63,19 +55,13 @@
                 "units": "normalize",
                 "calibration_file": "calibration_leader.json",
             },
-            channels: [
-                Rx(id: "positions"),
-            ],
+            channels: [Rx(id: "positions")],
         ),
         (
             id: "follower",
             type: "cu_feetech::FeetechBridge",
-            missions: [
-                "leader_follower",
-            ],
-            resources: {
-                "serial": "hw.serial1",
-            },
+            missions: ["leader_follower"],
+            resources: {"serial": "hw.serial1"},
             config: {
                 "servo0": 1,
                 "servo1": 2,
@@ -87,9 +73,7 @@
                 "calibration_file": "calibration_follower.json",
             },
             channels: [
-                Tx(
-                    id: "goal_positions",
-                ),
+                Tx(id: "goal_positions"),
                 Rx(id: "positions"),
             ],
         ),
@@ -105,9 +89,7 @@
             src: "leader/positions",
             dst: "follower/goal_positions",
             msg: "cu_feetech::messages::JointPositions",
-            missions: [
-                "leader_follower",
-            ],
+            missions: ["leader_follower"],
         ),
     ],
     runtime: (rate_target_hz: 30),

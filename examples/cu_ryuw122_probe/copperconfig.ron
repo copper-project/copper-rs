@@ -20,13 +20,9 @@
         (
             id: "ranges",
             type: "cu_ryuw122::Ryuw122InitiatorSource",
-            resources: {
-                "serial": "linux.serial0",
-            },
+            resources: {"serial": "linux.serial0"},
             config: {
-                "anchor_ids": [
-                    "ANCH0001",
-                ],
+                "anchor_ids": ["ANCH0001"],
                 "poll_payload": "PING",
                 "response_timeout_ms": 250,
                 "read_buffer_bytes": 512,

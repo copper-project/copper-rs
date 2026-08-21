@@ -32,9 +32,7 @@
             type: "autonomy_bridge::AutonomyBridge",
             run_in_sim: false,
             logging: (enabled: true),
-            config: {
-                "wire_format": "bincode",
-            },
+            config: {"wire_format": "bincode"},
             channels: [
                 Tx(
                     id: "context",

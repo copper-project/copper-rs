@@ -20,7 +20,5 @@
             msg: "cu_gstreamer::CuGstBuffer",
         ),
     ],
-    logging: (
-        enable_task_logging: false,
-    ),
+    logging: (enable_task_logging: false),
 )

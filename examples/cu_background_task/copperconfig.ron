@@ -17,17 +17,13 @@
             id: "task1",
             type: "tasks::ExampleTask",
             background: true,
-            config: {
-                "sleep_duration_ms": 1000,
-            },
+            config: {"sleep_duration_ms": 1000},
         ),
         (
             id: "task2",
             type: "tasks::ExampleTask",
             background: (pool: "slow"),
-            config: {
-                "sleep_duration_ms": 250,
-            },
+            config: {"sleep_duration_ms": 250},
         ),
     ],
     cnx: [
