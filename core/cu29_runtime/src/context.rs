@@ -1,19 +1,7 @@
 //! User-facing execution context passed to task and bridge process callbacks.
 
-#[cfg(feature = "std")]
-use bincode::{Decode, Encode};
 use core::ops::Deref;
 use cu29_clock::{RobotClock, RobotClockMock};
-
-#[cfg(feature = "std")]
-#[derive(Clone, Debug, Encode, Decode)]
-pub(crate) struct CuContextSnapshot {
-    cl_id: u64,
-    instance_id: u32,
-    subsystem_code: u16,
-    current_component_index: Option<usize>,
-    current_task_index: Option<usize>,
-}
 
 /// Execution context passed to task and bridge callbacks.
 ///
@@ -171,27 +159,10 @@ impl CuContext {
     }
 
     #[cfg(feature = "std")]
-    pub(crate) fn snapshot(&self) -> CuContextSnapshot {
-        CuContextSnapshot {
-            cl_id: self.cl_id,
-            instance_id: self.instance_id,
-            subsystem_code: self.subsystem_code,
-            current_component_index: self.current_component_index,
-            current_task_index: self.current_task_index,
-        }
-    }
-
-    #[cfg(feature = "std")]
-    pub(crate) fn restore_snapshot(&self, snapshot: &CuContextSnapshot) -> Self {
-        Self {
-            clock: self.clock.clone(),
-            cl_id: snapshot.cl_id,
-            instance_id: snapshot.instance_id,
-            subsystem_code: snapshot.subsystem_code,
-            task_ids: self.task_ids,
-            current_component_index: snapshot.current_component_index,
-            current_task_index: snapshot.current_task_index,
-        }
+    pub(crate) fn with_cl_id(&self, cl_id: u64) -> Self {
+        let mut context = self.clone();
+        context.cl_id = cl_id;
+        context
     }
 }
 

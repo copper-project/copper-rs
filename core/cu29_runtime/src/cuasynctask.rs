@@ -1,5 +1,5 @@
 use crate::config::ComponentConfig;
-use crate::context::{CuContext, CuContextSnapshot};
+use crate::context::CuContext;
 use crate::cutask::{BincodeAdapter, CuMsg, CuMsgPayload, CuSrcTask, CuTask, Freezable};
 use crate::reflect::{Reflect, TypePath};
 use bincode::config::standard;
@@ -12,50 +12,46 @@ use cu29_clock::CuTime;
 use cu29_traits::{CuError, CuResult};
 use rayon::ThreadPool;
 use std::any::Any;
-use std::sync::{Arc, Mutex, RwLock};
+use std::cell::UnsafeCell;
+use std::sync::{Arc, Mutex};
 
-const ASYNC_SNAPSHOT_MAGIC: u32 = 0x4355_4153;
-const ASYNC_SNAPSHOT_VERSION: u8 = 1;
+const ASYNC_IDLE_TAG: u8 = 0xA0;
+const ASYNC_WAITING_TAG: u8 = 0xA1;
+const ASYNC_FAILED_TAG: u8 = 0xA2;
+const ASYNC_PENDING_TAG: u8 = 0xA3;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum AsyncPhase {
+enum AsyncStatus {
     Idle,
-    Running,
-    ReplayPending,
+    Waiting(CuTime),
+    Failed(String),
+    Running(u64),
+    ReplayPending(u64),
 }
 
-struct PendingDispatch {
-    context: CuContextSnapshot,
-}
-
-struct AsyncState {
-    generation: u64,
-    phase: AsyncPhase,
-    ready_at: Option<CuTime>,
-    last_error: Option<CuError>,
-    last_error_snapshot: Option<String>,
+struct AsyncState<O: CuMsgPayload> {
+    status: AsyncStatus,
     committed_task: Vec<u8>,
-    committed_output: Vec<u8>,
     task_scratch: Vec<u8>,
-    output_scratch: Vec<u8>,
-    pending: Option<PendingDispatch>,
+    committed_output: CuMsg<O>,
 }
 
-impl AsyncState {
+impl<O: CuMsgPayload> AsyncState<O> {
     fn new() -> Self {
         Self {
-            generation: 0,
-            phase: AsyncPhase::Idle,
-            ready_at: None,
-            last_error: None,
-            last_error_snapshot: None,
+            status: AsyncStatus::Idle,
             committed_task: Vec::new(),
-            committed_output: Vec::new(),
             task_scratch: Vec::new(),
-            output_scratch: Vec::new(),
-            pending: None,
+            committed_output: CuMsg::default(),
         }
     }
+}
+
+fn commit_initial_snapshot<O: CuMsgPayload>(state: &mut AsyncState<O>, snapshot: Vec<u8>) {
+    let mut scratch = core::mem::replace(&mut state.committed_task, snapshot);
+    if scratch.capacity() < state.committed_task.len() {
+        scratch.reserve_exact(state.committed_task.len() - scratch.len());
+    }
+    state.task_scratch = scratch;
 }
 
 struct BufferWriter<'a>(&'a mut Vec<u8>);
@@ -81,16 +77,6 @@ fn thaw_from(task: &mut impl Freezable, buffer: &[u8]) -> Result<(), DecodeError
     let reader = bincode::de::read::SliceReader::new(buffer);
     let mut decoder = bincode::de::DecoderImpl::new(reader, standard(), ());
     task.thaw(&mut decoder)
-}
-
-fn decode_value<T: Decode<()>>(buffer: &[u8], label: &str) -> Result<T, DecodeError> {
-    let (value, bytes_read) = bincode::decode_from_slice(buffer, standard())?;
-    if bytes_read != buffer.len() {
-        return Err(DecodeError::OtherString(format!(
-            "async {label} snapshot had trailing bytes"
-        )));
-    }
-    Ok(value)
 }
 
 struct DynWriter<'a>(&'a mut dyn Writer);
@@ -124,8 +110,12 @@ trait ErasedDispatch: Any + Send + Sync {
 }
 
 struct DispatchSlot<I: CuMsgPayload> {
-    input: Arc<RwLock<Option<CuMsg<I>>>>,
+    input: UnsafeCell<CuMsg<I>>,
 }
+
+// SAFETY: the slot is written only before a run is published or while thaw holds the
+// inner-task mutex. While a run is published, workers and keyframes only read it.
+unsafe impl<I: CuMsgPayload + Send + Sync> Sync for DispatchSlot<I> {}
 
 impl<I> DispatchSlot<I>
 where
@@ -133,8 +123,18 @@ where
 {
     fn new() -> Self {
         Self {
-            input: Arc::new(RwLock::new(None)),
+            input: UnsafeCell::new(CuMsg::default()),
         }
+    }
+
+    fn replace(&self, input: CuMsg<I>) -> CuMsg<I> {
+        // SAFETY: callers write only while no worker can hold a reference to the slot.
+        unsafe { core::mem::replace(&mut *self.input.get(), input) }
+    }
+
+    fn get(&self) -> &CuMsg<I> {
+        // SAFETY: published dispatch input remains immutable until the worker finishes.
+        unsafe { &*self.input.get() }
     }
 }
 
@@ -147,189 +147,97 @@ where
     }
 
     fn encode_input(&self, writer: &mut dyn Writer) -> Result<(), EncodeError> {
-        let input = self.input.read().map_err(|_| {
-            EncodeError::OtherString("async task dispatch slot poisoned".to_string())
-        })?;
         let mut encoder = EncoderImpl::new(DynWriter(writer), standard());
-        input.is_some().encode(&mut encoder)?;
-        if let Some(input) = input.as_ref() {
-            input.encode(&mut encoder)?;
-        }
-        Ok(())
+        self.get().encode(&mut encoder)
     }
 
     fn decode_input(&self, reader: &mut dyn Reader) -> Result<(), DecodeError> {
         let mut decoder = bincode::de::DecoderImpl::new(DynReader(reader), standard(), ());
-        let input = if bool::decode(&mut decoder)? {
-            Some(CuMsg::<I>::decode(&mut decoder)?)
-        } else {
-            None
-        };
-        *self.input.write().map_err(|_| {
-            DecodeError::OtherString("async task dispatch slot poisoned".to_string())
-        })? = input;
+        drop(self.replace(CuMsg::<I>::decode(&mut decoder)?));
         Ok(())
     }
 }
 
-fn phase_tag(phase: AsyncPhase) -> u8 {
-    match phase {
-        AsyncPhase::Idle => 0,
-        AsyncPhase::Running => 1,
-        AsyncPhase::ReplayPending => 2,
-    }
+fn failure(error: CuError) -> AsyncStatus {
+    AsyncStatus::Failed(error.to_string())
 }
 
-fn encode_async_state<E>(
-    state: &AsyncState,
-    dispatch: Option<&dyn ErasedDispatch>,
-    encoder: &mut E,
-) -> Result<(), EncodeError>
+fn encode_async_state<O, E>(state: &AsyncState<O>, encoder: &mut E) -> Result<bool, EncodeError>
 where
+    O: CuMsgPayload + Send + 'static,
     E: Encoder,
 {
-    ASYNC_SNAPSHOT_MAGIC.encode(encoder)?;
-    ASYNC_SNAPSHOT_VERSION.encode(encoder)?;
-    phase_tag(state.phase).encode(encoder)?;
-
-    Encode::encode(&state.ready_at, encoder)?;
-    Encode::encode(&state.last_error_snapshot, encoder)?;
     Encode::encode(&state.committed_task, encoder)?;
     Encode::encode(&state.committed_output, encoder)?;
-
-    if let Some(pending) = state.pending.as_ref() {
-        true.encode(encoder)?;
-        pending.context.encode(encoder)?;
-        if let Some(dispatch) = dispatch {
-            dispatch.encode_input(encoder.writer())?;
-        } else {
-            false.encode(encoder)?;
+    match &state.status {
+        AsyncStatus::Idle => {
+            ASYNC_IDLE_TAG.encode(encoder)?;
+            Ok(false)
         }
-    } else {
-        false.encode(encoder)?;
+        AsyncStatus::Waiting(ready_at) => {
+            ASYNC_WAITING_TAG.encode(encoder)?;
+            ready_at.encode(encoder)?;
+            Ok(false)
+        }
+        AsyncStatus::Failed(snapshot) => {
+            ASYNC_FAILED_TAG.encode(encoder)?;
+            snapshot.encode(encoder)?;
+            Ok(false)
+        }
+        AsyncStatus::Running(cl_id) | AsyncStatus::ReplayPending(cl_id) => {
+            ASYNC_PENDING_TAG.encode(encoder)?;
+            cl_id.encode(encoder)?;
+            Ok(true)
+        }
     }
-    Ok(())
 }
 
-fn decode_async_state<D>(
-    decoder: &mut D,
-    dispatch: Option<&dyn ErasedDispatch>,
-) -> Result<AsyncState, DecodeError>
+fn decode_async_state<O, D>(decoder: &mut D) -> Result<AsyncState<O>, DecodeError>
 where
+    O: CuMsgPayload + Send + 'static,
     D: Decoder,
 {
-    let magic = u32::decode(decoder).map_err(|_| {
-        DecodeError::OtherString(
-            "unsupported legacy async keyframe payload; expected version 1".to_string(),
-        )
-    })?;
-    let version = u8::decode(decoder)?;
-    if magic != ASYNC_SNAPSHOT_MAGIC || version != ASYNC_SNAPSHOT_VERSION {
-        return Err(DecodeError::OtherString(format!(
-            "unsupported async keyframe payload version {version}; expected version {ASYNC_SNAPSHOT_VERSION}"
-        )));
-    }
-    let recorded_phase = match u8::decode(decoder)? {
-        0 => AsyncPhase::Idle,
-        1 | 2 => AsyncPhase::ReplayPending,
-        phase => {
+    let committed_task = Decode::decode(decoder)?;
+    let committed_output = CuMsg::<O>::decode(&mut decoder.with_context(()))?;
+    let status = match u8::decode(decoder)? {
+        ASYNC_IDLE_TAG => AsyncStatus::Idle,
+        ASYNC_WAITING_TAG => AsyncStatus::Waiting(Decode::decode(decoder)?),
+        ASYNC_FAILED_TAG => {
+            let snapshot: String = Decode::decode(decoder)?;
+            AsyncStatus::Failed(snapshot)
+        }
+        ASYNC_PENDING_TAG => AsyncStatus::ReplayPending(u64::decode(decoder)?),
+        tag => {
             return Err(DecodeError::OtherString(format!(
-                "invalid async keyframe phase {phase}"
+                "unsupported async keyframe payload tag {tag:#04x}; expected version 1"
             )));
         }
     };
-    let ready_at = Decode::decode(decoder)?;
-    let last_error_snapshot: Option<String> = Decode::decode(decoder)?;
-    let committed_task = Decode::decode(decoder)?;
-    let committed_output = Decode::decode(decoder)?;
-    let pending = if bool::decode(decoder)? {
-        let context = CuContextSnapshot::decode(decoder)?;
-        if let Some(dispatch) = dispatch {
-            dispatch.decode_input(decoder.reader())?;
-        } else if bool::decode(decoder)? {
-            return Err(DecodeError::OtherString(
-                "async task snapshot contains input but no dispatch slot is initialized"
-                    .to_string(),
-            ));
-        }
-        Some(PendingDispatch { context })
-    } else {
-        None
-    };
-    if recorded_phase == AsyncPhase::ReplayPending && pending.is_none() {
-        return Err(DecodeError::OtherString(
-            "async keyframe recorded pending work without a dispatch".to_string(),
-        ));
-    }
     Ok(AsyncState {
-        generation: 0,
-        phase: recorded_phase,
-        ready_at,
-        last_error: last_error_snapshot
-            .as_ref()
-            .map(|error| CuError::from(error.as_str())),
-        last_error_snapshot,
+        status,
         committed_task,
-        committed_output,
         task_scratch: Vec::new(),
-        output_scratch: Vec::new(),
-        pending,
+        committed_output,
     })
 }
 
 type ErasedDispatchSlot = Arc<dyn ErasedDispatch>;
 
-fn dispatch_slot<I>(slot: &Option<ErasedDispatchSlot>) -> CuResult<Arc<RwLock<Option<CuMsg<I>>>>>
+fn dispatch_slot<I>(slot: &ErasedDispatchSlot) -> CuResult<&DispatchSlot<I>>
 where
     I: CuMsgPayload + Send + Sync + 'static,
 {
-    let slot = slot
-        .as_ref()
-        .ok_or_else(|| CuError::from("Async task dispatch slot was not initialized"))?;
     slot.as_any()
         .downcast_ref::<DispatchSlot<I>>()
-        .map(|slot| Arc::clone(&slot.input))
         .ok_or_else(|| CuError::from("Async task dispatch slot type did not match its input"))
 }
 
-fn record_async_task_error<I>(
-    state: &Mutex<AsyncState>,
-    dispatch: &RwLock<Option<CuMsg<I>>>,
-    generation: u64,
-    error: CuError,
-) where
-    I: CuMsgPayload + Send + Sync + 'static,
-{
+fn record_async_error<O: CuMsgPayload>(state: &Mutex<AsyncState<O>>, error: CuError) {
     let mut guard = match state.lock() {
         Ok(guard) => guard,
         Err(poison) => poison.into_inner(),
     };
-    if guard.generation != generation {
-        return;
-    }
-    if let Ok(mut input) = dispatch.write() {
-        *input = None;
-    }
-    guard.phase = AsyncPhase::Idle;
-    guard.ready_at = None;
-    guard.last_error_snapshot = Some(error.to_string());
-    guard.last_error = Some(error);
-    guard.pending = None;
-}
-
-fn record_async_error(state: &Mutex<AsyncState>, generation: u64, error: CuError) {
-    let mut guard = match state.lock() {
-        Ok(guard) => guard,
-        Err(poison) => poison.into_inner(),
-    };
-    if guard.generation != generation {
-        return;
-    }
-    guard.phase = AsyncPhase::Idle;
-    guard.ready_at = None;
-    guard.last_error_snapshot = Some(error.to_string());
-    guard.last_error = Some(error);
-    guard.pending = None;
+    guard.status = failure(error);
 }
 
 #[derive(Reflect)]
@@ -342,9 +250,7 @@ where
     #[reflect(ignore)]
     task: Arc<Mutex<T>>,
     #[reflect(ignore)]
-    output: Arc<Mutex<CuMsg<O>>>,
-    #[reflect(ignore)]
-    state: Arc<Mutex<AsyncState>>,
+    state: Arc<Mutex<AsyncState<O>>>,
     #[reflect(ignore)]
     dispatch: Option<ErasedDispatchSlot>,
     #[reflect(ignore)]
@@ -395,10 +301,8 @@ where
         tp: Arc<ThreadPool>,
     ) -> CuResult<Self> {
         let task = Arc::new(Mutex::new(T::new(config, resources)?));
-        let output = Arc::new(Mutex::new(CuMsg::default()));
         Ok(Self {
             task,
-            output,
             state: Arc::new(Mutex::new(AsyncState::new())),
             dispatch: None,
             tp,
@@ -409,8 +313,8 @@ where
     where
         I: CuMsgPayload + Send + Sync + 'static,
     {
-        if self.dispatch.is_some() {
-            let _ = dispatch_slot::<I>(&self.dispatch)?;
+        if let Some(dispatch) = self.dispatch.as_ref() {
+            let _ = dispatch_slot::<I>(dispatch)?;
         } else {
             self.dispatch = Some(Arc::new(DispatchSlot::<I>::new()));
         }
@@ -428,29 +332,42 @@ where
             .state
             .lock()
             .map_err(|_| EncodeError::OtherString("async task state mutex poisoned".to_string()))?;
-        encode_async_state(&state, self.dispatch.as_deref(), encoder)
+        let pending = encode_async_state(&state, encoder)?;
+        if pending {
+            self.dispatch
+                .as_ref()
+                .ok_or_else(|| {
+                    EncodeError::OtherString(
+                        "async task pending before dispatch initialization".to_string(),
+                    )
+                })?
+                .encode_input(encoder.writer())?;
+        }
+        Ok(())
     }
 
     fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
-        let mut restored_state = decode_async_state(decoder, self.dispatch.as_deref())?;
-        let restored_output: CuMsg<O> =
-            decode_value(&restored_state.committed_output, "task output")?;
-
         let mut task = self
             .task
             .lock()
             .map_err(|_| DecodeError::OtherString("async task mutex poisoned".to_string()))?;
+        let restored_state = decode_async_state(decoder)?;
+        if matches!(restored_state.status, AsyncStatus::ReplayPending(_)) {
+            self.dispatch
+                .as_ref()
+                .ok_or_else(|| {
+                    DecodeError::OtherString(
+                        "async task restored before dispatch initialization".to_string(),
+                    )
+                })?
+                .decode_input(decoder.reader())?;
+        }
         thaw_from(&mut *task, &restored_state.committed_task)?;
 
-        let mut output = self.output.lock().map_err(|_| {
-            DecodeError::OtherString("async task output mutex poisoned".to_string())
-        })?;
-        *output = restored_output;
         let mut state = self
             .state
             .lock()
             .map_err(|_| DecodeError::OtherString("async task state mutex poisoned".to_string()))?;
-        restored_state.generation = state.generation.wrapping_add(1);
         *state = restored_state;
         Ok(())
     }
@@ -488,16 +405,7 @@ where
         freeze_into(&*task, &mut snapshot).map_err(|error| {
             CuError::from("Failed to snapshot async task after start").with_cause(error)
         })?;
-        state.task_scratch = core::mem::replace(&mut state.committed_task, snapshot);
-        let output = self
-            .output
-            .lock()
-            .map_err(|_| CuError::from("Async task output mutex poisoned during start"))?;
-        let mut output_snapshot = core::mem::take(&mut state.output_scratch);
-        encode_value_into(&*output, &mut output_snapshot).map_err(|error| {
-            CuError::from("Failed to snapshot async task output after start").with_cause(error)
-        })?;
-        state.output_scratch = core::mem::replace(&mut state.committed_output, output_snapshot);
+        commit_initial_snapshot(&mut state, snapshot);
         Ok(())
     }
 
@@ -507,188 +415,131 @@ where
         input: &Self::Input<'i>,
         real_output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
-        let dispatch = dispatch_slot::<I>(&self.dispatch)?;
-        let (generation, dispatch_context, mut task_snapshot, mut output_snapshot) = {
+        let (dispatch, dispatch_cl_id, mut task_snapshot, retired_input) = {
             let mut state = self.state.lock().map_err(|_| {
                 CuError::from("Async task state mutex poisoned while scheduling background work")
             })?;
-            if let Some(error) = state.last_error.take() {
-                state.last_error_snapshot = None;
-                return Err(error);
+            if matches!(state.status, AsyncStatus::Failed(_)) {
+                let AsyncStatus::Failed(error) =
+                    core::mem::replace(&mut state.status, AsyncStatus::Idle)
+                else {
+                    unreachable!();
+                };
+                return Err(CuError::from(error));
             }
-            if state.phase == AsyncPhase::Running {
+            if matches!(state.status, AsyncStatus::Running(_)) {
                 *real_output = CuMsg::default();
                 return Ok(());
             }
-            if state.phase == AsyncPhase::Idle
-                && let Some(ready_at) = state.ready_at
+            if let AsyncStatus::Waiting(ready_at) = state.status
                 && ctx.now() < ready_at
             {
                 *real_output = CuMsg::default();
                 return Ok(());
             }
 
-            let (dispatch_input, dispatch_context) = if state.phase == AsyncPhase::ReplayPending {
-                let pending = state.pending.take().ok_or_else(|| {
-                    CuError::from("Async replay is pending without a retained dispatch")
-                })?;
-                let has_input = dispatch
-                    .read()
-                    .map_err(|_| CuError::from("Async task dispatch slot poisoned"))?
-                    .is_some();
-                if !has_input {
-                    return Err(CuError::from(
-                        "Async task replay dispatch is missing its input",
-                    ));
-                }
-                (None, pending.context)
+            let dispatch = self
+                .dispatch
+                .as_ref()
+                .ok_or_else(|| CuError::from("Async task dispatch slot was not initialized"))?;
+            let typed_dispatch = dispatch_slot::<I>(dispatch)?;
+            let (dispatch_cl_id, replay_pending) =
+                if let AsyncStatus::ReplayPending(cl_id) = state.status {
+                    (cl_id, true)
+                } else {
+                    (ctx.cl_id(), false)
+                };
+            let retired_input = if replay_pending {
+                CuMsg::default()
             } else {
-                (Some((*input).clone()), ctx.snapshot())
+                typed_dispatch.replace((*input).clone())
             };
-            if let Some(dispatch_input) = dispatch_input {
-                *dispatch
-                    .write()
-                    .map_err(|_| CuError::from("Async task dispatch slot poisoned"))? =
-                    Some(dispatch_input);
-            }
-            state.pending = Some(PendingDispatch {
-                context: dispatch_context.clone(),
-            });
-            state.generation = state.generation.wrapping_add(1);
-            state.phase = AsyncPhase::Running;
-            state.ready_at = None;
+            *real_output = state.committed_output.clone();
+            state.status = AsyncStatus::Running(dispatch_cl_id);
             (
-                state.generation,
-                dispatch_context,
+                dispatch.clone(),
+                dispatch_cl_id,
                 core::mem::take(&mut state.task_scratch),
-                core::mem::take(&mut state.output_scratch),
+                retired_input,
             )
         };
 
-        let buffered_output = self.output.lock().map_err(|_| {
-            let error = CuError::from("Async task output mutex poisoned");
-            record_async_task_error(&self.state, &dispatch, generation, error.clone());
-            error
-        })?;
-        *real_output = buffered_output.clone();
-        drop(buffered_output);
-
         self.tp.spawn_fifo({
-            let ctx = ctx.restore_snapshot(&dispatch_context);
-            let output = self.output.clone();
+            let ctx = ctx.with_cl_id(dispatch_cl_id);
             let task = self.task.clone();
             let state = self.state.clone();
-            let dispatch = dispatch.clone();
             move || {
-                let input_guard = match dispatch.read() {
-                    Ok(guard) => guard,
-                    Err(_) => {
-                        record_async_task_error(
+                let mut worker_output = CuMsg::default();
+                let typed_dispatch =
+                    if let Some(slot) = dispatch.as_any().downcast_ref::<DispatchSlot<I>>() {
+                        slot
+                    } else {
+                        record_async_error(
                             &state,
-                            &dispatch,
-                            generation,
-                            CuError::from("Async task dispatch slot poisoned"),
+                            CuError::from("Async task dispatch slot type did not match its input"),
                         );
                         return;
-                    }
-                };
-                let input_ref = if let Some(input_ref) = input_guard.as_ref() {
-                    input_ref
-                } else {
-                    drop(input_guard);
-                    record_async_task_error(
-                        &state,
-                        &dispatch,
-                        generation,
-                        CuError::from("Async task dispatch input disappeared before execution"),
-                    );
-                    return;
-                };
+                    };
+                let input_ref = typed_dispatch.get();
                 let mut task_guard = match task.lock() {
                     Ok(guard) => guard,
                     Err(poison) => {
-                        drop(input_guard);
-                        record_async_task_error(
+                        record_async_error(
                             &state,
-                            &dispatch,
-                            generation,
                             CuError::from(format!("Async task mutex poisoned: {poison}")),
                         );
                         return;
                     }
                 };
-                let mut output_guard = match output.lock() {
-                    Ok(guard) => guard,
-                    Err(_) => {
-                        drop(input_guard);
-                        record_async_task_error(
-                            &state,
-                            &dispatch,
-                            generation,
-                            CuError::from("Async task output mutex poisoned"),
-                        );
-                        return;
-                    }
-                };
-                let output_ref: &mut CuMsg<O> = &mut output_guard;
-
                 // Each async run starts from an empty output so a task that
                 // chooses not to publish does not leak the previous payload.
-                *output_ref = CuMsg::default();
-
                 // Track the actual processing interval so replay can honor it.
-                if output_ref.metadata.process_time.start.is_none() {
-                    output_ref.metadata.process_time.start = ctx.now().into();
+                if worker_output.metadata.process_time.start.is_none() {
+                    worker_output.metadata.process_time.start = ctx.now().into();
                 }
-                let task_result = task_guard.process(&ctx, input_ref, output_ref);
+                let task_result = task_guard.process(&ctx, input_ref, &mut worker_output);
                 let fallback_end = ctx.now();
-                let end_from_metadata: Option<CuTime> = output_ref.metadata.process_time.end.into();
+                let end_from_metadata: Option<CuTime> =
+                    worker_output.metadata.process_time.end.into();
                 let ready_at = end_from_metadata.unwrap_or_else(|| {
-                    output_ref.metadata.process_time.end = fallback_end.into();
+                    worker_output.metadata.process_time.end = fallback_end.into();
                     fallback_end
                 });
-                let snapshot_result = freeze_into(&*task_guard, &mut task_snapshot)
-                    .and_then(|()| encode_value_into(output_ref, &mut output_snapshot));
-                drop(output_guard);
-                drop(task_guard);
-                drop(input_guard);
+                let snapshot_result = freeze_into(&*task_guard, &mut task_snapshot);
+                let (commit_snapshot, status) = match snapshot_result {
+                    Ok(()) => (
+                        true,
+                        match task_result {
+                            Ok(()) => AsyncStatus::Waiting(ready_at),
+                            Err(error) => failure(error),
+                        },
+                    ),
+                    Err(error) => (
+                        false,
+                        failure(
+                            CuError::from("Failed to snapshot completed async task")
+                                .with_cause(error),
+                        ),
+                    ),
+                };
 
                 let mut guard = state.lock().unwrap_or_else(|poison| poison.into_inner());
-                if guard.generation != generation {
-                    return;
-                }
-                if let Ok(mut input) = dispatch.write() {
-                    *input = None;
-                }
-                match snapshot_result {
-                    Ok(()) => {
-                        guard.task_scratch =
-                            core::mem::replace(&mut guard.committed_task, task_snapshot);
-                        guard.output_scratch =
-                            core::mem::replace(&mut guard.committed_output, output_snapshot);
-                        guard.phase = AsyncPhase::Idle;
-                        guard.pending = None;
-                        match task_result {
-                            Ok(()) => guard.ready_at = Some(ready_at),
-                            Err(error) => {
-                                guard.ready_at = None;
-                                guard.last_error_snapshot = Some(error.to_string());
-                                guard.last_error = Some(error);
-                            }
-                        }
-                    }
-                    Err(error) => {
-                        guard.task_scratch = task_snapshot;
-                        guard.output_scratch = output_snapshot;
-                        guard.phase = AsyncPhase::Idle;
-                        guard.pending = None;
-                        guard.ready_at = None;
-                        let error = CuError::from("Failed to snapshot completed async task")
-                            .with_cause(error);
-                        guard.last_error_snapshot = Some(error.to_string());
-                        guard.last_error = Some(error);
-                    }
-                }
+                let retired_output = if commit_snapshot {
+                    guard.task_scratch =
+                        core::mem::replace(&mut guard.committed_task, task_snapshot);
+                    Some(core::mem::replace(
+                        &mut guard.committed_output,
+                        worker_output,
+                    ))
+                } else {
+                    guard.task_scratch = task_snapshot;
+                    None
+                };
+                guard.status = status;
+                drop(guard);
+                drop(task_guard);
+                drop(retired_output);
+                drop(retired_input);
             }
         });
         Ok(())
@@ -713,9 +564,7 @@ where
     #[reflect(ignore)]
     task: Arc<Mutex<T>>,
     #[reflect(ignore)]
-    output: Arc<Mutex<CuMsg<O>>>,
-    #[reflect(ignore)]
-    state: Arc<Mutex<AsyncState>>,
+    state: Arc<Mutex<AsyncState<O>>>,
     #[reflect(ignore)]
     tp: Arc<ThreadPool>,
 }
@@ -764,10 +613,8 @@ where
         tp: Arc<ThreadPool>,
     ) -> CuResult<Self> {
         let task = Arc::new(Mutex::new(T::new(config, resources)?));
-        let output = Arc::new(Mutex::new(CuMsg::default()));
         Ok(Self {
             task,
-            output,
             state: Arc::new(Mutex::new(AsyncState::new())),
             tp,
         })
@@ -783,28 +630,21 @@ where
         let state = self.state.lock().map_err(|_| {
             EncodeError::OtherString("async source state mutex poisoned".to_string())
         })?;
-        encode_async_state(&state, None, encoder)
+        let _ = encode_async_state(&state, encoder)?;
+        Ok(())
     }
 
     fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
-        let mut restored_state = decode_async_state(decoder, None)?;
-        let restored_output: CuMsg<O> =
-            decode_value(&restored_state.committed_output, "source output")?;
-
         let mut task = self
             .task
             .lock()
             .map_err(|_| DecodeError::OtherString("async source mutex poisoned".to_string()))?;
+        let restored_state = decode_async_state(decoder)?;
         thaw_from(&mut *task, &restored_state.committed_task)?;
 
-        let mut output = self.output.lock().map_err(|_| {
-            DecodeError::OtherString("async source output mutex poisoned".to_string())
-        })?;
-        *output = restored_output;
         let mut state = self.state.lock().map_err(|_| {
             DecodeError::OtherString("async source state mutex poisoned".to_string())
         })?;
-        restored_state.generation = state.generation.wrapping_add(1);
         *state = restored_state;
         Ok(())
     }
@@ -839,150 +679,105 @@ where
         freeze_into(&*task, &mut snapshot).map_err(|error| {
             CuError::from("Failed to snapshot async source after start").with_cause(error)
         })?;
-        state.task_scratch = core::mem::replace(&mut state.committed_task, snapshot);
-        let output = self
-            .output
-            .lock()
-            .map_err(|_| CuError::from("Async source output mutex poisoned during start"))?;
-        let mut output_snapshot = core::mem::take(&mut state.output_scratch);
-        encode_value_into(&*output, &mut output_snapshot).map_err(|error| {
-            CuError::from("Failed to snapshot async source output after start").with_cause(error)
-        })?;
-        state.output_scratch = core::mem::replace(&mut state.committed_output, output_snapshot);
+        commit_initial_snapshot(&mut state, snapshot);
         Ok(())
     }
 
     fn process<'o>(&mut self, ctx: &CuContext, real_output: &mut Self::Output<'o>) -> CuResult<()> {
-        let (generation, dispatch_context, mut task_snapshot, mut output_snapshot) = {
+        let (dispatch_cl_id, mut task_snapshot) = {
             let mut state = self.state.lock().map_err(|_| {
                 CuError::from("Async source state mutex poisoned while scheduling background work")
             })?;
-            if let Some(error) = state.last_error.take() {
-                state.last_error_snapshot = None;
-                return Err(error);
+            if matches!(state.status, AsyncStatus::Failed(_)) {
+                let AsyncStatus::Failed(error) =
+                    core::mem::replace(&mut state.status, AsyncStatus::Idle)
+                else {
+                    unreachable!();
+                };
+                return Err(CuError::from(error));
             }
-            if state.phase == AsyncPhase::Running {
+            if matches!(state.status, AsyncStatus::Running(_)) {
                 *real_output = CuMsg::default();
                 return Ok(());
             }
-            if state.phase == AsyncPhase::Idle
-                && let Some(ready_at) = state.ready_at
+            if let AsyncStatus::Waiting(ready_at) = state.status
                 && ctx.now() < ready_at
             {
                 *real_output = CuMsg::default();
                 return Ok(());
             }
 
-            let dispatch_context = if state.phase == AsyncPhase::ReplayPending {
-                let pending = state.pending.take().ok_or_else(|| {
-                    CuError::from("Async source replay is pending without a retained dispatch")
-                })?;
-                pending.context
+            let dispatch_cl_id = if let AsyncStatus::ReplayPending(cl_id) = state.status {
+                cl_id
             } else {
-                ctx.snapshot()
+                ctx.cl_id()
             };
-            state.pending = Some(PendingDispatch {
-                context: dispatch_context.clone(),
-            });
-            state.generation = state.generation.wrapping_add(1);
-            state.phase = AsyncPhase::Running;
-            state.ready_at = None;
-            (
-                state.generation,
-                dispatch_context,
-                core::mem::take(&mut state.task_scratch),
-                core::mem::take(&mut state.output_scratch),
-            )
+            *real_output = state.committed_output.clone();
+            state.status = AsyncStatus::Running(dispatch_cl_id);
+            (dispatch_cl_id, core::mem::take(&mut state.task_scratch))
         };
 
-        let buffered_output = self.output.lock().map_err(|_| {
-            let error = CuError::from("Async source output mutex poisoned");
-            record_async_error(&self.state, generation, error.clone());
-            error
-        })?;
-        *real_output = buffered_output.clone();
-        drop(buffered_output);
-
         self.tp.spawn_fifo({
-            let ctx = ctx.restore_snapshot(&dispatch_context);
-            let output = self.output.clone();
+            let ctx = ctx.with_cl_id(dispatch_cl_id);
             let task = self.task.clone();
             let state = self.state.clone();
             move || {
+                let mut worker_output = CuMsg::default();
                 let mut task_guard = match task.lock() {
                     Ok(guard) => guard,
                     Err(poison) => {
                         record_async_error(
                             &state,
-                            generation,
                             CuError::from(format!("Async source mutex poisoned: {poison}")),
                         );
                         return;
                     }
                 };
-                let mut output_guard = match output.lock() {
-                    Ok(guard) => guard,
-                    Err(_) => {
-                        record_async_error(
-                            &state,
-                            generation,
-                            CuError::from("Async task output mutex poisoned"),
-                        );
-                        return;
-                    }
-                };
-                let output_ref: &mut CuMsg<O> = &mut output_guard;
-
-                *output_ref = CuMsg::default();
-
-                if output_ref.metadata.process_time.start.is_none() {
-                    output_ref.metadata.process_time.start = ctx.now().into();
+                if worker_output.metadata.process_time.start.is_none() {
+                    worker_output.metadata.process_time.start = ctx.now().into();
                 }
-                let task_result = task_guard.process(&ctx, output_ref);
+                let task_result = task_guard.process(&ctx, &mut worker_output);
                 let fallback_end = ctx.now();
-                let end_from_metadata: Option<CuTime> = output_ref.metadata.process_time.end.into();
+                let end_from_metadata: Option<CuTime> =
+                    worker_output.metadata.process_time.end.into();
                 let ready_at = end_from_metadata.unwrap_or_else(|| {
-                    output_ref.metadata.process_time.end = fallback_end.into();
+                    worker_output.metadata.process_time.end = fallback_end.into();
                     fallback_end
                 });
-                let snapshot_result = freeze_into(&*task_guard, &mut task_snapshot)
-                    .and_then(|()| encode_value_into(output_ref, &mut output_snapshot));
-                drop(output_guard);
-                drop(task_guard);
+                let snapshot_result = freeze_into(&*task_guard, &mut task_snapshot);
+                let (commit_snapshot, status) = match snapshot_result {
+                    Ok(()) => (
+                        true,
+                        match task_result {
+                            Ok(()) => AsyncStatus::Waiting(ready_at),
+                            Err(error) => failure(error),
+                        },
+                    ),
+                    Err(error) => (
+                        false,
+                        failure(
+                            CuError::from("Failed to snapshot completed async source")
+                                .with_cause(error),
+                        ),
+                    ),
+                };
 
                 let mut guard = state.lock().unwrap_or_else(|poison| poison.into_inner());
-                if guard.generation != generation {
-                    return;
-                }
-                match snapshot_result {
-                    Ok(()) => {
-                        guard.task_scratch =
-                            core::mem::replace(&mut guard.committed_task, task_snapshot);
-                        guard.output_scratch =
-                            core::mem::replace(&mut guard.committed_output, output_snapshot);
-                        guard.phase = AsyncPhase::Idle;
-                        guard.pending = None;
-                        match task_result {
-                            Ok(()) => guard.ready_at = Some(ready_at),
-                            Err(error) => {
-                                guard.ready_at = None;
-                                guard.last_error_snapshot = Some(error.to_string());
-                                guard.last_error = Some(error);
-                            }
-                        }
-                    }
-                    Err(error) => {
-                        guard.task_scratch = task_snapshot;
-                        guard.output_scratch = output_snapshot;
-                        guard.phase = AsyncPhase::Idle;
-                        guard.pending = None;
-                        guard.ready_at = None;
-                        let error = CuError::from("Failed to snapshot completed async source")
-                            .with_cause(error);
-                        guard.last_error_snapshot = Some(error.to_string());
-                        guard.last_error = Some(error);
-                    }
-                }
+                let retired_output = if commit_snapshot {
+                    guard.task_scratch =
+                        core::mem::replace(&mut guard.committed_task, task_snapshot);
+                    Some(core::mem::replace(
+                        &mut guard.committed_output,
+                        worker_output,
+                    ))
+                } else {
+                    guard.task_scratch = task_snapshot;
+                    None
+                };
+                guard.status = status;
+                drop(guard);
+                drop(task_guard);
+                drop(retired_output);
             }
         });
         Ok(())
@@ -1126,7 +921,7 @@ mod tests {
     {
         for _ in 0..100 {
             let state = async_task.state.lock().unwrap();
-            if state.phase != AsyncPhase::Running {
+            if !matches!(state.status, AsyncStatus::Running(_)) {
                 return;
             }
             drop(state);
@@ -1142,7 +937,7 @@ mod tests {
     {
         for _ in 0..100 {
             let state = async_task.state.lock().unwrap();
-            if state.phase != AsyncPhase::Running {
+            if !matches!(state.status, AsyncStatus::Running(_)) {
                 return;
             }
             drop(state);
@@ -1491,20 +1286,18 @@ mod tests {
             .recv_timeout(Duration::from_secs(1))
             .expect("background task never finished");
         // Wait until the async wrapper has cleared its processing flag and captured ready_at.
-        let mut ready_at_recorded = None;
+        let mut ready_at_recorded = false;
         for _ in 0..100 {
             let state = async_task.state.lock().unwrap();
-            if state.phase != AsyncPhase::Running {
-                ready_at_recorded = state.ready_at;
-                if ready_at_recorded.is_some() {
-                    break;
-                }
+            if matches!(state.status, AsyncStatus::Waiting(_)) {
+                ready_at_recorded = true;
+                break;
             }
             drop(state);
             std::thread::sleep(Duration::from_millis(1));
         }
         assert!(
-            ready_at_recorded.is_some(),
+            ready_at_recorded,
             "background task finished without recording ready_at"
         );
 
@@ -1635,20 +1428,18 @@ mod tests {
             .recv_timeout(Duration::from_secs(1))
             .expect("background source never finished");
 
-        let mut ready_at_recorded = None;
+        let mut ready_at_recorded = false;
         for _ in 0..100 {
             let state = async_src.state.lock().unwrap();
-            if state.phase != AsyncPhase::Running {
-                ready_at_recorded = state.ready_at;
-                if ready_at_recorded.is_some() {
-                    break;
-                }
+            if matches!(state.status, AsyncStatus::Waiting(_)) {
+                ready_at_recorded = true;
+                break;
             }
             drop(state);
             std::thread::sleep(Duration::from_millis(1));
         }
         assert!(
-            ready_at_recorded.is_some(),
+            ready_at_recorded,
             "background source finished without recording ready_at"
         );
 
@@ -1667,10 +1458,12 @@ mod tests {
         let _ = done_rx.recv_timeout(Duration::from_secs(1));
     }
 
+    type ReplayTaskObservation = (u32, u64, u32, u32);
+
     #[derive(Clone)]
     struct ReplayTaskResources {
         release: Arc<Mutex<mpsc::Receiver<()>>>,
-        observed: mpsc::Sender<(u32, u64, u32)>,
+        observed: mpsc::Sender<ReplayTaskObservation>,
     }
 
     #[derive(Reflect)]
@@ -1680,7 +1473,7 @@ mod tests {
         #[reflect(ignore)]
         release: Arc<Mutex<mpsc::Receiver<()>>>,
         #[reflect(ignore)]
-        observed: mpsc::Sender<(u32, u64, u32)>,
+        observed: mpsc::Sender<ReplayTaskObservation>,
     }
 
     impl Freezable for ReplayTask {
@@ -1728,7 +1521,7 @@ mod tests {
                 .expect("timed out waiting to release replay task");
             let input = input.payload().copied().expect("replay task input");
             self.observed
-                .send((input, ctx.cl_id(), self.counter))
+                .send((input, ctx.cl_id(), ctx.instance_id(), self.counter))
                 .expect("failed to record replay task dispatch");
             self.counter += 1;
             output.set_payload(input + self.counter);
@@ -1739,7 +1532,7 @@ mod tests {
     fn replay_task_resources() -> (
         ReplayTaskResources,
         mpsc::Sender<()>,
-        mpsc::Receiver<(u32, u64, u32)>,
+        mpsc::Receiver<ReplayTaskObservation>,
     ) {
         let (release_tx, release_rx) = mpsc::channel();
         let (observed_tx, observed_rx) = mpsc::channel();
@@ -1775,15 +1568,33 @@ mod tests {
 
         let frozen = bincode::encode_to_vec(BincodeAdapter(&original), standard())
             .expect("mid-run async freeze failed");
+        let committed_task = bincode::encode_to_vec(10u32, standard()).unwrap();
+        let expected = bincode::encode_to_vec(
+            (
+                committed_task,
+                CuMsg::<u32>::default(),
+                ASYNC_PENDING_TAG,
+                7u64,
+                original_input.clone(),
+            ),
+            standard(),
+        )
+        .unwrap();
         assert_eq!(
-            original.state.lock().unwrap().phase,
-            AsyncPhase::Running,
+            frozen, expected,
+            "pending task frames contain only committed state, CL id, and input"
+        );
+        assert!(
+            matches!(
+                original.state.lock().unwrap().status,
+                AsyncStatus::Running(7)
+            ),
             "freezing must not disturb the live worker"
         );
         release_tx.send(()).unwrap();
         assert_eq!(
             observed_rx.recv_timeout(Duration::from_secs(1)).unwrap(),
-            (41, 7, 10)
+            (41, 7, 3, 10)
         );
 
         let replay_tp = Arc::new(ThreadPoolBuilder::new().num_threads(1).build().unwrap());
@@ -1798,15 +1609,17 @@ mod tests {
         let reader = bincode::de::read::SliceReader::new(&frozen);
         let mut decoder = bincode::de::DecoderImpl::new(reader, standard(), ());
         restored.thaw(&mut decoder).unwrap();
-        assert_eq!(
-            restored.state.lock().unwrap().phase,
-            AsyncPhase::ReplayPending
-        );
+        assert!(matches!(
+            restored.state.lock().unwrap().status,
+            AsyncStatus::ReplayPending(7)
+        ));
 
-        let current_context = CuContext::builder(base_context.clock.clone())
+        let mut current_context = CuContext::builder(base_context.clock.clone())
             .cl_id(99)
             .instance_id(8)
+            .task_ids(&["replay"])
             .build();
+        current_context.set_current_task(0);
         let current_input = CuMsg::new(Some(999u32));
         restored
             .process(&current_context, &current_input, &mut output)
@@ -1816,8 +1629,8 @@ mod tests {
             replay_observed_rx
                 .recv_timeout(Duration::from_secs(1))
                 .unwrap(),
-            (41, 7, 10),
-            "replay must ignore the current CopperList input and context"
+            (41, 7, 8, 10),
+            "replay must retain only the original input and CopperList id"
         );
         wait_until_async_idle(&restored);
 
@@ -1865,8 +1678,7 @@ mod tests {
         {
             let mut state = original.state.lock().unwrap();
             let error = CuError::from("expected async failure");
-            state.last_error_snapshot = Some(error.to_string());
-            state.last_error = Some(error);
+            state.status = failure(error);
         }
         let frozen = bincode::encode_to_vec(BincodeAdapter(&original), standard()).unwrap();
 
@@ -1909,7 +1721,10 @@ mod tests {
                 bincode::encode_to_vec(BincodeAdapter(&async_task), standard())
                     .expect("freeze async task racing completion"),
             );
-            if async_task.state.lock().unwrap().phase == AsyncPhase::Idle {
+            if !matches!(
+                async_task.state.lock().unwrap().status,
+                AsyncStatus::Running(_)
+            ) {
                 break;
             }
             std::thread::yield_now();
@@ -1926,26 +1741,28 @@ mod tests {
             let reader = bincode::de::read::SliceReader::new(&snapshot);
             let mut decoder = bincode::de::DecoderImpl::new(reader, standard(), ());
             let dispatch = DispatchSlot::<u32>::new();
-            let state =
-                decode_async_state(&mut decoder, Some(&dispatch)).expect("decode raced snapshot");
-            let task_counter: u32 =
-                decode_value(&state.committed_task, "task").expect("decode committed task");
-            let committed_output: CuMsg<u32> =
-                decode_value(&state.committed_output, "output").expect("decode committed output");
-            match state.phase {
-                AsyncPhase::ReplayPending => {
+            let state: AsyncState<u32> =
+                decode_async_state(&mut decoder).expect("decode raced snapshot");
+            if matches!(state.status, AsyncStatus::ReplayPending(_)) {
+                dispatch.decode_input(decoder.reader()).unwrap();
+            }
+            let (task_counter, bytes_read): (u32, usize) =
+                bincode::decode_from_slice(&state.committed_task, standard())
+                    .expect("decode committed task");
+            assert_eq!(bytes_read, state.committed_task.len());
+            match state.status {
+                AsyncStatus::ReplayPending(0) => {
                     saw_running = true;
                     assert_eq!(task_counter, 10);
-                    assert!(committed_output.payload().is_none());
-                    assert!(state.pending.is_some());
+                    assert!(state.committed_output.payload().is_none());
+                    assert_eq!(dispatch.get().payload(), Some(&41));
                 }
-                AsyncPhase::Idle => {
+                AsyncStatus::Waiting(_) => {
                     saw_idle = true;
                     assert_eq!(task_counter, 11);
-                    assert_eq!(committed_output.payload(), Some(&52));
-                    assert!(state.pending.is_none());
+                    assert_eq!(state.committed_output.payload(), Some(&52));
                 }
-                AsyncPhase::Running => panic!("decoded keyframe cannot remain actively running"),
+                _ => panic!("decoded keyframe was neither pending nor committed"),
             }
         }
         assert!(saw_running, "race did not capture the pre-completion state");
@@ -2049,6 +1866,21 @@ mod tests {
         original.process(&dispatch_context, &mut output).unwrap();
         let frozen = bincode::encode_to_vec(BincodeAdapter(&original), standard())
             .expect("mid-run async source freeze failed");
+        let committed_task = bincode::encode_to_vec(20u32, standard()).unwrap();
+        let expected = bincode::encode_to_vec(
+            (
+                committed_task,
+                CuMsg::<u32>::default(),
+                ASYNC_PENDING_TAG,
+                7u64,
+            ),
+            standard(),
+        )
+        .unwrap();
+        assert_eq!(
+            frozen, expected,
+            "pending source frames contain no task-only dispatch marker"
+        );
         release_tx.send(()).unwrap();
         assert_eq!(
             observed_rx.recv_timeout(Duration::from_secs(1)).unwrap(),
