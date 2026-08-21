@@ -16,7 +16,7 @@
         (
             id: "bridge",
             type: "DummyBridge",
-            run_in_sim: false,
+            run_in_sim: true,
             channels: [
                 Tx(
                     id: "tx",

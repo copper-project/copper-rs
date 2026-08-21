@@ -54,9 +54,11 @@ use alloc::collections::{BTreeSet, VecDeque};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use bincode::de::read::Reader;
+use bincode::de::{Decoder, DecoderImpl};
 use bincode::enc::EncoderImpl;
-use bincode::enc::write::{SizeWriter, SliceWriter};
-use bincode::error::EncodeError;
+use bincode::enc::write::{SizeWriter, Writer};
+use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 #[cfg(all(feature = "std", any(feature = "async-cl-io", feature = "parallel-rt")))]
 use core::alloc::Layout;
@@ -1008,6 +1010,28 @@ pub struct KeyFramesManager {
 
     /// Bytes written by the last keyframe log
     pub last_encoded_bytes: u64,
+
+    /// Ordinal of the next component snapshot along this execution wave.
+    next_freeze_ordinal: u32,
+
+    /// Cold-path sizing accumulator used to reserve the capture buffer before execution.
+    capture_size_hint: usize,
+}
+
+const MIN_KEYFRAME_CAPTURE_CAPACITY: usize = 4 * 1024;
+
+/// A `Vec` writer that is forbidden from growing its backing allocation.
+struct PreallocatedVecWriter<'a>(&'a mut Vec<u8>);
+
+impl Writer for PreallocatedVecWriter<'_> {
+    fn write(&mut self, bytes: &[u8]) -> Result<(), EncodeError> {
+        if bytes.len() > self.0.capacity().saturating_sub(self.0.len()) {
+            return Err(EncodeError::UnexpectedEnd);
+        }
+        // The capacity check above makes this append allocation-free.
+        self.0.extend_from_slice(bytes);
+        Ok(())
+    }
 }
 
 impl KeyFramesManager {
@@ -1020,6 +1044,55 @@ impl KeyFramesManager {
         self.is_keyframe(culistid)
     }
 
+    /// Start a cold-path sizing pass for the next mission's keyframe buffer.
+    #[doc(hidden)]
+    pub fn begin_capture_preallocation(&mut self) {
+        self.capture_size_hint = KEYFRAME_PAYLOAD_HEADER.len();
+    }
+
+    /// Include one component's current frozen size in the cold-path capacity estimate.
+    #[doc(hidden)]
+    pub fn include_capture_capacity(&mut self, item: &impl Freezable) -> CuResult<()> {
+        if self.logger.is_none() {
+            return Ok(());
+        }
+        let mut sizer = EncoderImpl::new(SizeWriter::default(), bincode::config::standard());
+        BincodeAdapter(item)
+            .encode(&mut sizer)
+            .map_err(|_| CuError::from("Failed to size component keyframe state"))?;
+        let payload_bytes = sizer.into_writer().bytes_written as usize;
+        self.capture_size_hint = self
+            .capture_size_hint
+            .checked_add(KEYFRAME_FRAME_HEADER_LEN)
+            .and_then(|size| size.checked_add(payload_bytes))
+            .ok_or_else(|| CuError::from("Keyframe capture capacity overflow"))?;
+        Ok(())
+    }
+
+    /// Reserve the capture buffer before entering the execution loop.
+    #[doc(hidden)]
+    pub fn finish_capture_preallocation(&mut self) -> CuResult<()> {
+        if self.logger.is_none() {
+            return Ok(());
+        }
+        let requested = self
+            .capture_size_hint
+            .max(MIN_KEYFRAME_CAPTURE_CAPACITY)
+            .checked_next_power_of_two()
+            .ok_or_else(|| CuError::from("Keyframe capture capacity overflow"))?;
+        if self.inner.serialized_tasks.capacity() < requested {
+            let additional = requested.saturating_sub(self.inner.serialized_tasks.len());
+            self.inner
+                .serialized_tasks
+                .try_reserve_exact(additional)
+                .map_err(|error| {
+                    CuError::from("Failed to preallocate keyframe capture buffer")
+                        .add_cause(&error.to_string())
+                })?;
+        }
+        Ok(())
+    }
+
     pub fn reset(&mut self, culistid: u64, clock: &RobotClock) {
         if self.is_keyframe(culistid) {
             // If a recorded keyframe was preloaded for this CL, keep it as-is.
@@ -1028,6 +1101,7 @@ impl KeyFramesManager {
             }
             let ts = self.forced_timestamp.take().unwrap_or_else(|| clock.now());
             self.inner.reset(culistid, ts);
+            self.next_freeze_ordinal = 0;
             self.locked = false;
         }
     }
@@ -1050,9 +1124,16 @@ impl KeyFramesManager {
                     culistid, self.inner.culistid
                 )));
             }
-            self.inner
-                .add_frozen_task(task)
-                .map_err(|e| CuError::from(format!("Failed to serialize task: {e}")))
+            let ordinal = self.next_freeze_ordinal;
+            let encoded = self
+                .inner
+                .add_frozen_task(ordinal, task)
+                .map_err(|e| CuError::from(format!("Failed to serialize task: {e}")))?;
+            self.next_freeze_ordinal =
+                self.next_freeze_ordinal.checked_add(1).ok_or_else(|| {
+                    CuError::from("Keyframe contains more component snapshots than u32 can address")
+                })?;
+            Ok(encoded)
         } else {
             Ok(0)
         }
@@ -1300,6 +1381,8 @@ where
             last_encoded_bytes: 0,
             forced_timestamp: None,
             locked: false,
+            next_freeze_ordinal: 0,
+            capture_size_hint: KEYFRAME_PAYLOAD_HEADER.len(),
         };
         #[cfg(all(feature = "std", feature = "parallel-rt"))]
         let parallel_rt = ParallelRt::new(parts.parallel_rt_metadata)?;
@@ -1418,6 +1501,8 @@ where
             last_encoded_bytes: 0,
             forced_timestamp: None,
             locked: false,
+            next_freeze_ordinal: 0,
+            capture_size_hint: KEYFRAME_PAYLOAD_HEADER.len(),
         };
 
         let runtime_config = config.runtime.clone().unwrap_or_default();
@@ -1439,16 +1524,17 @@ where
     }
 }
 
-/// A KeyFrame is recording a snapshot of the tasks state before a given copperlist.
-/// It is a double encapsulation: this one recording the culistid and another even in
-/// bincode in the serialized_tasks.
+/// A keyframe records a distributed snapshot of component state around a copperlist.
+///
+/// `serialized_tasks` contains a versioned sequence of length-framed component
+/// snapshots in their generated execution-wave freeze order.
 #[derive(Clone, Encode, Decode)]
 pub struct KeyFrame {
     // This is the id of the copper list that this keyframe is associated with (recorded before the copperlist).
     pub culistid: u64,
     // This is the timestamp when the keyframe was created, using the robot clock.
     pub timestamp: CuTime,
-    // This is the bincode representation of the tuple of all the tasks.
+    // Versioned, length-framed bincode snapshots of all generated components.
     pub serialized_tasks: Vec<u8>,
 }
 
@@ -1457,7 +1543,7 @@ impl KeyFrame {
         KeyFrame {
             culistid: 0,
             timestamp: CuTime::default(),
-            serialized_tasks: Vec::new(),
+            serialized_tasks: KEYFRAME_PAYLOAD_HEADER.to_vec(),
         }
     }
 
@@ -1466,22 +1552,184 @@ impl KeyFrame {
         self.culistid = culistid;
         self.timestamp = timestamp;
         self.serialized_tasks.clear();
+        self.serialized_tasks
+            .extend_from_slice(KEYFRAME_PAYLOAD_HEADER);
     }
 
-    /// We need to be able to accumulate tasks to the serialization as they are executed after the step.
-    fn add_frozen_task(&mut self, task: &impl Freezable) -> Result<usize, EncodeError> {
+    /// Append one length-framed component snapshot in a single `freeze` pass.
+    fn add_frozen_task(
+        &mut self,
+        ordinal: u32,
+        task: &impl Freezable,
+    ) -> Result<usize, EncodeError> {
         let cfg = bincode::config::standard();
-        let mut sizer = EncoderImpl::<_, _>::new(SizeWriter::default(), cfg);
-        BincodeAdapter(task).encode(&mut sizer)?;
-        let need = sizer.into_writer().bytes_written as usize;
-
         let start = self.serialized_tasks.len();
-        self.serialized_tasks.resize(start + need, 0);
-        let mut enc =
-            EncoderImpl::<_, _>::new(SliceWriter::new(&mut self.serialized_tasks[start..]), cfg);
-        BincodeAdapter(task).encode(&mut enc)?;
-        Ok(need)
+        let payload_offset =
+            start
+                .checked_add(KEYFRAME_FRAME_HEADER_LEN)
+                .ok_or(EncodeError::Other(
+                    "keyframe component frame offset overflow",
+                ))?;
+        if payload_offset > self.serialized_tasks.capacity() {
+            return Err(EncodeError::UnexpectedEnd);
+        }
+
+        self.serialized_tasks.resize(payload_offset, 0);
+        self.serialized_tasks[start..start + 4].copy_from_slice(&ordinal.to_le_bytes());
+        let length_offset = start + 4;
+        self.serialized_tasks[length_offset..payload_offset].fill(0);
+
+        let mut encoder =
+            EncoderImpl::<_, _>::new(PreallocatedVecWriter(&mut self.serialized_tasks), cfg);
+        if let Err(error) = BincodeAdapter(task).encode(&mut encoder) {
+            self.serialized_tasks.truncate(start);
+            return Err(error);
+        }
+        let payload_len = encoder.into_writer().0.len() - payload_offset;
+        let payload_len = u32::try_from(payload_len).map_err(|_| {
+            self.serialized_tasks.truncate(start);
+            EncodeError::OtherString(
+                "keyframe component snapshot exceeds the u32 frame limit".to_string(),
+            )
+        })?;
+        self.serialized_tasks
+            .truncate(payload_offset + payload_len as usize);
+        self.serialized_tasks[length_offset..payload_offset]
+            .copy_from_slice(&payload_len.to_le_bytes());
+        Ok(self.serialized_tasks.len() - start)
     }
+}
+
+const KEYFRAME_PAYLOAD_MAGIC: &[u8; 4] = b"CUKF";
+const KEYFRAME_PAYLOAD_VERSION: u8 = 1;
+const KEYFRAME_PAYLOAD_HEADER: &[u8; 5] = b"CUKF\x01";
+const KEYFRAME_FRAME_HEADER_LEN: usize = 8;
+
+/// Reader for the versioned component frames inside a [`KeyFrame`].
+#[doc(hidden)]
+pub struct KeyFramePayloadReader<'a> {
+    remaining: &'a [u8],
+    next_ordinal: u32,
+}
+
+impl<'a> KeyFramePayloadReader<'a> {
+    /// Validate a keyframe payload and prepare to consume its component frames.
+    pub fn new(keyframe: &'a KeyFrame) -> CuResult<Self> {
+        let payload = keyframe.serialized_tasks.as_slice();
+        if payload.len() < KEYFRAME_PAYLOAD_HEADER.len()
+            || payload[..KEYFRAME_PAYLOAD_MAGIC.len()] != *KEYFRAME_PAYLOAD_MAGIC
+        {
+            return Err(CuError::from(
+                "Unsupported legacy keyframe payload: expected framed format version 1",
+            ));
+        }
+        let version = payload[KEYFRAME_PAYLOAD_MAGIC.len()];
+        if version != KEYFRAME_PAYLOAD_VERSION {
+            return Err(CuError::from(format!(
+                "Unsupported keyframe payload version {version}; expected {KEYFRAME_PAYLOAD_VERSION}"
+            )));
+        }
+        Ok(Self {
+            remaining: &payload[KEYFRAME_PAYLOAD_HEADER.len()..],
+            next_ordinal: 0,
+        })
+    }
+
+    /// Consume the next frame, validating the distributed-cut ordinal.
+    pub fn next_frame(&mut self) -> CuResult<&'a [u8]> {
+        if self.remaining.len() < KEYFRAME_FRAME_HEADER_LEN {
+            return Err(CuError::from(format!(
+                "Keyframe ended before component frame ordinal {}",
+                self.next_ordinal
+            )));
+        }
+        let ordinal = u32::from_le_bytes(
+            self.remaining[..4]
+                .try_into()
+                .map_err(|_| CuError::from("Invalid keyframe component ordinal"))?,
+        );
+        if ordinal != self.next_ordinal {
+            return Err(CuError::from(format!(
+                "Keyframe component frame out of order: expected ordinal {}, found {}",
+                self.next_ordinal, ordinal
+            )));
+        }
+        let payload_len = u32::from_le_bytes(
+            self.remaining[4..KEYFRAME_FRAME_HEADER_LEN]
+                .try_into()
+                .map_err(|_| CuError::from("Invalid keyframe component frame length"))?,
+        ) as usize;
+        let frame_end = KEYFRAME_FRAME_HEADER_LEN
+            .checked_add(payload_len)
+            .ok_or_else(|| CuError::from("Keyframe component frame length overflow"))?;
+        if frame_end > self.remaining.len() {
+            return Err(CuError::from(format!(
+                "Keyframe component frame {} is truncated",
+                self.next_ordinal
+            )));
+        }
+        let payload = &self.remaining[KEYFRAME_FRAME_HEADER_LEN..frame_end];
+        self.remaining = &self.remaining[frame_end..];
+        self.next_ordinal = self.next_ordinal.checked_add(1).ok_or_else(|| {
+            CuError::from("Keyframe contains more component frames than u32 can address")
+        })?;
+        Ok(payload)
+    }
+
+    /// Reject trailing component frames that the generated restore did not consume.
+    pub fn finish(self) -> CuResult<()> {
+        if self.remaining.is_empty() {
+            Ok(())
+        } else {
+            Err(CuError::from(format!(
+                "Keyframe contains trailing data after {} component frames",
+                self.next_ordinal
+            )))
+        }
+    }
+}
+
+struct FrameSliceReader<'a> {
+    remaining: &'a [u8],
+}
+
+impl Reader for FrameSliceReader<'_> {
+    fn read(&mut self, bytes: &mut [u8]) -> Result<(), DecodeError> {
+        if bytes.len() > self.remaining.len() {
+            return Err(DecodeError::UnexpectedEnd {
+                additional: bytes.len() - self.remaining.len(),
+            });
+        }
+        let (read, remaining) = self.remaining.split_at(bytes.len());
+        bytes.copy_from_slice(read);
+        self.remaining = remaining;
+        Ok(())
+    }
+
+    fn peek_read(&mut self, length: usize) -> Option<&[u8]> {
+        self.remaining.get(..length)
+    }
+
+    fn consume(&mut self, length: usize) {
+        self.remaining = self.remaining.get(length..).unwrap_or_default();
+    }
+}
+
+/// Thaw one component from an isolated keyframe frame and require full consumption.
+#[doc(hidden)]
+pub fn thaw_keyframe_component(item: &mut impl Freezable, frame: &[u8]) -> CuResult<()> {
+    let reader = FrameSliceReader { remaining: frame };
+    let mut decoder = DecoderImpl::new(reader, bincode::config::standard(), ());
+    item.thaw(&mut decoder)
+        .map_err(|error| CuError::from(format!("Failed to thaw keyframe component: {error}")))?;
+    let trailing = decoder.reader().remaining.len();
+    if trailing != 0 {
+        return Err(CuError::from(format!(
+            "Keyframe component snapshot has {} trailing bytes",
+            trailing
+        )));
+    }
+    Ok(())
 }
 
 /// Identifies where the effective runtime configuration came from.
@@ -2127,10 +2375,138 @@ mod tests {
     use crate::monitoring::NoMonitor;
     use crate::reflect::Reflect;
     use bincode::Encode;
+    use core::cell::Cell;
     use cu29_traits::{ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks};
     use serde_derive::{Deserialize, Serialize};
     #[cfg(feature = "std")]
     use std::sync::{Arc, Mutex};
+
+    struct CountingSnapshot<'a> {
+        calls: &'a Cell<usize>,
+        value: u32,
+        fail: bool,
+    }
+
+    impl Freezable for CountingSnapshot<'_> {
+        fn freeze<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+            self.calls.set(self.calls.get() + 1);
+            self.value.encode(encoder)?;
+            if self.fail {
+                Err(EncodeError::OtherString(
+                    "intentional freeze failure".to_string(),
+                ))
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    #[derive(Default)]
+    struct SnapshotValue(u32);
+
+    impl Freezable for SnapshotValue {
+        fn thaw<D: bincode::de::Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+            self.0 = u32::decode(decoder)?;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn keyframe_frames_freeze_once_and_roll_back_only_failed_frame() {
+        let calls = Cell::new(0);
+        let mut keyframe = KeyFrame::new();
+        keyframe
+            .serialized_tasks
+            .try_reserve_exact(MIN_KEYFRAME_CAPTURE_CAPACITY)
+            .unwrap();
+        keyframe.reset(7, CuTime::from_nanos(70));
+        keyframe
+            .add_frozen_task(
+                0,
+                &CountingSnapshot {
+                    calls: &calls,
+                    value: 11,
+                    fail: false,
+                },
+            )
+            .unwrap();
+        let committed_len = keyframe.serialized_tasks.len();
+
+        assert!(
+            keyframe
+                .add_frozen_task(
+                    1,
+                    &CountingSnapshot {
+                        calls: &calls,
+                        value: 99,
+                        fail: true,
+                    },
+                )
+                .is_err()
+        );
+        assert_eq!(keyframe.serialized_tasks.len(), committed_len);
+
+        keyframe
+            .add_frozen_task(
+                1,
+                &CountingSnapshot {
+                    calls: &calls,
+                    value: 22,
+                    fail: false,
+                },
+            )
+            .unwrap();
+        assert_eq!(calls.get(), 3, "each append must call freeze exactly once");
+
+        let mut frames = KeyFramePayloadReader::new(&keyframe).unwrap();
+        let mut first = SnapshotValue::default();
+        thaw_keyframe_component(&mut first, frames.next_frame().unwrap()).unwrap();
+        let mut second = SnapshotValue::default();
+        thaw_keyframe_component(&mut second, frames.next_frame().unwrap()).unwrap();
+        frames.finish().unwrap();
+        assert_eq!((first.0, second.0), (11, 22));
+    }
+
+    #[cfg(all(feature = "std", feature = "memory_monitoring"))]
+    #[test]
+    fn preallocated_keyframe_append_does_not_allocate() {
+        let calls = Cell::new(0);
+        let mut keyframe = KeyFrame::new();
+        keyframe
+            .serialized_tasks
+            .try_reserve_exact(MIN_KEYFRAME_CAPTURE_CAPACITY)
+            .unwrap();
+        keyframe.reset(3, CuTime::from_nanos(30));
+
+        let allocations = crate::monitoring::ScopedAllocCounter::new();
+        keyframe
+            .add_frozen_task(
+                0,
+                &CountingSnapshot {
+                    calls: &calls,
+                    value: 42,
+                    fail: false,
+                },
+            )
+            .unwrap();
+
+        assert_eq!(allocations.allocated(), 0);
+        assert_eq!(calls.get(), 1);
+    }
+
+    #[test]
+    fn keyframe_reader_rejects_legacy_payload_clearly() {
+        let keyframe = KeyFrame {
+            culistid: 0,
+            timestamp: CuTime::default(),
+            serialized_tasks: vec![0, 1, 2],
+        };
+        let error = match KeyFramePayloadReader::new(&keyframe) {
+            Ok(_) => panic!("legacy payload unexpectedly accepted"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("legacy keyframe payload"));
+    }
 
     #[derive(Reflect)]
     pub struct TestSource {}
