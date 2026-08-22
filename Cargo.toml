@@ -100,6 +100,8 @@ members = [
   "examples/cu_iceoryx2_bridge_demo",
   "examples/cu_logging_size",
   "examples/cu_msp_bridge_loopback",
+  "examples/cu_custom_planner",
+  "examples/cu_custom_planner/planner",
   "examples/cu_monitoring",
   "examples/cu_min_baremetal",
   "examples/cu_missions",

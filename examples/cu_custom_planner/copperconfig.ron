@@ -1,0 +1,36 @@
+(
+    tasks: [
+        (
+            id: "b_right",
+            type: "tasks::RightSrc",
+        ),
+        (
+            id: "a_left",
+            type: "tasks::LeftSrc",
+        ),
+        (
+            id: "merge",
+            type: "tasks::Merge",
+        ),
+    ],
+    cnx: [
+        (
+            src: "b_right",
+            dst: "merge",
+            msg: "i32",
+        ),
+        (
+            src: "a_left",
+            dst: "merge",
+            msg: "i32",
+        ),
+        (
+            src: "merge",
+            dst: "__nc__",
+            msg: "i32",
+        ),
+    ],
+    runtime: (
+        planner: (type: "custom_planner::Alphabetical"),
+    ),
+)
