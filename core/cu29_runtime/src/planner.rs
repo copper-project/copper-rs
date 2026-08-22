@@ -1,12 +1,15 @@
-//! Shared assembly of the exact generated CopperList execution plan.
+//! Execution planning: the pluggable [`CuPlanner`] trait, the planners shipped
+//! with copper, and the shared assembly of the generated CopperList plan.
 //!
-//! This module is intentionally hidden from the public documentation. It is an
-//! implementation contract shared by the proc macro and first-party tooling,
-//! not a stable application-facing scheduler API.
+//! A planner only decides a [`StepOrder`] over the synthetic plan graph; a
+//! shared pipeline validates the order and materializes the exact plan the
+//! runtime generates. Planners run at build time, never on the robot: the
+//! ship-with-copper ones execute inside `#[copper_runtime]`, out-of-tree ones
+//! in the application's `build.rs` via [`emit_plan`].
 
 use crate::config::{
-    BridgeChannelConfigRepresentation, ConfigGraphs, CuConfig, CuDirection, CuGraph, Flavor, Node,
-    NodeId, PlanConfig, PlanObjective,
+    BridgeChannelConfigRepresentation, ComponentConfig, ConfigGraphs, CuConfig, CuDirection,
+    CuGraph, Flavor, Node, NodeId,
 };
 use crate::curuntime::{
     CuExecutionLoop, CuExecutionStep, CuExecutionUnit, CuInputMsg, CuOutputPack, CuStepPhase,
@@ -19,6 +22,7 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 use cu29_traits::{CuError, CuResult};
+use serde::{Deserialize, Serialize};
 
 /// Default number of preallocated CopperLists compiled into a runtime.
 ///
@@ -64,49 +68,95 @@ pub struct AssembledPlan {
     pub plan_to_original: Vec<Option<NodeId>>,
 }
 
-/// The only decision the plan makes: a total step order over plan `NodeId`s.
+/// The only decision a planner makes: a total step order over plan `NodeId`s.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct StepOrder(pub(crate) Vec<NodeId>);
+pub struct StepOrder(pub Vec<NodeId>);
 
-/// A plan selection after resolution: ids are already mapped to plan `NodeId`s.
+/// A pluggable execution planner, selected by `runtime.planner` in the RON
+/// config (mirroring how monitors are selected by `type`).
 ///
-/// Two-stage on purpose ("parse, don't validate"): the serde-facing
-/// [`PlanConfig`] carries task names; this resolved form carries plan node ids,
-/// so invalid states are unrepresentable once [`ResolvedPlan::resolve`] has run.
+/// `plan` receives the synthetic plan graph of one mission: one node per task
+/// ([`Flavor::Task`]) and one per used bridge channel stage
+/// ([`Flavor::Bridge`]), with every connection as an edge. It returns the
+/// execution order over those nodes; the shared pipeline then rejects illegal
+/// orders (a step before one of its inputs, missing or duplicated steps) and
+/// materializes the CopperList plan.
 ///
-/// A future objective carries its own inputs in its variant (e.g. measured
-/// timings), so [`ResolvedPlan::order`] never needs another parameter.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum ResolvedPlan {
-    Linearity,
-    /// Task plan node ids in the given order (bridge stages are woven in by
-    /// [`ResolvedPlan::order`]).
-    Pinned(Vec<NodeId>),
+/// Planners run at build time, never on the robot. Copper ships [`Linearity`]
+/// (the default) and [`Pinned`]; any crate can implement this trait and
+/// resolve through [`emit_plan`] in the application's `build.rs`.
+pub trait CuPlanner {
+    /// Construct from the `config:` block of the `runtime.planner` section.
+    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
+    where
+        Self: Sized;
+
+    /// Decide the step order for one mission's plan graph.
+    fn plan(&self, graph: &CuGraph) -> CuResult<StepOrder>;
 }
 
-impl ResolvedPlan {
-    /// Map a config-level [`PlanConfig`] onto `plan_graph`, turning task RON ids
-    /// into plan node ids. All id errors surface here, before ordering.
-    pub(crate) fn resolve(plan: &PlanConfig, plan_graph: &CuGraph) -> CuResult<Self> {
-        match (&plan.objective, &plan.order) {
-            (Some(_), Some(_)) => Err(CuError::from(
-                "runtime.plan sets both `objective` and `order`; `order` already fixes the plan, remove one.",
-            )),
-            (_, Some(ids)) => Ok(ResolvedPlan::Pinned(resolve_pinned_ids(plan_graph, ids)?)),
-            (None | Some(PlanObjective::Linearity), None) => Ok(ResolvedPlan::Linearity),
-        }
+/// Canonical config `type` for [`Linearity`].
+pub const LINEARITY_PLANNER: &str = "cu29::planner::Linearity";
+
+/// Canonical config `type` for [`Pinned`].
+pub const PINNED_PLANNER: &str = "cu29::planner::Pinned";
+
+/// The default planner: best-effort linearity, keeping each source-to-sink
+/// chain contiguous. Needs no measurements and is bit-identical to the
+/// historical copper order.
+#[derive(Default)]
+pub struct Linearity;
+
+impl CuPlanner for Linearity {
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+        Ok(Linearity)
     }
 
-    /// Produce the step order for `plan_graph`. The only pluggable point.
-    ///
-    /// This is where the two layers meet: the variant is the objective, the
-    /// function it delegates to is the method used to reach it.
-    pub(crate) fn order(&self, plan_graph: &CuGraph) -> CuResult<StepOrder> {
-        match self {
-            ResolvedPlan::Linearity => topo_bfs_order(plan_graph),
-            ResolvedPlan::Pinned(tasks) => pinned_order(plan_graph, tasks),
-        }
+    fn plan(&self, graph: &CuGraph) -> CuResult<StepOrder> {
+        topo_bfs_order(graph)
     }
+}
+
+/// Replays an explicit task order: `config: { "order": [..] }` lists every
+/// task of the mission exactly once, by RON id; bridge stages are placed
+/// automatically next to their tasks. This is what an offline plan search
+/// writes back.
+pub struct Pinned {
+    order: Vec<String>,
+}
+
+impl CuPlanner for Pinned {
+    fn new(config: Option<&ComponentConfig>) -> CuResult<Self> {
+        const NEEDS_ORDER: &str = "The Pinned planner needs config: { \"order\": [..task ids..] }";
+        let order = config
+            .ok_or(CuError::from(NEEDS_ORDER))?
+            .get_value::<Vec<String>>("order")
+            .map_err(|e| CuError::from(format!("Pinned planner: {e}")))?
+            .ok_or(CuError::from(NEEDS_ORDER))?;
+        Ok(Pinned { order })
+    }
+
+    fn plan(&self, graph: &CuGraph) -> CuResult<StepOrder> {
+        pinned_order(graph, &resolve_pinned_ids(graph, &self.order)?)
+    }
+}
+
+/// Instantiate a ship-with-copper planner from its canonical config `type`.
+fn builtin_planner(
+    type_path: &str,
+    config: Option<&ComponentConfig>,
+) -> CuResult<Option<Box<dyn CuPlanner>>> {
+    Ok(Some(match type_path {
+        LINEARITY_PLANNER => Box::new(Linearity::new(config)?),
+        PINNED_PLANNER => Box::new(Pinned::new(config)?),
+        _ => return Ok(None),
+    }))
+}
+
+/// Whether `type_path` names a planner shipped with copper.
+#[doc(hidden)]
+pub fn is_builtin_planner(type_path: &str) -> bool {
+    matches!(type_path, LINEARITY_PLANNER | PINNED_PLANNER)
 }
 
 /// Map the configured task ids onto plan node ids, rejecting duplicates,
@@ -594,11 +644,17 @@ fn inferred_output_name(node: &Node, task_type: CuTaskType) -> String {
     )
 }
 
-/// Assemble the same synthetic task/bridge graph used by generated runtimes,
-/// ordering it with `config.plan()`. Mission-agnostic: `graph` selects the
-/// mission and callers wrap errors with its name.
-#[doc(hidden)]
-pub fn assemble_runtime_plan(config: &CuConfig, graph: &CuGraph) -> CuResult<AssembledPlan> {
+/// The synthetic graph a planner orders, plus the identity of every node.
+struct PlanGraph {
+    graph: CuGraph,
+    entities: Vec<PlanEntity>,
+    plan_to_original: Vec<Option<NodeId>>,
+}
+
+/// Build the same synthetic task/bridge graph used by generated runtimes.
+/// Mission-agnostic: `graph` selects the mission and callers wrap errors with
+/// its name.
+fn build_plan_graph(config: &CuConfig, graph: &CuGraph) -> CuResult<PlanGraph> {
     let mut plan_graph = CuGraph::default();
     let mut entities = Vec::new();
     let mut plan_to_original = Vec::new();
@@ -756,18 +812,87 @@ pub fn assemble_runtime_plan(config: &CuConfig, graph: &CuGraph) -> CuResult<Ass
             .map_err(|error| CuError::from(error.to_string()))?;
     }
 
-    // Choice (order) then bookkeeping (materialize): one legality gate, one
-    // shared materializer, for every objective and every consumer.
-    let resolved = ResolvedPlan::resolve(&config.plan(), &plan_graph)?;
-    let order = resolved.order(&plan_graph)?;
-    check_order(&plan_graph, &order)?;
-    let mut execution = plan_from_order(&plan_graph, &order)?;
-    expand_anytime_steps(&mut execution)?;
-    Ok(AssembledPlan {
-        execution,
+    Ok(PlanGraph {
+        graph: plan_graph,
         entities,
         plan_to_original,
     })
+}
+
+/// Choice (order) then bookkeeping (materialize): one legality gate, one
+/// shared materializer, for every planner and every consumer.
+fn finish_plan(plan_graph: PlanGraph, order: StepOrder) -> CuResult<AssembledPlan> {
+    check_order(&plan_graph.graph, &order)?;
+    let mut execution = plan_from_order(&plan_graph.graph, &order)?;
+    expand_anytime_steps(&mut execution)?;
+    Ok(AssembledPlan {
+        execution,
+        entities: plan_graph.entities,
+        plan_to_original: plan_graph.plan_to_original,
+    })
+}
+
+/// Assemble the generated execution plan, ordering it with the planner the
+/// config selects (`runtime.planner`, defaulting to [`Linearity`]).
+///
+/// Only ship-with-copper planners can be instantiated here; a config naming an
+/// out-of-tree planner must carry its build-time resolved order — see
+/// [`assemble_runtime_plan_resolved`] and [`emit_plan`].
+#[doc(hidden)]
+pub fn assemble_runtime_plan(config: &CuConfig, graph: &CuGraph) -> CuResult<AssembledPlan> {
+    let planner: Box<dyn CuPlanner> = match config.planner_config() {
+        None => Box::new(Linearity),
+        Some(selection) => builtin_planner(selection.get_type(), selection.get_config())?
+            .ok_or_else(|| {
+                CuError::from(format!(
+                    "Planner '{}' is not shipped with copper and the config carries no resolved order for this mission. Resolve it at build time: call cu29::planner::emit_plan::<{}>(\"<config>.ron\") from the application's build.rs.",
+                    selection.get_type(),
+                    selection.get_type(),
+                ))
+            })?,
+    };
+    assemble_runtime_plan_with(config, graph, planner.as_ref())
+}
+
+/// Assemble with an explicit planner instance, bypassing the config selection.
+#[doc(hidden)]
+pub fn assemble_runtime_plan_with(
+    config: &CuConfig,
+    graph: &CuGraph,
+    planner: &dyn CuPlanner,
+) -> CuResult<AssembledPlan> {
+    let plan_graph = build_plan_graph(config, graph)?;
+    let order = planner.plan(&plan_graph.graph)?;
+    finish_plan(plan_graph, order)
+}
+
+/// Assemble from a step order already resolved at build time, given as the
+/// stable step keys [`emit_plan`] emits and codegen bakes into the config.
+#[doc(hidden)]
+pub fn assemble_runtime_plan_resolved(
+    config: &CuConfig,
+    graph: &CuGraph,
+    step_keys: &[String],
+) -> CuResult<AssembledPlan> {
+    let plan_graph = build_plan_graph(config, graph)?;
+    let by_key: BTreeMap<&str, NodeId> = plan_graph
+        .entities
+        .iter()
+        .enumerate()
+        .map(|(id, entity)| (entity.key.as_str(), id as NodeId))
+        .collect();
+    let order = step_keys
+        .iter()
+        .map(|key| {
+            by_key.get(key.as_str()).copied().ok_or_else(|| {
+                CuError::from(format!(
+                    "Resolved plan references unknown step '{key}'; the baked order no longer matches the config."
+                ))
+            })
+        })
+        .collect::<CuResult<Vec<NodeId>>>()
+        .map(StepOrder)?;
+    finish_plan(plan_graph, order)
 }
 
 fn find_channel_plan_node(
@@ -828,10 +953,110 @@ pub fn step_key(
     format!("mission:{mission}|{}|phase:{phase}", entity.key)
 }
 
+/// Where [`emit_plan`] writes its artifact inside `OUT_DIR`.
+#[doc(hidden)]
+pub const PLAN_ARTIFACT_FILE: &str = "cu29_plan.ron";
+
+/// A build-time resolved plan: the planner that produced it, a digest of the
+/// config it was computed from, and the step order (stable step keys) per
+/// mission.
+#[doc(hidden)]
+#[derive(Serialize, Deserialize)]
+pub struct PlanArtifact {
+    pub planner_type: String,
+    pub config_digest: String,
+    pub orders: BTreeMap<String, Vec<String>>,
+}
+
+/// FNV-1a digest of the effective config, shared by [`emit_plan`] and the
+/// macro to detect a stale artifact.
+#[doc(hidden)]
+pub fn config_digest(config: &CuConfig) -> CuResult<String> {
+    let ron = config.serialize_ron()?;
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in ron.into_bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    Ok(format!("{hash:016x}"))
+}
+
+/// Resolve an out-of-tree [`CuPlanner`] for `config_path` and write the
+/// resulting step orders where `#[copper_runtime]` picks them up.
+///
+/// Call it from the application's `build.rs`:
+///
+/// ```rust,ignore
+/// fn main() {
+///     cu29_build::setup();
+///     cu29::planner::emit_plan::<my_planners::Alphabetical>("copperconfig.ron").unwrap();
+/// }
+/// ```
+///
+/// `config_path` is relative to the crate root, like the macro's `config`
+/// attribute. Honors the `COPPER_CFG_FEATURES` env var like `#[copper_runtime]`
+/// does.
+#[cfg(feature = "std")]
+pub fn emit_plan<P: CuPlanner>(config_path: &str) -> CuResult<()> {
+    let out_dir = std::env::var("OUT_DIR")
+        .map_err(|_| CuError::from("emit_plan must run from a build.rs (OUT_DIR is not set)"))?;
+    let artifact = plan_artifact::<P>(config_path)?;
+    let ron = ron::ser::to_string(&artifact)
+        .map_err(|e| CuError::from(format!("Could not serialize the plan artifact: {e}")))?;
+    let path = std::path::Path::new(&out_dir).join(PLAN_ARTIFACT_FILE);
+    std::fs::write(&path, ron)
+        .map_err(|e| CuError::new_with_cause("Could not write the plan artifact", e))?;
+    println!("cargo:rerun-if-changed={config_path}");
+    println!("cargo:rerun-if-env-changed=COPPER_CFG_FEATURES");
+    Ok(())
+}
+
+/// Run planner `P` over every mission of the config at `config_path`.
+#[cfg(feature = "std")]
+fn plan_artifact<P: CuPlanner>(config_path: &str) -> CuResult<PlanArtifact> {
+    let features_var = std::env::var("COPPER_CFG_FEATURES").unwrap_or_default();
+    let features: Vec<&str> = features_var.split(',').filter(|f| !f.is_empty()).collect();
+    let config = crate::config::read_configuration_with_features(config_path, &features)?;
+    let planner = P::new(
+        config
+            .planner_config()
+            .and_then(|selection| selection.get_config()),
+    )?;
+    let mut orders = BTreeMap::new();
+    for (mission, graph) in mission_graphs(&config) {
+        let keys = (|| -> CuResult<Vec<String>> {
+            let plan_graph = build_plan_graph(&config, graph)?;
+            let order = planner.plan(&plan_graph.graph)?;
+            check_order(&plan_graph.graph, &order)?;
+            Ok(order
+                .0
+                .iter()
+                .map(|&id| plan_graph.entities[id as usize].key.clone())
+                .collect())
+        })()
+        .map_err(|e| CuError::from(format!("mission '{mission}': {e}")))?;
+        orders.insert(mission, keys);
+    }
+    Ok(PlanArtifact {
+        planner_type: core::any::type_name::<P>().to_string(),
+        config_digest: config_digest(&config)?,
+        orders,
+    })
+}
+
+/// Read back an artifact written by [`emit_plan`].
+#[doc(hidden)]
+#[cfg(feature = "std")]
+pub fn read_plan_artifact(path: &std::path::Path) -> CuResult<PlanArtifact> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| CuError::new_with_cause("Could not read the plan artifact", e))?;
+    ron::from_str(&text)
+        .map_err(|e| CuError::from(format!("Could not parse the plan artifact: {e}")))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::RuntimeConfig;
     use crate::curuntime::CuExecutionUnit;
 
     fn config(ron: &str) -> CuConfig {
@@ -941,9 +1166,9 @@ mod tests {
     // ---- Pinned resolution and ordering ----
 
     /// radio(rx incoming, tx outgoing) feeding/consuming a small task chain,
-    /// with `plan` as its `runtime.plan`.
-    fn pinned_graph(plan: PlanConfig) -> CuConfig {
-        let mut config = config(
+    /// with `planner` as its `runtime.planner` section.
+    fn pinned_graph(planner: &str) -> CuConfig {
+        config(&format!(
             r#"(
                 tasks: [
                     (id: "cam", type: "demo::Cam"),
@@ -961,25 +1186,22 @@ mod tests {
                     (src: "ekf", dst: "motor", msg: "demo::State"),
                     (src: "motor", dst: "radio/outgoing", msg: "demo::Cmd"),
                 ],
-            )"#,
-        );
-        config
-            .runtime
-            .get_or_insert_with(RuntimeConfig::default)
-            .plan = plan;
-        config
+                runtime: (planner: {planner}),
+            )"#
+        ))
     }
 
-    fn pinned(ids: &[&str]) -> PlanConfig {
-        PlanConfig {
-            objective: None,
-            order: Some(ids.iter().map(|id| id.to_string()).collect()),
-        }
+    fn pinned(ids: &[&str]) -> String {
+        let quoted: Vec<String> = ids.iter().map(|id| format!("{id:?}")).collect();
+        format!(
+            r#"(type: "cu29::planner::Pinned", config: {{ "order": [{}] }})"#,
+            quoted.join(", ")
+        )
     }
 
     #[test]
     fn pinned_plan_weaves_bridge_stages_and_matches_task_order() {
-        let config = pinned_graph(pinned(&["cam", "ekf", "motor"]));
+        let config = pinned_graph(&pinned(&["cam", "ekf", "motor"]));
         let graph = config.get_graph(None).unwrap();
         let plan = assemble_runtime_plan(&config, graph).unwrap();
         assert_eq!(
@@ -996,8 +1218,8 @@ mod tests {
 
     #[test]
     fn pinned_plan_rejects_bad_id_lists() {
-        let rejects = |plan: PlanConfig| {
-            let config = pinned_graph(plan);
+        let rejects = |planner: &str| {
+            let config = pinned_graph(planner);
             let graph = config.get_graph(None).unwrap();
             assemble_runtime_plan(&config, graph)
                 .err()
@@ -1005,23 +1227,126 @@ mod tests {
                 .to_string()
         };
 
-        let err = rejects(pinned(&["cam", "ekf"]));
+        let err = rejects(&pinned(&["cam", "ekf"]));
         assert!(err.contains("missing"), "{err}");
 
-        let err = rejects(pinned(&["radio::rx::incoming", "cam", "ekf", "motor"]));
+        let err = rejects(&pinned(&["radio::rx::incoming", "cam", "ekf", "motor"]));
         assert!(err.contains("bridge stage"), "{err}");
 
-        let err = rejects(pinned(&["cam", "ekf", "motor", "ghost"]));
+        let err = rejects(&pinned(&["cam", "ekf", "motor", "ghost"]));
         assert!(err.contains("unknown task 'ghost'"), "{err}");
 
-        let err = rejects(pinned(&["cam", "cam", "ekf"]));
+        let err = rejects(&pinned(&["cam", "cam", "ekf"]));
         assert!(err.contains("more than once"), "{err}");
 
-        // An objective and an explicit order are mutually exclusive.
-        let mut both = pinned(&["cam", "ekf", "motor"]);
-        both.objective = Some(PlanObjective::Linearity);
-        let err = rejects(both);
-        assert!(err.contains("both `objective` and `order`"), "{err}");
+        let err = rejects(r#"(type: "cu29::planner::Pinned")"#);
+        assert!(err.contains("needs config"), "{err}");
+
+        // A type copper does not ship needs a build-time resolved order.
+        let err = rejects(r#"(type: "acme::Planner")"#);
+        assert!(err.contains("emit_plan"), "{err}");
+    }
+
+    // ---- Out-of-tree planners ----
+
+    /// Kahn's algorithm with a reverse-alphabetical tie-break: a valid order a
+    /// third-party planner could produce, distinct from `Linearity`.
+    struct ReverseAlpha;
+
+    impl CuPlanner for ReverseAlpha {
+        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+            Ok(ReverseAlpha)
+        }
+
+        fn plan(&self, graph: &CuGraph) -> CuResult<StepOrder> {
+            let mut order = Vec::new();
+            let mut planned: BTreeSet<NodeId> = BTreeSet::new();
+            while order.len() < graph.node_count() {
+                let next = graph
+                    .get_all_nodes()
+                    .into_iter()
+                    .filter(|(id, _)| !planned.contains(id))
+                    .filter(|(id, _)| {
+                        graph
+                            .get_neighbor_ids(*id, CuDirection::Incoming)
+                            .iter()
+                            .all(|input| planned.contains(input))
+                    })
+                    .max_by_key(|(_, node)| node.get_id())
+                    .map(|(id, _)| id)
+                    .expect("acyclic graph always has a ready node");
+                planned.insert(next);
+                order.push(next);
+            }
+            Ok(StepOrder(order))
+        }
+    }
+
+    #[test]
+    fn custom_planner_orders_the_plan() {
+        let config = config(
+            r#"(
+                tasks: [
+                    (id: "left", type: "demo::Left"),
+                    (id: "right", type: "demo::Right"),
+                    (id: "join", type: "demo::Join"),
+                    (id: "sink", type: "demo::Sink"),
+                ],
+                cnx: [
+                    (src: "left", dst: "join", msg: "demo::LeftMsg"),
+                    (src: "right", dst: "join", msg: "demo::RightMsg"),
+                    (src: "join", dst: "sink", msg: "demo::Joined"),
+                ],
+            )"#,
+        );
+        let graph = config.get_graph(None).unwrap();
+        let plan = assemble_runtime_plan_with(&config, graph, &ReverseAlpha).unwrap();
+        assert_eq!(step_labels(&plan), ["right", "left", "join", "sink"]);
+
+        // The same order replays from baked step keys.
+        let keys: Vec<String> = plan
+            .execution
+            .steps
+            .iter()
+            .map(|unit| match unit {
+                CuExecutionUnit::Step(step) => plan.entities[step.node_id as usize].key.clone(),
+                CuExecutionUnit::Loop(_) => panic!("unexpected nested loop"),
+            })
+            .collect();
+        let replayed = assemble_runtime_plan_resolved(&config, graph, &keys).unwrap();
+        assert_eq!(step_labels(&replayed), step_labels(&plan));
+
+        let err = assemble_runtime_plan_resolved(&config, graph, &["task:ghost".to_string()])
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(err.contains("unknown step 'task:ghost'"), "{err}");
+    }
+
+    /// An illegal planner output is rejected by the shared legality gate.
+    struct Backwards;
+
+    impl CuPlanner for Backwards {
+        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+            Ok(Backwards)
+        }
+
+        fn plan(&self, graph: &CuGraph) -> CuResult<StepOrder> {
+            let StepOrder(mut order) = topo_bfs_order(graph)?;
+            order.reverse();
+            Ok(StepOrder(order))
+        }
+    }
+
+    #[test]
+    fn illegal_planner_output_is_rejected() {
+        let config = build_config(&["s", "k"], &[("s", "k", "m")]);
+        let graph = config.get_graph(None).unwrap();
+        let err = assemble_runtime_plan_with(&config, graph, &Backwards)
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(err.contains("scheduled before its input"), "{err}");
     }
 
     #[test]

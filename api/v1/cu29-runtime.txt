@@ -83,8 +83,6 @@ pub fn cu29_runtime::config::HandleContent::from_u8(v: u8) -> Self
 pub enum cu29_runtime::config::OnError
 pub cu29_runtime::config::OnError::Strict
 pub cu29_runtime::config::OnError::Warn
-pub enum cu29_runtime::config::PlanObjective
-pub cu29_runtime::config::PlanObjective::Linearity
 pub enum cu29_runtime::config::SchedulingPolicy
 pub cu29_runtime::config::SchedulingPolicy::Fair
 pub cu29_runtime::config::SchedulingPolicy::Fifo
@@ -167,7 +165,9 @@ pub fn cu29_runtime::config::CuConfig::validate_constants(&self) -> cu29_traits:
 pub fn cu29_runtime::config::CuConfig::validate_logging_config(&self) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::config::CuConfig::validate_runtime_config(&self) -> cu29_traits::CuResult<()>
 impl cu29_runtime::config::CuConfig
-pub fn cu29_runtime::config::CuConfig::plan(&self) -> cu29_runtime::config::PlanConfig
+pub fn cu29_runtime::config::CuConfig::planner_config(&self) -> core::option::Option<&cu29_runtime::config::PlannerConfig>
+pub fn cu29_runtime::config::CuConfig::planner_resolved(&self, mission: &str) -> core::option::Option<&[alloc::string::String]>
+pub fn cu29_runtime::config::CuConfig::set_planner_resolved(&mut self, orders: impl core::iter::traits::collect::IntoIterator<Item = (alloc::string::String, alloc::vec::Vec<alloc::string::String>)>)
 impl core::default::Default for cu29_runtime::config::CuConfig
 pub fn cu29_runtime::config::CuConfig::default() -> Self
 impl serde_core::ser::Serialize for cu29_runtime::config::CuConfig
@@ -306,16 +306,18 @@ pub fn cu29_runtime::config::NodeLogging::enabled(&self) -> bool
 pub fn cu29_runtime::config::NodeLogging::handle_content(&self) -> cu29_runtime::config::HandleContent
 impl core::default::Default for cu29_runtime::config::NodeLogging
 pub fn cu29_runtime::config::NodeLogging::default() -> Self
-pub struct cu29_runtime::config::PlanConfig
-pub cu29_runtime::config::PlanConfig::objective: core::option::Option<cu29_runtime::config::PlanObjective>
-pub cu29_runtime::config::PlanConfig::order: core::option::Option<alloc::vec::Vec<alloc::string::String>>
+pub struct cu29_runtime::config::PlannerConfig
+impl cu29_runtime::config::PlannerConfig
+pub fn cu29_runtime::config::PlannerConfig::get_config(&self) -> core::option::Option<&cu29_runtime::config::ComponentConfig>
+pub fn cu29_runtime::config::PlannerConfig::get_type(&self) -> &str
+pub fn cu29_runtime::config::PlannerConfig::resolved(&self) -> core::option::Option<&alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::vec::Vec<alloc::string::String>>>
 pub struct cu29_runtime::config::ResourceBundleConfig
 pub cu29_runtime::config::ResourceBundleConfig::config: core::option::Option<cu29_runtime::config::ComponentConfig>
 pub cu29_runtime::config::ResourceBundleConfig::id: alloc::string::String
 pub cu29_runtime::config::ResourceBundleConfig::missions: core::option::Option<alloc::vec::Vec<alloc::string::String>>
 pub cu29_runtime::config::ResourceBundleConfig::provider: alloc::string::String
 pub struct cu29_runtime::config::RuntimeConfig
-pub cu29_runtime::config::RuntimeConfig::plan: cu29_runtime::config::PlanConfig
+pub cu29_runtime::config::RuntimeConfig::planner: core::option::Option<cu29_runtime::config::PlannerConfig>
 pub cu29_runtime::config::RuntimeConfig::rate_target_hz: core::option::Option<u64>
 pub cu29_runtime::config::RuntimeConfig::thread_pools: alloc::vec::Vec<cu29_runtime::config::ThreadPoolConfig>
 impl cu29_runtime::config::RuntimeConfig
@@ -1548,6 +1550,28 @@ pub fn cu29_runtime::payload::CuArrayVec<T, N>::module_path() -> core::option::O
 pub fn cu29_runtime::payload::CuArrayVec<T, N>::short_type_path() -> &'static str
 pub fn cu29_runtime::payload::CuArrayVec<T, N>::type_ident() -> core::option::Option<&'static str>
 pub fn cu29_runtime::payload::CuArrayVec<T, N>::type_path() -> &'static str
+pub mod cu29_runtime::planner
+pub struct cu29_runtime::planner::Linearity
+impl cu29_runtime::planner::CuPlanner for cu29_runtime::planner::Linearity
+pub fn cu29_runtime::planner::Linearity::new(_config: core::option::Option<&cu29_runtime::config::ComponentConfig>) -> cu29_traits::CuResult<Self>
+pub fn cu29_runtime::planner::Linearity::plan(&self, graph: &cu29_runtime::config::CuGraph) -> cu29_traits::CuResult<cu29_runtime::planner::StepOrder>
+pub struct cu29_runtime::planner::Pinned
+impl cu29_runtime::planner::CuPlanner for cu29_runtime::planner::Pinned
+pub fn cu29_runtime::planner::Pinned::new(config: core::option::Option<&cu29_runtime::config::ComponentConfig>) -> cu29_traits::CuResult<Self>
+pub fn cu29_runtime::planner::Pinned::plan(&self, graph: &cu29_runtime::config::CuGraph) -> cu29_traits::CuResult<cu29_runtime::planner::StepOrder>
+pub struct cu29_runtime::planner::StepOrder(pub alloc::vec::Vec<cu29_runtime::config::NodeId>)
+pub const cu29_runtime::planner::LINEARITY_PLANNER: &str
+pub const cu29_runtime::planner::PINNED_PLANNER: &str
+pub trait cu29_runtime::planner::CuPlanner
+pub fn cu29_runtime::planner::CuPlanner::new(config: core::option::Option<&cu29_runtime::config::ComponentConfig>) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
+pub fn cu29_runtime::planner::CuPlanner::plan(&self, graph: &cu29_runtime::config::CuGraph) -> cu29_traits::CuResult<cu29_runtime::planner::StepOrder>
+impl cu29_runtime::planner::CuPlanner for cu29_runtime::planner::Linearity
+pub fn cu29_runtime::planner::Linearity::new(_config: core::option::Option<&cu29_runtime::config::ComponentConfig>) -> cu29_traits::CuResult<Self>
+pub fn cu29_runtime::planner::Linearity::plan(&self, graph: &cu29_runtime::config::CuGraph) -> cu29_traits::CuResult<cu29_runtime::planner::StepOrder>
+impl cu29_runtime::planner::CuPlanner for cu29_runtime::planner::Pinned
+pub fn cu29_runtime::planner::Pinned::new(config: core::option::Option<&cu29_runtime::config::ComponentConfig>) -> cu29_traits::CuResult<Self>
+pub fn cu29_runtime::planner::Pinned::plan(&self, graph: &cu29_runtime::config::CuGraph) -> cu29_traits::CuResult<cu29_runtime::planner::StepOrder>
+pub fn cu29_runtime::planner::emit_plan<P: cu29_runtime::planner::CuPlanner>(config_path: &str) -> cu29_traits::CuResult<()>
 pub mod cu29_runtime::pool
 pub enum cu29_runtime::pool::CuHandleInner<T: core::fmt::Debug + core::marker::Send + core::marker::Sync>
 pub cu29_runtime::pool::CuHandleInner::Detached(alloc::boxed::Box<T>)

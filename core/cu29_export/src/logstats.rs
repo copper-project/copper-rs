@@ -3,7 +3,7 @@ use cu29::clock::{CuDuration, OptionCuTime};
 use cu29::config::{CuConfig, CuGraph, DEFAULT_MISSION_ID, Flavor};
 use cu29::curuntime::{CuExecutionUnit, CuStepPhase};
 use cu29::monitoring::CuDurationStatistics;
-use cu29::planner::{PlanEntityKind, assemble_runtime_plan};
+use cu29::planner::{PlanEntityKind, assemble_runtime_plan, assemble_runtime_plan_resolved};
 use cu29::prelude::{CopperListTuple, CuMsgMetadataTrait, CuPayloadRawBytes};
 use cu29::{CuError, CuResult};
 use serde::{Deserialize, Serialize};
@@ -308,7 +308,7 @@ where
 {
     let graph = config.get_graph(mission)?;
     let signature = build_graph_signature(graph, mission);
-    let output_slots = build_output_slots::<P>(config, graph).map_err(|e| {
+    let output_slots = build_output_slots::<P>(config, graph, mission).map_err(|e| {
         CuError::from(format!(
             "mission '{}': {e}",
             mission.unwrap_or(DEFAULT_MISSION_ID)
@@ -647,10 +647,12 @@ pub fn write_logstats(stats: &LogStats, path: &Path) -> CuResult<()> {
 fn build_output_slots<P: CopperListTuple>(
     config: &CuConfig,
     graph: &CuGraph,
+    mission: Option<&str>,
 ) -> CuResult<Vec<OutputSlot>> {
     let specs = P::get_output_specs();
     if specs.is_empty() {
-        return build_output_slots_from_plan(config, graph);
+        let resolved = config.planner_resolved(mission.unwrap_or(DEFAULT_MISSION_ID));
+        return build_output_slots_from_plan(config, graph, resolved);
     }
     Ok(specs
         .iter()
@@ -692,10 +694,17 @@ fn edge_key_from_connection(cnx: &cu29::config::Cnx) -> EdgeKey {
 
 /// Recover the culist slot layout from the config alone, for logs whose payload
 /// type carries no output specs. Each slot lists the graph edges feeding it.
-fn build_output_slots_from_plan(config: &CuConfig, graph: &CuGraph) -> CuResult<Vec<OutputSlot>> {
+fn build_output_slots_from_plan(
+    config: &CuConfig,
+    graph: &CuGraph,
+    resolved: Option<&[String]>,
+) -> CuResult<Vec<OutputSlot>> {
     // Share the generated-runtime construction path (bridge stages, slot
     // indices) so this cannot drift from the compiled plan.
-    let plan = assemble_runtime_plan(config, graph)?;
+    let plan = match resolved {
+        Some(step_keys) => assemble_runtime_plan_resolved(config, graph, step_keys)?,
+        None => assemble_runtime_plan(config, graph)?,
+    };
 
     let mut packs: Vec<(u32, String, Vec<String>)> = Vec::new();
     for unit in &plan.execution.steps {
@@ -915,7 +924,7 @@ mod tests {
         deduped.dedup();
         assert_eq!(deduped.len(), expected_indices.len(), "culist indices dup");
 
-        let slots = build_output_slots_from_plan(&config, graph).unwrap();
+        let slots = build_output_slots_from_plan(&config, graph, None).unwrap();
         assert_eq!(slots.len(), expected_slots);
     }
 

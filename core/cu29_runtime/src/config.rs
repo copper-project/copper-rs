@@ -2225,15 +2225,35 @@ impl CuConfig {
         }
     }
 
-    /// The configured execution plan (defaults to the `Linearity` objective).
+    /// The configured planner selection, if any (absent means `Linearity`).
     // rendercfg.rs recompiles this file via `mod config;`, so pub helpers it
     // does not call are dead code in that bin under `clippy --deny warnings`.
     #[allow(dead_code)]
-    pub fn plan(&self) -> PlanConfig {
-        self.runtime
-            .as_ref()
-            .map(|runtime| runtime.plan.clone())
-            .unwrap_or_default()
+    pub fn planner_config(&self) -> Option<&PlannerConfig> {
+        self.runtime.as_ref()?.planner.as_ref()
+    }
+
+    /// The step order baked at build time for `mission`, if the config carries one.
+    #[allow(dead_code)]
+    pub fn planner_resolved(&self, mission: &str) -> Option<&[String]> {
+        self.planner_config()?
+            .resolved
+            .as_ref()?
+            .get(mission)
+            .map(Vec::as_slice)
+    }
+
+    /// Bake per-mission resolved step orders into the planner section.
+    #[allow(dead_code)]
+    pub fn set_planner_resolved(
+        &mut self,
+        orders: impl IntoIterator<Item = (String, Vec<String>)>,
+    ) {
+        if let Some(runtime) = self.runtime.as_mut()
+            && let Some(planner) = runtime.planner.as_mut()
+        {
+            planner.resolved = Some(orders.into_iter().collect());
+        }
     }
 
     #[cfg(feature = "std")]
@@ -2357,47 +2377,49 @@ pub struct RuntimeConfig {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub thread_pools: Vec<ThreadPoolConfig>,
 
-    /// Execution plan selection, one for the whole config.
+    /// Execution planner selection, one for the whole config.
     ///
     /// This is a codegen input: `#[copper_runtime]` bakes the resulting plan
     /// into the binary. Editing it in a deployed app's RON at startup does not
     /// change the compiled plan (same class as `logging.copperlist_count`); the
     /// RON must match the binary that wrote the log.
-    #[serde(default, skip_serializing_if = "PlanConfig::is_default")]
-    pub plan: PlanConfig,
-}
-
-/// How the execution plan orders the steps of a mission graph. Applies to every
-/// mission.
-///
-/// Two layers: `objective` states what the plan optimizes for, the method used
-/// to reach it stays internal to the planner. `order` skips both by giving the
-/// answer directly.
-#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq)]
-pub struct PlanConfig {
-    /// What the plan optimizes for. Mutually exclusive with `order`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub objective: Option<PlanObjective>,
+    pub planner: Option<PlannerConfig>,
+}
 
-    /// The order, given by task RON id. Must list every task of the mission
-    /// exactly once; bridge stages are placed automatically next to their
-    /// tasks. This is what an offline plan search writes back.
+/// Selects the planner that orders the steps of every mission graph, plus its
+/// config. Mirrors [`MonitorConfig`]: `type` names a `CuPlanner` implementation.
+/// Copper ships `cu29::planner::Linearity` (the default when this section is
+/// absent) and `cu29::planner::Pinned`; any other type is an out-of-tree
+/// planner resolved at build time by `cu29::planner::emit_plan` in the
+/// application's `build.rs`.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PlannerConfig {
+    #[serde(rename = "type")]
+    pub(crate) type_: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) config: Option<ComponentConfig>,
+    /// Step order per mission (stable step keys), baked at build time when an
+    /// out-of-tree planner resolved the plan. Takes precedence over `type`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub order: Option<Vec<String>>,
+    pub(crate) resolved: Option<BTreeMap<String, Vec<String>>>,
 }
 
-/// What the execution plan optimizes for.
-#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq)]
-pub enum PlanObjective {
-    /// Best-effort linearity: keep each source-to-sink chain contiguous.
-    /// Needs no measurements, and is bit-identical to the historical order.
-    #[default]
-    Linearity,
-}
+impl PlannerConfig {
+    #[allow(dead_code)]
+    pub fn get_type(&self) -> &str {
+        &self.type_
+    }
 
-impl PlanConfig {
-    fn is_default(&self) -> bool {
-        self.objective.is_none() && self.order.is_none()
+    #[allow(dead_code)]
+    pub fn get_config(&self) -> Option<&ComponentConfig> {
+        self.config.as_ref()
+    }
+
+    /// The per-mission step orders baked at build time, if any.
+    #[allow(dead_code)]
+    pub fn resolved(&self) -> Option<&BTreeMap<String, Vec<String>>> {
+        self.resolved.as_ref()
     }
 }
 
@@ -5177,25 +5199,37 @@ mod tests {
     }
 
     #[test]
-    fn test_plan_config_defaults_and_round_trips() {
-        // The default plan is empty and is omitted from the serialized RON.
+    fn test_planner_config_defaults_and_round_trips() {
+        // The default has no planner section and none is serialized.
         let mut config = CuConfig::default();
         config
             .get_graph_mut(None)
             .unwrap()
             .add_node(Node::new("a", "demo::A"))
             .unwrap();
-        assert!(!config.serialize_ron().unwrap().contains("plan"));
-        assert_eq!(config.plan(), PlanConfig::default());
+        assert!(!config.serialize_ron().unwrap().contains("planner"));
+        assert!(config.planner_config().is_none());
 
-        // A non-default plan round-trips.
-        let runtime = config.runtime.get_or_insert_with(RuntimeConfig::default);
-        runtime.plan = PlanConfig {
-            objective: Some(PlanObjective::Linearity),
-            order: Some(vec!["a".to_string(), "b".to_string()]),
-        };
+        // A planner selection round-trips, including baked resolved orders.
+        let txt = r#"( tasks: [], cnx: [],
+            runtime: ( planner: ( type: "cu29::planner::Pinned", config: { "order": ["a", "b"] } ) ) )"#;
+        let mut config = CuConfig::deserialize_ron(txt).unwrap();
+        let planner = config.planner_config().unwrap();
+        assert_eq!(planner.get_type(), "cu29::planner::Pinned");
+        let order: Vec<String> = planner
+            .get_config()
+            .unwrap()
+            .get_value("order")
+            .unwrap()
+            .unwrap();
+        assert_eq!(order, ["a", "b"]);
+
+        config.set_planner_resolved([("default".to_string(), vec!["task:a".to_string()])]);
         let reparsed = CuConfig::deserialize_ron(&config.serialize_ron().unwrap()).unwrap();
-        assert_eq!(reparsed.plan(), config.plan());
+        assert_eq!(
+            reparsed.planner_resolved("default").unwrap(),
+            ["task:a".to_string()]
+        );
     }
 
     #[test]
