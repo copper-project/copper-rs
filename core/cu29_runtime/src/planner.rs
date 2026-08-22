@@ -825,7 +825,7 @@ fn build_plan_graph(config: &CuConfig, graph: &CuGraph) -> CuResult<PlanGraph> {
 
 /// Choice (order) then bookkeeping (materialize): one legality gate, one
 /// shared materializer, for every planner and every consumer.
-fn finish_plan(plan_graph: PlanGraph, order: StepOrder) -> CuResult<AssembledPlan> {
+fn assemble_from_order(plan_graph: PlanGraph, order: StepOrder) -> CuResult<AssembledPlan> {
     check_order(&plan_graph.graph, &order)?;
     let mut execution = plan_from_order(&plan_graph.graph, &order)?;
     expand_anytime_steps(&mut execution)?;
@@ -868,7 +868,7 @@ pub fn assemble_runtime_plan_with(
 ) -> CuResult<AssembledPlan> {
     let plan_graph = build_plan_graph(config, graph)?;
     let order = planner.plan(&plan_graph.graph)?;
-    finish_plan(plan_graph, order)
+    assemble_from_order(plan_graph, order)
 }
 
 /// Assemble from a step order already resolved at build time, given as the
@@ -897,7 +897,7 @@ pub fn assemble_runtime_plan_resolved(
         })
         .collect::<CuResult<Vec<NodeId>>>()
         .map(StepOrder)?;
-    finish_plan(plan_graph, order)
+    assemble_from_order(plan_graph, order)
 }
 
 fn find_channel_plan_node(
