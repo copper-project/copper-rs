@@ -153,10 +153,14 @@ fn builtin_planner(
     }))
 }
 
+/// The canonical config `type` strings of the planners shipped with copper.
+#[doc(hidden)]
+pub const BUILTIN_PLANNERS: [&str; 2] = [LINEARITY_PLANNER, PINNED_PLANNER];
+
 /// Whether `type_path` names a planner shipped with copper.
 #[doc(hidden)]
 pub fn is_builtin_planner(type_path: &str) -> bool {
-    matches!(type_path, LINEARITY_PLANNER | PINNED_PLANNER)
+    BUILTIN_PLANNERS.contains(&type_path)
 }
 
 /// Map the configured task ids onto plan node ids, rejecting duplicates,
@@ -845,8 +849,9 @@ pub fn assemble_runtime_plan(config: &CuConfig, graph: &CuGraph) -> CuResult<Ass
         Some(selection) => builtin_planner(selection.get_type(), selection.get_config())?
             .ok_or_else(|| {
                 CuError::from(format!(
-                    "Planner '{}' is not shipped with copper and the config carries no resolved order for this mission. Resolve it at build time: call cu29::planner::emit_plan::<{}>(\"<config>.ron\") from the application's build.rs.",
+                    "Planner '{}' is not shipped with copper (shipped: {}) and the config carries no resolved order for this mission. Resolve it at build time: call cu29::planner::emit_plan::<{}>(\"<config>.ron\") from the application's build.rs.",
                     selection.get_type(),
+                    BUILTIN_PLANNERS.join(", "),
                     selection.get_type(),
                 ))
             })?,
@@ -970,15 +975,60 @@ pub struct PlanArtifact {
 
 /// FNV-1a digest of the effective config, shared by [`emit_plan`] and the
 /// macro to detect a stale artifact.
+///
+/// Digests a canonical rendering with map entries sorted: `CuConfig` maps are
+/// `HashMap`s whose serialization order differs between the build.rs process
+/// and the rustc process, so the raw RON bytes cannot be compared.
 #[doc(hidden)]
 pub fn config_digest(config: &CuConfig) -> CuResult<String> {
     let ron = config.serialize_ron()?;
+    let value: ron::Value = CuConfig::get_options()
+        .from_str(&ron)
+        .map_err(|e| CuError::from(format!("Could not re-parse the config for digesting: {e}")))?;
+    let mut canonical = String::new();
+    canonical_ron(&value, &mut canonical);
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in ron.into_bytes() {
+    for byte in canonical.into_bytes() {
         hash ^= u64::from(byte);
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
     Ok(format!("{hash:016x}"))
+}
+
+fn canonical_ron(value: &ron::Value, out: &mut String) {
+    use core::fmt::Write;
+    match value {
+        ron::Value::Map(map) => {
+            let mut entries: Vec<(String, &ron::Value)> = map
+                .iter()
+                .map(|(key, entry)| {
+                    let mut rendered = String::new();
+                    canonical_ron(key, &mut rendered);
+                    (rendered, entry)
+                })
+                .collect();
+            entries.sort_by(|left, right| left.0.cmp(&right.0));
+            out.push('{');
+            for (key, entry) in entries {
+                out.push_str(&key);
+                out.push(':');
+                canonical_ron(entry, out);
+                out.push(',');
+            }
+            out.push('}');
+        }
+        ron::Value::Seq(entries) => {
+            out.push('[');
+            for entry in entries {
+                canonical_ron(entry, out);
+                out.push(',');
+            }
+            out.push(']');
+        }
+        other => {
+            let _ = write!(out, "{other:?}");
+        }
+    }
 }
 
 /// Resolve an out-of-tree [`CuPlanner`] for `config_path` and write the
@@ -994,8 +1044,8 @@ pub fn config_digest(config: &CuConfig) -> CuResult<String> {
 /// ```
 ///
 /// `config_path` is relative to the crate root, like the macro's `config`
-/// attribute. Honors the `COPPER_CFG_FEATURES` env var like `#[copper_runtime]`
-/// does.
+/// attribute. Honors the crate's Cargo feature set (`CARGO_CFG_FEATURE`) like
+/// `#[copper_runtime]` does.
 #[cfg(feature = "std")]
 pub fn emit_plan<P: CuPlanner>(config_path: &str) -> CuResult<()> {
     let out_dir = std::env::var("OUT_DIR")
@@ -1006,15 +1056,16 @@ pub fn emit_plan<P: CuPlanner>(config_path: &str) -> CuResult<()> {
     let path = std::path::Path::new(&out_dir).join(PLAN_ARTIFACT_FILE);
     std::fs::write(&path, ron)
         .map_err(|e| CuError::new_with_cause("Could not write the plan artifact", e))?;
-    println!("cargo:rerun-if-changed={config_path}");
-    println!("cargo:rerun-if-env-changed=COPPER_CFG_FEATURES");
+    println!("cargo::rerun-if-changed={config_path}");
     Ok(())
 }
 
 /// Run planner `P` over every mission of the config at `config_path`.
 #[cfg(feature = "std")]
 fn plan_artifact<P: CuPlanner>(config_path: &str) -> CuResult<PlanArtifact> {
-    let features_var = std::env::var("COPPER_CFG_FEATURES").unwrap_or_default();
+    // Build scripts see the raw Cargo feature list; cu29_build::setup()
+    // forwards the same list to the macro as COPPER_CFG_FEATURES.
+    let features_var = std::env::var("CARGO_CFG_FEATURE").unwrap_or_default();
     let features: Vec<&str> = features_var.split(',').filter(|f| !f.is_empty()).collect();
     let config = crate::config::read_configuration_with_features(config_path, &features)?;
     let planner = P::new(
@@ -1347,6 +1398,24 @@ mod tests {
             .unwrap()
             .to_string();
         assert!(err.contains("scheduled before its input"), "{err}");
+    }
+
+    #[test]
+    fn canonical_ron_ignores_map_entry_order() {
+        // The digest must not depend on map serialization order: emit_plan
+        // (build.rs) and the macro (rustc) run in different processes with
+        // different HashMap seeds.
+        let render = |txt: &str| {
+            let value: ron::Value = ron::from_str(txt).unwrap();
+            let mut out = String::new();
+            canonical_ron(&value, &mut out);
+            out
+        };
+        assert_eq!(
+            render(r#"{"a": 1, "b": [2, 3], "c": {"x": 4, "y": 5}}"#),
+            render(r#"{"c": {"y": 5, "x": 4}, "b": [2, 3], "a": 1}"#),
+        );
+        assert_ne!(render(r#"{"b": [2, 3]}"#), render(r#"{"b": [3, 2]}"#));
     }
 
     #[test]

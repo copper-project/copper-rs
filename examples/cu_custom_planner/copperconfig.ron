@@ -11,6 +11,13 @@
         (
             id: "merge",
             type: "tasks::Merge",
+            // A multi-key map: config digests must not depend on map order.
+            config: {
+                "gain": 2,
+                "mode": "sum",
+                "offset": 3,
+                "window": 4,
+            },
         ),
     ],
     cnx: [
@@ -31,6 +38,8 @@
         ),
     ],
     runtime: (
-        planner: (type: "custom_planner::Alphabetical"),
+        planner: (
+            type: "custom_planner::Alphabetical",
+        ),
     ),
 )

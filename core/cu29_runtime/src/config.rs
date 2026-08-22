@@ -2244,20 +2244,24 @@ impl CuConfig {
             .map(Vec::as_slice)
     }
 
-    /// Bake per-mission resolved step orders into the planner section.
+    /// Bake per-mission resolved step orders into the planner section,
+    /// creating the section (with `type_`) if the loaded config lacks one.
     /// Codegen contract: generated apps call this before logging the
     /// effective config.
     #[doc(hidden)]
     #[allow(dead_code)]
     pub fn set_planner_resolved(
         &mut self,
+        type_: &str,
         orders: impl IntoIterator<Item = (String, Vec<String>)>,
     ) {
-        if let Some(runtime) = self.runtime.as_mut()
-            && let Some(planner) = runtime.planner.as_mut()
-        {
-            planner.resolved = Some(orders.into_iter().collect());
-        }
+        let runtime = self.runtime.get_or_insert_with(RuntimeConfig::default);
+        let planner = runtime.planner.get_or_insert_with(|| PlannerConfig {
+            type_: type_.to_string(),
+            config: None,
+            resolved: None,
+        });
+        planner.resolved = Some(orders.into_iter().collect());
     }
 
     #[cfg(feature = "std")]
@@ -3269,7 +3273,7 @@ impl CuConfig {
         }
     }
 
-    fn get_options() -> Options {
+    pub(crate) fn get_options() -> Options {
         Options::default()
             .with_default_extension(Extensions::IMPLICIT_SOME)
             .with_default_extension(Extensions::UNWRAP_NEWTYPES)
@@ -5229,10 +5233,25 @@ mod tests {
             .unwrap();
         assert_eq!(order, ["a", "b"]);
 
-        config.set_planner_resolved([("default".to_string(), vec!["task:a".to_string()])]);
+        config.set_planner_resolved(
+            "cu29::planner::Pinned",
+            [("default".to_string(), vec!["task:a".to_string()])],
+        );
         let reparsed = CuConfig::deserialize_ron(&config.serialize_ron().unwrap()).unwrap();
         assert_eq!(
             reparsed.planner_resolved("default").unwrap(),
+            ["task:a".to_string()]
+        );
+
+        // The stamp creates the planner section when the loaded RON lacks one.
+        let mut bare = CuConfig::default();
+        bare.set_planner_resolved(
+            "acme::Planner",
+            [("default".to_string(), vec!["task:a".to_string()])],
+        );
+        assert_eq!(bare.planner_config().unwrap().get_type(), "acme::Planner");
+        assert_eq!(
+            bare.planner_resolved("default").unwrap(),
             ["task:a".to_string()]
         );
     }

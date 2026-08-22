@@ -17,6 +17,7 @@ use syn::{
 use crate::utils::{config_id_to_bridge_const, config_id_to_enum, config_id_to_struct_member};
 use cu29_build::COPPER_CFG_FEATURES_ENV;
 use cu29_runtime::config::CuConfig;
+use cu29_runtime::config::DEFAULT_MISSION_ID;
 use cu29_runtime::config::{
     AnytimeConfig, BridgeChannelConfigRepresentation, ConfigGraphs, ConstantConfig, ConstantNumber,
     ConstantStorage, CuGraph, Flavor, HandleContent, Node, NodeId, RT_POOL, ResourceBundleConfig,
@@ -27,8 +28,9 @@ use cu29_runtime::curuntime::{
     find_task_type_for_id,
 };
 use cu29_runtime::planner::{
-    DEFAULT_COPPERLIST_COUNT, PLAN_ARTIFACT_FILE, PlanEntityKind, assemble_runtime_plan,
-    assemble_runtime_plan_resolved, config_digest, is_builtin_planner, read_plan_artifact,
+    BUILTIN_PLANNERS, DEFAULT_COPPERLIST_COUNT, PLAN_ARTIFACT_FILE, PlanEntityKind,
+    assemble_runtime_plan, assemble_runtime_plan_resolved, config_digest, is_builtin_planner,
+    read_plan_artifact,
 };
 use cu29_traits::{CuError, CuResult};
 use proc_macro2::{Ident, Span};
@@ -1011,7 +1013,7 @@ fn build_gen_cumsgs_support(
     let (culist_plan, exec_entities, plan_to_original) = build_execution_plan(
         cuconfig,
         graph,
-        mission_label.unwrap_or("default"),
+        mission_label.unwrap_or(DEFAULT_MISSION_ID),
         &mut bridge_specs,
     )
     .map_err(|e| {
@@ -1901,18 +1903,19 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let copper_config = copper_config;
     // Re-apply the baked step orders at startup so the effective config the
     // app logs stays self-describing, whatever RON file it was started with.
-    let planner_resolved_stamp = match copper_config
-        .planner_config()
-        .and_then(|selection| selection.resolved())
-    {
-        Some(orders) => {
+    let planner_resolved_stamp = match copper_config.planner_config().and_then(|selection| {
+        selection
+            .resolved()
+            .map(|orders| (selection.get_type().to_string(), orders))
+    }) {
+        Some((planner_type, orders)) => {
             let entries = orders.iter().map(|(mission, keys)| {
                 quote! { (#mission.to_string(), vec![#(#keys.to_string()),*]) }
             });
             quote! {
                 let config = {
                     let mut config = config;
-                    config.set_planner_resolved([#(#entries),*]);
+                    config.set_planner_resolved(#planner_type, [#(#entries),*]);
                     config
                 };
             }
@@ -6520,15 +6523,16 @@ fn apply_external_plan(config: &mut CuConfig) -> CuResult<()> {
     let build_rs_hint = format!(
         "add to this crate's build.rs: cu29::planner::emit_plan::<{planner_type}>(\"<config>.ron\").unwrap()"
     );
+    let shipped = BUILTIN_PLANNERS.join(", ");
     let out_dir = std::env::var("OUT_DIR").map_err(|_| {
         CuError::from(format!(
-            "Planner '{planner_type}' is not shipped with copper and no plan artifact is available (no build script?); {build_rs_hint}"
+            "Planner '{planner_type}' is not shipped with copper (shipped: {shipped}) and no plan artifact is available (no build script?); {build_rs_hint}"
         ))
     })?;
     let path = std::path::Path::new(&out_dir).join(PLAN_ARTIFACT_FILE);
     let artifact = read_plan_artifact(&path).map_err(|e| {
         CuError::from(format!(
-            "Planner '{planner_type}' is not shipped with copper and reading its plan artifact failed ({e}); {build_rs_hint}"
+            "Planner '{planner_type}' is not shipped with copper (shipped: {shipped}) and reading its plan artifact failed ({e}); {build_rs_hint}"
         ))
     })?;
     let artifact_name = artifact
@@ -6549,7 +6553,7 @@ fn apply_external_plan(config: &mut CuConfig) -> CuResult<()> {
             "The plan artifact for planner '{planner_type}' is stale; re-run the build script (touch build.rs or the config file)."
         )));
     }
-    config.set_planner_resolved(artifact.orders);
+    config.set_planner_resolved(&planner_type, artifact.orders);
     Ok(())
 }
 
