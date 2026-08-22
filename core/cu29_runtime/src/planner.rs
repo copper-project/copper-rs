@@ -96,10 +96,10 @@ pub trait CuPlanner {
 }
 
 /// Canonical config `type` for [`Linearity`].
-pub const LINEARITY_PLANNER: &str = "cu29::planner::Linearity";
+const LINEARITY_PLANNER: &str = "cu29::planner::Linearity";
 
 /// Canonical config `type` for [`Pinned`].
-pub const PINNED_PLANNER: &str = "cu29::planner::Pinned";
+const PINNED_PLANNER: &str = "cu29::planner::Pinned";
 
 /// The default planner: best-effort linearity, keeping each source-to-sink
 /// chain contiguous. Needs no measurements and is bit-identical to the

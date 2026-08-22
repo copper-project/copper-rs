@@ -2234,6 +2234,7 @@ impl CuConfig {
     }
 
     /// The step order baked at build time for `mission`, if the config carries one.
+    #[doc(hidden)]
     #[allow(dead_code)]
     pub fn planner_resolved(&self, mission: &str) -> Option<&[String]> {
         self.planner_config()?
@@ -2244,6 +2245,9 @@ impl CuConfig {
     }
 
     /// Bake per-mission resolved step orders into the planner section.
+    /// Codegen contract: generated apps call this before logging the
+    /// effective config.
+    #[doc(hidden)]
     #[allow(dead_code)]
     pub fn set_planner_resolved(
         &mut self,
@@ -2417,6 +2421,7 @@ impl PlannerConfig {
     }
 
     /// The per-mission step orders baked at build time, if any.
+    #[doc(hidden)]
     #[allow(dead_code)]
     pub fn resolved(&self) -> Option<&BTreeMap<String, Vec<String>>> {
         self.resolved.as_ref()
