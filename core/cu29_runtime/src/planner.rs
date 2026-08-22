@@ -142,7 +142,7 @@ impl CuPlanner for Pinned {
 }
 
 /// Instantiate a ship-with-copper planner from its canonical config `type`.
-fn builtin_planner(
+fn instantiate_builtin_planner(
     type_path: &str,
     config: Option<&ComponentConfig>,
 ) -> CuResult<Option<Box<dyn CuPlanner>>> {
@@ -841,12 +841,12 @@ fn assemble_from_order(plan_graph: PlanGraph, order: StepOrder) -> CuResult<Asse
 ///
 /// Only ship-with-copper planners can be instantiated here; a config naming an
 /// out-of-tree planner must carry its build-time resolved order — see
-/// [`assemble_runtime_plan_resolved`] and [`emit_plan`].
+/// [`assemble_runtime_plan_from_step_keys`] and [`emit_plan`].
 #[doc(hidden)]
 pub fn assemble_runtime_plan(config: &CuConfig, graph: &CuGraph) -> CuResult<AssembledPlan> {
     let planner: Box<dyn CuPlanner> = match config.planner_config() {
         None => Box::new(Linearity),
-        Some(selection) => builtin_planner(selection.get_type(), selection.get_config())?
+        Some(selection) => instantiate_builtin_planner(selection.get_type(), selection.get_config())?
             .ok_or_else(|| {
                 CuError::from(format!(
                     "Planner '{}' is not shipped with copper (shipped: {}) and the config carries no resolved order for this mission. Resolve it at build time: call cu29::planner::emit_plan::<{}>(\"<config>.ron\") from the application's build.rs.",
@@ -856,12 +856,12 @@ pub fn assemble_runtime_plan(config: &CuConfig, graph: &CuGraph) -> CuResult<Ass
                 ))
             })?,
     };
-    assemble_runtime_plan_with(config, graph, planner.as_ref())
+    assemble_runtime_plan_with_planner(config, graph, planner.as_ref())
 }
 
 /// Assemble with an explicit planner instance, bypassing the config selection.
 #[doc(hidden)]
-pub fn assemble_runtime_plan_with(
+pub fn assemble_runtime_plan_with_planner(
     config: &CuConfig,
     graph: &CuGraph,
     planner: &dyn CuPlanner,
@@ -874,7 +874,7 @@ pub fn assemble_runtime_plan_with(
 /// Assemble from a step order already resolved at build time, given as the
 /// stable step keys [`emit_plan`] emits and codegen bakes into the config.
 #[doc(hidden)]
-pub fn assemble_runtime_plan_resolved(
+pub fn assemble_runtime_plan_from_step_keys(
     config: &CuConfig,
     graph: &CuGraph,
     step_keys: &[String],
@@ -986,7 +986,7 @@ pub fn config_digest(config: &CuConfig) -> CuResult<String> {
         .from_str(&ron)
         .map_err(|e| CuError::from(format!("Could not re-parse the config for digesting: {e}")))?;
     let mut canonical = String::new();
-    canonical_ron(&value, &mut canonical);
+    write_canonical_ron(&value, &mut canonical);
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     for byte in canonical.into_bytes() {
         hash ^= u64::from(byte);
@@ -995,7 +995,7 @@ pub fn config_digest(config: &CuConfig) -> CuResult<String> {
     Ok(format!("{hash:016x}"))
 }
 
-fn canonical_ron(value: &ron::Value, out: &mut String) {
+fn write_canonical_ron(value: &ron::Value, out: &mut String) {
     use core::fmt::Write;
     match value {
         ron::Value::Map(map) => {
@@ -1003,7 +1003,7 @@ fn canonical_ron(value: &ron::Value, out: &mut String) {
                 .iter()
                 .map(|(key, entry)| {
                     let mut rendered = String::new();
-                    canonical_ron(key, &mut rendered);
+                    write_canonical_ron(key, &mut rendered);
                     (rendered, entry)
                 })
                 .collect();
@@ -1012,7 +1012,7 @@ fn canonical_ron(value: &ron::Value, out: &mut String) {
             for (key, entry) in entries {
                 out.push_str(&key);
                 out.push(':');
-                canonical_ron(entry, out);
+                write_canonical_ron(entry, out);
                 out.push(',');
             }
             out.push('}');
@@ -1020,7 +1020,7 @@ fn canonical_ron(value: &ron::Value, out: &mut String) {
         ron::Value::Seq(entries) => {
             out.push('[');
             for entry in entries {
-                canonical_ron(entry, out);
+                write_canonical_ron(entry, out);
                 out.push(',');
             }
             out.push(']');
@@ -1050,7 +1050,7 @@ fn canonical_ron(value: &ron::Value, out: &mut String) {
 pub fn emit_plan<P: CuPlanner>(config_path: &str) -> CuResult<()> {
     let out_dir = std::env::var("OUT_DIR")
         .map_err(|_| CuError::from("emit_plan must run from a build.rs (OUT_DIR is not set)"))?;
-    let artifact = plan_artifact::<P>(config_path)?;
+    let artifact = build_plan_artifact::<P>(config_path)?;
     let ron = ron::ser::to_string(&artifact)
         .map_err(|e| CuError::from(format!("Could not serialize the plan artifact: {e}")))?;
     let path = std::path::Path::new(&out_dir).join(PLAN_ARTIFACT_FILE);
@@ -1062,7 +1062,7 @@ pub fn emit_plan<P: CuPlanner>(config_path: &str) -> CuResult<()> {
 
 /// Run planner `P` over every mission of the config at `config_path`.
 #[cfg(feature = "std")]
-fn plan_artifact<P: CuPlanner>(config_path: &str) -> CuResult<PlanArtifact> {
+fn build_plan_artifact<P: CuPlanner>(config_path: &str) -> CuResult<PlanArtifact> {
     // Build scripts see the raw Cargo feature list; cu29_build::setup()
     // forwards the same list to the macro as COPPER_CFG_FEATURES.
     let features_var = std::env::var("CARGO_CFG_FEATURE").unwrap_or_default();
@@ -1351,7 +1351,7 @@ mod tests {
             )"#,
         );
         let graph = config.get_graph(None).unwrap();
-        let plan = assemble_runtime_plan_with(&config, graph, &ReverseAlpha).unwrap();
+        let plan = assemble_runtime_plan_with_planner(&config, graph, &ReverseAlpha).unwrap();
         assert_eq!(step_labels(&plan), ["right", "left", "join", "sink"]);
 
         // The same order replays from baked step keys.
@@ -1364,10 +1364,10 @@ mod tests {
                 CuExecutionUnit::Loop(_) => panic!("unexpected nested loop"),
             })
             .collect();
-        let replayed = assemble_runtime_plan_resolved(&config, graph, &keys).unwrap();
+        let replayed = assemble_runtime_plan_from_step_keys(&config, graph, &keys).unwrap();
         assert_eq!(step_labels(&replayed), step_labels(&plan));
 
-        let err = assemble_runtime_plan_resolved(&config, graph, &["task:ghost".to_string()])
+        let err = assemble_runtime_plan_from_step_keys(&config, graph, &["task:ghost".to_string()])
             .err()
             .unwrap()
             .to_string();
@@ -1393,7 +1393,7 @@ mod tests {
     fn illegal_planner_output_is_rejected() {
         let config = build_config(&["s", "k"], &[("s", "k", "m")]);
         let graph = config.get_graph(None).unwrap();
-        let err = assemble_runtime_plan_with(&config, graph, &Backwards)
+        let err = assemble_runtime_plan_with_planner(&config, graph, &Backwards)
             .err()
             .unwrap()
             .to_string();
@@ -1408,7 +1408,7 @@ mod tests {
         let render = |txt: &str| {
             let value: ron::Value = ron::from_str(txt).unwrap();
             let mut out = String::new();
-            canonical_ron(&value, &mut out);
+            write_canonical_ron(&value, &mut out);
             out
         };
         assert_eq!(

@@ -3,7 +3,7 @@ use cu29::clock::{CuDuration, OptionCuTime};
 use cu29::config::{CuConfig, CuGraph, DEFAULT_MISSION_ID, Flavor};
 use cu29::curuntime::{CuExecutionUnit, CuStepPhase};
 use cu29::monitoring::CuDurationStatistics;
-use cu29::planner::{PlanEntityKind, assemble_runtime_plan, assemble_runtime_plan_resolved};
+use cu29::planner::{PlanEntityKind, assemble_runtime_plan, assemble_runtime_plan_from_step_keys};
 use cu29::prelude::{CopperListTuple, CuMsgMetadataTrait, CuPayloadRawBytes};
 use cu29::{CuError, CuResult};
 use serde::{Deserialize, Serialize};
@@ -651,7 +651,7 @@ fn build_output_slots<P: CopperListTuple>(
 ) -> CuResult<Vec<OutputSlot>> {
     let specs = P::get_output_specs();
     if specs.is_empty() {
-        let resolved = config.planner_resolved(mission.unwrap_or(DEFAULT_MISSION_ID));
+        let resolved = config.planner_resolved_order(mission.unwrap_or(DEFAULT_MISSION_ID));
         return build_output_slots_from_plan(config, graph, resolved);
     }
     Ok(specs
@@ -702,7 +702,7 @@ fn build_output_slots_from_plan(
     // Share the generated-runtime construction path (bridge stages, slot
     // indices) so this cannot drift from the compiled plan.
     let plan = match resolved {
-        Some(step_keys) => assemble_runtime_plan_resolved(config, graph, step_keys)?,
+        Some(step_keys) => assemble_runtime_plan_from_step_keys(config, graph, step_keys)?,
         None => assemble_runtime_plan(config, graph)?,
     };
 

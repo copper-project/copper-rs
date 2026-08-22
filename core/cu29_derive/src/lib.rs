@@ -29,7 +29,7 @@ use cu29_runtime::curuntime::{
 };
 use cu29_runtime::planner::{
     BUILTIN_PLANNERS, DEFAULT_COPPERLIST_COUNT, PLAN_ARTIFACT_FILE, PlanEntityKind,
-    assemble_runtime_plan, assemble_runtime_plan_resolved, config_digest, is_builtin_planner,
+    assemble_runtime_plan, assemble_runtime_plan_from_step_keys, config_digest, is_builtin_planner,
     read_plan_artifact,
 };
 use cu29_traits::{CuError, CuResult};
@@ -1905,7 +1905,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     // app logs stays self-describing, whatever RON file it was started with.
     let planner_resolved_stamp = match copper_config.planner_config().and_then(|selection| {
         selection
-            .resolved()
+            .resolved_orders()
             .map(|orders| (selection.get_type().to_string(), orders))
     }) {
         Some((planner_type, orders)) => {
@@ -1915,7 +1915,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {
                 let config = {
                     let mut config = config;
-                    config.set_planner_resolved(#planner_type, [#(#entries),*]);
+                    config.set_planner_resolved_orders(#planner_type, [#(#entries),*]);
                     config
                 };
             }
@@ -6514,7 +6514,7 @@ fn apply_external_plan(config: &mut CuConfig) -> CuResult<()> {
         None => return Ok(()),
         Some(selection) => (
             selection.get_type().to_string(),
-            selection.resolved().is_some(),
+            selection.resolved_orders().is_some(),
         ),
     };
     if is_builtin_planner(&planner_type) || already_resolved {
@@ -6553,7 +6553,7 @@ fn apply_external_plan(config: &mut CuConfig) -> CuResult<()> {
             "The plan artifact for planner '{planner_type}' is stale; re-run the build script (touch build.rs or the config file)."
         )));
     }
-    config.set_planner_resolved(&planner_type, artifact.orders);
+    config.set_planner_resolved_orders(&planner_type, artifact.orders);
     Ok(())
 }
 
@@ -8432,8 +8432,8 @@ fn build_execution_plan(
     Vec<ExecutionEntity>,
     HashMap<NodeId, NodeId>,
 )> {
-    let assembled = match config.planner_resolved(mission) {
-        Some(step_keys) => assemble_runtime_plan_resolved(config, graph, step_keys)?,
+    let assembled = match config.planner_resolved_order(mission) {
+        Some(step_keys) => assemble_runtime_plan_from_step_keys(config, graph, step_keys)?,
         None => assemble_runtime_plan(config, graph)?,
     };
     let mut exec_entities = Vec::with_capacity(assembled.entities.len());

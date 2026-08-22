@@ -6,7 +6,7 @@ use cu29_runtime::config::{
 use cu29_runtime::curuntime::{CuExecutionStep, CuExecutionUnit, CuStepPhase, CuTaskType};
 use cu29_runtime::planner::{
     AssembledPlan, DEFAULT_COPPERLIST_COUNT, PlanEntity, PlanEntityKind, assemble_runtime_plan,
-    assemble_runtime_plan_resolved, mission_graphs, step_key,
+    assemble_runtime_plan_from_step_keys, mission_graphs, step_key,
 };
 use cu29_traits::{CuError, CuResult};
 use serde::Deserialize;
@@ -161,8 +161,8 @@ fn render_document(
     let mut rendered = Vec::new();
     let mut total_height = MARGIN;
     for (mission, graph) in sections {
-        let plan = match config.planner_resolved(mission) {
-            Some(step_keys) => assemble_runtime_plan_resolved(config, graph, step_keys),
+        let plan = match config.planner_resolved_order(mission) {
+            Some(step_keys) => assemble_runtime_plan_from_step_keys(config, graph, step_keys),
             None => assemble_runtime_plan(config, graph),
         }
         .map_err(|error| {

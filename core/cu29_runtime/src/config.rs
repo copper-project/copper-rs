@@ -2236,7 +2236,7 @@ impl CuConfig {
     /// The step order baked at build time for `mission`, if the config carries one.
     #[doc(hidden)]
     #[allow(dead_code)]
-    pub fn planner_resolved(&self, mission: &str) -> Option<&[String]> {
+    pub fn planner_resolved_order(&self, mission: &str) -> Option<&[String]> {
         self.planner_config()?
             .resolved
             .as_ref()?
@@ -2250,7 +2250,7 @@ impl CuConfig {
     /// effective config.
     #[doc(hidden)]
     #[allow(dead_code)]
-    pub fn set_planner_resolved(
+    pub fn set_planner_resolved_orders(
         &mut self,
         type_: &str,
         orders: impl IntoIterator<Item = (String, Vec<String>)>,
@@ -2427,7 +2427,7 @@ impl PlannerConfig {
     /// The per-mission step orders baked at build time, if any.
     #[doc(hidden)]
     #[allow(dead_code)]
-    pub fn resolved(&self) -> Option<&BTreeMap<String, Vec<String>>> {
+    pub fn resolved_orders(&self) -> Option<&BTreeMap<String, Vec<String>>> {
         self.resolved.as_ref()
     }
 }
@@ -5233,25 +5233,25 @@ mod tests {
             .unwrap();
         assert_eq!(order, ["a", "b"]);
 
-        config.set_planner_resolved(
+        config.set_planner_resolved_orders(
             "cu29::planner::Pinned",
             [("default".to_string(), vec!["task:a".to_string()])],
         );
         let reparsed = CuConfig::deserialize_ron(&config.serialize_ron().unwrap()).unwrap();
         assert_eq!(
-            reparsed.planner_resolved("default").unwrap(),
+            reparsed.planner_resolved_order("default").unwrap(),
             ["task:a".to_string()]
         );
 
         // The stamp creates the planner section when the loaded RON lacks one.
         let mut bare = CuConfig::default();
-        bare.set_planner_resolved(
+        bare.set_planner_resolved_orders(
             "acme::Planner",
             [("default".to_string(), vec!["task:a".to_string()])],
         );
         assert_eq!(bare.planner_config().unwrap().get_type(), "acme::Planner");
         assert_eq!(
-            bare.planner_resolved("default").unwrap(),
+            bare.planner_resolved_order("default").unwrap(),
             ["task:a".to_string()]
         );
     }
