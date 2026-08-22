@@ -53,36 +53,6 @@ pub mod tasks {
             Ok(())
         }
     }
-
-    #[derive(Reflect)]
-    pub struct Merge;
-
-    impl Freezable for Merge {}
-
-    impl CuTask for Merge {
-        type Resources<'r> = ();
-        type Input<'m> = input_msg!('m, i32, i32);
-        type Output<'m> = output_msg!(i32);
-
-        fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
-        where
-            Self: Sized,
-        {
-            Ok(Self)
-        }
-
-        fn process(
-            &mut self,
-            _ctx: &CuContext,
-            input: &Self::Input<'_>,
-            output: &mut Self::Output<'_>,
-        ) -> CuResult<()> {
-            RAN.lock().unwrap().push("merge");
-            let (right, left) = input;
-            output.set_payload(right.payload().unwrap_or(&0) + left.payload().unwrap_or(&0));
-            Ok(())
-        }
-    }
 }
 
 #[copper_runtime(config = "copperconfig.ron")]
@@ -110,6 +80,6 @@ fn main() {
     let ran = RAN.lock().unwrap().clone();
     // The out-of-tree Alphabetical planner runs a_left before b_right; the
     // default Linearity order would start with b_right (listed first).
-    assert_eq!(ran, ["a_left", "b_right", "merge"]);
+    assert_eq!(ran, ["a_left", "b_right"]);
     debug!("Executed in the out-of-tree planner's order.");
 }

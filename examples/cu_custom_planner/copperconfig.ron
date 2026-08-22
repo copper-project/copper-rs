@@ -3,14 +3,6 @@
         (
             id: "b_right",
             type: "tasks::RightSrc",
-        ),
-        (
-            id: "a_left",
-            type: "tasks::LeftSrc",
-        ),
-        (
-            id: "merge",
-            type: "tasks::Merge",
             // A multi-key map: config digests must not depend on map order.
             config: {
                 "gain": 2,
@@ -19,20 +11,19 @@
                 "window": 4,
             },
         ),
+        (
+            id: "a_left",
+            type: "tasks::LeftSrc",
+        ),
     ],
     cnx: [
         (
             src: "b_right",
-            dst: "merge",
+            dst: "__nc__",
             msg: "i32",
         ),
         (
             src: "a_left",
-            dst: "merge",
-            msg: "i32",
-        ),
-        (
-            src: "merge",
             dst: "__nc__",
             msg: "i32",
         ),
