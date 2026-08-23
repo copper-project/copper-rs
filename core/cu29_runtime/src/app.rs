@@ -94,6 +94,10 @@ pub trait CuApplication<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> {
     /// * `Ok(())` - If all tasks are started successfully.
     /// * `Err(CuResult)` - If an error occurs while attempting to start one
     ///   or more tasks.
+    #[deprecated(
+        since = "1.2.0",
+        note = "use the typed transition `start()` on the handle returned by `build()`"
+    )]
     fn start_all_tasks(&mut self) -> CuResult<()>;
 
     /// Executes a single iteration of copper-generated runtime (generating and logging one copperlist)
@@ -103,6 +107,10 @@ pub trait CuApplication<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> {
     /// * `CuResult<()>` - Returns `Ok(())` if the iteration completes successfully, or an error
     ///   wrapped in `CuResult` if something goes wrong during execution.
     ///
+    #[deprecated(
+        since = "1.2.0",
+        note = "use `run_one_iteration()` on the Running handle from `build()?.start()?`"
+    )]
     fn run_one_iteration(&mut self) -> CuResult<()>;
 
     /// Runs indefinitely looping over run_one_iteration
@@ -113,6 +121,10 @@ pub trait CuApplication<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> {
     /// operation.
     /// - On success, the result is `Ok(())`.
     /// - On failure, an appropriate error wrapped in `CuResult` is returned.
+    #[deprecated(
+        since = "1.2.0",
+        note = "use the typed transition `run_until_shutdown()` on the handle returned by `build()`"
+    )]
     fn run(&mut self) -> CuResult<()>;
 
     /// Stops all tasks managed by the application/runtime.
@@ -124,6 +136,10 @@ pub trait CuApplication<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> {
     /// - On success, the result is `Ok(())`.
     /// - On failure, an appropriate error wrapped in `CuResult` is returned.
     ///
+    #[deprecated(
+        since = "1.2.0",
+        note = "use the typed transition `stop()` on the Running handle"
+    )]
     fn stop_all_tasks(&mut self) -> CuResult<()>;
 
     /// Restore all tasks from the given frozen state
@@ -160,6 +176,10 @@ pub trait CuSimApplication<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> {
     /// * `Ok(())` - If all tasks are started successfully.
     /// * `Err(CuResult)` - If an error occurs while attempting to start one
     ///   or more tasks.
+    #[deprecated(
+        since = "1.2.0",
+        note = "use the typed transition `start()` on the handle returned by `build()`"
+    )]
     fn start_all_tasks(
         &mut self,
         sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
@@ -174,6 +194,10 @@ pub trait CuSimApplication<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> {
     ///
     /// * `CuResult<()>` - Returns `Ok(())` if the iteration completes successfully, or an error
     ///   wrapped in `CuResult` if something goes wrong during execution.
+    #[deprecated(
+        since = "1.2.0",
+        note = "use `run_one_iteration()` on the Running handle from `build()?.start()?`"
+    )]
     fn run_one_iteration(
         &mut self,
         sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
@@ -190,6 +214,10 @@ pub trait CuSimApplication<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> {
     /// operation.
     /// - On success, the result is `Ok(())`.
     /// - On failure, an appropriate error wrapped in `CuResult` is returned.
+    #[deprecated(
+        since = "1.2.0",
+        note = "use the typed transition `run_until_shutdown()` on the handle returned by `build()`"
+    )]
     fn run(
         &mut self,
         sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
@@ -206,6 +234,10 @@ pub trait CuSimApplication<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> {
     /// operation.
     /// - On success, the result is `Ok(())`.
     /// - On failure, an appropriate error wrapped in `CuResult` is returned.
+    #[deprecated(
+        since = "1.2.0",
+        note = "use the typed transition `stop()` on the Running handle"
+    )]
     fn stop_all_tasks(
         &mut self,
         sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
@@ -323,16 +355,16 @@ impl Stoppable for Faulted {}
 /// transitions that are legal from it.
 ///
 /// ```text
-///                 start_all_tasks
+///                      start
 ///   Initialized ------------------> Running <---+
 ///        |                            |  |      | run_one_iteration
-///        | run                        |  +------+
-///        |                            | stop_all_tasks
+///        | run_until_shutdown         |  +------+
+///        |                            | stop
 ///        +--------> Stopped <---------+
 ///                    |   ^
-///                    |   | stop_all_tasks (cleanup)
+///                    |   | stop (cleanup)
 ///        (restart)   |  Faulted <--- any failed transition
-///                    +---> start_all_tasks / run again
+///                    +---> start / run_until_shutdown again
 /// ```
 ///
 /// Transitions consume the wrapper and return it typed with the new state, so
@@ -472,7 +504,8 @@ where
     ///
     /// On failure the application may be partially started; it is returned
     /// typed `Faulted` inside the error so it can be cleaned up.
-    pub fn start_all_tasks(mut self) -> TransitionResult<S, L, A, Running> {
+    #[allow(deprecated)] // forwards to the raw trait, deprecated for direct use only
+    pub fn start(mut self) -> TransitionResult<S, L, A, Running> {
         match self.app.start_all_tasks() {
             Ok(()) => Ok(self.into_state()),
             Err(error) => Err(LifecycleError {
@@ -484,7 +517,8 @@ where
 
     /// Runs the full lifecycle (start, iterate until shutdown, stop),
     /// transitioning to `Stopped` on success.
-    pub fn run(mut self) -> TransitionResult<S, L, A, Stopped> {
+    #[allow(deprecated)] // forwards to the raw trait, deprecated for direct use only
+    pub fn run_until_shutdown(mut self) -> TransitionResult<S, L, A, Stopped> {
         match self.app.run() {
             Ok(()) => Ok(self.into_state()),
             Err(error) => Err(LifecycleError {
@@ -504,6 +538,7 @@ where
     /// Executes one iteration of the runtime. An iteration error does not
     /// change the lifecycle state: the caller decides whether to keep
     /// iterating or stop.
+    #[allow(deprecated)] // forwards to the raw trait, deprecated for direct use only
     pub fn run_one_iteration(&mut self) -> CuResult<()> {
         self.app.run_one_iteration()
     }
@@ -519,7 +554,8 @@ where
     /// Stops all tasks, transitioning to `Stopped`. From `Faulted` this is a
     /// best-effort cleanup. On failure the application is handed back typed
     /// `Faulted` again.
-    pub fn stop_all_tasks(mut self) -> TransitionResult<S, L, A, Stopped> {
+    #[allow(deprecated)] // forwards to the raw trait, deprecated for direct use only
+    pub fn stop(mut self) -> TransitionResult<S, L, A, Stopped> {
         match self.app.stop_all_tasks() {
             Ok(()) => Ok(self.into_state()),
             Err(error) => Err(LifecycleError {
@@ -527,6 +563,61 @@ where
                 app: self.into_state(),
             }),
         }
+    }
+}
+
+/// Read access to the wrapped application in every lifecycle state, so
+/// conveniences like `app.clock()` keep working without ceremony.
+impl<S, L, A, State> core::ops::Deref for CuAppLifecycle<S, L, A, State> {
+    type Target = A;
+
+    fn deref(&self) -> &A {
+        &self.app
+    }
+}
+
+/// Mutable access only before the application is started: after a typed
+/// start, raw mutable access could bypass the lifecycle guarantees.
+impl<S, L, A> core::ops::DerefMut for CuAppLifecycle<S, L, A, Initialized> {
+    fn deref_mut(&mut self) -> &mut A {
+        &mut self.app
+    }
+}
+
+/// Legacy escape hatch: the raw (deprecated) lifecycle API remains callable
+/// on what `build()` returns, so pre-typestate code compiles unchanged and
+/// only picks up deprecation warnings. Raw calls do not advance the
+/// typestate; mixing them with typed transitions is outside the typestate
+/// guarantees.
+#[allow(deprecated)]
+impl<S, L, A> CuApplication<S, L> for CuAppLifecycle<S, L, A, Initialized>
+where
+    S: SectionStorage,
+    L: UnifiedLogWrite<S> + 'static,
+    A: CuApplication<S, L>,
+{
+    fn get_original_config() -> String {
+        A::get_original_config()
+    }
+
+    fn start_all_tasks(&mut self) -> CuResult<()> {
+        self.app.start_all_tasks()
+    }
+
+    fn run_one_iteration(&mut self) -> CuResult<()> {
+        self.app.run_one_iteration()
+    }
+
+    fn run(&mut self) -> CuResult<()> {
+        self.app.run()
+    }
+
+    fn stop_all_tasks(&mut self) -> CuResult<()> {
+        self.app.stop_all_tasks()
+    }
+
+    fn restore_keyframe(&mut self, freezer: &KeyFrame) -> CuResult<()> {
+        self.app.restore_keyframe(freezer)
     }
 }
 
@@ -656,7 +747,8 @@ where
     ///
     /// On failure the application may be partially started; it is returned
     /// typed `Faulted` inside the error so it can be cleaned up.
-    pub fn start_all_tasks(
+    #[allow(deprecated)] // forwards to the raw trait, deprecated for direct use only
+    pub fn start(
         mut self,
         sim_callback: &mut impl for<'z> FnMut(<A as CuSimApplication<S, L>>::Step<'z>) -> SimOverride,
     ) -> SimTransitionResult<S, L, A, Running> {
@@ -671,7 +763,8 @@ where
 
     /// Runs the full lifecycle (start, iterate until shutdown, stop),
     /// transitioning to `Stopped` on success.
-    pub fn run(
+    #[allow(deprecated)] // forwards to the raw trait, deprecated for direct use only
+    pub fn run_until_shutdown(
         mut self,
         sim_callback: &mut impl for<'z> FnMut(<A as CuSimApplication<S, L>>::Step<'z>) -> SimOverride,
     ) -> SimTransitionResult<S, L, A, Stopped> {
@@ -695,6 +788,7 @@ where
     /// Executes one iteration of the runtime. An iteration error does not
     /// change the lifecycle state: the caller decides whether to keep
     /// iterating or stop.
+    #[allow(deprecated)] // forwards to the raw trait, deprecated for direct use only
     pub fn run_one_iteration(
         &mut self,
         sim_callback: &mut impl for<'z> FnMut(<A as CuSimApplication<S, L>>::Step<'z>) -> SimOverride,
@@ -714,7 +808,8 @@ where
     /// Stops all tasks, transitioning to `Stopped`. From `Faulted` this is a
     /// best-effort cleanup. On failure the application is handed back typed
     /// `Faulted` again.
-    pub fn stop_all_tasks(
+    #[allow(deprecated)] // forwards to the raw trait, deprecated for direct use only
+    pub fn stop(
         mut self,
         sim_callback: &mut impl for<'z> FnMut(<A as CuSimApplication<S, L>>::Step<'z>) -> SimOverride,
     ) -> SimTransitionResult<S, L, A, Stopped> {
@@ -725,6 +820,79 @@ where
                 app: self.into_state(),
             }),
         }
+    }
+}
+
+/// Read access to the wrapped application in every lifecycle state.
+#[cfg(feature = "std")]
+impl<S, L, A, State> core::ops::Deref for CuSimAppLifecycle<S, L, A, State> {
+    type Target = A;
+
+    fn deref(&self) -> &A {
+        &self.app
+    }
+}
+
+/// Mutable access only before the application is started, mirroring
+/// [`CuAppLifecycle`].
+#[cfg(feature = "std")]
+impl<S, L, A> core::ops::DerefMut for CuSimAppLifecycle<S, L, A, Initialized> {
+    fn deref_mut(&mut self) -> &mut A {
+        &mut self.app
+    }
+}
+
+/// Legacy escape hatch mirroring the [`CuApplication`] impl on
+/// [`CuAppLifecycle`]: pre-typestate simulation code compiles unchanged
+/// against what `build()` returns and only picks up deprecation warnings.
+#[cfg(feature = "std")]
+#[allow(deprecated)]
+impl<S, L, A> CuSimApplication<S, L> for CuSimAppLifecycle<S, L, A, Initialized>
+where
+    S: SectionStorage,
+    L: UnifiedLogWrite<S> + 'static,
+    A: CuSimApplication<S, L>,
+{
+    type Step<'z> = <A as CuSimApplication<S, L>>::Step<'z>;
+
+    fn get_original_config() -> String {
+        A::get_original_config()
+    }
+
+    fn mission_id() -> Option<&'static str> {
+        A::mission_id()
+    }
+
+    fn start_all_tasks(
+        &mut self,
+        sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
+    ) -> CuResult<()> {
+        self.app.start_all_tasks(sim_callback)
+    }
+
+    fn run_one_iteration(
+        &mut self,
+        sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
+    ) -> CuResult<()> {
+        self.app.run_one_iteration(sim_callback)
+    }
+
+    fn run(
+        &mut self,
+        sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
+    ) -> CuResult<()> {
+        self.app.run(sim_callback)
+    }
+
+    fn stop_all_tasks(
+        &mut self,
+        sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
+    ) -> CuResult<()> {
+        self.app.stop_all_tasks(sim_callback)
+    }
+
+    fn restore_keyframe(&mut self, freezer: &KeyFrame) -> CuResult<()> {
+        self.app.restore_keyframe(freezer)
     }
 }
 
@@ -742,6 +910,7 @@ mod lifecycle_tests {
         fail_stop: bool,
     }
 
+    #[allow(deprecated)] // mocks implement the deprecated raw trait methods
     impl<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> CuApplication<S, L> for MockApp {
         fn get_original_config() -> String {
             String::new()
@@ -786,14 +955,14 @@ mod lifecycle_tests {
     #[test]
     fn full_cycle_with_restart() {
         let app = Lifecycle::new(MockApp::default());
-        let mut running = app.start_all_tasks().unwrap();
+        let mut running = app.start().unwrap();
         running.run_one_iteration().unwrap();
         running.run_one_iteration().unwrap();
-        let stopped = running.stop_all_tasks().unwrap();
+        let stopped = running.stop().unwrap();
 
         // Restarting a stopped application is legal (mission chaining).
-        let running = stopped.start_all_tasks().unwrap();
-        let stopped = running.stop_all_tasks().unwrap();
+        let running = stopped.start().unwrap();
+        let stopped = running.stop().unwrap();
 
         let mock = stopped.into_inner();
         assert_eq!(mock.started, 2);
@@ -804,8 +973,8 @@ mod lifecycle_tests {
     #[test]
     fn run_transitions_to_stopped_and_can_run_again() {
         let app = Lifecycle::new(MockApp::default());
-        let stopped = app.run().unwrap();
-        let stopped = stopped.run().unwrap();
+        let stopped = app.run_until_shutdown().unwrap();
+        let stopped = stopped.run_until_shutdown().unwrap();
         assert_eq!(stopped.inner().runs, 2);
     }
 
@@ -815,11 +984,11 @@ mod lifecycle_tests {
             fail_start: true,
             ..Default::default()
         });
-        let err = app.start_all_tasks().unwrap_err();
+        let err = app.start().unwrap_err();
         assert!(err.error.to_string().contains("mock start failure"));
 
         // The only legal transition from Faulted is the cleanup.
-        let stopped = err.app.stop_all_tasks().unwrap();
+        let stopped = err.app.stop().unwrap();
         let mock = stopped.into_inner();
         assert_eq!(mock.started, 0);
         assert_eq!(mock.stopped, 1);
@@ -831,8 +1000,8 @@ mod lifecycle_tests {
             fail_stop: true,
             ..Default::default()
         });
-        let running = app.start_all_tasks().unwrap();
-        let err = running.stop_all_tasks().unwrap_err();
+        let running = app.start().unwrap();
+        let err = running.stop().unwrap_err();
         assert!(err.error.to_string().contains("mock stop failure"));
     }
 
@@ -843,7 +1012,7 @@ mod lifecycle_tests {
                 fail_start: true,
                 ..Default::default()
             });
-            let _running = app.start_all_tasks()?;
+            let _running = app.start()?;
             Ok(())
         }
         let error = drive().unwrap_err();
@@ -860,6 +1029,7 @@ mod lifecycle_tests {
 
     struct MockStep;
 
+    #[allow(deprecated)] // mocks implement the deprecated raw trait methods
     impl<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> CuSimApplication<S, L> for MockSimApp {
         type Step<'z> = MockStep;
 
@@ -921,9 +1091,9 @@ mod lifecycle_tests {
         };
 
         let app = SimLifecycle::new(MockSimApp::default());
-        let mut running = app.start_all_tasks(&mut cb).unwrap();
+        let mut running = app.start(&mut cb).unwrap();
         running.run_one_iteration(&mut cb).unwrap();
-        let stopped = running.stop_all_tasks(&mut cb).unwrap();
+        let stopped = running.stop(&mut cb).unwrap();
 
         let mock = stopped.into_inner();
         assert_eq!(mock.started, 1);
@@ -939,9 +1109,9 @@ mod lifecycle_tests {
             fail_start: true,
             ..Default::default()
         });
-        let err = app.start_all_tasks(&mut cb).unwrap_err();
+        let err = app.start(&mut cb).unwrap_err();
         assert!(err.error.to_string().contains("mock sim start failure"));
-        let stopped = err.app.stop_all_tasks(&mut cb).unwrap();
+        let stopped = err.app.stop(&mut cb).unwrap();
         assert_eq!(stopped.inner().stopped, 1);
     }
 }

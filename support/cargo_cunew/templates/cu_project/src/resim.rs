@@ -71,7 +71,7 @@ fn make_app(
         .with_clock(clock.clone())
         .with_log_path(replay_log_base, PREALLOCATED_STORAGE_SIZE)?
         .with_sim_callback(&mut default_callback)
-        .build()?;
+        .build()?.into_inner();
     Ok((app, clock, clock_mock))
 }
 

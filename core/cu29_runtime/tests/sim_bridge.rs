@@ -252,11 +252,11 @@ fn bridge_sim_callbacks_fire_and_override() -> CuResult<()> {
         .with_clock(robot_clock.clone())
         .with_logger::<MmapSectionStorage, MmapUnifiedLoggerWrite>(logger)
         .with_sim_callback(&mut sim_cb)
-        .build_app()?;
+        .build()?;
 
-    let mut running = app.start_all_tasks(&mut sim_cb)?;
+    let mut running = app.start(&mut sim_cb)?;
     running.run_one_iteration(&mut sim_cb)?;
-    running.stop_all_tasks(&mut sim_cb)?;
+    running.stop(&mut sim_cb)?;
 
     // Bridge lifecycle start+stop observed
     assert_eq!(lifecycle_calls, 2);

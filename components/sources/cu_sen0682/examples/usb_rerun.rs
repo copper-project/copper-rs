@@ -124,9 +124,9 @@ fn run() -> CuResult<()> {
     let mut config = cu29::read_configuration("examples/usb_rerun.ron")?;
     override_serial_resource(&mut config, &port);
 
-    let app = UsbRerunApp::builder().with_config(config).build_app()?;
-    let clock = app.inner().clock();
-    let mut app = app.start_all_tasks()?;
+    let app = UsbRerunApp::builder().with_config(config).build()?;
+    let clock = app.clock();
+    let mut app = app.start()?;
 
     let running = Arc::new(AtomicBool::new(true));
     let running_for_signal = Arc::clone(&running);
@@ -171,7 +171,7 @@ fn run() -> CuResult<()> {
         thread::sleep(Duration::from_millis(5));
     }
 
-    app.stop_all_tasks()?;
+    app.stop()?;
 
     if let Some(err) = run_error {
         return Err(err);

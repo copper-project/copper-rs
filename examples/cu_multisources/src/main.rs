@@ -17,9 +17,11 @@ fn main() {
     let application = MultiSourceApp::builder()
         .with_log_path(&logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
-        .build_app()
+        .build()
         .expect("Failed to create runtime.");
 
-    application.run().expect("Failed to run application.");
+    application
+        .run_until_shutdown()
+        .expect("Failed to run application.");
     sleep(Duration::from_secs(1));
 }

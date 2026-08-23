@@ -153,12 +153,12 @@ fn build_copper_driver() -> (CopperDriver, MonitorModel) {
 
     let mut copper_app = BevyMonDemoApp::builder()
         .with_logger::<DemoSectionStorage, DemoUnifiedLogger>(unified_logger)
-        .build_app()
+        .build()
         .expect("Failed to create Copper runtime.");
 
-    // Pre-start configuration goes through inner_mut(), only available in the
+    // Pre-start mutable access works through DerefMut, only available in the
     // Initialized state.
-    let monitor_model = copper_app.inner_mut().copper_runtime_mut().monitor.model();
+    let monitor_model = copper_app.copper_runtime_mut().monitor.model();
 
     let driver = CopperDriver {
         state: CopperState::Initialized(copper_app),
@@ -172,9 +172,7 @@ fn start_copper_runtime(mut copper: ResMut<CopperDriver>) {
     else {
         return;
     };
-    let running = app
-        .start_all_tasks()
-        .expect("Failed to start Copper demo tasks.");
+    let running = app.start().expect("Failed to start Copper demo tasks.");
     copper.state = CopperState::Running(running);
     info!("Copper BevyMon demo runtime started.");
 }
@@ -552,9 +550,7 @@ fn stop_copper_on_exit(mut exit_events: MessageReader<AppExit>, mut copper: ResM
         };
 
         info!("Stopping Copper BevyMon demo runtime.");
-        let stopped = app
-            .stop_all_tasks()
-            .expect("Failed to stop Copper demo tasks.");
+        let stopped = app.stop().expect("Failed to stop Copper demo tasks.");
         let _ = stopped.into_inner().log_shutdown_completed();
     }
 }

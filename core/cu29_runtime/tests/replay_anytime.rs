@@ -357,15 +357,15 @@ fn record_run(log_path: &Path) -> CuResult<()> {
         .with_clock(clock)
         .with_log_path(log_path, LOG_SLAB_SIZE)?
         .with_sim_callback(&mut noop)
-        .build_app()?;
+        .build()?;
 
-    let mut app = app.start_all_tasks(&mut noop)?;
+    let mut app = app.start(&mut noop)?;
     for index in 0..ITERATIONS {
         clock_mock.set_value(index * DT_NANOS);
         app.run_one_iteration(&mut noop)?;
     }
     // stop consumes the handle; the returned Stopped app drops here, flushing the logger.
-    app.stop_all_tasks(&mut noop)?;
+    app.stop(&mut noop)?;
     Ok(())
 }
 
@@ -400,14 +400,14 @@ fn resim_run(recorded: &[RecordedCl], log_path: &Path) -> CuResult<()> {
         .with_clock(clock)
         .with_log_path(log_path, LOG_SLAB_SIZE)?
         .with_sim_callback(&mut noop)
-        .build_app()?;
+        .build()?;
 
-    let mut app = app.start_all_tasks(&mut noop)?;
+    let mut app = app.start(&mut noop)?;
     for copperlist in recorded {
         resim_one(&mut app, &clock_mock, copperlist)?;
     }
     // stop consumes the handle; the returned Stopped app drops here, flushing the logger.
-    app.stop_all_tasks(&mut noop)?;
+    app.stop(&mut noop)?;
     Ok(())
 }
 

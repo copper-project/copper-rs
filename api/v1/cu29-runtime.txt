@@ -2,10 +2,10 @@ pub mod cu29_runtime
 pub mod cu29_runtime::app
 pub struct cu29_runtime::app::CuAppLifecycle<S, L, A, State>
 impl<S, L, A, State> cu29_runtime::app::CuAppLifecycle<S, L, A, State> where S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, A: cu29_runtime::app::CuApplication<S, L>, State: cu29_runtime::app::Startable
-pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, State>::run(self) -> cu29_runtime::app::TransitionResult<S, L, A, cu29_runtime::app::Stopped>
-pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, State>::start_all_tasks(self) -> cu29_runtime::app::TransitionResult<S, L, A, cu29_runtime::app::Running>
+pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, State>::run_until_shutdown(self) -> cu29_runtime::app::TransitionResult<S, L, A, cu29_runtime::app::Stopped>
+pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, State>::start(self) -> cu29_runtime::app::TransitionResult<S, L, A, cu29_runtime::app::Running>
 impl<S, L, A, State> cu29_runtime::app::CuAppLifecycle<S, L, A, State> where S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, A: cu29_runtime::app::CuApplication<S, L>, State: cu29_runtime::app::Stoppable
-pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, State>::stop_all_tasks(self) -> cu29_runtime::app::TransitionResult<S, L, A, cu29_runtime::app::Stopped>
+pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, State>::stop(self) -> cu29_runtime::app::TransitionResult<S, L, A, cu29_runtime::app::Stopped>
 impl<S, L, A, State> cu29_runtime::app::CuAppLifecycle<S, L, A, State>
 pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, State>::inner(&self) -> &A
 pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, State>::into_inner(self) -> A
@@ -16,12 +16,24 @@ impl<S, L, A> cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Runn
 pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Running>::run_one_iteration(&mut self) -> cu29_traits::CuResult<()>
 impl<S, L, A, State> core::fmt::Debug for cu29_runtime::app::CuAppLifecycle<S, L, A, State>
 pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, State>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<S, L, A, State> core::ops::deref::Deref for cu29_runtime::app::CuAppLifecycle<S, L, A, State>
+pub type cu29_runtime::app::CuAppLifecycle<S, L, A, State>::Target = A
+pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, State>::deref(&self) -> &A
+impl<S, L, A> core::ops::deref::DerefMut for cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized>
+pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::deref_mut(&mut self) -> &mut A
+impl<S, L, A> cu29_runtime::app::CuApplication<S, L> for cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized> where S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, A: cu29_runtime::app::CuApplication<S, L>
+pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::get_original_config() -> alloc::string::String
+pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::restore_keyframe(&mut self, freezer: &cu29_runtime::curuntime::KeyFrame) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::run(&mut self) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::run_one_iteration(&mut self) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::start_all_tasks(&mut self) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::stop_all_tasks(&mut self) -> cu29_traits::CuResult<()>
 pub struct cu29_runtime::app::CuSimAppLifecycle<S, L, A, State>
 impl<S, L, A, State> cu29_runtime::app::CuSimAppLifecycle<S, L, A, State> where S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, A: cu29_runtime::app::CuSimApplication<S, L>, State: cu29_runtime::app::Startable
-pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, State>::run(self, sim_callback: &mut impl for<'z> core::ops::function::FnMut(<A as cu29_runtime::app::CuSimApplication<S, L>>::Step) -> cu29_runtime::simulation::SimOverride) -> cu29_runtime::app::SimTransitionResult<S, L, A, cu29_runtime::app::Stopped>
-pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, State>::start_all_tasks(self, sim_callback: &mut impl for<'z> core::ops::function::FnMut(<A as cu29_runtime::app::CuSimApplication<S, L>>::Step) -> cu29_runtime::simulation::SimOverride) -> cu29_runtime::app::SimTransitionResult<S, L, A, cu29_runtime::app::Running>
+pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, State>::run_until_shutdown(self, sim_callback: &mut impl for<'z> core::ops::function::FnMut(<A as cu29_runtime::app::CuSimApplication<S, L>>::Step) -> cu29_runtime::simulation::SimOverride) -> cu29_runtime::app::SimTransitionResult<S, L, A, cu29_runtime::app::Stopped>
+pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, State>::start(self, sim_callback: &mut impl for<'z> core::ops::function::FnMut(<A as cu29_runtime::app::CuSimApplication<S, L>>::Step) -> cu29_runtime::simulation::SimOverride) -> cu29_runtime::app::SimTransitionResult<S, L, A, cu29_runtime::app::Running>
 impl<S, L, A, State> cu29_runtime::app::CuSimAppLifecycle<S, L, A, State> where S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, A: cu29_runtime::app::CuSimApplication<S, L>, State: cu29_runtime::app::Stoppable
-pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, State>::stop_all_tasks(self, sim_callback: &mut impl for<'z> core::ops::function::FnMut(<A as cu29_runtime::app::CuSimApplication<S, L>>::Step) -> cu29_runtime::simulation::SimOverride) -> cu29_runtime::app::SimTransitionResult<S, L, A, cu29_runtime::app::Stopped>
+pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, State>::stop(self, sim_callback: &mut impl for<'z> core::ops::function::FnMut(<A as cu29_runtime::app::CuSimApplication<S, L>>::Step) -> cu29_runtime::simulation::SimOverride) -> cu29_runtime::app::SimTransitionResult<S, L, A, cu29_runtime::app::Stopped>
 impl<S, L, A, State> cu29_runtime::app::CuSimAppLifecycle<S, L, A, State>
 pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, State>::inner(&self) -> &A
 pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, State>::into_inner(self) -> A
@@ -31,6 +43,20 @@ impl<S, L, A> cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::R
 pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Running>::run_one_iteration(&mut self, sim_callback: &mut impl for<'z> core::ops::function::FnMut(<A as cu29_runtime::app::CuSimApplication<S, L>>::Step) -> cu29_runtime::simulation::SimOverride) -> cu29_traits::CuResult<()>
 impl<S, L, A, State> core::fmt::Debug for cu29_runtime::app::CuSimAppLifecycle<S, L, A, State>
 pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, State>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<S, L, A, State> core::ops::deref::Deref for cu29_runtime::app::CuSimAppLifecycle<S, L, A, State>
+pub type cu29_runtime::app::CuSimAppLifecycle<S, L, A, State>::Target = A
+pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, State>::deref(&self) -> &A
+impl<S, L, A> core::ops::deref::DerefMut for cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Initialized>
+pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::deref_mut(&mut self) -> &mut A
+impl<S, L, A> cu29_runtime::app::CuSimApplication<S, L> for cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Initialized> where S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, A: cu29_runtime::app::CuSimApplication<S, L>
+pub type cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::Step<'z> = <A as cu29_runtime::app::CuSimApplication<S, L>>::Step
+pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::get_original_config() -> alloc::string::String
+pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::mission_id() -> core::option::Option<&'static str>
+pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::restore_keyframe(&mut self, freezer: &cu29_runtime::curuntime::KeyFrame) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::run(&mut self, sim_callback: &mut impl for<'z> core::ops::function::FnMut(Self::Step) -> cu29_runtime::simulation::SimOverride) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::run_one_iteration(&mut self, sim_callback: &mut impl for<'z> core::ops::function::FnMut(Self::Step) -> cu29_runtime::simulation::SimOverride) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::start_all_tasks(&mut self, sim_callback: &mut impl for<'z> core::ops::function::FnMut(Self::Step) -> cu29_runtime::simulation::SimOverride) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::stop_all_tasks(&mut self, sim_callback: &mut impl for<'z> core::ops::function::FnMut(Self::Step) -> cu29_runtime::simulation::SimOverride) -> cu29_traits::CuResult<()>
 pub struct cu29_runtime::app::Faulted
 impl cu29_runtime::app::Stoppable for cu29_runtime::app::Faulted
 pub struct cu29_runtime::app::Initialized
@@ -73,6 +99,13 @@ pub fn cu29_runtime::app::CuApplication::run(&mut self) -> cu29_traits::CuResult
 pub fn cu29_runtime::app::CuApplication::run_one_iteration(&mut self) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::app::CuApplication::start_all_tasks(&mut self) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::app::CuApplication::stop_all_tasks(&mut self) -> cu29_traits::CuResult<()>
+impl<S, L, A> cu29_runtime::app::CuApplication<S, L> for cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized> where S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, A: cu29_runtime::app::CuApplication<S, L>
+pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::get_original_config() -> alloc::string::String
+pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::restore_keyframe(&mut self, freezer: &cu29_runtime::curuntime::KeyFrame) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::run(&mut self) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::run_one_iteration(&mut self) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::start_all_tasks(&mut self) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::app::CuAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::stop_all_tasks(&mut self) -> cu29_traits::CuResult<()>
 pub trait cu29_runtime::app::CuDistributedReplayApplication<S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static>: cu29_runtime::app::CuRecordedReplayApplication<S, L> + cu29_runtime::app::CuSubsystemMetadata
 pub fn cu29_runtime::app::CuDistributedReplayApplication::build_distributed_replay(clock: cu29_clock::RobotClock, unified_logger: alloc::sync::Arc<std::sync::poison::mutex::Mutex<L>>, instance_id: u32, config_override: core::option::Option<cu29_runtime::config::CuConfig>) -> cu29_traits::CuResult<Self> where Self: core::marker::Sized
 pub trait cu29_runtime::app::CuRecordedReplayApplication<S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static>: cu29_runtime::app::CuSimApplication<S, L>
@@ -87,6 +120,15 @@ pub fn cu29_runtime::app::CuSimApplication::run(&mut self, sim_callback: &mut im
 pub fn cu29_runtime::app::CuSimApplication::run_one_iteration(&mut self, sim_callback: &mut impl for<'z> core::ops::function::FnMut(Self::Step) -> cu29_runtime::simulation::SimOverride) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::app::CuSimApplication::start_all_tasks(&mut self, sim_callback: &mut impl for<'z> core::ops::function::FnMut(Self::Step) -> cu29_runtime::simulation::SimOverride) -> cu29_traits::CuResult<()>
 pub fn cu29_runtime::app::CuSimApplication::stop_all_tasks(&mut self, sim_callback: &mut impl for<'z> core::ops::function::FnMut(Self::Step) -> cu29_runtime::simulation::SimOverride) -> cu29_traits::CuResult<()>
+impl<S, L, A> cu29_runtime::app::CuSimApplication<S, L> for cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Initialized> where S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S> + 'static, A: cu29_runtime::app::CuSimApplication<S, L>
+pub type cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::Step<'z> = <A as cu29_runtime::app::CuSimApplication<S, L>>::Step
+pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::get_original_config() -> alloc::string::String
+pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::mission_id() -> core::option::Option<&'static str>
+pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::restore_keyframe(&mut self, freezer: &cu29_runtime::curuntime::KeyFrame) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::run(&mut self, sim_callback: &mut impl for<'z> core::ops::function::FnMut(Self::Step) -> cu29_runtime::simulation::SimOverride) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::run_one_iteration(&mut self, sim_callback: &mut impl for<'z> core::ops::function::FnMut(Self::Step) -> cu29_runtime::simulation::SimOverride) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::start_all_tasks(&mut self, sim_callback: &mut impl for<'z> core::ops::function::FnMut(Self::Step) -> cu29_runtime::simulation::SimOverride) -> cu29_traits::CuResult<()>
+pub fn cu29_runtime::app::CuSimAppLifecycle<S, L, A, cu29_runtime::app::Initialized>::stop_all_tasks(&mut self, sim_callback: &mut impl for<'z> core::ops::function::FnMut(Self::Step) -> cu29_runtime::simulation::SimOverride) -> cu29_traits::CuResult<()>
 pub trait cu29_runtime::app::CuStdApplication: cu29_runtime::app::CuApplication<cu29_unifiedlog::memmap::MmapSectionStorage, cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite>
 impl<T> cu29_runtime::app::CuStdApplication for T where T: cu29_runtime::app::CuApplication<cu29_unifiedlog::memmap::MmapSectionStorage, cu29_unifiedlog::memmap::MmapUnifiedLoggerWrite>
 pub trait cu29_runtime::app::CuSubsystemMetadata

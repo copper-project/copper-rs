@@ -1153,7 +1153,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
         MissionArg::OneToManyBackground => Ok(MissionApp::OneToManyBackground(
             OneToManyBackground::RuntimeMatrixApp::builder()
@@ -1161,7 +1162,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
         MissionArg::ManyToOne => Ok(MissionApp::ManyToOne(
             ManyToOne::RuntimeMatrixApp::builder()
@@ -1169,7 +1171,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
         MissionArg::ManyToOneBackground => Ok(MissionApp::ManyToOneBackground(
             ManyToOneBackground::RuntimeMatrixApp::builder()
@@ -1177,7 +1180,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
         MissionArg::ManyToMany => Ok(MissionApp::ManyToMany(
             ManyToMany::RuntimeMatrixApp::builder()
@@ -1185,7 +1189,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
         MissionArg::ManyToManyBackground => Ok(MissionApp::ManyToManyBackground(
             ManyToManyBackground::RuntimeMatrixApp::builder()
@@ -1193,7 +1198,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
         MissionArg::BridgeFanout => Ok(MissionApp::BridgeFanout(
             BridgeFanout::RuntimeMatrixApp::builder()
@@ -1201,7 +1207,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
         MissionArg::BridgeFanoutBackground => Ok(MissionApp::BridgeFanoutBackground(
             BridgeFanoutBackground::RuntimeMatrixApp::builder()
@@ -1209,7 +1216,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
     }
 }

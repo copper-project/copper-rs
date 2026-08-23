@@ -381,9 +381,9 @@ mod tests {
 
         events::reset();
         let app = builder(&log_path, clock).expect("build app");
-        let mut running = app.start_all_tasks().expect("start");
+        let mut running = app.start().expect("start");
         running.run_one_iteration().expect("run");
-        running.stop_all_tasks().expect("stop");
+        running.stop().expect("stop");
         events::take()
     }
 
@@ -415,7 +415,7 @@ mod tests {
                 .with_clock(clock)
                 .with_log_path(log_path, Some(32 * 1024 * 1024))
                 .expect("logger")
-                .build_app()
+                .build()
         });
         assert_eq!(events, vec!["alpha.rx.ingress", "beta.tx.egress"]);
     }
@@ -428,7 +428,7 @@ mod tests {
                 .with_clock(clock)
                 .with_log_path(log_path, Some(32 * 1024 * 1024))
                 .expect("logger")
-                .build_app()
+                .build()
         });
         assert_eq!(events, vec!["alpha.rx.loop", "alpha.tx.loop"]);
     }
@@ -441,7 +441,7 @@ mod tests {
                 .with_clock(clock)
                 .with_log_path(log_path, Some(32 * 1024 * 1024))
                 .expect("logger")
-                .build_app()
+                .build()
         });
         assert_eq!(events, vec!["source_to_bridge.process", "beta.tx.from_src"]);
     }
@@ -454,7 +454,7 @@ mod tests {
                 .with_clock(clock)
                 .with_log_path(log_path, Some(32 * 1024 * 1024))
                 .expect("logger")
-                .build_app()
+                .build()
         });
         assert_eq!(events, vec!["alpha.rx.to_sink", "sink_from_bridge.process"]);
     }
@@ -467,7 +467,7 @@ mod tests {
                 .with_clock(clock)
                 .with_log_path(log_path, Some(32 * 1024 * 1024))
                 .expect("logger")
-                .build_app()
+                .build()
         });
         assert_eq!(
             events,
@@ -491,11 +491,11 @@ mod tests {
                 .with_clock(clock.clone())
                 .with_log_path(&log_path, Some(32 * 1024 * 1024))
                 .expect("logger")
-                .build_app()
+                .build()
                 .expect("build app");
-            let mut running = app.start_all_tasks().expect("start");
+            let mut running = app.start().expect("start");
             running.run_one_iteration().expect("run");
-            running.stop_all_tasks().expect("stop");
+            running.stop().expect("stop");
         }
 
         let UnifiedLogger::Read(read_logger) = UnifiedLoggerBuilder::new()
@@ -545,11 +545,11 @@ mod tests {
                 .with_clock(clock.clone())
                 .with_log_path(&log_path, Some(32 * 1024 * 1024))
                 .expect("logger")
-                .build_app()
+                .build()
                 .unwrap();
-            let mut running = app.start_all_tasks().unwrap();
+            let mut running = app.start().unwrap();
             running.run_one_iteration().unwrap();
-            running.stop_all_tasks().unwrap();
+            running.stop().unwrap();
         }
         let first = events::take();
         assert_eq!(first, vec!["alpha.rx.ingress", "beta.tx.egress"]);
@@ -559,11 +559,11 @@ mod tests {
                 .with_clock(clock)
                 .with_log_path(&log_path, Some(32 * 1024 * 1024))
                 .expect("logger")
-                .build_app()
+                .build()
                 .unwrap();
-            let mut running = app.start_all_tasks().unwrap();
+            let mut running = app.start().unwrap();
             running.run_one_iteration().unwrap();
-            running.stop_all_tasks().unwrap();
+            running.stop().unwrap();
         }
         let second = events::take();
         assert_eq!(second, vec!["alpha.rx.loop", "alpha.tx.loop"]);

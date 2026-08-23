@@ -23,11 +23,9 @@ mod real {
         let application = ImageCodecDemoApp::builder()
             .with_log_path(&log_path, Some(64 * 1024 * 1024))
             .expect("Failed to setup Copper log")
-            .build_app()
+            .build()
             .expect("Failed to create application");
-        let mut running = application
-            .start_all_tasks()
-            .expect("Failed to start tasks");
+        let mut running = application.start().expect("Failed to start tasks");
 
         for _ in 0..180 {
             running

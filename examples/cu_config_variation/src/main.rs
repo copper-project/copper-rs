@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 struct MyApp {}
 
 fn run_once(app: CuStdAppLifecycle<MyApp>) -> CuResult<()> {
-    let mut running = app.start_all_tasks()?;
+    let mut running = app.start()?;
     running.run_one_iteration()?;
-    running.stop_all_tasks()?;
+    running.stop()?;
     Ok(())
 }
 
@@ -29,7 +29,7 @@ fn main() {
             .with_log_path(&logger_path, None)
             .expect("Failed to setup logger.")
             .with_config(copperconfig.clone())
-            .build_app()
+            .build()
             .expect("Failed to create application.");
         run_once(application).expect("Failed to run application.");
 
@@ -49,7 +49,7 @@ fn main() {
             .with_log_path(&logger_path, None)
             .expect("Failed to setup logger.")
             .with_config(copperconfig.clone())
-            .build_app()
+            .build()
             .expect("Failed to create application.");
         run_once(application).expect("Failed to run application.");
     }

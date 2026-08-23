@@ -89,11 +89,11 @@ fn main() -> ! {
         .with_clock(clock)
         .with_logger::<LogStorage, Logger>(writer)
         .with_resources(move |_| Ok(resources.resources))
-        .build_app()
+        .build()
     {
         Ok(app) => {
             log_heap_stats("before-run");
-            let _ = app.run();
+            let _ = app.run_until_shutdown();
         }
         Err(err) => {
             error!("App init failed: {}", &err);

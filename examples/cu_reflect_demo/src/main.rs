@@ -137,14 +137,14 @@ fn record_log() -> CuResult<()> {
         .with_clock(clock.clone())
         .with_log_path(Path::new(LOG_PATH), LOG_SLAB_SIZE)?
         .with_sim_callback(&mut sim_cb)
-        .build_app()?;
+        .build()?;
 
-    let mut running = app.start_all_tasks(&mut sim_cb)?;
+    let mut running = app.start(&mut sim_cb)?;
     for _ in 0..8 {
         clock_mock.increment(CuDuration::from_millis(10));
         running.run_one_iteration(&mut sim_cb)?;
     }
-    running.stop_all_tasks(&mut sim_cb)?;
+    running.stop(&mut sim_cb)?;
     Ok(())
 }
 
@@ -157,7 +157,7 @@ fn run_reflect_debug_demo() -> CuResult<()> {
         .with_clock(clock.clone())
         .with_log_path(Path::new(REPLAY_LOG_PATH), LOG_SLAB_SIZE)?
         .with_sim_callback(&mut sim_cb)
-        .build_app()?
+        .build()?
         .into_inner();
 
     fn time_of(cl: &CopperList<default::CuStampedDataSet>) -> Option<CuTime> {

@@ -25,17 +25,14 @@ fn main() {
         .with_sim_callback(&mut default_callback)
         .with_log_path(logger_path, PREALLOCATED_STORAGE_SIZE)
         .expect("Failed to setup logger.")
-        .build_app()
+        .build()
         .expect("Failed to create application.");
-    debug!(
-        "Running... starting clock: {}.",
-        application.inner().clock().now()
-    );
+    debug!("Running... starting clock: {}.", application.clock().now());
 
     let stopped = application
-        .run(&mut default_callback)
+        .run_until_shutdown(&mut default_callback)
         .expect("Failed to run application.");
-    debug!("End of program: {}.", stopped.inner().clock().now());
+    debug!("End of program: {}.", stopped.clock().now());
     sleep(Duration::from_secs(1));
 }
 

@@ -163,10 +163,10 @@ fn record_log() -> CuResult<()> {
         .with_clock(clock.clone())
         .with_log_path(Path::new(LOG_PATH), LOG_SLAB_SIZE)?
         .with_sim_callback(&mut sim_cb)
-        .build_app()?;
+        .build()?;
 
     println!("[record] Starting tasks");
-    let mut app = app.start_all_tasks(&mut sim_cb)?;
+    let mut app = app.start(&mut sim_cb)?;
     for i in 0..128u32 {
         clock_mock.increment(CuDuration::from_millis(10));
         app.run_one_iteration(&mut sim_cb)?;
@@ -175,7 +175,7 @@ fn record_log() -> CuResult<()> {
         }
     }
     println!("[record] Stopping tasks");
-    app.stop_all_tasks(&mut sim_cb)?;
+    app.stop(&mut sim_cb)?;
     println!("[record] Log recording complete");
     Ok(())
 }
@@ -208,7 +208,7 @@ fn app_factory(_params: &SessionOpenParams) -> CuResult<(DebugApp, RobotClock, R
         .with_clock(clock.clone())
         .with_log_path(Path::new(REPLAY_LOG_PATH), REPLAY_LOG_SLAB_SIZE)?
         .with_sim_callback(&mut sim_cb)
-        .build_app()?;
+        .build()?;
 
     // The replay session engine drives the raw lifecycle itself.
     Ok((app.into_inner(), clock, clock_mock))

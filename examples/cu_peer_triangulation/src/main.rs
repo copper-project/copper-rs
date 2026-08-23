@@ -151,14 +151,14 @@ fn main() -> CuResult<()> {
         .with_log_path(logger_path, Some(64 * 1024 * 1024))
         .expect("failed to setup logger")
         .with_sim_callback(&mut callback)
-        .build_app()
+        .build()
         .expect("failed to create runtime");
 
-    let mut running = app.start_all_tasks(&mut callback)?;
+    let mut running = app.start(&mut callback)?;
     for _ in 0..6 {
         running.run_one_iteration(&mut callback)?;
     }
-    running.stop_all_tasks(&mut callback)?;
+    running.stop(&mut callback)?;
 
     Ok(())
 }

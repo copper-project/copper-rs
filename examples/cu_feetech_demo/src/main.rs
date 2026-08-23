@@ -25,7 +25,7 @@ fn run_mission<App>(
 where
     App: CuApplication<memmap::MmapSectionStorage, UnifiedLoggerWrite>,
 {
-    app.run()?;
+    app.run_until_shutdown()?;
     Ok(())
 }
 
@@ -50,7 +50,7 @@ fn main() {
             let app = ArmPublisherApp::builder()
                 .with_log_path(logger_path, SLAB_SIZE)
                 .expect("Failed to setup logger.")
-                .build_app()
+                .build()
                 .unwrap_or_else(|e| {
                     print_setup_help(&e);
                     std::process::exit(1);
@@ -64,7 +64,7 @@ fn main() {
             let app = LeaderFollowerApp::builder()
                 .with_log_path(logger_path, SLAB_SIZE)
                 .expect("Failed to setup logger.")
-                .build_app()
+                .build()
                 .unwrap_or_else(|e| {
                     print_setup_help(&e);
                     std::process::exit(1);

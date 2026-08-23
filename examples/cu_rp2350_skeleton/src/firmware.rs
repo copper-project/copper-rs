@@ -210,11 +210,11 @@ fn main() -> ! {
     let app = BlinkyApp::builder()
         .with_clock(clock)
         .with_logger::<EMMCSectionStorage<TSPimodoriSdCard>, EMMCLogger<TSPimodoriSdCard>>(writer)
-        .build_app()
+        .build()
         .unwrap();
     info!("Starting Copper...");
 
-    let _ = app.run();
+    let _ = app.run_until_shutdown();
     defmt::error!("Copper crashed.");
     #[allow(clippy::empty_loop)]
     loop {}

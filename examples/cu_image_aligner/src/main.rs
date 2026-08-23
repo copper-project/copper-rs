@@ -17,20 +17,15 @@ fn main() {
     let application = ImageAlignerApp::builder()
         .with_log_path(&logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
-        .build_app()
+        .build()
         .expect("Failed to create runtime.");
-    debug!(
-        "Running... starting clock: {}.",
-        application.inner().clock().now()
-    );
+    debug!("Running... starting clock: {}.", application.clock().now());
 
-    let mut running = application
-        .start_all_tasks()
-        .expect("Failed to start tasks.");
+    let mut running = application.start().expect("Failed to start tasks.");
     for _ in 0..ITERATIONS {
         running
             .run_one_iteration()
             .expect("Failed to run iteration.");
     }
-    debug!("End of program: {}.", running.inner().clock().now());
+    debug!("End of program: {}.", running.clock().now());
 }

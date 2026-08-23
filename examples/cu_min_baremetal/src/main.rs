@@ -96,11 +96,11 @@ pub extern "C" fn main() {
     let app = MinimalNoStdApp::builder()
         .with_clock(clock)
         .with_logger::<NoopSectionStorage, NoopLogger>(writer)
-        .build_app()
+        .build()
         .unwrap();
     // build_app works in no_std too: the lifecycle handle replaces the UFCS
     // disambiguation the raw trait call needed.
-    let _ = app.run();
+    let _ = app.run_until_shutdown();
 }
 
 #[cfg(feature = "std")]
@@ -121,10 +121,10 @@ fn main() {
     let application = MinimalNoStdApp::builder()
         .with_log_path(&logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
-        .build_app()
+        .build()
         .expect("Failed to create application.");
 
-    if let Err(error) = application.run() {
+    if let Err(error) = application.run_until_shutdown() {
         debug!("Application Ended: {}", error.error)
     }
 }

@@ -103,10 +103,8 @@ fn drive() -> CuResult<()> {
 
     let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
     let logger_path = tmp_dir.path().join("ros2_bridge.copper");
-    let app = App::builder()
-        .with_log_path(&logger_path, None)?
-        .build_app()?;
-    let mut app = app.start_all_tasks()?;
+    let app = App::builder().with_log_path(&logger_path, None)?.build()?;
+    let mut app = app.start()?;
 
     for _ in 0..ITERATIONS {
         app.run_one_iteration()?;

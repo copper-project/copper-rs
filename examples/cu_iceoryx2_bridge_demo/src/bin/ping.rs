@@ -32,8 +32,8 @@ fn drive() -> CuResult<()> {
 
     let app = PingApp::builder()
         .with_log_path(&logger_path, SLAB_SIZE)?
-        .build_app()?;
-    let mut app = app.start_all_tasks()?;
+        .build()?;
+    let mut app = app.start()?;
 
     loop {
         app.run_one_iteration()?;

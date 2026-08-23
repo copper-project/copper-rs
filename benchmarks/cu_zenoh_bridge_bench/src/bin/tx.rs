@@ -51,7 +51,7 @@ fn drive() -> CuResult<()> {
         .with_log_path(&options.log_path, SLAB_SIZE)?
         .with_instance_id(options.instance_id)
         .with_config(config)
-        .build_app()?;
+        .build()?;
     println!(
         "TX ready: publishing every 10ms on route={} {}",
         summary.route,
@@ -60,6 +60,6 @@ fn drive() -> CuResult<()> {
     // `run` drives the full start/iterate/stop cycle; the typestate rejects
     // the extra start_all_tasks/stop_all_tasks calls this benchmark used to
     // make around it (a double start/stop at runtime).
-    app.run()?;
+    app.run_until_shutdown()?;
     Ok(())
 }

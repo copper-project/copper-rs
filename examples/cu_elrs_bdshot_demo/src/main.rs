@@ -229,11 +229,11 @@ fn main() -> ! {
     let app = BdshotDemoApp::builder()
         .with_clock(clock)
         .with_logger::<EMMCSectionStorage<TSPimodoriSdCard>, EMMCLogger<TSPimodoriSdCard>>(writer)
-        .build_app()
+        .build()
         .unwrap();
     info!("Starting cu-bdshot-demo...");
 
-    let _ = app.run();
+    let _ = app.run_until_shutdown();
     error!("Copper crashed.");
     #[allow(clippy::empty_loop)]
     loop {}

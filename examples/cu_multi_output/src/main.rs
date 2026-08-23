@@ -174,17 +174,13 @@ fn main() {
     let application = App::builder()
         .with_log_path(&logger_path, None)
         .expect("Failed to setup logger.")
-        .build_app()
+        .build()
         .expect("Failed to create application.");
-    let mut running = application
-        .start_all_tasks()
-        .expect("Failed to start application.");
+    let mut running = application.start().expect("Failed to start application.");
     running
         .run_one_iteration()
         .expect("Failed to run application.");
-    running
-        .stop_all_tasks()
-        .expect("Failed to stop application.");
+    running.stop().expect("Failed to stop application.");
 
     assert_eq!(LAST_I32.load(Ordering::SeqCst), 42);
     assert!(LAST_BOOL.load(Ordering::SeqCst));

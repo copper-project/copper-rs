@@ -398,6 +398,8 @@ where
         Ok(nodes)
     }
 
+    // Framework replay engine: drives the raw (app-deprecated) lifecycle on purpose.
+    #[allow(deprecated)]
     fn ensure_started(&mut self) -> CuResult<()> {
         if self.started {
             return Ok(());
@@ -599,6 +601,8 @@ where
         self.goto_index(target_idx)
     }
 
+    // Framework replay engine: drives the raw (app-deprecated) lifecycle on purpose.
+    #[allow(deprecated)]
     fn shutdown(&mut self) -> CuResult<()> {
         if !self.started {
             return Ok(());

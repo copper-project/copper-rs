@@ -258,14 +258,14 @@ pub fn run_demo(mode: PyTaskMode, iterations: usize) -> CuResult<()> {
     let app = PythonTaskDemoApp::builder()
         .with_log_path(&log_path, Some(32 * 1024 * 1024))?
         .with_config(config_for_mode(mode))
-        .build_app()?;
+        .build()?;
 
     reset_sinks();
-    let mut running = app.start_all_tasks()?;
+    let mut running = app.start()?;
     for _ in 0..iterations {
         running.run_one_iteration()?;
     }
-    running.stop_all_tasks()?;
+    running.stop()?;
     Ok(())
 }
 

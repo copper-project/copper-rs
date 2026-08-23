@@ -31,15 +31,15 @@ fn drive() -> CuResult<()> {
     let app = PingApp::builder()
         .with_log_path(&options.log_path, SLAB_SIZE)?
         .with_instance_id(options.instance_id)
-        .build_app()?;
-    let mut app = app.start_all_tasks()?;
+        .build()?;
+    let mut app = app.start()?;
 
     if let Some(iterations) = options.iterations {
         for _ in 0..iterations {
             app.run_one_iteration()?;
             std::thread::sleep(Duration::from_millis(200));
         }
-        app.stop_all_tasks()?;
+        app.stop()?;
         Ok(())
     } else {
         loop {

@@ -79,22 +79,15 @@ fn main() {
     debug!("Creating application... ");
     let application = App::builder()
         .with_logger::<memmap::MmapSectionStorage, UnifiedLoggerWrite>(unified_logger.clone())
-        .build_app()
+        .build()
         .expect("Failed to create application.");
-    debug!(
-        "Running... starting clock: {}.",
-        application.inner().clock().now()
-    );
-    let mut running = application
-        .start_all_tasks()
-        .expect("Failed to start application.");
+    debug!("Running... starting clock: {}.", application.clock().now());
+    let mut running = application.start().expect("Failed to start application.");
     running
         .run_one_iteration()
         .expect("Failed to run application.");
-    let stopped = running
-        .stop_all_tasks()
-        .expect("Failed to stop application.");
-    debug!("End of program: {}.", stopped.inner().clock().now());
+    let stopped = running.stop().expect("Failed to stop application.");
+    debug!("End of program: {}.", stopped.clock().now());
     // check if the logger file is at least 1 section in length
 
     // change the end of the logger_path from copper to _0.copper

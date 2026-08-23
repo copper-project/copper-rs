@@ -166,8 +166,8 @@ macro_rules! resim_default {
             .with_clock($robot_clock)
             .with_log_path($output_path, LOG_SLAB_SIZE)?
             .with_sim_callback(&mut default_cb)
-            .build_app()?;
-        let mut app = app.start_all_tasks(&mut default_cb)?;
+            .build()?;
+        let mut app = app.start(&mut default_cb)?;
 
         let mut reader = open_copperlist_reader($input_log_path)?;
         for entry in copperlists_reader::<$app::CuStampedDataSet>(&mut reader) {
@@ -176,7 +176,7 @@ macro_rules! resim_default {
             app.run_one_iteration(&mut sim_cb)?;
         }
 
-        app.stop_all_tasks(&mut default_cb)?;
+        app.stop(&mut default_cb)?;
         Ok(())
     }};
 }
@@ -225,8 +225,8 @@ fn resim_source_to_bridge(
         .with_clock(clock)
         .with_log_path(output_path, LOG_SLAB_SIZE)?
         .with_sim_callback(&mut default_cb)
-        .build_app()?;
-    let mut app = app.start_all_tasks(&mut default_cb)?;
+        .build()?;
+    let mut app = app.start(&mut default_cb)?;
 
     let mut reader = open_copperlist_reader(input_log_path)?;
     for entry in copperlists_reader::<SourceToBridge::CuStampedDataSet>(&mut reader) {
@@ -235,7 +235,7 @@ fn resim_source_to_bridge(
         app.run_one_iteration(&mut sim_cb)?;
     }
 
-    app.stop_all_tasks(&mut default_cb)?;
+    app.stop(&mut default_cb)?;
     Ok(())
 }
 
@@ -263,8 +263,8 @@ fn resim_bridge_to_sink(
         .with_clock(clock)
         .with_log_path(output_path, LOG_SLAB_SIZE)?
         .with_sim_callback(&mut default_cb)
-        .build_app()?;
-    let mut app = app.start_all_tasks(&mut default_cb)?;
+        .build()?;
+    let mut app = app.start(&mut default_cb)?;
 
     let mut reader = open_copperlist_reader(input_log_path)?;
     for entry in copperlists_reader::<BridgeToSink::CuStampedDataSet>(&mut reader) {
@@ -273,7 +273,7 @@ fn resim_bridge_to_sink(
         app.run_one_iteration(&mut sim_cb)?;
     }
 
-    app.stop_all_tasks(&mut default_cb)?;
+    app.stop(&mut default_cb)?;
     Ok(())
 }
 
@@ -301,8 +301,8 @@ fn resim_bridge_task_same(
         .with_clock(clock)
         .with_log_path(output_path, LOG_SLAB_SIZE)?
         .with_sim_callback(&mut default_cb)
-        .build_app()?;
-    let mut app = app.start_all_tasks(&mut default_cb)?;
+        .build()?;
+    let mut app = app.start(&mut default_cb)?;
 
     let mut reader = open_copperlist_reader(input_log_path)?;
     for entry in copperlists_reader::<BridgeTaskSame::CuStampedDataSet>(&mut reader) {
@@ -311,7 +311,7 @@ fn resim_bridge_task_same(
         app.run_one_iteration(&mut sim_cb)?;
     }
 
-    app.stop_all_tasks(&mut default_cb)?;
+    app.stop(&mut default_cb)?;
     Ok(())
 }
 
@@ -346,7 +346,7 @@ macro_rules! define_remote_debug_mission {
                 .with_clock(clock.clone())
                 .with_log_path(replay_log_base, LOG_SLAB_SIZE)?
                 .with_sim_callback(&mut default_cb)
-                .build_app()?;
+                .build()?;
             // The replay session engine drives the raw lifecycle itself.
             Ok((app.into_inner(), clock, clock_mock))
         }

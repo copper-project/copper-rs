@@ -458,14 +458,12 @@ pub mod harness {
         ) -> CuResult<(Vec<String>, Vec<String>)> {
             super::events::reset();
 
-            let app = App::builder()
-                .with_log_path(logger_path, None)?
-                .build_app()?;
+            let app = App::builder().with_log_path(logger_path, None)?.build()?;
             let build_events = super::events::snapshot();
 
-            let mut running = app.start_all_tasks()?;
+            let mut running = app.start()?;
             running.run_one_iteration()?;
-            running.stop_all_tasks()?;
+            running.stop()?;
 
             let runtime_events = super::slice_from(&super::events::snapshot(), build_events.len());
             Ok((build_events, runtime_events))
@@ -484,18 +482,16 @@ pub mod harness {
         ) -> CuResult<(Vec<String>, Vec<String>, Vec<String>, Vec<String>)> {
             super::events::reset();
 
-            let app = App::builder()
-                .with_log_path(logger_path, None)?
-                .build_app()?;
+            let app = App::builder().with_log_path(logger_path, None)?.build()?;
             let build_events = super::events::snapshot();
 
-            let mut running = app.start_all_tasks()?;
+            let mut running = app.start()?;
             let after_start = super::events::snapshot();
 
             running.run_one_iteration()?;
             let after_run = super::events::snapshot();
 
-            running.stop_all_tasks()?;
+            running.stop()?;
             let after_stop = super::events::snapshot();
 
             Ok((

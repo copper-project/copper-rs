@@ -247,6 +247,8 @@ where
         &mut self.app
     }
 
+    // Framework replay engine: drives the raw (app-deprecated) lifecycle on purpose.
+    #[allow(deprecated)]
     fn ensure_started(&mut self) -> CuResult<()> {
         if self.started {
             return Ok(());
@@ -568,6 +570,8 @@ where
         }
     }
 
+    // Framework replay engine: drives the raw (app-deprecated) lifecycle on purpose.
+    #[allow(deprecated)]
     fn replay_range(&mut self, start: usize, end: usize) -> CuResult<usize>
     where
         App: CurrentRuntimeCopperList<P>,

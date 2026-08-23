@@ -39,12 +39,12 @@ fn main() {
     let application = App::builder()
         .with_log_path(logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
-        .build_app()
+        .build()
         .expect("Failed to create application.");
     // `run` starts the tasks itself; the typestate wrapper rejects the manual
     // start_all_tasks call this example used to make before it.
     // Paced by `runtime.rate_target_hz` in the RON; stops on Ctrl-C.
-    if let Err(error) = application.run() {
+    if let Err(error) = application.run_until_shutdown() {
         eprintln!("Error while running: {}", error.error);
     }
 }

@@ -109,19 +109,15 @@ fn run(logger_path: &std::path::Path) -> Vec<PlanReport> {
     let application = DualPolicyTester::builder()
         .with_log_path(logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
-        .build_app()
+        .build()
         .expect("Failed to create application.");
-    let mut application = application
-        .start_all_tasks()
-        .expect("Failed to start application.");
+    let mut application = application.start().expect("Failed to start application.");
     for _ in 0..ITERATIONS {
         application
             .run_one_iteration()
             .expect("Failed to run application.");
     }
-    application
-        .stop_all_tasks()
-        .expect("Failed to stop application.");
+    application.stop().expect("Failed to stop application.");
     take_reports()
 }
 

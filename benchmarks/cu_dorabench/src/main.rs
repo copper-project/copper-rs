@@ -21,10 +21,10 @@ fn main() {
     let application = DoraBench::builder()
         .with_log_path(&logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
-        .build_app()
+        .build()
         .expect("Failed to create application.");
 
-    if let Err(error) = application.run() {
+    if let Err(error) = application.run_until_shutdown() {
         debug!("Application Ended: {}", error.error)
     }
 }

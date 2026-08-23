@@ -204,11 +204,9 @@ fn main() {
     let application = App::builder()
         .with_log_path(logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
-        .build_app()
+        .build()
         .expect("Failed to create application.");
-    let mut running = application
-        .start_all_tasks()
-        .expect("Failed to start application.");
+    let mut running = application.start().expect("Failed to start application.");
     // Three copperlists for the foreground chain; keep polling until the
     // backgrounded node's first job comes back from its worker thread.
     for iteration in 0..100 {
@@ -223,9 +221,7 @@ fn main() {
             break;
         }
     }
-    running
-        .stop_all_tasks()
-        .expect("Failed to stop application.");
+    running.stop().expect("Failed to stop application.");
 
     let background = tasks::BACKGROUND_RECORDED
         .lock()

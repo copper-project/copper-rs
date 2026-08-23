@@ -161,8 +161,8 @@ fn main() -> CuResult<()> {
     let app = App::builder()
         .with_log_path(&logger_path, Some((args.slab_mib as usize) * 1024 * 1024))?
         .with_config(config)
-        .build_app()?;
-    let mut app = app.start_all_tasks()?;
+        .build()?;
+    let mut app = app.start()?;
 
     for _ in 0..args.warmup {
         app.run_one_iteration()?;
@@ -178,7 +178,7 @@ fn main() -> CuResult<()> {
     }
     let total_elapsed = benchmark_start.elapsed();
 
-    app.stop_all_tasks()?;
+    app.stop()?;
 
     let mut jitter_ns = samples_ns
         .windows(2)

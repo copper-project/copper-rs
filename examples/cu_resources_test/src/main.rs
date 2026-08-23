@@ -38,7 +38,7 @@ where
     // `run` drives the full start/iterate/stop cycle; the typestate rejects
     // the extra start_all_tasks/stop_all_tasks calls this example used to
     // make around it (a double start/stop at runtime).
-    app.run()?;
+    app.run_until_shutdown()?;
     Ok(())
 }
 
@@ -66,13 +66,13 @@ fn drive() -> CuResult<()> {
         MissionArg::A => {
             let app = MissionAApp::builder()
                 .with_log_path(&logger_path, SLAB_SIZE)?
-                .build_app()?;
+                .build()?;
             run_once(app)?;
         }
         MissionArg::B => {
             let app = MissionBApp::builder()
                 .with_log_path(&logger_path, SLAB_SIZE)?
-                .build_app()?;
+                .build()?;
             run_once(app)?;
         }
     }

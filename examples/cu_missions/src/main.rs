@@ -17,9 +17,9 @@ fn run_once<App>(
 where
     App: CuApplication<memmap::MmapSectionStorage, UnifiedLoggerWrite>,
 {
-    let mut running = app.start_all_tasks()?;
+    let mut running = app.start()?;
     running.run_one_iteration()?;
-    running.stop_all_tasks()?;
+    running.stop()?;
     Ok(())
 }
 
@@ -37,7 +37,7 @@ fn main() {
             .with_clock(clock.clone())
             .with_log_path(&logger_path, SLAB_SIZE)
             .expect("Failed to setup logger.")
-            .build_app()
+            .build()
             .expect("Failed to create runtime");
         run_once(application_a).expect("Failed to run mission A.");
     }
@@ -49,7 +49,7 @@ fn main() {
             .with_clock(clock.clone())
             .with_log_path(&logger_path, SLAB_SIZE)
             .expect("Failed to setup logger.")
-            .build_app()
+            .build()
             .expect("Failed to create runtime");
         run_once(application_b).expect("Failed to run mission B.");
     }

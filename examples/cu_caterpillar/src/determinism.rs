@@ -85,11 +85,11 @@ fn record_run(log_base: &Path, iterations: usize, dt_ticks: u64) -> CuResult<()>
         .with_clock(clock.clone())
         .with_log_path(log_base, slab_size)?
         .with_sim_callback(&mut record_callback)
-        .build_app()
+        .build()
         .expect("failed to build app");
 
     let mut running = app
-        .start_all_tasks(&mut record_callback)
+        .start(&mut record_callback)
         .expect("failed to start tasks");
 
     for i in 0..iterations {
@@ -100,7 +100,7 @@ fn record_run(log_base: &Path, iterations: usize, dt_ticks: u64) -> CuResult<()>
     }
 
     running
-        .stop_all_tasks(&mut record_callback)
+        .stop(&mut record_callback)
         .expect("failed to stop tasks");
 
     Ok(())
@@ -208,11 +208,11 @@ fn resim_run(input_log_base: &Path, output_log_base: &Path) -> CuResult<()> {
         .with_clock(clock.clone())
         .with_log_path(output_log_base, slab_size)?
         .with_sim_callback(&mut init_cb)
-        .build_app()
+        .build()
         .expect("failed to build resim app");
 
     let mut app = app
-        .start_all_tasks(&mut init_cb)
+        .start(&mut init_cb)
         .expect("failed to start tasks (resim)");
 
     let UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
@@ -230,7 +230,7 @@ fn resim_run(input_log_base: &Path, output_log_base: &Path) -> CuResult<()> {
         resim_one_copperlist(&mut app, &mut clock_mock, cl);
     }
 
-    app.stop_all_tasks(&mut init_cb)
+    app.stop(&mut init_cb)
         .expect("failed to stop tasks (resim)");
 
     Ok(())

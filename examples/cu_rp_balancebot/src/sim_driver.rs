@@ -98,11 +98,11 @@ pub fn setup_native_copper(mut commands: Commands) {
         .with_log_path(PathBuf::from(logger_path), LOG_SLAB_SIZE)
         .expect("Failed to create logger.")
         .with_sim_callback(&mut default_callback)
-        .build_app()
+        .build()
         .expect("Failed to create runtime.");
 
     let copper_app = copper_app
-        .start_all_tasks(&mut default_callback)
+        .start(&mut default_callback)
         .expect("Failed to start all tasks.");
 
     commands.insert_resource(CopperSim {
@@ -126,15 +126,15 @@ pub fn build_bevymon_copper() -> (MonitorModel, CopperSim) {
         .with_clock(clock.clone())
         .with_logger::<BevyMonSectionStorage, BevyMonUnifiedLogger>(unified_logger)
         .with_sim_callback(&mut sim_callback)
-        .build_app()
+        .build()
         .expect("Failed to create runtime.");
 
-    // Pre-start configuration goes through inner_mut(), only available in the
+    // Pre-start mutable access works through DerefMut, only available in the
     // Initialized state.
-    let monitor_model = copper_app.inner_mut().copper_runtime_mut().monitor.model();
+    let monitor_model = copper_app.copper_runtime_mut().monitor.model();
 
     let copper_app = copper_app
-        .start_all_tasks(&mut sim_callback)
+        .start(&mut sim_callback)
         .expect("Failed to start all tasks.");
 
     (
@@ -306,7 +306,7 @@ pub fn stop_copper_on_exit(
         && let Some(copper_app) = copper_ctx.copper_app.take()
     {
         let stopped = copper_app
-            .stop_all_tasks(&mut default_callback)
+            .stop(&mut default_callback)
             .expect("Failed to stop all tasks.");
         let _ = stopped.into_inner().log_shutdown_completed();
     }
