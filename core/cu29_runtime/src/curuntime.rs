@@ -1341,11 +1341,16 @@ where
         let bridges = (parts.bridges_instanciator)(config, &mut resources)?;
 
         let (copperlists_logger, keyframes_logger, keyframe_interval) = match &config.logging {
-            Some(logging_config) if logging_config.enable_task_logging => (
-                Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
-                Some(Box::new(keyframes_logger) as Box<dyn WriteStream<KeyFrame>>),
-                logging_config.keyframe_interval.unwrap(),
-            ),
+            Some(logging_config) if logging_config.enable_task_logging => {
+                let keyframes_logger = logging_config
+                    .enable_keyframe_logging
+                    .then(|| Box::new(keyframes_logger) as Box<dyn WriteStream<KeyFrame>>);
+                (
+                    Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
+                    keyframes_logger,
+                    logging_config.keyframe_interval.unwrap(),
+                )
+            }
             Some(_) => (None, None, 0),
             None => (
                 Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
@@ -1460,11 +1465,16 @@ where
         let bridges = (parts.bridges_instanciator)(config, &mut resources)?;
 
         let (copperlists_logger, keyframes_logger, keyframe_interval) = match &config.logging {
-            Some(logging_config) if logging_config.enable_task_logging => (
-                Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
-                Some(Box::new(keyframes_logger) as Box<dyn WriteStream<KeyFrame>>),
-                logging_config.keyframe_interval.unwrap(),
-            ),
+            Some(logging_config) if logging_config.enable_task_logging => {
+                let keyframes_logger = logging_config
+                    .enable_keyframe_logging
+                    .then(|| Box::new(keyframes_logger) as Box<dyn WriteStream<KeyFrame>>);
+                (
+                    Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
+                    keyframes_logger,
+                    logging_config.keyframe_interval.unwrap(),
+                )
+            }
             Some(_) => (None, None, 0),
             None => (
                 Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),

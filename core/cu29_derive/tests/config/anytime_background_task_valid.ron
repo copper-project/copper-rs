@@ -4,6 +4,9 @@
             (id: "planner", threads: 1),
         ],
     ),
+    logging: (
+        enable_keyframe_logging: false,
+    ),
     resources: [
         (
             id: "board",
