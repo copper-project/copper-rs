@@ -22,6 +22,7 @@ use std::time::{Duration, Instant};
 /// `behavior_planner`'s `cache_crunch_limit` is deliberately absent: its 0.001ms input
 /// callback is a pointer assignment, below what a timed search can resolve, so the config
 /// keeps a fixed small limit there.
+#[cfg(not(feature = "callback-background"))]
 const TARGETS: &[(&str, &str, u64)] = &[
     ("front_lidar", "crunch_limit", 100),
     ("rear_lidar", "crunch_limit", 100),
@@ -54,6 +55,49 @@ const TARGETS: &[(&str, &str, u64)] = &[
     ("lanelet2_map_loader", "crunch_limit", 10200),
     ("euclidean_cluster_detector", "crunch_limit1", 10200),
 ];
+
+#[cfg(feature = "callback-background")]
+const TARGETS: &[(&str, &str, u64)] = &[
+    ("front_lidar", "crunch_limit", 100),
+    ("rear_lidar", "crunch_limit", 100),
+    ("point_cloud_map", "crunch_limit", 100),
+    ("visualizer", "crunch_limit", 100),
+    ("lanelet2_map", "crunch_limit", 100),
+    ("euclidean_cluster_settings", "crunch_limit", 100),
+    ("vehicle_dbw", "crunch_limit", 1000),
+    ("intersection_output", "crunch_limit", 1000),
+    ("point_cloud_fusion_rear_callback", "crunch_limit", 2100),
+    ("ndt_localizer_voxel_callback", "crunch_limit", 2100),
+    ("lanelet2_global_planner_ndt_callback", "crunch_limit", 2100),
+    ("lanelet2_map_loader_global_callback", "crunch_limit", 2100),
+    ("vehicle_interface_behavior_callback", "crunch_limit", 2100),
+    ("point_cloud_fusion", "crunch_limit", 10005),
+    ("points_transformer_front", "crunch_limit", 10100),
+    ("points_transformer_rear", "crunch_limit", 10100),
+    ("voxel_grid_downsampler", "crunch_limit", 10100),
+    ("point_cloud_map_loader", "crunch_limit", 10100),
+    ("ray_ground_filter", "crunch_limit", 10100),
+    ("object_collision_estimator", "crunch_limit", 10100),
+    ("mpc_controller", "crunch_limit", 10100),
+    ("parking_planner", "crunch_limit", 10100),
+    ("lane_planner", "crunch_limit", 10100),
+    ("ndt_localizer", "crunch_limit", 10100),
+    ("vehicle_interface", "crunch_limit", 10100),
+    ("behavior_planner", "crunch_limit", 100),
+    ("euclidean_cluster_detector", "crunch_limit", 10100),
+    ("lanelet2_global_planner", "crunch_limit", 10200),
+    ("lanelet2_map_loader", "crunch_limit", 10200),
+    (
+        "euclidean_cluster_detector_settings_callback",
+        "crunch_limit",
+        10200,
+    ),
+];
+
+#[cfg(feature = "callback-background")]
+const CONFIG_FILENAME: &str = "copperconfig-background.ron";
+#[cfg(not(feature = "callback-background"))]
+const CONFIG_FILENAME: &str = "copperconfig.ron";
 
 /// Timed runs per candidate limit; the median is what the search steers on.
 const RUNS: usize = 15;
@@ -159,12 +203,21 @@ fn limit_of(
         .map(|(_, limit)| *limit)
 }
 
-/// `        "crunch_limit": 123, // note` with the value swapped, anything else untouched.
-fn rewrite_line(line: &str, limit_of: impl Fn(&str) -> Option<u64>) -> Option<String> {
-    let (head, tail) = line.split_once("\": ")?;
-    let limit = limit_of(head.trim_start().strip_prefix('"')?)?;
-    let digits = tail.len() - tail.trim_start_matches(|c: char| c.is_ascii_digit()).len();
-    (digits > 0).then(|| format!("{head}\": {limit}{}", &tail[digits..]))
+/// Replace one `"key": 123` value wherever it appears on a line. RON formatters may
+/// keep small maps inline, so calibration must not depend on one key per line.
+fn rewrite_key(line: &str, key: &str, limit: u64) -> Option<String> {
+    let needle = format!("\"{key}\": ");
+    let start = line.find(&needle)? + needle.len();
+    let digits = line[start..]
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .count();
+    if digits == 0 {
+        return None;
+    }
+    let mut rewritten = line.to_string();
+    rewritten.replace_range(start..start + digits, &limit.to_string());
+    Some(rewritten)
 }
 
 /// The rewritten config and the number of values replaced. Node scope comes from the
@@ -177,25 +230,32 @@ fn rewrite(body: &str, targets: &[(&str, &str, u64)], limits: &[(u64, u64)]) -> 
         if let Some(rest) = line.trim_start().strip_prefix("id: \"") {
             node = rest.split('"').next().unwrap_or("");
         }
-        match rewrite_line(line, |key| limit_of(targets, limits, node, key)) {
-            Some(rewritten) => {
-                out.push_str(&rewritten);
+        let mut rewritten = line.to_string();
+        for (_, key, _) in targets
+            .iter()
+            .filter(|(target_node, _, _)| *target_node == node)
+        {
+            if let Some(limit) = limit_of(targets, limits, node, key)
+                && let Some(next) = rewrite_key(&rewritten, key, limit)
+            {
+                rewritten = next;
                 rewrites += 1;
             }
-            None => out.push_str(line),
         }
+        out.push_str(&rewritten);
         out.push('\n');
     }
     (out, rewrites)
 }
 
 fn write_config(limits: &[(u64, u64)], path: &PathBuf) {
-    let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("copperconfig.ron");
-    let text = fs::read_to_string(&source).expect("copperconfig.ron must be readable");
+    let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(CONFIG_FILENAME);
+    let text = fs::read_to_string(&source)
+        .unwrap_or_else(|_| panic!("{CONFIG_FILENAME} must be readable"));
     let (body, rewrites) = rewrite(strip_header(&text), TARGETS, limits);
     if rewrites != TARGETS.len() {
         eprintln!(
-            "copperconfig.ron: rewrote {rewrites} of {} calibrated values, so the config and \
+            "{CONFIG_FILENAME}: rewrote {rewrites} of {} calibrated values, so the config and \
              TARGETS disagree on node ids or keys. Nothing written.",
             TARGETS.len()
         );
@@ -257,7 +317,7 @@ fn main() {
         }
         let path = args
             .output
-            .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("copperconfig.ron"));
+            .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(CONFIG_FILENAME));
         write_config(&limits, &path);
     }
 }

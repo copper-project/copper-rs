@@ -26,3 +26,8 @@ serde_bytes = { workspace = true }
 
 [build-dependencies]
 cu29-build = { workspace = true }
+
+[features]
+default = []
+# Build the callback-level graph using Copper's existing background-task executor.
+callback-background = []

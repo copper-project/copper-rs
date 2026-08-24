@@ -38,6 +38,15 @@ just lame
 just compare
 ```
 
+The vanilla graph remains the default. A second three-command path builds the same crate
+with the `callback-background` feature and compares its callback-level graph instead:
+
+```sh
+just copper-background
+just lame
+just compare-background
+```
+
 Both benchmark commands default to a 60-second measured phase. Reasonable
 overrides remain command-line arguments rather than environment variables:
 
@@ -53,14 +62,30 @@ example's `logs/`, and extracts chain KPIs. `just lame` builds the pinned contai
 calibrates LaME's identical workload classes inside it, performs LaME's fixed 15-second
 profiling phase and 5-second pause, and then records the requested managed phase.
 
+`just copper-background` selects `copperconfig-background.ron` through the Cargo feature.
+It represents each of LaME's 36 independently scheduled callbacks as one static Copper
+task and runs them on the existing two-worker fair background pool. A fixed-capacity,
+compile-time callback mailbox in this example retains a trigger when its successor's one
+background invocation is still in flight; the RON graph remains the static topology and
+there is no runtime string lookup or heap-backed callback queue. This variant changes
+only this example; it does not modify Copper's scheduling internals. It disables
+task-state keyframes at compile time because workers may be active at CopperList
+boundaries, while retaining CopperList logging for KPI extraction. Its KPI pass rejects
+missing, duplicated, reordered, or invented chain samples. Only a contiguous tail still
+in flight at bounded shutdown is allowed. LaME's `SCHED_DEADLINE` policy remains a
+deliberate and reported runtime difference.
+
 Results are kept side by side:
 
 ```text
 analysis/data/
 ├── copper/       # raw chain CSVs, process samples, generated RON, summary.json
+├── copper-background/ # the feature-gated callback/background variant
 ├── lame/         # raw console log, raw responses, chain CSVs, process samples, summary.json
 ├── comparison.csv
-└── comparison.md
+├── comparison.md
+├── comparison-background.csv
+└── comparison-background.md
 ```
 
 The comparable real-time chains are:
@@ -85,9 +110,10 @@ LaME runs in a container, and the original paper evaluated LaME on NVIDIA Jetson
 | copper | rt1 | 200 ms | 300 | 12.285 ms | 12.290 ms | 12.343 ms | 12.419 ms | 0 | 99.8% | 37.0 MiB |
 | copper | rt2 | 100 ms | 324 | 23.293 ms | 23.293 ms | 23.458 ms | 23.470 ms | 0 | 99.8% | 37.0 MiB |
 | lame | rt0 | 200 ms | 299 | 103.469 ms | 102.483 ms | 113.462 ms | 117.721 ms | 0 | 185.7% | 89.8 MiB |
-| lame | rt1 | 200 ms | 600 | 47.749 ms | 47.348 ms | 56.414 ms | 60.854 ms | 0 | 185.7% | 89.8 MiB |
-| lame | rt2 | 100 ms | 300 | 81.880 ms | 81.583 ms | 88.854 ms | 91.454 ms | 0 | 185.7% | 89.8 MiB |
+| lame | rt1 | 200 ms | 300 | 81.880 ms | 81.583 ms | 88.854 ms | 91.454 ms | 0 | 185.7% | 89.8 MiB |
+| lame | rt2 | 100 ms | 600 | 47.749 ms | 47.348 ms | 56.414 ms | 60.854 ms | 0 | 185.7% | 89.8 MiB |
 
-CPU/RSS are process samples at roughly 10 Hz. LaME samples are from the managed phase after its 15 s profile and 5 s pause.
+CPU/RSS are process samples at roughly 10 Hz; 100% CPU is one fully occupied logical
+core. LaME samples are from the managed phase after its 15 s profile and 5 s pause.
 
 Reference: [Latency Management for ROS 2: An Online Multi-Core Scheduling Approach](https://intra.engr.ucr.edu/~hyoseung/pdf/RTNS25_LaME.pdf).

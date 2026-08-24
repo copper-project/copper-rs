@@ -45,7 +45,7 @@ def process_metrics(path):
 def summarize(directory, system):
     result = {"system": system, "chains": {}, "process": process_metrics(directory / "proc.csv")}
     for chain, (description, deadline) in CHAINS.items():
-        filename = "hotpath.csv" if system == "copper" and chain == "rt0" else f"{chain}.csv"
+        filename = "hotpath.csv" if system.startswith("copper") and chain == "rt0" else f"{chain}.csv"
         values = latency_values(directory / filename)
         result["chains"][chain] = {
             "description": description,
@@ -62,8 +62,8 @@ def summarize(directory, system):
     return result
 
 
-def report(base):
-    systems = [json.loads((base / name / "summary.json").read_text()) for name in ("copper", "lame")]
+def report(base, copper_dir, output):
+    systems = [json.loads((base / name / "summary.json").read_text()) for name in (copper_dir, "lame")]
     fields = ["system", "chain", "description", "deadline_ms", "n", "mean_ms", "p50_ms", "p99_ms", "max_ms", "deadline_misses", "mean_cpu_pct", "peak_rss_mb"]
     rows = []
     for system in systems:
@@ -71,7 +71,7 @@ def report(base):
             row = {"system": system["system"], "chain": chain, **metrics}
             row.update(system["process"])
             rows.append(row)
-    with (base / "comparison.csv").open("w", newline="") as file:
+    with (base / f"{output}.csv").open("w", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=fields)
         writer.writeheader()
         writer.writerows(rows)
@@ -90,7 +90,7 @@ def report(base):
             f"{row['mean_cpu_pct']:.1f}% | {row['peak_rss_mb']:.1f} MiB |"
         )
     lines += ["", "CPU/RSS are process samples at roughly 10 Hz; 100% CPU is one fully occupied logical core. LaME samples are from the managed phase after its 15 s profile and 5 s pause.", ""]
-    (base / "comparison.md").write_text("\n".join(lines))
+    (base / f"{output}.md").write_text("\n".join(lines))
     print("\n".join(lines))
 
 
@@ -98,11 +98,13 @@ parser = argparse.ArgumentParser()
 sub = parser.add_subparsers(dest="command", required=True)
 one = sub.add_parser("summarize")
 one.add_argument("directory", type=Path)
-one.add_argument("system", choices=("copper", "lame"))
+one.add_argument("system", choices=("copper", "copper-background", "lame"))
 both = sub.add_parser("compare")
 both.add_argument("base", type=Path)
+both.add_argument("--copper-dir", default="copper")
+both.add_argument("--output", default="comparison")
 args = parser.parse_args()
 if args.command == "summarize":
     summarize(args.directory, args.system)
 else:
-    report(args.base)
+    report(args.base, args.copper_dir, args.output)

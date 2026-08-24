@@ -20,7 +20,15 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[cfg(feature = "callback-background")]
+gen_cumsgs!("copperconfig-background.ron");
+#[cfg(not(feature = "callback-background"))]
 gen_cumsgs!("copperconfig.ron");
+
+#[cfg(feature = "callback-background")]
+const CONFIG_FILENAME: &str = "copperconfig-background.ron";
+#[cfg(not(feature = "callback-background"))]
+const CONFIG_FILENAME: &str = "copperconfig.ron";
 
 /// Reference-system deadlines. Copper never drops, so overload lands in these instead.
 const RT0_DEADLINE_MS: u64 = 200;
@@ -42,6 +50,7 @@ const RT2_CEILING_MS: u64 = 128;
 /// gated by the copperlist slot whose payload says the callback ran: a node's own slot
 /// for its main callback, an input's slot for a cache callback. `id#1` is a second
 /// output port. Summed over a pass, this is what the node's `process_time` should cost.
+#[cfg(not(feature = "callback-background"))]
 const NODES: &[(&str, &[(&str, f64)])] = &[
     ("front_lidar", &[("front_lidar", 100.0)]),
     ("rear_lidar", &[("rear_lidar", 100.0)]),
@@ -134,6 +143,108 @@ const NODES: &[(&str, &[(&str, f64)])] = &[
     ),
 ];
 
+/// Callback-level cost model. Every callback owns a CopperList slot in this variant, so
+/// its output payload is both the execution gate and the process-time witness.
+#[cfg(feature = "callback-background")]
+const NODES: &[(&str, &[(&str, f64)])] = &[
+    ("front_lidar", &[("front_lidar", 100.0)]),
+    ("rear_lidar", &[("rear_lidar", 100.0)]),
+    ("point_cloud_map", &[("point_cloud_map", 100.0)]),
+    ("visualizer", &[("visualizer", 100.0)]),
+    ("lanelet2_map", &[("lanelet2_map", 100.0)]),
+    (
+        "euclidean_cluster_settings",
+        &[("euclidean_cluster_settings", 100.0)],
+    ),
+    (
+        "points_transformer_front",
+        &[("points_transformer_front", 10100.0)],
+    ),
+    (
+        "points_transformer_rear",
+        &[("points_transformer_rear", 10100.0)],
+    ),
+    ("point_cloud_fusion", &[("point_cloud_fusion", 10005.0)]),
+    (
+        "point_cloud_fusion_rear_callback",
+        &[("point_cloud_fusion_rear_callback", 2100.0)],
+    ),
+    (
+        "voxel_grid_downsampler",
+        &[("voxel_grid_downsampler", 10100.0)],
+    ),
+    ("ray_ground_filter", &[("ray_ground_filter", 10100.0)]),
+    (
+        "point_cloud_map_loader",
+        &[("point_cloud_map_loader", 10100.0)],
+    ),
+    ("ndt_localizer", &[("ndt_localizer", 10100.0)]),
+    (
+        "ndt_localizer_voxel_callback",
+        &[("ndt_localizer_voxel_callback", 2100.0)],
+    ),
+    (
+        "lanelet2_global_planner",
+        &[("lanelet2_global_planner", 10200.0)],
+    ),
+    (
+        "lanelet2_global_planner_ndt_callback",
+        &[("lanelet2_global_planner_ndt_callback", 2100.0)],
+    ),
+    ("lanelet2_map_loader", &[("lanelet2_map_loader", 10200.0)]),
+    (
+        "lanelet2_map_loader_global_callback",
+        &[("lanelet2_map_loader_global_callback", 2100.0)],
+    ),
+    ("parking_planner", &[("parking_planner", 10100.0)]),
+    ("lane_planner", &[("lane_planner", 10100.0)]),
+    (
+        "euclidean_cluster_detector",
+        &[("euclidean_cluster_detector", 10100.0)],
+    ),
+    (
+        "euclidean_cluster_detector_settings_callback",
+        &[("euclidean_cluster_detector_settings_callback", 10200.0)],
+    ),
+    (
+        "object_collision_estimator",
+        &[("object_collision_estimator", 10100.0)],
+    ),
+    (
+        "behavior_planner_input_0",
+        &[("behavior_planner_input_0", 1.0)],
+    ),
+    (
+        "behavior_planner_input_1",
+        &[("behavior_planner_input_1", 1.0)],
+    ),
+    (
+        "behavior_planner_input_2",
+        &[("behavior_planner_input_2", 1.0)],
+    ),
+    (
+        "behavior_planner_input_3",
+        &[("behavior_planner_input_3", 1.0)],
+    ),
+    (
+        "behavior_planner_input_4",
+        &[("behavior_planner_input_4", 1.0)],
+    ),
+    (
+        "behavior_planner_input_5",
+        &[("behavior_planner_input_5", 1.0)],
+    ),
+    ("behavior_planner", &[("behavior_planner", 100.0)]),
+    ("mpc_controller", &[("mpc_controller", 10100.0)]),
+    ("vehicle_interface", &[("vehicle_interface", 10100.0)]),
+    (
+        "vehicle_interface_behavior_callback",
+        &[("vehicle_interface_behavior_callback", 2100.0)],
+    ),
+    ("vehicle_dbw", &[("vehicle_dbw", 1000.0)]),
+    ("intersection_output", &[("intersection_output", 1000.0)]),
+];
+
 /// Flat copperlist slot names, `id` then `id#1`... for the ports of a multi-port node.
 fn slot_names() -> Vec<String> {
     let mut seen: HashMap<&str, usize> = HashMap::new();
@@ -154,6 +265,7 @@ fn slot_names() -> Vec<String> {
 
 /// The modelled cost of one callback, in ns. The table is the single source of truth for
 /// the RT1 composition as well as for the err% column.
+#[cfg(not(feature = "callback-background"))]
 fn charge_ns(node: &str, gate: &str) -> u64 {
     NODES
         .iter()
@@ -210,10 +322,27 @@ fn alignment(samples: &[u64], updates: &HashMap<u64, u32>) -> (usize, usize, u32
     )
 }
 
+/// A bounded run may stop with work still in flight, so trailing source samples are
+/// allowed. Missing, duplicated, reordered, or invented samples before that tail are not.
+#[cfg(feature = "callback-background")]
+fn prefix_tail(source: &[u64], endpoint: &[u64], chain: &str) -> Result<usize, String> {
+    if endpoint.is_empty() {
+        return Err(format!("{chain}: no endpoint samples"));
+    }
+    if endpoint.len() > source.len() || source[..endpoint.len()] != *endpoint {
+        return Err(format!(
+            "{chain}: endpoint sequence is not an exact source prefix (source {:?}, endpoint {:?})",
+            source, endpoint
+        ));
+    }
+    Ok(source.len() - endpoint.len())
+}
+
 /// One latency series: the samples for the CSV, the statistics for the report, and the
 /// deadline the series is judged against.
 struct Series {
     rows: String,
+    seqs: Vec<u64>,
     stats: CuDurationStatistics,
     deadline_ns: u64,
     late: u64,
@@ -223,6 +352,7 @@ impl Series {
     fn new(header: &str, ceiling_ms: u64, deadline_ms: u64) -> Self {
         Self {
             rows: format!("{header}\n"),
+            seqs: Vec::new(),
             stats: CuDurationStatistics::new(CuDuration::from_millis(ceiling_ms)),
             deadline_ns: deadline_ms * 1_000_000,
             late: 0,
@@ -237,6 +367,7 @@ impl Series {
             at_ns as f64 / 1e6,
             value_ns as f64 / 1e6
         );
+        self.seqs.push(seq);
         self.stats.record(CuDuration(value_ns));
         if value_ns > self.deadline_ns {
             self.late += 1;
@@ -261,8 +392,10 @@ struct Kpis {
     slot_of: HashMap<String, usize>,
     /// RT1 ends inside point_cloud_fusion's cache callback, whose end is not separately
     /// observable, so its modelled cost completes the chain.
+    #[cfg(not(feature = "callback-background"))]
     rt1_cache_ns: u64,
     /// RT0 ends at behavior_planner's 1us input callback, not at the estimator output.
+    #[cfg(not(feature = "callback-background"))]
     rt0_cache_ns: u64,
     hot_path: Series,
     rt1: Series,
@@ -275,6 +408,8 @@ struct Kpis {
     timing_gaps: u64,
     planner_ticks: u64,
     front_seqs: Vec<u64>,
+    rear_seqs: Vec<u64>,
+    planner_seqs: Vec<u64>,
     estimator_updates: HashMap<u64, u32>,
     last_planner_tov: Option<u64>,
     span_ns: u64,
@@ -288,7 +423,9 @@ impl Kpis {
                 .enumerate()
                 .map(|(index, name)| (name, index))
                 .collect(),
+            #[cfg(not(feature = "callback-background"))]
             rt1_cache_ns: charge_ns("point_cloud_fusion", "points_transformer_rear"),
+            #[cfg(not(feature = "callback-background"))]
             rt0_cache_ns: charge_ns("behavior_planner", "object_collision_estimator"),
             hot_path: Series::new(
                 "seq,t_ms,latency_ms",
@@ -311,6 +448,8 @@ impl Kpis {
             timing_gaps: 0,
             planner_ticks: 0,
             front_seqs: Vec::new(),
+            rear_seqs: Vec::new(),
+            planner_seqs: Vec::new(),
             estimator_updates: HashMap::new(),
             last_planner_tov: None,
             span_ns: 0,
@@ -329,12 +468,16 @@ impl Kpis {
                 .unwrap_or(0),
         );
 
-        // (a) and (b): the estimator output carries the front_lidar tov. RT0 ends in the
-        // behavior planner's first input callback, modelled from its process start because
-        // Copper records one span for all of that node's callbacks.
+        // The estimator is also the alignment witness for the front-lidar branch.
         let estimator = msgs.get_object_collision_estimator_output();
         if let Some(sample) = estimator.payload() {
             *self.estimator_updates.entry(sample.seq).or_default() += 1;
+        }
+
+        // Vanilla combines all behavior-planner callbacks in one process span, so its
+        // first input callback has to be completed with the modelled 1us cost.
+        #[cfg(not(feature = "callback-background"))]
+        if let Some(sample) = estimator.payload() {
             match (
                 tov_ns(estimator.tov),
                 span(msgs.get_behavior_planner_output().metadata.process_time),
@@ -349,37 +492,93 @@ impl Kpis {
                 _ => self.timing_gaps += 1,
             }
         }
+
+        // The callback graph records that callback independently, including its real
+        // worker-thread end timestamp.
+        #[cfg(feature = "callback-background")]
+        {
+            let endpoint = msgs.get_behavior_planner_input_0_output();
+            if let (Some(sample), Some(at), Some((_, end))) = (
+                endpoint.payload(),
+                tov_ns(endpoint.tov),
+                span(endpoint.metadata.process_time),
+            ) {
+                self.hot_path.record(sample.seq, at, end.saturating_sub(at));
+            } else if endpoint.payload().is_some() {
+                self.timing_gaps += 1;
+            }
+        }
+
         if let Some(sample) = msgs.get_front_lidar_output().payload() {
             self.front_seqs.push(sample.seq);
         }
-
-        // (d) RT1 ends at point_cloud_fusion's cache callback, which runs first in that
-        // node's process span: the observable part runs to the span start and the
-        // modelled cache cost completes it.
-        let rear = msgs.get_points_transformer_rear_output();
-        let fusion = msgs.get_point_cloud_fusion_output();
-        if let (Some(sample), Some(at), Some((start, _))) = (
-            rear.payload(),
-            tov_ns(rear.tov),
-            span(fusion.metadata.process_time),
-        ) {
-            self.rt1
-                .record(sample.seq, at, start.saturating_sub(at) + self.rt1_cache_ns);
+        if let Some(sample) = msgs.get_rear_lidar_output().payload() {
+            self.rear_seqs.push(sample.seq);
         }
 
-        // (e) RT2 runs from the planner tick to the command sink, which does get a
-        // copperlist slot and therefore a recorded process_time.
+        #[cfg(not(feature = "callback-background"))]
+        {
+            // Vanilla combines fusion callbacks in one process span. The rear callback
+            // runs first, so complete the span start with its modelled 2.1ms cost.
+            let rear = msgs.get_points_transformer_rear_output();
+            let fusion = msgs.get_point_cloud_fusion_output();
+            if let (Some(sample), Some(at), Some((start, _))) = (
+                rear.payload(),
+                tov_ns(rear.tov),
+                span(fusion.metadata.process_time),
+            ) {
+                self.rt1
+                    .record(sample.seq, at, start.saturating_sub(at) + self.rt1_cache_ns);
+            }
+        }
+
+        #[cfg(feature = "callback-background")]
+        {
+            let endpoint = msgs.get_point_cloud_fusion_rear_callback_output();
+            if let (Some(sample), Some(at), Some((_, end))) = (
+                endpoint.payload(),
+                tov_ns(endpoint.tov),
+                span(endpoint.metadata.process_time),
+            ) {
+                self.rt1.record(sample.seq, at, end.saturating_sub(at));
+            } else if endpoint.payload().is_some() {
+                self.timing_gaps += 1;
+            }
+        }
+
+        // Planner cadence is measured when its timer callback lands.
         let planner = msgs.get_behavior_planner_output();
         if let (Some(sample), Some(at)) = (planner.payload(), tov_ns(planner.tov)) {
             self.planner_ticks += 1;
-            if let Some((_, end)) = span(msgs.get_vehicle_dbw_output().metadata.process_time) {
-                self.rt2.record(sample.seq, at, end.saturating_sub(at));
-            }
+            self.planner_seqs.push(sample.seq);
             if let Some(previous) = self.last_planner_tov {
                 self.planner_period
                     .record(sample.seq, at, at.saturating_sub(previous));
             }
             self.last_planner_tov = Some(at);
+        }
+
+        #[cfg(not(feature = "callback-background"))]
+        if let (Some(sample), Some(at), Some((_, end))) = (
+            planner.payload(),
+            tov_ns(planner.tov),
+            span(msgs.get_vehicle_dbw_output().metadata.process_time),
+        ) {
+            self.rt2.record(sample.seq, at, end.saturating_sub(at));
+        }
+
+        #[cfg(feature = "callback-background")]
+        {
+            let endpoint = msgs.get_vehicle_dbw_output();
+            if let (Some(sample), Some(at), Some((_, end))) = (
+                endpoint.payload(),
+                tov_ns(endpoint.tov),
+                span(endpoint.metadata.process_time),
+            ) {
+                self.rt2.record(sample.seq, at, end.saturating_sub(at));
+            } else if endpoint.payload().is_some() {
+                self.timing_gaps += 1;
+            }
         }
 
         // (f) per node, measured against the cost the model says this pass charged.
@@ -426,6 +625,15 @@ impl Kpis {
             .collect()
     }
 
+    #[cfg(feature = "callback-background")]
+    fn validate_callback_alignment(&self) -> Result<(usize, usize, usize), String> {
+        Ok((
+            prefix_tail(&self.front_seqs, &self.hot_path.seqs, "RT0")?,
+            prefix_tail(&self.rear_seqs, &self.rt1.seqs, "RT1")?,
+            prefix_tail(&self.planner_seqs, &self.rt2.seqs, "RT2")?,
+        ))
+    }
+
     fn report(&self, log_base: &Path, ids: (u64, u64)) {
         println!(
             "cu_autoware KPIs — {} copperlists (ids {}..={}) over {:.1}s ({})",
@@ -441,16 +649,21 @@ impl Kpis {
         self.hot_path.report("hot path RT0");
         self.rt1.report("RT1 rear -> fusion*");
         self.rt2.report("RT2 planner -> dbw");
-        println!(
-            "* RT0 is behavior_planner's process start plus its {:.3}ms first-input cost.",
-            self.rt0_cache_ns as f64 / 1e6
-        );
-        println!(
-            "* RT1 is the rear edge tov to point_cloud_fusion's process start plus its \
-             {:.1}ms cache cost, modelled from the cost table: the cache and the trigger \
-             share one process span.",
-            self.rt1_cache_ns as f64 / 1e6
-        );
+        #[cfg(not(feature = "callback-background"))]
+        {
+            println!(
+                "* RT0 is behavior_planner's process start plus its {:.3}ms first-input cost.",
+                self.rt0_cache_ns as f64 / 1e6
+            );
+            println!(
+                "* RT1 is the rear edge tov to point_cloud_fusion's process start plus its \
+                 {:.1}ms cache cost, modelled from the cost table: the cache and the trigger \
+                 share one process span.",
+                self.rt1_cache_ns as f64 / 1e6
+            );
+        }
+        #[cfg(feature = "callback-background")]
+        println!("* Callback endpoints use their independent worker-thread completion stamps.");
 
         let (matched, missing, duplicate, unmatched) =
             alignment(&self.front_seqs, &self.estimator_updates);
@@ -459,6 +672,13 @@ impl Kpis {
             self.front_seqs.len(),
             self.timing_gaps
         );
+        #[cfg(feature = "callback-background")]
+        match self.validate_callback_alignment() {
+            Ok((rt0_tail, rt1_tail, rt2_tail)) => println!(
+                "callbacks  exact ordered prefixes; shutdown tails RT0 {rt0_tail}, RT1 {rt1_tail}, RT2 {rt2_tail}"
+            ),
+            Err(error) => println!("callbacks  INVALID: {error}"),
+        }
         println!(
             "late       RT0 {}/{} over {RT0_DEADLINE_MS}ms, RT1 {}/{} over {RT1_DEADLINE_MS}ms, RT2 {}/{} over {RT2_DEADLINE_MS}ms",
             self.hot_path.late,
@@ -594,7 +814,7 @@ fn main() {
         .out_dir
         .map_or_else(|| crate_dir.join("analysis").join("data"), PathBuf::from);
 
-    let config_path = crate_dir.join("copperconfig.ron");
+    let config_path = crate_dir.join(CONFIG_FILENAME);
     let config = config_path
         .to_str()
         .ok_or_else(|| CuError::from("crate path is not UTF-8"))
@@ -653,6 +873,10 @@ fn main() {
     }
 
     kpis.report(&log_base, (first, last));
+    #[cfg(feature = "callback-background")]
+    if let Err(error) = kpis.validate_callback_alignment() {
+        fail(format!("callback alignment: {error}"));
+    }
 
     if let Err(e) = fs::create_dir_all(&out_dir) {
         fail(format!("{}: {e}", out_dir.display()));
@@ -675,7 +899,7 @@ fn main() {
     println!("  {}", logstats_path.display());
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "callback-background")))]
 mod tests {
     use super::*;
     use payload::{RefLaneSample, RefSample};
@@ -1075,5 +1299,35 @@ mod tests {
         // Sample 3 never reached the estimator; 2 arrived twice; 9 has no sample.
         assert_eq!(alignment(&[1, 2, 3], &updates), (2, 1, 1, 1));
         assert_eq!(alignment(&[], &HashMap::new()), (0, 0, 0, 0));
+    }
+}
+
+#[cfg(all(test, feature = "callback-background"))]
+mod background_tests {
+    use super::*;
+
+    #[test]
+    fn callback_cost_model_matches_graph_and_fig4_total() {
+        let slots = slot_names();
+        assert_eq!(slots.len(), 36);
+        for (node, charges) in NODES {
+            assert!(slots.iter().any(|slot| slot == node), "no slot '{node}'");
+            assert_eq!(charges.len(), 1, "{node} is not one callback");
+            assert_eq!(charges[0].0, *node, "{node} uses another callback's gate");
+        }
+        let total: f64 = NODES
+            .iter()
+            .flat_map(|(_, charges)| charges.iter())
+            .map(|(_, us)| us)
+            .sum();
+        assert!((total - 175_011.0).abs() < 1e-6, "{total}us");
+    }
+
+    #[test]
+    fn callback_alignment_allows_only_a_shutdown_tail() {
+        assert_eq!(prefix_tail(&[1, 2, 3], &[1, 2], "RT0"), Ok(1));
+        assert!(prefix_tail(&[1, 2, 3], &[1, 3], "RT0").is_err());
+        assert!(prefix_tail(&[1, 2], &[1, 2, 2], "RT0").is_err());
+        assert!(prefix_tail(&[1, 2], &[], "RT0").is_err());
     }
 }

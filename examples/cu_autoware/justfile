@@ -4,7 +4,13 @@ import "../../justfile"
 copper seconds="60":
   #!/usr/bin/env bash
   set -euo pipefail
-  analysis/run_copper.sh {{seconds}}
+  analysis/run_copper.sh {{seconds}} vanilla
+
+# Run the feature-gated callback graph on Copper's two-worker background pool.
+copper-background seconds="60":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  analysis/run_copper.sh {{seconds}} background
 
 # Build the pinned LaME image, run its managed executor, and summarize it.
 lame seconds="60":
@@ -20,6 +26,15 @@ compare:
   python3 analysis/compare_results.py summarize analysis/data/copper copper
   python3 analysis/compare_results.py summarize analysis/data/lame lame
   python3 analysis/compare_results.py compare analysis/data
+
+# Compare the callback-background Copper variant with the same LaME data.
+compare-background:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  python3 analysis/parse_lame.py analysis/data/lame/raw.log analysis/data/lame
+  python3 analysis/compare_results.py summarize analysis/data/copper-background copper-background
+  python3 analysis/compare_results.py summarize analysis/data/lame lame
+  python3 analysis/compare_results.py compare analysis/data --copper-dir copper-background --output comparison-background
 
 # Developer helpers for an exact-pass run and KPI extraction.
 run iters="400" log="logs/autoware.copper":

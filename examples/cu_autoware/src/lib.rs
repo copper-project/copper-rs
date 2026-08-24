@@ -12,7 +12,14 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-#[copper_runtime(config = "copperconfig.ron")]
+#[cfg_attr(
+    feature = "callback-background",
+    copper_runtime(config = "copperconfig-background.ron")
+)]
+#[cfg_attr(
+    not(feature = "callback-background"),
+    copper_runtime(config = "copperconfig.ron")
+)]
 struct App {}
 
 const SLAB_SIZE: Option<usize> = Some(64 * 1024 * 1024);
