@@ -8,6 +8,11 @@
             (id: "slow", threads: 1),
         ],
     ),
+    // Background jobs can be active at every CopperList boundary. This example records
+    // CopperLists but deliberately compiles out task-state snapshots.
+    logging: (
+        enable_keyframe_logging: false,
+    ),
     tasks: [
         (
             id: "task0",
