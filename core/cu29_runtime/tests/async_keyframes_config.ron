@@ -1,0 +1,70 @@
+(
+    runtime: (
+        thread_pools: [
+            (
+                id: "source_pool",
+                threads: 1,
+            ),
+            (
+                id: "first_pool",
+                threads: 1,
+            ),
+            (
+                id: "second_pool",
+                threads: 1,
+            ),
+        ],
+    ),
+    logging: (
+        enable_task_logging: true,
+        slab_size_mib: 16,
+        keyframe_interval: 1,
+    ),
+    tasks: [
+        (
+            id: "source",
+            type: "SlowSource",
+            background: (
+                pool: "source_pool",
+            ),
+            config: {"sleep_ms": 80},
+        ),
+        (
+            id: "first",
+            type: "SlowTask",
+            background: (
+                pool: "first_pool",
+            ),
+            config: {"sleep_ms": 120},
+        ),
+        (
+            id: "second",
+            type: "SlowTask",
+            background: (
+                pool: "second_pool",
+            ),
+            config: {"sleep_ms": 160},
+        ),
+        (
+            id: "sink",
+            type: "OutputSink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "source",
+            dst: "first",
+            msg: "WorkMsg",
+        ),
+        (
+            src: "first",
+            dst: "second",
+            msg: "WorkMsg",
+        ),
+        (
+            src: "second",
+            dst: "sink",
+            msg: "WorkMsg",
+        ),
+    ],
+)

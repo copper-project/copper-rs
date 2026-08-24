@@ -1888,6 +1888,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         .as_ref()
         .and_then(|logging| logging.copperlist_count)
         .unwrap_or(DEFAULT_COPPERLIST_COUNT);
+    let keyframe_logging_enabled = copper_config
+        .logging
+        .as_ref()
+        .is_none_or(|logging| logging.enable_keyframe_logging && logging.enable_task_logging);
     let copperlist_count_tokens = proc_macro2::Literal::usize_unsuffixed(copperlist_count);
     let caller_root = utils::caller_crate_root();
     let (git_commit, git_dirty) = detect_git_info(&caller_root);
@@ -2867,16 +2871,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 task_specs.task_types.len()
             ));
         }
-        let task_restore_code: Vec<proc_macro2::TokenStream> = keyframe_task_restore_order
-            .iter()
-            .map(|index| {
-                let task_tuple_index = syn::Index::from(*index);
-                quote! {
-                    tasks.#task_tuple_index.thaw(&mut decoder).map_err(|e| CuError::from("Failed to thaw").add_cause(&e.to_string()))?
-                }
-            })
-            .collect();
-
         // Generate the code to create instances of the nodes
         // It maps the types to their index
         let (
@@ -3400,6 +3394,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let bridge_postprocess_calls: Vec<proc_macro2::TokenStream> = culist_bridge_specs
             .iter()
             .map(|spec| {
+                let freeze_bridge = keyframe_freeze_bridge_tokens(keyframe_logging_enabled);
                 let bridge_index = int2sliceindex(spec.tuple_index as u32);
                 let monitor_index = syn::Index::from(
                     spec.monitor_index
@@ -3443,7 +3438,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             ctx.set_current_component(#monitor_index);
                             ctx.clear_current_task();
                             let bridge = &mut __cu_bridges.#bridge_index;
-                            kf_manager.freeze_any(clid, bridge)?;
+                            #freeze_bridge
                             execution_probe.record(cu29::monitoring::ExecutionMarker {
                                 component_id: cu29::monitoring::ComponentId::new(#monitor_index),
                                 step: CuComponentState::Postprocess,
@@ -3487,20 +3482,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         postprocess_calls.extend(bridge_postprocess_calls);
         let parallel_rt_run_supported = std && parallel_rt_enabled && !sim_mode;
 
-        // Bridges are frozen alongside tasks; restore them in the same order.
-        let bridge_restore_code: Vec<proc_macro2::TokenStream> = culist_bridge_specs
-            .iter()
-            .enumerate()
-            .map(|(index, _)| {
-                let bridge_tuple_index = syn::Index::from(index);
-                quote! {
-                    __cu_bridges.#bridge_tuple_index
-                        .thaw(&mut decoder)
-                        .map_err(|e| CuError::from("Failed to thaw bridge").add_cause(&e.to_string()))?
-                }
-            })
-            .collect();
-
         let output_pack_sizes = collect_output_pack_sizes(&culist_plan);
         let runtime_plan_code_and_logging: Vec<(
             proc_macro2::TokenStream,
@@ -3530,6 +3511,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 &task_input_layouts,
                                 mission.as_str(),
                                 sim_mode,
+                                keyframe_logging_enabled,
                                 &mission_mod,
                                 ParallelLifecyclePlacement::default(),
                                 false,
@@ -3587,6 +3569,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     &task_input_layouts,
                                     mission.as_str(),
                                     sim_mode,
+                                    keyframe_logging_enabled,
                                     &mission_mod,
                                     ParallelLifecyclePlacement::default(),
                                     false,
@@ -3612,6 +3595,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     &task_input_layouts,
                                     mission.as_str(),
                                     sim_mode,
+                                    keyframe_logging_enabled,
                                     &mission_mod,
                                     ParallelLifecyclePlacement::default(),
                                     false,
@@ -3638,6 +3622,101 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         } else {
             None
         };
+        // A sim runtime does not execute parallel-rt, but it must decode the component
+        // frames in the execution-wave order used by the matching recording runtime.
+        let restore_parallel_placements = (std && parallel_rt_enabled)
+            .then(|| build_parallel_lifecycle_placements(&culist_plan, &culist_exec_entities));
+        let mut keyframe_restore_order = Vec::<ParallelLifecycleKey>::new();
+        if let Some(placements) = restore_parallel_placements.as_ref() {
+            for (step_index, unit) in culist_plan.steps.iter().enumerate() {
+                let CuExecutionUnit::Step(step) = unit else {
+                    panic!("Execution loops are not supported in runtime generation");
+                };
+                match &culist_exec_entities[step.node_id as usize].kind {
+                    ExecutionEntityKind::Task { task_index } => {
+                        if step.phase != CuStepPhase::AnytimeRefine
+                            && !keyframe_restore_order
+                                .contains(&ParallelLifecycleKey::Task(*task_index))
+                        {
+                            keyframe_restore_order.push(ParallelLifecycleKey::Task(*task_index));
+                        }
+                    }
+                    ExecutionEntityKind::BridgeRx { bridge_index, .. }
+                    | ExecutionEntityKind::BridgeTx { bridge_index, .. } => {
+                        if placements[step_index].postprocess {
+                            keyframe_restore_order
+                                .push(ParallelLifecycleKey::Bridge(*bridge_index));
+                        }
+                    }
+                }
+            }
+        } else {
+            keyframe_restore_order.extend(
+                keyframe_task_restore_order
+                    .iter()
+                    .copied()
+                    .map(ParallelLifecycleKey::Task),
+            );
+            keyframe_restore_order
+                .extend((0..culist_bridge_specs.len()).map(ParallelLifecycleKey::Bridge));
+        }
+        let keyframe_restore_code: Vec<proc_macro2::TokenStream> = keyframe_restore_order
+            .iter()
+            .map(|component| match component {
+                ParallelLifecycleKey::Task(index) => {
+                    let task_tuple_index = syn::Index::from(*index);
+                    let skip_substituted = sim_mode
+                        && task_specs.cutypes[*index] != CuTaskType::Regular
+                        && !task_specs.run_in_sim_flags[*index];
+                    if skip_substituted {
+                        quote! {
+                            let _ = frames.next_frame()?;
+                        }
+                    } else {
+                        quote! {
+                            let frame = frames.next_frame()?;
+                            cu29::curuntime::thaw_keyframe_component(
+                                &mut tasks.#task_tuple_index,
+                                frame,
+                            )?;
+                        }
+                    }
+                }
+                ParallelLifecycleKey::Bridge(index) => {
+                    let bridge_tuple_index = syn::Index::from(*index);
+                    if sim_mode && !culist_bridge_specs[*index].run_in_sim {
+                        quote! {
+                            let _ = frames.next_frame()?;
+                        }
+                    } else {
+                        quote! {
+                            let frame = frames.next_frame()?;
+                            cu29::curuntime::thaw_keyframe_component(
+                                &mut __cu_bridges.#bridge_tuple_index,
+                                frame,
+                            )?;
+                        }
+                    }
+                }
+            })
+            .collect();
+        let keyframe_preallocation_code: Vec<proc_macro2::TokenStream> = keyframe_restore_order
+            .iter()
+            .map(|component| match component {
+                ParallelLifecycleKey::Task(index) => {
+                    let task_tuple_index = syn::Index::from(*index);
+                    quote! {
+                        kf_manager.include_capture_capacity(&tasks.#task_tuple_index)?;
+                    }
+                }
+                ParallelLifecycleKey::Bridge(index) => {
+                    let bridge_tuple_index = syn::Index::from(*index);
+                    quote! {
+                        kf_manager.include_capture_capacity(&__cu_bridges.#bridge_tuple_index)?;
+                    }
+                }
+            })
+            .collect();
         let runtime_plan_parallel_code_and_logging: Option<
             Vec<(proc_macro2::TokenStream, proc_macro2::TokenStream)>,
         > = if parallel_rt_run_supported {
@@ -3669,6 +3748,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         &task_input_layouts,
                                         mission.as_str(),
                                         false,
+                                        keyframe_logging_enabled,
                                         &mission_mod,
                                         ParallelLifecyclePlacement::default(),
                                         true,
@@ -3727,6 +3807,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         &task_input_layouts,
                                         mission.as_str(),
                                         false,
+                                        keyframe_logging_enabled,
                                         &mission_mod,
                                         parallel_lifecycle_placements
                                             .as_ref()
@@ -3754,6 +3835,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         &task_input_layouts,
                                         mission.as_str(),
                                         false,
+                                        keyframe_logging_enabled,
                                         &mission_mod,
                                         parallel_lifecycle_placements
                                             .as_ref()
@@ -3782,6 +3864,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         &task_input_layouts,
                                         mission.as_str(),
                                         false,
+                                        keyframe_logging_enabled,
                                         &mission_mod,
                                         parallel_lifecycle_placements
                                             .as_ref()
@@ -3915,6 +3998,26 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         } else {
             quote!(CuTasks)
         };
+        let parallel_step_keyframe_local = keyframe_logging_enabled.then(|| {
+            quote! {
+                let kf_manager = ParallelKeyFrameAccessor::new(
+                    step_rt.kf_manager_ptr,
+                    step_rt.kf_lock,
+                );
+            }
+        });
+        let parallel_worker_keyframe_captures = keyframe_logging_enabled.then(|| {
+            quote! {
+                let kf_manager_ptr = kf_manager_ptr;
+                let kf_lock = std::sync::Arc::clone(&kf_lock);
+            }
+        });
+        let parallel_step_keyframe_fields = keyframe_logging_enabled.then(|| {
+            quote! {
+                kf_manager_ptr,
+                kf_lock: kf_lock.as_ref(),
+            }
+        });
         let (
             parallel_process_step_idents,
             parallel_process_step_fn_defs,
@@ -3945,10 +4048,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let clock = step_rt.clock;
                                 let execution_probe = step_rt.execution_probe;
                                 let monitor = step_rt.monitor;
-                                let kf_manager = ParallelKeyFrameAccessor::new(
-                                    step_rt.kf_manager_ptr,
-                                    step_rt.kf_lock,
-                                );
+                                #parallel_step_keyframe_local
                                 let culist = &mut *step_rt.culist;
                                 let clid = step_rt.clid;
                                 let ctx = &mut step_rt.ctx;
@@ -3983,8 +4083,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let task_locks = std::sync::Arc::clone(&task_locks);
                                 let bridge_ptrs = bridge_ptrs;
                                 let bridge_locks = std::sync::Arc::clone(&bridge_locks);
-                                let kf_manager_ptr = kf_manager_ptr;
-                                let kf_lock = std::sync::Arc::clone(&kf_lock);
+                                #parallel_worker_keyframe_captures
                                 let rt_pool = std::sync::Arc::clone(&rt_pool);
                                 scope.spawn(move || {
                                     // Apply the "rt" pool's CPU affinity / scheduling policy to
@@ -4031,8 +4130,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                                     task_locks: task_locks.as_ref(),
                                                     bridge_ptrs: &bridge_ptrs,
                                                     bridge_locks: bridge_locks.as_ref(),
-                                                    kf_manager_ptr,
-                                                    kf_lock: kf_lock.as_ref(),
+                                                    #parallel_step_keyframe_fields
                                                     culist: culist.as_mut(),
                                                     clid,
                                                     ctx: cu29::context::CuContext::from_runtime_metadata(
@@ -4205,6 +4303,52 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 (0..bridge_runtime_types.len()).map(|_| quote! { std::sync::Mutex::new(()) });
             quote! { (#(#elems),*,) }
         };
+        let parallel_keyframe_accessor = keyframe_logging_enabled.then(|| {
+            quote! {
+                struct ParallelKeyFrameAccessor<'a> {
+                    ptr: ParallelSharedPtr<cu29::curuntime::KeyFramesManager>,
+                    lock: &'a std::sync::Mutex<()>,
+                }
+
+                impl<'a> ParallelKeyFrameAccessor<'a> {
+                    #[inline(always)]
+                    fn new(
+                        ptr: ParallelSharedPtr<cu29::curuntime::KeyFramesManager>,
+                        lock: &'a std::sync::Mutex<()>,
+                    ) -> Self {
+                        Self { ptr, lock }
+                    }
+
+                    #[inline(always)]
+                    fn freeze_task(
+                        &self,
+                        culistid: u64,
+                        task: &impl cu29::cutask::Freezable,
+                    ) -> CuResult<usize> {
+                        let _guard = self.lock.lock().expect("parallel keyframe lock poisoned");
+                        let manager = unsafe { self.ptr.as_mut() };
+                        manager.freeze_task(culistid, task)
+                    }
+
+                    #[inline(always)]
+                    fn freeze_any(
+                        &self,
+                        culistid: u64,
+                        item: &impl cu29::cutask::Freezable,
+                    ) -> CuResult<usize> {
+                        let _guard = self.lock.lock().expect("parallel keyframe lock poisoned");
+                        let manager = unsafe { self.ptr.as_mut() };
+                        manager.freeze_any(culistid, item)
+                    }
+                }
+            }
+        });
+        let parallel_process_step_keyframe_fields = keyframe_logging_enabled.then(|| {
+            quote! {
+                kf_manager_ptr: ParallelSharedPtr<cu29::curuntime::KeyFramesManager>,
+                kf_lock: &'a std::sync::Mutex<()>,
+            }
+        });
         let parallel_rt_support_tokens = if parallel_rt_run_supported {
             quote! {
                 type ParallelTaskPtrs = #parallel_task_ptrs_type;
@@ -4248,42 +4392,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 unsafe impl<T: Send> Send for ParallelSharedPtr<T> {}
                 unsafe impl<T: Send> Sync for ParallelSharedPtr<T> {}
 
-                struct ParallelKeyFrameAccessor<'a> {
-                    ptr: ParallelSharedPtr<cu29::curuntime::KeyFramesManager>,
-                    lock: &'a std::sync::Mutex<()>,
-                }
-
-                impl<'a> ParallelKeyFrameAccessor<'a> {
-                    #[inline(always)]
-                    fn new(
-                        ptr: ParallelSharedPtr<cu29::curuntime::KeyFramesManager>,
-                        lock: &'a std::sync::Mutex<()>,
-                    ) -> Self {
-                        Self { ptr, lock }
-                    }
-
-                    #[inline(always)]
-                    fn freeze_task(
-                        &self,
-                        culistid: u64,
-                        task: &impl cu29::cutask::Freezable,
-                    ) -> CuResult<usize> {
-                        let _guard = self.lock.lock().expect("parallel keyframe lock poisoned");
-                        let manager = unsafe { self.ptr.as_mut() };
-                        manager.freeze_task(culistid, task)
-                    }
-
-                    #[inline(always)]
-                    fn freeze_any(
-                        &self,
-                        culistid: u64,
-                        item: &impl cu29::cutask::Freezable,
-                    ) -> CuResult<usize> {
-                        let _guard = self.lock.lock().expect("parallel keyframe lock poisoned");
-                        let manager = unsafe { self.ptr.as_mut() };
-                        manager.freeze_any(culistid, item)
-                    }
-                }
+                #parallel_keyframe_accessor
 
                 struct ParallelProcessStepRuntime<'a> {
                     clock: &'a RobotClock,
@@ -4293,8 +4402,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     task_locks: &'a ParallelTaskLocks,
                     bridge_ptrs: &'a ParallelBridgePtrs,
                     bridge_locks: &'a ParallelBridgeLocks,
-                    kf_manager_ptr: ParallelSharedPtr<cu29::curuntime::KeyFramesManager>,
-                    kf_lock: &'a std::sync::Mutex<()>,
+                    #parallel_process_step_keyframe_fields
                     culist: &'a mut CuList,
                     clid: u64,
                     ctx: cu29::context::CuContext,
@@ -4371,6 +4479,18 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 return Err(CuError::from(format!(
                     "Configured logging.copperlist_count ({configured_copperlist_count}) does not match the runtime compiled into this binary ({})",
                     #copperlist_count_tokens
+                )));
+            }
+        };
+        let keyframe_logging_check = quote! {
+            let configured_keyframe_logging = config
+                .logging
+                .as_ref()
+                .is_none_or(|logging| logging.enable_keyframe_logging && logging.enable_task_logging);
+            if configured_keyframe_logging != #keyframe_logging_enabled {
+                return Err(CuError::from(format!(
+                    "Configured keyframe logging ({configured_keyframe_logging}) does not match the runtime compiled into this binary ({})",
+                    #keyframe_logging_enabled
                 )));
             }
         };
@@ -4545,6 +4665,57 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }}
         };
 
+        let parallel_keyframe_runtime = keyframe_logging_enabled.then(|| {
+            quote! {
+                let kf_manager_ptr =
+                    #mission_mod::ParallelSharedPtr::new(&mut runtime.keyframes_manager as *mut _);
+                let kf_lock = std::sync::Arc::new(std::sync::Mutex::new(()));
+            }
+        });
+        let parallel_active_keyframe = keyframe_logging_enabled.then(|| {
+            quote! { let mut active_keyframe_clid: Option<u64> = None; }
+        });
+        let parallel_keyframe_ready = if keyframe_logging_enabled {
+            quote! {{
+                let _keyframe_lock = kf_lock.lock().expect("parallel keyframe lock poisoned");
+                let kf_manager = unsafe { kf_manager_ptr.as_mut() };
+                active_keyframe_clid.is_none() || !kf_manager.captures_keyframe(next_clid)
+            }}
+        } else {
+            quote! { true }
+        };
+        let parallel_keyframe_reset = keyframe_logging_enabled.then(|| {
+            quote! {
+                {
+                    let _keyframe_lock =
+                        kf_lock.lock().expect("parallel keyframe lock poisoned");
+                    let kf_manager = unsafe { kf_manager_ptr.as_mut() };
+                    kf_manager.reset(clid, clock);
+                    if kf_manager.captures_keyframe(clid) {
+                        active_keyframe_clid = Some(clid);
+                    }
+                }
+            }
+        });
+        let parallel_keyframe_finish = if keyframe_logging_enabled {
+            quote! {{
+                let _keyframe_lock =
+                    kf_lock.lock().expect("parallel keyframe lock poisoned");
+                let kf_manager = unsafe { kf_manager_ptr.as_mut() };
+                kf_manager.end_of_processing(worker_result.clid)?;
+                kf_manager.last_encoded_bytes
+            }}
+        } else {
+            quote! { 0u64 }
+        };
+        let parallel_keyframe_clear = keyframe_logging_enabled.then(|| {
+            quote! {
+                if active_keyframe_clid == Some(worker_result.clid) {
+                    active_keyframe_clid = None;
+                }
+            }
+        });
+
         #[cfg(feature = "macro_debug")]
         eprintln!("[build the run methods]");
         let run_body: proc_macro2::TokenStream = if parallel_rt_run_supported {
@@ -4574,9 +4745,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     let task_locks = std::sync::Arc::new(#parallel_task_lock_values);
                     let bridge_ptrs: #mission_mod::ParallelBridgePtrs = #parallel_bridge_ptr_values;
                     let bridge_locks = std::sync::Arc::new(#parallel_bridge_lock_values);
-                    let kf_manager_ptr =
-                        #mission_mod::ParallelSharedPtr::new(&mut runtime.keyframes_manager as *mut _);
-                    let kf_lock = std::sync::Arc::new(std::sync::Mutex::new(()));
+                    #parallel_keyframe_runtime
                     let mut free_copperlists =
                         cu29::curuntime::allocate_boxed_copperlists::<CuStampedDataSet, #copperlist_count_tokens>();
                     let start_clid = cl_manager.next_cl_id();
@@ -4633,7 +4802,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     let mut next_commit_clid = start_clid;
                     let mut pending_results =
                         std::collections::BTreeMap::<u64, #mission_mod::ParallelWorkerResult>::new();
-                    let mut active_keyframe_clid: Option<u64> = None;
+                    #parallel_active_keyframe
                     let mut fatal_error: Option<CuError> = None;
 
                     loop {
@@ -4647,11 +4816,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 .as_ref()
                                 .map(|limiter| limiter.is_ready(clock))
                                 .unwrap_or(true);
-                            let keyframe_ready = {
-                                let _keyframe_lock = kf_lock.lock().expect("parallel keyframe lock poisoned");
-                                let kf_manager = unsafe { kf_manager_ptr.as_mut() };
-                                active_keyframe_clid.is_none() || !kf_manager.captures_keyframe(next_clid)
-                            };
+                            let keyframe_ready = #parallel_keyframe_ready;
 
                             if in_flight < parallel_rt.in_flight_limit()
                                 && rate_ready
@@ -4668,15 +4833,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         .expect("parallel CopperList pool unexpectedly empty");
                                     let clid = next_clid;
                                     culist.reset_for_runtime_use(clid);
-                                    {
-                                        let _keyframe_lock =
-                                            kf_lock.lock().expect("parallel keyframe lock poisoned");
-                                        let kf_manager = unsafe { kf_manager_ptr.as_mut() };
-                                        kf_manager.reset(clid, clock);
-                                        if kf_manager.captures_keyframe(clid) {
-                                            active_keyframe_clid = Some(clid);
-                                        }
-                                    }
+                                    #parallel_keyframe_reset
                                     culist.change_state(cu29::copperlist::CopperListState::Processing);
                                     entry_stage_tx
                                         .send(#mission_mod::ParallelWorkerJob {
@@ -4829,13 +4986,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             }
                                             cu29::curuntime::OwnedCopperListSubmission::Pending => {}
                                         }
-                                        let keyframe_bytes = {
-                                            let _keyframe_lock =
-                                                kf_lock.lock().expect("parallel keyframe lock poisoned");
-                                            let kf_manager = unsafe { kf_manager_ptr.as_mut() };
-                                            kf_manager.end_of_processing(worker_result.clid)?;
-                                            kf_manager.last_encoded_bytes
-                                        };
+                                        let keyframe_bytes = #parallel_keyframe_finish;
                                         monitor_result?;
                                         let stats = cu29::monitoring::CopperListIoStats {
                                             raw_culist_bytes: core::mem::size_of::<CuList>() as u64
@@ -4866,9 +5017,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 free_copperlists.push(culist);
                             }
 
-                            if active_keyframe_clid == Some(worker_result.clid) {
-                                active_keyframe_clid = None;
-                            }
+                            #parallel_keyframe_clear
                             parallel_rt.release_commit(worker_result.clid + 1);
                             next_commit_clid += 1;
                         }
@@ -4911,6 +5060,31 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 result
             }
         };
+        let keyframe_manager_binding = keyframe_logging_enabled
+            .then(|| quote! { let kf_manager = &mut runtime.keyframes_manager; });
+        let keyframe_reset =
+            keyframe_logging_enabled.then(|| quote! { kf_manager.reset(clid, clock); });
+        let keyframe_finish =
+            keyframe_logging_enabled.then(|| quote! { kf_manager.end_of_processing(clid)?; });
+        let keyframe_bytes = if keyframe_logging_enabled {
+            quote! { kf_manager.last_encoded_bytes }
+        } else {
+            quote! { 0 }
+        };
+        let keyframe_preallocation = keyframe_logging_enabled.then(|| {
+            quote! {
+                {
+                    let runtime = &mut self.copper_runtime;
+                    let tasks = &runtime.tasks;
+                    let __cu_bridges = &runtime.bridges;
+                    let kf_manager = &mut runtime.keyframes_manager;
+                    kf_manager.begin_capture_preallocation();
+                    #(#keyframe_preallocation_code)*
+                    kf_manager.finish_capture_preallocation()?;
+                }
+            }
+        });
+
         let run_methods: proc_macro2::TokenStream = quote! {
 
             #run_one_iteration {
@@ -4926,7 +5100,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let tasks = &mut runtime.tasks;
                 let __cu_bridges = &mut runtime.bridges;
                 let cl_manager = &mut runtime.copperlists_manager;
-                let kf_manager = &mut runtime.keyframes_manager;
+                #keyframe_manager_binding
                 let iteration_clid = cl_manager.next_cl_id();
                 let mut ctx = cu29::context::CuContext::from_runtime_metadata(
                     clock.clone(),
@@ -4943,7 +5117,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let culist = cl_manager.create()?;
                 let clid = culist.id;
                 debug_assert_eq!(clid, iteration_clid);
-                kf_manager.reset(clid, clock); // beginning of processing, we empty the serialized frozen states of the tasks.
+                #keyframe_reset
                 culist.change_state(cu29::copperlist::CopperListState::Processing);
                 let mut ctx = cu29::context::CuContext::from_runtime_metadata(
                     clock.clone(),
@@ -4979,20 +5153,21 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #(#preprocess_logging_calls)*
 
                 cl_manager.end_of_processing(clid)?;
-                kf_manager.end_of_processing(clid)?;
                 monitor_result?;
+
+                // Postprocess calls keep their component-local freeze points. Finish the
+                // framed keyframe only after those late bridge frames have been appended.
+                #(#postprocess_calls)*
+                #keyframe_finish
                 let stats = cu29::monitoring::CopperListIoStats {
                     raw_culist_bytes: core::mem::size_of::<CuList>() as u64 + cl_manager.last_handle_bytes,
                     handle_bytes: cl_manager.last_handle_bytes,
                     encoded_culist_bytes: cl_manager.last_encoded_bytes,
-                    keyframe_bytes: kf_manager.last_encoded_bytes,
+                    keyframe_bytes: #keyframe_bytes,
                     structured_log_bytes_total: ::cu29::prelude::structured_log_bytes_total(),
                     culistid: clid,
                 };
                 monitor.observe_copperlist_io(stats);
-
-                // Postprocess calls can happen at any time, just packed them up at the end.
-                #(#postprocess_calls)*
                 Ok(())
             }
 
@@ -5002,11 +5177,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let clock = &clock_handle;
                 let tasks = &mut runtime.tasks;
                 let __cu_bridges = &mut runtime.bridges;
-                let config = cu29::bincode::config::standard();
-                let reader = cu29::bincode::de::read::SliceReader::new(&keyframe.serialized_tasks);
-                let mut decoder = DecoderImpl::new(reader, config, ());
-                #(#task_restore_code);*;
-                #(#bridge_restore_code);*;
+                let mut frames = cu29::curuntime::KeyFramePayloadReader::new(keyframe)?;
+                #(#keyframe_restore_code)*
+                frames.finish()?;
                 Ok(())
             }
 
@@ -5023,6 +5196,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #mission_mod::TASK_IDS,
                 );
                 #(#start_calls)*
+                #keyframe_preallocation
                 ctx.clear_current_component();
                 ctx.clear_current_task();
                 self.copper_runtime.monitor.start(&ctx)?;
@@ -5119,6 +5293,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #config_load_stmt
                 #constant_override_warning
                 #copperlist_count_check
+                #keyframe_logging_check
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp init: config loaded");
                 if let Some(runtime) = &config.runtime {
@@ -8782,9 +8957,11 @@ fn parallel_bridge_lifecycle_tokens(
     component_index: usize,
     mission_mod: &Ident,
     placement: ParallelLifecyclePlacement,
+    keyframe_logging_enabled: bool,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let rt_guard = rtsan_guard_tokens();
     let abort_process_step = abort_process_step_tokens(true);
+    let freeze_bridge = keyframe_freeze_bridge_tokens(keyframe_logging_enabled);
 
     let preprocess_alloc_open = alloc_scope_open_tokens();
     let preprocess_alloc_close = alloc_scope_close_tokens(
@@ -8853,7 +9030,7 @@ fn parallel_bridge_lifecycle_tokens(
 
     let postprocess = if placement.postprocess {
         quote! {
-            kf_manager.freeze_any(clid, bridge)?;
+            #freeze_bridge
             execution_probe.record(cu29::monitoring::ExecutionMarker {
                 component_id: cu29::monitoring::ComponentId::new(#component_index),
                 step: CuComponentState::Postprocess,
@@ -9218,6 +9395,7 @@ fn generate_anytime_base_block(
     let (slot_cast_defs, slot_cast_fn) = anytime_slot_cast_tokens(&task_hint);
     let rt_guard = rtsan_guard_tokens();
     let mission_mod = ctx.mission_mod;
+    let freeze_task = keyframe_freeze_task_tokens(ctx.keyframe_logging_enabled, task_instance);
 
     let comment_str = format!(
         "DEBUG ->> {} ({:?}/{:?}) Id:{} I:{:?} O:{:?}",
@@ -9328,7 +9506,7 @@ fn generate_anytime_base_block(
             #comment_tokens
             // One snapshot per copperlist, before the job: refine blocks must
             // not re-freeze.
-            kf_manager.freeze_task(clid, &#task_instance)?;
+            #freeze_task
             #task_input_setup
             #call_sim_callback
             let cumsg_input = #task_input_expr;
@@ -9530,17 +9708,20 @@ struct StepGenerationContext<'a> {
     task_input_layouts: &'a HashMap<String, TaskInputLayout>,
     mission_name: &'a str,
     sim_mode: bool,
+    keyframe_logging_enabled: bool,
     mission_mod: &'a Ident,
     lifecycle_placement: ParallelLifecyclePlacement,
     wrap_process_step: bool,
 }
 
 impl<'a> StepGenerationContext<'a> {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         output_pack_sizes: &'a [usize],
         task_input_layouts: &'a HashMap<String, TaskInputLayout>,
         mission_name: &'a str,
         sim_mode: bool,
+        keyframe_logging_enabled: bool,
         mission_mod: &'a Ident,
         lifecycle_placement: ParallelLifecyclePlacement,
         wrap_process_step: bool,
@@ -9550,6 +9731,7 @@ impl<'a> StepGenerationContext<'a> {
             task_input_layouts,
             mission_name,
             sim_mode,
+            keyframe_logging_enabled,
             mission_mod,
             lifecycle_placement,
             wrap_process_step,
@@ -9560,6 +9742,25 @@ impl<'a> StepGenerationContext<'a> {
 struct TaskExecutionTokens {
     setup: proc_macro2::TokenStream,
     instance: proc_macro2::TokenStream,
+}
+
+fn keyframe_freeze_task_tokens(
+    enabled: bool,
+    task_instance: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    if enabled {
+        quote! { kf_manager.freeze_task(clid, &#task_instance)?; }
+    } else {
+        quote! {}
+    }
+}
+
+fn keyframe_freeze_bridge_tokens(enabled: bool) -> proc_macro2::TokenStream {
+    if enabled {
+        quote! { kf_manager.freeze_any(clid, bridge)?; }
+    } else {
+        quote! {}
+    }
 }
 
 impl TaskExecutionTokens {
@@ -9581,6 +9782,7 @@ fn generate_task_execution_tokens(
         task_input_layouts,
         mission_name,
         sim_mode,
+        keyframe_logging_enabled,
         mission_mod,
         lifecycle_placement,
         wrap_process_step,
@@ -9589,6 +9791,7 @@ fn generate_task_execution_tokens(
         setup: task_setup,
         instance: task_instance,
     } = task_tokens;
+    let freeze_task = keyframe_freeze_task_tokens(keyframe_logging_enabled, &task_instance);
     let comment_str = format!(
         "DEBUG ->> {} ({:?}) Id:{} I:{:?} O:{:?}",
         step.node.get_id(),
@@ -9730,7 +9933,7 @@ fn generate_task_execution_tokens(
                         #task_setup
                         #parallel_task_preprocess
                         #comment_tokens
-                        kf_manager.freeze_task(clid, &#task_instance)?;
+                        #freeze_task
                         #call_sim_callback
                         let cumsg_output = &mut msgs.#output_culist_index;
                         #maybe_sim_tick
@@ -9793,7 +9996,7 @@ fn generate_task_execution_tokens(
                         #task_setup
                         #parallel_task_preprocess
                         #comment_tokens
-                        kf_manager.freeze_task(clid, &#task_instance)?;
+                        #freeze_task
                         #task_input_setup
                         #call_sim_callback
                         let cumsg_input = #task_input_expr;
@@ -9899,7 +10102,7 @@ fn generate_task_execution_tokens(
                         #task_setup
                         #parallel_task_preprocess
                         #comment_tokens
-                        kf_manager.freeze_task(clid, &#task_instance)?;
+                        #freeze_task
                         #task_input_setup
                         #call_sim_callback
                         let cumsg_input = #task_input_expr;
@@ -9938,6 +10141,7 @@ fn generate_bridge_rx_execution_tokens(
         task_input_layouts: _,
         mission_name: _,
         sim_mode,
+        keyframe_logging_enabled,
         mission_mod,
         lifecycle_placement,
         wrap_process_step,
@@ -9980,6 +10184,7 @@ fn generate_bridge_rx_execution_tokens(
                 .expect("Bridge missing monitor index for lifecycle"),
             mission_mod,
             lifecycle_placement,
+            keyframe_logging_enabled,
         );
     let const_ident = &channel.const_ident;
     let enum_ident = Ident::new(
@@ -10092,6 +10297,7 @@ fn generate_bridge_tx_execution_tokens(
         task_input_layouts: _,
         mission_name: _,
         sim_mode,
+        keyframe_logging_enabled,
         mission_mod,
         lifecycle_placement,
         wrap_process_step,
@@ -10146,6 +10352,7 @@ fn generate_bridge_tx_execution_tokens(
                 .expect("Bridge missing monitor index for lifecycle"),
             mission_mod,
             lifecycle_placement,
+            keyframe_logging_enabled,
         );
     let const_ident = &channel.const_ident;
     let enum_ident = Ident::new(
@@ -10492,6 +10699,7 @@ enum ExecutionEntityKind {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use std::fs;
     use std::path::{Path, PathBuf};
 
@@ -10508,6 +10716,23 @@ mod tests {
             fs::create_dir_all(parent).expect("create parent dirs");
         }
         fs::write(path, content).expect("write file");
+    }
+
+    #[test]
+    fn disabled_keyframe_capture_emits_no_freeze_calls() {
+        let task = quote! { tasks.0 };
+        assert!(keyframe_freeze_task_tokens(false, &task).is_empty());
+        assert!(keyframe_freeze_bridge_tokens(false).is_empty());
+        assert!(
+            keyframe_freeze_task_tokens(true, &task)
+                .to_string()
+                .contains("freeze_task")
+        );
+        assert!(
+            keyframe_freeze_bridge_tokens(true)
+                .to_string()
+                .contains("freeze_any")
+        );
     }
 
     // See tests/compile_file directory for more information
