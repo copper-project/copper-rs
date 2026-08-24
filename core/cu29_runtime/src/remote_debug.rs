@@ -5516,7 +5516,7 @@ mod tests {
             &[TaskOutputSpec {
                 task_id: "alias_task",
                 msg_type: "alias::payload",
-                payload_type_path_fn: <PayloadAlias as TypePath>::type_path,
+                payload_type_path_fn: crate::reflect::__payload_type_path::<PayloadAlias>,
             }]
         }
     }
