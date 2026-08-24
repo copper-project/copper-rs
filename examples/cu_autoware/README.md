@@ -68,11 +68,11 @@ The comparable real-time chains are:
 | Report | Copper endpoint | LaME chain | Deadline |
 |---|---|---:|---:|
 | RT0 | front lidar → behavior-planner input | 1 (source chain 0) | 200 ms |
-| RT1 | rear lidar → point-cloud-fusion input | 2 (source chain 3) | 200 ms |
-| RT2 | behavior-planner timer → vehicle DBW | 0 (source chain 1) | 100 ms |
+| RT1 | rear lidar → point-cloud-fusion input | 0 (source chain 3) | 200 ms |
+| RT2 | behavior-planner timer → vehicle DBW | 2 (source chain 1) | 100 ms |
 
 The report includes sample count, mean, p50, p99, maximum, deadline misses, sampled mean
-CPU, and peak RSS. Keep the raw files when comparing machines: Copper runs natively while
+CPU, and peak RSS; 100% CPU means one fully occupied logical core. Keep the raw files when comparing machines: Copper runs natively while
 LaME runs in a container, and the original paper evaluated LaME on NVIDIA Jetson hardware.
 
 # Copper vs. LaME results

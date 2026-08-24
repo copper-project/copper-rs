@@ -16,6 +16,9 @@ lame seconds="60":
 compare:
   #!/usr/bin/env bash
   set -euo pipefail
+  python3 analysis/parse_lame.py analysis/data/lame/raw.log analysis/data/lame
+  python3 analysis/compare_results.py summarize analysis/data/copper copper
+  python3 analysis/compare_results.py summarize analysis/data/lame lame
   python3 analysis/compare_results.py compare analysis/data
 
 # Developer helpers for an exact-pass run and KPI extraction.

@@ -89,7 +89,7 @@ def report(base):
             f"{row['max_ms']:.3f} ms | {row['deadline_misses']} | "
             f"{row['mean_cpu_pct']:.1f}% | {row['peak_rss_mb']:.1f} MiB |"
         )
-    lines += ["", "CPU/RSS are process samples at roughly 10 Hz. LaME samples are from the managed phase after its 15 s profile and 5 s pause.", ""]
+    lines += ["", "CPU/RSS are process samples at roughly 10 Hz; 100% CPU is one fully occupied logical core. LaME samples are from the managed phase after its 15 s profile and 5 s pause.", ""]
     (base / "comparison.md").write_text("\n".join(lines))
     print("\n".join(lines))
 
