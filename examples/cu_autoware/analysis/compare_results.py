@@ -42,6 +42,34 @@ def process_metrics(path):
     }
 
 
+def markdown_table(headers, rows, right_aligned):
+    widths = []
+    for column, header in enumerate(headers):
+        minimum = 4 if column in right_aligned else 3
+        widths.append(max(minimum, len(header), *(len(row[column]) for row in rows)))
+
+    def render(row):
+        cells = []
+        for column, value in enumerate(row):
+            align = str.rjust if column in right_aligned else str.ljust
+            cells.append(align(value, widths[column]))
+        return f"| {' | '.join(cells)} |"
+
+    separators = [
+        "-" * (width - 1) + ":" if column in right_aligned else "-" * width
+        for column, width in enumerate(widths)
+    ]
+    return [render(headers), render(separators), *(render(row) for row in rows)]
+
+
+def comparison_marker(value, reference):
+    if value == reference:
+        return "[same]"
+    if value == 0:
+        return "[xinf]"
+    return f"[x{reference / value:.3f}]"
+
+
 def summarize(directory, system):
     result = {"system": system, "chains": {}, "process": process_metrics(directory / "proc.csv")}
     for chain, (description, deadline) in CHAINS.items():
@@ -63,12 +91,15 @@ def summarize(directory, system):
 
 
 def report(base, copper_dir, output):
-    systems = [json.loads((base / name / "summary.json").read_text()) for name in (copper_dir, "lame")]
+    challenger = json.loads((base / copper_dir / "summary.json").read_text())
+    reference = json.loads((base / "lame" / "summary.json").read_text())
     fields = ["system", "chain", "description", "deadline_ms", "n", "mean_ms", "p50_ms", "p99_ms", "max_ms", "deadline_misses", "mean_cpu_pct", "peak_rss_mb"]
     rows = []
-    for system in systems:
-        for chain, metrics in system["chains"].items():
-            row = {"system": system["system"], "chain": chain, **metrics}
+    for chain in CHAINS:
+        for system in (reference, challenger):
+            metrics = system["chains"][chain]
+            name = "copper" if system["system"].startswith("copper") else system["system"]
+            row = {"system": name, "chain": chain, **metrics}
             row.update(system["process"])
             rows.append(row)
     with (base / f"{output}.csv").open("w", newline="") as file:
@@ -76,20 +107,40 @@ def report(base, copper_dir, output):
         writer.writeheader()
         writer.writerows(rows)
 
-    lines = [
-        "# Copper vs. LaME results",
-        "",
-        "| System | Chain | Deadline | n | Mean | p50 | p99 | Max | Misses | Mean CPU | Peak RSS |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
-    ]
+    headers = ("System", "Chain", "Deadline", "n", "Mean", "p50", "p99", "Max", "Misses", "Mean CPU", "Peak RSS")
+    table_rows = []
     for row in rows:
-        lines.append(
-            f"| {row['system']} | {row['chain']} | {row['deadline_ms']:.0f} ms | {row['n']} | "
-            f"{row['mean_ms']:.3f} ms | {row['p50_ms']:.3f} ms | {row['p99_ms']:.3f} ms | "
-            f"{row['max_ms']:.3f} ms | {row['deadline_misses']} | "
-            f"{row['mean_cpu_pct']:.1f}% | {row['peak_rss_mb']:.1f} MiB |"
+        reference_chain = reference["chains"][row["chain"]]
+        is_challenger = row["system"] == "copper"
+
+        def compared(value, reference_value, formatted):
+            if not is_challenger:
+                return formatted
+            return f"{formatted} {comparison_marker(value, reference_value)}"
+
+        table_rows.append(
+            (
+                row["system"],
+                row["chain"],
+                f"{row['deadline_ms']:.0f} ms",
+                str(row["n"]),
+                compared(row["mean_ms"], reference_chain["mean_ms"], f"{row['mean_ms']:.3f} ms"),
+                compared(row["p50_ms"], reference_chain["p50_ms"], f"{row['p50_ms']:.3f} ms"),
+                compared(row["p99_ms"], reference_chain["p99_ms"], f"{row['p99_ms']:.3f} ms"),
+                compared(row["max_ms"], reference_chain["max_ms"], f"{row['max_ms']:.3f} ms"),
+                compared(row["deadline_misses"], reference_chain["deadline_misses"], str(row["deadline_misses"])),
+                compared(row["mean_cpu_pct"], reference["process"]["mean_cpu_pct"], f"{row['mean_cpu_pct']:.1f}%"),
+                compared(row["peak_rss_mb"], reference["process"]["peak_rss_mb"], f"{row['peak_rss_mb']:.1f} MiB"),
+            )
         )
-    lines += ["", "CPU/RSS are process samples at roughly 10 Hz; 100% CPU is one fully occupied logical core. LaME samples are from the managed phase after its 15 s profile and 5 s pause.", ""]
+    lines = ["# Copper vs. LaME results", "", *markdown_table(headers, table_rows, set(range(2, len(headers))))]
+    lines += [
+        "",
+        "LaME is the reference row for each chain. Bracketed factors on Copper are LaME divided by Copper, so values above x1.000 are improvements and values below x1.000 are regressions; `[same]` means both values are equal.",
+        "",
+        "CPU/RSS are process samples at roughly 10 Hz; 100% CPU is one fully occupied logical core. LaME samples are from the managed phase after its 15 s profile and 5 s pause.",
+        "",
+    ]
     (base / f"{output}.md").write_text("\n".join(lines))
     print("\n".join(lines))
 
