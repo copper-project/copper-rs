@@ -1,7 +1,6 @@
 // The 24 nodes of the Autoware reference system (LAME fork, Fig. 4 of the RTNS'25 paper).
 // `E` in the comments is the execution time each node must reproduce; the crunch limits
-// below are host-calibrated with the `calibrate` binary and validated against the app's
-// logged `process_time` (see PLAN.md for the procedure). behavior_planner's 0.001ms
+// below are host-calibrated with the `calibrate` binary. behavior_planner's 0.001ms
 // input callback is below timing resolution, so its cache_crunch_limit is not
 // calibrated and stays at 100.
 // 200Hz is the GCD grid of the 200/120/100/60/25ms sensor periods.

@@ -950,7 +950,7 @@ mod tests {
         assert_eq!(covered, ids);
     }
 
-    /// Every callback of Fig. 4, once: the 185.0ms pass PLAN.md quotes.
+    /// Every callback of Fig. 4, once: the full 185.0ms pass.
     #[test]
     fn test_cost_model_totals_the_fig4_pass() {
         let total: f64 = NODES
