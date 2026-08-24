@@ -39,12 +39,12 @@ just compare
 ```
 
 The vanilla graph remains the default. A second three-command path builds the same crate
-with the `callback-background` feature and compares its callback-level graph instead:
+with the `hybrid-background` feature and compares a manually optimized static schedule:
 
 ```sh
-just copper-background
+just copper-hybrid
 just lame
-just compare-background
+just compare-hybrid
 ```
 
 Both benchmark commands default to a 60-second measured phase. Reasonable
@@ -62,30 +62,28 @@ example's `logs/`, and extracts chain KPIs. `just lame` builds the pinned contai
 calibrates LaME's identical workload classes inside it, performs LaME's fixed 15-second
 profiling phase and 5-second pause, and then records the requested managed phase.
 
-`just copper-background` selects `copperconfig-background.ron` through the Cargo feature.
-It represents each of LaME's 36 independently scheduled callbacks as one static Copper
-task and runs them on the existing two-worker fair background pool. A fixed-capacity,
-compile-time callback mailbox in this example retains a trigger when its successor's one
-background invocation is still in flight; the RON graph remains the static topology and
-there is no runtime string lookup or heap-backed callback queue. This variant changes
-only this example; it does not modify Copper's scheduling internals. It disables
-task-state keyframes at compile time because workers may be active at CopperList
-boundaries, while retaining CopperList logging for KPI extraction. Its KPI pass rejects
-missing, duplicated, reordered, or invented chain samples. Only a contiguous tail still
-in flight at bounded shutdown is allowed. LaME's `SCHED_DEADLINE` policy remains a
-deliberate and reported runtime difference.
+`just copper-hybrid` selects `copperconfig-hybrid.ron` through the Cargo feature. It
+partitions the 36 callbacks into seven independent periodic regions. Only those regions
+are scheduled across two statically balanced one-thread pools; every causal continuation
+inside a region executes inline on the same worker. Critical-path callbacks run before
+non-critical fan-out work. This is the example-local schedule that Copper's future
+profile-guided optimizer is expected to generate automatically, and it does not modify
+Copper's scheduling internals. Task-state keyframes are compiled out because workers may
+be active at CopperList boundaries, while CopperList logging remains available for KPI
+extraction. The KPI pass validates callback costs and exact chain sequences. LaME's
+`SCHED_DEADLINE` policy remains a reported runtime difference.
 
 Results are kept side by side:
 
 ```text
 analysis/data/
 ├── copper/       # raw chain CSVs, process samples, generated RON, summary.json
-├── copper-background/ # the feature-gated callback/background variant
+├── copper-hybrid/ # the feature-gated, statically fused two-worker variant
 ├── lame/         # raw console log, raw responses, chain CSVs, process samples, summary.json
 ├── comparison.csv
 ├── comparison.md
-├── comparison-background.csv
-└── comparison-background.md
+├── comparison-hybrid.csv
+└── comparison-hybrid.md
 ```
 
 The comparable real-time chains are:

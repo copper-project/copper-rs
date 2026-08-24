@@ -11,14 +11,14 @@ case "$variant" in
     system=copper
     features=()
     ;;
-  background)
-    out=analysis/data/copper-background
-    log=logs/benchmark-background.copper
-    system=copper-background
-    features=(--features callback-background)
+  hybrid)
+    out=analysis/data/copper-hybrid
+    log=logs/benchmark-hybrid.copper
+    system=copper-hybrid
+    features=(--features hybrid-background)
     ;;
   *)
-    echo "usage: $0 [seconds] [vanilla|background]" >&2
+    echo "usage: $0 [seconds] [vanilla|hybrid]" >&2
     exit 2
     ;;
 esac

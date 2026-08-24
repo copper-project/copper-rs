@@ -1,0 +1,127 @@
+// Manually optimized static regions for the Autoware reference workload. Only the seven
+// independent periodic roots are scheduled on background workers. Every causally dependent
+// callback below a root executes inline as one continuation, keeping scheduler boundaries
+// out of the latency path. The two one-thread pools are statically balanced from Fig. 4.
+(
+    runtime: (
+        rate_target_hz: 200,
+        thread_pools: [
+            (id: "region_a", threads: 1, policy: Fair),
+            (id: "region_b", threads: 1, policy: Fair),
+        ],
+    ),
+    logging: (
+        enable_keyframe_logging: false,
+    ),
+    tasks: [
+        (
+            id: "front_region",
+            type: "crate::tasks::RefRegion<0>",
+            kind: source,
+            background: (pool: "region_a"),
+            config: {
+                "period_ms": 200,
+                "front_lidar": 3374,
+                "points_transformer_front": 109495,
+                "point_cloud_fusion": 108734,
+                "ray_ground_filter": 109495,
+                "euclidean_cluster_detector": 109495,
+                "object_collision_estimator": 109495,
+                "behavior_planner_input_0": 100,
+                "voxel_grid_downsampler": 109495,
+                "ndt_localizer_voxel_callback": 33926,
+            },
+        ),
+        (
+            id: "rear_region",
+            type: "crate::tasks::RefRegion<1>",
+            kind: source,
+            background: (pool: "region_a"),
+            config: {
+                "period_ms": 200,
+                "rear_lidar": 3374,
+                "points_transformer_rear": 109495,
+                "point_cloud_fusion_rear_callback": 33926,
+            },
+        ),
+        (
+            id: "map_region",
+            type: "crate::tasks::RefRegion<2>",
+            kind: source,
+            background: (pool: "region_a"),
+            config: {
+                "period_ms": 120,
+                "point_cloud_map": 3374,
+                "point_cloud_map_loader": 109495,
+                "ndt_localizer": 109495,
+                "lanelet2_global_planner_ndt_callback": 33926,
+                "behavior_planner_input_1": 100,
+            },
+        ),
+        (
+            id: "visual_region",
+            type: "crate::tasks::RefRegion<3>",
+            kind: source,
+            background: (pool: "region_b"),
+            config: {
+                "period_ms": 60,
+                "visualizer": 3374,
+                "lanelet2_global_planner": 110181,
+                "lanelet2_map_loader_global_callback": 33926,
+                "behavior_planner_input_2": 100,
+            },
+        ),
+        (
+            id: "lane_region",
+            type: "crate::tasks::RefRegion<4>",
+            kind: source,
+            background: (pool: "region_a"),
+            config: {
+                "period_ms": 100,
+                "lanelet2_map": 3374,
+                "lanelet2_map_loader": 110181,
+                "behavior_planner_input_3": 100,
+                "parking_planner": 109495,
+                "behavior_planner_input_4": 100,
+                "lane_planner": 109495,
+                "behavior_planner_input_5": 100,
+            },
+        ),
+        (
+            id: "settings_region",
+            type: "crate::tasks::RefRegion<5>",
+            kind: source,
+            background: (pool: "region_b"),
+            config: {
+                "period_ms": 25,
+                "euclidean_cluster_settings": 3374,
+                "euclidean_cluster_detector_settings_callback": 110181,
+                "intersection_output": 19320,
+            },
+        ),
+        (
+            id: "planner_region",
+            type: "crate::tasks::RefRegion<6>",
+            kind: source,
+            background: (pool: "region_b"),
+            config: {
+                "period_ms": 100,
+                "behavior_planner": 3374,
+                "mpc_controller": 109495,
+                "vehicle_interface": 109495,
+                "vehicle_dbw": 19320,
+                "vehicle_interface_behavior_callback": 33926,
+            },
+        ),
+    ],
+    cnx: [
+        (src: "front_region", dst: "__nc__", msg: "crate::payload::RefRegionSample"),
+        (src: "rear_region", dst: "__nc__", msg: "crate::payload::RefRegionSample"),
+        (src: "map_region", dst: "__nc__", msg: "crate::payload::RefRegionSample"),
+        (src: "visual_region", dst: "__nc__", msg: "crate::payload::RefRegionSample"),
+        (src: "lane_region", dst: "__nc__", msg: "crate::payload::RefRegionSample"),
+        (src: "settings_region", dst: "__nc__", msg: "crate::payload::RefRegionSample"),
+        (src: "planner_region", dst: "__nc__", msg: "crate::payload::RefRegionSample"),
+    ],
+    monitor: (type: "cu_consolemon::CuConsoleMon"),
+)

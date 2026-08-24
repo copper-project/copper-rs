@@ -29,5 +29,5 @@ cu29-build = { workspace = true }
 
 [features]
 default = []
-# Build the callback-level graph using Copper's existing background-task executor.
-callback-background = []
+# Build the manually region-fused graph on two background workers.
+hybrid-background = []

@@ -4,6 +4,8 @@
 //! busy work, `period_ms` the tick of the timed ones. Timing constants are load-bearing
 //! in a benchmark, so a missing or mistyped key is an error rather than a default.
 
+#[cfg(feature = "hybrid-background")]
+use crate::payload::{REGION_CALLBACK_CAPACITY, RefRegionSample};
 use crate::payload::{RefLaneSample, RefSample};
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
@@ -12,8 +14,6 @@ use bincode::{Decode, Encode};
 use cu29::prelude::*;
 use std::hint::black_box;
 use std::marker::PhantomData;
-#[cfg(feature = "callback-background")]
-use std::sync::Mutex;
 
 fn cfg_u64(config: Option<&ComponentConfig>, task: &str, key: &str) -> CuResult<u64> {
     config
@@ -108,151 +108,105 @@ fn suppress<P: CuMsgPayload>(output: &mut CuMsg<P>) {
     output.tov = Tov::default();
 }
 
-// The existing background wrapper has one in-flight invocation per task. A callback
-// that completes while its successor is busy therefore cannot use a one-CopperList
-// payload pulse as its queue. The callback benchmark keeps that wiring here instead:
-// a fixed, compile-time DAG and bounded mailboxes. This is deliberately feature-local;
-// the vanilla application continues to use ordinary Copper connections exclusively.
-#[cfg(feature = "callback-background")]
-const CALLBACK_COUNT: usize = 36;
-#[cfg(feature = "callback-background")]
-const CALLBACK_QUEUE_CAPACITY: usize = 16;
-
-#[cfg(feature = "callback-background")]
-#[derive(Clone, Copy)]
-struct CallbackEvent {
-    seq: u64,
-    tov: CuTime,
-}
-
-#[cfg(feature = "callback-background")]
-#[derive(Clone, Copy)]
-struct CallbackQueue {
-    slots: [Option<CallbackEvent>; CALLBACK_QUEUE_CAPACITY],
-    head: usize,
-    len: usize,
-}
-
-#[cfg(feature = "callback-background")]
-impl CallbackQueue {
-    const fn new() -> Self {
-        Self {
-            slots: [None; CALLBACK_QUEUE_CAPACITY],
-            head: 0,
-            len: 0,
-        }
-    }
-
-    fn push(&mut self, event: CallbackEvent) -> CuResult<()> {
-        if self.len == CALLBACK_QUEUE_CAPACITY {
-            return Err(CuError::from(
-                "callback-background mailbox capacity exceeded",
-            ));
-        }
-        let tail = (self.head + self.len) % CALLBACK_QUEUE_CAPACITY;
-        self.slots[tail] = Some(event);
-        self.len += 1;
-        Ok(())
-    }
-
-    fn pop(&mut self) -> Option<CallbackEvent> {
-        if self.len == 0 {
-            return None;
-        }
-        let event = self.slots[self.head].take();
-        self.head = (self.head + 1) % CALLBACK_QUEUE_CAPACITY;
-        self.len -= 1;
-        event
-    }
-}
-
-#[cfg(feature = "callback-background")]
-struct CallbackMailboxes {
-    queues: [CallbackQueue; CALLBACK_COUNT],
-}
-
-#[cfg(feature = "callback-background")]
-impl CallbackMailboxes {
-    const fn new() -> Self {
-        Self {
-            queues: [CallbackQueue::new(); CALLBACK_COUNT],
-        }
-    }
-}
-
-#[cfg(feature = "callback-background")]
-static CALLBACK_MAILBOXES: Mutex<CallbackMailboxes> = Mutex::new(CallbackMailboxes::new());
-
-#[cfg(feature = "callback-background")]
-fn callback_successors(id: usize) -> &'static [usize] {
-    match id {
-        0 => &[6],
-        1 => &[7],
-        2 => &[12],
-        3 => &[15],
-        4 => &[17],
-        5 => &[22],
-        6 => &[8],
-        7 => &[9],
-        8 => &[10, 11],
-        10 => &[14],
-        11 => &[21],
-        12 => &[13],
-        13 => &[16, 25],
-        15 => &[18, 26],
-        17 => &[19, 20, 27],
-        19 => &[28],
-        20 => &[29],
-        21 => &[23],
-        22 => &[35],
-        23 => &[24],
-        30 => &[31, 33],
-        31 => &[32],
-        32 => &[34],
+/// Callback names in execution order for each independent region. The order keeps the
+/// reported critical continuation ahead of non-critical fan-out work.
+#[cfg(feature = "hybrid-background")]
+pub fn region_callbacks(region: usize) -> &'static [&'static str] {
+    match region {
+        0 => &[
+            "front_lidar",
+            "points_transformer_front",
+            "point_cloud_fusion",
+            "ray_ground_filter",
+            "euclidean_cluster_detector",
+            "object_collision_estimator",
+            "behavior_planner_input_0",
+            "voxel_grid_downsampler",
+            "ndt_localizer_voxel_callback",
+        ],
+        1 => &[
+            "rear_lidar",
+            "points_transformer_rear",
+            "point_cloud_fusion_rear_callback",
+        ],
+        2 => &[
+            "point_cloud_map",
+            "point_cloud_map_loader",
+            "ndt_localizer",
+            "lanelet2_global_planner_ndt_callback",
+            "behavior_planner_input_1",
+        ],
+        3 => &[
+            "visualizer",
+            "lanelet2_global_planner",
+            "lanelet2_map_loader_global_callback",
+            "behavior_planner_input_2",
+        ],
+        4 => &[
+            "lanelet2_map",
+            "lanelet2_map_loader",
+            "behavior_planner_input_3",
+            "parking_planner",
+            "behavior_planner_input_4",
+            "lane_planner",
+            "behavior_planner_input_5",
+        ],
+        5 => &[
+            "euclidean_cluster_settings",
+            "euclidean_cluster_detector_settings_callback",
+            "intersection_output",
+        ],
+        6 => &[
+            "behavior_planner",
+            "mpc_controller",
+            "vehicle_interface",
+            "vehicle_dbw",
+            "vehicle_interface_behavior_callback",
+        ],
         _ => &[],
     }
 }
 
-#[cfg(feature = "callback-background")]
-fn enqueue_successors(id: usize, event: CallbackEvent) -> CuResult<()> {
-    let mut mailboxes = CALLBACK_MAILBOXES
-        .lock()
-        .map_err(|_| CuError::from("callback-background mailbox mutex poisoned"))?;
-    for successor in callback_successors(id) {
-        mailboxes.queues[*successor].push(event)?;
+#[cfg(feature = "hybrid-background")]
+const fn region_endpoint_index(region: usize) -> Option<usize> {
+    match region {
+        0 => Some(6),
+        1 => Some(2),
+        6 => Some(3),
+        _ => None,
     }
-    Ok(())
 }
 
-#[cfg(feature = "callback-background")]
-fn dequeue_callback(id: usize) -> CuResult<Option<CallbackEvent>> {
-    CALLBACK_MAILBOXES
-        .lock()
-        .map_err(|_| CuError::from("callback-background mailbox mutex poisoned"))
-        .map(|mut mailboxes| mailboxes.queues[id].pop())
-}
-
-/// Timer callback used only by the callback/background benchmark graph.
-#[cfg(feature = "callback-background")]
+/// A profile-guided-style static region: its periodic root is scheduled in the
+/// background, then every causal continuation runs inline on that same worker.
+#[cfg(feature = "hybrid-background")]
 #[derive(Reflect)]
-pub struct RefCallbackSensor<const ID: usize> {
+pub struct RefRegion<const REGION: usize> {
     pacer: Pacer,
-    crunch_limit: u64,
+    crunch_limits: [u64; REGION_CALLBACK_CAPACITY],
     seq: u64,
 }
 
-#[cfg(feature = "callback-background")]
-impl<const ID: usize> Freezable for RefCallbackSensor<ID> {}
+#[cfg(feature = "hybrid-background")]
+impl<const REGION: usize> Freezable for RefRegion<REGION> {}
 
-#[cfg(feature = "callback-background")]
-impl<const ID: usize> CuSrcTask for RefCallbackSensor<ID> {
+#[cfg(feature = "hybrid-background")]
+impl<const REGION: usize> CuSrcTask for RefRegion<REGION> {
     type Resources<'r> = ();
-    type Output<'m> = output_msg!(RefSample);
+    type Output<'m> = output_msg!(RefRegionSample);
 
     fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
+        let callbacks = region_callbacks(REGION);
+        if callbacks.is_empty() || callbacks.len() > REGION_CALLBACK_CAPACITY {
+            return Err(CuError::from("invalid static Autoware callback region"));
+        }
+        let mut crunch_limits = [0; REGION_CALLBACK_CAPACITY];
+        for (index, callback) in callbacks.iter().enumerate() {
+            crunch_limits[index] = cfg_u64(config, "RefRegion", callback)?;
+        }
         Ok(Self {
-            pacer: Pacer::new(config, "RefCallbackSensor")?,
-            crunch_limit: cfg_u64(config, "RefCallbackSensor", "crunch_limit")?,
+            pacer: Pacer::new(config, "RefRegion")?,
+            crunch_limits,
             seq: 0,
         })
     }
@@ -263,61 +217,26 @@ impl<const ID: usize> CuSrcTask for RefCallbackSensor<ID> {
             suppress(output);
             return Ok(());
         }
-        crunch(self.crunch_limit);
         self.seq += 1;
-        let event = CallbackEvent {
-            seq: self.seq,
-            tov: now,
-        };
-        enqueue_successors(ID, event)?;
+        let mut callback_ns = [0; REGION_CALLBACK_CAPACITY];
+        let mut endpoint_ns = 0;
+        for (index, elapsed_ns) in callback_ns
+            .iter_mut()
+            .enumerate()
+            .take(region_callbacks(REGION).len())
+        {
+            let started = ctx.now();
+            crunch(self.crunch_limits[index]);
+            *elapsed_ns = (ctx.now() - started).as_nanos();
+            if region_endpoint_index(REGION) == Some(index) {
+                endpoint_ns = (ctx.now() - now).as_nanos();
+            }
+        }
         output.tov = Tov::Time(now);
-        output.set_payload(RefSample {
+        output.set_payload(RefRegionSample {
             seq: self.seq,
-            ..Default::default()
-        });
-        Ok(())
-    }
-}
-
-/// Subscription callback used only by the callback/background benchmark graph. Copper's
-/// typed edge remains in the generated DAG; the bounded mailbox retains its trigger if
-/// this callback's previous invocation is still occupying a worker.
-#[cfg(feature = "callback-background")]
-#[derive(Reflect)]
-pub struct RefCallbackTransform<const ID: usize> {
-    crunch_limit: u64,
-}
-
-#[cfg(feature = "callback-background")]
-impl<const ID: usize> Freezable for RefCallbackTransform<ID> {}
-
-#[cfg(feature = "callback-background")]
-impl<const ID: usize> CuTask for RefCallbackTransform<ID> {
-    type Resources<'r> = ();
-    type Input<'m> = input_msg!(RefSample);
-    type Output<'m> = output_msg!(RefSample);
-
-    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
-        Ok(Self {
-            crunch_limit: cfg_u64(config, "RefCallbackTransform", "crunch_limit")?,
-        })
-    }
-
-    fn process(
-        &mut self,
-        _ctx: &CuContext,
-        _input: &Self::Input<'_>,
-        output: &mut Self::Output<'_>,
-    ) -> CuResult<()> {
-        let Some(event) = dequeue_callback(ID)? else {
-            suppress(output);
-            return Ok(());
-        };
-        crunch(self.crunch_limit);
-        enqueue_successors(ID, event)?;
-        output.tov = Tov::Time(event.tov);
-        output.set_payload(RefSample {
-            seq: event.seq,
+            endpoint_ns,
+            callback_ns,
             ..Default::default()
         });
         Ok(())
@@ -630,45 +549,18 @@ impl<P: CuMsgPayload + AsRef<RefSample>> CuSinkTask for RefCommand<P> {
 mod tests {
     use super::*;
 
-    #[cfg(feature = "callback-background")]
+    #[cfg(feature = "hybrid-background")]
     #[test]
-    fn callback_mailbox_is_bounded_fifo() {
-        let mut queue = CallbackQueue::new();
-        for seq in 0..CALLBACK_QUEUE_CAPACITY as u64 {
-            queue
-                .push(CallbackEvent {
-                    seq,
-                    tov: CuTime::from_millis(seq),
-                })
-                .unwrap();
-        }
-        assert!(
-            queue
-                .push(CallbackEvent {
-                    seq: 99,
-                    tov: CuTime::from_millis(99)
-                })
-                .is_err()
-        );
-        for seq in 0..CALLBACK_QUEUE_CAPACITY as u64 {
-            let event = queue.pop().unwrap();
-            assert_eq!(event.seq, seq);
-            assert_eq!(event.tov, CuTime::from_millis(seq));
-        }
-        assert!(queue.pop().is_none());
-    }
-
-    #[cfg(feature = "callback-background")]
-    #[test]
-    fn callback_dag_pins_the_three_reported_chains() {
-        assert_eq!(callback_successors(0), [6]);
-        assert_eq!(callback_successors(6), [8]);
-        assert_eq!(callback_successors(23), [24]);
-        assert_eq!(callback_successors(1), [7]);
-        assert_eq!(callback_successors(7), [9]);
-        assert_eq!(callback_successors(30), [31, 33]);
-        assert_eq!(callback_successors(31), [32]);
-        assert_eq!(callback_successors(32), [34]);
+    fn hybrid_regions_cover_every_callback_once() {
+        let callbacks: Vec<_> = (0..7)
+            .flat_map(|region| region_callbacks(region).iter().copied())
+            .collect();
+        assert_eq!(callbacks.len(), 36);
+        let unique: std::collections::HashSet<_> = callbacks.iter().copied().collect();
+        assert_eq!(unique.len(), callbacks.len());
+        assert_eq!(region_endpoint_index(0), Some(6));
+        assert_eq!(region_endpoint_index(1), Some(2));
+        assert_eq!(region_endpoint_index(6), Some(3));
     }
     use bincode::config::standard;
     use bincode::de::DecoderImpl;

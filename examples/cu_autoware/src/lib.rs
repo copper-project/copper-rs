@@ -13,11 +13,11 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 #[cfg_attr(
-    feature = "callback-background",
-    copper_runtime(config = "copperconfig-background.ron")
+    feature = "hybrid-background",
+    copper_runtime(config = "copperconfig-hybrid.ron")
 )]
 #[cfg_attr(
-    not(feature = "callback-background"),
+    not(feature = "hybrid-background"),
     copper_runtime(config = "copperconfig.ron")
 )]
 struct App {}

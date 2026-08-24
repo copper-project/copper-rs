@@ -19,10 +19,9 @@ use std::time::{Duration, Instant};
 /// (node id, config key, target execution time in µs). Fig. 4 of the RTNS'25 paper; the
 /// single authority for generated configs. Nodes sharing a target share one measured limit.
 ///
-/// `behavior_planner`'s `cache_crunch_limit` is deliberately absent: its 0.001ms input
-/// callback is a pointer assignment, below what a timed search can resolve, so the config
-/// keeps a fixed small limit there.
-#[cfg(not(feature = "callback-background"))]
+/// Vanilla keeps behavior-planner's 0.001ms cache work at a fixed minimum. The hybrid
+/// configuration gives each fused callback its own key, including those six tiny costs.
+#[cfg(not(feature = "hybrid-background"))]
 const TARGETS: &[(&str, &str, u64)] = &[
     ("front_lidar", "crunch_limit", 100),
     ("rear_lidar", "crunch_limit", 100),
@@ -56,47 +55,57 @@ const TARGETS: &[(&str, &str, u64)] = &[
     ("euclidean_cluster_detector", "crunch_limit1", 10200),
 ];
 
-#[cfg(feature = "callback-background")]
+#[cfg(feature = "hybrid-background")]
 const TARGETS: &[(&str, &str, u64)] = &[
-    ("front_lidar", "crunch_limit", 100),
-    ("rear_lidar", "crunch_limit", 100),
-    ("point_cloud_map", "crunch_limit", 100),
-    ("visualizer", "crunch_limit", 100),
-    ("lanelet2_map", "crunch_limit", 100),
-    ("euclidean_cluster_settings", "crunch_limit", 100),
-    ("vehicle_dbw", "crunch_limit", 1000),
-    ("intersection_output", "crunch_limit", 1000),
-    ("point_cloud_fusion_rear_callback", "crunch_limit", 2100),
-    ("ndt_localizer_voxel_callback", "crunch_limit", 2100),
-    ("lanelet2_global_planner_ndt_callback", "crunch_limit", 2100),
-    ("lanelet2_map_loader_global_callback", "crunch_limit", 2100),
-    ("vehicle_interface_behavior_callback", "crunch_limit", 2100),
-    ("point_cloud_fusion", "crunch_limit", 10005),
-    ("points_transformer_front", "crunch_limit", 10100),
-    ("points_transformer_rear", "crunch_limit", 10100),
-    ("voxel_grid_downsampler", "crunch_limit", 10100),
-    ("point_cloud_map_loader", "crunch_limit", 10100),
-    ("ray_ground_filter", "crunch_limit", 10100),
-    ("object_collision_estimator", "crunch_limit", 10100),
-    ("mpc_controller", "crunch_limit", 10100),
-    ("parking_planner", "crunch_limit", 10100),
-    ("lane_planner", "crunch_limit", 10100),
-    ("ndt_localizer", "crunch_limit", 10100),
-    ("vehicle_interface", "crunch_limit", 10100),
-    ("behavior_planner", "crunch_limit", 100),
-    ("euclidean_cluster_detector", "crunch_limit", 10100),
-    ("lanelet2_global_planner", "crunch_limit", 10200),
-    ("lanelet2_map_loader", "crunch_limit", 10200),
+    ("front_region", "front_lidar", 100),
+    ("rear_region", "rear_lidar", 100),
+    ("map_region", "point_cloud_map", 100),
+    ("visual_region", "visualizer", 100),
+    ("lane_region", "lanelet2_map", 100),
+    ("settings_region", "euclidean_cluster_settings", 100),
+    ("planner_region", "behavior_planner", 100),
+    ("planner_region", "vehicle_dbw", 1000),
+    ("settings_region", "intersection_output", 1000),
+    ("rear_region", "point_cloud_fusion_rear_callback", 2100),
+    ("front_region", "ndt_localizer_voxel_callback", 2100),
+    ("map_region", "lanelet2_global_planner_ndt_callback", 2100),
+    ("visual_region", "lanelet2_map_loader_global_callback", 2100),
     (
+        "planner_region",
+        "vehicle_interface_behavior_callback",
+        2100,
+    ),
+    ("front_region", "point_cloud_fusion", 10005),
+    ("front_region", "points_transformer_front", 10100),
+    ("rear_region", "points_transformer_rear", 10100),
+    ("front_region", "voxel_grid_downsampler", 10100),
+    ("map_region", "point_cloud_map_loader", 10100),
+    ("front_region", "ray_ground_filter", 10100),
+    ("front_region", "object_collision_estimator", 10100),
+    ("planner_region", "mpc_controller", 10100),
+    ("lane_region", "parking_planner", 10100),
+    ("lane_region", "lane_planner", 10100),
+    ("map_region", "ndt_localizer", 10100),
+    ("planner_region", "vehicle_interface", 10100),
+    ("front_region", "euclidean_cluster_detector", 10100),
+    ("visual_region", "lanelet2_global_planner", 10200),
+    ("lane_region", "lanelet2_map_loader", 10200),
+    (
+        "settings_region",
         "euclidean_cluster_detector_settings_callback",
-        "crunch_limit",
         10200,
     ),
+    ("front_region", "behavior_planner_input_0", 1),
+    ("map_region", "behavior_planner_input_1", 1),
+    ("visual_region", "behavior_planner_input_2", 1),
+    ("lane_region", "behavior_planner_input_3", 1),
+    ("lane_region", "behavior_planner_input_4", 1),
+    ("lane_region", "behavior_planner_input_5", 1),
 ];
 
-#[cfg(feature = "callback-background")]
-const CONFIG_FILENAME: &str = "copperconfig-background.ron";
-#[cfg(not(feature = "callback-background"))]
+#[cfg(feature = "hybrid-background")]
+const CONFIG_FILENAME: &str = "copperconfig-hybrid.ron";
+#[cfg(not(feature = "hybrid-background"))]
 const CONFIG_FILENAME: &str = "copperconfig.ron";
 
 /// Timed runs per candidate limit; the median is what the search steers on.

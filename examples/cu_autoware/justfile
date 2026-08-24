@@ -6,11 +6,11 @@ copper seconds="60":
   set -euo pipefail
   analysis/run_copper.sh {{seconds}} vanilla
 
-# Run the feature-gated callback graph on Copper's two-worker background pool.
-copper-background seconds="60":
+# Run statically fused causal regions on two background workers.
+copper-hybrid seconds="60":
   #!/usr/bin/env bash
   set -euo pipefail
-  analysis/run_copper.sh {{seconds}} background
+  analysis/run_copper.sh {{seconds}} hybrid
 
 # Build the pinned LaME image, run its managed executor, and summarize it.
 lame seconds="60":
@@ -27,14 +27,14 @@ compare:
   python3 analysis/compare_results.py summarize analysis/data/lame lame
   python3 analysis/compare_results.py compare analysis/data
 
-# Compare the callback-background Copper variant with the same LaME data.
-compare-background:
+# Compare the optimized hybrid Copper variant with the same LaME data.
+compare-hybrid:
   #!/usr/bin/env bash
   set -euo pipefail
   python3 analysis/parse_lame.py analysis/data/lame/raw.log analysis/data/lame
-  python3 analysis/compare_results.py summarize analysis/data/copper-background copper-background
+  python3 analysis/compare_results.py summarize analysis/data/copper-hybrid copper-hybrid
   python3 analysis/compare_results.py summarize analysis/data/lame lame
-  python3 analysis/compare_results.py compare analysis/data --copper-dir copper-background --output comparison-background
+  python3 analysis/compare_results.py compare analysis/data --copper-dir copper-hybrid --output comparison-hybrid
 
 # Developer helpers for an exact-pass run and KPI extraction.
 run iters="400" log="logs/autoware.copper":
