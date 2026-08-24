@@ -6,8 +6,16 @@
     runtime: (
         rate_target_hz: 200,
         thread_pools: [
-            (id: "region_a", threads: 1, policy: Fair),
-            (id: "region_b", threads: 1, policy: Fair),
+            (
+                id: "region_a",
+                threads: 1,
+                policy: Fair,
+            ),
+            (
+                id: "region_b",
+                threads: 1,
+                policy: Fair,
+            ),
         ],
     ),
     logging: (
@@ -18,7 +26,9 @@
             id: "front_region",
             type: "crate::tasks::RefRegion<0>",
             kind: source,
-            background: (pool: "region_a"),
+            background: (
+                pool: "region_a",
+            ),
             config: {
                 "period_ms": 200,
                 "front_lidar": 3374,
@@ -36,7 +46,9 @@
             id: "rear_region",
             type: "crate::tasks::RefRegion<1>",
             kind: source,
-            background: (pool: "region_a"),
+            background: (
+                pool: "region_a",
+            ),
             config: {
                 "period_ms": 200,
                 "rear_lidar": 3374,
@@ -48,7 +60,9 @@
             id: "map_region",
             type: "crate::tasks::RefRegion<2>",
             kind: source,
-            background: (pool: "region_a"),
+            background: (
+                pool: "region_a",
+            ),
             config: {
                 "period_ms": 120,
                 "point_cloud_map": 3374,
@@ -62,7 +76,9 @@
             id: "visual_region",
             type: "crate::tasks::RefRegion<3>",
             kind: source,
-            background: (pool: "region_b"),
+            background: (
+                pool: "region_b",
+            ),
             config: {
                 "period_ms": 60,
                 "visualizer": 3374,
@@ -75,7 +91,9 @@
             id: "lane_region",
             type: "crate::tasks::RefRegion<4>",
             kind: source,
-            background: (pool: "region_a"),
+            background: (
+                pool: "region_a",
+            ),
             config: {
                 "period_ms": 100,
                 "lanelet2_map": 3374,
@@ -91,7 +109,9 @@
             id: "settings_region",
             type: "crate::tasks::RefRegion<5>",
             kind: source,
-            background: (pool: "region_b"),
+            background: (
+                pool: "region_b",
+            ),
             config: {
                 "period_ms": 25,
                 "euclidean_cluster_settings": 3374,
@@ -103,7 +123,9 @@
             id: "planner_region",
             type: "crate::tasks::RefRegion<6>",
             kind: source,
-            background: (pool: "region_b"),
+            background: (
+                pool: "region_b",
+            ),
             config: {
                 "period_ms": 100,
                 "behavior_planner": 3374,
@@ -115,13 +137,43 @@
         ),
     ],
     cnx: [
-        (src: "front_region", dst: "__nc__", msg: "crate::payload::RefRegionSample"),
-        (src: "rear_region", dst: "__nc__", msg: "crate::payload::RefRegionSample"),
-        (src: "map_region", dst: "__nc__", msg: "crate::payload::RefRegionSample"),
-        (src: "visual_region", dst: "__nc__", msg: "crate::payload::RefRegionSample"),
-        (src: "lane_region", dst: "__nc__", msg: "crate::payload::RefRegionSample"),
-        (src: "settings_region", dst: "__nc__", msg: "crate::payload::RefRegionSample"),
-        (src: "planner_region", dst: "__nc__", msg: "crate::payload::RefRegionSample"),
+        (
+            src: "front_region",
+            dst: "__nc__",
+            msg: "crate::payload::RefRegionSample",
+        ),
+        (
+            src: "rear_region",
+            dst: "__nc__",
+            msg: "crate::payload::RefRegionSample",
+        ),
+        (
+            src: "map_region",
+            dst: "__nc__",
+            msg: "crate::payload::RefRegionSample",
+        ),
+        (
+            src: "visual_region",
+            dst: "__nc__",
+            msg: "crate::payload::RefRegionSample",
+        ),
+        (
+            src: "lane_region",
+            dst: "__nc__",
+            msg: "crate::payload::RefRegionSample",
+        ),
+        (
+            src: "settings_region",
+            dst: "__nc__",
+            msg: "crate::payload::RefRegionSample",
+        ),
+        (
+            src: "planner_region",
+            dst: "__nc__",
+            msg: "crate::payload::RefRegionSample",
+        ),
     ],
-    monitor: (type: "cu_consolemon::CuConsoleMon"),
+    monitor: (
+        type: "cu_consolemon::CuConsoleMon",
+    ),
 )
