@@ -1,0 +1,29 @@
+(
+    logging: (keyframe_interval: 1),
+    tasks: [
+        (
+            id: "src",
+            type: "StatefulSrc",
+        ),
+        (
+            id: "task",
+            type: "StatefulTask",
+        ),
+        (
+            id: "sink",
+            type: "StatefulSink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "task",
+            msg: "ValueMsg",
+        ),
+        (
+            src: "task",
+            dst: "sink",
+            msg: "ValueMsg",
+        ),
+    ],
+)
