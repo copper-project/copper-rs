@@ -2320,13 +2320,30 @@ fn apply_joystick_frame(frame: &RcFrame, rc_input: &mut SimRcInput) {
     rc_input.auto = frame.knob_sc.is_some_and(three_pos_is_middle);
 }
 
+/// Seconds parsed from an environment variable, for scripted (headless-ish) runs.
+fn env_seconds(name: &str) -> Option<f32> {
+    std::env::var(name).ok()?.trim().parse::<f32>().ok()
+}
+
 fn update_rc_input_keyboard(
     mut rc_input: ResMut<SimRcInput>,
     keyboard: Res<ButtonInput<KeyCode>>,
     rc_source: Res<RcInputSource>,
     _layout: Res<WorldLayout>,
+    time: Res<Time>,
     #[cfg(feature = "bevymon")] focus: Option<Res<CuBevyMonFocus>>,
 ) {
+    // CU_SIM_AUTOSTART_S=<secs>: arm in Angle mode and engage AUTO once the
+    // sim has been running that long, so scripted runs need no keyboard.
+    if let Some(after) = env_seconds("CU_SIM_AUTOSTART_S")
+        && !rc_input.armed
+        && time.elapsed_secs() >= after
+    {
+        rc_input.armed = true;
+        rc_input.mode = messages::FlightMode::Angle;
+        rc_input.auto = true;
+        info!("sim rc: CU_SIM_AUTOSTART_S reached; armed in Angle mode with auto=true");
+    }
     #[cfg(feature = "bevymon")]
     if _layout.split_monitor && !focus.is_some_and(|focus| focus.0 == CuBevyMonSurface::Sim) {
         return;
@@ -2527,6 +2544,15 @@ fn run_copper(
     mut exit_writer: MessageWriter<AppExit>,
 ) {
     let elapsed_ns = physics_time.elapsed().as_nanos() as u64;
+    // CU_SIM_EXIT_AFTER_S=<secs>: request a clean AppExit (Copper stops and
+    // the unified log is finalized) after that much simulated time.
+    if let Some(after) = env_seconds("CU_SIM_EXIT_AFTER_S")
+        && physics_time.elapsed().as_secs_f32() >= after
+    {
+        info!("sim: CU_SIM_EXIT_AFTER_S reached; exiting");
+        exit_writer.write(AppExit::Success);
+        return;
+    }
     if let Err(err) = run_copper_iteration(
         &mut copper,
         elapsed_ns,
