@@ -157,6 +157,13 @@ impl CuContext {
         self.current_task_index
             .and_then(|idx| self.task_ids.get(idx).copied())
     }
+
+    #[cfg(feature = "std")]
+    pub(crate) fn with_cl_id(&self, cl_id: u64) -> Self {
+        let mut context = self.clone();
+        context.cl_id = cl_id;
+        context
+    }
 }
 
 /// Builder for [`CuContext`].
