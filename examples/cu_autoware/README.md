@@ -89,7 +89,7 @@ analysis/data/
 The comparable real-time chains are:
 
 | Report | Copper endpoint | LaME chain | Deadline |
-|---|---|---:|---:|
+| --- | --- | ---: | ---: |
 | RT0 | front lidar → behavior-planner input | 1 (source chain 0) | 200 ms |
 | RT1 | rear lidar → point-cloud-fusion input | 0 (source chain 3) | 200 ms |
 | RT2 | behavior-planner timer → vehicle DBW | 2 (source chain 1) | 100 ms |
@@ -98,19 +98,17 @@ The report includes sample count, mean, p50, p99, maximum, deadline misses, samp
 CPU, and peak RSS; 100% CPU means one fully occupied logical core. Keep the raw files when comparing machines: Copper runs natively while
 LaME runs in a container, and the original paper evaluated LaME on NVIDIA Jetson hardware.
 
-# Copper vs. LaME results
+## Copper vs. LaME results
 
 (on a desktop class Ryzen CPU)
 
-# Copper vs. LaME results
-
 | System | Chain | Deadline |    n |               Mean |                p50 |                 p99 |                 Max |   Misses |        Mean CPU |          Peak RSS |
 | ------ | ----- | -------: | ---: | -----------------: | -----------------: | ------------------: | ------------------: | -------: | --------------: | ----------------: |
-| lame   | rt0   |   200 ms |  298 |         102.470 ms |         102.015 ms |          111.081 ms |          113.556 ms |        0 |          202.6% |          88.9 MiB |
+| LaME   | rt0   |   200 ms |  298 |         102.470 ms |         102.015 ms |          111.081 ms |          113.556 ms |        0 |          202.6% |          88.9 MiB |
 | copper | rt0   |   200 ms |  300 | 51.048 ms [x2.007] | 51.041 ms [x1.999] |  51.857 ms [x2.142] |  52.623 ms [x2.158] | 0 [same] | 177.1% [x1.144] | 28.3 MiB [x3.141] |
-| lame   | rt1   |   200 ms |  299 |         102.652 ms |          96.573 ms |          165.932 ms |          173.784 ms |        0 |          202.6% |          88.9 MiB |
+| LaME   | rt1   |   200 ms |  299 |         102.652 ms |          96.573 ms |          165.932 ms |          173.784 ms |        0 |          202.6% |          88.9 MiB |
 | copper | rt1   |   200 ms |  300 | 12.346 ms [x8.314] | 12.351 ms [x7.819] | 12.467 ms [x13.310] | 12.524 ms [x13.876] | 0 [same] | 177.1% [x1.144] | 28.3 MiB [x3.141] |
-| lame   | rt2   |   100 ms |  600 |          48.284 ms |          47.835 ms |           56.243 ms |           75.951 ms |        0 |          202.6% |          88.9 MiB |
+| LaME   | rt2   |   100 ms |  600 |          48.284 ms |          47.835 ms |           56.243 ms |           75.951 ms |        0 |          202.6% |          88.9 MiB |
 | copper | rt2   |   100 ms |  600 | 21.359 ms [x2.261] | 21.352 ms [x2.240] |  21.666 ms [x2.596] |  22.526 ms [x3.372] | 0 [same] | 177.1% [x1.144] | 28.3 MiB [x3.141] |
 
 Reference: [Latency Management for ROS 2: An Online Multi-Core Scheduling Approach](https://intra.engr.ucr.edu/~hyoseung/pdf/RTNS25_LaME.pdf).
