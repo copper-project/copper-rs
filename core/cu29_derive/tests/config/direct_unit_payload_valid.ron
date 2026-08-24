@@ -1,0 +1,15 @@
+(
+    tasks: [
+        (
+            id: "angle-src",
+            type: "AngleSource",
+        ),
+    ],
+    cnx: [
+        (
+            src: "angle-src",
+            dst: "__nc__",
+            msg: "cu29::units::si::f32::Angle",
+        ),
+    ],
+)

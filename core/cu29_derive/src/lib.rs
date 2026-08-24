@@ -1395,7 +1395,7 @@ fn gen_culist_support(
                 cu29::TaskOutputSpec {
                     task_id: #task_id,
                     msg_type: #msg_type,
-                    payload_type_path_fn: <#payload_type as cu29::prelude::TypePath>::type_path,
+                    payload_type_path_fn: cu29::reflect::__payload_type_path::<#payload_type>,
                 }
             }
         })
