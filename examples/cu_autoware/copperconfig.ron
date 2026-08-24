@@ -349,4 +349,7 @@
             msg: "crate::payload::RefSample",
         ),
     ],
+    monitor: (
+        type: "cu_consolemon::CuConsoleMon",
+    ),
 )

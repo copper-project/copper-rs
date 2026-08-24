@@ -17,6 +17,7 @@ publish = false
 [dependencies]
 cu29 = { workspace = true }
 cu29-export = { workspace = true, features = ["mcap"] }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "1.2.0-dev" }
 bincode = { workspace = true, features = ["derive"] }
 chrono = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
