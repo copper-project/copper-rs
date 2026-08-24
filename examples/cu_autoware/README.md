@@ -103,10 +103,10 @@ LaME runs in a container, and the original paper evaluated LaME on NVIDIA Jetson
 (on a desktop class Ryzen CPU)
 
 | System | Chain | Deadline | n | Mean | p50 | p99 | Max | Misses | Mean CPU | Peak RSS |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| copper | rt0 | 200 ms | 300 | 151.067 ms | 151.041 ms | 151.708 ms | 152.863 ms | 0 | 99.8% | 37.0 MiB |
-| copper | rt1 | 200 ms | 300 | 12.285 ms | 12.290 ms | 12.343 ms | 12.419 ms | 0 | 99.8% | 37.0 MiB |
-| copper | rt2 | 100 ms | 324 | 23.293 ms | 23.293 ms | 23.458 ms | 23.470 ms | 0 | 99.8% | 37.0 MiB |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| copper | rt0 | 200 ms | 300 | 50.862 ms | 50.814 ms | 51.927 ms | 52.361 ms | 0 | 176.4% | 28.1 MiB |
+| copper | rt1 | 200 ms | 300 | 12.368 ms | 12.364 ms | 12.531 ms | 12.848 ms | 0 | 176.4% | 28.1 MiB |
+| copper | rt2 | 100 ms | 600 | 21.370 ms | 21.374 ms | 21.693 ms | 22.616 ms | 0 | 176.4% | 28.1 MiB |
 | lame | rt0 | 200 ms | 299 | 103.469 ms | 102.483 ms | 113.462 ms | 117.721 ms | 0 | 185.7% | 89.8 MiB |
 | lame | rt1 | 200 ms | 300 | 81.880 ms | 81.583 ms | 88.854 ms | 91.454 ms | 0 | 185.7% | 89.8 MiB |
 | lame | rt2 | 100 ms | 600 | 47.749 ms | 47.348 ms | 56.414 ms | 60.854 ms | 0 | 185.7% | 89.8 MiB |
