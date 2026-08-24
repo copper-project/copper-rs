@@ -1,5 +1,5 @@
 //! Turns the reference system's per-node execution times into `crunch_limit` values for
-//! this host, and with `--apply` writes them into `copperconfig.ron`.
+//! this host, and writes them to `--output` or, for maintainers, `--apply`.
 //!
 //! Run it in release: the crunch is the workload under measurement, and a debug build
 //! calibrates a different one. `crunch` is `#[inline(never)]` so this binary and the app
@@ -10,13 +10,14 @@
 //! on the optimistic side of whatever the app ends up charging.
 
 use chrono::Local;
+use clap::Parser;
 use cu_autoware::tasks::crunch;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 /// (node id, config key, target execution time in µs). Fig. 4 of the RTNS'25 paper; the
-/// single authority for `--apply`. Nodes sharing a target share one measured limit.
+/// single authority for generated configs. Nodes sharing a target share one measured limit.
 ///
 /// `behavior_planner`'s `cache_crunch_limit` is deliberately absent: its 0.001ms input
 /// callback is a pointer assignment, below what a timed search can resolve, so the config
@@ -47,7 +48,7 @@ const TARGETS: &[(&str, &str, u64)] = &[
     ("lane_planner", "crunch_limit", 10100),
     ("ndt_localizer", "crunch_limit", 10100),
     ("vehicle_interface", "crunch_limit", 10100),
-    ("behavior_planner", "crunch_limit", 10100),
+    ("behavior_planner", "crunch_limit", 100),
     ("euclidean_cluster_detector", "crunch_limit0", 10100),
     ("lanelet2_global_planner", "crunch_limit", 10200),
     ("lanelet2_map_loader", "crunch_limit", 10200),
@@ -66,7 +67,18 @@ const PROBE_LIMIT: u64 = 20_000;
 const WARMUP: Duration = Duration::from_millis(500);
 const HEADER_MARK: &str = "// Calibrated on ";
 const HEADER_NOTE: &str =
-    "// Limits are host-measured: rerun `cargo run --release --bin calibrate -- --apply`.";
+    "// Limits are host-measured: rerun the calibrate binary for this machine.";
+
+#[derive(Parser)]
+#[command(about = "Calibrate the synthetic callback workloads for this host")]
+struct Args {
+    /// Write a calibrated copy without modifying the tracked configuration.
+    #[arg(long, conflicts_with = "apply")]
+    output: Option<PathBuf>,
+    /// Replace the tracked copperconfig.ron (maintainer workflow).
+    #[arg(long)]
+    apply: bool,
+}
 
 /// Median and spread (max-min over median, in %) of `RUNS` timed crunches, in µs.
 fn measure(limit: u64) -> (f64, f64) {
@@ -177,9 +189,9 @@ fn rewrite(body: &str, targets: &[(&str, &str, u64)], limits: &[(u64, u64)]) -> 
     (out, rewrites)
 }
 
-fn apply(limits: &[(u64, u64)]) {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("copperconfig.ron");
-    let text = fs::read_to_string(&path).expect("copperconfig.ron must be readable");
+fn write_config(limits: &[(u64, u64)], path: &PathBuf) {
+    let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("copperconfig.ron");
+    let text = fs::read_to_string(&source).expect("copperconfig.ron must be readable");
     let (body, rewrites) = rewrite(strip_header(&text), TARGETS, limits);
     if rewrites != TARGETS.len() {
         eprintln!(
@@ -195,8 +207,11 @@ fn apply(limits: &[(u64, u64)]) {
         Local::now().format("%Y-%m-%d")
     );
     // fmtron's canonical form has no trailing newline.
-    fs::write(&path, out.trim_end()).expect("copperconfig.ron must be writable");
-    println!("applied {rewrites} limits to {}", path.display());
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).expect("calibration output directory must be writable");
+    }
+    fs::write(path, out.trim_end()).expect("calibration output must be writable");
+    println!("wrote {rewrites} calibrated limits to {}", path.display());
 }
 
 fn main() {
@@ -204,14 +219,7 @@ fn main() {
         eprintln!("calibrate measures the release workload: cargo run --release --bin calibrate");
         std::process::exit(1);
     }
-    let mut apply_to_config = false;
-    for arg in std::env::args().skip(1) {
-        if arg != "--apply" {
-            eprintln!("unknown argument '{arg}'. usage: calibrate [--apply]");
-            std::process::exit(2);
-        }
-        apply_to_config = true;
-    }
+    let args = Args::parse();
 
     // The app runs the crunch back to back, so calibrate against a warm core: a cold one
     // reads several percent slow here, which is the whole error budget.
@@ -240,14 +248,17 @@ fn main() {
         worst = worst.max(err.abs());
     }
 
-    if apply_to_config {
+    if args.apply || args.output.is_some() {
         if worst > APPLY_BAR {
             eprintln!(
                 "worst class is {worst:.2}% off target, over the {APPLY_BAR}% bar. Nothing written."
             );
             std::process::exit(1);
         }
-        apply(&limits);
+        let path = args
+            .output
+            .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("copperconfig.ron"));
+        write_config(&limits, &path);
     }
 }
 

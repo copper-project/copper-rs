@@ -165,13 +165,13 @@
                 "cache_crunch_limit": 33926,
             },
         ),
-        // Cyclic: its timer callback is E 10.1ms, its six input callbacks 0.001ms each.
+        // Cyclic: its timer callback is E 0.1ms, its six input callbacks 0.001ms each.
         (
             id: "behavior_planner",
             type: "crate::tasks::RefCyclic",
             config: {
                 "period_ms": 100,
-                "crunch_limit": 109495,
+                "crunch_limit": 3374,
                 "cache_crunch_limit": 100,
             },
         ),

@@ -1,7 +1,7 @@
 //! Benchmark KPIs from one recorded run.
 //!
-//! `kpi [log base] [out dir]`, defaults `<crate>/logs/autoware.copper` and
-//! `<crate>/analysis/data`; `KPI_EXPECT=<n>` also asserts the copperlist count. One typed
+//! `kpi --log-base <path> --out-dir <path>`; `--expect <n>` also asserts the copperlist
+//! count. One typed
 //! walk over the copperlists yields every KPI; `CuDurationStatistics` does the aggregation
 //! and `cu29_export`'s `compute_logstats` writes the per-edge view next to the CSVs.
 //!
@@ -9,6 +9,7 @@
 //! pass over the graph, so a sample and everything it triggers share one list and the
 //! chain KPIs need no cross-list matching.
 
+use clap::Parser;
 use cu_autoware::payload;
 use cu29::prelude::*;
 use cu29_export::logstats::{compute_logstats, write_logstats};
@@ -118,7 +119,7 @@ const NODES: &[(&str, &[(&str, f64)])] = &[
             ("lanelet2_map_loader", 1.0),
             ("parking_planner", 1.0),
             ("lane_planner", 1.0),
-            ("behavior_planner", 10100.0),
+            ("behavior_planner", 100.0),
         ],
     ),
     ("mpc_controller", &[("mpc_controller", 10100.0)]),
@@ -261,6 +262,8 @@ struct Kpis {
     /// RT1 ends inside point_cloud_fusion's cache callback, whose end is not separately
     /// observable, so its modelled cost completes the chain.
     rt1_cache_ns: u64,
+    /// RT0 ends at behavior_planner's 1us input callback, not at the estimator output.
+    rt0_cache_ns: u64,
     hot_path: Series,
     rt1: Series,
     rt2: Series,
@@ -286,6 +289,7 @@ impl Kpis {
                 .map(|(index, name)| (name, index))
                 .collect(),
             rt1_cache_ns: charge_ns("point_cloud_fusion", "points_transformer_rear"),
+            rt0_cache_ns: charge_ns("behavior_planner", "object_collision_estimator"),
             hot_path: Series::new(
                 "seq,t_ms,latency_ms",
                 RT0_DEADLINE_MS * CEILING_FACTOR,
@@ -325,14 +329,22 @@ impl Kpis {
                 .unwrap_or(0),
         );
 
-        // (a) and (b): the update is a firing whether or not it is timeable, and the
-        // estimator's output carries the front_lidar tov it came from.
+        // (a) and (b): the estimator output carries the front_lidar tov. RT0 ends in the
+        // behavior planner's first input callback, modelled from its process start because
+        // Copper records one span for all of that node's callbacks.
         let estimator = msgs.get_object_collision_estimator_output();
         if let Some(sample) = estimator.payload() {
             *self.estimator_updates.entry(sample.seq).or_default() += 1;
-            match (tov_ns(estimator.tov), span(estimator.metadata.process_time)) {
-                (Some(at), Some((_, end))) => {
-                    self.hot_path.record(sample.seq, at, end.saturating_sub(at));
+            match (
+                tov_ns(estimator.tov),
+                span(msgs.get_behavior_planner_output().metadata.process_time),
+            ) {
+                (Some(at), Some((start, _))) => {
+                    self.hot_path.record(
+                        sample.seq,
+                        at,
+                        start.saturating_sub(at) + self.rt0_cache_ns,
+                    );
                 }
                 _ => self.timing_gaps += 1,
             }
@@ -429,6 +441,10 @@ impl Kpis {
         self.hot_path.report("hot path RT0");
         self.rt1.report("RT1 rear -> fusion*");
         self.rt2.report("RT2 planner -> dbw");
+        println!(
+            "* RT0 is behavior_planner's process start plus its {:.3}ms first-input cost.",
+            self.rt0_cache_ns as f64 / 1e6
+        );
         println!(
             "* RT1 is the rear edge tov to point_cloud_fusion's process start plus its \
              {:.1}ms cache cost, modelled from the cost table: the cache and the trigger \
@@ -555,15 +571,27 @@ fn write(dir: &Path, name: &str, content: &str) {
     println!("  {}", path.display());
 }
 
+#[derive(Parser)]
+#[command(about = "Extract comparable KPIs from a Copper benchmark log")]
+struct Args {
+    #[arg(long)]
+    log_base: Option<PathBuf>,
+    #[arg(long)]
+    out_dir: Option<PathBuf>,
+    /// Assert the exact number of recorded Copper graph passes.
+    #[arg(long)]
+    expect: Option<u64>,
+}
+
 fn main() {
     let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let mut args = std::env::args().skip(1);
-    let log_base = args.next().map_or_else(
+    let args = Args::parse();
+    let log_base = args.log_base.map_or_else(
         || crate_dir.join("logs").join("autoware.copper"),
         PathBuf::from,
     );
     let out_dir = args
-        .next()
+        .out_dir
         .map_or_else(|| crate_dir.join("analysis").join("data"), PathBuf::from);
 
     let config_path = crate_dir.join("copperconfig.ron");
@@ -614,17 +642,14 @@ fn main() {
             config_path.display()
         ));
     }
-    if let Ok(expected) = std::env::var("KPI_EXPECT") {
-        let expected: u64 = expected
-            .parse()
-            .unwrap_or_else(|e| fail(format!("KPI_EXPECT: {e}")));
-        if kpis.culists != expected {
-            fail(format!(
-                "{}: {} copperlists, KPI_EXPECT says {expected}",
-                log_base.display(),
-                kpis.culists
-            ));
-        }
+    if let Some(expected) = args.expect
+        && kpis.culists != expected
+    {
+        fail(format!(
+            "{}: {} copperlists, --expect says {expected}",
+            log_base.display(),
+            kpis.culists
+        ));
     }
 
     kpis.report(&log_base, (first, last));
@@ -958,7 +983,7 @@ mod tests {
             .flat_map(|(_, charges)| charges.iter())
             .map(|(_, us)| us)
             .sum();
-        assert!((total - 185_011.0).abs() < 1e-6, "{total}us");
+        assert!((total - 175_011.0).abs() < 1e-6, "{total}us");
     }
 
     #[test]
@@ -966,8 +991,8 @@ mod tests {
         let mut kpis = Kpis::new();
         kpis.record_pass(&fresh_pass());
 
-        // estimator end 1150 - front_lidar tov 1000.
-        assert_eq!(kpis.hot_path.stats.max(), CuDuration(150 * MS));
+        // behavior input starts at 1160 - front_lidar tov 1000, plus its 1us cost.
+        assert_eq!(kpis.hot_path.stats.max(), CuDuration(160 * MS + 1_000));
         // fusion process start 1012 - rear edge tov 1002, plus the 2.1ms cache cost.
         assert_eq!(kpis.rt1.stats.max(), CuDuration(10 * MS + 2_100_000));
         // dbw end 1191 - planner tov 1160.
