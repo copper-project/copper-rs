@@ -71,7 +71,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
     strategy:
@@ -152,7 +152,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
     strategy:
@@ -310,7 +310,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
     steps:
@@ -361,7 +361,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: ${{ matrix.target_os == 'windows' && 'core' || 'workspace' }}
 
     strategy:
@@ -484,7 +484,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
     steps:
@@ -540,7 +540,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
     steps:
@@ -584,7 +584,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
     steps:
@@ -642,7 +642,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: ${{ matrix.target_os == 'windows' && 'core' || 'workspace' }}
 
     strategy:
