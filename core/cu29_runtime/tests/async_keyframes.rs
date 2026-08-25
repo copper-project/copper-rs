@@ -156,17 +156,17 @@ fn continuously_busy_async_workers_produce_complete_keyframes() -> CuResult<()> 
         .map_err(|error| CuError::new_with_cause("create temp directory failed", error))?;
     let log_path = temp_dir.path().join("async_keyframes.copper");
     let logger = build_logger(&log_path)?;
-    let mut app = AsyncKeyframeApp::builder()
+    let app = AsyncKeyframeApp::builder()
         .with_logger::<MmapSectionStorage, MmapUnifiedLoggerWrite>(logger)
         .build()?;
 
-    app.start_all_tasks()?;
+    let mut running = app.start()?;
     for _ in 0..ITERATIONS {
-        app.run_one_iteration()?;
+        running.run_one_iteration()?;
         std::thread::sleep(Duration::from_millis(5));
     }
-    app.stop_all_tasks()?;
-    drop(app);
+    let stopped = running.stop()?;
+    drop(stopped);
 
     let UnifiedLogger::Read(reader) = UnifiedLoggerBuilder::new()
         .file_base_name(&log_path)

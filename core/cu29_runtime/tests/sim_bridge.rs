@@ -185,13 +185,13 @@ mod recording {
     struct RealApp {}
 
     pub(super) fn record(logger: Arc<Mutex<MmapUnifiedLoggerWrite>>) -> CuResult<()> {
-        let mut app = RealApp::builder()
+        let app = RealApp::builder()
             .with_logger::<MmapSectionStorage, MmapUnifiedLoggerWrite>(logger)
             .build()?;
-        app.start_all_tasks()?;
-        app.run_one_iteration()?;
-        app.run_one_iteration()?;
-        app.stop_all_tasks()?;
+        let mut running = app.start()?;
+        running.run_one_iteration()?;
+        running.run_one_iteration()?;
+        running.stop()?;
         Ok(())
     }
 }
@@ -208,6 +208,10 @@ mod run_in_sim {
     struct RunInSimApp {}
 
     #[test]
+    // Drives the raw (deprecated) sim lifecycle on purpose: restoring a keyframe
+    // into a started app is a replay primitive the lifecycle typestate
+    // deliberately does not expose.
+    #[allow(deprecated)]
     fn nonzero_bridge_keyframe_matches_linear_debug_replay() -> CuResult<()> {
         let temp_dir = tempfile::tempdir()
             .map_err(|error| CuError::new_with_cause("create temp log dir failed", error))?;
@@ -303,6 +307,10 @@ fn read_first_keyframe(path: &Path) -> CuResult<KeyFrame> {
 }
 
 #[test]
+// Drives the raw (deprecated) sim lifecycle on purpose: restoring a keyframe
+// into a started app is a replay primitive the lifecycle typestate
+// deliberately does not expose.
+#[allow(deprecated)]
 fn sim_restore_skips_substituted_bridge_frame() -> CuResult<()> {
     let temp_dir = tempfile::tempdir()
         .map_err(|error| CuError::new_with_cause("create temp log dir failed", error))?;
