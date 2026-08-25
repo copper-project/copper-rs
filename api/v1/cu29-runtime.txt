@@ -333,6 +333,7 @@ pub cu29_runtime::config::LoggingCodecSpec::type_: alloc::string::String
 pub struct cu29_runtime::config::LoggingConfig
 pub cu29_runtime::config::LoggingConfig::codecs: alloc::vec::Vec<cu29_runtime::config::LoggingCodecSpec>
 pub cu29_runtime::config::LoggingConfig::copperlist_count: core::option::Option<usize>
+pub cu29_runtime::config::LoggingConfig::enable_keyframe_logging: bool
 pub cu29_runtime::config::LoggingConfig::enable_task_logging: bool
 pub cu29_runtime::config::LoggingConfig::keyframe_interval: core::option::Option<u32>
 pub cu29_runtime::config::LoggingConfig::section_size_mib: core::option::Option<u64>

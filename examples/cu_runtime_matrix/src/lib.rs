@@ -1500,7 +1500,7 @@ mod tests {
     const TEST_COMPUTE_ROUNDS: u32 = 2;
     const MAX_BG_SETTLE_ITERS: u64 = 32;
     const BG_STABLE_PASSES: usize = 4;
-    const TRACE_FIXTURE_KEYFRAME_INTERVAL: u32 = u32::MAX;
+    const TRACE_FIXTURE_KEYFRAME_INTERVAL: u32 = 1;
 
     #[derive(Debug, Clone, PartialEq)]
     struct NormalizedCuMsg {
@@ -1595,9 +1595,8 @@ mod tests {
         let logging = config
             .logging
             .get_or_insert_with(cu29::config::LoggingConfig::default);
-        // These tests validate live traces and CopperLists, not replay keyframes.
-        // Async background tasks may legitimately have work in flight at normal
-        // keyframe boundaries, so keep only the initial idle keyframe.
+        // Capture every distributed execution-wave cut, including cuts taken while
+        // background workers are continuously occupied.
         logging.keyframe_interval = Some(TRACE_FIXTURE_KEYFRAME_INTERVAL);
     }
 

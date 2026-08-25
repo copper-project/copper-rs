@@ -1021,19 +1021,10 @@ where
 }
 
 fn nearest_replay_anchor(keyframes: &[KeyFrame], target_culistid: u64) -> Option<KeyFrame> {
-    // Nonzero runtime keyframes are currently frozen task-by-task immediately before each
-    // task process step, so restoring one and replaying from the top of the CL can create a
-    // mixed task-boundary state. The initial keyframe is still a coherent replay anchor.
     keyframes
         .iter()
-        .filter(|kf| kf.culistid == 0 && kf.culistid <= target_culistid)
+        .filter(|kf| kf.culistid <= target_culistid)
         .max_by_key(|kf| kf.culistid)
-        .or_else(|| {
-            keyframes
-                .iter()
-                .filter(|kf| kf.culistid <= target_culistid)
-                .min_by_key(|kf| kf.culistid)
-        })
         .cloned()
 }
 
@@ -1050,21 +1041,21 @@ mod tests {
     }
 
     #[test]
-    fn replay_anchor_prefers_initial_keyframe_over_later_task_boundary_keyframes() {
+    fn replay_anchor_selects_nearest_keyframe_at_or_before_target() {
         let keyframes = [keyframe(0), keyframe(100), keyframe(500)];
 
         let anchor = nearest_replay_anchor(&keyframes, 533).expect("replay anchor");
 
-        assert_eq!(anchor.culistid, 0);
+        assert_eq!(anchor.culistid, 500);
     }
 
     #[test]
-    fn replay_anchor_falls_back_to_earliest_keyframe_without_initial_anchor() {
+    fn replay_anchor_uses_nearest_available_nonzero_keyframe() {
         let keyframes = [keyframe(100), keyframe(500), keyframe(900)];
 
         let anchor = nearest_replay_anchor(&keyframes, 533).expect("replay anchor");
 
-        assert_eq!(anchor.culistid, 100);
+        assert_eq!(anchor.culistid, 500);
         assert!(nearest_replay_anchor(&keyframes, 99).is_none());
     }
 }

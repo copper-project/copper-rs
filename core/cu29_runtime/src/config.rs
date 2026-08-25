@@ -2278,6 +2278,14 @@ pub struct LoggingConfig {
     #[serde(default = "default_as_true", skip_serializing_if = "Clone::clone")]
     pub enable_task_logging: bool,
 
+    /// Generate and record task-state keyframes.
+    ///
+    /// This is a compile-time application property: `#[copper_runtime]` emits no
+    /// keyframe capture calls when it is `false`. CopperList and structured logging
+    /// remain available.
+    #[serde(default = "default_as_true", skip_serializing_if = "Clone::clone")]
+    pub enable_keyframe_logging: bool,
+
     /// Number of preallocated CopperLists available to the runtime.
     ///
     /// This is consumed by proc-macro codegen and must match the value compiled into the
@@ -2309,6 +2317,7 @@ impl Default for LoggingConfig {
     fn default() -> Self {
         Self {
             enable_task_logging: true,
+            enable_keyframe_logging: true,
             copperlist_count: None,
             slab_size_mib: None,
             section_size_mib: None,
@@ -6196,6 +6205,20 @@ mod tests {
         let config = CuConfig::deserialize_ron(txt).unwrap();
         let logging_config = config.logging.unwrap();
         assert_eq!(logging_config.keyframe_interval.unwrap(), 314);
+        assert!(logging_config.enable_keyframe_logging);
+    }
+
+    #[test]
+    fn test_keyframe_logging_can_be_disabled_independently() {
+        let txt = r#"(
+            tasks: [],
+            cnx: [],
+            logging: (enable_task_logging: true, enable_keyframe_logging: false),
+        )"#;
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let logging = config.logging.unwrap();
+        assert!(logging.enable_task_logging);
+        assert!(!logging.enable_keyframe_logging);
     }
 
     #[test]
