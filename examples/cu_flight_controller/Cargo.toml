@@ -253,6 +253,7 @@ logreader = [
   "bincode/std",
   "serde/std",
   "dep:cu29-export",
+  "cu29-export/mcap",
   "dep:cu-crsf",
   "dep:cu-msp-bridge",
   "dep:cu-bdshot",

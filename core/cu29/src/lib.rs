@@ -321,8 +321,9 @@ pub mod prelude {
         CuMsgOrigin, CuPayloadRawBytes, CuResult, DebugEnumVariantDescriptor, DebugEnumVariantKind,
         DebugFieldDescriptor, DebugFieldKind, DebugFieldSemantics, DebugScalarKind,
         DebugScalarRegistration, DebugScalarType, ErasedCuStampedData, ErasedCuStampedDataSet,
-        MatchingTasks, Metadata, ObservedWriter, PayloadSchemas, TaskOutputSpec, UnifiedLogType,
-        WriteStream, abort_observed_encode, begin_observed_encode, finish_observed_encode,
+        MatchingTasks, Metadata, ObservedWriter, PayloadSchemas, ReflectSerializedPayloadSchema,
+        SerializedPayloadSchema, TaskOutputSpec, UnifiedLogType, WriteStream,
+        abort_observed_encode, begin_observed_encode, finish_observed_encode,
         observed_encode_bytes, record_observed_encode_bytes, with_cause,
     };
     #[cfg(feature = "std")]

@@ -3,6 +3,7 @@
 use core::any::TypeId;
 use std::collections::BTreeSet;
 
+use cu29::prelude::ReflectSerializedPayloadSchema;
 use cu29::reflect::{
     ArrayInfo, EnumInfo, GetTypeRegistration, ListInfo, MapInfo, NamedField, SetInfo, StructInfo,
     TupleInfo, TupleStructInfo, Type, TypeInfo, TypeRegistry, VariantInfo,
@@ -105,6 +106,10 @@ impl<'a> ReflectSchemaBuilder<'a> {
     }
 
     fn inline_schema_for_type(&mut self, type_info: &'static TypeInfo) -> Value {
+        if let Some(schema) = self.serialized_payload_schema(type_info) {
+            return schema;
+        }
+
         match type_info {
             TypeInfo::Struct(info) => self.schema_for_struct(info),
             TypeInfo::TupleStruct(info) => self.schema_for_tuple_struct(info),
@@ -119,6 +124,14 @@ impl<'a> ReflectSchemaBuilder<'a> {
                     json!({ "description": format!("Opaque reflected type: {}", info.type_path()) })
                 }),
         }
+    }
+
+    fn serialized_payload_schema(&self, type_info: &'static TypeInfo) -> Option<Value> {
+        let registration = self.registry.get(type_info.type_id())?;
+        let schema = registration.data::<ReflectSerializedPayloadSchema>()?;
+        let mut schema = serde_json::from_str::<Value>(schema.schema()).ok()?;
+        schema.as_object_mut()?.remove("$schema");
+        Some(schema)
     }
 
     fn schema_for_struct(&mut self, info: &StructInfo) -> Value {
@@ -501,6 +514,7 @@ fn escape_json_pointer(segment: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cu_sensor_payloads::{CuDepthInteger, CuDepthMap, CuDepthMillimeter};
     use cu29::bevy_reflect;
     use cu29::prelude::Reflect;
 
@@ -599,5 +613,18 @@ mod tests {
 
         assert!(root["properties"]["kept"].is_object());
         assert!(root["properties"].get("skipped").is_none());
+    }
+
+    #[test]
+    fn payload_owned_schema_overrides_reflected_fields() {
+        type CompactDepth = CuDepthMap<Vec<u16>, CuDepthInteger<u16, CuDepthMillimeter>>;
+
+        let schema = trace_type_to_jsonschema::<CompactDepth>();
+        let parsed: Value = serde_json::from_str(&schema).expect("Invalid depth schema");
+        let root = find_def(&parsed, "CuDepthMapInteger");
+
+        assert_eq!(root["properties"]["handle"]["type"], "array");
+        assert_eq!(root["properties"]["handle"]["items"]["type"], "integer");
+        assert_eq!(root["required"], json!(["format", "encoding", "handle"]));
     }
 }
