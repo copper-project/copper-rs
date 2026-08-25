@@ -835,6 +835,10 @@ where
 ///
 /// The default implementation returns an empty vector for backwards compatibility
 /// with code that doesn't need MCAP export support.
+#[deprecated(
+    since = "1.2.0",
+    note = "generated logreaders now derive schemas from output metadata; use SerializedPayloadSchema for custom serialized payload shapes or export_to_mcap_with_schemas for explicit per-slot schemas"
+)]
 pub trait PayloadSchemas {
     /// Returns a vector of (task_id, schema_json) pairs.
     ///

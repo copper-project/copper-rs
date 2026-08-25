@@ -45,6 +45,7 @@ use std::path::{Path, PathBuf};
 pub use mcap_export::{McapExportStats, export_to_mcap, export_to_mcap_with_schemas, mcap_info};
 
 #[cfg(feature = "mcap")]
+#[allow(deprecated)]
 pub use cu29::prelude::PayloadSchemas;
 
 #[cfg(feature = "mcap")]
