@@ -212,6 +212,9 @@ just rc
 # Run the normal full-window simulator with MCU + compute Copper runtimes
 just
 
+# Run the autonomous demo, then exit cleanly after 45 simulated seconds
+just demo
+
 # Run the split BevyMon simulator
 just bevy
 
@@ -221,6 +224,10 @@ just web
 # Build a deployable browser bundle into dist/flight-controller with hashed asset filenames
 just web-dist
 ```
+
+The browser bundle enables the compile-time `autonomous-demo` profile: it arms in Angle mode and
+engages AUTO after four simulated seconds, then keeps running. The native `just demo` profile uses
+the same autonomous start and exits cleanly after 45 simulated seconds to finalize its logs.
 
 The split BevyMon path reuses the same `cu_bevymon::spawn_split_layout(...)` shell as
 `cu_rp_balancebot` and `cu_bevymon_demo`, but the left panel still runs the real flight-controller

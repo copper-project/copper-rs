@@ -177,6 +177,7 @@ bevy = { workspace = true, default-features = false, features = [
 default = ["sim", "forest-world"]
 forest-world = []
 urban-world = []
+autonomous-demo = []
 sim_core = [
   "dep:cu29",
   "cu29/std",

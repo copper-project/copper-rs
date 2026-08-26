@@ -68,6 +68,13 @@ sim:
   cd "{{ROOT}}"
   cargo --config examples/cu_flight_controller/.cargo/config.toml run -r -p cu-flight-controller --no-default-features --features sim,forest-world --bin quad-sim
 
+# Run a self-starting autonomous demo and exit cleanly so logs are finalized.
+demo:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+  cargo --config examples/cu_flight_controller/.cargo/config.toml run -r -p cu-flight-controller --no-default-features --features sim,forest-world,autonomous-demo --bin quad-sim
+
 # Run the Bevy + Copper simulation loop in the urban world.
 sim-urban:
   #!/usr/bin/env bash
