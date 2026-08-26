@@ -93,6 +93,7 @@ pub use cu29_runtime::parallel_queue;
 #[cfg(all(feature = "std", feature = "parallel-rt"))]
 pub use cu29_runtime::parallel_rt;
 pub use cu29_runtime::payload;
+pub use cu29_runtime::planner;
 #[cfg(feature = "std")]
 pub use cu29_runtime::pool;
 pub use cu29_runtime::reflect;

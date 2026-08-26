@@ -20,6 +20,7 @@ pub use cu29::logcodec
 pub use cu29::monitoring
 pub use cu29::output_msg
 pub use cu29::payload
+pub use cu29::planner
 pub use cu29::pool
 pub use cu29::rayon
 pub use cu29::read_configuration

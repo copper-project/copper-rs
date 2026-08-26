@@ -2225,6 +2225,45 @@ impl CuConfig {
         }
     }
 
+    /// The configured planner selection, if any (absent means `Linearity`).
+    // rendercfg.rs recompiles this file via `mod config;`, so pub helpers it
+    // does not call are dead code in that bin under `clippy --deny warnings`.
+    #[allow(dead_code)]
+    pub fn planner_config(&self) -> Option<&PlannerConfig> {
+        self.runtime.as_ref()?.planner.as_ref()
+    }
+
+    /// The step order baked at build time for `mission`, if the config carries one.
+    #[doc(hidden)]
+    #[allow(dead_code)]
+    pub fn planner_resolved_order(&self, mission: &str) -> Option<&[String]> {
+        self.planner_config()?
+            .resolved
+            .as_ref()?
+            .get(mission)
+            .map(Vec::as_slice)
+    }
+
+    /// Bake per-mission resolved step orders into the planner section,
+    /// creating the section (with `type_`) if the loaded config lacks one.
+    /// Codegen contract: generated apps call this before logging the
+    /// effective config.
+    #[doc(hidden)]
+    #[allow(dead_code)]
+    pub fn set_planner_resolved_orders(
+        &mut self,
+        type_: &str,
+        orders: impl IntoIterator<Item = (String, Vec<String>)>,
+    ) {
+        let runtime = self.runtime.get_or_insert_with(RuntimeConfig::default);
+        let planner = runtime.planner.get_or_insert_with(|| PlannerConfig {
+            type_: type_.to_string(),
+            config: None,
+            resolved: None,
+        });
+        planner.resolved = Some(orders.into_iter().collect());
+    }
+
     #[cfg(feature = "std")]
     fn has_background_tasks(&self) -> bool {
         match &self.graphs {
@@ -2354,6 +2393,52 @@ pub struct RuntimeConfig {
     /// threads and this section is ignored.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub thread_pools: Vec<ThreadPoolConfig>,
+
+    /// Execution planner selection, one for the whole config.
+    ///
+    /// This is a codegen input: `#[copper_runtime]` bakes the resulting plan
+    /// into the binary. Editing it in a deployed app's RON at startup does not
+    /// change the compiled plan (same class as `logging.copperlist_count`); the
+    /// RON must match the binary that wrote the log.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub planner: Option<PlannerConfig>,
+}
+
+/// Selects the planner that orders the steps of every mission graph, plus its
+/// config. Mirrors [`MonitorConfig`]: `type` names a `CuPlanner` implementation.
+/// Copper ships `cu29::planner::Linearity` (the default when this section is
+/// absent) and `cu29::planner::Pinned`; any other type is an out-of-tree
+/// planner resolved at build time by `cu29::planner::emit_plan` in the
+/// application's `build.rs`.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PlannerConfig {
+    #[serde(rename = "type")]
+    pub(crate) type_: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) config: Option<ComponentConfig>,
+    /// Step order per mission (stable step keys), baked at build time when an
+    /// out-of-tree planner resolved the plan. Takes precedence over `type`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) resolved: Option<BTreeMap<String, Vec<String>>>,
+}
+
+impl PlannerConfig {
+    #[allow(dead_code)]
+    pub fn get_type(&self) -> &str {
+        &self.type_
+    }
+
+    #[allow(dead_code)]
+    pub fn get_config(&self) -> Option<&ComponentConfig> {
+        self.config.as_ref()
+    }
+
+    /// The per-mission step orders baked at build time, if any.
+    #[doc(hidden)]
+    #[allow(dead_code)]
+    pub fn resolved_orders(&self) -> Option<&BTreeMap<String, Vec<String>>> {
+        self.resolved.as_ref()
+    }
 }
 
 /// Smallest valid real-time priority for [`SchedulingPolicy::Fifo`]/[`SchedulingPolicy::RoundRobin`].
@@ -3197,7 +3282,7 @@ impl CuConfig {
         }
     }
 
-    fn get_options() -> Options {
+    pub(crate) fn get_options() -> Options {
         Options::default()
             .with_default_extension(Extensions::IMPLICIT_SOME)
             .with_default_extension(Extensions::UNWRAP_NEWTYPES)
@@ -5129,6 +5214,55 @@ mod tests {
         let deserialized_graph = deserialized.graphs.get_graph(None).unwrap();
         assert_eq!(graph.node_count(), deserialized_graph.node_count());
         assert_eq!(graph.edge_count(), deserialized_graph.edge_count());
+    }
+
+    #[test]
+    fn test_planner_config_defaults_and_round_trips() {
+        // The default has no planner section and none is serialized.
+        let mut config = CuConfig::default();
+        config
+            .get_graph_mut(None)
+            .unwrap()
+            .add_node(Node::new("a", "demo::A"))
+            .unwrap();
+        assert!(!config.serialize_ron().unwrap().contains("planner"));
+        assert!(config.planner_config().is_none());
+
+        // A planner selection round-trips, including baked resolved orders.
+        let txt = r#"( tasks: [], cnx: [],
+            runtime: ( planner: ( type: "cu29::planner::Pinned", config: { "order": ["a", "b"] } ) ) )"#;
+        let mut config = CuConfig::deserialize_ron(txt).unwrap();
+        let planner = config.planner_config().unwrap();
+        assert_eq!(planner.get_type(), "cu29::planner::Pinned");
+        let order: Vec<String> = planner
+            .get_config()
+            .unwrap()
+            .get_value("order")
+            .unwrap()
+            .unwrap();
+        assert_eq!(order, ["a", "b"]);
+
+        config.set_planner_resolved_orders(
+            "cu29::planner::Pinned",
+            [("default".to_string(), vec!["task:a".to_string()])],
+        );
+        let reparsed = CuConfig::deserialize_ron(&config.serialize_ron().unwrap()).unwrap();
+        assert_eq!(
+            reparsed.planner_resolved_order("default").unwrap(),
+            ["task:a".to_string()]
+        );
+
+        // The stamp creates the planner section when the loaded RON lacks one.
+        let mut bare = CuConfig::default();
+        bare.set_planner_resolved_orders(
+            "acme::Planner",
+            [("default".to_string(), vec!["task:a".to_string()])],
+        );
+        assert_eq!(bare.planner_config().unwrap().get_type(), "acme::Planner");
+        assert_eq!(
+            bare.planner_resolved_order("default").unwrap(),
+            ["task:a".to_string()]
+        );
     }
 
     #[test]
