@@ -62,20 +62,16 @@ const SLAB_SIZE: Option<usize> = None;
 
 fn main() {
     let logger_path = std::env::temp_dir().join("cu_custom_planner.copper");
-    let mut application = App::builder()
+    let application = App::builder()
         .with_log_path(&logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
         .build()
         .expect("Failed to create runtime");
-    application
-        .start_all_tasks()
-        .expect("Failed to start application.");
-    application
+    let mut running = application.start().expect("Failed to start application.");
+    running
         .run_one_iteration()
         .expect("Failed to run application.");
-    application
-        .stop_all_tasks()
-        .expect("Failed to stop application.");
+    running.stop().expect("Failed to stop application.");
 
     let ran = RAN.lock().unwrap().clone();
     // The out-of-tree Alphabetical planner runs a_left before b_right; the
