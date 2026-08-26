@@ -52,7 +52,7 @@ use cu29_value::to_value;
 use alloc::alloc::{alloc_zeroed, handle_alloc_error};
 use alloc::boxed::Box;
 use alloc::format;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use bincode::de::read::Reader;
 use bincode::de::{Decoder, DecoderImpl};
