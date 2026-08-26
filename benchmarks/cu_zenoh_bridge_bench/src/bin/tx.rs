@@ -47,20 +47,19 @@ fn drive() -> CuResult<()> {
         transport_details,
         options.log_path.display(),
     );
-    let mut app = TxApp::builder()
+    let app = TxApp::builder()
         .with_log_path(&options.log_path, SLAB_SIZE)?
         .with_instance_id(options.instance_id)
         .with_config(config)
         .build()?;
-    app.start_all_tasks()?;
     println!(
         "TX ready: publishing every 10ms on route={} {}",
         summary.route,
         summary.transport_details(),
     );
-    let run_result = app.run();
-    let stop_result = app.stop_all_tasks();
-    run_result?;
-    stop_result?;
+    // `run` drives the full start/iterate/stop cycle; the typestate rejects
+    // the extra start_all_tasks/stop_all_tasks calls this benchmark used to
+    // make around it (a double start/stop at runtime).
+    app.run_until_shutdown()?;
     Ok(())
 }

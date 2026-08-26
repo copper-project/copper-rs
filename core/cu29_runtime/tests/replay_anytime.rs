@@ -353,19 +353,19 @@ fn record_run(log_path: &Path) -> CuResult<()> {
     let (clock, clock_mock) = RobotClock::mock();
     let mut noop = |_step: default::SimStep<'_>| SimOverride::ExecuteByRuntime;
 
-    let mut app = AnytimeReplayApp::builder()
+    let app = AnytimeReplayApp::builder()
         .with_clock(clock)
         .with_log_path(log_path, LOG_SLAB_SIZE)?
         .with_sim_callback(&mut noop)
         .build()?;
 
-    app.start_all_tasks(&mut noop)?;
+    let mut app = app.start(&mut noop)?;
     for index in 0..ITERATIONS {
         clock_mock.set_value(index * DT_NANOS);
         app.run_one_iteration(&mut noop)?;
     }
-    app.stop_all_tasks(&mut noop)?;
-    drop(app);
+    // stop consumes the handle; the returned Stopped app drops here, flushing the logger.
+    app.stop(&mut noop)?;
     Ok(())
 }
 
@@ -374,7 +374,7 @@ fn record_run(log_path: &Path) -> CuResult<()> {
 /// two anytime nodes to the runtime, so their base and refine quanta execute for
 /// real against the recorded input.
 fn resim_one(
-    app: &mut AnytimeReplayApp,
+    app: &mut CuStdSimAppLifecycle<AnytimeReplayApp, Running>,
     clock_mock: &RobotClockMock,
     recorded: &RecordedCl,
 ) -> CuResult<()> {
@@ -396,18 +396,18 @@ fn resim_run(recorded: &[RecordedCl], log_path: &Path) -> CuResult<()> {
     let (clock, clock_mock) = RobotClock::mock();
     let mut noop = |_step: default::SimStep<'_>| SimOverride::ExecuteByRuntime;
 
-    let mut app = AnytimeReplayApp::builder()
+    let app = AnytimeReplayApp::builder()
         .with_clock(clock)
         .with_log_path(log_path, LOG_SLAB_SIZE)?
         .with_sim_callback(&mut noop)
         .build()?;
 
-    app.start_all_tasks(&mut noop)?;
+    let mut app = app.start(&mut noop)?;
     for copperlist in recorded {
         resim_one(&mut app, &clock_mock, copperlist)?;
     }
-    app.stop_all_tasks(&mut noop)?;
-    drop(app);
+    // stop consumes the handle; the returned Stopped app drops here, flushing the logger.
+    app.stop(&mut noop)?;
     Ok(())
 }
 

@@ -1,3 +1,9 @@
+// Benchmark/matrix harness: dispatches over the generated mission apps via a
+// plain enum, driving the raw (app-deprecated) lifecycle API on purpose. The
+// typestate handle would require the enum itself to implement CuApplication;
+// not worth it for a benchmark driver.
+#![allow(deprecated)]
+
 use bincode::{Decode, Encode};
 use clap::{Parser, ValueEnum};
 use cu29::prelude::*;
@@ -1147,7 +1153,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
         MissionArg::OneToManyBackground => Ok(MissionApp::OneToManyBackground(
             OneToManyBackground::RuntimeMatrixApp::builder()
@@ -1155,7 +1162,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
         MissionArg::ManyToOne => Ok(MissionApp::ManyToOne(
             ManyToOne::RuntimeMatrixApp::builder()
@@ -1163,7 +1171,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
         MissionArg::ManyToOneBackground => Ok(MissionApp::ManyToOneBackground(
             ManyToOneBackground::RuntimeMatrixApp::builder()
@@ -1171,7 +1180,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
         MissionArg::ManyToMany => Ok(MissionApp::ManyToMany(
             ManyToMany::RuntimeMatrixApp::builder()
@@ -1179,7 +1189,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
         MissionArg::ManyToManyBackground => Ok(MissionApp::ManyToManyBackground(
             ManyToManyBackground::RuntimeMatrixApp::builder()
@@ -1187,7 +1198,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
         MissionArg::BridgeFanout => Ok(MissionApp::BridgeFanout(
             BridgeFanout::RuntimeMatrixApp::builder()
@@ -1195,7 +1207,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
         MissionArg::BridgeFanoutBackground => Ok(MissionApp::BridgeFanoutBackground(
             BridgeFanoutBackground::RuntimeMatrixApp::builder()
@@ -1203,7 +1216,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
     }
 }

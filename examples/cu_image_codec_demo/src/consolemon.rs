@@ -24,14 +24,15 @@ pub fn main() {
         std::fs::create_dir_all(parent).expect("Failed to create log directory");
     }
 
-    let mut application = ImageCodecDemoConsolemonApp::builder()
+    let application = ImageCodecDemoConsolemonApp::builder()
         .with_log_path(&log_path, Some(64 * 1024 * 1024))
         .expect("Failed to setup Copper log")
         .build()
         .expect("Failed to create application");
 
-    if let Err(err) = application.run() {
-        if err.message() != "Exiting..." {
+    if let Err(err) = application.run_until_shutdown() {
+        if err.error.message() != "Exiting..." {
+            let err = err.error;
             error!("{err:?}");
         }
     }

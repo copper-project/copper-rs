@@ -162,12 +162,12 @@ fn open_copperlist_reader(log_path: &Path) -> CuResult<UnifiedLoggerIOReader> {
 macro_rules! resim_default {
     ($app:ident, $output_path:expr, $robot_clock:expr, $clock_mock:expr, $input_log_path:expr) => {{
         let mut default_cb = |_step: $app::SimStep<'_>| SimOverride::ExecuteByRuntime;
-        let mut app = $app::BridgeSchedulerReSim::builder()
+        let app = $app::BridgeSchedulerReSim::builder()
             .with_clock($robot_clock)
             .with_log_path($output_path, LOG_SLAB_SIZE)?
             .with_sim_callback(&mut default_cb)
             .build()?;
-        app.start_all_tasks(&mut default_cb)?;
+        let mut app = app.start(&mut default_cb)?;
 
         let mut reader = open_copperlist_reader($input_log_path)?;
         for entry in copperlists_reader::<$app::CuStampedDataSet>(&mut reader) {
@@ -176,7 +176,7 @@ macro_rules! resim_default {
             app.run_one_iteration(&mut sim_cb)?;
         }
 
-        app.stop_all_tasks(&mut default_cb)?;
+        app.stop(&mut default_cb)?;
         Ok(())
     }};
 }
@@ -221,12 +221,12 @@ fn resim_source_to_bridge(
     input_log_path: &Path,
 ) -> CuResult<()> {
     let mut default_cb = |_step: SourceToBridge::SimStep<'_>| SimOverride::ExecuteByRuntime;
-    let mut app = SourceToBridge::BridgeSchedulerReSim::builder()
+    let app = SourceToBridge::BridgeSchedulerReSim::builder()
         .with_clock(clock)
         .with_log_path(output_path, LOG_SLAB_SIZE)?
         .with_sim_callback(&mut default_cb)
         .build()?;
-    app.start_all_tasks(&mut default_cb)?;
+    let mut app = app.start(&mut default_cb)?;
 
     let mut reader = open_copperlist_reader(input_log_path)?;
     for entry in copperlists_reader::<SourceToBridge::CuStampedDataSet>(&mut reader) {
@@ -235,7 +235,7 @@ fn resim_source_to_bridge(
         app.run_one_iteration(&mut sim_cb)?;
     }
 
-    app.stop_all_tasks(&mut default_cb)?;
+    app.stop(&mut default_cb)?;
     Ok(())
 }
 
@@ -259,12 +259,12 @@ fn resim_bridge_to_sink(
     input_log_path: &Path,
 ) -> CuResult<()> {
     let mut default_cb = |_step: BridgeToSink::SimStep<'_>| SimOverride::ExecuteByRuntime;
-    let mut app = BridgeToSink::BridgeSchedulerReSim::builder()
+    let app = BridgeToSink::BridgeSchedulerReSim::builder()
         .with_clock(clock)
         .with_log_path(output_path, LOG_SLAB_SIZE)?
         .with_sim_callback(&mut default_cb)
         .build()?;
-    app.start_all_tasks(&mut default_cb)?;
+    let mut app = app.start(&mut default_cb)?;
 
     let mut reader = open_copperlist_reader(input_log_path)?;
     for entry in copperlists_reader::<BridgeToSink::CuStampedDataSet>(&mut reader) {
@@ -273,7 +273,7 @@ fn resim_bridge_to_sink(
         app.run_one_iteration(&mut sim_cb)?;
     }
 
-    app.stop_all_tasks(&mut default_cb)?;
+    app.stop(&mut default_cb)?;
     Ok(())
 }
 
@@ -297,12 +297,12 @@ fn resim_bridge_task_same(
     input_log_path: &Path,
 ) -> CuResult<()> {
     let mut default_cb = |_step: BridgeTaskSame::SimStep<'_>| SimOverride::ExecuteByRuntime;
-    let mut app = BridgeTaskSame::BridgeSchedulerReSim::builder()
+    let app = BridgeTaskSame::BridgeSchedulerReSim::builder()
         .with_clock(clock)
         .with_log_path(output_path, LOG_SLAB_SIZE)?
         .with_sim_callback(&mut default_cb)
         .build()?;
-    app.start_all_tasks(&mut default_cb)?;
+    let mut app = app.start(&mut default_cb)?;
 
     let mut reader = open_copperlist_reader(input_log_path)?;
     for entry in copperlists_reader::<BridgeTaskSame::CuStampedDataSet>(&mut reader) {
@@ -311,7 +311,7 @@ fn resim_bridge_task_same(
         app.run_one_iteration(&mut sim_cb)?;
     }
 
-    app.stop_all_tasks(&mut default_cb)?;
+    app.stop(&mut default_cb)?;
     Ok(())
 }
 
@@ -347,7 +347,8 @@ macro_rules! define_remote_debug_mission {
                 .with_log_path(replay_log_base, LOG_SLAB_SIZE)?
                 .with_sim_callback(&mut default_cb)
                 .build()?;
-            Ok((app, clock, clock_mock))
+            // The replay session engine drives the raw lifecycle itself.
+            Ok((app.into_inner(), clock, clock_mock))
         }
 
         fn $build_callback<'a>(

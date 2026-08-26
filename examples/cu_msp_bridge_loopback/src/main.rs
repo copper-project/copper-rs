@@ -47,21 +47,21 @@ fn drive() -> CuResult<()> {
     emulator.configure_bridge(&mut config)?;
     install_ctrlc_cleanup(emulator.symlink_path.clone())?;
 
-    let mut app = CuMspBridgeLoopbackApp::builder()
+    let app = CuMspBridgeLoopbackApp::builder()
         .with_log_path(&logger_path, Some(16 * 1024 * 1024))?
         .with_config(config)
         .build()?;
 
-    app.start_all_tasks()?;
+    let mut running = app.start()?;
     for i in 0..3 {
         debug!("Running iteration {}", i);
-        app.run_one_iteration()?;
+        running.run_one_iteration()?;
         if tasks::state::was_validated() {
             break;
         }
         thread::sleep(Duration::from_millis(10));
     }
-    app.stop_all_tasks()?;
+    running.stop()?;
 
     if !tasks::state::was_validated() {
         return Err(CuError::from(

@@ -1,3 +1,8 @@
+// Replay harness: drives the raw (app-deprecated) lifecycle API on purpose.
+// Replay needs mid-flight runtime access (keyframe locking, forced
+// timestamps) that the lifecycle typestate deliberately does not expose.
+#![allow(deprecated)]
+
 pub mod tasks;
 
 use cu29::prelude::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
@@ -153,7 +158,8 @@ fn make_app(log_base: &Path) -> CuResult<(BalanceBotReSim, RobotClock, RobotCloc
         .with_clock(robot_clock.clone())
         .with_log_path(log_base, REPLAY_LOG_SLAB_SIZE)?
         .with_sim_callback(&mut default_callback)
-        .build()?;
+        .build()?
+        .into_inner();
     Ok((copper_app, robot_clock, robot_clock_mock))
 }
 

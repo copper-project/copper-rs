@@ -1,0 +1,22 @@
+error[E0599]: the method `start` exists for struct `CuAppLifecycle<MmapSectionStorage, MmapUnifiedLoggerWrite, A, cu29::prelude::Running>`, but its trait bounds were not satisfied
+ --> tests/compile_fail/lifecycle/start_running_app.rs:8:17
+  |
+8 |     let _ = app.start();
+  |                 ^^^^^ method cannot be called due to unsatisfied trait bounds
+  |
+ ::: $WORKSPACE/core/cu29_runtime/src/app.rs
+  |
+  | pub struct Running;
+  | ------------------ doesn't satisfy `cu29::prelude::Running: Startable`
+  |
+  = note: the following trait bounds were not satisfied:
+          `cu29::prelude::Running: Startable`
+  = help: items from traits can only be used if the trait is implemented and in scope
+  = note: the following traits define an item `start`, perhaps you need to implement one of them:
+          candidate #1: `CuAnytimeTask`
+          candidate #2: `cu29::prelude::CuBridge`
+          candidate #3: `cu29::prelude::CuMonitor`
+          candidate #4: `cu29::prelude::CuSinkTask`
+          candidate #5: `cu29::prelude::CuSrcTask`
+          candidate #6: `cu29::prelude::CuTask`
+          candidate #7: `fixedbitset::range::IndexRange`

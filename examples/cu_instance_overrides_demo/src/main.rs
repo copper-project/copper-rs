@@ -130,12 +130,12 @@ fn drive() -> CuResult<()> {
             .map_err(|err| CuError::new_with_cause("failed to create log directory", err))?;
     }
 
-    let mut app = App::builder()
+    let app = App::builder()
         .with_log_path(&logger_path, None)?
         .with_instance_id(instance_id)
         .build()?;
-    app.start_all_tasks()?;
-    app.run_one_iteration()?;
-    app.stop_all_tasks()?;
+    let mut running = app.start()?;
+    running.run_one_iteration()?;
+    running.stop()?;
     Ok(())
 }

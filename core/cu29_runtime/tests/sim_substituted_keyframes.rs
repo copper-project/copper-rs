@@ -128,13 +128,13 @@ mod recording {
     struct RealApp {}
 
     pub(super) fn record(logger: Arc<Mutex<MmapUnifiedLoggerWrite>>) -> CuResult<()> {
-        let mut app = RealApp::builder()
+        let app = RealApp::builder()
             .with_logger::<MmapSectionStorage, MmapUnifiedLoggerWrite>(logger)
             .build()?;
-        app.start_all_tasks()?;
-        app.run_one_iteration()?;
-        app.run_one_iteration()?;
-        app.stop_all_tasks()?;
+        let mut running = app.start()?;
+        running.run_one_iteration()?;
+        running.run_one_iteration()?;
+        running.stop()?;
         Ok(())
     }
 }
@@ -158,6 +158,10 @@ fn build_logger(path: &Path) -> CuResult<Arc<Mutex<MmapUnifiedLoggerWrite>>> {
 }
 
 #[test]
+// Drives the raw (deprecated) sim lifecycle on purpose: restoring a keyframe
+// into a started app is a replay primitive the lifecycle typestate
+// deliberately does not expose.
+#[allow(deprecated)]
 fn sim_restore_skips_substituted_source_and_sink_but_thaws_regular_task() -> CuResult<()> {
     let temp_dir = tempfile::tempdir()
         .map_err(|error| CuError::new_with_cause("create temp directory failed", error))?;

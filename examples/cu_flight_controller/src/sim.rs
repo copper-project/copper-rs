@@ -1,3 +1,8 @@
+// Simulation engine: drives the raw (app-deprecated) lifecycle API on purpose.
+// It needs mid-flight runtime access that the lifecycle typestate
+// deliberately does not expose.
+#![allow(deprecated)]
+
 #[cfg(feature = "sim")]
 extern crate alloc;
 
@@ -147,7 +152,8 @@ mod mcu_copper {
                 .expect("failed to create logger")
                 .with_sim_callback(&mut default_callback)
                 .build()
-                .expect("failed to create runtime");
+                .expect("failed to create runtime")
+                .into_inner();
             Self { app }
         }
 
@@ -157,7 +163,8 @@ mod mcu_copper {
                 .with_clock(clock.clone())
                 .with_sim_callback(&mut default_callback)
                 .build()
-                .expect("failed to create runtime");
+                .expect("failed to create runtime")
+                .into_inner();
             Self { app }
         }
 
@@ -171,7 +178,8 @@ mod mcu_copper {
                 .with_logger::<BevyMonSectionStorage, BevyMonUnifiedLogger>(logger)
                 .with_sim_callback(&mut default_callback)
                 .build()
-                .expect("failed to create runtime");
+                .expect("failed to create runtime")
+                .into_inner();
             Self { app }
         }
 
@@ -363,7 +371,8 @@ mod compute_copper {
                 .expect("failed to create compute logger")
                 .with_sim_callback(&mut default_callback)
                 .build()
-                .expect("failed to create compute runtime");
+                .expect("failed to create compute runtime")
+                .into_inner();
             Self {
                 app,
                 zed_store,
@@ -377,7 +386,8 @@ mod compute_copper {
                 .with_clock(clock.clone())
                 .with_sim_callback(&mut default_callback)
                 .build()
-                .expect("failed to create compute runtime");
+                .expect("failed to create compute runtime")
+                .into_inner();
             Self {
                 app,
                 zed_store,

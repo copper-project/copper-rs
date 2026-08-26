@@ -146,7 +146,7 @@ fn main() -> CuResult<()> {
     }
 
     let (robot_clock, _) = RobotClock::mock();
-    let mut app = App::builder()
+    let app = App::builder()
         .with_clock(robot_clock)
         .with_log_path(logger_path, Some(64 * 1024 * 1024))
         .expect("failed to setup logger")
@@ -154,11 +154,11 @@ fn main() -> CuResult<()> {
         .build()
         .expect("failed to create runtime");
 
-    app.start_all_tasks(&mut callback)?;
+    let mut running = app.start(&mut callback)?;
     for _ in 0..6 {
-        app.run_one_iteration(&mut callback)?;
+        running.run_one_iteration(&mut callback)?;
     }
-    app.stop_all_tasks(&mut callback)?;
+    running.stop(&mut callback)?;
 
     Ok(())
 }

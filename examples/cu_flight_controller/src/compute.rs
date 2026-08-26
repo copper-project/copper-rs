@@ -21,8 +21,9 @@ fn main() {
 }
 
 fn drive() -> CuResult<()> {
-    let mut app = ComputeApp::builder()
+    let app = ComputeApp::builder()
         .with_log_path("logs/compute.copper", LOG_SLAB_SIZE)?
         .build()?;
-    app.run()
+    app.run_until_shutdown()?;
+    Ok(())
 }

@@ -23,13 +23,15 @@ fn main() {
 
     debug!("Creating application... ");
 
-    let mut application = BalanceBot::builder()
+    let application = BalanceBot::builder()
         .with_log_path(logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
         .build()
         .expect("Failed to create runtime.");
 
     debug!("Running... starting clock: {}.", application.clock().now());
-    application.run().expect("Failed to run application.");
-    debug!("End of app: final clock: {}.", application.clock().now());
+    let stopped = application
+        .run_until_shutdown()
+        .expect("Failed to run application.");
+    debug!("End of app: final clock: {}.", stopped.clock().now());
 }

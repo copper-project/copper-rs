@@ -77,21 +77,17 @@ fn main() {
     let unified_logger = Arc::new(Mutex::new(logger));
     debug!("Logger created at {}.", path = &logger_path);
     debug!("Creating application... ");
-    let mut application = App::builder()
+    let application = App::builder()
         .with_logger::<memmap::MmapSectionStorage, UnifiedLoggerWrite>(unified_logger.clone())
         .build()
         .expect("Failed to create application.");
     debug!("Running... starting clock: {}.", application.clock().now());
-    application
-        .start_all_tasks()
-        .expect("Failed to start application.");
-    application
+    let mut running = application.start().expect("Failed to start application.");
+    running
         .run_one_iteration()
         .expect("Failed to run application.");
-    application
-        .stop_all_tasks()
-        .expect("Failed to stop application.");
-    debug!("End of program: {}.", application.clock().now());
+    let stopped = running.stop().expect("Failed to stop application.");
+    debug!("End of program: {}.", stopped.clock().now());
     // check if the logger file is at least 1 section in length
 
     // change the end of the logger_path from copper to _0.copper
