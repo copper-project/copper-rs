@@ -1512,7 +1512,7 @@
 </li>
 <li>
 <p><strong>More task, bridge, and component state is actually frozen and thawed</strong>
-  The flight-controller example and <code>cu_pid</code> now preserve controller state across freeze/thaw. The broader component pass also moved many sources, bridges, tasks, and examples away from empty <code>Freezable</code> defaults where state matters for replay. Async task wrappers now snapshot their buffered output and async scheduling state, and they refuse to freeze while background work is still in progress.
+  The flight-controller example and <code>cu_pid</code> now preserve controller state across freeze/thaw. The broader component pass also moved many sources, bridges, tasks, and examples away from empty <code>Freezable</code> defaults where state matters for replay. Async task wrappers preserve in-flight background work across keyframes, so capture can continue while workers are busy and replay remains deterministic.
   The user reason is replay correctness: keyframes are only useful if they restore the state that affects the next tick. A replay that restarts a PID integral, calibration state, bridge buffer, or background-task output is not a faithful replay. (<a href="https://github.com/copper-project/copper-rs/pull/1153">#1153</a>, <a href="https://github.com/copper-project/copper-rs/pull/1155">#1155</a>)</p>
 </li>
 <li>

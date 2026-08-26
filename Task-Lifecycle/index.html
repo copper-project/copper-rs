@@ -1376,8 +1376,7 @@ fn process(&amp;mut self, _clock: &amp;RobotClock, input: &amp;Self::Input&lt;'_
 }
 </code></pre>
 <p>This is useful for calibration bundles, static transforms, map updates, and other state that is usually unchanged but must still be deterministic in logs and replay. Because the updates are part of the message stream, replay and resimulation see the same state transitions as the live run.</p>
-<p>Note on freeze / thaw: A task internal state can be serialized to give the opportunity for the framework to "snapshot" the system, it would be at a low rate (ie. ~ a second). 
-You can think of it a little bit as a "key frame" in a video. It is useful at replay to be able to jump into a state without having to replay all the previous messages.</p>
+<p>Note on freeze / thaw: Copper periodically serializes component state so replay can seek from a nearby keyframe instead of replaying from the beginning. Keyframe capture does not stop or drain the graph, including background and <code>parallel-rt</code> work, but remains deterministic on replay. Because <code>freeze()</code> runs at the component's normal point in the execution wave, implementations should be side-effect-free and must not allocate on the real-time path.</p>
 
 
 
