@@ -10,6 +10,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   CARGO_NET_RETRY: "10"
+  DOCS_TOOLCHAIN: nightly-2026-06-25
 
 jobs:
   coverage:
@@ -31,11 +32,13 @@ jobs:
       - name: Check out local Copper dependencies
         run: support/ci/checkout_local_dependencies.sh
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.DOCS_TOOLCHAIN }}
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
       - name: Build API docs
-        run: cargo +nightly doc --no-deps
+        run: cargo +${DOCS_TOOLCHAIN} doc --no-deps
         env:
           RUSTDOCFLAGS: --enable-index-page -Zunstable-options
       - name: Set up Python
