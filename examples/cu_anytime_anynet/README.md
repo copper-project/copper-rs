@@ -1,216 +1,245 @@
 # AnyNet anytime stereo depth
 
+![AnyNet running on KITTI with ground truth, staged refinement, benchmark errors, and an RGB reconstruction](doc/still.png)
+
 This demo runs the first three stages of [AnyNet](https://github.com/mileyan/AnyNet)
 as a Copper `CuAnytimeTask`. `anynet-fg` refines in the foreground and can be
-recorded/resimulated; `anynet-bg` keeps the 5 Hz graph responsive while Candle
-inference runs on a background worker.
+recorded and resimulated; `anynet-bg` keeps the 5 Hz graph responsive while
+Candle inference runs on a background worker.
 
-The default command downloads and converts the pretrained KITTI checkpoint if
-needed, then runs the foreground demo on a moving synthetic stereo pair. The
-background variant uses the same checkpoint:
+The foreground configuration defines two compile-time Copper missions:
+
+- `synthetic` is the zero-data default.
+- `kitti` uses real KITTI stereo frames, disparity ground truth, and the scaled
+  camera calibration.
+
+Both mission graphs are compiled into the same binary from separate RON
+includes. Selecting KITTI does not require editing the configuration or
+recompiling a different topology.
+
+Render the complete static graph, including both missions, from this directory:
+
+```sh
+just dag
+```
+
+## Quick start
+
+Run the default synthetic mission:
 
 ```sh
 just
-just bg
 ```
 
-To test only the task-graph wiring, use random weights explicitly:
+Synthetic input demonstrates the stage-by-stage runtime behavior, but has no
+KITTI labels. The ground-truth, 3-pixel outlier, and measured-error panes are
+therefore empty.
+
+Other useful entry points are:
 
 ```sh
-just smoketest
+just bg         # synthetic input, inference on a background worker
+just smoketest  # task-graph smoke test with random weights
+just cuda       # synthetic background demo with Candle/cudarc
 ```
 
-## What the viewer shows
+## Run it on real KITTI data
 
-The 2D panes colormap **disparity in pixels** (turbo, pinned to a shared
-0–96 px range) rather than metric depth — the jet-style look of the AnyNet
-paper's figures. This is deliberate: a road scene spreads disparity almost
-uniformly over the colormap, while a linear 0.5–60 m depth range crams most of
-the image into a few color steps and makes every stage look identical.
+[![Animated RGB reconstruction from the KITTI demo](doc/anynet-kitti-reconstruction.webp)](doc/anynet-kitti-reconstruction.webm)
 
-Refinement rewrites the published depth map in place, so by the time the sink
-runs, only the stage the budget actually reached still exists. Both configs
-therefore set `config: {"stage_snapshots": true}` on the `anynet` node, which
-makes the task keep a detached copy of what each stage published, plus the
-elapsed time at which it landed. The demo sends a blueprint laying those out
-like the paper's architecture figure:
+The animation is an RGB-colored reconstruction from the same real-data run as
+the main screenshot. Click it for the original 60 FPS WebM.
 
-- Top row: `world/cam/image` and `stage/stage1..3` — the left frame, then the
-  *same* frame's disparity after each stage, coarse to fine. Stage 1 comes from
-  1/16-scale features and looks visibly blurry; each refinement sharpens it.
-- `result/disparity` — the anytime result as the graph consumed it, and
-  `world/cam/depth`, its metric back-projection in the 3D view (a `Pinhole`
-  sits on `world/cam`).
-- `delta/stage2..3` — the absolute per-pixel disparity correction each
-  refinement applied, as a grayscale residual map (the paper's "Residual 2/3").
-  Two consecutive disparity panes can look near-identical to the eye; this is
-  where the refinement is pinpointed.
-- `anytime/*` — stage reached, quality, the elapsed time at which each stage
-  landed, and the total job latency from the message metadata. This is the
-  latency-versus-quality trade-off the anytime policy is making.
+Run:
 
-### Measured quality: 3-px error against KITTI ground truth
+```sh
+just kitti
+```
 
-The `quality` curve plots the configured per-stage labels (0.49/0.70/1.00),
-not accuracy. To *measure* the improvement, give the viewer node the same
-`data_dir` as the stereo node: when the directory contains KITTI's
-`disp_occ_0/` ground truth, the viewer computes the benchmark's 3-pixel error
-(share of labeled pixels off by more than 3 px *and* more than 5%) for every
-stage snapshot and logs it under `anytime/error`, with per-stage rows in the
-summary panel. Predictions are rescaled to native KITTI pixel units before
-comparison, so the 3 px threshold keeps its standard meaning. Only `_10`
-frames carry labels, so every other frame contributes points. Expect the
-curves to drop stage by stage — with the mirror checkpoint below at 640×192,
-typically ~30% → ~26% → ~15%.
+That one command:
 
-### Watching the refinement happen
+1. Downloads the official KITTI 2015 scene-flow archive if it is missing
+   (about 1.6 GiB, with interrupted-download resume).
+2. Unpacks and validates the stereo images and `disp_occ_0` labels.
+3. Prepares the mirrored AnyNet checkpoint if needed.
+4. Selects and runs the `kitti` Copper mission.
 
-Every entity is stamped on two timelines. `copperlist` steps one finished
-frame at a time and is what resim compares. `time` stamps each stage snapshot
-at the instant it actually published inside the job. Select the `time`
-timeline in Rerun and press play: the `anytime result` pane and the 3D view
-show stage 1's coarse sketch partway through each frame, then visibly sharpen
-as stages 2 and 3 land — the anytime behavior replayed live.
+To install the dataset without launching the viewer, use `just kitti-data`.
+Data is kept outside the repository in the expected sister directory:
 
-At 1× playback that replay is a blink: the whole refinement window spans a few
-tens of milliseconds per frame. The viewer's `time_dilation` config (default
-1.0) stretches every step of the `time` timeline; the demo config sets 20.0,
-so pressing play shows each stage for a comfortable fraction of a second.
-Dilated steps are capped at 1 s so the base-compute wait and the idle stretch
-between jobs do not become multi-second freezes on playback — without the cap
-the animation would visibly stall between frames. Alternatively, lower Rerun's
-playback rate instead of dilating.
+```text
+copper/
+├── copper-rs/
+└── kitti/
+    ├── data_scene_flow.zip
+    ├── training/
+    │   ├── image_2/
+    │   ├── image_3/
+    │   └── disp_occ_0/
+    └── testing/
+```
 
-Dilation assumes stamps arrive in time order, which only the foreground binary
-guarantees. In background mode a result lags the frame delivered beside it, so
-leave `time_dilation` at 1.0 there: stamps then map to their true times and the
-lagged stages still replay correctly.
+The archive can also be obtained from the
+[KITTI stereo 2015 page](https://www.cvlibs.net/datasets/kitti/eval_scene_flow.php?benchmark=stereo)
+and unpacked manually into that layout.
 
-Snapshots cost one depth copy per quantum, so `stage_snapshots` defaults to off
-and production graphs should leave it off. Without it the stage panes fall back
-to a latest-at view: each pane holds the most recent frame that *ended* at that
-stage, which is a different frame per pane.
+The source selects the 200 `_10` stereo benchmark frames. KITTI's `_11` files
+are following temporal frames for scene flow and do not carry the disparity
+labels used here.
 
-### Smoke mode has nothing to show
+### How the two missions are configured
 
-In `just smoketest`, every pane is a single flat color and the residuals are
-exactly zero. That is correct, not a broken viewer. Random weights make the cost
-volume uniform, so the disparity regression returns the midpoint of the search
-range for every pixel: a constant 88 px, which is a constant 4.427 m at the
-demo configs' KITTI focal length and baseline. All three stages produce that same constant,
-so the stage panes are identical and `|d₂−d₁|` and `|d₃−d₂|` are 0.00 px.
+`copperconfig.ron` declares the missions and includes both static graph
+fragments:
 
-The summary panel reports this directly — `disparity: flat at 88.0 px` and
-`residual 1 to 2: max 0.00 px` — because a flat map, an all-zero residual,
-and an empty pane all render as the same flat color. Load trained weights to see
-the panes diverge; the stage-quality labels 0.49, 0.70, and 1.00 are policy
-values, not measured accuracy.
+```ron
+missions: [(id: "synthetic"), (id: "kitti")],
+includes: [
+    (path: "config/synthetic.ron"),
+    (path: "config/kitti.ron"),
+],
+```
 
-### Making the budget bite
+`config/synthetic.ron` owns the generated stereo source and its default 721.5
+pixel calibration. `config/kitti.ron` points at `../kitti/training` and uses
+371.7 pixels on both AnyNet and the viewer: KITTI's native 721.5 pixel focal
+length scaled from approximately 1242 pixels wide to the model's 640 pixels.
+The 0.54 m stereo baseline is shared.
 
-With the default 800 ms budget the job converges at roughly 150 ms on a modern
-desktop CPU, so every frame reaches stage 3 and the stage and quality curves sit
-flat at 3 and 1.00. That is the policy working, not failing: nothing forced it to
-stop early.
+Copper generates one application builder per mission. The foreground CLI
+selects `synthetic` when no argument is supplied; `just kitti` selects the
+`kitti` builder. Only the selected mission's tasks are instantiated, so the
+default remains usable when no KITTI directory exists.
 
-Read the per-stage times off the `latency (ms)` view and set `time_budget_ms`
-just under the stage you want to cut off. Measured on one desktop CPU at
-640×192, where stage 1 landed at ~85 ms, stage 2 at ~110 ms, and stage 3 at
-~150 ms:
+## Reading the viewer
 
-| `time_budget_ms` | published stage |
-| --- | --- |
-| 90 | always 1 |
-| 100 | mostly 1, sometimes 2 |
-| 130 | always 2 |
-| 800 (default) | always 3 |
+The large 2×2 comparison area contains:
 
-These are machine-specific — take the numbers from your own latency view.
+- `left`: the current rectified image.
+- `KITTI ground truth`: labeled disparity resampled into model-pixel units.
+- `anytime result`: the result currently published by the refining task.
+- `RGB depth reconstruction`: a metric point cloud colored from the matching
+  left image, so cars and road features remain recognizable in 3D.
 
-Each interactive run starts a fresh Rerun viewer and selects a free port when
-the default port is already occupied. The installed viewer must match the
-workspace's Rerun SDK version.
+The smaller diagnostics area is intentionally about one quarter the size of
+the primary views. It contains stage 1 through stage 3, a spatial outlier mask,
+latency curves, and measured 3-pixel error curves.
 
-For headless runs, add `"rrd": "anynet.rrd"` to the viewer node's config; the
-blueprint travels with the `.rrd`. The `anynet` node requires `focal_px` and
-`baseline_m` — the demo configs ship KITTI's 721.5 and 0.54. The viewer node
-accepts the same two keys (defaulting to those KITTI values) — both must match
-the `anynet` node, since they convert the published metric depth back to the
-disparity the panes colormap and calibrate the 3D view — plus `disp_max_px` (default 96.0,
-the far end of the pinned disparity colormap) and `depth_max_m` (default 60.0,
-the far end of the 3D view's depth colormap).
-To use KITTI 2015, download the
-[stereo 2015 data set](https://www.cvlibs.net/datasets/kitti/eval_scene_flow.php?benchmark=stereo)
-(free registration required; `data_scene_flow.zip`, ~2 GB) and add
-`config: {"data_dir": "/path/to/KITTI/training"}` to the stereo node, pointing
-at the unpacked `training/` directory. It must contain matching `image_2/` and
-`image_3/` files; frames are resized to 640×192. Give the viewer node the same `data_dir`
-to enable the measured 3-px error curves (needs `disp_occ_0/` next to the image
-directories). Because 1242-wide KITTI frames are resized to 640, set
-`focal_px` to `721.5 × 640 / 1242 ≈ 371.7` on both the `anynet` and `viewer`
-nodes if you want the 3D view metrically scaled; the disparity panes and error
-metric are unaffected by this choice as long as the two nodes agree.
+All 2D disparity panes use Turbo with a shared, pinned 0–96 pixel range. This
+is deliberate: a road scene distributes disparity across the colormap, whereas
+linear metric depth compresses most of the scene into a few colors and hides
+the changes made by refinement.
 
-The pretrained-model link in the AnyNet README (Google Drive) is dead as of
-2026. A working mirror lives in the
-[Stereo-3D-Detection](https://github.com/AmrElsersy/Stereo-3D-Detection) fork's
-Drive folder; its `kitti2015.tar` matches the reference architecture exactly.
-Checkpoint conversion requires `torch`, `safetensors`, and `gdown` in the
-active Python environment. Install those dependencies using your preferred
-environment manager, then run:
+### Ground truth and the 3-pixel outlier mask
+
+KITTI ground truth is semi-dense: unlabeled pixels are omitted. The outlier pane
+evaluates only its labeled pixels:
+
+- White means the prediction differs from ground truth by more than 3 native
+  KITTI pixels **and** more than 5 percent.
+- Black means it is within that benchmark tolerance.
+- Unlabeled pixels are omitted.
+
+A recognizable white car is not segmentation—it means the car's labeled
+disparity pixels are mostly wrong. Reflective bodywork, occlusion, and sharp
+foreground boundaries commonly make cars difficult.
+
+### Why the 3D reconstruction is filtered
+
+Directly back-projecting all 640×192 predictions creates an opaque fan in which
+ordinary disparity noise becomes long depth spikes. The reconstruction pane is
+a display-only diagnostic designed for a human instead:
+
+- one point per 4×4 output block;
+- RGB from the exact stereo frame that produced the depth, including for a
+  lagging background result;
+- a small sampled-grid median to suppress isolated spikes;
+- a 35 m foreground cutoff; and
+- fixed 2-point screen-space dots.
+
+Inference, logged depth snapshots, and KITTI scoring still use the untouched
+full-resolution prediction. Filtering changes only the Rerun point cloud.
+
+## Watching anytime refinement happen
+
+Refinement rewrites the published depth map in place. Both foreground missions
+set `"stage_snapshots": true`, making the task keep a detached copy of each
+stage and the elapsed time at which it landed. Production graphs should
+normally leave this off because it adds one depth copy per quantum.
+
+Every entity is stamped on two timelines:
+
+- `copperlist` steps through finished graph iterations and is used for replay.
+- `time` stamps each stage at its actual publication instant inside the job.
+
+Select `time` in Rerun and press play. The anytime result, RGB reconstruction,
+outlier mask, and error score update from coarse stage 1 through stages 2 and 3.
+The foreground missions use `time_dilation: 20.0` because the real stage gaps
+are too short to perceive at normal playback speed. Dilation steps are capped
+at one second so idle time between jobs does not become a long freeze.
+
+Background delivery can arrive after newer input frames. Leave dilation at 1.0
+in background mode so timestamps retain their true order; the viewer matches a
+result to its source image and ground truth by time of validity.
+
+## Making the budget bite
+
+With the default 800 ms budget, a modern desktop CPU normally reaches stage 3.
+Read the actual stage times from `latency (ms)` and set `time_budget_ms` just
+below the stage you want to prevent. Example measurements at 640×192 were:
+
+| `time_budget_ms` | Typical published stage |
+| ---: | :--- |
+| 90 | stage 1 |
+| 100 | stage 1, sometimes stage 2 |
+| 130 | stage 2 |
+| 800 | stage 3 |
+
+These boundaries are machine-specific; the graph in your viewer is the source
+of truth.
+
+## Pretrained weights and normalization
+
+The original AnyNet checkpoint link is dead. The `weights` recipe downloads a
+compatible mirror and converts it to Safetensors. It requires `torch`,
+`safetensors`, and `gdown` in the active Python environment:
 
 ```sh
 just weights
 ```
 
-This writes the converted checkpoint to
-`target/cu_anytime_anynet/anynet-kitti.safetensors`. The normal `just`, `just
-fg`, `just bg`, and `just cuda` recipes run this setup automatically when the
-converted checkpoint is missing.
+The result is written to
+`target/cu_anytime_anynet/anynet-kitti.safetensors`. The normal `just`, `fg`,
+`kitti`, `bg`, and `cuda` recipes invoke this step automatically when needed.
 
-**Normalization caveat:** that mirror was trained on raw 0..255 pixels, not
-the `/255` ImageNet normalization of the original AnyNet dataloader (its first
-BatchNorm's running mean sits in the thousands). The `anynet` node's
-`normalization` config selects the input scaling: `"imagenet"` (default,
-matches the original protocol) or `"raw"` (required for this mirror). A
-mismatch is not an error anywhere — every stage just regresses confidently
-wrong disparities, with 3-px error pinned near 100%.
-
-Add the `weights` and `normalization` keys to the `anynet` node's existing
-`config` block, keeping the required calibration:
+The mirror checkpoint was trained on raw 0–255 pixels, not the `/255` ImageNet
+normalization used by the original AnyNet dataloader. Its mission configs must
+therefore retain:
 
 ```ron
-config: {
-    "focal_px": 721.5,
-    "baseline_m": 0.54,
-    "stage_snapshots": true,
-    "weights": "/path/to/copper-rs/target/cu_anytime_anynet/anynet-kitti.safetensors",
-    "normalization": "raw",
-},
+"normalization": "raw",
 ```
 
-A tighter `time_budget_ms` publishes earlier stages; for example, a
-10 ms foreground budget normally publishes stage 1 only.
+A normalization mismatch is not rejected by the model; it simply produces
+confidently wrong disparities and a 3-pixel error near 100 percent.
 
-CUDA builds use Candle/cudarc:
+## Recording, replay, and platform notes
 
-```sh
-just cuda
-```
+For a headless Rerun recording, add `"rrd": "anynet.rrd"` to the selected
+mission's viewer node. The blueprint is stored in the recording. An installed
+interactive Rerun viewer must match the workspace SDK version.
 
-Jetson/aarch64 CUDA support must be verified on the target; CPU is the fallback.
-Floating-point replay can differ across CPU and CUDA devices.
+The foreground binary supports normal Copper unified logging and resimulation.
+Mission logs are written under this example's `logs/` directory. Its 8 MiB
+CopperList sections are sized for the 640×192 stereo pair, published depth, and
+three visualization snapshots. Increasing resolution may require raising
+`section_size_mib`, `slab_size_mib`, and the binary's matching slab constant.
 
-The background config intentionally sets `enable_task_logging: false`. A
-background anytime task cannot freeze safely while a multi-second job is live,
-so keyframes would fail. Consequently the background binary has Rerun output
-but no unified Copper log or resimulation. The foreground binary supports the
-normal unified-log and resim workflow. Its 8 MiB CopperList sections are sized
-to hold the full synthetic stereo pair, the published depth map, and the three
-stage snapshots used for replay at 640×192. Higher `width`/`height` on the
-stereo node grows every copperlist with the square of the resolution, and one
-copperlist outgrowing a section is a hard failure — scale `section_size_mib`
-(and `slab_size_mib` together with the binary's matching `SLAB_SIZE`) with it.
+The background config disables task logging because an active background
+anytime job cannot be frozen safely for a keyframe. It still produces Rerun
+output but not a replayable unified log. CUDA builds use Candle/cudarc; verify
+Jetson/aarch64 behavior on the target. Floating-point replay may differ between
+CPU and CUDA devices.
 
 The architecture is ported from AnyNet (Wang et al., ICRA 2019) under its MIT
 license. The optional SPN sharpening stage and its custom CUDA operator are not

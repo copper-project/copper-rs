@@ -6,20 +6,18 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu_anynet::{STAGES, StereoDepth, StereoPair};
 use cu_sensor_payloads::{CuDepthLength, CuDepthMap, CuImage, CuImageBufferFormat};
-use cu29::cutask_anytime::quality_to_f32;
 use cu29::prelude::*;
 use cu29::units::si::f32::Length;
 use cu29::units::si::length::meter;
 use image::imageops::FilterType;
 use rerun::blueprint::{
-    Blueprint, BlueprintActivation, Grid, Horizontal, Spatial2DView, Spatial3DView,
-    TextDocumentView, TimeSeriesView, Vertical,
+    Blueprint, BlueprintActivation, Grid, Spatial2DView, Spatial3DView, TimeSeriesView, Vertical,
 };
 use rerun::components::{Colormap, ValueRange};
 use rerun::datatypes::Range1D;
 use rerun::{
-    ChannelDatatype, DepthImage, MediaType, Pinhole, RecordingStream, RecordingStreamBuilder,
-    Scalars, SeriesLines, SpawnOptions, TextDocument, TextLog,
+    ChannelDatatype, DepthImage, LineStrips3D, Points3D, RecordingStream, RecordingStreamBuilder,
+    Scalars, SeriesLines, SpawnOptions, ViewCoordinates,
 };
 use std::collections::VecDeque;
 use std::fs;
@@ -41,8 +39,17 @@ const DEFAULT_DEPTH_MAX_METERS: f64 = 60.0;
 /// depth crams most of the image into a few color steps and hides what each
 /// refinement changed. This is the jet-style look of the AnyNet paper.
 const DEFAULT_DISPARITY_MAX_PIXELS: f64 = 96.0;
-/// Largest per-stage disparity correction the residual colormap resolves.
-const DELTA_MAX_PIXELS: f64 = 8.0;
+/// Keep one depth sample per square of this many source pixels in the 3D pane.
+/// This is visualization-only: inference and KITTI scoring still use every
+/// model output pixel.
+const DEPTH_POINT_STEP: usize = 4;
+/// The 3D pane is for reading foreground structure, not inspecting the
+/// network's unconstrained far field. Keeping distant predictions hides the
+/// cars inside a large fan of low-disparity noise.
+const DEPTH_DISPLAY_MAX_METERS: f32 = 35.0;
+/// Fixed screen-space point size: large enough for the source RGB texture to
+/// remain recognizable without reconnecting the cloud into an opaque sheet.
+const DEPTH_POINT_RADIUS: f32 = 2.0;
 /// Longest single step the dilated `time` timeline can take, in seconds.
 ///
 /// Dilation exists to make the within-job stage gaps (tens of milliseconds)
@@ -58,6 +65,17 @@ const DEFAULT_BASELINE_METERS: f32 = 0.54;
 /// Recent (tov, seq) pairs kept to match a background-delivered depth, which
 /// lags by a few frames, back to the stereo frame it was computed from.
 const SEEN_FRAMES: usize = 64;
+
+struct SeenFrame {
+    tov: CuTime,
+    sequence: u64,
+    rgb: Arc<SampledRgb>,
+}
+
+struct SampledRgb {
+    columns: usize,
+    colors: Vec<[u8; 3]>,
+}
 
 /// Stereo source using a KITTI directory when configured, otherwise a moving
 /// synthetic scene with several disparity planes.
@@ -165,13 +183,15 @@ impl CuSrcTask for StereoSrc {
     }
 }
 
-/// Rerun viewer laying out the stereo input, the same frame's disparity after
-/// each anytime stage, the residual each refinement applied, and the latency
-/// those stages cost. The 2D panes colormap disparity in pixels — the AnyNet
-/// paper's jet-style look — because metric depth hides refinement (see
-/// [`DEFAULT_DISPARITY_MAX_PIXELS`]). A second `time` timeline stamps each
-/// stage at the instant it published, so playing it replays the refinement
-/// live inside every frame.
+/// Rerun viewer centered on the stereo input, KITTI ground truth, the current
+/// anytime result, and its 3D reconstruction. A compact diagnostics strip keeps
+/// the three stage snapshots, their latency, and the KITTI 3-pixel error visible
+/// without giving debug detail the same weight as the primary comparison.
+///
+/// All disparity panes share the same model-resolution pixel scale and pinned
+/// colormap. A second `time` timeline stamps each stage at the instant it
+/// published, so playing it replays both the prediction and its benchmark
+/// outlier mask refining live inside every frame.
 ///
 /// The stage panes need the `anynet` node to set `stage_snapshots`: refinement
 /// overwrites the published depth in place, so without snapshots only the stage
@@ -207,9 +227,10 @@ pub struct DepthViewer {
     /// Decoded ground truth per `gt_paths` index, filled lazily.
     #[reflect(ignore)]
     gt_cache: Vec<Option<Arc<GtDisparity>>>,
-    /// Recent (tov, seq) stereo frames, to resolve a lagging depth's frame.
+    /// Recent stereo metadata and decimated RGB, used to color a lagging
+    /// depth result with the frame it actually reconstructed.
     #[reflect(ignore)]
-    seen: VecDeque<(CuTime, u64)>,
+    seen: VecDeque<SeenFrame>,
     calibrated: bool,
     cycle: i64,
 }
@@ -348,21 +369,28 @@ impl CuSinkTask for DepthViewer {
         rec.set_duration_secs("time", stamped_frame_time);
         if let Some(stereo) = stereo_msg.payload() {
             if !self.calibrated {
-                // A pinhole on the parent path back-projects the depth image
-                // below it into the 3D view; the resolution is only known once
-                // a frame has arrived.
                 let format = stereo.left.format;
-                let pinhole = Pinhole::from_focal_length_and_resolution(
-                    [self.focal_pixels, self.focal_pixels],
-                    [format.width as f32, format.height as f32],
-                );
-                rec.log_static("world/cam", &pinhole).map_err(rerun_error)?;
+                rec.log_static("world", &ViewCoordinates::RDF())
+                    .map_err(rerun_error)?;
+                rec.log_static(
+                    "world/reconstruction_extent",
+                    &reconstruction_extent(
+                        format,
+                        self.focal_pixels,
+                        self.display_depth_max_meters(),
+                    ),
+                )
+                .map_err(rerun_error)?;
                 self.calibrated = true;
             }
             stereo.left.mark_touched();
             rec.log("world/cam/image", &stereo.left)
                 .map_err(rerun_error)?;
-            self.seen.push_back((frame_time, stereo.left.seq));
+            self.seen.push_back(SeenFrame {
+                tov: frame_time,
+                sequence: stereo.left.seq,
+                rgb: Arc::new(sample_rgb(&stereo.left, DEPTH_POINT_STEP)?),
+            });
             if self.seen.len() > SEEN_FRAMES {
                 self.seen.pop_front();
             }
@@ -371,15 +399,17 @@ impl CuSinkTask for DepthViewer {
         // Ground truth for the frame the depth was computed from — matched by
         // tov, so a lagging background result is never scored against the
         // wrong frame's labels.
-        let depth_seq = self
+        let matched_frame = self
             .seen
             .iter()
             .rev()
-            .find(|(tov, _)| *tov == depth_time)
-            .map(|(_, seq)| *seq);
-        let ground_truth = depth_seq.and_then(|seq| self.ground_truth(seq));
+            .find(|frame| frame.tov == depth_time)
+            .map(|frame| (frame.sequence, Arc::clone(&frame.rgb)));
+        let ground_truth = matched_frame
+            .as_ref()
+            .and_then(|(sequence, _rgb)| self.ground_truth(*sequence));
+        let rgb = matched_frame.as_ref().map(|(_sequence, rgb)| rgb.as_ref());
 
-        let mut frame = FrameFacts::default();
         if let Some(depth) = depth_msg.payload() {
             let job_duration = depth
                 .snapshots
@@ -389,28 +419,37 @@ impl CuSinkTask for DepthViewer {
                 .map(|snapshot| snapshot.elapsed)
                 .or_else(|| process_duration(depth_msg.metadata.process_time))
                 .unwrap_or_default();
-            frame.total_millis = Some(millis(job_duration));
+
+            // Ground truth and the empty initial comparison belong to the
+            // frame the inference consumed, not necessarily the frame beside
+            // a lagging background result.
+            let stamped = self.stamp(depth_time);
+            rec.set_duration_secs("time", stamped);
+            match &ground_truth {
+                Some(gt) => rec.log(
+                    "reference/ground_truth",
+                    &ground_truth_image(
+                        gt,
+                        depth.depth.format.width,
+                        depth.depth.format.height,
+                        self.disparity_max_pixels,
+                    ),
+                ),
+                None => rec.log("reference/ground_truth", &DepthImage::clear_fields()),
+            }
+            .map_err(rerun_error)?;
+            rec.log("comparison/outliers", &DepthImage::clear_fields())
+                .map_err(rerun_error)?;
+
             if depth.snapshots.iter().all(Option::is_none) {
                 // Latest-at fallback: only the stage this frame reached exists.
                 let stamped = self.stamp(depth_time + job_duration);
                 rec.set_duration_secs("time", stamped);
-                let image = self.log_result(&rec, &depth.depth, &mut frame)?;
+                let image = self.log_result(&rec, &depth.depth, rgb)?;
                 rec.log(stage_path("stage", depth.stage), &image)
                     .map_err(rerun_error)?;
-                if let Some(gt) = &ground_truth
-                    && let Some(error) = three_pixel_error(&depth.depth, gt, self.disparity_scale())
-                {
-                    rec.log(
-                        stage_path("anytime/error", depth.stage),
-                        &Scalars::single(f64::from(error)),
-                    )
-                    .map_err(rerun_error)?;
-                    if let Some(slot) = stage_slot(depth.stage) {
-                        frame.errors[slot] = Some(error);
-                    }
-                }
+                self.log_benchmark(&rec, &depth.depth, depth.stage, ground_truth.as_deref())?;
             } else {
-                let mut previous: Option<&CuDepthMap<Vec<Length>, CuDepthLength>> = None;
                 for snapshot in depth.snapshots.iter().flatten() {
                     let stamped = self.stamp(depth_time + snapshot.elapsed);
                     rec.set_duration_secs("time", stamped);
@@ -418,7 +457,7 @@ impl CuSinkTask for DepthViewer {
                     // they and the 3D back-projection visibly sharpen inside
                     // each frame; on `copperlist` the last write is the stage
                     // the budget bought.
-                    let image = self.log_result(&rec, &snapshot.depth, &mut frame)?;
+                    let image = self.log_result(&rec, &snapshot.depth, rgb)?;
                     rec.log(stage_path("stage", snapshot.stage), &image)
                         .map_err(rerun_error)?;
                     rec.log(
@@ -426,57 +465,22 @@ impl CuSinkTask for DepthViewer {
                         &Scalars::single(millis(snapshot.elapsed)),
                     )
                     .map_err(rerun_error)?;
-                    if let Some(gt) = &ground_truth
-                        && let Some(error) =
-                            three_pixel_error(&snapshot.depth, gt, self.disparity_scale())
-                    {
-                        rec.log(
-                            stage_path("anytime/error", snapshot.stage),
-                            &Scalars::single(f64::from(error)),
-                        )
-                        .map_err(rerun_error)?;
-                        if let Some(slot) = stage_slot(snapshot.stage) {
-                            frame.errors[slot] = Some(error);
-                        }
-                    }
-                    if let Some(previous) = previous
-                        && previous.format == snapshot.depth.format
-                    {
-                        let (image, largest) =
-                            delta_image(&snapshot.depth, previous, self.disparity_scale());
-                        rec.log(stage_path("delta", snapshot.stage), &image)
-                            .map_err(rerun_error)?;
-                        if let Some(slot) = stage_slot(snapshot.stage) {
-                            frame.corrections[slot] = Some(largest);
-                        }
-                    }
-                    previous = Some(&snapshot.depth);
+                    self.log_benchmark(
+                        &rec,
+                        &snapshot.depth,
+                        snapshot.stage,
+                        ground_truth.as_deref(),
+                    )?;
                 }
             }
             let stamped = self.stamp(depth_time + job_duration);
             rec.set_duration_secs("time", stamped);
-            rec.log("anytime/stage", &Scalars::single(depth.stage as f64))
-                .map_err(rerun_error)?;
             rec.log(
-                "anytime/quality",
-                &Scalars::single(quality_to_f32(depth.quality) as f64),
+                "anytime/latency/total",
+                &Scalars::single(millis(job_duration)),
             )
             .map_err(rerun_error)?;
         }
-
-        if let Some(elapsed) = frame.total_millis {
-            rec.log("anytime/latency/total", &Scalars::single(elapsed))
-                .map_err(rerun_error)?;
-        }
-        let status = depth_msg.metadata.status_txt.0.as_str();
-        rec.log("anytime/status", &TextLog::new(status))
-            .map_err(rerun_error)?;
-        rec.log(
-            "anytime/summary",
-            &TextDocument::new(summary(cycle, depth_msg.payload(), status, &frame))
-                .with_media_type(MediaType::markdown()),
-        )
-        .map_err(rerun_error)?;
         Ok(())
     }
 }
@@ -485,6 +489,10 @@ impl DepthViewer {
     /// Focal length times baseline: divides metric depth back to disparity.
     fn disparity_scale(&self) -> f32 {
         self.focal_pixels * self.baseline_meters
+    }
+
+    fn display_depth_max_meters(&self) -> f32 {
+        (self.depth_max_meters as f32).min(DEPTH_DISPLAY_MAX_METERS)
     }
 
     /// Maps a real timestamp onto the `time` timeline. Every step between
@@ -553,47 +561,66 @@ impl DepthViewer {
         (image, range)
     }
 
-    /// Metric depth under the pinhole, which the 3D view back-projects.
-    fn depth_image(&self, depth: &CuDepthMap<Vec<Length>, CuDepthLength>) -> DepthImage {
-        depth_image(
-            depth_bytes(depth),
-            depth.format.width,
-            depth.format.height,
-            (DEPTH_MIN_METERS, self.depth_max_meters),
-            Colormap::Turbo,
-        )
-    }
-
-    /// The two live result entities: the disparity pane and the metric depth
-    /// the 3D view back-projects. Returns the disparity image so the caller
-    /// can reuse it for the stage pane instead of recomputing it.
+    /// The two live result entities: the disparity pane and an RGB-colored,
+    /// display-filtered 3D point cloud. Returns the disparity image so the
+    /// caller can reuse it for the stage pane instead of recomputing it.
     fn log_result(
         &self,
         rec: &RecordingStream,
         depth: &CuDepthMap<Vec<Length>, CuDepthLength>,
-        frame: &mut FrameFacts,
+        rgb: Option<&SampledRgb>,
     ) -> CuResult<DepthImage> {
-        let (image, range) = self.disparity_image(depth);
-        frame.disparity_range = range;
+        let (image, _range) = self.disparity_image(depth);
         rec.log("result/disparity", &image).map_err(rerun_error)?;
-        rec.log("world/cam/depth", &self.depth_image(depth))
-            .map_err(rerun_error)?;
+        rec.log(
+            "world/reconstruction",
+            &rgb_point_cloud(
+                depth,
+                rgb,
+                self.focal_pixels,
+                DEPTH_POINT_STEP,
+                DEPTH_MIN_METERS as f32,
+                self.display_depth_max_meters(),
+            ),
+        )
+        .map_err(rerun_error)?;
         Ok(image)
     }
-}
 
-/// Numbers the summary panel reports that the panes alone cannot convey.
-#[derive(Default)]
-struct FrameFacts {
-    /// Range of the finite disparity samples in the published map, in pixels.
-    disparity_range: Option<(f32, f32)>,
-    /// Largest disparity correction each refinement applied, in pixels,
-    /// indexed by stage - 1.
-    corrections: [Option<f32>; STAGES],
-    /// KITTI 3-pixel error of each stage against ground truth, in percent,
-    /// indexed by stage - 1.
-    errors: [Option<f32>; STAGES],
-    total_millis: Option<f64>,
+    /// Logs both the scalar KITTI score and the spatial outlier mask for one
+    /// stage. The mask shares the stage timestamp, so it refines alongside the
+    /// anytime result on the `time` timeline.
+    fn log_benchmark(
+        &self,
+        rec: &RecordingStream,
+        depth: &CuDepthMap<Vec<Length>, CuDepthLength>,
+        stage: u8,
+        ground_truth: Option<&GtDisparity>,
+    ) -> CuResult<()> {
+        let Some(gt) = ground_truth else {
+            return Ok(());
+        };
+        let Some((bytes, error)) = benchmark_outlier_bytes(depth, gt, self.disparity_scale())
+        else {
+            return Ok(());
+        };
+        rec.log(
+            stage_path("anytime/error", stage),
+            &Scalars::single(f64::from(error)),
+        )
+        .map_err(rerun_error)?;
+        rec.log(
+            "comparison/outliers",
+            &depth_image(
+                bytes,
+                depth.format.width,
+                depth.format.height,
+                (0.0, 1.0),
+                Colormap::Grayscale,
+            ),
+        )
+        .map_err(rerun_error)
+    }
 }
 
 /// A KITTI ground-truth disparity map at its native resolution, kept in the
@@ -604,67 +631,62 @@ struct GtDisparity {
     values: Vec<u16>,
 }
 
-/// Fixed viewport shaped like the AnyNet paper's figure: the input and the
-/// same frame's disparity after each stage across the top, coarse to fine;
-/// the live result, its 3D back-projection, and the per-stage residuals on
-/// the second row; the anytime signals below.
+/// Primary views occupy most of the window: input, truth, live anytime result,
+/// and the reconstructed scene. Stage snapshots and benchmark diagnostics use
+/// a shorter two-row grid below; each is roughly one quarter the area of a
+/// primary pane.
 fn send_blueprint(rec: &RecordingStream) -> CuResult<()> {
-    let mut panes = vec![
+    let primary = Grid::new([
         Spatial2DView::new("left")
             .with_origin("world/cam/image")
             .into(),
-    ];
+        Spatial2DView::new("KITTI ground truth")
+            .with_origin("reference/ground_truth")
+            .into(),
+        Spatial2DView::new("anytime result")
+            .with_origin("result/disparity")
+            .into(),
+        Spatial3DView::new("RGB depth reconstruction")
+            .with_origin("world")
+            .with_contents(["world/reconstruction", "world/reconstruction_extent"])
+            .into(),
+    ])
+    .with_grid_columns(2);
+
+    let mut details = Vec::with_capacity(STAGES + 3);
     for stage in 1..=STAGES as u8 {
-        panes.push(
+        details.push(
             Spatial2DView::new(format!("stage {stage}"))
                 .with_origin(stage_path("stage", stage))
                 .into(),
         );
     }
-    panes.push(
-        Spatial2DView::new("anytime result")
-            .with_origin("result/disparity")
+    details.extend([
+        Spatial2DView::new("3-px outliers (white = wrong)")
+            .with_origin("comparison/outliers")
             .into(),
-    );
-    panes.push(Spatial3DView::new("depth 3D").with_origin("world").into());
-    for stage in 2..=STAGES as u8 {
-        panes.push(
-            Spatial2DView::new(format!("residual {} to {stage}", stage - 1))
-                .with_origin(stage_path("delta", stage))
-                .into(),
-        );
-    }
-    // Milliseconds, a 0..1 quality, and an error percentage share no sensible
-    // axis, so they get one view each rather than one view that flattens the
-    // traces. The error view stays empty unless the viewer has KITTI ground
-    // truth (`data_dir` with a `disp_occ_0/` directory).
-    let signals = Horizontal::new([
         TimeSeriesView::new("latency (ms)")
             .with_origin("anytime/latency")
-            .into(),
-        TimeSeriesView::new("quality and stage")
-            .with_contents(["anytime/quality", "anytime/stage"])
             .into(),
         TimeSeriesView::new("3-px error (%)")
             .with_origin("anytime/error")
             .into(),
-        TextDocumentView::new("frame")
-            .with_origin("anytime/summary")
-            .into(),
     ]);
-    Blueprint::new(Vertical::new([
-        Grid::new(panes).with_grid_columns(4).into(),
-        signals.into(),
-    ]))
+
+    Blueprint::new(
+        Vertical::new([
+            primary.into(),
+            Grid::new(details).with_grid_columns(3).into(),
+        ])
+        .with_row_shares([4.0, 1.5]),
+    )
     .send(rec, BlueprintActivation::default())
     .map_err(rerun_error)
 }
 
 /// Names and colors the curves once so the legend reads without hovering.
 fn style_curves(rec: &RecordingStream) -> CuResult<()> {
-    let curves: [(&str, &str, [u8; 3]); 9] = [
-        ("anytime/stage", "stage reached", [120, 180, 255]),
-        ("anytime/quality", "quality", [255, 214, 102]),
+    let curves: [(&str, &str, [u8; 3]); 7] = [
         ("anytime/latency/stage1", "stage 1 at", [140, 220, 160]),
         ("anytime/latency/stage2", "stage 2 at", [90, 180, 120]),
         ("anytime/latency/stage3", "stage 3 at", [50, 140, 90]),
@@ -687,82 +709,136 @@ fn stage_path(prefix: &str, stage: u8) -> String {
     format!("{prefix}/stage{stage}")
 }
 
-/// `stage - 1` as an array index, `None` for a stage outside `1..=STAGES` —
-/// the stage is a wire value, not something to index with unchecked.
-fn stage_slot(stage: u8) -> Option<usize> {
-    (1..=STAGES as u8)
-        .contains(&stage)
-        .then(|| stage as usize - 1)
-}
-
-/// Per-frame markdown panel: what the budget bought for this copperlist.
-///
-/// The depth range and the per-stage correction sizes are here because the
-/// panes cannot show them: a flat depth map, an all-zero correction, and an
-/// empty pane are three different things that all render as one flat color.
-fn summary(cycle: i64, depth: Option<&StereoDepth>, status: &str, frame: &FrameFacts) -> String {
-    let mut text = format!("### frame {cycle}\n\n`{status}`\n\n| | |\n| --- | --- |\n");
-    match depth {
-        Some(depth) => {
-            text.push_str(&format!("| stage | {} of {STAGES} |\n", depth.stage));
-            text.push_str(&format!(
-                "| quality | {:.2} |\n",
-                quality_to_f32(depth.quality)
+/// Copies only the RGB samples used by the display point cloud. Retaining this
+/// compact texture rather than an image handle keeps background results tied
+/// to their real source frame without exhausting the source's buffer pool.
+fn sample_rgb(image: &CuImage<Vec<u8>>, point_step: usize) -> CuResult<SampledRgb> {
+    if point_step == 0 {
+        return Err(CuError::from("DepthViewer: point step must be non-zero"));
+    }
+    let bgr = match &image.format.pixel_format {
+        b"RGB3" | b"RGB " => false,
+        b"BGR3" | b"BGR " => true,
+        _ => {
+            return Err(CuError::from(
+                "DepthViewer: RGB reconstruction requires RGB3 or BGR3 input",
             ));
-            text.push_str(&match frame.disparity_range {
-                Some((low, high)) if (high - low).abs() < f32::EPSILON => {
-                    format!("| disparity | flat at {low:.1} px |\n")
-                }
-                Some((low, high)) => format!("| disparity | {low:.1} to {high:.1} px |\n"),
-                None => "| disparity | no valid samples |\n".to_owned(),
-            });
-            for snapshot in depth.snapshots.iter().flatten() {
-                text.push_str(&format!(
-                    "| stage {} at | {:.1} ms |\n",
-                    snapshot.stage,
-                    millis(snapshot.elapsed),
-                ));
-            }
-            for (index, largest) in frame.corrections.iter().enumerate() {
-                if let Some(largest) = largest {
-                    text.push_str(&format!(
-                        "| residual {} to {} | max {largest:.2} px |\n",
-                        index,
-                        index + 1
-                    ));
-                }
-            }
-            for (index, error) in frame.errors.iter().enumerate() {
-                if let Some(error) = error {
-                    text.push_str(&format!(
-                        "| 3-px error, stage {} | {error:.1}% |\n",
-                        index + 1
-                    ));
-                }
+        }
+    };
+    let width = image.format.width as usize;
+    let height = image.format.height as usize;
+    image.with_plane_bytes(0, |bytes, plane| {
+        let stride = plane.stride_bytes as usize;
+        let columns = width.div_ceil(point_step);
+        let mut colors = Vec::with_capacity(columns * height.div_ceil(point_step));
+        for y in (0..height).step_by(point_step) {
+            for x in (0..width).step_by(point_step) {
+                let index = y * stride + x * 3;
+                let pixel = [bytes[index], bytes[index + 1], bytes[index + 2]];
+                colors.push(if bgr {
+                    [pixel[2], pixel[1], pixel[0]]
+                } else {
+                    pixel
+                });
             }
         }
-        None => text.push_str("| stage | nothing published |\n"),
-    }
-    if let Some(total) = frame.total_millis {
-        text.push_str(&format!("| job total | {total:.1} ms |\n"));
-    }
-    text
+        SampledRgb { columns, colors }
+    })
 }
 
-/// Serializes a depth map in meters for the 3D back-projection. Rows are
-/// walked through the stride: the sample slice includes row padding, while the
-/// serialized image is `width` pixels wide.
-fn depth_bytes(depth: &CuDepthMap<Vec<Length>, CuDepthLength>) -> Vec<u8> {
+/// An RGB-colored point cloud is much easier to parse than a depth-colored
+/// sheet: the car remains visually a car while its metric shape is visible.
+/// A small median over the sampled grid suppresses isolated depth spikes, and
+/// the foreground cutoff removes the unstable low-disparity far field. Both
+/// operations are display-only; inference and scoring retain the raw map.
+fn rgb_point_cloud(
+    depth: &CuDepthMap<Vec<Length>, CuDepthLength>,
+    rgb: Option<&SampledRgb>,
+    focal_pixels: f32,
+    point_step: usize,
+    depth_min_meters: f32,
+    depth_max_meters: f32,
+) -> Points3D {
     let (width, height, stride) = row_layout(depth);
-    let mut bytes = Vec::with_capacity(width * height * 4);
+    let capacity = width.div_ceil(point_step) * height.div_ceil(point_step);
+    let mut positions = Vec::with_capacity(capacity);
+    let mut colors = Vec::with_capacity(capacity);
+    let center_x = 0.5 * width as f32;
+    let center_y = 0.5 * height as f32;
     depth.with_samples(|samples, _format| {
-        for row in samples.chunks(stride).take(height) {
-            for sample in &row[..width] {
-                bytes.extend_from_slice(&sample.get::<meter>().to_le_bytes());
+        for y in (0..height).step_by(point_step) {
+            for x in (0..width).step_by(point_step) {
+                let Some(z) = median_depth(
+                    samples,
+                    width,
+                    height,
+                    stride,
+                    x,
+                    y,
+                    point_step,
+                    depth_min_meters,
+                    depth_max_meters,
+                ) else {
+                    continue;
+                };
+                positions.push([
+                    (x as f32 - center_x) * z / focal_pixels,
+                    (y as f32 - center_y) * z / focal_pixels,
+                    z,
+                ]);
+                let color_index = y / point_step * width.div_ceil(point_step) + x / point_step;
+                colors.push(
+                    rgb.filter(|sampled| sampled.columns == width.div_ceil(point_step))
+                        .and_then(|sampled| sampled.colors.get(color_index))
+                        .copied()
+                        .unwrap_or([190, 200, 210]),
+                );
             }
         }
     });
-    bytes
+    Points3D::new(positions)
+        .with_colors(colors)
+        .with_radii([rerun::Radius::new_ui_points(DEPTH_POINT_RADIUS)])
+}
+
+#[allow(clippy::too_many_arguments)]
+fn median_depth(
+    samples: &[Length],
+    width: usize,
+    height: usize,
+    stride: usize,
+    x: usize,
+    y: usize,
+    point_step: usize,
+    depth_min_meters: f32,
+    depth_max_meters: f32,
+) -> Option<f32> {
+    let mut neighbors = [0.0; 9];
+    let mut count = 0;
+    let step = point_step as isize;
+    for dy in [-step, 0, step] {
+        for dx in [-step, 0, step] {
+            let sample_x = x as isize + dx;
+            let sample_y = y as isize + dy;
+            if sample_x < 0
+                || sample_y < 0
+                || sample_x >= width as isize
+                || sample_y >= height as isize
+            {
+                continue;
+            }
+            let meters = samples[sample_y as usize * stride + sample_x as usize].get::<meter>();
+            if meters.is_finite() && (depth_min_meters..=depth_max_meters).contains(&meters) {
+                neighbors[count] = meters;
+                count += 1;
+            }
+        }
+    }
+    if count < 3 {
+        return None;
+    }
+    neighbors[..count].sort_by(f32::total_cmp);
+    Some(neighbors[count / 2])
 }
 
 fn row_layout(depth: &CuDepthMap<Vec<Length>, CuDepthLength>) -> (usize, usize, usize) {
@@ -807,52 +883,115 @@ fn disparity_bytes(
     (bytes, range)
 }
 
-/// Absolute per-pixel disparity correction one refinement applied, with the
-/// largest correction it contains, both in pixels.
-///
-/// This is the paper's grayscale residual map: what the eye cannot pull out of
-/// two near-identical disparity panes — and the reported maximum is what
-/// distinguishes "refined nothing" from "no data".
-fn delta_image(
-    current: &CuDepthMap<Vec<Length>, CuDepthLength>,
-    previous: &CuDepthMap<Vec<Length>, CuDepthLength>,
-    disparity_scale: f32,
-) -> (DepthImage, f32) {
-    let pixels = |meters: f32| {
-        if meters.is_finite() && meters > 0.0 {
-            disparity_scale / meters
-        } else {
-            f32::NAN
+/// KITTI truth resampled to the network output dimensions and converted from
+/// native-image pixels to model-image pixels. It therefore shares exactly the
+/// same 0..`disparity_max_pixels` colormap as the prediction panes.
+fn ground_truth_image(
+    gt: &GtDisparity,
+    width: u32,
+    height: u32,
+    disparity_max_pixels: f64,
+) -> DepthImage {
+    depth_image(
+        ground_truth_bytes(gt, width, height),
+        width,
+        height,
+        (0.0, disparity_max_pixels),
+        Colormap::Turbo,
+    )
+}
+
+fn ground_truth_bytes(gt: &GtDisparity, width: u32, height: u32) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(width as usize * height as usize * 4);
+    let to_native = gt.width as f32 / width as f32;
+    for y in 0..height as usize {
+        let gt_y = y * gt.height as usize / height as usize;
+        for x in 0..width as usize {
+            let gt_x = x * gt.width as usize / width as usize;
+            let raw = gt.values[gt_y * gt.width as usize + gt_x];
+            let disparity = if raw == 0 {
+                f32::NAN
+            } else {
+                raw as f32 / 256.0 / to_native
+            };
+            bytes.extend_from_slice(&disparity.to_le_bytes());
         }
-    };
-    let (width, height, stride) = row_layout(current);
-    let mut before = Vec::with_capacity(previous.format.required_elements());
-    previous.with_samples(|samples, _format| before.extend_from_slice(samples));
+    }
+    bytes
+}
+
+/// KITTI's 3-pixel benchmark as a spatial mask and aggregate percentage.
+/// White pixels are outliers, black pixels are correct, and unlabeled pixels
+/// are NaN. Thresholding remains in native KITTI pixels even though the mask
+/// is displayed at the network's resized resolution.
+fn benchmark_outlier_bytes(
+    depth: &CuDepthMap<Vec<Length>, CuDepthLength>,
+    gt: &GtDisparity,
+    disparity_scale: f32,
+) -> Option<(Vec<u8>, f32)> {
+    let (width, height, stride) = row_layout(depth);
+    let gt_width = gt.width as usize;
+    let gt_height = gt.height as usize;
+    if width == 0 || height == 0 || gt_width == 0 || gt_height == 0 {
+        return None;
+    }
+    let to_native = gt.width as f32 / width as f32;
     let mut bytes = Vec::with_capacity(width * height * 4);
-    let mut largest = 0.0f32;
-    current.with_samples(|samples, _format| {
-        for (row, before_row) in samples
-            .chunks(stride)
-            .zip(before.chunks(stride))
-            .take(height)
-        {
-            for (sample, before) in row[..width].iter().zip(&before_row[..width]) {
-                let delta = (pixels(sample.get::<meter>()) - pixels(before.get::<meter>())).abs();
-                bytes.extend_from_slice(&delta.to_le_bytes());
-                if delta.is_finite() && delta > largest {
-                    largest = delta;
+    let mut labeled = 0u32;
+    let mut bad = 0u32;
+    depth.with_samples(|samples, _format| {
+        for y in 0..height {
+            let gt_y = y * gt_height / height;
+            for x in 0..width {
+                let gt_x = x * gt_width / width;
+                let raw = gt.values[gt_y * gt_width + gt_x];
+                if raw == 0 {
+                    bytes.extend_from_slice(&f32::NAN.to_le_bytes());
+                    continue;
                 }
+                let truth = raw as f32 / 256.0;
+                labeled += 1;
+                let meters = samples[y * stride + x].get::<meter>();
+                let predicted = if meters.is_finite() && meters > 0.0 {
+                    disparity_scale / meters * to_native
+                } else {
+                    f32::INFINITY
+                };
+                let error = (predicted - truth).abs();
+                let is_bad = error > 3.0 && error / truth > 0.05;
+                bad += u32::from(is_bad);
+                bytes.extend_from_slice(&f32::from(is_bad).to_le_bytes());
             }
         }
     });
-    let image = depth_image(
-        bytes,
-        current.format.width,
-        current.format.height,
-        (0.0, DELTA_MAX_PIXELS),
-        Colormap::Grayscale,
-    );
-    (image, largest)
+    (labeled > 0).then(|| (bytes, 100.0 * bad as f32 / labeled as f32))
+}
+
+/// A subtle wireframe around the volume reconstructed from the depth image.
+/// Besides making the camera geometry legible, this gives Rerun a stable
+/// region of interest: depth-image clouds alone do not currently participate
+/// in the initial 3D eye's automatic framing.
+fn reconstruction_extent(
+    format: CuImageBufferFormat,
+    focal_pixels: f32,
+    far_meters: f32,
+) -> LineStrips3D {
+    let half_width = 0.5 * format.width as f32 * far_meters / focal_pixels;
+    let half_height = 0.5 * format.height as f32 * far_meters / focal_pixels;
+    let origin = [0.0, 0.0, 0.0];
+    let top_left = [-half_width, -half_height, far_meters];
+    let top_right = [half_width, -half_height, far_meters];
+    let bottom_right = [half_width, half_height, far_meters];
+    let bottom_left = [-half_width, half_height, far_meters];
+    LineStrips3D::new([
+        vec![origin, top_left],
+        vec![origin, top_right],
+        vec![origin, bottom_right],
+        vec![origin, bottom_left],
+        vec![top_left, top_right, bottom_right, bottom_left, top_left],
+    ])
+    .with_colors([0x6B728080])
+    .with_radii([rerun::Radius::new_ui_points(0.75)])
 }
 
 fn depth_image(
@@ -895,6 +1034,12 @@ fn discover_kitti_pairs(data_dir: &str) -> CuResult<Vec<(PathBuf, PathBuf)>> {
         let entry = entry.map_err(|error| {
             CuError::new_with_cause("Failed to read a KITTI directory entry", error)
         })?;
+        // KITTI scene flow provides `_11` as the following temporal frame.
+        // Stereo disparity ground truth and benchmark inputs are the `_10`
+        // frames, which are the useful sequence for this depth demo.
+        if !entry.file_name().to_string_lossy().ends_with("_10.png") {
+            continue;
+        }
         let right = right_dir.join(entry.file_name());
         if entry.path().is_file() && right.is_file() {
             pairs.push((entry.path(), right));
@@ -906,8 +1051,8 @@ fn discover_kitti_pairs(data_dir: &str) -> CuResult<Vec<(PathBuf, PathBuf)>> {
 
 /// Ground-truth disparity path per stereo pair, in the same order as
 /// [`discover_kitti_pairs`] so the source's frame sequence indexes both.
-/// KITTI 2015 labels only the `_10` frame of each scene, so `_11` entries
-/// are `None`.
+/// The source deliberately selects KITTI's labeled `_10` benchmark frames, so
+/// every discovered pair should have a ground-truth entry in a training set.
 fn discover_kitti_ground_truth(data_dir: &str) -> CuResult<Vec<Option<PathBuf>>> {
     let gt_dir = Path::new(data_dir).join("disp_occ_0");
     Ok(discover_kitti_pairs(data_dir)?
@@ -934,55 +1079,6 @@ fn load_gt_disparity(path: &Path) -> CuResult<GtDisparity> {
         height,
         values,
     })
-}
-
-/// KITTI's 3-pixel error: the share of labeled pixels whose disparity is off
-/// by more than 3 px *and* more than 5%, in percent — the paper's per-stage
-/// quality metric. The published map is nearest-neighbor matched against the
-/// native-resolution ground truth and its disparities are rescaled to native
-/// pixel units, so the 3 px threshold keeps its KITTI meaning.
-fn three_pixel_error(
-    depth: &CuDepthMap<Vec<Length>, CuDepthLength>,
-    gt: &GtDisparity,
-    disparity_scale: f32,
-) -> Option<f32> {
-    let width = depth.format.width as usize;
-    let height = depth.format.height as usize;
-    let stride = depth.format.stride as usize;
-    let gt_width = gt.width as usize;
-    let gt_height = gt.height as usize;
-    if width == 0 || height == 0 || gt_width == 0 || gt_height == 0 {
-        return None;
-    }
-    let to_native = gt.width as f32 / width as f32;
-    let mut labeled = 0u32;
-    let mut bad = 0u32;
-    depth.with_samples(|samples, _format| {
-        for y in 0..height {
-            let gt_y = y * gt_height / height;
-            for x in 0..width {
-                let gt_x = x * gt_width / width;
-                let raw = gt.values[gt_y * gt_width + gt_x];
-                if raw == 0 {
-                    continue;
-                }
-                let truth = raw as f32 / 256.0;
-                labeled += 1;
-                let meters = samples[y * stride + x].get::<meter>();
-                let predicted = if meters.is_finite() && meters > 0.0 {
-                    disparity_scale / meters * to_native
-                } else {
-                    // An invalid prediction over a labeled pixel is wrong.
-                    f32::INFINITY
-                };
-                let error = (predicted - truth).abs();
-                if error > 3.0 && error / truth > 0.05 {
-                    bad += 1;
-                }
-            }
-        }
-    });
-    (labeled > 0).then(|| 100.0 * bad as f32 / labeled as f32)
 }
 
 fn load_image(
@@ -1037,4 +1133,85 @@ fn synthetic_pixel(x: usize, y: usize, phase: usize) -> [u8; 3] {
 
 fn rerun_error(error: rerun::RecordingStreamError) -> CuError {
     CuError::new_with_cause("Failed to log to Rerun", error)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cu_sensor_payloads::CuDepthMapFormat;
+
+    fn decode_f32(bytes: &[u8]) -> Vec<f32> {
+        bytes
+            .chunks_exact(4)
+            .map(|chunk| f32::from_le_bytes(chunk.try_into().unwrap()))
+            .collect()
+    }
+
+    #[test]
+    fn ground_truth_is_resampled_into_model_pixel_units() {
+        let gt = GtDisparity {
+            width: 4,
+            height: 1,
+            values: vec![8 * 256, 0, 20 * 256, 0],
+        };
+
+        let values = decode_f32(&ground_truth_bytes(&gt, 2, 1));
+
+        assert_eq!(values, vec![4.0, 10.0]);
+    }
+
+    #[test]
+    fn benchmark_mask_matches_kitti_three_pixel_rule() {
+        let depth = CuDepthMap::new(
+            CuDepthMapFormat {
+                width: 2,
+                height: 1,
+                stride: 2,
+            },
+            CuHandle::new_detached(vec![Length::new::<meter>(2.5), Length::new::<meter>(5.0)]),
+        );
+        let gt = GtDisparity {
+            width: 4,
+            height: 1,
+            values: vec![8 * 256, 0, 20 * 256, 0],
+        };
+
+        let (bytes, error) = benchmark_outlier_bytes(&depth, &gt, 10.0).unwrap();
+
+        assert_eq!(decode_f32(&bytes), vec![0.0, 1.0]);
+        assert_eq!(error, 50.0);
+    }
+
+    #[test]
+    fn benchmark_mask_marks_unlabeled_pixels_as_nan() {
+        let depth = CuDepthMap::new(
+            CuDepthMapFormat {
+                width: 2,
+                height: 1,
+                stride: 2,
+            },
+            CuHandle::new_detached(vec![Length::new::<meter>(1.0), Length::new::<meter>(1.25)]),
+        );
+        let gt = GtDisparity {
+            width: 2,
+            height: 1,
+            values: vec![0, 8 * 256],
+        };
+
+        let (bytes, error) = benchmark_outlier_bytes(&depth, &gt, 10.0).unwrap();
+        let values = decode_f32(&bytes);
+        assert!(values[0].is_nan());
+        assert_eq!(values[1], 0.0);
+        assert_eq!(error, 0.0);
+    }
+
+    #[test]
+    fn display_median_suppresses_an_isolated_depth_spike() {
+        let mut samples = vec![Length::new::<meter>(12.0); 9];
+        samples[4] = Length::new::<meter>(34.0);
+
+        let filtered = median_depth(&samples, 3, 3, 3, 1, 1, 1, 0.5, 35.0);
+
+        assert_eq!(filtered, Some(12.0));
+    }
 }

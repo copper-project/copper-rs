@@ -14,7 +14,7 @@ fn main() {
 }
 
 fn run() -> CuResult<()> {
-    let log_path = "logs/anynet_bg.copper";
+    let log_path = "examples/cu_anytime_anynet/logs/anynet_bg.copper";
     if let Some(parent) = Path::new(log_path).parent() {
         fs::create_dir_all(parent)
             .map_err(|error| CuError::new_with_cause("Failed to create logs directory", error))?;

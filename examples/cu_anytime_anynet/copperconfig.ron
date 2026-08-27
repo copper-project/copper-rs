@@ -1,61 +1,17 @@
 (
+    // Both static graphs are compiled into the foreground binary. Its CLI
+    // defaults to `synthetic`; `just kitti` selects the real-data mission.
+    missions: [
+        (id: "synthetic"),
+        (id: "kitti"),
+    ],
+    includes: [
+        (path: "config/synthetic.ron"),
+        (path: "config/kitti.ron"),
+    ],
     logging: (
         enable_task_logging: true,
         slab_size_mib: 32,
         section_size_mib: 8,
     ),
-    tasks: [
-        (
-            id: "stereo",
-            type: "cu_anytime_anynet::tasks::StereoSrc",
-            // Runs the synthetic scene. Add `"data_dir"` to replay KITTI 2015
-            // instead — see the README for the download and the `focal_px` the
-            // 1242 -> 640 resize implies.
-            config: {},
-        ),
-        (
-            id: "anynet",
-            type: "cu_anynet::AnyNetStereo",
-            // KITTI's calibration; must match the viewer node.
-            config: {
-                "focal_px": 721.5,
-                "baseline_m": 0.54,
-                "stage_snapshots": true,
-                "weights": "target/cu_anytime_anynet/anynet-kitti.safetensors",
-                "normalization": "raw",
-            },
-            anytime: (
-                max_refines: 2,
-                time_budget_ms: 800.0,
-                max_age_ms: 2000.0,
-            ),
-        ),
-        (
-            id: "viewer",
-            type: "cu_anytime_anynet::tasks::DepthViewer",
-            // `time_dilation` replays the within-frame refinement in 20x slow
-            // motion on the `time` timeline. Give this node the same
-            // `"data_dir"` and `"focal_px"` as above for the 3-px error curves.
-            config: {
-                "time_dilation": 20.0,
-            },
-        ),
-    ],
-    cnx: [
-        (
-            src: "stereo",
-            dst: "anynet",
-            msg: "cu_anynet::StereoPair",
-        ),
-        (
-            src: "stereo",
-            dst: "viewer",
-            msg: "cu_anynet::StereoPair",
-        ),
-        (
-            src: "anynet",
-            dst: "viewer",
-            msg: "cu_anynet::StereoDepth",
-        ),
-    ],
 )
