@@ -1406,11 +1406,7 @@ fn gen_culist_support(
             let task_id = LitStr::new(task_id, Span::call_site());
             let msg_type = LitStr::new(msg_type, Span::call_site());
             quote! {
-                cu29::TaskOutputSpec {
-                    task_id: #task_id,
-                    msg_type: #msg_type,
-                    payload_type_path_fn: cu29::reflect::__payload_type_path::<#payload_type>,
-                }
+                cu29::TaskOutputSpec::new::<#payload_type>(#task_id, #msg_type)
             }
         })
         .collect();
@@ -1446,6 +1442,10 @@ fn gen_culist_support(
 
         pub type CuList = CopperList<CuStampedDataSet>;
 
+        const TASK_OUTPUT_SPECS: &[cu29::TaskOutputSpec] = &[
+            #(#task_output_spec_literals),*
+        ];
+
         impl CuStampedDataSet {
             #(#methods)*
 
@@ -1469,13 +1469,9 @@ fn gen_culist_support(
 
             #[allow(dead_code)]
             fn get_output_specs() -> &'static [cu29::TaskOutputSpec] {
-                &[#(#task_output_spec_literals),*]
+                TASK_OUTPUT_SPECS
             }
         }
-
-        // Note: PayloadSchemas is NOT implemented here.
-        // Users who want MCAP export with schemas should implement it manually
-        // using cu29_export::trace_type_to_jsonschema.
 
         // Adds the bincode support for the copper list tuple
         #msgs_types_tuple_encode

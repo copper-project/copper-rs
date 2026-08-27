@@ -126,11 +126,15 @@ pub fn cu29_traits::ObservedWriter<W>::into_inner(self) -> W
 pub const fn cu29_traits::ObservedWriter<W>::new(inner: W) -> Self
 impl<W: cu_bincode::enc::write::Writer> cu_bincode::enc::write::Writer for cu29_traits::ObservedWriter<W>
 pub fn cu29_traits::ObservedWriter<W>::write(&mut self, bytes: &[u8]) -> core::result::Result<(), cu_bincode::error::EncodeError>
+pub struct cu29_traits::ReflectSerializedPayloadSchema
+impl cu29_traits::ReflectSerializedPayloadSchema
+pub fn cu29_traits::ReflectSerializedPayloadSchema::schema(&self) -> &'static str
 pub struct cu29_traits::TaskOutputSpec
 pub cu29_traits::TaskOutputSpec::msg_type: &'static str
 pub cu29_traits::TaskOutputSpec::payload_type_path_fn: fn() -> &'static str
 pub cu29_traits::TaskOutputSpec::task_id: &'static str
 impl cu29_traits::TaskOutputSpec
+pub const fn cu29_traits::TaskOutputSpec::new<T>(task_id: &'static str, msg_type: &'static str) -> Self
 pub fn cu29_traits::TaskOutputSpec::payload_type_path(&self) -> &'static str
 pub const cu29_traits::COMPACT_STRING_CAPACITY: usize
 pub trait cu29_traits::CopperListTuple: cu_bincode::enc::Encode + cu_bincode::de::Decode<()> + core::fmt::Debug + serde_core::ser::Serialize + cu29_traits::ErasedCuStampedDataSet + cu29_traits::MatchingTasks + core::default::Default
@@ -156,6 +160,8 @@ pub trait cu29_traits::Metadata: core::default::Default + core::fmt::Debug + cor
 impl cu29_traits::Metadata for ()
 pub trait cu29_traits::PayloadSchemas
 pub fn cu29_traits::PayloadSchemas::get_payload_schemas() -> alloc::vec::Vec<(&'static str, alloc::string::String)>
+pub trait cu29_traits::SerializedPayloadSchema
+pub fn cu29_traits::SerializedPayloadSchema::serialized_payload_schema() -> &'static str
 pub trait cu29_traits::WriteStream<E: cu_bincode::enc::Encode>: core::fmt::Debug + core::marker::Send + core::marker::Sync
 pub fn cu29_traits::WriteStream::flush(&mut self) -> cu29_traits::CuResult<()>
 pub fn cu29_traits::WriteStream::last_log_bytes(&self) -> core::option::Option<usize>

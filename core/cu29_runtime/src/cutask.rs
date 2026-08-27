@@ -35,6 +35,7 @@ pub trait CuMsgPayload:
     + DeserializeOwned
     + Reflect
     + TypePath
+    + GetTypeRegistration
     + Sized
 {
 }
@@ -59,6 +60,7 @@ impl<T> CuMsgPayload for T where
         + DeserializeOwned
         + Reflect
         + TypePath
+        + GetTypeRegistration
         + Sized
 {
 }
