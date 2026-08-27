@@ -332,7 +332,15 @@ where
 /// * `src` - Reader for the CopperList log data
 /// * `output_path` - Path to write the MCAP file
 /// * `task_ids` - Slice of output IDs corresponding to CopperList message slots
-/// * `schemas` - Vector of (task_id, schema_json) pairs
+/// * `schemas` - Slot-aligned `(task_id, schema_json)` pairs. When non-empty,
+///   this slice must have the same length and order as `task_ids`. Duplicate
+///   task IDs are valid because one task can produce multiple output payloads.
+///   Pass an empty slice to create every channel without a payload schema.
+///
+/// # Errors
+///
+/// Returns an error before creating `output_path` when a non-empty schema list
+/// has the wrong length or its task ID at any slot does not match `task_ids`.
 pub fn export_to_mcap_with_schemas<P, R>(
     mut src: R,
     output_path: &Path,
@@ -343,6 +351,8 @@ where
     P: CopperListTuple,
     R: Read,
 {
+    validate_slot_aligned_schemas(task_ids, schemas)?;
+
     // Create MCAP file
     let file = File::create(output_path)
         .map_err(|e| CuError::new_with_cause("Failed to create MCAP output file", e))?;
@@ -362,9 +372,7 @@ where
         .map_err(|e| CuError::new_with_cause("Failed to add metadata schema", e))?;
 
     for (slot_index, task_id) in task_ids.iter().enumerate() {
-        if let Some((schema_task_id, schema_json)) = schemas.get(slot_index)
-            && schema_task_id == task_id
-        {
+        if let Some((_, schema_json)) = schemas.get(slot_index) {
             let wrapped_schema = wrap_payload_schema_for_mcap_message(schema_json);
             let schema_id = mcap_writer
                 .add_schema(
@@ -506,6 +514,34 @@ where
         channels_created: channel_infos.iter().filter(|c| c.is_some()).count(),
         schemas_generated: schemas.len(),
     })
+}
+
+fn validate_slot_aligned_schemas(task_ids: &[&str], schemas: &[(&str, String)]) -> CuResult<()> {
+    if schemas.is_empty() {
+        return Ok(());
+    }
+
+    if schemas.len() != task_ids.len() {
+        return Err(format!(
+            "MCAP schemas must be empty or contain one slot-aligned entry per CopperList output: expected {}, got {}",
+            task_ids.len(),
+            schemas.len()
+        )
+        .into());
+    }
+
+    for (slot_index, ((schema_task_id, _), expected_task_id)) in
+        schemas.iter().zip(task_ids).enumerate()
+    {
+        if schema_task_id != expected_task_id {
+            return Err(format!(
+                "MCAP schema task ID mismatch at CopperList slot {slot_index}: expected '{expected_task_id}', got '{schema_task_id}'; schemas must be in slot order"
+            )
+            .into());
+        }
+    }
+
+    Ok(())
 }
 
 /// Statistics from an MCAP export operation.
@@ -1033,6 +1069,65 @@ mod tests {
         assert!(!schemas[0].1.contains("TestPayloadB"));
         assert!(schemas[1].1.contains("TestPayloadB"));
         assert!(!schemas[1].1.contains("TestPayloadA"));
+    }
+
+    #[test]
+    fn explicit_schemas_accept_duplicate_task_ids_when_slot_aligned() {
+        let schemas = [
+            ("multi_output", "schema-a".to_string()),
+            ("multi_output", "schema-b".to_string()),
+        ];
+
+        validate_slot_aligned_schemas(&["multi_output", "multi_output"], &schemas)
+            .expect("duplicate task IDs are valid when each output slot has a schema");
+    }
+
+    #[test]
+    fn explicit_schemas_reject_unordered_task_ids_before_creating_output() {
+        let schemas = [
+            ("task_b", "schema-b".to_string()),
+            ("task_a", "schema-a".to_string()),
+        ];
+        let dir = tempdir().expect("Failed to create temp dir");
+        let mcap_path = dir.path().join("invalid_schema_order.mcap");
+
+        let error = export_to_mcap_with_schemas::<TestMsgs, _>(
+            Cursor::new(Vec::<u8>::new()),
+            &mcap_path,
+            &["task_a", "task_b"],
+            &schemas,
+        )
+        .expect_err("unordered schemas must be rejected");
+
+        assert!(
+            error.to_string().contains(
+                "schema task ID mismatch at CopperList slot 0: expected 'task_a', got 'task_b'"
+            ),
+            "unexpected error: {error}"
+        );
+        assert!(
+            !mcap_path.exists(),
+            "schema validation must happen before creating the output file"
+        );
+    }
+
+    #[test]
+    fn explicit_schemas_reject_deduplicated_slot_list() {
+        let schemas = [("multi_output", "schema-a".to_string())];
+
+        let error = validate_slot_aligned_schemas(&["multi_output", "multi_output"], &schemas)
+            .expect_err("a non-empty schema list must cover every output slot");
+
+        assert!(
+            error.to_string().contains("expected 2, got 1"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn explicit_schemas_allow_an_empty_list() {
+        validate_slot_aligned_schemas(&["task_a", "task_b"], &[])
+            .expect("an empty list intentionally creates schema-less channels");
     }
 
     #[test]
