@@ -1044,6 +1044,19 @@ Call register_copperlist_python_type::<P>() from Rust before using this function
             RuntimeLifecycleEvent::ShutdownCompleted => {
                 root.set_item("kind", "shutdown_completed")?;
             }
+            RuntimeLifecycleEvent::BuildIdentityRecorded { identity } => {
+                root.set_item("kind", "build_identity_recorded")?;
+                root.set_item("git_repository", &identity.git_repository)?;
+                root.set_item("git_commit", &identity.git_commit)?;
+                root.set_item("git_dirty", identity.git_dirty)?;
+                root.set_item("source_archive_hash", &identity.source_archive_hash)?;
+                root.set_item("cargo_manifest_path", &identity.cargo_manifest_path)?;
+                root.set_item("cargo_target", format!("{:?}", identity.cargo_target))?;
+                root.set_item("cargo_features", &identity.cargo_features)?;
+                root.set_item("rust_target", &identity.rust_target)?;
+                root.set_item("rust_toolchain", &identity.rust_toolchain)?;
+                root.set_item("dependency_resolution", &identity.dependency_resolution)?;
+            }
         }
 
         dict_to_namespace(root, py)

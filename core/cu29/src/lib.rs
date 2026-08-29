@@ -290,8 +290,9 @@ pub mod prelude {
     pub use cu29_runtime::copperlist::*;
     pub use cu29_runtime::cubridge::*;
     pub use cu29_runtime::curuntime::{
-        CuRuntime, KeyFrame, RuntimeLifecycleConfigSource, RuntimeLifecycleEvent,
-        RuntimeLifecycleRecord, RuntimeLifecycleStackInfo,
+        CuRuntime, KeyFrame, RuntimeBuildIdentityV1, RuntimeCargoTarget,
+        RuntimeLifecycleConfigSource, RuntimeLifecycleEvent, RuntimeLifecycleRecord,
+        RuntimeLifecycleStackInfo,
     };
     pub use cu29_runtime::cutask::*;
     #[cfg(feature = "std")]

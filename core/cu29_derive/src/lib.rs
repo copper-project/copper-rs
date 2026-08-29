@@ -1940,6 +1940,27 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     } else {
         quote! { None }
     };
+    let build_metadata = cu29_build::read_build_metadata().unwrap_or_default();
+    let option_string_tokens = |value: Option<String>| match value {
+        Some(value) => quote! { Some(#value.to_string()) },
+        None => quote! { None },
+    };
+    let build_git_repository = option_string_tokens(build_metadata.git_repository);
+    let build_git_commit = option_string_tokens(build_metadata.git_commit);
+    let build_git_dirty = match build_metadata.git_dirty {
+        Some(value) => quote! { Some(#value) },
+        None => quote! { None },
+    };
+    let build_source_archive_hash = option_string_tokens(build_metadata.source_archive_hash);
+    let build_cargo_manifest_path = option_string_tokens(build_metadata.cargo_manifest_path);
+    let build_rust_target = option_string_tokens(build_metadata.rust_target);
+    let build_rust_toolchain = option_string_tokens(build_metadata.rust_toolchain);
+    let build_dependency_resolution = option_string_tokens(build_metadata.dependency_resolution);
+    let build_cargo_features = build_metadata.cargo_features;
+    let build_cargo_target = match std::env::var("CARGO_BIN_NAME") {
+        Ok(name) if !name.is_empty() => quote! { RuntimeCargoTarget::Bin(#name.to_string()) },
+        _ => quote! { RuntimeCargoTarget::Lib },
+    };
     let subsystem_code_literal = proc_macro2::Literal::u16_unsuffixed(subsystem_code);
     let subsystem_id_tokens = if let Some(subsystem_id) = subsystem_id.as_deref() {
         quote! { Some(#subsystem_id) }
@@ -5519,6 +5540,23 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         config_source,
                         effective_config_ron,
                         stack: stack_info,
+                    },
+                })?;
+                runtime_lifecycle_stream.log(&RuntimeLifecycleRecord {
+                    timestamp: clock.now(),
+                    event: RuntimeLifecycleEvent::BuildIdentityRecorded {
+                        identity: RuntimeBuildIdentityV1 {
+                            git_repository: #build_git_repository,
+                            git_commit: #build_git_commit,
+                            git_dirty: #build_git_dirty,
+                            source_archive_hash: #build_source_archive_hash,
+                            cargo_manifest_path: #build_cargo_manifest_path,
+                            cargo_target: #build_cargo_target,
+                            cargo_features: vec![#(#build_cargo_features.to_string()),*],
+                            rust_target: #build_rust_target,
+                            rust_toolchain: #build_rust_toolchain,
+                            dependency_resolution: #build_dependency_resolution,
+                        },
                     },
                 })?;
                 #[cfg(target_os = "none")]

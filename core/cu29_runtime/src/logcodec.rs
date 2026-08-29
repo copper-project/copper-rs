@@ -8,6 +8,8 @@ use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::{String, ToString};
 #[cfg(feature = "std")]
+use alloc::vec::Vec;
+#[cfg(feature = "std")]
 use bincode::config::standard;
 use bincode::de::{Decode, Decoder};
 #[cfg(feature = "std")]
@@ -338,15 +340,18 @@ fn read_next_entry<T: Decode<()>>(src: &mut impl Read) -> CuResult<Option<T>> {
     }
 }
 
+/// Reads every runtime lifecycle record without requiring the application's CopperList type.
 #[cfg(feature = "std")]
-pub fn read_effective_config_ron_from_log(log_base: &Path) -> CuResult<Option<String>> {
+pub fn read_runtime_lifecycle_records_from_log(
+    log_base: &Path,
+) -> CuResult<Vec<RuntimeLifecycleRecord>> {
     let logger = UnifiedLoggerBuilder::new()
         .file_base_name(log_base)
         .build()
         .map_err(|err| {
             CuError::new_with_cause(
                 &format!(
-                    "Failed to open Copper log '{}' while loading effective log config",
+                    "Failed to open Copper log '{}' while loading runtime lifecycle metadata",
                     log_base.display()
                 ),
                 err,
@@ -354,13 +359,22 @@ pub fn read_effective_config_ron_from_log(log_base: &Path) -> CuResult<Option<St
         })?;
     let UnifiedLogger::Read(read_logger) = logger else {
         return Err(CuError::from(
-            "Expected readable unified logger while loading effective log config",
+            "Expected readable unified logger while loading runtime lifecycle metadata",
         ));
     };
 
     let mut reader =
         UnifiedLoggerIOReader::new(read_logger, cu29_traits::UnifiedLogType::RuntimeLifecycle);
+    let mut records = Vec::new();
     while let Some(record) = read_next_entry::<RuntimeLifecycleRecord>(&mut reader)? {
+        records.push(record);
+    }
+    Ok(records)
+}
+
+#[cfg(feature = "std")]
+pub fn read_effective_config_ron_from_log(log_base: &Path) -> CuResult<Option<String>> {
+    for record in read_runtime_lifecycle_records_from_log(log_base)? {
         if let RuntimeLifecycleEvent::Instantiated {
             effective_config_ron,
             ..
