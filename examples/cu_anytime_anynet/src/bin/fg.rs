@@ -39,8 +39,9 @@ fn prepare_log(log_path: &str) -> CuResult<()> {
 fn run() -> CuResult<()> {
     let log_path = "examples/cu_anytime_anynet/logs/anynet_fg_smoketest.copper";
     prepare_log(log_path)?;
-    let mut app = App::builder().with_log_path(log_path, SLAB_SIZE)?.build()?;
-    app.run()
+    let app = App::builder().with_log_path(log_path, SLAB_SIZE)?.build()?;
+    app.run_until_shutdown()?;
+    Ok(())
 }
 
 #[cfg(not(feature = "smoketest"))]
@@ -53,16 +54,18 @@ fn run() -> CuResult<()> {
 
     match mission.as_str() {
         "synthetic" => {
-            let mut app = SyntheticApp::builder()
+            let app = SyntheticApp::builder()
                 .with_log_path(&log_path, SLAB_SIZE)?
                 .build()?;
-            app.run()
+            app.run_until_shutdown()?;
+            Ok(())
         }
         "kitti" => {
-            let mut app = KittiApp::builder()
+            let app = KittiApp::builder()
                 .with_log_path(&log_path, SLAB_SIZE)?
                 .build()?;
-            app.run()
+            app.run_until_shutdown()?;
+            Ok(())
         }
         _ => Err(CuError::from(format!(
             "Unknown mission '{mission}'; expected 'synthetic' or 'kitti'"

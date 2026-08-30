@@ -19,6 +19,7 @@ fn run() -> CuResult<()> {
         fs::create_dir_all(parent)
             .map_err(|error| CuError::new_with_cause("Failed to create logs directory", error))?;
     }
-    let mut app = App::builder().with_log_path(log_path, SLAB_SIZE)?.build()?;
-    app.run()
+    let app = App::builder().with_log_path(log_path, SLAB_SIZE)?.build()?;
+    app.run_until_shutdown()?;
+    Ok(())
 }
