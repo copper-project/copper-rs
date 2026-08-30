@@ -26,6 +26,19 @@ pub struct RefSample {
     pub seq: u64,
 }
 
+/// Maximum callbacks executed by one statically fused background region.
+pub const REGION_CALLBACK_CAPACITY: usize = 9;
+
+/// One completed independent region. Causal callbacks execute inline on the same worker;
+/// their individual durations remain available for benchmark validation.
+#[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
+pub struct RefRegionSample {
+    pub data: DataBlock,
+    pub seq: u64,
+    pub endpoint_ns: u64,
+    pub callback_ns: [u64; REGION_CALLBACK_CAPACITY],
+}
+
 /// The same block under a second name.
 ///
 /// Copper derives a task's output ports from the *distinct* `msg:` types of its outgoing

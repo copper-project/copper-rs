@@ -20,8 +20,14 @@ cu29-export = { workspace = true, features = ["mcap"] }
 cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "1.2.0-dev" }
 bincode = { workspace = true, features = ["derive"] }
 chrono = { workspace = true }
+clap = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_bytes = { workspace = true }
 
 [build-dependencies]
 cu29-build = { workspace = true }
+
+[features]
+default = []
+# Build the manually region-fused graph on two background workers.
+hybrid-background = []

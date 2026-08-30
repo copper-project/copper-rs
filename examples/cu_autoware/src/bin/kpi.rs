@@ -1,7 +1,7 @@
 //! Benchmark KPIs from one recorded run.
 //!
-//! `kpi [log base] [out dir]`, defaults `<crate>/logs/autoware.copper` and
-//! `<crate>/analysis/data`; `KPI_EXPECT=<n>` also asserts the copperlist count. One typed
+//! `kpi --log-base <path> --out-dir <path>`; `--expect <n>` also asserts the copperlist
+//! count. One typed
 //! walk over the copperlists yields every KPI; `CuDurationStatistics` does the aggregation
 //! and `cu29_export`'s `compute_logstats` writes the per-edge view next to the CSVs.
 //!
@@ -9,6 +9,7 @@
 //! pass over the graph, so a sample and everything it triggers share one list and the
 //! chain KPIs need no cross-list matching.
 
+use clap::Parser;
 use cu_autoware::payload;
 use cu29::prelude::*;
 use cu29_export::logstats::{compute_logstats, write_logstats};
@@ -19,7 +20,15 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[cfg(feature = "hybrid-background")]
+gen_cumsgs!("copperconfig-hybrid.ron");
+#[cfg(not(feature = "hybrid-background"))]
 gen_cumsgs!("copperconfig.ron");
+
+#[cfg(feature = "hybrid-background")]
+const CONFIG_FILENAME: &str = "copperconfig-hybrid.ron";
+#[cfg(not(feature = "hybrid-background"))]
+const CONFIG_FILENAME: &str = "copperconfig.ron";
 
 /// Reference-system deadlines. Copper never drops, so overload lands in these instead.
 const RT0_DEADLINE_MS: u64 = 200;
@@ -41,6 +50,7 @@ const RT2_CEILING_MS: u64 = 128;
 /// gated by the copperlist slot whose payload says the callback ran: a node's own slot
 /// for its main callback, an input's slot for a cache callback. `id#1` is a second
 /// output port. Summed over a pass, this is what the node's `process_time` should cost.
+#[cfg(not(feature = "hybrid-background"))]
 const NODES: &[(&str, &[(&str, f64)])] = &[
     ("front_lidar", &[("front_lidar", 100.0)]),
     ("rear_lidar", &[("rear_lidar", 100.0)]),
@@ -118,7 +128,7 @@ const NODES: &[(&str, &[(&str, f64)])] = &[
             ("lanelet2_map_loader", 1.0),
             ("parking_planner", 1.0),
             ("lane_planner", 1.0),
-            ("behavior_planner", 10100.0),
+            ("behavior_planner", 100.0),
         ],
     ),
     ("mpc_controller", &[("mpc_controller", 10100.0)]),
@@ -133,7 +143,75 @@ const NODES: &[(&str, &[(&str, f64)])] = &[
     ),
 ];
 
+/// Callback costs and their fused region output slots.
+#[cfg(feature = "hybrid-background")]
+const NODES: &[(&str, &[(&str, f64)])] = &[
+    ("front_lidar", &[("front_region", 100.0)]),
+    ("rear_lidar", &[("rear_region", 100.0)]),
+    ("point_cloud_map", &[("map_region", 100.0)]),
+    ("visualizer", &[("visual_region", 100.0)]),
+    ("lanelet2_map", &[("lane_region", 100.0)]),
+    ("euclidean_cluster_settings", &[("settings_region", 100.0)]),
+    ("points_transformer_front", &[("front_region", 10100.0)]),
+    ("points_transformer_rear", &[("rear_region", 10100.0)]),
+    ("point_cloud_fusion", &[("front_region", 10005.0)]),
+    (
+        "point_cloud_fusion_rear_callback",
+        &[("rear_region", 2100.0)],
+    ),
+    ("voxel_grid_downsampler", &[("front_region", 10100.0)]),
+    ("ray_ground_filter", &[("front_region", 10100.0)]),
+    ("point_cloud_map_loader", &[("map_region", 10100.0)]),
+    ("ndt_localizer", &[("map_region", 10100.0)]),
+    ("ndt_localizer_voxel_callback", &[("front_region", 2100.0)]),
+    ("lanelet2_global_planner", &[("visual_region", 10200.0)]),
+    (
+        "lanelet2_global_planner_ndt_callback",
+        &[("map_region", 2100.0)],
+    ),
+    ("lanelet2_map_loader", &[("lane_region", 10200.0)]),
+    (
+        "lanelet2_map_loader_global_callback",
+        &[("visual_region", 2100.0)],
+    ),
+    ("parking_planner", &[("lane_region", 10100.0)]),
+    ("lane_planner", &[("lane_region", 10100.0)]),
+    ("euclidean_cluster_detector", &[("front_region", 10100.0)]),
+    (
+        "euclidean_cluster_detector_settings_callback",
+        &[("settings_region", 10200.0)],
+    ),
+    ("object_collision_estimator", &[("front_region", 10100.0)]),
+    ("behavior_planner_input_0", &[("front_region", 1.0)]),
+    ("behavior_planner_input_1", &[("map_region", 1.0)]),
+    ("behavior_planner_input_2", &[("visual_region", 1.0)]),
+    ("behavior_planner_input_3", &[("lane_region", 1.0)]),
+    ("behavior_planner_input_4", &[("lane_region", 1.0)]),
+    ("behavior_planner_input_5", &[("lane_region", 1.0)]),
+    ("behavior_planner", &[("planner_region", 100.0)]),
+    ("mpc_controller", &[("planner_region", 10100.0)]),
+    ("vehicle_interface", &[("planner_region", 10100.0)]),
+    (
+        "vehicle_interface_behavior_callback",
+        &[("planner_region", 2100.0)],
+    ),
+    ("vehicle_dbw", &[("planner_region", 1000.0)]),
+    ("intersection_output", &[("settings_region", 1000.0)]),
+];
+
+#[cfg(feature = "hybrid-background")]
+const REGION_NODE_INDICES: &[&[usize]] = &[
+    &[0, 6, 8, 11, 21, 23, 24, 10, 14],
+    &[1, 7, 9],
+    &[2, 12, 13, 16, 25],
+    &[3, 15, 18, 26],
+    &[4, 17, 27, 19, 28, 20, 29],
+    &[5, 22, 35],
+    &[30, 31, 32, 34, 33],
+];
+
 /// Flat copperlist slot names, `id` then `id#1`... for the ports of a multi-port node.
+#[cfg(any(not(feature = "hybrid-background"), test))]
 fn slot_names() -> Vec<String> {
     let mut seen: HashMap<&str, usize> = HashMap::new();
     CuMsgs::get_all_task_ids()
@@ -153,6 +231,7 @@ fn slot_names() -> Vec<String> {
 
 /// The modelled cost of one callback, in ns. The table is the single source of truth for
 /// the RT1 composition as well as for the err% column.
+#[cfg(not(feature = "hybrid-background"))]
 fn charge_ns(node: &str, gate: &str) -> u64 {
     NODES
         .iter()
@@ -209,10 +288,27 @@ fn alignment(samples: &[u64], updates: &HashMap<u64, u32>) -> (usize, usize, u32
     )
 }
 
+/// A bounded run may stop with work still in flight, so trailing source samples are
+/// allowed. Missing, duplicated, reordered, or invented samples before that tail are not.
+#[cfg(feature = "hybrid-background")]
+fn prefix_tail(source: &[u64], endpoint: &[u64], chain: &str) -> Result<usize, String> {
+    if endpoint.is_empty() {
+        return Err(format!("{chain}: no endpoint samples"));
+    }
+    if endpoint.len() > source.len() || source[..endpoint.len()] != *endpoint {
+        return Err(format!(
+            "{chain}: endpoint sequence is not an exact source prefix (source {:?}, endpoint {:?})",
+            source, endpoint
+        ));
+    }
+    Ok(source.len() - endpoint.len())
+}
+
 /// One latency series: the samples for the CSV, the statistics for the report, and the
 /// deadline the series is judged against.
 struct Series {
     rows: String,
+    seqs: Vec<u64>,
     stats: CuDurationStatistics,
     deadline_ns: u64,
     late: u64,
@@ -222,6 +318,7 @@ impl Series {
     fn new(header: &str, ceiling_ms: u64, deadline_ms: u64) -> Self {
         Self {
             rows: format!("{header}\n"),
+            seqs: Vec::new(),
             stats: CuDurationStatistics::new(CuDuration::from_millis(ceiling_ms)),
             deadline_ns: deadline_ms * 1_000_000,
             late: 0,
@@ -236,6 +333,7 @@ impl Series {
             at_ns as f64 / 1e6,
             value_ns as f64 / 1e6
         );
+        self.seqs.push(seq);
         self.stats.record(CuDuration(value_ns));
         if value_ns > self.deadline_ns {
             self.late += 1;
@@ -257,10 +355,15 @@ impl Series {
 
 /// Everything one walk of the log accumulates.
 struct Kpis {
+    #[cfg(not(feature = "hybrid-background"))]
     slot_of: HashMap<String, usize>,
     /// RT1 ends inside point_cloud_fusion's cache callback, whose end is not separately
     /// observable, so its modelled cost completes the chain.
+    #[cfg(not(feature = "hybrid-background"))]
     rt1_cache_ns: u64,
+    /// RT0 ends at behavior_planner's 1us input callback, not at the estimator output.
+    #[cfg(not(feature = "hybrid-background"))]
+    rt0_cache_ns: u64,
     hot_path: Series,
     rt1: Series,
     rt2: Series,
@@ -272,6 +375,8 @@ struct Kpis {
     timing_gaps: u64,
     planner_ticks: u64,
     front_seqs: Vec<u64>,
+    rear_seqs: Vec<u64>,
+    planner_seqs: Vec<u64>,
     estimator_updates: HashMap<u64, u32>,
     last_planner_tov: Option<u64>,
     span_ns: u64,
@@ -280,12 +385,16 @@ struct Kpis {
 impl Kpis {
     fn new() -> Self {
         Self {
+            #[cfg(not(feature = "hybrid-background"))]
             slot_of: slot_names()
                 .into_iter()
                 .enumerate()
                 .map(|(index, name)| (name, index))
                 .collect(),
+            #[cfg(not(feature = "hybrid-background"))]
             rt1_cache_ns: charge_ns("point_cloud_fusion", "points_transformer_rear"),
+            #[cfg(not(feature = "hybrid-background"))]
+            rt0_cache_ns: charge_ns("behavior_planner", "object_collision_estimator"),
             hot_path: Series::new(
                 "seq,t_ms,latency_ms",
                 RT0_DEADLINE_MS * CEILING_FACTOR,
@@ -307,6 +416,8 @@ impl Kpis {
             timing_gaps: 0,
             planner_ticks: 0,
             front_seqs: Vec::new(),
+            rear_seqs: Vec::new(),
+            planner_seqs: Vec::new(),
             estimator_updates: HashMap::new(),
             last_planner_tov: None,
             span_ns: 0,
@@ -315,7 +426,6 @@ impl Kpis {
 
     fn record_pass(&mut self, msgs: &CuMsgs) {
         let flat = msgs.cumsgs();
-        let present: Vec<bool> = flat.iter().map(|msg| msg.payload().is_some()).collect();
         self.culists += 1;
         self.span_ns = self.span_ns.max(
             flat.iter()
@@ -325,67 +435,194 @@ impl Kpis {
                 .unwrap_or(0),
         );
 
-        // (a) and (b): the update is a firing whether or not it is timeable, and the
-        // estimator's output carries the front_lidar tov it came from.
-        let estimator = msgs.get_object_collision_estimator_output();
-        if let Some(sample) = estimator.payload() {
-            *self.estimator_updates.entry(sample.seq).or_default() += 1;
-            match (tov_ns(estimator.tov), span(estimator.metadata.process_time)) {
-                (Some(at), Some((_, end))) => {
-                    self.hot_path.record(sample.seq, at, end.saturating_sub(at));
-                }
-                _ => self.timing_gaps += 1,
+        #[cfg(feature = "hybrid-background")]
+        {
+            self.record_hybrid(msgs);
+        }
+
+        #[cfg(not(feature = "hybrid-background"))]
+        {
+            let present: Vec<bool> = flat.iter().map(|msg| msg.payload().is_some()).collect();
+
+            // The estimator is also the alignment witness for the front-lidar branch.
+            let estimator = msgs.get_object_collision_estimator_output();
+            if let Some(sample) = estimator.payload() {
+                *self.estimator_updates.entry(sample.seq).or_default() += 1;
             }
-        }
-        if let Some(sample) = msgs.get_front_lidar_output().payload() {
-            self.front_seqs.push(sample.seq);
-        }
 
-        // (d) RT1 ends at point_cloud_fusion's cache callback, which runs first in that
-        // node's process span: the observable part runs to the span start and the
-        // modelled cache cost completes it.
-        let rear = msgs.get_points_transformer_rear_output();
-        let fusion = msgs.get_point_cloud_fusion_output();
-        if let (Some(sample), Some(at), Some((start, _))) = (
-            rear.payload(),
-            tov_ns(rear.tov),
-            span(fusion.metadata.process_time),
-        ) {
-            self.rt1
-                .record(sample.seq, at, start.saturating_sub(at) + self.rt1_cache_ns);
-        }
+            // Vanilla combines all behavior-planner callbacks in one process span, so its
+            // first input callback has to be completed with the modelled 1us cost.
+            #[cfg(not(feature = "hybrid-background"))]
+            if let Some(sample) = estimator.payload() {
+                match (
+                    tov_ns(estimator.tov),
+                    span(msgs.get_behavior_planner_output().metadata.process_time),
+                ) {
+                    (Some(at), Some((start, _))) => {
+                        self.hot_path.record(
+                            sample.seq,
+                            at,
+                            start.saturating_sub(at) + self.rt0_cache_ns,
+                        );
+                    }
+                    _ => self.timing_gaps += 1,
+                }
+            }
 
-        // (e) RT2 runs from the planner tick to the command sink, which does get a
-        // copperlist slot and therefore a recorded process_time.
-        let planner = msgs.get_behavior_planner_output();
-        if let (Some(sample), Some(at)) = (planner.payload(), tov_ns(planner.tov)) {
-            self.planner_ticks += 1;
-            if let Some((_, end)) = span(msgs.get_vehicle_dbw_output().metadata.process_time) {
+            // The callback graph records that callback independently, including its real
+            // worker-thread end timestamp.
+            #[cfg(feature = "hybrid-background")]
+            {
+                let endpoint = msgs.get_behavior_planner_input_0_output();
+                if let (Some(sample), Some(at), Some((_, end))) = (
+                    endpoint.payload(),
+                    tov_ns(endpoint.tov),
+                    span(endpoint.metadata.process_time),
+                ) {
+                    self.hot_path.record(sample.seq, at, end.saturating_sub(at));
+                } else if endpoint.payload().is_some() {
+                    self.timing_gaps += 1;
+                }
+            }
+
+            if let Some(sample) = msgs.get_front_lidar_output().payload() {
+                self.front_seqs.push(sample.seq);
+            }
+            if let Some(sample) = msgs.get_rear_lidar_output().payload() {
+                self.rear_seqs.push(sample.seq);
+            }
+
+            #[cfg(not(feature = "hybrid-background"))]
+            {
+                // Vanilla combines fusion callbacks in one process span. The rear callback
+                // runs first, so complete the span start with its modelled 2.1ms cost.
+                let rear = msgs.get_points_transformer_rear_output();
+                let fusion = msgs.get_point_cloud_fusion_output();
+                if let (Some(sample), Some(at), Some((start, _))) = (
+                    rear.payload(),
+                    tov_ns(rear.tov),
+                    span(fusion.metadata.process_time),
+                ) {
+                    self.rt1
+                        .record(sample.seq, at, start.saturating_sub(at) + self.rt1_cache_ns);
+                }
+            }
+
+            #[cfg(feature = "hybrid-background")]
+            {
+                let endpoint = msgs.get_point_cloud_fusion_rear_callback_output();
+                if let (Some(sample), Some(at), Some((_, end))) = (
+                    endpoint.payload(),
+                    tov_ns(endpoint.tov),
+                    span(endpoint.metadata.process_time),
+                ) {
+                    self.rt1.record(sample.seq, at, end.saturating_sub(at));
+                } else if endpoint.payload().is_some() {
+                    self.timing_gaps += 1;
+                }
+            }
+
+            // Planner cadence is measured when its timer callback lands.
+            let planner = msgs.get_behavior_planner_output();
+            if let (Some(sample), Some(at)) = (planner.payload(), tov_ns(planner.tov)) {
+                self.planner_ticks += 1;
+                self.planner_seqs.push(sample.seq);
+                if let Some(previous) = self.last_planner_tov {
+                    self.planner_period
+                        .record(sample.seq, at, at.saturating_sub(previous));
+                }
+                self.last_planner_tov = Some(at);
+            }
+
+            #[cfg(not(feature = "hybrid-background"))]
+            if let (Some(sample), Some(at), Some((_, end))) = (
+                planner.payload(),
+                tov_ns(planner.tov),
+                span(msgs.get_vehicle_dbw_output().metadata.process_time),
+            ) {
                 self.rt2.record(sample.seq, at, end.saturating_sub(at));
             }
-            if let Some(previous) = self.last_planner_tov {
-                self.planner_period
-                    .record(sample.seq, at, at.saturating_sub(previous));
-            }
-            self.last_planner_tov = Some(at);
-        }
 
-        // (f) per node, measured against the cost the model says this pass charged.
-        for (index, (node, charges)) in NODES.iter().enumerate() {
-            let cost: f64 = charges
-                .iter()
-                .filter(|(gate, _)| present[self.slot_of[*gate]])
-                .map(|(_, us)| us)
-                .sum();
-            if cost == 0.0 {
-                continue;
+            #[cfg(feature = "hybrid-background")]
+            {
+                let endpoint = msgs.get_vehicle_dbw_output();
+                if let (Some(sample), Some(at), Some((_, end))) = (
+                    endpoint.payload(),
+                    tov_ns(endpoint.tov),
+                    span(endpoint.metadata.process_time),
+                ) {
+                    self.rt2.record(sample.seq, at, end.saturating_sub(at));
+                } else if endpoint.payload().is_some() {
+                    self.timing_gaps += 1;
+                }
             }
-            let Some((start, end)) = span(flat[self.slot_of[*node]].metadata().process_time())
-            else {
+
+            // (f) per node, measured against the cost the model says this pass charged.
+            for (index, (node, charges)) in NODES.iter().enumerate() {
+                let cost: f64 = charges
+                    .iter()
+                    .filter(|(gate, _)| present[self.slot_of[*gate]])
+                    .map(|(_, us)| us)
+                    .sum();
+                if cost == 0.0 {
+                    continue;
+                }
+                let Some((start, end)) = span(flat[self.slot_of[*node]].metadata().process_time())
+                else {
+                    continue;
+                };
+                self.measured[index].record(CuDuration(end - start));
+                self.modelled_us[index] += cost;
+            }
+        }
+    }
+
+    #[cfg(feature = "hybrid-background")]
+    fn record_hybrid(&mut self, msgs: &CuMsgs) {
+        let regions = [
+            msgs.get_front_region_output(),
+            msgs.get_rear_region_output(),
+            msgs.get_map_region_output(),
+            msgs.get_visual_region_output(),
+            msgs.get_lane_region_output(),
+            msgs.get_settings_region_output(),
+            msgs.get_planner_region_output(),
+        ];
+        for (region, message) in regions.into_iter().enumerate() {
+            let Some(sample) = message.payload() else {
                 continue;
             };
-            self.measured[index].record(CuDuration(end - start));
-            self.modelled_us[index] += cost;
+            for (local, node_index) in REGION_NODE_INDICES[region].iter().enumerate() {
+                self.measured[*node_index].record(CuDuration(sample.callback_ns[local]));
+                self.modelled_us[*node_index] += NODES[*node_index].1[0].1;
+            }
+
+            let Some(at) = tov_ns(message.tov) else {
+                self.timing_gaps += 1;
+                continue;
+            };
+            match region {
+                0 => {
+                    self.front_seqs.push(sample.seq);
+                    *self.estimator_updates.entry(sample.seq).or_default() += 1;
+                    self.hot_path.record(sample.seq, at, sample.endpoint_ns);
+                }
+                1 => {
+                    self.rear_seqs.push(sample.seq);
+                    self.rt1.record(sample.seq, at, sample.endpoint_ns);
+                }
+                6 => {
+                    self.planner_ticks += 1;
+                    self.planner_seqs.push(sample.seq);
+                    self.rt2.record(sample.seq, at, sample.endpoint_ns);
+                    if let Some(previous) = self.last_planner_tov {
+                        self.planner_period
+                            .record(sample.seq, at, at.saturating_sub(previous));
+                    }
+                    self.last_planner_tov = Some(at);
+                }
+                _ => {}
+            }
         }
     }
 
@@ -414,6 +651,15 @@ impl Kpis {
             .collect()
     }
 
+    #[cfg(feature = "hybrid-background")]
+    fn validate_callback_alignment(&self) -> Result<(usize, usize, usize), String> {
+        Ok((
+            prefix_tail(&self.front_seqs, &self.hot_path.seqs, "RT0")?,
+            prefix_tail(&self.rear_seqs, &self.rt1.seqs, "RT1")?,
+            prefix_tail(&self.planner_seqs, &self.rt2.seqs, "RT2")?,
+        ))
+    }
+
     fn report(&self, log_base: &Path, ids: (u64, u64)) {
         println!(
             "cu_autoware KPIs — {} copperlists (ids {}..={}) over {:.1}s ({})",
@@ -429,12 +675,21 @@ impl Kpis {
         self.hot_path.report("hot path RT0");
         self.rt1.report("RT1 rear -> fusion*");
         self.rt2.report("RT2 planner -> dbw");
-        println!(
-            "* RT1 is the rear edge tov to point_cloud_fusion's process start plus its \
-             {:.1}ms cache cost, modelled from the cost table: the cache and the trigger \
-             share one process span.",
-            self.rt1_cache_ns as f64 / 1e6
-        );
+        #[cfg(not(feature = "hybrid-background"))]
+        {
+            println!(
+                "* RT0 is behavior_planner's process start plus its {:.3}ms first-input cost.",
+                self.rt0_cache_ns as f64 / 1e6
+            );
+            println!(
+                "* RT1 is the rear edge tov to point_cloud_fusion's process start plus its \
+                 {:.1}ms cache cost, modelled from the cost table: the cache and the trigger \
+                 share one process span.",
+                self.rt1_cache_ns as f64 / 1e6
+            );
+        }
+        #[cfg(feature = "hybrid-background")]
+        println!("* Endpoint stamps are captured inside each fused worker continuation.");
 
         let (matched, missing, duplicate, unmatched) =
             alignment(&self.front_seqs, &self.estimator_updates);
@@ -443,6 +698,13 @@ impl Kpis {
             self.front_seqs.len(),
             self.timing_gaps
         );
+        #[cfg(feature = "hybrid-background")]
+        match self.validate_callback_alignment() {
+            Ok((rt0_tail, rt1_tail, rt2_tail)) => println!(
+                "callbacks  exact ordered prefixes; shutdown tails RT0 {rt0_tail}, RT1 {rt1_tail}, RT2 {rt2_tail}"
+            ),
+            Err(error) => println!("callbacks  INVALID: {error}"),
+        }
         println!(
             "late       RT0 {}/{} over {RT0_DEADLINE_MS}ms, RT1 {}/{} over {RT1_DEADLINE_MS}ms, RT2 {}/{} over {RT2_DEADLINE_MS}ms",
             self.hot_path.late,
@@ -555,18 +817,30 @@ fn write(dir: &Path, name: &str, content: &str) {
     println!("  {}", path.display());
 }
 
+#[derive(Parser)]
+#[command(about = "Extract comparable KPIs from a Copper benchmark log")]
+struct Args {
+    #[arg(long)]
+    log_base: Option<PathBuf>,
+    #[arg(long)]
+    out_dir: Option<PathBuf>,
+    /// Assert the exact number of recorded Copper graph passes.
+    #[arg(long)]
+    expect: Option<u64>,
+}
+
 fn main() {
     let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let mut args = std::env::args().skip(1);
-    let log_base = args.next().map_or_else(
+    let args = Args::parse();
+    let log_base = args.log_base.map_or_else(
         || crate_dir.join("logs").join("autoware.copper"),
         PathBuf::from,
     );
     let out_dir = args
-        .next()
+        .out_dir
         .map_or_else(|| crate_dir.join("analysis").join("data"), PathBuf::from);
 
-    let config_path = crate_dir.join("copperconfig.ron");
+    let config_path = crate_dir.join(CONFIG_FILENAME);
     let config = config_path
         .to_str()
         .ok_or_else(|| CuError::from("crate path is not UTF-8"))
@@ -614,20 +888,21 @@ fn main() {
             config_path.display()
         ));
     }
-    if let Ok(expected) = std::env::var("KPI_EXPECT") {
-        let expected: u64 = expected
-            .parse()
-            .unwrap_or_else(|e| fail(format!("KPI_EXPECT: {e}")));
-        if kpis.culists != expected {
-            fail(format!(
-                "{}: {} copperlists, KPI_EXPECT says {expected}",
-                log_base.display(),
-                kpis.culists
-            ));
-        }
+    if let Some(expected) = args.expect
+        && kpis.culists != expected
+    {
+        fail(format!(
+            "{}: {} copperlists, --expect says {expected}",
+            log_base.display(),
+            kpis.culists
+        ));
     }
 
     kpis.report(&log_base, (first, last));
+    #[cfg(feature = "hybrid-background")]
+    if let Err(error) = kpis.validate_callback_alignment() {
+        fail(format!("callback alignment: {error}"));
+    }
 
     if let Err(e) = fs::create_dir_all(&out_dir) {
         fail(format!("{}: {e}", out_dir.display()));
@@ -650,7 +925,7 @@ fn main() {
     println!("  {}", logstats_path.display());
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "hybrid-background")))]
 mod tests {
     use super::*;
     use payload::{RefLaneSample, RefSample};
@@ -958,7 +1233,7 @@ mod tests {
             .flat_map(|(_, charges)| charges.iter())
             .map(|(_, us)| us)
             .sum();
-        assert!((total - 185_011.0).abs() < 1e-6, "{total}us");
+        assert!((total - 175_011.0).abs() < 1e-6, "{total}us");
     }
 
     #[test]
@@ -966,8 +1241,8 @@ mod tests {
         let mut kpis = Kpis::new();
         kpis.record_pass(&fresh_pass());
 
-        // estimator end 1150 - front_lidar tov 1000.
-        assert_eq!(kpis.hot_path.stats.max(), CuDuration(150 * MS));
+        // behavior input starts at 1160 - front_lidar tov 1000, plus its 1us cost.
+        assert_eq!(kpis.hot_path.stats.max(), CuDuration(160 * MS + 1_000));
         // fusion process start 1012 - rear edge tov 1002, plus the 2.1ms cache cost.
         assert_eq!(kpis.rt1.stats.max(), CuDuration(10 * MS + 2_100_000));
         // dbw end 1191 - planner tov 1160.
@@ -1050,5 +1325,45 @@ mod tests {
         // Sample 3 never reached the estimator; 2 arrived twice; 9 has no sample.
         assert_eq!(alignment(&[1, 2, 3], &updates), (2, 1, 1, 1));
         assert_eq!(alignment(&[], &HashMap::new()), (0, 0, 0, 0));
+    }
+}
+
+#[cfg(all(test, feature = "hybrid-background"))]
+mod hybrid_tests {
+    use super::*;
+
+    #[test]
+    fn callback_cost_model_matches_graph_and_fig4_total() {
+        let slots = slot_names();
+        assert_eq!(slots.len(), 7);
+        for (node, charges) in NODES {
+            assert_eq!(charges.len(), 1, "{node} is not one callback");
+            assert!(
+                slots.iter().any(|slot| slot == charges[0].0),
+                "no fused region '{}' for {node}",
+                charges[0].0
+            );
+        }
+        assert_eq!(
+            REGION_NODE_INDICES
+                .iter()
+                .map(|region| region.len())
+                .sum::<usize>(),
+            36
+        );
+        let total: f64 = NODES
+            .iter()
+            .flat_map(|(_, charges)| charges.iter())
+            .map(|(_, us)| us)
+            .sum();
+        assert!((total - 175_011.0).abs() < 1e-6, "{total}us");
+    }
+
+    #[test]
+    fn callback_alignment_allows_only_a_shutdown_tail() {
+        assert_eq!(prefix_tail(&[1, 2, 3], &[1, 2], "RT0"), Ok(1));
+        assert!(prefix_tail(&[1, 2, 3], &[1, 3], "RT0").is_err());
+        assert!(prefix_tail(&[1, 2], &[1, 2, 2], "RT0").is_err());
+        assert!(prefix_tail(&[1, 2], &[], "RT0").is_err());
     }
 }

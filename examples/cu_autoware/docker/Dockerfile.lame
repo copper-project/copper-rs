@@ -1,0 +1,32 @@
+FROM ros:humble-ros-base-jammy
+
+LABEL org.opencontainers.image.source="https://github.com/rtenlab/reference-system-latency-management" \
+      org.opencontainers.image.revision="c17dfa091dff2ad10e369bdb34c415ddce8405f0"
+
+SHELL ["/bin/bash", "-c"]
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential git libboost-dev python3-colcon-common-extensions \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/lame_ws/src
+RUN git clone https://github.com/rtenlab/reference-system-latency-management.git \
+    && git -C reference-system-latency-management checkout c17dfa091dff2ad10e369bdb34c415ddce8405f0
+
+COPY docker/nvtx3 /usr/local/include/nvtx3
+COPY docker/prepare_lame.py /tmp/prepare_lame.py
+RUN python3 /tmp/prepare_lame.py \
+    && source /opt/ros/humble/setup.bash \
+    && cd /opt/lame_ws \
+    && colcon build --merge-install --packages-up-to latency_mgmt \
+        --cmake-args -DPICAS=TRUE -DPICAS_THREAD_AFFINITY=TRUE -DLATENCY_MGMT=TRUE \
+        -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release
+
+COPY analysis/lame_entrypoint.sh /usr/local/bin/lame-entrypoint
+COPY analysis/sample_proc.sh /usr/local/bin/sample-proc
+COPY analysis/parse_lame.py /usr/local/bin/parse-lame
+COPY analysis/compare_results.py /usr/local/bin/compare-results
+RUN chmod +x /usr/local/bin/lame-entrypoint /usr/local/bin/sample-proc \
+        /usr/local/bin/parse-lame /usr/local/bin/compare-results
+ENTRYPOINT ["/usr/local/bin/lame-entrypoint"]

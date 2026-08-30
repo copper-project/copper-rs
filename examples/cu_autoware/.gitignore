@@ -3,3 +3,4 @@ analysis/data/
 analysis/figs/
 copper-crash-*.txt
 plan.svg
+__pycache__/

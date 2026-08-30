@@ -1,5 +1,5 @@
 //! Turns the reference system's per-node execution times into `crunch_limit` values for
-//! this host, and with `--apply` writes them into `copperconfig.ron`.
+//! this host, and writes them to `--output` or, for maintainers, `--apply`.
 //!
 //! Run it in release: the crunch is the workload under measurement, and a debug build
 //! calibrates a different one. `crunch` is `#[inline(never)]` so this binary and the app
@@ -10,17 +10,18 @@
 //! on the optimistic side of whatever the app ends up charging.
 
 use chrono::Local;
+use clap::Parser;
 use cu_autoware::tasks::crunch;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 /// (node id, config key, target execution time in µs). Fig. 4 of the RTNS'25 paper; the
-/// single authority for `--apply`. Nodes sharing a target share one measured limit.
+/// single authority for generated configs. Nodes sharing a target share one measured limit.
 ///
-/// `behavior_planner`'s `cache_crunch_limit` is deliberately absent: its 0.001ms input
-/// callback is a pointer assignment, below what a timed search can resolve, so the config
-/// keeps a fixed small limit there.
+/// Vanilla keeps behavior-planner's 0.001ms cache work at a fixed minimum. The hybrid
+/// configuration gives each fused callback its own key, including those six tiny costs.
+#[cfg(not(feature = "hybrid-background"))]
 const TARGETS: &[(&str, &str, u64)] = &[
     ("front_lidar", "crunch_limit", 100),
     ("rear_lidar", "crunch_limit", 100),
@@ -47,12 +48,65 @@ const TARGETS: &[(&str, &str, u64)] = &[
     ("lane_planner", "crunch_limit", 10100),
     ("ndt_localizer", "crunch_limit", 10100),
     ("vehicle_interface", "crunch_limit", 10100),
-    ("behavior_planner", "crunch_limit", 10100),
+    ("behavior_planner", "crunch_limit", 100),
     ("euclidean_cluster_detector", "crunch_limit0", 10100),
     ("lanelet2_global_planner", "crunch_limit", 10200),
     ("lanelet2_map_loader", "crunch_limit", 10200),
     ("euclidean_cluster_detector", "crunch_limit1", 10200),
 ];
+
+#[cfg(feature = "hybrid-background")]
+const TARGETS: &[(&str, &str, u64)] = &[
+    ("front_region", "front_lidar", 100),
+    ("rear_region", "rear_lidar", 100),
+    ("map_region", "point_cloud_map", 100),
+    ("visual_region", "visualizer", 100),
+    ("lane_region", "lanelet2_map", 100),
+    ("settings_region", "euclidean_cluster_settings", 100),
+    ("planner_region", "behavior_planner", 100),
+    ("planner_region", "vehicle_dbw", 1000),
+    ("settings_region", "intersection_output", 1000),
+    ("rear_region", "point_cloud_fusion_rear_callback", 2100),
+    ("front_region", "ndt_localizer_voxel_callback", 2100),
+    ("map_region", "lanelet2_global_planner_ndt_callback", 2100),
+    ("visual_region", "lanelet2_map_loader_global_callback", 2100),
+    (
+        "planner_region",
+        "vehicle_interface_behavior_callback",
+        2100,
+    ),
+    ("front_region", "point_cloud_fusion", 10005),
+    ("front_region", "points_transformer_front", 10100),
+    ("rear_region", "points_transformer_rear", 10100),
+    ("front_region", "voxel_grid_downsampler", 10100),
+    ("map_region", "point_cloud_map_loader", 10100),
+    ("front_region", "ray_ground_filter", 10100),
+    ("front_region", "object_collision_estimator", 10100),
+    ("planner_region", "mpc_controller", 10100),
+    ("lane_region", "parking_planner", 10100),
+    ("lane_region", "lane_planner", 10100),
+    ("map_region", "ndt_localizer", 10100),
+    ("planner_region", "vehicle_interface", 10100),
+    ("front_region", "euclidean_cluster_detector", 10100),
+    ("visual_region", "lanelet2_global_planner", 10200),
+    ("lane_region", "lanelet2_map_loader", 10200),
+    (
+        "settings_region",
+        "euclidean_cluster_detector_settings_callback",
+        10200,
+    ),
+    ("front_region", "behavior_planner_input_0", 1),
+    ("map_region", "behavior_planner_input_1", 1),
+    ("visual_region", "behavior_planner_input_2", 1),
+    ("lane_region", "behavior_planner_input_3", 1),
+    ("lane_region", "behavior_planner_input_4", 1),
+    ("lane_region", "behavior_planner_input_5", 1),
+];
+
+#[cfg(feature = "hybrid-background")]
+const CONFIG_FILENAME: &str = "copperconfig-hybrid.ron";
+#[cfg(not(feature = "hybrid-background"))]
+const CONFIG_FILENAME: &str = "copperconfig.ron";
 
 /// Timed runs per candidate limit; the median is what the search steers on.
 const RUNS: usize = 15;
@@ -66,7 +120,18 @@ const PROBE_LIMIT: u64 = 20_000;
 const WARMUP: Duration = Duration::from_millis(500);
 const HEADER_MARK: &str = "// Calibrated on ";
 const HEADER_NOTE: &str =
-    "// Limits are host-measured: rerun `cargo run --release --bin calibrate -- --apply`.";
+    "// Limits are host-measured: rerun the calibrate binary for this machine.";
+
+#[derive(Parser)]
+#[command(about = "Calibrate the synthetic callback workloads for this host")]
+struct Args {
+    /// Write a calibrated copy without modifying the tracked configuration.
+    #[arg(long, conflicts_with = "apply")]
+    output: Option<PathBuf>,
+    /// Replace the tracked copperconfig.ron (maintainer workflow).
+    #[arg(long)]
+    apply: bool,
+}
 
 /// Median and spread (max-min over median, in %) of `RUNS` timed crunches, in µs.
 fn measure(limit: u64) -> (f64, f64) {
@@ -147,12 +212,21 @@ fn limit_of(
         .map(|(_, limit)| *limit)
 }
 
-/// `        "crunch_limit": 123, // note` with the value swapped, anything else untouched.
-fn rewrite_line(line: &str, limit_of: impl Fn(&str) -> Option<u64>) -> Option<String> {
-    let (head, tail) = line.split_once("\": ")?;
-    let limit = limit_of(head.trim_start().strip_prefix('"')?)?;
-    let digits = tail.len() - tail.trim_start_matches(|c: char| c.is_ascii_digit()).len();
-    (digits > 0).then(|| format!("{head}\": {limit}{}", &tail[digits..]))
+/// Replace one `"key": 123` value wherever it appears on a line. RON formatters may
+/// keep small maps inline, so calibration must not depend on one key per line.
+fn rewrite_key(line: &str, key: &str, limit: u64) -> Option<String> {
+    let needle = format!("\"{key}\": ");
+    let start = line.find(&needle)? + needle.len();
+    let digits = line[start..]
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .count();
+    if digits == 0 {
+        return None;
+    }
+    let mut rewritten = line.to_string();
+    rewritten.replace_range(start..start + digits, &limit.to_string());
+    Some(rewritten)
 }
 
 /// The rewritten config and the number of values replaced. Node scope comes from the
@@ -165,25 +239,32 @@ fn rewrite(body: &str, targets: &[(&str, &str, u64)], limits: &[(u64, u64)]) -> 
         if let Some(rest) = line.trim_start().strip_prefix("id: \"") {
             node = rest.split('"').next().unwrap_or("");
         }
-        match rewrite_line(line, |key| limit_of(targets, limits, node, key)) {
-            Some(rewritten) => {
-                out.push_str(&rewritten);
+        let mut rewritten = line.to_string();
+        for (_, key, _) in targets
+            .iter()
+            .filter(|(target_node, _, _)| *target_node == node)
+        {
+            if let Some(limit) = limit_of(targets, limits, node, key)
+                && let Some(next) = rewrite_key(&rewritten, key, limit)
+            {
+                rewritten = next;
                 rewrites += 1;
             }
-            None => out.push_str(line),
         }
+        out.push_str(&rewritten);
         out.push('\n');
     }
     (out, rewrites)
 }
 
-fn apply(limits: &[(u64, u64)]) {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("copperconfig.ron");
-    let text = fs::read_to_string(&path).expect("copperconfig.ron must be readable");
+fn write_config(limits: &[(u64, u64)], path: &PathBuf) {
+    let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(CONFIG_FILENAME);
+    let text = fs::read_to_string(&source)
+        .unwrap_or_else(|_| panic!("{CONFIG_FILENAME} must be readable"));
     let (body, rewrites) = rewrite(strip_header(&text), TARGETS, limits);
     if rewrites != TARGETS.len() {
         eprintln!(
-            "copperconfig.ron: rewrote {rewrites} of {} calibrated values, so the config and \
+            "{CONFIG_FILENAME}: rewrote {rewrites} of {} calibrated values, so the config and \
              TARGETS disagree on node ids or keys. Nothing written.",
             TARGETS.len()
         );
@@ -195,8 +276,11 @@ fn apply(limits: &[(u64, u64)]) {
         Local::now().format("%Y-%m-%d")
     );
     // fmtron's canonical form has no trailing newline.
-    fs::write(&path, out.trim_end()).expect("copperconfig.ron must be writable");
-    println!("applied {rewrites} limits to {}", path.display());
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).expect("calibration output directory must be writable");
+    }
+    fs::write(path, out.trim_end()).expect("calibration output must be writable");
+    println!("wrote {rewrites} calibrated limits to {}", path.display());
 }
 
 fn main() {
@@ -204,14 +288,7 @@ fn main() {
         eprintln!("calibrate measures the release workload: cargo run --release --bin calibrate");
         std::process::exit(1);
     }
-    let mut apply_to_config = false;
-    for arg in std::env::args().skip(1) {
-        if arg != "--apply" {
-            eprintln!("unknown argument '{arg}'. usage: calibrate [--apply]");
-            std::process::exit(2);
-        }
-        apply_to_config = true;
-    }
+    let args = Args::parse();
 
     // The app runs the crunch back to back, so calibrate against a warm core: a cold one
     // reads several percent slow here, which is the whole error budget.
@@ -240,14 +317,17 @@ fn main() {
         worst = worst.max(err.abs());
     }
 
-    if apply_to_config {
+    if args.apply || args.output.is_some() {
         if worst > APPLY_BAR {
             eprintln!(
                 "worst class is {worst:.2}% off target, over the {APPLY_BAR}% bar. Nothing written."
             );
             std::process::exit(1);
         }
-        apply(&limits);
+        let path = args
+            .output
+            .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(CONFIG_FILENAME));
+        write_config(&limits, &path);
     }
 }
 

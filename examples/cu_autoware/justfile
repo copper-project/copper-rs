@@ -1,23 +1,47 @@
 import "../../justfile"
 
-# Record a bounded release run, e.g. `just run 400 logs/variant-a.copper`.
-run iters="400" log="":
+# Build, calibrate, run, and summarize Copper.
+copper seconds="60":
   #!/usr/bin/env bash
   set -euo pipefail
-  cargo run --release -p cu-autoware --bin cu-autoware -- {{iters}} {{log}}
+  analysis/run_copper.sh {{seconds}} vanilla
 
-# Record a run with the CPU/RSS sampler attached.
-sampled iters="400":
+# Run statically fused causal regions on two background workers.
+copper-hybrid seconds="60":
   #!/usr/bin/env bash
   set -euo pipefail
-  cargo build --release -p cu-autoware --bin cu-autoware
-  analysis/sample_proc.sh analysis/data/proc.csv -- ../../target/release/cu-autoware {{iters}}
+  analysis/run_copper.sh {{seconds}} hybrid
 
-# Compute the KPIs from the recorded log, e.g. `just kpi logs/variant-a.copper data/a`.
-kpi log="" out="":
+# Build the pinned LaME image, run its managed executor, and summarize it.
+lame seconds="60":
   #!/usr/bin/env bash
   set -euo pipefail
-  cargo run --release -p cu-autoware --bin kpi -- {{log}} {{out}}
+  analysis/run_lame.sh {{seconds}}
+
+# Write and print analysis/data/comparison.{csv,md} from both runs.
+compare:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  python3 analysis/parse_lame.py analysis/data/lame/raw.log analysis/data/lame
+  python3 analysis/compare_results.py summarize analysis/data/copper copper
+  python3 analysis/compare_results.py summarize analysis/data/lame lame
+  python3 analysis/compare_results.py compare analysis/data
+
+# Compare the optimized hybrid Copper variant with the same LaME data.
+compare-hybrid:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  python3 analysis/parse_lame.py analysis/data/lame/raw.log analysis/data/lame
+  python3 analysis/compare_results.py summarize analysis/data/copper-hybrid copper-hybrid
+  python3 analysis/compare_results.py summarize analysis/data/lame lame
+  python3 analysis/compare_results.py compare analysis/data --copper-dir copper-hybrid --output comparison-hybrid
+
+# Developer helpers for an exact-pass run and KPI extraction.
+run iters="400" log="logs/autoware.copper":
+  cargo run --release -p cu-autoware --bin cu-autoware -- --iterations {{iters}} --log-base {{log}}
+
+kpi log="logs/autoware.copper" out="analysis/data":
+  cargo run --release -p cu-autoware --bin kpi -- --log-base {{log}} --out-dir {{out}}
 
 # Draw the figures from the KPI CSVs.
 plots:

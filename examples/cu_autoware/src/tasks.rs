@@ -4,6 +4,8 @@
 //! busy work, `period_ms` the tick of the timed ones. Timing constants are load-bearing
 //! in a benchmark, so a missing or mistyped key is an error rather than a default.
 
+#[cfg(feature = "hybrid-background")]
+use crate::payload::{REGION_CALLBACK_CAPACITY, RefRegionSample};
 use crate::payload::{RefLaneSample, RefSample};
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
@@ -104,6 +106,141 @@ impl Freezable for Pacer {
 fn suppress<P: CuMsgPayload>(output: &mut CuMsg<P>) {
     output.clear_payload();
     output.tov = Tov::default();
+}
+
+/// Callback names in execution order for each independent region. The order keeps the
+/// reported critical continuation ahead of non-critical fan-out work.
+#[cfg(feature = "hybrid-background")]
+pub fn region_callbacks(region: usize) -> &'static [&'static str] {
+    match region {
+        0 => &[
+            "front_lidar",
+            "points_transformer_front",
+            "point_cloud_fusion",
+            "ray_ground_filter",
+            "euclidean_cluster_detector",
+            "object_collision_estimator",
+            "behavior_planner_input_0",
+            "voxel_grid_downsampler",
+            "ndt_localizer_voxel_callback",
+        ],
+        1 => &[
+            "rear_lidar",
+            "points_transformer_rear",
+            "point_cloud_fusion_rear_callback",
+        ],
+        2 => &[
+            "point_cloud_map",
+            "point_cloud_map_loader",
+            "ndt_localizer",
+            "lanelet2_global_planner_ndt_callback",
+            "behavior_planner_input_1",
+        ],
+        3 => &[
+            "visualizer",
+            "lanelet2_global_planner",
+            "lanelet2_map_loader_global_callback",
+            "behavior_planner_input_2",
+        ],
+        4 => &[
+            "lanelet2_map",
+            "lanelet2_map_loader",
+            "behavior_planner_input_3",
+            "parking_planner",
+            "behavior_planner_input_4",
+            "lane_planner",
+            "behavior_planner_input_5",
+        ],
+        5 => &[
+            "euclidean_cluster_settings",
+            "euclidean_cluster_detector_settings_callback",
+            "intersection_output",
+        ],
+        6 => &[
+            "behavior_planner",
+            "mpc_controller",
+            "vehicle_interface",
+            "vehicle_dbw",
+            "vehicle_interface_behavior_callback",
+        ],
+        _ => &[],
+    }
+}
+
+#[cfg(feature = "hybrid-background")]
+const fn region_endpoint_index(region: usize) -> Option<usize> {
+    match region {
+        0 => Some(6),
+        1 => Some(2),
+        6 => Some(3),
+        _ => None,
+    }
+}
+
+/// A profile-guided-style static region: its periodic root is scheduled in the
+/// background, then every causal continuation runs inline on that same worker.
+#[cfg(feature = "hybrid-background")]
+#[derive(Reflect)]
+pub struct RefRegion<const REGION: usize> {
+    pacer: Pacer,
+    crunch_limits: [u64; REGION_CALLBACK_CAPACITY],
+    seq: u64,
+}
+
+#[cfg(feature = "hybrid-background")]
+impl<const REGION: usize> Freezable for RefRegion<REGION> {}
+
+#[cfg(feature = "hybrid-background")]
+impl<const REGION: usize> CuSrcTask for RefRegion<REGION> {
+    type Resources<'r> = ();
+    type Output<'m> = output_msg!(RefRegionSample);
+
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
+        let callbacks = region_callbacks(REGION);
+        if callbacks.is_empty() || callbacks.len() > REGION_CALLBACK_CAPACITY {
+            return Err(CuError::from("invalid static Autoware callback region"));
+        }
+        let mut crunch_limits = [0; REGION_CALLBACK_CAPACITY];
+        for (index, callback) in callbacks.iter().enumerate() {
+            crunch_limits[index] = cfg_u64(config, "RefRegion", callback)?;
+        }
+        Ok(Self {
+            pacer: Pacer::new(config, "RefRegion")?,
+            crunch_limits,
+            seq: 0,
+        })
+    }
+
+    fn process(&mut self, ctx: &CuContext, output: &mut Self::Output<'_>) -> CuResult<()> {
+        let now = ctx.now();
+        if !self.pacer.fire(now) {
+            suppress(output);
+            return Ok(());
+        }
+        self.seq += 1;
+        let mut callback_ns = [0; REGION_CALLBACK_CAPACITY];
+        let mut endpoint_ns = 0;
+        for (index, elapsed_ns) in callback_ns
+            .iter_mut()
+            .enumerate()
+            .take(region_callbacks(REGION).len())
+        {
+            let started = ctx.now();
+            crunch(self.crunch_limits[index]);
+            *elapsed_ns = (ctx.now() - started).as_nanos();
+            if region_endpoint_index(REGION) == Some(index) {
+                endpoint_ns = (ctx.now() - now).as_nanos();
+            }
+        }
+        output.tov = Tov::Time(now);
+        output.set_payload(RefRegionSample {
+            seq: self.seq,
+            endpoint_ns,
+            callback_ns,
+            ..Default::default()
+        });
+        Ok(())
+    }
 }
 
 /// Timer-driven sensor: emits a fresh sample on its own period.
@@ -411,6 +548,20 @@ impl<P: CuMsgPayload + AsRef<RefSample>> CuSinkTask for RefCommand<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "hybrid-background")]
+    #[test]
+    fn hybrid_regions_cover_every_callback_once() {
+        let callbacks: Vec<_> = (0..7)
+            .flat_map(|region| region_callbacks(region).iter().copied())
+            .collect();
+        assert_eq!(callbacks.len(), 36);
+        let unique: std::collections::HashSet<_> = callbacks.iter().copied().collect();
+        assert_eq!(unique.len(), callbacks.len());
+        assert_eq!(region_endpoint_index(0), Some(6));
+        assert_eq!(region_endpoint_index(1), Some(2));
+        assert_eq!(region_endpoint_index(6), Some(3));
+    }
     use bincode::config::standard;
     use bincode::de::DecoderImpl;
     use bincode::de::read::SliceReader;
