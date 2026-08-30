@@ -47,20 +47,17 @@ pub fn run(iterations: usize, log_base: Option<PathBuf>) {
     let mut rate_limiter =
         LoopRateLimiter::from_rate_target_hz(rate_target_hz, &application.clock())
             .expect("Failed to create the rate limiter.");
-    application
-        .start_all_tasks()
-        .expect("Failed to start application.");
+    let mut running = application.start().expect("Failed to start application.");
     for _ in 0..iterations {
-        application
+        running
             .run_one_iteration()
             .expect("Failed to run application.");
-        rate_limiter.limit(&application.clock());
+        rate_limiter.limit(&running.clock());
     }
-    application
-        .stop_all_tasks()
-        .expect("Failed to stop application.");
+    let stopped = running.stop().expect("Failed to stop application.");
     // The generated `run()` writes this; a manual loop has to. `kpi` refuses to report on
     // a log that does not end with it, which is how a truncated log is caught.
+    let mut application = stopped.into_inner();
     application
         .log_shutdown_completed()
         .expect("Failed to record shutdown.");
