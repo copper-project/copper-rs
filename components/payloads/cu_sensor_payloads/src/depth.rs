@@ -55,6 +55,7 @@ pub trait CuDepthEncoding: Copy + Debug + Default + Send + Sync + 'static {
     type Sample: ElementType;
 
     const DESCRIPTOR: CuDepthEncodingDescriptor;
+    const SERIALIZED_MAP_SCHEMA: &'static str = GENERIC_DEPTH_MAP_SERIALIZED_SCHEMA;
     const TYPE_PATH: &'static str;
     const SHORT_TYPE_PATH: &'static str;
     const TYPE_IDENT: &'static str;
@@ -81,6 +82,7 @@ impl CuDepthEncoding for CuDepthLength {
         units_per_meter: 1.0,
         invalid: None,
     };
+    const SERIALIZED_MAP_SCHEMA: &'static str = LENGTH_DEPTH_MAP_SERIALIZED_SCHEMA;
     const TYPE_PATH: &'static str = "cu_sensor_payloads::CuDepthMap";
     const SHORT_TYPE_PATH: &'static str = "CuDepthMap";
     const TYPE_IDENT: &'static str = "CuDepthMap";
@@ -186,6 +188,7 @@ where
         units_per_meter: S::UNITS_PER_METER,
         invalid: Some(CuDepthInvalidValue::Unsigned(0)),
     };
+    const SERIALIZED_MAP_SCHEMA: &'static str = INTEGER_DEPTH_MAP_SERIALIZED_SCHEMA;
     const TYPE_PATH: &'static str = "cu_sensor_payloads::CuDepthMapInteger";
     const SHORT_TYPE_PATH: &'static str = "CuDepthMapInteger";
     const TYPE_IDENT: &'static str = "CuDepthMapInteger";
@@ -215,7 +218,12 @@ where
 /// retain a sensor's compact native representation without a producer-side
 /// conversion or copy.
 #[derive(Debug, Default, Clone, Reflect)]
-#[reflect(from_reflect = false, no_field_bounds, type_path = false)]
+#[reflect(
+    from_reflect = false,
+    no_field_bounds,
+    type_path = false,
+    SerializedPayloadSchema
+)]
 pub struct CuDepthMap<A, E = CuDepthLength>
 where
     E: CuDepthEncoding,
@@ -505,6 +513,41 @@ where
 {
 }
 
+macro_rules! depth_map_serialized_schema {
+    ($sample_schema:literal, $invalid_schema:literal) => {
+        concat!(
+            r#"{"$schema":"https://json-schema.org/draft-07/schema#","type":"object","properties":{
+"format":{"type":"object","properties":{"width":{"type":"integer","minimum":0},"height":{"type":"integer","minimum":0},"stride":{"type":"integer","minimum":0}},"required":["width","height","stride"],"additionalProperties":false},
+"encoding":{"type":"object","properties":{"units_per_meter":{"type":"number"},"invalid":"#,
+            $invalid_schema,
+            r#"},"required":["units_per_meter","invalid"],"additionalProperties":false},
+"handle":{"type":"array","items":"#,
+            $sample_schema,
+            r#"}},"required":["format","encoding","handle"],"additionalProperties":false}"#
+        )
+    };
+}
+
+const LENGTH_DEPTH_MAP_SERIALIZED_SCHEMA: &str =
+    depth_map_serialized_schema!(r#"{"type":"number"}"#, r#"{"type":"null"}"#);
+
+const INTEGER_DEPTH_MAP_SERIALIZED_SCHEMA: &str = depth_map_serialized_schema!(
+    r#"{"type":"integer","minimum":0}"#,
+    r#"{"type":"object","properties":{"unsigned":{"type":"integer","const":0}},"required":["unsigned"],"additionalProperties":false}"#
+);
+
+const GENERIC_DEPTH_MAP_SERIALIZED_SCHEMA: &str = depth_map_serialized_schema!(r#"{}"#, r#"{}"#);
+
+impl<A, E> SerializedPayloadSchema for CuDepthMap<A, E>
+where
+    E: CuDepthEncoding,
+    A: ArrayLike<Element = E::Sample> + Send + Sync + 'static,
+{
+    fn serialized_payload_schema() -> &'static str {
+        E::SERIALIZED_MAP_SCHEMA
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -706,5 +749,23 @@ mod tests {
 
         assert_eq!(value["encoding"]["units_per_meter"], 1_000.0);
         assert_eq!(value["encoding"]["invalid"]["unsigned"], 0);
+    }
+
+    #[test]
+    fn compact_serialized_schema_matches_depth_wire_fields() {
+        let schema = serde_json::from_str::<serde_json::Value>(
+            U16MillimeterDepth::serialized_payload_schema(),
+        )
+        .expect("parse compact depth schema");
+
+        assert_eq!(schema["properties"]["handle"]["items"]["type"], "integer");
+        assert_eq!(
+            schema["properties"]["encoding"]["properties"]["invalid"]["properties"]["unsigned"]["const"],
+            0
+        );
+        assert_eq!(
+            schema["required"],
+            serde_json::json!(["format", "encoding", "handle"])
+        );
     }
 }

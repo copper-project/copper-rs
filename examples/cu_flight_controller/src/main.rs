@@ -91,9 +91,9 @@ fn main() -> ! {
         .with_resources(move |_| Ok(resources.resources))
         .build()
     {
-        Ok(mut app) => {
+        Ok(app) => {
             log_heap_stats("before-run");
-            let _ = <FlightControllerApp as CuApplication<LogStorage, Logger>>::run(&mut app);
+            let _ = app.run_until_shutdown();
         }
         Err(err) => {
             error!("App init failed: {}", &err);

@@ -4,10 +4,10 @@ use std::path::{Path, PathBuf};
 #[copper_runtime(config = "copperconfig.ron")]
 struct MyApp {}
 
-fn run_once(app: &mut MyApp) -> CuResult<()> {
-    app.start_all_tasks()?;
-    app.run_one_iteration()?;
-    app.stop_all_tasks()?;
+fn run_once(app: CuStdAppLifecycle<MyApp>) -> CuResult<()> {
+    let mut running = app.start()?;
+    running.run_one_iteration()?;
+    running.stop()?;
     Ok(())
 }
 
@@ -24,14 +24,14 @@ fn main() {
 
     // First run with the base configuration
     {
-        let mut application = MyApp::builder()
+        let application = MyApp::builder()
             .with_clock(clock.clone())
             .with_log_path(&logger_path, None)
             .expect("Failed to setup logger.")
             .with_config(copperconfig.clone())
             .build()
             .expect("Failed to create application.");
-        run_once(&mut application).expect("Failed to run application.");
+        run_once(application).expect("Failed to run application.");
 
         // everything will be teared down here
     }
@@ -44,13 +44,13 @@ fn main() {
             node.set_param("pin", 42);
         }
 
-        let mut application = MyApp::builder()
+        let application = MyApp::builder()
             .with_clock(clock.clone())
             .with_log_path(&logger_path, None)
             .expect("Failed to setup logger.")
             .with_config(copperconfig.clone())
             .build()
             .expect("Failed to create application.");
-        run_once(&mut application).expect("Failed to run application.");
+        run_once(application).expect("Failed to run application.");
     }
 }

@@ -27,18 +27,18 @@ fn main() {
 
 fn drive() -> CuResult<()> {
     let options = parse_run_options("scout.copper", DEFAULT_SCOUT_PERIOD_MS)?;
-    let mut app = ScoutApp::builder()
+    let app = ScoutApp::builder()
         .with_log_path(&options.log_path, LOG_SLAB_SIZE)?
         .with_instance_id(options.instance_id)
         .build()?;
-    app.start_all_tasks()?;
+    let mut app = app.start()?;
 
     if let Some(iterations) = options.iterations {
         for _ in 0..iterations {
             app.run_one_iteration()?;
             sleep_period(options.period);
         }
-        app.stop_all_tasks()?;
+        app.stop()?;
         return Ok(());
     }
 

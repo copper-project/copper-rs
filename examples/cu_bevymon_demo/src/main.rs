@@ -10,7 +10,7 @@ use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsag
 use bevy::ui::Node as UiNode;
 use cu_bevymon::{
     CuBevyMonFocus, CuBevyMonPlugin, CuBevyMonSplitLayoutConfig, CuBevyMonSplitStyle,
-    CuBevyMonSurface, CuBevyMonTexture, MonitorUiOptions, spawn_split_layout,
+    CuBevyMonSurface, CuBevyMonTexture, MonitorModel, MonitorUiOptions, spawn_split_layout,
 };
 use cu29::prelude::*;
 use cu29::prelude::{debug, error, info};
@@ -64,11 +64,22 @@ struct LayoutSpawned(bool);
 #[derive(Resource)]
 struct SplitUiCamera(Entity);
 
+type DemoLifecycle<State> =
+    CuAppLifecycle<DemoSectionStorage, DemoUnifiedLogger, BevyMonDemoApp, State>;
+
+/// The Copper lifecycle spread across Bevy systems: transitions consume the
+/// wrapper, so the driver holds the current state and swaps it on transition.
+/// This replaces the old `started: bool` flag.
+enum CopperState {
+    Initialized(DemoLifecycle<Initialized>),
+    Running(DemoLifecycle<Running>),
+    Stopped,
+}
+
 #[derive(Resource)]
 struct CopperDriver {
-    copper_app: BevyMonDemoApp,
+    state: CopperState,
     iteration_timer: Timer,
-    started: bool,
 }
 
 #[derive(Resource)]
@@ -89,8 +100,7 @@ impl Default for DemoCameraRig {
 }
 
 fn main() {
-    let mut copper = build_copper_driver();
-    let monitor_model = copper.copper_app.copper_runtime_mut().monitor.model();
+    let (copper, monitor_model) = build_copper_driver();
 
     let mut app = App::new();
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -131,7 +141,7 @@ fn main() {
     app.run();
 }
 
-fn build_copper_driver() -> CopperDriver {
+fn build_copper_driver() -> (CopperDriver, MonitorModel) {
     let unified_logger = build_unified_logger().expect("Failed to create demo logger.");
 
     #[cfg(target_arch = "wasm32")]
@@ -141,24 +151,29 @@ fn build_copper_driver() -> CopperDriver {
 
     debug!("Creating Copper BevyMon demo application.");
 
-    let copper_app = BevyMonDemoApp::builder()
+    let mut copper_app = BevyMonDemoApp::builder()
         .with_logger::<DemoSectionStorage, DemoUnifiedLogger>(unified_logger)
         .build()
         .expect("Failed to create Copper runtime.");
 
-    CopperDriver {
-        copper_app,
+    // Pre-start mutable access works through DerefMut, only available in the
+    // Initialized state.
+    let monitor_model = copper_app.copper_runtime_mut().monitor.model();
+
+    let driver = CopperDriver {
+        state: CopperState::Initialized(copper_app),
         iteration_timer: Timer::from_seconds(1.0 / COPPER_TICK_HZ, TimerMode::Repeating),
-        started: false,
-    }
+    };
+    (driver, monitor_model)
 }
 
 fn start_copper_runtime(mut copper: ResMut<CopperDriver>) {
-    <BevyMonDemoApp as CuApplication<DemoSectionStorage, DemoUnifiedLogger>>::start_all_tasks(
-        &mut copper.copper_app,
-    )
-    .expect("Failed to start Copper demo tasks.");
-    copper.started = true;
+    let CopperState::Initialized(app) = std::mem::replace(&mut copper.state, CopperState::Stopped)
+    else {
+        return;
+    };
+    let running = app.start().expect("Failed to start Copper demo tasks.");
+    copper.state = CopperState::Running(running);
     info!("Copper BevyMon demo runtime started.");
 }
 
@@ -504,40 +519,38 @@ fn run_copper_iteration(
     mut copper: ResMut<CopperDriver>,
     mut exit_writer: MessageWriter<AppExit>,
 ) {
-    if !copper.started {
+    let CopperDriver {
+        state,
+        iteration_timer,
+    } = &mut *copper;
+    let CopperState::Running(app) = state else {
+        return;
+    };
+
+    if !iteration_timer.tick(time.delta()).just_finished() {
         return;
     }
 
-    if !copper.iteration_timer.tick(time.delta()).just_finished() {
-        return;
-    }
-
-    if let Err(err) =
-        <BevyMonDemoApp as CuApplication<DemoSectionStorage, DemoUnifiedLogger>>::run_one_iteration(
-            &mut copper.copper_app,
-        )
-    {
+    if let Err(err) = app.run_one_iteration() {
         error!(
             "Copper demo stopped after runtime error: {}",
             err.to_string()
         );
+        // An iteration error leaves the app Running; request an exit and let
+        // stop_copper_on_exit shut the tasks down cleanly.
         exit_writer.write(AppExit::Success);
-        copper.started = false;
     }
 }
 
 fn stop_copper_on_exit(mut exit_events: MessageReader<AppExit>, mut copper: ResMut<CopperDriver>) {
     if exit_events.read().next().is_some() {
-        if !copper.started {
+        let CopperState::Running(app) = std::mem::replace(&mut copper.state, CopperState::Stopped)
+        else {
             return;
-        }
+        };
 
         info!("Stopping Copper BevyMon demo runtime.");
-        <BevyMonDemoApp as CuApplication<DemoSectionStorage, DemoUnifiedLogger>>::stop_all_tasks(
-            &mut copper.copper_app,
-        )
-        .expect("Failed to stop Copper demo tasks.");
-        let _ = copper.copper_app.log_shutdown_completed();
-        copper.started = false;
+        let stopped = app.stop().expect("Failed to stop Copper demo tasks.");
+        let _ = stopped.into_inner().log_shutdown_completed();
     }
 }

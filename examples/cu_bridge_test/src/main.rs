@@ -18,13 +18,14 @@ struct Cli {
     mission: MissionArg,
 }
 
-fn run_once<App>(app: &mut App) -> CuResult<()>
+fn run_once<App>(app: CuAppLifecycle<MmapSectionStorage, UnifiedLoggerWrite, App>) -> CuResult<()>
 where
     App: CuApplication<MmapSectionStorage, UnifiedLoggerWrite>,
 {
-    app.start_all_tasks()?;
-    app.run()?;
-    app.stop_all_tasks()?;
+    // `run` drives the full start/iterate/stop cycle; the typestate rejects
+    // the extra start_all_tasks/stop_all_tasks calls this example used to
+    // make around it (a double start/stop at runtime).
+    app.run_until_shutdown()?;
     Ok(())
 }
 
@@ -50,40 +51,40 @@ fn drive() -> CuResult<()> {
 
     match args.mission {
         MissionArg::BridgeOnlyAb => {
-            let mut app = BridgeOnlyABApp::builder()
+            let app = BridgeOnlyABApp::builder()
                 .with_log_path(&logger_path, SLAB_SIZE)?
                 .build()?;
-            run_once(&mut app)?;
+            run_once(app)?;
         }
         MissionArg::BridgeLoopback => {
-            let mut app = BridgeLoopbackApp::builder()
+            let app = BridgeLoopbackApp::builder()
                 .with_log_path(&logger_path, SLAB_SIZE)?
                 .build()?;
-            run_once(&mut app)?;
+            run_once(app)?;
         }
         MissionArg::SourceToBridge => {
-            let mut app = SourceToBridgeApp::builder()
+            let app = SourceToBridgeApp::builder()
                 .with_log_path(&logger_path, SLAB_SIZE)?
                 .build()?;
-            run_once(&mut app)?;
+            run_once(app)?;
         }
         MissionArg::BridgeToSink => {
-            let mut app = BridgeToSinkApp::builder()
+            let app = BridgeToSinkApp::builder()
                 .with_log_path(&logger_path, SLAB_SIZE)?
                 .build()?;
-            run_once(&mut app)?;
+            run_once(app)?;
         }
         MissionArg::BridgeTaskSame => {
-            let mut app = BridgeTaskSameApp::builder()
+            let app = BridgeTaskSameApp::builder()
                 .with_log_path(&logger_path, SLAB_SIZE)?
                 .build()?;
-            run_once(&mut app)?;
+            run_once(app)?;
         }
         MissionArg::BridgeFanout => {
-            let mut app = BridgeFanoutApp::builder()
+            let app = BridgeFanoutApp::builder()
                 .with_log_path(&logger_path, SLAB_SIZE)?
                 .build()?;
-            run_once(&mut app)?;
+            run_once(app)?;
         }
     }
 

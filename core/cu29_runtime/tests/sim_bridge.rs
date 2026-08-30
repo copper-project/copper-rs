@@ -185,13 +185,13 @@ mod recording {
     struct RealApp {}
 
     pub(super) fn record(logger: Arc<Mutex<MmapUnifiedLoggerWrite>>) -> CuResult<()> {
-        let mut app = RealApp::builder()
+        let app = RealApp::builder()
             .with_logger::<MmapSectionStorage, MmapUnifiedLoggerWrite>(logger)
             .build()?;
-        app.start_all_tasks()?;
-        app.run_one_iteration()?;
-        app.run_one_iteration()?;
-        app.stop_all_tasks()?;
+        let mut running = app.start()?;
+        running.run_one_iteration()?;
+        running.run_one_iteration()?;
+        running.stop()?;
         Ok(())
     }
 }
@@ -208,6 +208,10 @@ mod run_in_sim {
     struct RunInSimApp {}
 
     #[test]
+    // Drives the raw (deprecated) sim lifecycle on purpose: restoring a keyframe
+    // into a started app is a replay primitive the lifecycle typestate
+    // deliberately does not expose.
+    #[allow(deprecated)]
     fn nonzero_bridge_keyframe_matches_linear_debug_replay() -> CuResult<()> {
         let temp_dir = tempfile::tempdir()
             .map_err(|error| CuError::new_with_cause("create temp log dir failed", error))?;
@@ -303,6 +307,10 @@ fn read_first_keyframe(path: &Path) -> CuResult<KeyFrame> {
 }
 
 #[test]
+// Drives the raw (deprecated) sim lifecycle on purpose: restoring a keyframe
+// into a started app is a replay primitive the lifecycle typestate
+// deliberately does not expose.
+#[allow(deprecated)]
 fn sim_restore_skips_substituted_bridge_frame() -> CuResult<()> {
     let temp_dir = tempfile::tempdir()
         .map_err(|error| CuError::new_with_cause("create temp log dir failed", error))?;
@@ -374,15 +382,15 @@ fn bridge_sim_callbacks_fire_and_override() -> CuResult<()> {
         }
     };
 
-    let mut app = App::builder()
+    let app = App::builder()
         .with_clock(robot_clock.clone())
         .with_logger::<MmapSectionStorage, MmapUnifiedLoggerWrite>(logger)
         .with_sim_callback(&mut sim_cb)
         .build()?;
 
-    app.start_all_tasks(&mut sim_cb)?;
-    app.run_one_iteration(&mut sim_cb)?;
-    app.stop_all_tasks(&mut sim_cb)?;
+    let mut running = app.start(&mut sim_cb)?;
+    running.run_one_iteration(&mut sim_cb)?;
+    running.stop(&mut sim_cb)?;
 
     // Bridge lifecycle start+stop observed
     assert_eq!(lifecycle_calls, 2);

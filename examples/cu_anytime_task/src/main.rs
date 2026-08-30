@@ -201,18 +201,16 @@ fn main() {
     {
         fs::create_dir_all(parent).expect("Failed to create logs directory");
     }
-    let mut application = App::builder()
+    let application = App::builder()
         .with_log_path(logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
         .build()
         .expect("Failed to create application.");
-    application
-        .start_all_tasks()
-        .expect("Failed to start application.");
+    let mut running = application.start().expect("Failed to start application.");
     // Three copperlists for the foreground chain; keep polling until the
     // backgrounded node's first job comes back from its worker thread.
     for iteration in 0..100 {
-        application
+        running
             .run_one_iteration()
             .expect("Failed to run application.");
         let landed = !tasks::BACKGROUND_RECORDED
@@ -223,9 +221,7 @@ fn main() {
             break;
         }
     }
-    application
-        .stop_all_tasks()
-        .expect("Failed to stop application.");
+    running.stop().expect("Failed to stop application.");
 
     let background = tasks::BACKGROUND_RECORDED
         .lock()

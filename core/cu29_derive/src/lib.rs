@@ -17,6 +17,7 @@ use syn::{
 use crate::utils::{config_id_to_bridge_const, config_id_to_enum, config_id_to_struct_member};
 use cu29_build::COPPER_CFG_FEATURES_ENV;
 use cu29_runtime::config::CuConfig;
+use cu29_runtime::config::DEFAULT_MISSION_ID;
 use cu29_runtime::config::{
     AnytimeConfig, BridgeChannelConfigRepresentation, ConfigGraphs, ConstantConfig, ConstantNumber,
     ConstantStorage, CuGraph, Flavor, HandleContent, Node, NodeId, RT_POOL, ResourceBundleConfig,
@@ -26,7 +27,11 @@ use cu29_runtime::curuntime::{
     CuExecutionLoop, CuExecutionStep, CuExecutionUnit, CuStepPhase, CuTaskType,
     find_task_type_for_id,
 };
-use cu29_runtime::planner::{DEFAULT_COPPERLIST_COUNT, PlanEntityKind, assemble_runtime_plan};
+use cu29_runtime::planner::{
+    BUILTIN_PLANNERS, DEFAULT_COPPERLIST_COUNT, PLAN_ARTIFACT_FILE, PlanEntityKind,
+    assemble_runtime_plan, assemble_runtime_plan_from_step_keys, config_digest, is_builtin_planner,
+    read_plan_artifact,
+};
 use cu29_traits::{CuError, CuResult};
 use proc_macro2::{Ident, Span};
 
@@ -891,10 +896,14 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
     }
     #[cfg(feature = "macro_debug")]
     eprintln!("[gen culist support with {config:?}]");
-    let cuconfig = match read_config(&config) {
+    let mut cuconfig = match read_config(&config) {
         Ok(cuconfig) => cuconfig,
         Err(e) => return return_error(e.to_string()),
     };
+    if let Err(e) = apply_external_plan(&mut cuconfig) {
+        return return_error(e.to_string());
+    }
+    let cuconfig = cuconfig;
 
     let extra_imports = if !std {
         quote! {
@@ -1001,16 +1010,21 @@ fn build_gen_cumsgs_support(
 ) -> CuResult<proc_macro2::TokenStream> {
     let channel_usage = collect_bridge_channel_usage(graph);
     let mut bridge_specs = build_bridge_specs(cuconfig, graph, &channel_usage);
-    let (culist_plan, exec_entities, plan_to_original) =
-        build_execution_plan(cuconfig, graph, &mut bridge_specs).map_err(|e| {
-            if let Some(mission) = mission_label {
-                CuError::from(format!(
-                    "Could not compute copperlist plan for mission '{mission}': {e}"
-                ))
-            } else {
-                CuError::from(format!("Could not compute copperlist plan: {e}"))
-            }
-        })?;
+    let (culist_plan, exec_entities, plan_to_original) = build_execution_plan(
+        cuconfig,
+        graph,
+        mission_label.unwrap_or(DEFAULT_MISSION_ID),
+        &mut bridge_specs,
+    )
+    .map_err(|e| {
+        if let Some(mission) = mission_label {
+            CuError::from(format!(
+                "Could not compute copperlist plan for mission '{mission}': {e}"
+            ))
+        } else {
+            CuError::from(format!("Could not compute copperlist plan: {e}"))
+        }
+    })?;
     let task_names = collect_task_names(graph);
     let (culist_order, node_output_positions) = collect_culist_metadata(
         &culist_plan,
@@ -1392,11 +1406,7 @@ fn gen_culist_support(
             let task_id = LitStr::new(task_id, Span::call_site());
             let msg_type = LitStr::new(msg_type, Span::call_site());
             quote! {
-                cu29::TaskOutputSpec {
-                    task_id: #task_id,
-                    msg_type: #msg_type,
-                    payload_type_path_fn: <#payload_type as cu29::prelude::TypePath>::type_path,
-                }
+                cu29::TaskOutputSpec::new::<#payload_type>(#task_id, #msg_type)
             }
         })
         .collect();
@@ -1432,6 +1442,10 @@ fn gen_culist_support(
 
         pub type CuList = CopperList<CuStampedDataSet>;
 
+        const TASK_OUTPUT_SPECS: &[cu29::TaskOutputSpec] = &[
+            #(#task_output_spec_literals),*
+        ];
+
         impl CuStampedDataSet {
             #(#methods)*
 
@@ -1455,13 +1469,9 @@ fn gen_culist_support(
 
             #[allow(dead_code)]
             fn get_output_specs() -> &'static [cu29::TaskOutputSpec] {
-                &[#(#task_output_spec_literals),*]
+                TASK_OUTPUT_SPECS
             }
         }
-
-        // Note: PayloadSchemas is NOT implemented here.
-        // Users who want MCAP export with schemas should implement it manually
-        // using cu29_export::trace_type_to_jsonschema.
 
         // Adds the bincode support for the copper list tuple
         #msgs_types_tuple_encode
@@ -1882,7 +1892,32 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let subsystem_id = resolved_runtime_config.subsystem_id.clone();
     let config_features = resolved_runtime_config.active_features.clone();
     let copper_config_content = resolved_runtime_config.bundled_local_config_content.clone();
-    let copper_config = resolved_runtime_config.local_config;
+    let mut copper_config = resolved_runtime_config.local_config;
+    if let Err(e) = apply_external_plan(&mut copper_config) {
+        return return_error(e.to_string());
+    }
+    let copper_config = copper_config;
+    // Re-apply the baked step orders at startup so the effective config the
+    // app logs stays self-describing, whatever RON file it was started with.
+    let planner_resolved_stamp = match copper_config.planner_config().and_then(|selection| {
+        selection
+            .resolved_orders()
+            .map(|orders| (selection.get_type().to_string(), orders))
+    }) {
+        Some((planner_type, orders)) => {
+            let entries = orders.iter().map(|(mission, keys)| {
+                quote! { (#mission.to_string(), vec![#(#keys.to_string()),*]) }
+            });
+            quote! {
+                let config = {
+                    let mut config = config;
+                    config.set_planner_resolved_orders(#planner_type, [#(#entries),*]);
+                    config
+                };
+            }
+        }
+        None => quote! {},
+    };
     let copperlist_count = copper_config
         .logging
         .as_ref()
@@ -2072,9 +2107,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let mut culist_bridge_specs =
             build_bridge_specs(&copper_config, graph, &culist_channel_usage);
         let (culist_plan, culist_exec_entities, culist_plan_to_original) =
-            match build_execution_plan(&copper_config, graph, &mut culist_bridge_specs) {
+            match build_execution_plan(&copper_config, graph, mission, &mut culist_bridge_specs) {
                 Ok(plan) => plan,
-                Err(e) => return return_error(format!("Could not compute copperlist plan: {e}")),
+                Err(e) => {
+                    return return_error(format!(
+                        "Could not compute copperlist plan for mission '{mission}': {e}"
+                    ));
+                }
             };
 
         // Single-input/single-output arity is validated at configuration time
@@ -3911,30 +3950,38 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let (run_one_iteration, start_all_tasks, stop_all_tasks, run) = if sim_mode {
             (
                 quote! {
+                    #[allow(deprecated)] // implements the deprecated raw trait method
                     fn run_one_iteration(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()>
                 },
                 quote! {
+                    #[allow(deprecated)] // implements the deprecated raw trait method
                     fn start_all_tasks(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()>
                 },
                 quote! {
+                    #[allow(deprecated)] // implements the deprecated raw trait method
                     fn stop_all_tasks(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()>
                 },
                 quote! {
+                    #[allow(deprecated)] // implements the deprecated raw trait method
                     fn run(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()>
                 },
             )
         } else {
             (
                 quote! {
+                    #[allow(deprecated)] // implements the deprecated raw trait method
                     fn run_one_iteration(&mut self) -> CuResult<()>
                 },
                 quote! {
+                    #[allow(deprecated)] // implements the deprecated raw trait method
                     fn start_all_tasks(&mut self) -> CuResult<()>
                 },
                 quote! {
+                    #[allow(deprecated)] // implements the deprecated raw trait method
                     fn stop_all_tasks(&mut self) -> CuResult<()>
                 },
                 quote! {
+                    #[allow(deprecated)] // implements the deprecated raw trait method
                     fn run(&mut self) -> CuResult<()>
                 },
             )
@@ -5452,6 +5499,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     UnifiedLogType::RuntimeLifecycle,
                     1024 * 64, // 64 KiB
                 )?;
+                #planner_resolved_stamp
                 let effective_config_ron = config
                     .serialize_ron()
                     .unwrap_or_else(|_| "<failed to serialize config>".to_string());
@@ -5666,6 +5714,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 {
                     type RecordedDataSet = #mission_mod::CuStampedDataSet;
 
+                    #[allow(deprecated)] // replays via the deprecated raw iteration on purpose
                     fn replay_recorded_copperlist(
                         &mut self,
                         clock_mock: &RobotClockMock,
@@ -5736,7 +5785,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         } else {
                             builder
                         };
-                        builder.with_sim_callback(&mut noop).build()
+                        builder.with_sim_callback(&mut noop).build_impl()
                     }
                 }
             })
@@ -5963,15 +6012,35 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             // sim mode
             Some(quote! {
                         impl #application_name {
+                            #[deprecated(
+                                since = "1.2.0",
+                                note = "use the typed lifecycle handle returned by `build()` instead"
+                            )]
+                            #[allow(deprecated)] // forwards to the deprecated raw trait method
                             pub fn start_all_tasks(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()> {
                                 <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::start_all_tasks(self, sim_callback)
                             }
+                            #[deprecated(
+                                since = "1.2.0",
+                                note = "use the typed lifecycle handle returned by `build()` instead"
+                            )]
+                            #[allow(deprecated)] // forwards to the deprecated raw trait method
                             pub fn run_one_iteration(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()> {
                                 <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::run_one_iteration(self, sim_callback)
                             }
+                            #[deprecated(
+                                since = "1.2.0",
+                                note = "use the typed lifecycle handle returned by `build()` instead"
+                            )]
+                            #[allow(deprecated)] // forwards to the deprecated raw trait method
                             pub fn run(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()> {
                                 <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::run(self, sim_callback)
                             }
+                            #[deprecated(
+                                since = "1.2.0",
+                                note = "use the typed lifecycle handle returned by `build()` instead"
+                            )]
+                            #[allow(deprecated)] // forwards to the deprecated raw trait method
                             pub fn stop_all_tasks(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()> {
                                 <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::stop_all_tasks(self, sim_callback)
                             }
@@ -5994,15 +6063,35 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             // std and normal mode, we use the memory mapped starage for those
             Some(quote! {
                         impl #application_name {
+                            #[deprecated(
+                                since = "1.2.0",
+                                note = "use the typed lifecycle handle returned by `build()` instead"
+                            )]
+                            #[allow(deprecated)] // forwards to the deprecated raw trait method
                             pub fn start_all_tasks(&mut self) -> CuResult<()> {
                                 <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::start_all_tasks(self)
                             }
+                            #[deprecated(
+                                since = "1.2.0",
+                                note = "use the typed lifecycle handle returned by `build()` instead"
+                            )]
+                            #[allow(deprecated)] // forwards to the deprecated raw trait method
                             pub fn run_one_iteration(&mut self) -> CuResult<()> {
                                 <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::run_one_iteration(self)
                             }
+                            #[deprecated(
+                                since = "1.2.0",
+                                note = "use the typed lifecycle handle returned by `build()` instead"
+                            )]
+                            #[allow(deprecated)] // forwards to the deprecated raw trait method
                             pub fn run(&mut self) -> CuResult<()> {
                                 <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::run(self)
                             }
+                            #[deprecated(
+                                since = "1.2.0",
+                                note = "use the typed lifecycle handle returned by `build()` instead"
+                            )]
+                            #[allow(deprecated)] // forwards to the deprecated raw trait method
                             pub fn stop_all_tasks(&mut self) -> CuResult<()> {
                                 <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::stop_all_tasks(self)
                             }
@@ -6010,6 +6099,18 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             })
         } else {
             None // if no-std, let the user figure our the correct logger type they need to provide anyway.
+        };
+
+        let (builder_build_app_return, builder_build_app_wrap) = if sim_mode {
+            (
+                quote! { cu29::prelude::app::CuSimAppLifecycle<S, L, #application_name> },
+                quote! { cu29::prelude::app::CuSimAppLifecycle },
+            )
+        } else {
+            (
+                quote! { cu29::prelude::app::CuAppLifecycle<S, L, #application_name> },
+                quote! { cu29::prelude::app::CuAppLifecycle },
+            )
         };
 
         let application_builder = Some(quote! {
@@ -6070,8 +6171,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #builder_with_log_path_method
                 #builder_sim_callback_method
 
+                /// Builds the application wrapped in its compile-time checked
+                /// lifecycle, in the `Initialized` state: start it with
+                /// `start()` or drive the full cycle with `run_until_shutdown()`.
+                /// The pre-typestate lifecycle methods remain callable on the
+                /// returned handle (with deprecation warnings) until Copper 2.0.
                 #[allow(dead_code)]
-                pub fn build(self) -> CuResult<#application_name> {
+                pub fn build(self) -> CuResult<#builder_build_app_return> {
+                    Ok(#builder_build_app_wrap::new(self.build_impl()?))
+                }
+
+                fn build_impl(self) -> CuResult<#application_name> {
                     let clock = self
                         .clock
                         .ok_or(CuError::from("Clock missing from builder"))?;
@@ -6632,6 +6742,60 @@ fn read_config(config_file: &str) -> CuResult<CuConfig> {
     let active_features = active_config_features();
     let active_feature_refs: Vec<_> = active_features.iter().map(String::as_str).collect();
     read_configuration_with_features(filename.as_str(), &active_feature_refs)
+}
+
+/// Bake an out-of-tree planner's build-time resolved step orders into the config.
+///
+/// Ship-with-copper planners are instantiated directly by the shared planner;
+/// any other `runtime.planner` type must have been resolved by
+/// `cu29::planner::emit_plan` in the caller's build.rs, whose artifact this
+/// reads from `OUT_DIR`.
+fn apply_external_plan(config: &mut CuConfig) -> CuResult<()> {
+    let (planner_type, already_resolved) = match config.planner_config() {
+        None => return Ok(()),
+        Some(selection) => (
+            selection.get_type().to_string(),
+            selection.resolved_orders().is_some(),
+        ),
+    };
+    if is_builtin_planner(&planner_type) || already_resolved {
+        return Ok(());
+    }
+    let build_rs_hint = format!(
+        "add to this crate's build.rs: cu29::planner::emit_plan::<{planner_type}>(\"<config>.ron\").unwrap()"
+    );
+    let shipped = BUILTIN_PLANNERS.join(", ");
+    let out_dir = std::env::var("OUT_DIR").map_err(|_| {
+        CuError::from(format!(
+            "Planner '{planner_type}' is not shipped with copper (shipped: {shipped}) and no plan artifact is available (no build script?); {build_rs_hint}"
+        ))
+    })?;
+    let path = std::path::Path::new(&out_dir).join(PLAN_ARTIFACT_FILE);
+    let artifact = read_plan_artifact(&path).map_err(|e| {
+        CuError::from(format!(
+            "Planner '{planner_type}' is not shipped with copper (shipped: {shipped}) and reading its plan artifact failed ({e}); {build_rs_hint}"
+        ))
+    })?;
+    let artifact_name = artifact
+        .planner_type
+        .rsplit("::")
+        .next()
+        .unwrap_or(&artifact.planner_type);
+    let config_name = planner_type.rsplit("::").next().unwrap_or(&planner_type);
+    if artifact_name != config_name {
+        return Err(CuError::from(format!(
+            "The plan artifact was emitted by '{}' but the config selects '{planner_type}'.",
+            artifact.planner_type
+        )));
+    }
+    let expected = config_digest(config)?;
+    if artifact.config_digest != expected {
+        return Err(CuError::from(format!(
+            "The plan artifact for planner '{planner_type}' is stale; re-run the build script (touch build.rs or the config file)."
+        )));
+    }
+    config.set_planner_resolved_orders(&planner_type, artifact.orders);
+    Ok(())
 }
 
 fn inferred_single_output_payload_type(
@@ -8502,13 +8666,17 @@ fn build_bridge_resource_mappings(
 fn build_execution_plan(
     config: &CuConfig,
     graph: &CuGraph,
+    mission: &str,
     bridge_specs: &mut [BridgeSpec],
 ) -> CuResult<(
     CuExecutionLoop,
     Vec<ExecutionEntity>,
     HashMap<NodeId, NodeId>,
 )> {
-    let assembled = assemble_runtime_plan(config, graph)?;
+    let assembled = match config.planner_resolved_order(mission) {
+        Some(step_keys) => assemble_runtime_plan_from_step_keys(config, graph, step_keys)?,
+        None => assemble_runtime_plan(config, graph)?,
+    };
     let mut exec_entities = Vec::with_capacity(assembled.entities.len());
     for (plan_node_id, entity) in assembled.entities.iter().enumerate() {
         let kind = match entity.kind {
@@ -10888,7 +11056,8 @@ mod tests {
         let channel_usage = collect_bridge_channel_usage(graph);
         let mut bridge_specs = build_bridge_specs(&config, graph, &channel_usage);
         let (runtime_plan, exec_entities, plan_to_original) =
-            build_execution_plan(&config, graph, &mut bridge_specs).expect("runtime plan failed");
+            build_execution_plan(&config, graph, "default", &mut bridge_specs)
+                .expect("runtime plan failed");
         let output_packs = extract_output_packs(&runtime_plan);
         let task_names = collect_task_names(graph);
         let (_, node_output_positions) = collect_culist_metadata(

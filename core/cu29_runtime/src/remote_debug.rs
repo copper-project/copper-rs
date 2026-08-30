@@ -5513,11 +5513,11 @@ mod tests {
         }
 
         fn get_output_specs() -> &'static [TaskOutputSpec] {
-            &[TaskOutputSpec {
-                task_id: "alias_task",
-                msg_type: "alias::payload",
-                payload_type_path_fn: <PayloadAlias as TypePath>::type_path,
-            }]
+            const OUTPUT_SPECS: &[TaskOutputSpec] = &[TaskOutputSpec::new::<PayloadAlias>(
+                "alias_task",
+                "alias::payload",
+            )];
+            OUTPUT_SPECS
         }
     }
 

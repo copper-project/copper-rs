@@ -42,9 +42,11 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 #[cfg(feature = "mcap")]
-pub use mcap_export::{
-    McapExportStats, PayloadSchemas, export_to_mcap, export_to_mcap_with_schemas, mcap_info,
-};
+pub use mcap_export::{McapExportStats, export_to_mcap, export_to_mcap_with_schemas, mcap_info};
+
+#[cfg(feature = "mcap")]
+#[allow(deprecated)]
+pub use cu29::prelude::PayloadSchemas;
 
 #[cfg(feature = "mcap")]
 pub use serde_to_jsonschema::trace_type_to_jsonschema;
@@ -202,11 +204,10 @@ fn build_read_logger(unifiedlog_base: &Path) -> CuResult<UnifiedLoggerRead> {
 /// This is a generator for a main function to build a log extractor.
 /// It depends on the specific type of the CopperList payload that is determined at compile time from the configuration.
 ///
-/// When the `mcap` feature is enabled, P must also implement `PayloadSchemas` for MCAP export support.
 #[cfg(feature = "mcap")]
 pub fn run_cli<P>() -> CuResult<()>
 where
-    P: CopperListTuple + CuPayloadRawBytes + mcap_export::PayloadSchemas + 'static,
+    P: CopperListTuple + CuPayloadRawBytes + 'static,
 {
     #[cfg(feature = "python")]
     let _ = python::register_copperlist_python_type::<P>();
@@ -230,7 +231,7 @@ where
 #[cfg(feature = "mcap")]
 fn run_cli_inner<P>() -> CuResult<()>
 where
-    P: CopperListTuple + CuPayloadRawBytes + mcap_export::PayloadSchemas + 'static,
+    P: CopperListTuple + CuPayloadRawBytes + 'static,
 {
     let args = LogReaderCli::parse();
     let unifiedlog_base = args.unifiedlog_base;
@@ -319,8 +320,7 @@ where
 
             let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
 
-            // Export to MCAP with schemas.
-            // Note: P must implement PayloadSchemas and provide schemas for each CopperList slot.
+            // Export to MCAP with schemas derived from generated output metadata.
             let stats = if let Some(total_bytes) = total_bytes {
                 let progress_bar = make_progress_bar(total_bytes);
                 let reader = ProgressReader::new(reader, progress_bar.clone());
@@ -478,11 +478,11 @@ fn resolve_logstats_mission(
 
 /// Helper function for MCAP export.
 ///
-/// Uses the PayloadSchemas trait to get per-slot payload schemas.
+/// Uses generated per-slot payload type metadata to derive schemas.
 #[cfg(feature = "mcap")]
 fn export_to_mcap_impl<P>(src: impl Read, output: &Path) -> CuResult<McapExportStats>
 where
-    P: CopperListTuple + mcap_export::PayloadSchemas,
+    P: CopperListTuple,
 {
     mcap_export::export_to_mcap::<P, _>(src, output)
 }

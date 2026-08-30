@@ -1,3 +1,7 @@
+// Replay-primitive tests: drive the raw (app-deprecated) lifecycle API on
+// purpose, because replay interleaves recorded-copperlist injection with a
+// started app in ways the lifecycle typestate deliberately does not expose.
+#![allow(deprecated)]
 #![cfg(all(test, feature = "std"))]
 
 use bincode::{Decode, Encode, config::standard, encode_to_vec};
@@ -13,7 +17,11 @@ use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
+
+/// The logger runtime is a process-wide singleton: serialize the tests that
+/// each build a full application so they do not race its initialization.
+static TEST_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 #[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
 struct CounterMsg {
@@ -191,7 +199,8 @@ fn record_reference_run(
         .with_clock(clock)
         .with_logger::<MmapSectionStorage, MmapUnifiedLoggerWrite>(logger)
         .with_sim_callback(&mut noop)
-        .build()?;
+        .build()?
+        .into_inner();
 
     app.start_all_tasks(&mut noop)?;
     app.run_one_iteration(&mut noop)?;
@@ -218,7 +227,8 @@ fn replay_run(
         .with_clock(clock)
         .with_logger::<MmapSectionStorage, MmapUnifiedLoggerWrite>(logger)
         .with_sim_callback(&mut noop)
-        .build()?;
+        .build()?
+        .into_inner();
 
     app.start_all_tasks(&mut noop)?;
     app.replay_recorded_copperlist(&clock_mock, recorded_cl, keyframe)?;
@@ -236,6 +246,9 @@ fn replay_run(
 
 #[test]
 fn replay_recorded_copperlist_reproduces_copperlist_and_keyframe() -> CuResult<()> {
+    let _guard = TEST_MUTEX
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
     let temp_dir = tempfile::tempdir()
         .map_err(|e| cu29::CuError::new_with_cause("create temp dir failed", e))?;
     let record_path = temp_dir.path().join("recorded.copper");
@@ -254,6 +267,9 @@ fn replay_recorded_copperlist_reproduces_copperlist_and_keyframe() -> CuResult<(
 
 #[test]
 fn replay_recorded_copperlist_without_keyframe_uses_recorded_timestamp() -> CuResult<()> {
+    let _guard = TEST_MUTEX
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
     let temp_dir = tempfile::tempdir()
         .map_err(|e| cu29::CuError::new_with_cause("create temp dir failed", e))?;
     let record_path = temp_dir.path().join("recorded_no_kf.copper");
@@ -274,6 +290,9 @@ fn replay_recorded_copperlist_without_keyframe_uses_recorded_timestamp() -> CuRe
 
 #[test]
 fn builder_propagates_instance_id_into_runtime() -> CuResult<()> {
+    let _guard = TEST_MUTEX
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
     let temp_dir = tempfile::tempdir()
         .map_err(|e| cu29::CuError::new_with_cause("create temp dir failed", e))?;
     let log_path = temp_dir.path().join("instance_id_runtime.copper");
@@ -286,7 +305,8 @@ fn builder_propagates_instance_id_into_runtime() -> CuResult<()> {
         .with_logger::<MmapSectionStorage, MmapUnifiedLoggerWrite>(logger)
         .with_instance_id(42)
         .with_sim_callback(&mut noop)
-        .build()?;
+        .build()?
+        .into_inner();
 
     assert_eq!(app.copper_runtime_mut().instance_id(), 42);
     Ok(())
