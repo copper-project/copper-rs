@@ -23,11 +23,11 @@ fn run() -> CuResult<()> {
         .map_err(|e| CuError::new_with_cause("failed to create temporary log directory", e))?;
     let log_path = log_dir.path().join("cu_gnss_ublox_demo.copper");
 
-    let mut app = CuGnssUbloxDemo::builder()
+    let app = CuGnssUbloxDemo::builder()
         .with_log_path(&log_path, Some(16 * 1024 * 1024))?
         .build()?;
     let clock = app.clock();
-    app.start_all_tasks()?;
+    let mut app = app.start()?;
 
     let running = Arc::new(AtomicBool::new(true));
     let running_for_signal = Arc::clone(&running);
@@ -59,7 +59,7 @@ fn run() -> CuResult<()> {
         thread::sleep(Duration::from_millis(5));
     }
 
-    app.stop_all_tasks()?;
+    app.stop()?;
 
     if let Some(err) = run_error {
         return Err(err);

@@ -1,3 +1,8 @@
+// Replay harness: drives the raw (app-deprecated) lifecycle API on purpose.
+// Replay needs mid-flight runtime access (keyframe locking, forced
+// timestamps) that the lifecycle typestate deliberately does not expose.
+#![allow(deprecated)]
+
 pub mod tasks;
 
 use cu29::prelude::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
@@ -66,7 +71,7 @@ fn make_app(
         .with_clock(clock.clone())
         .with_log_path(replay_log_base, PREALLOCATED_STORAGE_SIZE)?
         .with_sim_callback(&mut default_callback)
-        .build()?;
+        .build()?.into_inner();
     Ok((app, clock, clock_mock))
 }
 

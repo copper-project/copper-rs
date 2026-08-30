@@ -19,14 +19,17 @@ fn main() {
     }
     debug!("Logger created at {}.", logger_path);
     debug!("Creating application... ");
-    let mut application = {{project-name | upper_camel_case}}Application::builder()
+    let application = {{project-name | upper_camel_case}}Application::builder()
         .with_log_path(logger_path, PREALLOCATED_STORAGE_SIZE)
         .expect("Failed to setup logger.")
         .build()
         .expect("Failed to create application.");
-    debug!("Running... starting clock: {}.", application.clock().now());
+    debug!(
+        "Running... starting clock: {}.",
+        application.clock().now()
+    );
 
-    application.run().expect("Failed to run application.");
-    debug!("End of program: {}.", application.clock().now());
+    let stopped = application.run_until_shutdown().expect("Failed to run application.");
+    debug!("End of program: {}.", stopped.clock().now());
     sleep(Duration::from_secs(1));
 }

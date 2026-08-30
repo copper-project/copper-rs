@@ -24,6 +24,8 @@ extern crate alloc;
 
 #[cfg(feature = "reflect")]
 pub use bevy_reflect::Reflect;
+#[cfg(feature = "reflect")]
+use bevy_reflect::{GetTypeRegistration, TypePath, TypeRegistry};
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::enc::write::Writer;
@@ -516,13 +518,58 @@ pub struct TaskOutputSpec {
     pub task_id: &'static str,
     pub msg_type: &'static str,
     pub payload_type_path_fn: fn() -> &'static str,
+    #[cfg(feature = "reflect")]
+    payload_type_registration_fn: fn(&mut TypeRegistry),
 }
 
 impl TaskOutputSpec {
+    #[cfg(feature = "reflect")]
+    pub const fn new<T>(task_id: &'static str, msg_type: &'static str) -> Self
+    where
+        T: GetTypeRegistration + TypePath,
+    {
+        Self {
+            task_id,
+            msg_type,
+            payload_type_path_fn: payload_type_path::<T>,
+            payload_type_registration_fn: register_payload_type::<T>,
+        }
+    }
+
+    #[cfg(not(feature = "reflect"))]
+    pub const fn new<T>(task_id: &'static str, msg_type: &'static str) -> Self {
+        Self {
+            task_id,
+            msg_type,
+            payload_type_path_fn: payload_type_path::<T>,
+        }
+    }
+
     #[inline]
     pub fn payload_type_path(&self) -> &'static str {
         (self.payload_type_path_fn)()
     }
+
+    #[cfg(feature = "reflect")]
+    #[inline]
+    pub fn register_payload_type(&self, registry: &mut TypeRegistry) {
+        (self.payload_type_registration_fn)(registry);
+    }
+}
+
+#[cfg(feature = "reflect")]
+fn payload_type_path<T: TypePath>() -> &'static str {
+    T::type_path()
+}
+
+#[cfg(not(feature = "reflect"))]
+fn payload_type_path<T>() -> &'static str {
+    core::any::type_name::<T>()
+}
+
+#[cfg(feature = "reflect")]
+fn register_payload_type<T: GetTypeRegistration>(registry: &mut TypeRegistry) {
+    registry.register::<T>();
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -743,14 +790,55 @@ pub trait MatchingTasks {
     }
 }
 
+/// Describes the serialized JSON representation of a reusable payload type.
+///
+/// Implement this next to a payload's [`Serialize`] implementation when its
+/// wire representation cannot be inferred accurately from reflected fields.
+/// Add `SerializedPayloadSchema` to the type's `#[reflect(...)]` attribute so
+/// reflection-based exporters discover the implementation automatically.
+/// Exporters can then consume the schema without the payload depending on a
+/// particular export format such as MCAP.
+pub trait SerializedPayloadSchema {
+    /// Returns a JSON Schema for the value emitted by [`Serialize`].
+    fn serialized_payload_schema() -> &'static str;
+}
+
+/// Reflected type metadata for [`SerializedPayloadSchema`].
+#[derive(Clone, Copy)]
+pub struct ReflectSerializedPayloadSchema {
+    schema_fn: fn() -> &'static str,
+}
+
+impl ReflectSerializedPayloadSchema {
+    pub fn schema(&self) -> &'static str {
+        (self.schema_fn)()
+    }
+}
+
+#[cfg(feature = "reflect")]
+impl<T> bevy_reflect::FromType<T> for ReflectSerializedPayloadSchema
+where
+    T: SerializedPayloadSchema,
+{
+    fn from_type() -> Self {
+        Self {
+            schema_fn: T::serialized_payload_schema,
+        }
+    }
+}
+
 /// Trait for providing JSON schemas for CopperList payload types.
 ///
-/// This trait is implemented by the generated CuMsgs type via the `gen_cumsgs!` macro
-/// when MCAP export support is enabled. It provides compile-time schema information
-/// for each task's payload type, enabling proper schema generation for Foxglove.
+/// This legacy hook remains available to callers that manage explicit schema
+/// lists. Generated logreaders use [`MatchingTasks::get_output_specs`] so MCAP
+/// export does not require an application-maintained implementation.
 ///
 /// The default implementation returns an empty vector for backwards compatibility
 /// with code that doesn't need MCAP export support.
+#[deprecated(
+    since = "1.2.0",
+    note = "generated logreaders now derive schemas from output metadata; use SerializedPayloadSchema for custom serialized payload shapes or export_to_mcap_with_schemas for explicit per-slot schemas"
+)]
 pub trait PayloadSchemas {
     /// Returns a vector of (task_id, schema_json) pairs.
     ///

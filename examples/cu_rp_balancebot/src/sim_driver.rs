@@ -19,11 +19,20 @@ use std::path::{Path, PathBuf};
 #[cfg(feature = "bevymon")]
 use std::sync::{Arc, Mutex};
 
+#[cfg(feature = "bevymon")]
+type SimLifecycle<State> =
+    CuSimAppLifecycle<BevyMonSectionStorage, BevyMonUnifiedLogger, crate::BalanceBotSim, State>;
+#[cfg(not(feature = "bevymon"))]
+type SimLifecycle<State> =
+    CuSimAppLifecycle<memmap::MmapSectionStorage, UnifiedLoggerWrite, crate::BalanceBotSim, State>;
+
 #[derive(Resource)]
 pub struct CopperSim {
     clock: RobotClock,
     clock_mock: RobotClockMock,
-    copper_app: crate::BalanceBotSim,
+    /// The running simulation; taken out once on shutdown because stopping
+    /// consumes the lifecycle handle.
+    copper_app: Option<SimLifecycle<Running>>,
 }
 
 #[derive(Resource, Default)]
@@ -84,7 +93,7 @@ pub fn setup_native_copper(mut commands: Commands) {
         path = logger_path
     );
 
-    let mut copper_app = crate::BalanceBotSim::builder()
+    let copper_app = crate::BalanceBotSim::builder()
         .with_clock(robot_clock.clone())
         .with_log_path(PathBuf::from(logger_path), LOG_SLAB_SIZE)
         .expect("Failed to create logger.")
@@ -92,14 +101,14 @@ pub fn setup_native_copper(mut commands: Commands) {
         .build()
         .expect("Failed to create runtime.");
 
-    copper_app
-        .start_all_tasks(&mut default_callback)
+    let copper_app = copper_app
+        .start(&mut default_callback)
         .expect("Failed to start all tasks.");
 
     commands.insert_resource(CopperSim {
         clock: robot_clock,
         clock_mock: robot_clock_mock,
-        copper_app,
+        copper_app: Some(copper_app),
     });
     commands.insert_resource(LastCopperTick::default());
 }
@@ -120,17 +129,20 @@ pub fn build_bevymon_copper() -> (MonitorModel, CopperSim) {
         .build()
         .expect("Failed to create runtime.");
 
-    copper_app
-        .start_all_tasks(&mut sim_callback)
+    // Pre-start mutable access works through DerefMut, only available in the
+    // Initialized state.
+    let monitor_model = copper_app.copper_runtime_mut().monitor.model();
+
+    let copper_app = copper_app
+        .start(&mut sim_callback)
         .expect("Failed to start all tasks.");
 
-    let monitor_model = copper_app.copper_runtime_mut().monitor.model();
     (
         monitor_model,
         CopperSim {
             clock,
             clock_mock,
-            copper_app,
+            copper_app: Some(copper_app),
         },
     )
 }
@@ -277,7 +289,10 @@ pub fn run_copper_callback(
             _ => SimOverride::ExecuteByRuntime,
         }
     };
-    if let Err(err) = copper_ctx.copper_app.run_one_iteration(&mut sim_callback) {
+    let Some(copper_app) = copper_ctx.copper_app.as_mut() else {
+        return;
+    };
+    if let Err(err) = copper_app.run_one_iteration(&mut sim_callback) {
         error!("Simulation stopped: {err}");
         exit_writer.write(AppExit::Success);
     }
@@ -287,11 +302,12 @@ pub fn stop_copper_on_exit(
     mut exit_events: MessageReader<AppExit>,
     mut copper_ctx: ResMut<CopperSim>,
 ) {
-    if exit_events.read().next().is_some() {
-        copper_ctx
-            .copper_app
-            .stop_all_tasks(&mut default_callback)
+    if exit_events.read().next().is_some()
+        && let Some(copper_app) = copper_ctx.copper_app.take()
+    {
+        let stopped = copper_app
+            .stop(&mut default_callback)
             .expect("Failed to stop all tasks.");
-        let _ = copper_ctx.copper_app.log_shutdown_completed();
+        let _ = stopped.into_inner().log_shutdown_completed();
     }
 }

@@ -74,7 +74,8 @@ fn app_factory(
         .with_sim_callback(&mut default_callback)
         .build()?;
 
-    Ok((app, clock, clock_mock))
+    // The replay session engine drives the raw lifecycle itself.
+    Ok((app.into_inner(), clock, clock_mock))
 }
 
 fn build_callback<'a>(

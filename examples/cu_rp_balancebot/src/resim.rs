@@ -1,3 +1,8 @@
+// Replay harness: drives the raw (app-deprecated) lifecycle API on purpose.
+// Replay needs mid-flight runtime access (keyframe locking, forced
+// timestamps) that the lifecycle typestate deliberately does not expose.
+#![allow(deprecated)]
+
 pub mod tasks;
 
 use cu29::prelude::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
@@ -153,7 +158,8 @@ fn make_app(log_base: &Path) -> CuResult<(BalanceBotReSim, RobotClock, RobotCloc
         .with_clock(robot_clock.clone())
         .with_log_path(log_base, REPLAY_LOG_SLAB_SIZE)?
         .with_sim_callback(&mut default_callback)
-        .build()?;
+        .build()?
+        .into_inner();
     Ok((copper_app, robot_clock, robot_clock_mock))
 }
 
@@ -277,8 +283,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cu29::bincode::de::{DecoderImpl, read::SliceReader};
     use cu29::bincode::{config::standard, decode_from_slice, encode_to_vec};
+    use cu29::curuntime::{KeyFramePayloadReader, thaw_keyframe_component};
     use cu29::cutask::BincodeAdapter;
     use cu29::debug::CuDebugSession;
     use std::path::PathBuf;
@@ -490,33 +496,15 @@ mod tests {
         let (mut app, _robot_clock, _robot_clock_mock) = make_app(&debug_log_base)?;
         app.start_all_tasks(&mut default_callback)?;
 
-        let reader = SliceReader::new(&first_keyframe.serialized_tasks);
-        let mut decoder = DecoderImpl::new(reader, standard(), ());
+        let mut frames = KeyFramePayloadReader::new(first_keyframe)?;
         let tasks = &mut app.copper_runtime_mut().tasks;
-        tasks
-            .0
-            .thaw(&mut decoder)
-            .map_err(|err| CuError::new_with_cause("task 0 thaw failed", err))?;
-        tasks
-            .1
-            .thaw(&mut decoder)
-            .map_err(|err| CuError::new_with_cause("task 1 thaw failed", err))?;
-        tasks
-            .2
-            .thaw(&mut decoder)
-            .map_err(|err| CuError::new_with_cause("task 2 thaw failed", err))?;
-        tasks
-            .3
-            .thaw(&mut decoder)
-            .map_err(|err| CuError::new_with_cause("task 3 thaw failed", err))?;
-        tasks
-            .4
-            .thaw(&mut decoder)
-            .map_err(|err| CuError::new_with_cause("task 4 thaw failed", err))?;
-        tasks
-            .5
-            .thaw(&mut decoder)
-            .map_err(|err| CuError::new_with_cause("task 5 thaw failed", err))?;
+        thaw_keyframe_component(&mut tasks.0, frames.next_frame()?)?;
+        thaw_keyframe_component(&mut tasks.1, frames.next_frame()?)?;
+        thaw_keyframe_component(&mut tasks.2, frames.next_frame()?)?;
+        thaw_keyframe_component(&mut tasks.3, frames.next_frame()?)?;
+        thaw_keyframe_component(&mut tasks.4, frames.next_frame()?)?;
+        thaw_keyframe_component(&mut tasks.5, frames.next_frame()?)?;
+        frames.finish()?;
 
         let (mut app_100, _robot_clock_100, _robot_clock_mock_100) =
             make_app(&temp_replay_log_base("fresh_keyframe_decode_runtime_100"))?;
@@ -543,51 +531,21 @@ mod tests {
             .expect("encode task 1 runtime state for CL100");
         let task_2_bytes = encode_to_vec(BincodeAdapter(&runtime_tasks.2), standard())
             .expect("encode task 2 runtime state for CL100");
-        let expected_prefix = [
-            task_0_bytes.as_slice(),
-            task_1_bytes.as_slice(),
-            task_2_bytes.as_slice(),
-        ]
-        .concat();
-        assert!(
-            keyframe_100.serialized_tasks.len() >= expected_prefix.len(),
-            "CL100 keyframe shorter than encoded task prefix: {} < {}",
-            keyframe_100.serialized_tasks.len(),
-            expected_prefix.len()
-        );
-        assert_eq!(
-            &keyframe_100.serialized_tasks[..expected_prefix.len()],
-            expected_prefix.as_slice(),
-            "CL100 keyframe prefix diverged from live task freeze bytes"
-        );
-
-        let reader_100 = SliceReader::new(&keyframe_100.serialized_tasks);
-        let mut decoder_100 = DecoderImpl::new(reader_100, standard(), ());
+        let mut frames_100 = KeyFramePayloadReader::new(keyframe_100)?;
         let tasks_100 = &mut app_100.copper_runtime_mut().tasks;
-        tasks_100
-            .0
-            .thaw(&mut decoder_100)
-            .map_err(|err| CuError::new_with_cause("task 0 thaw failed for CL100", err))?;
-        tasks_100
-            .1
-            .thaw(&mut decoder_100)
-            .map_err(|err| CuError::new_with_cause("task 1 thaw failed for CL100", err))?;
-        tasks_100
-            .2
-            .thaw(&mut decoder_100)
-            .map_err(|err| CuError::new_with_cause("task 2 thaw failed for CL100", err))?;
-        tasks_100
-            .3
-            .thaw(&mut decoder_100)
-            .map_err(|err| CuError::new_with_cause("task 3 thaw failed for CL100", err))?;
-        tasks_100
-            .4
-            .thaw(&mut decoder_100)
-            .map_err(|err| CuError::new_with_cause("task 4 thaw failed for CL100", err))?;
-        tasks_100
-            .5
-            .thaw(&mut decoder_100)
-            .map_err(|err| CuError::new_with_cause("task 5 thaw failed for CL100", err))?;
+        let frame_0 = frames_100.next_frame()?;
+        let frame_1 = frames_100.next_frame()?;
+        let frame_2 = frames_100.next_frame()?;
+        assert_eq!(frame_0, task_0_bytes, "CL100 task 0 freeze bytes diverged");
+        assert_eq!(frame_1, task_1_bytes, "CL100 task 1 freeze bytes diverged");
+        assert_eq!(frame_2, task_2_bytes, "CL100 task 2 freeze bytes diverged");
+        thaw_keyframe_component(&mut tasks_100.0, frame_0)?;
+        thaw_keyframe_component(&mut tasks_100.1, frame_1)?;
+        thaw_keyframe_component(&mut tasks_100.2, frame_2)?;
+        thaw_keyframe_component(&mut tasks_100.3, frames_100.next_frame()?)?;
+        thaw_keyframe_component(&mut tasks_100.4, frames_100.next_frame()?)?;
+        thaw_keyframe_component(&mut tasks_100.5, frames_100.next_frame()?)?;
+        frames_100.finish()?;
 
         for keyframe in &keyframes {
             <BalanceBotReSim as CuSimApplication<MmapSectionStorage, MmapUnifiedLoggerWrite>>::restore_keyframe(

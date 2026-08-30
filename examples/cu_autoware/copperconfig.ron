@@ -1,0 +1,354 @@
+// The 24 nodes of the Autoware reference system (LAME fork, Fig. 4 of the RTNS'25 paper).
+// `E` in the comments is the execution time each node must reproduce; the crunch limits
+// below are host-calibrated with the `calibrate` binary. behavior_planner's 0.001ms
+// input callback is below timing resolution, so its cache_crunch_limit is not
+// calibrated and stays at 100.
+// 200Hz is the GCD grid of the 200/120/100/60/25ms sensor periods.
+(
+    runtime: (rate_target_hz: 200),
+    tasks: [
+        // Sensors, E 0.1ms each. The two lidars run at Fig. 4's 200ms; the fork's
+        // default.hpp says 100ms, and the paper wins here.
+        (
+            id: "front_lidar",
+            type: "crate::tasks::RefSensor",
+            config: {
+                "period_ms": 200,
+                "crunch_limit": 3374,
+            },
+        ),
+        (
+            id: "rear_lidar",
+            type: "crate::tasks::RefSensor",
+            config: {
+                "period_ms": 200,
+                "crunch_limit": 3374,
+            },
+        ),
+        (
+            id: "point_cloud_map",
+            type: "crate::tasks::RefSensor",
+            config: {
+                "period_ms": 120,
+                "crunch_limit": 3374,
+            },
+        ),
+        (
+            id: "visualizer",
+            type: "crate::tasks::RefSensor",
+            config: {
+                "period_ms": 60,
+                "crunch_limit": 3374,
+            },
+        ),
+        (
+            id: "lanelet2_map",
+            type: "crate::tasks::RefSensor",
+            config: {
+                "period_ms": 100,
+                "crunch_limit": 3374,
+            },
+        ),
+        (
+            id: "euclidean_cluster_settings",
+            type: "crate::tasks::RefSensor",
+            config: {
+                "period_ms": 25,
+                "crunch_limit": 3374,
+            },
+        ),
+        // Transforms, E 10.1ms each.
+        (
+            id: "points_transformer_front",
+            type: "crate::tasks::RefTransform",
+            config: {
+                "crunch_limit": 109495,
+            },
+        ),
+        (
+            id: "points_transformer_rear",
+            type: "crate::tasks::RefTransform",
+            config: {
+                "crunch_limit": 109495,
+            },
+        ),
+        (
+            id: "voxel_grid_downsampler",
+            type: "crate::tasks::RefTransform",
+            config: {
+                "crunch_limit": 109495,
+            },
+        ),
+        (
+            id: "point_cloud_map_loader",
+            type: "crate::tasks::RefTransform",
+            config: {
+                "crunch_limit": 109495,
+            },
+        ),
+        (
+            id: "ray_ground_filter",
+            type: "crate::tasks::RefTransform",
+            config: {
+                "crunch_limit": 109495,
+            },
+        ),
+        (
+            id: "object_collision_estimator",
+            type: "crate::tasks::RefTransform",
+            config: {
+                "crunch_limit": 109495,
+            },
+        ),
+        (
+            id: "mpc_controller",
+            type: "crate::tasks::RefTransform",
+            config: {
+                "crunch_limit": 109495,
+            },
+        ),
+        (
+            id: "parking_planner",
+            type: "crate::tasks::RefTransform",
+            config: {
+                "crunch_limit": 109495,
+            },
+        ),
+        (
+            id: "lane_planner",
+            type: "crate::tasks::RefTransform",
+            config: {
+                "crunch_limit": 109495,
+            },
+        ),
+        // Fusions: `crunch_limit` is the trigger callback, `cache_crunch_limit` the
+        // 2.1ms callback that caches input 1.
+        (
+            id: "point_cloud_fusion", // E 10.005ms
+            type: "crate::tasks::RefFusion",
+            config: {
+                "crunch_limit": 108734,
+                "cache_crunch_limit": 33926,
+            },
+        ),
+        // ndt_localizer's inputs follow the fork's `// modified` swap, so its trigger is
+        // reversed against upstream ros-realtime. Not a typo.
+        (
+            id: "ndt_localizer", // E 10.1ms
+            type: "crate::tasks::RefFusion",
+            config: {
+                "crunch_limit": 109495,
+                "cache_crunch_limit": 33926,
+            },
+        ),
+        (
+            id: "lanelet2_global_planner", // E 10.2ms
+            type: "crate::tasks::RefFusion",
+            config: {
+                "crunch_limit": 110181,
+                "cache_crunch_limit": 33926,
+            },
+        ),
+        (
+            id: "lanelet2_map_loader", // E 10.2ms
+            type: "crate::tasks::RefFusion",
+            config: {
+                "crunch_limit": 110181,
+                "cache_crunch_limit": 33926,
+            },
+        ),
+        (
+            id: "vehicle_interface", // E 10.1ms
+            type: "crate::tasks::RefFusion",
+            config: {
+                "crunch_limit": 109495,
+                "cache_crunch_limit": 33926,
+            },
+        ),
+        // Cyclic: its timer callback is E 10.1ms, its six input callbacks 0.001ms each.
+        (
+            id: "behavior_planner",
+            type: "crate::tasks::RefCyclic",
+            config: {
+                "period_ms": 100,
+                "crunch_limit": 109495,
+                "cache_crunch_limit": 100,
+            },
+        ),
+        // Intersection: lane 0 is E 10.1ms, lane 1 E 10.2ms.
+        (
+            id: "euclidean_cluster_detector",
+            type: "crate::tasks::RefIntersection",
+            config: {
+                "crunch_limit0": 109495,
+                "crunch_limit1": 110181,
+            },
+        ),
+        // Commands, E 1.0ms each.
+        (
+            id: "vehicle_dbw",
+            type: "crate::tasks::RefCommand<crate::payload::RefSample>",
+            config: {
+                "crunch_limit": 19320,
+            },
+        ),
+        (
+            id: "intersection_output",
+            type: "crate::tasks::RefCommand<crate::payload::RefLaneSample>",
+            config: {
+                "crunch_limit": 19320,
+            },
+        ),
+    ],
+    // Connection order is input order, so every multi-input node lists its input 0 first.
+    cnx: [
+        (
+            src: "front_lidar",
+            dst: "points_transformer_front",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "rear_lidar",
+            dst: "points_transformer_rear",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "points_transformer_front",
+            dst: "point_cloud_fusion",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "points_transformer_rear",
+            dst: "point_cloud_fusion",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "point_cloud_fusion",
+            dst: "voxel_grid_downsampler",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "point_cloud_fusion",
+            dst: "ray_ground_filter",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "point_cloud_map",
+            dst: "point_cloud_map_loader",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "point_cloud_map_loader",
+            dst: "ndt_localizer",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "voxel_grid_downsampler",
+            dst: "ndt_localizer",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "visualizer",
+            dst: "lanelet2_global_planner",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "ndt_localizer",
+            dst: "lanelet2_global_planner",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "lanelet2_map",
+            dst: "lanelet2_map_loader",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "lanelet2_global_planner",
+            dst: "lanelet2_map_loader",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "lanelet2_map_loader",
+            dst: "parking_planner",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "lanelet2_map_loader",
+            dst: "lane_planner",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "ray_ground_filter",
+            dst: "euclidean_cluster_detector",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "euclidean_cluster_settings",
+            dst: "euclidean_cluster_detector",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "euclidean_cluster_detector",
+            dst: "object_collision_estimator",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "euclidean_cluster_detector",
+            dst: "intersection_output",
+            msg: "crate::payload::RefLaneSample",
+        ),
+        (
+            src: "object_collision_estimator",
+            dst: "behavior_planner",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "ndt_localizer",
+            dst: "behavior_planner",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "lanelet2_global_planner",
+            dst: "behavior_planner",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "lanelet2_map_loader",
+            dst: "behavior_planner",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "parking_planner",
+            dst: "behavior_planner",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "lane_planner",
+            dst: "behavior_planner",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "behavior_planner",
+            dst: "mpc_controller",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "mpc_controller",
+            dst: "vehicle_interface",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "behavior_planner",
+            dst: "vehicle_interface",
+            msg: "crate::payload::RefSample",
+        ),
+        (
+            src: "vehicle_interface",
+            dst: "vehicle_dbw",
+            msg: "crate::payload::RefSample",
+        ),
+    ],
+    monitor: (
+        type: "cu_consolemon::CuConsoleMon",
+    ),
+)

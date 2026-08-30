@@ -29,3 +29,4 @@ __pycache__/
 # Test generation project
 /templates/test_project
 /templates/test_workspace
+copper-crash-*.txt

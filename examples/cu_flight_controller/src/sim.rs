@@ -1,3 +1,8 @@
+// Simulation engine: drives the raw (app-deprecated) lifecycle API on purpose.
+// It needs mid-flight runtime access that the lifecycle typestate
+// deliberately does not expose.
+#![allow(deprecated)]
+
 #[cfg(feature = "sim")]
 extern crate alloc;
 
@@ -147,7 +152,8 @@ mod mcu_copper {
                 .expect("failed to create logger")
                 .with_sim_callback(&mut default_callback)
                 .build()
-                .expect("failed to create runtime");
+                .expect("failed to create runtime")
+                .into_inner();
             Self { app }
         }
 
@@ -157,7 +163,8 @@ mod mcu_copper {
                 .with_clock(clock.clone())
                 .with_sim_callback(&mut default_callback)
                 .build()
-                .expect("failed to create runtime");
+                .expect("failed to create runtime")
+                .into_inner();
             Self { app }
         }
 
@@ -171,7 +178,8 @@ mod mcu_copper {
                 .with_logger::<BevyMonSectionStorage, BevyMonUnifiedLogger>(logger)
                 .with_sim_callback(&mut default_callback)
                 .build()
-                .expect("failed to create runtime");
+                .expect("failed to create runtime")
+                .into_inner();
             Self { app }
         }
 
@@ -363,7 +371,8 @@ mod compute_copper {
                 .expect("failed to create compute logger")
                 .with_sim_callback(&mut default_callback)
                 .build()
-                .expect("failed to create compute runtime");
+                .expect("failed to create compute runtime")
+                .into_inner();
             Self {
                 app,
                 zed_store,
@@ -377,7 +386,8 @@ mod compute_copper {
                 .with_clock(clock.clone())
                 .with_sim_callback(&mut default_callback)
                 .build()
-                .expect("failed to create compute runtime");
+                .expect("failed to create compute runtime")
+                .into_inner();
             Self {
                 app,
                 zed_store,
@@ -570,6 +580,28 @@ struct SimRcInput {
     armed: bool,
     mode: messages::FlightMode,
     auto: bool,
+}
+
+#[derive(Resource)]
+struct SimRunOptions {
+    autostart_s: Option<f32>,
+    exit_after_s: Option<f32>,
+}
+
+impl Default for SimRunOptions {
+    fn default() -> Self {
+        const AUTOSTART_S: f32 = 4.0;
+        const EXIT_AFTER_S: f32 = 45.0;
+
+        Self {
+            autostart_s: cfg!(feature = "autonomous-demo").then_some(AUTOSTART_S),
+            exit_after_s: cfg!(all(
+                feature = "autonomous-demo",
+                not(target_arch = "wasm32")
+            ))
+            .then_some(EXIT_AFTER_S),
+        }
+    }
 }
 
 impl Default for SimRcInput {
@@ -2325,8 +2357,19 @@ fn update_rc_input_keyboard(
     keyboard: Res<ButtonInput<KeyCode>>,
     rc_source: Res<RcInputSource>,
     _layout: Res<WorldLayout>,
+    run_options: Res<SimRunOptions>,
+    time: Res<Time>,
     #[cfg(feature = "bevymon")] focus: Option<Res<CuBevyMonFocus>>,
 ) {
+    if let Some(after) = run_options.autostart_s
+        && !rc_input.armed
+        && time.elapsed_secs() >= after
+    {
+        rc_input.armed = true;
+        rc_input.mode = messages::FlightMode::Angle;
+        rc_input.auto = true;
+        info!("sim rc: autostart reached; armed in Angle mode with auto=true");
+    }
     #[cfg(feature = "bevymon")]
     if _layout.split_monitor && !focus.is_some_and(|focus| focus.0 == CuBevyMonSurface::Sim) {
         return;
@@ -2517,21 +2560,34 @@ fn sync_vehicle_state(
     };
 }
 
+#[derive(SystemParam)]
+struct SimRunInputs<'w> {
+    rc_input: Res<'w, SimRcInput>,
+    options: Res<'w, SimRunOptions>,
+}
+
 fn run_copper(
     mut copper: ResMut<CopperState>,
     physics_time: Res<Time<Physics>>,
     sim_state: Res<SimState>,
-    rc_input: Res<SimRcInput>,
+    run: SimRunInputs,
     mut motor_commands: ResMut<SimMotorCommands>,
     mut osd_overlay: ResMut<SimOsdOverlay>,
     mut exit_writer: MessageWriter<AppExit>,
 ) {
     let elapsed_ns = physics_time.elapsed().as_nanos() as u64;
+    if let Some(after) = run.options.exit_after_s
+        && physics_time.elapsed().as_secs_f32() >= after
+    {
+        info!("sim: exit deadline reached; exiting");
+        exit_writer.write(AppExit::Success);
+        return;
+    }
     if let Err(err) = run_copper_iteration(
         &mut copper,
         elapsed_ns,
         sim_state.vehicle.clone(),
-        rc_input.clone(),
+        run.rc_input.clone(),
         &mut motor_commands,
         &mut osd_overlay,
     ) {
@@ -3215,6 +3271,7 @@ fn build_world_with_assets(
     app.insert_resource(SimState::default())
         .insert_resource(SimMotorCommands::default())
         .insert_resource(SimRcInput::default())
+        .insert_resource(SimRunOptions::default())
         .insert_resource(SimKinematics::default())
         .insert_resource(SimResetInterlock::default())
         .insert_resource(RcInputSource::default())

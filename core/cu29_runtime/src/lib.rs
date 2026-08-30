@@ -34,7 +34,6 @@ pub mod parallel_queue;
 #[cfg(all(feature = "std", feature = "parallel-rt"))]
 pub mod parallel_rt;
 pub mod payload;
-#[doc(hidden)]
 pub mod planner;
 #[cfg(feature = "std")]
 pub mod pool;

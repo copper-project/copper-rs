@@ -11,9 +11,10 @@ use cu29::reflect::Reflect;
 use cu29::rx_channels;
 use cu29::simulation::{CuTaskCallbackState, SimOverride};
 use cu29::tx_channels;
+use cu29_export::keyframes_reader;
 use cu29_runtime::app::CuSimApplication;
 use cu29_unifiedlog::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
-use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder};
+use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -174,6 +175,97 @@ impl CuSinkTask for MySink {
 #[copper_runtime(config = "tests/sim_bridge_config.ron", sim_mode = true)]
 struct App {}
 
+mod recording {
+    use super::{DummyBridge, MySink, MySrc, Ping, Pong};
+    use cu29::prelude::*;
+    use cu29_unifiedlog::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
+    use std::sync::{Arc, Mutex};
+
+    #[copper_runtime(config = "tests/sim_bridge_config.ron")]
+    struct RealApp {}
+
+    pub(super) fn record(logger: Arc<Mutex<MmapUnifiedLoggerWrite>>) -> CuResult<()> {
+        let app = RealApp::builder()
+            .with_logger::<MmapSectionStorage, MmapUnifiedLoggerWrite>(logger)
+            .build()?;
+        let mut running = app.start()?;
+        running.run_one_iteration()?;
+        running.run_one_iteration()?;
+        running.stop()?;
+        Ok(())
+    }
+}
+
+mod run_in_sim {
+    use super::{DummyBridge, MySink, MySrc, Ping, Pong, build_logger, recording};
+    use cu29::prelude::*;
+    use cu29_export::{copperlists_reader, keyframes_reader};
+    use cu29_runtime::app::CuSimApplication;
+    use cu29_unifiedlog::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
+    use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
+
+    #[copper_runtime(config = "tests/sim_bridge_run_in_sim_config.ron", sim_mode = true)]
+    struct RunInSimApp {}
+
+    #[test]
+    // Drives the raw (deprecated) sim lifecycle on purpose: restoring a keyframe
+    // into a started app is a replay primitive the lifecycle typestate
+    // deliberately does not expose.
+    #[allow(deprecated)]
+    fn nonzero_bridge_keyframe_matches_linear_debug_replay() -> CuResult<()> {
+        let temp_dir = tempfile::tempdir()
+            .map_err(|error| CuError::new_with_cause("create temp log dir failed", error))?;
+        let record_path = temp_dir.path().join("bridge_replay_record.copper");
+        recording::record(build_logger(&record_path)?)?;
+
+        let UnifiedLogger::Read(reader) = UnifiedLoggerBuilder::new()
+            .file_base_name(&record_path)
+            .build()
+            .map_err(|error| CuError::new_with_cause("open keyframe log failed", error))?
+        else {
+            return Err(CuError::from("logger builder did not return a reader"));
+        };
+        let mut reader = UnifiedLoggerIOReader::new(reader, UnifiedLogType::FrozenTasks);
+        let keyframe = keyframes_reader(&mut reader)
+            .find(|keyframe| keyframe.culistid == 1)
+            .ok_or_else(|| CuError::from("recorded log did not contain the CL1 keyframe"))?;
+
+        let UnifiedLogger::Read(reader) = UnifiedLoggerBuilder::new()
+            .file_base_name(&record_path)
+            .build()
+            .map_err(|error| CuError::new_with_cause("open CopperList log failed", error))?
+        else {
+            return Err(CuError::from("logger builder did not return a reader"));
+        };
+        let mut reader = UnifiedLoggerIOReader::new(reader, UnifiedLogType::CopperList);
+        let recorded_cl1 = copperlists_reader::<default::CuStampedDataSet>(&mut reader)
+            .find(|copperlist| copperlist.id == 1)
+            .ok_or_else(|| CuError::from("recorded log did not contain CopperList 1"))?;
+
+        let replay_path = temp_dir.path().join("bridge_replay.copper");
+        let mut callback = |_step: default::SimStep<'_>| SimOverride::ExecuteByRuntime;
+        let mut app = RunInSimApp::builder()
+            .with_logger::<MmapSectionStorage, MmapUnifiedLoggerWrite>(build_logger(&replay_path)?)
+            .with_sim_callback(&mut callback)
+            .build()?;
+        app.start_all_tasks(&mut callback)?;
+        <RunInSimApp as CuSimApplication<
+            MmapSectionStorage,
+            MmapUnifiedLoggerWrite,
+        >>::restore_keyframe(&mut app, &keyframe)?;
+        assert_eq!(app.copper_runtime_mut().bridges.0.tx_called, 2);
+        assert_eq!(app.copper_runtime_mut().bridges.0.rx_called, 2);
+
+        let mut replay_callback =
+            |step: default::SimStep<'_>| default::recorded_debug_replay_step(step, &recorded_cl1);
+        app.run_one_iteration(&mut replay_callback)?;
+        assert_eq!(app.copper_runtime_mut().bridges.0.tx_called, 2);
+        assert_eq!(app.copper_runtime_mut().bridges.0.rx_called, 2);
+        app.stop_all_tasks(&mut callback)?;
+        Ok(())
+    }
+}
+
 fn build_logger(path: &Path) -> CuResult<Arc<Mutex<MmapUnifiedLoggerWrite>>> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -198,6 +290,48 @@ fn build_test_logger() -> CuResult<(TempDir, PathBuf, Arc<Mutex<MmapUnifiedLogge
         .map_err(|e| cu29::CuError::new_with_cause("create temp log dir failed", e))?;
     let log_path = temp_dir.path().join("sim_bridge.log");
     Ok((temp_dir, log_path.clone(), build_logger(&log_path)?))
+}
+
+fn read_first_keyframe(path: &Path) -> CuResult<KeyFrame> {
+    let UnifiedLogger::Read(reader) = UnifiedLoggerBuilder::new()
+        .file_base_name(path)
+        .build()
+        .map_err(|error| CuError::new_with_cause("open keyframe log failed", error))?
+    else {
+        return Err(CuError::from("logger builder did not return a reader"));
+    };
+    let mut reader = UnifiedLoggerIOReader::new(reader, UnifiedLogType::FrozenTasks);
+    keyframes_reader(&mut reader)
+        .next()
+        .ok_or_else(|| CuError::from("recorded log did not contain a keyframe"))
+}
+
+#[test]
+// Drives the raw (deprecated) sim lifecycle on purpose: restoring a keyframe
+// into a started app is a replay primitive the lifecycle typestate
+// deliberately does not expose.
+#[allow(deprecated)]
+fn sim_restore_skips_substituted_bridge_frame() -> CuResult<()> {
+    let temp_dir = tempfile::tempdir()
+        .map_err(|error| CuError::new_with_cause("create temp log dir failed", error))?;
+    let record_path = temp_dir.path().join("real_bridge.copper");
+    let logger = build_logger(&record_path)?;
+    recording::record(logger)?;
+    let keyframe = read_first_keyframe(&record_path)?;
+
+    let sim_path = temp_dir.path().join("sim_bridge.copper");
+    let logger = build_logger(&sim_path)?;
+    let mut callback = |_step: default::SimStep<'_>| SimOverride::ExecuteByRuntime;
+    let mut sim = App::builder()
+        .with_logger::<MmapSectionStorage, MmapUnifiedLoggerWrite>(logger)
+        .with_sim_callback(&mut callback)
+        .build()?;
+    sim.start_all_tasks(&mut callback)?;
+    <App as CuSimApplication<MmapSectionStorage, MmapUnifiedLoggerWrite>>::restore_keyframe(
+        &mut sim, &keyframe,
+    )?;
+    sim.stop_all_tasks(&mut callback)?;
+    Ok(())
 }
 
 #[test]
@@ -248,15 +382,15 @@ fn bridge_sim_callbacks_fire_and_override() -> CuResult<()> {
         }
     };
 
-    let mut app = App::builder()
+    let app = App::builder()
         .with_clock(robot_clock.clone())
         .with_logger::<MmapSectionStorage, MmapUnifiedLoggerWrite>(logger)
         .with_sim_callback(&mut sim_cb)
         .build()?;
 
-    app.start_all_tasks(&mut sim_cb)?;
-    app.run_one_iteration(&mut sim_cb)?;
-    app.stop_all_tasks(&mut sim_cb)?;
+    let mut running = app.start(&mut sim_cb)?;
+    running.run_one_iteration(&mut sim_cb)?;
+    running.stop(&mut sim_cb)?;
 
     // Bridge lifecycle start+stop observed
     assert_eq!(lifecycle_calls, 2);

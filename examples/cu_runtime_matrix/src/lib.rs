@@ -1,3 +1,9 @@
+// Benchmark/matrix harness: dispatches over the generated mission apps via a
+// plain enum, driving the raw (app-deprecated) lifecycle API on purpose. The
+// typestate handle would require the enum itself to implement CuApplication;
+// not worth it for a benchmark driver.
+#![allow(deprecated)]
+
 use bincode::{Decode, Encode};
 use clap::{Parser, ValueEnum};
 use cu29::prelude::*;
@@ -1147,7 +1153,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
         MissionArg::OneToManyBackground => Ok(MissionApp::OneToManyBackground(
             OneToManyBackground::RuntimeMatrixApp::builder()
@@ -1155,7 +1162,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
         MissionArg::ManyToOne => Ok(MissionApp::ManyToOne(
             ManyToOne::RuntimeMatrixApp::builder()
@@ -1163,7 +1171,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
         MissionArg::ManyToOneBackground => Ok(MissionApp::ManyToOneBackground(
             ManyToOneBackground::RuntimeMatrixApp::builder()
@@ -1171,7 +1180,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
         MissionArg::ManyToMany => Ok(MissionApp::ManyToMany(
             ManyToMany::RuntimeMatrixApp::builder()
@@ -1179,7 +1189,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
         MissionArg::ManyToManyBackground => Ok(MissionApp::ManyToManyBackground(
             ManyToManyBackground::RuntimeMatrixApp::builder()
@@ -1187,7 +1198,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
         MissionArg::BridgeFanout => Ok(MissionApp::BridgeFanout(
             BridgeFanout::RuntimeMatrixApp::builder()
@@ -1195,7 +1207,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
         MissionArg::BridgeFanoutBackground => Ok(MissionApp::BridgeFanoutBackground(
             BridgeFanoutBackground::RuntimeMatrixApp::builder()
@@ -1203,7 +1216,8 @@ fn build_mission_app(
                 .with_log_path(log_path, DEFAULT_LOG_SLAB_SIZE)?
                 .with_instance_id(instance_id)
                 .with_config(config)
-                .build()?,
+                .build()?
+                .into_inner(),
         )),
     }
 }
@@ -1486,7 +1500,7 @@ mod tests {
     const TEST_COMPUTE_ROUNDS: u32 = 2;
     const MAX_BG_SETTLE_ITERS: u64 = 32;
     const BG_STABLE_PASSES: usize = 4;
-    const TRACE_FIXTURE_KEYFRAME_INTERVAL: u32 = u32::MAX;
+    const TRACE_FIXTURE_KEYFRAME_INTERVAL: u32 = 1;
 
     #[derive(Debug, Clone, PartialEq)]
     struct NormalizedCuMsg {
@@ -1581,9 +1595,8 @@ mod tests {
         let logging = config
             .logging
             .get_or_insert_with(cu29::config::LoggingConfig::default);
-        // These tests validate live traces and CopperLists, not replay keyframes.
-        // Async background tasks may legitimately have work in flight at normal
-        // keyframe boundaries, so keep only the initial idle keyframe.
+        // Capture every distributed execution-wave cut, including cuts taken while
+        // background workers are continuously occupied.
         logging.keyframe_interval = Some(TRACE_FIXTURE_KEYFRAME_INTERVAL);
     }
 

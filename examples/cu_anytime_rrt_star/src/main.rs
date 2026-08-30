@@ -36,16 +36,15 @@ fn main() {
         fs::create_dir_all(parent).expect("Failed to create logs directory");
     }
 
-    let mut application = App::builder()
+    let application = App::builder()
         .with_log_path(logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
         .build()
         .expect("Failed to create application.");
-    application
-        .start_all_tasks()
-        .expect("Failed to start application.");
+    // `run` starts the tasks itself; the typestate wrapper rejects the manual
+    // start_all_tasks call this example used to make before it.
     // Paced by `runtime.rate_target_hz` in the RON; stops on Ctrl-C.
-    if let Err(error) = application.run() {
-        eprintln!("Error while running: {error}");
+    if let Err(error) = application.run_until_shutdown() {
+        eprintln!("Error while running: {}", error.error);
     }
 }

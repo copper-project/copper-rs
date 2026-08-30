@@ -21,7 +21,7 @@ fn main() {
     }
     debug!("Logger created at {}.", &logger_path);
     debug!("Creating application... ");
-    let mut application = SimTestApplication::builder()
+    let application = SimTestApplication::builder()
         .with_sim_callback(&mut default_callback)
         .with_log_path(logger_path, PREALLOCATED_STORAGE_SIZE)
         .expect("Failed to setup logger.")
@@ -29,10 +29,10 @@ fn main() {
         .expect("Failed to create application.");
     debug!("Running... starting clock: {}.", application.clock().now());
 
-    application
-        .run(&mut default_callback)
+    let stopped = application
+        .run_until_shutdown(&mut default_callback)
         .expect("Failed to run application.");
-    debug!("End of program: {}.", application.clock().now());
+    debug!("End of program: {}.", stopped.clock().now());
     sleep(Duration::from_secs(1));
 }
 

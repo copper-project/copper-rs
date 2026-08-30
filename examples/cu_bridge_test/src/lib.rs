@@ -367,7 +367,12 @@ mod tests {
 
     fn run_mission<AppBuilderFn, App>(builder: AppBuilderFn) -> Vec<&'static str>
     where
-        AppBuilderFn: FnOnce(&std::path::Path, RobotClock) -> CuResult<App>,
+        AppBuilderFn: FnOnce(
+            &std::path::Path,
+            RobotClock,
+        ) -> CuResult<
+            CuAppLifecycle<MmapSectionStorage, UnifiedLoggerWrite, App>,
+        >,
         App: CuApplication<MmapSectionStorage, UnifiedLoggerWrite>,
     {
         let temp_dir = TempDir::new().expect("temp dir");
@@ -375,13 +380,10 @@ mod tests {
         let clock = RobotClock::default();
 
         events::reset();
-        let mut app = builder(&log_path, clock).expect("build app");
-        <App as CuApplication<MmapSectionStorage, UnifiedLoggerWrite>>::start_all_tasks(&mut app)
-            .expect("start");
-        <App as CuApplication<MmapSectionStorage, UnifiedLoggerWrite>>::run_one_iteration(&mut app)
-            .expect("run");
-        <App as CuApplication<MmapSectionStorage, UnifiedLoggerWrite>>::stop_all_tasks(&mut app)
-            .expect("stop");
+        let app = builder(&log_path, clock).expect("build app");
+        let mut running = app.start().expect("start");
+        running.run_one_iteration().expect("run");
+        running.stop().expect("stop");
         events::take()
     }
 
@@ -485,15 +487,15 @@ mod tests {
         let clock = RobotClock::default();
 
         {
-            let mut app = super::BridgeTaskSameApp::builder()
+            let app = super::BridgeTaskSameApp::builder()
                 .with_clock(clock.clone())
                 .with_log_path(&log_path, Some(32 * 1024 * 1024))
                 .expect("logger")
                 .build()
                 .expect("build app");
-            app.start_all_tasks().expect("start");
-            app.run_one_iteration().expect("run");
-            app.stop_all_tasks().expect("stop");
+            let mut running = app.start().expect("start");
+            running.run_one_iteration().expect("run");
+            running.stop().expect("stop");
         }
 
         let UnifiedLogger::Read(read_logger) = UnifiedLoggerBuilder::new()
@@ -539,29 +541,29 @@ mod tests {
 
         events::reset();
         {
-            let mut app = super::BridgeOnlyABApp::builder()
+            let app = super::BridgeOnlyABApp::builder()
                 .with_clock(clock.clone())
                 .with_log_path(&log_path, Some(32 * 1024 * 1024))
                 .expect("logger")
                 .build()
                 .unwrap();
-            app.start_all_tasks().unwrap();
-            app.run_one_iteration().unwrap();
-            app.stop_all_tasks().unwrap();
+            let mut running = app.start().unwrap();
+            running.run_one_iteration().unwrap();
+            running.stop().unwrap();
         }
         let first = events::take();
         assert_eq!(first, vec!["alpha.rx.ingress", "beta.tx.egress"]);
 
         {
-            let mut app = super::BridgeLoopbackApp::builder()
+            let app = super::BridgeLoopbackApp::builder()
                 .with_clock(clock)
                 .with_log_path(&log_path, Some(32 * 1024 * 1024))
                 .expect("logger")
                 .build()
                 .unwrap();
-            app.start_all_tasks().unwrap();
-            app.run_one_iteration().unwrap();
-            app.stop_all_tasks().unwrap();
+            let mut running = app.start().unwrap();
+            running.run_one_iteration().unwrap();
+            running.stop().unwrap();
         }
         let second = events::take();
         assert_eq!(second, vec!["alpha.rx.loop", "alpha.tx.loop"]);

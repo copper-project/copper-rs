@@ -71,7 +71,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
     strategy:
@@ -152,7 +152,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
     strategy:
@@ -310,7 +310,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
     steps:
@@ -361,7 +361,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: ${{ matrix.target_os == 'windows' && 'core' || 'workspace' }}
 
     strategy:
@@ -484,7 +484,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
     steps:
@@ -540,7 +540,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
     steps:
@@ -584,7 +584,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: workspace
 
     steps:
@@ -642,7 +642,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: cu29/reflect,mock,cu-sensor-payloads/image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: ${{ matrix.target_os == 'windows' && 'core' || 'workspace' }}
 
     strategy:
@@ -721,7 +721,7 @@ jobs:
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
       - name: Install cargo-generate on (${{ inputs.linux_light_runner_label }} | debug)
-        uses: taiki-e/install-action@v2.86.3
+        uses: taiki-e/install-action@v2.86.7
         with:
           tool: cargo-generate
       - name: Generate new templates on (${{ inputs.linux_light_runner_label }} | debug)
@@ -770,7 +770,7 @@ jobs:
           cache_shared_key: rust-ubuntu-latest
           install_nextest: "false"
       - name: Install cargo-generate on (${{ inputs.linux_light_runner_label }} | debug)
-        uses: taiki-e/install-action@v2.86.3
+        uses: taiki-e/install-action@v2.86.7
         with:
           tool: cargo-generate
       - name: Generate new templates on (${{ inputs.linux_light_runner_label }} | debug)
@@ -819,7 +819,7 @@ jobs:
           cache_shared_key: rust-macos-latest
           install_nextest: "false"
       - name: Install cargo-generate on (macos-latest | debug)
-        uses: taiki-e/install-action@v2.86.3
+        uses: taiki-e/install-action@v2.86.7
         with:
           tool: cargo-generate
       - name: Generate new templates on (macos-latest | debug)

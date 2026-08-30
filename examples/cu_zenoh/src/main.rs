@@ -45,14 +45,14 @@ fn main() {
     let logger_path = tmp_dir.path().join("zenoh.copper");
     debug!("Logger created at {}.", path = &logger_path);
     debug!("Creating application... ");
-    let mut application = App::builder()
+    let application = App::builder()
         .with_log_path(&logger_path, SLAB_SIZE)
         .expect("Failed to setup logger.")
         .build()
         .expect("Failed to create application.");
     debug!("Running... starting clock: {}.", application.clock().now());
 
-    if let Err(error) = application.run() {
-        debug!("Application Ended: {}", error)
+    if let Err(error) = application.run_until_shutdown() {
+        debug!("Application Ended: {}", error.error)
     }
 }

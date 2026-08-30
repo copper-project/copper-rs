@@ -1,3 +1,8 @@
+// Replay harness: drives the raw (app-deprecated) lifecycle API on purpose.
+// Replay needs mid-flight runtime access (keyframe locking, forced
+// timestamps) that the lifecycle typestate deliberately does not expose.
+#![allow(deprecated)]
+
 use cu29::bincode::de::Decoder;
 use cu29::bincode::enc::Encoder;
 use cu29::bincode::error::{DecodeError, EncodeError};
@@ -151,7 +156,8 @@ fn record_log() -> CuResult<()> {
         .with_clock(clock.clone())
         .with_log_path(Path::new(LOG_PATH), LOG_SLAB_SIZE)?
         .with_sim_callback(&mut sim_cb)
-        .build()?;
+        .build()?
+        .into_inner();
 
     app.start_all_tasks(&mut sim_cb)?;
     // Record enough iterations to span multiple log sections and exercise indexing.
@@ -171,7 +177,8 @@ fn run_debug_session() -> CuResult<()> {
         .with_clock(clock.clone())
         .with_log_path(Path::new(REPLAY_LOG_PATH), REPLAY_LOG_SLAB_SIZE)?
         .with_sim_callback(&mut sim_cb)
-        .build()?;
+        .build()?
+        .into_inner();
 
     // Time extractor from recorded copperlist.
     fn time_of(cl: &CopperList<default::CuStampedDataSet>) -> Option<CuTime> {

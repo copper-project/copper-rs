@@ -81,23 +81,26 @@ fn record_run(log_base: &Path, iterations: usize, dt_ticks: u64) -> CuResult<()>
         }
     };
 
-    let mut app = CaterpillarDeterminismApp::builder()
+    let app = CaterpillarDeterminismApp::builder()
         .with_clock(clock.clone())
         .with_log_path(log_base, slab_size)?
         .with_sim_callback(&mut record_callback)
         .build()
         .expect("failed to build app");
 
-    app.start_all_tasks(&mut record_callback)
+    let mut running = app
+        .start(&mut record_callback)
         .expect("failed to start tasks");
 
     for i in 0..iterations {
         clock_mock.set_value(dt_ticks.saturating_mul(i as u64));
-        app.run_one_iteration(&mut record_callback)
+        running
+            .run_one_iteration(&mut record_callback)
             .expect("run_one_iteration failed");
     }
 
-    app.stop_all_tasks(&mut record_callback)
+    running
+        .stop(&mut record_callback)
         .expect("failed to stop tasks");
 
     Ok(())
@@ -146,7 +149,7 @@ fn read_keyframe_stream_encoded(log_base: &Path) -> CuResult<Vec<Vec<u8>>> {
 }
 
 fn resim_one_copperlist(
-    app: &mut CaterpillarDeterminismApp,
+    app: &mut CuStdSimAppLifecycle<CaterpillarDeterminismApp, Running>,
     robot_clock_mock: &mut RobotClockMock,
     copper_list: CopperList<default::CuStampedDataSet>,
 ) {
@@ -201,14 +204,15 @@ fn resim_run(input_log_base: &Path, output_log_base: &Path) -> CuResult<()> {
         SimOverride::ExecuteByRuntime
     }
 
-    let mut app = CaterpillarDeterminismApp::builder()
+    let app = CaterpillarDeterminismApp::builder()
         .with_clock(clock.clone())
         .with_log_path(output_log_base, slab_size)?
         .with_sim_callback(&mut init_cb)
         .build()
         .expect("failed to build resim app");
 
-    app.start_all_tasks(&mut init_cb)
+    let mut app = app
+        .start(&mut init_cb)
         .expect("failed to start tasks (resim)");
 
     let UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
@@ -226,7 +230,7 @@ fn resim_run(input_log_base: &Path, output_log_base: &Path) -> CuResult<()> {
         resim_one_copperlist(&mut app, &mut clock_mock, cl);
     }
 
-    app.stop_all_tasks(&mut init_cb)
+    app.stop(&mut init_cb)
         .expect("failed to stop tasks (resim)");
 
     Ok(())

@@ -20,17 +20,15 @@ mod real {
             std::fs::create_dir_all(parent).expect("Failed to create log directory");
         }
 
-        let mut application = ImageCodecDemoApp::builder()
+        let application = ImageCodecDemoApp::builder()
             .with_log_path(&log_path, Some(64 * 1024 * 1024))
             .expect("Failed to setup Copper log")
             .build()
             .expect("Failed to create application");
-        application
-            .start_all_tasks()
-            .expect("Failed to start tasks");
+        let mut running = application.start().expect("Failed to start tasks");
 
         for _ in 0..180 {
-            application
+            running
                 .run_one_iteration()
                 .expect("Failed to run iteration");
         }

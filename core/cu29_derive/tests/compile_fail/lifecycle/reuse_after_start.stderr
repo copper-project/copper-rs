@@ -1,0 +1,15 @@
+error[E0382]: use of moved value: `app`
+ --> tests/compile_fail/lifecycle/reuse_after_start.rs:8:13
+  |
+6 | fn reuse_after_start<A: CuStdApplication>(app: CuStdAppLifecycle<A>) {
+  |                                           --- move occurs because `app` has type `CuAppLifecycle<MmapSectionStorage, MmapUnifiedLoggerWrite, A>`, which does not implement the `Copy` trait
+7 |     let _running = app.start();
+  |                        ------- `app` moved due to this method call
+8 |     let _ = app.start();
+  |             ^^^ value used here after move
+  |
+note: `CuAppLifecycle::<S, L, A, State>::start` takes ownership of the receiver `self`, which moves `app`
+ --> $WORKSPACE/core/cu29_runtime/src/app.rs
+  |
+  |     pub fn start(mut self) -> TransitionResult<S, L, A, Running> {
+  |                      ^^^^
