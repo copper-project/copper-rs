@@ -1,0 +1,27 @@
+[package]
+name = "cu-autoware"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Port of the Autoware reference system benchmark to Copper"
+default-run = "cu-autoware"
+
+publish = false
+
+[dependencies]
+cu29 = { workspace = true }
+cu29-export = { workspace = true, features = ["mcap"] }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "1.2.0-dev" }
+bincode = { workspace = true, features = ["derive"] }
+chrono = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_bytes = { workspace = true }
+
+[build-dependencies]
+cu29-build = { workspace = true }

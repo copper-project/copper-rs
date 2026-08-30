@@ -1,0 +1,30 @@
+import "../../justfile"
+
+# Record a bounded release run, e.g. `just run 400 logs/variant-a.copper`.
+run iters="400" log="":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo run --release -p cu-autoware --bin cu-autoware -- {{iters}} {{log}}
+
+# Record a run with the CPU/RSS sampler attached.
+sampled iters="400":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo build --release -p cu-autoware --bin cu-autoware
+  analysis/sample_proc.sh analysis/data/proc.csv -- ../../target/release/cu-autoware {{iters}}
+
+# Compute the KPIs from the recorded log, e.g. `just kpi logs/variant-a.copper data/a`.
+kpi log="" out="":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo run --release -p cu-autoware --bin kpi -- {{log}} {{out}}
+
+# Draw the figures from the KPI CSVs.
+plots:
+  python3 analysis/plots.py
+
+# fsck the recorded log through the standard export CLI.
+fsck:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo run --release -p cu-autoware --bin cu-autoware-logreader -- logs/autoware.copper fsck
