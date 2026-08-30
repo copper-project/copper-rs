@@ -17,13 +17,14 @@
 *.mcap
 *.profraw
 cu29_logstats.json
+copper-crash-*.txt
 Cargo.lock
 /examples/**/logs/*
+__pycache__/
 
 # independent project from the workspace
 /examples/cu_rp2350_skeleton/.idea/
 /examples/cu_rp2350_skeleton/target/
-/examples/cu_python_task_demo/python/__pycache__/
 
 # Test generation project
 /templates/test_project

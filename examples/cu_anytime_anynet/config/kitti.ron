@@ -1,0 +1,60 @@
+(
+    tasks: [
+        (
+            id: "stereo_kitti",
+            type: "cu_anytime_anynet::tasks::StereoSrc",
+            missions: ["kitti"],
+            config: {
+                "data_dir": "../kitti/training",
+            },
+        ),
+        (
+            id: "anynet_kitti",
+            type: "cu_anynet::AnyNetStereo",
+            missions: ["kitti"],
+            // KITTI's native 721.5 px focal length scaled for 1242 -> 640.
+            config: {
+                "focal_px": 371.7,
+                "baseline_m": 0.54,
+                "stage_snapshots": true,
+                "weights": "target/cu_anytime_anynet/anynet-kitti.safetensors",
+                "normalization": "raw",
+            },
+            anytime: (
+                max_refines: 2,
+                time_budget_ms: 800.0,
+                max_age_ms: 2000.0,
+            ),
+        ),
+        (
+            id: "viewer_kitti",
+            type: "cu_anytime_anynet::tasks::DepthViewer",
+            missions: ["kitti"],
+            config: {
+                "data_dir": "../kitti/training",
+                "focal_px": 371.7,
+                "time_dilation": 20.0,
+            },
+        ),
+    ],
+    cnx: [
+        (
+            src: "stereo_kitti",
+            dst: "anynet_kitti",
+            msg: "cu_anynet::StereoPair",
+            missions: ["kitti"],
+        ),
+        (
+            src: "stereo_kitti",
+            dst: "viewer_kitti",
+            msg: "cu_anynet::StereoPair",
+            missions: ["kitti"],
+        ),
+        (
+            src: "anynet_kitti",
+            dst: "viewer_kitti",
+            msg: "cu_anynet::StereoDepth",
+            missions: ["kitti"],
+        ),
+    ],
+)

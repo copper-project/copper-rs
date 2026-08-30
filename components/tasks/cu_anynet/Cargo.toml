@@ -1,0 +1,36 @@
+[package]
+name = "cu-anynet"
+description = "AnyNet anytime stereo-depth task for the Copper project"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/cu-anynet"
+exclude = ["tests/fixtures/*", "tools/*"]
+
+[package.metadata.copper]
+kind = "task"
+domains = ["algorithm/perception", "vision/stereo"]
+environments = ["host"]
+
+[features]
+cuda = ["candle-core/cuda", "candle-nn/cuda"]
+
+[dependencies]
+bincode = { workspace = true }
+candle-core = "0.11.0"
+candle-nn = "0.11.0"
+cu-sensor-payloads = { workspace = true }
+cu29 = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+ron = { version = "0.12", default-features = false }
+
+[build-dependencies]
+cu29-build = { workspace = true }

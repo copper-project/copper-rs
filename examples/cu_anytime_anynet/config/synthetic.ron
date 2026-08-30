@@ -1,0 +1,55 @@
+(
+    tasks: [
+        (
+            id: "stereo_synthetic",
+            type: "cu_anytime_anynet::tasks::StereoSrc",
+            missions: ["synthetic"],
+            config: {},
+        ),
+        (
+            id: "anynet_synthetic",
+            type: "cu_anynet::AnyNetStereo",
+            missions: ["synthetic"],
+            config: {
+                "focal_px": 721.5,
+                "baseline_m": 0.54,
+                "stage_snapshots": true,
+                "weights": "target/cu_anytime_anynet/anynet-kitti.safetensors",
+                "normalization": "raw",
+            },
+            anytime: (
+                max_refines: 2,
+                time_budget_ms: 800.0,
+                max_age_ms: 2000.0,
+            ),
+        ),
+        (
+            id: "viewer_synthetic",
+            type: "cu_anytime_anynet::tasks::DepthViewer",
+            missions: ["synthetic"],
+            config: {
+                "time_dilation": 20.0,
+            },
+        ),
+    ],
+    cnx: [
+        (
+            src: "stereo_synthetic",
+            dst: "anynet_synthetic",
+            msg: "cu_anynet::StereoPair",
+            missions: ["synthetic"],
+        ),
+        (
+            src: "stereo_synthetic",
+            dst: "viewer_synthetic",
+            msg: "cu_anynet::StereoPair",
+            missions: ["synthetic"],
+        ),
+        (
+            src: "anynet_synthetic",
+            dst: "viewer_synthetic",
+            msg: "cu_anynet::StereoDepth",
+            missions: ["synthetic"],
+        ),
+    ],
+)

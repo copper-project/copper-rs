@@ -1,0 +1,54 @@
+(
+    logging: (
+        enable_task_logging: true,
+        slab_size_mib: 32,
+        section_size_mib: 8,
+    ),
+    tasks: [
+        (
+            id: "stereo",
+            type: "cu_anytime_anynet::tasks::StereoSrc",
+            config: {},
+        ),
+        (
+            id: "anynet",
+            type: "cu_anynet::AnyNetStereo",
+            // Omitting `weights` intentionally selects random smoke-mode
+            // weights, which produce an identical flat map at every stage.
+            config: {
+                "focal_px": 721.5,
+                "baseline_m": 0.54,
+                "stage_snapshots": true,
+            },
+            anytime: (
+                max_refines: 2,
+                time_budget_ms: 800.0,
+                max_age_ms: 2000.0,
+            ),
+        ),
+        (
+            id: "viewer",
+            type: "cu_anytime_anynet::tasks::DepthViewer",
+            config: {
+                "time_dilation": 20.0,
+            },
+        ),
+    ],
+    cnx: [
+        (
+            src: "stereo",
+            dst: "anynet",
+            msg: "cu_anynet::StereoPair",
+        ),
+        (
+            src: "stereo",
+            dst: "viewer",
+            msg: "cu_anynet::StereoPair",
+        ),
+        (
+            src: "anynet",
+            dst: "viewer",
+            msg: "cu_anynet::StereoDepth",
+        ),
+    ],
+)

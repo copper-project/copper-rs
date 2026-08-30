@@ -1,0 +1,17 @@
+(
+    // Both static graphs are compiled into the foreground binary. Its CLI
+    // defaults to `synthetic`; `just kitti` selects the real-data mission.
+    missions: [
+        (id: "synthetic"),
+        (id: "kitti"),
+    ],
+    includes: [
+        (path: "config/synthetic.ron"),
+        (path: "config/kitti.ron"),
+    ],
+    logging: (
+        enable_task_logging: true,
+        slab_size_mib: 32,
+        section_size_mib: 8,
+    ),
+)

@@ -1,0 +1,40 @@
+[package]
+name = "cu-anytime-anynet"
+description = "Foreground and background AnyNet anytime stereo-depth demos for Copper"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+publish = false
+
+[package.metadata.copper]
+environments = ["host"]
+
+[features]
+cuda = ["cu-anynet/cuda"]
+smoketest = []
+
+[[bin]]
+name = "anynet-fg"
+path = "src/bin/fg.rs"
+
+[[bin]]
+name = "anynet-bg"
+path = "src/bin/bg.rs"
+
+[dependencies]
+bincode = { workspace = true }
+cu-anynet = { workspace = true }
+cu-sensor-payloads = { workspace = true, features = ["rerun"] }
+cu29 = { workspace = true }
+image = { workspace = true, features = ["jpeg", "png"] }
+rerun = { workspace = true }
+serde = { workspace = true }
+
+[build-dependencies]
+cu29-build = { workspace = true }
