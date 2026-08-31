@@ -83,26 +83,7 @@ sim-cuda:
   cargo run --release -p cu-flight-controller --no-default-features --features vitfly-cuda,forest-world --bin quad-sim
 
 # Run the replay-backed remote debug server for the flight controller log.
-resim debug_base="copper/examples/cu_flight_controller/debug/v1" log="logs/flight_controller_sim.copper" replay_log="logs/flight_controller_resim.copper":
-  #!/usr/bin/env bash
-  set -euo pipefail
-  example_dir="{{justfile_directory()}}"
-  log="{{log}}"
-  replay_log="{{replay_log}}"
-  if [[ "$log" != /* ]]; then
-    log="${example_dir}/${log}"
-  fi
-  if [[ "$replay_log" != /* ]]; then
-    replay_log="${example_dir}/${replay_log}"
-  fi
-  cd "{{ROOT}}"
-  cargo --config examples/cu_flight_controller/.cargo/config.toml run -p cu-flight-controller --no-default-features --features sim-debug --bin quad-resim -- \
-    --debug-base "{{debug_base}}" \
-    --log-base "$log" \
-    --replay-log-base "$replay_log"
-
-# Alias for parity with examples that expose replay debug as `resim-debug`.
-resim-debug debug_base="copper/examples/cu_flight_controller/debug/v1" log="logs/flight_controller_sim.copper" replay_log="logs/flight_controller_resim.copper":
+resim-mcu-debug debug_base="copper/examples/cu_flight_controller/debug/v1" log="logs/flight_controller_sim.copper" replay_log="logs/flight_controller_resim.copper":
   #!/usr/bin/env bash
   set -euo pipefail
   example_dir="{{justfile_directory()}}"
@@ -122,7 +103,7 @@ resim-debug debug_base="copper/examples/cu_flight_controller/debug/v1" log="logs
 
 # Run the replay-backed debugger for the compute log, including the depth
 # images that were actually presented to ViTFly.
-compute-resim debug_base="copper/examples/cu_flight_controller/compute/debug/v1" log="logs/flight_compute_sim.copper" replay_log="logs/flight_compute_resim.copper":
+resim-compute-debug debug_base="copper/examples/cu_flight_controller/compute/debug/v1" log="logs/flight_compute_sim.copper" replay_log="logs/flight_compute_resim.copper":
   #!/usr/bin/env bash
   set -euo pipefail
   example_dir="{{justfile_directory()}}"
