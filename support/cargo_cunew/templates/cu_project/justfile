@@ -15,7 +15,7 @@ cl:
 resim:
   #!/usr/bin/env bash
   set -euo pipefail
-  RUST_BACKTRACE=1 cargo run --features=sim-debug --bin {{project-name|kebab_case}}-resim -- \
+  RUST_BACKTRACE=1 cargo run --profile debug-optimized --features=sim-debug --bin {{project-name|kebab_case}}-resim -- \
     --log-base logs/{{project-name|kebab_case}}.copper
 
 resim-debug debug_base="copper/projects/{{project-name|snake_case}}/debug/v1" log="logs/{{project-name|kebab_case}}.copper" replay_log="logs/{{project-name|kebab_case}}_resim.copper":
@@ -30,7 +30,7 @@ resim-debug debug_base="copper/projects/{{project-name|snake_case}}/debug/v1" lo
   if [[ "$replay_log" != /* ]]; then
     replay_log="${invocation_dir}/${replay_log}"
   fi
-  RUST_BACKTRACE=1 cargo run --features=sim-debug --bin {{project-name|kebab_case}}-resim -- \
+  RUST_BACKTRACE=1 cargo run --profile debug-optimized --features=sim-debug --bin {{project-name|kebab_case}}-resim -- \
     --debug-base "{% raw %}{{debug_base}}{% endraw %}" \
     --log-base "$log" \
     --replay-log-base "$replay_log"

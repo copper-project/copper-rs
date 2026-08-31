@@ -103,7 +103,7 @@ resim-mcu-debug debug_base="copper/examples/cu_flight_controller/debug/v1" log="
     replay_log="${example_dir}/${replay_log}"
   fi
   cd "{{ROOT}}"
-  cargo --config examples/cu_flight_controller/.cargo/config.toml run -p cu-flight-controller --no-default-features --features sim-debug --bin quad-resim -- \
+  cargo --config examples/cu_flight_controller/.cargo/config.toml run --profile debug-optimized -p cu-flight-controller --no-default-features --features sim-debug --bin quad-resim -- \
     --debug-base "{{debug_base}}" \
     --log-base "$log" \
     --replay-log-base "$replay_log"
@@ -123,7 +123,7 @@ resim-compute-debug debug_base="copper/examples/cu_flight_controller/compute/deb
     replay_log="${example_dir}/${replay_log}"
   fi
   cd "{{ROOT}}"
-  cargo --config examples/cu_flight_controller/.cargo/config.toml run -p cu-flight-controller --no-default-features --features sim-debug --bin quad-compute-resim -- \
+  cargo --config examples/cu_flight_controller/.cargo/config.toml run --profile debug-optimized -p cu-flight-controller --no-default-features --features sim-debug --bin quad-compute-resim -- \
     --debug-base "{{debug_base}}" \
     --log-base "$log" \
     --replay-log-base "$replay_log"

@@ -155,6 +155,14 @@ resolver = "3"
 [profile.release]
 debug = 2
 
+# Replay and remote-debug tooling needs optimized execution without losing the
+# dev profile's Copper debug logs, debug assertions, or debugger information.
+[profile.debug-optimized]
+inherits = "dev"
+opt-level = 3
+debug = 2
+debug-assertions = true
+
 # Keep normal application code debuggable while compiling the CPU inference
 # hot path with the optimizations it requires. Cargo profiles declared by the
 # git dependency itself are ignored, so these overrides belong at the workspace

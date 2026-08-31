@@ -50,10 +50,12 @@ This writes a relocatable static Trunk bundle into `dist/balancebot/` with hashe
 
 ```bash
 $ cd examples/cu_rp_balancebot
-$ cargo run --no-default-features --features sim-debug --bin balancebot-resim --release
+$ cargo run --profile debug-optimized --no-default-features --features sim-debug --bin balancebot-resim
 ```
 
 This replay-only build enables Copper's debug API feature set without pulling the Bevy simulator.
+The `debug-optimized` profile keeps Copper debug structured logs and debug information while
+optimizing replay and remote-debug operations.
 It will recreate the logs from only the inputs of the previous run in `logs/balanceresim*.copper`.
 
 To start the replay-backed remote debug server instead of a one-shot replay:

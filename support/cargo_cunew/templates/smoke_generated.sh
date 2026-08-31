@@ -16,7 +16,7 @@ smoke_project() {
   (
     cd "$dir"
     cargo +"$toolchain" build
-    cargo +"$toolchain" build --features sim-debug --bins
+    cargo +"$toolchain" build --profile debug-optimized --features sim-debug --bins
   )
 }
 
@@ -25,7 +25,7 @@ smoke_workspace() {
   (
     cd "$dir"
     cargo +"$toolchain" build
-    cargo +"$toolchain" build -p cu_example_app --features sim-debug --bins
+    cargo +"$toolchain" build --profile debug-optimized -p cu_example_app --features sim-debug --bins
   )
 }
 
