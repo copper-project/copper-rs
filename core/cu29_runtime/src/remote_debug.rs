@@ -28,7 +28,7 @@
 //! | `{base}/events/cursor` | server -> client(s) | event JSON (reserved, currently not emitted by handlers) |
 //! | `{base}/events/run` | server -> client(s) | event JSON (reserved, currently not emitted by handlers) |
 //! | `{base}/events/watch` | server -> client(s) | watch event JSON (topic exposed, emission helper exists) |
-//! | `{base}/events/health` | server -> client(s) | event JSON (reserved, currently not emitted by handlers) |
+//! | `{base}/events/health` | server -> client(s) | health and long-running operation progress events |
 //!
 //! ## Wire Format
 //!
@@ -256,8 +256,8 @@
 //!   even though server handles it explicitly.
 //! - `session.capabilities` and `session.open` expose lifecycle limits under
 //!   `session_lifecycle` in the capability payload.
-//! - Event publishers are declared and helper methods exist, but core handlers are
-//!   currently request/reply oriented and do not emit continuous event streams yet.
+//! - `session.open` emits correlated `session_open_progress` health events while it indexes the
+//!   log. Each event reports `scanned_bytes`, `total_bytes`, and `indexed_entries`.
 
 use crate::app::{CuSimApplication, CurrentRuntimeCopperList};
 use crate::config::{BridgeChannelConfigRepresentation, Flavor, read_configuration_str};
@@ -1841,23 +1841,51 @@ where
             Err(e) => return err_response(request_id, "SessionOpenFailed", &e.to_string()),
         };
 
+        let health_publisher = &self.event_publishers.health;
+        let progress_request_id = request_id.clone();
+        let mut report_progress = |progress: crate::debug::LogIndexProgress| {
+            let event = json!({
+                "kind": "session_open_progress",
+                "request_id": progress_request_id,
+                "phase": "indexing_log",
+                "scanned_bytes": progress.scanned_bytes,
+                "total_bytes": progress.total_bytes,
+                "indexed_entries": progress.indexed_entries,
+            });
+            if let Ok(payload) = encode_payload(
+                &event,
+                wire_codec,
+                "RemoteDebug: failed to serialize session open progress",
+            ) {
+                let _ = zenoh::Wait::wait(
+                    health_publisher
+                        .put(payload)
+                        .encoding(wire_codec.encoding()),
+                );
+            }
+        };
+
         let session = match parsed.cache_cap {
-            Some(cap) => CuDebugSession::<App, P, CB, TF, S, L>::from_log_with_cache_cap(
+            Some(cap) => {
+                CuDebugSession::<App, P, CB, TF, S, L>::from_log_with_cache_cap_and_progress(
+                    path.as_path(),
+                    app,
+                    clock,
+                    clock_mock,
+                    self.build_callback.clone(),
+                    self.time_of.clone(),
+                    cap,
+                    &mut report_progress,
+                )
+            }
+            None => CuDebugSession::<App, P, CB, TF, S, L>::from_log_with_progress(
                 path.as_path(),
                 app,
                 clock,
                 clock_mock,
                 self.build_callback.clone(),
                 self.time_of.clone(),
-                cap,
-            ),
-            None => CuDebugSession::<App, P, CB, TF, S, L>::from_log(
-                path.as_path(),
-                app,
-                clock,
-                clock_mock,
-                self.build_callback.clone(),
-                self.time_of.clone(),
+                &mut report_progress,
             ),
         };
 
@@ -3495,6 +3523,89 @@ impl RemoteDebugZenohClient {
             }
         }
     }
+
+    /// Send one RPC call while receiving events published during the operation.
+    pub fn call_with_events(
+        &self,
+        session_id: Option<&str>,
+        method: &str,
+        params: Value,
+        event_topic: &str,
+        mut on_event: impl FnMut(Value),
+    ) -> CuResult<DebugRpcResponse> {
+        let event_sub = self.subscribe_events(event_topic)?;
+        let request_id = format!("req{}", self.next_request_id.fetch_add(1, Ordering::SeqCst));
+        let request = DebugRpcRequest {
+            api: API_VERSION.to_string(),
+            request_id: request_id.clone(),
+            session_id: session_id.map(ToOwned::to_owned),
+            method: method.to_string(),
+            params,
+            reply_to: self.reply_topic.clone(),
+        };
+
+        let payload = encode_payload(
+            &request,
+            self.codec,
+            "RemoteDebugClient: request encode failed",
+        )?;
+        zenoh::Wait::wait(
+            self.request_pub
+                .put(payload)
+                .encoding(self.codec.encoding()),
+        )
+        .map_err(cu_error_map("RemoteDebugClient: failed to send request"))?;
+
+        loop {
+            while let Some(sample) = event_sub.try_recv().map_err(|e| {
+                CuError::from(format!("RemoteDebugClient: failed receiving event: {e}"))
+            })? {
+                let payload = sample.payload().to_bytes();
+                let event = decode_value(payload.as_ref(), self.codec)?;
+                if event.get("request_id").and_then(Value::as_str) == Some(request_id.as_str()) {
+                    on_event(event);
+                }
+            }
+
+            if let Some(sample) = self.reply_sub.try_recv().map_err(|e| {
+                CuError::from(format!("RemoteDebugClient: failed receiving reply: {e}"))
+            })? {
+                #[cfg(target_os = "linux")]
+                let payload_len = sample.payload().len();
+                #[cfg(target_os = "linux")]
+                let payload_is_shm = sample.payload().as_shm().is_some();
+                let payload = sample.payload().to_bytes();
+                let response = decode_response(payload.as_ref(), self.codec)?;
+                if response.request_id != request_id {
+                    continue;
+                }
+                #[cfg(target_os = "linux")]
+                if payload_len >= self.shm_config.message_size_threshold_bytes && !payload_is_shm {
+                    return Err(CuError::from(format!(
+                        "RemoteDebugClient refused a {} reply delivered outside shared memory. \
+                         Both endpoints must have SHM enabled and enough RLIMIT_MEMLOCK; \
+                         refusing silent Unix-socket fallback.",
+                        format_bytes(payload_len),
+                    )));
+                }
+                return Ok(response);
+            }
+
+            if let Some(sample) =
+                event_sub
+                    .recv_timeout(Duration::from_millis(100))
+                    .map_err(|e| {
+                        CuError::from(format!("RemoteDebugClient: failed receiving event: {e}"))
+                    })?
+            {
+                let payload = sample.payload().to_bytes();
+                let event = decode_value(payload.as_ref(), self.codec)?;
+                if event.get("request_id").and_then(Value::as_str) == Some(request_id.as_str()) {
+                    on_event(event);
+                }
+            }
+        }
+    }
 }
 
 fn capabilities_json(session_lifecycle: SessionLifecycleLimits) -> Value {
@@ -3576,6 +3687,15 @@ fn decode_response(bytes: &[u8], codec: WireCodec) -> CuResult<DebugRpcResponse>
             .map_err(|e| CuError::new_with_cause("RemoteDebugClient: invalid CBOR response", e)),
         WireCodec::Json => serde_json::from_slice::<DebugRpcResponse>(bytes)
             .map_err(|e| CuError::new_with_cause("RemoteDebugClient: invalid JSON response", e)),
+    }
+}
+
+fn decode_value(bytes: &[u8], codec: WireCodec) -> CuResult<Value> {
+    match codec {
+        WireCodec::Cbor => minicbor_serde::from_slice::<Value>(bytes)
+            .map_err(|e| CuError::new_with_cause("RemoteDebugClient: invalid CBOR event", e)),
+        WireCodec::Json => serde_json::from_slice::<Value>(bytes)
+            .map_err(|e| CuError::new_with_cause("RemoteDebugClient: invalid JSON event", e)),
     }
 }
 
