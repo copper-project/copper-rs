@@ -919,8 +919,11 @@ impl UnifiedLogRead for MmapUnifiedLoggerRead {
             }
         }
     }
+}
 
-    fn raw_skip_section(&mut self) -> CuResult<SectionHeader> {
+impl MmapUnifiedLoggerRead {
+    /// Advance past the next section without copying its payload.
+    pub fn raw_skip_section(&mut self) -> CuResult<SectionHeader> {
         if self.current_reading_position >= self.current_mmap_buffer.len() {
             self.next_slab().map_err(|e| {
                 CuError::new_with_cause("Failed to read next slab, is the log complete?", e)
@@ -941,9 +944,7 @@ impl UnifiedLogRead for MmapUnifiedLoggerRead {
         self.current_reading_position += header.offset_to_next_section as usize;
         Ok(header)
     }
-}
 
-impl MmapUnifiedLoggerRead {
     pub fn new(base_file_path: &Path) -> io::Result<Self> {
         let (file, mmap, prolog, header) = open_slab_index(base_file_path, 0)?;
         let main_header = header.ok_or_else(|| {
