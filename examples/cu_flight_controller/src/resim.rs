@@ -21,13 +21,13 @@ const REPLAY_LOG_SLAB_SIZE: Option<usize> = Some(128 * 1024 * 1024);
 #[copper_runtime(config = "mcu_config.ron", sim_mode = true, ignore_resources = true)]
 struct FlightControllerReSim {}
 
-type ReplayCopperList = CopperList<gnss::CuStampedDataSet>;
+type ReplayCopperList = CopperList<default::CuStampedDataSet>;
 type ReplayBuildCallback =
     for<'a> fn(
         &'a ReplayCopperList,
         RobotClock,
         RobotClockMock,
-    ) -> Box<dyn for<'z> FnMut(gnss::SimStep<'z>) -> SimOverride + 'a>;
+    ) -> Box<dyn for<'z> FnMut(default::SimStep<'z>) -> SimOverride + 'a>;
 type ReplayTimeExtractor = fn(&ReplayCopperList) -> Option<CuTime>;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -37,8 +37,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     );
     let replay_template = cli.replay_log_base.clone();
     serve_remote_debug::<
-        gnss::FlightControllerReSim,
-        gnss::CuStampedDataSet,
+        default::FlightControllerReSim,
+        default::CuStampedDataSet,
         ReplayBuildCallback,
         ReplayTimeExtractor,
         MmapSectionStorage,
@@ -59,7 +59,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 fn app_factory(
     params: &SessionOpenParams,
     replay_template: &Path,
-) -> CuResult<(gnss::FlightControllerReSim, RobotClock, RobotClockMock)> {
+) -> CuResult<(default::FlightControllerReSim, RobotClock, RobotClockMock)> {
     let (clock, clock_mock) = RobotClock::mock();
     let replay_log_base = per_session_replay_log_base(
         replay_template,
@@ -67,8 +67,8 @@ fn app_factory(
     );
     remove_log_family(&replay_log_base)?;
 
-    let mut default_callback = |_step: gnss::SimStep<'_>| SimOverride::ExecuteByRuntime;
-    let app = gnss::FlightControllerReSim::builder()
+    let mut default_callback = |_step: default::SimStep<'_>| SimOverride::ExecuteByRuntime;
+    let app = default::FlightControllerReSim::builder()
         .with_clock(clock.clone())
         .with_log_path(replay_log_base, REPLAY_LOG_SLAB_SIZE)?
         .with_sim_callback(&mut default_callback)
@@ -82,8 +82,10 @@ fn build_callback<'a>(
     copperlist: &'a ReplayCopperList,
     _process_clock: RobotClock,
     _clock_for_cb: RobotClockMock,
-) -> Box<dyn for<'z> FnMut(gnss::SimStep<'z>) -> SimOverride + 'a> {
-    Box::new(move |step: gnss::SimStep<'_>| gnss::recorded_debug_replay_step(step, copperlist))
+) -> Box<dyn for<'z> FnMut(default::SimStep<'z>) -> SimOverride + 'a> {
+    Box::new(move |step: default::SimStep<'_>| {
+        default::recorded_debug_replay_step(step, copperlist)
+    })
 }
 
 fn extract_time(copperlist: &ReplayCopperList) -> Option<CuTime> {
