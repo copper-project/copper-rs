@@ -34,6 +34,7 @@ impl cu29_unifiedlog::memmap::MmapUnifiedLoggerRead
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::new(base_file_path: &std::path::Path) -> std::io::error::Result<Self>
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::position(&self) -> cu29_unifiedlog::memmap::LogPosition
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::raw_main_header(&self) -> &cu29_unifiedlog::MainHeader
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::raw_skip_section(&mut self) -> cu29_traits::CuResult<cu29_unifiedlog::SectionHeader>
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::scan_section_bytes(&mut self, datalogtype: cu29_traits::UnifiedLogType) -> cu29_traits::CuResult<u64>
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::seek(&mut self, pos: cu29_unifiedlog::memmap::LogPosition) -> cu29_traits::CuResult<()>
 impl cu29_unifiedlog::UnifiedLogRead for cu29_unifiedlog::memmap::MmapUnifiedLoggerRead
@@ -174,6 +175,7 @@ impl cu29_unifiedlog::memmap::MmapUnifiedLoggerRead
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::new(base_file_path: &std::path::Path) -> std::io::error::Result<Self>
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::position(&self) -> cu29_unifiedlog::memmap::LogPosition
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::raw_main_header(&self) -> &cu29_unifiedlog::MainHeader
+pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::raw_skip_section(&mut self) -> cu29_traits::CuResult<cu29_unifiedlog::SectionHeader>
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::scan_section_bytes(&mut self, datalogtype: cu29_traits::UnifiedLogType) -> cu29_traits::CuResult<u64>
 pub fn cu29_unifiedlog::memmap::MmapUnifiedLoggerRead::seek(&mut self, pos: cu29_unifiedlog::memmap::LogPosition) -> cu29_traits::CuResult<()>
 impl cu29_unifiedlog::UnifiedLogRead for cu29_unifiedlog::memmap::MmapUnifiedLoggerRead
