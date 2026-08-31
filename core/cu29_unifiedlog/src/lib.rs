@@ -205,9 +205,6 @@ pub trait UnifiedLogRead {
     /// It will return the header and the byte array of the section.
     /// Note the last Entry should be of UnifiedLogType::LastEntry if the log is not corrupted.
     fn raw_read_section(&mut self) -> CuResult<(SectionHeader, Vec<u8>)>;
-
-    /// Advance past the next section without copying its payload.
-    fn raw_skip_section(&mut self) -> CuResult<SectionHeader>;
 }
 
 /// Create a new stream to write to the unifiedlogger.
