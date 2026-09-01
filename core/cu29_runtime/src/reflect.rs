@@ -58,6 +58,22 @@ pub trait TypePath {
     }
 }
 
+/// Returns the canonical payload type path used by generated output metadata.
+#[doc(hidden)]
+#[inline]
+#[cfg(feature = "reflect")]
+pub fn __payload_type_path<T: TypePath>() -> &'static str {
+    T::type_path()
+}
+
+/// Returns the canonical payload type path used by generated output metadata.
+#[doc(hidden)]
+#[inline]
+#[cfg(not(feature = "reflect"))]
+pub fn __payload_type_path<T>() -> &'static str {
+    core::any::type_name::<T>()
+}
+
 #[cfg(not(feature = "reflect"))]
 macro_rules! impl_type_path_for_primitives {
     ($($ty:ty),* $(,)?) => {
@@ -169,7 +185,9 @@ pub fn dump_type_registry_schema(_registry: &TypeRegistry) -> String {
 
 #[cfg(all(test, not(feature = "reflect")))]
 mod tests {
-    use super::TypePath;
+    use super::{__payload_type_path, TypePath};
+
+    struct PayloadWithoutTypePath;
 
     fn assert_type_path<T: TypePath + ?Sized>() {}
 
@@ -177,5 +195,13 @@ mod tests {
     fn unit_and_primitive_type_paths_exist_without_reflect() {
         assert_type_path::<()>();
         assert_type_path::<i8>();
+    }
+
+    #[test]
+    fn payload_type_path_does_not_require_type_path_without_reflect() {
+        assert_eq!(
+            __payload_type_path::<PayloadWithoutTypePath>(),
+            core::any::type_name::<PayloadWithoutTypePath>()
+        );
     }
 }

@@ -139,9 +139,7 @@ To replay a recorded simulation log through the remote debug API:
 
 ```bash
 cd examples/cu_flight_controller
-just resim
-# or, for parity with other examples:
-just resim-debug
+just resim-mcu-debug
 ```
 
 To inspect the compute-side log in Time Traveler—including the depth raster
@@ -152,7 +150,7 @@ that was actually passed to ViTFly—run:
 just sim
 
 # Serve that compute-side log to Time Traveler.
-just compute-resim
+just resim-compute-debug
 ```
 
 Then attach Time Traveler to

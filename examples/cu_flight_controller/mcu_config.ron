@@ -6,27 +6,18 @@
                 "control_source": "mapper",
                 "attitude_kp": 1.0,
             },
-            when: Any(
-                [
-                    Feature(
-                        "sim-debug",
-                    ),
-                    Not(
-                        Any(
-                            [
-                                Feature(
-                                    "sim",
-                                ),
-                                Feature(
-                                    "end2end",
-                                ),
-                                Feature(
-                                    "logreader",
-                                ),
-                            ],
+            when: Not(
+                Any(
+                    [
+                        Feature("sim"),
+                        Feature(
+                            "end2end",
                         ),
-                    ),
-                ],
+                        Feature(
+                            "logreader",
+                        ),
+                    ],
+                ),
             ),
         ),
         (
@@ -35,50 +26,24 @@
                 "control_source": "mode_supervisor",
                 "attitude_kp": 10.0,
             },
-            when: All(
+            when: Any(
                 [
-                    Any(
-                        [
-                            Feature(
-                                "sim",
-                            ),
-                            Feature(
-                                "end2end",
-                            ),
-                            Feature(
-                                "logreader",
-                            ),
-                        ],
-                    ),
-                    Not(
-                        Feature(
-                            "sim-debug",
-                        ),
+                    Feature("sim"),
+                    Feature("end2end"),
+                    Feature(
+                        "logreader",
                     ),
                 ],
             ),
         ),
         (
             path: "mcu_autonomy.ron",
-            when: All(
+            when: Any(
                 [
-                    Any(
-                        [
-                            Feature(
-                                "sim",
-                            ),
-                            Feature(
-                                "end2end",
-                            ),
-                            Feature(
-                                "logreader",
-                            ),
-                        ],
-                    ),
-                    Not(
-                        Feature(
-                            "sim-debug",
-                        ),
+                    Feature("sim"),
+                    Feature("end2end"),
+                    Feature(
+                        "logreader",
                     ),
                 ],
             ),

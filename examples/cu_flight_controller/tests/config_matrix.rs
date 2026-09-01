@@ -36,13 +36,17 @@ fn mcu_feature_matrix_selects_one_control_graph() {
         &["firmware"][..],
         &["bevymon"][..],
         &["python-bindings"][..],
-        &["sim", "sim-debug"][..],
     ] {
         assert!(has_default_mcu_task(features, "attitude"));
         assert!(!has_default_mcu_task(features, "mode_supervisor"));
     }
 
-    for features in [&["sim"][..], &["end2end"][..], &["logreader"][..]] {
+    for features in [
+        &["sim"][..],
+        &["sim", "sim-debug"][..],
+        &["end2end"][..],
+        &["logreader"][..],
+    ] {
         assert!(has_default_mcu_task(features, "attitude"));
         assert!(has_default_mcu_task(features, "mode_supervisor"));
     }

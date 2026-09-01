@@ -1395,7 +1395,7 @@ fn gen_culist_support(
                 cu29::TaskOutputSpec {
                     task_id: #task_id,
                     msg_type: #msg_type,
-                    payload_type_path_fn: <#payload_type as cu29::prelude::TypePath>::type_path,
+                    payload_type_path_fn: cu29::reflect::__payload_type_path::<#payload_type>,
                 }
             }
         })
@@ -2867,16 +2867,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 task_specs.task_types.len()
             ));
         }
-        let task_restore_code: Vec<proc_macro2::TokenStream> = keyframe_task_restore_order
-            .iter()
-            .map(|index| {
-                let task_tuple_index = syn::Index::from(*index);
-                quote! {
-                    tasks.#task_tuple_index.thaw(&mut decoder).map_err(|e| CuError::from("Failed to thaw").add_cause(&e.to_string()))?
-                }
-            })
-            .collect();
-
         // Generate the code to create instances of the nodes
         // It maps the types to their index
         let (
@@ -3487,20 +3477,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         postprocess_calls.extend(bridge_postprocess_calls);
         let parallel_rt_run_supported = std && parallel_rt_enabled && !sim_mode;
 
-        // Bridges are frozen alongside tasks; restore them in the same order.
-        let bridge_restore_code: Vec<proc_macro2::TokenStream> = culist_bridge_specs
-            .iter()
-            .enumerate()
-            .map(|(index, _)| {
-                let bridge_tuple_index = syn::Index::from(index);
-                quote! {
-                    __cu_bridges.#bridge_tuple_index
-                        .thaw(&mut decoder)
-                        .map_err(|e| CuError::from("Failed to thaw bridge").add_cause(&e.to_string()))?
-                }
-            })
-            .collect();
-
         let output_pack_sizes = collect_output_pack_sizes(&culist_plan);
         let runtime_plan_code_and_logging: Vec<(
             proc_macro2::TokenStream,
@@ -3638,6 +3614,101 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         } else {
             None
         };
+        // A sim runtime does not execute parallel-rt, but it must decode the component
+        // frames in the execution-wave order used by the matching recording runtime.
+        let restore_parallel_placements = (std && parallel_rt_enabled)
+            .then(|| build_parallel_lifecycle_placements(&culist_plan, &culist_exec_entities));
+        let mut keyframe_restore_order = Vec::<ParallelLifecycleKey>::new();
+        if let Some(placements) = restore_parallel_placements.as_ref() {
+            for (step_index, unit) in culist_plan.steps.iter().enumerate() {
+                let CuExecutionUnit::Step(step) = unit else {
+                    panic!("Execution loops are not supported in runtime generation");
+                };
+                match &culist_exec_entities[step.node_id as usize].kind {
+                    ExecutionEntityKind::Task { task_index } => {
+                        if step.phase != CuStepPhase::AnytimeRefine
+                            && !keyframe_restore_order
+                                .contains(&ParallelLifecycleKey::Task(*task_index))
+                        {
+                            keyframe_restore_order.push(ParallelLifecycleKey::Task(*task_index));
+                        }
+                    }
+                    ExecutionEntityKind::BridgeRx { bridge_index, .. }
+                    | ExecutionEntityKind::BridgeTx { bridge_index, .. } => {
+                        if placements[step_index].postprocess {
+                            keyframe_restore_order
+                                .push(ParallelLifecycleKey::Bridge(*bridge_index));
+                        }
+                    }
+                }
+            }
+        } else {
+            keyframe_restore_order.extend(
+                keyframe_task_restore_order
+                    .iter()
+                    .copied()
+                    .map(ParallelLifecycleKey::Task),
+            );
+            keyframe_restore_order
+                .extend((0..culist_bridge_specs.len()).map(ParallelLifecycleKey::Bridge));
+        }
+        let keyframe_restore_code: Vec<proc_macro2::TokenStream> = keyframe_restore_order
+            .iter()
+            .map(|component| match component {
+                ParallelLifecycleKey::Task(index) => {
+                    let task_tuple_index = syn::Index::from(*index);
+                    let skip_substituted = sim_mode
+                        && task_specs.cutypes[*index] != CuTaskType::Regular
+                        && !task_specs.run_in_sim_flags[*index];
+                    if skip_substituted {
+                        quote! {
+                            let _ = frames.next_frame()?;
+                        }
+                    } else {
+                        quote! {
+                            let frame = frames.next_frame()?;
+                            cu29::curuntime::thaw_keyframe_component(
+                                &mut tasks.#task_tuple_index,
+                                frame,
+                            )?;
+                        }
+                    }
+                }
+                ParallelLifecycleKey::Bridge(index) => {
+                    let bridge_tuple_index = syn::Index::from(*index);
+                    if sim_mode && !culist_bridge_specs[*index].run_in_sim {
+                        quote! {
+                            let _ = frames.next_frame()?;
+                        }
+                    } else {
+                        quote! {
+                            let frame = frames.next_frame()?;
+                            cu29::curuntime::thaw_keyframe_component(
+                                &mut __cu_bridges.#bridge_tuple_index,
+                                frame,
+                            )?;
+                        }
+                    }
+                }
+            })
+            .collect();
+        let keyframe_preallocation_code: Vec<proc_macro2::TokenStream> = keyframe_restore_order
+            .iter()
+            .map(|component| match component {
+                ParallelLifecycleKey::Task(index) => {
+                    let task_tuple_index = syn::Index::from(*index);
+                    quote! {
+                        kf_manager.include_capture_capacity(&tasks.#task_tuple_index)?;
+                    }
+                }
+                ParallelLifecycleKey::Bridge(index) => {
+                    let bridge_tuple_index = syn::Index::from(*index);
+                    quote! {
+                        kf_manager.include_capture_capacity(&__cu_bridges.#bridge_tuple_index)?;
+                    }
+                }
+            })
+            .collect();
         let runtime_plan_parallel_code_and_logging: Option<
             Vec<(proc_macro2::TokenStream, proc_macro2::TokenStream)>,
         > = if parallel_rt_run_supported {
@@ -4979,8 +5050,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #(#preprocess_logging_calls)*
 
                 cl_manager.end_of_processing(clid)?;
-                kf_manager.end_of_processing(clid)?;
                 monitor_result?;
+
+                // Postprocess calls keep their component-local freeze points. Finish the
+                // framed keyframe only after those late bridge frames have been appended.
+                #(#postprocess_calls)*
+                kf_manager.end_of_processing(clid)?;
                 let stats = cu29::monitoring::CopperListIoStats {
                     raw_culist_bytes: core::mem::size_of::<CuList>() as u64 + cl_manager.last_handle_bytes,
                     handle_bytes: cl_manager.last_handle_bytes,
@@ -4990,9 +5065,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     culistid: clid,
                 };
                 monitor.observe_copperlist_io(stats);
-
-                // Postprocess calls can happen at any time, just packed them up at the end.
-                #(#postprocess_calls)*
                 Ok(())
             }
 
@@ -5002,11 +5074,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let clock = &clock_handle;
                 let tasks = &mut runtime.tasks;
                 let __cu_bridges = &mut runtime.bridges;
-                let config = cu29::bincode::config::standard();
-                let reader = cu29::bincode::de::read::SliceReader::new(&keyframe.serialized_tasks);
-                let mut decoder = DecoderImpl::new(reader, config, ());
-                #(#task_restore_code);*;
-                #(#bridge_restore_code);*;
+                let mut frames = cu29::curuntime::KeyFramePayloadReader::new(keyframe)?;
+                #(#keyframe_restore_code)*
+                frames.finish()?;
                 Ok(())
             }
 
@@ -5023,6 +5093,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #mission_mod::TASK_IDS,
                 );
                 #(#start_calls)*
+                {
+                    let runtime = &mut self.copper_runtime;
+                    let tasks = &runtime.tasks;
+                    let __cu_bridges = &runtime.bridges;
+                    let kf_manager = &mut runtime.keyframes_manager;
+                    kf_manager.begin_capture_preallocation();
+                    #(#keyframe_preallocation_code)*
+                    kf_manager.finish_capture_preallocation()?;
+                }
                 ctx.clear_current_component();
                 ctx.clear_current_task();
                 self.copper_runtime.monitor.start(&ctx)?;

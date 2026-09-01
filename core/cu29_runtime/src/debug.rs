@@ -67,6 +67,13 @@ pub(crate) struct SectionIndexEntry {
     pub(crate) last_ts: Option<CuTime>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct LogIndexProgress {
+    pub(crate) scanned_bytes: u64,
+    pub(crate) total_bytes: u64,
+    pub(crate) indexed_entries: usize,
+}
+
 /// Cached copperlists for one section.
 #[derive(Debug, Clone)]
 struct CachedSection<P: CopperListTuple> {
@@ -131,8 +138,29 @@ where
         build_callback: CB,
         time_of: TF,
     ) -> CuResult<Self> {
+        Self::from_log_with_progress(
+            log_base,
+            app,
+            robot_clock,
+            clock_mock,
+            build_callback,
+            time_of,
+            |_| {},
+        )
+    }
+
+    pub(crate) fn from_log_with_progress(
+        log_base: &Path,
+        app: App,
+        robot_clock: RobotClock,
+        clock_mock: RobotClockMock,
+        build_callback: CB,
+        time_of: TF,
+        mut progress: impl FnMut(LogIndexProgress),
+    ) -> CuResult<Self> {
         let _ = crate::logcodec::seed_effective_config_from_log::<P>(log_base)?;
-        let (sections, keyframes, total_entries) = index_log::<P, _>(log_base, &time_of)?;
+        let (sections, keyframes, total_entries) =
+            index_log_with_progress::<P, _, _>(log_base, &time_of, &mut progress)?;
         let log_reader = build_read_logger(log_base)?;
         Ok(Self::new(
             log_reader,
@@ -157,8 +185,32 @@ where
         time_of: TF,
         cache_cap: usize,
     ) -> CuResult<Self> {
+        Self::from_log_with_cache_cap_and_progress(
+            log_base,
+            app,
+            robot_clock,
+            clock_mock,
+            build_callback,
+            time_of,
+            cache_cap,
+            |_| {},
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn from_log_with_cache_cap_and_progress(
+        log_base: &Path,
+        app: App,
+        robot_clock: RobotClock,
+        clock_mock: RobotClockMock,
+        build_callback: CB,
+        time_of: TF,
+        cache_cap: usize,
+        mut progress: impl FnMut(LogIndexProgress),
+    ) -> CuResult<Self> {
         let _ = crate::logcodec::seed_effective_config_from_log::<P>(log_base)?;
-        let (sections, keyframes, total_entries) = index_log::<P, _>(log_base, &time_of)?;
+        let (sections, keyframes, total_entries) =
+            index_log_with_progress::<P, _, _>(log_base, &time_of, &mut progress)?;
         let log_reader = build_read_logger(log_base)?;
         Ok(Self::new_with_cache_cap(
             log_reader,
@@ -949,6 +1001,35 @@ where
     P: CopperListTuple,
     TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime>,
 {
+    index_log_with_progress(log_base, time_of, |_| {})
+}
+
+fn index_log_with_progress<P, TF, PF>(
+    log_base: &Path,
+    time_of: &TF,
+    mut progress: PF,
+) -> CuResult<(Vec<SectionIndexEntry>, Vec<KeyFrame>, usize)>
+where
+    P: CopperListTuple,
+    TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime>,
+    PF: FnMut(LogIndexProgress),
+{
+    let sizing_logger = UnifiedLoggerBuilder::new()
+        .file_base_name(log_base)
+        .build()
+        .map_err(|e| CuError::new_with_cause("Failed to open unified log", e))?;
+    let UnifiedLogger::Read(mut sizing_reader) = sizing_logger else {
+        return Err(CuError::from("Expected read-only unified logger"));
+    };
+    let mut total_bytes = 0u64;
+    loop {
+        let header = sizing_reader.raw_skip_section()?;
+        if header.entry_type == UnifiedLogType::LastEntry {
+            break;
+        }
+        total_bytes = total_bytes.saturating_add(header.used as u64);
+    }
+
     let logger = UnifiedLoggerBuilder::new()
         .file_base_name(log_base)
         .build()
@@ -960,6 +1041,12 @@ where
     let mut sections = Vec::new();
     let mut keyframes = Vec::new();
     let mut total_entries = 0usize;
+    let mut scanned_bytes = 0u64;
+    progress(LogIndexProgress {
+        scanned_bytes,
+        total_bytes,
+        indexed_entries: total_entries,
+    });
 
     loop {
         let pos = dl.position();
@@ -972,19 +1059,18 @@ where
             UnifiedLogType::CopperList => {
                 let (len, first_id, last_id, first_ts, last_ts) =
                     scan_copperlist_section::<P, _>(&data, time_of)?;
-                if len == 0 {
-                    continue;
+                if len > 0 {
+                    sections.push(SectionIndexEntry {
+                        pos,
+                        start_idx: total_entries,
+                        len,
+                        first_id,
+                        last_id,
+                        first_ts,
+                        last_ts,
+                    });
+                    total_entries += len;
                 }
-                sections.push(SectionIndexEntry {
-                    pos,
-                    start_idx: total_entries,
-                    len,
-                    first_id,
-                    last_id,
-                    first_ts,
-                    last_ts,
-                });
-                total_entries += len;
             }
             UnifiedLogType::FrozenTasks => {
                 // Read all keyframes in this section
@@ -1011,25 +1097,22 @@ where
                 // ignore other sections
             }
         }
+        scanned_bytes = scanned_bytes.saturating_add(header.used as u64);
+        progress(LogIndexProgress {
+            scanned_bytes,
+            total_bytes,
+            indexed_entries: total_entries,
+        });
     }
 
     Ok((sections, keyframes, total_entries))
 }
 
 fn nearest_replay_anchor(keyframes: &[KeyFrame], target_culistid: u64) -> Option<KeyFrame> {
-    // Nonzero runtime keyframes are currently frozen task-by-task immediately before each
-    // task process step, so restoring one and replaying from the top of the CL can create a
-    // mixed task-boundary state. The initial keyframe is still a coherent replay anchor.
     keyframes
         .iter()
-        .filter(|kf| kf.culistid == 0 && kf.culistid <= target_culistid)
+        .filter(|kf| kf.culistid <= target_culistid)
         .max_by_key(|kf| kf.culistid)
-        .or_else(|| {
-            keyframes
-                .iter()
-                .filter(|kf| kf.culistid <= target_culistid)
-                .min_by_key(|kf| kf.culistid)
-        })
         .cloned()
 }
 
@@ -1046,21 +1129,21 @@ mod tests {
     }
 
     #[test]
-    fn replay_anchor_prefers_initial_keyframe_over_later_task_boundary_keyframes() {
+    fn replay_anchor_selects_nearest_keyframe_at_or_before_target() {
         let keyframes = [keyframe(0), keyframe(100), keyframe(500)];
 
         let anchor = nearest_replay_anchor(&keyframes, 533).expect("replay anchor");
 
-        assert_eq!(anchor.culistid, 0);
+        assert_eq!(anchor.culistid, 500);
     }
 
     #[test]
-    fn replay_anchor_falls_back_to_earliest_keyframe_without_initial_anchor() {
+    fn replay_anchor_uses_nearest_available_nonzero_keyframe() {
         let keyframes = [keyframe(100), keyframe(500), keyframe(900)];
 
         let anchor = nearest_replay_anchor(&keyframes, 533).expect("replay anchor");
 
-        assert_eq!(anchor.culistid, 100);
+        assert_eq!(anchor.culistid, 500);
         assert!(nearest_replay_anchor(&keyframes, 99).is_none());
     }
 }
