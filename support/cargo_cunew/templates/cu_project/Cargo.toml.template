@@ -8,6 +8,13 @@ default-run = "{{project-name|kebab_case}}"
 {% comment %} We must be part of a root workspace if we're in the copper repo {% endcomment %}
 [workspace]
 {%endif %}
+
+[profile.debug-optimized]
+inherits = "dev"
+opt-level = 3
+debug = 2
+debug-assertions = true
+
 # The main executable of your application
 [[bin]]
 name = "{{project-name|kebab_case}}"

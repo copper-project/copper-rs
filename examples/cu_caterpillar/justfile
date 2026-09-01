@@ -89,7 +89,7 @@ dag-logstats bin="cu-caterpillar-logreader" log="logs/caterpillar.copper" missio
 resim:
 	#!/usr/bin/env bash
 	set -euo pipefail
-	RUST_BACKTRACE=1 cargo run -r --features sim-debug --bin cu-caterpillar-resim -- \
+	RUST_BACKTRACE=1 cargo run --profile debug-optimized --features sim-debug --bin cu-caterpillar-resim -- \
 		--log-base logs/caterpillar.copper
 
 resim-debug debug_base="copper/examples/cu_caterpillar/debug/v1" log="logs/caterpillar.copper" replay_log="logs/caterpillarresim.copper":
@@ -104,7 +104,7 @@ resim-debug debug_base="copper/examples/cu_caterpillar/debug/v1" log="logs/cater
 	if [[ "$replay_log" != /* ]]; then
 		replay_log="${invocation_dir}/${replay_log}"
 	fi
-	RUST_BACKTRACE=1 cargo run -r --features sim-debug --bin cu-caterpillar-resim -- \
+	RUST_BACKTRACE=1 cargo run --profile debug-optimized --features sim-debug --bin cu-caterpillar-resim -- \
 		--debug-base "{{debug_base}}" \
 		--log-base "$log" \
 		--replay-log-base "$replay_log"

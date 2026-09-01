@@ -11,7 +11,7 @@ default: record
 record:
 	#!/usr/bin/env bash
 	set -euo pipefail
-	cargo run -p {{package}} -- record
+	cargo run --profile debug-optimized -p {{package}} -- record
 
 # Start the remote debug server against the recorded baseline log.
 resim-debug debug_base=debug_base log=log replay_log=replay_log: record
@@ -26,7 +26,7 @@ resim-debug debug_base=debug_base log=log replay_log=replay_log: record
 	if [[ "$replay_log" != /* ]]; then
 		replay_log="${invocation_dir}/${replay_log}"
 	fi
-	RUST_BACKTRACE=1 cargo run -p {{package}} -- resim-debug \
+	RUST_BACKTRACE=1 cargo run --profile debug-optimized -p {{package}} -- resim-debug \
 		--debug-base "{{debug_base}}" \
 		--log-base "$log" \
 		--replay-log-base "$replay_log"
@@ -35,7 +35,7 @@ resim-debug debug_base=debug_base log=log replay_log=replay_log: record
 smoke: record
 	#!/usr/bin/env bash
 	set -euo pipefail
-	cargo run -p {{package}} -- smoke
+	cargo run --profile debug-optimized -p {{package}} -- smoke
 
 # Run the full end-to-end demo in one command.
 demo: smoke

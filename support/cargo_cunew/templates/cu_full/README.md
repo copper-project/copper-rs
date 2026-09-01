@@ -37,3 +37,6 @@ To start the replay-backed remote debug server manually:
 ```bash
 just resim-debug
 ```
+
+Both replay recipes use the `debug-optimized` Cargo profile so replay stays fast while
+preserving Copper `debug!` structured logs and debug information.

@@ -5,6 +5,12 @@ members = [
 ]
 resolver = "2"
 
+[profile.debug-optimized]
+inherits = "dev"
+opt-level = 3
+debug = 2
+debug-assertions = true
+
 [workspace.dependencies]
 cu29 = { {%if copper_source == "crates.io" %} version = "{{copper_version}}" {%elsif copper_source == "git" %} git = "{{copper_git_url}}"{{copper_git_ref_snippet}} {%elsif copper_source == "local" %} path = "{{copper_root_path}}/core/cu29" {%endif %} }
 cu29-build = { {%if copper_source == "crates.io" %} version = "{{copper_version}}" {%elsif copper_source == "git" %} git = "{{copper_git_url}}"{{copper_git_ref_snippet}} {%elsif copper_source == "local" %} path = "{{copper_root_path}}/core/cu29_build" {%endif %} }

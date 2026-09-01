@@ -31,6 +31,9 @@ To start the replay-backed remote debug server manually:
 just resim-debug
 ```
 
+Both replay recipes use the `debug-optimized` Cargo profile so replay stays fast while
+preserving Copper `debug!` structured logs and debug information.
+
 ## Monitors
 
 Copper runs without a monitor by default. To enable the per-task

@@ -603,7 +603,9 @@ mod tests {
         assert!(manifest.contains("version = \"9.9.9\""));
         assert!(manifest.contains("version = \"9.9.8\""));
         assert!(manifest.contains("cu29-export"));
+        assert!(manifest.contains("[profile.debug-optimized]"));
         assert!(!manifest.contains("\n[workspace]\n"));
+        assert!(justfile.contains("--profile debug-optimized"));
         assert!(justfile.contains("cargo install --locked cu29-runtime --version \"9.9.9\""));
         assert!(justfile.contains("dag:"));
         assert!(justfile.contains("[positional-arguments]"));
@@ -647,7 +649,9 @@ mod tests {
 
         assert!(manifest.contains("core/cu29"));
         assert!(manifest.contains("core/cu29_export"));
+        assert!(manifest.contains("[profile.debug-optimized]"));
         assert!(app_manifest.contains("edition = \"2024\""));
+        assert!(justfile.contains("--profile debug-optimized"));
         assert!(justfile.contains("cu29-rendercfg"));
         assert!(justfile.contains("cu29-plan"));
         assert!(justfile.contains("plan-log:"));
