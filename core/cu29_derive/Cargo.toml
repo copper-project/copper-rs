@@ -50,6 +50,7 @@ parallel-rt = ["cu29-runtime/parallel-rt"]
 # normally don't enable it directly on `cu29-derive`.
 memory_monitoring = ["cu29-runtime/memory_monitoring"]
 signal-handler = []
+flat-copperlist-encoding = []
 rtsan = []
 
 [package.metadata.cargo-shear]

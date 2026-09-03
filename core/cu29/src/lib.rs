@@ -28,6 +28,7 @@
 //! - `sysclock-perf`: use a host/system clock for runtime perf timing while keeping robot time for `tov` and `rate_target_hz`
 //! - `high-precision-limiter`: std-only hybrid sleep/spin loop limiter for tighter `rate_target_hz` cadence
 //! - `async-cl-io`: offload CopperList serialization/logging to a dedicated std thread
+//! - `flat-copperlist-encoding`: override the default compression for CPU-constrained applications
 //! - `parallel-rt`: prepare the runtime for a future multi-threaded deterministic executor
 //! - `cuda`: enable CUDA-backed Copper pools and handles on supported host platforms
 //! - `safety-ids`: std-only safety-case metadata collection and JSON export helpers
@@ -74,6 +75,8 @@ pub use cu29_runtime::app;
 pub use cu29_runtime::config;
 pub use cu29_runtime::context;
 pub use cu29_runtime::copperlist;
+#[doc(hidden)]
+pub use cu29_runtime::copperlist_codec;
 #[cfg(feature = "std")]
 pub use cu29_runtime::cuasynctask;
 pub use cu29_runtime::cubridge;

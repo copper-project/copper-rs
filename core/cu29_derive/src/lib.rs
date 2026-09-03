@@ -1113,14 +1113,33 @@ fn gen_culist_support(
         node_output_positions,
         task_names,
     );
-    let msgs_types_tuple_encode =
-        build_culist_tuple_encode(&output_packs, &encode_helper_names, &slot_handle_modes);
-    let msgs_types_tuple_decode = build_culist_tuple_decode(
-        &output_packs,
-        &slot_types,
-        cumsg_count,
-        &decode_helper_names,
-    );
+    let compressed = !cfg!(feature = "flat-copperlist-encoding");
+    let (msgs_types_tuple_encode, msgs_types_tuple_decode) = if compressed {
+        (
+            build_compressed_culist_tuple_encode(
+                &output_packs,
+                &encode_helper_names,
+                &slot_handle_modes,
+                cumsg_count,
+            ),
+            build_compressed_culist_tuple_decode(
+                &output_packs,
+                &slot_types,
+                cumsg_count,
+                &decode_helper_names,
+            ),
+        )
+    } else {
+        (
+            build_culist_tuple_encode(&output_packs, &encode_helper_names, &slot_handle_modes),
+            build_culist_tuple_decode(
+                &output_packs,
+                &slot_types,
+                cumsg_count,
+                &decode_helper_names,
+            ),
+        )
+    };
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[build the copperlist tuple debug support]");
@@ -7305,6 +7324,7 @@ fn build_culist_codec_helpers(
     Vec<Option<Ident>>,
     Vec<Option<Ident>>,
 ) {
+    let compressed = !cfg!(feature = "flat-copperlist-encoding");
     let mission_tokens = if let Some(mission) = mission_label {
         let lit = LitStr::new(mission, Span::call_site());
         quote! { Some(#lit) }
@@ -7331,7 +7351,48 @@ fn build_culist_codec_helpers(
         let msg_type = LitStr::new(&binding.msg_type, Span::call_site());
         let codec_type_path = LitStr::new(&binding.codec_type_path, Span::call_site());
 
-        helpers.push(quote! {
+        let helper = if compressed {
+            quote! {
+            fn #encode_fn<E: Encoder>(payload: &#payload_type, encoder: &mut E) -> Result<(), EncodeError> {
+                static STATE: ::cu29::logcodec::CodecState<#codec_type> = ::cu29::logcodec::CodecState::new();
+                let config_entry = ::cu29::logcodec::effective_config_entry::<CuStampedDataSet>(#default_config_ron_ident);
+                ::cu29::logcodec::with_codec_for_encode(
+                    &STATE,
+                    config_entry,
+                    |effective_config_ron| {
+                        ::cu29::logcodec::instantiate_codec::<#codec_type, #payload_type>(
+                            effective_config_ron,
+                            #mission_tokens,
+                            #task_id,
+                            #msg_type,
+                            #codec_type_path,
+                        )
+                    },
+                    |codec| ::cu29::logcodec::encode_payload_with_codec(payload, codec, encoder),
+                )
+            }
+
+            fn #decode_fn<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<#payload_type, DecodeError> {
+                static STATE: ::cu29::logcodec::CodecState<#codec_type> = ::cu29::logcodec::CodecState::new();
+                let config_entry = ::cu29::logcodec::effective_config_entry::<CuStampedDataSet>(#default_config_ron_ident);
+                ::cu29::logcodec::with_codec_for_decode(
+                    &STATE,
+                    config_entry,
+                    |effective_config_ron| {
+                        ::cu29::logcodec::instantiate_codec::<#codec_type, #payload_type>(
+                            effective_config_ron,
+                            #mission_tokens,
+                            #task_id,
+                            #msg_type,
+                            #codec_type_path,
+                        )
+                    },
+                    |codec| ::cu29::logcodec::decode_payload_with_codec(decoder, codec),
+                )
+            }
+            }
+        } else {
+            quote! {
             fn #encode_fn<E: Encoder>(msg: &CuMsg<#payload_type>, encoder: &mut E) -> Result<(), EncodeError> {
                 static STATE: ::cu29::logcodec::CodecState<#codec_type> = ::cu29::logcodec::CodecState::new();
                 let config_entry = ::cu29::logcodec::effective_config_entry::<CuStampedDataSet>(#default_config_ron_ident);
@@ -7369,7 +7430,9 @@ fn build_culist_codec_helpers(
                     |codec| ::cu29::logcodec::decode_msg_with_codec(decoder, codec),
                 )
             }
-        });
+            }
+        };
+        helpers.push(helper);
         encode_helper_names.push(Some(encode_fn));
         decode_helper_names.push(Some(decode_fn));
     }
@@ -7900,6 +7963,197 @@ fn build_culist_tuple(slot_types: &[Type]) -> TypeTuple {
         parse_quote! { () }
     } else {
         parse_quote! { ( #( #slot_types ),*, ) }
+    }
+}
+
+/// Builds the canonical generated encoding: one common metadata block followed
+/// by the payload bytes selected for the local log view.
+fn build_compressed_culist_tuple_encode(
+    output_packs: &[OutputPack],
+    encode_helper_names: &[Option<Ident>],
+    slot_handle_modes: &[HandleContent],
+    cumsg_count: usize,
+) -> ItemImpl {
+    let mut flat_idx = 0usize;
+    let mut metadata_refs = Vec::with_capacity(cumsg_count);
+    let mut original_idents = Vec::with_capacity(cumsg_count);
+    let mut captured_idents = Vec::with_capacity(cumsg_count);
+    let mut presence_initializers = Vec::with_capacity(cumsg_count);
+    let mut payload_encoders = Vec::with_capacity(cumsg_count);
+
+    for (slot_idx, pack) in output_packs.iter().enumerate() {
+        let slot_index = syn::Index::from(slot_idx);
+        let mode = slot_handle_modes.get(slot_idx).copied().unwrap_or_default();
+        for (port_idx, payload_ty) in pack.msg_types.iter().enumerate() {
+            let access = if pack.is_multi() {
+                let port_index = syn::Index::from(port_idx);
+                quote! { self.0.#slot_index.#port_index }
+            } else {
+                quote! { self.0.#slot_index }
+            };
+            let original_ident = format_ident!("__cu_original_payload_{flat_idx}");
+            let captured_ident = format_ident!("__cu_captured_payload_{flat_idx}");
+            let helper = encode_helper_names[flat_idx].clone();
+            let cache_index = flat_idx;
+            flat_idx += 1;
+
+            metadata_refs.push(quote! {
+                ::cu29::copperlist_codec::CommonMetadataRef::new(
+                    &#access.tov,
+                    &#access.metadata,
+                )
+            });
+            original_idents.push(original_ident.clone());
+            captured_idents.push(captured_ident.clone());
+
+            let captured_value = if mode == HandleContent::default() {
+                quote! { #original_ident }
+            } else {
+                let mode_u8 = mode as u8;
+                quote! {
+                    match #access.payload() {
+                        Some(__cu_payload) => {
+                            use ::cu29::pool::PayloadDefaultHandlePolicyApply as _;
+                            use ::cu29::pool::PayloadDefaultLoggingPolicy as _;
+                            __cu_payload.apply_handle_content_policy(
+                                ::cu29::config::HandleContent::from_u8(#mode_u8),
+                            );
+                            __cu_payload.payload_should_log()
+                        }
+                        None => false,
+                    }
+                }
+            };
+            let awareness_check = if mode == HandleContent::default() {
+                quote! {}
+            } else {
+                quote! {
+                    const _: fn() = || {
+                        fn assert_aware<__T: ::cu29::pool::HandleContentAware + ?::core::marker::Sized>() {}
+                        assert_aware::<#payload_ty>();
+                    };
+                }
+            };
+            presence_initializers.push(quote! {
+                #awareness_check
+                let #original_ident = #access.payload().is_some();
+                let #captured_ident = #captured_value;
+            });
+
+            let encode_payload = if let Some(helper) = helper {
+                quote! { #helper(__cu_payload, encoder)?; }
+            } else {
+                quote! {
+                    ::cu29::copperlist_codec::encode_payload(__cu_payload, encoder)?;
+                }
+            };
+            payload_encoders.push(quote! {
+                if #captured_ident {
+                    __cu_capture.select_slot(#cache_index);
+                    let __cu_payload = #access.payload().ok_or(
+                        EncodeError::Other("CopperList captured-payload plane mismatch")
+                    )?;
+                    #encode_payload
+                }
+            });
+        }
+    }
+
+    parse_quote! {
+        impl Encode for CuStampedDataSet {
+            fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+                let __cu_capture = cu29::monitoring::start_copperlist_io_capture(&self.1);
+                #(#presence_initializers)*
+                let __cu_metadata = [#(#metadata_refs),*];
+                let __cu_original_payload_presence = [#(#original_idents),*];
+                let __cu_captured_payload_presence = [#(#captured_idents),*];
+                ::cu29::copperlist_codec::encode_common_metadata::<#cumsg_count, _>(
+                    &__cu_metadata,
+                    &__cu_original_payload_presence,
+                    &__cu_captured_payload_presence,
+                    encoder,
+                )?;
+                #(#payload_encoders)*
+                Ok(())
+            }
+        }
+    }
+}
+
+fn build_compressed_culist_tuple_decode(
+    output_packs: &[OutputPack],
+    slot_types: &[Type],
+    cumsg_count: usize,
+    decode_helper_names: &[Option<Ident>],
+) -> ItemImpl {
+    let mut flat_idx = 0usize;
+    let mut decode_fields = Vec::with_capacity(slot_types.len());
+
+    for pack in output_packs {
+        if pack.is_multi() {
+            let mut fields = Vec::with_capacity(pack.msg_types.len());
+            for payload_ty in &pack.msg_types {
+                let metadata_index = flat_idx;
+                let helper = decode_helper_names[flat_idx].clone();
+                flat_idx += 1;
+                let decode_payload = if let Some(helper) = helper {
+                    quote! { #helper(decoder)? }
+                } else {
+                    quote! { ::cu29::copperlist_codec::decode_payload::<#payload_ty, _>(decoder)? }
+                };
+                fields.push(quote! {
+                    {
+                        let __cu_slot = __cu_metadata.take_slot(#metadata_index);
+                        let __cu_payload = if __cu_slot.captured_payload_present {
+                            Some(#decode_payload)
+                        } else {
+                            None
+                        };
+                        ::cu29::copperlist_codec::restore_msg(__cu_payload, __cu_slot)
+                    }
+                });
+            }
+            decode_fields.push(quote! { ( #(#fields),* ) });
+        } else {
+            let payload_ty = pack
+                .msg_types
+                .first()
+                .expect("single-port pack must have a payload type");
+            let metadata_index = flat_idx;
+            let helper = decode_helper_names[flat_idx].clone();
+            flat_idx += 1;
+            let decode_payload = if let Some(helper) = helper {
+                quote! { #helper(decoder)? }
+            } else {
+                quote! { ::cu29::copperlist_codec::decode_payload::<#payload_ty, _>(decoder)? }
+            };
+            decode_fields.push(quote! {
+                {
+                    let __cu_slot = __cu_metadata.take_slot(#metadata_index);
+                    let __cu_payload = if __cu_slot.captured_payload_present {
+                        Some(#decode_payload)
+                    } else {
+                        None
+                    };
+                    ::cu29::copperlist_codec::restore_msg(__cu_payload, __cu_slot)
+                }
+            });
+        }
+    }
+
+    parse_quote! {
+        impl Decode<()> for CuStampedDataSet {
+            fn decode<D: Decoder<Context=()>>(decoder: &mut D) -> Result<Self, DecodeError> {
+                let mut __cu_metadata =
+                    ::cu29::copperlist_codec::decode_common_metadata::<#cumsg_count, _>(decoder)?;
+                Ok(CuStampedDataSet(
+                    (
+                        #(#decode_fields),*,
+                    ),
+                    cu29::monitoring::CuMsgIoCache::<#cumsg_count>::default(),
+                ))
+            }
+        }
     }
 }
 

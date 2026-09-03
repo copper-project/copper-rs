@@ -323,6 +323,49 @@ where
     Ok(CuMsg::from_parts(payload, tov, metadata))
 }
 
+/// Encodes one present payload with its configured codec. Presence and common
+/// metadata are carried by the generated CopperList metadata block.
+#[doc(hidden)]
+pub fn encode_payload_with_codec<T, C, E>(
+    payload: &T,
+    codec: &mut C,
+    encoder: &mut E,
+) -> Result<(), EncodeError>
+where
+    T: CuMsgPayload,
+    C: CuLogCodec<T>,
+    E: Encoder,
+{
+    let encoded_start = observed_encode_bytes();
+    let handle_start = crate::monitoring::current_payload_handle_bytes();
+    let source_handle_bytes = codec.source_payload_handle_bytes(payload);
+    if source_handle_bytes > 0 {
+        crate::monitoring::record_payload_handle_bytes(source_handle_bytes);
+    }
+    codec.encode_payload(payload, encoder)?;
+    let encoded_bytes = observed_encode_bytes().saturating_sub(encoded_start);
+    let handle_bytes =
+        crate::monitoring::current_payload_handle_bytes().saturating_sub(handle_start);
+    crate::monitoring::record_current_slot_payload_io_stats(
+        core::mem::size_of::<T>(),
+        encoded_bytes,
+        handle_bytes,
+    );
+    Ok(())
+}
+
+/// Decodes one payload with its configured codec after generated metadata has
+/// declared that the payload bytes are present.
+#[doc(hidden)]
+pub fn decode_payload_with_codec<T, C, D>(decoder: &mut D, codec: &mut C) -> Result<T, DecodeError>
+where
+    T: CuMsgPayload,
+    C: CuLogCodec<T>,
+    D: Decoder<Context = ()>,
+{
+    codec.decode_payload(decoder)
+}
+
 #[cfg(feature = "std")]
 fn read_next_entry<T: Decode<()>>(src: &mut impl Read) -> CuResult<Option<T>> {
     match decode_from_std_read::<T, _, _>(src, standard()) {

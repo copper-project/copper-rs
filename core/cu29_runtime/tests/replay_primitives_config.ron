@@ -3,12 +3,23 @@
         enable_task_logging: true,
         slab_size_mib: 16,
         keyframe_interval: 1,
+        codecs: [
+            (
+                id: "counter",
+                type: "CountingCodec",
+            ),
+        ],
     ),
     tasks: [
         (
             id: "src",
             type: "CounterSrc",
             run_in_sim: true,
+            logging: (
+                codecs: {
+                    "CounterMsg": "counter",
+                },
+            ),
         ),
         (
             id: "accum",
