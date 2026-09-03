@@ -17,20 +17,53 @@ use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
 /// The logger runtime is a process-wide singleton: serialize the tests that
 /// each build a full application so they do not race its initialization.
 static TEST_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
-#[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
+#[derive(Default, Debug, Clone, PartialEq, Encode, Decode, Serialize, Deserialize, Reflect)]
 struct CounterMsg {
     value: u32,
 }
 
-#[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
+#[derive(Default, Debug, Clone, PartialEq, Encode, Decode, Serialize, Deserialize, Reflect)]
 struct AccumMsg {
     sum: u32,
+}
+
+static CUSTOM_CODEC_ENCODE_CALLS: AtomicUsize = AtomicUsize::new(0);
+
+struct CountingCodec;
+
+impl cu29::logcodec::CuLogCodec<CounterMsg> for CountingCodec {
+    type Config = ();
+
+    fn new(_config: Self::Config) -> CuResult<Self> {
+        Ok(Self)
+    }
+
+    fn source_payload_handle_bytes(&self, _payload: &CounterMsg) -> usize {
+        0
+    }
+
+    fn encode_payload<E: Encoder>(
+        &mut self,
+        payload: &CounterMsg,
+        encoder: &mut E,
+    ) -> Result<(), EncodeError> {
+        CUSTOM_CODEC_ENCODE_CALLS.fetch_add(1, Ordering::Relaxed);
+        payload.encode(encoder)
+    }
+
+    fn decode_payload<D: Decoder<Context = ()>>(
+        &mut self,
+        decoder: &mut D,
+    ) -> Result<CounterMsg, DecodeError> {
+        CounterMsg::decode(decoder)
+    }
 }
 
 #[derive(Reflect)]
@@ -186,6 +219,69 @@ fn read_first_keyframe(path: &Path) -> CuResult<KeyFrame> {
 
 fn encode_bytes<T: Encode>(value: &T) -> Vec<u8> {
     encode_to_vec(value, standard()).expect("encode value for deterministic comparison")
+}
+
+fn assert_msg_metadata_eq<T>(expected: &CuMsg<T>, actual: &CuMsg<T>)
+where
+    T: CuMsgPayload + PartialEq,
+{
+    assert_eq!(expected.payload(), actual.payload());
+    assert_eq!(expected.tov, actual.tov);
+    let expected_start: Option<CuTime> = expected.metadata.process_time.start.into();
+    let actual_start: Option<CuTime> = actual.metadata.process_time.start.into();
+    let expected_end: Option<CuTime> = expected.metadata.process_time.end.into();
+    let actual_end: Option<CuTime> = actual.metadata.process_time.end.into();
+    assert_eq!(expected_start, actual_start);
+    assert_eq!(expected_end, actual_end);
+    assert_eq!(expected.metadata.status_txt, actual.metadata.status_txt);
+    assert_eq!(expected.metadata.origin, actual.metadata.origin);
+}
+
+#[test]
+fn generated_copperlist_codec_restores_every_message_field() {
+    let _guard = TEST_MUTEX
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
+    let mut expected = default::CuStampedDataSet::default();
+    let repeated_origin = CuMsgOrigin {
+        subsystem_code: u16::MAX,
+        instance_id: u32::MAX,
+        cl_id: u64::MAX,
+    };
+
+    expected.0.0.set_payload(CounterMsg { value: u32::MAX });
+    expected.0.0.tov = Tov::Range(CuTimeRange {
+        start: CuTime::MAX,
+        end: CuTime::MIN,
+    });
+    expected.0.0.metadata.process_time = PartialCuTimeRange {
+        start: Some(CuTime::MAX).into(),
+        end: Some(CuTime::MIN).into(),
+    };
+    expected.0.0.metadata.set_status("repeated");
+    expected.0.0.metadata.origin = Some(repeated_origin.clone());
+
+    expected.0.1.clear_payload();
+    expected.0.1.tov = Tov::Time(CuTime(42));
+    expected.0.1.metadata.process_time = PartialCuTimeRange {
+        start: None.into(),
+        end: Some(CuTime(17)).into(),
+    };
+    expected.0.1.metadata.set_status("repeated");
+    expected.0.1.metadata.origin = Some(repeated_origin);
+
+    CUSTOM_CODEC_ENCODE_CALLS.store(0, Ordering::Relaxed);
+    let mut encoded = vec![0u8; 4096];
+    let encoded_len = bincode::encode_into_slice(&expected, &mut encoded, standard())
+        .expect("encode generated CopperList");
+    encoded.truncate(encoded_len);
+    assert_eq!(CUSTOM_CODEC_ENCODE_CALLS.load(Ordering::Relaxed), 1);
+    let (decoded, used): (default::CuStampedDataSet, usize) =
+        bincode::decode_from_slice(&encoded, standard()).expect("decode generated CopperList");
+
+    assert_eq!(used, encoded.len());
+    assert_msg_metadata_eq(&expected.0.0, &decoded.0.0);
+    assert_msg_metadata_eq(&expected.0.1, &decoded.0.1);
 }
 
 fn record_reference_run(

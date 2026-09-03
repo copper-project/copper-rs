@@ -16,6 +16,8 @@ mod app_sim;
 pub mod config;
 pub mod context;
 pub mod copperlist;
+#[doc(hidden)]
+pub mod copperlist_codec;
 #[cfg(feature = "std")]
 pub mod cuasynctask; // no no-std version yet
 pub mod cubridge;
