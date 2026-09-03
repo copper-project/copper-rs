@@ -5513,6 +5513,24 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: keyframes stream ready");
 
+                // Downstream record demand is independent from local logging.
+                // Streaming codegen can union its requirements here without
+                // making the runtime infer demand from `logging`.
+                let local_copperlist_output_required = config
+                    .logging
+                    .as_ref()
+                    .is_none_or(|logging| logging.enable_task_logging);
+                let local_keyframe_output_required = config
+                    .logging
+                    .as_ref()
+                    .is_none_or(|logging| {
+                        logging.enable_task_logging && logging.enable_keyframe_logging
+                    });
+                let output_requirements = cu29::curuntime::OutputRequirements::new(
+                    local_copperlist_output_required,
+                    local_keyframe_output_required,
+                );
+
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: creating runtime lifecycle stream");
                 let mut local_lifecycle_sink = stream_write::<RuntimeLifecycleRecord, S>(
@@ -5561,6 +5579,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     ),
                     local_copperlist_sink,
                     local_keyframe_sink,
+                    output_requirements,
                 )
                 .with_subsystem(#application_name::subsystem())
                 .with_instance_id(instance_id)

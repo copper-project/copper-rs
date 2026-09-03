@@ -160,6 +160,7 @@ pub struct CuRuntimeBuilder<
     parts: CuRuntimeParts<CT, CB, P, M, NBCL, TI, BI, MI>,
     copperlist_sink: CLS,
     keyframe_sink: KFS,
+    output_requirements: OutputRequirements,
 }
 
 impl<'cfg, CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, MI, CLS, KFS>
@@ -172,6 +173,7 @@ impl<'cfg, CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, 
         parts: CuRuntimeParts<CT, CB, P, M, NBCL, TI, BI, MI>,
         copperlist_sink: CLS,
         keyframe_sink: KFS,
+        output_requirements: OutputRequirements,
     ) -> Self {
         Self {
             clock,
@@ -185,6 +187,7 @@ impl<'cfg, CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, 
             parts,
             copperlist_sink,
             keyframe_sink,
+            output_requirements,
         }
     }
 
@@ -432,6 +435,47 @@ pub type CompletedCopperListSink<P> = SemanticRecordSink<CopperList<P>>;
 /// Semantic output boundary for a completed keyframe.
 #[doc(hidden)]
 pub type CompletedKeyFrameSink = SemanticRecordSink<KeyFrame>;
+
+/// Semantic record families requested by the statically generated downstream graph.
+///
+/// This is deliberately independent from [`crate::config::LoggingConfig`]. Local
+/// unified logging is one possible downstream consumer; generated streaming sinks
+/// may request the same records even when local CopperList logging is disabled.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[doc(hidden)]
+pub struct OutputRequirements {
+    completed_copperlists: bool,
+    keyframes: bool,
+}
+
+impl OutputRequirements {
+    #[inline]
+    pub const fn new(completed_copperlists: bool, keyframes: bool) -> Self {
+        Self {
+            completed_copperlists,
+            keyframes,
+        }
+    }
+
+    #[inline]
+    pub const fn completed_copperlists(self) -> bool {
+        self.completed_copperlists
+    }
+
+    #[inline]
+    pub const fn keyframes(self) -> bool {
+        self.keyframes
+    }
+
+    /// Combines the record needs of independently generated downstream consumers.
+    #[inline]
+    pub const fn union(self, other: Self) -> Self {
+        Self::new(
+            self.completed_copperlists || other.completed_copperlists,
+            self.keyframes || other.keyframes,
+        )
+    }
+}
 
 /// Manages the lifecycle and completed-list sink on the synchronous path.
 #[doc(hidden)]
@@ -1420,6 +1464,7 @@ where
             parts,
             copperlist_sink,
             keyframe_sink,
+            output_requirements,
         } = self;
         let mut resources =
             resources.ok_or_else(|| CuError::from("Resources missing from CuRuntimeBuilder"))?;
@@ -1457,24 +1502,17 @@ where
         let monitor = (parts.monitor_instanciator)(config, monitor_metadata, monitor_runtime);
         let bridges = (parts.bridges_instanciator)(config, &mut resources)?;
 
-        let (copperlist_sink, keyframe_sink, keyframe_interval) = match &config.logging {
-            Some(logging_config) if logging_config.enable_task_logging => {
-                let keyframe_sink = logging_config
-                    .enable_keyframe_logging
-                    .then(|| Box::new(keyframe_sink) as Box<CompletedKeyFrameSink>);
-                (
-                    Some(Box::new(copperlist_sink) as Box<CompletedCopperListSink<P>>),
-                    keyframe_sink,
-                    logging_config.keyframe_interval.unwrap(),
-                )
-            }
-            Some(_) => (None, None, 0),
-            None => (
-                Some(Box::new(copperlist_sink) as Box<CompletedCopperListSink<P>>),
-                Some(Box::new(keyframe_sink) as Box<CompletedKeyFrameSink>),
-                DEFAULT_KEYFRAME_INTERVAL,
-            ),
-        };
+        let copperlist_sink = output_requirements
+            .completed_copperlists()
+            .then(|| Box::new(copperlist_sink) as Box<CompletedCopperListSink<P>>);
+        let keyframe_sink = output_requirements
+            .keyframes()
+            .then(|| Box::new(keyframe_sink) as Box<CompletedKeyFrameSink>);
+        let keyframe_interval = config
+            .logging
+            .as_ref()
+            .and_then(|logging| logging.keyframe_interval)
+            .unwrap_or(DEFAULT_KEYFRAME_INTERVAL);
 
         let copperlists_manager = CopperListsManager::new(copperlist_sink)?;
         #[cfg(target_os = "none")]
@@ -1553,6 +1591,7 @@ where
             parts,
             copperlist_sink,
             keyframe_sink,
+            output_requirements,
         } = self;
         let mut resources =
             resources.ok_or_else(|| CuError::from("Resources missing from CuRuntimeBuilder"))?;
@@ -1581,24 +1620,17 @@ where
         let monitor = (parts.monitor_instanciator)(config, monitor_metadata, monitor_runtime);
         let bridges = (parts.bridges_instanciator)(config, &mut resources)?;
 
-        let (copperlist_sink, keyframe_sink, keyframe_interval) = match &config.logging {
-            Some(logging_config) if logging_config.enable_task_logging => {
-                let keyframe_sink = logging_config
-                    .enable_keyframe_logging
-                    .then(|| Box::new(keyframe_sink) as Box<CompletedKeyFrameSink>);
-                (
-                    Some(Box::new(copperlist_sink) as Box<CompletedCopperListSink<P>>),
-                    keyframe_sink,
-                    logging_config.keyframe_interval.unwrap(),
-                )
-            }
-            Some(_) => (None, None, 0),
-            None => (
-                Some(Box::new(copperlist_sink) as Box<CompletedCopperListSink<P>>),
-                Some(Box::new(keyframe_sink) as Box<CompletedKeyFrameSink>),
-                DEFAULT_KEYFRAME_INTERVAL,
-            ),
-        };
+        let copperlist_sink = output_requirements
+            .completed_copperlists()
+            .then(|| Box::new(copperlist_sink) as Box<CompletedCopperListSink<P>>);
+        let keyframe_sink = output_requirements
+            .keyframes()
+            .then(|| Box::new(keyframe_sink) as Box<CompletedKeyFrameSink>);
+        let keyframe_interval = config
+            .logging
+            .as_ref()
+            .and_then(|logging| logging.keyframe_interval)
+            .unwrap_or(DEFAULT_KEYFRAME_INTERVAL);
 
         let copperlists_manager = CopperListsManager::new(copperlist_sink)?;
         #[cfg(target_os = "none")]
@@ -2499,6 +2531,19 @@ mod tests {
     }
 
     #[cfg(feature = "std")]
+    impl WriteStream<CopperList<Msgs>> for RecordingSemanticSink {
+        fn log(&mut self, culist: &CopperList<Msgs>) -> CuResult<()> {
+            assert_eq!(culist.get_state(), CopperListState::BeingSerialized);
+            self.ids.lock().unwrap().push(culist.id);
+            Ok(())
+        }
+
+        fn last_log_bytes(&self) -> Option<usize> {
+            Some(23)
+        }
+    }
+
+    #[cfg(feature = "std")]
     #[derive(Debug)]
     struct RecordingKeyFrameSink {
         ids: Arc<Mutex<Vec<u64>>>,
@@ -2539,10 +2584,66 @@ mod tests {
                 ),
                 FakeWriter {},
                 FakeWriter {},
+                OutputRequirements::new(true, true),
             )
             .try_with_resources_instantiator(resources_instanciator)
             .and_then(|builder| builder.build());
         assert!(runtime.is_ok());
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn downstream_requirements_are_independent_from_local_logging() {
+        let mut config = CuConfig::default();
+        config.logging = Some(crate::config::LoggingConfig {
+            enable_task_logging: false,
+            enable_keyframe_logging: false,
+            keyframe_interval: Some(1),
+            ..Default::default()
+        });
+        let graph = config.get_graph_mut(None).unwrap();
+        graph.add_node(Node::new("a", "TestSource")).unwrap();
+        graph.add_node(Node::new("b", "TestSink")).unwrap();
+        graph.connect(0, 1, "()").unwrap();
+
+        let copperlist_ids = Arc::new(Mutex::new(Vec::new()));
+        let keyframe_ids = Arc::new(Mutex::new(Vec::new()));
+        let mut runtime: TestRuntime =
+            CuRuntimeBuilder::<Tasks, (), Msgs, NoMonitor, TEST_NBCL, _, _, _, _, _>::new(
+                RobotClock::default(),
+                &config,
+                crate::config::DEFAULT_MISSION_ID,
+                CuRuntimeParts::new(
+                    tasks_instanciator,
+                    &[],
+                    &[],
+                    #[cfg(all(feature = "std", feature = "parallel-rt"))]
+                    &crate::parallel_rt::DISABLED_PARALLEL_RT_METADATA,
+                    monitor_instanciator,
+                    bridges_instanciator,
+                ),
+                RecordingSemanticSink {
+                    ids: copperlist_ids.clone(),
+                },
+                RecordingKeyFrameSink {
+                    ids: keyframe_ids.clone(),
+                },
+                OutputRequirements::new(true, false).union(OutputRequirements::new(false, true)),
+            )
+            .try_with_resources_instantiator(resources_instanciator)
+            .and_then(|builder| builder.build())
+            .unwrap();
+
+        let copperlist = runtime.copperlists_manager.create().unwrap();
+        copperlist.change_state(CopperListState::Processing);
+        runtime.copperlists_manager.end_of_processing(0).unwrap();
+        runtime.copperlists_manager.finish_pending().unwrap();
+
+        runtime.keyframes_manager.reset(0, &runtime.clock);
+        runtime.keyframes_manager.end_of_processing(0).unwrap();
+
+        assert_eq!(*copperlist_ids.lock().unwrap(), vec![0]);
+        assert_eq!(*keyframe_ids.lock().unwrap(), vec![0]);
     }
 
     #[test]
@@ -2614,6 +2715,7 @@ mod tests {
                 ),
                 FakeWriter {},
                 FakeWriter {},
+                OutputRequirements::new(true, true),
             )
             .try_with_resources_instantiator(resources_instanciator)
             .and_then(|builder| builder.build())
