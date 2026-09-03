@@ -24,3 +24,4 @@ default = []
 [[bench]]
 name = "rlc"
 harness = false
+test = false
