@@ -11,7 +11,10 @@
     ],
     logging: (
         enable_task_logging: true,
-        copperlist_count: 4,
+        // Repeatability checks run 9 CopperLists without depending on the
+        // async serializer's scheduling. Keep those 9 handoff slots plus the
+        // slot reserved for the next real-time iteration.
+        copperlist_count: 10,
         slab_size_mib: 32,
         section_size_mib: 4,
         keyframe_interval: 2,

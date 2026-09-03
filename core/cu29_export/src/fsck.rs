@@ -8,6 +8,57 @@ use cu29::{CopperListTuple, CuResult};
 use num_format::{Locale, ToFormattedString};
 use std::io::Cursor;
 
+const MAX_REPORTED_COPPERLIST_HOLES: usize = 16;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CopperListHole {
+    first: u64,
+    last: u64,
+}
+
+impl CopperListHole {
+    fn len(self) -> u64 {
+        self.last.saturating_sub(self.first).saturating_add(1)
+    }
+}
+
+#[derive(Default)]
+struct CopperListSequence {
+    entries: u64,
+    first_id: Option<u64>,
+    last_id: Option<u64>,
+    missing: u64,
+    holes: Vec<CopperListHole>,
+}
+
+impl CopperListSequence {
+    fn observe(&mut self, id: u64) {
+        self.entries = self.entries.saturating_add(1);
+
+        let Some(previous) = self.last_id else {
+            self.first_id = Some(id);
+            self.last_id = Some(id);
+            if id > 0 {
+                self.push_hole(0, id - 1);
+            }
+            return;
+        };
+
+        if id > previous.saturating_add(1) {
+            self.push_hole(previous + 1, id - 1);
+        }
+        if id > previous {
+            self.last_id = Some(id);
+        }
+    }
+
+    fn push_hole(&mut self, first: u64, last: u64) {
+        let hole = CopperListHole { first, last };
+        self.missing = self.missing.saturating_add(hole.len());
+        self.holes.push(hole);
+    }
+}
+
 struct ByteEntropy {
     counts: [u64; 256],
     total: u64,
@@ -206,7 +257,7 @@ where
     }
     let mut overall_first_ts: OptionCuTime = OptionCuTime::none();
     let mut last_ts: OptionCuTime = OptionCuTime::none();
-    let mut last_cl = 0;
+    let mut copperlist_sequence = CopperListSequence::default();
     let mut keyframes = 0;
     let mut useful_size: usize = 0;
     let mut structured_log_size: usize = 0;
@@ -246,7 +297,8 @@ where
                         cls_entropy.observe(&content);
 
                         let mut reader = Cursor::new(content.as_slice());
-                        let mut first_cl = 0;
+                        let mut first_cl = None;
+                        let mut section_last_cl = None;
                         let mut first_ts: OptionCuTime = OptionCuTime::none();
                         while reader.position() < content.len() as u64 {
                             let entry_start = reader.position() as usize;
@@ -256,15 +308,19 @@ where
                             ) {
                                 Ok(entry) => entry,
                                 Err(error) => {
-                                    println!("CopperList after #{last_cl} is corrupted: {error:?}");
+                                    let after = copperlist_sequence
+                                        .last_id
+                                        .map_or_else(|| "start".to_string(), |id| format!("#{id}"));
+                                    println!("CopperList after {after} is corrupted: {error:?}");
                                     break;
                                 }
                             };
                             let entry_end = reader.position() as usize;
                             cl_entropy_samples.observe(&content[entry_start..entry_end]);
-                            last_cl = entry.id;
+                            copperlist_sequence.observe(entry.id);
+                            section_last_cl = Some(entry.id);
                             if first_ts.is_none() {
-                                first_cl = entry.id;
+                                first_cl = Some(entry.id);
                                 first_ts = entry
                                     .cumsgs()
                                     .first()
@@ -280,9 +336,12 @@ where
                             last_ts = last_msg.metadata().process_time().end;
                         }
                         if verbose > 0 {
-                            println!(
-                                "    CopperLists => OK (id range: [{first_cl}-{last_cl}] timerange: [{first_ts}-{last_ts}])"
-                            );
+                            match (first_cl, section_last_cl) {
+                                (Some(first_cl), Some(last_cl)) => println!(
+                                    "    CopperLists => OK (id range: [{first_cl}-{last_cl}] timerange: [{first_ts}-{last_ts}])"
+                                ),
+                                _ => println!("    CopperLists => OK (empty section)"),
+                            }
                         }
                     }
                     UnifiedLogType::FrozenTasks => {
@@ -356,8 +415,12 @@ where
     } else {
         0.0
     };
-    let cl_rate = if last_cl != 0 && total_time_nanos > 0.0 {
-        let cl_time_nanos = total_time_nanos / last_cl as f64;
+    let cl_intervals = copperlist_sequence
+        .first_id
+        .zip(copperlist_sequence.last_id)
+        .map_or(0, |(first, last)| last.saturating_sub(first));
+    let cl_rate = if cl_intervals != 0 && total_time_nanos > 0.0 {
+        let cl_time_nanos = total_time_nanos / cl_intervals as f64;
         1_000_000_000f64 / cl_time_nanos
     } else {
         0.0
@@ -370,8 +433,10 @@ where
         0.0
     };
 
-    if result.is_ok() {
+    if result.is_ok() && copperlist_sequence.holes.is_empty() {
         println!("The log checked out OK.");
+    } else if result.is_ok() {
+        println!("The log is structurally valid but contains CopperList holes.");
     } else {
         println!("** The log is corrupted.");
     }
@@ -401,7 +466,41 @@ where
     println!("  Logging rate     -> {mib_per_sec:.02} MiB/s (effective)");
 
     println!();
-    println!("  # of CL          -> {}", last_cl.to_formatted_string(l));
+    println!(
+        "  # of CL          -> {}",
+        copperlist_sequence.entries.to_formatted_string(l)
+    );
+    match (copperlist_sequence.first_id, copperlist_sequence.last_id) {
+        (Some(first), Some(last)) => println!("  CL id range      -> [{first}-{last}]"),
+        _ => println!("  CL id range      -> n/a"),
+    }
+    if copperlist_sequence.holes.is_empty() {
+        println!("  CL holes         -> none");
+    } else {
+        println!(
+            "  CL holes         -> {} missing across {} range(s)",
+            copperlist_sequence.missing.to_formatted_string(l),
+            copperlist_sequence.holes.len().to_formatted_string(l)
+        );
+        for hole in copperlist_sequence
+            .holes
+            .iter()
+            .take(MAX_REPORTED_COPPERLIST_HOLES)
+        {
+            if hole.first == hole.last {
+                println!("    missing CL #{}", hole.first);
+            } else {
+                println!("    missing CLs #{}-#{}", hole.first, hole.last);
+            }
+        }
+        let omitted = copperlist_sequence
+            .holes
+            .len()
+            .saturating_sub(MAX_REPORTED_COPPERLIST_HOLES);
+        if omitted > 0 {
+            println!("    ... and {omitted} more hole range(s)");
+        }
+    }
     println!(
         "  CL rate          -> {}.{:02} Hz",
         (cl_rate.trunc() as u64).to_formatted_string(&Locale::en),
@@ -459,7 +558,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{ByteEntropy, EntropySamples, EntropySummary};
+    use super::{ByteEntropy, CopperListHole, CopperListSequence, EntropySamples, EntropySummary};
 
     #[test]
     fn empty_entropy_is_absent() {
@@ -507,5 +606,40 @@ mod tests {
                 p95: 5.0,
             })
         );
+    }
+
+    #[test]
+    fn copperlist_sequence_reports_initial_and_internal_holes() {
+        let mut sequence = CopperListSequence::default();
+        for id in [2, 3, 6, 9, 10] {
+            sequence.observe(id);
+        }
+
+        assert_eq!(sequence.entries, 5);
+        assert_eq!(sequence.first_id, Some(2));
+        assert_eq!(sequence.last_id, Some(10));
+        assert_eq!(sequence.missing, 6);
+        assert_eq!(
+            sequence.holes,
+            vec![
+                CopperListHole { first: 0, last: 1 },
+                CopperListHole { first: 4, last: 5 },
+                CopperListHole { first: 7, last: 8 },
+            ]
+        );
+    }
+
+    #[test]
+    fn copperlist_sequence_does_not_invent_holes_for_duplicates_or_reordering() {
+        let mut sequence = CopperListSequence::default();
+        for id in [0, 1, 1, 0, 2] {
+            sequence.observe(id);
+        }
+
+        assert_eq!(sequence.entries, 5);
+        assert_eq!(sequence.first_id, Some(0));
+        assert_eq!(sequence.last_id, Some(2));
+        assert_eq!(sequence.missing, 0);
+        assert!(sequence.holes.is_empty());
     }
 }

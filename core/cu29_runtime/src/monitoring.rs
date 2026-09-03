@@ -1174,6 +1174,9 @@ pub struct CopperListIoStats {
     pub structured_log_bytes_total: u64,
     /// CopperList identifier for reference in monitors
     pub culistid: u64,
+    /// Total completed CopperLists dropped because the asynchronous output
+    /// handoff had no capacity. This is cumulative for the runtime instance.
+    pub dropped_copperlists_total: u64,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

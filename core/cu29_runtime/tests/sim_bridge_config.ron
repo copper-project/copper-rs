@@ -1,5 +1,10 @@
 (
-    logging: (keyframe_interval: 1),
+    logging: (
+        keyframe_interval: 1,
+        // The replay tests require both recorded iterations regardless of
+        // async serializer scheduling, plus one slot for continued execution.
+        copperlist_count: 3,
+    ),
     tasks: [
         (
             id: "src",

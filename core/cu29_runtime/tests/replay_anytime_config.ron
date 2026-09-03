@@ -3,6 +3,9 @@
         enable_task_logging: true,
         slab_size_mib: 16,
         keyframe_interval: 8,
+        // This regression asserts a lossless 64-CL recording even when the
+        // async output worker is enabled and the producer runs without pacing.
+        copperlist_count: 65,
     ),
     tasks: [
         (
