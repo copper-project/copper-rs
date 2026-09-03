@@ -1,4 +1,4 @@
-use crate::{copperlists_reader, keyframes_reader, structlog_reader};
+use crate::{keyframes_reader, structlog_reader};
 use bincode::config::standard;
 use bincode::decode_from_std_read;
 use bincode::error::DecodeError;
@@ -50,6 +50,73 @@ impl ByteEntropy {
 
     fn ideal_size_bytes(&self, bits_per_byte: f64) -> u64 {
         (bits_per_byte * self.total as f64 / 8.0).ceil() as u64
+    }
+}
+
+#[derive(Debug, PartialEq)]
+struct EntropySummary {
+    mean: f64,
+    p50: f64,
+    p95: f64,
+}
+
+const ENTROPY_BUCKETS: usize = 8_001;
+const ENTROPY_BUCKET_SCALE: f64 = 1_000.0;
+
+struct EntropySamples {
+    histogram: [u64; ENTROPY_BUCKETS],
+    count: u64,
+    sum: f64,
+}
+
+impl Default for EntropySamples {
+    fn default() -> Self {
+        Self {
+            histogram: [0; ENTROPY_BUCKETS],
+            count: 0,
+            sum: 0.0,
+        }
+    }
+}
+
+impl EntropySamples {
+    fn observe(&mut self, bytes: &[u8]) {
+        let mut entropy = ByteEntropy::default();
+        entropy.observe(bytes);
+        if let Some(bits_per_byte) = entropy.bits_per_byte() {
+            self.observe_value(bits_per_byte);
+        }
+    }
+
+    fn observe_value(&mut self, bits_per_byte: f64) {
+        let bucket = (bits_per_byte * ENTROPY_BUCKET_SCALE).round() as usize;
+        self.histogram[bucket.min(ENTROPY_BUCKETS - 1)] += 1;
+        self.count += 1;
+        self.sum += bits_per_byte;
+    }
+
+    fn percentile(&self, fraction: f64) -> f64 {
+        let target = (fraction * self.count.saturating_sub(1) as f64).round() as u64;
+        let mut seen = 0u64;
+        for (bucket, count) in self.histogram.iter().enumerate() {
+            seen += count;
+            if seen > target {
+                return bucket as f64 / ENTROPY_BUCKET_SCALE;
+            }
+        }
+        8.0
+    }
+
+    fn summary(&self) -> Option<EntropySummary> {
+        if self.count == 0 {
+            return None;
+        }
+
+        Some(EntropySummary {
+            mean: self.sum / self.count as f64,
+            p50: self.percentile(0.50),
+            p95: self.percentile(0.95),
+        })
     }
 }
 
@@ -145,6 +212,7 @@ where
     let mut structured_log_size: usize = 0;
     let mut cls_size: usize = 0;
     let mut cls_entropy = ByteEntropy::default();
+    let mut cl_entropy_samples = EntropySamples::default();
     let mut kfs_size: usize = 0;
     let mut runtime_lifecycle_size: usize = 0;
     let mut runtime_lifecycle_events: usize = 0;
@@ -177,11 +245,23 @@ where
                         cls_size += content.len();
                         cls_entropy.observe(&content);
 
-                        let mut reader: Cursor<Vec<u8>> = Cursor::new(content);
-                        let iter = copperlists_reader::<P>(&mut reader);
+                        let mut reader = Cursor::new(content.as_slice());
                         let mut first_cl = 0;
                         let mut first_ts: OptionCuTime = OptionCuTime::none();
-                        for entry in iter {
+                        while reader.position() < content.len() as u64 {
+                            let entry_start = reader.position() as usize;
+                            let entry = match decode_from_std_read::<CopperList<P>, _, _>(
+                                &mut reader,
+                                standard(),
+                            ) {
+                                Ok(entry) => entry,
+                                Err(error) => {
+                                    println!("CopperList after #{last_cl} is corrupted: {error:?}");
+                                    break;
+                                }
+                            };
+                            let entry_end = reader.position() as usize;
+                            cl_entropy_samples.observe(&content[entry_start..entry_end]);
                             last_cl = entry.id;
                             if first_ts.is_none() {
                                 first_cl = entry.id;
@@ -334,13 +414,19 @@ where
     if let Some(bits_per_byte) = cls_entropy.bits_per_byte() {
         let ideal_size = cls_entropy.ideal_size_bytes(bits_per_byte);
         let headroom = (1.0 - bits_per_byte / 8.0) * 100.0;
-        println!("  CL byte entropy  -> {bits_per_byte:.4} bits/byte");
+        println!("  CL aggregate H0  -> {bits_per_byte:.4} bits/byte");
         println!(
             "  CL entropy floor -> {} bytes ({headroom:.2}% zero-order headroom)",
             ideal_size.to_formatted_string(l)
         );
     } else {
-        println!("  CL byte entropy  -> n/a (no copperlist bytes)");
+        println!("  CL aggregate H0  -> n/a (no copperlist bytes)");
+    }
+    if let Some(summary) = cl_entropy_samples.summary() {
+        println!(
+            "  CL per-entry H0  -> mean {:.4}, p50 {:.4}, p95 {:.4} bits/byte",
+            summary.mean, summary.p50, summary.p95
+        );
     }
     println!();
     println!("  # of Keyframes   -> {}", keyframes.to_formatted_string(l));
@@ -373,11 +459,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::ByteEntropy;
+    use super::{ByteEntropy, EntropySamples, EntropySummary};
 
     #[test]
     fn empty_entropy_is_absent() {
         assert_eq!(ByteEntropy::default().bits_per_byte(), None);
+        assert_eq!(EntropySamples::default().summary(), None);
     }
 
     #[test]
@@ -404,5 +491,21 @@ mod tests {
         let bits_per_byte = entropy.bits_per_byte().unwrap();
         assert!((bits_per_byte - 1.0).abs() < f64::EPSILON);
         assert_eq!(entropy.ideal_size_bytes(bits_per_byte), 2);
+    }
+
+    #[test]
+    fn per_entry_entropy_reports_mean_and_percentiles() {
+        let mut samples = EntropySamples::default();
+        for value in [5.0, 1.0, 4.0, 2.0, 3.0] {
+            samples.observe_value(value);
+        }
+        assert_eq!(
+            samples.summary(),
+            Some(EntropySummary {
+                mean: 3.0,
+                p50: 3.0,
+                p95: 5.0,
+            })
+        );
     }
 }
