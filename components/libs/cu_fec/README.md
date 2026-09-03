@@ -60,6 +60,86 @@ let _ = decoder.receive_repair(id, &repair[..config.symbol_size()])?;
 # Ok::<(), cu_fec::Error>(())
 ```
 
+## What recovery to expect
+
+A received repair symbol contributes at most one independent equation. If `L` source
+symbols are missing, the decoder needs at least `L` innovative repair symbols whose
+windows cover those losses. Duplicate repairs, repairs lost in transit, and repairs
+whose windows do not cover a missing source do not help recover it.
+
+For repairs covering the same source window, these are useful rules of thumb:
+
+| Coding parameters | Received repairs needed for `L` losses | Practical expectation |
+| --- | ---: | --- |
+| GF(2^8), `DensityThreshold::FULL` | `L` | About 99.6% full-rank probability; there is no loss margin. |
+| GF(2^8), `DensityThreshold::FULL` | `L + 1` | Above 99.998% full-rank probability, assuming distinct repair keys. This is the recommended baseline. |
+| GF(2), threshold `7` (about 50% density) | `L + 4` | About 94% full-rank probability for moderate `L`. |
+| GF(2), threshold `7` | `L + 8` | About 99.6% full-rank probability for moderate `L`, at the cost of substantially more redundancy. |
+| GF(2), `DensityThreshold::FULL` | — | Every coefficient is one. Repairs for an identical window repeat the same equation, so this normally handles only one erasure in that window. |
+
+The probabilities are random-matrix approximations, not delivery guarantees. RFC
+8681 derives coefficients deterministically from the repair key, so use a different
+key for each repair. Sliding windows overlap rather than forming perfect blocks;
+packet timing and window coverage therefore matter as much as the raw repair count.
+
+For example, suppose 32 source symbols are each carried by one UDP datagram and the
+receiver gets four distinct GF(2^8), full-density repairs covering all 32 symbols:
+
+- three missing source datagrams should be recoverable with one repair to spare;
+- four missing source datagrams are usually recoverable, but have no margin if a
+  repair is lost or dependent;
+- five missing source datagrams cannot be recovered from those four repairs;
+- if two repair datagrams are also lost, only two source losses can be corrected.
+
+## Starting profiles
+
+These are deliberately conservative starting points. Measure the actual link and
+adjust them using recorded loss bursts rather than relying only on average loss.
+
+| Link and loss pattern | Symbol size | Window | Repair cadence | Field and density | Design target |
+| --- | ---: | ---: | ---: | --- | --- |
+| Ethernet/Wi-Fi, below about 2% loss | 1,024–1,200 bytes | 64 | 1 repair per 16 sources (6.25%) | GF(2^8), full | Isolated one- or two-packet losses. |
+| UDP telemetry, around 5% loss with short bursts | 1,024–1,200 bytes | 64 | 1 per 8 (12.5%) | GF(2^8), full | Bursts of roughly three to five packets. |
+| Intermittent radio, around 10% loss or longer bursts | 256–512 bytes | 64–96 | 1 per 4 (25%) | GF(2^8), full | Bursts of roughly eight to twelve packets, after trace-based validation. |
+| CPU-constrained link where extra bandwidth is acceptable | 256–512 bytes | 32–64 | Start at 1 per 4 | GF(2), threshold `7` | Keep four to eight more received repairs than losses and validate the exact workload. |
+
+As a concrete telemetry example, at 100 source datagrams per second a 64-symbol
+window retains about 640 ms of data. Sending one repair after every eight sources
+adds 12.5% FEC overhead and produces a repair every 80 ms. Recovering a three-packet
+burst with one spare repair may require up to four covering repairs, or roughly
+320 ms when no earlier repair is useful, which fits inside that window.
+
+## Choosing the parameters
+
+- `symbol_size`: If one symbol maps to one UDP datagram, start around 1,200 bytes on
+  a normal Ethernet path so the symbol, FEC payload ID, application framing, UDP,
+  and IP headers remain below the path MTU. Radios often work better at 256–512
+  bytes. Avoid IP fragmentation.
+- `window_symbols`: This is the protection horizon. At `P` source packets per
+  second, a window of `W` symbols retains approximately `W / P` seconds. It must
+  cover the longest loss burst plus the time needed to receive enough repairs.
+- Repair cadence: One repair every `N` source symbols adds `100 / N` percent FEC
+  traffic before transport headers. Redundancy must exceed the observed loss rate
+  with room for burstiness and lost repair packets.
+- `Field::Gf256` with `DensityThreshold::FULL`: Use this first. It gives much more
+  reliable rank with little repair-count overhead.
+- `Field::Gf2`: Consider it when encode CPU matters more than bandwidth. Threshold
+  `7` makes each coefficient nonzero with probability 8/16. For thresholds `0..=14`,
+  the nonzero probability is `(threshold + 1) / 16`; very sparse settings need
+  careful workload-specific testing.
+- Equation capacity: Set the active and const-generic equation capacities above the
+  largest simultaneous loss count you intend to recover. For a five-loss target,
+  eight is a reasonable GF(2^8) starting point; use more if repairs can accumulate
+  across a larger unresolved window.
+
+Const-generic capacities determine the allocated object size even when runtime
+limits are smaller. Encoder storage is approximately
+`MAX_SYMBOL_SIZE * MAX_WINDOW_SYMBOLS`. The decoder additionally stores about
+`MAX_EQUATIONS * (MAX_WINDOW_SYMBOLS + MAX_SYMBOL_SIZE)` bytes of equation data.
+Encoding work grows approximately with the active `symbol_size * window_symbols`,
+so increasing the window is not free. The included benchmark prints exact encoder
+and decoder sizes for its selected capacities.
+
 The codec operates on symbols only. Packet integrity, fragmentation, ADU framing,
 pacing, transport, and authentication belong to the integrating protocol. RFC 8681
 source and repair payload-ID helpers are included for interoperable framing.
