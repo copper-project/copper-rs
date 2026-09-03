@@ -8,6 +8,51 @@ use cu29::{CopperListTuple, CuResult};
 use num_format::{Locale, ToFormattedString};
 use std::io::Cursor;
 
+struct ByteEntropy {
+    counts: [u64; 256],
+    total: u64,
+}
+
+impl Default for ByteEntropy {
+    fn default() -> Self {
+        Self {
+            counts: [0; 256],
+            total: 0,
+        }
+    }
+}
+
+impl ByteEntropy {
+    fn observe(&mut self, bytes: &[u8]) {
+        self.total += bytes.len() as u64;
+        for byte in bytes {
+            self.counts[usize::from(*byte)] += 1;
+        }
+    }
+
+    fn bits_per_byte(&self) -> Option<f64> {
+        if self.total == 0 {
+            return None;
+        }
+
+        let total = self.total as f64;
+        Some(
+            self.counts
+                .iter()
+                .filter(|count| **count != 0)
+                .map(|count| {
+                    let probability = *count as f64 / total;
+                    -probability * probability.log2()
+                })
+                .sum(),
+        )
+    }
+
+    fn ideal_size_bytes(&self, bits_per_byte: f64) -> u64 {
+        (bits_per_byte * self.total as f64 / 8.0).ceil() as u64
+    }
+}
+
 fn print_runtime_lifecycle_record(index: usize, entry: &RuntimeLifecycleRecord) {
     println!("    RuntimeLifecycle #{index} @{}", entry.timestamp);
     match &entry.event {
@@ -99,6 +144,7 @@ where
     let mut useful_size: usize = 0;
     let mut structured_log_size: usize = 0;
     let mut cls_size: usize = 0;
+    let mut cls_entropy = ByteEntropy::default();
     let mut kfs_size: usize = 0;
     let mut runtime_lifecycle_size: usize = 0;
     let mut runtime_lifecycle_events: usize = 0;
@@ -129,6 +175,7 @@ where
                     }
                     UnifiedLogType::CopperList => {
                         cls_size += content.len();
+                        cls_entropy.observe(&content);
 
                         let mut reader: Cursor<Vec<u8>> = Cursor::new(content);
                         let iter = copperlists_reader::<P>(&mut reader);
@@ -284,6 +331,17 @@ where
         "  CL total size    -> {} bytes",
         cls_size.to_formatted_string(l)
     );
+    if let Some(bits_per_byte) = cls_entropy.bits_per_byte() {
+        let ideal_size = cls_entropy.ideal_size_bytes(bits_per_byte);
+        let headroom = (1.0 - bits_per_byte / 8.0) * 100.0;
+        println!("  CL byte entropy  -> {bits_per_byte:.4} bits/byte");
+        println!(
+            "  CL entropy floor -> {} bytes ({headroom:.2}% zero-order headroom)",
+            ideal_size.to_formatted_string(l)
+        );
+    } else {
+        println!("  CL byte entropy  -> n/a (no copperlist bytes)");
+    }
     println!();
     println!("  # of Keyframes   -> {}", keyframes.to_formatted_string(l));
     println!("  KF rate          -> {kf_rate:.2} Hz");
@@ -311,4 +369,40 @@ where
     );
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ByteEntropy;
+
+    #[test]
+    fn empty_entropy_is_absent() {
+        assert_eq!(ByteEntropy::default().bits_per_byte(), None);
+    }
+
+    #[test]
+    fn constant_bytes_have_zero_entropy() {
+        let mut entropy = ByteEntropy::default();
+        entropy.observe(&[42; 32]);
+        assert_eq!(entropy.bits_per_byte(), Some(0.0));
+        assert_eq!(entropy.ideal_size_bytes(0.0), 0);
+    }
+
+    #[test]
+    fn uniform_byte_values_have_eight_bits_of_entropy() {
+        let mut entropy = ByteEntropy::default();
+        entropy.observe(&(0..=u8::MAX).collect::<Vec<_>>());
+        assert_eq!(entropy.bits_per_byte(), Some(8.0));
+        assert_eq!(entropy.ideal_size_bytes(8.0), 256);
+    }
+
+    #[test]
+    fn observations_are_aggregated_across_sections() {
+        let mut entropy = ByteEntropy::default();
+        entropy.observe(&[0; 8]);
+        entropy.observe(&[1; 8]);
+        let bits_per_byte = entropy.bits_per_byte().unwrap();
+        assert!((bits_per_byte - 1.0).abs() < f64::EPSILON);
+        assert_eq!(entropy.ideal_size_bytes(bits_per_byte), 2);
+    }
 }
