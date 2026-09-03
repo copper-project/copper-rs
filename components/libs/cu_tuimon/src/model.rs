@@ -411,6 +411,7 @@ pub(crate) struct CopperListStats {
     pub(crate) structured_total_bytes: u64,
     pub(crate) structured_bytes_per_cl: u64,
     pub(crate) dropped_copperlists_total: u64,
+    pub(crate) dropped_keyframes_total: u64,
     pub(crate) total_copperlists: u64,
     pub(crate) window_copperlists: u64,
     pub(crate) last_seen_clid: Option<u64>,
@@ -429,6 +430,7 @@ impl CopperListStats {
             structured_total_bytes: 0,
             structured_bytes_per_cl: 0,
             dropped_copperlists_total: 0,
+            dropped_keyframes_total: 0,
             total_copperlists: 0,
             window_copperlists: 0,
             last_seen_clid: None,
@@ -450,6 +452,7 @@ impl CopperListStats {
         self.structured_bytes_per_cl = total.saturating_sub(self.structured_total_bytes);
         self.structured_total_bytes = total;
         self.dropped_copperlists_total = stats.dropped_copperlists_total;
+        self.dropped_keyframes_total = stats.dropped_keyframes_total;
     }
 
     fn update_rate(&mut self, clid: u64) {
@@ -554,6 +557,7 @@ mod tests {
 
         model.observe_copperlist_io(CopperListIoStats {
             dropped_copperlists_total: 7,
+            dropped_keyframes_total: 3,
             ..CopperListIoStats::default()
         });
 
@@ -565,6 +569,15 @@ mod tests {
                 .unwrap()
                 .dropped_copperlists_total,
             7
+        );
+        assert_eq!(
+            model
+                .inner
+                .copperlist_stats
+                .lock()
+                .unwrap()
+                .dropped_keyframes_total,
+            3
         );
     }
 }

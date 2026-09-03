@@ -436,6 +436,18 @@ pub type CompletedCopperListSink<P> = SemanticRecordSink<CopperList<P>>;
 #[doc(hidden)]
 pub type CompletedKeyFrameSink = SemanticRecordSink<KeyFrame>;
 
+/// Zero-cost placeholder emitted when a semantic record family has no consumer.
+#[derive(Clone, Copy, Debug, Default)]
+#[doc(hidden)]
+pub struct NullWriteStream;
+
+impl<E: Encode> WriteStream<E> for NullWriteStream {
+    #[inline]
+    fn log(&mut self, _record: &E) -> CuResult<()> {
+        Ok(())
+    }
+}
+
 /// Semantic record families requested by the statically generated downstream graph.
 ///
 /// This is deliberately independent from [`crate::config::LoggingConfig`]. Local
@@ -1152,10 +1164,16 @@ pub type CopperListsManager<P, const NBCL: usize> = AsyncCopperListsManager<P, N
 #[doc(hidden)]
 pub type CopperListsManager<P, const NBCL: usize> = SyncCopperListsManager<P, NBCL>;
 
-/// Manages the frozen tasks state and logging.
+#[cfg(all(feature = "std", feature = "async-cl-io"))]
+struct AsyncKeyFrameCompletion {
+    keyframe: Box<KeyFrame>,
+    sink_result: CuResult<u64>,
+}
+
+/// Manages bounded task-state keyframe capture and output.
 pub struct KeyFramesManager {
-    /// Where the serialized tasks are stored following the wave of execution of a CL.
-    inner: KeyFrame,
+    /// Active capture buffer. It is absent when no downstream consumer needs keyframes.
+    inner: Option<KeyFrame>,
 
     /// Optional override for the timestamp to stamp the next keyframe (used by deterministic replay).
     forced_timestamp: Option<CuTime>,
@@ -1163,20 +1181,48 @@ pub struct KeyFramesManager {
     /// If set, reuse this keyframe verbatim (e.g., during replay) instead of re-freezing state.
     locked: bool,
 
-    /// Consumer of completed task-state keyframes.
+    /// Consumer of completed task-state keyframes on the synchronous path.
+    #[cfg(not(all(feature = "std", feature = "async-cl-io")))]
     sink: Option<Box<CompletedKeyFrameSink>>,
 
-    /// Capture a keyframe only each...
+    /// Spare capture buffers exchanged with completed keyframes at handoff.
+    /// Boxing is intentional: ownership moves through the SPSC ring without a
+    /// hot-path allocation or copying the potentially large payload buffer.
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    #[allow(clippy::vec_box)]
+    spares: Vec<Box<KeyFrame>>,
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    pending_count: usize,
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    pending_producer: Option<Producer<Box<KeyFrame>>>,
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    completion_consumer: Option<Consumer<AsyncKeyFrameCompletion>>,
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    worker_handle: Option<JoinHandle<()>>,
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    worker_thread: Option<Thread>,
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    worker_shutdown: Option<Arc<AtomicBool>>,
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    worker_running: Option<Arc<AtomicBool>>,
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    capture_this_copperlist: Option<u64>,
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    dropped_keyframes_total: u64,
+
+    /// Capture a keyframe at this CopperList interval.
     keyframe_interval: u32,
 
-    /// Bytes written by the last keyframe log
+    /// Bytes written by the last completed keyframe output.
     pub last_encoded_bytes: u64,
 
-    /// Cold-path sizing accumulator used to reserve the capture buffer before execution.
+    /// Cold-path sizing accumulator used to reserve the capture buffers before execution.
     capture_size_hint: usize,
 }
 
 const MIN_KEYFRAME_CAPTURE_CAPACITY: usize = 4 * 1024;
+#[cfg(all(feature = "std", feature = "async-cl-io"))]
+const ASYNC_KEYFRAME_HANDOFF_CAPACITY: usize = 2;
 
 /// A `Vec` writer that is forbidden from growing its backing allocation.
 struct PreallocatedVecWriter<'a>(&'a mut Vec<u8>);
@@ -1193,13 +1239,148 @@ impl Writer for PreallocatedVecWriter<'_> {
 }
 
 impl KeyFramesManager {
-    fn is_keyframe(&self, culistid: u64) -> bool {
-        self.sink.is_some() && culistid.is_multiple_of(self.keyframe_interval as u64)
+    #[doc(hidden)]
+    pub fn new(sink: Option<Box<CompletedKeyFrameSink>>, keyframe_interval: u32) -> CuResult<Self> {
+        if sink.is_some() && keyframe_interval == 0 {
+            return Err(CuError::from(
+                "Keyframe interval cannot be zero when a downstream consumer requires keyframes",
+            ));
+        }
+
+        #[cfg(all(feature = "std", feature = "async-cl-io"))]
+        {
+            let enabled = sink.is_some();
+            let (
+                pending_producer,
+                completion_consumer,
+                worker_handle,
+                worker_thread,
+                worker_shutdown,
+                worker_running,
+            ) = if let Some(mut sink) = sink {
+                let (pending_producer, mut pending_consumer) =
+                    RingBuffer::<Box<KeyFrame>>::new(ASYNC_KEYFRAME_HANDOFF_CAPACITY);
+                let (mut completion_producer, completion_consumer) =
+                    RingBuffer::<AsyncKeyFrameCompletion>::new(ASYNC_KEYFRAME_HANDOFF_CAPACITY);
+                let worker_shutdown = Arc::new(AtomicBool::new(false));
+                let worker_running = Arc::new(AtomicBool::new(true));
+                let shutdown = worker_shutdown.clone();
+                let running = worker_running.clone();
+                let worker_handle = std::thread::Builder::new()
+                    .name("cu-async-kf-io".to_string())
+                    .spawn(move || {
+                        let _running_guard = AsyncOutputWorkerRunningGuard(running);
+                        loop {
+                            let keyframe = match pending_consumer.pop() {
+                                Ok(keyframe) => keyframe,
+                                Err(PopError::Empty) => {
+                                    if shutdown.load(Ordering::Acquire) {
+                                        break;
+                                    }
+                                    std::thread::park();
+                                    continue;
+                                }
+                            };
+                            let sink_result = sink
+                                .log(keyframe.as_ref())
+                                .map(|_| sink.last_log_bytes().unwrap_or(0) as u64);
+                            let should_stop = sink_result.is_err();
+                            let mut completion = AsyncKeyFrameCompletion {
+                                keyframe,
+                                sink_result,
+                            };
+                            loop {
+                                match completion_producer.push(completion) {
+                                    Ok(()) => break,
+                                    Err(PushError::Full(returned)) => {
+                                        completion = returned;
+                                        std::thread::yield_now();
+                                    }
+                                }
+                            }
+                            if should_stop {
+                                break;
+                            }
+                        }
+                    })
+                    .map_err(|error| {
+                        CuError::from("Failed to spawn async keyframe output thread")
+                            .add_cause(error.to_string().as_str())
+                    })?;
+                let worker_thread = worker_handle.thread().clone();
+                (
+                    Some(pending_producer),
+                    Some(completion_consumer),
+                    Some(worker_handle),
+                    Some(worker_thread),
+                    Some(worker_shutdown),
+                    Some(worker_running),
+                )
+            } else {
+                (None, None, None, None, None, None)
+            };
+
+            let spares = if enabled {
+                let mut spares = Vec::with_capacity(ASYNC_KEYFRAME_HANDOFF_CAPACITY);
+                for _ in 0..ASYNC_KEYFRAME_HANDOFF_CAPACITY {
+                    spares.push(Box::new(KeyFrame::new()));
+                }
+                spares
+            } else {
+                Vec::new()
+            };
+            Ok(Self {
+                inner: enabled.then(KeyFrame::new),
+                forced_timestamp: None,
+                locked: false,
+                spares,
+                pending_count: 0,
+                pending_producer,
+                completion_consumer,
+                worker_handle,
+                worker_thread,
+                worker_shutdown,
+                worker_running,
+                capture_this_copperlist: None,
+                dropped_keyframes_total: 0,
+                keyframe_interval,
+                last_encoded_bytes: 0,
+                capture_size_hint: KEYFRAME_PAYLOAD_HEADER.len(),
+            })
+        }
+
+        #[cfg(not(all(feature = "std", feature = "async-cl-io")))]
+        {
+            let enabled = sink.is_some();
+            Ok(Self {
+                inner: enabled.then(KeyFrame::new),
+                forced_timestamp: None,
+                locked: false,
+                sink,
+                keyframe_interval,
+                last_encoded_bytes: 0,
+                capture_size_hint: KEYFRAME_PAYLOAD_HEADER.len(),
+            })
+        }
+    }
+
+    fn is_keyframe_due(&self, culistid: u64) -> bool {
+        self.inner.is_some() && culistid.is_multiple_of(self.keyframe_interval as u64)
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    fn is_capturing(&self, culistid: u64) -> bool {
+        self.capture_this_copperlist == Some(culistid)
+    }
+
+    #[cfg(not(all(feature = "std", feature = "async-cl-io")))]
+    fn is_capturing(&self, culistid: u64) -> bool {
+        self.is_keyframe_due(culistid)
     }
 
     #[inline]
     pub fn captures_keyframe(&self, culistid: u64) -> bool {
-        self.is_keyframe(culistid)
+        self.is_keyframe_due(culistid)
     }
 
     /// Start a cold-path sizing pass for the next mission's keyframe buffer.
@@ -1211,7 +1392,7 @@ impl KeyFramesManager {
     /// Include one component's current frozen size in the cold-path capacity estimate.
     #[doc(hidden)]
     pub fn include_capture_capacity(&mut self, item: &impl Freezable) -> CuResult<()> {
-        if self.sink.is_none() {
+        if self.inner.is_none() {
             return Ok(());
         }
         let mut sizer = EncoderImpl::new(SizeWriter::default(), bincode::config::standard());
@@ -1230,37 +1411,65 @@ impl KeyFramesManager {
     /// Reserve the capture buffer before entering the execution loop.
     #[doc(hidden)]
     pub fn finish_capture_preallocation(&mut self) -> CuResult<()> {
-        if self.sink.is_none() {
+        if self.inner.is_none() {
             return Ok(());
         }
+        #[cfg(all(feature = "std", feature = "async-cl-io"))]
+        self.reclaim_completed()?;
         let requested = self
             .capture_size_hint
             .max(MIN_KEYFRAME_CAPTURE_CAPACITY)
             .checked_next_power_of_two()
             .ok_or_else(|| CuError::from("Keyframe capture capacity overflow"))?;
-        if self.inner.serialized_tasks.capacity() < requested {
-            let additional = requested.saturating_sub(self.inner.serialized_tasks.len());
-            self.inner
-                .serialized_tasks
-                .try_reserve_exact(additional)
-                .map_err(|error| {
-                    CuError::from("Failed to preallocate keyframe capture buffer")
-                        .add_cause(&error.to_string())
-                })?;
+        reserve_keyframe_capacity(self.inner.as_mut().unwrap(), requested)?;
+        #[cfg(all(feature = "std", feature = "async-cl-io"))]
+        for spare in &mut self.spares {
+            reserve_keyframe_capacity(spare, requested)?;
+        }
+        #[cfg(all(feature = "std", feature = "async-cl-io"))]
+        if self.spares.len() != ASYNC_KEYFRAME_HANDOFF_CAPACITY {
+            return Err(CuError::from(
+                "Keyframe output worker did not return every capture buffer before preallocation",
+            ));
         }
         Ok(())
     }
 
-    pub fn reset(&mut self, culistid: u64, clock: &RobotClock) {
-        if self.is_keyframe(culistid) {
+    /// Fallible reset used by generated runtimes so asynchronous worker failures
+    /// are returned before a new keyframe capture starts.
+    #[doc(hidden)]
+    pub fn try_reset(&mut self, culistid: u64, clock: &RobotClock) -> CuResult<()> {
+        if self.is_keyframe_due(culistid) {
+            #[cfg(all(feature = "std", feature = "async-cl-io"))]
+            {
+                self.reclaim_completed()?;
+                if self.spares.is_empty() {
+                    self.capture_this_copperlist = None;
+                    self.dropped_keyframes_total = self.dropped_keyframes_total.saturating_add(1);
+                    self.forced_timestamp = None;
+                    self.locked = false;
+                    return Ok(());
+                }
+                self.capture_this_copperlist = Some(culistid);
+            }
             // If a recorded keyframe was preloaded for this CL, keep it as-is.
-            if self.locked && self.inner.culistid == culistid {
-                return;
+            let inner = self.inner.as_mut().unwrap();
+            if self.locked && inner.culistid == culistid {
+                return Ok(());
             }
             let ts = self.forced_timestamp.take().unwrap_or_else(|| clock.now());
-            self.inner.reset(culistid, ts);
+            inner.reset(culistid, ts);
             self.locked = false;
         }
+        Ok(())
+    }
+
+    /// Reset the capture buffer at a configured keyframe boundary.
+    ///
+    /// Generated runtimes use the fallible internal variant to surface output
+    /// worker failures. This method preserves the existing direct-call API.
+    pub fn reset(&mut self, culistid: u64, clock: &RobotClock) {
+        let _ = self.try_reset(culistid, clock);
     }
 
     /// Force the timestamp of the next keyframe to a given value.
@@ -1270,19 +1479,19 @@ impl KeyFramesManager {
     }
 
     pub fn freeze_task(&mut self, culistid: u64, task: &impl Freezable) -> CuResult<usize> {
-        if self.is_keyframe(culistid) {
+        if self.is_capturing(culistid) {
             if self.locked {
                 // We are replaying a recorded keyframe verbatim; don't mutate it.
                 return Ok(0);
             }
-            if self.inner.culistid != culistid {
+            let inner = self.inner.as_mut().unwrap();
+            if inner.culistid != culistid {
                 return Err(CuError::from(format!(
                     "Freezing task for culistid {} but current keyframe is {}",
-                    culistid, self.inner.culistid
+                    culistid, inner.culistid
                 )));
             }
-            let encoded = self
-                .inner
+            let encoded = inner
                 .add_frozen_task(task)
                 .map_err(|e| CuError::from(format!("Failed to serialize task: {e}")))?;
             Ok(encoded)
@@ -1297,10 +1506,38 @@ impl KeyFramesManager {
     }
 
     pub fn end_of_processing(&mut self, culistid: u64) -> CuResult<()> {
-        if self.is_keyframe(culistid) {
-            let sink = self.sink.as_mut().unwrap();
-            sink.log(&self.inner)?;
-            self.last_encoded_bytes = sink.last_log_bytes().unwrap_or(0) as u64;
+        if self.is_capturing(culistid) {
+            #[cfg(not(all(feature = "std", feature = "async-cl-io")))]
+            {
+                let sink = self.sink.as_mut().unwrap();
+                sink.log(self.inner.as_ref().unwrap())?;
+                self.last_encoded_bytes = sink.last_log_bytes().unwrap_or(0) as u64;
+            }
+            #[cfg(all(feature = "std", feature = "async-cl-io"))]
+            {
+                self.last_encoded_bytes = 0;
+                let mut completed = self.spares.pop().ok_or_else(|| {
+                    CuError::from("Missing spare keyframe buffer at output handoff")
+                })?;
+                core::mem::swap(self.inner.as_mut().unwrap(), completed.as_mut());
+                let producer = self.pending_producer.as_mut().ok_or_else(|| {
+                    CuError::from("Missing keyframe output producer for active capture")
+                })?;
+                match producer.push(completed) {
+                    Ok(()) => {
+                        self.pending_count += 1;
+                        if let Some(worker_thread) = self.worker_thread.as_ref() {
+                            worker_thread.unpark();
+                        }
+                    }
+                    Err(PushError::Full(spare)) => {
+                        self.spares.push(spare);
+                        self.dropped_keyframes_total =
+                            self.dropped_keyframes_total.saturating_add(1);
+                    }
+                }
+                self.capture_this_copperlist = None;
+            }
             // Clear the lock so the next CL can rebuild normally unless re-locked.
             self.locked = false;
             Ok(())
@@ -1314,9 +1551,124 @@ impl KeyFramesManager {
     /// Preload a recorded keyframe so it is logged verbatim on the matching CL.
     #[cfg(feature = "std")]
     pub fn lock_keyframe(&mut self, keyframe: &KeyFrame) {
-        self.inner = keyframe.clone();
-        self.forced_timestamp = Some(keyframe.timestamp);
-        self.locked = true;
+        if let Some(inner) = self.inner.as_mut() {
+            *inner = keyframe.clone();
+            self.forced_timestamp = Some(keyframe.timestamp);
+            self.locked = true;
+        }
+    }
+
+    #[inline]
+    #[doc(hidden)]
+    pub const fn dropped_keyframes_total(&self) -> u64 {
+        #[cfg(all(feature = "std", feature = "async-cl-io"))]
+        {
+            self.dropped_keyframes_total
+        }
+        #[cfg(not(all(feature = "std", feature = "async-cl-io")))]
+        {
+            0
+        }
+    }
+
+    #[doc(hidden)]
+    pub fn finish_pending(&mut self) -> CuResult<()> {
+        #[cfg(all(feature = "std", feature = "async-cl-io"))]
+        while self.pending_count > 0 {
+            self.wait_for_completion()?;
+        }
+        Ok(())
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    fn reclaim_completed(&mut self) -> CuResult<()> {
+        let pop_result = {
+            let Some(completion_consumer) = self.completion_consumer.as_mut() else {
+                return Ok(());
+            };
+            completion_consumer.pop()
+        };
+        match pop_result {
+            Ok(completion) => self.handle_completion(completion),
+            Err(PopError::Empty) => {
+                if self.pending_count > 0
+                    && self
+                        .worker_running
+                        .as_ref()
+                        .is_some_and(|running| !running.load(Ordering::Acquire))
+                {
+                    Err(CuError::from(
+                        "Async keyframe output worker stopped unexpectedly",
+                    ))
+                } else {
+                    Ok(())
+                }
+            }
+        }
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    fn wait_for_completion(&mut self) -> CuResult<()> {
+        loop {
+            let pending_before = self.pending_count;
+            self.reclaim_completed()?;
+            if self.pending_count < pending_before {
+                return Ok(());
+            }
+            std::thread::yield_now();
+        }
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    fn handle_completion(&mut self, completion: AsyncKeyFrameCompletion) -> CuResult<()> {
+        self.pending_count = self.pending_count.saturating_sub(1);
+        if let Ok(encoded_bytes) = completion.sink_result.as_ref() {
+            self.last_encoded_bytes = *encoded_bytes;
+        }
+        self.spares.push(completion.keyframe);
+        completion.sink_result.map(|_| ())
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    fn shutdown_worker(&mut self) -> CuResult<()> {
+        self.finish_pending()?;
+        if let Some(shutdown) = self.worker_shutdown.as_ref() {
+            shutdown.store(true, Ordering::Release);
+        }
+        if let Some(worker_thread) = self.worker_thread.as_ref() {
+            worker_thread.unpark();
+        }
+        if let Some(worker_handle) = self.worker_handle.take() {
+            worker_handle.join().map_err(|_| {
+                CuError::from("Async keyframe output worker panicked while joining")
+            })?;
+        }
+        self.pending_producer.take();
+        self.worker_thread.take();
+        self.worker_shutdown.take();
+        self.worker_running.take();
+        Ok(())
+    }
+}
+
+fn reserve_keyframe_capacity(keyframe: &mut KeyFrame, requested: usize) -> CuResult<()> {
+    if keyframe.serialized_tasks.capacity() < requested {
+        let additional = requested.saturating_sub(keyframe.serialized_tasks.len());
+        keyframe
+            .serialized_tasks
+            .try_reserve_exact(additional)
+            .map_err(|error| {
+                CuError::from("Failed to preallocate keyframe capture buffer")
+                    .add_cause(&error.to_string())
+            })?;
+    }
+    Ok(())
+}
+
+#[cfg(all(feature = "std", feature = "async-cl-io"))]
+impl Drop for KeyFramesManager {
+    fn drop(&mut self) {
+        let _ = self.shutdown_worker();
     }
 }
 
@@ -1525,15 +1877,7 @@ where
             );
         }
 
-        let keyframes_manager = KeyFramesManager {
-            inner: KeyFrame::new(),
-            sink: keyframe_sink,
-            keyframe_interval,
-            last_encoded_bytes: 0,
-            forced_timestamp: None,
-            locked: false,
-            capture_size_hint: KEYFRAME_PAYLOAD_HEADER.len(),
-        };
+        let keyframes_manager = KeyFramesManager::new(keyframe_sink, keyframe_interval)?;
         #[cfg(all(feature = "std", feature = "parallel-rt"))]
         let parallel_rt = ParallelRt::new(parts.parallel_rt_metadata)?;
 
@@ -1643,15 +1987,7 @@ where
             );
         }
 
-        let keyframes_manager = KeyFramesManager {
-            inner: KeyFrame::new(),
-            sink: keyframe_sink,
-            keyframe_interval,
-            last_encoded_bytes: 0,
-            forced_timestamp: None,
-            locked: false,
-            capture_size_hint: KEYFRAME_PAYLOAD_HEADER.len(),
-        };
+        let keyframes_manager = KeyFramesManager::new(keyframe_sink, keyframe_interval)?;
 
         let runtime_config = config.runtime.clone().unwrap_or_default();
         runtime_config.validate()?;
@@ -2639,8 +2975,12 @@ mod tests {
         runtime.copperlists_manager.end_of_processing(0).unwrap();
         runtime.copperlists_manager.finish_pending().unwrap();
 
-        runtime.keyframes_manager.reset(0, &runtime.clock);
+        runtime
+            .keyframes_manager
+            .try_reset(0, &runtime.clock)
+            .unwrap();
         runtime.keyframes_manager.end_of_processing(0).unwrap();
+        runtime.keyframes_manager.finish_pending().unwrap();
 
         assert_eq!(*copperlist_ids.lock().unwrap(), vec![0]);
         assert_eq!(*keyframe_ids.lock().unwrap(), vec![0]);
@@ -2946,18 +3286,15 @@ mod tests {
     #[test]
     fn test_keyframe_manager_accepts_nonserializing_semantic_sink() {
         let ids = Arc::new(Mutex::new(Vec::new()));
-        let mut keyframes = KeyFramesManager {
-            inner: KeyFrame::new(),
-            forced_timestamp: None,
-            locked: false,
-            sink: Some(Box::new(RecordingKeyFrameSink { ids: ids.clone() })),
-            keyframe_interval: 1,
-            last_encoded_bytes: 0,
-            capture_size_hint: KEYFRAME_PAYLOAD_HEADER.len(),
-        };
+        let mut keyframes = KeyFramesManager::new(
+            Some(Box::new(RecordingKeyFrameSink { ids: ids.clone() })),
+            1,
+        )
+        .unwrap();
 
-        keyframes.reset(7, &RobotClock::default());
+        keyframes.try_reset(7, &RobotClock::default()).unwrap();
         keyframes.end_of_processing(7).unwrap();
+        keyframes.finish_pending().unwrap();
 
         assert_eq!(*ids.lock().unwrap(), vec![7]);
         assert_eq!(keyframes.last_encoded_bytes, 29);
@@ -3045,6 +3382,107 @@ mod tests {
                 .recv()
                 .map_err(|_| CuError::from("failed to release blocking writer"))
         }
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    #[derive(Debug)]
+    struct BlockingKeyFrameWriter {
+        ids: Arc<Mutex<Vec<u64>>>,
+        started: SyncSender<()>,
+        release: Arc<Mutex<Receiver<()>>>,
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    impl WriteStream<KeyFrame> for BlockingKeyFrameWriter {
+        fn log(&mut self, keyframe: &KeyFrame) -> CuResult<()> {
+            self.ids.lock().unwrap().push(keyframe.culistid);
+            self.started
+                .send(())
+                .map_err(|_| CuError::from("failed to signal blocking keyframe writer start"))?;
+            self.release
+                .lock()
+                .unwrap()
+                .recv()
+                .map_err(|_| CuError::from("failed to release blocking keyframe writer"))
+        }
+    }
+
+    #[test]
+    fn disabled_keyframes_allocate_no_capture_buffers() {
+        let keyframes = KeyFramesManager::new(None, 1).unwrap();
+
+        assert!(keyframes.inner.is_none());
+        assert!(!keyframes.captures_keyframe(0));
+        #[cfg(all(feature = "std", feature = "async-cl-io"))]
+        {
+            assert!(keyframes.spares.is_empty());
+            assert!(keyframes.pending_producer.is_none());
+            assert!(keyframes.worker_handle.is_none());
+        }
+    }
+
+    #[cfg(all(feature = "std", feature = "memory_monitoring"))]
+    #[test]
+    fn disabled_keyframe_manager_allocates_nothing() {
+        let allocations = crate::monitoring::ScopedAllocCounter::new();
+        let keyframes = KeyFramesManager::new(None, 1).unwrap();
+
+        assert_eq!(allocations.allocated(), 0);
+        assert!(keyframes.inner.is_none());
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    #[test]
+    fn saturated_keyframe_handoff_skips_capture_before_freezing() {
+        let ids = Arc::new(Mutex::new(Vec::new()));
+        let (started_tx, started_rx) = sync_channel(1);
+        let (release_tx, release_rx) = sync_channel(1);
+        let mut keyframes = KeyFramesManager::new(
+            Some(Box::new(BlockingKeyFrameWriter {
+                ids: ids.clone(),
+                started: started_tx,
+                release: Arc::new(Mutex::new(release_rx)),
+            })),
+            1,
+        )
+        .unwrap();
+        let freeze_calls = Cell::new(0);
+        let snapshot = CountingSnapshot {
+            calls: &freeze_calls,
+            value: 42,
+            fail: false,
+        };
+        keyframes.begin_capture_preallocation();
+        keyframes.include_capture_capacity(&snapshot).unwrap();
+        keyframes.finish_capture_preallocation().unwrap();
+        freeze_calls.set(0);
+
+        keyframes.try_reset(0, &RobotClock::default()).unwrap();
+        assert_ne!(keyframes.freeze_task(0, &snapshot).unwrap(), 0);
+        keyframes.end_of_processing(0).unwrap();
+        started_rx
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .unwrap();
+
+        keyframes.try_reset(1, &RobotClock::default()).unwrap();
+        assert_ne!(keyframes.freeze_task(1, &snapshot).unwrap(), 0);
+        keyframes.end_of_processing(1).unwrap();
+
+        keyframes.try_reset(2, &RobotClock::default()).unwrap();
+        assert_eq!(keyframes.freeze_task(2, &snapshot).unwrap(), 0);
+        keyframes.end_of_processing(2).unwrap();
+
+        assert_eq!(freeze_calls.get(), 2);
+        assert_eq!(keyframes.dropped_keyframes_total(), 1);
+        assert_eq!(*ids.lock().unwrap(), vec![0]);
+
+        release_tx.send(()).unwrap();
+        started_rx
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .unwrap();
+        release_tx.send(()).unwrap();
+        keyframes.finish_pending().unwrap();
+        assert_eq!(*ids.lock().unwrap(), vec![0, 1]);
     }
 
     #[cfg(all(feature = "std", feature = "async-cl-io"))]

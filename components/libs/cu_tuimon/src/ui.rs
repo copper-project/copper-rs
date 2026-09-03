@@ -708,7 +708,8 @@ impl MonitorUi {
             .saturating_add(stats.keyframe_bytes)
             .saturating_add(stats.structured_bytes_per_cl);
         let disk_total_bw = format_rate_bytes_or_na(disk_total_bytes, stats.rate_hz);
-        let dropped_display = stats.dropped_copperlists_total.to_string();
+        let dropped_copperlists_display = stats.dropped_copperlists_total.to_string();
+        let dropped_keyframes_display = stats.dropped_keyframes_total.to_string();
 
         let header_cells = ["Metric", "Value"].iter().map(|header| {
             Cell::from(Line::from(*header)).style(
@@ -728,7 +729,14 @@ impl MonitorUi {
         let spacer = row(" ", " ".to_string());
 
         let rate_style = Style::default().fg(palette::CYAN);
-        let dropped_style = if stats.dropped_copperlists_total == 0 {
+        let dropped_copperlists_style = if stats.dropped_copperlists_total == 0 {
+            Style::default()
+        } else {
+            Style::default()
+                .fg(palette::LIGHT_RED)
+                .add_modifier(Modifier::BOLD)
+        };
+        let dropped_keyframes_style = if stats.dropped_keyframes_total == 0 {
             Style::default()
         } else {
             Style::default()
@@ -747,7 +755,9 @@ impl MonitorUi {
         ];
 
         let disk_rows = vec![
-            row("Dropped CopperLists", dropped_display).style(dropped_style),
+            row("Dropped CopperLists", dropped_copperlists_display)
+                .style(dropped_copperlists_style),
+            row("Dropped keyframes", dropped_keyframes_display).style(dropped_keyframes_style),
             spacer.clone(),
             row("CL serialized size", encoded_display),
             row("Space saved", space_saved_display),
@@ -1147,10 +1157,11 @@ mod tests {
     }
 
     #[test]
-    fn copperlist_screen_highlights_dropped_count() {
+    fn copperlist_screen_highlights_dropped_counts() {
         let model = test_monitor_model();
         model.observe_copperlist_io(CopperListIoStats {
             dropped_copperlists_total: 7,
+            dropped_keyframes_total: 3,
             ..CopperListIoStats::default()
         });
         let mut ui = MonitorUi::new(model, MonitorUiOptions::default());
@@ -1175,6 +1186,24 @@ mod tests {
             .iter()
             .find(|cell| cell.symbol() == "7")
             .expect("dropped count value");
+        assert_eq!(value.fg, palette::LIGHT_RED);
+        assert!(value.modifier.contains(Modifier::BOLD));
+
+        let dropped_keyframe_row = buffer
+            .content
+            .chunks(buffer.area.width as usize)
+            .find(|cells| {
+                cells
+                    .iter()
+                    .map(|cell| cell.symbol())
+                    .collect::<String>()
+                    .contains("Dropped keyframes")
+            })
+            .expect("Dropped keyframes row");
+        let value = dropped_keyframe_row
+            .iter()
+            .find(|cell| cell.symbol() == "3")
+            .expect("dropped keyframe count value");
         assert_eq!(value.fg, palette::LIGHT_RED);
         assert!(value.modifier.contains(Modifier::BOLD));
     }
