@@ -144,8 +144,8 @@ pub struct CuRuntimeBuilder<
     TI,
     BI,
     MI,
-    CLW,
-    KFW,
+    CLS,
+    KFS,
 > {
     clock: RobotClock,
     config: &'cfg CuConfig,
@@ -156,20 +156,20 @@ pub struct CuRuntimeBuilder<
     #[cfg(feature = "std")]
     thread_pools: Option<Vec<Option<Arc<ThreadPool>>>>,
     parts: CuRuntimeParts<CT, CB, P, M, NBCL, TI, BI, MI>,
-    copperlists_logger: CLW,
-    keyframes_logger: KFW,
+    copperlist_sink: CLS,
+    keyframe_sink: KFS,
 }
 
-impl<'cfg, CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, MI, CLW, KFW>
-    CuRuntimeBuilder<'cfg, CT, CB, P, M, NBCL, TI, BI, MI, CLW, KFW>
+impl<'cfg, CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, MI, CLS, KFS>
+    CuRuntimeBuilder<'cfg, CT, CB, P, M, NBCL, TI, BI, MI, CLS, KFS>
 {
     pub fn new(
         clock: RobotClock,
         config: &'cfg CuConfig,
         mission: &'cfg str,
         parts: CuRuntimeParts<CT, CB, P, M, NBCL, TI, BI, MI>,
-        copperlists_logger: CLW,
-        keyframes_logger: KFW,
+        copperlist_sink: CLS,
+        keyframe_sink: KFS,
     ) -> Self {
         Self {
             clock,
@@ -181,8 +181,8 @@ impl<'cfg, CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize, TI, BI, 
             #[cfg(feature = "std")]
             thread_pools: None,
             parts,
-            copperlists_logger,
-            keyframes_logger,
+            copperlist_sink,
+            keyframe_sink,
         }
     }
 
@@ -415,29 +415,44 @@ fn encode_completed_copperlist_snapshot<P: CopperListTuple>(
         .map_err(|e| CuError::new_with_cause("Failed to encode completed CopperList snapshot", e))
 }
 
-/// Manages the lifecycle of the copper lists and logging on the synchronous path.
+/// Existing type-erased leaf boundary for a semantic record consumer.
+///
+/// This deliberately aliases [`WriteStream`] rather than wrapping it. Generated
+/// code can statically compose concrete consumers behind this existing boundary
+/// without changing its object size or adding another virtual call.
+#[doc(hidden)]
+pub type SemanticRecordSink<T> = dyn WriteStream<T>;
+
+/// Semantic output boundary for a completed CopperList.
+#[doc(hidden)]
+pub type CompletedCopperListSink<P> = SemanticRecordSink<CopperList<P>>;
+
+/// Semantic output boundary for a completed keyframe.
+#[doc(hidden)]
+pub type CompletedKeyFrameSink = SemanticRecordSink<KeyFrame>;
+
+/// Manages the lifecycle and completed-list sink on the synchronous path.
 #[doc(hidden)]
 pub struct SyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
     inner: CuListsManager<P, NBCL>,
-    /// Logger for the copper lists (messages between tasks)
-    logger: Option<Box<dyn WriteStream<CopperList<P>>>>,
+    sink: Option<Box<CompletedCopperListSink<P>>>,
     /// Remote-debug snapshot of the most recently completed CopperList.
     #[cfg(feature = "remote-debug")]
     last_completed_encoded: Option<Vec<u8>>,
-    /// Last encoded size returned by logger.log
+    /// Last local-log encoded size reported by the sink.
     pub last_encoded_bytes: u64,
-    /// Last handle-backed payload bytes observed during logger.log
+    /// Last handle-backed payload bytes observed while the sink ran.
     pub last_handle_bytes: u64,
 }
 
 impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, NBCL> {
-    pub fn new(logger: Option<Box<dyn WriteStream<CopperList<P>>>>) -> CuResult<Self>
+    pub fn new(sink: Option<Box<CompletedCopperListSink<P>>>) -> CuResult<Self>
     where
         P: CuListZeroedInit,
     {
         Ok(Self {
             inner: CuListsManager::new(),
-            logger,
+            sink,
             #[cfg(feature = "remote-debug")]
             last_completed_encoded: None,
             last_encoded_bytes: 0,
@@ -503,10 +518,10 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
                 }
             }
             if is_top && cl.get_state() == CopperListState::DoneProcessing {
-                if let Some(logger) = &mut self.logger {
+                if let Some(sink) = &mut self.sink {
                     cl.change_state(CopperListState::BeingSerialized);
-                    logger.log(cl)?;
-                    self.last_encoded_bytes = logger.last_log_bytes().unwrap_or(0) as u64;
+                    sink.log(cl)?;
+                    self.last_encoded_bytes = sink.last_log_bytes().unwrap_or(0) as u64;
                     self.last_handle_bytes = take_last_completed_handle_bytes();
                 }
                 cl.change_state(CopperListState::Free);
@@ -540,10 +555,10 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         culist.change_state(CopperListState::DoneProcessing);
         self.last_encoded_bytes = 0;
         self.last_handle_bytes = 0;
-        if let Some(logger) = &mut self.logger {
+        if let Some(sink) = &mut self.sink {
             culist.change_state(CopperListState::BeingSerialized);
-            logger.log(&culist)?;
-            self.last_encoded_bytes = logger.last_log_bytes().unwrap_or(0) as u64;
+            sink.log(&culist)?;
+            self.last_encoded_bytes = sink.last_log_bytes().unwrap_or(0) as u64;
             self.last_handle_bytes = take_last_completed_handle_bytes();
         }
         culist.change_state(CopperListState::Free);
@@ -604,7 +619,7 @@ pub enum OwnedCopperListSubmission<P: CopperListTuple> {
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
 struct AsyncCopperListCompletion<P: CopperListTuple> {
     culist: Box<CopperList<P>>,
-    log_result: CuResult<(u64, u64)>,
+    sink_result: CuResult<(u64, u64)>,
 }
 
 #[cfg(all(feature = "std", any(feature = "async-cl-io", feature = "parallel-rt")))]
@@ -637,7 +652,7 @@ where
     free_pool
 }
 
-/// Manages the lifecycle of the copper lists and logging on the asynchronous path.
+/// Manages the lifecycle and completed-list sink on the asynchronous path.
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
 #[doc(hidden)]
 pub struct AsyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
@@ -650,15 +665,15 @@ pub struct AsyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usi
     pending_sender: Option<SyncSender<Box<CopperList<P>>>>,
     completion_receiver: Option<Receiver<AsyncCopperListCompletion<P>>>,
     worker_handle: Option<JoinHandle<()>>,
-    /// Last encoded size returned by logger.log
+    /// Last local-log encoded size reported by the sink.
     pub last_encoded_bytes: u64,
-    /// Last handle-backed payload bytes observed during logger.log
+    /// Last handle-backed payload bytes observed while the sink ran.
     pub last_handle_bytes: u64,
 }
 
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
 impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P, NBCL> {
-    pub fn new(logger: Option<Box<dyn WriteStream<CopperList<P>>>>) -> CuResult<Self>
+    pub fn new(sink: Option<Box<CompletedCopperListSink<P>>>) -> CuResult<Self>
     where
         P: CuListZeroedInit + AsyncCopperListPayload + 'static,
     {
@@ -667,8 +682,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
             free_pool.push(allocate_zeroed_copperlist::<P>());
         }
 
-        let (pending_sender, completion_receiver, worker_handle) = if let Some(mut logger) = logger
-        {
+        let (pending_sender, completion_receiver, worker_handle) = if let Some(mut sink) = sink {
             let (pending_sender, pending_receiver) = sync_channel::<Box<CopperList<P>>>(NBCL);
             let (completion_sender, completion_receiver) =
                 sync_channel::<AsyncCopperListCompletion<P>>(NBCL);
@@ -677,15 +691,18 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
                 .spawn(move || {
                     while let Ok(mut culist) = pending_receiver.recv() {
                         culist.change_state(CopperListState::BeingSerialized);
-                        let log_result = logger.log(&culist).map(|_| {
+                        let sink_result = sink.log(&culist).map(|_| {
                             (
-                                logger.last_log_bytes().unwrap_or(0) as u64,
+                                sink.last_log_bytes().unwrap_or(0) as u64,
                                 take_last_completed_handle_bytes(),
                             )
                         });
-                        let should_stop = log_result.is_err();
+                        let should_stop = sink_result.is_err();
                         if completion_sender
-                            .send(AsyncCopperListCompletion { culist, log_result })
+                            .send(AsyncCopperListCompletion {
+                                culist,
+                                sink_result,
+                            })
                             .is_err()
                         {
                             break;
@@ -941,12 +958,12 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         mut completion: AsyncCopperListCompletion<P>,
     ) -> CuResult<Box<CopperList<P>>> {
         self.pending_count = self.pending_count.saturating_sub(1);
-        if let Ok((encoded_bytes, handle_bytes)) = completion.log_result.as_ref() {
+        if let Ok((encoded_bytes, handle_bytes)) = completion.sink_result.as_ref() {
             self.last_encoded_bytes = *encoded_bytes;
             self.last_handle_bytes = *handle_bytes;
         }
         completion.culist.change_state(CopperListState::Free);
-        completion.log_result?;
+        completion.sink_result?;
         Ok(completion.culist)
     }
 
@@ -1002,8 +1019,8 @@ pub struct KeyFramesManager {
     /// If set, reuse this keyframe verbatim (e.g., during replay) instead of re-freezing state.
     locked: bool,
 
-    /// Logger for the state of the tasks (frozen tasks)
-    logger: Option<Box<dyn WriteStream<KeyFrame>>>,
+    /// Consumer of completed task-state keyframes.
+    sink: Option<Box<CompletedKeyFrameSink>>,
 
     /// Capture a keyframe only each...
     keyframe_interval: u32,
@@ -1033,7 +1050,7 @@ impl Writer for PreallocatedVecWriter<'_> {
 
 impl KeyFramesManager {
     fn is_keyframe(&self, culistid: u64) -> bool {
-        self.logger.is_some() && culistid.is_multiple_of(self.keyframe_interval as u64)
+        self.sink.is_some() && culistid.is_multiple_of(self.keyframe_interval as u64)
     }
 
     #[inline]
@@ -1050,7 +1067,7 @@ impl KeyFramesManager {
     /// Include one component's current frozen size in the cold-path capacity estimate.
     #[doc(hidden)]
     pub fn include_capture_capacity(&mut self, item: &impl Freezable) -> CuResult<()> {
-        if self.logger.is_none() {
+        if self.sink.is_none() {
             return Ok(());
         }
         let mut sizer = EncoderImpl::new(SizeWriter::default(), bincode::config::standard());
@@ -1069,7 +1086,7 @@ impl KeyFramesManager {
     /// Reserve the capture buffer before entering the execution loop.
     #[doc(hidden)]
     pub fn finish_capture_preallocation(&mut self) -> CuResult<()> {
-        if self.logger.is_none() {
+        if self.sink.is_none() {
             return Ok(());
         }
         let requested = self
@@ -1137,9 +1154,9 @@ impl KeyFramesManager {
 
     pub fn end_of_processing(&mut self, culistid: u64) -> CuResult<()> {
         if self.is_keyframe(culistid) {
-            let logger = self.logger.as_mut().unwrap();
-            logger.log(&self.inner)?;
-            self.last_encoded_bytes = logger.last_log_bytes().unwrap_or(0) as u64;
+            let sink = self.sink.as_mut().unwrap();
+            sink.log(&self.inner)?;
+            self.last_encoded_bytes = sink.last_log_bytes().unwrap_or(0) as u64;
             // Clear the lock so the next CL can rebuild normally unless re-locked.
             self.locked = false;
             Ok(())
@@ -1207,11 +1224,11 @@ pub struct CuRuntime<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize
     #[doc(hidden)]
     pub execution_probe: RuntimeExecutionProbe,
 
-    /// The logger for the copper lists (messages between tasks)
+    /// Lifecycle manager and completed CopperList output boundary.
     #[doc(hidden)]
     pub copperlists_manager: CopperListsManager<P, NBCL>,
 
-    /// The logger for the state of the tasks (frozen tasks)
+    /// Manager for capturing and consuming task-state keyframes.
     #[doc(hidden)]
     pub keyframes_manager: KeyFramesManager,
 
@@ -1277,9 +1294,9 @@ impl<
     TI,
     BI,
     MI,
-    CLW,
-    KFW,
-> CuRuntimeBuilder<'cfg, CT, CB, P, M, NBCL, TI, BI, MI, CLW, KFW>
+    CLS,
+    KFS,
+> CuRuntimeBuilder<'cfg, CT, CB, P, M, NBCL, TI, BI, MI, CLS, KFS>
 where
     TI: for<'c> Fn(
         Vec<Option<&'c ComponentConfig>>,
@@ -1288,8 +1305,8 @@ where
     ) -> CuResult<CT>,
     BI: Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
     MI: Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
-    CLW: WriteStream<CopperList<P>> + 'static,
-    KFW: WriteStream<KeyFrame> + 'static,
+    CLS: WriteStream<CopperList<P>> + 'static,
+    KFS: WriteStream<KeyFrame> + 'static,
 {
     pub fn build(self) -> CuResult<CuRuntime<CT, CB, P, M, NBCL>> {
         let Self {
@@ -1301,8 +1318,8 @@ where
             resources,
             thread_pools,
             parts,
-            copperlists_logger,
-            keyframes_logger,
+            copperlist_sink,
+            keyframe_sink,
         } = self;
         let mut resources =
             resources.ok_or_else(|| CuError::from("Resources missing from CuRuntimeBuilder"))?;
@@ -1340,26 +1357,26 @@ where
         let monitor = (parts.monitor_instanciator)(config, monitor_metadata, monitor_runtime);
         let bridges = (parts.bridges_instanciator)(config, &mut resources)?;
 
-        let (copperlists_logger, keyframes_logger, keyframe_interval) = match &config.logging {
+        let (copperlist_sink, keyframe_sink, keyframe_interval) = match &config.logging {
             Some(logging_config) if logging_config.enable_task_logging => {
-                let keyframes_logger = logging_config
+                let keyframe_sink = logging_config
                     .enable_keyframe_logging
-                    .then(|| Box::new(keyframes_logger) as Box<dyn WriteStream<KeyFrame>>);
+                    .then(|| Box::new(keyframe_sink) as Box<CompletedKeyFrameSink>);
                 (
-                    Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
-                    keyframes_logger,
+                    Some(Box::new(copperlist_sink) as Box<CompletedCopperListSink<P>>),
+                    keyframe_sink,
                     logging_config.keyframe_interval.unwrap(),
                 )
             }
             Some(_) => (None, None, 0),
             None => (
-                Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
-                Some(Box::new(keyframes_logger) as Box<dyn WriteStream<KeyFrame>>),
+                Some(Box::new(copperlist_sink) as Box<CompletedCopperListSink<P>>),
+                Some(Box::new(keyframe_sink) as Box<CompletedKeyFrameSink>),
                 DEFAULT_KEYFRAME_INTERVAL,
             ),
         };
 
-        let copperlists_manager = CopperListsManager::new(copperlists_logger)?;
+        let copperlists_manager = CopperListsManager::new(copperlist_sink)?;
         #[cfg(target_os = "none")]
         {
             let cl_size = core::mem::size_of::<CopperList<P>>();
@@ -1372,7 +1389,7 @@ where
 
         let keyframes_manager = KeyFramesManager {
             inner: KeyFrame::new(),
-            logger: keyframes_logger,
+            sink: keyframe_sink,
             keyframe_interval,
             last_encoded_bytes: 0,
             forced_timestamp: None,
@@ -1415,15 +1432,15 @@ impl<
     TI,
     BI,
     MI,
-    CLW,
-    KFW,
-> CuRuntimeBuilder<'cfg, CT, CB, P, M, NBCL, TI, BI, MI, CLW, KFW>
+    CLS,
+    KFS,
+> CuRuntimeBuilder<'cfg, CT, CB, P, M, NBCL, TI, BI, MI, CLS, KFS>
 where
     TI: for<'c> Fn(Vec<Option<&'c ComponentConfig>>, &mut ResourceManager) -> CuResult<CT>,
     BI: Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
     MI: Fn(&CuConfig, CuMonitoringMetadata, CuMonitoringRuntime) -> M,
-    CLW: WriteStream<CopperList<P>> + 'static,
-    KFW: WriteStream<KeyFrame> + 'static,
+    CLS: WriteStream<CopperList<P>> + 'static,
+    KFS: WriteStream<KeyFrame> + 'static,
 {
     pub fn build(self) -> CuResult<CuRuntime<CT, CB, P, M, NBCL>> {
         let Self {
@@ -1434,8 +1451,8 @@ where
             instance_id,
             resources,
             parts,
-            copperlists_logger,
-            keyframes_logger,
+            copperlist_sink,
+            keyframe_sink,
         } = self;
         let mut resources =
             resources.ok_or_else(|| CuError::from("Resources missing from CuRuntimeBuilder"))?;
@@ -1464,26 +1481,26 @@ where
         let monitor = (parts.monitor_instanciator)(config, monitor_metadata, monitor_runtime);
         let bridges = (parts.bridges_instanciator)(config, &mut resources)?;
 
-        let (copperlists_logger, keyframes_logger, keyframe_interval) = match &config.logging {
+        let (copperlist_sink, keyframe_sink, keyframe_interval) = match &config.logging {
             Some(logging_config) if logging_config.enable_task_logging => {
-                let keyframes_logger = logging_config
+                let keyframe_sink = logging_config
                     .enable_keyframe_logging
-                    .then(|| Box::new(keyframes_logger) as Box<dyn WriteStream<KeyFrame>>);
+                    .then(|| Box::new(keyframe_sink) as Box<CompletedKeyFrameSink>);
                 (
-                    Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
-                    keyframes_logger,
+                    Some(Box::new(copperlist_sink) as Box<CompletedCopperListSink<P>>),
+                    keyframe_sink,
                     logging_config.keyframe_interval.unwrap(),
                 )
             }
             Some(_) => (None, None, 0),
             None => (
-                Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
-                Some(Box::new(keyframes_logger) as Box<dyn WriteStream<KeyFrame>>),
+                Some(Box::new(copperlist_sink) as Box<CompletedCopperListSink<P>>),
+                Some(Box::new(keyframe_sink) as Box<CompletedKeyFrameSink>),
                 DEFAULT_KEYFRAME_INTERVAL,
             ),
         };
 
-        let copperlists_manager = CopperListsManager::new(copperlists_logger)?;
+        let copperlists_manager = CopperListsManager::new(copperlist_sink)?;
         #[cfg(target_os = "none")]
         {
             let cl_size = core::mem::size_of::<CopperList<P>>();
@@ -1496,7 +1513,7 @@ where
 
         let keyframes_manager = KeyFramesManager {
             inner: KeyFrame::new(),
-            logger: keyframes_logger,
+            sink: keyframe_sink,
             keyframe_interval,
             last_encoded_bytes: 0,
             forced_timestamp: None,
@@ -1754,6 +1771,10 @@ pub struct RuntimeLifecycleRecord {
     pub timestamp: CuTime,
     pub event: RuntimeLifecycleEvent,
 }
+
+/// Semantic output boundary for runtime lifecycle and manifest records.
+#[doc(hidden)]
+pub type RuntimeLifecycleSink = SemanticRecordSink<RuntimeLifecycleRecord>;
 
 impl<
     CT,
@@ -2356,6 +2377,43 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "std")]
+    #[derive(Debug)]
+    struct RecordingSemanticSink {
+        ids: Arc<Mutex<Vec<u64>>>,
+    }
+
+    #[cfg(feature = "std")]
+    impl WriteStream<CopperList<IntMsgs>> for RecordingSemanticSink {
+        fn log(&mut self, culist: &CopperList<IntMsgs>) -> CuResult<()> {
+            assert_eq!(culist.get_state(), CopperListState::BeingSerialized);
+            self.ids.lock().unwrap().push(culist.id);
+            Ok(())
+        }
+
+        fn last_log_bytes(&self) -> Option<usize> {
+            Some(23)
+        }
+    }
+
+    #[cfg(feature = "std")]
+    #[derive(Debug)]
+    struct RecordingKeyFrameSink {
+        ids: Arc<Mutex<Vec<u64>>>,
+    }
+
+    #[cfg(feature = "std")]
+    impl WriteStream<KeyFrame> for RecordingKeyFrameSink {
+        fn log(&mut self, keyframe: &KeyFrame) -> CuResult<()> {
+            self.ids.lock().unwrap().push(keyframe.culistid);
+            Ok(())
+        }
+
+        fn last_log_bytes(&self) -> Option<usize> {
+            Some(29)
+        }
+    }
+
     #[test]
     fn test_runtime_instantiation() {
         let mut config = CuConfig::default();
@@ -2661,6 +2719,46 @@ mod tests {
         assert_eq!(copperlists.available_copper_lists().unwrap(), 1);
     }
 
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_sync_manager_accepts_nonserializing_semantic_sink() {
+        let ids = Arc::new(Mutex::new(Vec::new()));
+        let mut copperlists =
+            SyncCopperListsManager::<IntMsgs, 1>::new(Some(Box::new(RecordingSemanticSink {
+                ids: ids.clone(),
+            })))
+            .unwrap();
+
+        let culist = copperlists.create().unwrap();
+        culist.change_state(CopperListState::Processing);
+        copperlists.end_of_processing(0).unwrap();
+
+        assert_eq!(*ids.lock().unwrap(), vec![0]);
+        assert_eq!(copperlists.last_encoded_bytes, 23);
+        assert_eq!(copperlists.last_handle_bytes, 0);
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_keyframe_manager_accepts_nonserializing_semantic_sink() {
+        let ids = Arc::new(Mutex::new(Vec::new()));
+        let mut keyframes = KeyFramesManager {
+            inner: KeyFrame::new(),
+            forced_timestamp: None,
+            locked: false,
+            sink: Some(Box::new(RecordingKeyFrameSink { ids: ids.clone() })),
+            keyframe_interval: 1,
+            last_encoded_bytes: 0,
+            capture_size_hint: KEYFRAME_PAYLOAD_HEADER.len(),
+        };
+
+        keyframes.reset(7, &RobotClock::default());
+        keyframes.end_of_processing(7).unwrap();
+
+        assert_eq!(*ids.lock().unwrap(), vec![7]);
+        assert_eq!(keyframes.last_encoded_bytes, 29);
+    }
+
     #[cfg(not(feature = "async-cl-io"))]
     #[test]
     fn test_sync_end_of_processing_preserves_slot_on_logger_error() {
@@ -2715,6 +2813,7 @@ mod tests {
     #[cfg(all(feature = "std", feature = "async-cl-io"))]
     impl WriteStream<CopperList<Msgs>> for RecordingWriter {
         fn log(&mut self, culist: &CopperList<Msgs>) -> CuResult<()> {
+            assert_eq!(culist.get_state(), CopperListState::BeingSerialized);
             self.ids.lock().unwrap().push(culist.id);
             std::thread::sleep(std::time::Duration::from_millis(2));
             Ok(())

@@ -50,7 +50,11 @@ impl WriteStream<CuLogEntry> for DummyWriteStream {
         Ok(())
     }
 }
-type LogWriter = Box<dyn WriteStream<CuLogEntry> + Send + 'static>;
+/// Existing type-erased leaf boundary for structured-log consumers.
+///
+/// Generated code may place a statically composed semantic-output adapter here
+/// without adding another layer of runtime dispatch.
+type StructuredLogSink = Box<dyn WriteStream<CuLogEntry> + Send + 'static>;
 
 /// Callback signature: receives the structured entry plus its format string and param names.
 pub type LiveLogListener = Box<dyn Fn(&CuLogEntry, &str, &[&str]) + Send + Sync + 'static>;
@@ -137,7 +141,7 @@ pub fn format_message_only(
 
 /// Shared logging state reachable from the macro-generated calls.
 struct LoggerState {
-    writer: Mutex<LogWriter>,
+    sink: Mutex<StructuredLogSink>,
     clock: RobotClock,
     live_listeners: Mutex<LiveLogListeners>,
 }
@@ -171,21 +175,24 @@ impl Log for NullLog {
 pub struct LoggerRuntime {}
 
 impl LoggerRuntime {
-    /// destination is the binary stream in which we will log the structured log.
+    /// `sink` consumes each semantic structured-log entry.
+    ///
+    /// The default generated sink writes the local binary stream; generated
+    /// applications may instead supply a statically composed output adapter.
     /// `extra_text_logger` is the logger that will log the text logs in real time. This is slow and only for debug builds.
     pub fn init(
         clock: RobotClock,
-        destination: impl WriteStream<CuLogEntry> + 'static,
+        sink: impl WriteStream<CuLogEntry> + 'static,
         #[allow(unused_variables)] extra_text_logger: Option<impl Log + 'static>,
     ) -> Self {
         STRUCTURED_LOG_BYTES.store(0, Ordering::Relaxed);
 
         if let Some(state) = LOGGER_STATE.get() {
-            let mut writer_guard = lock_mutex(&state.writer);
-            *writer_guard = Box::new(destination);
+            let mut active_sink = lock_mutex(&state.sink);
+            *active_sink = Box::new(sink);
         } else {
             let state = LoggerState {
-                writer: Mutex::new(Box::new(destination)),
+                sink: Mutex::new(Box::new(sink)),
                 clock,
                 live_listeners: Mutex::new(LiveLogListeners::default()),
             };
@@ -236,8 +243,8 @@ impl LoggerRuntime {
     pub fn flush(&self) {
         // no op in no_std TODO(gbin): check if it will be needed in no_std at some point.
         if let Some(state) = LOGGER_STATE.get() {
-            let mut writer = lock_mutex(&state.writer);
-            let _ = writer.flush(); // ignore errors in no_std
+            let mut sink = lock_mutex(&state.sink);
+            let _ = sink.flush(); // ignore errors in no_std
         } else {
             #[cfg(feature = "std")]
             eprintln!("cu29_log: Logger not initialized.");
@@ -250,8 +257,8 @@ impl Drop for LoggerRuntime {
         self.flush();
         // Assume on no-std that there is no buffering. TODO(gbin): check if this hold true.
         if let Some(state) = LOGGER_STATE.get() {
-            let mut writer_guard = lock_mutex(&state.writer);
-            *writer_guard = Box::new(DummyWriteStream);
+            let mut sink = lock_mutex(&state.sink);
+            *sink = Box::new(DummyWriteStream);
         }
     }
 }
@@ -270,7 +277,7 @@ fn log_inner(
     };
     entry.time = state.clock.now();
 
-    let mut guard = lock_mutex(&state.writer);
+    let mut guard = lock_mutex(&state.sink);
     guard.log(entry)?;
     if let Some(bytes) = guard.last_log_bytes() {
         STRUCTURED_LOG_BYTES.fetch_add(bytes, Ordering::Relaxed);
