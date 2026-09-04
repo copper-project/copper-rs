@@ -27,8 +27,8 @@
 //! - `remote-debug`: remote debug transport support
 //! - `sysclock-perf`: use a host/system clock for runtime perf timing while keeping robot time for `tov` and `rate_target_hz`
 //! - `high-precision-limiter`: std-only hybrid sleep/spin loop limiter for tighter `rate_target_hz` cadence
-//! - `async-cl-io`: hand completed CopperLists to a dedicated std output thread without blocking;
-//!   drops are reported through `CopperListIoStats::dropped_copperlists_total`
+//! - `async-cl-io`: hand completed CopperLists and keyframes to dedicated std output threads
+//!   without blocking; drops are reported through `CopperListIoStats`
 //! - `flat-copperlist-encoding`: override the default compression for CPU-constrained applications
 //! - `parallel-rt`: prepare the runtime for a future multi-threaded deterministic executor
 //! - `cuda`: enable CUDA-backed Copper pools and handles on supported host platforms

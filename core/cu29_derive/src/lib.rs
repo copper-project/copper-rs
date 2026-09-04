@@ -4756,7 +4756,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     let _keyframe_lock =
                         kf_lock.lock().expect("parallel keyframe lock poisoned");
                     let kf_manager = unsafe { kf_manager_ptr.as_mut() };
-                    kf_manager.reset(clid, clock);
+                    kf_manager.try_reset(clid, clock)?;
                     if kf_manager.captures_keyframe(clid) {
                         active_keyframe_clid = Some(clid);
                     }
@@ -4769,10 +4769,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     kf_lock.lock().expect("parallel keyframe lock poisoned");
                 let kf_manager = unsafe { kf_manager_ptr.as_mut() };
                 kf_manager.end_of_processing(worker_result.clid)?;
-                kf_manager.last_encoded_bytes
+                (
+                    kf_manager.last_encoded_bytes,
+                    kf_manager.dropped_keyframes_total(),
+                )
             }}
         } else {
-            quote! { 0u64 }
+            quote! { (0u64, 0u64) }
         };
         let parallel_keyframe_clear = keyframe_logging_enabled.then(|| {
             quote! {
@@ -5052,7 +5055,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             }
                                             cu29::curuntime::OwnedCopperListSubmission::Pending => {}
                                         }
-                                        let keyframe_bytes = #parallel_keyframe_finish;
+                                        let (keyframe_bytes, dropped_keyframes_total) = #parallel_keyframe_finish;
                                         monitor_result?;
                                         let stats = cu29::monitoring::CopperListIoStats {
                                             raw_culist_bytes: core::mem::size_of::<CuList>() as u64
@@ -5063,6 +5066,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             structured_log_bytes_total: ::cu29::prelude::structured_log_bytes_total(),
                                             culistid: worker_result.clid,
                                             dropped_copperlists_total: cl_manager.dropped_copperlists_total(),
+                                            dropped_keyframes_total,
                                         };
                                         monitor.observe_copperlist_io(stats);
 
@@ -5130,11 +5134,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let keyframe_manager_binding = keyframe_logging_enabled
             .then(|| quote! { let kf_manager = &mut runtime.keyframes_manager; });
         let keyframe_reset =
-            keyframe_logging_enabled.then(|| quote! { kf_manager.reset(clid, clock); });
+            keyframe_logging_enabled.then(|| quote! { kf_manager.try_reset(clid, clock)?; });
         let keyframe_finish =
             keyframe_logging_enabled.then(|| quote! { kf_manager.end_of_processing(clid)?; });
         let keyframe_bytes = if keyframe_logging_enabled {
             quote! { kf_manager.last_encoded_bytes }
+        } else {
+            quote! { 0 }
+        };
+        let dropped_keyframes_total = if keyframe_logging_enabled {
+            quote! { kf_manager.dropped_keyframes_total() }
         } else {
             quote! { 0 }
         };
@@ -5150,6 +5159,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     kf_manager.finish_capture_preallocation()?;
                 }
             }
+        });
+        let keyframe_finish_pending = keyframe_logging_enabled.then(|| {
+            quote! { self.copper_runtime.keyframes_manager.finish_pending()?; }
         });
 
         let run_methods: proc_macro2::TokenStream = quote! {
@@ -5234,6 +5246,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     structured_log_bytes_total: ::cu29::prelude::structured_log_bytes_total(),
                     culistid: clid,
                     dropped_copperlists_total: cl_manager.dropped_copperlists_total(),
+                    dropped_keyframes_total: #dropped_keyframes_total,
                 };
                 monitor.observe_copperlist_io(stats);
                 Ok(())
@@ -5285,6 +5298,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 ctx.clear_current_task();
                 self.copper_runtime.monitor.stop(&ctx)?;
                 self.copper_runtime.copperlists_manager.finish_pending()?;
+                #keyframe_finish_pending
                 // TODO(lifecycle): emit typed stop reasons (completed/error/panic/requested)
                 // once panic/reporting flow is finalized for std and no-std.
                 let _ = self.log_runtime_lifecycle_event(RuntimeLifecycleEvent::MissionStopped {
@@ -5453,6 +5467,23 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         } else {
             quote!()
         };
+        let local_keyframe_sink_init = if keyframe_logging_enabled {
+            quote! {
+                #[cfg(target_os = "none")]
+                ::cu29::prelude::info!("CuApp new: creating keyframes stream");
+                let local_keyframe_sink = stream_write::<KeyFrame, S>(
+                    unified_logger.clone(),
+                    UnifiedLogType::FrozenTasks,
+                    1024 * 1024 * 10, // 10 MiB
+                )?;
+                #[cfg(target_os = "none")]
+                ::cu29::prelude::info!("CuApp new: keyframes stream ready");
+            }
+        } else {
+            quote! {
+                let local_keyframe_sink = cu29::curuntime::NullWriteStream;
+            }
+        };
 
         let build_with_resources_fn = quote! {
             #build_with_resources_sig {
@@ -5503,15 +5534,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: copperlist stream ready");
 
-                #[cfg(target_os = "none")]
-                ::cu29::prelude::info!("CuApp new: creating keyframes stream");
-                let local_keyframe_sink = stream_write::<KeyFrame, S>(
-                    unified_logger.clone(),
-                    UnifiedLogType::FrozenTasks,
-                    1024 * 1024 * 10, // 10 MiB
-                )?;
-                #[cfg(target_os = "none")]
-                ::cu29::prelude::info!("CuApp new: keyframes stream ready");
+                #local_keyframe_sink_init
 
                 // Downstream record demand is independent from local logging.
                 // Streaming codegen can union its requirements here without

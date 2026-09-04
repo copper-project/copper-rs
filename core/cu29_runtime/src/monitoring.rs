@@ -1177,6 +1177,10 @@ pub struct CopperListIoStats {
     /// Total completed CopperLists dropped because the asynchronous output
     /// handoff had no capacity. This is cumulative for the runtime instance.
     pub dropped_copperlists_total: u64,
+    /// Total scheduled keyframes skipped because the asynchronous output worker
+    /// had not returned the preallocated spare capture buffer. This is cumulative
+    /// for the runtime instance.
+    pub dropped_keyframes_total: u64,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

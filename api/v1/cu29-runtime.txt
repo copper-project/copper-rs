@@ -867,6 +867,8 @@ pub fn cu29_runtime::curuntime::KeyFramesManager::freeze_task(&mut self, culisti
 pub fn cu29_runtime::curuntime::KeyFramesManager::lock_keyframe(&mut self, keyframe: &cu29_runtime::curuntime::KeyFrame)
 pub fn cu29_runtime::curuntime::KeyFramesManager::reset(&mut self, culistid: u64, clock: &cu29_clock::RobotClock)
 pub fn cu29_runtime::curuntime::KeyFramesManager::set_forced_timestamp(&mut self, ts: cu29_clock::CuTime)
+impl core::ops::drop::Drop for cu29_runtime::curuntime::KeyFramesManager
+pub fn cu29_runtime::curuntime::KeyFramesManager::drop(&mut self)
 pub struct cu29_runtime::curuntime::LoopRateLimiter
 impl cu29_runtime::curuntime::LoopRateLimiter
 pub fn cu29_runtime::curuntime::LoopRateLimiter::from_rate_target_hz(rate_target_hz: u64, clock: &cu29_clock::RobotClock) -> cu29_traits::CuResult<Self>
@@ -1320,6 +1322,7 @@ pub const fn cu29_runtime::monitoring::CopperListInfo::new(size_bytes: usize, co
 pub struct cu29_runtime::monitoring::CopperListIoStats
 pub cu29_runtime::monitoring::CopperListIoStats::culistid: u64
 pub cu29_runtime::monitoring::CopperListIoStats::dropped_copperlists_total: u64
+pub cu29_runtime::monitoring::CopperListIoStats::dropped_keyframes_total: u64
 pub cu29_runtime::monitoring::CopperListIoStats::encoded_culist_bytes: u64
 pub cu29_runtime::monitoring::CopperListIoStats::handle_bytes: u64
 pub cu29_runtime::monitoring::CopperListIoStats::keyframe_bytes: u64
