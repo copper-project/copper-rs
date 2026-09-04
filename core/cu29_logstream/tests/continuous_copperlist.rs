@@ -1,9 +1,12 @@
+mod common;
+
 use bincode::{Decode, Encode};
+use common::link_sim::{LinkSimulationConfig, simulate_bad_link};
 use cu_fec::{DensityThreshold, EncodingSymbolId, Field, RepairParameters, RlcConfig};
 use cu29_logstream::{
     ContinuousCopperListSink, ContinuousDecoder, ContinuousEncoder, ContinuousSenderConfig,
-    CuStreamTx, CuStreamTxError, ImpairmentConfig, Lane, ReceiverLimits, RecordKind,
-    StreamIdentity, decode_copperlist, encode_copperlist, encode_record, impair,
+    CuStreamTx, CuStreamTxError, Lane, ReceiverLimits, RecordKind, StreamIdentity,
+    decode_copperlist, encode_copperlist, encode_record,
 };
 use cu29_runtime::copperlist::CopperList;
 use cu29_traits::{ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks, WriteStream};
@@ -80,7 +83,7 @@ fn partial_copperlist(id: u64) -> CopperList<PartialDataSet> {
 }
 
 #[test]
-fn partial_copperlists_survive_seeded_stream_impairment() {
+fn partial_copperlists_survive_a_deterministically_simulated_bad_link() {
     let identity = StreamIdentity {
         session_id: *b"test-session-001",
         sender_id: 7,
@@ -116,20 +119,19 @@ fn partial_copperlists_survive_seeded_stream_impairment() {
     }
     assert!(source_symbols < WINDOW_SYMBOLS);
 
-    let impaired = impair(
+    let simulated_link = simulate_bad_link(
         &datagrams,
-        ImpairmentConfig {
+        LinkSimulationConfig {
             seed: 0x5eed_cafe,
             drop_basis_points: 2_000,
             corrupt_basis_points: 750,
             duplicate_basis_points: 1_000,
             reorder: true,
         },
-    )
-    .unwrap();
-    assert!(impaired.stats.dropped_datagrams > 0);
-    assert!(impaired.stats.corrupted_datagrams > 0);
-    assert!(impaired.stats.duplicated_datagrams > 0);
+    );
+    assert!(simulated_link.stats.dropped_datagrams > 0);
+    assert!(simulated_link.stats.corrupted_datagrams > 0);
+    assert!(simulated_link.stats.duplicated_datagrams > 0);
 
     let mut decoder = ContinuousDecoder::<MAX_SYMBOL_SIZE, WINDOW_SYMBOLS, MAX_EQUATIONS>::new(
         identity,
@@ -139,7 +141,7 @@ fn partial_copperlists_survive_seeded_stream_impairment() {
         ReceiverLimits::new(4_096, 8, WINDOW_SYMBOLS, 256),
     )
     .unwrap();
-    for datagram in &impaired.datagrams {
+    for datagram in &simulated_link.datagrams {
         decoder.receive_datagram(datagram).unwrap();
     }
 

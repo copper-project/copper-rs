@@ -11,7 +11,6 @@ pub use cu_fec::{DensityThreshold, EncodingSymbolId, Field, RlcConfig};
 
 mod copper;
 mod error;
-mod impairment;
 mod record;
 mod rlc;
 mod sender;
@@ -20,7 +19,6 @@ mod wire;
 
 pub use copper::{decode_copperlist, encode_copperlist, encode_copperlist_record_into};
 pub use error::{Error, Result};
-pub use impairment::{ImpairmentConfig, ImpairmentOutput, ImpairmentStats, impair};
 pub use record::{DecodedRecord, RecordKind, encode_record};
 pub use rlc::{
     ContinuousDecoder, ContinuousEncoder, ContinuousRecoveryStats, ReceiverLimits, RecoveredRecord,

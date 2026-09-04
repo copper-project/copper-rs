@@ -1,9 +1,9 @@
-use crate::{Error, Result};
-use alloc::vec::Vec;
+//! Deterministic simulation of an unreliable datagram link for integration tests.
 
-/// Seeded deterministic datagram impairment profile, expressed in basis points.
+/// Controls the packet loss, corruption, duplication, and reordering introduced
+/// by [`simulate_bad_link`]. Probabilities are expressed in basis points.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct ImpairmentConfig {
+pub struct LinkSimulationConfig {
     pub seed: u64,
     pub drop_basis_points: u16,
     pub corrupt_basis_points: u16,
@@ -12,52 +12,37 @@ pub struct ImpairmentConfig {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct ImpairmentStats {
-    pub input_datagrams: usize,
+pub struct LinkSimulationStats {
     pub dropped_datagrams: usize,
     pub corrupted_datagrams: usize,
     pub duplicated_datagrams: usize,
-    pub output_datagrams: usize,
-}
-
-impl ImpairmentStats {
-    pub const fn destruction_basis_points(self) -> u16 {
-        if self.input_datagrams == 0 {
-            return 0;
-        }
-        let destroyed = self
-            .dropped_datagrams
-            .saturating_add(self.corrupted_datagrams);
-        ((destroyed as u64 * 10_000) / self.input_datagrams as u64) as u16
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ImpairmentOutput {
+pub struct LinkSimulationOutput {
     pub datagrams: Vec<Vec<u8>>,
-    pub stats: ImpairmentStats,
+    pub stats: LinkSimulationStats,
 }
 
-/// Apply deterministic loss, corruption, duplication, and reordering.
-pub fn impair(datagrams: &[Vec<u8>], config: ImpairmentConfig) -> Result<ImpairmentOutput> {
-    if config.drop_basis_points > 10_000
-        || config.corrupt_basis_points > 10_000
-        || config.duplicate_basis_points > 10_000
-    {
-        return Err(Error::InvalidConfig(
-            "impairment probabilities cannot exceed 10,000 basis points",
-        ));
-    }
+/// Simulates a bad datagram link in a deterministic, reproducible way.
+pub fn simulate_bad_link(
+    datagrams: &[Vec<u8>],
+    config: LinkSimulationConfig,
+) -> LinkSimulationOutput {
+    assert!(
+        config.drop_basis_points <= 10_000
+            && config.corrupt_basis_points <= 10_000
+            && config.duplicate_basis_points <= 10_000,
+        "link simulation probabilities cannot exceed 10,000 basis points"
+    );
+
     let mut rng = SplitMix64::new(config.seed);
     let capacity = datagrams
         .len()
         .checked_mul(2)
-        .ok_or(Error::InvalidConfig("impaired datagram capacity overflow"))?;
+        .expect("simulated datagram capacity overflow");
     let mut output = Vec::with_capacity(capacity);
-    let mut stats = ImpairmentStats {
-        input_datagrams: datagrams.len(),
-        ..ImpairmentStats::default()
-    };
+    let mut stats = LinkSimulationStats::default();
 
     for datagram in datagrams {
         if rng.basis_points() < config.drop_basis_points {
@@ -84,11 +69,10 @@ pub fn impair(datagrams: &[Vec<u8>], config: ImpairmentConfig) -> Result<Impairm
             output.swap(index, other);
         }
     }
-    stats.output_datagrams = output.len();
-    Ok(ImpairmentOutput {
+    LinkSimulationOutput {
         datagrams: output,
         stats,
-    })
+    }
 }
 
 struct SplitMix64(u64);
@@ -115,24 +99,18 @@ impl SplitMix64 {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use alloc::vec;
-
-    #[test]
-    fn impairment_is_reproducible() {
-        let datagrams = (0..20).map(|value| vec![value; 8]).collect::<Vec<_>>();
-        let config = ImpairmentConfig {
-            seed: 42,
-            drop_basis_points: 2_000,
-            corrupt_basis_points: 1_000,
-            duplicate_basis_points: 1_000,
-            reorder: true,
-        };
-        assert_eq!(
-            impair(&datagrams, config).unwrap(),
-            impair(&datagrams, config).unwrap()
-        );
-    }
+#[test]
+fn bad_link_simulation_is_reproducible() {
+    let datagrams = (0..20).map(|value| vec![value; 8]).collect::<Vec<_>>();
+    let config = LinkSimulationConfig {
+        seed: 42,
+        drop_basis_points: 2_000,
+        corrupt_basis_points: 1_000,
+        duplicate_basis_points: 1_000,
+        reorder: true,
+    };
+    assert_eq!(
+        simulate_bad_link(&datagrams, config),
+        simulate_bad_link(&datagrams, config)
+    );
 }
