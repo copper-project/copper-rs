@@ -87,6 +87,8 @@ pub use cu29_runtime::cutask_anytime;
 pub use cu29_runtime::debug;
 #[cfg(feature = "std")]
 pub use cu29_runtime::distributed_replay;
+#[doc(hidden)]
+pub use cu29_runtime::fanout;
 pub use cu29_runtime::input_msg;
 pub use cu29_runtime::logcodec;
 pub use cu29_runtime::monitoring;

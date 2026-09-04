@@ -28,6 +28,8 @@ pub mod cutask_anytime;
 pub mod debug;
 #[cfg(feature = "std")]
 pub mod distributed_replay;
+#[doc(hidden)]
+pub mod fanout;
 pub(crate) mod log;
 pub mod logcodec;
 pub mod monitoring;
