@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 
 const RECORD_MAGIC: [u8; 4] = *b"CUSR";
 const RECORD_VERSION: u8 = 1;
-const RECORD_HEADER_LEN: usize = 56;
+pub const RECORD_HEADER_LEN: usize = 56;
 const RECORD_DIGEST_OFFSET: usize = 24;
 
 /// Semantic record families carried by the log stream.
@@ -64,6 +64,34 @@ pub fn encode_record(kind: RecordKind, object_id: u64, payload: &[u8]) -> Result
     let digest = record_digest(kind, object_id, payload_len, payload);
     record[RECORD_DIGEST_OFFSET..RECORD_HEADER_LEN].copy_from_slice(digest.as_bytes());
     Ok(record)
+}
+
+/// Writes a semantic-record header for a payload already stored immediately
+/// after `header` in the caller's record buffer.
+pub(crate) fn encode_record_header(
+    kind: RecordKind,
+    object_id: u64,
+    payload: &[u8],
+    header: &mut [u8],
+) -> Result<()> {
+    if header.len() < RECORD_HEADER_LEN {
+        return Err(Error::BufferTooSmall {
+            needed: RECORD_HEADER_LEN,
+            available: header.len(),
+        });
+    }
+    let payload_len = u64::try_from(payload.len())
+        .map_err(|_| Error::InvalidConfig("record payload length exceeds u64"))?;
+    let header = &mut header[..RECORD_HEADER_LEN];
+    header.fill(0);
+    header[..4].copy_from_slice(&RECORD_MAGIC);
+    header[4] = RECORD_VERSION;
+    header[5] = kind as u8;
+    header[8..16].copy_from_slice(&object_id.to_be_bytes());
+    header[16..24].copy_from_slice(&payload_len.to_be_bytes());
+    let digest = record_digest(kind, object_id, payload_len, payload);
+    header[RECORD_DIGEST_OFFSET..RECORD_HEADER_LEN].copy_from_slice(digest.as_bytes());
+    Ok(())
 }
 
 pub(crate) fn decode_record(record: &[u8]) -> Result<DecodedRecord<'_>> {

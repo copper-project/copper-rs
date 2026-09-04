@@ -1,17 +1,36 @@
 use bincode::{Decode, Encode};
 use cu_fec::{DensityThreshold, EncodingSymbolId, Field, RepairParameters, RlcConfig};
 use cu29_logstream::{
-    ContinuousDecoder, ContinuousEncoder, ImpairmentConfig, Lane, ReceiverLimits, RecordKind,
+    ContinuousCopperListSink, ContinuousDecoder, ContinuousEncoder, ContinuousSenderConfig,
+    CuStreamTx, CuStreamTxError, ImpairmentConfig, Lane, ReceiverLimits, RecordKind,
     StreamIdentity, decode_copperlist, encode_copperlist, encode_record, impair,
 };
 use cu29_runtime::copperlist::CopperList;
-use cu29_traits::{ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks};
+use cu29_traits::{ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks, WriteStream};
 use serde::Serialize;
 
 const MAX_SYMBOL_SIZE: usize = 192;
 const SYMBOL_SIZE: usize = 160;
 const WINDOW_SYMBOLS: usize = 64;
 const MAX_EQUATIONS: usize = 32;
+
+#[derive(Debug, Default)]
+struct BackpressureTx {
+    attempts: usize,
+    accepted: Vec<Vec<u8>>,
+}
+
+impl CuStreamTx for BackpressureTx {
+    fn try_send(&mut self, datagram: &[u8]) -> Result<(), CuStreamTxError> {
+        self.attempts += 1;
+        if self.attempts.is_multiple_of(2) {
+            Err(CuStreamTxError::WouldBlock)
+        } else {
+            self.accepted.push(datagram.to_vec());
+            Ok(())
+        }
+    }
+}
 
 /// Test stand-in for the generated streaming view: all slot metadata remains,
 /// while only selected payloads and reconstruction digests cross the link.
@@ -211,4 +230,44 @@ fn missing_unrepaired_fragments_do_not_claim_semantic_recovery() {
     assert_eq!(stats.source_symbols_recovered, 0);
     assert_eq!(stats.source_recovery_basis_points(source_symbols), 0);
     assert_eq!(stats.semantic_recovery_basis_points(source.len()), 0);
+}
+
+#[test]
+fn sender_drops_transport_backpressure_without_blocking_the_output_worker() {
+    let identity = StreamIdentity {
+        session_id: *b"test-session-003",
+        sender_id: 11,
+    };
+    let fec = RlcConfig::new(SYMBOL_SIZE, WINDOW_SYMBOLS, Field::Gf256).unwrap();
+    let mut sink = ContinuousCopperListSink::<
+        PartialDataSet,
+        BackpressureTx,
+        MAX_SYMBOL_SIZE,
+        WINDOW_SYMBOLS,
+    >::new(
+        BackpressureTx::default(),
+        ContinuousSenderConfig {
+            identity,
+            first_packet_sequence: 0,
+            lane: Lane::ReplayCritical,
+            fec,
+            max_record_bytes: 4_096,
+            initial_esi: EncodingSymbolId::new(0),
+            repair_every_source_symbols: 2,
+            first_repair_key: 1,
+            repair_density: DensityThreshold::FULL,
+        },
+    )
+    .unwrap();
+
+    sink.log(&partial_copperlist(12_000)).unwrap();
+
+    let stats = sink.stats();
+    assert_eq!(stats.records_encoded, 1);
+    assert!(stats.datagrams_sent > 0);
+    assert!(stats.datagrams_dropped > 0);
+    assert_eq!(
+        stats.datagrams_sent + stats.datagrams_dropped,
+        stats.source_datagrams + stats.repair_datagrams
+    );
 }

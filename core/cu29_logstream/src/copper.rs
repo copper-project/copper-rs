@@ -1,4 +1,5 @@
-use crate::{Error, Result};
+use crate::record::{RECORD_HEADER_LEN, encode_record_header};
+use crate::{Error, RecordKind, Result};
 use alloc::{string::ToString, vec::Vec};
 use cu29_runtime::copperlist::CopperList;
 use cu29_traits::CopperListTuple;
@@ -10,6 +11,29 @@ use cu29_traits::CopperListTuple;
 pub fn encode_copperlist<P: CopperListTuple>(copperlist: &CopperList<P>) -> Result<Vec<u8>> {
     bincode::encode_to_vec(copperlist, bincode::config::standard())
         .map_err(|error| Error::Codec(error.to_string()))
+}
+
+/// Serializes and frames one CopperList directly into reusable caller-owned storage.
+pub fn encode_copperlist_record_into<P: CopperListTuple>(
+    copperlist: &CopperList<P>,
+    output: &mut [u8],
+) -> Result<usize> {
+    if output.len() < RECORD_HEADER_LEN {
+        return Err(Error::BufferTooSmall {
+            needed: RECORD_HEADER_LEN,
+            available: output.len(),
+        });
+    }
+    let (header, payload) = output.split_at_mut(RECORD_HEADER_LEN);
+    let payload_len = bincode::encode_into_slice(copperlist, payload, bincode::config::standard())
+        .map_err(|error| Error::Codec(error.to_string()))?;
+    encode_record_header(
+        RecordKind::CopperList,
+        copperlist.id,
+        &payload[..payload_len],
+        header,
+    )?;
+    Ok(RECORD_HEADER_LEN + payload_len)
 }
 
 /// Decodes one application-typed full or partial CopperList.

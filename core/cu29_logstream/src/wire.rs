@@ -100,29 +100,9 @@ pub struct WirePacket {
 
 impl WirePacket {
     pub fn encode(&self) -> Result<Vec<u8>> {
-        let payload_len = u16::try_from(self.payload.len())
-            .map_err(|_| Error::InvalidConfig("wire payload exceeds u16"))?;
-        let mut bytes = Vec::with_capacity(PACKET_HEADER_LEN + self.payload.len());
-        bytes.extend_from_slice(&PACKET_MAGIC);
-        bytes.push(WIRE_VERSION);
-        bytes.push(PACKET_HEADER_LEN as u8);
-        bytes.push(self.header.lane as u8);
-        bytes.push(self.header.record_kind as u8);
-        bytes.push(self.header.fec_scheme as u8);
-        bytes.push(self.header.symbol_kind as u8);
-        bytes.extend_from_slice(&0_u16.to_be_bytes());
-        bytes.extend_from_slice(&self.header.session_id);
-        bytes.extend_from_slice(&self.header.sender_id.to_be_bytes());
-        bytes.extend_from_slice(&self.header.packet_sequence.to_be_bytes());
-        bytes.extend_from_slice(&self.header.object_id.to_be_bytes());
-        bytes.extend_from_slice(&self.header.fec_metadata);
-        bytes.extend_from_slice(&self.header.fragment_count.to_be_bytes());
-        bytes.extend_from_slice(&payload_len.to_be_bytes());
-        bytes.extend_from_slice(&0_u16.to_be_bytes());
-        bytes.extend_from_slice(&0_u32.to_be_bytes());
-        bytes.extend_from_slice(&self.payload);
-        let checksum = CRC32C.checksum(&bytes);
-        bytes[CRC_OFFSET..PACKET_HEADER_LEN].copy_from_slice(&checksum.to_be_bytes());
+        let mut bytes = alloc::vec![0; PACKET_HEADER_LEN + self.payload.len()];
+        let encoded = encode_packet_into(self.header, &self.payload, &mut bytes)?;
+        debug_assert_eq!(encoded, bytes.len());
         Ok(bytes)
     }
 
@@ -178,6 +158,42 @@ impl WirePacket {
     }
 }
 
+/// Encodes one packet into caller-owned storage and returns its exact length.
+pub fn encode_packet_into(header: WireHeader, payload: &[u8], output: &mut [u8]) -> Result<usize> {
+    let payload_len = u16::try_from(payload.len())
+        .map_err(|_| Error::InvalidConfig("wire payload exceeds u16"))?;
+    let needed = PACKET_HEADER_LEN
+        .checked_add(payload.len())
+        .ok_or(Error::InvalidConfig("packet length overflow"))?;
+    if output.len() < needed {
+        return Err(Error::BufferTooSmall {
+            needed,
+            available: output.len(),
+        });
+    }
+
+    let bytes = &mut output[..needed];
+    bytes.fill(0);
+    bytes[..4].copy_from_slice(&PACKET_MAGIC);
+    bytes[4] = WIRE_VERSION;
+    bytes[5] = PACKET_HEADER_LEN as u8;
+    bytes[6] = header.lane as u8;
+    bytes[7] = header.record_kind as u8;
+    bytes[8] = header.fec_scheme as u8;
+    bytes[9] = header.symbol_kind as u8;
+    bytes[12..28].copy_from_slice(&header.session_id);
+    bytes[28..32].copy_from_slice(&header.sender_id.to_be_bytes());
+    bytes[32..40].copy_from_slice(&header.packet_sequence.to_be_bytes());
+    bytes[40..48].copy_from_slice(&header.object_id.to_be_bytes());
+    bytes[48..60].copy_from_slice(&header.fec_metadata);
+    bytes[60..64].copy_from_slice(&header.fragment_count.to_be_bytes());
+    bytes[64..66].copy_from_slice(&payload_len.to_be_bytes());
+    bytes[PACKET_HEADER_LEN..].copy_from_slice(payload);
+    let checksum = CRC32C.checksum(bytes);
+    bytes[CRC_OFFSET..PACKET_HEADER_LEN].copy_from_slice(&checksum.to_be_bytes());
+    Ok(needed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -216,5 +232,16 @@ mod tests {
         let mut encoded = fixture().encode().unwrap();
         *encoded.last_mut().unwrap() ^= 0x40;
         assert_eq!(WirePacket::decode(&encoded), Err(Error::CrcMismatch));
+    }
+
+    #[test]
+    fn caller_owned_encoding_matches_allocating_encoding() {
+        let packet = fixture();
+        let expected = packet.encode().unwrap();
+        let mut storage = [0xaa; 128];
+        let encoded = encode_packet_into(packet.header, &packet.payload, &mut storage).unwrap();
+
+        assert_eq!(&storage[..encoded], expected);
+        assert!(storage[encoded..].iter().all(|byte| *byte == 0xaa));
     }
 }

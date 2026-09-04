@@ -10,6 +10,7 @@ pub enum Error {
     TooManyRecords { actual: usize, maximum: usize },
     TooManySourceSymbols { actual: usize, maximum: usize },
     TooManyDatagrams { actual: usize, maximum: usize },
+    BufferTooSmall { needed: usize, available: usize },
     TruncatedPacket,
     InvalidMagic,
     UnsupportedVersion(u8),
@@ -27,6 +28,7 @@ pub enum Error {
     RecordLengthMismatch,
     RecordDigestMismatch,
     Codec(String),
+    Transport(&'static str),
 }
 
 impl Display for Error {
@@ -54,6 +56,12 @@ impl Display for Error {
                     "stream has {actual} source symbols; maximum is {maximum}"
                 )
             }
+            Self::BufferTooSmall { needed, available } => {
+                write!(
+                    formatter,
+                    "buffer needs {needed} bytes; only {available} available"
+                )
+            }
             Self::TruncatedPacket => formatter.write_str("truncated logstream packet"),
             Self::InvalidMagic => formatter.write_str("invalid logstream magic"),
             Self::UnsupportedVersion(version) => {
@@ -77,6 +85,7 @@ impl Display for Error {
             Self::RecordLengthMismatch => formatter.write_str("semantic record length mismatch"),
             Self::RecordDigestMismatch => formatter.write_str("semantic record digest mismatch"),
             Self::Codec(message) => write!(formatter, "semantic codec failed: {message}"),
+            Self::Transport(message) => write!(formatter, "datagram transport failed: {message}"),
         }
     }
 }

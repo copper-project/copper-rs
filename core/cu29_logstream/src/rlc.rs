@@ -1,12 +1,12 @@
 use crate::record::decode_record;
 use crate::{
-    DecodedRecord, Error, FecScheme, FecSymbolKind, Lane, RecordKind, Result, WireHeader,
-    WirePacket,
+    DecodedRecord, Error, FecScheme, FecSymbolKind, Lane, PACKET_HEADER_LEN, RecordKind, Result,
+    WireHeader, WirePacket, encode_packet_into,
 };
 use alloc::{vec, vec::Vec};
 use cu_fec::{
-    EncodingSymbolId, Field, RepairParameters, RepairPayloadId, RlcConfig, RlcDecoder, RlcEncoder,
-    SourcePayloadId,
+    DensityThreshold, EncodingSymbolId, Field, RepairParameters, RepairPayloadId, RlcConfig,
+    RlcDecoder, RlcEncoder, SourcePayloadId,
 };
 
 const FRAGMENT_MAGIC: [u8; 4] = *b"CUFR";
@@ -153,6 +153,42 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize>
 
     /// Fragments and emits one already-framed CopperList record as systematic symbols.
     pub fn push_record(&mut self, record: &[u8], output: &mut Vec<Vec<u8>>) -> Result<usize> {
+        let mut datagram = vec![0; PACKET_HEADER_LEN + self.config().symbol_size()];
+        self.push_record_with(record, &mut datagram, |packet| {
+            output.push(packet.to_vec());
+            Ok(())
+        })
+    }
+
+    /// Fragments a record and emits each systematic packet immediately from
+    /// reusable caller-owned storage.
+    pub fn push_record_with(
+        &mut self,
+        record: &[u8],
+        datagram: &mut [u8],
+        mut emit: impl FnMut(&[u8]) -> Result<()>,
+    ) -> Result<usize> {
+        self.push_record_inner(record, datagram, &mut emit, None)
+            .map(|(source_symbols, _)| source_symbols)
+    }
+
+    pub(crate) fn push_record_with_repairs(
+        &mut self,
+        record: &[u8],
+        datagram: &mut [u8],
+        emit: &mut impl FnMut(&[u8]) -> Result<()>,
+        repair_schedule: &mut RepairSchedule,
+    ) -> Result<(usize, usize)> {
+        self.push_record_inner(record, datagram, emit, Some(repair_schedule))
+    }
+
+    fn push_record_inner(
+        &mut self,
+        record: &[u8],
+        datagram: &mut [u8],
+        emit: &mut impl FnMut(&[u8]) -> Result<()>,
+        mut repair_schedule: Option<&mut RepairSchedule>,
+    ) -> Result<(usize, usize)> {
         let decoded = decode_record(record)?;
         if decoded.kind != RecordKind::CopperList {
             return Err(Error::InconsistentObject);
@@ -170,6 +206,7 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize>
         let fragment_count = u32::try_from(fragment_count)
             .map_err(|_| Error::InvalidConfig("fragment count exceeds u32"))?;
         let mut symbol = [0_u8; MAX_SYMBOL_SIZE];
+        let mut repair_symbols = 0usize;
 
         for (fragment_index, chunk) in record.chunks(fragment_capacity).enumerate() {
             let active_symbol = &mut symbol[..self.config().symbol_size()];
@@ -195,9 +232,23 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize>
                 FecSymbolKind::Source,
                 fec_metadata,
             );
-            self.emit_packet(header, active_symbol, output)?;
+            self.emit_packet_with(header, active_symbol, datagram, emit)?;
+            if let Some(schedule) = repair_schedule.as_mut() {
+                schedule.source_symbols_since_repair =
+                    schedule.source_symbols_since_repair.saturating_add(1);
+                if schedule.source_symbols_since_repair >= schedule.every {
+                    schedule.source_symbols_since_repair -= schedule.every;
+                    self.push_repair_with(
+                        RepairParameters::new(schedule.next_repair_key, schedule.density),
+                        datagram,
+                        &mut *emit,
+                    )?;
+                    schedule.next_repair_key = schedule.next_repair_key.wrapping_add(1);
+                    repair_symbols = repair_symbols.saturating_add(1);
+                }
+            }
         }
-        Ok(fragment_count as usize)
+        Ok((fragment_count as usize, repair_symbols))
     }
 
     /// Emits one repair symbol over the encoder's current sliding window.
@@ -205,6 +256,20 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize>
         &mut self,
         parameters: RepairParameters,
         output: &mut Vec<Vec<u8>>,
+    ) -> Result<RepairPayloadId> {
+        let mut datagram = vec![0; PACKET_HEADER_LEN + self.config().symbol_size()];
+        self.push_repair_with(parameters, &mut datagram, |packet| {
+            output.push(packet.to_vec());
+            Ok(())
+        })
+    }
+
+    /// Emits one repair packet immediately from reusable caller-owned storage.
+    pub fn push_repair_with(
+        &mut self,
+        parameters: RepairParameters,
+        datagram: &mut [u8],
+        mut emit: impl FnMut(&[u8]) -> Result<()>,
     ) -> Result<RepairPayloadId> {
         let mut symbol = [0_u8; MAX_SYMBOL_SIZE];
         let active_symbol = &mut symbol[..self.config().symbol_size()];
@@ -218,7 +283,7 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize>
             FecSymbolKind::Repair,
             fec_metadata,
         );
-        self.emit_packet(header, active_symbol, output)?;
+        self.emit_packet_with(header, active_symbol, datagram, &mut emit)?;
         Ok(id)
     }
 
@@ -244,19 +309,35 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize>
         }
     }
 
-    fn emit_packet(
+    fn emit_packet_with(
         &mut self,
         header: WireHeader,
         payload: &[u8],
-        output: &mut Vec<Vec<u8>>,
+        datagram: &mut [u8],
+        emit: &mut impl FnMut(&[u8]) -> Result<()>,
     ) -> Result<()> {
-        let packet = WirePacket {
-            header,
-            payload: payload.to_vec(),
-        };
-        output.push(packet.encode()?);
+        let encoded = encode_packet_into(header, payload, datagram)?;
+        emit(&datagram[..encoded])?;
         self.packet_sequence = self.packet_sequence.wrapping_add(1);
         Ok(())
+    }
+}
+
+pub(crate) struct RepairSchedule {
+    every: usize,
+    source_symbols_since_repair: usize,
+    next_repair_key: u16,
+    density: DensityThreshold,
+}
+
+impl RepairSchedule {
+    pub(crate) const fn new(every: usize, next_repair_key: u16, density: DensityThreshold) -> Self {
+        Self {
+            every,
+            source_symbols_since_repair: 0,
+            next_repair_key,
+            density,
+        }
     }
 }
 
