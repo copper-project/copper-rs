@@ -1886,6 +1886,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let std = false;
     let signal_handler = cfg!(feature = "signal-handler");
     let parallel_rt_enabled = cfg!(feature = "parallel-rt");
+    let logstream_enabled = cfg!(feature = "logstream");
     let rt_guard = rtsan_guard_tokens();
 
     if ignore_resources && !sim_mode {
@@ -4628,6 +4629,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             })
         };
 
+        let build_with_resources_logstream_param = if logstream_enabled {
+            quote! {
+                logstream: Option<(
+                    Box<dyn ::cu29::logstream::CuStreamTx>,
+                    ::cu29::logstream::ContinuousSenderConfig,
+                )>,
+            }
+        } else {
+            quote! {}
+        };
         let build_with_resources_sig = if sim_mode {
             quote! {
                 fn build_with_resources<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>(
@@ -4635,6 +4646,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     unified_logger: Arc<Mutex<L>>,
                     app_resources: AppResources,
                     instance_id: u32,
+                    #build_with_resources_logstream_param
                     sim_callback: &mut impl FnMut(SimStep) -> SimOverride,
                 ) -> CuResult<Self>
             }
@@ -4645,6 +4657,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     unified_logger: Arc<Mutex<L>>,
                     app_resources: AppResources,
                     instance_id: u32,
+                    #build_with_resources_logstream_param
                 ) -> CuResult<Self>
             }
         };
@@ -5426,6 +5439,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
+        let no_logstream_arg = logstream_enabled.then(|| quote! { None, });
+        let builder_logstream_arg = logstream_enabled.then(|| quote! { self.logstream, });
         let new_with_resources_compat_fn = if sim_mode {
             quote! {
                 pub fn new_with_resources<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>(
@@ -5440,6 +5455,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         unified_logger,
                         app_resources,
                         instance_id,
+                        #no_logstream_arg
                         sim_callback,
                     )
                 }
@@ -5452,7 +5468,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     app_resources: AppResources,
                     instance_id: u32,
                 ) -> CuResult<Self> {
-                    Self::build_with_resources(clock, unified_logger, app_resources, instance_id)
+                    Self::build_with_resources(
+                        clock,
+                        unified_logger,
+                        app_resources,
+                        instance_id,
+                        #no_logstream_arg
+                    )
                 }
             }
         };
@@ -5482,6 +5504,60 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         } else {
             quote! {
                 let local_keyframe_sink = cu29::curuntime::NullWriteStream;
+            }
+        };
+        let copperlist_output_graph = if logstream_enabled {
+            quote! {
+                let local_copperlist_output_required = config
+                    .logging
+                    .as_ref()
+                    .is_none_or(|logging| logging.enable_task_logging);
+                let local_keyframe_output_required = config
+                    .logging
+                    .as_ref()
+                    .is_none_or(|logging| {
+                        logging.enable_task_logging && logging.enable_keyframe_logging
+                    });
+                let logstream_output_required = logstream.is_some();
+                let logstream_sink = logstream
+                    .map(|(transport, mut sender_config)| {
+                        sender_config.identity.sender_id = instance_id;
+                        ::cu29::logstream::DefaultContinuousCopperListSink::<
+                            #mission_mod::CuStampedDataSet,
+                            Box<dyn ::cu29::logstream::CuStreamTx>,
+                        >::new(transport, sender_config)
+                        .map_err(|error| CuError::from(error.to_string()))
+                    })
+                    .transpose()?;
+                let copperlist_sink = ::cu29::fanout::StaticFanoutSink::new(
+                    ::cu29::fanout::OptionalWriteStream::new(
+                        local_copperlist_output_required.then_some(local_copperlist_sink),
+                    ),
+                    ::cu29::fanout::OptionalWriteStream::new(logstream_sink),
+                );
+                let output_requirements = cu29::curuntime::OutputRequirements::new(
+                    local_copperlist_output_required || logstream_output_required,
+                    local_keyframe_output_required,
+                );
+            }
+        } else {
+            quote! {
+                // Downstream record demand is independent from local logging.
+                let local_copperlist_output_required = config
+                    .logging
+                    .as_ref()
+                    .is_none_or(|logging| logging.enable_task_logging);
+                let local_keyframe_output_required = config
+                    .logging
+                    .as_ref()
+                    .is_none_or(|logging| {
+                        logging.enable_task_logging && logging.enable_keyframe_logging
+                    });
+                let output_requirements = cu29::curuntime::OutputRequirements::new(
+                    local_copperlist_output_required,
+                    local_keyframe_output_required,
+                );
+                let copperlist_sink = local_copperlist_sink;
             }
         };
 
@@ -5536,23 +5612,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 #local_keyframe_sink_init
 
-                // Downstream record demand is independent from local logging.
-                // Streaming codegen can union its requirements here without
-                // making the runtime infer demand from `logging`.
-                let local_copperlist_output_required = config
-                    .logging
-                    .as_ref()
-                    .is_none_or(|logging| logging.enable_task_logging);
-                let local_keyframe_output_required = config
-                    .logging
-                    .as_ref()
-                    .is_none_or(|logging| {
-                        logging.enable_task_logging && logging.enable_keyframe_logging
-                    });
-                let output_requirements = cu29::curuntime::OutputRequirements::new(
-                    local_copperlist_output_required,
-                    local_keyframe_output_required,
-                );
+                #copperlist_output_graph
 
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: creating runtime lifecycle stream");
@@ -5600,7 +5660,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         #mission_mod::monitor_instanciator,
                         #mission_mod::bridges_instanciator,
                     ),
-                    local_copperlist_sink,
+                    copperlist_sink,
                     local_keyframe_sink,
                     output_requirements,
                 )
@@ -5894,6 +5954,34 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! { None }
         };
 
+        let builder_logstream_field = logstream_enabled.then(|| {
+            quote! {
+                logstream: Option<(
+                    Box<dyn ::cu29::logstream::CuStreamTx>,
+                    ::cu29::logstream::ContinuousSenderConfig,
+                )>,
+            }
+        });
+        let builder_logstream_init = logstream_enabled.then(|| quote! { logstream: None, });
+        let builder_logstream_copy =
+            logstream_enabled.then(|| quote! { logstream: self.logstream, });
+        let builder_with_logstream_method = logstream_enabled.then(|| {
+            quote! {
+                /// Adds a nonblocking continuous CopperList datagram destination.
+                pub fn with_logstream<T>(
+                    mut self,
+                    transport: T,
+                    config: ::cu29::logstream::ContinuousSenderConfig,
+                ) -> Self
+                where
+                    T: ::cu29::logstream::CuStreamTx + 'static,
+                {
+                    self.logstream = Some((Box::new(transport), config));
+                    self
+                }
+            }
+        });
+
         let (
             builder_struct,
             builder_impl,
@@ -5918,6 +6006,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         config_override: Option<CuConfig>,
                         resources_factory: R,
                         sim_callback: Option<&'a mut F>,
+                        #builder_logstream_field
                         _storage: core::marker::PhantomData<S>,
                     }
                 },
@@ -5942,6 +6031,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             config_override: None,
                             resources_factory: #mission_mod::resources_instanciator as fn(&CuConfig) -> CuResult<ResourceManager>,
                             sim_callback: None,
+                            #builder_logstream_init
                             _storage: core::marker::PhantomData,
                         }
                     }
@@ -5974,6 +6064,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         instance_id: u32,
                         config_override: Option<CuConfig>,
                         resources_factory: R,
+                        #builder_logstream_field
                         _storage: core::marker::PhantomData<S>,
                     }
                 },
@@ -5993,6 +6084,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             instance_id: 0,
                             config_override: None,
                             resources_factory: #mission_mod::resources_instanciator as fn(&CuConfig) -> CuResult<ResourceManager>,
+                            #builder_logstream_init
                             _storage: core::marker::PhantomData,
                         }
                     }
@@ -6203,6 +6295,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         config_override: self.config_override,
                         resources_factory: self.resources_factory,
                         #builder_sim_callback_field_copy
+                        #builder_logstream_copy
                         _storage: core::marker::PhantomData,
                     }
                 }
@@ -6226,6 +6319,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         config_override: self.config_override,
                         resources_factory,
                         #builder_sim_callback_field_copy
+                        #builder_logstream_copy
                         _storage: core::marker::PhantomData,
                     }
                 }
@@ -6233,6 +6327,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #builder_with_config_method
                 #builder_with_log_path_method
                 #builder_sim_callback_method
+                #builder_with_logstream_method
 
                 /// Builds the application wrapped in its compile-time checked
                 /// lifecycle, in the `Initialized` state: start it with
@@ -6262,6 +6357,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         self.unified_logger,
                         app_resources,
                         self.instance_id,
+                        #builder_logstream_arg
                         #builder_build_sim_callback_arg
                     )
                 }

@@ -3,6 +3,60 @@
 use bincode::Encode;
 use cu29_traits::{CuResult, WriteStream};
 
+/// Compile-time sink slot whose concrete type is retained when disabled at runtime.
+#[derive(Debug)]
+pub struct OptionalWriteStream<S> {
+    inner: Option<S>,
+}
+
+impl<S> OptionalWriteStream<S> {
+    #[inline]
+    pub const fn new(inner: Option<S>) -> Self {
+        Self { inner }
+    }
+
+    #[inline]
+    pub const fn is_some(&self) -> bool {
+        self.inner.is_some()
+    }
+
+    #[inline]
+    pub fn as_ref(&self) -> Option<&S> {
+        self.inner.as_ref()
+    }
+
+    #[inline]
+    pub fn as_mut(&mut self) -> Option<&mut S> {
+        self.inner.as_mut()
+    }
+
+    #[inline]
+    pub fn into_inner(self) -> Option<S> {
+        self.inner
+    }
+}
+
+impl<E, S> WriteStream<E> for OptionalWriteStream<S>
+where
+    E: Encode,
+    S: WriteStream<E>,
+{
+    #[inline]
+    fn log(&mut self, record: &E) -> CuResult<()> {
+        self.inner.as_mut().map_or(Ok(()), |sink| sink.log(record))
+    }
+
+    #[inline]
+    fn flush(&mut self) -> CuResult<()> {
+        self.inner.as_mut().map_or(Ok(()), WriteStream::flush)
+    }
+
+    #[inline]
+    fn last_log_bytes(&self) -> Option<usize> {
+        self.inner.as_ref().and_then(WriteStream::last_log_bytes)
+    }
+}
+
 /// Fans one borrowed semantic record out to two concrete sinks.
 ///
 /// Both sinks are called, in field order, even when the first one fails. If
@@ -212,5 +266,13 @@ mod tests {
 
         let ids: Vec<_> = calls.lock().unwrap().iter().map(|(id, _)| *id).collect();
         assert_eq!(ids, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn optional_sink_is_a_noop_when_absent() {
+        let mut sink = OptionalWriteStream::<ProbeSink>::new(None);
+        sink.log(&42).unwrap();
+        sink.flush().unwrap();
+        assert_eq!(sink.last_log_bytes(), None);
     }
 }

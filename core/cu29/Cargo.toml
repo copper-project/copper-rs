@@ -28,6 +28,7 @@ cu29-derive = { workspace = true }
 cu29-log = { workspace = true }
 cu29-log-derive = { workspace = true }
 cu29-log-runtime = { workspace = true }
+cu29-logstream = { workspace = true, optional = true }
 cu29-reflect-derive = { workspace = true }
 cu29-runtime = { workspace = true }
 cu29-traits = { workspace = true }
@@ -65,6 +66,12 @@ signal-handler = ["dep:ctrlc", "cu29-derive/signal-handler"]
 flat-copperlist-encoding = ["cu29-derive/flat-copperlist-encoding"]
 sysclock-perf = ["std", "cu29-runtime/sysclock-perf"]
 high-precision-limiter = ["std", "cu29-runtime/high-precision-limiter"]
+logstream = [
+  "std",
+  "async-cl-io",
+  "dep:cu29-logstream",
+  "cu29-derive/logstream",
+]
 cuda = ["std", "cu29-runtime/cuda"]
 log-level-debug = ["cu29-log-derive/log-level-debug"]
 log-level-info = ["cu29-log-derive/log-level-info"]
@@ -108,6 +115,10 @@ std = [
 ]
 rtsan = ["dep:rtsan-standalone", "cu29-derive/rtsan"]
 safety-ids = ["std", "dep:inventory", "dep:serde_json"]
+
+[dev-dependencies]
+cu29-logstream = { workspace = true, features = ["test-utils"] }
+heapless = { workspace = true }
 
 [build-dependencies]
 cu29-build = { workspace = true }

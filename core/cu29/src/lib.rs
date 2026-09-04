@@ -72,6 +72,8 @@ extern crate alloc;
 extern crate self as cu29;
 
 pub use cu29_derive::{bundle_resources, resources, safety_case};
+#[cfg(feature = "logstream")]
+pub use cu29_logstream as logstream;
 pub use cu29_runtime::app;
 pub use cu29_runtime::config;
 pub use cu29_runtime::context;

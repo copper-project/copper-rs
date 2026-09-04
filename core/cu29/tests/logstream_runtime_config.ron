@@ -1,0 +1,20 @@
+(
+    logging: (
+        enable_task_logging: false,
+        enable_keyframe_logging: false,
+        copperlist_count: 8,
+    ),
+    tasks: [
+        (
+            id: "source",
+            type: "StreamSource",
+        ),
+    ],
+    cnx: [
+        (
+            src: "source",
+            dst: "__nc__",
+            msg: "StreamMsg",
+        ),
+    ],
+)
