@@ -1,0 +1,62 @@
+(
+    logging: (
+        enable_task_logging: false,
+        enable_keyframe_logging: false,
+        copperlist_count: 8,
+    ),
+    resources: [
+        (
+            id: "network",
+            provider: "ConfiguredStreamResources",
+        ),
+    ],
+    log_streaming: (
+        destinations: [
+            (
+                id: "ground",
+                transport: (
+                    type: "ConfiguredTx",
+                    resource: "network.tx",
+                ),
+                link: (
+                    mtu_bytes: 1200,
+                    bitrate_bps: 1000000,
+                    memory_budget_kib: 512,
+                    max_latency_ms: 250,
+                    burst_packets: 8,
+                ),
+                fec: (
+                    continuous: (
+                        field: Gf256,
+                        window_symbols: 64,
+                        repair_every_source_symbols: 4,
+                        repair_density: Full,
+                    ),
+                    objects: (
+                        max_object_bytes: 4194304,
+                        repair_symbols_per_block: 8,
+                    ),
+                ),
+                content: (
+                    archive: true,
+                    live_viz: true,
+                    anchor_interval: 100,
+                ),
+                max_record_bytes: 65536,
+            ),
+        ],
+    ),
+    tasks: [
+        (
+            id: "source",
+            type: "ConfiguredStreamSource",
+        ),
+    ],
+    cnx: [
+        (
+            src: "source",
+            dst: "__nc__",
+            msg: "ConfiguredStreamMsg",
+        ),
+    ],
+)

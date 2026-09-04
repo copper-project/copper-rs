@@ -2,7 +2,8 @@ use crate::{
     DecodedRecord, Error, FecScheme, FecSymbolKind, Lane, PACKET_HEADER_LEN, RecordKind, Result,
     WireHeader, WirePacket, decode_record, encode_packet_into,
 };
-use alloc::{vec, vec::Vec};
+use alloc::{boxed::Box, vec, vec::Vec};
+use bincode::{Decode, Encode};
 use core::fmt::{Display, Formatter};
 use cu_fec::{
     DensityThreshold, EncodingSymbolId, Field, RepairParameters, RepairPayloadId, RlcConfig,
@@ -11,10 +12,10 @@ use cu_fec::{
 
 const FRAGMENT_MAGIC: [u8; 4] = *b"CUFR";
 const FRAGMENT_VERSION: u8 = 1;
-const FRAGMENT_HEADER_LEN: usize = 32;
+pub(crate) const FRAGMENT_HEADER_LEN: usize = 32;
 
 /// Identity shared by one sender's continuous stream.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode)]
 pub struct StreamIdentity {
     pub session_id: [u8; 16],
     pub sender_id: u32,
@@ -427,7 +428,7 @@ pub struct ContinuousDecoder<
     identity: StreamIdentity,
     lane: Lane,
     limits: ReceiverLimits,
-    fec: RlcDecoder<MAX_SYMBOL_SIZE, MAX_WINDOW_SYMBOLS, MAX_EQUATIONS>,
+    fec: Box<RlcDecoder<MAX_SYMBOL_SIZE, MAX_WINDOW_SYMBOLS, MAX_EQUATIONS>>,
     processed_symbols: Vec<EncodingSymbolId>,
     assemblies: Vec<RecordAssembly>,
     ready: Vec<ReadyRecord>,
@@ -458,7 +459,7 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
             identity,
             lane,
             limits,
-            fec: RlcDecoder::new(config, equation_capacity)?,
+            fec: Box::new(RlcDecoder::new(config, equation_capacity)?),
             processed_symbols: Vec::with_capacity(config.window_symbols()),
             assemblies: Vec::with_capacity(limits.max_buffered_records),
             ready: Vec::with_capacity(limits.max_buffered_records),
