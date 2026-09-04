@@ -410,6 +410,7 @@ pub(crate) struct CopperListStats {
     pub(crate) keyframe_bytes: u64,
     pub(crate) structured_total_bytes: u64,
     pub(crate) structured_bytes_per_cl: u64,
+    pub(crate) dropped_copperlists_total: u64,
     pub(crate) total_copperlists: u64,
     pub(crate) window_copperlists: u64,
     pub(crate) last_seen_clid: Option<u64>,
@@ -427,6 +428,7 @@ impl CopperListStats {
             keyframe_bytes: 0,
             structured_total_bytes: 0,
             structured_bytes_per_cl: 0,
+            dropped_copperlists_total: 0,
             total_copperlists: 0,
             window_copperlists: 0,
             last_seen_clid: None,
@@ -447,6 +449,7 @@ impl CopperListStats {
         let total = stats.structured_log_bytes_total;
         self.structured_bytes_per_cl = total.saturating_sub(self.structured_total_bytes);
         self.structured_total_bytes = total;
+        self.dropped_copperlists_total = stats.dropped_copperlists_total;
     }
 
     fn update_rate(&mut self, clid: u64) {
@@ -538,5 +541,30 @@ mod tests {
         assert!(identity.subsystem_name.is_none());
         assert_eq!(identity.mission_name.as_str(), "default");
         assert_eq!(identity.instance_id, 0);
+    }
+
+    #[test]
+    fn copperlist_io_tracks_cumulative_handoff_drops() {
+        static COMPONENTS: &[MonitorComponentMetadata] = &[];
+        let model = MonitorModel::from_parts(
+            COMPONENTS,
+            CopperListInfo::new(0, 0),
+            MonitorTopology::default(),
+        );
+
+        model.observe_copperlist_io(CopperListIoStats {
+            dropped_copperlists_total: 7,
+            ..CopperListIoStats::default()
+        });
+
+        assert_eq!(
+            model
+                .inner
+                .copperlist_stats
+                .lock()
+                .unwrap()
+                .dropped_copperlists_total,
+            7
+        );
     }
 }

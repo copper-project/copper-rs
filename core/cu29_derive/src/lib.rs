@@ -5062,6 +5062,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             keyframe_bytes,
                                             structured_log_bytes_total: ::cu29::prelude::structured_log_bytes_total(),
                                             culistid: worker_result.clid,
+                                            dropped_copperlists_total: cl_manager.dropped_copperlists_total(),
                                         };
                                         monitor.observe_copperlist_io(stats);
 
@@ -5232,6 +5233,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     keyframe_bytes: #keyframe_bytes,
                     structured_log_bytes_total: ::cu29::prelude::structured_log_bytes_total(),
                     culistid: clid,
+                    dropped_copperlists_total: cl_manager.dropped_copperlists_total(),
                 };
                 monitor.observe_copperlist_io(stats);
                 Ok(())

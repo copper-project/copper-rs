@@ -112,7 +112,7 @@ macro_debug = []
 reflect = ["dep:bevy_reflect", "cu29-traits/reflect"]
 sysclock-perf = ["std"]
 high-precision-limiter = ["std"]
-async-cl-io = ["std"]
+async-cl-io = ["std", "dep:rtrb"]
 parallel-rt = ["std", "dep:rtrb"]
 # CPU affinity + real-time scheduler policy/priority for thread pools.
 rt-scheduling = ["std", "dep:core_affinity", "dep:libc"]

@@ -708,6 +708,7 @@ impl MonitorUi {
             .saturating_add(stats.keyframe_bytes)
             .saturating_add(stats.structured_bytes_per_cl);
         let disk_total_bw = format_rate_bytes_or_na(disk_total_bytes, stats.rate_hz);
+        let dropped_display = stats.dropped_copperlists_total.to_string();
 
         let header_cells = ["Metric", "Value"].iter().map(|header| {
             Cell::from(Line::from(*header)).style(
@@ -727,6 +728,13 @@ impl MonitorUi {
         let spacer = row(" ", " ".to_string());
 
         let rate_style = Style::default().fg(palette::CYAN);
+        let dropped_style = if stats.dropped_copperlists_total == 0 {
+            Style::default()
+        } else {
+            Style::default()
+                .fg(palette::LIGHT_RED)
+                .add_modifier(Modifier::BOLD)
+        };
         let mem_rows = vec![
             row("Observed rate", rate_display).style(rate_style),
             spacer.clone(),
@@ -739,6 +747,8 @@ impl MonitorUi {
         ];
 
         let disk_rows = vec![
+            row("Dropped CopperLists", dropped_display).style(dropped_style),
+            spacer.clone(),
             row("CL serialized size", encoded_display),
             row("Space saved", space_saved_display),
             row("Structured log / CL", structured_display),
@@ -1109,9 +1119,11 @@ impl MonitorUi {
 mod tests {
     use super::*;
     use cu29::monitoring::{
-        ComponentType, CopperListInfo, MonitorComponentMetadata, MonitorConnection, MonitorNode,
-        MonitorTopology,
+        ComponentType, CopperListInfo, CopperListIoStats, MonitorComponentMetadata,
+        MonitorConnection, MonitorNode, MonitorTopology,
     };
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
 
     #[test]
     fn normalize_text_colors_replaces_reset_fg_and_bg() {
@@ -1132,6 +1144,39 @@ mod tests {
         let ui = MonitorUi::new(test_monitor_model(), MonitorUiOptions::default());
 
         assert_eq!(ui.active_screen(), MonitorScreen::Dag);
+    }
+
+    #[test]
+    fn copperlist_screen_highlights_dropped_count() {
+        let model = test_monitor_model();
+        model.observe_copperlist_io(CopperListIoStats {
+            dropped_copperlists_total: 7,
+            ..CopperListIoStats::default()
+        });
+        let mut ui = MonitorUi::new(model, MonitorUiOptions::default());
+        ui.set_active_screen(MonitorScreen::CopperList);
+        let mut terminal = Terminal::new(TestBackend::new(90, 18)).unwrap();
+
+        terminal.draw(|frame| ui.draw(frame)).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let dropped_row = buffer
+            .content
+            .chunks(buffer.area.width as usize)
+            .find(|cells| {
+                cells
+                    .iter()
+                    .map(|cell| cell.symbol())
+                    .collect::<String>()
+                    .contains("Dropped CopperLists")
+            })
+            .expect("Dropped CopperLists row");
+        let value = dropped_row
+            .iter()
+            .find(|cell| cell.symbol() == "7")
+            .expect("dropped count value");
+        assert_eq!(value.fg, palette::LIGHT_RED);
+        assert!(value.modifier.contains(Modifier::BOLD));
     }
 
     #[test]

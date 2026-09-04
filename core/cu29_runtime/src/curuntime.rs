@@ -67,9 +67,11 @@ use core::fmt::{Debug, Formatter};
 use core::marker::PhantomData;
 
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
-use std::sync::mpsc::{Receiver, SyncSender, TryRecvError, sync_channel};
+use rtrb::{Consumer, PopError, Producer, PushError, RingBuffer};
 #[cfg(all(feature = "std", feature = "async-cl-io"))]
-use std::thread::JoinHandle;
+use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(all(feature = "std", feature = "async-cl-io"))]
+use std::thread::{JoinHandle, Thread};
 
 #[cfg(feature = "std")]
 #[doc(hidden)]
@@ -544,6 +546,11 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         Ok(NBCL - self.inner.len())
     }
 
+    #[inline]
+    pub const fn dropped_copperlists_total(&self) -> u64 {
+        0
+    }
+
     #[cfg(feature = "std")]
     pub fn end_of_processing_boxed(
         &mut self,
@@ -620,6 +627,18 @@ pub enum OwnedCopperListSubmission<P: CopperListTuple> {
 struct AsyncCopperListCompletion<P: CopperListTuple> {
     culist: Box<CopperList<P>>,
     sink_result: CuResult<(u64, u64)>,
+    #[cfg(feature = "remote-debug")]
+    completed_snapshot: CuResult<Vec<u8>>,
+}
+
+#[cfg(all(feature = "std", feature = "async-cl-io"))]
+struct AsyncOutputWorkerRunningGuard(Arc<AtomicBool>);
+
+#[cfg(all(feature = "std", feature = "async-cl-io"))]
+impl Drop for AsyncOutputWorkerRunningGuard {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
 }
 
 #[cfg(all(feature = "std", any(feature = "async-cl-io", feature = "parallel-rt")))]
@@ -662,9 +681,13 @@ pub struct AsyncCopperListsManager<P: CopperListTuple + Default, const NBCL: usi
     last_completed_encoded: Option<Vec<u8>>,
     pending_count: usize,
     next_cl_id: u64,
-    pending_sender: Option<SyncSender<Box<CopperList<P>>>>,
-    completion_receiver: Option<Receiver<AsyncCopperListCompletion<P>>>,
+    pending_producer: Option<Producer<Box<CopperList<P>>>>,
+    completion_consumer: Option<Consumer<AsyncCopperListCompletion<P>>>,
     worker_handle: Option<JoinHandle<()>>,
+    worker_thread: Option<Thread>,
+    worker_shutdown: Option<Arc<AtomicBool>>,
+    worker_running: Option<Arc<AtomicBool>>,
+    dropped_copperlists_total: u64,
     /// Last local-log encoded size reported by the sink.
     pub last_encoded_bytes: u64,
     /// Last handle-backed payload bytes observed while the sink ran.
@@ -682,14 +705,51 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
             free_pool.push(allocate_zeroed_copperlist::<P>());
         }
 
-        let (pending_sender, completion_receiver, worker_handle) = if let Some(mut sink) = sink {
-            let (pending_sender, pending_receiver) = sync_channel::<Box<CopperList<P>>>(NBCL);
-            let (completion_sender, completion_receiver) =
-                sync_channel::<AsyncCopperListCompletion<P>>(NBCL);
+        if sink.is_some() && NBCL < 2 {
+            return Err(CuError::from(
+                "async CopperList output requires at least two CopperList slots",
+            ));
+        }
+
+        let (
+            pending_producer,
+            completion_consumer,
+            worker_handle,
+            worker_thread,
+            worker_shutdown,
+            worker_running,
+        ) = if let Some(mut sink) = sink {
+            let handoff_capacity = NBCL - 1;
+            let (pending_producer, mut pending_consumer) =
+                RingBuffer::<Box<CopperList<P>>>::new(handoff_capacity);
+            let (mut completion_producer, completion_consumer) =
+                RingBuffer::<AsyncCopperListCompletion<P>>::new(handoff_capacity);
+            let worker_shutdown = Arc::new(AtomicBool::new(false));
+            let worker_running = Arc::new(AtomicBool::new(true));
+            let shutdown = worker_shutdown.clone();
+            let running = worker_running.clone();
             let worker_handle = std::thread::Builder::new()
                 .name("cu-async-cl-io".to_string())
                 .spawn(move || {
-                    while let Ok(mut culist) = pending_receiver.recv() {
+                    let _running_guard = AsyncOutputWorkerRunningGuard(running);
+                    loop {
+                        let mut culist = match pending_consumer.pop() {
+                            Ok(culist) => culist,
+                            Err(PopError::Empty) => {
+                                if shutdown.load(Ordering::Acquire) {
+                                    break;
+                                }
+                                std::thread::park();
+                                continue;
+                            }
+                        };
+                        #[cfg(feature = "remote-debug")]
+                        let completed_snapshot = {
+                            // Preserve the pre-handoff snapshot contract while
+                            // keeping its allocation and encoding off the RT path.
+                            culist.change_state(CopperListState::DoneProcessing);
+                            encode_completed_copperlist_snapshot(&culist)
+                        };
                         culist.change_state(CopperListState::BeingSerialized);
                         let sink_result = sink.log(&culist).map(|_| {
                             (
@@ -698,14 +758,22 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
                             )
                         });
                         let should_stop = sink_result.is_err();
-                        if completion_sender
-                            .send(AsyncCopperListCompletion {
-                                culist,
-                                sink_result,
-                            })
-                            .is_err()
-                        {
-                            break;
+                        #[cfg(feature = "remote-debug")]
+                        let should_stop = should_stop || completed_snapshot.is_err();
+                        let mut completion = AsyncCopperListCompletion {
+                            culist,
+                            sink_result,
+                            #[cfg(feature = "remote-debug")]
+                            completed_snapshot,
+                        };
+                        loop {
+                            match completion_producer.push(completion) {
+                                Ok(()) => break,
+                                Err(PushError::Full(returned)) => {
+                                    completion = returned;
+                                    std::thread::yield_now();
+                                }
+                            }
                         }
                         if should_stop {
                             break;
@@ -716,13 +784,17 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
                     CuError::from("Failed to spawn async CopperList serializer thread")
                         .add_cause(e.to_string().as_str())
                 })?;
+            let worker_thread = worker_handle.thread().clone();
             (
-                Some(pending_sender),
-                Some(completion_receiver),
+                Some(pending_producer),
+                Some(completion_consumer),
                 Some(worker_handle),
+                Some(worker_thread),
+                Some(worker_shutdown),
+                Some(worker_running),
             )
         } else {
-            (None, None, None)
+            (None, None, None, None, None, None)
         };
 
         Ok(Self {
@@ -732,9 +804,13 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
             last_completed_encoded: None,
             pending_count: 0,
             next_cl_id: 0,
-            pending_sender,
-            completion_receiver,
+            pending_producer,
+            completion_consumer,
             worker_handle,
+            worker_thread,
+            worker_shutdown,
+            worker_running,
+            dropped_copperlists_total: 0,
             last_encoded_bytes: 0,
             last_handle_bytes: 0,
         })
@@ -781,14 +857,10 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         }
 
         self.reclaim_completed()?;
-        while self.free_pool.is_empty() {
-            self.wait_for_completion()?;
-        }
 
-        let culist = self
-            .free_pool
-            .pop()
-            .ok_or_else(|| CuError::from("Ran out of space for copper lists"))?;
+        let culist = self.free_pool.pop().ok_or_else(|| {
+            CuError::from("CopperList output handoff exhausted the slot reserved for execution")
+        })?;
         self.current = Some(culist);
 
         let current = self
@@ -798,17 +870,6 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         current.reset_for_runtime_use(self.next_cl_id);
         self.next_cl_id += 1;
         Ok(current.as_mut())
-    }
-
-    #[cfg(feature = "remote-debug")]
-    fn capture_completed_snapshot(&mut self, cl: &CopperList<P>) -> CuResult<()> {
-        self.last_completed_encoded = Some(encode_completed_copperlist_snapshot(cl)?);
-        Ok(())
-    }
-
-    #[cfg(not(feature = "remote-debug"))]
-    fn capture_completed_snapshot(&mut self, _cl: &CopperList<P>) -> CuResult<()> {
-        Ok(())
     }
 
     pub fn end_of_processing(&mut self, culistid: u64) -> CuResult<()> {
@@ -828,21 +889,12 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         debug_assert_processing_completion_state(culist.as_ref(), "async end_of_processing");
 
         culist.change_state(CopperListState::DoneProcessing);
-        self.capture_completed_snapshot(&culist)?;
         self.last_encoded_bytes = 0;
         self.last_handle_bytes = 0;
 
-        if let Some(pending_sender) = &self.pending_sender {
-            culist.change_state(CopperListState::QueuedForSerialization);
-            pending_sender.send(culist).map_err(|e| {
-                CuError::from("Failed to enqueue CopperList for async serialization")
-                    .add_cause(e.to_string().as_str())
-            })?;
-            self.pending_count += 1;
-            self.reclaim_completed()?;
-        } else {
-            culist.change_state(CopperListState::Free);
-            self.free_pool.push(culist);
+        match self.try_submit(culist)? {
+            OwnedCopperListSubmission::Recycled(culist) => self.free_pool.push(culist),
+            OwnedCopperListSubmission::Pending => {}
         }
 
         Ok(())
@@ -866,62 +918,97 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         Ok(self.free_pool.len())
     }
 
+    #[inline]
+    pub const fn dropped_copperlists_total(&self) -> u64 {
+        self.dropped_copperlists_total
+    }
+
     pub fn end_of_processing_boxed(
         &mut self,
         mut culist: Box<CopperList<P>>,
     ) -> CuResult<OwnedCopperListSubmission<P>> {
-        self.reclaim_completed()?;
         #[cfg(debug_assertions)]
         debug_assert_processing_completion_state(culist.as_ref(), "async boxed end_of_processing");
         culist.change_state(CopperListState::DoneProcessing);
-        self.capture_completed_snapshot(&culist)?;
         self.last_encoded_bytes = 0;
         self.last_handle_bytes = 0;
 
-        if let Some(pending_sender) = &self.pending_sender {
-            culist.change_state(CopperListState::QueuedForSerialization);
-            pending_sender.send(culist).map_err(|e| {
-                CuError::from("Failed to enqueue CopperList for async serialization")
-                    .add_cause(e.to_string().as_str())
-            })?;
-            self.pending_count += 1;
-            self.reclaim_completed()?;
-            Ok(OwnedCopperListSubmission::Pending)
-        } else {
+        self.try_submit(culist)
+    }
+
+    fn try_submit(
+        &mut self,
+        mut culist: Box<CopperList<P>>,
+    ) -> CuResult<OwnedCopperListSubmission<P>> {
+        let Some(pending_producer) = self.pending_producer.as_mut() else {
             culist.change_state(CopperListState::Free);
-            Ok(OwnedCopperListSubmission::Recycled(culist))
+            return Ok(OwnedCopperListSubmission::Recycled(culist));
+        };
+
+        // Keep one of the preallocated CopperLists available to execute the
+        // next iteration. Queue capacity alone cannot enforce this because a
+        // record may be in the worker or waiting on the completion channel.
+        if self.pending_count >= NBCL - 1 {
+            return Ok(self.drop_copperlist(culist));
+        }
+
+        culist.change_state(CopperListState::QueuedForSerialization);
+        match pending_producer.push(culist) {
+            Ok(()) => {
+                self.pending_count += 1;
+                if let Some(worker_thread) = self.worker_thread.as_ref() {
+                    worker_thread.unpark();
+                }
+                Ok(OwnedCopperListSubmission::Pending)
+            }
+            Err(PushError::Full(culist)) => Ok(self.drop_copperlist(culist)),
         }
     }
 
+    fn drop_copperlist(&mut self, mut culist: Box<CopperList<P>>) -> OwnedCopperListSubmission<P> {
+        self.dropped_copperlists_total = self.dropped_copperlists_total.saturating_add(1);
+        culist.change_state(CopperListState::Free);
+        OwnedCopperListSubmission::Recycled(culist)
+    }
+
     pub fn try_reclaim_boxed(&mut self) -> CuResult<Option<Box<CopperList<P>>>> {
-        let recv_result = {
-            let Some(completion_receiver) = self.completion_receiver.as_ref() else {
+        let pop_result = {
+            let Some(completion_consumer) = self.completion_consumer.as_mut() else {
                 return Ok(None);
             };
-            completion_receiver.try_recv()
+            completion_consumer.pop()
         };
-        match recv_result {
+        match pop_result {
             Ok(completion) => self.handle_completion(completion).map(Some),
-            Err(TryRecvError::Empty) => Ok(None),
-            Err(TryRecvError::Disconnected) => Err(CuError::from(
-                "Async CopperList serializer thread disconnected unexpectedly",
-            )),
+            Err(PopError::Empty) => {
+                if self.pending_count > 0
+                    && self
+                        .worker_running
+                        .as_ref()
+                        .is_some_and(|running| !running.load(Ordering::Acquire))
+                {
+                    Err(CuError::from(
+                        "Async CopperList output worker stopped unexpectedly",
+                    ))
+                } else {
+                    Ok(None)
+                }
+            }
         }
     }
 
     pub fn wait_reclaim_boxed(&mut self) -> CuResult<Box<CopperList<P>>> {
-        let completion = self
-            .completion_receiver
-            .as_ref()
-            .ok_or_else(|| {
-                CuError::from("No async CopperList serializer is active to return a free slot")
-            })?
-            .recv()
-            .map_err(|e| {
-                CuError::from("Failed to receive completion from async CopperList serializer")
-                    .add_cause(e.to_string().as_str())
-            })?;
-        self.handle_completion(completion)
+        if self.completion_consumer.is_none() {
+            return Err(CuError::from(
+                "No async CopperList output worker is active to return a free slot",
+            ));
+        }
+        loop {
+            if let Some(culist) = self.try_reclaim_boxed()? {
+                return Ok(culist);
+            }
+            std::thread::yield_now();
+        }
     }
 
     pub fn finish_pending_boxed(&mut self) -> CuResult<Vec<Box<CopperList<P>>>> {
@@ -964,17 +1051,30 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
         }
         completion.culist.change_state(CopperListState::Free);
         completion.sink_result?;
+        #[cfg(feature = "remote-debug")]
+        {
+            self.last_completed_encoded = Some(completion.completed_snapshot?);
+        }
         Ok(completion.culist)
     }
 
     fn shutdown_worker(&mut self) -> CuResult<()> {
         self.finish_pending()?;
-        self.pending_sender.take();
+        if let Some(shutdown) = self.worker_shutdown.as_ref() {
+            shutdown.store(true, Ordering::Release);
+        }
+        if let Some(worker_thread) = self.worker_thread.as_ref() {
+            worker_thread.unpark();
+        }
         if let Some(worker_handle) = self.worker_handle.take() {
             worker_handle.join().map_err(|_| {
-                CuError::from("Async CopperList serializer thread panicked while joining")
+                CuError::from("Async CopperList output worker panicked while joining")
             })?;
         }
+        self.pending_producer.take();
+        self.worker_thread.take();
+        self.worker_shutdown.take();
+        self.worker_running.take();
         Ok(())
     }
 }
@@ -2090,6 +2190,8 @@ mod tests {
     use core::cell::Cell;
     use cu29_traits::{ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks};
     use serde_derive::{Deserialize, Serialize};
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
     #[cfg(feature = "std")]
     use std::sync::{Arc, Mutex};
 
@@ -2821,10 +2923,33 @@ mod tests {
     }
 
     #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    #[derive(Debug)]
+    struct BlockingWriter {
+        ids: Arc<Mutex<Vec<u64>>>,
+        started: SyncSender<()>,
+        release: Arc<Mutex<Receiver<()>>>,
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    impl WriteStream<CopperList<Msgs>> for BlockingWriter {
+        fn log(&mut self, culist: &CopperList<Msgs>) -> CuResult<()> {
+            self.ids.lock().unwrap().push(culist.id);
+            self.started
+                .send(())
+                .map_err(|_| CuError::from("failed to signal blocking writer start"))?;
+            self.release
+                .lock()
+                .unwrap()
+                .recv()
+                .map_err(|_| CuError::from("failed to release blocking writer"))
+        }
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
     #[test]
     fn test_async_copperlists_manager_flushes_in_order() {
         let ids = Arc::new(Mutex::new(Vec::new()));
-        let mut copperlists = CopperListsManager::<Msgs, 4>::new(Some(Box::new(RecordingWriter {
+        let mut copperlists = CopperListsManager::<Msgs, 5>::new(Some(Box::new(RecordingWriter {
             ids: ids.clone(),
         })))
         .unwrap();
@@ -2837,8 +2962,95 @@ mod tests {
         }
 
         copperlists.finish_pending().unwrap();
-        assert_eq!(copperlists.available_copper_lists().unwrap(), 4);
+        assert_eq!(copperlists.available_copper_lists().unwrap(), 5);
         assert_eq!(*ids.lock().unwrap(), vec![0, 1, 2, 3]);
+        assert_eq!(copperlists.dropped_copperlists_total(), 0);
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    #[test]
+    fn test_async_handoff_drops_without_exhausting_execution_slot() {
+        let ids = Arc::new(Mutex::new(Vec::new()));
+        let (started_tx, started_rx) = sync_channel(1);
+        let (release_tx, release_rx) = sync_channel(1);
+        let mut copperlists = CopperListsManager::<Msgs, 2>::new(Some(Box::new(BlockingWriter {
+            ids: ids.clone(),
+            started: started_tx,
+            release: Arc::new(Mutex::new(release_rx)),
+        })))
+        .unwrap();
+
+        let first = copperlists.create().unwrap();
+        first.change_state(CopperListState::Processing);
+        copperlists.end_of_processing(0).unwrap();
+        started_rx
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .unwrap();
+
+        let second = copperlists.create().unwrap();
+        second.change_state(CopperListState::Processing);
+        copperlists.end_of_processing(1).unwrap();
+
+        assert_eq!(copperlists.dropped_copperlists_total(), 1);
+        assert_eq!(copperlists.available_copper_lists().unwrap(), 1);
+        assert_eq!(*ids.lock().unwrap(), vec![0]);
+
+        release_tx.send(()).unwrap();
+        copperlists.finish_pending().unwrap();
+        assert_eq!(copperlists.available_copper_lists().unwrap(), 2);
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    #[test]
+    fn test_async_boxed_handoff_returns_dropped_copperlist_to_caller() {
+        let ids = Arc::new(Mutex::new(Vec::new()));
+        let (started_tx, started_rx) = sync_channel(1);
+        let (release_tx, release_rx) = sync_channel(1);
+        let mut copperlists = CopperListsManager::<Msgs, 2>::new(Some(Box::new(BlockingWriter {
+            ids: ids.clone(),
+            started: started_tx,
+            release: Arc::new(Mutex::new(release_rx)),
+        })))
+        .unwrap();
+
+        let mut first = Box::new(CopperList::new(0, Msgs::default()));
+        first.change_state(CopperListState::Processing);
+        assert!(matches!(
+            copperlists.end_of_processing_boxed(first).unwrap(),
+            OwnedCopperListSubmission::Pending
+        ));
+        started_rx
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .unwrap();
+
+        let mut second = Box::new(CopperList::new(1, Msgs::default()));
+        second.change_state(CopperListState::Processing);
+        let recycled = match copperlists.end_of_processing_boxed(second).unwrap() {
+            OwnedCopperListSubmission::Recycled(culist) => culist,
+            OwnedCopperListSubmission::Pending => panic!("saturated handoff accepted CopperList"),
+        };
+
+        assert_eq!(recycled.id, 1);
+        assert_eq!(recycled.get_state(), CopperListState::Free);
+        assert_eq!(copperlists.dropped_copperlists_total(), 1);
+        assert_eq!(*ids.lock().unwrap(), vec![0]);
+
+        release_tx.send(()).unwrap();
+        let completed = copperlists.finish_pending_boxed().unwrap();
+        assert_eq!(completed.len(), 1);
+        assert_eq!(completed[0].id, 0);
+    }
+
+    #[cfg(all(feature = "std", feature = "async-cl-io"))]
+    #[test]
+    fn test_async_output_requires_a_spare_execution_slot() {
+        let error =
+            match CopperListsManager::<Msgs, 1>::new(Some(Box::new(RecordingWriter::default()))) {
+                Ok(_) => panic!("async output unexpectedly accepted a single CopperList slot"),
+                Err(error) => error,
+            };
+
+        assert!(error.to_string().contains("at least two CopperList slots"));
     }
 
     #[cfg(all(feature = "std", feature = "async-cl-io"))]
