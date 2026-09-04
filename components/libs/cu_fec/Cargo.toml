@@ -1,0 +1,27 @@
+[package]
+name = "cu-fec"
+description = "Bounded-memory no_std RFC 8681 sliding-window FEC for lossy datagram streams"
+documentation = "https://docs.rs/cu-fec"
+readme = "README.md"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0 AND BSD-3-Clause"
+homepage.workspace = true
+repository.workspace = true
+keywords = ["fec", "rlc", "no-std", "network-coding", "embedded"]
+categories = ["algorithms", "embedded", "no-std", "network-programming"]
+
+[package.metadata.copper]
+kind = "lib"
+domains = ["networking/fec"]
+environments = ["host", "embedded"]
+
+[features]
+default = []
+
+[[bench]]
+name = "rlc"
+harness = false
+bench = false

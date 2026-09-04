@@ -27,6 +27,7 @@ members = [
   "components/codecs/cu_ffv1_codec",
   "components/codecs/cu_png_codec",
   "components/libs/cu_msp_lib",
+  "components/libs/cu_fec",
   "components/libs/cu_transform",
   "core/cu29_units",
   "components/libs/cu_tuimon",
@@ -238,6 +239,7 @@ cu29-unifiedlog = { path = "core/cu29_unifiedlog", default-features = false, fea
 cu29-units = { path = "core/cu29_units", version = "1.2.0-dev" }
 cu29-value = { path = "core/cu29_value", default-features = false, version = "1.2.0-dev" }
 cu-ffv1-codec = { path = "components/codecs/cu_ffv1_codec", version = "1.2.0-dev" }
+cu-fec = { path = "components/libs/cu_fec", version = "1.2.0-dev", default-features = false }
 cu-linux-resources = { path = "components/res/cu_linux_resources", version = "1.2.0-dev" }
 cu-png-codec = { path = "components/codecs/cu_png_codec", version = "1.2.0-dev" }
 cu-rng = { path = "components/res/cu_rng", version = "1.2.0-dev" }
