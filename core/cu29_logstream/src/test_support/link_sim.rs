@@ -1,4 +1,4 @@
-//! Deterministic simulation of an unreliable datagram link for integration tests.
+//! Deterministic simulation of an unreliable datagram link.
 
 /// Controls the packet loss, corruption, duplication, and reordering introduced
 /// by [`simulate_bad_link`]. Probabilities are expressed in basis points.

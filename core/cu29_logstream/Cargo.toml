@@ -31,3 +31,4 @@ serde = { workspace = true }
 [features]
 default = ["std"]
 std = ["blake3/std", "cu29-runtime/std", "cu29-traits/std"]
+test-utils = ["std"]

@@ -17,6 +17,13 @@ mod sender;
 mod stream;
 mod wire;
 
+/// Utilities for testing log streaming over unreliable datagram links.
+///
+/// This module is not part of the normal runtime API and is available only
+/// with the `test-utils` feature.
+#[cfg(feature = "test-utils")]
+pub mod test_support;
+
 pub use copper::{decode_copperlist, encode_copperlist, encode_copperlist_record_into};
 pub use error::{Error, Result};
 pub use record::{DecodedRecord, RecordKind, encode_record};
