@@ -24,11 +24,12 @@ crc = { workspace = true }
 cu-fec = { workspace = true }
 cu29-runtime = { workspace = true }
 cu29-traits = { workspace = true }
+raptorq = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }
 
 [features]
 default = ["std"]
-std = ["blake3/std", "cu29-runtime/std", "cu29-traits/std"]
+std = ["blake3/std", "cu29-runtime/std", "cu29-traits/std", "raptorq/std"]
 test-utils = ["std"]

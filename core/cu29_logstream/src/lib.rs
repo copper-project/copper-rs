@@ -11,7 +11,9 @@ pub use cu_fec::{DensityThreshold, EncodingSymbolId, Field, RlcConfig};
 
 mod copper;
 mod error;
+mod object;
 mod record;
+mod recovery;
 mod rlc;
 mod sender;
 mod stream;
@@ -26,7 +28,15 @@ pub mod test_support;
 
 pub use copper::{decode_copperlist, encode_copperlist, encode_copperlist_record_into};
 pub use error::{Error, Result};
-pub use record::{DecodedRecord, RecordKind, encode_record};
+pub use object::{
+    FiniteObjectDecoder, FiniteObjectEncoder, FiniteObjectLimits, FiniteObjectRecoveryStats,
+    FiniteObjectSenderConfig,
+};
+pub use record::{DecodedRecord, RecordKind, decode_record, encode_record};
+pub use recovery::{
+    Anchor, decode_anchor, decode_keyframe, encode_anchor, encode_keyframe,
+    encode_keyframe_and_anchor,
+};
 pub use rlc::{
     ContinuousDecoder, ContinuousEncoder, ContinuousReceiveEvent, ContinuousRecoveryStats,
     CopperListGap, GapReason, ReceiveError, ReceiverLimits, ReceiverOccupancy, RecoveredRecord,
@@ -35,6 +45,7 @@ pub use rlc::{
 pub use sender::{
     ContinuousCopperListSink, ContinuousSenderConfig, ContinuousSenderStats,
     DEFAULT_MAX_SYMBOL_SIZE, DEFAULT_MAX_WINDOW_SYMBOLS, DefaultContinuousCopperListSink,
+    KeyFrameAnchorSink, LogStreamSenderConfig, RecoverySenderConfig, RecoverySenderStats,
 };
 pub use stream::{CuStreamRx, CuStreamRxError, CuStreamTx, CuStreamTxError};
 pub use wire::{

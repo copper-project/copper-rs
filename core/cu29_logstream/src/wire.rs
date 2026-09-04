@@ -87,7 +87,7 @@ pub struct WireHeader {
     pub object_id: u64,
     /// Scheme-specific fixed-width FEC metadata.
     pub fec_metadata: [u8; 12],
-    /// Fragment count for a systematic symbol; zero for a repair symbol.
+    /// Scheme-specific 32-bit identifier: RLC fragment count or RaptorQ payload ID.
     pub fragment_count: u32,
 }
 
