@@ -2054,8 +2054,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             copper_runtime: cu29::curuntime::CuRuntime<CuTasks, CuBridges, CuStampedDataSet, #monitor_type, #copperlist_count_tokens>
         }
     };
-    let lifecycle_stream_field: Field = parse_quote! {
-        runtime_lifecycle_stream: Option<Box<dyn WriteStream<RuntimeLifecycleRecord>>>
+    let lifecycle_sink_field: Field = parse_quote! {
+        runtime_lifecycle_sink: Option<Box<::cu29::curuntime::RuntimeLifecycleSink>>
     };
     let logger_runtime_field: Field = parse_quote! {
         logger_runtime: cu29::prelude::LoggerRuntime
@@ -2066,12 +2066,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     match &mut application_struct.fields {
         Named(fields_named) => {
             fields_named.named.push(runtime_field);
-            fields_named.named.push(lifecycle_stream_field);
+            fields_named.named.push(lifecycle_sink_field);
             fields_named.named.push(logger_runtime_field);
         }
         Unnamed(fields_unnamed) => {
             fields_unnamed.unnamed.push(runtime_field);
-            fields_unnamed.unnamed.push(lifecycle_stream_field);
+            fields_unnamed.unnamed.push(lifecycle_sink_field);
             fields_unnamed.unnamed.push(logger_runtime_field);
         }
         Fields::Unit => {
@@ -5461,7 +5461,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #build_with_resources_thread_pools_destructure
                 } = app_resources;
 
-                let structured_stream = ::cu29::prelude::stream_write::<
+                let local_structured_log_sink = ::cu29::prelude::stream_write::<
                     ::cu29::prelude::CuLogEntry,
                     S,
                 >(
@@ -5471,7 +5471,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 )?;
                 let logger_runtime = ::cu29::prelude::LoggerRuntime::init(
                     clock.clone(),
-                    structured_stream,
+                    local_structured_log_sink,
                     None::<::cu29::prelude::NullLog>,
                 );
 
@@ -5490,7 +5490,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 );
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: creating copperlist stream");
-                let copperlist_stream = stream_write::<#mission_mod::CuList, S>(
+                let local_copperlist_sink = stream_write::<#mission_mod::CuList, S>(
                     unified_logger.clone(),
                     UnifiedLogType::CopperList,
                     default_section_size,
@@ -5503,7 +5503,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: creating keyframes stream");
-                let keyframes_stream = stream_write::<KeyFrame, S>(
+                let local_keyframe_sink = stream_write::<KeyFrame, S>(
                     unified_logger.clone(),
                     UnifiedLogType::FrozenTasks,
                     1024 * 1024 * 10, // 10 MiB
@@ -5513,7 +5513,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: creating runtime lifecycle stream");
-                let mut runtime_lifecycle_stream = stream_write::<RuntimeLifecycleRecord, S>(
+                let mut local_lifecycle_sink = stream_write::<RuntimeLifecycleRecord, S>(
                     unified_logger.clone(),
                     UnifiedLogType::RuntimeLifecycle,
                     1024 * 64, // 64 KiB
@@ -5532,7 +5532,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     subsystem_code: #application_name::subsystem().code(),
                     instance_id,
                 };
-                runtime_lifecycle_stream.log(&RuntimeLifecycleRecord {
+                local_lifecycle_sink.log(&RuntimeLifecycleRecord {
                     timestamp: clock.now(),
                     event: RuntimeLifecycleEvent::Instantiated {
                         config_source,
@@ -5557,8 +5557,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         #mission_mod::monitor_instanciator,
                         #mission_mod::bridges_instanciator,
                     ),
-                    copperlist_stream,
-                    keyframes_stream,
+                    local_copperlist_sink,
+                    local_keyframe_sink,
                 )
                 .with_subsystem(#application_name::subsystem())
                 .with_instance_id(instance_id)
@@ -5570,7 +5570,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 let application = Ok(#application_name {
                     copper_runtime,
-                    runtime_lifecycle_stream: Some(Box::new(runtime_lifecycle_stream)),
+                    runtime_lifecycle_sink: Some(Box::new(local_lifecycle_sink)),
                     logger_runtime,
                 });
 
@@ -5611,10 +5611,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     event: RuntimeLifecycleEvent,
                 ) -> CuResult<()> {
                     let timestamp = self.copper_runtime.clock_ref().now();
-                    let Some(stream) = self.runtime_lifecycle_stream.as_mut() else {
+                    let Some(sink) = self.runtime_lifecycle_sink.as_mut() else {
                         return Err(CuError::from("Runtime lifecycle stream is not initialized"));
                     };
-                    stream.log(&RuntimeLifecycleRecord { timestamp, event })
+                    sink.log(&RuntimeLifecycleRecord { timestamp, event })
                 }
 
                 /// Convenience helper for manual execution loops to mark graceful shutdown.
