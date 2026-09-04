@@ -1,0 +1,33 @@
+[package]
+name = "cu29-logstream"
+description = "Bounded semantic log streaming protocol and FEC for Copper"
+documentation = "https://docs.rs/cu29-logstream"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[package.metadata.copper]
+kind = "lib"
+domains = ["logging/streaming"]
+environments = ["host", "embedded"]
+
+[dependencies]
+bincode = { workspace = true }
+blake3 = { workspace = true }
+crc = { workspace = true }
+cu-fec = { workspace = true }
+cu29-runtime = { workspace = true }
+cu29-traits = { workspace = true }
+
+[dev-dependencies]
+serde = { workspace = true }
+
+[features]
+default = ["std"]
+std = ["blake3/std", "cu29-runtime/std", "cu29-traits/std"]
