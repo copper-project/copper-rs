@@ -10,26 +10,28 @@ use crate::{GeodeticPosition, Transform3D};
 fn transform_parts<T: Copy + Into<f64> + Debug + Default + 'static>(
     transform: &Transform3D<T>,
 ) -> ([f32; 3], [[f32; 3]; 3]) {
+    // `to_matrix` is row-major: translation in the last column, rotation rows
+    // first. Rerun's Mat3x3 is column-major, so read the rotation transposed.
     let matrix = (*transform).to_matrix();
     let translation = [
-        matrix[3][0].into() as f32,
-        matrix[3][1].into() as f32,
-        matrix[3][2].into() as f32,
+        matrix[0][3].into() as f32,
+        matrix[1][3].into() as f32,
+        matrix[2][3].into() as f32,
     ];
     let mat3 = [
         [
             matrix[0][0].into() as f32,
-            matrix[0][1].into() as f32,
-            matrix[0][2].into() as f32,
-        ],
-        [
             matrix[1][0].into() as f32,
-            matrix[1][1].into() as f32,
-            matrix[1][2].into() as f32,
+            matrix[2][0].into() as f32,
         ],
         [
-            matrix[2][0].into() as f32,
+            matrix[0][1].into() as f32,
+            matrix[1][1].into() as f32,
             matrix[2][1].into() as f32,
+        ],
+        [
+            matrix[0][2].into() as f32,
+            matrix[1][2].into() as f32,
             matrix[2][2].into() as f32,
         ],
     ];
@@ -79,12 +81,12 @@ mod tests {
     use crate::GeodeticPosition;
 
     #[test]
-    fn transform_parts_uses_fourth_row_for_translation() {
+    fn transform_parts_uses_last_column_for_translation() {
         let transform = Transform3D::<f32>::from_matrix([
-            [1.0, 0.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-            [10.0, 20.0, 30.0, 1.0],
+            [1.0, 0.0, 0.0, 10.0],
+            [0.0, 1.0, 0.0, 20.0],
+            [0.0, 0.0, 1.0, 30.0],
+            [0.0, 0.0, 0.0, 1.0],
         ]);
 
         let (translation, _mat3) = transform_parts(&transform);

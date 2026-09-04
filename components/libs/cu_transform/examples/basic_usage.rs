@@ -167,7 +167,7 @@ fn main() {
             let mat = transform.to_matrix();
             println!(
                 "Retrieved transform: translation=({:.2}, {:.2}, {:.2})",
-                mat[3][0], mat[3][1], mat[3][2]
+                mat[0][3], mat[1][3], mat[2][3]
             );
         }
         Err(e) => println!("Error: {e}"),

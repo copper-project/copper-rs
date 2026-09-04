@@ -76,11 +76,10 @@ impl<
         let self_mat = self.transform.to_matrix();
         let prev_mat = previous.transform.to_matrix();
         let mut linear_velocity = [T::default(); 3];
-        // Note: When glam feature is enabled, matrices are in column-major format
-        // Translation is in the last row: mat[3][0], mat[3][1], mat[3][2]
+        // Note: matrices are row-major; translation is in the last column.
         for (i, vel) in linear_velocity.iter_mut().enumerate() {
             // Calculate position difference
-            let pos_diff = self_mat[3][i] - prev_mat[3][i];
+            let pos_diff = self_mat[i][3] - prev_mat[i][3];
             // Divide by time difference to get velocity
             *vel = pos_diff / dt_t;
         }
@@ -940,10 +939,10 @@ mod tests {
         ]);
 
         transform2.transform = Transform3D::from_matrix([
-            [1.0, 0.0, 0.0, 0.0], // Column 0: x-axis
-            [0.0, 1.0, 0.0, 0.0], // Column 1: y-axis
-            [0.0, 0.0, 1.0, 0.0], // Column 2: z-axis
-            [1.0, 2.0, 0.0, 1.0], // Column 3: translation (x=1, y=2, z=0)
+            [1.0, 0.0, 0.0, 1.0], // Row 0: x-axis + x translation
+            [0.0, 1.0, 0.0, 2.0], // Row 1: y-axis + y translation
+            [0.0, 0.0, 1.0, 0.0], // Row 2: z-axis
+            [0.0, 0.0, 0.0, 1.0], // Row 3: homogeneous
         ]);
 
         // Compute velocity from transforms (newer minus older)
@@ -1084,10 +1083,10 @@ mod tests {
         ]);
 
         transform2.transform = Transform3D::from_matrix([
-            [1.0, 0.0, 0.0, 0.0], // Column 0: x-axis
-            [0.0, 1.0, 0.0, 0.0], // Column 1: y-axis
-            [0.0, 0.0, 1.0, 0.0], // Column 2: z-axis
-            [2.0, 0.0, 0.0, 1.0], // Column 3: translation (x=2, y=0, z=0)
+            [1.0, 0.0, 0.0, 2.0], // Row 0: x-axis + x translation
+            [0.0, 1.0, 0.0, 0.0], // Row 1: y-axis
+            [0.0, 0.0, 1.0, 0.0], // Row 2: z-axis
+            [0.0, 0.0, 0.0, 1.0], // Row 3: homogeneous
         ]);
 
         buffer.add_transform(transform1);
@@ -1341,10 +1340,10 @@ mod tests {
         ]);
 
         transform2.transform = Transform3D::from_matrix([
-            [1.0, 0.0, 0.0, 0.0], // Column 0: x-axis
-            [0.0, 1.0, 0.0, 0.0], // Column 1: y-axis
-            [0.0, 0.0, 1.0, 0.0], // Column 2: z-axis
-            [3.0, 0.0, 0.0, 1.0], // Column 3: translation (x=3, y=0, z=0)
+            [1.0, 0.0, 0.0, 3.0], // Row 0: x-axis + x translation
+            [0.0, 1.0, 0.0, 0.0], // Row 1: y-axis
+            [0.0, 0.0, 1.0, 0.0], // Row 2: z-axis
+            [0.0, 0.0, 0.0, 1.0], // Row 3: homogeneous
         ]);
 
         buffer.add_transform(transform1);
