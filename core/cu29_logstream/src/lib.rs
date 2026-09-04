@@ -28,7 +28,8 @@ pub use copper::{decode_copperlist, encode_copperlist, encode_copperlist_record_
 pub use error::{Error, Result};
 pub use record::{DecodedRecord, RecordKind, encode_record};
 pub use rlc::{
-    ContinuousDecoder, ContinuousEncoder, ContinuousRecoveryStats, ReceiverLimits, RecoveredRecord,
+    ContinuousDecoder, ContinuousEncoder, ContinuousReceiveEvent, ContinuousRecoveryStats,
+    CopperListGap, GapReason, ReceiveError, ReceiverLimits, ReceiverOccupancy, RecoveredRecord,
     StreamIdentity,
 };
 pub use sender::{

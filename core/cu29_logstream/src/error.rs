@@ -8,8 +8,6 @@ pub enum Error {
     InvalidConfig(&'static str),
     ObjectTooLarge { actual: u64, maximum: u64 },
     TooManyRecords { actual: usize, maximum: usize },
-    TooManySourceSymbols { actual: usize, maximum: usize },
-    TooManyDatagrams { actual: usize, maximum: usize },
     BufferTooSmall { needed: usize, available: usize },
     TruncatedPacket,
     InvalidMagic,
@@ -38,22 +36,10 @@ impl Display for Error {
             Self::ObjectTooLarge { actual, maximum } => {
                 write!(formatter, "object has {actual} bytes; maximum is {maximum}")
             }
-            Self::TooManyDatagrams { actual, maximum } => {
-                write!(
-                    formatter,
-                    "object needs {actual} datagrams; maximum is {maximum}"
-                )
-            }
             Self::TooManyRecords { actual, maximum } => {
                 write!(
                     formatter,
                     "stream has {actual} records; maximum is {maximum}"
-                )
-            }
-            Self::TooManySourceSymbols { actual, maximum } => {
-                write!(
-                    formatter,
-                    "stream has {actual} source symbols; maximum is {maximum}"
                 )
             }
             Self::BufferTooSmall { needed, available } => {

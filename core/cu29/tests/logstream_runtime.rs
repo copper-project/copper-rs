@@ -3,9 +3,9 @@
 use bincode::{Decode, Encode};
 use cu29::logstream::test_support::link_sim::{LinkSimulationConfig, simulate_bad_link};
 use cu29::logstream::{
-    ContinuousDecoder, ContinuousSenderConfig, CuStreamTx, CuStreamTxError, DensityThreshold,
-    EncodingSymbolId, FecSymbolKind, Field, Lane, ReceiverLimits, RlcConfig, StreamIdentity,
-    WirePacket, decode_copperlist,
+    ContinuousDecoder, ContinuousReceiveEvent, ContinuousSenderConfig, CuStreamTx, CuStreamTxError,
+    DensityThreshold, EncodingSymbolId, FecSymbolKind, Field, Lane, ReceiverLimits, RlcConfig,
+    StreamIdentity, WirePacket, decode_copperlist,
 };
 use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -146,21 +146,30 @@ fn generated_runtime_streams_without_local_copperlist_logging() -> CuResult<()> 
         Lane::ReplayCritical,
         fec,
         MAX_EQUATIONS,
-        ReceiverLimits::new(RECORD_BYTES, ITERATIONS, WINDOW_SYMBOLS, 64),
+        0,
+        ReceiverLimits::new(RECORD_BYTES, WINDOW_SYMBOLS),
     )
     .map_err(|error| CuError::from(error.to_string()))?;
+    let mut records = Vec::new();
+    let mut gaps = Vec::new();
     for datagram in &simulated_link.datagrams {
         decoder
-            .receive_datagram(datagram)
-            .map_err(|error| CuError::from(error.to_string()))?;
+            .receive_datagram(datagram, |event| {
+                match event {
+                    ContinuousReceiveEvent::Record(record) => records.push(record.clone()),
+                    ContinuousReceiveEvent::Gap(gap) => gaps.push(gap),
+                }
+                Ok::<(), core::convert::Infallible>(())
+            })
+            .map_err(|error| CuError::from(format!("{error:?}")))?;
     }
 
-    assert_eq!(decoder.recovered_records().len(), ITERATIONS);
+    assert_eq!(records.len(), ITERATIONS);
+    assert!(gaps.is_empty());
     assert!(decoder.stats().source_symbols_received < source_symbols);
     assert!(decoder.stats().source_symbols_recovered > 0);
     for expected_id in 0..ITERATIONS {
-        let record = decoder
-            .recovered_records()
+        let record = records
             .iter()
             .find(|record| {
                 record
