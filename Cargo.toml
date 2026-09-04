@@ -405,9 +405,6 @@ stm32h7xx-hal = { version = "0.16.0", default-features = false }
 strfmt = "0.2"
 zenoh = { version = "~1.10.0", default-features = false }
 
-[workspace.metadata.cargo-shear]
-ignored = ["cu-consolemon"]
-
 [workspace.metadata.dependency-audit]
 allow_divergent = ["embedded-hal", "embedded-io", "embedded-sdmmc"]
 
