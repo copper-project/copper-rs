@@ -274,6 +274,14 @@ pub trait CuRecordedReplayApplication<S: SectionStorage, L: UnifiedLogWrite<S> +
     type RecordedDataSet: CopperListTuple;
 
     /// Replay one recorded CopperList exactly as logged.
+    ///
+    /// Generated implementations validate continuity, drain prior asynchronous
+    /// output, and align the allocator to the recorded id before executing the
+    /// captured-output callback. This is an offline operation and may wait for
+    /// logging workers; it is not a real-time task-path API. A matching keyframe
+    /// permits a jump across missing history and preserves its recorded timing.
+    /// Call [`CuSimApplication::restore_keyframe`] separately when restoring task
+    /// state at that boundary.
     fn replay_recorded_copperlist(
         &mut self,
         clock_mock: &RobotClockMock,

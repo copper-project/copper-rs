@@ -19,6 +19,11 @@ can read them. Sender work runs off the real-time task path.
 
 ## Using it
 
+For a runnable sender/receiver pair, start with the
+[UDP demo](../../examples/cu_logstream_demo). Its default `just` command verifies
+the received archive against the onboard log and runs the ordinary logreader and
+recorded replay. Loss, outage, late-start, and receiver-restart scenarios are included.
+
 Enable `cu29/logstream` and configure a `log_streaming` destination in the app's
 RON config. Bind a transport implementing `CuStreamTx`; the
 [`cu29-logstream-udp`](../../components/res/cu29_logstream_udp) resource supplies UDP

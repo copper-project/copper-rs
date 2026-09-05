@@ -6022,36 +6022,31 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             copperlist.id,
                             keyframe.map(|frame| frame.culistid),
                         )?;
-                        if let Some(keyframe) = keyframe {
-                            if keyframe.culistid != copperlist.id {
-                                return Err(CuError::from(format!(
-                                    "Recorded keyframe culistid {} does not match copperlist {}",
-                                    keyframe.culistid, copperlist.id
-                                )));
-                            }
-
+                        let timestamp = if let Some(keyframe) = keyframe {
                             if !self.copper_runtime_mut().captures_keyframe(copperlist.id) {
                                 return Err(CuError::from(format!(
                                     "CopperList {} is not configured to capture a keyframe in this runtime",
                                     copperlist.id
                                 )));
                             }
-
-                            self.copper_runtime_mut()
-                                .set_forced_keyframe_timestamp(keyframe.timestamp);
-                            self.copper_runtime_mut().lock_keyframe(keyframe);
-                            clock_mock.set_value(keyframe.timestamp.as_nanos());
+                            keyframe.timestamp
                         } else {
-                            let timestamp =
-                                cu29::simulation::recorded_copperlist_timestamp(copperlist)
-                                    .ok_or_else(|| {
-                                        CuError::from(format!(
-                                            "Recorded copperlist {} has no process_time.start timestamps",
-                                            copperlist.id
-                                        ))
-                                    })?;
-                            clock_mock.set_value(timestamp.as_nanos());
+                            cu29::simulation::recorded_copperlist_timestamp(copperlist)
+                                .ok_or_else(|| CuError::from(format!(
+                                    "Recorded copperlist {} has no process_time.start timestamps",
+                                    copperlist.id
+                                )))?
+                        };
+                        // Recorded replay runs offline. Drain the previous output
+                        // and align allocation only after validating this boundary.
+                        self.copper_runtime_mut().copperlists_manager
+                            .prepare_recorded_replay(copperlist.id)?;
+                        self.copper_runtime_mut().keyframes_manager.finish_pending()?;
+                        if let Some(keyframe) = keyframe {
+                            self.copper_runtime_mut().set_forced_keyframe_timestamp(timestamp);
+                            self.copper_runtime_mut().lock_keyframe(keyframe);
                         }
+                        clock_mock.set_value(timestamp.as_nanos());
 
                         let mut sim_callback = |step: SimStep<'_>| -> SimOverride {
                             #mission_mod::recorded_replay_step(step, copperlist)

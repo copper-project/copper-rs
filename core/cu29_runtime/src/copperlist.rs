@@ -229,6 +229,11 @@ impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
         self.current_cl_id
     }
 
+    pub(crate) fn set_next_replay_id(&mut self, id: u64) {
+        debug_assert_eq!(self.length, 0);
+        self.current_cl_id = id;
+    }
+
     /// Returns the most recently assigned copper-list id.
     ///
     /// Before the first call to [`create`](Self::create), this returns `0`.

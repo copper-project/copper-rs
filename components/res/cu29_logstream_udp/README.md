@@ -120,7 +120,9 @@ integration test separately from the general workspace tests.
 The generated-runtime integration test receives actual UDP traffic in socket
 arrival order, discovers its manifest without out-of-band FEC settings, and
 decodes correctly ordered application-typed CopperLists and recovery objects.
-The current router discards packets preceding manifest discovery; this test
-does not sort packets to hide that startup limitation or assert a complete
-session archive. Automatic verified anchor recovery and native receiver
-archival are the next PR, followed by a runnable two-process demonstrator.
+The router buffers a bounded number of packets preceding manifest discovery.
+The test verifies native archives and explicit gaps after lost prefixes or outages.
+For a runnable sender and receiver in separate processes, see the
+[UDP demo](../../../examples/cu_logstream_demo). Run `just logstream-demo-check`
+from the repository root to exercise clean reception, FEC recovery, outages,
+late start, receiver restart, and recorded replay.

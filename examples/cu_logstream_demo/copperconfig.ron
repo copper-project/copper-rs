@@ -1,0 +1,80 @@
+(
+    logging: (
+        enable_task_logging: true,
+        enable_keyframe_logging: true,
+        keyframe_interval: 16,
+        slab_size_mib: 16,
+        section_size_mib: 1,
+        copperlist_count: 8,
+    ),
+    resources: [
+        (
+            id: "network",
+            provider: "cu29_logstream_udp::CuUdpLogStreamResources",
+            config: {
+                "bind_addr": "127.0.0.1:0",
+                "remote_addr": "127.0.0.1:7447",
+                "send_buffer_bytes": 262144,
+                "ttl": 1,
+            },
+        ),
+    ],
+    log_streaming: (
+        destinations: [
+            (
+                id: "ground",
+                transport: (
+                    type: "cu29_logstream_udp::CuUdpLogStreamTx",
+                    resource: "network.tx",
+                ),
+                link: (
+                    mtu_bytes: 1200,
+                    bitrate_bps: 1000000,
+                    memory_budget_kib: 512,
+                    max_latency_ms: 250,
+                    burst_packets: 8,
+                ),
+                fec: (
+                    continuous: (
+                        field: Gf256,
+                        window_symbols: 64,
+                        repair_every_source_symbols: 4,
+                        repair_density: Full,
+                    ),
+                    objects: (
+                        max_object_bytes: 65536,
+                        repair_symbols_per_block: 2,
+                    ),
+                ),
+                content: (
+                    archive: true,
+                    live_viz: false,
+                    anchor_interval: 16,
+                ),
+                max_record_bytes: 4096,
+            ),
+        ],
+    ),
+    tasks: [
+        (
+            id: "counter",
+            type: "cu_logstream_demo::tasks::Counter",
+        ),
+        (
+            id: "sum",
+            type: "cu_logstream_demo::tasks::Accumulator",
+        ),
+    ],
+    cnx: [
+        (
+            src: "counter",
+            dst: "sum",
+            msg: "cu_logstream_demo::tasks::Sample",
+        ),
+        (
+            src: "sum",
+            dst: "__nc__",
+            msg: "cu_logstream_demo::tasks::Sample",
+        ),
+    ],
+)

@@ -1,0 +1,42 @@
+[package]
+name = "cu-logstream-demo"
+description = "Two-process deterministic Copper log streaming over UDP"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[features]
+default = []
+# Keep async runtime features out of ordinary workspace builds.
+demo = ["cu29/logstream", "cu29/reflect"]
+replay = ["demo", "cu29/remote-debug"]
+
+[[bin]]
+name = "cu-logstream-demo"
+path = "src/main.rs"
+required-features = ["demo"]
+
+[[bin]]
+name = "cu-logstream-demo-logreader"
+path = "src/logreader.rs"
+required-features = ["demo"]
+
+[[bin]]
+name = "cu-logstream-demo-resim"
+path = "src/resim.rs"
+required-features = ["replay"]
+
+[dependencies]
+cu29 = { workspace = true }
+cu29-logstream = { workspace = true, features = ["std"] }
+cu29-logstream-udp = { workspace = true }
+cu29-export = { workspace = true }
+cu29-unifiedlog = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+serde = { workspace = true }
+
+[build-dependencies]
+cu29-build = { workspace = true }
