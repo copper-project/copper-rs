@@ -285,6 +285,7 @@ bincode = { package = "cu-bincode", version = "2.0", default-features = false, f
 ] }
 blake3 = { version = "1.8.7", default-features = false }
 crc = { version = "3.4.0", default-features = false }
+raptorq = { version = "2.0.1", default-features = false }
 serde = { version = "1.0", default-features = false, features = [
   "derive",
   "alloc",

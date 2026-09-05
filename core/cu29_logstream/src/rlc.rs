@@ -1,7 +1,6 @@
-use crate::record::decode_record;
 use crate::{
     DecodedRecord, Error, FecScheme, FecSymbolKind, Lane, PACKET_HEADER_LEN, RecordKind, Result,
-    WireHeader, WirePacket, encode_packet_into,
+    WireHeader, WirePacket, decode_record, encode_packet_into,
 };
 use alloc::{vec, vec::Vec};
 use core::fmt::{Display, Formatter};
@@ -174,6 +173,10 @@ pub struct RecoveredRecord {
 }
 
 impl RecoveredRecord {
+    pub(crate) fn from_bytes(bytes: Vec<u8>) -> Self {
+        Self { bytes }
+    }
+
     pub fn bytes(&self) -> &[u8] {
         &self.bytes
     }
@@ -694,9 +697,7 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
         self.ready.push(ReadyRecord {
             object_id: assembly.object_id,
             first_esi: assembly.first_esi,
-            record: RecoveredRecord {
-                bytes: assembly.bytes,
-            },
+            record: RecoveredRecord::from_bytes(assembly.bytes),
         });
         self.stats.records_recovered = self.stats.records_recovered.saturating_add(1);
         self.observe_peak_buffered_records();

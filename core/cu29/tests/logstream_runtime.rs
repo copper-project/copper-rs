@@ -4,8 +4,10 @@ use bincode::{Decode, Encode};
 use cu29::logstream::test_support::link_sim::{LinkSimulationConfig, simulate_bad_link};
 use cu29::logstream::{
     ContinuousDecoder, ContinuousReceiveEvent, ContinuousSenderConfig, CuStreamTx, CuStreamTxError,
-    DensityThreshold, EncodingSymbolId, FecSymbolKind, Field, Lane, ReceiverLimits, RlcConfig,
-    StreamIdentity, WirePacket, decode_copperlist,
+    DensityThreshold, EncodingSymbolId, FecScheme, FecSymbolKind, Field, FiniteObjectDecoder,
+    FiniteObjectLimits, FiniteObjectSenderConfig, Lane, LogStreamSenderConfig, ReceiverLimits,
+    RecordKind, RecoverySenderConfig, RlcConfig, StreamIdentity, WirePacket, decode_anchor,
+    decode_copperlist, decode_record, encode_record,
 };
 use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -91,7 +93,7 @@ fn generated_runtime_streams_without_local_copperlist_logging() -> CuResult<()> 
     };
     let fec = RlcConfig::new(SYMBOL_SIZE, WINDOW_SYMBOLS, Field::Gf256)
         .map_err(|error| CuError::from(error.to_string()))?;
-    let sender = ContinuousSenderConfig {
+    let continuous = ContinuousSenderConfig {
         identity,
         first_packet_sequence: 0,
         lane: Lane::ReplayCritical,
@@ -101,6 +103,22 @@ fn generated_runtime_streams_without_local_copperlist_logging() -> CuResult<()> 
         repair_every_source_symbols: 1,
         first_repair_key: 1,
         repair_density: DensityThreshold::FULL,
+    };
+    let manifest = encode_record(RecordKind::Manifest, 0, b"runtime-test-manifest")
+        .map_err(|error| CuError::from(error.to_string()))?;
+    let sender = LogStreamSenderConfig {
+        continuous,
+        recovery: RecoverySenderConfig {
+            finite: FiniteObjectSenderConfig {
+                identity,
+                first_packet_sequence: 0,
+                lane: Lane::LargeObject,
+                symbol_size: SYMBOL_SIZE as u16,
+                max_object_bytes: 64 * 1024,
+                repair_symbols_per_block: 8,
+            },
+            manifest_record: manifest.clone(),
+        },
     };
 
     let app = LogstreamRuntimeApp::builder()
@@ -122,8 +140,10 @@ fn generated_runtime_streams_without_local_copperlist_logging() -> CuResult<()> 
     let source_symbols = datagrams
         .iter()
         .filter(|datagram| {
-            WirePacket::decode(datagram)
-                .is_ok_and(|packet| packet.header.symbol_kind == FecSymbolKind::Source)
+            WirePacket::decode(datagram).is_ok_and(|packet| {
+                packet.header.fec_scheme == FecScheme::RlcGf256
+                    && packet.header.symbol_kind == FecSymbolKind::Source
+            })
         })
         .count();
     let simulated_link = simulate_bad_link(
@@ -187,5 +207,35 @@ fn generated_runtime_streams_without_local_copperlist_logging() -> CuResult<()> 
             Some(&StreamMsg(expected_id as u64))
         );
     }
+
+    let mut object_decoder = FiniteObjectDecoder::new(
+        identity,
+        Lane::LargeObject,
+        FiniteObjectLimits::new(64 * 1024, SYMBOL_SIZE as u16, 4),
+    )
+    .map_err(|error| CuError::from(error.to_string()))?;
+    let mut object_records = Vec::new();
+    for datagram in &datagrams {
+        object_decoder
+            .receive_datagram(datagram, |record| {
+                object_records.push(record.bytes().to_vec());
+                Ok::<(), core::convert::Infallible>(())
+            })
+            .map_err(|error| CuError::from(format!("{error:?}")))?;
+    }
+    let keyframe = object_records
+        .iter()
+        .map(|record| decode_record(record).unwrap())
+        .find(|record| record.kind == RecordKind::KeyFrame)
+        .expect("generated runtime should stream its keyframe");
+    let anchor = object_records
+        .iter()
+        .map(|record| decode_record(record).unwrap())
+        .find(|record| record.kind == RecordKind::Anchor)
+        .map(|record| decode_anchor(record.payload).unwrap())
+        .expect("generated runtime should stream its anchor");
+    assert_eq!(anchor.copperlist_id, 0);
+    assert!(anchor.references_keyframe(keyframe));
+    assert!(anchor.references_manifest(decode_record(&manifest).unwrap()));
     Ok(())
 }

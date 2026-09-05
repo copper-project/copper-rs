@@ -1943,10 +1943,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         .as_ref()
         .and_then(|logging| logging.copperlist_count)
         .unwrap_or(DEFAULT_COPPERLIST_COUNT);
-    let keyframe_logging_enabled = copper_config
+    let local_keyframe_logging_enabled = copper_config
         .logging
         .as_ref()
         .is_none_or(|logging| logging.enable_keyframe_logging && logging.enable_task_logging);
+    // A feature-gated streaming destination may request keyframes even when the local archive
+    // does not. Compile the capture path in that case; runtime output requirements keep it idle
+    // when no logstream destination is configured.
+    let keyframe_logging_enabled = local_keyframe_logging_enabled || logstream_enabled;
     let copperlist_count_tokens = proc_macro2::Literal::usize_unsuffixed(copperlist_count);
     let caller_root = utils::caller_crate_root();
     let (git_commit, git_dirty) = detect_git_info(&caller_root);
@@ -4554,10 +4558,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 .logging
                 .as_ref()
                 .is_none_or(|logging| logging.enable_keyframe_logging && logging.enable_task_logging);
-            if configured_keyframe_logging != #keyframe_logging_enabled {
+            if configured_keyframe_logging != #local_keyframe_logging_enabled {
                 return Err(CuError::from(format!(
                     "Configured keyframe logging ({configured_keyframe_logging}) does not match the runtime compiled into this binary ({})",
-                    #keyframe_logging_enabled
+                    #local_keyframe_logging_enabled
                 )));
             }
         };
@@ -4633,7 +4637,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {
                 logstream: Option<(
                     Box<dyn ::cu29::logstream::CuStreamTx>,
-                    ::cu29::logstream::ContinuousSenderConfig,
+                    Box<dyn ::cu29::logstream::CuStreamTx>,
+                    ::cu29::logstream::LogStreamSenderConfig,
                 )>,
             }
         } else {
@@ -5489,7 +5494,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         } else {
             quote!()
         };
-        let local_keyframe_sink_init = if keyframe_logging_enabled {
+        let local_keyframe_sink_init = if local_keyframe_logging_enabled {
             quote! {
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp new: creating keyframes stream");
@@ -5519,25 +5524,42 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         logging.enable_task_logging && logging.enable_keyframe_logging
                     });
                 let logstream_output_required = logstream.is_some();
-                let logstream_sink = logstream
-                    .map(|(transport, mut sender_config)| {
-                        sender_config.identity.sender_id = instance_id;
-                        ::cu29::logstream::DefaultContinuousCopperListSink::<
+                let logstream_sinks = logstream
+                    .map(|(continuous_transport, recovery_transport, mut sender_config)| {
+                        sender_config.continuous.identity.sender_id = instance_id;
+                        sender_config.recovery.finite.identity.sender_id = instance_id;
+                        sender_config
+                            .validate()
+                            .map_err(|error| CuError::from(error.to_string()))?;
+                        let copperlist = ::cu29::logstream::DefaultContinuousCopperListSink::<
                             #mission_mod::CuStampedDataSet,
                             Box<dyn ::cu29::logstream::CuStreamTx>,
-                        >::new(transport, sender_config)
-                        .map_err(|error| CuError::from(error.to_string()))
+                        >::new(continuous_transport, sender_config.continuous)
+                        .map_err(|error| CuError::from(error.to_string()))?;
+                        let keyframe = ::cu29::logstream::KeyFrameAnchorSink::new(
+                            recovery_transport,
+                            sender_config.recovery,
+                        )
+                        .map_err(|error| CuError::from(error.to_string()))?;
+                        Ok::<_, CuError>((copperlist, keyframe))
                     })
                     .transpose()?;
+                let (logstream_sink, logstream_keyframe_sink) = logstream_sinks.unzip();
                 let copperlist_sink = ::cu29::fanout::StaticFanoutSink::new(
                     ::cu29::fanout::OptionalWriteStream::new(
                         local_copperlist_output_required.then_some(local_copperlist_sink),
                     ),
                     ::cu29::fanout::OptionalWriteStream::new(logstream_sink),
                 );
+                let keyframe_sink = ::cu29::fanout::StaticFanoutSink::new(
+                    ::cu29::fanout::OptionalWriteStream::new(
+                        local_keyframe_output_required.then_some(local_keyframe_sink),
+                    ),
+                    ::cu29::fanout::OptionalWriteStream::new(logstream_keyframe_sink),
+                );
                 let output_requirements = cu29::curuntime::OutputRequirements::new(
                     local_copperlist_output_required || logstream_output_required,
-                    local_keyframe_output_required,
+                    local_keyframe_output_required || logstream_output_required,
                 );
             }
         } else {
@@ -5558,6 +5580,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     local_keyframe_output_required,
                 );
                 let copperlist_sink = local_copperlist_sink;
+                let keyframe_sink = local_keyframe_sink;
             }
         };
 
@@ -5661,7 +5684,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         #mission_mod::bridges_instanciator,
                     ),
                     copperlist_sink,
-                    local_keyframe_sink,
+                    keyframe_sink,
                     output_requirements,
                 )
                 .with_subsystem(#application_name::subsystem())
@@ -5958,7 +5981,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {
                 logstream: Option<(
                     Box<dyn ::cu29::logstream::CuStreamTx>,
-                    ::cu29::logstream::ContinuousSenderConfig,
+                    Box<dyn ::cu29::logstream::CuStreamTx>,
+                    ::cu29::logstream::LogStreamSenderConfig,
                 )>,
             }
         });
@@ -5967,16 +5991,24 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             logstream_enabled.then(|| quote! { logstream: self.logstream, });
         let builder_with_logstream_method = logstream_enabled.then(|| {
             quote! {
-                /// Adds a nonblocking continuous CopperList datagram destination.
+                /// Adds a nonblocking CopperList plus keyframe/anchor packet resource.
+                ///
+                /// The endpoint is cloned once so independently scheduled semantic lanes never
+                /// serialize access through a mutex. Clones must remain fire-and-forget,
+                /// nonblocking implementations of `CuStreamTx`.
                 pub fn with_logstream<T>(
                     mut self,
                     transport: T,
-                    config: ::cu29::logstream::ContinuousSenderConfig,
+                    config: ::cu29::logstream::LogStreamSenderConfig,
                 ) -> Self
                 where
-                    T: ::cu29::logstream::CuStreamTx + 'static,
+                    T: ::cu29::logstream::CuStreamTx + Clone + 'static,
                 {
-                    self.logstream = Some((Box::new(transport), config));
+                    self.logstream = Some((
+                        Box::new(transport.clone()),
+                        Box::new(transport),
+                        config,
+                    ));
                     self
                 }
             }

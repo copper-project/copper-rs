@@ -2319,9 +2319,9 @@ pub struct LoggingConfig {
 
     /// Generate and record task-state keyframes.
     ///
-    /// This is a compile-time application property: `#[copper_runtime]` emits no
-    /// keyframe capture calls when it is `false`. CopperList and structured logging
-    /// remain available.
+    /// Without another generated keyframe consumer, this is a compile-time application
+    /// property and `#[copper_runtime]` emits no capture calls when it is `false`.
+    /// A log-stream destination independently requests keyframe capture for anchors.
     #[serde(default = "default_as_true", skip_serializing_if = "Clone::clone")]
     pub enable_keyframe_logging: bool,
 

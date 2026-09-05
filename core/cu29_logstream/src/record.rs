@@ -41,6 +41,8 @@ impl TryFrom<u8> for RecordKind {
 pub struct DecodedRecord<'a> {
     pub kind: RecordKind,
     pub object_id: u64,
+    /// Digest binding the record version, kind, identity, length, and payload.
+    pub digest: [u8; 32],
     pub payload: &'a [u8],
 }
 
@@ -94,7 +96,8 @@ pub(crate) fn encode_record_header(
     Ok(())
 }
 
-pub(crate) fn decode_record(record: &[u8]) -> Result<DecodedRecord<'_>> {
+/// Validates and decodes one complete semantic record envelope.
+pub fn decode_record(record: &[u8]) -> Result<DecodedRecord<'_>> {
     if record.len() < RECORD_HEADER_LEN {
         return Err(Error::TruncatedRecord);
     }
@@ -123,6 +126,7 @@ pub(crate) fn decode_record(record: &[u8]) -> Result<DecodedRecord<'_>> {
     Ok(DecodedRecord {
         kind,
         object_id,
+        digest: *expected_digest.as_bytes(),
         payload,
     })
 }
