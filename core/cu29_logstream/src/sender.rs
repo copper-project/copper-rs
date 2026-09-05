@@ -46,6 +46,7 @@ pub struct RecoverySenderConfig {
 /// Complete sender configuration for continuous CopperLists and restart anchors.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LogStreamSenderConfig {
+    pub pacing: crate::PacingConfig,
     pub continuous: ContinuousSenderConfig,
     pub recovery: RecoverySenderConfig,
 }
@@ -94,7 +95,8 @@ pub struct RecoverySenderStats {
     pub datagrams_dropped: u64,
 }
 
-/// Runtime keyframe sink that sends a repeated manifest, keyframe, and binding anchor.
+/// Immediate, unpaced keyframe sink for codec tests and custom drivers.
+/// Generated applications use `scheduled_sinks` to share a destination budget.
 pub struct KeyFrameAnchorSink<T: CuStreamTx> {
     transport: T,
     encoder: FiniteObjectEncoder,
@@ -215,7 +217,8 @@ impl<T: CuStreamTx> WriteStream<KeyFrame> for KeyFrameAnchorSink<T> {
     }
 }
 
-/// CopperList semantic sink backed by continuous RLC and a nonblocking datagram transport.
+/// Immediate, unpaced CopperList sink backed by continuous RLC.
+/// Generated applications use `scheduled_sinks` for bounded packet scheduling.
 pub struct ContinuousCopperListSink<
     P,
     T,

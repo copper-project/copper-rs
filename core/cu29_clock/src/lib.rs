@@ -884,6 +884,12 @@ impl RobotClockMock {
 }
 
 impl RobotClock {
+    /// Whether this clock is driven explicitly by a RobotClockMock. Physical link
+    /// pacing must select a running clock when application time is mocked.
+    pub fn is_mock(&self) -> bool {
+        self.inner.mock_state.is_some()
+    }
+
     /// Creates a RobotClock using now as its reference time.
     /// It will start at 0ns incrementing monotonically.
     /// This uses the std System Time as a reference clock.

@@ -281,6 +281,12 @@ impl LogStreamPlan {
             });
         }
         Ok(LogStreamSenderConfig {
+            pacing: crate::PacingConfig {
+                bitrate_bps: self.bitrate_bps,
+                burst_packets: self.burst_packets,
+                max_latency: cu29_clock::CuDuration::from_millis(u64::from(self.max_latency_ms)),
+                memory_budget_bytes: self.memory_budget_kib as usize * 1024,
+            },
             continuous: ContinuousSenderConfig {
                 identity,
                 first_packet_sequence: 0,

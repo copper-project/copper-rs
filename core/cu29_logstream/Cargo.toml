@@ -22,10 +22,18 @@ bincode = { workspace = true }
 blake3 = { workspace = true }
 crc = { workspace = true }
 cu-fec = { workspace = true }
+cu29-clock = { workspace = true }
+cu29-log = { workspace = true, optional = true }
+cu29-log-derive = { workspace = true, optional = true }
+cu29-log-runtime = { workspace = true, optional = true }
+cu29-value = { workspace = true, optional = true }
 cu29-runtime = { workspace = true }
 cu29-traits = { workspace = true }
 cu29-unifiedlog = { workspace = true, optional = true }
 raptorq = { workspace = true }
+
+[build-dependencies]
+cu29-build = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }
@@ -33,10 +41,18 @@ serde = { workspace = true }
 [features]
 default = ["std"]
 std = [
+  "dep:cu29-log-derive",
+  "dep:cu29-log",
+  "cu29-log/std",
+  "dep:cu29-log-runtime",
+  "cu29-log-runtime/std",
+  "dep:cu29-value",
+  "cu29-value/std",
   "dep:cu29-unifiedlog",
   "cu29-unifiedlog/std",
   "blake3/std",
   "cu29-runtime/std",
+  "cu29-clock/std",
   "cu29-traits/std",
   "raptorq/std",
 ]
