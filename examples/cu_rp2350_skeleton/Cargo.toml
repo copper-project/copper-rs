@@ -28,7 +28,9 @@ cu-sdlogger = { path = "../../components/libs/cu_sdlogger", default-features = f
   "eh1",
 ], optional = true, version = "1.2.0-dev" }
 cu29-export = { path = "../../core/cu29_export", version = "1.2.0-dev", optional = true, default-features = false }
-bincode = { version = "2.0", default-features = false, features = ["derive"] }
+bincode = { package = "cu-bincode", version = "2.0", default-features = false, features = [
+  "derive",
+] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 
 # embedded stuff
