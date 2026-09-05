@@ -78,11 +78,23 @@ impl View {
 
     fn draw(&self, frame: &mut ratatui::Frame<'_>, status: Status, overwritten: u64, path: &str) {
         if frame.area().height < 20 || frame.area().width < 50 {
+            let [header, body] =
+                Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(frame.area());
+            let [title, mascot] =
+                Layout::horizontal([Constraint::Min(0), Constraint::Length(4)]).areas(header);
+            frame.render_widget(
+                Line::from(if self.paused {
+                    "VIEW PAUSED"
+                } else {
+                    "LIVE VIEW"
+                }),
+                title,
+            );
+            frame.render_widget(Line::from(" 😼 ").right_aligned(), mascot);
             frame.render_widget(Paragraph::new(format!(
-                "{}\nCounter: {}   Sum: {}\nArchived: {}   Gaps: {}\nUI missed: {}\nSpace: pause/resume   q: quit",
-                if self.paused { "VIEW PAUSED" } else { "LIVE VIEW" },
+                "Counter: {}   Sum: {}\nArchived: {}   Gaps: {}\nUI missed: {}\nSpace: pause/resume   q: quit",
                 number(self.counter), number(self.sum), status.archived, status.gaps, self.missed,
-            )), frame.area());
+            )), body);
             return;
         }
         let [header, values, chart, health, footer] = Layout::vertical([
@@ -108,7 +120,11 @@ impl View {
                     "LIVE VIEW"
                 }
             ))
-            .block(Block::bordered().title("Copper · UDP ground station"))
+            .block(
+                Block::bordered()
+                    .title("Copper · UDP ground station")
+                    .title(Line::from(" 😼 ").right_aligned()),
+            )
             .style(Style::default().fg(if self.paused {
                 Color::Yellow
             } else {
