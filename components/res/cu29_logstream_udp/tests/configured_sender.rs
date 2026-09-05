@@ -2,7 +2,7 @@ use bincode::{Decode, Encode};
 use cu29::prelude::*;
 use cu29::resource::{BundleContext, BundleIndex, ResourceBundle, ResourceManager};
 use cu29_logstream::{
-    FiniteObjectLimits, RecordKind, SessionEvent, SessionRouter, SessionRouterLimits,
+    CuStreamRx, FiniteObjectLimits, RecordKind, SessionEvent, SessionRouter, SessionRouterLimits,
     decode_copperlist,
 };
 use cu29_logstream_udp::{CuUdpLogStreamResources, CuUdpLogStreamResourcesId, CuUdpLogStreamRx};
@@ -71,7 +71,8 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
     // The receiver knows hard capacity limits, but no sender identity or FEC plan.
     let mut router = SessionRouter::<1128, 64, 64>::new(SessionRouterLimits {
         max_sessions: 1,
-        max_pending_events: 64,
+        // A startup gap can release a full window of records plus the gap event.
+        max_pending_events: 65,
         max_record_bytes: 4096,
         max_buffered_records: 64,
         equation_capacity: 64,
@@ -128,17 +129,34 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
     let mut running = app.start()?;
     let mut packet = [0; 1200];
     const ITERATIONS: u64 = 128;
-    for _ in 0..ITERATIONS {
+    for id in 0..ITERATIONS {
         running.run_one_iteration()?;
-        // Allow the asynchronous output workers to progress. This is test driving,
-        // not carrier pacing. Every datagram is consumed in actual socket order.
-        std::thread::sleep(Duration::from_millis(1));
-        while router.try_receive(&mut rx, &mut packet, &mut emit).unwrap() {}
+        // Drive the clean fixture by observable wire progress, not assumptions
+        // about debug-build FEC speed or an unenforced link budget. This wait is
+        // entirely in the test harness; the production sender remains one-way.
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let mut source_received = false;
+        while !source_received && Instant::now() < deadline {
+            if let Some(len) = rx.try_recv(&mut packet).unwrap() {
+                let header = cu29_logstream::WirePacket::decode(&packet[..len])
+                    .unwrap()
+                    .header;
+                source_received = header.record_kind == RecordKind::CopperList
+                    && header.symbol_kind == cu29_logstream::FecSymbolKind::Source
+                    && header.object_id == id;
+                router.receive_datagram(&packet[..len], &mut emit).unwrap();
+            } else {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        }
+        assert!(source_received, "sender did not transmit CopperList {id}");
     }
     drop(running.stop()?);
     let deadline = Instant::now() + Duration::from_millis(100);
     while Instant::now() < deadline {
-        if !router.try_receive(&mut rx, &mut packet, &mut emit).unwrap() {
+        if let Some(len) = rx.try_recv(&mut packet).unwrap() {
+            router.receive_datagram(&packet[..len], &mut emit).unwrap();
+        } else {
             std::thread::sleep(Duration::from_millis(1));
         }
     }
