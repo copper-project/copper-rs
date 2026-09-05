@@ -61,6 +61,46 @@ Run `just logstream-receiver-check` from the repository root to test reception,
 archival, and replay continuity. See the Rust API docs for receiver limits and
 event handling.
 
+## Ground-side telemetry
+
+The std-only `telemetry` module provides a single-publisher, single-reader
+circular buffer with overwrite-oldest behavior. Feed it the typed value returned
+after `NativeArchive::accept()` succeeds; do not decode again or clone payloads.
+The transport and archive remain owned by the receiving worker.
+
+```rust,ignore
+let (mut publisher, mut reader) = telemetry_channel(capacity, initial_status);
+// Receiving worker, after successful archival:
+publisher.publish(frame); // Include the frame's session identity in its type.
+publisher.set_status(current_status);
+
+// User-owned thread/task:
+reader.ready().await; // Or wait_timeout(duration) / register_waker(&waker).
+let status = reader.status();
+while let Some(update) = reader.try_read() {
+    my_widgets.consume(update.frame, update.missed);
+}
+```
+
+Status uses an independent coalesced slot and a small `Copy` value. Reading it
+does not consume frames. Notifications cover unread frames, changed status, and
+publisher closure; consume/acknowledge these before waiting again. A registered
+waker only schedules work or unparks a thread, never blocks or processes data.
+
+The ring allocates at construction and holds at most its capacity plus one
+reader-owned in-flight frame. A borrowed frame stays valid while publication
+continues. Payload-owned allocations are additional. Crossbeam queue operations
+use atomics and never wait for user processing or free capacity; this host
+exchange is not an RT wait-free primitive. Consumer loss is independent of
+network/archive gaps. A disconnected reader cannot backpressure recording.
+Both still share a process failure boundary.
+
+The [Ratatui demo](../../examples/cu_logstream_demo#native-telemetry-screen)
+shows typed robot outputs and a pause control. Live deterministic task
+reconstruction and generated mission dispatch are subsequent steps; displaying
+captured payloads alone does not recover task state. Run
+`just logstream-telemetry-check` for the integration and regression checks.
+
 ## Sender storage and lifecycle
 
 `scheduled_sinks` creates one worker owning the transport and FEC state, a pool

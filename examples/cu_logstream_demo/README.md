@@ -26,20 +26,55 @@ example's `logs/` and prints its path.
 | `clean` | All 256 CopperLists match the onboard payloads and metadata. |
 | `loss` | Discard the source packets for CopperList 20; RLC repairs recover it with no semantic gap. |
 | `outage` | Discard a contiguous arrival interval beginning at CopperList 32 and ending before 160, including control traffic. Missing history remains explicit and a verified anchor enables recovery. |
-| `late` | Start the receiver after the sender is already running. Its archive contains a `LateJoin` prefix gap. |
+| `late` | A separate probe receiver archives through CopperList 64 and exits; a fresh receiver then starts with no prior session state. Its archive contains a `LateJoin` prefix gap. |
 | `idle` | Drop all traffic for the first 300 ms, produce only CL0, and keep the sender alive with no new captures. Periodic recovery restores the complete one-record archive. |
 | `restart` | Close the first receiver after CopperList 64, leave it offline briefly, and launch a new process while the sender continues. The new archive reports unavailable history. |
 
 Loss injection runs at the receiver's packet boundary after real UDP reception,
 before FEC decoding. It preserves arrival order and adds no sender task work.
 The source-loss and outage intervals are selected by wire record IDs. Late start
-and restart use real process lifetimes, so their exact recovery IDs depend on
-host scheduling. Verification checks the resulting continuity rather than
-assuming those IDs.
+and restart use real process lifetimes. Late start waits for observed stream
+progress instead of a launch-time sleep, which could join while CopperList 0
+is still recoverable from retained history. Exact recovery IDs still depend on
+host scheduling; verification checks the resulting continuity.
 
-The status display reports received packets, the latest archived CopperList,
-latest verified anchor, gap count, and demo packet drops. Task data stays in the
-native log. Received files have separate paths for each receiver lifetime.
+The headless status display reports received packets, the latest archived
+CopperList, latest verified anchor, gap count, and demo packet drops. Received
+files have separate paths for each receiver lifetime.
+
+## Native telemetry screen
+
+From this directory, start `just dashboard`, then `just sender` in another
+terminal. The manual sender runs for about a minute; automated scenarios keep
+256 iterations. Choose fresh log paths when repeating a run:
+
+```sh
+just dashboard 127.0.0.1:7447 logs/dashboard-2.copper
+# In another terminal:
+just sender 127.0.0.1:7447 logs/sender-2.copper
+```
+
+The Ratatui screen shows counter/sum values, a counter chart, packet and frame
+age, archive progress, verified anchors, source gap ranges, and reader overwrites.
+**Space** pauses consumption; wait a second and resume to see missed samples
+while the archive count keeps advancing. **q**, Escape, or Ctrl-C closes the
+receiver and finalizes its archive. The sender is a separate process. After the
+sender finishes, the screen remains open until you quit.
+
+The receiver moves the already decoded, successfully archived CopperList into a
+64-frame circular buffer. The UI pulls on its own thread through
+`cu29_logstream::telemetry::telemetry_channel`. It waits for a payload-free wake
+with a 50 ms keyboard/age timer; no UI callback runs on the receiving thread.
+On overrun it resumes at the oldest retained frame with an exact local missed
+count. Source gaps and reader misses are distinct. Status stays available while
+the UI is paused. The UI owns its bounded chart history and uses generated
+`get_counter_output()` / `get_sum_output()` accessors.
+
+This step displays captured outputs; it does **not** yet execute a live
+Copper runtime on the ground to deterministically reconstruct omitted outputs
+or task state. That next step must feed this same archive/pull boundary after
+keyframe restore, ordered execution, and verification. This demo has one mission;
+numeric mission dispatch remains a separate protocol/codegen milestone.
 
 ## Run the processes yourself
 
@@ -58,7 +93,8 @@ just receiver 127.0.0.1:7447 logs/received-2.copper
 just sender 127.0.0.1:7447 logs/sender-2.copper
 ```
 
-The sender runs 256 iterations at roughly 100 Hz. The receiver exits after one
+The manual sender runs 6000 iterations at roughly 100 Hz; the final `just sender`
+argument selects another count. The receiver exits after one
 second without a datagram, or fails if no traffic arrives within 15 seconds.
 Socket addresses are explicit CLI arguments; stream policy and static sender
 resource binding are in `copperconfig.ron`.
@@ -105,6 +141,10 @@ buffer budget excludes thread stacks, channel/allocator bookkeeping, and bounded
 RaptorQ scratch allocations; see the [sender docs](../../core/cu29_logstream).
 Memory-bounded recovery cannot recover expired history, and receiver shutdown
 does not establish the sender's unobserved tail. Full-capture native archival
-requires the matching application schema. Feedback, hybrid reconstruction, the
-live twin API, and serial are later milestones. Feedback interfaces permit a
-shared bidirectional carrier or separate explicitly configured endpoints.
+requires the matching application schema. Feedback, live deterministic
+reconstruction, mission dispatch, and serial are later
+milestones. The host telemetry buffer and optional `tui` feature are available
+now. Run `just logstream-telemetry-check` at the root for notification/overrun
+tests, archive comparisons with fast/stalled/disconnected readers, terminal
+rendering, and all existing loss/recovery/replay scenarios. Feedback interfaces
+permit a shared bidirectional carrier or separate explicitly configured endpoints.

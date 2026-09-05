@@ -15,6 +15,10 @@ mod archive;
 #[cfg(feature = "std")]
 pub use archive::NativeArchive;
 
+/// Bounded ground-side delivery to caller-owned telemetry consumers.
+#[cfg(feature = "std")]
+pub mod telemetry;
+
 mod copper;
 mod error;
 mod manifest;
