@@ -90,6 +90,8 @@ pub struct cu29_unifiedlog::LogPosition
 pub cu29_unifiedlog::LogPosition::offset: usize
 pub cu29_unifiedlog::LogPosition::slab_index: usize
 pub struct cu29_unifiedlog::LogStream<S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S>>
+impl<S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S>> cu29_unifiedlog::LogStream<S, L>
+pub fn cu29_unifiedlog::LogStream<S, L>::new(entry_type: cu29_traits::UnifiedLogType, parent_logger: alloc::sync::Arc<std::sync::poison::mutex::Mutex<L>>, minimum_allocation_amount: usize) -> cu29_traits::CuResult<Self>
 impl<E: cu_bincode::enc::Encode, S: cu29_unifiedlog::SectionStorage, L: cu29_unifiedlog::UnifiedLogWrite<S>> cu29_traits::WriteStream<E> for cu29_unifiedlog::LogStream<S, L>
 pub fn cu29_unifiedlog::LogStream<S, L>::last_log_bytes(&self) -> core::option::Option<usize>
 pub fn cu29_unifiedlog::LogStream<S, L>::log(&mut self, obj: &E) -> cu29_traits::CuResult<()>

@@ -168,6 +168,13 @@ logstream-udp-check:
 	cargo +stable clippy -p cu29-logstream-udp --all-targets --features runtime-integration -- --deny warnings
 	cargo +stable test -p cu29-logstream-udp --features runtime-integration
 
+# Receiver assembly, native archives, UDP arrival order, and replay continuity.
+logstream-receiver-check:
+	cargo +stable test -p cu29-logstream
+	cargo +stable check -p cu29-logstream --no-default-features
+	cargo +stable test -p cu29-runtime --test replay_primitives
+	just logstream-udp-check
+
 # Check the large examples from the former extra-examples repo.
 check-extra-examples: check-extra-examples-host check-extra-examples-embedded
 

@@ -24,6 +24,7 @@ crc = { workspace = true }
 cu-fec = { workspace = true }
 cu29-runtime = { workspace = true }
 cu29-traits = { workspace = true }
+cu29-unifiedlog = { workspace = true, optional = true }
 raptorq = { workspace = true }
 
 [dev-dependencies]
@@ -31,5 +32,12 @@ serde = { workspace = true }
 
 [features]
 default = ["std"]
-std = ["blake3/std", "cu29-runtime/std", "cu29-traits/std", "raptorq/std"]
+std = [
+  "dep:cu29-unifiedlog",
+  "cu29-unifiedlog/std",
+  "blake3/std",
+  "cu29-runtime/std",
+  "cu29-traits/std",
+  "raptorq/std",
+]
 test-utils = ["std"]

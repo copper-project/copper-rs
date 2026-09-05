@@ -48,6 +48,7 @@ pub cu29_traits::UnifiedLogType::Empty
 pub cu29_traits::UnifiedLogType::FrozenTasks
 pub cu29_traits::UnifiedLogType::LastEntry
 pub cu29_traits::UnifiedLogType::RuntimeLifecycle
+pub cu29_traits::UnifiedLogType::StreamContinuity
 pub cu29_traits::UnifiedLogType::StructuredLogLine
 impl cu_bincode::enc::Encode for cu29_traits::UnifiedLogType
 pub fn cu29_traits::UnifiedLogType::encode<__E: cu_bincode::enc::Encoder>(&self, encoder: &mut __E) -> core::result::Result<(), cu_bincode::error::EncodeError>

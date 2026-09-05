@@ -6017,6 +6017,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         copperlist: &CopperList<Self::RecordedDataSet>,
                         keyframe: Option<&KeyFrame>,
                     ) -> CuResult<()> {
+                        cu29::continuity::validate_replay_continuity(
+                            self.copper_runtime_mut().copperlists_manager.next_cl_id(),
+                            copperlist.id,
+                            keyframe.map(|frame| frame.culistid),
+                        )?;
                         if let Some(keyframe) = keyframe {
                             if keyframe.culistid != copperlist.id {
                                 return Err(CuError::from(format!(

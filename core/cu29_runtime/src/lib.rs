@@ -15,6 +15,7 @@ pub mod app;
 mod app_sim;
 pub mod config;
 pub mod context;
+pub mod continuity;
 pub mod copperlist;
 #[doc(hidden)]
 pub mod copperlist_codec;

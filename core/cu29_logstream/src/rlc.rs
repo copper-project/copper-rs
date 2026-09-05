@@ -45,6 +45,10 @@ impl ReceiverLimits {
 pub enum GapReason {
     /// One or more required source symbols aged out of the configured RLC window.
     RlcWindowExpired,
+    /// History unavailable before a verified late-join boundary.
+    LateJoin,
+    /// Recovery advanced to a verified anchor after an outage.
+    AnchorRecovery,
     /// The caller finalized the session before the range could be recovered.
     SessionEnded,
 }
@@ -468,6 +472,19 @@ impl<const MAX_SYMBOL_SIZE: usize, const MAX_WINDOW_SYMBOLS: usize, const MAX_EQ
             retention_floor: None,
             stats: ContinuousRecoveryStats::default(),
         })
+    }
+
+    pub const fn next_object_id(&self) -> u64 {
+        self.next_object_id
+    }
+
+    /// Advances ordering at a verified semantic boundary, retaining the FEC
+    /// window and already assembled records at or beyond that boundary.
+    pub(crate) fn resume_at(&mut self, boundary: u64) {
+        self.next_object_id = self.next_object_id.max(boundary);
+        self.assemblies
+            .retain(|record| record.object_id >= self.next_object_id);
+        self.discard_stale_ready();
     }
 
     pub const fn stats(&self) -> ContinuousRecoveryStats {
