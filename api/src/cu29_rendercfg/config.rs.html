@@ -2319,9 +2319,9 @@
 <a href=#2319 id=2319 data-nosnippet>2319</a>
 <a href=#2320 id=2320 data-nosnippet>2320</a>    <span class="doccomment">/// Generate and record task-state keyframes.
 <a href=#2321 id=2321 data-nosnippet>2321</a>    ///
-<a href=#2322 id=2322 data-nosnippet>2322</a>    /// This is a compile-time application property: `#[copper_runtime]` emits no
-<a href=#2323 id=2323 data-nosnippet>2323</a>    /// keyframe capture calls when it is `false`. CopperList and structured logging
-<a href=#2324 id=2324 data-nosnippet>2324</a>    /// remain available.
+<a href=#2322 id=2322 data-nosnippet>2322</a>    /// Without another generated keyframe consumer, this is a compile-time application
+<a href=#2323 id=2323 data-nosnippet>2323</a>    /// property and `#[copper_runtime]` emits no capture calls when it is `false`.
+<a href=#2324 id=2324 data-nosnippet>2324</a>    /// A log-stream destination independently requests keyframe capture for anchors.
 <a href=#2325 id=2325 data-nosnippet>2325</a>    </span><span class="attr">#[serde(default = <span class="string">"default_as_true"</span>, skip_serializing_if = <span class="string">"Clone::clone"</span>)]
 <a href=#2326 id=2326 data-nosnippet>2326</a>    </span><span class="kw">pub </span>enable_keyframe_logging: bool,
 <a href=#2327 id=2327 data-nosnippet>2327</a>

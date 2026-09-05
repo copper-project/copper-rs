@@ -8,9 +8,9 @@
     pub codecs: <a class="struct" href="https://doc.rust-lang.org/nightly/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="struct" href="struct.LoggingCodecSpec.html" title="struct cu29_rendercfg::config::LoggingCodecSpec">LoggingCodecSpec</a>&gt;,
 }</code></pre><h2 id="fields" class="fields section-header">Fields<a href="#fields" class="anchor">§</a></h2><span id="structfield.enable_task_logging" class="structfield section-header"><a href="#structfield.enable_task_logging" class="anchor field">§</a><code>enable_task_logging: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.bool.html">bool</a></code></span><div class="docblock"><p>Enable task logging to the log file.</p>
 </div><span id="structfield.enable_keyframe_logging" class="structfield section-header"><a href="#structfield.enable_keyframe_logging" class="anchor field">§</a><code>enable_keyframe_logging: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.bool.html">bool</a></code></span><div class="docblock"><p>Generate and record task-state keyframes.</p>
-<p>This is a compile-time application property: <code>#[copper_runtime]</code> emits no
-keyframe capture calls when it is <code>false</code>. CopperList and structured logging
-remain available.</p>
+<p>Without another generated keyframe consumer, this is a compile-time application
+property and <code>#[copper_runtime]</code> emits no capture calls when it is <code>false</code>.
+A log-stream destination independently requests keyframe capture for anchors.</p>
 </div><span id="structfield.copperlist_count" class="structfield section-header"><a href="#structfield.copperlist_count" class="anchor field">§</a><code>copperlist_count: <a class="enum" href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.usize.html">usize</a>&gt;</code></span><div class="docblock"><p>Number of preallocated CopperLists available to the runtime.</p>
 <p>This is consumed by proc-macro codegen and must match the value compiled into the
 application binary.</p>
