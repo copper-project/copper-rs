@@ -227,7 +227,7 @@ fn main() -> Result<()> {
             iterations,
             idle_ms,
         } => sender(remote, &log_base, iterations, idle_ms),
-        Command::Receiver(options) => receiver::run(&options, None, &Default::default()),
+        Command::Receiver(options) => receiver::run(&options),
         #[cfg(feature = "tui")]
         Command::Dashboard(options) => dashboard::run(options),
         Command::Verify {

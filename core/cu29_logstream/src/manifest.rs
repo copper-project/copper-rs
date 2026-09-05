@@ -14,7 +14,7 @@ use bincode::{Decode, Encode};
 use cu29_runtime::config::{LogStreamDestinationConfig, LogStreamRepairDensity, LogStreamRlcField};
 use cu29_traits::TaskOutputSpec;
 
-pub const SESSION_MANIFEST_VERSION: u16 = 2;
+pub const SESSION_MANIFEST_VERSION: u16 = 1;
 
 /// Link and codec policy after RON validation and MTU resolution.
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]

@@ -4,7 +4,7 @@ use crate::{
     receiver::{self, ReceiverOptions},
 };
 use cu_logstream_demo::telemetry::{Frame, RecordingState, Status};
-use cu29_logstream::telemetry::{TelemetryReader, telemetry_channel};
+use cu29_logstream::telemetry::TelemetryReader;
 use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     layout::{Constraint, Layout},
@@ -15,8 +15,6 @@ use ratatui::{
 use std::{
     collections::VecDeque,
     io::IsTerminal,
-    sync::atomic::{AtomicBool, Ordering},
-    thread,
     time::{Duration, Instant},
 };
 
@@ -188,8 +186,8 @@ impl View {
                     number(status.anchor)
                 )),
                 Line::from(format!(
-                    "Source gaps: {}    Demo drops: {}    Replay queue drops: {}",
-                    status.gaps, status.dropped, status.twin.queue_overflows
+                    "Source gaps: {}    Replay queue drops: {}",
+                    status.gaps, status.twin.queue_overflows
                 )),
                 Line::from(format!(
                     "UI missed: {}    Buffer overwrites: {}    Capacity: {BUFFER_CAPACITY}",
@@ -221,67 +219,60 @@ pub fn run(options: ReceiverOptions) -> Result<()> {
             "Dashboard needs a terminal; use the receiver command for headless recording".into(),
         );
     }
-    let (publisher, mut reader) =
-        telemetry_channel(BUFFER_CAPACITY.try_into().unwrap(), Status::default());
-    let stop = AtomicBool::new(false);
-    thread::scope(|scope| -> Result<()> {
-        let worker = scope.spawn(|| {
-            receiver::run(&options, Some(publisher), &stop).map_err(|error| error.to_string())
-        });
-        let ui_result: std::io::Result<()> = ratatui::run(|terminal| {
-            let mut view = View {
-                history: VecDeque::with_capacity(CHART_CAPACITY),
-                ..Default::default()
-            };
-            let mut redraw = Instant::now();
-            loop {
-                // Paused/closed views only service keyboard/age timers. Live views
-                // wait for backend notification, with the same keyboard deadline.
-                if view.paused || reader.is_closed() {
-                    event::poll(UI_TICK)?;
-                } else {
-                    reader.wait_timeout(UI_TICK);
-                }
-                while event::poll(Duration::ZERO)? {
-                    if let Event::Key(key) = event::read()?
-                        && key.kind == KeyEventKind::Press
-                    {
-                        match key.code {
-                            KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
-                            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                                return Ok(());
-                            }
-                            KeyCode::Char(' ') => {
-                                view.paused = !view.paused;
-                                redraw = Instant::now();
-                            }
-                            _ => {}
+    let (mut twin, mut reader, _) = receiver::start(&options)?;
+    let ui_result: std::io::Result<()> = ratatui::run(|terminal| {
+        let mut view = View {
+            history: VecDeque::with_capacity(CHART_CAPACITY),
+            ..Default::default()
+        };
+        let mut redraw = Instant::now();
+        loop {
+            // Paused/closed views only service keyboard/age timers. Live views
+            // wait for backend notification, with the same keyboard deadline.
+            if view.paused || reader.is_closed() {
+                event::poll(UI_TICK)?;
+            } else {
+                reader.wait_timeout(UI_TICK);
+            }
+            while event::poll(Duration::ZERO)? {
+                if let Event::Key(key) = event::read()?
+                    && key.kind == KeyEventKind::Press
+                {
+                    match key.code {
+                        KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
+                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            return Ok(());
                         }
+                        KeyCode::Char(' ') => {
+                            view.paused = !view.paused;
+                            redraw = Instant::now();
+                        }
+                        _ => {}
                     }
                 }
-                view.consume(&mut reader);
-                let status = reader.status();
-                if Instant::now() >= redraw {
-                    terminal.draw(|frame| {
-                        view.draw(
-                            frame,
-                            status,
-                            reader.overwritten(),
-                            &options.log_base.display().to_string(),
-                        )
-                    })?;
-                    redraw = Instant::now() + UI_TICK;
-                }
-                if reader.is_closed() && status.state == RecordingState::Failed {
-                    return Ok(());
-                }
             }
-        });
-        stop.store(true, Ordering::Release);
-        let receiver_result = worker.join().map_err(|_| "Receiver thread panicked")?;
-        ui_result?;
-        receiver_result.map_err(Into::into)
-    })
+            view.consume(&mut reader);
+            let status = reader.status();
+            if Instant::now() >= redraw {
+                terminal.draw(|frame| {
+                    view.draw(
+                        frame,
+                        status,
+                        reader.overwritten(),
+                        &options.log_base.display().to_string(),
+                    )
+                })?;
+                redraw = Instant::now() + UI_TICK;
+            }
+            if reader.is_closed() && status.state == RecordingState::Failed {
+                return Ok(());
+            }
+        }
+    });
+    let receiver_result = twin.stop();
+    ui_result?;
+    receiver_result?;
+    Ok(())
 }
 
 #[cfg(test)]

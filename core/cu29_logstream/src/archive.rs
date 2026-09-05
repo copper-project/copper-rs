@@ -1,5 +1,6 @@
 //! Application-typed native archival. All work here is receiver-side.
 
+use crate::capture::CapturedList;
 use crate::{
     ApplicationSchema, Error, RecordKind, Result, SessionEvent, SessionManifest, StreamIdentity,
 };
@@ -22,15 +23,14 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-type ArchiveDecoder<P> =
-    fn(&[u8]) -> Result<(CopperList<P>, &[u8], Option<crate::capture::CaptureProof>)>;
+type ArchiveDecoder<P> = fn(&[u8]) -> Result<(CapturedList<P>, &[u8])>;
 
 type NativeStream = LogStream<MmapSectionStorage, UnifiedLoggerWrite>;
 
 /// One application-typed archive per `(session id, sender id)`. Pass all ordered
 /// router events for that sender to `accept`. The expected schema comes from
 /// `P`'s generated output specs, independently of the remote manifest.
-/// Only the full captured native codec view is supported; hybrid views are deferred.
+/// `CaptureArchive` applies the generated selective codec for a live twin.
 /// A write failure poisons the writer: do not retry a partially committed event.
 pub struct NativeArchive<P: CopperListTuple> {
     copperlists: NativeStream,
@@ -42,7 +42,6 @@ pub struct NativeArchive<P: CopperListTuple> {
     poisoned: bool,
     payload: PhantomData<P>,
     decode: ArchiveDecoder<P>,
-    last_proof: Option<crate::capture::CaptureProof>,
 }
 
 struct CanonicalEntry<'a>(&'a [u8]);
@@ -68,7 +67,7 @@ impl<P: CopperListTuple> NativeArchive<P> {
             slab_bytes,
             section_bytes,
             expected,
-            |bytes| Ok((crate::decode_copperlist(bytes)?, bytes, None)),
+            |bytes| Ok((CapturedList::new(crate::decode_copperlist(bytes)?), bytes)),
         )
     }
 
@@ -124,7 +123,6 @@ impl<P: CopperListTuple> NativeArchive<P> {
             poisoned: false,
             payload: PhantomData,
             decode,
-            last_proof: None,
         };
         archive
             .continuity
@@ -139,6 +137,11 @@ impl<P: CopperListTuple> NativeArchive<P> {
     /// and returns the typed value for an in-process consumer. Keyframes are
     /// archived only after the router has verified their anchor references.
     pub fn accept(&mut self, event: &SessionEvent) -> Result<Option<CopperList<P>>> {
+        self.accept_capture(event)
+            .map(|capture| capture.map(|c| c.copperlist))
+    }
+
+    fn accept_capture(&mut self, event: &SessionEvent) -> Result<Option<CapturedList<P>>> {
         if self.poisoned {
             return Err(Error::InvalidConfig(
                 "archive failed; close it before continuing",
@@ -151,7 +154,7 @@ impl<P: CopperListTuple> NativeArchive<P> {
         result
     }
 
-    fn accept_inner(&mut self, event: &SessionEvent) -> Result<Option<CopperList<P>>> {
+    fn accept_inner(&mut self, event: &SessionEvent) -> Result<Option<CapturedList<P>>> {
         let identity = match event {
             SessionEvent::Manifest(manifest) => manifest.identity,
             SessionEvent::ContinuousRecord { identity, .. }
@@ -173,7 +176,8 @@ impl<P: CopperListTuple> NativeArchive<P> {
                 if decoded.kind != RecordKind::CopperList || decoded.object_id != self.next_id {
                     return Err(Error::InconsistentObject);
                 }
-                let (copperlist, native, proof) = (self.decode)(decoded.payload)?;
+                let (capture, native) = (self.decode)(decoded.payload)?;
+                let copperlist = &capture.copperlist;
                 if copperlist.id != decoded.object_id {
                     return Err(Error::InconsistentObject);
                 }
@@ -181,21 +185,11 @@ impl<P: CopperListTuple> NativeArchive<P> {
                     .next_id
                     .checked_add(1)
                     .ok_or(Error::InconsistentObject)?;
-                if let Some(proof) = &proof {
-                    self.continuity
-                        .log(&StreamContinuityRecord::Capture {
-                            copperlist_id: copperlist.id,
-                            proof: bincode::encode_to_vec(proof, bincode::config::standard())
-                                .map_err(io_error)?,
-                        })
-                        .map_err(io_error)?;
-                }
-                self.last_proof = proof;
                 self.copperlists
                     .log(&CanonicalEntry(native))
                     .map_err(io_error)?;
                 self.next_id = next;
-                return Ok(Some(copperlist));
+                return Ok(Some(capture));
             }
             SessionEvent::Gap { gap, .. } => {
                 if gap.first_id != self.next_id || gap.last_id < gap.first_id {
@@ -271,7 +265,7 @@ fn io_error(error: impl core::fmt::Display) -> Error {
 
 /// Capture-aware native archive. Synthesized payloads never enter this writer.
 /// Native CopperList metadata retains both original and captured presence planes;
-/// StreamContinuity retains each proof and the complete reconstruction contract.
+/// StreamContinuity retains the reconstruction contract and source gaps.
 pub struct CaptureArchive<P: crate::capture::CaptureDataSet>(NativeArchive<P>);
 impl<P: crate::capture::CaptureDataSet> CaptureArchive<P> {
     pub fn new(
@@ -286,28 +280,16 @@ impl<P: crate::capture::CaptureDataSet> CaptureArchive<P> {
             slab_bytes,
             section_bytes,
             P::stream_schema(),
-            |bytes| {
-                let (capture, native) = crate::capture::decode_capture(bytes)?;
-                Ok((capture.copperlist, native, Some(capture.proof)))
-            },
+            crate::capture::decode_capture,
         )?))
     }
     pub fn accept(
         &mut self,
         event: &SessionEvent,
     ) -> Result<Option<crate::capture::CapturedList<P>>> {
-        Ok(self
-            .0
-            .accept(event)?
-            .map(|copperlist| crate::capture::CapturedList {
-                copperlist,
-                proof: self
-                    .0
-                    .last_proof
-                    .take()
-                    .expect("capture decoder supplies proof"),
-            }))
+        self.0.accept_capture(event)
     }
+
     pub fn finish(self) -> Result<()> {
         self.0.finish()
     }

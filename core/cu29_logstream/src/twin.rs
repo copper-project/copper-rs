@@ -23,6 +23,9 @@ use std::{
 pub trait LiveReplay: Sized + 'static {
     type DataSet: CaptureDataSet + Send + 'static;
     fn build_twin() -> CuResult<(Self, RobotClockMock)>;
+    fn stop_twin(&mut self) -> CuResult<()> {
+        Ok(())
+    }
     fn replay_capture(
         &mut self,
         clock: &RobotClockMock,
@@ -94,36 +97,38 @@ impl<A: LiveReplay> LiveTwin<A> {
             }
             return Ok(None);
         }
-        if let Err(error) = self
+        let result = self
             .app
-            .replay_capture(&self.clock, &mut capture.copperlist, keyframe)
-            .and_then(|()| {
-                capture
-                    .verify()
-                    .map_err(|e| cu29_traits::CuError::from(e.to_string()))
-            })
-        {
+            .replay_capture(&self.clock, &mut capture.copperlist, keyframe);
+        #[cfg(feature = "verify-reconstruction")]
+        let result = result.and_then(|()| {
+            capture
+                .verify()
+                .map_err(|e| cu29_traits::CuError::from(e.to_string()))
+        });
+        if let Err(error) = result {
             self.next = None;
             self.status.state = ReconstructionState::Diverged;
             self.status.divergences += 1;
             return Err(error);
         }
         self.next = id.checked_add(1);
-        self.status.state = if capture
-            .proof
-            .reconstructed_digests
-            .iter()
-            .any(Option::is_some)
-        {
-            ReconstructionState::Verified
-        } else {
-            ReconstructionState::Reconstructed
-        };
+        self.status.state = ReconstructionState::Reconstructed;
+        #[cfg(feature = "verify-reconstruction")]
+        if capture.digest.is_some() {
+            self.status.state = ReconstructionState::Verified;
+        }
         self.status.reconstructed += 1;
         if self.status.state == ReconstructionState::Verified {
             self.status.verified += 1;
         }
         Ok(Some(capture.copperlist))
+    }
+}
+
+impl<A: LiveReplay> Drop for LiveTwin<A> {
+    fn drop(&mut self) {
+        let _ = self.app.stop_twin();
     }
 }
 
@@ -151,12 +156,13 @@ struct Pending<P: CopperListTuple> {
 /// Storage bounds are `capacity` queued events, `capacity` pending captures,
 /// one pending anchor and one executing frame, in addition to the telemetry ring.
 /// Overflow invalidates replay until an admitted matching anchor, never archival.
+#[doc(hidden)]
 pub struct TwinWorker<P: CopperListTuple, S> {
     sender: Option<SyncSender<Work<P>>>,
     statuses: Arc<ArrayQueue<S>>,
     generation: Arc<AtomicU64>,
     overflows: Arc<AtomicU64>,
-    worker: Option<JoinHandle<()>>,
+    worker: Option<JoinHandle<TwinStatus>>,
 }
 
 impl<P: CaptureDataSet + Send + 'static, S: TwinReceiverStatus> TwinWorker<P, S> {
@@ -182,7 +188,7 @@ impl<P: CaptureDataSet + Send + 'static, S: TwinReceiverStatus> TwinWorker<P, S>
                     }
                     Err(e) => {
                         let _ = ready_tx.send(Err(e));
-                        return;
+                        return TwinStatus::default();
                     }
                 };
                 let mut current_generation = 0;
@@ -281,6 +287,7 @@ impl<P: CaptureDataSet + Send + 'static, S: TwinReceiverStatus> TwinWorker<P, S>
                     receiver_status = status;
                 }
                 publisher.set_status(receiver_status.with_twin(twin.status));
+                twin.status
             })
             .map_err(|e| cu29_traits::CuError::new_with_cause("spawn live twin", e))?;
         ready_rx
@@ -294,6 +301,15 @@ impl<P: CaptureDataSet + Send + 'static, S: TwinReceiverStatus> TwinWorker<P, S>
             worker: Some(worker),
         })
     }
+    pub fn finish(mut self) -> CuResult<TwinStatus> {
+        self.sender.take();
+        self.worker
+            .take()
+            .ok_or_else(|| cu29_traits::CuError::from("Twin worker already joined"))?
+            .join()
+            .map_err(|_| cu29_traits::CuError::from("Twin replay worker panicked"))
+    }
+
     /// Route an already archived event into live replay. This is the usual
     /// ground-station integration: `twin.accept(event, archive.accept(event)?)`.
     /// Archival must succeed first; replay never retries or delays that writer.

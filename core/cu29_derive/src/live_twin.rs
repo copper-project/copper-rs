@@ -48,7 +48,7 @@ pub(super) fn dataset_support(
         return quote! { compile_error!("hybrid streaming currently requires the lossless native compressed codec and full handle capture"); };
     }
     let encode = build_compressed_culist_tuple_encode(packs, helpers, modes, count, Some(&capture));
-    let mut presence = Vec::new();
+    let mut validate = Vec::new();
     let mut digests = Vec::new();
     let mut flat_abis = Vec::new();
     let mut metadata = Vec::new();
@@ -61,10 +61,14 @@ pub(super) fn dataset_support(
             } else {
                 quote! { #slot }
             };
-            presence.push(quote! { self.0.#access.payload().is_some() });
-            digests.push(if capture[i] { quote! { None } } else {
-                quote! { ::cu29::logstream::capture::reconstruction_digest(&self.0.#access.payload())? }
-            });
+            if !capture[i] {
+                validate.push(quote! {
+                    if self.0.#access.payload().is_some() {
+                        return Err(::cu29::logstream::Error::InvalidConfig("reconstructed payload must be omitted"));
+                    }
+                });
+                digests.push(quote! { self.0.#access.payload().encode(encoder)?; });
+            }
             flat_abis.push(abis[i].clone());
             metadata.push(quote! {
                 self.0.#access.tov = captured.0.#access.tov;
@@ -78,7 +82,6 @@ pub(super) fn dataset_support(
         #encode
         impl ::cu29::logstream::capture::CaptureDataSet for CuStampedDataSet {
             const RECONSTRUCTION: &'static [Option<u32>] = &[#(#flat_abis),*];
-            fn original_presence(&self) -> Vec<bool> { vec![#(#presence),*] }
             fn stream_schema() -> ::cu29::logstream::ApplicationSchema {
                 #[allow(unused_mut)]
                 let mut schema = ::cu29::logstream::ApplicationSchema::from_output_specs(
@@ -89,12 +92,16 @@ pub(super) fn dataset_support(
             fn encode_capture<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
                 self.__encode_capture(encoder)
             }
-            fn capture_proof(&self) -> ::cu29::logstream::Result<::cu29::logstream::capture::CaptureProof> {
-                Ok(::cu29::logstream::capture::CaptureProof {
-                    version: 1,
-                    original_presence: self.original_presence(),
-                    reconstructed_digests: vec![#(#digests),*],
-                })
+            fn validate_capture(&self) -> ::cu29::logstream::Result<()> {
+                #(#validate)*
+                Ok(())
+            }
+            ::cu29::logstream::__with_reconstruction_verification! {
+                fn encode_reconstruction<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+                    let _ = &encoder;
+                    #(#digests)*
+                    Ok(())
+                }
             }
             fn restore_sender_metadata(&mut self, captured: &Self) { #(#metadata)* }
         }
@@ -150,21 +157,32 @@ pub(super) fn runtime_support(
             .push(quote! { #mission::SimStep::#variant(_) => SimOverride::ExecuteByRuntime, });
     }
     quote! {
+        impl #app {
+            /// Start a live twin from this graph; Copper owns receive, archive and replay workers.
+            pub fn twin<R: ::cu29::logstream::CuStreamRx + 'static>(rx: R)
+                -> ::cu29::logstream::CuTwinBuilder<Self, R> {
+                ::cu29::logstream::CuTwin::<Self>::builder(rx)
+            }
+        }
         impl ::cu29::logstream::twin::LiveReplay for #app {
             type DataSet = #mission::CuStampedDataSet;
             #[allow(deprecated)]
             fn build_twin() -> CuResult<(Self, RobotClockMock)> {
                 let (clock, mock) = RobotClock::mock();
                 let mut config = CuConfig::deserialize_ron(&Self::original_config())?;
-                if let Some(logging) = &mut config.logging {
-                    logging.enable_task_logging = false;
-                    logging.enable_keyframe_logging = false;
-                }
+                let logging = config.logging.get_or_insert_with(Default::default);
+                logging.enable_task_logging = false;
+                logging.enable_keyframe_logging = false;
                 let mut app = Self::builder().with_clock(clock).with_config(config)
                     .with_sim_callback(&mut |_| SimOverride::ExecutedBySim).build()?.into_inner();
                 <Self as CuSimApplication<NoopSectionStorage, NoopLogger>>::start_all_tasks(&mut app,
                     &mut |step| match step { #(#lifecycle_arms)* _ => SimOverride::ExecutedBySim })?;
                 Ok((app, mock))
+            }
+            #[allow(deprecated)]
+            fn stop_twin(&mut self) -> CuResult<()> {
+                <Self as CuSimApplication<NoopSectionStorage, NoopLogger>>::stop_all_tasks(self,
+                    &mut |step| match step { #(#lifecycle_arms)* _ => SimOverride::ExecutedBySim })
             }
             #[allow(deprecated)]
             fn replay_capture(&mut self, clock_mock: &RobotClockMock,
