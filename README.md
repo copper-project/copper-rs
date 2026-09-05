@@ -44,32 +44,32 @@ browser. The simulator runs beside a live view of the Copper task graph and late
   <tr>
     <td width="50%" valign="top">
       <a href="https://cdn.copper-robotics.com/demo/balancebot/index.html">
-        <img src="doc/static/demo-balancebot-browser.png" alt="BalanceBot browser demo" width="100%" />
+        <img src="https://raw.githubusercontent.com/copper-project/copper-rs/master/doc/static/demo-balancebot-browser.png" alt="BalanceBot browser demo" width="100%" />
       </a>
       <br />
       <strong><a href="https://cdn.copper-robotics.com/demo/balancebot/index.html">BalanceBot</a></strong>
       <br />
       A self-balancing robot simulation using the application that runs on Raspberry Pi hardware.
       <br />
-      <a href="examples/cu_rp_balancebot">Source code</a>
+      <a href="https://github.com/copper-project/extra-examples/tree/master/examples/cu_rp_balancebot">Source code</a>
     </td>
     <td width="50%" valign="top">
       <a href="https://cdn.copper-robotics.com/demo/flight-controller/index.html">
-        <img src="doc/static/demo-flight-controller-browser.png" alt="Flight controller browser demo" width="100%" />
+        <img src="https://raw.githubusercontent.com/copper-project/copper-rs/master/doc/static/demo-flight-controller-browser.png" alt="Flight controller browser demo" width="100%" />
       </a>
       <br />
       <strong><a href="https://cdn.copper-robotics.com/demo/flight-controller/index.html">Flight Controller</a></strong>
       <br />
       A quadcopter simulation using the control stack deployed on STM32H7 flight hardware.
       <br />
-      <a href="examples/cu_flight_controller">Source code</a>
+      <a href="https://github.com/copper-project/extra-examples/tree/master/examples/cu_flight_controller">Source code</a>
     </td>
   </tr>
 </table>
 
 Watch more robots built with Copper in the
 [community showcase](https://youtu.be/weV_JYaUsmo), or explore the
-[cross-framework benchmarks](benchmarks/).
+[cross-framework benchmarks](https://github.com/copper-project/copper-rs/tree/master/benchmarks).
 
 ## Build Your First Copper App
 
@@ -91,16 +91,13 @@ Copper log (`just plan-log`), and replay.
 
 ## How Copper Fits Together
 
-```mermaid
-flowchart LR
-    Config["copperconfig.ron<br/>Static task graph"]
-    Generate["#[copper_runtime]<br/>Compile-time generation"]
-    Runtime["Deterministic runtime<br/>Zero-alloc hot path"]
-    Log["Unified .copper log"]
-    Tools["Replay · Export · Inspect"]
-
-    Config --> Generate --> Runtime --> Log --> Tools
-```
+| Stage | What happens |
+| --- | --- |
+| **Declare** | Define the static task graph in `copperconfig.ron`. |
+| **Generate** | `#[copper_runtime]` wires the graph at compile time. |
+| **Run** | Execute deterministically with a zero-allocation hot path. |
+| **Record** | Capture messages, timing, and state in a unified `.copper` log. |
+| **Inspect** | Replay a recorded run, export its data, and inspect its state. |
 
 The robot is a static thing: Copper turns its declared graph into a purpose-built
 runtime, then records messages, timing, and state into one replayable log.
@@ -118,7 +115,7 @@ runtime, then records messages, timing, and state into one replayable log.
   </tr>
   <tr>
     <td><strong>Go deeper</strong></td>
-    <td><a href="examples/">Examples</a> · <a href="https://copper-project.github.io/copper-rs-book/logging-replay.html">Logging and replay</a> · <a href="https://copper-project.github.io/copper-rs/Python-Support">Python support</a></td>
+    <td><a href="https://github.com/copper-project/copper-rs/tree/master/examples">Examples</a> · <a href="https://copper-project.github.io/copper-rs-book/logging-replay.html">Logging and replay</a> · <a href="https://copper-project.github.io/copper-rs/Python-Support">Python support</a></td>
   </tr>
   <tr>
     <td><strong>Project</strong></td>
@@ -126,6 +123,6 @@ runtime, then records messages, timing, and state into one replayable log.
   </tr>
   <tr>
     <td><strong>Community</strong></td>
-    <td><a href="CONTRIBUTING.md">Contributing</a> · <a href="https://github.com/copper-project/copper-rs/discussions">GitHub Discussions</a> · <a href="https://discord.gg/VkCG7Sb9Kw">Discord</a></td>
+    <td><a href="https://github.com/copper-project/copper-rs/blob/master/CONTRIBUTING.md">Contributing</a> · <a href="https://github.com/copper-project/copper-rs/discussions">GitHub Discussions</a> · <a href="https://discord.gg/VkCG7Sb9Kw">Discord</a></td>
   </tr>
 </table>
