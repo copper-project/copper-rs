@@ -35,5 +35,14 @@ fsck log="logs/received.copper": build
 resim log="logs/received.copper" output="logs/replay.copper": build
     {{root}}/target/debug/cu-logstream-demo-resim --log-base {{log}} --replay-log-base {{output}}
 
-resim-debug log="logs/received.copper" output="logs/replay.copper" debug_base="copper/cu-logstream-demo/debug/v1": build
+resim-debug log="logs/replay.copper" output="logs/replay.copper" debug_base="copper/cu-logstream-demo/debug/v1": build
     {{root}}/target/debug/cu-logstream-demo-resim --log-base {{log}} --replay-log-base {{output}} --debug-base {{debug_base}}
+
+# Developer-only per-output divergence checks; hashing stays on output workers.
+dashboard-verify listen="127.0.0.1:7447" log="logs/dashboard-verify.copper":
+    cargo +stable build -p cu-logstream-demo --features tui,verify-reconstruction --bin cu-logstream-demo
+    {{root}}/target/debug/cu-logstream-demo dashboard --listen {{listen}} --log-base {{log}}
+
+sender-verify remote="127.0.0.1:7447" log="logs/sender-verify.copper" iterations="6000":
+    cargo +stable build -p cu-logstream-demo --features tui,verify-reconstruction --bin cu-logstream-demo
+    {{root}}/target/debug/cu-logstream-demo sender --remote {{remote}} --log-base {{log}} --iterations {{iterations}}

@@ -10,6 +10,7 @@ publish = false
 
 [features]
 default = []
+verify-reconstruction = ["demo", "cu29/logstream-verify"]
 # Keep async runtime features out of ordinary workspace builds.
 demo = ["cu29/logstream", "cu29/reflect"]
 replay = ["demo", "cu29/remote-debug"]

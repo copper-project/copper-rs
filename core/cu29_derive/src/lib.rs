@@ -1,3 +1,4 @@
+mod live_twin;
 use proc_macro::TokenStream;
 use quote::{ToTokens, format_ident, quote};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -1121,6 +1122,7 @@ fn gen_culist_support(
                 &encode_helper_names,
                 &slot_handle_modes,
                 cumsg_count,
+                None,
             ),
             build_compressed_culist_tuple_decode(
                 &output_packs,
@@ -1450,8 +1452,22 @@ fn gen_culist_support(
         }
     }
 
+    let capture_support = if cfg!(feature = "logstream") {
+        live_twin::dataset_support(
+            runtime_plan,
+            &output_packs,
+            &encode_helper_names,
+            &slot_handle_modes,
+            cumsg_count,
+            &flat_codec_bindings,
+        )
+    } else {
+        quote! {}
+    };
+
     // This generates a way to get the metadata of every single message of a culist at low cost
     quote! {
+        #capture_support
         #collect_metadata_function
         #compute_payload_bytes_fn
         #default_config_ron_const
@@ -1636,6 +1652,9 @@ fn gen_sim_support(
         });
     }
 
+    if cfg!(feature = "logstream") {
+        variants.push(quote! { CopperListCompleted(&'a mut CopperList<CuStampedDataSet>) });
+    }
     variants.push(quote! { __Phantom(core::marker::PhantomData<&'a ()>) });
     quote! {
         // not used if sim is not generated but this is ok.
@@ -2258,13 +2277,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 };
             let bridge_resource_mappings =
                 build_bridge_resource_mappings(&resource_specs, &culist_bridge_specs, sim_mode);
-            let logstream_resource_specs = match build_logstream_resource_specs(
-                &copper_config,
-                mission.as_str(),
-                &resource_specs,
-            ) {
-                Ok(specs) => specs,
-                Err(e) => return return_error(e.to_string()),
+            let logstream_resource_specs = if sim_mode {
+                Vec::new()
+            } else {
+                match build_logstream_resource_specs(
+                    &copper_config,
+                    mission.as_str(),
+                    &resource_specs,
+                ) {
+                    Ok(specs) => specs,
+                    Err(e) => return return_error(e.to_string()),
+                }
             };
             (
                 resources_module,
@@ -4580,7 +4603,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 .logging
                 .as_ref()
                 .is_none_or(|logging| logging.enable_keyframe_logging && logging.enable_task_logging);
-            if configured_keyframe_logging != #local_keyframe_logging_enabled {
+            // A ground-side simulation may disable local output entirely while
+            // retaining the generated freeze/thaw plan for received anchors.
+            if configured_keyframe_logging != #local_keyframe_logging_enabled
+                && !(#sim_mode && #logstream_enabled && !configured_keyframe_logging) {
                 return Err(CuError::from(format!(
                     "Configured keyframe logging ({configured_keyframe_logging}) does not match the runtime compiled into this binary ({})",
                     #local_keyframe_logging_enabled
@@ -5246,6 +5272,21 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! { self.copper_runtime.keyframes_manager.finish_pending()?; }
         });
 
+        let live_completed = (sim_mode && logstream_enabled).then(|| {
+            quote! {
+                let _ = sim_callback(SimStep::CopperListCompleted(culist));
+            }
+        });
+        let live_replay_impl = if sim_mode && logstream_enabled {
+            live_twin::runtime_support(
+                application_name,
+                &mission_mod,
+                &culist_plan,
+                &culist_exec_entities,
+            )
+        } else {
+            quote! {}
+        };
         let run_methods: proc_macro2::TokenStream = quote! {
 
             #run_one_iteration {
@@ -5313,6 +5354,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 // here drop the payloads if we don't want them to be logged.
                 #(#preprocess_logging_calls)*
 
+                #live_completed
                 cl_manager.end_of_processing(clid)?;
                 monitor_result?;
 
@@ -5455,6 +5497,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp init: loading config");
                 #config_load_stmt
+                let mut config = config;
+                if #sim_mode { config.log_streaming = None; }
                 #constant_override_warning
                 #copperlist_count_check
                 #keyframe_logging_check
@@ -5579,9 +5623,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let configured_logstream_session = (!logstream_resource_specs.is_empty()).then(|| {
             quote! {
                 let logstream_session_id = ::cu29::logstream::new_session_id();
-                let logstream_schema = ::cu29::logstream::ApplicationSchema::from_output_specs(
-                    <#mission_mod::CuStampedDataSet as ::cu29::prelude::MatchingTasks>::get_output_specs(),
-                );
+                let logstream_schema = <#mission_mod::CuStampedDataSet as ::cu29::logstream::capture::CaptureDataSet>::stream_schema();
             }
         });
         let configured_logstream_initializers = logstream_resource_specs.iter().map(|spec| {
@@ -5624,6 +5666,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         #transport_ident, sender_config,
                         if clock.is_mock() { RobotClock::new() } else { clock.clone() },
                     )?;
+                let #continuous_ident = if logstream_schema.reconstruction.is_empty() {
+                    #continuous_ident
+                } else {
+                    #continuous_ident.with_encoder(::cu29::logstream::capture::encode_capture_record_into)
+                };
             }
         });
         let configured_logstream_fanouts = logstream_resource_specs.iter().map(|spec| {
@@ -5664,10 +5711,20 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     .map(|(transport, mut sender_config)| {
                         sender_config.continuous.identity.sender_id = instance_id;
                         sender_config.recovery.finite.identity.sender_id = instance_id;
+                        let schema = <#mission_mod::CuStampedDataSet as ::cu29::logstream::capture::CaptureDataSet>::stream_schema();
+                        if !schema.reconstruction.is_empty() {
+                            let manifest = ::cu29::logstream::SessionManifest::decode_record(&sender_config.recovery.manifest_record)
+                                .map_err(|e| CuError::from(e.to_string()))?;
+                            if manifest.application_schema != schema {
+                                return Err(CuError::from("injected sender must use the generated reconstruction schema"));
+                            }
+                        }
                         let (copperlist, keyframe, _) = ::cu29::logstream::scheduled_sinks::<
                             #mission_mod::CuStampedDataSet, _
                         >(transport, sender_config,
                             if clock.is_mock() { RobotClock::new() } else { clock.clone() })?;
+                        let copperlist = if schema.reconstruction.is_empty() { copperlist }
+                            else { copperlist.with_encoder(::cu29::logstream::capture::encode_capture_record_into) };
                         Ok::<_, CuError>((copperlist, keyframe))
                     })
                     .transpose()?;
@@ -6800,6 +6857,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #app_reflect_impl
                 #app_runtime_copperlist_impl
                 #application_impl
+                #live_replay_impl
                 #recorded_replay_app_impl
                 #distributed_replay_app_impl
 
@@ -8271,6 +8329,7 @@ fn build_compressed_culist_tuple_encode(
     encode_helper_names: &[Option<Ident>],
     slot_handle_modes: &[HandleContent],
     cumsg_count: usize,
+    capture_slots: Option<&[bool]>,
 ) -> ItemImpl {
     let mut flat_idx = 0usize;
     let mut metadata_refs = Vec::with_capacity(cumsg_count);
@@ -8304,7 +8363,9 @@ fn build_compressed_culist_tuple_encode(
             original_idents.push(original_ident.clone());
             captured_idents.push(captured_ident.clone());
 
-            let captured_value = if mode == HandleContent::default() {
+            let captured_value = if capture_slots.is_some_and(|slots| !slots[slot_idx]) {
+                quote! { false }
+            } else if mode == HandleContent::default() {
                 quote! { #original_ident }
             } else {
                 let mode_u8 = mode as u8;
@@ -8357,9 +8418,20 @@ fn build_compressed_culist_tuple_encode(
         }
     }
 
+    let (impl_header, method) = if capture_slots.is_some() {
+        (
+            quote! { impl CuStampedDataSet },
+            format_ident!("__encode_capture"),
+        )
+    } else {
+        (
+            quote! { impl Encode for CuStampedDataSet },
+            format_ident!("encode"),
+        )
+    };
     parse_quote! {
-        impl Encode for CuStampedDataSet {
-            fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        #impl_header {
+            fn #method<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
                 let __cu_capture = cu29::monitoring::start_copperlist_io_capture(&self.1);
                 #(#presence_initializers)*
                 let __cu_metadata = [#(#metadata_refs),*];
@@ -10857,6 +10929,9 @@ fn generate_task_execution_tokens(
                 "task",
                 &quote! { cu29::cutask::CuTask },
             );
+            let live_process_completed = (sim_mode && cfg!(feature = "logstream")).then(|| quote! {
+                let _ = sim_callback(SimStep::#enum_name(CuTaskCallbackState::ProcessCompleted(cumsg_output)));
+            });
             let regular_process_tokens = quote! {
                 #slot_cast_defs
 
@@ -10872,6 +10947,7 @@ fn generate_task_execution_tokens(
                     #task_instance.process(&ctx, cumsg_input, cumsg_output)
                 };
                 #output_end_time
+                #live_process_completed
                 #alloc_close
                 result
             };

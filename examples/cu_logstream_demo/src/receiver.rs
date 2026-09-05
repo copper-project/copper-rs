@@ -1,10 +1,10 @@
 use crate::{Impairment, Result, prepare_log};
 use cu_logstream_demo::{
     DataSet, SLAB_BYTES,
-    telemetry::{Frame, Publisher, RecordingState, Status},
+    telemetry::{Publisher, RecordingState, Status},
 };
 use cu29_logstream::{
-    CuStreamRx, FecSymbolKind, FiniteObjectLimits, NativeArchive, RecordKind, SessionEvent,
+    CaptureArchive, CuStreamRx, FecSymbolKind, FiniteObjectLimits, RecordKind, SessionEvent,
     SessionRouter, SessionRouterLimits, WirePacket,
 };
 use cu29_logstream_udp::CuUdpLogStreamConfig;
@@ -34,12 +34,69 @@ pub struct ReceiverOptions {
     /// Exit after this much silence; this does not prove the sender's tail is complete.
     #[arg(long, default_value_t = 1000, value_parser = clap::value_parser!(u64).range(1..))]
     pub idle_ms: u64,
+    /// Record captures without constructing a live twin.
+    #[arg(long)]
+    pub archive_only: bool,
 }
 
 pub fn run(
     options: &ReceiverOptions,
-    mut telemetry: Option<&mut Publisher>,
+    telemetry: Option<Publisher>,
     stop: &AtomicBool,
+) -> Result<()> {
+    let quiet = telemetry.is_some();
+    let mut headless_reader = None;
+    let telemetry = telemetry.or_else(|| {
+        if options.archive_only {
+            return None;
+        }
+        let (publisher, reader) =
+            cu29_logstream::telemetry::telemetry_channel(4.try_into().unwrap(), Status::default());
+        headless_reader = Some(reader);
+        Some(publisher)
+    });
+    let twin = telemetry
+        .map(|publisher| {
+            cu29_logstream::twin::TwinWorker::spawn::<cu_logstream_demo::twin::Twin>(
+                32.try_into().unwrap(),
+                publisher,
+            )
+        })
+        .transpose()?;
+    let result = run_inner(options, twin.as_ref(), stop, quiet);
+    if result.is_err()
+        && let Some(twin) = &twin
+    {
+        twin.set_status(Status {
+            state: RecordingState::Failed,
+            ..Default::default()
+        });
+    }
+    drop(twin);
+    if let Some(mut reader) = headless_reader {
+        let status = reader.status();
+        println!(
+            "Copper twin: {:?}, reconstructed={}, verified={}, replay_queue_drops={}",
+            status.twin.state,
+            status.twin.reconstructed,
+            status.twin.verified,
+            status.twin.queue_overflows
+        );
+        if result.is_ok() && status.archived > 0 && status.twin.reconstructed == 0 {
+            return Err("Live Copper twin produced no reconstructed frames".into());
+        }
+        if result.is_ok() && status.twin.divergences != 0 {
+            return Err("Live Copper twin diverged".into());
+        }
+    }
+    result
+}
+
+fn run_inner(
+    options: &ReceiverOptions,
+    twin: Option<&cu29_logstream::twin::TwinWorker<DataSet, Status>>,
+    stop: &AtomicBool,
+    quiet: bool,
 ) -> Result<()> {
     let ReceiverOptions {
         listen,
@@ -48,8 +105,8 @@ pub fn run(
         impairment,
         stop_at,
         idle_ms,
+        ..
     } = options;
-    let quiet = telemetry.is_some();
     prepare_log(path)?;
     let mut socket = CuUdpLogStreamConfig::new(*listen);
     socket.recv_buffer_bytes = Some(262144);
@@ -65,7 +122,7 @@ pub fn run(
         equation_capacity: 64,
         finite_objects: FiniteObjectLimits::new(65536, 1128, 4),
     })?;
-    let mut archive: Option<NativeArchive<DataSet>> = None;
+    let mut archive: Option<CaptureArchive<DataSet>> = None;
     let mut status = Status::default();
     if let Some(ready) = ready_file {
         // Coordination metadata only; the native archive contains all task data.
@@ -129,25 +186,22 @@ pub fn run(
                             );
                         }
                         status.identity = Some(manifest.identity);
-                        archive = Some(NativeArchive::new(
+                        archive = Some(CaptureArchive::new(
                             path,
                             manifest.clone(),
                             SLAB_BYTES,
                             65536,
                         )?);
                     }
-                    if let Some(writer) = archive.as_mut()
-                        && let Some(list) = writer.accept(&event)?
-                    {
-                        status.latest = Some(list.id);
-                        status.archived += 1;
-                        status.state = RecordingState::Recording;
-                        if let Some(publisher) = telemetry.as_deref_mut() {
-                            publisher.publish(Frame {
-                                identity: status.identity.expect("archived frame has a manifest"),
-                                received_at: Instant::now(),
-                                copperlist: list,
-                            });
+                    if let Some(writer) = archive.as_mut() {
+                        let capture = writer.accept(&event)?;
+                        if let Some(list) = &capture {
+                            status.latest = Some(list.copperlist.id);
+                            status.archived += 1;
+                            status.state = RecordingState::Recording;
+                        }
+                        if let Some(twin) = twin {
+                            twin.accept(&event, capture)?;
                         }
                     }
                     match event {
@@ -161,7 +215,7 @@ pub fn run(
                             }
                         }
                         SessionEvent::VerifiedAnchor { anchor, .. } => {
-                            status.anchor = Some(anchor.copperlist_id)
+                            status.anchor = Some(anchor.copperlist_id);
                         }
                         _ => {}
                     }
@@ -172,8 +226,8 @@ pub fn run(
             thread::sleep(Duration::from_millis(1));
         }
         status.packets = router.stats().datagrams_seen;
-        if let Some(publisher) = telemetry.as_deref_mut() {
-            publisher.set_status(status);
+        if let Some(twin) = &twin {
+            twin.set_status(status);
         }
         if !quiet && last_status.elapsed() >= Duration::from_millis(500) {
             print_status(&status, router.stats().datagrams_seen);
@@ -194,8 +248,8 @@ pub fn run(
         return Err("No session manifest received".into());
     }
     status.state = RecordingState::Closed;
-    if let Some(publisher) = telemetry {
-        publisher.set_status(status);
+    if let Some(twin) = &twin {
+        twin.set_status(status);
     }
     if !quiet {
         print_status(&status, router.stats().datagrams_seen);
@@ -222,6 +276,7 @@ fn print_status(status: &Status, packets: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cu_logstream_demo::telemetry::Frame;
     use cu29_logstream::telemetry::telemetry_channel;
 
     #[test]
@@ -244,20 +299,18 @@ mod tests {
                 impairment: Impairment::Clean,
                 stop_at: Some(COUNT - 1),
                 idle_ms: 2000,
+                archive_only: mode == "disabled",
             };
             let (publisher, reader) =
                 telemetry_channel::<Frame, Status>(4.try_into().unwrap(), Status::default());
-            let mut publisher = (mode != "disabled").then_some(publisher);
+            let publisher = (mode != "disabled").then_some(publisher);
             let mut reader = Some(reader);
             if mode == "disconnected" {
                 drop(reader.take());
             }
             thread::scope(|scope| {
                 let worker = scope.spawn(move || {
-                    let result = run(&options, publisher.as_mut(), &AtomicBool::new(false))
-                        .map_err(|e| e.to_string());
-                    drop(publisher);
-                    result
+                    run(&options, publisher, &AtomicBool::new(false)).map_err(|e| e.to_string())
                 });
                 let fast_reader = if mode == "fast" {
                     let mut reader = reader.take().unwrap();
@@ -267,10 +320,28 @@ mod tests {
                             assert!(reader.wait_timeout(Duration::from_secs(5)));
                             reader.status();
                             while let Some(update) = reader.try_read() {
+                                let list = &update.frame.copperlist;
+                                assert_eq!(
+                                    list.msgs.get_derived_output().payload().unwrap().0,
+                                    list.msgs.get_sum_output().payload().unwrap().0 % 256
+                                );
+                                assert_eq!(
+                                    list.msgs.get_derived_output().tov,
+                                    list.msgs.get_sum_output().tov
+                                );
                                 accounted += update.missed + 1;
                             }
                             if reader.is_closed() {
                                 while let Some(update) = reader.try_read() {
+                                    let list = &update.frame.copperlist;
+                                    assert_eq!(
+                                        list.msgs.get_derived_output().payload().unwrap().0,
+                                        list.msgs.get_sum_output().payload().unwrap().0 % 256
+                                    );
+                                    assert_eq!(
+                                        list.msgs.get_derived_output().tov,
+                                        list.msgs.get_sum_output().tov
+                                    );
                                     accounted += update.missed + 1;
                                 }
                                 return accounted;

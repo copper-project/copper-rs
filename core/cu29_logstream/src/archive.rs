@@ -22,6 +22,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+type ArchiveDecoder<P> =
+    fn(&[u8]) -> Result<(CopperList<P>, &[u8], Option<crate::capture::CaptureProof>)>;
+
 type NativeStream = LogStream<MmapSectionStorage, UnifiedLoggerWrite>;
 
 /// One application-typed archive per `(session id, sender id)`. Pass all ordered
@@ -38,6 +41,8 @@ pub struct NativeArchive<P: CopperListTuple> {
     next_id: u64,
     poisoned: bool,
     payload: PhantomData<P>,
+    decode: ArchiveDecoder<P>,
+    last_proof: Option<crate::capture::CaptureProof>,
 }
 
 struct CanonicalEntry<'a>(&'a [u8]);
@@ -56,11 +61,29 @@ impl<P: CopperListTuple> NativeArchive<P> {
         slab_bytes: usize,
         section_bytes: usize,
     ) -> Result<Self> {
+        let expected = ApplicationSchema::from_output_specs(P::get_output_specs());
+        Self::new_checked(
+            path,
+            manifest,
+            slab_bytes,
+            section_bytes,
+            expected,
+            |bytes| Ok((crate::decode_copperlist(bytes)?, bytes, None)),
+        )
+    }
+
+    fn new_checked(
+        path: &Path,
+        manifest: SessionManifest,
+        slab_bytes: usize,
+        section_bytes: usize,
+        expected_schema: ApplicationSchema,
+        decode: ArchiveDecoder<P>,
+    ) -> Result<Self> {
         manifest.plan.validate()?;
         if manifest.version != crate::SESSION_MANIFEST_VERSION {
             return Err(Error::UnsupportedManifestVersion(manifest.version));
         }
-        let expected_schema = ApplicationSchema::from_output_specs(P::get_output_specs());
         if manifest.application_schema != expected_schema || !manifest.plan.content.archive {
             return Err(Error::InvalidConfig(
                 "archive requires the matching application schema and archive content policy",
@@ -100,6 +123,8 @@ impl<P: CopperListTuple> NativeArchive<P> {
             next_id: 0,
             poisoned: false,
             payload: PhantomData,
+            decode,
+            last_proof: None,
         };
         archive
             .continuity
@@ -148,7 +173,7 @@ impl<P: CopperListTuple> NativeArchive<P> {
                 if decoded.kind != RecordKind::CopperList || decoded.object_id != self.next_id {
                     return Err(Error::InconsistentObject);
                 }
-                let copperlist: CopperList<P> = crate::decode_copperlist(decoded.payload)?;
+                let (copperlist, native, proof) = (self.decode)(decoded.payload)?;
                 if copperlist.id != decoded.object_id {
                     return Err(Error::InconsistentObject);
                 }
@@ -156,8 +181,18 @@ impl<P: CopperListTuple> NativeArchive<P> {
                     .next_id
                     .checked_add(1)
                     .ok_or(Error::InconsistentObject)?;
+                if let Some(proof) = &proof {
+                    self.continuity
+                        .log(&StreamContinuityRecord::Capture {
+                            copperlist_id: copperlist.id,
+                            proof: bincode::encode_to_vec(proof, bincode::config::standard())
+                                .map_err(io_error)?,
+                        })
+                        .map_err(io_error)?;
+                }
+                self.last_proof = proof;
                 self.copperlists
-                    .log(&CanonicalEntry(decoded.payload))
+                    .log(&CanonicalEntry(native))
                     .map_err(io_error)?;
                 self.next_id = next;
                 return Ok(Some(copperlist));
@@ -232,4 +267,48 @@ impl<P: CopperListTuple> NativeArchive<P> {
 
 fn io_error(error: impl core::fmt::Display) -> Error {
     Error::Codec(error.to_string())
+}
+
+/// Capture-aware native archive. Synthesized payloads never enter this writer.
+/// Native CopperList metadata retains both original and captured presence planes;
+/// StreamContinuity retains each proof and the complete reconstruction contract.
+pub struct CaptureArchive<P: crate::capture::CaptureDataSet>(NativeArchive<P>);
+impl<P: crate::capture::CaptureDataSet> CaptureArchive<P> {
+    pub fn new(
+        path: &Path,
+        manifest: SessionManifest,
+        slab_bytes: usize,
+        section_bytes: usize,
+    ) -> Result<Self> {
+        Ok(Self(NativeArchive::new_checked(
+            path,
+            manifest,
+            slab_bytes,
+            section_bytes,
+            P::stream_schema(),
+            |bytes| {
+                let (capture, native) = crate::capture::decode_capture(bytes)?;
+                Ok((capture.copperlist, native, Some(capture.proof)))
+            },
+        )?))
+    }
+    pub fn accept(
+        &mut self,
+        event: &SessionEvent,
+    ) -> Result<Option<crate::capture::CapturedList<P>>> {
+        Ok(self
+            .0
+            .accept(event)?
+            .map(|copperlist| crate::capture::CapturedList {
+                copperlist,
+                proof: self
+                    .0
+                    .last_proof
+                    .take()
+                    .expect("capture decoder supplies proof"),
+            }))
+    }
+    pub fn finish(self) -> Result<()> {
+        self.0.finish()
+    }
 }

@@ -14,6 +14,7 @@ pub struct Status {
     pub identity: Option<StreamIdentity>,
     pub last_packet: Option<Instant>,
     pub state: RecordingState,
+    pub twin: cu29_logstream::twin::TwinStatus,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -25,10 +26,12 @@ pub enum RecordingState {
     Failed,
 }
 
-pub struct Frame {
-    pub identity: StreamIdentity,
-    pub received_at: Instant,
-    pub copperlist: crate::List,
+pub type Frame = cu29_logstream::twin::TwinFrame<crate::DataSet>;
+impl cu29_logstream::twin::TwinReceiverStatus for Status {
+    fn with_twin(mut self, status: cu29_logstream::twin::TwinStatus) -> Self {
+        self.twin = status;
+        self
+    }
 }
 
 pub type Publisher = TelemetryPublisher<Frame, Status>;
