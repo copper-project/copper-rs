@@ -18,6 +18,8 @@ domains = ["logging/streaming"]
 environments = ["host", "embedded"]
 
 [dependencies]
+atomic-waker = { version = "1.1", optional = true }
+crossbeam-queue = { version = "0.3", optional = true }
 bincode = { workspace = true }
 blake3 = { workspace = true }
 crc = { workspace = true }
@@ -41,6 +43,8 @@ serde = { workspace = true }
 [features]
 default = ["std"]
 std = [
+  "dep:atomic-waker",
+  "dep:crossbeam-queue",
   "dep:cu29-log-derive",
   "dep:cu29-log",
   "cu29-log/std",

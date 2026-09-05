@@ -191,6 +191,15 @@ logstream-demo-check:
 	cargo +stable test -p cu29-runtime --test replay_primitives --features cu29/async-cl-io
 	just --justfile examples/cu_logstream_demo/justfile check
 
+# Pull telemetry, reader overruns, archive isolation, and the native terminal UI.
+logstream-telemetry-check:
+	cargo +stable clippy -p cu29-logstream --all-targets -- --deny warnings
+	cargo +stable test -p cu29-logstream
+	cargo +stable check -p cu29-logstream --no-default-features
+	cargo +stable clippy -p cu-logstream-demo --all-targets --features replay,tui -- --deny warnings
+	cargo +stable test -p cu-logstream-demo --features demo,tui --bin cu-logstream-demo
+	just logstream-demo-check
+
 # Check the large examples from the former extra-examples repo.
 check-extra-examples: check-extra-examples-host check-extra-examples-embedded
 
