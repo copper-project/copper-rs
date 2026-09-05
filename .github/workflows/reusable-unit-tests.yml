@@ -126,6 +126,9 @@ jobs:
       - name: Run Unit Tests on (ubuntu-26.04 | debug)
         if: matrix.task == 'test'
         run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $WORKSPACE_EXCLUDES -- --skip test_compile_fail
+      - name: Run UDP logstream integration
+        if: matrix.task == 'test'
+        run: cargo +${{ inputs.toolchain }} test -p cu29-logstream-udp --features runtime-integration
       - name: Run cu29-derive trybuild tests on (ubuntu-26.04 | debug)
         if: matrix.task == 'trybuild'
         run: cargo +${{ inputs.toolchain }} test -p cu29-derive test_compile_fail -- --nocapture
@@ -205,6 +208,9 @@ jobs:
       - name: Run Unit Tests on (${{ inputs.linux_runner_label }} | debug)
         if: matrix.task == 'test'
         run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $WORKSPACE_EXCLUDES -- --skip test_compile_fail
+      - name: Run UDP logstream integration
+        if: matrix.task == 'test'
+        run: cargo +${{ inputs.toolchain }} test -p cu29-logstream-udp --features runtime-integration
       - name: Run cu29-derive trybuild tests on (${{ inputs.linux_runner_label }} | debug)
         if: matrix.task == 'trybuild'
         run: cargo +${{ inputs.toolchain }} test -p cu29-derive test_compile_fail -- --nocapture
@@ -406,6 +412,9 @@ jobs:
       - name: Run Unit Tests on (${{ matrix.target_os == 'windows' && inputs.windows_runner_label || 'macos-latest' }} | debug)
         if: matrix.task == 'test'
         run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $WORKSPACE_EXCLUDES -- --skip test_compile_fail
+      - name: Run UDP logstream integration
+        if: matrix.task == 'test'
+        run: cargo +${{ inputs.toolchain }} test -p cu29-logstream-udp --features runtime-integration
       - name: Run cu29-derive trybuild tests on (${{ matrix.target_os == 'windows' && inputs.windows_runner_label || 'macos-latest' }} | debug)
         if: matrix.task == 'trybuild'
         run: cargo +${{ inputs.toolchain }} test -p cu29-derive test_compile_fail -- --nocapture

@@ -1,0 +1,46 @@
+[package]
+name = "cu29-logstream-udp"
+description = "Nonblocking UDP packet resources for Copper log streaming"
+documentation = "https://docs.rs/cu29-logstream-udp"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[package.metadata.copper]
+kind = "resource"
+domains = ["logging/streaming", "resource/network"]
+environments = ["host"]
+host_os = ["linux", "macos", "windows"]
+
+[features]
+# Keep the generated-runtime test opt-in: the carrier itself must not enable
+# cu29/logstream (and async-cl-io) across unrelated workspace applications.
+runtime-integration = ["cu29/logstream", "cu29/reflect"]
+
+[[test]]
+name = "configured_sender"
+required-features = ["runtime-integration"]
+
+[dependencies]
+cu29 = { path = "../../../core/cu29", version = "1.2.0-dev", default-features = false, features = [
+  "std",
+] }
+cu29-logstream = { workspace = true, features = ["std"] }
+socket2 = { workspace = true, features = ["all"] }
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+libc = { workspace = true }
+
+[dev-dependencies]
+bincode = { workspace = true }
+serde = { workspace = true }
+tempfile = { workspace = true }
+
+[build-dependencies]
+cu29-build = { workspace = true }

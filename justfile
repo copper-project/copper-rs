@@ -28,6 +28,7 @@ pr-check:
 	just lint
 	just api-check
 	just test
+	just logstream-udp-check
 
 # Reproduce the scheduled weekly audit and beta checks on the local host.
 weekly: weekly-audit
@@ -161,6 +162,11 @@ test:
 
 	cargo +stable nextest run --all-targets --workspace {{WORKSPACE_EXCLUDES}}
 	cargo +stable nextest run --no-default-features
+
+# UDP carrier contracts and generated sender/session-router localhost integration.
+logstream-udp-check:
+	cargo +stable clippy -p cu29-logstream-udp --all-targets --features runtime-integration -- --deny warnings
+	cargo +stable test -p cu29-logstream-udp --features runtime-integration
 
 # Check the large examples from the former extra-examples repo.
 check-extra-examples: check-extra-examples-host check-extra-examples-embedded
