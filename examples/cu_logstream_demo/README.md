@@ -26,16 +26,17 @@ example's `logs/` and prints its path.
 | `clean` | All 256 CopperLists match the onboard payloads and metadata. |
 | `loss` | Discard the source packets for CopperList 20; RLC repairs recover it with no semantic gap. |
 | `outage` | Discard a contiguous arrival interval beginning at CopperList 32 and ending before 160, including control traffic. Missing history remains explicit and a verified anchor enables recovery. |
-| `late` | Start the receiver after the sender is already running. Its archive contains a `LateJoin` prefix gap. |
+| `late` | A separate probe receiver archives through CopperList 64 and exits; a fresh receiver then starts with no prior session state. Its archive contains a `LateJoin` prefix gap. |
 | `idle` | Drop all traffic for the first 300 ms, produce only CL0, and keep the sender alive with no new captures. Periodic recovery restores the complete one-record archive. |
 | `restart` | Close the first receiver after CopperList 64, leave it offline briefly, and launch a new process while the sender continues. The new archive reports unavailable history. |
 
 Loss injection runs at the receiver's packet boundary after real UDP reception,
 before FEC decoding. It preserves arrival order and adds no sender task work.
 The source-loss and outage intervals are selected by wire record IDs. Late start
-and restart use real process lifetimes, so their exact recovery IDs depend on
-host scheduling. Verification checks the resulting continuity rather than
-assuming those IDs.
+and restart use real process lifetimes. Late start waits for observed stream
+progress instead of a launch-time sleep, which could join while CopperList 0
+is still recoverable from retained history. Exact recovery IDs still depend on
+host scheduling; verification checks the resulting continuity.
 
 The headless status display reports received packets, the latest archived
 CopperList, latest verified anchor, gap count, and demo packet drops. Received

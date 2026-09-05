@@ -51,13 +51,15 @@ def run(binary, scenario):
             sender = spawn("sender", "--remote", address, "--log-base", directory / "sender.copper",
                            "--iterations", "1", "--idle-ms", "1000")
         elif scenario == "late":
-            # Reserve an endpoint using the actual receiver, then close it before
-            # starting the sender. This receiver receives no data or manifest.
-            initial, address = receiver("reservation")
-            initial.terminate()
-            initial.wait(timeout=5)
+            # Observe a real prefix with a separate receiver. A launch-time sleep
+            # can join while CL0 is still retained and recover it, so it does not
+            # establish the missing history required by this scenario.
+            initial, address = receiver("reservation", stop=True)
             sender = spawn("sender", "--remote", address, "--log-base", directory / "sender.copper")
-            time.sleep(0.6)
+            wait(initial)
+            if sender.poll() is not None:
+                raise RuntimeError("Sender finished before late receiver startup")
+            # This fresh process gets no archive or decoder state from the probe.
             ground, _ = receiver("received", address)
         else:
             ground, address = receiver("received", impairment=scenario if scenario in ("loss", "outage") else "clean",
