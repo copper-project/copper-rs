@@ -1,63 +1,44 @@
-# Semantic log streaming
+# Copper log streaming
 
-`SessionRouter` accepts complete packets from any `CuStreamRx` or through
-`receive_datagram`. It discovers sender manifests without out-of-band FEC settings.
-Use receiver-local hard limits for sessions, continuous records, startup packets,
-completed recovery records, and finite-object decoding.
+`cu29-logstream` gets a robot's execution log to another machine while the robot
+is running. Use it to collect logs at a ground station over a link that can lose
+packets, or when the robot's onboard log is hard to retrieve.
 
-Startup packets are retained in arrival order up to `max_startup_packets` per
-session. Overflow is counted and never implies that missing history was received.
-Completed keyframes and anchors use a separate `max_recovery_records` cache;
-oldest entries are evicted when full. This is additional to the bounded RaptorQ
-object storage. Repetition may recover evicted objects only while the sender
-still retains them. These are receiver allocations, outside the real-time path.
+It sits between Copper's generated runtime and a packet transport:
 
-The router verifies each anchor against the exact manifest and keyframe record
-digests, including the keyframe's CopperList id. Control objects can arrive in
-any order. A verified boundary advances ordered delivery without discarding the
-active FEC window or records at and after that boundary. Missing prefixes produce
-`LateJoin` gaps; an established stream restarting after an outage produces
-`AnchorRecovery` gaps. RLC expiration and explicit session finalization also emit
-inclusive gaps. Repeated or older anchors cannot rewind delivery.
-
-`SessionEvent::Object` is a raw recovered object, not permission to restore state.
-Use `VerifiedAnchor` for that purpose. A consumer failure leaves the event pending;
-call `drain_events` before accepting another packet. Call `finish_through` only
-when the sender's last CopperList id is known. An unknown tail stays unknown.
-
-## Native archives
-
-With `std`, `NativeArchive<P>` writes one sender/session to a native `.copper` log.
-Construct it on the manifest event. The receiver schema is derived from `P`'s
-generated `MatchingTasks::get_output_specs()` and compared with the manifest:
-
-```rust,ignore
-let archive = NativeArchive::<default::CuStampedDataSet>::new(
-    &path, manifest, slab_bytes, section_bytes,
-)?;
+```text
+Robot runtime → logstream sender → UDP / custom transport
+                                         ↓
+Logreader / replay ← .copper archive ← logstream receiver
 ```
 
-Pass that sender's ordered router events to `accept`. Each CopperList is decoded
-once into `CopperList<P>` and returned for an in-process consumer. The original
-canonical payload bytes are appended directly to `CopperList` sections; verified
-keyframes go into `FrozenTasks`. This requires the matching full-capture native
-application codec. Hybrid payload reconstruction and codec conversion are deferred.
-The section size must accommodate the largest canonical entry, including manifest
-and keyframe objects. Use a fresh output path per session.
+The sender protects log records with recovery data. The receiver reconstructs
+what it can and records explicit gaps for what it cannot. Received archives use
+Copper's native format, so your application's normal logreader and replay tools
+can read them. Sender work runs off the real-time task path.
 
-The `StreamContinuity` section preserves the canonical manifest, explicit gaps,
-verified anchor references, and the receiver's final known boundary. `finish`
-closes the archive; it does not assert that the unobserved sender tail is complete.
-A failed archive write is terminal for that writer because an event can span more
-than one native section.
+## Using it
 
-Ordinary application logreaders read these CopperLists and keyframes.
-`cu29_export::stream_continuity_reader` reads provenance and gaps; logreader `fsck`
-reports the gap ranges and verified anchors. Generated recorded replay and indexed
-state replay reject crossing missing CopperList ids without a matching keyframe.
-A later keyframe permits state replay from its boundary; it does not heal history.
+Enable `cu29/logstream` and configure a `log_streaming` destination in the app's
+RON config. Bind a transport implementing `CuStreamTx`; the
+[`cu29-logstream-udp`](../../components/res/cu29_logstream_udp) resource supplies UDP
+sender and receiver endpoints.
 
-Run `just logstream-receiver-check` at the repository root. This exercises startup,
-late join, digest rejection, consumer failure, native archive/export over real UDP,
-and replay gap handling. Packet pacing, feedback, the two-process demonstrator,
-hybrid reconstruction, and dashboard APIs remain separate follow-up work.
+On the receiving side, `SessionRouter` discovers the sender's configuration from
+its manifest. Feed its events to `NativeArchive<P>`, where `P` is your application's
+generated dataset type. The archive checks that the sender's schema matches and
+preserves the received payloads and timestamps.
+
+## What to expect
+
+- Recovery uses bounded memory. Packet loss beyond those bounds leaves gaps.
+- A late receiver can resume from a verified keyframe, but cannot recover expired
+  history. Replay refuses to cross a gap without a matching keyframe.
+- Native archival currently requires the matching application and full-capture
+  codec. Use a separate archive path for each sender session.
+- Pacing and optional feedback are deferred. The configured bitrate is not yet
+  enforced.
+
+Run `just logstream-receiver-check` from the repository root to test reception,
+archival, and replay continuity. See the Rust API docs for receiver limits and
+event handling.
