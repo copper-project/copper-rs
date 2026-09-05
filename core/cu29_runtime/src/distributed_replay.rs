@@ -534,6 +534,20 @@ where
                 .or(keyframe
                     .as_ref()
                     .filter(|candidate| candidate.culistid == copperlist.id));
+            let expected = if idx > 0 {
+                self.copperlist_at(idx - 1)?
+                    .0
+                    .id
+                    .checked_add(1)
+                    .ok_or_else(|| CuError::from("Replay CopperList id overflow"))?
+            } else {
+                0
+            };
+            crate::continuity::validate_replay_continuity(
+                expected,
+                copperlist.id,
+                keyframe.map(|frame| frame.culistid),
+            )?;
             <App as CuRecordedReplayApplication<S, L>>::replay_recorded_copperlist(
                 &mut self.app,
                 &self.clock_mock,

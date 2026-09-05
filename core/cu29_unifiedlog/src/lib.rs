@@ -227,7 +227,8 @@ pub struct LogStream<S: SectionStorage, L: UnifiedLogWrite<S>> {
 }
 
 impl<S: SectionStorage, L: UnifiedLogWrite<S>> LogStream<S, L> {
-    fn new(
+    /// Creates a concrete stream, including for borrowed canonical encoded entries.
+    pub fn new(
         entry_type: UnifiedLogType,
         parent_logger: Arc<Mutex<L>>,
         minimum_allocation_amount: usize,

@@ -407,3 +407,35 @@ fn builder_propagates_instance_id_into_runtime() -> CuResult<()> {
     assert_eq!(app.copper_runtime_mut().instance_id(), 42);
     Ok(())
 }
+
+#[test]
+fn recorded_replay_rejects_missing_history_before_changing_clock_or_state() -> CuResult<()> {
+    let _guard = TEST_MUTEX
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
+    let temp = tempfile::tempdir().unwrap();
+    let (mut recorded, mut keyframe) = record_reference_run(&temp.path().join("source.copper"))?;
+    recorded.id = 100;
+    keyframe.culistid = 100;
+    let logger = build_logger(&temp.path().join("replay.copper"))?;
+    let (clock, mock) = RobotClock::mock();
+    let mut noop = |_step: default::SimStep<'_>| SimOverride::ExecuteByRuntime;
+    let mut app = ReplayApp::builder()
+        .with_clock(clock)
+        .with_logger::<MmapSectionStorage, MmapUnifiedLoggerWrite>(logger)
+        .with_sim_callback(&mut noop)
+        .build()?
+        .into_inner();
+    app.start_all_tasks(&mut noop)?;
+    let before = mock.value();
+    let error = app
+        .replay_recorded_copperlist(&mock, &recorded, None)
+        .unwrap_err();
+    assert!(error.to_string().contains("gap"));
+    assert_eq!(mock.value(), before);
+    assert_eq!(app.copper_runtime_mut().copperlists_manager.next_cl_id(), 0);
+    // A validated received keyframe makes this boundary a legal restart.
+    app.replay_recorded_copperlist(&mock, &recorded, Some(&keyframe))?;
+    app.stop_all_tasks(&mut noop)?;
+    Ok(())
+}

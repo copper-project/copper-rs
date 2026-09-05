@@ -123,6 +123,8 @@ fn generated_runtime_binds_configured_transport_and_emits_manifest() -> CuResult
     assert!(!continuous_packets.is_empty());
 
     let mut router = SessionRouter::<1128, 64, 64>::new(SessionRouterLimits {
+        max_startup_packets: 64,
+        max_recovery_records: 8,
         max_sessions: 1,
         max_pending_events: 32,
         max_record_bytes: 65_536,

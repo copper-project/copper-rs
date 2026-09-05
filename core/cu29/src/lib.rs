@@ -77,6 +77,7 @@ pub use cu29_logstream as logstream;
 pub use cu29_runtime::app;
 pub use cu29_runtime::config;
 pub use cu29_runtime::context;
+pub use cu29_runtime::continuity;
 pub use cu29_runtime::copperlist;
 #[doc(hidden)]
 pub use cu29_runtime::copperlist_codec;

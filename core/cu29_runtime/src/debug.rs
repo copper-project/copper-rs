@@ -631,6 +631,20 @@ where
         let mut replayed = 0usize;
         for idx in start..=end {
             let (entry, ts) = self.copperlist_at(idx)?;
+            let restored = (idx == start)
+                .then_some(self.last_keyframe)
+                .flatten()
+                .filter(|boundary| *boundary == entry.id);
+            let expected = if idx > 0 {
+                self.copperlist_at(idx - 1)?
+                    .0
+                    .id
+                    .checked_add(1)
+                    .ok_or_else(|| CuError::from("Replay CopperList id overflow"))?
+            } else {
+                0
+            };
+            crate::continuity::validate_replay_continuity(expected, entry.id, restored)?;
             if let Some(ts) = ts {
                 self.clock_mock.set_value(ts.as_nanos());
             }

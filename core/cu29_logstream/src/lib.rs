@@ -9,6 +9,11 @@ extern crate alloc;
 
 pub use cu_fec::{DensityThreshold, EncodingSymbolId, Field, RlcConfig};
 
+#[cfg(feature = "std")]
+mod archive;
+#[cfg(feature = "std")]
+pub use archive::NativeArchive;
+
 mod copper;
 mod error;
 mod manifest;

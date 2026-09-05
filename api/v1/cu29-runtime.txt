@@ -615,6 +615,37 @@ pub fn cu29_runtime::context::CuContextBuilder::build(self) -> cu29_runtime::con
 pub fn cu29_runtime::context::CuContextBuilder::cl_id(self, cl_id: u64) -> Self
 pub fn cu29_runtime::context::CuContextBuilder::instance_id(self, instance_id: u32) -> Self
 pub fn cu29_runtime::context::CuContextBuilder::task_ids(self, task_ids: &'static [&'static str]) -> Self
+pub mod cu29_runtime::continuity
+pub enum cu29_runtime::continuity::SourceGapReason
+pub cu29_runtime::continuity::SourceGapReason::AnchorRecovery
+pub cu29_runtime::continuity::SourceGapReason::LateJoin
+pub cu29_runtime::continuity::SourceGapReason::RlcWindowExpired
+pub cu29_runtime::continuity::SourceGapReason::SessionEnded
+impl cu_bincode::enc::Encode for cu29_runtime::continuity::SourceGapReason
+pub fn cu29_runtime::continuity::SourceGapReason::encode<__E: cu_bincode::enc::Encoder>(&self, encoder: &mut __E) -> core::result::Result<(), cu_bincode::error::EncodeError>
+impl<'__de, __Context> cu_bincode::de::BorrowDecode<'__de, __Context> for cu29_runtime::continuity::SourceGapReason
+pub fn cu29_runtime::continuity::SourceGapReason::borrow_decode<__D: cu_bincode::de::BorrowDecoder<'__de, Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+impl<__Context> cu_bincode::de::Decode<__Context> for cu29_runtime::continuity::SourceGapReason
+pub fn cu29_runtime::continuity::SourceGapReason::decode<__D: cu_bincode::de::Decoder<Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+pub enum cu29_runtime::continuity::StreamContinuityRecord
+pub cu29_runtime::continuity::StreamContinuityRecord::Anchor
+pub cu29_runtime::continuity::StreamContinuityRecord::Anchor::copperlist_id: u64
+pub cu29_runtime::continuity::StreamContinuityRecord::Anchor::record: alloc::vec::Vec<u8>
+pub cu29_runtime::continuity::StreamContinuityRecord::Finished
+pub cu29_runtime::continuity::StreamContinuityRecord::Finished::next_copperlist_id: u64
+pub cu29_runtime::continuity::StreamContinuityRecord::Gap
+pub cu29_runtime::continuity::StreamContinuityRecord::Gap::first_id: u64
+pub cu29_runtime::continuity::StreamContinuityRecord::Gap::last_id: u64
+pub cu29_runtime::continuity::StreamContinuityRecord::Gap::reason: cu29_runtime::continuity::SourceGapReason
+pub cu29_runtime::continuity::StreamContinuityRecord::Manifest
+pub cu29_runtime::continuity::StreamContinuityRecord::Manifest::record: alloc::vec::Vec<u8>
+impl cu_bincode::enc::Encode for cu29_runtime::continuity::StreamContinuityRecord
+pub fn cu29_runtime::continuity::StreamContinuityRecord::encode<__E: cu_bincode::enc::Encoder>(&self, encoder: &mut __E) -> core::result::Result<(), cu_bincode::error::EncodeError>
+impl<'__de, __Context> cu_bincode::de::BorrowDecode<'__de, __Context> for cu29_runtime::continuity::StreamContinuityRecord
+pub fn cu29_runtime::continuity::StreamContinuityRecord::borrow_decode<__D: cu_bincode::de::BorrowDecoder<'__de, Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+impl<__Context> cu_bincode::de::Decode<__Context> for cu29_runtime::continuity::StreamContinuityRecord
+pub fn cu29_runtime::continuity::StreamContinuityRecord::decode<__D: cu_bincode::de::Decoder<Context = __Context>>(decoder: &mut __D) -> core::result::Result<Self, cu_bincode::error::DecodeError>
+pub fn cu29_runtime::continuity::validate_replay_continuity(expected: u64, actual: u64, keyframe: core::option::Option<u64>) -> cu29_traits::CuResult<()>
 pub mod cu29_runtime::copperlist
 pub enum cu29_runtime::copperlist::CopperListState
 pub cu29_runtime::copperlist::CopperListState::BeingSerialized

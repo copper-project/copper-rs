@@ -269,7 +269,7 @@ where
     let mut runtime_lifecycle_events: usize = 0;
     let mut sl_entries: usize = 0;
 
-    let result = loop {
+    let result = 'scan: loop {
         // for _ in 0..4 {
         let section = dl.raw_read_section();
         match section {
@@ -389,6 +389,36 @@ where
                                     break;
                                 }
                             }
+                        }
+                    }
+                    UnifiedLogType::StreamContinuity => {
+                        let mut remaining = content.as_slice();
+                        while !remaining.is_empty() {
+                            let (record, used): (cu29::continuity::StreamContinuityRecord, usize) =
+                                match bincode::decode_from_slice(remaining, standard()) {
+                                    Ok(value) => value,
+                                    Err(error) => {
+                                        break 'scan Err(cu29::CuError::new_with_cause(
+                                            "Invalid stream continuity record",
+                                            error,
+                                        ));
+                                    }
+                                };
+                            match record {
+                                cu29::continuity::StreamContinuityRecord::Gap {
+                                    first_id,
+                                    last_id,
+                                    reason,
+                                } => println!("Source gap {first_id}..={last_id}: {reason:?}"),
+                                cu29::continuity::StreamContinuityRecord::Anchor {
+                                    copperlist_id,
+                                    ..
+                                } => {
+                                    println!("Verified stream anchor at CopperList {copperlist_id}")
+                                }
+                                _ => {}
+                            }
+                            remaining = &remaining[used..];
                         }
                     }
                     UnifiedLogType::LastEntry => {

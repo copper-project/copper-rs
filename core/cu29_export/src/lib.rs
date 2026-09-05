@@ -559,6 +559,13 @@ fn read_next_entry<T: Decode<()>>(src: &mut impl Read) -> Option<T> {
     }
 }
 
+/// Reads received archive provenance, inclusive source gaps and verified anchors.
+pub fn stream_continuity_reader(
+    mut src: impl Read,
+) -> impl Iterator<Item = cu29::continuity::StreamContinuityRecord> {
+    std::iter::from_fn(move || read_next_entry(&mut src))
+}
+
 /// Extracts the copper lists from a binary representation.
 /// P is the Payload determined by the configuration of the application.
 pub fn copperlists_reader<P: CopperListTuple>(

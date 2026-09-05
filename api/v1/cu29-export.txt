@@ -86,6 +86,7 @@ pub fn cu29_export::copperlists_reader<P: cu29_traits::CopperListTuple>(src: imp
 pub fn cu29_export::keyframes_reader(src: impl std::io::Read) -> impl core::iter::traits::iterator::Iterator<Item = cu29_runtime::curuntime::KeyFrame>
 pub fn cu29_export::run_cli<P>() -> cu29_traits::CuResult<()> where P: cu29_traits::CopperListTuple + cu29_traits::CuPayloadRawBytes + 'static
 pub fn cu29_export::runtime_lifecycle_reader(src: impl std::io::Read) -> impl core::iter::traits::iterator::Iterator<Item = cu29_runtime::curuntime::RuntimeLifecycleRecord>
+pub fn cu29_export::stream_continuity_reader(src: impl std::io::Read) -> impl core::iter::traits::iterator::Iterator<Item = cu29_runtime::continuity::StreamContinuityRecord>
 pub fn cu29_export::structlog_reader(src: impl std::io::Read) -> impl core::iter::traits::iterator::Iterator<Item = cu29_traits::CuResult<cu29_log::CuLogEntry>>
 pub fn cu29_export::textlog_dump(src: impl std::io::Read, index: &std::path::Path) -> cu29_traits::CuResult<()>
 pub fn cu29_export::unified_log_mission(unifiedlog_base: &std::path::Path) -> cu29_traits::CuResult<core::option::Option<alloc::string::String>>
