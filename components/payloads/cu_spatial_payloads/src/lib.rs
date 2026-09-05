@@ -415,7 +415,8 @@ impl<T: Copy + Debug + Default + 'static> TransformInner<T> {
             // Convert to f32 matrix
             // SAFETY: We just verified T == f32, so the layouts match.
             let mat_f32: [[f32; 4]; 4] = unsafe { core::mem::transmute_copy(&mat) };
-            let glam_mat = Mat4::from_cols_array_2d(&mat_f32);
+            // `mat` is row-major; glam stores column-major, so transpose at the boundary.
+            let glam_mat = Mat4::from_cols_array_2d(&mat_f32).transpose();
             let affine = Affine3A::from_mat4(glam_mat);
             // SAFETY: We just verified T == f32, so this is the correct enum variant.
             unsafe { core::mem::transmute_copy(&TransformInner::<T>::F32(affine)) }
@@ -423,8 +424,8 @@ impl<T: Copy + Debug + Default + 'static> TransformInner<T> {
             // Convert to f64 matrix
             // SAFETY: We just verified T == f64, so the layouts match.
             let mat_f64: [[f64; 4]; 4] = unsafe { core::mem::transmute_copy(&mat) };
-            // let m = mat_f64;
-            let glam_mat = DMat4::from_cols_array_2d(&mat_f64);
+            // `mat` is row-major; glam stores column-major, so transpose at the boundary.
+            let glam_mat = DMat4::from_cols_array_2d(&mat_f64).transpose();
             let affine = DAffine3::from_mat4(glam_mat);
             // SAFETY: We just verified T == f64, so this is the correct enum variant.
             unsafe { core::mem::transmute_copy(&TransformInner::<T>::F64(affine)) }
@@ -437,13 +438,15 @@ impl<T: Copy + Debug + Default + 'static> TransformInner<T> {
         match self {
             TransformInner::F32(affine) => {
                 let mat = Mat4::from(affine);
-                let mat_array = mat.to_cols_array_2d();
+                // glam is column-major; transposing then taking columns yields row-major.
+                let mat_array = mat.transpose().to_cols_array_2d();
                 // SAFETY: We only reach this arm when T == f32.
                 unsafe { core::mem::transmute_copy(&mat_array) }
             }
             TransformInner::F64(affine) => {
                 let mat = DMat4::from(affine);
-                let mat_array = mat.to_cols_array_2d();
+                // glam is column-major; transposing then taking columns yields row-major.
+                let mat_array = mat.transpose().to_cols_array_2d();
                 // SAFETY: We only reach this arm when T == f64.
                 unsafe { core::mem::transmute_copy(&mat_array) }
             }
@@ -818,103 +821,35 @@ mod nalgebra_integration {
 #[cfg(feature = "glam")]
 mod glam_integration {
     use super::Transform3D;
-    use glam::{Affine3A, DAffine3};
+    use glam::{Affine3A, DAffine3, DMat4, Mat4};
 
     impl From<Transform3D<f64>> for DAffine3 {
         fn from(p: Transform3D<f64>) -> Self {
+            // `to_matrix` is row-major; glam stores column-major, so transpose.
             let mat = p.to_matrix();
-            let mut aff = DAffine3::IDENTITY;
-            aff.matrix3.x_axis.x = mat[0][0];
-            aff.matrix3.x_axis.y = mat[0][1];
-            aff.matrix3.x_axis.z = mat[0][2];
-
-            aff.matrix3.y_axis.x = mat[1][0];
-            aff.matrix3.y_axis.y = mat[1][1];
-            aff.matrix3.y_axis.z = mat[1][2];
-
-            aff.matrix3.z_axis.x = mat[2][0];
-            aff.matrix3.z_axis.y = mat[2][1];
-            aff.matrix3.z_axis.z = mat[2][2];
-
-            aff.translation.x = mat[3][0];
-            aff.translation.y = mat[3][1];
-            aff.translation.z = mat[3][2];
-
-            aff
+            DAffine3::from_mat4(DMat4::from_cols_array_2d(&mat).transpose())
         }
     }
 
     impl From<DAffine3> for Transform3D<f64> {
         fn from(aff: DAffine3) -> Self {
-            let mut transform = [[0.0f64; 4]; 4];
-
-            transform[0][0] = aff.matrix3.x_axis.x;
-            transform[0][1] = aff.matrix3.x_axis.y;
-            transform[0][2] = aff.matrix3.x_axis.z;
-
-            transform[1][0] = aff.matrix3.y_axis.x;
-            transform[1][1] = aff.matrix3.y_axis.y;
-            transform[1][2] = aff.matrix3.y_axis.z;
-
-            transform[2][0] = aff.matrix3.z_axis.x;
-            transform[2][1] = aff.matrix3.z_axis.y;
-            transform[2][2] = aff.matrix3.z_axis.z;
-
-            transform[3][0] = aff.translation.x;
-            transform[3][1] = aff.translation.y;
-            transform[3][2] = aff.translation.z;
-            transform[3][3] = 1.0;
-
-            Transform3D::from_matrix(transform)
+            // glam is column-major; transposing then taking columns yields row-major.
+            Transform3D::from_matrix(DMat4::from(aff).transpose().to_cols_array_2d())
         }
     }
 
     impl From<Transform3D<f32>> for Affine3A {
         fn from(p: Transform3D<f32>) -> Self {
+            // `to_matrix` is row-major; glam stores column-major, so transpose.
             let mat = p.to_matrix();
-            let mut aff = Affine3A::IDENTITY;
-            aff.matrix3.x_axis.x = mat[0][0];
-            aff.matrix3.x_axis.y = mat[0][1];
-            aff.matrix3.x_axis.z = mat[0][2];
-
-            aff.matrix3.y_axis.x = mat[1][0];
-            aff.matrix3.y_axis.y = mat[1][1];
-            aff.matrix3.y_axis.z = mat[1][2];
-
-            aff.matrix3.z_axis.x = mat[2][0];
-            aff.matrix3.z_axis.y = mat[2][1];
-            aff.matrix3.z_axis.z = mat[2][2];
-
-            aff.translation.x = mat[0][3];
-            aff.translation.y = mat[1][3];
-            aff.translation.z = mat[2][3];
-
-            aff
+            Affine3A::from_mat4(Mat4::from_cols_array_2d(&mat).transpose())
         }
     }
 
     impl From<Affine3A> for Transform3D<f32> {
         fn from(aff: Affine3A) -> Self {
-            let mut transform = [[0.0f32; 4]; 4];
-
-            transform[0][0] = aff.matrix3.x_axis.x;
-            transform[0][1] = aff.matrix3.x_axis.y;
-            transform[0][2] = aff.matrix3.x_axis.z;
-
-            transform[1][0] = aff.matrix3.y_axis.x;
-            transform[1][1] = aff.matrix3.y_axis.y;
-            transform[1][2] = aff.matrix3.y_axis.z;
-
-            transform[2][0] = aff.matrix3.z_axis.x;
-            transform[2][1] = aff.matrix3.z_axis.y;
-            transform[2][2] = aff.matrix3.z_axis.z;
-
-            transform[0][3] = aff.translation.x;
-            transform[1][3] = aff.translation.y;
-            transform[2][3] = aff.translation.z;
-            transform[3][3] = 1.0;
-
-            Transform3D::from_matrix(transform)
+            // glam is column-major; transposing then taking columns yields row-major.
+            Transform3D::from_matrix(Mat4::from(aff).transpose().to_cols_array_2d())
         }
     }
 }
@@ -1288,13 +1223,15 @@ mod tests {
         use glam::DAffine3;
 
         let pose = Transform3D::from_matrix([
-            [1.0, 0.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-            [5.0, 6.0, 7.0, 1.0],
+            [1.0, 0.0, 0.0, 5.0],
+            [0.0, 1.0, 0.0, 6.0],
+            [0.0, 0.0, 1.0, 7.0],
+            [0.0, 0.0, 0.0, 1.0],
         ]);
         let aff: DAffine3 = pose.into();
         assert_eq!(aff.translation[0], 5.0);
+        assert_eq!(aff.translation[1], 6.0);
+        assert_eq!(aff.translation[2], 7.0);
         let pose_from_aff: Transform3D<f64> = aff.into();
 
         assert_eq!(
@@ -1345,28 +1282,15 @@ mod tests {
         assert_eq!(mat_transposed.w_axis.z, 7.0);
     }
 
-    /// 90 degrees around z plus a (2, 3, 4) translation, in the layout the
-    /// active backend expects: glam stores column-major, the fallback
-    /// row-major.
+    /// 90 degrees around z plus a (2, 3, 4) translation, in row-major layout
+    /// (the canonical layout for both the glam and non-glam backends).
     fn quarter_turn_and_shift() -> Transform3D<f32> {
-        #[cfg(feature = "glam")]
-        {
-            Transform3D::from_matrix([
-                [0.0, 1.0, 0.0, 0.0],
-                [-1.0, 0.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [2.0, 3.0, 4.0, 1.0],
-            ])
-        }
-        #[cfg(not(feature = "glam"))]
-        {
-            Transform3D::from_matrix([
-                [0.0, -1.0, 0.0, 2.0],
-                [1.0, 0.0, 0.0, 3.0],
-                [0.0, 0.0, 1.0, 4.0],
-                [0.0, 0.0, 0.0, 1.0],
-            ])
-        }
+        Transform3D::from_matrix([
+            [0.0, -1.0, 0.0, 2.0],
+            [1.0, 0.0, 0.0, 3.0],
+            [0.0, 0.0, 1.0, 4.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ])
     }
 
     fn assert_point_close(lhs: Point3f, rhs: Point3f, eps: f32) {
@@ -1399,6 +1323,37 @@ mod tests {
     fn transform_accessors_are_backend_independent() {
         let t = quarter_turn_and_shift();
 
+        assert_eq!(
+            t.translation(),
+            [
+                Length32::new::<meter>(2.0),
+                Length32::new::<meter>(3.0),
+                Length32::new::<meter>(4.0),
+            ]
+        );
+        assert_eq!(
+            t.rotation(),
+            [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
+        );
+    }
+
+    #[test]
+    fn from_matrix_is_row_major_and_round_trips() {
+        // The canonical layout is row-major: translation lives in the last
+        // column, matching the non-glam backend and the doc examples. The glam
+        // backend must transpose at its boundary so both feature configs agree.
+        let mat = [
+            [0.0, -1.0, 0.0, 2.0],
+            [1.0, 0.0, 0.0, 3.0],
+            [0.0, 0.0, 1.0, 4.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ];
+        let t = Transform3D::<f32>::from_matrix(mat);
+
+        // Lossless round-trip in the canonical layout.
+        assert_eq!(t.to_matrix(), mat);
+
+        // Accessors agree with the matrix.
         assert_eq!(
             t.translation(),
             [

@@ -121,12 +121,12 @@ pub fn interpolate_transforms<T: Interpolate>(
         }
     }
 
-    // Interpolate translation (in column-major format, translation is in the last row)
+    // Interpolate translation (row-major: translation is in the last column).
     for i in 0..3 {
-        let before_val = before_mat[3][i].to_f64();
-        let after_val = after_mat[3][i].to_f64();
+        let before_val = before_mat[i][3].to_f64();
+        let after_val = after_mat[i][3].to_f64();
         let interpolated = before_val + (after_val - before_val) * ratio;
-        result_mat[3][i] = T::from_f64(interpolated);
+        result_mat[i][3] = T::from_f64(interpolated);
     }
 
     Ok(Transform3D::from_matrix(result_mat))
@@ -166,10 +166,10 @@ mod tests {
 
         let after: StampedTransform<f32> = StampedTransform {
             transform: Transform3D::from_matrix([
-                [1.0, 0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0, 10.0],
                 [0.0, 1.0, 0.0, 0.0],
                 [0.0, 0.0, 1.0, 0.0],
-                [10.0, 0.0, 0.0, 1.0], // Translation: x=10
+                [0.0, 0.0, 0.0, 1.0], // Translation: x=10
             ]),
             stamp: CuTime::from_nanos(3000),
             parent_frame: frame_id!("world"),
@@ -180,19 +180,19 @@ mod tests {
         assert!(result.is_ok());
 
         let transform = result.unwrap();
-        assert_approx_eq(transform.to_matrix()[3][0], 5.0, 1e-5);
+        assert_approx_eq(transform.to_matrix()[0][3], 5.0, 1e-5);
 
         let result = interpolate_transforms(&before, &after, CuTime::from_nanos(1500));
         assert!(result.is_ok());
 
         let transform = result.unwrap();
-        assert_approx_eq(transform.to_matrix()[3][0], 2.5, 1e-5);
+        assert_approx_eq(transform.to_matrix()[0][3], 2.5, 1e-5);
 
         let result = interpolate_transforms(&before, &after, CuTime::from_nanos(2500));
         assert!(result.is_ok());
 
         let transform = result.unwrap();
-        assert_approx_eq(transform.to_matrix()[3][0], 7.5, 1e-5);
+        assert_approx_eq(transform.to_matrix()[0][3], 7.5, 1e-5);
     }
 
     #[test]
@@ -211,10 +211,10 @@ mod tests {
 
         let after: StampedTransform<f64> = StampedTransform {
             transform: Transform3D::from_matrix([
-                [1.0, 0.0, 0.0, 0.0], // Translation: x=10
+                [1.0, 0.0, 0.0, 10.0], // Translation: x=10
                 [0.0, 1.0, 0.0, 0.0],
                 [0.0, 0.0, 1.0, 0.0],
-                [10.0, 0.0, 0.0, 1.0],
+                [0.0, 0.0, 0.0, 1.0],
             ]),
             stamp: CuTime::from_nanos(3000),
             parent_frame: frame_id!("world"),
@@ -225,7 +225,7 @@ mod tests {
         let result = interpolate_transforms(&before, &after, CuTime::from_nanos(2000));
         assert!(result.is_ok());
         let transform = result.unwrap();
-        assert_approx_eq(transform.to_matrix()[3][0], 5.0, 1e-5);
+        assert_approx_eq(transform.to_matrix()[0][3], 5.0, 1e-5);
     }
 
     // Disabled: Transform3D only supports f32 and f64 when using glam (default)
