@@ -13,6 +13,7 @@ members = [
   "core/cu29_log",
   "core/cu29_log_derive",
   "core/cu29_log_runtime",
+  "core/cu29_logstream",
   "core/cu29_runtime",
   "core/cu29_soa_derive",
   "core/cu29_traits",
@@ -144,6 +145,7 @@ default-members = [
   "core/cu29_log",
   "core/cu29_log_derive",
   "core/cu29_log_runtime",
+  "core/cu29_logstream",
   "core/cu29_runtime",
   "core/cu29_soa_derive",
   "core/cu29_traits",
@@ -230,6 +232,7 @@ cu29-intern-strs = { path = "core/cu29_intern_strs", version = "1.2.0-dev" } # s
 cu29-log = { path = "core/cu29_log", default-features = false, version = "1.2.0-dev" }
 cu29-log-derive = { path = "core/cu29_log_derive", default-features = false, version = "1.2.0-dev" }
 cu29-log-runtime = { path = "core/cu29_log_runtime", default-features = false, version = "1.2.0-dev" }
+cu29-logstream = { path = "core/cu29_logstream", default-features = false, version = "1.2.0-dev" }
 cu29-runtime = { path = "core/cu29_runtime", default-features = false, version = "1.2.0-dev" }
 cu29-soa-derive = { path = "core/cu29_soa_derive", default-features = false, version = "1.2.0-dev" }
 cu29-traits = { path = "core/cu29_traits", default-features = false, version = "1.2.0-dev" }
@@ -280,6 +283,8 @@ bincode = { package = "cu-bincode", version = "2.0", default-features = false, f
   "derive",
   "alloc",
 ] }
+blake3 = { version = "1.8.7", default-features = false }
+crc = { version = "3.4.0", default-features = false }
 serde = { version = "1.0", default-features = false, features = [
   "derive",
   "alloc",
