@@ -6435,7 +6435,7 @@ mod tests {
             resources: [
                 (
                     id: "telemetry_udp",
-                    provider: "cu29_stream_udp::CuUdpStreamResources",
+                    provider: "cu29_logstream_udp::CuUdpLogStreamResources",
                     config: {
                         "bind_addr": "0.0.0.0:0",
                         "remote_addr": "192.168.10.20:7447",
@@ -6450,7 +6450,7 @@ mod tests {
                     (
                         id: "ground",
                         transport: (
-                            type: "cu29_stream_udp::CuUdpStreamTx",
+                            type: "cu29_logstream_udp::CuUdpLogStreamTx",
                             resource: "telemetry_udp.tx",
                         ),
                         link: (
