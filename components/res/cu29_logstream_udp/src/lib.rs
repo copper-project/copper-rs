@@ -246,6 +246,16 @@ impl CuUdpLogStreamRx {
 impl CuStreamRx for CuUdpLogStreamRx {
     fn try_recv(&mut self, packet: &mut [u8]) -> Result<Option<usize>, CuStreamRxError> {
         let capacity = packet.len();
+        // Darwin can return success without consuming a datagram for a zero-length
+        // receive. Give it one byte of space, but validate against caller capacity.
+        #[cfg(target_os = "macos")]
+        let mut empty_buffer = [0u8; 1];
+        #[cfg(target_os = "macos")]
+        let packet = if packet.is_empty() {
+            &mut empty_buffer[..]
+        } else {
+            packet
+        };
         // SAFETY: u8 and MaybeUninit<u8> have identical layout. The exclusive borrow
         // lives only for this call. socket2 guarantees recv_from_vectored_with_flags
         // writes only initialized bytes, preserving validity even when receive fails.
@@ -260,11 +270,14 @@ impl CuStreamRx for CuUdpLogStreamRx {
             .recv_from_vectored_with_flags(&mut buffers, flags)
         {
             Ok((len, flags, _)) if flags.is_truncated() || len > capacity => {
+                #[cfg(any(target_os = "linux", target_os = "android"))]
                 let needed = if len > capacity {
                     len
                 } else {
                     UDP_DATAGRAM_CAPACITY
                 };
+                #[cfg(not(any(target_os = "linux", target_os = "android")))]
+                let needed = UDP_DATAGRAM_CAPACITY;
                 Err(CuStreamRxError::BufferTooSmall { needed })
             }
             Ok((len, _, _)) => Ok(Some(len)),

@@ -82,6 +82,7 @@ fn truncation_consumes_one_packet_and_never_returns_partial_success() {
 fn empty_packets_and_exact_capacity_are_distinct_from_no_data() {
     let mut rx = receiver();
     let mut tx = sender(rx.local_addr().unwrap());
+    assert_eq!(rx.try_recv(&mut []), Ok(None));
     tx.try_send(b"").unwrap();
     assert_eq!(receive(&mut rx, &mut []), Ok(0));
     assert_eq!(rx.try_recv(&mut []), Ok(None));
@@ -90,6 +91,14 @@ fn empty_packets_and_exact_capacity_are_distinct_from_no_data() {
         receive(&mut rx, &mut []),
         Err(CuStreamRxError::BufferTooSmall { .. })
     ));
+    assert_eq!(rx.try_recv(&mut []), Ok(None));
+    tx.try_send(b"larger than the scratch buffer").unwrap();
+    let error = receive(&mut rx, &mut []).unwrap_err();
+    assert!(matches!(
+        error,
+        CuStreamRxError::BufferTooSmall { needed } if needed >= b"larger than the scratch buffer".len()
+    ));
+    assert_eq!(rx.try_recv(&mut []), Ok(None));
     tx.try_send(b"12345678").unwrap();
     let mut packet = [0; 8];
     assert_eq!(receive(&mut rx, &mut packet), Ok(8));
