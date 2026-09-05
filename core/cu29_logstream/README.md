@@ -159,45 +159,62 @@ Sources and bridge receives stay captured. Reconstruction currently supports
 ordinary synchronous tasks using the lossless native compressed codec; background,
 anytime, custom codec and selective handle policies are rejected for this path.
 
-A ground station declares `#[copper_runtime(config = "copperconfig.ron", sim_mode = true)]`
-and uses its generated `LiveReplay` implementation. Create `TwinWorker::spawn` with
-a bounded queue and the existing `TelemetryPublisher`, then process each ordered
-router event with:
+A ground station declares `#[copper_runtime(config = "copperconfig.ron", sim_mode = true)]`.
+The generated application exposes a twin builder:
 
 ```rust,ignore
-let capture = archive.accept(&event)?; // CaptureArchive<GeneratedDataSet>
-twin.accept(&event, capture)?;
+let (mut twin, mut frames) = Ground::twin(rx)
+    .with_log_path("logs/received.copper")
+    .spawn()?;
+
+// On the UI or analysis thread:
+frames.wait_timeout(std::time::Duration::from_millis(50));
+while let Some(update) = frames.try_read() {
+    render(&update.frame.copperlist);
+}
+let status = twin.stop()?;
 ```
 
-The archive writes the received native capture bytes, original-presence metadata,
-reconstruction policy and omission proofs before handing ownership to replay. It
-never stores synthesized outputs or waits for replay/UI consumption. `NativeArchive`
-remains the full-capture API; use `CaptureArchive` for this selective view. Existing
-native sections retain proofs in `StreamContinuity`; the container format is unchanged.
-Manifest version 2 binds the per-output replay ABI. Build matching robot and ground
-code; numeric mission dispatch remains separate work.
+`rx` is any `CuStreamRx`, such as the receive half of a UDP resource. Copper owns
+session routing, native recording, the bounded replay worker, status publication,
+and shutdown. The caller owns the frame reader and presentation. Pausing or dropping
+that reader never blocks recording. Dropping the twin stops and joins its workers;
+`stop()` also reports receiver errors and final counters. `archive_only()` records
+without running a twin. Each handle accepts one sender session and a fresh log path.
+The default receiver supports the 1200-byte-MTU, 64-symbol streaming profile, with
+4 KiB records and 64 KiB recovery objects. It retains 32 replay events, 32 pending
+captures, one anchor, one executing frame and 64 display frames; payload storage and
+thread/runtime allocations are additional. `with_frame_capacity` changes display retention.
 
-The worker joins independently arriving keyframes and captured boundaries, restores
-state, injects captured messages and executes only reconstructible tasks. It restores
-sender metadata before downstream tasks run. Generated simulation does not bind
-configured stream transmitters; the twin disables local logging and uses no log file.
-The worker retains at most the configured number of queued events and pending
-captures, one anchor and one executing frame, plus the presentation ring. Payload
-allocations and thread/runtime storage are additional. Source gaps and replay queue
-overflow require another matching anchor; UI overwrites only discard display samples.
+Production sends the existing native CopperList format with selected payloads omitted.
+The native codec already carries original/captured presence. There is no proof envelope,
+per-list verification allocation, or new continuity record. The archive writes the
+received native bytes before replay and never stores synthesized outputs. The unreleased
+session manifest stays at **version 1** and binds the reconstruction ABI to the graph.
+Packet framing, FEC and anchor recovery are unchanged.
 
-Per-output digest checking is **off by default**, including debug Rust builds.
-Enable `cu29/logstream-verify` (or the demo's `verify-reconstruction`) at development
-time to check reconstructed payloads. All digest encoding/hashing happens on the
-existing sender output worker and the ground replay worker. No task-path hashing,
-serialization, allocation or copying is added. Ordinary packet/anchor integrity
-checks remain; they do not independently prove behavioral determinism.
+Copper restores keyframes, injects captured inputs, executes reconstructible tasks and
+restores sender metadata before downstream tasks run. Existing source gaps and replay
+queue overflows require a matching recovery anchor. These continuity checks are separate
+from checking whether deterministic task code produced the right result. The generated
+ground runtime disables its own logging and transport transmitters; its archive is owned
+by the twin receiver.
 
-The UI reports Waiting/Recovering, Reconstructed, Verified (developer checks), or
-Diverged. Only checked frames are called Verified. With checks enabled, a mismatch
-withholds reconstructed frames until another matching anchor. Capture recording
-continues through divergence and UI pause. Use `just dashboard-verify` and
-`just sender-verify` in separate terminals to run the developer checks.
+Reconstruction correctness checks are **entirely opt-in**, even in debug Rust builds.
+Enable `cu29/logstream-verify` (the demo calls it `verify-reconstruction`) on both ends
+for development. Only this feature compiles in hashing and a fixed 32-byte digest trailer
+covering the omitted outputs and their payload presence. Hashing runs on the existing
+sender output worker and the ground replay worker, using borrowed payloads with no
+intermediate allocation. Production captures have no trailer or digest storage. A normal
+receiver rejects debug trailers explicitly; a verification receiver also accepts normal
+captures and labels them Reconstructed, never Verified.
 
-`just resim` reconstructs the capture archive offline into full native CopperLists.
-Run `just logstream-twin-check` at the repository root for the focused checks.
+Only debug captures that pass comparison are labeled Verified. A mismatch suppresses
+reconstructed frames until the next matching anchor; native recording continues. Debug
+digests are consumed live and do not add archive sections or change offline log readers.
+Use `just dashboard-verify` and `just sender-verify` to run the development checks.
+`just resim` reconstructs ordinary capture archives offline; the demo's verification
+command compares the result against the full onboard log.
+
+Run `just logstream-twin-check` for allocation/native-format checks, both verification
+modes, worker lifecycle, reader isolation, and the UDP loss/recovery/replay scenarios.

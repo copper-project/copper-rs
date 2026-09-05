@@ -638,9 +638,6 @@ pub enum cu29_runtime::continuity::StreamContinuityRecord
 pub cu29_runtime::continuity::StreamContinuityRecord::Anchor
 pub cu29_runtime::continuity::StreamContinuityRecord::Anchor::copperlist_id: u64
 pub cu29_runtime::continuity::StreamContinuityRecord::Anchor::record: alloc::vec::Vec<u8>
-pub cu29_runtime::continuity::StreamContinuityRecord::Capture
-pub cu29_runtime::continuity::StreamContinuityRecord::Capture::copperlist_id: u64
-pub cu29_runtime::continuity::StreamContinuityRecord::Capture::proof: alloc::vec::Vec<u8>
 pub cu29_runtime::continuity::StreamContinuityRecord::Finished
 pub cu29_runtime::continuity::StreamContinuityRecord::Finished::next_copperlist_id: u64
 pub cu29_runtime::continuity::StreamContinuityRecord::Gap

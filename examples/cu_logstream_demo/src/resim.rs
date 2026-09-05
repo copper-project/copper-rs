@@ -110,13 +110,9 @@ fn main() -> CuResult<()> {
         UnifiedLogType::StreamContinuity,
     );
     for record in cu29_export::stream_continuity_reader(source) {
-        if !matches!(
-            record,
-            cu29::continuity::StreamContinuityRecord::Capture { .. }
-        ) {
-            provenance.log(&record)?;
-        }
+        provenance.log(&record)?;
     }
+
     let mut count = 0;
     for capture in cu_logstream_demo::read_captures(&cli.log_base)? {
         let keyframe = keyframes

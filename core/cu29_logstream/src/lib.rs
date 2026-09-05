@@ -16,6 +16,10 @@ mod archive;
 pub use archive::{CaptureArchive, NativeArchive};
 #[cfg(feature = "std")]
 pub mod twin;
+#[cfg(feature = "std")]
+mod twin_session;
+#[cfg(feature = "std")]
+pub use twin_session::{CuTwin, CuTwinBuilder, CuTwinReader, CuTwinRecordingState, CuTwinStatus};
 
 /// Bounded ground-side delivery to caller-owned telemetry consumers.
 #[cfg(feature = "std")]

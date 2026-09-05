@@ -26,9 +26,6 @@ pub enum StreamContinuityRecord {
     Anchor { copperlist_id: u64, record: Vec<u8> },
     /// Explicit receiver finalization, not a claim about an unobserved sender tail.
     Finished { next_copperlist_id: u64 },
-    /// Versioned capture proof for an intentionally partial native CopperList.
-    /// Retains original presence and reconstruction digests for offline replay.
-    Capture { copperlist_id: u64, proof: Vec<u8> },
 }
 
 /// Rejects replay across missing history unless state is restored at this boundary.

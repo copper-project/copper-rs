@@ -1,31 +1,42 @@
-//! Generated selective streaming codecs. Encoding and hashing run on output workers.
+//! Generated selective native codecs. Optional verification runs on output workers.
 
 use crate::{ApplicationSchema, Error, Result};
-use alloc::{string::ToString, vec::Vec};
-use bincode::{
-    Decode, Encode,
-    enc::{Encoder, EncoderImpl, write::Writer},
-    error::EncodeError,
-};
+use alloc::string::ToString;
+use bincode::{Encode, enc::Encoder, error::EncodeError};
 use cu29_runtime::copperlist::CopperList;
 use cu29_traits::CopperListTuple;
 
-/// One proof per output slot, including intentionally absent messages.
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
-pub struct CaptureProof {
-    pub version: u16,
-    pub original_presence: Vec<bool>,
-    pub reconstructed_digests: Vec<Option<[u8; 32]>>,
+// Gate generated methods using this crate's feature, not a downstream app's
+// feature names or the proc-macro host's independently resolved features.
+#[doc(hidden)]
+#[cfg(feature = "verify-reconstruction")]
+#[macro_export]
+macro_rules! __with_reconstruction_verification {
+    ($($item:item)*) => { $($item)* };
+}
+#[doc(hidden)]
+#[cfg(not(feature = "verify-reconstruction"))]
+#[macro_export]
+macro_rules! __with_reconstruction_verification {
+    ($($item:item)*) => {};
 }
 
-/// Generated from the application's RON. Users do not implement slot dispatch.
+/// Generated from RON. Slot dispatch and storage are fixed at compile time.
 pub trait CaptureDataSet: CopperListTuple {
     const RECONSTRUCTION: &'static [Option<u32>];
-    fn original_presence(&self) -> Vec<bool>;
     fn stream_schema() -> ApplicationSchema;
     fn encode_capture<E: Encoder>(&self, encoder: &mut E) -> core::result::Result<(), EncodeError>;
-    fn capture_proof(&self) -> Result<CaptureProof>;
+    fn validate_capture(&self) -> Result<()>;
     fn restore_sender_metadata(&mut self, captured: &Self);
+    #[cfg(feature = "verify-reconstruction")]
+    fn encode_reconstruction<E: Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> core::result::Result<(), EncodeError>;
+    #[cfg(feature = "verify-reconstruction")]
+    fn reconstruction_digest(&self) -> Result<[u8; 32]> {
+        payload_digest(&ReconstructionView(self))
+    }
 }
 
 pub struct CaptureView<'a, P>(pub &'a P);
@@ -35,19 +46,32 @@ impl<P: CaptureDataSet> Encode for CaptureView<'_, P> {
     }
 }
 
+#[cfg(feature = "verify-reconstruction")]
+struct ReconstructionView<'a, P>(&'a P);
+#[cfg(feature = "verify-reconstruction")]
+impl<P: CaptureDataSet> Encode for ReconstructionView<'_, P> {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> core::result::Result<(), EncodeError> {
+        self.0.encode_reconstruction(encoder)
+    }
+}
+
+#[cfg(feature = "verify-reconstruction")]
 struct DigestWriter(blake3::Hasher);
-impl Writer for DigestWriter {
+#[cfg(feature = "verify-reconstruction")]
+impl bincode::enc::write::Writer for DigestWriter {
     fn write(&mut self, bytes: &[u8]) -> core::result::Result<(), EncodeError> {
         self.0.update(bytes);
         Ok(())
     }
 }
 
-/// Hash a canonical payload without allocating an encoded payload buffer.
+/// Debug-only digest of the reconstructed outputs, including payload presence.
+/// Hashes directly from borrowed payloads without an intermediate allocation.
+#[cfg(feature = "verify-reconstruction")]
 pub fn payload_digest(value: &impl Encode) -> Result<[u8; 32]> {
     let mut writer = DigestWriter(blake3::Hasher::new());
     value
-        .encode(&mut EncoderImpl::new(
+        .encode(&mut bincode::enc::EncoderImpl::new(
             &mut writer,
             bincode::config::standard(),
         ))
@@ -55,17 +79,28 @@ pub fn payload_digest(value: &impl Encode) -> Result<[u8; 32]> {
     Ok(*writer.0.finalize().as_bytes())
 }
 
-/// A captured native list and its explicit omission proof. Never a verified twin frame.
+/// A native capture. Production stores only the CopperList itself.
 pub struct CapturedList<P: CopperListTuple> {
     pub copperlist: CopperList<P>,
-    pub proof: CaptureProof,
+    #[cfg(feature = "verify-reconstruction")]
+    pub digest: Option<[u8; 32]>,
+}
+
+impl<P: CopperListTuple> CapturedList<P> {
+    /// Wrap an ordinary capture archive entry. Archives contain no debug digests.
+    pub fn new(copperlist: CopperList<P>) -> Self {
+        Self {
+            copperlist,
+            #[cfg(feature = "verify-reconstruction")]
+            digest: None,
+        }
+    }
 }
 
 pub fn encode_capture_record_into<P: CaptureDataSet>(
     list: &CopperList<P>,
     output: &mut [u8],
 ) -> Result<usize> {
-    let proof = list.msgs.capture_proof()?;
     let header_len = crate::record::RECORD_HEADER_LEN;
     if output.len() < header_len {
         return Err(Error::BufferTooSmall {
@@ -75,11 +110,25 @@ pub fn encode_capture_record_into<P: CaptureDataSet>(
     }
     let (header, payload) = output.split_at_mut(header_len);
     let len = bincode::encode_into_slice(
-        (&proof, list.id, list.get_state(), CaptureView(&list.msgs)),
+        (list.id, list.get_state(), CaptureView(&list.msgs)),
         payload,
         bincode::config::standard(),
     )
     .map_err(|e| Error::Codec(e.to_string()))?;
+    // A developer build appends one fixed-size digest. Production is exactly
+    // the existing native CopperList format, including its presence planes.
+    #[cfg(feature = "verify-reconstruction")]
+    let len = {
+        let available = payload.len();
+        let trailer = payload
+            .get_mut(len..len + 32)
+            .ok_or(Error::BufferTooSmall {
+                needed: header_len + len + 32,
+                available: header_len + available,
+            })?;
+        trailer.copy_from_slice(&list.msgs.reconstruction_digest()?);
+        len + 32
+    };
     crate::record::encode_record_header(
         crate::RecordKind::CopperList,
         list.id,
@@ -89,62 +138,48 @@ pub fn encode_capture_record_into<P: CaptureDataSet>(
     Ok(header_len + len)
 }
 
-/// Decode once; return the original native byte slice for capture archival.
+/// Decode once and borrow the native bytes for archival. Verification builds
+/// accept production captures too; production rejects debug trailers explicitly.
 pub fn decode_capture<P: CaptureDataSet>(payload: &[u8]) -> Result<(CapturedList<P>, &[u8])> {
-    let (proof, offset): (CaptureProof, usize) =
-        bincode::decode_from_slice(payload, bincode::config::standard().with_limit::<1048576>())
+    let (copperlist, consumed): (CopperList<P>, usize) =
+        bincode::decode_from_slice(payload, bincode::config::standard())
             .map_err(|e| Error::Codec(e.to_string()))?;
-    let output_count = P::get_output_specs().len();
-    if proof.version != 1
-        || proof.original_presence.len() != output_count
-        || proof.reconstructed_digests.len() != output_count
-    {
-        return Err(Error::InvalidConfig("invalid capture proof layout"));
+    copperlist.msgs.validate_capture()?;
+    #[cfg(feature = "verify-reconstruction")]
+    let digest = match &payload[consumed..] {
+        [] => None,
+        bytes => Some(
+            bytes
+                .try_into()
+                .map_err(|_| Error::InvalidConfig("invalid reconstruction digest trailer"))?,
+        ),
+    };
+    #[cfg(not(feature = "verify-reconstruction"))]
+    if consumed != payload.len() {
+        return Err(Error::InvalidConfig(
+            "capture has trailing bytes; debug captures require verify-reconstruction",
+        ));
     }
-    let native = &payload[offset..];
-    let copperlist = crate::decode_copperlist::<P>(native)?;
-    let captured_presence = copperlist.msgs.original_presence();
-    for (i, present) in captured_presence.iter().enumerate() {
-        let reconstruct = P::RECONSTRUCTION.get(i).is_some_and(Option::is_some);
-        if *present != (proof.original_presence[i] && !reconstruct)
-            || (proof.reconstructed_digests[i].is_some() && !reconstruct)
-        {
-            return Err(Error::InvalidConfig(
-                "capture payload/presence policy mismatch",
-            ));
-        }
-    }
-    Ok((CapturedList { copperlist, proof }, native))
+    Ok((
+        CapturedList {
+            copperlist,
+            #[cfg(feature = "verify-reconstruction")]
+            digest,
+        },
+        &payload[..consumed],
+    ))
 }
 
+#[cfg(feature = "verify-reconstruction")]
 impl<P: CaptureDataSet> CapturedList<P> {
     pub fn verify(&self) -> Result<()> {
-        let actual = self.copperlist.msgs.capture_proof()?;
-        if actual.original_presence != self.proof.original_presence
-            || self
-                .proof
-                .reconstructed_digests
-                .iter()
-                .zip(&actual.reconstructed_digests)
-                .any(|(expected, actual)| expected.is_some() && expected != actual)
+        if let Some(expected) = self.digest
+            && self.copperlist.msgs.reconstruction_digest()? != expected
         {
             return Err(Error::InvalidConfig(
                 "deterministic reconstruction diverged",
             ));
         }
         Ok(())
-    }
-}
-
-/// Optional developer checks. The production build does not encode or hash a reconstructed payload.
-pub fn reconstruction_digest(value: &impl Encode) -> Result<Option<[u8; 32]>> {
-    #[cfg(feature = "verify-reconstruction")]
-    {
-        payload_digest(value).map(Some)
-    }
-    #[cfg(not(feature = "verify-reconstruction"))]
-    {
-        let _ = value;
-        Ok(None)
     }
 }

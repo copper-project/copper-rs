@@ -69,6 +69,7 @@ fn config_resolves_to_sender_config_and_versioned_manifest() {
 
     let manifest = SessionManifest::decode_record(&sender.recovery.manifest_record).unwrap();
     assert_eq!(manifest.version, SESSION_MANIFEST_VERSION);
+    assert_eq!(manifest.version, 1, "the unreleased protocol remains v1");
     assert_eq!(manifest.identity, identity);
     assert_eq!(manifest.plan, plan);
     assert_eq!(manifest.application_schema, schema());
