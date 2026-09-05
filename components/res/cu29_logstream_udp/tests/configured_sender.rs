@@ -69,7 +69,7 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
         .set("remote_addr", rx.local_addr().unwrap().to_string());
 
     // The receiver knows hard capacity limits, but no sender identity or FEC plan.
-    let mut router = SessionRouter::<1128, 64, 64>::new(SessionRouterLimits {
+    let router_limits = SessionRouterLimits {
         max_startup_packets: 64,
         max_recovery_records: 8,
         max_sessions: 1,
@@ -79,8 +79,8 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
         max_buffered_records: 64,
         equation_capacity: 64,
         finite_objects: FiniteObjectLimits::new(65536, 1128, 4),
-    })
-    .unwrap();
+    };
+    let mut router = SessionRouter::<1128, 64, 64>::new(router_limits).unwrap();
     let logs = tempfile::tempdir().unwrap();
     let archive_path = logs.path().join("received.copper");
     let expected_schema = cu29_logstream::ApplicationSchema::from_output_specs(
@@ -178,21 +178,43 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
         // entirely in the test harness; the production sender remains one-way.
         let deadline = Instant::now() + Duration::from_secs(2);
         let mut source_received = false;
-        while !source_received && Instant::now() < deadline {
+        // At the late-join and outage boundaries, also wait for a fresh receiver
+        // to bootstrap. Manifest repetition is periodic, so source progress alone
+        // does not guarantee the impaired capture contains a recovery bundle.
+        let mut bootstrap = matches!(id, 64 | 96)
+            .then(|| SessionRouter::<1128, 64, 64>::new(router_limits).unwrap());
+        let mut recovery_received = bootstrap.is_none();
+        while !(source_received && recovery_received) && Instant::now() < deadline {
             if let Some(len) = rx.try_recv(&mut packet).unwrap() {
                 let header = cu29_logstream::WirePacket::decode(&packet[..len])
                     .unwrap()
                     .header;
-                source_received = header.record_kind == RecordKind::CopperList
+                source_received |= header.record_kind == RecordKind::CopperList
                     && header.symbol_kind == cu29_logstream::FecSymbolKind::Source
                     && header.object_id == id;
                 traffic.push(packet[..len].to_vec());
                 router.receive_datagram(&packet[..len], &mut emit).unwrap();
+                // The impaired capture starts at this source packet; earlier
+                // manifests must not satisfy its bootstrap requirement.
+                if source_received && let Some(bootstrap) = bootstrap.as_mut() {
+                    bootstrap
+                        .receive_datagram(&packet[..len], |event| {
+                            if let SessionEvent::VerifiedAnchor { anchor, .. } = event {
+                                recovery_received |= anchor.copperlist_id >= id;
+                            }
+                            Ok::<(), core::convert::Infallible>(())
+                        })
+                        .unwrap();
+                }
             } else {
                 std::thread::sleep(Duration::from_millis(1));
             }
         }
         assert!(source_received, "sender did not transmit CopperList {id}");
+        assert!(
+            recovery_received,
+            "sender did not repeat a complete recovery bundle at CopperList {id}"
+        );
     }
     drop(running.stop()?);
     let deadline = Instant::now() + Duration::from_millis(100);
@@ -325,7 +347,10 @@ fn validate_impaired_archive(
             })
             .unwrap();
     }
-    archive.unwrap().finish().unwrap();
+    archive
+        .expect("impaired capture must include a decodable session manifest")
+        .finish()
+        .unwrap();
     let lists: Vec<_> =
         cu29_export::copperlists_reader::<default::CuStampedDataSet>(UnifiedLoggerIOReader::new(
             UnifiedLoggerRead::new(path).unwrap(),
