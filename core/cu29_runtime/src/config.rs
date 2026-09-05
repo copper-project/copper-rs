@@ -1472,6 +1472,99 @@ pub struct ResourceBundleConfig {
     pub missions: Option<Vec<String>>,
 }
 
+/// Static log-streaming policy compiled into a Copper application.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct LogStreamingConfig {
+    pub destinations: Vec<LogStreamDestinationConfig>,
+}
+
+/// One statically generated log-stream destination.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct LogStreamDestinationConfig {
+    pub id: String,
+    pub transport: LogStreamTransportConfig,
+    pub link: LogStreamLinkConfig,
+    pub fec: LogStreamFecConfig,
+    pub content: LogStreamContentConfig,
+    pub max_record_bytes: u64,
+}
+
+/// Concrete Copper resource used as the destination's packet transmitter.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct LogStreamTransportConfig {
+    #[serde(rename = "type")]
+    pub type_: String,
+    pub resource: String,
+}
+
+/// Physical-link assumptions and sender bounds.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct LogStreamLinkConfig {
+    pub mtu_bytes: u16,
+    pub bitrate_bps: u64,
+    pub memory_budget_kib: u32,
+    pub max_latency_ms: u32,
+    pub burst_packets: u32,
+}
+
+/// Explicit FEC policy. Lane identity fixes the algorithms: continuous is RLC
+/// and objects is RaptorQ, so there is deliberately no configurable scheme.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct LogStreamFecConfig {
+    pub continuous: LogStreamContinuousFecConfig,
+    pub objects: LogStreamObjectFecConfig,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct LogStreamContinuousFecConfig {
+    pub field: LogStreamRlcField,
+    pub window_symbols: u16,
+    pub repair_every_source_symbols: u16,
+    pub repair_density: LogStreamRepairDensity,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LogStreamRlcField {
+    Gf2,
+    Gf256,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LogStreamRepairDensity {
+    Full,
+    Threshold(u8),
+}
+
+impl LogStreamRepairDensity {
+    pub const fn threshold(self) -> u8 {
+        match self {
+            Self::Full => 15,
+            Self::Threshold(value) => value,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct LogStreamObjectFecConfig {
+    pub max_object_bytes: u64,
+    pub repair_symbols_per_block: u32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct LogStreamContentConfig {
+    pub archive: bool,
+    pub live_viz: bool,
+    pub anchor_interval: u32,
+}
+
 /// Declarative definition of a bridge component with a list of channels.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BridgeConfig {
@@ -2189,6 +2282,8 @@ pub struct CuConfig {
     pub runtime: Option<RuntimeConfig>,
     /// Declarative resource bundle definitions
     pub resources: Vec<ResourceBundleConfig>,
+    /// Optional statically generated semantic log-stream destinations.
+    pub log_streaming: Option<LogStreamingConfig>,
     /// Declarative bridge definitions that are yet to be expanded into the graph
     pub bridges: Vec<BridgeConfig>,
     /// Graph structure - either a single graph or multiple mission-specific graphs
@@ -2196,6 +2291,129 @@ pub struct CuConfig {
 }
 
 impl CuConfig {
+    /// Validates static log-stream topology and bounds before code generation.
+    pub fn validate_log_streaming_config(&self) -> CuResult<()> {
+        let Some(streaming) = &self.log_streaming else {
+            return Ok(());
+        };
+        if streaming.destinations.is_empty() {
+            return Err(CuError::from(
+                "log_streaming.destinations must contain at least one destination",
+            ));
+        }
+
+        let keyframe_interval = self
+            .logging
+            .as_ref()
+            .and_then(|logging| logging.keyframe_interval)
+            .unwrap_or(DEFAULT_KEYFRAME_INTERVAL);
+        for (index, destination) in streaming.destinations.iter().enumerate() {
+            if destination.id.trim().is_empty() {
+                return Err(CuError::from(format!(
+                    "log_streaming destination at index {index} has an empty id"
+                )));
+            }
+            if streaming.destinations[..index]
+                .iter()
+                .any(|other| other.id == destination.id)
+            {
+                return Err(CuError::from(format!(
+                    "Duplicate log_streaming destination id '{}'",
+                    destination.id
+                )));
+            }
+            if destination.transport.type_.trim().is_empty() {
+                return Err(CuError::from(format!(
+                    "log_streaming destination '{}' has an empty transport type",
+                    destination.id
+                )));
+            }
+            let Some((bundle_id, resource_name)) = destination.transport.resource.split_once('.')
+            else {
+                return Err(CuError::from(format!(
+                    "log_streaming destination '{}' resource '{}' must use 'bundle.resource' syntax",
+                    destination.id, destination.transport.resource
+                )));
+            };
+            if bundle_id.is_empty()
+                || resource_name.is_empty()
+                || resource_name.contains('.')
+                || !self.resources.iter().any(|bundle| bundle.id == bundle_id)
+            {
+                return Err(CuError::from(format!(
+                    "log_streaming destination '{}' references invalid resource '{}'",
+                    destination.id, destination.transport.resource
+                )));
+            }
+            if streaming.destinations[..index]
+                .iter()
+                .any(|other| other.transport.resource == destination.transport.resource)
+            {
+                return Err(CuError::from(format!(
+                    "log_streaming resource '{}' is bound by more than one destination",
+                    destination.transport.resource
+                )));
+            }
+            if destination.link.mtu_bytes <= 72 {
+                return Err(CuError::from(format!(
+                    "log_streaming destination '{}' mtu_bytes must exceed the 72-byte packet header",
+                    destination.id
+                )));
+            }
+            if destination.link.bitrate_bps == 0
+                || destination.link.memory_budget_kib == 0
+                || destination.link.max_latency_ms == 0
+                || destination.link.burst_packets == 0
+            {
+                return Err(CuError::from(format!(
+                    "log_streaming destination '{}' link values must be nonzero",
+                    destination.id
+                )));
+            }
+            if destination.fec.continuous.window_symbols == 0
+                || destination.fec.continuous.repair_every_source_symbols == 0
+            {
+                return Err(CuError::from(format!(
+                    "log_streaming destination '{}' continuous FEC values must be nonzero",
+                    destination.id
+                )));
+            }
+            if destination.fec.continuous.repair_density.threshold() > 15 {
+                return Err(CuError::from(format!(
+                    "log_streaming destination '{}' repair density threshold must be in 0..=15",
+                    destination.id
+                )));
+            }
+            if destination.fec.objects.max_object_bytes == 0
+                || destination.fec.objects.repair_symbols_per_block == 0
+                || destination.max_record_bytes == 0
+            {
+                return Err(CuError::from(format!(
+                    "log_streaming destination '{}' object and record bounds must be nonzero",
+                    destination.id
+                )));
+            }
+            if destination.content.anchor_interval == 0
+                || !destination
+                    .content
+                    .anchor_interval
+                    .is_multiple_of(keyframe_interval)
+            {
+                return Err(CuError::from(format!(
+                    "log_streaming destination '{}' anchor_interval must be a nonzero multiple of logging.keyframe_interval ({keyframe_interval})",
+                    destination.id
+                )));
+            }
+            if !destination.content.archive && !destination.content.live_viz {
+                return Err(CuError::from(format!(
+                    "log_streaming destination '{}' must enable archive or live_viz content",
+                    destination.id
+                )));
+            }
+        }
+        Ok(())
+    }
+
     /// Guarantees that a default `"background"` thread pool entry exists in
     /// `runtime.thread_pools` whenever the graph has any `background: true`
     /// task that didn't explicitly select a pool. Thread pools are otherwise
@@ -2800,6 +3018,7 @@ struct CuConfigRepresentation {
     constants: Option<Vec<ConstantConfig>>,
     tasks: Option<Vec<Node>>,
     resources: Option<Vec<ResourceBundleConfig>>,
+    log_streaming: Option<LogStreamingConfig>,
     bridges: Option<Vec<BridgeConfig>>,
     cnx: Option<Vec<SerializedCnx>>,
     #[serde(
@@ -3031,6 +3250,7 @@ where
     cuconfig.logging = representation.logging.clone();
     cuconfig.runtime = representation.runtime.clone();
     cuconfig.resources = representation.resources.clone().unwrap_or_default();
+    cuconfig.log_streaming = representation.log_streaming.clone();
     cuconfig.bridges = representation.bridges.clone().unwrap_or_default();
 
     validate_thread_pools::<E>(&cuconfig.runtime)?;
@@ -3132,6 +3352,7 @@ impl Serialize for CuConfig {
                     logging: self.logging.clone(),
                     runtime: self.runtime.clone(),
                     resources: resources.clone(),
+                    log_streaming: self.log_streaming.clone(),
                     missions: None,
                     includes: None,
                 }
@@ -3233,6 +3454,7 @@ impl Serialize for CuConfig {
                     constants: (!self.constants.is_empty()).then_some(self.constants.clone()),
                     tasks: Some(tasks),
                     resources: resources.clone(),
+                    log_streaming: self.log_streaming.clone(),
                     bridges,
                     cnx: Some(cnx),
                     monitors,
@@ -3256,6 +3478,7 @@ impl Default for CuConfig {
             logging: None,
             runtime: None,
             resources: Vec::new(),
+            log_streaming: None,
             bridges: Vec::new(),
         }
     }
@@ -3278,6 +3501,7 @@ impl CuConfig {
             logging: None,
             runtime: None,
             resources: Vec::new(),
+            log_streaming: None,
             bridges: Vec::new(),
         }
     }
@@ -4399,6 +4623,10 @@ fn process_includes(
                 result.runtime = included_representation.runtime;
             }
 
+            if result.log_streaming.is_none() {
+                result.log_streaming = included_representation.log_streaming;
+            }
+
             if let Some(included_missions) = included_representation.missions {
                 if result.missions.is_none() {
                     result.missions = Some(included_missions);
@@ -5060,6 +5288,7 @@ fn config_representation_to_config(representation: CuConfigRepresentation) -> Cu
     cuconfig.validate_runtime_config()?;
     cuconfig.validate_anytime_configs()?;
     cuconfig.validate_constants()?;
+    cuconfig.validate_log_streaming_config()?;
 
     Ok(cuconfig)
 }
@@ -6197,6 +6426,117 @@ mod tests {
             r#"( tasks: [], cnx: [], logging: ( slab_size_mib: 100, section_size_mib: 1024 ) )"#;
         let config = CuConfig::deserialize_ron(txt).unwrap();
         assert!(config.validate_logging_config().is_err());
+    }
+
+    #[test]
+    fn log_streaming_config_parses_and_round_trips_without_scheme_fields() {
+        let txt = r#"
+        (
+            resources: [
+                (
+                    id: "telemetry_udp",
+                    provider: "cu29_stream_udp::CuUdpStreamResources",
+                    config: {
+                        "bind_addr": "0.0.0.0:0",
+                        "remote_addr": "192.168.10.20:7447",
+                        "send_buffer_bytes": 262144,
+                        "ttl": 1,
+                        "dscp": 46,
+                    },
+                ),
+            ],
+            log_streaming: (
+                destinations: [
+                    (
+                        id: "ground",
+                        transport: (
+                            type: "cu29_stream_udp::CuUdpStreamTx",
+                            resource: "telemetry_udp.tx",
+                        ),
+                        link: (
+                            mtu_bytes: 1200,
+                            bitrate_bps: 1000000,
+                            memory_budget_kib: 512,
+                            max_latency_ms: 250,
+                            burst_packets: 8,
+                        ),
+                        fec: (
+                            continuous: (
+                                field: Gf256,
+                                window_symbols: 64,
+                                repair_every_source_symbols: 4,
+                                repair_density: Full,
+                            ),
+                            objects: (
+                                max_object_bytes: 4194304,
+                                repair_symbols_per_block: 8,
+                            ),
+                        ),
+                        content: (
+                            archive: true,
+                            live_viz: true,
+                            anchor_interval: 100,
+                        ),
+                        max_record_bytes: 65536,
+                    ),
+                ],
+            ),
+        )
+        "#;
+
+        let config = read_configuration_str(txt.to_string(), None).unwrap();
+        let destination = &config.log_streaming.as_ref().unwrap().destinations[0];
+        assert_eq!(destination.id, "ground");
+        assert_eq!(destination.transport.resource, "telemetry_udp.tx");
+        assert_eq!(destination.fec.continuous.field, LogStreamRlcField::Gf256);
+        assert_eq!(
+            destination.fec.continuous.repair_density,
+            LogStreamRepairDensity::Full
+        );
+
+        let serialized = config.serialize_ron().unwrap();
+        let reparsed = read_configuration_str(serialized, None).unwrap();
+        assert_eq!(reparsed.log_streaming, config.log_streaming);
+    }
+
+    #[test]
+    fn log_streaming_rejects_a_pluggable_fec_scheme() {
+        let txt = r#"
+        (
+            resources: [(id: "network", provider: "app::Network")],
+            log_streaming: (
+                destinations: [(
+                    id: "ground",
+                    transport: (type: "app::Tx", resource: "network.tx"),
+                    link: (
+                        mtu_bytes: 1200,
+                        bitrate_bps: 1000000,
+                        memory_budget_kib: 512,
+                        max_latency_ms: 250,
+                        burst_packets: 8,
+                    ),
+                    fec: (
+                        continuous: (
+                            scheme: Rlc,
+                            field: Gf256,
+                            window_symbols: 64,
+                            repair_every_source_symbols: 4,
+                            repair_density: Full,
+                        ),
+                        objects: (
+                            max_object_bytes: 4194304,
+                            repair_symbols_per_block: 8,
+                        ),
+                    ),
+                    content: (archive: true, live_viz: false, anchor_interval: 100),
+                    max_record_bytes: 65536,
+                )],
+            ),
+        )
+        "#;
+
+        let error = read_configuration_str(txt.to_string(), None).unwrap_err();
+        assert!(error.to_string().contains("scheme"), "{error}");
     }
 
     // this test makes sure the edge id is suitable to be used to sort the inputs of a task

@@ -4694,6 +4694,7 @@ mod tests {
                 config: None,
                 missions: None,
             }],
+            log_streaming: None,
             bridges: Vec::new(),
             graphs: ConfigGraphs::Simple(config::CuGraph::default()),
         };

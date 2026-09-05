@@ -8,10 +8,12 @@ pub enum Error {
     InvalidConfig(&'static str),
     ObjectTooLarge { actual: u64, maximum: u64 },
     TooManyRecords { actual: usize, maximum: usize },
+    TooManySessions { maximum: usize },
     BufferTooSmall { needed: usize, available: usize },
     TruncatedPacket,
     InvalidMagic,
     UnsupportedVersion(u8),
+    UnsupportedManifestVersion(u16),
     InvalidHeaderLength(u8),
     UnknownLane(u8),
     UnknownRecordKind(u8),
@@ -42,6 +44,12 @@ impl Display for Error {
                     "stream has {actual} records; maximum is {maximum}"
                 )
             }
+            Self::TooManySessions { maximum } => {
+                write!(
+                    formatter,
+                    "session router exceeds its {maximum}-session limit"
+                )
+            }
             Self::BufferTooSmall { needed, available } => {
                 write!(
                     formatter,
@@ -52,6 +60,9 @@ impl Display for Error {
             Self::InvalidMagic => formatter.write_str("invalid logstream magic"),
             Self::UnsupportedVersion(version) => {
                 write!(formatter, "unsupported logstream version {version}")
+            }
+            Self::UnsupportedManifestVersion(version) => {
+                write!(formatter, "unsupported session manifest version {version}")
             }
             Self::InvalidHeaderLength(length) => {
                 write!(formatter, "invalid logstream header length {length}")

@@ -39,6 +39,8 @@ pub struct ContinuousSenderConfig {
 pub struct RecoverySenderConfig {
     pub finite: FiniteObjectSenderConfig,
     pub manifest_record: Vec<u8>,
+    /// CopperList interval between transmitted keyframe/anchor groups.
+    pub anchor_interval: u32,
 }
 
 /// Complete sender configuration for continuous CopperLists and restart anchors.
@@ -65,6 +67,9 @@ impl LogStreamSenderConfig {
             return Err(Error::InvalidConfig(
                 "recovery configuration requires a manifest record",
             ));
+        }
+        if self.recovery.anchor_interval == 0 {
+            return Err(Error::InvalidConfig("anchor interval must be nonzero"));
         }
         Ok(())
     }
@@ -96,6 +101,7 @@ pub struct KeyFrameAnchorSink<T: CuStreamTx> {
     manifest_record: Vec<u8>,
     manifest_object_id: u64,
     manifest_record_digest: [u8; 32],
+    anchor_interval: u32,
     stats: RecoverySenderStats,
 }
 
@@ -112,6 +118,9 @@ impl<T: CuStreamTx> Debug for KeyFrameAnchorSink<T> {
 
 impl<T: CuStreamTx> KeyFrameAnchorSink<T> {
     pub fn new(transport: T, config: RecoverySenderConfig) -> Result<Self> {
+        if config.anchor_interval == 0 {
+            return Err(Error::InvalidConfig("anchor interval must be nonzero"));
+        }
         let manifest = decode_record(&config.manifest_record)?;
         if manifest.kind != RecordKind::Manifest {
             return Err(Error::InvalidConfig(
@@ -126,6 +135,7 @@ impl<T: CuStreamTx> KeyFrameAnchorSink<T> {
             manifest_record: config.manifest_record,
             manifest_object_id,
             manifest_record_digest,
+            anchor_interval: config.anchor_interval,
             stats: RecoverySenderStats::default(),
         })
     }
@@ -179,6 +189,12 @@ fn emit_finite_record<T: CuStreamTx>(
 
 impl<T: CuStreamTx> WriteStream<KeyFrame> for KeyFrameAnchorSink<T> {
     fn log(&mut self, keyframe: &KeyFrame) -> CuResult<()> {
+        if !keyframe
+            .culistid
+            .is_multiple_of(u64::from(self.anchor_interval))
+        {
+            return Ok(());
+        }
         let (keyframe_record, anchor_record) = encode_keyframe_and_anchor(
             keyframe,
             self.manifest_object_id,

@@ -1917,6 +1917,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         return return_error(e.to_string());
     }
     let copper_config = copper_config;
+    if copper_config.log_streaming.is_some() && !logstream_enabled {
+        return return_error(
+            "copperconfig.ron declares log_streaming but the cu29 'logstream' feature is disabled"
+                .to_string(),
+        );
+    }
+    if copper_config.log_streaming.is_some() && ignore_resources {
+        return return_error(
+            "log_streaming resource bindings cannot be used with ignore_resources".to_string(),
+        );
+    }
     // Re-apply the baked step orders at startup so the effective config the
     // app logs stays self-describing, whatever RON file it was started with.
     let planner_resolved_stamp = match copper_config.planner_config().and_then(|selection| {
@@ -2196,6 +2207,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             resources_instanciator_fn,
             task_resource_mappings,
             bridge_resource_mappings,
+            logstream_resource_specs,
         ) = if ignore_resources {
             let bundle_specs: Vec<BundleSpec> = Vec::new();
             let resource_specs: Vec<ResourceKeySpec> = Vec::new();
@@ -2216,6 +2228,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 resources_instanciator_fn,
                 task_resource_mappings,
                 bridge_resource_mappings,
+                Vec::new(),
             )
         } else {
             let bundle_specs = match build_bundle_specs(&copper_config, mission.as_str()) {
@@ -2245,11 +2258,20 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 };
             let bridge_resource_mappings =
                 build_bridge_resource_mappings(&resource_specs, &culist_bridge_specs, sim_mode);
+            let logstream_resource_specs = match build_logstream_resource_specs(
+                &copper_config,
+                mission.as_str(),
+                &resource_specs,
+            ) {
+                Ok(specs) => specs,
+                Err(e) => return return_error(e.to_string()),
+            };
             (
                 resources_module,
                 resources_instanciator_fn,
                 task_resource_mappings,
                 bridge_resource_mappings,
+                logstream_resource_specs,
             )
         };
 
@@ -4565,6 +4587,49 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 )));
             }
         };
+        let logstream_topology_check = if logstream_enabled {
+            let expected_count = logstream_resource_specs.len();
+            let destination_checks = logstream_resource_specs.iter().map(|spec| {
+                let index = syn::Index::from(spec.destination_index);
+                let destination = &copper_config
+                    .log_streaming
+                    .as_ref()
+                    .expect("logstream specs require config")
+                    .destinations[spec.destination_index];
+                let expected_id = LitStr::new(&destination.id, Span::call_site());
+                let expected_type = LitStr::new(&destination.transport.type_, Span::call_site());
+                let expected_resource =
+                    LitStr::new(&destination.transport.resource, Span::call_site());
+                quote! {
+                    let destination = &configured_logstream_destinations[#index];
+                    if destination.id != #expected_id
+                        || destination.transport.type_ != #expected_type
+                        || destination.transport.resource != #expected_resource
+                    {
+                        return Err(CuError::from(format!(
+                            "Configured log_streaming destination topology at index {} does not match the runtime compiled into this binary",
+                            #index,
+                        )));
+                    }
+                }
+            });
+            quote! {
+                let configured_logstream_destinations = config
+                    .log_streaming
+                    .as_ref()
+                    .map_or(&[][..], |streaming| streaming.destinations.as_slice());
+                if configured_logstream_destinations.len() != #expected_count {
+                    return Err(CuError::from(format!(
+                        "Configured log_streaming destination count ({}) does not match the runtime compiled into this binary ({})",
+                        configured_logstream_destinations.len(),
+                        #expected_count,
+                    )));
+                }
+                #(#destination_checks)*
+            }
+        } else {
+            quote! {}
+        };
 
         let prepare_config_sig = if std {
             quote! {
@@ -5394,6 +5459,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #constant_override_warning
                 #copperlist_count_check
                 #keyframe_logging_check
+                #logstream_topology_check
                 #[cfg(target_os = "none")]
                 ::cu29::prelude::info!("CuApp init: config loaded");
                 if let Some(runtime) = &config.runtime {
@@ -5511,6 +5577,82 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let local_keyframe_sink = cu29::curuntime::NullWriteStream;
             }
         };
+        let configured_logstream_session = (!logstream_resource_specs.is_empty()).then(|| {
+            quote! {
+                let logstream_session_id = ::cu29::logstream::new_session_id();
+                let logstream_schema = ::cu29::logstream::ApplicationSchema::from_output_specs(
+                    <#mission_mod::CuStampedDataSet as ::cu29::prelude::MatchingTasks>::get_output_specs(),
+                );
+            }
+        });
+        let configured_logstream_initializers = logstream_resource_specs.iter().map(|spec| {
+            let index = syn::Index::from(spec.destination_index);
+            let bundle_index = spec.bundle_index;
+            let provider_path = &spec.provider_path;
+            let resource_name = LitStr::new(&spec.resource_name, Span::call_site());
+            let transport_type = &spec.transport_type;
+            let transport_ident = format_ident!("__cu_logstream_transport_{}", spec.destination_index);
+            let continuous_ident = format_ident!("__cu_logstream_continuous_{}", spec.destination_index);
+            let recovery_ident = format_ident!("__cu_logstream_recovery_{}", spec.destination_index);
+            quote! {
+                let destination = &config
+                    .log_streaming
+                    .as_ref()
+                    .expect("compiled logstream configuration is missing")
+                    .destinations[#index];
+                let plan = ::cu29::logstream::LogStreamPlan::resolve(destination)
+                    .map_err(|error| CuError::from(error.to_string()))?;
+                let sender_config = plan
+                    .sender_config(
+                        ::cu29::logstream::StreamIdentity {
+                            session_id: logstream_session_id,
+                            sender_id: instance_id,
+                        },
+                        logstream_schema.clone(),
+                    )
+                    .map_err(|error| CuError::from(error.to_string()))?;
+                let #transport_ident: #transport_type = resources
+                    .take(
+                        cu29::resource::ResourceKey::<()>::new(
+                            cu29::resource::BundleIndex::new(#bundle_index),
+                            cu29::resource::resource_index_by_name::<#provider_path>(#resource_name),
+                        )
+                        .typed::<#transport_type>(),
+                    )?
+                    .0;
+                let continuous_transport: Box<dyn ::cu29::logstream::CuStreamTx> =
+                    Box::new(#transport_ident.clone());
+                let recovery_transport: Box<dyn ::cu29::logstream::CuStreamTx> =
+                    Box::new(#transport_ident);
+                let #continuous_ident = ::cu29::logstream::DefaultContinuousCopperListSink::<
+                    #mission_mod::CuStampedDataSet,
+                    Box<dyn ::cu29::logstream::CuStreamTx>,
+                >::new(continuous_transport, sender_config.continuous)
+                .map_err(|error| CuError::from(error.to_string()))?;
+                let #recovery_ident = ::cu29::logstream::KeyFrameAnchorSink::new(
+                    recovery_transport,
+                    sender_config.recovery,
+                )
+                .map_err(|error| CuError::from(error.to_string()))?;
+            }
+        });
+        let configured_logstream_fanouts = logstream_resource_specs.iter().map(|spec| {
+            let continuous_ident =
+                format_ident!("__cu_logstream_continuous_{}", spec.destination_index);
+            let recovery_ident =
+                format_ident!("__cu_logstream_recovery_{}", spec.destination_index);
+            quote! {
+                let copperlist_sink = ::cu29::fanout::StaticFanoutSink::new(
+                    copperlist_sink,
+                    #continuous_ident,
+                );
+                let keyframe_sink = ::cu29::fanout::StaticFanoutSink::new(
+                    keyframe_sink,
+                    #recovery_ident,
+                );
+            }
+        });
+        let configured_logstream_count = logstream_resource_specs.len();
         let copperlist_output_graph = if logstream_enabled {
             quote! {
                 let local_copperlist_output_required = config
@@ -5523,8 +5665,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     .is_none_or(|logging| {
                         logging.enable_task_logging && logging.enable_keyframe_logging
                     });
-                let logstream_output_required = logstream.is_some();
-                let logstream_sinks = logstream
+                let logstream_output_required = #configured_logstream_count != 0 || logstream.is_some();
+                #[allow(unused_mut)]
+                let mut resources = resources;
+                #configured_logstream_session
+                #(#configured_logstream_initializers)*
+                let injected_logstream_sinks = logstream
                     .map(|(continuous_transport, recovery_transport, mut sender_config)| {
                         sender_config.continuous.identity.sender_id = instance_id;
                         sender_config.recovery.finite.identity.sender_id = instance_id;
@@ -5544,18 +5690,22 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         Ok::<_, CuError>((copperlist, keyframe))
                     })
                     .transpose()?;
-                let (logstream_sink, logstream_keyframe_sink) = logstream_sinks.unzip();
+                let (injected_logstream_sink, injected_logstream_keyframe_sink) =
+                    injected_logstream_sinks.unzip();
+                let copperlist_sink = ::cu29::fanout::OptionalWriteStream::new(
+                    local_copperlist_output_required.then_some(local_copperlist_sink),
+                );
+                let keyframe_sink = ::cu29::fanout::OptionalWriteStream::new(
+                    local_keyframe_output_required.then_some(local_keyframe_sink),
+                );
+                #(#configured_logstream_fanouts)*
                 let copperlist_sink = ::cu29::fanout::StaticFanoutSink::new(
-                    ::cu29::fanout::OptionalWriteStream::new(
-                        local_copperlist_output_required.then_some(local_copperlist_sink),
-                    ),
-                    ::cu29::fanout::OptionalWriteStream::new(logstream_sink),
+                    copperlist_sink,
+                    ::cu29::fanout::OptionalWriteStream::new(injected_logstream_sink),
                 );
                 let keyframe_sink = ::cu29::fanout::StaticFanoutSink::new(
-                    ::cu29::fanout::OptionalWriteStream::new(
-                        local_keyframe_output_required.then_some(local_keyframe_sink),
-                    ),
-                    ::cu29::fanout::OptionalWriteStream::new(logstream_keyframe_sink),
+                    keyframe_sink,
+                    ::cu29::fanout::OptionalWriteStream::new(injected_logstream_keyframe_sink),
                 );
                 let output_requirements = cu29::curuntime::OutputRequirements::new(
                     local_copperlist_output_required || logstream_output_required,
@@ -8858,6 +9008,67 @@ fn build_bundle_list<'a>(config: &'a CuConfig, mission: &str) -> Vec<&'a Resourc
 struct BundleSpec {
     id: String,
     provider_path: syn::Path,
+}
+
+struct LogStreamResourceSpec {
+    destination_index: usize,
+    bundle_index: usize,
+    provider_path: syn::Path,
+    resource_name: String,
+    transport_type: syn::Type,
+}
+
+fn build_logstream_resource_specs(
+    config: &CuConfig,
+    mission: &str,
+    component_resources: &[ResourceKeySpec],
+) -> CuResult<Vec<LogStreamResourceSpec>> {
+    let Some(streaming) = &config.log_streaming else {
+        return Ok(Vec::new());
+    };
+    let bundle_specs = build_bundle_specs(config, mission)?;
+    let bundle_lookup: HashMap<_, _> = bundle_specs
+        .iter()
+        .enumerate()
+        .map(|(index, bundle)| (bundle.id.as_str(), (index, &bundle.provider_path)))
+        .collect();
+
+    streaming
+        .destinations
+        .iter()
+        .enumerate()
+        .map(|(destination_index, destination)| {
+            let (bundle_id, resource_name) =
+                parse_resource_path(&destination.transport.resource)?;
+            let (bundle_index, provider_path) = bundle_lookup.get(bundle_id.as_str()).ok_or_else(|| {
+                CuError::from(format!(
+                    "Log-stream destination '{}' references resource bundle '{}' which is not active in mission '{}'",
+                    destination.id, bundle_id, mission
+                ))
+            })?;
+            if component_resources.iter().any(|resource| {
+                resource.bundle_index == *bundle_index && resource.resource_name == resource_name
+            }) {
+                return Err(CuError::from(format!(
+                    "Log-stream destination '{}' and a task or bridge both require exclusive resource '{}'",
+                    destination.id, destination.transport.resource
+                )));
+            }
+            let transport_type = parse_str::<Type>(&destination.transport.type_).map_err(|error| {
+                CuError::from(format!(
+                    "Log-stream destination '{}' transport type '{}' is not a valid Rust type: {error}",
+                    destination.id, destination.transport.type_
+                ))
+            })?;
+            Ok(LogStreamResourceSpec {
+                destination_index,
+                bundle_index: *bundle_index,
+                provider_path: (*provider_path).clone(),
+                resource_name,
+                transport_type,
+            })
+        })
+        .collect()
 }
 
 fn build_bundle_specs(config: &CuConfig, mission: &str) -> CuResult<Vec<BundleSpec>> {

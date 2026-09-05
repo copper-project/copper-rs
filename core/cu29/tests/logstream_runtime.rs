@@ -118,6 +118,7 @@ fn generated_runtime_streams_without_local_copperlist_logging() -> CuResult<()> 
                 repair_symbols_per_block: 8,
             },
             manifest_record: manifest.clone(),
+            anchor_interval: 1,
         },
     };
 

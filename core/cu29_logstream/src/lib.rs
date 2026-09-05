@@ -11,10 +11,12 @@ pub use cu_fec::{DensityThreshold, EncodingSymbolId, Field, RlcConfig};
 
 mod copper;
 mod error;
+mod manifest;
 mod object;
 mod record;
 mod recovery;
 mod rlc;
+mod router;
 mod sender;
 mod stream;
 mod wire;
@@ -28,6 +30,13 @@ pub mod test_support;
 
 pub use copper::{decode_copperlist, encode_copperlist, encode_copperlist_record_into};
 pub use error::{Error, Result};
+#[cfg(feature = "std")]
+pub use manifest::new_session_id;
+pub use manifest::{
+    ApplicationOutputSchema, ApplicationSchema, LogStreamPlan, ResolvedContentPolicy,
+    ResolvedContinuousFec, ResolvedObjectFec, ResolvedRlcField, SESSION_MANIFEST_VERSION,
+    SessionManifest,
+};
 pub use object::{
     FiniteObjectDecoder, FiniteObjectEncoder, FiniteObjectLimits, FiniteObjectRecoveryStats,
     FiniteObjectSenderConfig,
@@ -42,6 +51,7 @@ pub use rlc::{
     CopperListGap, GapReason, ReceiveError, ReceiverLimits, ReceiverOccupancy, RecoveredRecord,
     StreamIdentity,
 };
+pub use router::{SessionEvent, SessionRouter, SessionRouterLimits, SessionRouterStats};
 pub use sender::{
     ContinuousCopperListSink, ContinuousSenderConfig, ContinuousSenderStats,
     DEFAULT_MAX_SYMBOL_SIZE, DEFAULT_MAX_WINDOW_SYMBOLS, DefaultContinuousCopperListSink,
