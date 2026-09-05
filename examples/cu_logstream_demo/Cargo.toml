@@ -13,6 +13,7 @@ default = []
 # Keep async runtime features out of ordinary workspace builds.
 demo = ["cu29/logstream", "cu29/reflect"]
 replay = ["demo", "cu29/remote-debug"]
+tui = ["demo", "dep:ratatui"]
 
 [[bin]]
 name = "cu-logstream-demo"
@@ -37,6 +38,10 @@ cu29-export = { workspace = true }
 cu29-unifiedlog = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 serde = { workspace = true }
+ratatui = { version = "0.30", optional = true }
 
 [build-dependencies]
 cu29-build = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

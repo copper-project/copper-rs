@@ -2,6 +2,7 @@
 
 extern crate self as cu_logstream_demo;
 pub mod tasks;
+pub mod telemetry;
 
 use cu29::prelude::*;
 

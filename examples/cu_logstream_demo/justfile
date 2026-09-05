@@ -6,6 +6,13 @@ default: (run "clean")
 build:
     cargo +stable build -p cu-logstream-demo --features replay --bins
 
+build-tui:
+    cargo +stable build -p cu-logstream-demo --features tui --bin cu-logstream-demo
+
+# Start this first, then `just sender` in another terminal. Space pauses only the view.
+dashboard listen="127.0.0.1:7447" log="logs/dashboard.copper": build-tui
+    {{root}}/target/debug/cu-logstream-demo dashboard --listen {{listen}} --log-base {{log}}
+
 # Scenarios: clean, loss, outage, late, restart, idle, all.
 run scenario="clean": build
     python3 run.py {{scenario}} --binary {{root}}/target/debug/cu-logstream-demo
@@ -13,8 +20,8 @@ run scenario="clean": build
 check: (run "all")
 
 # Start these in separate terminals, choosing fresh output paths for each run.
-sender remote="127.0.0.1:7447" log="logs/sender.copper": build
-    {{root}}/target/debug/cu-logstream-demo sender --remote {{remote}} --log-base {{log}}
+sender remote="127.0.0.1:7447" log="logs/sender.copper" iterations="6000": build
+    {{root}}/target/debug/cu-logstream-demo sender --remote {{remote}} --log-base {{log}} --iterations {{iterations}}
 
 receiver listen="127.0.0.1:7447" log="logs/received.copper": build
     {{root}}/target/debug/cu-logstream-demo receiver --listen {{listen}} --log-base {{log}}
