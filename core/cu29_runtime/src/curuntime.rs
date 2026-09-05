@@ -522,6 +522,18 @@ impl<P: CopperListTuple + Default, const NBCL: usize> SyncCopperListsManager<P, 
         self.inner.next_cl_id()
     }
 
+    /// Aligns an idle allocator to a continuity-validated recorded boundary.
+    /// Generated replay calls this off the real-time path.
+    pub fn prepare_recorded_replay(&mut self, next_id: u64) -> CuResult<()> {
+        if !self.inner.is_empty() {
+            return Err(CuError::from(
+                "Cannot reposition replay with active CopperLists",
+            ));
+        }
+        self.inner.set_next_replay_id(next_id);
+        Ok(())
+    }
+
     pub fn last_cl_id(&self) -> u64 {
         self.inner.last_cl_id()
     }
@@ -874,6 +886,14 @@ impl<P: CopperListTuple + Default, const NBCL: usize> AsyncCopperListsManager<P,
 
     pub fn next_cl_id(&self) -> u64 {
         self.next_cl_id
+    }
+
+    /// Drains offline replay output before moving to a validated recorded boundary.
+    /// This may wait for the worker; generated production task steps never call it.
+    pub fn prepare_recorded_replay(&mut self, next_id: u64) -> CuResult<()> {
+        self.finish_pending()?;
+        self.next_cl_id = next_id;
+        Ok(())
     }
 
     pub fn last_cl_id(&self) -> u64 {

@@ -436,6 +436,28 @@ fn recorded_replay_rejects_missing_history_before_changing_clock_or_state() -> C
     assert_eq!(app.copper_runtime_mut().copperlists_manager.next_cl_id(), 0);
     // A validated received keyframe makes this boundary a legal restart.
     app.replay_recorded_copperlist(&mock, &recorded, Some(&keyframe))?;
+    assert_eq!(
+        app.copper_runtime_mut().copperlists_manager.next_cl_id(),
+        101
+    );
+    recorded.id = 101;
+    app.replay_recorded_copperlist(&mock, &recorded, None)?;
+    assert_eq!(
+        app.copper_runtime_mut().copperlists_manager.next_cl_id(),
+        102
+    );
     app.stop_all_tasks(&mut noop)?;
+    drop(app);
+    let replayed: Vec<_> =
+        copperlists_reader::<default::CuStampedDataSet>(UnifiedLoggerIOReader::new(
+            cu29::prelude::UnifiedLoggerRead::new(temp.path().join("replay.copper").as_path())
+                .map_err(|error| CuError::new_with_cause("Open replay archive", error))?,
+            UnifiedLogType::CopperList,
+        ))
+        .collect();
+    assert_eq!(
+        replayed.iter().map(|list| list.id).collect::<Vec<_>>(),
+        [100, 101]
+    );
     Ok(())
 }

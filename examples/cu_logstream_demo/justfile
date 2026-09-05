@@ -1,0 +1,32 @@
+root := "../.."
+
+# Run the clean two-process demo and verify both native logs.
+default: (run "clean")
+
+build:
+    cargo +stable build -p cu-logstream-demo --features replay --bins
+
+# Scenarios: clean, loss, outage, late, restart, all.
+run scenario="clean": build
+    python3 run.py {{scenario}} --binary {{root}}/target/debug/cu-logstream-demo
+
+check: (run "all")
+
+# Start these in separate terminals, choosing fresh output paths for each run.
+sender remote="127.0.0.1:7447" log="logs/sender.copper": build
+    {{root}}/target/debug/cu-logstream-demo sender --remote {{remote}} --log-base {{log}}
+
+receiver listen="127.0.0.1:7447" log="logs/received.copper": build
+    {{root}}/target/debug/cu-logstream-demo receiver --listen {{listen}} --log-base {{log}}
+
+cl log="logs/received.copper": build
+    {{root}}/target/debug/cu-logstream-demo-logreader {{log}} extract-copperlists
+
+fsck log="logs/received.copper": build
+    {{root}}/target/debug/cu-logstream-demo-logreader {{log}} fsck
+
+resim log="logs/received.copper" output="logs/replay.copper": build
+    {{root}}/target/debug/cu-logstream-demo-resim --log-base {{log}} --replay-log-base {{output}}
+
+resim-debug log="logs/received.copper" output="logs/replay.copper" debug_base="copper/cu-logstream-demo/debug/v1": build
+    {{root}}/target/debug/cu-logstream-demo-resim --log-base {{log}} --replay-log-base {{output}} --debug-base {{debug_base}}
