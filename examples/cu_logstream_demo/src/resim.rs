@@ -37,14 +37,6 @@ fn build(path: &Path) -> CuResult<(Replay, RobotClock, RobotClockMock)> {
     Ok((app, clock, mock))
 }
 
-fn reader(path: &Path, kind: UnifiedLogType) -> CuResult<UnifiedLoggerIOReader> {
-    Ok(UnifiedLoggerIOReader::new(
-        UnifiedLoggerRead::new(path)
-            .map_err(|error| CuError::new_with_cause("Open archive", error))?,
-        kind,
-    ))
-}
-
 fn main() -> CuResult<()> {
     let cli = ReplayCli::parse(ReplayDefaults::new(
         "logs/received.copper",
@@ -52,6 +44,14 @@ fn main() -> CuResult<()> {
     ));
     cu29::replay::ensure_log_family_exists(&cli.log_base)?;
     if let Some(debug_base) = cli.debug_base {
+        if cu_logstream_demo::read_lists(&cli.log_base)?
+            .iter()
+            .any(|list| list.msgs.get_derived_output().payload().is_none())
+        {
+            return Err(
+                "Run just resim first, then use resim-debug on the reconstructed full log".into(),
+            );
+        }
         let template = cli.replay_log_base;
         return serve_remote_debug::<
             Replay,
@@ -77,43 +77,57 @@ fn main() -> CuResult<()> {
     if cu29::replay::first_slab_path(&cli.replay_log_base)?.exists() {
         return Err("Replay output already exists; choose a new --replay-log-base".into());
     }
-    let (mut app, _, mock) = build(&cli.replay_log_base)?;
-    app.start_all_tasks(&mut |_| SimOverride::ExecuteByRuntime)?;
-    let keyframes: Vec<_> =
-        cu29_export::keyframes_reader(reader(&cli.log_base, UnifiedLogType::FrozenTasks)?)
-            .collect();
-    let mut count = 0;
-    for list in cu29_export::copperlists_reader::<default::CuStampedDataSet>(reader(
-        &cli.log_base,
+    let mut twin = cu29_logstream::twin::LiveTwin::<cu_logstream_demo::twin::Twin>::new()?;
+    let keyframes = cu_logstream_demo::read_keyframes(&cli.log_base)?;
+    let logger = UnifiedLoggerBuilder::new()
+        .file_base_name(&cli.replay_log_base)
+        .preallocated_size(SLAB_BYTES)
+        .write(true)
+        .create(true)
+        .build()
+        .map_err(|e| CuError::new_with_cause("Create replay output", e))?;
+    let UnifiedLogger::Write(logger) = logger else {
+        unreachable!()
+    };
+    let logger = std::sync::Arc::new(std::sync::Mutex::new(logger));
+    let mut output = cu29_unifiedlog::stream_write::<cu_logstream_demo::List, MmapSectionStorage>(
+        logger.clone(),
         UnifiedLogType::CopperList,
-    )?) {
-        let keyframe = keyframes.iter().find(|frame| frame.culistid == list.id);
-        if let Some(frame) = keyframe {
-            <Replay as cu29::prelude::app::CuSimApplication<
-                MmapSectionStorage,
-                MmapUnifiedLoggerWrite,
-            >>::restore_keyframe(&mut app, frame)?;
+        65536,
+    )?;
+    let mut states = cu29_unifiedlog::stream_write::<cu29::curuntime::KeyFrame, MmapSectionStorage>(
+        logger.clone(),
+        UnifiedLogType::FrozenTasks,
+        65536,
+    )?;
+    let mut provenance = cu29_unifiedlog::stream_write::<
+        cu29::continuity::StreamContinuityRecord,
+        MmapSectionStorage,
+    >(logger, UnifiedLogType::StreamContinuity, 65536)?;
+    let source = UnifiedLoggerIOReader::new(
+        UnifiedLoggerRead::new(&cli.log_base)
+            .map_err(|e| CuError::new_with_cause("Open capture provenance", e))?,
+        UnifiedLogType::StreamContinuity,
+    );
+    for record in cu29_export::stream_continuity_reader(source) {
+        provenance.log(&record)?;
+    }
+
+    let mut count = 0;
+    for capture in cu_logstream_demo::read_captures(&cli.log_base)? {
+        let keyframe = keyframes
+            .iter()
+            .find(|k| k.culistid == capture.copperlist.id);
+        let list = twin
+            .reconstruct(capture, keyframe)?
+            .ok_or_else(|| CuError::from("Missing replay anchor"))?;
+        if let Some(keyframe) = keyframe {
+            states.log(keyframe)?;
         }
-        // Generated replay checks continuity before touching the clock or tasks.
-        app.replay_recorded_copperlist(&mock, &list, keyframe)?;
+        output.log(&list)?;
         count += 1;
     }
-    app.stop_all_tasks(&mut |_| SimOverride::ExecuteByRuntime)?;
-    drop(app);
-    let recorded = cu_logstream_demo::read_lists(&cli.log_base)?;
-    let replayed = cu_logstream_demo::read_lists(&cli.replay_log_base)?;
-    if recorded.len() != replayed.len() {
-        return Err("Recorded replay lost CopperLists".into());
-    }
-    for (expected, actual) in recorded.iter().zip(&replayed) {
-        let encode = |list| {
-            cu29::bincode::encode_to_vec(list, cu29::bincode::config::standard())
-                .map_err(|error| CuError::new_with_cause("Encode replay comparison", error))
-        };
-        if encode(expected)? != encode(actual)? {
-            return Err(format!("Recorded replay changed CopperList {}", expected.id).into());
-        }
-    }
-    println!("Replayed {count} captured CopperLists with verified keyframe boundaries.");
+    drop(output);
+    println!("Reconstructed {count} full CopperLists from captured inputs.");
     Ok(())
 }

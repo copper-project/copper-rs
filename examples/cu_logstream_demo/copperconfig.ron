@@ -64,6 +64,14 @@
             id: "sum",
             type: "cu_logstream_demo::tasks::Accumulator",
         ),
+        (
+            id: "derived",
+            type: "cu_logstream_demo::tasks::Derived",
+            streaming: (
+                replay: reconstruct,
+                replay_abi: 1,
+            ),
+        ),
     ],
     cnx: [
         (
@@ -73,6 +81,11 @@
         ),
         (
             src: "sum",
+            dst: "derived",
+            msg: "cu_logstream_demo::tasks::Sample",
+        ),
+        (
+            src: "derived",
             dst: "__nc__",
             msg: "cu_logstream_demo::tasks::Sample",
         ),

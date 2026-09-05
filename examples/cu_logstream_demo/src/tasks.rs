@@ -57,6 +57,10 @@ impl Freezable for Accumulator {
     }
 }
 
+impl CuCrossPlatformDeterministic for Accumulator {
+    const REPLAY_ABI: u32 = 1;
+}
+
 impl CuTask for Accumulator {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(Sample);
@@ -75,6 +79,35 @@ impl CuTask for Accumulator {
             .ok_or_else(|| CuError::from("Counter produced no sample"))?
             .0;
         output.set_payload(Sample(self.sum));
+        output.tov = input.tov;
+        Ok(())
+    }
+}
+
+/// This task runs on both the robot and the generated ground-side replay runtime.
+#[derive(Default, Reflect)]
+pub struct Derived;
+impl Freezable for Derived {}
+impl CuCrossPlatformDeterministic for Derived {
+    const REPLAY_ABI: u32 = 1;
+}
+impl CuTask for Derived {
+    type Resources<'r> = ();
+    type Input<'m> = input_msg!(Sample);
+    type Output<'m> = output_msg!(Sample);
+    fn new(_: Option<&ComponentConfig>, _: ()) -> CuResult<Self> {
+        Ok(Self)
+    }
+    fn process(
+        &mut self,
+        _: &CuContext,
+        input: &Self::Input<'_>,
+        output: &mut Self::Output<'_>,
+    ) -> CuResult<()> {
+        let sum = input
+            .payload()
+            .ok_or_else(|| CuError::from("Accumulator produced no sample"))?;
+        output.set_payload(Sample(sum.0 % 256));
         output.tov = input.tov;
         Ok(())
     }

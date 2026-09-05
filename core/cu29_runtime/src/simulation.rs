@@ -166,6 +166,9 @@ pub enum CuTaskCallbackState<I, O> {
     /// if this is a source task, I will be CuMsg<()>
     /// if this is a sink task, O will be CuMsg<()>
     Process(I, O),
+    /// Simulation-only observation after the runtime executed a task's process.
+    /// Generated live replay restores sender metadata before downstream tasks run.
+    ProcessCompleted(O),
     /// Callbacked when a task is getting called on post-process.
     Postprocess,
     /// Callbacked when a task is stopped.

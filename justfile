@@ -544,3 +544,12 @@ wt branch:
     zellij action write-chars "cd ${dir};reset"
     zellij action write 13
   fi
+
+# Selective capture, generated live replay, opt-in divergence checks, and UI isolation.
+logstream-twin-check:
+    cargo +stable clippy -p cu29-logstream --all-targets --features verify-reconstruction -- --deny warnings
+    cargo +stable clippy -p cu-logstream-demo --all-targets --features replay,tui,verify-reconstruction -- --deny warnings
+    cargo +stable test -p cu-logstream-demo --features demo,tui,verify-reconstruction
+    cargo +stable test -p cu-logstream-demo --features demo --test twin
+    just logstream-receiver-check
+    just --justfile examples/cu_logstream_demo/justfile check
