@@ -965,6 +965,8 @@ impl MonitorUi {
     }
 
     fn render_tabs(&mut self, f: &mut Frame, area: Rect) {
+        let [area, mascot] =
+            Layout::horizontal([Constraint::Min(0), Constraint::Length(4)]).areas(area);
         let base_bg = Color::Rgb(16, 18, 20);
         let active_bg = Color::Rgb(56, 110, 120);
         let inactive_bg = Color::Rgb(40, 44, 52);
@@ -993,7 +995,7 @@ impl MonitorUi {
                 screen: tab.screen,
                 x: cursor_x,
                 y: area.y,
-                width: tab_width,
+                width: tab_width.min(area.right().saturating_sub(cursor_x)),
                 height: area.height,
             });
             cursor_x = cursor_x.saturating_add(tab_width);
@@ -1018,6 +1020,12 @@ impl MonitorUi {
             .style(Style::default().bg(base_bg))
             .block(Block::default().style(Style::default().bg(base_bg)));
         f.render_widget(tabs, area);
+        f.render_widget(
+            Line::from(" 😼 ")
+                .right_aligned()
+                .style(Style::default().fg(active_fg).bg(base_bg)),
+            mascot,
+        );
     }
 
     fn render_help(&mut self, f: &mut Frame, area: Rect) {
