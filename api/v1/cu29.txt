@@ -58,6 +58,7 @@ pub use cu29::prelude::<<cu29_unifiedlog::*>>
 pub use cu29::prelude::COMPACT_STRING_CAPACITY
 pub use cu29::prelude::CopperListTuple
 pub use cu29::prelude::CuCompactString
+pub use cu29::prelude::CuCrossPlatformDeterministic
 pub use cu29::prelude::CuError
 pub use cu29::prelude::CuMsgMetadataTrait
 pub use cu29::prelude::CuMsgOrigin

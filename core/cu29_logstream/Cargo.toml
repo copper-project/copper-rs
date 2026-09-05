@@ -41,6 +41,8 @@ cu29-build = { workspace = true }
 serde = { workspace = true }
 
 [features]
+# Developer-only per-output divergence checks; all hashing stays off the RT path.
+verify-reconstruction = []
 default = ["std"]
 std = [
   "dep:atomic-waker",

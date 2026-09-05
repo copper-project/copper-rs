@@ -151,15 +151,22 @@ fn verify(sender: &Path, received: &Path, expect: Expectation, iterations: u64) 
         {
             return Err("Archive marks a received record as missing".into());
         }
-        let encoding = bincode::config::standard();
-        if bincode::encode_to_vec(list, encoding)?
-            != bincode::encode_to_vec(&onboard[list.id as usize], encoding)?
-        {
-            return Err(format!(
-                "Payload or sender metadata mismatch at CopperList {}",
-                list.id
-            )
-            .into());
+        let expected = &onboard[list.id as usize];
+        if list.msgs.get_derived_output().payload().is_some() {
+            return Err("Derived payload was transmitted".into());
+        }
+        for (actual, expected) in [
+            (
+                list.msgs.get_counter_output(),
+                expected.msgs.get_counter_output(),
+            ),
+            (list.msgs.get_sum_output(), expected.msgs.get_sum_output()),
+        ] {
+            if bincode::encode_to_vec(actual, bincode::config::standard())?
+                != bincode::encode_to_vec(expected, bincode::config::standard())?
+            {
+                return Err(format!("Captured input or metadata mismatch at {}", list.id).into());
+            }
         }
         next = list.id + 1;
     }
@@ -169,6 +176,20 @@ fn verify(sender: &Path, received: &Path, expect: Expectation, iterations: u64) 
     ) || !matches!(continuity.last(), Some(StreamContinuityRecord::Finished { next_copperlist_id }) if *next_copperlist_id == next)
     {
         return Err("Missing archive provenance/finalization".into());
+    }
+    let mut twin = cu29_logstream::twin::LiveTwin::<cu_logstream_demo::twin::Twin>::new()?;
+    let keyframes = cu_logstream_demo::read_keyframes(received)?;
+    for capture in cu_logstream_demo::read_captures(received)? {
+        let id = capture.copperlist.id;
+        let keyframe = keyframes.iter().find(|k| k.culistid == id);
+        let reconstructed = twin
+            .reconstruct(capture, keyframe)?
+            .ok_or("Capture has no verified replay boundary")?;
+        if bincode::encode_to_vec(&reconstructed, bincode::config::standard())?
+            != bincode::encode_to_vec(&onboard[id as usize], bincode::config::standard())?
+        {
+            return Err(format!("Reconstructed output or sender metadata mismatch at {id}").into());
+        }
     }
     let valid = match expect {
         Expectation::Complete => ground.len() == onboard.len() && gaps.is_empty(),

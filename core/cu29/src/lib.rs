@@ -329,13 +329,13 @@ pub mod prelude {
     #[allow(deprecated)]
     pub use cu29_traits::PayloadSchemas;
     pub use cu29_traits::{
-        COMPACT_STRING_CAPACITY, CopperListTuple, CuCompactString, CuError, CuMsgMetadataTrait,
-        CuMsgOrigin, CuPayloadRawBytes, CuResult, DebugEnumVariantDescriptor, DebugEnumVariantKind,
-        DebugFieldDescriptor, DebugFieldKind, DebugFieldSemantics, DebugScalarKind,
-        DebugScalarRegistration, DebugScalarType, ErasedCuStampedData, ErasedCuStampedDataSet,
-        MatchingTasks, Metadata, ObservedWriter, ReflectSerializedPayloadSchema,
-        SerializedPayloadSchema, TaskOutputSpec, UnifiedLogType, WriteStream,
-        abort_observed_encode, begin_observed_encode, finish_observed_encode,
+        COMPACT_STRING_CAPACITY, CopperListTuple, CuCompactString, CuCrossPlatformDeterministic,
+        CuError, CuMsgMetadataTrait, CuMsgOrigin, CuPayloadRawBytes, CuResult,
+        DebugEnumVariantDescriptor, DebugEnumVariantKind, DebugFieldDescriptor, DebugFieldKind,
+        DebugFieldSemantics, DebugScalarKind, DebugScalarRegistration, DebugScalarType,
+        ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks, Metadata, ObservedWriter,
+        ReflectSerializedPayloadSchema, SerializedPayloadSchema, TaskOutputSpec, UnifiedLogType,
+        WriteStream, abort_observed_encode, begin_observed_encode, finish_observed_encode,
         observed_encode_bytes, record_observed_encode_bytes, with_cause,
     };
     #[cfg(feature = "std")]

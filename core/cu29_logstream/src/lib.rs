@@ -13,12 +13,15 @@ pub use cu_fec::{DensityThreshold, EncodingSymbolId, Field, RlcConfig};
 #[cfg(feature = "std")]
 mod archive;
 #[cfg(feature = "std")]
-pub use archive::NativeArchive;
+pub use archive::{CaptureArchive, NativeArchive};
+#[cfg(feature = "std")]
+pub mod twin;
 
 /// Bounded ground-side delivery to caller-owned telemetry consumers.
 #[cfg(feature = "std")]
 pub mod telemetry;
 
+pub mod capture;
 mod copper;
 mod error;
 mod manifest;

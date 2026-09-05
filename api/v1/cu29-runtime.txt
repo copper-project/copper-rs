@@ -211,6 +211,9 @@ pub cu29_runtime::config::SchedulingPolicy::Fifo::priority: u8
 pub cu29_runtime::config::SchedulingPolicy::Nice(i8)
 pub cu29_runtime::config::SchedulingPolicy::RoundRobin
 pub cu29_runtime::config::SchedulingPolicy::RoundRobin::priority: u8
+pub enum cu29_runtime::config::StreamReplay
+pub cu29_runtime::config::StreamReplay::Capture
+pub cu29_runtime::config::StreamReplay::Reconstruct
 pub enum cu29_runtime::config::TaskKind
 pub cu29_runtime::config::TaskKind::Regular
 pub cu29_runtime::config::TaskKind::Sink
@@ -452,6 +455,7 @@ pub fn cu29_runtime::config::Node::set_param<T: core::convert::Into<cu29_runtime
 pub fn cu29_runtime::config::Node::set_resources<I>(&mut self, resources: core::option::Option<I>) where I: core::iter::traits::collect::IntoIterator<Item = (alloc::string::String, alloc::string::String)>
 pub fn cu29_runtime::config::Node::set_task_kind(&mut self, kind: core::option::Option<cu29_runtime::config::TaskKind>)
 pub fn cu29_runtime::config::Node::set_type(self, name: core::option::Option<alloc::string::String>) -> Self
+pub fn cu29_runtime::config::Node::streaming(&self) -> cu29_runtime::config::NodeStreaming
 pub struct cu29_runtime::config::NodeLogging
 impl cu29_runtime::config::NodeLogging
 pub fn cu29_runtime::config::NodeLogging::codec(&self) -> core::option::Option<&str>
@@ -461,6 +465,9 @@ pub fn cu29_runtime::config::NodeLogging::enabled(&self) -> bool
 pub fn cu29_runtime::config::NodeLogging::handle_content(&self) -> cu29_runtime::config::HandleContent
 impl core::default::Default for cu29_runtime::config::NodeLogging
 pub fn cu29_runtime::config::NodeLogging::default() -> Self
+pub struct cu29_runtime::config::NodeStreaming
+pub cu29_runtime::config::NodeStreaming::replay: cu29_runtime::config::StreamReplay
+pub cu29_runtime::config::NodeStreaming::replay_abi: core::option::Option<u32>
 pub struct cu29_runtime::config::PlannerConfig
 impl cu29_runtime::config::PlannerConfig
 pub fn cu29_runtime::config::PlannerConfig::get_config(&self) -> core::option::Option<&cu29_runtime::config::ComponentConfig>
@@ -631,6 +638,9 @@ pub enum cu29_runtime::continuity::StreamContinuityRecord
 pub cu29_runtime::continuity::StreamContinuityRecord::Anchor
 pub cu29_runtime::continuity::StreamContinuityRecord::Anchor::copperlist_id: u64
 pub cu29_runtime::continuity::StreamContinuityRecord::Anchor::record: alloc::vec::Vec<u8>
+pub cu29_runtime::continuity::StreamContinuityRecord::Capture
+pub cu29_runtime::continuity::StreamContinuityRecord::Capture::copperlist_id: u64
+pub cu29_runtime::continuity::StreamContinuityRecord::Capture::proof: alloc::vec::Vec<u8>
 pub cu29_runtime::continuity::StreamContinuityRecord::Finished
 pub cu29_runtime::continuity::StreamContinuityRecord::Finished::next_copperlist_id: u64
 pub cu29_runtime::continuity::StreamContinuityRecord::Gap
@@ -2233,6 +2243,7 @@ pub cu29_runtime::simulation::CuTaskCallbackState::New(core::option::Option<cu29
 pub cu29_runtime::simulation::CuTaskCallbackState::Postprocess
 pub cu29_runtime::simulation::CuTaskCallbackState::Preprocess
 pub cu29_runtime::simulation::CuTaskCallbackState::Process(I, O)
+pub cu29_runtime::simulation::CuTaskCallbackState::ProcessCompleted(O)
 pub cu29_runtime::simulation::CuTaskCallbackState::Start
 pub cu29_runtime::simulation::CuTaskCallbackState::Stop
 pub enum cu29_runtime::simulation::SimOverride

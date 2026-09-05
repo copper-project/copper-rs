@@ -135,11 +135,25 @@ impl Inbox {
 }
 
 /// Encodes directly into a sender-owned buffer on the existing CL output worker.
-pub struct ScheduledCopperListSink<P> {
+pub struct ScheduledCopperListSink<P: CopperListTuple> {
     inbox: Inbox,
+    encoder: fn(&CopperList<P>, &mut [u8]) -> crate::Result<usize>,
     _payload: PhantomData<fn() -> P>,
 }
-impl<P> Debug for ScheduledCopperListSink<P> {
+impl<P: CopperListTuple> ScheduledCopperListSink<P> {
+    /// Select the generated capture encoder before handing the sink to its output worker.
+    pub fn with_encoder(
+        mut self,
+        encoder: fn(&CopperList<P>, &mut [u8]) -> crate::Result<usize>,
+    ) -> Self
+    where
+        P: CopperListTuple,
+    {
+        self.encoder = encoder;
+        self
+    }
+}
+impl<P: CopperListTuple> Debug for ScheduledCopperListSink<P> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ScheduledCopperListSink")
             .finish_non_exhaustive()
@@ -148,8 +162,7 @@ impl<P> Debug for ScheduledCopperListSink<P> {
 impl<P: CopperListTuple + Send + Sync> WriteStream<CopperList<P>> for ScheduledCopperListSink<P> {
     fn log(&mut self, record: &CopperList<P>) -> CuResult<()> {
         self.inbox.submit(false, |bytes| {
-            crate::encode_copperlist_record_into(record, bytes)
-                .map_err(|error| CuError::from(error.to_string()))
+            (self.encoder)(record, bytes).map_err(|error| CuError::from(error.to_string()))
         })
     }
 }
@@ -310,6 +323,7 @@ where
     });
     Ok((
         ScheduledCopperListSink {
+            encoder: crate::encode_copperlist_record_into,
             inbox: Inbox {
                 clock: cl_clock,
                 worker: worker.clone(),

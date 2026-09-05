@@ -40,8 +40,8 @@ preserves the received payloads and timestamps.
 - Recovery uses bounded memory. Packet loss beyond those bounds leaves gaps.
 - A late receiver can resume from a verified keyframe, but cannot recover expired
   history. Replay refuses to cross a gap without a matching keyframe.
-- Native archival currently requires the matching application and full-capture
-  codec. Use a separate archive path for each sender session.
+- Native archival requires the matching application. `NativeArchive` handles
+  full captures; `CaptureArchive` retains selective captures for live/offline replay. Use a separate archive path for each sender session.
 - Generated senders enforce one bitrate/burst budget across continuous data,
   repairs, and recovery packets. The budget counts Copper packet bytes, excluding
   UDP/IP or other carrier overhead. Replay and recovery share byte-deficit
@@ -137,3 +137,67 @@ for codec tests/custom integration and do not enforce pacing themselves.
 
 Run `just logstream-pacing-check` for scheduler, worker lifecycle, and UDP demo
 checks, including recovery after the entire initial bootstrap transmission is lost.
+
+## Live Copper twin
+
+The demo graph is `counter -> sum -> derived`. The ordinary `Derived` Copper task
+computes `sum % 256` on the robot and in generated ground-side replay. Its payload
+is never transmitted, including repeated anchor boundaries and FEC repairs. The
+robot's onboard log contains the full output for comparison. Ratatui explicitly
+labels the derived value **reconstructed locally; payload not transmitted**.
+
+Declare the static contract in the same RON used by the robot and ground build:
+
+```ron
+(id: "derived", type: "tasks::Derived",
+ streaming: (replay: reconstruct, replay_abi: 1)),
+```
+
+The task implements `CuCrossPlatformDeterministic` with `REPLAY_ABI = 1`. This is
+an explicit promise of deterministic behavior and no external side effects.
+Sources and bridge receives stay captured. Reconstruction currently supports
+ordinary synchronous tasks using the lossless native compressed codec; background,
+anytime, custom codec and selective handle policies are rejected for this path.
+
+A ground station declares `#[copper_runtime(config = "copperconfig.ron", sim_mode = true)]`
+and uses its generated `LiveReplay` implementation. Create `TwinWorker::spawn` with
+a bounded queue and the existing `TelemetryPublisher`, then process each ordered
+router event with:
+
+```rust,ignore
+let capture = archive.accept(&event)?; // CaptureArchive<GeneratedDataSet>
+twin.accept(&event, capture)?;
+```
+
+The archive writes the received native capture bytes, original-presence metadata,
+reconstruction policy and omission proofs before handing ownership to replay. It
+never stores synthesized outputs or waits for replay/UI consumption. `NativeArchive`
+remains the full-capture API; use `CaptureArchive` for this selective view. Existing
+native sections retain proofs in `StreamContinuity`; the container format is unchanged.
+Manifest version 2 binds the per-output replay ABI. Build matching robot and ground
+code; numeric mission dispatch remains separate work.
+
+The worker joins independently arriving keyframes and captured boundaries, restores
+state, injects captured messages and executes only reconstructible tasks. It restores
+sender metadata before downstream tasks run. Generated simulation does not bind
+configured stream transmitters; the twin disables local logging and uses no log file.
+The worker retains at most the configured number of queued events and pending
+captures, one anchor and one executing frame, plus the presentation ring. Payload
+allocations and thread/runtime storage are additional. Source gaps and replay queue
+overflow require another matching anchor; UI overwrites only discard display samples.
+
+Per-output digest checking is **off by default**, including debug Rust builds.
+Enable `cu29/logstream-verify` (or the demo's `verify-reconstruction`) at development
+time to check reconstructed payloads. All digest encoding/hashing happens on the
+existing sender output worker and the ground replay worker. No task-path hashing,
+serialization, allocation or copying is added. Ordinary packet/anchor integrity
+checks remain; they do not independently prove behavioral determinism.
+
+The UI reports Waiting/Recovering, Reconstructed, Verified (developer checks), or
+Diverged. Only checked frames are called Verified. With checks enabled, a mismatch
+withholds reconstructed frames until another matching anchor. Capture recording
+continues through divergence and UI pause. Use `just dashboard-verify` and
+`just sender-verify` in separate terminals to run the developer checks.
+
+`just resim` reconstructs the capture archive offline into full native CopperLists.
+Run `just logstream-twin-check` at the repository root for the focused checks.

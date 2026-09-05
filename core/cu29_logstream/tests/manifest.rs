@@ -45,6 +45,7 @@ fn destination() -> LogStreamDestinationConfig {
 
 fn schema() -> ApplicationSchema {
     ApplicationSchema {
+        reconstruction: vec![],
         outputs: vec![ApplicationOutputSchema {
             task_id: "camera".into(),
             message_type: "app::Image".into(),
