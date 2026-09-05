@@ -42,10 +42,15 @@ def run(binary, scenario):
 
     def verify(name, expectation):
         wait(spawn("verify", "--sender", directory / "sender.copper", "--received",
-                   directory / f"{name}.copper", "--expect", expectation))
+                   directory / f"{name}.copper", "--expect", expectation,
+                   "--iterations", "1" if scenario == "idle" else "256"))
 
     try:
-        if scenario == "late":
+        if scenario == "idle":
+            ground, address = receiver("received", impairment="bootstrap")
+            sender = spawn("sender", "--remote", address, "--log-base", directory / "sender.copper",
+                           "--iterations", "1", "--idle-ms", "1000")
+        elif scenario == "late":
             # Reserve an endpoint using the actual receiver, then close it before
             # starting the sender. This receiver receives no data or manifest.
             initial, address = receiver("reservation")
@@ -72,7 +77,7 @@ def run(binary, scenario):
         else:
             wait(sender)
             wait(ground)
-            verify("received", {"clean": "complete", "loss": "complete", "outage": "outage", "late": "late"}[scenario])
+            verify("received", {"idle": "complete", "clean": "complete", "loss": "complete", "outage": "outage", "late": "late"}[scenario])
             replay_names = ["received"]
 
         logreader = binary.with_name("cu-logstream-demo-logreader")
@@ -95,9 +100,9 @@ def run(binary, scenario):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("scenario", choices=["clean", "loss", "outage", "late", "restart", "all"], default="clean", nargs="?")
+    parser.add_argument("scenario", choices=["clean", "loss", "outage", "late", "restart", "idle", "all"], default="clean", nargs="?")
     parser.add_argument("--binary", type=pathlib.Path, required=True)
     args = parser.parse_args()
     binary = args.binary.resolve()
-    for scenario in (["clean", "loss", "outage", "late", "restart"] if args.scenario == "all" else [args.scenario]):
+    for scenario in (["clean", "loss", "outage", "late", "restart", "idle"] if args.scenario == "all" else [args.scenario]):
         run(binary, scenario)

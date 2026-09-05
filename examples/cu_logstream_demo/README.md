@@ -12,6 +12,7 @@ just run loss
 just run outage
 just run late
 just run restart
+just run idle
 ```
 
 `just` builds the tools, runs the clean scenario, compares the received archive
@@ -26,6 +27,7 @@ example's `logs/` and prints its path.
 | `loss` | Discard the source packets for CopperList 20; RLC repairs recover it with no semantic gap. |
 | `outage` | Discard a contiguous arrival interval beginning at CopperList 32 and ending before 160, including control traffic. Missing history remains explicit and a verified anchor enables recovery. |
 | `late` | Start the receiver after the sender is already running. Its archive contains a `LateJoin` prefix gap. |
+| `idle` | Drop all traffic for the first 300 ms, produce only CL0, and keep the sender alive with no new captures. Periodic recovery restores the complete one-record archive. |
 | `restart` | Close the first receiver after CopperList 64, leave it offline briefly, and launch a new process while the sender continues. The new archive reports unavailable history. |
 
 Loss injection runs at the receiver's packet boundary after real UDP reception,
@@ -85,14 +87,24 @@ native keyframe sections.
 ## Check the milestone
 
 From the repository root, run `just logstream-demo-check`. This checks Clippy,
-builds the opt-in binaries, and exercises all five scenarios. `just check` in this
+builds the opt-in binaries, and exercises all six scenarios. `just check` in this
 directory runs all scenarios. Normal workspace builds leave streaming disabled;
 `demo` enables it and `replay` also enables the remote-debug replay tools.
 
-This is a low-rate demonstrator. The configured bitrate, burst, and latency
-policy are not yet enforced by a pacer. Manifests and anchors are emitted on
-qualifying keyframe captures; independent retained-object repetition is deferred.
+The configured 2 Mbps budget includes Copper packet headers and FEC/recovery
+traffic, excluding UDP/IP overhead. A bounded background sender enforces the
+bitrate, eight-packet burst allowance, and 250 ms ordinary-data queue deadline.
+Manifest and complete recovery bundles repeat on a 250 ms local deadline while
+the sender remains alive, including when application time is paused. The demo's
+mock application timestamps stay deterministic; physical pacing uses a running
+RobotClock. Receiver time synchronization is not required.
+
+Run `just logstream-pacing-check` at the root for deterministic rate/burst,
+overload, and worker lifecycle checks alongside these scenarios. The sender
+buffer budget excludes thread stacks, channel/allocator bookkeeping, and bounded
+RaptorQ scratch allocations; see the [sender docs](../../core/cu29_logstream).
 Memory-bounded recovery cannot recover expired history, and receiver shutdown
 does not establish the sender's unobserved tail. Full-capture native archival
 requires the matching application schema. Feedback, hybrid reconstruction, the
-live twin API, and serial are later milestones.
+live twin API, and serial are later milestones. Feedback interfaces permit a
+shared bidirectional carrier or separate explicitly configured endpoints.

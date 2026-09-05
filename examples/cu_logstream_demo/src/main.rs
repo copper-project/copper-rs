@@ -35,6 +35,9 @@ enum Command {
         log_base: PathBuf,
         #[arg(long, default_value_t = ITERATIONS, value_parser = clap::value_parser!(u64).range(1..))]
         iterations: u64,
+        /// Keep the sender alive without new captures to exercise autonomous repetition.
+        #[arg(long, default_value_t = 0)]
+        idle_ms: u64,
     },
     Receiver {
         #[arg(long, default_value = "127.0.0.1:7447")]
@@ -70,6 +73,7 @@ enum Impairment {
     Clean,
     Loss,
     Outage,
+    Bootstrap,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -95,9 +99,9 @@ fn prepare_log(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn sender(remote: SocketAddr, path: &Path, iterations: u64) -> Result<()> {
+fn sender(remote: SocketAddr, path: &Path, iterations: u64, idle_ms: u64) -> Result<()> {
     prepare_log(path)?;
-    cu_logstream_demo::run_sender(remote, path, iterations)?;
+    cu_logstream_demo::run_sender(remote, path, iterations, idle_ms)?;
     println!(
         "Sender finished {iterations} iterations: {}",
         path.display()
@@ -152,6 +156,7 @@ fn receiver(
     let mut last_packet = started;
     let mut last_status = started;
     let mut seen_packet = false;
+    let mut first_packet = None;
     let mut in_outage = false;
     let mut packet = [0; 1200];
     loop {
@@ -161,6 +166,7 @@ fn receiver(
         {
             last_packet = Instant::now();
             seen_packet = true;
+            let first = *first_packet.get_or_insert(last_packet);
             // Demo-only receive-side impairment. Production sender/resource code is unchanged.
             let wire = WirePacket::decode(&packet[..len])?;
             let header = wire.header;
@@ -177,6 +183,9 @@ fn receiver(
                         && header.object_id == 20
                 }
                 Impairment::Outage => in_outage,
+                Impairment::Bootstrap => {
+                    last_packet.duration_since(first) < Duration::from_millis(300)
+                }
             };
             if discard {
                 status.dropped += 1;
@@ -360,7 +369,8 @@ fn main() -> Result<()> {
             remote,
             log_base,
             iterations,
-        } => sender(remote, &log_base, iterations),
+            idle_ms,
+        } => sender(remote, &log_base, iterations, idle_ms),
         Command::Receiver {
             listen,
             log_base,

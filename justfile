@@ -29,7 +29,7 @@ pr-check:
 	just api-check
 	just test
 	just logstream-udp-check
-	just logstream-demo-check
+	just logstream-pacing-check
 
 # Reproduce the scheduled weekly audit and beta checks on the local host.
 weekly: weekly-audit
@@ -175,6 +175,15 @@ logstream-receiver-check:
 	cargo +stable check -p cu29-logstream --no-default-features
 	cargo +stable test -p cu29-runtime --test replay_primitives
 	just logstream-udp-check
+
+# Sender budget/retention, generated integration, and one-way UDP recovery.
+logstream-pacing-check:
+	cargo +stable clippy -p cu29-logstream --all-targets -- --deny warnings
+	cargo +stable test -p cu29-logstream
+	cargo +stable check -p cu29-logstream --no-default-features
+	cargo +stable clippy -p cu29 --features logstream --test logstream_runtime -- --deny warnings
+	cargo +stable test -p cu29 --features logstream --test logstream_runtime
+	just logstream-demo-check
 
 # Runnable two-process UDP scenarios, archive comparison, and recorded replay.
 logstream-demo-check:

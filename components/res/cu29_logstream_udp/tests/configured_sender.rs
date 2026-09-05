@@ -209,6 +209,20 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
     assert_eq!(router.stats().sessions_discovered, 1);
     assert_eq!(router.stats().malformed_datagrams, 0);
     assert!(verified_anchor_seen);
+    let source_ids: std::collections::BTreeSet<_> = traffic
+        .iter()
+        .filter_map(|packet| {
+            let header = cu29_logstream::WirePacket::decode(packet).unwrap().header;
+            (header.record_kind == RecordKind::CopperList
+                && header.symbol_kind == cu29_logstream::FecSymbolKind::Source)
+                .then_some(header.object_id)
+        })
+        .collect();
+    assert_eq!(
+        source_ids,
+        (0..ITERATIONS).collect(),
+        "clean fixture must admit every source record"
+    );
     assert!(gaps.is_empty(), "unexpected clean-link gaps: {gaps:?}");
     assert_eq!(ids, (0..ITERATIONS).collect::<Vec<_>>());
     archive.take().unwrap().finish().unwrap();

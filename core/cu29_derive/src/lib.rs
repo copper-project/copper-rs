@@ -4702,7 +4702,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {
                 logstream: Option<(
                     Box<dyn ::cu29::logstream::CuStreamTx>,
-                    Box<dyn ::cu29::logstream::CuStreamTx>,
                     ::cu29::logstream::LogStreamSenderConfig,
                 )>,
             }
@@ -5620,20 +5619,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         .typed::<#transport_type>(),
                     )?
                     .0;
-                let continuous_transport: Box<dyn ::cu29::logstream::CuStreamTx> =
-                    Box::new(#transport_ident.clone());
-                let recovery_transport: Box<dyn ::cu29::logstream::CuStreamTx> =
-                    Box::new(#transport_ident);
-                let #continuous_ident = ::cu29::logstream::DefaultContinuousCopperListSink::<
-                    #mission_mod::CuStampedDataSet,
-                    Box<dyn ::cu29::logstream::CuStreamTx>,
-                >::new(continuous_transport, sender_config.continuous)
-                .map_err(|error| CuError::from(error.to_string()))?;
-                let #recovery_ident = ::cu29::logstream::KeyFrameAnchorSink::new(
-                    recovery_transport,
-                    sender_config.recovery,
-                )
-                .map_err(|error| CuError::from(error.to_string()))?;
+                let (#continuous_ident, #recovery_ident, _) =
+                    ::cu29::logstream::scheduled_sinks::<#mission_mod::CuStampedDataSet, _>(
+                        #transport_ident, sender_config,
+                        if clock.is_mock() { RobotClock::new() } else { clock.clone() },
+                    )?;
             }
         });
         let configured_logstream_fanouts = logstream_resource_specs.iter().map(|spec| {
@@ -5671,22 +5661,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #configured_logstream_session
                 #(#configured_logstream_initializers)*
                 let injected_logstream_sinks = logstream
-                    .map(|(continuous_transport, recovery_transport, mut sender_config)| {
+                    .map(|(transport, mut sender_config)| {
                         sender_config.continuous.identity.sender_id = instance_id;
                         sender_config.recovery.finite.identity.sender_id = instance_id;
-                        sender_config
-                            .validate()
-                            .map_err(|error| CuError::from(error.to_string()))?;
-                        let copperlist = ::cu29::logstream::DefaultContinuousCopperListSink::<
-                            #mission_mod::CuStampedDataSet,
-                            Box<dyn ::cu29::logstream::CuStreamTx>,
-                        >::new(continuous_transport, sender_config.continuous)
-                        .map_err(|error| CuError::from(error.to_string()))?;
-                        let keyframe = ::cu29::logstream::KeyFrameAnchorSink::new(
-                            recovery_transport,
-                            sender_config.recovery,
-                        )
-                        .map_err(|error| CuError::from(error.to_string()))?;
+                        let (copperlist, keyframe, _) = ::cu29::logstream::scheduled_sinks::<
+                            #mission_mod::CuStampedDataSet, _
+                        >(transport, sender_config,
+                            if clock.is_mock() { RobotClock::new() } else { clock.clone() })?;
                         Ok::<_, CuError>((copperlist, keyframe))
                     })
                     .transpose()?;
@@ -6131,7 +6112,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {
                 logstream: Option<(
                     Box<dyn ::cu29::logstream::CuStreamTx>,
-                    Box<dyn ::cu29::logstream::CuStreamTx>,
                     ::cu29::logstream::LogStreamSenderConfig,
                 )>,
             }
@@ -6143,22 +6123,18 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {
                 /// Adds a nonblocking CopperList plus keyframe/anchor packet resource.
                 ///
-                /// The endpoint is cloned once so independently scheduled semantic lanes never
-                /// serialize access through a mutex. Clones must remain fire-and-forget,
-                /// nonblocking implementations of `CuStreamTx`.
+                /// One sender worker owns the endpoint and schedules both semantic lanes
+                /// against the same budget. Physical pacing uses a running RobotClock,
+                /// even when the application's clock is mocked.
                 pub fn with_logstream<T>(
                     mut self,
                     transport: T,
                     config: ::cu29::logstream::LogStreamSenderConfig,
                 ) -> Self
                 where
-                    T: ::cu29::logstream::CuStreamTx + Clone + 'static,
+                    T: ::cu29::logstream::CuStreamTx + 'static,
                 {
-                    self.logstream = Some((
-                        Box::new(transport.clone()),
-                        Box::new(transport),
-                        config,
-                    ));
+                    self.logstream = Some((Box::new(transport), config));
                     self
                 }
             }

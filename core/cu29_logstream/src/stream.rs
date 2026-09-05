@@ -57,3 +57,67 @@ impl<T: CuStreamRx + ?Sized> CuStreamRx for alloc::boxed::Box<T> {
         (**self).try_recv(packet)
     }
 }
+
+/// Optional advisory receive direction. This logical interface may share the
+/// physical stream carrier. A shared endpoint must have one receive owner and
+/// route complete packet kinds; cloned competing readers cannot provide routing.
+/// Protocol decoding, capability negotiation, and feedback policy belong above it.
+pub trait CuFeedbackRx: Debug + Send + Sync {
+    fn try_recv_feedback(
+        &mut self,
+        packet: &mut [u8],
+    ) -> core::result::Result<Option<usize>, CuStreamRxError>;
+}
+
+/// Optional advisory transmit direction; same atomic, bounded contract as stream TX.
+pub trait CuFeedbackTx: Debug + Send + Sync {
+    fn try_send_feedback(&mut self, packet: &[u8]) -> core::result::Result<(), CuStreamTxError>;
+}
+
+/// Static autonomous wiring. There is no feedback polling or capability discovery.
+#[derive(Debug)]
+pub struct OneWay<T> {
+    tx: T,
+}
+impl<T> OneWay<T> {
+    pub const fn new(tx: T) -> Self {
+        Self { tx }
+    }
+    pub fn into_inner(self) -> T {
+        self.tx
+    }
+}
+impl<T: CuStreamTx> CuStreamTx for OneWay<T> {
+    fn try_send(&mut self, packet: &[u8]) -> core::result::Result<(), CuStreamTxError> {
+        self.tx.try_send(packet)
+    }
+}
+impl<T: CuStreamTx> CuFeedbackRx for OneWay<T> {
+    fn try_recv_feedback(
+        &mut self,
+        _packet: &mut [u8],
+    ) -> core::result::Result<Option<usize>, CuStreamRxError> {
+        Ok(None)
+    }
+}
+
+/// Explicit feedback wiring for separate logical endpoints. The endpoints may be
+/// resource handles backed by one carrier; physical out-of-band links are optional.
+#[derive(Debug)]
+pub struct SeparateFeedback<T, R> {
+    pub tx: T,
+    pub feedback_rx: R,
+}
+impl<T: CuStreamTx, R: CuFeedbackRx> CuStreamTx for SeparateFeedback<T, R> {
+    fn try_send(&mut self, packet: &[u8]) -> core::result::Result<(), CuStreamTxError> {
+        self.tx.try_send(packet)
+    }
+}
+impl<T: CuStreamTx, R: CuFeedbackRx> CuFeedbackRx for SeparateFeedback<T, R> {
+    fn try_recv_feedback(
+        &mut self,
+        packet: &mut [u8],
+    ) -> core::result::Result<Option<usize>, CuStreamRxError> {
+        self.feedback_rx.try_recv_feedback(packet)
+    }
+}

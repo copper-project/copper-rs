@@ -31,6 +31,7 @@ pub fn run_sender(
     remote: std::net::SocketAddr,
     path: &std::path::Path,
     iterations: u64,
+    idle_ms: u64,
 ) -> CuResult<()> {
     let mut config = CuConfig::deserialize_ron(include_str!("../copperconfig.ron"))?;
     config.resources[0]
@@ -52,6 +53,7 @@ pub fn run_sender(
         // Low-rate example driving, outside task execution. This is not link pacing.
         std::thread::sleep(std::time::Duration::from_nanos(TICK_NS));
     }
+    std::thread::sleep(std::time::Duration::from_millis(idle_ms));
     drop(running.stop()?);
     Ok(())
 }

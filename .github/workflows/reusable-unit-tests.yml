@@ -132,6 +132,8 @@ jobs:
       - name: Check two-process UDP logstream demo
         if: matrix.task == 'test' && runner.os != 'Windows'
         run: |
+          cargo +${{ inputs.toolchain }} test -p cu29-logstream --test pacing
+          cargo +${{ inputs.toolchain }} test -p cu29 --features logstream --test logstream_runtime
           cargo +${{ inputs.toolchain }} clippy -p cu-logstream-demo --all-targets --features replay -- --deny warnings
           cargo +${{ inputs.toolchain }} build -p cu-logstream-demo --features replay --bins
           python3 examples/cu_logstream_demo/run.py all --binary target/debug/cu-logstream-demo
@@ -220,6 +222,8 @@ jobs:
       - name: Check two-process UDP logstream demo
         if: matrix.task == 'test' && runner.os != 'Windows'
         run: |
+          cargo +${{ inputs.toolchain }} test -p cu29-logstream --test pacing
+          cargo +${{ inputs.toolchain }} test -p cu29 --features logstream --test logstream_runtime
           cargo +${{ inputs.toolchain }} clippy -p cu-logstream-demo --all-targets --features replay -- --deny warnings
           cargo +${{ inputs.toolchain }} build -p cu-logstream-demo --features replay --bins
           python3 examples/cu_logstream_demo/run.py all --binary target/debug/cu-logstream-demo
@@ -430,6 +434,8 @@ jobs:
       - name: Check two-process UDP logstream demo
         if: matrix.task == 'test' && runner.os != 'Windows'
         run: |
+          cargo +${{ inputs.toolchain }} test -p cu29-logstream --test pacing
+          cargo +${{ inputs.toolchain }} test -p cu29 --features logstream --test logstream_runtime
           cargo +${{ inputs.toolchain }} clippy -p cu-logstream-demo --all-targets --features replay -- --deny warnings
           cargo +${{ inputs.toolchain }} build -p cu-logstream-demo --features replay --bins
           python3 examples/cu_logstream_demo/run.py all --binary target/debug/cu-logstream-demo

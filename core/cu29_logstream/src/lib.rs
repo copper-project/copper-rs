@@ -2,8 +2,9 @@
 
 //! Transport-independent Copper log framing and continuous-stream recovery.
 //!
-//! The crate deliberately stops at datagrams. Runtime ownership handoff,
-//! pacing, and concrete transports are composed outside this layer.
+//! The crate owns bounded FEC, pacing, and autonomous recovery repetition above
+//! packet transports. The host driver consumes encoded records from existing
+//! semantic output workers; runtime ownership handoff stays outside this layer.
 
 extern crate alloc;
 
@@ -18,6 +19,7 @@ mod copper;
 mod error;
 mod manifest;
 mod object;
+mod pacing;
 mod record;
 mod recovery;
 mod rlc;
@@ -25,6 +27,10 @@ mod router;
 mod sender;
 mod stream;
 mod wire;
+#[cfg(feature = "std")]
+mod worker;
+#[cfg(feature = "std")]
+pub use worker::{ScheduledCopperListSink, ScheduledKeyFrameSink, SenderMonitor, scheduled_sinks};
 
 /// Utilities for testing log streaming over unreliable datagram links.
 ///
@@ -46,6 +52,7 @@ pub use object::{
     FiniteObjectDecoder, FiniteObjectEncoder, FiniteObjectLimits, FiniteObjectRecoveryStats,
     FiniteObjectSenderConfig,
 };
+pub use pacing::{PacingConfig, RECOVERY_REPEAT_INTERVAL, SenderCore, SenderStats};
 pub use record::{DecodedRecord, RecordKind, decode_record, encode_record};
 pub use recovery::{
     Anchor, decode_anchor, decode_keyframe, encode_anchor, encode_keyframe,
@@ -62,7 +69,10 @@ pub use sender::{
     DEFAULT_MAX_SYMBOL_SIZE, DEFAULT_MAX_WINDOW_SYMBOLS, DefaultContinuousCopperListSink,
     KeyFrameAnchorSink, LogStreamSenderConfig, RecoverySenderConfig, RecoverySenderStats,
 };
-pub use stream::{CuStreamRx, CuStreamRxError, CuStreamTx, CuStreamTxError};
+pub use stream::{
+    CuFeedbackRx, CuFeedbackTx, CuStreamRx, CuStreamRxError, CuStreamTx, CuStreamTxError, OneWay,
+    SeparateFeedback,
+};
 pub use wire::{
     FecScheme, FecSymbolKind, Lane, PACKET_HEADER_LEN, WIRE_VERSION, WireHeader, WirePacket,
     encode_packet_into,

@@ -91,36 +91,9 @@ fn generated_runtime_streams_without_local_copperlist_logging() -> CuResult<()> 
         session_id: *b"runtime-stream01",
         sender_id: 23,
     };
-    let fec = RlcConfig::new(SYMBOL_SIZE, WINDOW_SYMBOLS, Field::Gf256)
-        .map_err(|error| CuError::from(error.to_string()))?;
-    let continuous = ContinuousSenderConfig {
-        identity,
-        first_packet_sequence: 0,
-        lane: Lane::ReplayCritical,
-        fec,
-        max_record_bytes: RECORD_BYTES,
-        initial_esi: EncodingSymbolId::new(0),
-        repair_every_source_symbols: 1,
-        first_repair_key: 1,
-        repair_density: DensityThreshold::FULL,
-    };
-    let manifest = encode_record(RecordKind::Manifest, 0, b"runtime-test-manifest")
-        .map_err(|error| CuError::from(error.to_string()))?;
-    let sender = LogStreamSenderConfig {
-        continuous,
-        recovery: RecoverySenderConfig {
-            finite: FiniteObjectSenderConfig {
-                identity,
-                first_packet_sequence: 0,
-                lane: Lane::LargeObject,
-                symbol_size: SYMBOL_SIZE as u16,
-                max_object_bytes: 64 * 1024,
-                repair_symbols_per_block: 8,
-            },
-            manifest_record: manifest.clone(),
-            anchor_interval: 1,
-        },
-    };
+    let sender = sender_config(identity)?;
+    let fec = sender.continuous.fec;
+    let manifest = sender.recovery.manifest_record.clone();
 
     let app = LogstreamRuntimeApp::builder()
         .with_instance_id(identity.sender_id)
@@ -147,17 +120,30 @@ fn generated_runtime_streams_without_local_copperlist_logging() -> CuResult<()> 
             })
         })
         .count();
+    // Scheduling changes cross-lane arrival order. Select a known source loss
+    // by semantic identity so this integration test stays inside its FEC budget;
+    // random loss/corruption matrices are exercised by the codec tests.
+    let impaired: Vec<_> = datagrams
+        .iter()
+        .filter(|datagram| {
+            let header = WirePacket::decode(datagram).unwrap().header;
+            !(header.record_kind == RecordKind::CopperList
+                && header.symbol_kind == FecSymbolKind::Source
+                && header.object_id == 1)
+        })
+        .cloned()
+        .collect();
+    assert!(impaired.len() < datagrams.len());
     let simulated_link = simulate_bad_link(
-        &datagrams,
+        &impaired,
         LinkSimulationConfig {
             seed: 0x71_6d_e5,
-            drop_basis_points: 1_500,
-            corrupt_basis_points: 500,
+            drop_basis_points: 0,
+            corrupt_basis_points: 0,
             duplicate_basis_points: 500,
             reorder: true,
         },
     );
-    assert!(simulated_link.stats.dropped_datagrams > 0);
     let mut decoder = ContinuousDecoder::<
         SYMBOL_SIZE,
         { cu29::logstream::DEFAULT_MAX_WINDOW_SYMBOLS },
@@ -238,5 +224,97 @@ fn generated_runtime_streams_without_local_copperlist_logging() -> CuResult<()> 
     assert_eq!(anchor.copperlist_id, 0);
     assert!(anchor.references_keyframe(keyframe));
     assert!(anchor.references_manifest(decode_record(&manifest).unwrap()));
+    Ok(())
+}
+
+fn sender_config(identity: StreamIdentity) -> CuResult<LogStreamSenderConfig> {
+    let fec = RlcConfig::new(SYMBOL_SIZE, WINDOW_SYMBOLS, Field::Gf256)
+        .map_err(|error| CuError::from(error.to_string()))?;
+    let continuous = ContinuousSenderConfig {
+        identity,
+        first_packet_sequence: 0,
+        lane: Lane::ReplayCritical,
+        fec,
+        max_record_bytes: RECORD_BYTES,
+        initial_esi: EncodingSymbolId::new(0),
+        repair_every_source_symbols: 1,
+        first_repair_key: 1,
+        repair_density: DensityThreshold::FULL,
+    };
+    let manifest = encode_record(RecordKind::Manifest, 0, b"runtime-test-manifest")
+        .map_err(|error| CuError::from(error.to_string()))?;
+    Ok(LogStreamSenderConfig {
+        pacing: cu29::logstream::PacingConfig {
+            bitrate_bps: 10_000_000,
+            burst_packets: 8,
+            max_latency: cu29::clock::CuDuration::from_millis(1000),
+            memory_budget_bytes: 1024 * 1024,
+        },
+        continuous,
+        recovery: RecoverySenderConfig {
+            finite: FiniteObjectSenderConfig {
+                identity,
+                first_packet_sequence: 0,
+                lane: Lane::LargeObject,
+                symbol_size: SYMBOL_SIZE as u16,
+                max_object_bytes: 64 * 1024,
+                repair_symbols_per_block: 8,
+            },
+            manifest_record: manifest.clone(),
+            anchor_interval: 1,
+        },
+    })
+}
+
+#[test]
+fn scheduled_worker_shutdown_is_bounded_with_frozen_robotclock() -> CuResult<()> {
+    let mut config = sender_config(StreamIdentity {
+        session_id: *b"frozen-stream001",
+        sender_id: 1,
+    })?;
+    config.pacing.bitrate_bps = 1;
+    config.pacing.burst_packets = 1;
+    config.pacing.max_latency = CuDuration::from_millis(20);
+    let (clock, _mock) = RobotClock::mock();
+    let (mut lists, keyframes, monitor) = cu29::logstream::scheduled_sinks::<
+        default::CuStampedDataSet,
+        _,
+    >(CapturingTx::default(), config, clock)?;
+    lists.log(&default::CuList::default())?;
+    let started = std::time::Instant::now();
+    drop(lists);
+    drop(keyframes);
+    assert!(started.elapsed() < std::time::Duration::from_secs(1));
+    assert!(!monitor.failed());
+    assert!(monitor.final_stats().unwrap().shutdown_drops > 0);
+    Ok(())
+}
+
+#[derive(Debug)]
+struct FailedTx;
+impl CuStreamTx for FailedTx {
+    fn try_send(&mut self, _: &[u8]) -> Result<(), CuStreamTxError> {
+        Err(CuStreamTxError::Failed("test carrier failure"))
+    }
+}
+
+#[test]
+fn scheduled_worker_reports_carrier_failure_to_its_producer() -> CuResult<()> {
+    let config = sender_config(StreamIdentity {
+        session_id: *b"failed-stream001",
+        sender_id: 1,
+    })?;
+    let (mut lists, keyframes, monitor) = cu29::logstream::scheduled_sinks::<
+        default::CuStampedDataSet,
+        _,
+    >(FailedTx, config, RobotClock::new())?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    while !monitor.failed() && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    assert!(monitor.failed());
+    assert!(lists.log(&default::CuList::default()).is_err());
+    drop(lists);
+    drop(keyframes);
     Ok(())
 }

@@ -6,7 +6,7 @@ default: (run "clean")
 build:
     cargo +stable build -p cu-logstream-demo --features replay --bins
 
-# Scenarios: clean, loss, outage, late, restart, all.
+# Scenarios: clean, loss, outage, late, restart, idle, all.
 run scenario="clean": build
     python3 run.py {{scenario}} --binary {{root}}/target/debug/cu-logstream-demo
 

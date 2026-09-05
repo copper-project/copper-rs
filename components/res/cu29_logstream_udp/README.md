@@ -42,9 +42,11 @@ transport: (
 
 [The integration fixture](tests/configured_sender.ron) contains a complete
 configuration, including the required link, FEC, content, and record bounds.
-MTU and stream policy belong there, not in the UDP resource. The current sender
-carries bitrate/burst/latency policy in its manifest but does not yet enforce
-pacing; link scheduling and optional feedback are a later iteration.
+MTU and stream policy belong there, not in the UDP resource. Generated senders
+schedule all lanes through one background worker enforcing the configured
+bitrate/burst budget and data expiry. Retained bootstrap data repeats without
+new captures. Optional feedback remains deferred; its logical receive interface
+may share this carrier and does not require a separate physical uplink.
 
 ## Receiver resource
 

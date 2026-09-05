@@ -22,7 +22,8 @@ can read them. Sender work runs off the real-time task path.
 For a runnable sender/receiver pair, start with the
 [UDP demo](../../examples/cu_logstream_demo). Its default `just` command verifies
 the received archive against the onboard log and runs the ordinary logreader and
-recorded replay. Loss, outage, late-start, and receiver-restart scenarios are included.
+recorded replay. Loss, outage, late-start, receiver-restart, and idle recovery
+scenarios are included.
 
 Enable `cu29/logstream` and configure a `log_streaming` destination in the app's
 RON config. Bind a transport implementing `CuStreamTx`; the
@@ -41,9 +42,58 @@ preserves the received payloads and timestamps.
   history. Replay refuses to cross a gap without a matching keyframe.
 - Native archival currently requires the matching application and full-capture
   codec. Use a separate archive path for each sender session.
-- Pacing and optional feedback are deferred. The configured bitrate is not yet
-  enforced.
+- Generated senders enforce one bitrate/burst budget across continuous data,
+  repairs, and recovery packets. The budget counts Copper packet bytes, excluding
+  UDP/IP or other carrier overhead. Replay and recovery share byte-deficit
+  scheduling with weights 3:1; unused capacity is available to either lane.
+- Manifest and latest complete keyframe/anchor/boundary recovery repeat on a
+  250 ms local deadline, with overlapping requests coalesced. A pending bundle
+  finishes before a newer one replaces it. New anchors wait for older queued
+  source packets to be attempted or expired, preventing avoidable receiver gaps. No new task capture is required.
+- Pacing uses `RobotClock` and requires no robot/receiver time synchronization.
+  Generated real-link senders select a running clock when application time is
+  mocked. Direct driver tests can supply a mock clock.
+- Feedback packet traits and static one-way/separate-endpoint adapters are
+  available. A duplex resource may implement stream TX and feedback RX on one
+  carrier. Feedback protocol, negotiation, and adaptation remain deferred.
 
 Run `just logstream-receiver-check` from the repository root to test reception,
 archival, and replay continuity. See the Rust API docs for receiver limits and
 event handling.
+
+## Sender storage and lifecycle
+
+`scheduled_sinks` creates one worker owning the transport and FEC state, a pool
+of four encoded CL buffers and two encoded keyframe buffers, and fixed packet
+storage. Encoding writes directly into these buffers on the existing output
+workers. Runtime CopperLists and keyframe capture objects are released before
+transmission. Packet staging and recovery retention add bounded copies only on
+the background sender path; repeated transmissions borrow the retained packets.
+
+The destination memory budget covers the record pool, continuous encoder, packet
+queues, retained packets, and their explicitly counted storage. Thread stacks,
+channel/allocator bookkeeping, and RaptorQ's temporary codec allocations are
+additional. RaptorQ input is capped by `max_object_bytes`; the scheduled sender
+requires that maximum to fit one source block. This is a buffer budget, not a
+whole-process allocator ceiling. Unsupported bounds fail during construction.
+
+Four pending CL boundaries and two pending keyframes accommodate independently
+ordered output workers. Under sustained skew, oldest pending entries are replaced
+and counted; the last complete bundle remains usable. Ordinary data expires after
+`max_latency_ms`, measured from encoded-record admission. Retained recovery stays
+useful after that deadline and is repeated until replaced or stopped.
+
+Pool exhaustion, packet-queue overflow, expiry, carrier backpressure, and shutdown
+shedding are counted. `SenderMonitor` exposes final counters and failure state;
+the worker also writes its shutdown statistics and failures to Copper structured
+logging. Dropping both sinks stops repetition and drains only until the configured
+latency deadline. An independent running RobotClock bounds teardown of a frozen
+test clock. Production real-time handoff is unchanged.
+
+`SenderCore` is available without `std`; callers provide `CuTime` from their
+RobotClock and drive `poll` themselves. The std driver owns thread wakeups.
+Immediate `ContinuousCopperListSink` and `KeyFrameAnchorSink` remain available
+for codec tests/custom integration and do not enforce pacing themselves.
+
+Run `just logstream-pacing-check` for scheduler, worker lifecycle, and UDP demo
+checks, including recovery after the entire initial bootstrap transmission is lost.
