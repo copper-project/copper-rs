@@ -2,7 +2,7 @@
 
 use crate::{
     Error, FecScheme, FecSymbolKind, Lane, PACKET_HEADER_LEN, ReceiveError, RecordKind,
-    RecoveredRecord, Result, StreamIdentity, WireHeader, WirePacket, decode_record,
+    RecoveredRecord, Result, StreamIdentity, WireHeader, WirePacketRef, decode_record,
     encode_packet_into,
 };
 use alloc::{vec, vec::Vec};
@@ -212,14 +212,20 @@ impl FiniteObjectDecoder {
         mut emit: impl FnMut(&RecoveredRecord) -> core::result::Result<(), E>,
     ) -> core::result::Result<(), ReceiveError<E>> {
         self.drain_records(&mut emit)?;
-        self.stats.datagrams_seen = self.stats.datagrams_seen.saturating_add(1);
-        let packet = match WirePacket::decode(datagram) {
+        let packet = match WirePacketRef::decode(datagram) {
             Ok(packet) => packet,
             Err(_) => {
+                self.stats.datagrams_seen = self.stats.datagrams_seen.saturating_add(1);
                 self.stats.invalid_datagrams = self.stats.invalid_datagrams.saturating_add(1);
                 return Ok(());
             }
         };
+        self.receive_packet(packet)?;
+        self.drain_records(&mut emit)
+    }
+
+    pub(crate) fn receive_packet(&mut self, packet: WirePacketRef<'_>) -> Result<()> {
+        self.stats.datagrams_seen = self.stats.datagrams_seen.saturating_add(1);
         if packet.header.session_id != self.identity.session_id
             || packet.header.sender_id != self.identity.sender_id
             || packet.header.lane != self.lane
@@ -291,8 +297,7 @@ impl FiniteObjectDecoder {
                     return Err(Error::TooManyRecords {
                         actual,
                         maximum: self.limits.max_concurrent_objects,
-                    }
-                    .into());
+                    });
                 }
                 self.objects.push(ObjectDecoder {
                     kind: packet.header.record_kind,
@@ -319,24 +324,25 @@ impl FiniteObjectDecoder {
         self.stats.valid_datagrams = self.stats.valid_datagrams.saturating_add(1);
         let completed = self.objects[object_index]
             .decoder
-            .decode(EncodingPacket::new(payload_id, packet.payload));
+            .decode(EncodingPacket::new(payload_id, packet.payload.to_vec()));
         let Some(bytes) = completed else {
             return Ok(());
         };
 
         let object = self.objects.swap_remove(object_index);
-        let decoded = decode_record(&bytes)?;
+        let record = RecoveredRecord::from_bytes(bytes)?;
+        let decoded = record.decoded();
         if decoded.kind != object.kind || decoded.object_id != object.object_id {
-            return Err(Error::InconsistentObject.into());
+            return Err(Error::InconsistentObject);
         }
         self.ready.push(ReadyObject {
             kind: object.kind,
             object_id: object.object_id,
             oti: object.oti,
-            record: RecoveredRecord::from_bytes(bytes),
+            record,
         });
         self.stats.objects_recovered = self.stats.objects_recovered.saturating_add(1);
-        self.drain_records(&mut emit)
+        Ok(())
     }
 
     /// Retries delivery of records retained after a consumer failure.
@@ -344,19 +350,27 @@ impl FiniteObjectDecoder {
         &mut self,
         mut emit: impl FnMut(&RecoveredRecord) -> core::result::Result<(), E>,
     ) -> core::result::Result<(), ReceiveError<E>> {
-        while !self.ready.is_empty() {
-            emit(&self.ready[0].record).map_err(ReceiveError::Consumer)?;
-            let delivered = self.ready.remove(0);
-            if self.completed.len() == self.limits.max_concurrent_objects {
-                self.completed.remove(0);
-            }
-            self.completed.push(CompletedObject {
-                kind: delivered.kind,
-                object_id: delivered.object_id,
-                oti: delivered.oti,
-            });
+        while let Some(ready) = self.ready.first() {
+            emit(&ready.record).map_err(ReceiveError::Consumer)?;
+            self.pop_record();
         }
         Ok(())
+    }
+
+    pub(crate) fn pop_record(&mut self) -> Option<RecoveredRecord> {
+        if self.ready.is_empty() {
+            return None;
+        }
+        let delivered = self.ready.remove(0);
+        if self.completed.len() == self.limits.max_concurrent_objects {
+            self.completed.remove(0);
+        }
+        self.completed.push(CompletedObject {
+            kind: delivered.kind,
+            object_id: delivered.object_id,
+            oti: delivered.oti,
+        });
+        Some(delivered.record)
     }
 }
 

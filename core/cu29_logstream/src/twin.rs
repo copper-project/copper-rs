@@ -315,13 +315,13 @@ impl<P: CaptureDataSet + Send + 'static, S: TwinReceiverStatus> TwinWorker<P, S>
     /// Archival must succeed first; replay never retries or delays that writer.
     pub fn accept(
         &self,
-        event: &crate::SessionEvent,
+        event: &crate::SessionEventRef<'_>,
         capture: Option<CapturedList<P>>,
     ) -> crate::Result<()> {
         match event {
             crate::SessionEvent::Manifest(_) | crate::SessionEvent::Gap { .. } => self.recover(),
             crate::SessionEvent::VerifiedRecoveryPoint { keyframe, .. } => {
-                self.recovery_point(crate::decode_keyframe(keyframe.decoded()?.payload)?)
+                self.recovery_point(crate::decode_keyframe(keyframe.decoded().payload)?)
             }
             crate::SessionEvent::ContinuousRecord { identity, .. } => {
                 if let Some(capture) = capture {

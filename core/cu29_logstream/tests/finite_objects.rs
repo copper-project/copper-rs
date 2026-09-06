@@ -262,7 +262,7 @@ fn a_late_receiver_restarts_the_continuous_stream_at_the_recovery_point() {
             .receive_datagram(datagram, |event| {
                 match event {
                     ContinuousReceiveEvent::Record(record) => {
-                        recovered_ids.push(record.decoded().unwrap().object_id);
+                        recovered_ids.push(record.decoded().object_id);
                     }
                     ContinuousReceiveEvent::Gap(gap) => gaps.push(gap),
                 }

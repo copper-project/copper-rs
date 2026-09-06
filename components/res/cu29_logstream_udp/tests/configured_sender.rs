@@ -94,9 +94,9 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
     let mut keyframe_seen = false;
     let mut recovery_point_seen = false;
     let mut gaps = Vec::new();
-    let mut emit = |event| {
+    let mut emit = |event: cu29_logstream::SessionEventRef<'_>| {
         if let SessionEvent::Manifest(manifest) = &event {
-            let mut wrong_schema = manifest.clone();
+            let mut wrong_schema = manifest.manifest().clone();
             wrong_schema.application_schema.outputs[0]
                 .payload_type
                 .push_str("::Wrong");
@@ -104,7 +104,10 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
             assert!(
                 cu29_logstream::NativeArchive::<default::CuStampedDataSet>::new(
                     &rejected_path,
-                    wrong_schema,
+                    &cu29_logstream::ReceivedManifest::decode_record(
+                        wrong_schema.encode_record().unwrap()
+                    )
+                    .unwrap(),
                     1024 * 1024,
                     4096
                 )
@@ -112,13 +115,8 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
             );
             assert!(!rejected_path.exists());
             archive = Some(
-                cu29_logstream::NativeArchive::new(
-                    &archive_path,
-                    manifest.clone(),
-                    1024 * 1024,
-                    4096,
-                )
-                .unwrap(),
+                cu29_logstream::NativeArchive::new(&archive_path, manifest, 1024 * 1024, 4096)
+                    .unwrap(),
             );
         }
         if let Some(writer) = archive.as_mut() {
@@ -126,13 +124,13 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
         }
         match event {
             SessionEvent::Manifest(manifest) => {
-                assert_eq!(manifest.identity.sender_id, 41);
-                assert_eq!(manifest.plan.destination_id, "ground");
-                assert_eq!(manifest.plan.symbol_size, 1128);
-                assert_eq!(manifest.application_schema, expected_schema);
-                assert_eq!(manifest.application_schema.outputs.len(), 1);
+                assert_eq!(manifest.manifest().identity.sender_id, 41);
+                assert_eq!(manifest.manifest().plan.destination_id, "ground");
+                assert_eq!(manifest.manifest().plan.symbol_size, 1128);
+                assert_eq!(manifest.manifest().application_schema, expected_schema);
+                assert_eq!(manifest.manifest().application_schema.outputs.len(), 1);
                 assert_eq!(
-                    manifest.application_schema.outputs[0].payload_type,
+                    manifest.manifest().application_schema.outputs[0].payload_type,
                     core::any::type_name::<UdpMessage>()
                 );
                 manifest_seen = true;
@@ -140,7 +138,7 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
             SessionEvent::ContinuousRecord { identity, record } => {
                 assert!(manifest_seen);
                 assert_eq!(identity.sender_id, 41);
-                let record = record.decoded().unwrap();
+                let record = record.decoded();
                 expected_payloads.push(record.payload.to_vec());
                 let copperlist: default::CuList = decode_copperlist(record.payload).unwrap();
                 assert_eq!(record.object_id, copperlist.id);
@@ -151,7 +149,7 @@ fn configured_runtime_bootstraps_over_udp_in_actual_arrival_order() -> CuResult<
                 assert!(ids.last().is_none_or(|&id| copperlist.id > id));
                 ids.push(copperlist.id);
             }
-            SessionEvent::Object { record, .. } => match record.decoded().unwrap().kind {
+            SessionEvent::Object { record, .. } => match record.decoded().kind {
                 RecordKind::KeyFrame => keyframe_seen = true,
                 RecordKind::RecoveryPoint => recovery_point_seen = true,
                 _ => {}
@@ -333,13 +331,8 @@ fn validate_impaired_archive(
             .receive_datagram(packet, |event| {
                 if let SessionEvent::Manifest(manifest) = &event {
                     archive = Some(
-                        cu29_logstream::NativeArchive::new(
-                            path,
-                            manifest.clone(),
-                            1024 * 1024,
-                            4096,
-                        )
-                        .unwrap(),
+                        cu29_logstream::NativeArchive::new(path, manifest, 1024 * 1024, 4096)
+                            .unwrap(),
                     );
                 }
                 if let Some(archive) = archive.as_mut() {

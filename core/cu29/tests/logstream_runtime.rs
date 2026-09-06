@@ -178,14 +178,9 @@ fn generated_runtime_streams_without_local_copperlist_logging() -> CuResult<()> 
     for expected_id in 0..ITERATIONS {
         let record = records
             .iter()
-            .find(|record| {
-                record
-                    .decoded()
-                    .is_ok_and(|record| record.object_id == expected_id as u64)
-            })
+            .find(|record| record.decoded().object_id == expected_id as u64)
             .expect("every generated CopperList should be recovered")
-            .decoded()
-            .map_err(|error| CuError::from(error.to_string()))?;
+            .decoded();
         let copperlist: default::CuList =
             decode_copperlist(record.payload).map_err(|error| CuError::from(error.to_string()))?;
         assert_eq!(copperlist.id, expected_id as u64);
